@@ -3,6 +3,11 @@ import {
   usePipecatClient,
   usePipecatClientTransportState,
 } from "@pipecat-ai/client-react";
+import {
+  startWakeWord,
+  stopWakeWord,
+  wakeWordAvailable,
+} from "../wakeWord";
 
 function isTypingTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
@@ -16,8 +21,17 @@ export default function MicControls() {
   const connected = state === "ready" || state === "connected";
   const [muted, setMuted] = useState(false);
   const [pttHeld, setPttHeld] = useState(false);
+  const [wakeOn, setWakeOn] = useState(false);
+  const [wakeError, setWakeError] = useState<string | null>(null);
   // Only auto-mute on keyup when this keydown did the unmute.
   const pttOwned = useRef(false);
+
+  // Stop the wake-word listener when unmounted.
+  useEffect(() => {
+    return () => {
+      void stopWakeWord();
+    };
+  }, []);
 
   useEffect(() => {
     if (!connected || !client) return;
@@ -51,6 +65,25 @@ export default function MicControls() {
     setMuted(next);
   };
 
+  const toggleWakeWord = async () => {
+    if (wakeOn) {
+      await stopWakeWord();
+      setWakeOn(false);
+      return;
+    }
+    try {
+      setWakeError(null);
+      // On wake: chime (inside wakeWord.ts) + unmute so Jarvis hears you.
+      await startWakeWord(() => {
+        client?.enableMic(true);
+        setMuted(false);
+      });
+      setWakeOn(true);
+    } catch (err) {
+      setWakeError(err instanceof Error ? err.message : "wake word failed");
+    }
+  };
+
   const live = connected && !muted;
   return (
     <div className="mic-controls">
@@ -65,6 +98,20 @@ export default function MicControls() {
       <span className={pttHeld ? "ptt ptt-live" : "ptt"}>
         {pttHeld ? "Talking…" : "Hold SPACE to talk"}
       </span>
+      <button
+        type="button"
+        className={wakeOn ? "btn btn-wake-on" : "btn btn-wake-off"}
+        onClick={toggleWakeWord}
+        disabled={!wakeWordAvailable}
+        title={
+          wakeWordAvailable
+            ? 'Say "Jarvis" to unmute (runs locally in your browser)'
+            : "Set VITE_PICOVOICE_ACCESS_KEY in web/.env to enable wake word"
+        }
+      >
+        {wakeOn ? "👂 Wake word on" : "Wake word off"}
+      </button>
+      {wakeError && <span className="wake-error">{wakeError}</span>}
     </div>
   );
 }

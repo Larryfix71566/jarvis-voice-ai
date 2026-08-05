@@ -56,6 +56,7 @@ Jarvis is an Ironman-style voice assistant that runs entirely on your machine: y
 | OpenAI (or compatible) | https://platform.openai.com/api-keys | `OPENAI_API_KEY` | pay-as-you-go (low cost for dev) | **Yes** |
 | Tavily | https://app.tavily.com | `TAVILY_API_KEY` | 1,000 credits/month | **Yes** |
 | Open-Meteo | no key | — | free, rate-limited | built-in |
+| Picovoice (wake word) | https://console.picovoice.ai | `VITE_PICOVOICE_ACCESS_KEY` (web/.env) | free tier | Optional (stretch) |
 
 Any OpenAI-compatible Chat Completions endpoint works as the LLM (set
 `OPENAI_BASE_URL` / `OPENAI_MODEL`, e.g. Moonshot/Kimi
@@ -106,6 +107,10 @@ python3 -m jarvis.cli
   within about a second and listens.
 - **Push-to-talk:** hold **SPACE** to unmute while held; the mic button
   toggles a persistent mute.
+- **Wake word (optional stretch):** with a free Picovoice Console AccessKey in
+  `web/.env` (`VITE_PICOVOICE_ACCESS_KEY=...`), enable the "Wake word" toggle
+  and just say **"Jarvis"** — a chime plays and the mic unmutes. Detection
+  runs entirely in your browser (Porcupine Web); the server is untouched.
 - **Switch voices** by saying "Switch your voice to George", or pick from the
   **voice picker** in the console (catalog from `config/voices.yaml`; add your
   own ElevenLabs voice IDs there, including clones).
@@ -227,6 +232,7 @@ ls tests/acceptance/
 | Port in use (7860 or 5173) | An old bot/web process is still running | `pkill -f jarvis.bot.bot` / `pkill -f vite`, or change the port (`JARVIS_BOT_PORT`, `npm run dev -- --port`) |
 | Voices not switching | Voice id not in `config/voices.yaml`, or TTS update failed | List valid ids: `python scripts/list_voices.py`; check the bot log for TTS errors |
 | Reminders not firing | Client not connected (watcher only delivers while connected), or `due_at` in the future | Reconnect and wait ≤ 30 s; inspect rows: `sqlite3 data/jarvis.db 'select * from reminders'` |
+| Wake-word toggle disabled | `VITE_PICOVOICE_ACCESS_KEY` not set | Create a free AccessKey at console.picovoice.ai, put it in `web/.env`, restart `run_web.sh` |
 | `invalid temperature` from the LLM | Provider (e.g. kimi-k2.x) only accepts temperature=1 | Leave temperature unset — Jarvis omits it by default (DEVIATIONS.md D-003) |
 | Web build fails with missing module files | Flaky filesystem truncated `node_modules` | Reinstall on a healthy filesystem: `cd web && rm -rf node_modules && npm install --no-bin-links` (D-006) |
 | First bot boot or test run hangs for minutes | pipecat downloads NLTK `punkt_tab` on first import; the download stalls on restricted networks | One-time seed: `python -c "import nltk; nltk.download('punkt_tab')"`. If your network blocks raw.githubusercontent.com, download `https://cdn.jsdelivr.net/gh/nltk/nltk_data@gh-pages/packages/tokenizers/punkt_tab.zip` and unzip into `~/nltk_data/tokenizers/` |
@@ -250,6 +256,7 @@ ls tests/acceptance/
 | `JARVIS_TIMEZONE` | `America/New_York` | User timezone for reminders/dates |
 | `JARVIS_USER_NAME` | `Boss` | How Jarvis addresses you |
 | `JARVIS_NAME` | `Jarvis` | Assistant's name |
+| `VITE_PICOVOICE_ACCESS_KEY` | — (feature off) | Web-side only (`web/.env`): enables the optional "Jarvis" wake word |
 
 **Config files:**
 

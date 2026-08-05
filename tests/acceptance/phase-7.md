@@ -28,6 +28,14 @@ Setup: `./scripts/run_bot.sh` + `./scripts/run_web.sh`, connect in the browser.
       → p50 ≤ 1200 ms non-delegated, p50 ≤ 2500 ms delegated,
       p90 ≤ 3500 ms overall
 
+## Stretch (7.4) — wake word: IMPLEMENTED client-side
+- `web/src/wakeWord.ts`: Porcupine Web with the built-in "Jarvis" keyword;
+  on detection plays a WebAudio chime and unmutes the mic. Server unchanged.
+- Opt-in: requires `VITE_PICOVOICE_ACCESS_KEY` in `web/.env` (free Picovoice
+  Console key); without it the toggle is disabled with an explanatory tooltip.
+- [ ] Manual: with a key configured, say "Jarvis" from across the room →
+      chime + mic unmutes; toggle off stops listening.
+
 ## Automated gate (DONE)
 - `pytest tests/unit tests/integration -q` → green (watcher + probe tests
   included)
