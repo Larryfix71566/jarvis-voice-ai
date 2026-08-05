@@ -1,7 +1,12 @@
+# Voice catalog (plan §6.5, Phase 5 step 5.2 — exact schema)
 default: rachel
 voices:
   - id: rachel
     elevenlabs_voice_id: "21m00Tcm4TlvDq8ikWAM"
     label: "Rachel (calm, American female)"
-  # Additional voices appended at Phase 5 step 5.2 after listing the user's
-  # ElevenLabs library; at least 2 more entries required by the gate.
+  - id: george
+    elevenlabs_voice_id: "JBFqnCBsd6RMkjVDRZzb"
+    label: "George (warm, British male)"
+  - id: eric
+    elevenlabs_voice_id: "cjVigY5qzO86Huf0OWal"
+    label: "Eric (smooth, trustworthy American male)"

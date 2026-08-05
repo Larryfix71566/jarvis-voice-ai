@@ -1,10 +1,14 @@
-"""Runner-compatible bot entry point (plan Phase 4, step 4.1 — locked shape).
+"""Runner-compatible bot entry point (plan Phase 4 step 4.1, Phase 5 step 5.1).
 
 Run:  python -m jarvis.bot.bot   (or ./scripts/run_bot.sh)
 Then open http://localhost:7860/client and click Connect.
+
+D-004 (pipecat 1.4.0): TransportParams has no vad_analyzer or
+allow_interruptions fields. VAD runs as VADProcessor inside the pipeline
+and interruptions come from Flux STT's should_interrupt=True — both in
+pipeline.py. The entry shape (SmallWebRTC only, run_session) is unchanged.
 """
 
-from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.runner.types import RunnerArguments, SmallWebRTCRunnerArguments
 from pipecat.transports.base_transport import TransportParams
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
@@ -19,12 +23,11 @@ async def bot(runner_args: RunnerArguments):
                 webrtc_connection=runner_args.webrtc_connection,
                 params=TransportParams(
                     audio_in_enabled=True,
-                    audio_out_enabled=False,  # Phase 4: no TTS yet
-                    vad_analyzer=SileroVADAnalyzer(),
+                    audio_out_enabled=True,  # Phase 5: TTS
                 ),
             )
         case _:
-            raise RuntimeError("Phase 4 supports SmallWebRTC only")
+            raise RuntimeError("Jarvis supports SmallWebRTC only")
     await run_session(transport)
 
 

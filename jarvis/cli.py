@@ -1,7 +1,7 @@
-"""Jarvis text REPL (plan Phase 2 step 2.4, Phase 3 step 3.3).
+"""Jarvis text REPL (plan Phase 2 step 2.4, Phase 3 step 3.3, Phase 5 step 5.5).
 
 Run from the repo root:  python -m jarvis.cli
-Commands: /tools, /reset, /quit
+Commands: /tools, /reset, /voice [id], /quit
 Runs the Supervisor in delegating mode; sub-agent activity is printed as
 "[Scheduler] calling set_reminder…" lines (plan step 3.1).
 """
@@ -71,6 +71,29 @@ async def main() -> None:
                     print(f"{server}:")
                     for tool in registry.tools_for([server]):
                         print(f"  - {tool}")
+                continue
+            if line.startswith("/voice"):
+                # Phase 5 step 5.5: CLI confirms resolution logic only
+                # (no audio in the terminal).
+                from jarvis.bot.voice_switch import (
+                    available_list,
+                    catalog_summary,
+                    load_voice_catalog,
+                    resolve_voice,
+                )
+                catalog = load_voice_catalog()
+                parts = line.split(maxsplit=1)
+                if len(parts) == 1:
+                    print(catalog_summary(catalog))
+                    print(f"current default: {catalog['default']}")
+                else:
+                    voice = resolve_voice(parts[1], catalog)
+                    if voice is None:
+                        print(f"I don't have a voice called '{parts[1]}'. "
+                              f"Available: {available_list(catalog)}.")
+                    else:
+                        print(f"Voice switched to {voice['label']}. "
+                              f"(applies in the browser client)")
                 continue
             start = time.perf_counter()
             reply = await orchestrator.chat(line)
