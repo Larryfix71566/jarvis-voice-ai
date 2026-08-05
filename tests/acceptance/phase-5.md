@@ -13,8 +13,8 @@ JARVIS reply must be HEARD aloud, not just seen in the log.
 ## Voice switching
 - [ ] Say "Switch your voice to George" → set_voice tool fires, spoken
       confirmation "Voice switched to George", subsequent speech in George
-- [ ] App-message path: send `{"type":"voice","action":"set","query":"eric"}`
-      from the client console → voice switches, `{"type":"voice","action":"current",...}`
+- [ ] App-message path: send `{"type":"voice/set","voice":"eric"}`
+      from the client console → voice switches, `{"type":"voice/current","voice":"eric"}`
       reply received
 - [ ] CLI: `python3 -m jarvis.cli /voice eric` → voice list shows eric as
       current for new sessions

@@ -6,6 +6,7 @@ Constructs the pipeline with mocked transport/STT/LLM and asserts:
 - TranscriptLogger writes conversations rows for both roles.
 """
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -16,11 +17,20 @@ from jarvis.bot.transcript_log import TranscriptLogger
 
 
 class FakeTransport:
+    def __init__(self):
+        self.sent = []  # app messages sent via output().send_message
+
     def input(self):
         return "TRANSPORT_INPUT"
 
     def output(self):
-        return "TRANSPORT_OUTPUT"
+        sent = self.sent
+
+        class Out(str):  # str so processor-order assertions still work
+            async def send_message(self, frame):
+                sent.append(frame.message)
+
+        return Out("TRANSPORT_OUTPUT")
 
     def event_handler(self, name):
         def deco(fn):
@@ -166,6 +176,67 @@ def test_stt_model_is_flux(runtime, fakes):
     stt = next(p for p in pipeline.processors if isinstance(p, FakeSTT))
     assert stt.settings.model == "flux-general-en"
     assert stt.api_key == "dg"
+
+
+async def test_agent_events_pushed_as_app_messages(runtime, fakes, monkeypatch,
+                                                   capsys):
+    """Plan Phase 6 step 6.3: agent_start/agent_done -> {"type":"agent",...}."""
+    captured = {}
+    real = bp.build_delegate_tool
+
+    def spy(sub_agents, on_event=None):
+        captured["on_event"] = on_event
+        return real(sub_agents, on_event=on_event)
+
+    monkeypatch.setattr(bp, "build_delegate_tool", spy)
+    transport = FakeTransport()
+    build_pipeline(transport, runtime)
+    handler = captured["on_event"]
+    assert handler is not None
+
+    handler({"type": "delegate_start", "agent": "scheduler",
+             "display_name": "Scheduler", "task": "t"})
+    handler({"type": "agent_start", "agent": "scheduler",
+             "display_name": "Scheduler", "task": "t"})
+    handler({"type": "agent_tool", "agent": "scheduler",
+             "display_name": "Scheduler", "tool": "get_time"})
+    handler({"type": "agent_done", "agent": "scheduler",
+             "display_name": "Scheduler"})
+    await asyncio.sleep(0)  # flush scheduled create_task sends
+
+    # Locked payload shape, sent inside the rtvi-ai server-message envelope
+    # (D-005); agent_tool does not produce a UI message.
+    payloads = [m["data"] for m in transport.sent]
+    for m in transport.sent:
+        assert m["label"] == "rtvi-ai"
+        assert m["type"] == "server-message"
+        assert m["id"]
+    assert payloads == [
+        {"type": "agent", "name": "scheduler", "state": "working"},
+        {"type": "agent", "name": "scheduler", "state": "done"},
+    ]
+    # stdout feed (Phase 4 behavior) still intact.
+    assert "[AGENT] Scheduler working" in capsys.readouterr().out
+
+
+def test_unwrap_client_message_shapes():
+    """D-005: locked raw shape passes through; client-js envelope unwraps."""
+    assert bp._unwrap_client_message({"type": "voice/set", "voice": "george"}) == {
+        "type": "voice/set", "voice": "george"}
+    env = {"id": "1", "label": "rtvi-ai", "type": "client-message",
+           "data": {"t": "voice/set", "d": {"voice": "eric"}}}
+    assert bp._unwrap_client_message(env) == {"type": "voice/set", "voice": "eric"}
+    assert bp._unwrap_client_message({"type": "client-message",
+                                      "data": "junk"}) is None
+    assert bp._unwrap_client_message("not a dict") is None
+
+
+def test_wrap_rtvi_envelope():
+    wrapped = bp._wrap_rtvi({"type": "voice/current", "voice": "rachel"})
+    assert wrapped["label"] == "rtvi-ai"
+    assert wrapped["type"] == "server-message"
+    assert wrapped["data"] == {"type": "voice/current", "voice": "rachel"}
+    assert wrapped["id"]
 
 
 async def test_transcript_logger_writes_both_roles(fresh_db):

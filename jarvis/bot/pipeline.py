@@ -18,6 +18,7 @@ changes again.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -88,6 +89,33 @@ def bot_event_log(event: dict) -> None:
         print(f"[AGENT] {event['display_name']} done", flush=True)
 
 
+def make_agent_event_handler(transport: Any) -> Any:
+    """Plan Phase 6 step 6.3: log agent events AND feed them to the UI.
+
+    on_event callbacks are sync (agents/base.py EventCallback), so the async
+    app-message send is scheduled on the running loop. Message shape (locked):
+    {"type": "agent", "name": "<agent>", "state": "working"|"done"}.
+    """
+
+    def on_agent_event(event: dict) -> None:
+        bot_event_log(event)
+        etype = event.get("type")
+        if etype not in ("agent_start", "agent_done"):
+            return
+        message = {
+            "type": "agent",
+            "name": event.get("agent"),
+            "state": "working" if etype == "agent_start" else "done",
+        }
+        try:
+            asyncio.get_running_loop().create_task(
+                send_app_message(transport, message))
+        except RuntimeError:
+            pass  # no running loop (tests calling the handler directly)
+
+    return on_agent_event
+
+
 class FramePusher:
     """Indirection so handlers built before the PipelineTask can push frames."""
 
@@ -114,7 +142,7 @@ def build_pipeline(
 
     sub_agents = load_sub_agents(settings, runtime.registry)
     delegate_schema, delegate_handler = build_delegate_tool(
-        sub_agents, on_event=bot_event_log
+        sub_agents, on_event=make_agent_event_handler(transport)
     )
     set_voice_schema, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
     agent_catalog = render_agent_catalog([
@@ -189,10 +217,44 @@ def build_pipeline(
     return pipeline, llm, aggregators, pusher
 
 
+def _wrap_rtvi(message: dict) -> dict:
+    """D-005: client-js 1.13 drops data-channel messages that are not
+    rtvi-ai labeled, so app payloads are wrapped in a server-message
+    envelope. The payload itself keeps the locked shape."""
+    return {
+        "id": str(uuid.uuid4()),
+        "label": "rtvi-ai",
+        "type": "server-message",
+        "data": message,
+    }
+
+
+def _unwrap_client_message(message: Any) -> dict | None:
+    """D-005: normalize inbound client messages to the locked raw shape.
+
+    Accepts the locked shape ({"type": "voice/set", ...}) verbatim, plus the
+    client-js RTVI envelope ({"type": "client-message",
+    "data": {"t": <type>, "d": {...}}}) — client-js 1.13 has no raw
+    sendAppMessage, its sendClientMessage always wraps.
+    """
+    if not isinstance(message, dict):
+        return None
+    if message.get("type") == "client-message":
+        data = message.get("data")
+        if not isinstance(data, dict):
+            return None
+        msg_type = data.get("t")
+        payload = data.get("d")
+        if not isinstance(msg_type, str):
+            return None
+        return {"type": msg_type, **(payload if isinstance(payload, dict) else {})}
+    return message
+
+
 async def send_app_message(transport: Any, message: dict) -> None:
     """Server->client app message over the WebRTC data channel."""
     await transport.output().send_message(
-        OutputTransportMessageUrgentFrame(message=message))
+        OutputTransportMessageUrgentFrame(message=_wrap_rtvi(message)))
 
 
 async def run_session(transport: Any) -> None:
@@ -227,16 +289,23 @@ async def run_session(transport: Any) -> None:
                            "Greet them briefly by name.",
             })
 
+        voice_state = {"current": catalog["default"]}
+
         @transport.event_handler("on_app_message")
         async def on_app_message(message: Any, sender: str) -> None:
-            if isinstance(message, dict) and message.get("type") == "voice/set":
-                voice = resolve_voice(str(message.get("voice", "")), catalog)
-                if voice is not None:
-                    from pipecat.frames.frames import TTSUpdateSettingsFrame
-                    await pusher.push(TTSUpdateSettingsFrame(
-                        settings={"voice": voice["elevenlabs_voice_id"]}))
-                    await send_app_message(transport, {
-                        "type": "voice/current", "voice": voice["id"]})
+            msg = _unwrap_client_message(message)
+            if msg is None or msg.get("type") != "voice/set":
+                return
+            voice = resolve_voice(str(msg.get("voice", "")), catalog)
+            if voice is not None:
+                from pipecat.frames.frames import TTSUpdateSettingsFrame
+                voice_state["current"] = voice["id"]
+                await pusher.push(TTSUpdateSettingsFrame(
+                    settings={"voice": voice["elevenlabs_voice_id"]}))
+            # Reply on failure too (unchanged id) so the UI reconciles its
+            # optimistic select against server truth.
+            await send_app_message(transport, {
+                "type": "voice/current", "voice": voice_state["current"]})
 
         runner = PipelineRunner()
         await runner.run(task)
