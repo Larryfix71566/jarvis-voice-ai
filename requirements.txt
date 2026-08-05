@@ -1,0 +1,14 @@
+pipecat-ai[deepgram,elevenlabs,openai,silero,mcp,runner,webrtc]
+mcp[cli]
+fastmcp>=3.4.5
+openai
+pydantic-settings
+pyyaml
+psutil
+tavily-python
+httpx
+python-dateutil
+pytest
+pytest-asyncio
+pytest-cov
+ruff

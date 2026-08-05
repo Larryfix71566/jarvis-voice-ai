@@ -1,0 +1,7 @@
+default: rachel
+voices:
+  - id: rachel
+    elevenlabs_voice_id: "21m00Tcm4TlvDq8ikWAM"
+    label: "Rachel (calm, American female)"
+  # Additional voices appended at Phase 5 step 5.2 after listing the user's
+  # ElevenLabs library; at least 2 more entries required by the gate.

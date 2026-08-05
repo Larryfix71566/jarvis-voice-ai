@@ -1,0 +1,25 @@
+servers:
+  - name: mcp-time
+    command: python
+    args: ["-m", "mcp_servers.mcp_time.server"]
+    env: {}
+  - name: mcp-notes
+    command: python
+    args: ["-m", "mcp_servers.mcp_notes.server"]
+    env:
+      JARVIS_DB_PATH: "${JARVIS_DB_PATH}"
+  - name: mcp-reminders
+    command: python
+    args: ["-m", "mcp_servers.mcp_reminders.server"]
+    env:
+      JARVIS_DB_PATH: "${JARVIS_DB_PATH}"
+      JARVIS_TIMEZONE: "${JARVIS_TIMEZONE}"
+  - name: mcp-web
+    command: python
+    args: ["-m", "mcp_servers.mcp_web.server"]
+    env:
+      TAVILY_API_KEY: "${TAVILY_API_KEY}"
+  - name: mcp-system
+    command: python
+    args: ["-m", "mcp_servers.mcp_system.server"]
+    env: {}
