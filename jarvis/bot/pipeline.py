@@ -30,6 +30,7 @@ from pipecat.pipeline.task import PipelineTask
 
 from jarvis.agents.base import load_sub_agents
 from jarvis.agents.delegate import build_delegate_tool
+from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.transcript_log import TranscriptLogger
 from jarvis.bot.voice_switch import (
     available_list,
@@ -275,9 +276,12 @@ async def run_session(transport: Any) -> None:
         task = PipelineTask(pipeline)
         pusher.bind(task)
 
+        client_connected = {"value": False}
+
         @transport.event_handler("on_client_connected")
         async def on_client_connected(transport: Any, client: Any) -> None:
             print("[session] client connected", flush=True)
+            client_connected["value"] = True
             await send_app_message(transport, {
                 "type": "voice/catalog",
                 "voices": catalog["voices"],
@@ -288,6 +292,21 @@ async def run_session(transport: Any) -> None:
                 "content": "[system] The user just connected. "
                            "Greet them briefly by name.",
             })
+
+        @transport.event_handler("on_client_disconnected")
+        async def on_client_disconnected(transport: Any, client: Any) -> None:
+            print("[session] client disconnected", flush=True)
+            client_connected["value"] = False
+
+        async def inject_context(text: str) -> None:
+            aggregators.user().add_message({"role": "user", "content": text})
+
+        watcher = RemindersWatcher(
+            runtime.registry,
+            inject=inject_context,
+            is_connected=lambda: client_connected["value"],
+        )
+        watcher.start()
 
         voice_state = {"current": catalog["default"]}
 
@@ -308,6 +327,9 @@ async def run_session(transport: Any) -> None:
                 "type": "voice/current", "voice": voice_state["current"]})
 
         runner = PipelineRunner()
-        await runner.run(task)
+        try:
+            await runner.run(task)
+        finally:
+            await watcher.stop()
     finally:
         await registry.stop()
