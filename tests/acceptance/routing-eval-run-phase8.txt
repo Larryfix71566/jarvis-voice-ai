@@ -1,0 +1,161 @@
+
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│                                                                              │
+│                         ▄▀▀ ▄▀█ █▀▀ ▀█▀ █▀▄▀█ █▀▀ █▀█                        │
+│                         █▀  █▀█ ▄▄█  █  █ ▀ █ █▄▄ █▀▀                        │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                FastMCP 3.4.5                                 │
+│                            https://gofastmcp.com                             │
+│                                                                              │
+│                  🖥  Server:      mcp-time, 3.4.5                             │
+│                  🚀 Deploy free: https://horizon.prefect.io                  │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                          🎉 Update available: 3.4.6                          │
+│                      Run: pip install --upgrade fastmcp                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+[08/05/26 23:38:59] INFO     Starting MCP server 'mcp-time'     transport.py:241
+                             with transport 'stdio'                             
+
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│                                                                              │
+│                         ▄▀▀ ▄▀█ █▀▀ ▀█▀ █▀▄▀█ █▀▀ █▀█                        │
+│                         █▀  █▀█ ▄▄█  █  █ ▀ █ █▄▄ █▀▀                        │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                FastMCP 3.4.5                                 │
+│                            https://gofastmcp.com                             │
+│                                                                              │
+│                  🖥  Server:      mcp-notes, 3.4.5                            │
+│                  🚀 Deploy free: https://horizon.prefect.io                  │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                          🎉 Update available: 3.4.6                          │
+│                      Run: pip install --upgrade fastmcp                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+[08/05/26 23:39:01] INFO     Starting MCP server 'mcp-notes'    transport.py:241
+                             with transport 'stdio'                             
+
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│                                                                              │
+│                         ▄▀▀ ▄▀█ █▀▀ ▀█▀ █▀▄▀█ █▀▀ █▀█                        │
+│                         █▀  █▀█ ▄▄█  █  █ ▀ █ █▄▄ █▀▀                        │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                FastMCP 3.4.5                                 │
+│                            https://gofastmcp.com                             │
+│                                                                              │
+│                  🖥  Server:      mcp-reminders, 3.4.5                        │
+│                  🚀 Deploy free: https://horizon.prefect.io                  │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                          🎉 Update available: 3.4.6                          │
+│                      Run: pip install --upgrade fastmcp                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+[08/05/26 23:39:02] INFO     Starting MCP server                transport.py:241
+                             'mcp-reminders' with transport                     
+                             'stdio'                                            
+
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│                                                                              │
+│                         ▄▀▀ ▄▀█ █▀▀ ▀█▀ █▀▄▀█ █▀▀ █▀█                        │
+│                         █▀  █▀█ ▄▄█  █  █ ▀ █ █▄▄ █▀▀                        │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                FastMCP 3.4.5                                 │
+│                            https://gofastmcp.com                             │
+│                                                                              │
+│                  🖥  Server:      mcp-web, 3.4.5                              │
+│                  🚀 Deploy free: https://horizon.prefect.io                  │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                          🎉 Update available: 3.4.6                          │
+│                      Run: pip install --upgrade fastmcp                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+[08/05/26 23:39:03] INFO     Starting MCP server 'mcp-web' with transport.py:241
+                             transport 'stdio'                                  
+
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│                                                                              │
+│                         ▄▀▀ ▄▀█ █▀▀ ▀█▀ █▀▄▀█ █▀▀ █▀█                        │
+│                         █▀  █▀█ ▄▄█  █  █ ▀ █ █▄▄ █▀▀                        │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                FastMCP 3.4.5                                 │
+│                            https://gofastmcp.com                             │
+│                                                                              │
+│                  🖥  Server:      mcp-system, 3.4.5                           │
+│                  🚀 Deploy free: https://horizon.prefect.io                  │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                          🎉 Update available: 3.4.6                          │
+│                      Run: pip install --upgrade fastmcp                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+[08/05/26 23:39:04] INFO     Starting MCP server 'mcp-system'   transport.py:241
+                             with transport 'stdio'                             
+2026-08-05 23:45:06,134 WARNING jarvis.agents.base: subagent_timeout agent=analyst
+2026-08-05 23:46:32,567 WARNING jarvis.agents.base: subagent_timeout agent=analyst
+2026-08-05 23:54:18,827 WARNING jarvis.agents.base: subagent_timeout agent=analyst
+[ 1/30] ok  expect=['scheduler'] got=['scheduler']  'what time is it'
+[ 2/30] ok  expect=['scheduler'] got=['scheduler']  'remind me to water the plants in 3 hours'
+[ 3/30] MISS expect=['scheduler'] got=[]  'what day of the week is August 20th'
+[ 4/30] ok  expect=['scheduler'] got=['scheduler']  'what reminders do I have today'
+[ 5/30] ok  expect=['scheduler'] got=['scheduler']  'wake me up at 6:30 tomorrow morning'
+[ 6/30] ok  expect=['librarian'] got=['librarian']  'remember that my passport expires in March'
+[ 7/30] ok  expect=['librarian'] got=['librarian']  'save a note that the project wifi password is blueplanet42'
+[ 8/30] ok  expect=['librarian'] got=['librarian']  'when does my passport expire'
+[ 9/30] ok  expect=['librarian'] got=['librarian']  'what did I save about the wifi'
+[10/30] ok  expect=['librarian'] got=['librarian']  'store this: my dentist is Dr. Patel on Main Street'
+[11/30] ok  expect=['analyst'] got=['analyst']  "what's the weather in Berlin"
+[12/30] ok  expect=['analyst'] got=['analyst']  'search the web for the latest AI news'
+[13/30] ok  expect=['analyst'] got=['analyst']  'who won the Celtics game last night'
+[14/30] ok  expect=['analyst'] got=['analyst']  'what is the current price of bitcoin'
+[15/30] ok  expect=['analyst'] got=['analyst']  'will it rain in London this weekend'
+[16/30] ok  expect=['systems'] got=['systems']  'how is my computer doing'
+[17/30] ok  expect=['systems'] got=['systems']  "what's using all my memory"
+[18/30] ok  expect=['systems'] got=['systems']  'how much disk space do I have left'
+[19/30] ok  expect=['systems'] got=['systems']  'how long has my machine been running'
+[20/30] ok  expect=['systems'] got=['systems']  'is my CPU under heavy load right now'
+[21/30] ok  expect=['none'] got=[]  'hello'
+[22/30] ok  expect=['none'] got=[]  "thanks, that's all"
+[23/30] ok  expect=['none'] got=[]  'how are you feeling today'
+[24/30] ok  expect=['none'] got=[]  'what can you do for me'
+[25/30] ok  expect=['none'] got=[]  'remind me about the thing'
+[26/30] ok  expect=['none'] got=[]  'save a note'
+[27/30] ok  expect=['analyst', 'scheduler'] got=['analyst', 'scheduler']  'check the weather in Rome and remind me to pack tonight'
+[28/30] ok  expect=['librarian', 'scheduler'] got=['librarian', 'scheduler']  'save a note that the plumber comes Friday and remind me Thursday evening'
+[29/30] MISS expect=['analyst', 'librarian'] got=['analyst']  'look up the current time in Tokyo and save a note with what you find'
+[30/30] ok  expect=['scheduler', 'systems'] got=['scheduler', 'systems']  'check how my computer is doing and remind me to restart it tonight'
+
+Routing accuracy: 28/30 = 93% (threshold 90%)
