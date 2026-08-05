@@ -1,9 +1,10 @@
-"""Orchestrator: the Supervisor brain (plan Phase 2, step 2.3).
+"""Orchestrator: the Supervisor brain (plan Phase 2 step 2.3, Phase 3 step 3.3).
 
-Text-level LLM conversation loop with OpenAI-style function calling over
-the SkillRegistry's MCP tools. Phase 2 runs it in "direct" scope: the
-Supervisor calls MCP tools itself. Phase 3 narrows the toolset to
-delegate_task only (delegating mode).
+Text-level LLM conversation loop with OpenAI-style function calling.
+Two modes (constructor param ``mode``):
+- "direct" (Phase 2): the Supervisor calls MCP tools itself.
+- "delegating" (Phase 3, default): the Supervisor's only tool is
+  delegate_task, backed by the sub-agent roster from config/agents.yaml.
 
 Locked behavior:
 - temperature omitted by default (provider default applies; D-003 —
@@ -21,12 +22,15 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Callable
+from pathlib import Path
+from typing import Any, Callable, Literal
 
 from openai import AsyncOpenAI
 
+from jarvis.agents.base import SubAgent, load_sub_agents
+from jarvis.agents.delegate import build_delegate_tool
 from jarvis.db import get_conn, now_iso
-from jarvis.prompts import SUPERVISOR_PROMPT
+from jarvis.prompts import SUPERVISOR_PROMPT, render_agent_catalog
 
 logger = logging.getLogger(__name__)
 
@@ -44,24 +48,48 @@ class Orchestrator:
         allowed_servers: list[str] | None = None,
         client_factory: Callable[[Any], Any] | None = None,
         temperature: float | None = None,
+        mode: Literal["direct", "delegating"] = "delegating",
+        sub_agents: dict[str, SubAgent] | None = None,
+        agents_config: str | Path | None = None,
+        on_event: Callable[[dict], None] | None = None,
     ):
         self._settings = settings
         self._registry = registry
         self._session_id = session_id
         self._allowed_servers = allowed_servers
         self._temperature = temperature
+        self._mode = mode
         if client_factory is not None:
             self._client = client_factory(settings)
         else:
             self._client = AsyncOpenAI(
                 api_key=settings.openai_api_key, base_url=settings.openai_base_url
             )
-        # Phase 2: no agent catalog yet (plan step 2.3 / Appendix A.4).
+        if mode == "delegating":
+            if sub_agents is None:
+                sub_agents = load_sub_agents(
+                    settings, registry, agents_config, client_factory
+                )
+            self._sub_agents = sub_agents
+            self._delegate_schema, self._delegate_handler = build_delegate_tool(
+                sub_agents, on_event=on_event
+            )
+            agent_catalog = render_agent_catalog([
+                {"name": a.name, "display_name": a.display_name,
+                 "description": a.description}
+                for a in sub_agents.values()
+            ])
+        else:
+            self._sub_agents = None
+            self._delegate_schema = None
+            self._delegate_handler = None
+            # Phase 2 direct mode (plan step 2.3 / Appendix A.4).
+            agent_catalog = "(none yet — call tools directly)"
         self._system_prompt = SUPERVISOR_PROMPT.format(
             jarvis_name=settings.jarvis_name,
             user_name=settings.jarvis_user_name,
             timezone=settings.jarvis_timezone,
-            agent_catalog="(none yet — call tools directly)",
+            agent_catalog=agent_catalog,
             voice_catalog="(none configured yet)",
         )
         self._history: list[dict] = []
@@ -108,8 +136,8 @@ class Orchestrator:
                     arguments = json.loads(tool_call.function.arguments or "{}")
                 except json.JSONDecodeError:
                     arguments = {}
-                result = await self._registry.call(
-                    tool_call.function.name, arguments, self._allowed_servers
+                result = await self._execute_tool(
+                    tool_call.function.name, arguments
                 )
                 self._history.append({
                     "role": "tool",
@@ -130,7 +158,16 @@ class Orchestrator:
     def _messages(self) -> list[dict]:
         return [{"role": "system", "content": self._system_prompt}, *self._history]
 
+    async def _execute_tool(self, name: str, arguments: dict) -> str:
+        if self._mode == "delegating":
+            if name == "delegate_task":
+                return await self._delegate_handler(arguments)
+            return f"Unknown tool '{name}'. Use delegate_task."
+        return await self._registry.call(name, arguments, self._allowed_servers)
+
     def _tools_kwarg(self) -> dict:
+        if self._mode == "delegating":
+            return {"tools": [self._delegate_schema]}
         tools = self._registry.openai_tools(self._allowed_servers)
         return {"tools": tools} if tools else {}
 

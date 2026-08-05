@@ -1,7 +1,9 @@
-"""Jarvis text REPL (plan Phase 2, step 2.4).
+"""Jarvis text REPL (plan Phase 2 step 2.4, Phase 3 step 3.3).
 
 Run from the repo root:  python -m jarvis.cli
 Commands: /tools, /reset, /quit
+Runs the Supervisor in delegating mode; sub-agent activity is printed as
+"[Scheduler] calling set_reminder…" lines (plan step 3.1).
 """
 
 from __future__ import annotations
@@ -38,7 +40,15 @@ async def main() -> None:
     registry = SkillRegistry(REPO_ROOT / "config" / "mcp_servers.yaml")
     print("Starting skill servers…")
     await registry.start()
-    orchestrator = Orchestrator(settings, registry, session_id=str(uuid.uuid4()))
+
+    def on_event(event: dict) -> None:
+        if event.get("type") == "agent_tool":
+            print(f"{GRAY}[{event['display_name']}] calling "
+                  f"{event['tool']}…{RESET}")
+
+    orchestrator = Orchestrator(
+        settings, registry, session_id=str(uuid.uuid4()), on_event=on_event
+    )
     print(BANNER)
 
     try:

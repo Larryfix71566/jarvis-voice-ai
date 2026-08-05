@@ -77,13 +77,14 @@ class FakeRegistry:
         return ["fake_tool"]
 
 
-def make_orchestrator(script, registry=None, **kwargs):
+def make_orchestrator(script, registry=None, mode="direct", **kwargs):
     fake = FakeLLM(script)
     orch = Orchestrator(
         make_settings(),
         registry or FakeRegistry(),
         session_id="test-session",
         client_factory=lambda settings: fake,
+        mode=mode,
         **kwargs,
     )
     return orch, fake.chat.completions
@@ -185,3 +186,65 @@ class TestPersistence:
             ("user", "stored question"),
             ("assistant", "stored reply"),
         ]
+
+
+class FakeSubAgent:
+    """Stands in for SubAgent in delegating-mode tests."""
+
+    def __init__(self, name, result="done"):
+        self.name = name
+        self.display_name = name.title()
+        self.description = f"{name} things."
+        self.mcp_servers = []
+        self.result = result
+        self.tasks = []
+
+    async def run(self, task, on_event=None):
+        self.tasks.append(task)
+        return self.result
+
+
+def make_delegating(script, sub_agents=None, **kwargs):
+    if sub_agents is None:
+        sub_agents = {n: FakeSubAgent(n)
+                      for n in ("scheduler", "librarian", "analyst", "systems")}
+    return make_orchestrator(script, mode="delegating",
+                             sub_agents=sub_agents, **kwargs)
+
+
+class TestDelegatingMode:
+    async def test_only_delegate_tool_is_offered(self, fresh_db):
+        orch, completions = make_delegating([("text", "ok")])
+        await orch.chat("hi")
+        tools = completions.requests[0]["tools"]
+        assert [t["function"]["name"] for t in tools] == ["delegate_task"]
+
+    async def test_system_prompt_lists_agent_catalog(self, fresh_db):
+        orch, completions = make_delegating([("text", "ok")])
+        await orch.chat("hi")
+        system = completions.requests[0]["messages"][0]["content"]
+        assert "- scheduler (Scheduler): scheduler things." in system
+        assert "- systems (Systems): systems things." in system
+
+    async def test_delegate_call_routes_to_subagent(self, fresh_db):
+        agents = {n: FakeSubAgent(n) for n in ("scheduler", "librarian")}
+        orch, _ = make_delegating(
+            [("tool", "delegate_task",
+              {"agent_name": "scheduler", "task": "what time is it"}),
+             ("text", "It is 3 PM, Boss.")],
+            sub_agents=agents,
+        )
+        reply = await orch.chat("what time is it")
+        assert agents["scheduler"].tasks == ["what time is it"]
+        assert reply == "It is 3 PM, Boss."
+        roles = [m["role"] for m in orch.history]
+        assert roles == ["user", "assistant", "tool", "assistant"]
+
+    async def test_unknown_tool_name_gets_plain_error(self, fresh_db):
+        orch, _ = make_delegating(
+            [("tool", "get_time", {}), ("text", "recovered")])
+        reply = await orch.chat("hi")
+        tool_msg = orch.history[2]
+        assert tool_msg["role"] == "tool"
+        assert "Unknown tool 'get_time'" in tool_msg["content"]
+        assert reply == "recovered"

@@ -1,0 +1,45 @@
+# Routing eval cases (plan Phase 3, step 3.4 — extended from Appendix B).
+# Coverage: 5 per single agent (20), 6 none, 4 multi-agent = 30 total.
+# expect: scheduler | librarian | analyst | systems | none | [agent, agent]
+
+# --- scheduler (5) ---
+- {input: "what time is it", expect: scheduler}
+- {input: "remind me to water the plants in 3 hours", expect: scheduler}
+- {input: "what day of the week is August 20th", expect: scheduler}
+- {input: "what reminders do I have today", expect: scheduler}
+- {input: "wake me up at 6:30 tomorrow morning", expect: scheduler}
+
+# --- librarian (5) ---
+- {input: "remember that my passport expires in March", expect: librarian}
+- {input: "save a note that the project wifi password is blueplanet42", expect: librarian}
+- {input: "when does my passport expire", expect: librarian}
+- {input: "what did I save about the wifi", expect: librarian}
+- {input: "store this: my dentist is Dr. Patel on Main Street", expect: librarian}
+
+# --- analyst (5) ---
+- {input: "what's the weather in Berlin", expect: analyst}
+- {input: "search the web for the latest AI news", expect: analyst}
+- {input: "who won the Celtics game last night", expect: analyst}
+- {input: "what is the current price of bitcoin", expect: analyst}
+- {input: "will it rain in London this weekend", expect: analyst}
+
+# --- systems (5) ---
+- {input: "how is my computer doing", expect: systems}
+- {input: "what's using all my memory", expect: systems}
+- {input: "how much disk space do I have left", expect: systems}
+- {input: "how long has my machine been running", expect: systems}
+- {input: "is my CPU under heavy load right now", expect: systems}
+
+# --- none (6): greetings, small talk, clarification ---
+- {input: "hello", expect: none}
+- {input: "thanks, that's all", expect: none}
+- {input: "how are you feeling today", expect: none}
+- {input: "what can you do for me", expect: none}
+- {input: "remind me about the thing", expect: none}   # must ask a clarifying question
+- {input: "save a note", expect: none}                 # missing content: clarify
+
+# --- multi-agent (4) ---
+- {input: "check the weather in Rome and remind me to pack tonight", expect: [analyst, scheduler]}
+- {input: "save a note that the plumber comes Friday and remind me Thursday evening", expect: [librarian, scheduler]}
+- {input: "look up the current time in Tokyo and save a note with what you find", expect: [analyst, librarian]}
+- {input: "check how my computer is doing and remind me to restart it tonight", expect: [systems, scheduler]}

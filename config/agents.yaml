@@ -1,0 +1,18 @@
+# Sub-agent roster + routing metadata (plan §6.4, Phase 3 — exact schema)
+sub_agents:
+  - name: scheduler
+    display_name: Scheduler
+    mcp_servers: [mcp-time, mcp-reminders]
+    description: "Time, dates, day-of-week and calendar questions in the user's timezone; reminders, alarms, scheduling and planning."
+  - name: librarian
+    display_name: Librarian
+    mcp_servers: [mcp-notes]
+    description: "Long-term memory: store and recall facts, notes, preferences."
+  - name: analyst
+    display_name: Analyst
+    mcp_servers: [mcp-web]
+    description: "Web research, current events, sports results, weather, the time in other cities, and general lookups."
+  - name: systems
+    display_name: Systems
+    mcp_servers: [mcp-system]
+    description: "Local machine status: CPU, memory, disk, battery, uptime."
