@@ -32,3 +32,10 @@ Architecture deviations are forbidden and must be reverted.
 - Installed reality: the `kimi-k2.x` model family (Moonshot API) rejects any temperature other than 1 with HTTP 400 `invalid temperature: only 1 is allowed for this model`
 - Adaptation: `Orchestrator(temperature=None)` default now omits the parameter entirely so the provider default applies; an explicit value is still forwarded for providers that support it. Live tests no longer pass `temperature=0.0`
 - Architecture impact: none
+
+### D-004 — 2026-08-05
+- Plan reference: Phase 4 step 4.2 (service construction), Phase 5 step 5.1 (TTS Settings)
+- Specified: `DeepgramFluxSTTService` importable from `pipecat.services.deepgram.stt` with nested `.Settings(model=...)`; `ToolsSchema` from `pipecat.processors.aggregators.openai_llm_context` taking raw OpenAI tool dicts in `standard_tools`
+- Installed reality: pipecat 1.4.0 — Flux STT lives at `pipecat.services.deepgram.flux.stt` with standalone `DeepgramFluxSTTSettings(model=...)` from `pipecat.services.deepgram.flux.base`; `ToolsSchema` lives at `pipecat.adapters.schemas.tools_schema` and its `standard_tools` takes `FunctionSchema` objects (`pipecat.adapters.schemas.function_schema`), not raw dicts. ElevenLabsTTSSettings matches the plan (voice/model/stability/similarity_boost fields present). STT "keywords" tuning maps to the Flux settings `keyterm` field
+- Adaptation: updated imports in `jarvis/bot/pipeline.py`; the locked OpenAI delegate_task schema is converted to `FunctionSchema` (same name/description/properties/required); STT/TTS settings values unchanged
+- Architecture impact: none
