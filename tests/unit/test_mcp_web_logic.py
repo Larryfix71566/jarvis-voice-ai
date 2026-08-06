@@ -62,6 +62,84 @@ class TestWebSearch:
         assert logic.web_search("q")["error"] == "Web search failed: ConnectError."
 
 
+def _sse(payload: dict) -> str:
+    import json as _json
+
+    return "event: message\ndata: " + _json.dumps(payload) + "\n\n"
+
+
+class FakeMCPSearchResponse(FakeResponse):
+    """FakeResponse with an SSE .text body for the hosted MCP endpoint."""
+
+    def __init__(self, inner_results, status=200):
+        super().__init__({}, status)
+        inner = {"results": inner_results, "answer": "MCP answer."}
+        import json as _json
+
+        rpc = {"jsonrpc": "2.0", "id": 1,
+               "result": {"content": [{"type": "text", "text": _json.dumps(inner)}]}}
+        self.text = _sse(rpc)
+
+
+class TestWebSearchMCPTransport:
+    """D-011: hosted-MCP-first transport with REST fallback."""
+
+    def test_mcp_primary_used_and_mapped(self, monkeypatch):
+        monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+        calls = []
+
+        def fake_post(url, **kwargs):
+            calls.append(url)
+            assert "mcp.tavily.com" in url  # REST must not be needed
+            return FakeMCPSearchResponse([
+                {"title": "A", "url": "https://a", "content": "x" * 400},
+            ])
+
+        monkeypatch.setattr(logic.httpx, "post", fake_post)
+        result = logic.web_search("query", max_results=2)
+        assert len(calls) == 1
+        assert result["answer"] == "MCP answer."
+        assert result["results"][0]["title"] == "A"
+        assert len(result["results"][0]["snippet"]) == 300
+
+    def test_mcp_transport_error_falls_back_to_rest(self, monkeypatch):
+        monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+
+        def fake_post(url, **kwargs):
+            if "mcp.tavily.com" in url:
+                raise httpx.ConnectError("waf blocked")
+            return FakeResponse({"answer": "REST answer.", "results": []})
+
+        monkeypatch.setattr(logic.httpx, "post", fake_post)
+        assert logic.web_search("q")["answer"] == "REST answer."
+
+    def test_mcp_jsonrpc_error_falls_back_to_rest(self, monkeypatch):
+        monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+
+        class ErrorBody(FakeResponse):
+            text = _sse({"jsonrpc": "2.0", "id": 1,
+                         "error": {"code": -32601, "message": "no such tool"}})
+
+        def fake_post(url, **kwargs):
+            if "mcp.tavily.com" in url:
+                return ErrorBody({})
+            return FakeResponse({"answer": "REST answer.", "results": []})
+
+        monkeypatch.setattr(logic.httpx, "post", fake_post)
+        assert logic.web_search("q")["answer"] == "REST answer."
+
+    def test_both_transports_down_reports_rest_error(self, monkeypatch):
+        monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+
+        def fake_post(url, **kwargs):
+            if "mcp.tavily.com" in url:
+                raise httpx.ConnectError("waf blocked")
+            return FakeResponse({}, 403)
+
+        monkeypatch.setattr(logic.httpx, "post", fake_post)
+        assert logic.web_search("q")["error"] == "Web search failed (HTTP 403)."
+
+
 GEO_PAYLOAD = {
     "results": [{
         "name": "Tokyo", "country": "Japan",

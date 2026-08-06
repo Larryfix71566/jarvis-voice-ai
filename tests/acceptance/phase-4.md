@@ -55,7 +55,7 @@ Evidence: `.acceptance-scratch/` (gitignored): run14.log/run15.log
 | 4 | `USER: Save a note that the Wi Fi password is swordfish.` → Librarian create_note → `JARVIS: Saved, Boss. The Wi-Fi password is swordfish...`; notes row `Wi-Fi Password / The Wi-Fi password is "swordfish".` ✓; audio verified ("Swordfish" exact). |
 | 5 | `USER: What did I save about Wi Fi?` → Librarian search_notes → `JARVIS: You saved that the Wi-Fi password is swordfish, Boss.` ✓ "swordfish" in reply; audio verified. |
 | 6 | `USER: What's the weather in Tokyo` → Analyst get_weather → real conditions: `JARVIS: In Tokyo... twenty six degrees Celsius and mainly clear. High of thirty one, low of twenty three, light drizzle expected.`; audio verified. |
-| 7 | `USER: Search the web for today's top tech news.` → `[AGENT] Analyst working / calling web_search / done` ✓ routing + tool execution. This run the sub-agent's Tavily call was refused (free dev key now 403s from the sandbox's datacenter IP — same anti-abuse pattern ElevenLabs had; external account issue, listed below) and Jarvis reported the failure honestly per rule 3: `JARVIS: I was unable to retrieve today's tech news due to a web access issue, Boss...`; audio verified. Earlier same-day runs (run7 04:14, run8b 04:38) show successful web_search round-trips (~7 s, done) for this same utterance before the block started. |
+| 7 | (run16, TTS live, after D-011) `USER: Search the web for today's top tech news.` → `[AGENT] Analyst working / calling web_search / done` → REAL current headlines spoken: `JARVIS: Here is today's top tech news, Boss. SpaceX revenue surged 92% but shares slid. Snap stock jumped 8% on earnings. Sila raised $300 million for battery manufacturing. Fusion funding hit $4.5 billion as General Fusion listed on Nasdaq...`; audio transcription confirms the spoken headlines. (History: run14's attempt was refused when Tavily's AWS WAF blocked the sandbox egress IP on the REST endpoint — diagnosed as pre-auth edge block, account healthy; fixed by D-011's switch to Tavily's hosted MCP transport, which the same IP reaches freely.) |
 | 8 | `USER: How's my computer doing?` → Systems get_system_status → real stats: `JARVIS: ...CPU is at fifteen percent, memory at thirty one percent, disk at twenty four percent, uptime one point three hours...`; audio verified. |
 | 9 | (run15, TTS live) `USER: Check the weather in Paris and remind me to pack an umbrella tomorrow morning.` → `[AGENT] Analyst working` AND `[AGENT] Scheduler working` → combined reply: `JARVIS: Paris is clear and dry right now, with no rain expected. Reminder set for eight AM tomorrow morning to pack an umbrella, Boss.`; reminders row `(2, 'Pack an umbrella', '2026-08-06T08:00:00-04:00')` ✓; audio verified. (run14's attempt delegated only the Analyst hop — LLM nondeterminism against prompt rule 2, not wiring; run8c earlier the same day also passed both hops with DB row.) |
 | 10 | `USER: Remind me about the report.` → no [AGENT] lines → `JARVIS: When would you like that reminder, Boss?` ✓ exactly one clarifying question; audio verified. |
@@ -72,10 +72,11 @@ roles present. TURN lines do not include first-audio latency yet (the
 below; see plan Phase 5/8).
 
 Notes / external issues found during live runs:
-- Tavily free dev key now returns HTTP 403 from this sandbox's egress IP
-  (worked earlier the same day). Routing to Analyst/web_search is
-  unaffected; live web content needs the key/account unblocked or a paid
-  tier — same resolution path as the ElevenLabs block.
+- Tavily's AWS WAF blocked the sandbox's egress IP on api.tavily.com
+  mid-session (pre-auth awselb 403; account healthy per dashboard). Fixed
+  in-tree by D-011: web_search now uses Tavily's hosted MCP endpoint
+  (mcp.tavily.com) first with the REST API as fallback — verified live
+  with real headlines (run16).
 - Kimi (the supervisor LLM) is nondeterministic about always emitting the
   second delegate_task call for two-part requests (prompt rule 2): items 9
   and 11 each needed one re-run to capture a both-hops pass. Routing

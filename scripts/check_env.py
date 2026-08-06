@@ -113,14 +113,20 @@ def main() -> int:
     else:
         report(False, "ElevenLabs reachable", "skipped (no ELEVENLABS_API_KEY)")
 
-    # 6. Tavily reachable (WARN-degradable per §6.2)
+    # 6. Tavily reachable (WARN-degradable per §6.2). D-011: probe the
+    # hosted MCP endpoint (the transport web_search uses first); the classic
+    # REST API is WAF-blocked for some egress IPs even with a healthy key.
     if not env.get("TAVILY_API_KEY"):
         report(None, "Tavily reachable", "no key — mcp-web will run degraded")
     else:
-        code, _ = http_status("https://api.tavily.com/search",
-                              {"Authorization": f"Bearer {env['TAVILY_API_KEY']}"},
-                              method="POST",
-                              payload={"query": "ping", "max_results": 1})
+        code, _ = http_status(
+            f"https://mcp.tavily.com/mcp/?tavilyApiKey={env['TAVILY_API_KEY']}",
+            {"Content-Type": "application/json",
+             "Accept": "application/json, text/event-stream"},
+            method="POST",
+            payload={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                     "params": {"name": "tavily_search",
+                                "arguments": {"query": "ping", "max_results": 1}}})
         report(code is not None and 200 <= code < 300, "Tavily reachable",
                f"HTTP {code}" if code else "connection error")
 

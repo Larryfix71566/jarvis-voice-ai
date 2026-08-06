@@ -3,15 +3,24 @@
 Sync functions, plain dicts in/out, 10s httpx timeouts, network failures
 return {"error": ...} — never raise. TAVILY_API_KEY absent -> degraded
 mode error dict (plan §6.2).
+
+D-011: the Tavily search transport is MCP-first. Tavily's AWS WAF blocks
+some egress IPs on api.tavily.com (bare awselb 403 before auth), while
+their hosted MCP endpoint mcp.tavily.com serves the same key/account from
+the same source IP. web_search therefore tries the MCP JSON-RPC endpoint
+first and falls back to the classic REST API; the locked return contract
+({"results": [{title,url,snippet}], "answer": str}) is unchanged.
 """
 
 from __future__ import annotations
 
+import json
 import os
 
 import httpx
 
 TAVILY_URL = "https://api.tavily.com/search"
+TAVILY_MCP_URL = "https://mcp.tavily.com/mcp/"
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 TIMEOUT = 10.0
@@ -36,6 +45,66 @@ def _condition(code: int | None) -> str:
     return WMO_CODES.get(code if code is not None else -1, "unknown conditions")
 
 
+def _search_via_rest(query: str, max_results: int, api_key: str) -> dict:
+    """Classic REST transport (fallback when the MCP endpoint fails)."""
+    resp = httpx.post(
+        TAVILY_URL,
+        headers={"Authorization": f"Bearer {api_key}"},
+        json={"query": query, "max_results": max_results, "include_answer": True},
+        timeout=TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+class _MCPTransportError(Exception):
+    """Raised when the hosted MCP endpoint cannot serve the search."""
+
+
+def _parse_sse_json(text: str) -> dict:
+    """Extract the JSON-RPC message from an MCP streamable-HTTP SSE body."""
+    for line in text.splitlines():
+        if line.startswith("data:"):
+            return json.loads(line[len("data:"):].strip())
+    raise _MCPTransportError("no data line in SSE body")
+
+
+def _search_via_mcp(query: str, max_results: int, api_key: str) -> dict:
+    """D-011 primary transport: Tavily's hosted MCP server (JSON-RPC)."""
+    resp = httpx.post(
+        TAVILY_MCP_URL,
+        params={"tavilyApiKey": api_key},
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        },
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "tavily_search",
+                "arguments": {"query": query, "max_results": max_results},
+            },
+        },
+        timeout=TIMEOUT,
+    )
+    resp.raise_for_status()
+    payload = _parse_sse_json(resp.text)
+    if "error" in payload:
+        raise _MCPTransportError(str(payload["error"])[:120])
+    result = payload.get("result") or {}
+    if result.get("isError"):
+        raise _MCPTransportError("tool returned isError")
+    content = result.get("content") or []
+    if not content or content[0].get("type") != "text":
+        raise _MCPTransportError("unexpected MCP content shape")
+    inner = json.loads(content[0]["text"])
+    if inner.get("error"):
+        raise _MCPTransportError(str(inner["error"])[:120])
+    return inner
+
+
 def web_search(query: str, max_results: int = 5) -> dict:
     """Tavily web search. Degrades cleanly when TAVILY_API_KEY is unset."""
     query = (query or "").strip()
@@ -46,18 +115,15 @@ def web_search(query: str, max_results: int = 5) -> dict:
         return {"error": "Web search is unavailable (no API key configured)."}
     max_results = max(1, min(int(max_results), 10))
     try:
-        resp = httpx.post(
-            TAVILY_URL,
-            headers={"Authorization": f"Bearer {api_key}"},
-            json={"query": query, "max_results": max_results, "include_answer": True},
-            timeout=TIMEOUT,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    except httpx.HTTPStatusError as exc:
-        return {"error": f"Web search failed (HTTP {exc.response.status_code})."}
-    except Exception as exc:
-        return {"error": f"Web search failed: {type(exc).__name__}."}
+        data = _search_via_mcp(query, max_results, api_key)
+    except Exception:
+        # MCP endpoint unreachable/blocked/misbehaving -> classic REST.
+        try:
+            data = _search_via_rest(query, max_results, api_key)
+        except httpx.HTTPStatusError as exc:
+            return {"error": f"Web search failed (HTTP {exc.response.status_code})."}
+        except Exception as exc:
+            return {"error": f"Web search failed: {type(exc).__name__}."}
     results = [
         {
             "title": r.get("title", ""),
