@@ -8,3 +8,4 @@ dist/
 .coverage
 data/*.db-*
 .eval-logs/
+.acceptance-scratch/

@@ -19,6 +19,7 @@ changes again.
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -31,7 +32,7 @@ from pipecat.pipeline.task import PipelineTask
 from jarvis.agents.base import load_sub_agents
 from jarvis.agents.delegate import build_delegate_tool
 from jarvis.bot.reminders_watcher import RemindersWatcher
-from jarvis.bot.transcript_log import TranscriptLogger
+from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.voice_switch import (
     available_list,
     build_set_voice_tool,
@@ -57,6 +58,7 @@ from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.processors.audio.vad_processor import VADProcessor
 from pipecat.services.deepgram.flux.base import DeepgramFluxSTTSettings
 from pipecat.services.deepgram.flux.stt import DeepgramFluxSTTService
@@ -146,6 +148,18 @@ def build_pipeline(
         sub_agents, on_event=make_agent_event_handler(transport)
     )
     set_voice_schema, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
+
+    def adapt_to_pipecat(dict_handler):
+        """D-009: pipecat 1.4 register_function handlers receive one
+        FunctionCallParams object and deliver results via
+        params.result_callback(...); jarvis function handlers keep the locked
+        (arguments dict) -> confirmation str contract used by the Supervisor."""
+
+        async def wrapper(params):
+            result = await dict_handler(params.arguments)
+            await params.result_callback(result)
+
+        return wrapper
     agent_catalog = render_agent_catalog([
         {"name": a.name, "display_name": a.display_name,
          "description": a.description}
@@ -173,8 +187,8 @@ def build_pipeline(
         base_url=settings.openai_base_url,
         model=settings.openai_model,
     )
-    llm.register_function("delegate_task", delegate_handler)
-    llm.register_function("set_voice", set_voice_handler)
+    llm.register_function("delegate_task", adapt_to_pipecat(delegate_handler))
+    llm.register_function("set_voice", adapt_to_pipecat(set_voice_handler))
     tts = ElevenLabsTTSService(
         api_key=settings.elevenlabs_api_key,
         settings=ElevenLabsTTSSettings(
@@ -206,7 +220,13 @@ def build_pipeline(
 
     pipeline = Pipeline([
         transport.input(),
-        VADProcessor(vad_analyzer=SileroVADAnalyzer()),
+        # stop_secs 2.5 (default 0.2): wiring tuning so a mid-sentence pause
+        # (~2 s) does not trigger the local smart-turn analyzer to close the
+        # turn early (Phase 4 acceptance item 11; recorded in DEVIATIONS.md
+        # D-010). Turn end is decided by pipecat's TurnAnalyzer on VAD stop,
+        # so the VAD stop window is the lever — Flux EOT only finalizes
+        # transcripts, which accumulate harmlessly mid-turn.
+        VADProcessor(vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=2.5))),
         stt,
         aggregators.user(),
         llm,
@@ -273,7 +293,38 @@ async def run_session(transport: Any) -> None:
     try:
         catalog = load_voice_catalog()
         pipeline, _llm, aggregators, pusher = build_pipeline(transport, runtime)
-        task = PipelineTask(pipeline)
+        # D-007: user-side transcript logging lives in a task observer because
+        # pipecat 1.4's user aggregator consumes TranscriptionFrame; the locked
+        # 9-processor order is unchanged.
+        observers = [TranscriptObserver(runtime.session_id)]
+        if os.environ.get("JARVIS_DEBUG_OBSERVER"):
+            # Temporary diagnostic: print every function-call frame hop with
+            # timestamps to find where post-result frames stall.
+            from pipecat.frames.frames import (
+                FunctionCallInProgressFrame,
+                FunctionCallResultFrame,
+            )
+            from pipecat.observers.base_observer import BaseObserver
+
+            class _FnFrameProbe(BaseObserver):
+                async def on_push_frame(self, data) -> None:
+                    if isinstance(
+                        data.frame,
+                        (FunctionCallInProgressFrame, FunctionCallResultFrame),
+                    ):
+                        src = type(data.source).__name__ if data.source else "?"
+                        dst = (
+                            type(data.destination).__name__
+                            if data.destination else "?"
+                        )
+                        print(
+                            f"[FNPROBE] {type(data.frame).__name__} "
+                            f"{src}->{dst} dir={data.direction}",
+                            flush=True,
+                        )
+
+            observers.append(_FnFrameProbe())
+        task = PipelineTask(pipeline, observers=observers)
         pusher.bind(task)
 
         client_connected = {"value": False}
@@ -287,11 +338,14 @@ async def run_session(transport: Any) -> None:
                 "voices": catalog["voices"],
                 "current": catalog["default"],
             })
-            aggregators.user().add_message({
+            # D-008: pipecat 1.4 has add_messages (plural) and requires an
+            # explicit push_context_frame() to trigger the LLM run.
+            aggregators.user().add_messages([{
                 "role": "user",
                 "content": "[system] The user just connected. "
                            "Greet them briefly by name.",
-            })
+            }])
+            await aggregators.user().push_context_frame()
 
         @transport.event_handler("on_client_disconnected")
         async def on_client_disconnected(transport: Any, client: Any) -> None:
@@ -299,7 +353,9 @@ async def run_session(transport: Any) -> None:
             client_connected["value"] = False
 
         async def inject_context(text: str) -> None:
-            aggregators.user().add_message({"role": "user", "content": text})
+            # D-008: same 1.4 context-injection pattern as the greeting.
+            aggregators.user().add_messages([{"role": "user", "content": text}])
+            await aggregators.user().push_context_frame()
 
         watcher = RemindersWatcher(
             runtime.registry,

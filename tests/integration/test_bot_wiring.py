@@ -3,7 +3,8 @@
 Constructs the pipeline with mocked transport/STT/LLM and asserts:
 - processor order is exactly the locked Phase 4 order,
 - delegate_task is the one function registered on the LLM service,
-- TranscriptLogger writes conversations rows for both roles.
+- transcript logging writes conversations rows for both roles (user side via
+  the D-007 task observer, assistant side via the TranscriptLogger processor).
 """
 
 import asyncio
@@ -160,6 +161,30 @@ def test_two_functions_registered(runtime, fakes):
     assert llm.kwargs == {"api_key": "sk", "base_url": "http://llm", "model": "m"}
 
 
+async def test_registered_handlers_accept_pipecat_params(runtime, fakes):
+    """D-009: pipecat 1.4 invokes register_function handlers with a single
+    FunctionCallParams object and expects the result via result_callback —
+    not the locked (arguments dict) -> str contract the jarvis handlers use."""
+    _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
+
+    delivered = []
+
+    class FakeParams:
+        def __init__(self, arguments):
+            self.arguments = arguments
+
+        async def result_callback(self, result):
+            delivered.append(result)
+
+    await llm.functions["delegate_task"](
+        FakeParams({"agent_name": "scheduler", "task": "set alarm"}))
+    assert delivered == ["done"]
+
+    delivered.clear()
+    await llm.functions["set_voice"](FakeParams({"voice": "rachel"}))
+    assert delivered and "Rachel" in delivered[0]
+
+
 def test_tts_settings_from_voices_yaml(runtime, fakes):
     pipeline, _, _, _ = build_pipeline(FakeTransport(), runtime)
     tts = next(p for p in pipeline.processors if isinstance(p, FakeTTS))
@@ -240,7 +265,21 @@ def test_wrap_rtvi_envelope():
 
 
 async def test_transcript_logger_writes_both_roles(fresh_db):
+    """User rows come from TranscriptObserver (D-007: the 1.4 user aggregator
+    consumes TranscriptionFrame, so the processor never sees it); assistant
+    rows still come from the TranscriptLogger processor."""
     from pipecat.frames.frames import LLMFullResponseEndFrame, LLMTextFrame, TranscriptionFrame
+    from pipecat.observers.base_observer import FramePushed
+    from pipecat.processors.frame_processor import FrameDirection
+
+    from jarvis.bot.transcript_log import TranscriptObserver
+
+    observer = TranscriptObserver(session_id="s1")
+    await observer.on_push_frame(FramePushed(
+        source=None, destination=None,
+        frame=TranscriptionFrame(
+            text="hello jarvis", finalized=True, user_id="u", timestamp="t"),
+        direction=FrameDirection.DOWNSTREAM, timestamp=0))
 
     logger = TranscriptLogger(session_id="s1")
 
@@ -248,8 +287,6 @@ async def test_transcript_logger_writes_both_roles(fresh_db):
         pass
     logger.push_frame = noop  # detach from pipeline plumbing
 
-    await logger.process_frame(TranscriptionFrame(
-        text="hello jarvis", finalized=True, user_id="u", timestamp="t"), None)
     await logger.process_frame(LLMTextFrame(text="Good "), None)
     await logger.process_frame(LLMTextFrame(text="afternoon."), None)
     await logger.process_frame(LLMFullResponseEndFrame(), None)
