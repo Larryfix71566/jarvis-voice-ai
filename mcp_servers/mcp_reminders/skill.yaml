@@ -1,0 +1,9 @@
+# Skill manifest (upgrade plan §3.1)
+name: mcp-reminders
+version: 1.0.0
+class: standard
+tools: [set_reminder, list_reminders, complete_reminder, cancel_reminder, get_due_reminders]
+requires_env: []
+requires_keychain: []
+scopes: []
+test: "python3 -m pytest tests/unit/test_mcp_reminders_logic.py -q"

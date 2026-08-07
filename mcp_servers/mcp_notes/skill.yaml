@@ -1,0 +1,9 @@
+# Skill manifest (upgrade plan §3.1)
+name: mcp-notes
+version: 1.0.0
+class: standard
+tools: [create_note, list_notes, search_notes, get_note, update_note, delete_note]
+requires_env: []
+requires_keychain: []
+scopes: []
+test: "python3 -m pytest tests/unit/test_mcp_notes_logic.py -q"

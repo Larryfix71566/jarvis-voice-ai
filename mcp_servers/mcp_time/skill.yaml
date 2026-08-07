@@ -1,0 +1,9 @@
+# Skill manifest (upgrade plan §3.1)
+name: mcp-time
+version: 1.0.0
+class: standard
+tools: [get_current_time, resolve_date_expression, date_add, date_diff]
+requires_env: []
+requires_keychain: []
+scopes: []
+test: "python3 -m pytest tests/unit/test_mcp_time_logic.py -q"

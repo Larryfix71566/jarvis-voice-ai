@@ -1,0 +1,9 @@
+# Skill manifest (upgrade plan §3.1)
+name: mcp-system
+version: 1.0.0
+class: standard
+tools: [get_system_status, get_top_processes]
+requires_env: []
+requires_keychain: []
+scopes: []
+test: "python3 -m pytest tests/unit/test_mcp_system_logic.py -q"
