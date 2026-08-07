@@ -8,6 +8,8 @@ psutil
 tavily-python
 httpx
 python-dateutil
+openwakeword
+websockets
 pytest
 pytest-asyncio
 pytest-cov
