@@ -45,9 +45,26 @@ CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(status, due_at);
 CREATE INDEX IF NOT EXISTS idx_notes_tags ON notes(tags);
 """
 
+MIGRATION_0002 = """
+CREATE TABLE IF NOT EXISTS actions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tool TEXT NOT NULL,                -- e.g. git_commit, git_push
+  action_class TEXT NOT NULL,        -- standard | privileged
+  draft_payload TEXT NOT NULL,       -- JSON of the prepared action
+  summary TEXT NOT NULL,             -- human-readable read-back text
+  status TEXT NOT NULL DEFAULT 'pending',  -- pending | committed | failed | expired
+  created_at TEXT NOT NULL,
+  resolved_at TEXT,
+  transcript_excerpt TEXT,
+  result TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_actions_status ON actions(status, tool);
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
+    ("0002_actions", MIGRATION_0002),
 ]
 
 

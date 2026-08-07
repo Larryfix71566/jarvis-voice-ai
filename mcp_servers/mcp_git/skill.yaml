@@ -1,0 +1,9 @@
+# Skill manifest (upgrade plan §3.1)
+name: mcp-git
+version: 0.1.0
+class: privileged
+tools: [git_status, git_log, git_diff_summary, prepare_commit, commit, prepare_push, push, list_actions]
+requires_env: []
+requires_keychain: []
+scopes: []
+test: "python3 -m pytest tests/unit/test_mcp_git_logic.py -q"

@@ -16,3 +16,7 @@ sub_agents:
     display_name: Systems
     mcp_servers: [mcp-system]
     description: "Local machine status: CPU, memory, disk, battery, uptime."
+  - name: developer
+    display_name: Developer
+    mcp_servers: [mcp-git]
+    description: "The Jarvis git repository: status, recent commits, diffs, committing and pushing changes (with confirmation), and the audit trail of repository actions."
