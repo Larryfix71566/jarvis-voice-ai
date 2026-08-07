@@ -18,12 +18,19 @@ def test_supervisor_prompt_formats_all_placeholders():
         timezone="America/New_York",
         agent_catalog="- scheduler (Scheduler): time stuff",
         voice_catalog="- rachel: Rachel (calm)",
+        memory_context="- user.name: Larry",
     )
     assert "Jarvis" in rendered
     assert "America/New_York" in rendered
     assert "- scheduler (Scheduler): time stuff" in rendered
     assert "- rachel: Rachel (calm)" in rendered
+    assert "- user.name: Larry" in rendered
     assert "{" not in rendered  # no unformatted placeholders remain
+
+
+def test_supervisor_prompt_memory_section_present():
+    assert "{memory_context}" in SUPERVISOR_PROMPT
+    assert "Long-term memory" in SUPERVISOR_PROMPT
 
 
 def test_supervisor_prompt_locked_rules_present():
