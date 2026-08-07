@@ -10,9 +10,11 @@ import MicControls from "./components/MicControls";
 import TranscriptDrawer from "./components/TranscriptDrawer";
 import VoicePicker from "./components/VoicePicker";
 import GitPanel from "./components/GitPanel";
+import EditModePanel from "./components/EditModePanel";
 import type { OrbState } from "./components/Orb";
 import "./App.css";
 import "./command-deck.css";
+import "./editmode.css";
 
 function errorText(message: unknown): string {
   const m = message as { data?: unknown };
@@ -36,6 +38,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [gitOpen, setGitOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const transport = usePipecatClientTransportState();
 
   const connected = transport === "ready" || transport === "connected";
@@ -83,6 +86,14 @@ export default function App() {
         <button
           type="button"
           className="btn"
+          onClick={() => setEditOpen((o) => !o)}
+          title="Self-development edit mode (PRs only — merge on GitHub)"
+        >
+          ✎ Edit
+        </button>
+        <button
+          type="button"
+          className="btn"
           onClick={() => setDrawerOpen((o) => !o)}
           title="Transcript history (T)"
         >
@@ -93,6 +104,12 @@ export default function App() {
       {gitOpen && (
         <div className="git-popover">
           <GitPanel />
+        </div>
+      )}
+
+      {editOpen && (
+        <div className="git-popover">
+          <EditModePanel />
         </div>
       )}
 
