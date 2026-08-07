@@ -40,6 +40,10 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from jarvis.db import get_conn, now_iso
 
+#: Log prefix for assistant turns. scripts/spoken_acceptance.py parses this
+#: marker — keep the two in sync.
+ASSISTANT_LOG_PREFIX = "MORTIMER:"
+
 
 class TranscriptLogger(FrameProcessor):
     def __init__(self, session_id: str, **kwargs: Any):
@@ -61,7 +65,7 @@ class TranscriptLogger(FrameProcessor):
             text = "".join(self._assistant_buffer).strip()
             self._assistant_buffer = []
             if text:
-                print(f"[{_ts()}] JARVIS: {text}", flush=True)
+                print(f"[{_ts()}] {ASSISTANT_LOG_PREFIX} {text}", flush=True)
                 self._persist("assistant", text)
             self._log_turn("llm_done")
 

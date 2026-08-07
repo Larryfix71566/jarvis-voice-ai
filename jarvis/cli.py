@@ -18,7 +18,7 @@ from jarvis.config import load_settings
 from jarvis.logging_config import setup_logging
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 
-BANNER = "JARVIS text interface — commands: /tools, /reset, /quit"
+BANNER = "{name} text interface — commands: /tools, /reset, /quit"
 GRAY = "\033[90m"
 RESET = "\033[0m"
 
@@ -49,7 +49,7 @@ async def main() -> None:
     orchestrator = Orchestrator(
         settings, registry, session_id=str(uuid.uuid4()), on_event=on_event
     )
-    print(BANNER)
+    print(BANNER.format(name=settings.jarvis_name.upper()))
 
     try:
         while True:
@@ -98,7 +98,7 @@ async def main() -> None:
             start = time.perf_counter()
             reply = await orchestrator.chat(line)
             elapsed_ms = int((time.perf_counter() - start) * 1000)
-            print(f"Jarvis: {reply}")
+            print(f"{settings.jarvis_name}: {reply}")
             print(f"{GRAY}[{elapsed_ms}ms]{RESET}")
     finally:
         await registry.stop()

@@ -57,7 +57,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">JARVIS</div>
+        <div className="brand">MORTIMER</div>
         <ConnectButton />
         <VoicePicker />
       </header>
@@ -70,7 +70,7 @@ export default function App() {
           <div className="hud-corner hud-tr" />
           <div className="hud-corner hud-bl" />
           <div className="hud-corner hud-br" />
-          <div className="orb-readout">J.A.R.V.I.S.</div>
+          <div className="orb-readout">M.O.R.T.I.M.E.R.</div>
           <Orb state={orbState} />
           <div className={`orb-label orb-label-${orbState}`}>
             <span className="orb-dot" />

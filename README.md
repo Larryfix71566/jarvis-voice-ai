@@ -1,8 +1,8 @@
-# Jarvis — Voice AI Agent Controller
+# Mortimer — Voice AI Agent Controller
 
 ## 1. What this is
 
-Jarvis is an Ironman-style voice assistant that runs entirely on your machine: you speak, it listens, thinks, acts, and answers out loud in a voice you choose. A single voice-facing **Supervisor** agent understands your intent and delegates specialist work to four text-only sub-agents — Scheduler, Librarian, Analyst, and Systems — whose skills live in separate MCP (Model Context Protocol) server processes. Everything persists to a local SQLite file, and the only cloud dependencies are the four speech/LLM/search APIs.
+Mortimer is an Ironman-style voice assistant that runs entirely on your machine: you speak, it listens, thinks, acts, and answers out loud in a voice you choose. A single voice-facing **Supervisor** agent understands your intent and delegates specialist work to four text-only sub-agents — Scheduler, Librarian, Analyst, and Systems — whose skills live in separate MCP (Model Context Protocol) server processes. Everything persists to a local SQLite file, and the only cloud dependencies are the four speech/LLM/search APIs.
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
@@ -56,7 +56,7 @@ Jarvis is an Ironman-style voice assistant that runs entirely on your machine: y
 | OpenAI (or compatible) | https://platform.openai.com/api-keys | `OPENAI_API_KEY` | pay-as-you-go (low cost for dev) | **Yes** |
 | Tavily | https://app.tavily.com | `TAVILY_API_KEY` | 1,000 credits/month | **Yes** |
 | Open-Meteo | no key | — | free, rate-limited | built-in |
-| Picovoice (wake word) | https://console.picovoice.ai | `VITE_PICOVOICE_ACCESS_KEY` (web/.env) | free tier | Optional (stretch) |
+| openWakeWord (wake word) | no key — `pip install openwakeword` | `JARVIS_WAKEWORD_MODEL` (custom model file) | free, open source, fully local | Optional (stretch) |
 
 Any OpenAI-compatible Chat Completions endpoint works as the LLM (set
 `OPENAI_BASE_URL` / `OPENAI_MODEL`, e.g. Moonshot/Kimi
@@ -90,7 +90,7 @@ python scripts/init_db.py
 # 6. Start the web console (terminal 2)
 ./scripts/run_web.sh       # first run installs web dependencies via npm
 
-# 7. Open http://localhost:5173, click Connect, allow the mic, say "Hello Jarvis"
+# 7. Open http://localhost:5173, click Connect, allow the mic, say "Hello Mortimer"
 ```
 
 A text-only REPL is also available for quick checks without a browser:
@@ -99,21 +99,30 @@ A text-only REPL is also available for quick checks without a browser:
 python3 -m jarvis.cli
 ```
 
-## 4. Using Jarvis
+## 4. Using Mortimer
 
 - **Talk naturally.** "What time is it?", "Remind me to call the dentist
   tomorrow at 9 AM", "Remember that Dr. Patel's office is on Main Street",
   "What's the weather in London?", "Search the web for the latest SpaceX
   news", "How is my computer holding up?" Multi-part requests work too:
   "Check the weather in Paris and remind me to pack an umbrella tomorrow."
-- **Interrupt anytime.** Start talking while Jarvis speaks and it stops
+- **Interrupt anytime.** Start talking while Mortimer speaks and it stops
   within about a second and listens.
 - **Push-to-talk:** hold **SPACE** to unmute while held; the mic button
   toggles a persistent mute.
-- **Wake word (optional stretch):** with a free Picovoice Console AccessKey in
-  `web/.env` (`VITE_PICOVOICE_ACCESS_KEY=...`), enable the "Wake word" toggle
-  and just say **"Jarvis"** — a chime plays and the mic unmutes. Detection
-  runs entirely in your browser (Porcupine Web); the server is untouched.
+- **Wake word (optional stretch):** start the local openWakeWord sidecar
+  (`./scripts/run_wakeword.sh`), enable the **"Wake word"** toggle, and just
+  say **"Mortimer"** — a chime plays and the mic unmutes. Detection is fully
+  local: no keys, no cloud, audio never leaves the machine. (Picovoice
+  discontinued its free tier in 2026, so openWakeWord replaced it.)
+  One-time setup:
+  1. `pip install openwakeword websockets` — already in `requirements.txt`
+     (the frozen lock predates the sidecar; regenerate it after this lands).
+  2. Train a custom **"Mortimer"** model free with openWakeWord's
+     synthetic-speech training notebook (linked from the openWakeWord repo),
+     download the `.onnx` (or `.tflite`) file, and set `JARVIS_WAKEWORD_MODEL`
+     in `.env` to its path (default: `models/mortimer.onnx`).
+  3. `./scripts/run_wakeword.sh` — sidecar listens on `127.0.0.1:7862`.
 - **Switch voices** by saying "Switch your voice to George", or pick from the
   **voice picker** in the console (catalog from `config/voices.yaml`; add your
   own ElevenLabs voice IDs there, including clones).
@@ -121,7 +130,7 @@ python3 -m jarvis.cli
   ("⚙ Scheduler working…") plus a short history; the server log prints
   `[AGENT]` lines and per-turn `TURN` latency lines.
 - **Proactive reminders:** if a reminder comes due while you're connected,
-  Jarvis speaks it unprompted (checked every 30 s).
+  Mortimer speaks it unprompted (checked every 30 s).
 - **CLI commands:** `/tools` (list loaded tools), `/voice` (list voices),
   `/voice <id>` (switch), `/reset` (clear conversation), `/quit`.
 
@@ -149,6 +158,7 @@ jarvis/
 │   ├── logging_config.py          # stdlib logging setup
 │   ├── db.py                      # sqlite helpers + migrations
 │   ├── prompts.py                 # ALL system prompts (single source of truth)
+│   ├── memory.py                  # persistent memory + tendency learning
 │   ├── skills/
 │   │   ├── __init__.py
 │   │   └── registry.py            # SkillRegistry: MCP client manager
@@ -158,6 +168,9 @@ jarvis/
 │   │   ├── supervisor.py          # Supervisor logic (used by CLI and bot)
 │   │   └── delegate.py            # delegate_task tool implementation
 │   ├── cli.py                     # text REPL — python -m jarvis.cli
+│   ├── wakeword/                  # openWakeWord sidecar (wake word)
+│   │   ├── logic.py               # WakeGate: threshold + cooldown (pure)
+│   │   └── server.py              # localhost websocket sidecar (:7862)
 │   └── bot/
 │       ├── __init__.py
 │       ├── bot.py                 # Pipecat entry point (runner-compatible)
@@ -176,6 +189,7 @@ jarvis/
 │   ├── init_db.py                 # runs migrations
 │   ├── run_bot.sh
 │   ├── run_web.sh
+│   ├── run_wakeword.sh            # optional wake-word sidecar
 │   └── latency_probe.py           # per-turn latency stats from a bot log
 ├── tests/
 │   ├── conftest.py
@@ -199,6 +213,10 @@ jarvis/
         │   └── MicControls.tsx
         └── jarvisClient.ts        # PipecatClient singleton
 ```
+
+*(The internal package name `jarvis/` and the `JARVIS_*` environment variable
+names are stable identifiers — renaming them would break existing installs
+with zero user-visible benefit. Everything user-facing says Mortimer.)*
 
 ## 6. Testing
 
@@ -235,8 +253,9 @@ ls tests/acceptance/
 | Port in use (7860 or 5173) | An old bot/web process is still running | `pkill -f jarvis.bot.bot` / `pkill -f vite`, or change the port (`JARVIS_BOT_PORT`, `npm run dev -- --port`) |
 | Voices not switching | Voice id not in `config/voices.yaml`, or TTS update failed | List valid ids: `python scripts/list_voices.py`; check the bot log for TTS errors |
 | Reminders not firing | Client not connected (watcher only delivers while connected), or `due_at` in the future | Reconnect and wait ≤ 30 s; inspect rows: `sqlite3 data/jarvis.db 'select * from reminders'` |
-| Wake-word toggle disabled | `VITE_PICOVOICE_ACCESS_KEY` not set | Create a free AccessKey at console.picovoice.ai, put it in `web/.env`, restart `run_web.sh` |
-| `invalid temperature` from the LLM | Provider (e.g. kimi-k2.x) only accepts temperature=1 | Leave temperature unset — Jarvis omits it by default (DEVIATIONS.md D-003) |
+| Wake-word toggle errors | Sidecar not running, `openwakeword` not installed, or model file missing | `pip install openwakeword websockets`; train the "Mortimer" model and set `JARVIS_WAKEWORD_MODEL`; run `./scripts/run_wakeword.sh` |
+| Wake word hears nothing / fires constantly | Threshold wrong for your mic/model | Adjust `JARVIS_WAKEWORD_THRESHOLD` (raise to reduce false wakes, lower to increase sensitivity) and restart the sidecar |
+| `invalid temperature` from the LLM | Provider (e.g. kimi-k2.x) only accepts temperature=1 | Leave temperature unset — Mortimer omits it by default (DEVIATIONS.md D-003) |
 | Web build fails with missing module files | Flaky filesystem truncated `node_modules` | Reinstall on a healthy filesystem: `cd web && rm -rf node_modules && npm install --no-bin-links` (D-006) |
 | First bot boot or test run hangs for minutes | pipecat downloads NLTK `punkt_tab` on first import; the download stalls on restricted networks | One-time seed: `python -c "import nltk; nltk.download('punkt_tab')"`. If your network blocks raw.githubusercontent.com, download `https://cdn.jsdelivr.net/gh/nltk/nltk_data@gh-pages/packages/tokenizers/punkt_tab.zip` and unzip into `~/nltk_data/tokenizers/` |
 
@@ -257,9 +276,12 @@ ls tests/acceptance/
 | `JARVIS_BOT_PORT` | `7860` | Bot HTTP/WebRTC port |
 | `JARVIS_WEBRTC_ENDPOINT` | `http://localhost:7860/api/offer` | WebRTC offer endpoint (client-side) |
 | `JARVIS_TIMEZONE` | `America/New_York` | User timezone for reminders/dates |
-| `JARVIS_USER_NAME` | `Boss` | How Jarvis addresses you |
-| `JARVIS_NAME` | `Jarvis` | Assistant's name |
-| `VITE_PICOVOICE_ACCESS_KEY` | — (feature off) | Web-side only (`web/.env`): enables the optional "Jarvis" wake word |
+| `JARVIS_USER_NAME` | `Boss` | How Mortimer addresses you |
+| `JARVIS_NAME` | `Mortimer` | Assistant's name |
+| `JARVIS_WAKEWORD_PORT` | `7862` | Wake-word sidecar websocket port (localhost only) |
+| `JARVIS_WAKEWORD_MODEL` | `models/mortimer.onnx` | Custom wake-word model file (sidecar exits if missing) |
+| `JARVIS_WAKEWORD_THRESHOLD` | `0.5` | Wake detection score threshold (0–1) |
+| `JARVIS_WAKEWORD_COOLDOWN` | `2.0` | Minimum seconds between wake events |
 
 **Config files:**
 

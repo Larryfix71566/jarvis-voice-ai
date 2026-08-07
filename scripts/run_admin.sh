@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run the Jarvis admin sidecar (upgrade plan U1.5): localhost-only API on 7861.
+# Run the Mortimer admin sidecar (upgrade plan U1.5): localhost-only API on 7861.
 set -e
 cd "$(dirname "$0")/.."
 set -a

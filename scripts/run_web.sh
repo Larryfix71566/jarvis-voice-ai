@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Phase 6: start the Jarvis web console (dev server on :5173).
+# Phase 6: start the Mortimer web console (dev server on :5173).
 # The bot must be running separately: ./scripts/run_bot.sh
 set -euo pipefail
 cd "$(dirname "$0")/../web"
