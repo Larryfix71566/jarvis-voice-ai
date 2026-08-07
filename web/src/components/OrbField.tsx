@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import { RTVIEvent } from "@pipecat-ai/client-js";
 import {
   usePipecatConversation,
@@ -163,7 +164,7 @@ export default function OrbField({ state }: { state: OrbState }) {
         const pull = {
           "--px": `${(50 - a.x) * 0.08}%`,
           "--py": `${(50 - a.y) * 0.08}%`,
-        } as React.CSSProperties;
+        } as CSSProperties;
         return (
           <div
             key={`${a.key}-${doneAt[a.key] ?? 0}`}
