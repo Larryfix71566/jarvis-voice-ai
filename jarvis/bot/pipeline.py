@@ -43,6 +43,7 @@ from jarvis.bot.voice_switch import (
 from jarvis.cli import bridge_settings_to_env
 from jarvis.config import Settings, load_settings
 from jarvis.db import run_migrations
+from jarvis.memory import render_memory_context, update_memory_from_session
 from jarvis.prompts import (
     SUPERVISOR_PROMPT,
     VOICE_ADDENDUM,
@@ -172,6 +173,7 @@ def build_pipeline(
             timezone=settings.jarvis_timezone,
             agent_catalog=agent_catalog,
             voice_catalog=catalog_summary(catalog),
+            memory_context=render_memory_context(),  # U2.5 persistent memory
         )
         + "\n"
         + VOICE_ADDENDUM
@@ -405,5 +407,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             await runner.run(task)
         finally:
             await watcher.stop()
+            # U2.5: fold this session into long-term memory. Best-effort,
+            # hard-capped — memory work must never delay shutdown.
+            try:
+                await asyncio.wait_for(
+                    update_memory_from_session(settings, runtime.session_id),
+                    timeout=30,
+                )
+            except Exception:  # noqa: BLE001
+                pass
     finally:
         await registry.stop()
