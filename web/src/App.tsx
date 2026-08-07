@@ -1,16 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RTVIEvent } from "@pipecat-ai/client-js";
 import {
   usePipecatClientTransportState,
   useRTVIClientEvent,
 } from "@pipecat-ai/client-react";
 import ConnectButton from "./components/ConnectButton";
-import Orb, { type OrbState } from "./components/Orb";
+import OrbField from "./components/OrbField";
 import MicControls from "./components/MicControls";
-import Transcript from "./components/Transcript";
+import TranscriptDrawer from "./components/TranscriptDrawer";
 import VoicePicker from "./components/VoicePicker";
-import AgentActivity from "./components/AgentActivity";
 import GitPanel from "./components/GitPanel";
+import type { OrbState } from "./components/Orb";
 import "./App.css";
 
 function errorText(message: unknown): string {
@@ -25,9 +25,16 @@ function errorText(message: unknown): string {
   return "An error occurred.";
 }
 
+function isTypingTarget(target: EventTarget | null): boolean {
+  const tag = (target as HTMLElement | null)?.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
 export default function App() {
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [gitOpen, setGitOpen] = useState(false);
   const transport = usePipecatClientTransportState();
 
   const connected = transport === "ready" || transport === "connected";
@@ -38,12 +45,6 @@ export default function App() {
     : transport === "disconnected" || transport === "error"
       ? "offline"
       : "connecting";
-  const orbLabel = {
-    offline: "Standby",
-    connecting: "Spinning up",
-    listening: "Listening",
-    speaking: "Speaking",
-  }[orbState];
 
   useRTVIClientEvent(RTVIEvent.BotStartedSpeaking, () => {
     setSpeaking(true);
@@ -54,37 +55,58 @@ export default function App() {
     setError(errorText(message)),
   );
 
+  // T toggles the transcript drawer (voice-first; text on demand).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "KeyT" || e.repeat || isTypingTarget(e.target)) return;
+      setDrawerOpen((o) => !o);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div className="app">
       <header className="topbar">
         <div className="brand">MORTIMER</div>
         <ConnectButton />
         <VoicePicker />
+        <button
+          type="button"
+          className="btn"
+          onClick={() => setGitOpen((o) => !o)}
+          title="Repository (admin sidecar)"
+        >
+          ⚙ Repo
+        </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => setDrawerOpen((o) => !o)}
+          title="Transcript history (T)"
+        >
+          Log
+        </button>
       </header>
+
+      {gitOpen && (
+        <div className="git-popover">
+          <GitPanel />
+        </div>
+      )}
 
       {error && <div className="error-banner">{error}</div>}
 
       <main className="main">
-        <section className="orb-wrap">
-          <div className="hud-corner hud-tl" />
-          <div className="hud-corner hud-tr" />
-          <div className="hud-corner hud-bl" />
-          <div className="hud-corner hud-br" />
-          <div className="orb-readout">M.O.R.T.I.M.E.R.</div>
-          <Orb state={orbState} />
-          <div className={`orb-label orb-label-${orbState}`}>
-            <span className="orb-dot" />
-            {orbLabel}
-          </div>
-          <GitPanel />
-        </section>
-        <Transcript />
+        <OrbField state={orbState} />
       </main>
 
       <footer className="bottombar">
         <MicControls />
-        <AgentActivity />
+        <div className="hints">SPACE talk · T transcript</div>
       </footer>
+
+      <TranscriptDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>
   );
 }
