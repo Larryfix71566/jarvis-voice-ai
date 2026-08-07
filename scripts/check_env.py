@@ -81,8 +81,13 @@ def main() -> int:
     # 3. LLM reachable
     if env.get("OPENAI_API_KEY"):
         base = env.get("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-        code, _ = http_status(f"{base}/models",
-                              {"Authorization": f"Bearer {env['OPENAI_API_KEY']}"})
+        headers = {"Authorization": f"Bearer {env['OPENAI_API_KEY']}"}
+        if "anthropic" in base:
+            # Anthropic's /v1/models expects native auth; Bearer only works
+            # on /chat/completions (the path the bot actually calls).
+            headers = {"x-api-key": env["OPENAI_API_KEY"],
+                       "anthropic-version": "2023-06-01"}
+        code, _ = http_status(f"{base}/models", headers)
         report(code is not None and 200 <= code < 300,
                "LLM reachable (GET {}/models)".format(base),
                f"HTTP {code}" if code else "connection error")
