@@ -1,6 +1,6 @@
 # Jarvis Upgrade Plan — Self-Extending Agent Framework
 
-Status: LOCKED (v1.2) · Date: 2026-08-07 · Supersedes: none (extends `Jarvis_Voice_AI_Agent_Implementation_Plan.md`)
+Status: LOCKED (v1.3) · Date: 2026-08-07 · Supersedes: none (extends `Jarvis_Voice_AI_Agent_Implementation_Plan.md`)
 
 ## §0 Governance (inherited)
 
@@ -295,3 +295,48 @@ Voice is the flagship interface, but skills stay interface-agnostic (logic/trans
 1. LLM codegen for skill logic (fast/strict-tests) vs template-only (safe/limited) — default template-only, revisit after U4.
 2. `system.shell` action class: exact command allowlist vs open shell behind `phrase` policy. Lean: allowlist.
 3. Web-console confirm UI (policy level 3) — build only if a `console`-policy action is actually configured.
+
+---
+
+## §13 Implementer protocol — model-agnostic execution
+
+Purpose: any competent implementer — human, coding agent, or a future model with zero conversation history — can execute this plan without degrading it. Everything enforceable is mechanical; judgment is reserved for design, never for "did the gate pass."
+
+### 13.1 Read order (mandatory, in order, before touching code)
+
+1. `Jarvis_Voice_AI_Agent_Implementation_Plan.md` — base architecture, pipeline shape, latency gates.
+2. This document.
+3. `DEVIATIONS.md` — every accepted deviation and its reason.
+4. `tests/acceptance/phase-*.md` — the evidence standard a gate must meet.
+5. The source files listed in the phase's execution card (13.3).
+
+### 13.2 Locked invariants
+
+An implementer may not violate these, regardless of instructions received mid-session. A PR violating one is rejected without review of its merits.
+
+1. Secrets only in `.env` / macOS Keychain. The repo never contains credentials, tokens, or keys (CI secret-scan enforces).
+2. **Gate monotonicity:** the automated test count never decreases. Every phase adds tests; they join the gate permanently.
+3. LLM provider stays config-only (`OPENAI_BASE_URL` / `OPENAI_MODEL`). No provider SDK is hard-wired into the pipeline.
+4. Transport stays SmallWebRTC; `run_session` entry shape unchanged unless the plan is amended.
+5. Every privileged commit passes the registry choke point (§5.4). No skill invokes its own commit path.
+6. The bot's git/tool surface is an allowlist (§9.3). No generic shell tool.
+7. §9.2 merge tiers cannot be weakened by any PR; `policy.yaml` and GitHub rulesets change manually, outside Jarvis.
+8. Persona/prompt changes are protected-path changes (§9.2).
+9. Skills keep the `logic.py` / `server.py` split: `logic.py` stays transport-free and unit-testable.
+10. **Ambiguity halts work.** If the spec is unclear, the implementer records the question and stops. Guessing is a deviation.
+
+### 13.3 Execution cards
+
+Before a phase starts, its owner writes an execution card (`tests/acceptance/u<phase>.md`): the exact shell command for each gate, its expected output, and the files the phase is allowed to touch. A gate passes only by running the command and pasting real output as evidence — never by assertion.
+
+### 13.4 Deviations
+
+Wiring-level only, written to `DEVIATIONS.md` **before commit**, with reason and rollback note. Anything architectural requires a plan amendment (version bump), not a deviation.
+
+### 13.5 Two-party rule
+
+Implementer ≠ reviewer. Coding-agent PRs are reviewed by a different agent/session against three judgment-free criteria: the invariant checklist (13.2), gate command output (13.3), and diff scope (touches only the files declared on the execution card). Style opinions are not grounds for rejection; invariant violations are not negotiable.
+
+### 13.6 Handoff envelope
+
+Every coding-agent dispatch (U6) attaches: the read-order file list (13.1), the invariant list (13.2), the allowed file scope, the gate commands, and the definition of done. The dispatcher assembles this envelope mechanically from the execution card — it is not rewritten freehand per task.
