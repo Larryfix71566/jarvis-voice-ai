@@ -41,6 +41,18 @@ let node: AudioWorkletNode | null = null;
 let ws: WebSocket | null = null;
 let running = false;
 
+/** Wake-event listeners (e.g. the orb ripple) — notified on each detection. */
+type WakeListener = () => void;
+const wakeListeners = new Set<WakeListener>();
+
+/** Subscribe to wake detections; returns an unsubscribe function. */
+export function subscribeWake(cb: WakeListener): () => void {
+  wakeListeners.add(cb);
+  return () => {
+    wakeListeners.delete(cb);
+  };
+}
+
 /** Short two-tone chime via WebAudio (no asset file needed). */
 export function playChime(): void {
   try {
@@ -105,6 +117,7 @@ export async function startWakeWord(onWake: () => void): Promise<void> {
         const msg = JSON.parse(String(ev.data));
         if (msg?.type === "wake") {
           playChime();
+          wakeListeners.forEach((cb) => cb());
           onWake();
         }
       } catch {
