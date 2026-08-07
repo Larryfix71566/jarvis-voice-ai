@@ -76,24 +76,37 @@
   }
 }
 
-/* --- agent satellites --- */
+/* --- agent satellite cards --- */
 .satellite {
   position: absolute;
   transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   z-index: 2;
-  opacity: 0.55;
-  transition: opacity 0.4s;
+  padding: 9px 13px;
+  background: rgba(6, 11, 15, 0.85);
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  opacity: 0.6;
+  transition:
+    opacity 0.4s,
+    border-color 0.3s,
+    box-shadow 0.3s,
+    transform 0.5s ease;
 }
 
-.satellite-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--text-dim);
-  transition: background 0.3s;
+.satellite-icon {
+  display: flex;
+  color: var(--text-dim);
+  transition: color 0.3s;
+}
+
+.satellite-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 190px;
 }
 
 .satellite-name {
@@ -105,14 +118,40 @@
   transition: color 0.3s;
 }
 
-.satellite-working {
-  opacity: 1;
+.satellite-status {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 190px;
 }
 
-.satellite-working .satellite-dot {
-  background: var(--accent);
-  box-shadow: 0 0 12px var(--accent);
-  animation: dot-pulse 1s ease-in-out infinite;
+/* working: glow, pull toward the orb, animated icon */
+.satellite-working {
+  opacity: 1;
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 18px var(--accent-faint);
+  transform: translate(-50%, -50%) translate(var(--px, 0), var(--py, 0))
+    scale(1.06);
+}
+
+.satellite-working .satellite-icon {
+  color: var(--accent);
+  animation: icon-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes icon-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .satellite-working .satellite-name {
@@ -120,10 +159,22 @@
   text-shadow: 0 0 10px var(--accent-dim);
 }
 
-.satellite-done .satellite-dot {
-  background: var(--green);
-  box-shadow: 0 0 10px var(--green);
+.satellite-working .satellite-status {
+  color: var(--text);
+}
+
+/* just finished: brief green settle */
+.satellite-done {
+  border-color: rgba(61, 220, 151, 0.35);
+}
+
+.satellite-done .satellite-icon {
+  color: var(--green);
   animation: done-flash 0.9s ease-out forwards;
+}
+
+.satellite-done .satellite-status {
+  color: var(--green);
 }
 
 @keyframes done-flash {
@@ -281,9 +332,13 @@
   .beam-live,
   .orb-halo-armed,
   .wake-ripple,
-  .satellite-working .satellite-dot,
-  .satellite-done .satellite-dot {
+  .satellite-working .satellite-icon,
+  .satellite-done .satellite-icon {
     animation: none;
+  }
+
+  .satellite-working {
+    transform: translate(-50%, -50%);
   }
 
   .wake-ripple {
@@ -293,7 +348,7 @@
 
 /* --- narrow screens --- */
 @media (max-width: 860px) {
-  .satellite-name {
+  .satellite-status {
     display: none;
   }
 
