@@ -1,6 +1,6 @@
 """Spoken-acceptance harness (Phase 4 "Spoken Dozen" tooling).
 
-Plays pre-recorded WAV files into a running Jarvis bot over the same
+Plays pre-recorded WAV files into a running Mortimer bot over the same
 /api/offer WebRTC path the browser client uses, so the Phase 4 checklist can
 be exercised without a human at the mic. Uses only locked dependencies
 (aiortc + PyAV ship with pipecat's webrtc extra).
@@ -41,10 +41,10 @@ one terminal signal that works on every path.
   1. Delegated turn: terminal when results received >= delegations started,
      then a long quiet (covers the supervisor's LLM re-run between hops of a
      multi-hop turn so we never barge-in on hop 2).
-  2. Non-delegated turn: first JARVIS log line, or 25s with no delegation,
+  2. Non-delegated turn: first MORTIMER log line, or 25s with no delegation,
      then --quiet seconds of inactivity.
 
-Progress goes to stdout; the bot log carries the USER:/JARVIS:/[AGENT]/TURN
+Progress goes to stdout; the bot log carries the USER:/MORTIMER:/[AGENT]/TURN
 lines used as checklist evidence.
 
 Manifest directives (Phase 5/7 extensions — same tooling, no server changes):
@@ -89,6 +89,8 @@ SAMPLE_RATE = 48000
 SAMPLES_PER_FRAME = 960  # 20 ms
 TURN_MARKER = "TURN user_end->llm_done"
 
+#: Assistant-turn log marker (must match transcript_log.ASSISTANT_LOG_PREFIX).
+ASSISTANT_MARKER = "MORTIMER:"
 
 ACTIVITY_RMS = 800  # int16 RMS above this counts as bot speech
 
@@ -96,7 +98,7 @@ ACTIVITY_RMS = 800  # int16 RMS above this counts as bot speech
 class BotAudioRecorder:
     """Records the bot's remote audio track to per-turn 48 kHz mono s16 WAVs.
 
-    With TTS working, this captures what Jarvis actually spoke, so the
+    With TTS working, this captures what the assistant actually spoke, so the
     audible checklist items get machine-verifiable evidence (the WAVs can
     also be transcribed back for content checks).
 
@@ -287,7 +289,7 @@ def turn_signature(text: str) -> tuple:
         text.count(TURN_MARKER),
         len(WORKING_RE.findall(text)),
         len(DONE_RE.findall(text)),
-        text.count("JARVIS:"),
+        text.count(ASSISTANT_MARKER),
         dc.started,
         dc.results,
         dc.working,
@@ -305,9 +307,9 @@ async def wait_for_turn_complete(
         return False
     started0, results0, working0 = snap
     try:
-        jarvis0 = log_path.read_text(errors="replace").count("JARVIS:")
+        assistant0 = log_path.read_text(errors="replace").count(ASSISTANT_MARKER)
     except FileNotFoundError:
-        jarvis0 = 0
+        assistant0 = 0
     turn_seen_at = time.perf_counter()
     last_sig: tuple | None = None
     last_change = turn_seen_at
@@ -331,11 +333,11 @@ async def wait_for_turn_complete(
             terminal = (dc.results - results0) >= n_deleg
             need_quiet = max(quiet, DELEGATED_QUIET)
         else:
-            terminal = sig[3] > jarvis0 or (now - turn_seen_at) > 25
+            terminal = sig[3] > assistant0 or (now - turn_seen_at) > 25
             need_quiet = quiet
         if not terminal:
             continue
-        # NOTE: we do NOT wait for the final post-result JARVIS line. While
+        # NOTE: we do NOT wait for the final post-result assistant line. While
         # the ElevenLabs account is blocked, the TTS service parks downstream
         # FunctionCall* frames (verified with a frame-level probe: the hop
         # ElevenLabsTTSService->SmallWebRTCOutputTransport never happens until
