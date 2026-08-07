@@ -9,7 +9,7 @@ from jarvis.prompts import render_agent_catalog
 from tests.unit.test_orchestrator import FakeSubAgent
 
 AGENTS = {n: FakeSubAgent(n)
-          for n in ("scheduler", "librarian", "analyst", "systems")}
+          for n in ("scheduler", "librarian", "analyst", "systems", "developer")}
 
 
 class TestSchema:
@@ -21,7 +21,7 @@ class TestSchema:
         assert "self-contained" in fn["description"]
         props = fn["parameters"]["properties"]
         assert props["agent_name"]["enum"] == [
-            "scheduler", "librarian", "analyst", "systems"]
+            "scheduler", "librarian", "analyst", "systems", "developer"]
         assert fn["parameters"]["required"] == ["agent_name", "task"]
 
 
@@ -37,7 +37,7 @@ class TestHandler:
         _, handler = build_delegate_tool(AGENTS)
         result = await handler({"agent_name": "chef", "task": "cook"})
         assert result == ("Unknown agent 'chef'. Available: "
-                          "scheduler, librarian, analyst, systems.")
+                          "scheduler, librarian, analyst, systems, developer.")
 
     async def test_events_forwarded(self):
         events = []
@@ -58,7 +58,7 @@ class TestAgentsYaml:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
         entries = data["sub_agents"]
         assert [e["name"] for e in entries] == [
-            "scheduler", "librarian", "analyst", "systems"]
+            "scheduler", "librarian", "analyst", "systems", "developer"]
         for e in entries:
             assert e["display_name"] and e["description"]
             assert e["mcp_servers"], e["name"]

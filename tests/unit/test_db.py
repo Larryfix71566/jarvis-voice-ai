@@ -4,7 +4,7 @@ import sqlite3
 
 from jarvis.db import get_conn, now_iso, run_migrations
 
-EXPECTED_TABLES = {"migrations", "notes", "reminders", "conversations"}
+EXPECTED_TABLES = {"migrations", "notes", "reminders", "conversations", "actions"}
 
 
 def _table_names(conn: sqlite3.Connection) -> set[str]:
@@ -15,7 +15,7 @@ def _table_names(conn: sqlite3.Connection) -> set[str]:
 def test_migrations_apply_cleanly_to_fresh_db(tmp_path):
     conn = get_conn(tmp_path / "fresh.db")
     newly = run_migrations(conn)
-    assert newly == ["0001_init"]
+    assert newly == ["0001_init", "0002_actions"]
     assert EXPECTED_TABLES <= _table_names(conn)
     conn.close()
 
@@ -24,11 +24,11 @@ def test_migrations_are_idempotent(tmp_path):
     conn = get_conn(tmp_path / "twice.db")
     first = run_migrations(conn)
     second = run_migrations(conn)
-    assert first == ["0001_init"]
+    assert first == ["0001_init", "0002_actions"]
     assert second == []
     # Still exactly one recorded migration row.
     rows = conn.execute("SELECT id FROM migrations").fetchall()
-    assert [row["id"] for row in rows] == ["0001_init"]
+    assert [row["id"] for row in rows] == ["0001_init", "0002_actions"]
     conn.close()
 
 
