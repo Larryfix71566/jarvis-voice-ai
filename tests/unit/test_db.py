@@ -6,6 +6,7 @@ from jarvis.db import get_conn, now_iso, run_migrations
 
 EXPECTED_TABLES = {
     "migrations", "notes", "reminders", "conversations", "actions", "memories",
+    "observations",
 }
 
 
@@ -17,7 +18,7 @@ def _table_names(conn: sqlite3.Connection) -> set[str]:
 def test_migrations_apply_cleanly_to_fresh_db(tmp_path):
     conn = get_conn(tmp_path / "fresh.db")
     newly = run_migrations(conn)
-    assert newly == ["0001_init", "0002_actions", "0003_memory"]
+    assert newly == ["0001_init", "0002_actions", "0003_memory", "0004_observations"]
     assert EXPECTED_TABLES <= _table_names(conn)
     conn.close()
 
@@ -26,12 +27,12 @@ def test_migrations_are_idempotent(tmp_path):
     conn = get_conn(tmp_path / "twice.db")
     first = run_migrations(conn)
     second = run_migrations(conn)
-    assert first == ["0001_init", "0002_actions", "0003_memory"]
+    assert first == ["0001_init", "0002_actions", "0003_memory", "0004_observations"]
     assert second == []
     # Still exactly one recorded migration row.
     rows = conn.execute("SELECT id FROM migrations").fetchall()
     assert [row["id"] for row in rows] == [
-        "0001_init", "0002_actions", "0003_memory",
+        "0001_init", "0002_actions", "0003_memory", "0004_observations",
     ]
     conn.close()
 
@@ -46,6 +47,7 @@ def test_expected_indexes_exist(tmp_path):
     assert "idx_reminders_due" in indexes
     assert "idx_notes_tags" in indexes
     assert "idx_memories_fact_key" in indexes
+    assert "idx_observations_key" in indexes
     conn.close()
 
 
