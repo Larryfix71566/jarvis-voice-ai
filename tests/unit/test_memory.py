@@ -116,13 +116,18 @@ def test_parse_update_strict_json():
     )
     assert _parse_update(payload) == {
         "facts": [("user.name", "Larry")],
+        "observations": [],
         "summary": "s",
     }
 
 
 def test_parse_update_strips_markdown_fence():
     payload = '```json\n{"facts": [], "summary": "hi"}\n```'
-    assert _parse_update(payload) == {"facts": [], "summary": "hi"}
+    assert _parse_update(payload) == {
+        "facts": [],
+        "observations": [],
+        "summary": "hi",
+    }
 
 
 def test_parse_update_rejects_garbage():
@@ -221,3 +226,93 @@ def test_db_path_env_override_used(tmp_path, monkeypatch):
     monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "env.db"))
     run_migrations()
     assert os.path.exists(tmp_path / "env.db")
+
+
+# --- U2.6: tendency learning (observations -> promotion) -----------------
+
+from jarvis.memory import (  # noqa: E402
+    PROMOTE_AFTER,
+    add_observation,
+    delete_fact,
+    promote_observations,
+)
+
+
+def test_observation_does_not_promote_below_threshold(conn):
+    add_observation(conn, "user.style.brevity", "asked for a shorter reply", "s1")
+    add_observation(conn, "user.style.brevity", "again wanted it brief", "s2")
+    assert promote_observations(conn) == []
+    assert render_memory_context(conn) == EMPTY_CONTEXT
+
+
+def test_observation_promotes_at_threshold(conn):
+    for i in range(PROMOTE_AFTER):
+        add_observation(
+            conn, "user.style.brevity", f"preferred brief answer {i}", f"s{i}"
+        )
+    promoted = promote_observations(conn)
+    assert promoted == ["user.style.brevity"]
+    rendered = render_memory_context(conn)
+    assert "- user.style.brevity:" in rendered
+
+
+def test_promotion_requires_distinct_sessions(conn):
+    for i in range(PROMOTE_AFTER + 2):
+        add_observation(conn, "user.style.tone", f"observation {i}", "same-session")
+    assert promote_observations(conn) == []
+
+
+def test_explicit_fact_overrides_stale_observations(conn):
+    upsert_fact(conn, "user.style.format", "User said: always bullet lists.", "s9")
+    # Older observations (earlier timestamps) must not clobber the explicit fact.
+    for i in range(PROMOTE_AFTER):
+        add_observation(conn, "user.style.format", f"seemed to like prose {i}", f"s{i}")
+    assert promote_observations(conn) == []
+    assert conn.execute(
+        "SELECT content FROM memories WHERE key = 'user.style.format'"
+    ).fetchone()["content"] == "User said: always bullet lists."
+
+
+def test_delete_fact_forgets_fact_and_evidence(conn):
+    upsert_fact(conn, "user.style.brevity", "prefers short", "s1")
+    add_observation(conn, "user.style.brevity", "obs", "s1")
+    assert delete_fact(conn, "user.style.brevity") is True
+    assert conn.execute(
+        "SELECT COUNT(*) c FROM memories WHERE key = 'user.style.brevity'"
+    ).fetchone()["c"] == 0
+    assert conn.execute(
+        "SELECT COUNT(*) c FROM observations WHERE key = 'user.style.brevity'"
+    ).fetchone()["c"] == 0
+    assert delete_fact(conn, "user.style.brevity") is False  # already gone
+
+
+@pytest.mark.asyncio
+async def test_update_stores_observations_and_promotes(conn):
+    # Two prior sessions of evidence already logged.
+    add_observation(conn, "user.style.brevity", "wanted it short", "old1")
+    add_observation(conn, "user.style.brevity", "wanted it short", "old2")
+    _add_turn(conn, "s7", "user", "Just give me the short version.")
+    payload = json.dumps(
+        {
+            "facts": [],
+            "observations": [
+                {"key": "user.style.brevity", "value": "asked for the short version"}
+            ],
+            "summary": "User keeps asking for brevity.",
+        }
+    )
+    ok = await update_memory_from_session(
+        _FakeSettings(), "s7", client_factory=_factory(payload)
+    )
+    assert ok is True
+    rendered = render_memory_context(conn)
+    assert "- user.style.brevity:" in rendered  # promoted by the third sighting
+
+
+def test_parse_update_tolerates_missing_observations_key():
+    payload = json.dumps({"facts": [], "summary": "s"})
+    assert _parse_update(payload) == {
+        "facts": [],
+        "observations": [],
+        "summary": "s",
+    }
