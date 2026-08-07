@@ -1,6 +1,6 @@
 # Jarvis Upgrade Plan — Self-Extending Agent Framework
 
-Status: LOCKED (v1.0) · Date: 2026-08-07 · Supersedes: none (extends `Jarvis_Voice_AI_Agent_Implementation_Plan.md`)
+Status: LOCKED (v1.1) · Date: 2026-08-07 · Supersedes: none (extends `Jarvis_Voice_AI_Agent_Implementation_Plan.md`)
 
 ## §0 Governance (inherited)
 
@@ -174,22 +174,68 @@ Fifth sub-agent, `foundry`, backed by `mcp_servers/mcp_forge/`:
 
 ---
 
-## §8 Layer 5 — External project orchestration
+## §8 Layer 5 — Project orchestration (external projects + Jarvis itself)
 
-Jarvis orchestrates external projects; it does not voice-author arbitrary code.
+Jarvis orchestrates projects through the PR loop; it does not voice-author arbitrary code.
 
 - GitHub integration (issues, PRs, clone, status) via MCP; code lives in the target project's own repo with its own CI as the quality gate.
-- Voice role: "open an issue on X", "what's CI status on Y", "summarize PR #12".
-- Locked boundary: Foundry scaffolds **inside** the Jarvis framework only; external repos are interacted with through their own tooling, never self-modified into Jarvis.
+- Voice role: "open an issue on X", "what's CI status on Y", "summarize PR #12", "merge it".
+- **Jarvis's own repo is a managed project.** The unit of self-development is the pull request, never the direct file edit: user states intent by voice → Jarvis opens issue + feature branch → a coding agent writes the code → CI runs the test gate → Jarvis summarizes the diff in plain English with risk points → merge per §9 safeguards.
+- Foundry scaffolds **inside** the Jarvis framework (skills, agents, workflows); everything else — including changes to Jarvis core — goes through the PR loop.
 
 ---
 
-## §9 Phases & exit gates
+## §9 Self-development loop & safeguards
+
+Goal: continued development of the Jarvis interface from within the interface, with structural protection against destroying what works.
+
+### 9.1 Components
+
+1. **Restart-safe launcher.** A thin supervisor process runs the bot as a child and stays alive across restarts. "Jarvis, apply and restart": supervisor swaps code, boots the bot, health-checks (env check + WebRTC endpoint up within N seconds), and **auto-rolls back to the last known-good tag** if boot fails. The console auto-reconnects; the session survives a bot restart.
+2. **Console review pane.** Sidecar admin API gains branch/diff/PR endpoints; the console shows the pending PR's plain-English summary + file list + full diff on demand. Merges to `main` are executed here.
+3. **GitHub Actions CI.** The 186-test gate + web build runs on every PR. Jarvis is structurally unable to merge a red PR.
+4. **Coding-agent dispatch.** Jarvis hands well-scoped issues to a coding agent (Copilot coding agent / equivalent) rather than editing files itself.
+
+### 9.2 Operation tiers (graduated by blast radius)
+
+| Operation | Who can trigger | Requirement |
+|---|---|---|
+| status / log / diff / branch list | voice, free | read-only |
+| commit + push to **feature branch** | voice, free | non-destructive; required for loop |
+| open PR / request coding agent | voice, free | — |
+| merge PR touching **only** `mcp_servers/` + `config/agents.yaml` | voice `confirm` | CI green |
+| merge PR touching **protected paths** (`web/`, `jarvis/bot/`, `jarvis/prompts.py`, `config/policy.yaml`, plan docs) | **console click only** (policy level 3) | CI green |
+| change `config/policy.yaml` or GitHub rulesets | **manual only** — Jarvis has no such tool | — |
+| force-push, branch deletion, direct commit to `main` | **nobody via Jarvis** — tools do not exist | — |
+
+### 9.3 Enforcement outside Jarvis
+
+- GitHub ruleset on `main`: PR required, CI green required, force-push blocked, branch deletion blocked. Jarvis's credentials/tools have no ruleset-edit power, so no prompt injection or bug inside the bot can weaken it.
+- The git skill exposes an **allowlist** of operations only (no generic shell); absent operations cannot be talked into existence.
+
+### 9.4 Rollback story
+
+- Every merge auto-tags a pre-merge snapshot (`known-good-YYYYMMDD-HHMM`).
+- "Jarvis, roll back" → reverts to the last known-good tag via a revert PR (itself CI-gated; protected-path rules apply).
+- Launcher auto-rollback (9.1.1) covers the worst case: merged code that prevents the bot from booting. Verified in U6-G5.
+
+### 9.5 Audit
+
+Every git operation (read or write) lands in the `actions` audit table with the authorizing transcript excerpt. "Jarvis, what did you change this week?" is answerable from the log.
+
+---
+
+## §10 Phases & exit gates
 
 ### U1 — Framework formalization
 - G1: `skill.yaml` manifests for all 5 existing skills; `check_skills.py` passes.
 - G2: Roster-only test agent added via `agents.yaml` alone; delegation schema validates.
 - G3: New standard skill (e.g. `mcp_stocks` read-only) added; available after reconnect with **no bot restart**.
+
+### U1.5 — Git skill + console Git panel (privileged-skill pilot)
+- G1: `mcp_git` read tools (status, log, diff summary) answer by voice.
+- G2: Commit flow: stage + drafted message read-back → spoken confirm → commit; `git push` requires spoken confirm. Audit rows present.
+- G3: Sidecar admin API (localhost-only) serves git status/commit/push; console Git panel works; panel push hits the same policy choke point as voice.
 
 ### U2 — Scheduled-prompt workflows
 - G1: Recurring prompt-reminder fires and injects on schedule; delivered-state correct when disconnected.
@@ -211,9 +257,16 @@ Jarvis orchestrates external projects; it does not voice-author arbitrary code.
 - G3: send flow: draft read-back → spoken confirm → commit → appears in Sent; audit row present.
 - G4: event create/move/cancel with confirm; read-back correct in user's timezone.
 
+### U6 — Self-development loop (§9)
+- G1: Launcher restarts bot on voice command; console auto-reconnects; session survives.
+- G2: GitHub ruleset live on `main`: direct push rejected, force-push rejected, CI required — verified by attempting each.
+- G3: End-to-end: voice intent → issue + branch → coding-agent PR → CI green → plain-English summary → merge executed per §9.2 tiering.
+- G4: Protected-path drill: a PR touching `web/` cannot be voice-merged (console click required); a skill-only PR merges by spoken confirm.
+- G5: Rollback drill: merge a change that breaks boot on a throwaway PR; launcher health-check fails it and auto-rolls back to the known-good tag; bot healthy without manual intervention.
+
 ---
 
-## §10 Open decisions
+## §11 Open decisions
 
 1. LLM codegen for skill logic (fast/strict-tests) vs template-only (safe/limited) — default template-only, revisit after U4.
 2. `system.shell` action class: exact command allowlist vs open shell behind `phrase` policy. Lean: allowlist.
