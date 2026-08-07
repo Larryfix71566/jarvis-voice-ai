@@ -4,17 +4,21 @@ Two pieces:
 
 - ``TranscriptLogger`` — pipeline processor in its LOCKED position between the
   LLM service and the TTS service. Prints assistant text turns, appends them to
-  the conversations table, and prints per-turn latency lines:
+  the conversations table, and prints the per-turn latency line:
     - TURN user_end->llm_done = <ms>      (Phase 4)
-    - TURN user_end->first_audio = <ms>   (Phase 5, first outbound audio)
 
 - ``TranscriptObserver`` — task-level observer (D-007) handling the USER side:
   prints every finalized user transcription with a timestamp and appends it to
-  the conversations table. pipecat 1.4's LLMUserContextAggregator CONSUMES
-  TranscriptionFrame instead of forwarding it downstream, so a processor placed
-  after the LLM never sees user transcripts. Observers see every frame at every
-  hop without altering the locked 9-processor order, which makes them the
-  wiring-level mechanism for user-side transcript logging.
+  the conversations table, and prints the Phase 5 latency line:
+    - TURN user_end->first_audio = <ms>   (first outbound audio of the turn)
+  pipecat 1.4's LLMUserContextAggregator CONSUMES TranscriptionFrame instead of
+  forwarding it downstream, so a processor placed after the LLM never sees user
+  transcripts. The same routing reality applies to first_audio: TranscriptLogger
+  sits UPSTREAM of the TTS service in the locked order, so OutputAudioRawFrame
+  (born at the TTS service) never travels back through it — a processor-side
+  first_audio branch can never fire. Observers see every frame at every hop
+  without altering the locked 9-processor order, which makes them the
+  wiring-level mechanism for both duties.
 """
 
 from __future__ import annotations
@@ -42,7 +46,6 @@ class TranscriptLogger(FrameProcessor):
         super().__init__(**kwargs)
         self._session_id = session_id
         self._turn_start: float | None = None
-        self._audio_logged_for_turn = False
         self._assistant_buffer: list[str] = []
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
@@ -50,7 +53,6 @@ class TranscriptLogger(FrameProcessor):
 
         if isinstance(frame, UserStoppedSpeakingFrame):
             self._turn_start = time.perf_counter()
-            self._audio_logged_for_turn = False
 
         elif isinstance(frame, LLMTextFrame):
             self._assistant_buffer.append(frame.text)
@@ -62,11 +64,6 @@ class TranscriptLogger(FrameProcessor):
                 print(f"[{_ts()}] JARVIS: {text}", flush=True)
                 self._persist("assistant", text)
             self._log_turn("llm_done")
-
-        elif isinstance(frame, OutputAudioRawFrame):
-            if not self._audio_logged_for_turn:
-                self._audio_logged_for_turn = True
-                self._log_turn("first_audio")
 
         await self.push_frame(frame, direction)
 
@@ -93,12 +90,30 @@ class TranscriptObserver(BaseObserver):
     def __init__(self, session_id: str):
         super().__init__()
         self._session_id = session_id
+        self._turn_start: float | None = None
+        self._audio_logged_for_turn = False
 
     async def on_push_frame(self, data: FramePushed) -> None:
         frame = data.frame
-        if not isinstance(frame, TranscriptionFrame):
-            return
         if data.direction != FrameDirection.DOWNSTREAM:
+            return
+
+        if isinstance(frame, UserStoppedSpeakingFrame):
+            self._turn_start = time.perf_counter()
+            self._audio_logged_for_turn = False
+            return
+
+        if isinstance(frame, OutputAudioRawFrame):
+            # First outbound audio of the turn (Phase 5 first_audio latency).
+            # The frame is observed once per downstream hop; the flag keeps the
+            # TURN line single-shot per turn.
+            if self._turn_start is not None and not self._audio_logged_for_turn:
+                self._audio_logged_for_turn = True
+                ms = int((time.perf_counter() - self._turn_start) * 1000)
+                print(f"TURN user_end->first_audio = {ms}ms", flush=True)
+            return
+
+        if not isinstance(frame, TranscriptionFrame):
             return
         if not getattr(frame, "finalized", True):
             return

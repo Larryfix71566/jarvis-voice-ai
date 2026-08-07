@@ -278,7 +278,7 @@ async def send_app_message(transport: Any, message: dict) -> None:
         OutputTransportMessageUrgentFrame(message=_wrap_rtvi(message)))
 
 
-async def run_session(transport: Any) -> None:
+async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
     """Build per-connection resources and run the pipeline to completion."""
     settings = load_settings()
     bridge_settings_to_env(settings)
@@ -366,11 +366,11 @@ async def run_session(transport: Any) -> None:
 
         voice_state = {"current": catalog["default"]}
 
-        @transport.event_handler("on_app_message")
-        async def on_app_message(message: Any, sender: str) -> None:
+        async def handle_voice_set(message: Any) -> None:
             msg = _unwrap_client_message(message)
             if msg is None or msg.get("type") != "voice/set":
                 return
+            print(f"[appmsg] voice/set: {msg.get('voice')}", flush=True)
             voice = resolve_voice(str(msg.get("voice", "")), catalog)
             if voice is not None:
                 from pipecat.frames.frames import TTSUpdateSettingsFrame
@@ -381,6 +381,24 @@ async def run_session(transport: Any) -> None:
             # optimistic select against server truth.
             await send_app_message(transport, {
                 "type": "voice/current", "voice": voice_state["current"]})
+
+        @transport.event_handler("on_app_message")
+        async def on_app_message(message: Any, sender: str) -> None:
+            await handle_voice_set(message)
+
+        if webrtc_connection is not None:
+            # D-005 update: on the installed pipecat 1.4.0 runner stack the
+            # transport-level on_app_message event demonstrably does NOT
+            # dispatch to handlers registered as above (the message reaches
+            # the pipeline as InputTransportMessageFrame — the runner-added
+            # RTVIProcessor logs "Ignoring not RTVI message" — but the
+            # transport event never fires our handler). The connection-level
+            # "app-message" event is the same event the transport itself
+            # subscribes to; registering there is the working receive path
+            # for both the locked raw shape and the client-js envelope.
+            @webrtc_connection.event_handler("app-message")
+            async def on_connection_app_message(connection: Any, message: Any) -> None:
+                await handle_voice_set(message)
 
         runner = PipelineRunner()
         try:

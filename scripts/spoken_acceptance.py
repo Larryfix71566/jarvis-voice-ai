@@ -46,6 +46,21 @@ one terminal signal that works on every path.
 
 Progress goes to stdout; the bot log carries the USER:/JARVIS:/[AGENT]/TURN
 lines used as checklist evidence.
+
+Manifest directives (Phase 5/7 extensions — same tooling, no server changes):
+  @APP {"type":"voice/set","voice":"eric"}
+      Send a raw client app-message over the data channel (the server accepts
+      the locked raw shape verbatim) and wait up to 10s for the matching
+      {"type":"voice/current"} echo.
+  @BARGE <long.wav> <interrupt.wav> <speak_secs>
+      Play long.wav, wait for the bot to START speaking, let it speak for
+      speak_secs, then play interrupt.wav without waiting for the turn —
+      a barge-in. Measures seconds from interruption start until the bot's
+      remote audio stops (acceptance: ~1 s), then waits for the interrupt
+      turn to complete normally.
+  @AWAIT_TURN <timeout>
+      Speak nothing; wait for a NEW server-side turn (e.g. a due reminder
+      injected by the RemindersWatcher while connected) within timeout.
 """
 
 from __future__ import annotations
@@ -75,21 +90,31 @@ SAMPLES_PER_FRAME = 960  # 20 ms
 TURN_MARKER = "TURN user_end->llm_done"
 
 
+ACTIVITY_RMS = 800  # int16 RMS above this counts as bot speech
+
+
 class BotAudioRecorder:
     """Records the bot's remote audio track to per-turn 48 kHz mono s16 WAVs.
 
     With TTS working, this captures what Jarvis actually spoke, so the
     audible checklist items get machine-verifiable evidence (the WAVs can
-    also be transcribed back for content checks)."""
+    also be transcribed back for content checks).
 
-    def __init__(self, out_dir: Path) -> None:
+    Doubles as the remote-activity monitor for @BARGE: every resampled
+    frame's RMS updates ``last_active``, so the barge logic can detect the
+    bot starting/stopping speech. Recording to WAV only happens when an
+    output dir is set; monitoring is always on."""
+
+    def __init__(self, out_dir: Path | None) -> None:
         self._out_dir = out_dir
         self._wf: wave.Wave_write | None = None
+        self.last_active = 0.0
 
     def attach(self, track) -> None:
         asyncio.ensure_future(self._pump(track))
 
     async def _pump(self, track) -> None:
+        import numpy as np
         from av.audio.resampler import AudioResampler
 
         resampler = AudioResampler(format="s16", layout="mono", rate=SAMPLE_RATE)
@@ -99,11 +124,22 @@ class BotAudioRecorder:
             except Exception:
                 return
             for f in resampler.resample(frame):
+                data = bytes(f.planes[0])
                 if self._wf is not None:
-                    self._wf.writeframesraw(bytes(f.planes[0]))
+                    self._wf.writeframesraw(data)
+                arr = np.frombuffer(data, dtype=np.int16)
+                if arr.size:
+                    rms = float(np.sqrt(np.mean(arr.astype(np.float64) ** 2)))
+                    if rms > ACTIVITY_RMS:
+                        self.last_active = time.perf_counter()
+
+    def recently_active(self, within: float = 1.0) -> bool:
+        return (time.perf_counter() - self.last_active) <= within
 
     def start_turn(self, name: str) -> None:
         self.end_turn()
+        if self._out_dir is None:
+            return
         self._wf = wave.open(str(self._out_dir / f"{name}-bot.wav"), "wb")
         self._wf.setnchannels(1)
         self._wf.setsampwidth(2)
@@ -122,6 +158,7 @@ class PlaylistTrack(AudioStreamTrack):
         super().__init__()
         self._queue: asyncio.Queue[Path] = asyncio.Queue()
         self._wf: wave.Wave_read | None = None
+        self._wf_name: str | None = None
         self._pts = 0
         self._start: float | None = None
         self._silence = b"\x00" * (SAMPLES_PER_FRAME * 2)
@@ -132,12 +169,16 @@ class PlaylistTrack(AudioStreamTrack):
     def current_file_done(self) -> bool:
         return self._wf is None and self._queue.empty()
 
+    def current_name(self) -> str | None:
+        return self._wf_name
+
     async def recv(self) -> AudioFrame:
         if self._start is None:
             self._start = time.perf_counter()
         if self._wf is None and not self._queue.empty():
             path = self._queue.get_nowait()
             self._wf = wave.open(str(path), "rb")
+            self._wf_name = path.name
             assert (
                 self._wf.getframerate() == SAMPLE_RATE
                 and self._wf.getnchannels() == 1
@@ -152,6 +193,7 @@ class PlaylistTrack(AudioStreamTrack):
                 data = data + self._silence[: SAMPLES_PER_FRAME * 2 - len(data)]
                 self._wf.close()
                 self._wf = None
+                self._wf_name = None
                 logger.info("file finished, sending silence")
         frame = AudioFrame(format="s16", layout="mono", samples=SAMPLES_PER_FRAME)
         frame.planes[0].update(data)
@@ -215,6 +257,29 @@ class DCState:
 
 
 dc = DCState()
+
+voice_messages: list[dict] = []  # {"type":"voice/current", ...} echoes
+
+
+def parse_manifest(path: Path) -> list[tuple]:
+    """WAV paths plus @-directives (module docstring). Returns typed items:
+    ("wav", Path) | ("app", dict) | ("barge", Path, Path, float) |
+    ("await_turn", float)."""
+    items: list[tuple] = []
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("@APP "):
+            items.append(("app", json.loads(line[len("@APP "):])))
+        elif line.startswith("@BARGE "):
+            parts = line.split()
+            items.append(("barge", Path(parts[1]), Path(parts[2]), float(parts[3])))
+        elif line.startswith("@AWAIT_TURN "):
+            items.append(("await_turn", float(line.split()[1])))
+        else:
+            items.append(("wav", Path(line)))
+    return items
 
 
 def turn_signature(text: str) -> tuple:
@@ -284,25 +349,22 @@ async def wait_for_turn_complete(
 
 
 async def run(args: argparse.Namespace) -> int:
-    files = [
-        Path(line.strip())
-        for line in Path(args.manifest).read_text().splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    ]
-    for f in files:
-        if not f.exists():
-            print(f"missing manifest file: {f}", file=sys.stderr)
-            return 2
+    items = parse_manifest(Path(args.manifest))
+    for item in items:
+        for f in [p for p in item[1:] if isinstance(p, Path)]:
+            if not f.exists():
+                print(f"missing manifest file: {f}", file=sys.stderr)
+                return 2
 
     track = PlaylistTrack()
     pc = RTCPeerConnection()
     pc.addTrack(track)
     channel = pc.createDataChannel("rtvi-ai")
-    recorder = BotAudioRecorder(Path(args.audio_dir)) if args.audio_dir else None
+    recorder = BotAudioRecorder(Path(args.audio_dir) if args.audio_dir else None)
 
     @pc.on("track")
     def on_track(remote):
-        if remote.kind == "audio" and recorder is not None:
+        if remote.kind == "audio":
             recorder.attach(remote)
 
     @channel.on("message")
@@ -312,6 +374,8 @@ async def run(args: argparse.Namespace) -> int:
             inner = payload.get("data", payload)
             if isinstance(inner, dict):
                 dc.feed(inner)
+                if inner.get("type") == "voice/current":
+                    voice_messages.append(inner)
             logger.info("app-message: %s", json.dumps(inner)[:160])
         except Exception:
             logger.info("app-message(raw): %s", str(message)[:160])
@@ -332,6 +396,22 @@ async def run(args: argparse.Namespace) -> int:
     )
     logger.info("connected (pc_id=%s)", answer.get("pc_id"))
 
+    # Keepalive: pipecat's SmallWebRTCConnection.is_connected() requires a
+    # "ping" data-channel message within the last 3 s once any message was
+    # received (the browser client-js pings roughly every second). Without
+    # this the server considers the client stale and QUEUES inbound app
+    # messages instead of handling them — @APP voice/set would never fire.
+    async def keepalive():
+        while True:
+            try:
+                if channel.readyState == "open":
+                    channel.send("ping")
+            except Exception:
+                pass  # retry next tick; never let the task die
+            await asyncio.sleep(1.0)
+
+    keepalive_task = asyncio.ensure_future(keepalive())
+
     # let the greeting turn finish before the first utterance
     log_path = Path(args.bot_log)
     greeting_turns = count_turns(log_path)
@@ -341,21 +421,95 @@ async def run(args: argparse.Namespace) -> int:
     logger.info("greeting turn: %s", "seen" if greeted else "not seen (continuing)")
 
     results = []
-    for i, f in enumerate(files, 1):
-        before = count_turns(log_path)
-        snap = dc.snapshot()
-        if recorder is not None:
-            recorder.start_turn(f.stem)
-        track.enqueue(f)
-        while not track.current_file_done():
-            await asyncio.sleep(0.2)
-        ok = await wait_for_turn_complete(
-            log_path, before, snap, args.quiet, args.turn_timeout)
-        if recorder is not None:
-            recorder.end_turn()
-        results.append((i, f.name, ok))
-        print(f"[{i:02d}] {f.name}: turn={'OK' if ok else 'TIMEOUT'}", flush=True)
+    i = 0
+    for item in items:
+        i += 1
+        kind = item[0]
 
+        if kind == "wav":
+            f = item[1]
+            before = count_turns(log_path)
+            snap = dc.snapshot()
+            recorder.start_turn(f.stem)
+            track.enqueue(f)
+            while not track.current_file_done():
+                await asyncio.sleep(0.2)
+            ok = await wait_for_turn_complete(
+                log_path, before, snap, args.quiet, args.turn_timeout)
+            recorder.end_turn()
+            results.append((i, f.name, ok))
+            print(f"[{i:02d}] {f.name}: turn={'OK' if ok else 'TIMEOUT'}", flush=True)
+
+        elif kind == "app":
+            msg = item[1]
+            voice_messages.clear()
+            channel.send(json.dumps(msg))
+            logger.info("sent app-message: %s", json.dumps(msg))
+            deadline = time.perf_counter() + 10
+            ok = False
+            while time.perf_counter() < deadline:
+                if any(m.get("voice") == msg.get("voice") for m in voice_messages):
+                    ok = True
+                    break
+                await asyncio.sleep(0.2)
+            got = voice_messages[-1] if voice_messages else None
+            results.append((i, f"@APP {msg.get('voice')}", ok))
+            print(f"[{i:02d}] @APP voice/set {msg.get('voice')}: "
+                  f"echo={'OK' if ok else f'MISSING (last={got})'}", flush=True)
+
+        elif kind == "barge":
+            _, long_wav, barge_wav, speak_secs = item
+            before = count_turns(log_path)
+            snap = dc.snapshot()
+            recorder.start_turn(long_wav.stem)
+            track.enqueue(long_wav)
+            while not track.current_file_done():
+                await asyncio.sleep(0.2)
+            # wait for the bot to START speaking (up to 45s)
+            t_wait = time.perf_counter() + 45
+            while time.perf_counter() < t_wait and not recorder.recently_active():
+                await asyncio.sleep(0.1)
+            if not recorder.recently_active():
+                results.append((i, "barge", False))
+                print(f"[{i:02d}] barge: bot never started speaking", flush=True)
+                continue
+            logger.info("bot speaking; interrupting in %.1fs", speak_secs)
+            await asyncio.sleep(speak_secs)
+            track.enqueue(barge_wav)
+            while track.current_name() != barge_wav.name:
+                await asyncio.sleep(0.05)
+            t0 = time.perf_counter()
+            # measure: bot audio stops after interruption start
+            stop_latency = None
+            deadline = t0 + 15
+            while time.perf_counter() < deadline:
+                if (time.perf_counter() - recorder.last_active) >= 0.5:
+                    stop_latency = recorder.last_active - t0
+                    break
+                await asyncio.sleep(0.05)
+            while not track.current_file_done():
+                await asyncio.sleep(0.1)
+            ok_turn = await wait_for_turn_complete(
+                log_path, before, snap, args.quiet, args.turn_timeout)
+            recorder.end_turn()
+            ok = ok_turn and stop_latency is not None and stop_latency <= 1.5
+            results.append((i, "barge", ok))
+            lat = f"{stop_latency:.2f}s" if stop_latency is not None else "never stopped"
+            print(f"[{i:02d}] barge: bot audio stopped {lat} after interruption; "
+                  f"interrupt turn={'OK' if ok_turn else 'TIMEOUT'}", flush=True)
+
+        elif kind == "await_turn":
+            timeout = item[1]
+            before = count_turns(log_path)
+            snap = dc.snapshot()
+            recorder.start_turn(f"await-{i:02d}")
+            ok = await wait_for_turn_complete(
+                log_path, before, snap, args.quiet, timeout)
+            recorder.end_turn()
+            results.append((i, "@AWAIT_TURN", ok))
+            print(f"[{i:02d}] @AWAIT_TURN: turn={'OK' if ok else 'TIMEOUT'}", flush=True)
+
+    keepalive_task.cancel()
     await pc.close()
     failed = [r for r in results if not r[2]]
     print(f"done: {len(results) - len(failed)}/{len(results)} turns observed")

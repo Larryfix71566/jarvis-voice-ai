@@ -300,3 +300,34 @@ async def test_transcript_logger_writes_both_roles(fresh_db):
         ("user", "hello jarvis"),
         ("assistant", "Good afternoon."),
     ]
+
+
+async def test_observer_logs_first_audio_latency(capsys):
+    """Phase 5 first_audio TURN line comes from the D-007 observer: the locked
+    order places TranscriptLogger upstream of the TTS service, so
+    OutputAudioRawFrame never reaches the processor. The observer sees the
+    frame once per downstream hop — the line must still be single-shot."""
+    from pipecat.frames.frames import OutputAudioRawFrame, UserStoppedSpeakingFrame
+    from pipecat.observers.base_observer import FramePushed
+    from pipecat.processors.frame_processor import FrameDirection
+
+    from jarvis.bot.transcript_log import TranscriptObserver
+
+    observer = TranscriptObserver(session_id="s1")
+
+    def pushed(frame):
+        return FramePushed(
+            source=None, destination=None, frame=frame,
+            direction=FrameDirection.DOWNSTREAM, timestamp=0)
+
+    await observer.on_push_frame(pushed(UserStoppedSpeakingFrame()))
+    audio = OutputAudioRawFrame(audio=b"\x00\x00", sample_rate=24000, num_channels=1)
+    await observer.on_push_frame(pushed(audio))  # TTS -> output transport hop
+    await observer.on_push_frame(pushed(audio))  # output transport -> assistant agg hop
+
+    out = capsys.readouterr().out
+    lines = [ln for ln in out.splitlines() if "user_end->first_audio" in ln]
+    assert len(lines) == 1
+    assert lines[0].startswith("TURN user_end->first_audio = ")
+    ms = int(lines[0].rsplit("=", 1)[1].strip().removesuffix("ms"))
+    assert ms >= 0

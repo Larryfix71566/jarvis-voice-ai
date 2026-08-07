@@ -28,7 +28,10 @@ async def bot(runner_args: RunnerArguments):
             )
         case _:
             raise RuntimeError("Jarvis supports SmallWebRTC only")
-    await run_session(transport)
+    await run_session(
+        transport,
+        webrtc_connection=getattr(runner_args, "webrtc_connection", None),
+    )
 
 
 if __name__ == "__main__":

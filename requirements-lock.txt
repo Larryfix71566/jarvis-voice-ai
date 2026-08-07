@@ -146,3 +146,6 @@ uvloop==0.22.1
 watchfiles==1.2.0
 websockets==17.0.1
 yarl==1.24.5
+
+# pipecat ElevenLabsTTS extra (missed by Phase 0 freeze; found 2026-08-07)
+elevenlabs==2.61.0
