@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { RTVIEvent } from "@pipecat-ai/client-js";
-import { useRTVIClientEvent } from "@pipecat-ai/client-react";
+import {
+  usePipecatClientTransportState,
+  useRTVIClientEvent,
+} from "@pipecat-ai/client-react";
 import ConnectButton from "./components/ConnectButton";
+import Orb, { type OrbState } from "./components/Orb";
 import MicControls from "./components/MicControls";
 import Transcript from "./components/Transcript";
 import VoicePicker from "./components/VoicePicker";
@@ -23,6 +27,22 @@ function errorText(message: unknown): string {
 export default function App() {
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const transport = usePipecatClientTransportState();
+
+  const connected = transport === "ready" || transport === "connected";
+  const orbState: OrbState = connected
+    ? speaking
+      ? "speaking"
+      : "listening"
+    : transport === "disconnected" || transport === "error"
+      ? "offline"
+      : "connecting";
+  const orbLabel = {
+    offline: "Standby",
+    connecting: "Spinning up",
+    listening: "Listening",
+    speaking: "Speaking",
+  }[orbState];
 
   useRTVIClientEvent(RTVIEvent.BotStartedSpeaking, () => {
     setSpeaking(true);
@@ -44,10 +64,18 @@ export default function App() {
       {error && <div className="error-banner">{error}</div>}
 
       <main className="main">
-        <div className="orb-wrap">
-          <div className={speaking ? "orb orb-speaking" : "orb"} />
-          <div className="orb-label">{speaking ? "Speaking" : "Listening"}</div>
-        </div>
+        <section className="orb-wrap">
+          <div className="hud-corner hud-tl" />
+          <div className="hud-corner hud-tr" />
+          <div className="hud-corner hud-bl" />
+          <div className="hud-corner hud-br" />
+          <div className="orb-readout">J.A.R.V.I.S.</div>
+          <Orb state={orbState} />
+          <div className={`orb-label orb-label-${orbState}`}>
+            <span className="orb-dot" />
+            {orbLabel}
+          </div>
+        </section>
         <Transcript />
       </main>
 

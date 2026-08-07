@@ -1,12 +1,18 @@
 # Voice catalog (plan §6.5, Phase 5 step 5.2 — exact schema)
-default: rachel
+default: jarvis
 voices:
-  - id: rachel
-    elevenlabs_voice_id: "21m00Tcm4TlvDq8ikWAM"
-    label: "Rachel (calm, American female)"
+  - id: jarvis
+    elevenlabs_voice_id: "bFQZmxKHMUkCBuOjyJYh"
+    label: "Jarvis (British, calm, precise — voice-designed)"
+  - id: daniel
+    elevenlabs_voice_id: "onwK4e9ZLuTAKqWW03F9"
+    label: "Daniel (steady British broadcaster)"
   - id: george
     elevenlabs_voice_id: "JBFqnCBsd6RMkjVDRZzb"
     label: "George (warm, British male)"
+  - id: rachel
+    elevenlabs_voice_id: "21m00Tcm4TlvDq8ikWAM"
+    label: "Rachel (calm, American female)"
   - id: eric
     elevenlabs_voice_id: "cjVigY5qzO86Huf0OWal"
     label: "Eric (smooth, trustworthy American male)"
