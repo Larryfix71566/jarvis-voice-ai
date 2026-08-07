@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run the Jarvis bot (plan Phase 4, step 4.3).
+# Run the Mortimer bot (plan Phase 4, step 4.3).
 # Prefers the project venv when present; otherwise falls back to python3
 # (e.g. deps installed in the user site). .env provides keys.
 set -e

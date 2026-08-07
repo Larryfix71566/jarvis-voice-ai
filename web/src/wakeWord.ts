@@ -1,17 +1,28 @@
 /**
  * Wake word (plan Phase 7.4 stretch — client-side only, server unchanged).
  *
- * Picovoice Porcupine Web runs locally in the browser listening for the
- * built-in "Jarvis" keyword. On detection it plays a chime and invokes the
- * onWake callback (the UI unmutes the mic). Everything is opt-in: without
- * VITE_PICOVOICE_ACCESS_KEY (free key from https://console.picovoice.ai)
- * the feature is unavailable and the toggle stays disabled.
+ * Picovoice Porcupine Web runs locally in the browser listening for a
+ * custom-trained "Mortimer" keyword. Porcupine ships no built-in Mortimer
+ * keyword, so the model file must be trained once in Picovoice Console
+ * (platform: Web) and placed at web/public/mortimer.ppn. On detection the
+ * listener plays a chime and invokes the onWake callback (the UI unmutes
+ * the mic). Everything is opt-in: without VITE_PICOVOICE_ACCESS_KEY (free
+ * key from https://console.picovoice.ai) the feature is unavailable and
+ * the toggle stays disabled.
  */
 
-import { BuiltInKeyword, PorcupineWorker } from "@picovoice/porcupine-web";
+import { PorcupineWorker } from "@picovoice/porcupine-web";
 import { WebVoiceProcessor } from "@picovoice/web-voice-processor";
 
 const ACCESS_KEY: string = import.meta.env.VITE_PICOVOICE_ACCESS_KEY ?? "";
+
+/** Custom "Mortimer" keyword model served from web/public. */
+const MORTIMER_KEYWORD = {
+  publicPath: "/mortimer.ppn",
+  customWritePath: "mortimer",
+  forceWrite: true,
+  label: "Mortimer",
+};
 
 /** Whether the wake-word feature can run (key configured). */
 export const wakeWordAvailable = ACCESS_KEY.length > 0;
@@ -47,22 +58,32 @@ export function playChime(): void {
   }
 }
 
-/** Start listening for "Jarvis". onWake fires on every detection. */
+/** Start listening for "Mortimer". onWake fires on every detection. */
 export async function startWakeWord(onWake: () => void): Promise<void> {
   if (!wakeWordAvailable || running) return;
-  const instance = await PorcupineWorker.create(
-    ACCESS_KEY,
-    BuiltInKeyword.Jarvis,
-    () => {
-      playChime();
-      onWake();
-    },
-    { publicPath: "/porcupine_params.pv" },
-    {
-      processErrorCallback: (error: { message?: string; toString(): string }) =>
-        console.warn("wake word processing error:", error?.message ?? String(error)),
-    },
-  );
+  let instance: PorcupineWorker;
+  try {
+    instance = await PorcupineWorker.create(
+      ACCESS_KEY,
+      MORTIMER_KEYWORD,
+      () => {
+        playChime();
+        onWake();
+      },
+      { publicPath: "/porcupine_params.pv" },
+      {
+        processErrorCallback: (error: { message?: string; toString(): string }) =>
+          console.warn("wake word processing error:", error?.message ?? String(error)),
+      },
+    );
+  } catch (err) {
+    const hint =
+      'wake word model missing — train "Mortimer" in Picovoice Console ' +
+      "(platform: Web) and place the .ppn at web/public/mortimer.ppn";
+    throw new Error(
+      err instanceof Error && err.message ? `${hint} (${err.message})` : hint,
+    );
+  }
   worker = instance;
   await WebVoiceProcessor.subscribe(instance);
   running = true;

@@ -73,7 +73,7 @@ export default function MicControls() {
     }
     try {
       setWakeError(null);
-      // On wake: chime (inside wakeWord.ts) + unmute so Jarvis hears you.
+      // On wake: chime (inside wakeWord.ts) + unmute so Mortimer hears you.
       await startWakeWord(() => {
         client?.enableMic(true);
         setMuted(false);
@@ -105,7 +105,7 @@ export default function MicControls() {
         disabled={!wakeWordAvailable}
         title={
           wakeWordAvailable
-            ? 'Say "Jarvis" to unmute (runs locally in your browser)'
+            ? 'Say "Mortimer" to unmute (runs locally in your browser)'
             : "Set VITE_PICOVOICE_ACCESS_KEY in web/.env to enable wake word"
         }
       >
