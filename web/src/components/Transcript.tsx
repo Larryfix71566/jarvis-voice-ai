@@ -49,7 +49,7 @@ export default function Transcript() {
         >
           <div className={m.role === "user" ? "bubble bubble-user" : "bubble bubble-jarvis"}>
             <div className="bubble-meta">
-              {m.role === "user" ? "You" : "Jarvis"} · {formatTime(m.createdAt)}
+              {m.role === "user" ? "You" : "Mortimer"} · {formatTime(m.createdAt)}
             </div>
             <div className="bubble-text">{messageText(m)}</div>
           </div>

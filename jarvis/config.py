@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     jarvis_webrtc_endpoint: str = "http://localhost:7860/api/offer"
     jarvis_timezone: str = "America/New_York"
     jarvis_user_name: str = "Boss"
-    jarvis_name: str = "Jarvis"
+    jarvis_name: str = "Mortimer"
 
     @field_validator("jarvis_timezone")
     @classmethod
