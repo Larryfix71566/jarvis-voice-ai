@@ -9,3 +9,5 @@ dist/
 data/*.db-*
 .eval-logs/
 .acceptance-scratch/
+data/wakeword/
+models/
