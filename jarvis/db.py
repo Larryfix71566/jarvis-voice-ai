@@ -61,10 +61,25 @@ CREATE TABLE IF NOT EXISTS actions (
 CREATE INDEX IF NOT EXISTS idx_actions_status ON actions(status, tool);
 """
 
+MIGRATION_0003 = """
+CREATE TABLE IF NOT EXISTS memories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL,                -- fact | summary
+  key TEXT,                          -- facts only, e.g. user.name (unique per fact)
+  content TEXT NOT NULL,
+  source_session_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_fact_key
+  ON memories(key) WHERE kind = 'fact';
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
     ("0002_actions", MIGRATION_0002),
+    ("0003_memory", MIGRATION_0003),
 ]
 
 
