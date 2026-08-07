@@ -1,0 +1,11 @@
+# Upgrade Agent configuration (plan section 3.5).
+# Swapping the model is config-only: change model/base_url here or set
+# JARVIS_UPGRADE_MODEL / JARVIS_UPGRADE_BASE_URL in the environment.
+# This file is NOT on the self-edit allowlist — the agent cannot change its
+# own model, temperature, or loop bounds.
+provider: openai
+model: gpt-4.1-mini
+base_url: https://api.openai.com/v1
+temperature: 0.2
+max_iterations: 10
+max_session_minutes: 30
