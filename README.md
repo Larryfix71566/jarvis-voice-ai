@@ -9,7 +9,7 @@ Mortimer is an Ironman-style voice assistant that runs entirely on your machine:
 │                         BROWSER (React client)                      │
 │  mic ──► PipecatClient (SmallWebRTCTransport) ──► WebRTC audio      │
 │  speaker ◄── PipecatClientAudio ◄── WebRTC audio                    │
-│  UI: Connect | mic toggle | transcript | voice picker | agent feed  │
+│  UI: centered orb | agent satellites | transcript drawer (T)        │
 └──────────────────────────────┬─────────────────────────────────────┘
                                │ WebRTC (P2P, localhost)
 ┌──────────────────────────────▼─────────────────────────────────────┐
@@ -135,9 +135,13 @@ python3 -m jarvis.cli
 - **Switch voices** by saying "Switch your voice to George", or pick from the
   **voice picker** in the console (catalog from `config/voices.yaml`; add your
   own ElevenLabs voice IDs there, including clones).
-- **Agent activity:** the console shows which specialist is working
-  ("⚙ Scheduler working…") plus a short history; the server log prints
-  `[AGENT]` lines and per-turn `TURN` latency lines.
+- **Agent activity:** the command deck shows the four specialists as
+  satellites around the orb — a satellite lights up with an animated beam
+  to the core while it works, then flashes green as it finishes; the server
+  log prints `[AGENT]` lines and per-turn `TURN` latency lines.
+- **Transcript on demand:** press **T** (or the **Log** button) to slide the
+  full transcript drawer in from the right; the orb's live caption shows the
+  latest exchange at a glance.
 - **Proactive reminders:** if a reminder comes due while you're connected,
   Mortimer speaks it unprompted (checked every 30 s).
 - **CLI commands:** `/tools` (list loaded tools), `/voice` (list voices),
@@ -216,13 +220,19 @@ jarvis/
     └── src/
         ├── main.tsx
         ├── App.tsx
+        ├── App.css                    # base HUD theme
+        ├── command-deck.css           # command-deck stage/satellite/drawer styles
         ├── components/
         │   ├── ConnectButton.tsx
+        │   ├── Orb.tsx                # canvas orb (state-driven dynamics)
+        │   ├── OrbField.tsx           # command deck: centered orb + agent satellites
         │   ├── Transcript.tsx
+        │   ├── TranscriptDrawer.tsx   # slide-in transcript history (T)
         │   ├── VoicePicker.tsx
-        │   ├── AgentActivity.tsx
+        │   ├── GitPanel.tsx           # admin sidecar console
         │   └── MicControls.tsx
-        └── jarvisClient.ts        # PipecatClient singleton
+        ├── wakeWord.ts                # wake-word sidecar client + chime
+        └── jarvisClient.ts            # PipecatClient singleton
 ```
 
 *(The internal package name `jarvis/` and the `JARVIS_*` environment variable
