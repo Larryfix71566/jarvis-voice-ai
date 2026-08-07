@@ -1,6 +1,6 @@
 # Jarvis Upgrade Plan — Self-Extending Agent Framework
 
-Status: LOCKED (v1.1) · Date: 2026-08-07 · Supersedes: none (extends `Jarvis_Voice_AI_Agent_Implementation_Plan.md`)
+Status: LOCKED (v1.2) · Date: 2026-08-07 · Supersedes: none (extends `Jarvis_Voice_AI_Agent_Implementation_Plan.md`)
 
 ## §0 Governance (inherited)
 
@@ -264,9 +264,33 @@ Every git operation (read or write) lands in the `actions` audit table with the 
 - G4: Protected-path drill: a PR touching `web/` cannot be voice-merged (console click required); a skill-only PR merges by spoken confirm.
 - G5: Rollback drill: merge a change that breaks boot on a throwaway PR; launcher health-check fails it and auto-rolls back to the known-good tag; bot healthy without manual intervention.
 
+### U5.5 — Skill namespaces + lazy loading
+- G1: Supervisor routes domain-first; only the selected domain's tool schemas enter context. Measured: context tokens per turn flat as skills grow from 10 → 40 (test doubles).
+- G2: Routing accuracy on a 40-skill fixture ≥ current 4-agent baseline.
+
 ---
 
-## §11 Open decisions
+## §11 Instance model — one foundation, many deployments
+
+Each client/business gets its **own instance**: separate deployment, `.env`, Keychain tokens, database, audit log, and policy file. No multi-tenancy inside a single instance, ever — isolation is physical, not logical.
+
+### 11.1 The rule that keeps the foundation healthy
+
+- **Code is shared; config and data are per-client.** Client needs are expressed in `agents.yaml`, skill selection, `policy.yaml`, voices, workflows, branding — never as client-specific branches in core code.
+- If two clients need the same capability, it lands in the foundation once, behind config. A capability that can't be expressed as config is a design smell — fix the abstraction, don't fork the code.
+- Client instances track the foundation repo as upstream; improvements flow foundation → clients by merge, never client-specific hacks flowing back.
+
+### 11.2 Deployment pack (built by Foundry, U4)
+
+A deployment pack = `{ agents.yaml, skill manifest list, policy.yaml, voices.yaml, workflows, console branding }`. Stamping out a new client instance = clone foundation + apply pack + run OAuth/env provisioning checklist + exit gates (check_env + check_skills green). The Foundry's `scaffold_*` tools generalize to emit packs.
+
+### 11.3 Skill scale discipline (U5.5)
+
+Voice is the flagship interface, but skills stay interface-agnostic (logic/transport split already enforces). As the library grows past ~30 tools: skill **namespaces + lazy loading** — supervisor routes to a domain first, then only that domain's schemas load into context. Protects latency and routing accuracy.
+
+---
+
+## §12 Open decisions
 
 1. LLM codegen for skill logic (fast/strict-tests) vs template-only (safe/limited) — default template-only, revisit after U4.
 2. `system.shell` action class: exact command allowlist vs open shell behind `phrase` policy. Lean: allowlist.
