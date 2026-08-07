@@ -31,6 +31,7 @@ from jarvis.agents.base import SubAgent, load_sub_agents
 from jarvis.agents.delegate import build_delegate_tool
 from jarvis.db import get_conn, now_iso
 from jarvis.prompts import SUPERVISOR_PROMPT, render_agent_catalog
+from jarvis.memory import render_memory_context
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,7 @@ class Orchestrator:
             timezone=settings.jarvis_timezone,
             agent_catalog=agent_catalog,
             voice_catalog="(none configured yet)",
+            memory_context=render_memory_context(),  # U2.5 persistent memory
         )
         self._history: list[dict] = []
 
