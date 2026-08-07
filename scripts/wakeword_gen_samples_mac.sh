@@ -6,8 +6,10 @@
 # Output: data/wakeword/positive/*.wav and data/wakeword/negative/*.wav
 #         (16 kHz mono PCM WAV, exactly what jarvis/wakeword/train.py expects)
 #
-# Usage:  ./scripts/wakeword_gen_samples_mac.sh [positive_repeats] [negative_repeats]
+# Usage:  bash scripts/wakeword_gen_samples_mac.sh [positive_repeats] [negative_repeats]
 #         defaults: 6 repeats each (≈ voices × phrases × repeats clips)
+#
+# Note: compatible with the bash 3.2 that ships with macOS (no mapfile).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -19,7 +21,10 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 # All installed English voices (name is field 1 of `say -v '?'`).
-mapfile -t VOICES < <(say -v '?' | awk '$2 ~ /^en_/ {print $1}')
+VOICES=()
+while IFS= read -r v; do
+  VOICES+=("$v")
+done < <(say -v '?' | awk '$2 ~ /^en_/ {print $1}')
 if [ ${#VOICES[@]} -eq 0 ]; then
   echo "no English voices found — install some in System Settings > Accessibility > Spoken Content" >&2
   exit 1
@@ -40,11 +45,12 @@ speak_set() {
   local dir="$1" tag="$2" repeats="$3"; shift 3
   local phrases=("$@")
   local n=0
+  local r voice phrase rate aiff
   for ((r=0; r<repeats; r++)); do
     for voice in "${VOICES[@]}"; do
       for phrase in "${phrases[@]}"; do
-        local rate=${RATES[$RANDOM % ${#RATES[@]}]}
-        local aiff="$TMP/clip.aiff"
+        rate=${RATES[$((RANDOM % ${#RATES[@]}))]}
+        aiff="$TMP/clip.aiff"
         say -v "$voice" -r "$rate" -o "$aiff" "$phrase" 2>/dev/null || continue
         afconvert -f WAVE -d LEI16@16000 "$aiff" "$dir/${tag}_${voice// /_}_${r}_$((n++)).wav"
       done

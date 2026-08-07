@@ -11,9 +11,8 @@ The bot pipeline is untouched: detection lives in this sidecar, the chime
 and mic-unmute happen client-side. Fully local — no keys, no cloud.
 
 Model: a custom "Mortimer" model is REQUIRED (openWakeWord ships none).
-Train one free with openWakeWord's synthetic-data notebook
-(https://github.com/dscripka/openWakeWord — "training new models") and set
-JARVIS_WAKEWORD_MODEL to the .onnx (or .tflite) path.
+Train one locally with ``python -m jarvis.wakeword.train`` (see README §4)
+and set JARVIS_WAKEWORD_MODEL to the .onnx path.
 
 Run:  python -m jarvis.wakeword.server   (or ./scripts/run_wakeword.sh)
 """
@@ -41,6 +40,18 @@ CHUNK_BYTES = CHUNK_SAMPLES * 2  # 16-bit mono
 DEFAULT_MODEL = "models/mortimer.onnx"
 
 
+def ensure_feature_models() -> None:
+    """Download openWakeWord's shared feature models on first run.
+
+    The openwakeword wheel does not bundle melspectrogram/embedding ONNX
+    files; they are fetched once from the project's GitHub release assets
+    and cached inside the installed package directory.
+    """
+    from openwakeword.utils import download_models
+
+    download_models(model_names=[])
+
+
 def load_model():
     """Load the custom wake-word model; exit with a clear message otherwise."""
     try:
@@ -53,10 +64,10 @@ def load_model():
     if not Path(model_path).exists():
         sys.exit(
             f"Wake-word model not found: {model_path}\n"
-            "Train a custom 'Mortimer' model (free, synthetic data — see the "
-            "openWakeWord repo's training notebook), then set "
-            "JARVIS_WAKEWORD_MODEL in .env to the .onnx/.tflite path."
+            "Train one locally: bash scripts/wakeword_gen_samples_mac.sh "
+            "then python -m jarvis.wakeword.train (see README §4)."
         )
+    ensure_feature_models()
     framework = "tflite" if model_path.endswith(".tflite") else "onnx"
     model = Model(
         wakeword_model_paths=[model_path], inference_framework=framework
