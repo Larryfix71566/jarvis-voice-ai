@@ -13,6 +13,7 @@ Data layout (created by the sample generator):
 Usage (inside the project venv):
 
     uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+    uv pip install onnx onnxscript
     python -m jarvis.wakeword.train --data-dir data/wakeword --out models/mortimer.onnx
 
 Training is fully local: audio never leaves the machine.
@@ -31,6 +32,9 @@ SAMPLE_RATE = 16000
 WINDOW_FRAMES = 16          # classifier input: 16 embedding frames x 96 dims
 WINDOW_STEP = 2             # stride between windows within one clip
 EMBEDDING_DIM = 96
+#: openWakeWord's embedding model needs a 76-frame mel window (76 x 160
+#: samples); shorter clips crash its batch path, so skip them up front.
+MIN_CLIP_SAMPLES = 76 * 160 + 1
 
 
 def make_windows(embeddings: np.ndarray, window: int = WINDOW_FRAMES,
@@ -41,6 +45,8 @@ def make_windows(embeddings: np.ndarray, window: int = WINDOW_FRAMES,
     frame so every clip yields at least one window.
     """
     embeddings = np.asarray(embeddings, dtype=np.float32)
+    if embeddings.ndim == 1:  # single-frame batch squeezed by openwakeword
+        embeddings = embeddings[None, :]
     if embeddings.ndim != 2 or embeddings.shape[1] != EMBEDDING_DIM:
         raise ValueError(
             f"expected (n_frames, {EMBEDDING_DIM}) embeddings, got {embeddings.shape}")
@@ -82,11 +88,34 @@ def _augment(clip: np.ndarray, rng: random.Random) -> list[np.ndarray]:
     return variants
 
 
+def _embed_clip(audio_features, clip: np.ndarray) -> np.ndarray | None:
+    """Embeddings for one clip, or None if it can't be embedded.
+
+    Returns None for clips shorter than the embedding window and for any
+    clip the feature models reject — one bad take must not abort a run.
+    """
+    if len(clip) < MIN_CLIP_SAMPLES:
+        return None
+    try:
+        emb = audio_features._get_embeddings(clip)
+    except Exception:
+        return None
+    if emb.size == 0:
+        return None
+    return np.atleast_2d(emb)  # single-frame output arrives squeezed to (96,)
+
+
 def _clip_embeddings(audio_features, clips: list[np.ndarray]) -> np.ndarray:
     windows = []
+    skipped = 0
     for clip in clips:
-        emb = audio_features._get_embeddings(clip)
+        emb = _embed_clip(audio_features, clip)
+        if emb is None:
+            skipped += 1  # clip too short or rejected by the feature models
+            continue
         windows.extend(make_windows(emb))
+    if skipped:
+        print(f"  note: skipped {skipped} clip(s) too short for embeddings")
     return np.stack(windows).astype(np.float32)
 
 
@@ -125,6 +154,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     from openwakeword.utils import AudioFeatures
+    from jarvis.wakeword.server import ensure_feature_models
 
     rng = random.Random(args.seed)
     torch.manual_seed(args.seed)
@@ -147,6 +177,7 @@ def main(argv: list[str] | None = None) -> int:
     neg_aug = neg_train + [v for c in neg_train for v in _augment(c, rng)]
 
     print("extracting embeddings (openWakeWord AudioFeatures, local ONNX) ...")
+    ensure_feature_models()  # one-time download of the shared ONNX feature models
     audio_features = AudioFeatures(inference_framework="onnx")
     X_pos = _clip_embeddings(audio_features, pos_aug)
     X_neg = _clip_embeddings(audio_features, neg_aug)
@@ -182,28 +213,45 @@ def main(argv: list[str] | None = None) -> int:
         if (epoch + 1) % 10 == 0:
             print(f"  epoch {epoch + 1}/{args.epochs}  loss {total / len(Xt):.4f}")
 
-    # Held-out report (mean score per clip over its windows).
+    # Held-out report (mean score per clip over its windows). Clips too
+    # short to embed are excluded from the stats, not scored as negatives.
     model.eval()
     with torch.no_grad():
         scores = model(torch.from_numpy(X_val)).squeeze(1).numpy()
-    per_clip, cursor = [], 0
-    for clip in val_clips:
-        n = len(make_windows(audio_features._get_embeddings(clip)))
+    per_clip, per_label, cursor = [], [], 0
+    for clip, label in zip(val_clips, val_labels):
+        emb = _embed_clip(audio_features, clip)
+        if emb is None:
+            continue
+        n = len(make_windows(emb))
         per_clip.append(float(scores[cursor:cursor + n].mean()))
+        per_label.append(label)
         cursor += n
-    pos_scores = [s for s, l in zip(per_clip, val_labels) if l == 1]
-    neg_scores = [s for s, l in zip(per_clip, val_labels) if l == 0]
-    print(f"held-out ({len(val_clips)} clips):")
-    print(f"  wake clips   — min {min(pos_scores):.3f}  mean {np.mean(pos_scores):.3f}")
-    print(f"  other clips  — max {max(neg_scores):.3f}  mean {np.mean(neg_scores):.3f}")
-    threshold = (min(pos_scores) + max(neg_scores)) / 2
+    pos_scores = [s for s, l in zip(per_clip, per_label) if l == 1]
+    neg_scores = [s for s, l in zip(per_clip, per_label) if l == 0]
+    print(f"held-out ({len(per_clip)} scorable clips):")
+    print(f"  wake clips   — min {min(pos_scores):.3f}  "
+          f"p25 {np.percentile(pos_scores, 25):.3f}  mean {np.mean(pos_scores):.3f}")
+    print(f"  other clips  — max {max(neg_scores):.3f}  "
+          f"p95 {np.percentile(neg_scores, 95):.3f}  mean {np.mean(neg_scores):.3f}")
+    # Suggested threshold: midpoint between the low quartile of wake scores
+    # and the 95th percentile of other-speech scores — robust to outliers.
+    threshold = float((np.percentile(pos_scores, 25)
+                       + np.percentile(neg_scores, 95)) / 2)
+    threshold = min(max(threshold, 0.05), 0.95)
     print(f"  suggested JARVIS_WAKEWORD_THRESHOLD={threshold:.2f}")
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    torch.onnx.export(model, torch.zeros(1, WINDOW_FRAMES, EMBEDDING_DIM),
-                      str(out_path), input_names=["input"],
-                      output_names=["output"], opset_version=13)
+    try:
+        torch.onnx.export(model, torch.zeros(1, WINDOW_FRAMES, EMBEDDING_DIM),
+                          str(out_path), input_names=["input"],
+                          output_names=["output"], opset_version=13)
+    except ModuleNotFoundError as exc:
+        print(f"error: ONNX export needs an extra package ({exc.name}).\n"
+              "  uv pip install onnx onnxscript   # then re-run this command",
+              file=sys.stderr)
+        return 1
     print(f"saved {out_path}")
 
     # Sanity check: load through the exact path the sidecar uses.
