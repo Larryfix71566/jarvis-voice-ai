@@ -12,6 +12,7 @@ import VoicePicker from "./components/VoicePicker";
 import GitPanel from "./components/GitPanel";
 import type { OrbState } from "./components/Orb";
 import "./App.css";
+import "./command-deck.css";
 
 function errorText(message: unknown): string {
   const m = message as { data?: unknown };
