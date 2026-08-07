@@ -73,6 +73,9 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
 )
 
+# Cap for the task summary forwarded to the UI in agent "working" messages.
+UI_TASK_SUMMARY_CHARS = 120
+
 
 @dataclass
 class Runtime:
@@ -98,7 +101,10 @@ def make_agent_event_handler(transport: Any) -> Any:
 
     on_event callbacks are sync (agents/base.py EventCallback), so the async
     app-message send is scheduled on the running loop. Message shape (locked):
-    {"type": "agent", "name": "<agent>", "state": "working"|"done"}.
+    {"type": "agent", "name": "<agent>", "state": "working"|"done"} —
+    "working" messages additionally carry "task": the delegated task text,
+    truncated to UI_TASK_SUMMARY_CHARS, so the console can show what the
+    specialist is doing (satellite cards).
     """
 
     def on_agent_event(event: dict) -> None:
@@ -106,11 +112,15 @@ def make_agent_event_handler(transport: Any) -> Any:
         etype = event.get("type")
         if etype not in ("agent_start", "agent_done"):
             return
-        message = {
+        message: dict[str, Any] = {
             "type": "agent",
             "name": event.get("agent"),
             "state": "working" if etype == "agent_start" else "done",
         }
+        if etype == "agent_start":
+            task = str(event.get("task", "")).strip()
+            if task:
+                message["task"] = task[:UI_TASK_SUMMARY_CHARS]
         try:
             asyncio.get_running_loop().create_task(
                 send_app_message(transport, message))
