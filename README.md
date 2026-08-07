@@ -61,7 +61,10 @@ Jarvis is an Ironman-style voice assistant that runs entirely on your machine: y
 Any OpenAI-compatible Chat Completions endpoint works as the LLM (set
 `OPENAI_BASE_URL` / `OPENAI_MODEL`, e.g. Moonshot/Kimi
 `https://api.moonshot.ai/v1`, DeepSeek, or a local Ollama). The provider must
-support function/tool calling.
+support function/tool calling. Anthropic Claude also works through its
+OpenAI-compatibility layer (`https://api.anthropic.com/v1/`, model
+`claude-haiku-4-5` recommended for low latency) — ready-made blocks for all
+of these are commented in `.env.example`.
 
 ## 3. Quickstart
 
