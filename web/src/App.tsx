@@ -10,6 +10,7 @@ import MicControls from "./components/MicControls";
 import Transcript from "./components/Transcript";
 import VoicePicker from "./components/VoicePicker";
 import AgentActivity from "./components/AgentActivity";
+import GitPanel from "./components/GitPanel";
 import "./App.css";
 
 function errorText(message: unknown): string {
@@ -75,6 +76,7 @@ export default function App() {
             <span className="orb-dot" />
             {orbLabel}
           </div>
+          <GitPanel />
         </section>
         <Transcript />
       </main>
