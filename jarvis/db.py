@@ -75,11 +75,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_fact_key
   ON memories(key) WHERE kind = 'fact';
 """
 
+MIGRATION_0004 = """
+CREATE TABLE IF NOT EXISTS observations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  key TEXT NOT NULL,                 -- tendency key, e.g. user.style.brevity
+  content TEXT NOT NULL,             -- one observed instance of the pattern
+  source_session_id TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_observations_key ON observations(key);
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
     ("0002_actions", MIGRATION_0002),
     ("0003_memory", MIGRATION_0003),
+    ("0004_observations", MIGRATION_0004),
 ]
 
 

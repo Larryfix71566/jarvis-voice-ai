@@ -39,6 +39,11 @@ MAX_CONTEXT_CHARS = 1600
 MAX_TRANSCRIPT_ROWS = 60
 MAX_ROW_CHARS = 300
 
+# U2.6 tendency learning: a behavioral pattern must be observed in this many
+# distinct sessions before it is promoted to a user.style.* fact and starts
+# shaping behavior. One odd session must never teach Jarvis a bad habit.
+PROMOTE_AFTER = 3
+
 EMPTY_CONTEXT = "(no memories yet)"
 
 EXTRACTION_PROMPT = """You maintain the long-term memory of a personal AI assistant.
@@ -46,6 +51,7 @@ You are given the previous running summary (possibly empty) and the transcript
 of one conversation session. Produce a memory update as STRICT JSON only:
 
 {"facts": [{"key": "<dotted.key>", "value": "<one short statement>"}],
+ "observations": [{"key": "user.style.<pattern>", "value": "<what was observed>"}],
  "summary": "<rewritten running summary, at most 500 characters>"}
 
 Rules:
@@ -53,12 +59,21 @@ Rules:
   the user's name, preferences, people, projects, standing decisions.
   Keys are lowercase dotted paths, e.g. "user.name", "user.preference.music",
   "project.jarvis". Resend a key with a new value to correct it.
+- Anything the user EXPLICITLY states about how they want things done
+  ("I prefer short answers", "stop doing that", "always ask me first")
+  is a fact with a user.style.* key — record it immediately in facts,
+  not observations. Explicit statements override everything inferred.
+- Observations are INFERRED behavioral tendencies: how the user phrases
+  requests, what they react well or badly to, formats they pick,
+  pacing, tone. Keys are "user.style.<pattern>". Observations are
+  evidence, not truth — record them even when unsure; they only become
+  active after recurring across sessions.
 - Do NOT record one-off requests, small talk, or anything time-bound
   (that is what reminders and notes are for).
 - The summary must stand alone: it replaces the previous summary, so carry
   forward anything still relevant and fold in this session's essentials.
 - If the session contains nothing worth remembering, return
-  {"facts": [], "summary": "<previous summary unchanged>"}.
+  {"facts": [], "observations": [], "summary": "<previous summary unchanged>"}.
 - Output JSON only. No markdown, no commentary."""
 
 
@@ -140,6 +155,59 @@ def set_summary(
         )
 
 
+def add_observation(
+    conn: sqlite3.Connection, key: str, value: str, session_id: str | None
+) -> None:
+    """Record one observed instance of an inferred behavioral tendency."""
+    conn.execute(
+        "INSERT INTO observations (key, content, source_session_id, "
+        "created_at) VALUES (?, ?, ?, ?)",
+        (key, value[:MAX_FACT_CHARS], session_id, now_iso()),
+    )
+
+
+def promote_observations(conn: sqlite3.Connection) -> list[str]:
+    """Promote tendencies with enough evidence to user.style.* facts.
+
+    A pattern promotes when its key has at least PROMOTE_AFTER observations
+    from DISTINCT sessions. Promotion can only CREATE a fact — it never
+    overwrites one. Once a fact exists for a key (typically from an explicit
+    user statement), only another explicit statement may change it; inferred
+    evidence never clobbers what the user actually said.
+    """
+    rows = conn.execute(
+        "SELECT key, COUNT(DISTINCT source_session_id) AS sessions "
+        "FROM observations GROUP BY key"
+    ).fetchall()
+    promoted: list[str] = []
+    for row in rows:
+        if row["sessions"] < PROMOTE_AFTER:
+            continue
+        fact = conn.execute(
+            "SELECT 1 FROM memories WHERE kind = 'fact' AND key = ?",
+            (row["key"],),
+        ).fetchone()
+        if fact is not None:
+            continue  # explicit fact stands; inference never overwrites it
+        latest = conn.execute(
+            "SELECT content FROM observations WHERE key = ? "
+            "ORDER BY id DESC LIMIT 1",
+            (row["key"],),
+        ).fetchone()
+        upsert_fact(conn, row["key"], latest["content"], None)
+        promoted.append(row["key"])
+    return promoted
+
+
+def delete_fact(conn: sqlite3.Connection, key: str) -> bool:
+    """Forget one fact and its accumulated observations ('forget that' path)."""
+    cur = conn.execute(
+        "DELETE FROM memories WHERE kind = 'fact' AND key = ?", (key,)
+    )
+    conn.execute("DELETE FROM observations WHERE key = ?", (key,))
+    return cur.rowcount > 0
+
+
 def _session_transcript(
     conn: sqlite3.Connection, session_id: str
 ) -> tuple[list[sqlite3.Row], str]:
@@ -179,7 +247,17 @@ def _parse_update(text: str) -> dict | None:
         for f in facts
         if isinstance(f, dict) and f.get("key") and f.get("value")
     ]
-    return {"facts": clean_facts, "summary": summary.strip()}
+    observations = data.get("observations") or []
+    clean_observations = [
+        (str(o["key"]).strip(), str(o["value"]).strip())
+        for o in observations
+        if isinstance(o, dict) and o.get("key") and o.get("value")
+    ]
+    return {
+        "facts": clean_facts,
+        "observations": clean_observations,
+        "summary": summary.strip(),
+    }
 
 
 async def update_memory_from_session(
@@ -231,10 +309,15 @@ async def update_memory_from_session(
         with get_conn() as conn:
             for key, value in update["facts"]:
                 upsert_fact(conn, key, value, session_id)
+            for key, value in update["observations"]:
+                add_observation(conn, key, value, session_id)
+            promoted = promote_observations(conn)
             if update["summary"]:
                 set_summary(conn, update["summary"], session_id)
         logger.info(
-            "memory_updated session=%s facts=%d", session_id, len(update["facts"])
+            "memory_updated session=%s facts=%d observations=%d promoted=%s",
+            session_id, len(update["facts"]), len(update["observations"]),
+            promoted,
         )
         return True
     except Exception:  # noqa: BLE001 — memory must never break the pipeline
