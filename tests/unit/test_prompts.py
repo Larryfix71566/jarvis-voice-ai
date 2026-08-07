@@ -37,7 +37,7 @@ def test_voice_addendum_is_plain_prose_rule():
 
 
 def test_subagent_prompts_roster_and_contracts():
-    assert set(SUBAGENT_PROMPTS) == {"scheduler", "librarian", "analyst", "systems"}
+    assert set(SUBAGENT_PROMPTS) == {"scheduler", "librarian", "analyst", "systems", "developer"}
     for name, prompt in SUBAGENT_PROMPTS.items():
         assert "FAILED:" in prompt, name
     assert "{timezone}" not in SUBAGENT_PROMPTS["scheduler"].format(

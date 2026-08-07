@@ -145,6 +145,6 @@ class TestLoadSubAgents:
     def test_loads_roster_from_repo_yaml(self):
         agents = load_sub_agents(make_settings(), FakeRegistry(),
                                  client_factory=lambda s: FakeLLM([]))
-        assert set(agents) == {"scheduler", "librarian", "analyst", "systems"}
+        assert set(agents) == {"scheduler", "librarian", "analyst", "systems", "developer"}
         assert agents["scheduler"].mcp_servers == ["mcp-time", "mcp-reminders"]
         assert agents["analyst"].display_name == "Analyst"
