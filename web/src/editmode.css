@@ -1,0 +1,111 @@
+/* Edit mode panel (self-development loop, plan section 5). Additive only. */
+
+.editmode-panel {
+  background: rgba(12, 16, 24, 0.96);
+  border: 1px solid rgba(120, 180, 255, 0.25);
+  border-radius: 10px;
+  padding: 12px 14px;
+  width: 420px;
+  max-width: 92vw;
+  max-height: 70vh;
+  overflow-y: auto;
+  font-size: 13px;
+  color: #cfe3ff;
+}
+
+.editmode-disclaimer {
+  color: #8fa8cc;
+  font-size: 12px;
+  margin: 6px 0 10px;
+  line-height: 1.4;
+}
+
+.editmode-session {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.editmode-tag {
+  color: #7c8db0;
+  font-size: 11px;
+}
+
+.editmode-summary {
+  margin: 8px 0;
+  padding: 8px 10px;
+  background: rgba(120, 180, 255, 0.08);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.editmode-proposals {
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.editmode-proposal summary {
+  cursor: pointer;
+  color: #9ec7ff;
+}
+
+.editmode-diff {
+  margin: 6px 0 0;
+  padding: 8px;
+  background: #0a0e16;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 11px;
+  line-height: 1.35;
+  max-height: 220px;
+  overflow-y: auto;
+  white-space: pre;
+}
+
+.editmode-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.editmode-revert {
+  margin-left: auto;
+  color: #ff9c9c;
+}
+
+.editmode-checks {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.check-ok {
+  color: #8fe6a8;
+}
+
+.check-fail {
+  color: #ff9c9c;
+}
+
+.editmode-pr {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(143, 230, 168, 0.4);
+  border-radius: 6px;
+  word-break: break-all;
+}
+
+.editmode-pr a {
+  color: #8fe6a8;
+}
+
+.editmode-merge-note {
+  margin-top: 6px;
+  color: #8fa8cc;
+  font-size: 12px;
+}
