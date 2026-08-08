@@ -11,3 +11,4 @@ data/*.db-*
 .acceptance-scratch/
 data/wakeword/
 models/
+logs/
