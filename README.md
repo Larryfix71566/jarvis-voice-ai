@@ -2,7 +2,7 @@
 
 ## 1. What this is
 
-Mortimer is an Ironman-style voice assistant that runs entirely on your machine: you speak, it listens, thinks, acts, and answers out loud in a voice you choose. A single voice-facing **Supervisor** agent understands your intent and delegates specialist work to four text-only sub-agents — Scheduler, Librarian, Analyst, and Systems — whose skills live in separate MCP (Model Context Protocol) server processes. Everything persists to a local SQLite file, and the only cloud dependencies are the four speech/LLM/search APIs.
+Mortimer is an Ironman-style voice assistant that runs entirely on your machine: you speak, it listens, thinks, acts, and answers out loud in a voice you choose. A single voice-facing **Supervisor** agent understands your intent and delegates specialist work to five text-only sub-agents — Scheduler, Librarian, Analyst, Systems, and Developer — whose skills live in separate MCP (Model Context Protocol) server processes. Everything persists to a local SQLite file, and the only cloud dependencies are the speech/LLM/search APIs (plus GitHub, if you enable app development).
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
@@ -34,14 +34,15 @@ Mortimer is an Ironman-style voice assistant that runs entirely on your machine:
 └──────────────────────────────┬─────────────────────────────────────┘
                                │ MCP protocol over stdio (JSON-RPC)
 ┌──────────────────────────────▼─────────────────────────────────────┐
-│              MCP SKILL SERVERS (4 separate processes)               │
+│              MCP SKILL SERVERS (separate processes)                 │
 │  mcp-time        mcp-notes       mcp-reminders     mcp-web          │
 │  (time/dates)    (SQLite notes)  (SQLite reminders) (Tavily+weather)│
-│                              + mcp-system (psutil machine status)   │
+│  + mcp-system (psutil machine status)                               │
+│  + mcp-apps   (app development: one private GitHub repo per app)    │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-*(Five skill servers total: `mcp-time`, `mcp-notes`, `mcp-reminders`, `mcp-web`, `mcp-system`.)*
+*(Six skill servers spawned by the registry: `mcp-time`, `mcp-notes`, `mcp-reminders`, `mcp-web`, `mcp-system`, `mcp-apps` — plus `mcp-git`, which backs the admin sidecar and the Developer agent's repo tools.)*
 
 ## 2. Prerequisites
 
@@ -57,6 +58,7 @@ Mortimer is an Ironman-style voice assistant that runs entirely on your machine:
 | Tavily | https://app.tavily.com | `TAVILY_API_KEY` | 1,000 credits/month | **Yes** |
 | Open-Meteo | no key | — | free, rate-limited | built-in |
 | openWakeWord (wake word) | no key — `pip install openwakeword` | `JARVIS_WAKEWORD_MODEL` (custom model file) | free, open source, fully local | Optional (stretch) |
+| GitHub (app development) | https://github.com/settings/tokens | `GITHUB_TOKEN`, `GITHUB_OWNER` | free | Optional (mcp-apps) |
 
 Any OpenAI-compatible Chat Completions endpoint works as the LLM (set
 `OPENAI_BASE_URL` / `OPENAI_MODEL`, e.g. Moonshot/Kimi
@@ -110,6 +112,14 @@ python3 -m jarvis.cli
   within about a second and listens.
 - **Push-to-talk:** hold **SPACE** to unmute while held; the mic button
   toggles a persistent mute.
+- **Build apps (optional):** "Build me an expense tracker app." The
+  Developer previews a new private GitHub repo (proposed name and file
+  list) and creates it **only after you confirm**. Each app lives in its
+  own repo, scaffolded from a template, and is recorded in Mortimer's app
+  registry (`apps/index.json` on the `mortimer-dev` branch). Ask "what
+  apps have you built?" to list them. Requires `GITHUB_TOKEN` (a PAT that
+  can create repos and read/write contents); without it the app tools
+  report a clear unavailable error and everything else keeps working.
 - **Wake word (optional stretch):** start the local openWakeWord sidecar
   (`./scripts/run_wakeword.sh`), enable the **"Wake word"** toggle, and just
   say **"Mortimer"** — a chime plays and the mic unmutes. Detection is fully
@@ -197,7 +207,11 @@ jarvis/
 │   ├── mcp_notes/
 │   ├── mcp_reminders/
 │   ├── mcp_web/
-│   └── mcp_system/
+│   ├── mcp_system/
+│   ├── mcp_git/                   # repo ops (admin sidecar + Developer agent)
+│   └── mcp_apps/                  # app development: logic.py (pure, injected
+│                                  #   client) + github.py (only network code)
+│                                  #   + templates/web_app/
 ├── scripts/
 │   ├── check_env.py               # validates keys + connectivity
 │   ├── init_db.py                 # runs migrations
@@ -271,6 +285,7 @@ ls tests/acceptance/
 | 401 from Deepgram / ElevenLabs | Bad or expired speech keys | Regenerate keys, update `.env`, restart the bot |
 | Slow responses | Large LLM model, slow provider, or cold MCP servers | Use a faster `OPENAI_MODEL`; check `TURN` lines / `latency_probe.py`; keep the bot running between turns |
 | MCP server won't start | Missing deps after a partial install, or a stale venv | Re-run `pip install -r requirements-lock.txt`; start one manually: `python mcp_servers/mcp_time/server.py` |
+| App tools report unavailable | `GITHUB_TOKEN` missing or lacks repo permissions | Create a PAT at github.com/settings/tokens with repo creation + contents read/write, set `GITHUB_TOKEN` and `GITHUB_OWNER` in `.env`, restart the bot |
 | Port in use (7860 or 5173) | An old bot/web process is still running | `pkill -f jarvis.bot.bot` / `pkill -f vite`, or change the port (`JARVIS_BOT_PORT`, `npm run dev -- --port`) |
 | Voices not switching | Voice id not in `config/voices.yaml`, or TTS update failed | List valid ids: `python scripts/list_voices.py`; check the bot log for TTS errors |
 | Reminders not firing | Client not connected (watcher only delivers while connected), or `due_at` in the future | Reconnect and wait ≤ 30 s; inspect rows: `sqlite3 data/jarvis.db 'select * from reminders'` |
@@ -293,6 +308,8 @@ ls tests/acceptance/
 | `DEEPGRAM_API_KEY` | — | Speech-to-text key (required) |
 | `ELEVENLABS_API_KEY` | — | Text-to-speech key (required) |
 | `TAVILY_API_KEY` | — | Web search key (required for Analyst research) |
+| `GITHUB_TOKEN` | — | GitHub PAT for app development (optional; enables mcp-apps) |
+| `GITHUB_OWNER` | — | GitHub user/org owning app repos (optional; defaults to the token's user) |
 | `JARVIS_DB_PATH` | `data/jarvis.db` | SQLite database file |
 | `JARVIS_LOG_LEVEL` | `INFO` | Python logging level |
 | `JARVIS_BOT_PORT` | `7860` | Bot HTTP/WebRTC port |
@@ -309,7 +326,7 @@ ls tests/acceptance/
 
 | File | Purpose |
 |---|---|
-| `config/mcp_servers.yaml` | The five MCP skill servers: command, args, env |
+| `config/mcp_servers.yaml` | The MCP skill servers: command, args, env |
 | `config/agents.yaml` | Sub-agent roster: name, display name, routing description, owned MCP servers |
 | `config/voices.yaml` | Voice catalog (`id`, `label`, `elevenlabs_voice_id`) + default voice |
 | `jarvis/prompts.py` | All system prompts (Supervisor, sub-agents, voice addendum) — single source of truth |
