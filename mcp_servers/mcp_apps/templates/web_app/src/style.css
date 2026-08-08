@@ -1,0 +1,17 @@
+/* __APP_NAME__ */
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #0d1117;
+  color: #e6edf3;
+}
+
+.app {
+  max-width: 720px;
+  margin: 4rem auto;
+  padding: 0 1rem;
+}

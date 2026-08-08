@@ -1,0 +1,9 @@
+# Skill manifest
+name: mcp-apps
+version: 0.1.0
+class: privileged
+tools: [app_create, app_write_file, app_register, app_list, app_read]
+requires_env: [GITHUB_TOKEN]
+requires_keychain: []
+scopes: []
+test: "python3 -m pytest tests/unit/test_mcp_apps_logic.py -q"
