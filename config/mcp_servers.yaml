@@ -23,3 +23,9 @@ servers:
     command: python
     args: ["-m", "mcp_servers.mcp_system.server"]
     env: {}
+  - name: mcp-apps
+    command: python
+    args: ["-m", "mcp_servers.mcp_apps.server"]
+    env:
+      GITHUB_TOKEN: "${GITHUB_TOKEN}"
+      GITHUB_OWNER: "${GITHUB_OWNER}"
