@@ -1,0 +1,39 @@
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Gate 1: self-edit branches may only touch allowlisted paths.
+      - name: Allowlist enforcement
+        run: python scripts/check_allowlist.py origin/main...HEAD
+
+      # Gate 2: backend still imports.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend dependencies
+        run: pip install -r requirements.txt
+      - name: Backend import smoke
+        run: python -c "import jarvis, jarvis.config, jarvis.cli"
+
+      # Gate 3: unit tests (non-blocking until the suite is green on main).
+      - name: Unit tests
+        continue-on-error: true
+        run: pytest tests/unit -q
+
+      # Gate 4: frontend still compiles.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Frontend build
+        run: |
+          cd web
+          npm ci
+          npm run build
