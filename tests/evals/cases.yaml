@@ -1,6 +1,6 @@
 # Routing eval cases (plan Phase 3, step 3.4 — extended from Appendix B).
-# Coverage: 5 per single agent (20), 6 none, 4 multi-agent = 30 total.
-# expect: scheduler | librarian | analyst | systems | none | [agent, agent]
+# Coverage: 5 per single agent (25), 6 none, 4 multi-agent = 35 total.
+# expect: scheduler | librarian | analyst | systems | developer | none | [agent, agent]
 
 # --- scheduler (5) ---
 - {input: "what time is it", expect: scheduler}
@@ -29,6 +29,13 @@
 - {input: "how much disk space do I have left", expect: systems}
 - {input: "how long has my machine been running", expect: systems}
 - {input: "is my CPU under heavy load right now", expect: systems}
+
+# --- developer (5) ---
+- {input: "what branch is the repo on", expect: developer}
+- {input: "commit these changes", expect: developer}
+- {input: "push my commits to origin", expect: developer}
+- {input: "build me an expense tracker app", expect: developer}
+- {input: "what apps have you built so far", expect: developer}
 
 # --- none (6): greetings, small talk, clarification ---
 - {input: "hello", expect: none}

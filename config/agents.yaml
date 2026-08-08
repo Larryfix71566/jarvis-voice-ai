@@ -18,5 +18,5 @@ sub_agents:
     description: "Local machine status: CPU, memory, disk, battery, uptime."
   - name: developer
     display_name: Developer
-    mcp_servers: [mcp-git]
-    description: "The Jarvis git repository: status, recent commits, diffs, committing and pushing changes (with confirmation), and the audit trail of repository actions."
+    mcp_servers: [mcp-git, mcp-apps]
+    description: "The Jarvis git repository: status, recent commits, diffs, committing and pushing changes (with confirmation), and the audit trail of repository actions. Also builds new applications: each app gets its own private GitHub repo (created only after user confirmation) and is recorded in the Mortimer app registry."

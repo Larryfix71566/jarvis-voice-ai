@@ -1,0 +1,9 @@
+{
+  "name": "__APP_NAME__",
+  "version": "0.1.0",
+  "created_by": "mortimer",
+  "created_at": "__CREATED_AT__",
+  "entry_point": "src/index.html",
+  "dependencies": [],
+  "description": "__DESCRIPTION__"
+}
