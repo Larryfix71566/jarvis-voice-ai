@@ -246,7 +246,7 @@ body {
   padding: 10px 20px;
 }
 
-/* --- main: orb panel + transcript side by side --- */
+/* --- main: command-deck stage --- */
 .main {
   position: relative;
   z-index: 1;
@@ -314,11 +314,6 @@ body {
   letter-spacing: 0.5em;
   color: var(--text-dim);
   text-indent: 0.5em; /* recenters letter-spaced text */
-}
-
-.orb-canvas {
-  width: 280px;
-  height: 280px;
 }
 
 .orb-label {
@@ -675,10 +670,5 @@ body {
     padding: 28px 0;
     border-right: none;
     border-bottom: 1px solid var(--hairline);
-  }
-
-  .orb-canvas {
-    width: 220px;
-    height: 220px;
   }
 }
