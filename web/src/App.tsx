@@ -6,6 +6,7 @@ import {
 } from "@pipecat-ai/client-react";
 import ConnectButton from "./components/ConnectButton";
 import OrbField from "./components/OrbField";
+import VoiceWave from "./components/VoiceWave";
 import MicControls from "./components/MicControls";
 import TranscriptDrawer from "./components/TranscriptDrawer";
 import VoicePicker from "./components/VoicePicker";
@@ -71,6 +72,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <VoiceWave state={orbState} />
       <header className="topbar">
         <div className="brand">MORTIMER</div>
         <ConnectButton />
