@@ -1,29 +1,43 @@
-"""LLM brain of the self-development loop.
+"""Upgrade Agent: the LLM-driven brain of the self-development loop (plan section 3.5).
 
-The upgrade agent plans edits to Mortimer's own codebase. It never touches
-git directly: it works through a closed toolset exposed by
-:class:`jarvis.selfedit.service.SelfEditService` (file_read, edit_propose,
-session_validate, session_submit) and the service alone owns the sandboxed
-branch, validation, and PR creation.
+The agent interprets a natural-language goal, reads allowlisted source files,
+and produces edits — but its only tools are the closed set below, backed by
+jarvis/selfedit/service.py. It never gets shell or raw git access.
+
+Behavior contract (any model swapped in via config must pass this — it is the
+acceptance suite for the agent's brain):
+- Present every proposed diff before validating; summarize validation
+  results before submitting. No silent edits.
+- One automatic repair attempt after a failed validation; if it fails again,
+  end the session and report. Never retry-submit in a loop.
+- Decline goals that require off-allowlist changes and say they need human
+  development.
+- Hard loop bounds: max_iterations tool cycles and max_session_minutes
+  wall-clock, from config/upgrade_agent.yaml (overridable via env).
 
 Planner model
 -------------
-Which model does the planning is chosen from the registry in
+Which model does the planning comes from the registry in
 ``config/upgrade_models.yaml`` (override path via ``JARVIS_UPGRADE_MODELS``).
 Selection order: an explicit per-session ``profile`` argument >
 ``JARVIS_UPGRADE_PROFILE`` env > the registry's ``default`` key. Profiles are
-OpenAI-compatible endpoints; API keys come only from the environment
-(``api_key_env``). ``temperature: null`` in a profile means the parameter is
-omitted from requests entirely (D-003: kimi-k2.x rejects any value != 1).
+OpenAI-compatible endpoints; the API key comes from the profile's
+``api_key_env`` — keys live in the environment, never in config. A profile
+with ``temperature: null`` OMITS the parameter entirely (DEVIATIONS.md D-003:
+kimi-k2.x rejects any value other than 1).
 
 If no registry file exists, the agent falls back to the legacy single-slot
-config in ``config/upgrade_agent.yaml`` (``model``/``base_url``/``api_key_env``)
-— byte-identical behavior to before the registry existed.
+config in ``config/upgrade_agent.yaml`` (provider/model/base_url/temperature,
+with JARVIS_UPGRADE_MODEL / JARVIS_UPGRADE_BASE_URL env overrides) —
+byte-identical behavior to before the registry existed.
+
+The client factory is injectable for tests.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from pathlib import Path
@@ -31,17 +45,47 @@ from typing import Any, Callable
 
 import yaml
 
-DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "upgrade_agent.yaml"
-DEFAULT_REGISTRY_PATH = Path(__file__).resolve().parents[2] / "config" / "upgrade_models.yaml"
+from jarvis.selfedit.service import SelfEditService
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_CONFIG_PATH = (
+    Path(__file__).resolve().parents[2] / "config" / "upgrade_agent.yaml"
+)
+DEFAULT_REGISTRY_PATH = (
+    Path(__file__).resolve().parents[2] / "config" / "upgrade_models.yaml"
+)
 REGISTRY_PATH_ENV = "JARVIS_UPGRADE_MODELS"
 PROFILE_ENV = "JARVIS_UPGRADE_PROFILE"
 
-PLANNER_TOOLS = [
+SYSTEM_PROMPT = """You are the Jarvis Upgrade Agent. You develop upgrades to the
+Jarvis interface by proposing code edits, under these NON-NEGOTIABLE rules:
+
+1. `main` changes only via a human merging a pull request on GitHub. You can
+   only open PRs. You can never merge, force-push, or touch main.
+2. You may only read and edit files on the self-edit allowlist (UI sources
+   under web/src, web/public, non-secret config, jarvis/prompts.py,
+   jarvis/skills, docs). If the user's goal requires anything else — wake
+   word, agents, admin, CI, dependencies, the self-edit machinery itself —
+   decline that part and say it requires human development.
+3. Your only tools are file_read, edit_propose, session_validate,
+   session_submit. There is no shell and no git tool.
+4. Propose edits with edit_propose, then call session_validate, and only if
+   every check passes call session_submit. If validation fails you get ONE
+   repair attempt; if it fails again, stop and report the failure.
+5. Keep edits small, self-contained, and explained by a one-line rationale.
+
+Work style: first read the files relevant to the goal, then propose complete
+new file contents for each file you change, then validate, then submit.
+Reply to the user with a concise summary of what you changed (or why you
+declined), in plain language."""
+
+TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
             "name": "file_read",
-            "description": "Read a repository file (allowlisted paths only).",
+            "description": "Read an allowlisted repo file.",
             "parameters": {
                 "type": "object",
                 "properties": {"path": {"type": "string"}},
@@ -53,19 +97,16 @@ PLANNER_TOOLS = [
         "type": "function",
         "function": {
             "name": "edit_propose",
-            "description": (
-                "Propose a full-file replacement for one allowlisted path. "
-                "The edit is staged in the sandbox session; nothing is committed "
-                "until validation passes and the user confirms submission."
-            ),
+            "description": "Propose a full-file replacement for an allowlisted "
+                           "path. Returns the diff.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {"type": "string"},
-                    "content": {"type": "string"},
+                    "new_content": {"type": "string"},
                     "rationale": {"type": "string"},
                 },
-                "required": ["path", "content", "rationale"],
+                "required": ["path", "new_content", "rationale"],
             },
         },
     },
@@ -73,10 +114,8 @@ PLANNER_TOOLS = [
         "type": "function",
         "function": {
             "name": "session_validate",
-            "description": (
-                "Run the validation pipeline (allowlist, backend imports, "
-                "frontend build) against the staged proposals."
-            ),
+            "description": "Run the validation gate (allowlist, backend "
+                           "imports, frontend build).",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -84,27 +123,28 @@ PLANNER_TOOLS = [
         "type": "function",
         "function": {
             "name": "session_submit",
-            "description": (
-                "Open a pull request with the validated proposals. Call this ONLY "
-                "after validation has passed and the caller has explicitly asked "
-                "for submission. The PR is never merged by the agent."
-            ),
+            "description": "Commit, push the session branch and open a PR. "
+                           "Only works after validation has passed. Merge "
+                           "remains manual on GitHub.",
             "parameters": {"type": "object", "properties": {}},
         },
     },
 ]
 
-SYSTEM_PROMPT = """You are Mortimer's upgrade planner. You improve Mortimer's own \
-codebase exactly as the goal describes — no more, no less.
 
-Rules:
-- Read before you write. Never propose an edit to a file you have not read.
-- Stay inside the goal's scope. Drive-by refactors are rejected.
-- Every edit_propose call needs a one-sentence rationale.
-- When the goal is satisfied, call session_validate, then stop and report.
-- Call session_submit ONLY if the goal explicitly says to submit.
-- You cannot merge, force-push, or touch main. Ever.
-"""
+def load_agent_config(path: str | Path | None = None) -> dict:
+    cfg_path = Path(path) if path else DEFAULT_CONFIG_PATH
+    data = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    return {
+        "provider": data.get("provider", "openai"),
+        "model": os.environ.get("JARVIS_UPGRADE_MODEL")
+                 or data.get("model", "gpt-4.1-mini"),
+        "base_url": os.environ.get("JARVIS_UPGRADE_BASE_URL")
+                    or data.get("base_url", "https://api.openai.com/v1"),
+        "temperature": float(data.get("temperature", 0.2)),
+        "max_iterations": int(data.get("max_iterations", 10)),
+        "max_session_minutes": int(data.get("max_session_minutes", 30)),
+    }
 
 
 class UnknownModelProfileError(ValueError):
@@ -123,7 +163,7 @@ def load_model_registry(path: str | os.PathLike[str] | None = None) -> dict[str,
     p = Path(path)
     if not p.exists():
         return {"default": None, "profiles": {}}
-    data = yaml.safe_load(p.read_text()) or {}
+    data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     profiles = {prof["name"]: prof for prof in data.get("profiles", []) or []}
     return {"default": data.get("default"), "profiles": profiles}
 
@@ -162,40 +202,42 @@ def available_models(registry_path: str | os.PathLike[str] | None = None) -> lis
 
 
 class UpgradeAgent:
-    """Closed-toolset planner for self-development edits."""
+    """Drives one self-edit session from a natural-language goal."""
 
     def __init__(
         self,
-        service: Any,
-        config_path: str | os.PathLike[str] | None = None,
+        service: SelfEditService,
+        config_path: str | Path | None = None,
         registry_path: str | os.PathLike[str] | None = None,
         profile: str | None = None,
         client_factory: Callable[[], Any] | None = None,
-    ) -> None:
+    ):
         self.service = service
-        cfg = yaml.safe_load(Path(config_path or DEFAULT_CONFIG_PATH).read_text()) or {}
-        self.max_iterations = int(cfg.get("max_iterations", 10))
-        self.max_minutes = float(cfg.get("max_minutes", 30))
+        self.cfg = load_agent_config(config_path)
 
-        registry = load_model_registry(registry_path)
+        # Registry mode overlays the planner slot; loop bounds always come
+        # from the agent config.
         self.profile_name: str | None = None
+        registry = load_model_registry(registry_path)
         if registry.get("profiles"):
             prof = resolve_profile(registry, profile)
             self.profile_name = prof["name"]
-            self._profile_label = prof.get("label", prof["name"])
-            self.model = prof.get("model", "")
-            self.base_url = prof.get("base_url") or None
-            self.temperature = prof.get("temperature", None)
+            self.cfg["provider"] = prof.get("provider", self.cfg["provider"])
+            self.cfg["model"] = prof.get("model", self.cfg["model"])
+            self.cfg["base_url"] = prof.get("base_url") or self.cfg["base_url"]
+            if "temperature" in prof:
+                # null means: omit the parameter entirely (D-003)
+                self.cfg["temperature"] = prof["temperature"]
             self._api_key_env = prof.get("api_key_env", "OPENAI_API_KEY")
         else:
-            # Legacy single-slot config (pre-registry behavior).
-            self.model = cfg.get("model", "gpt-4.1-mini")
-            self.base_url = cfg.get("base_url") or None
-            self.temperature = cfg.get("temperature", 0.2)
-            self._api_key_env = cfg.get("api_key_env", "OPENAI_API_KEY")
+            self._api_key_env = "OPENAI_API_KEY"
+
+        # Uniform attribute view for status lines and tests.
+        self.model = self.cfg["model"]
+        self.base_url = self.cfg["base_url"]
 
         # Defer client construction when the key is absent: run() fails fast
-        # with a clear summary instead of the SDK raising at import time.
+        # with a clear summary instead of the SDK raising at construction.
         self._key_missing = client_factory is None and not os.environ.get(self._api_key_env)
         self._client: Any = None
         if client_factory is not None:
@@ -204,7 +246,8 @@ class UpgradeAgent:
             from openai import OpenAI
 
             self._client = OpenAI(
-                api_key=os.environ[self._api_key_env], base_url=self.base_url
+                api_key=os.environ[self._api_key_env],
+                base_url=self.cfg["base_url"],
             )
 
     def model_label(self) -> str:
@@ -213,8 +256,11 @@ class UpgradeAgent:
             return f"{self.profile_name} ({self.model})"
         return self.model
 
-    def run(self, goal: str) -> dict[str, Any]:
-        """Plan and stage edits for ``goal``. Returns a summary dict."""
+    def run(self, goal: str, on_event: Callable[[dict], None] | None = None) -> dict:
+        """Execute a full session: start → edit loop → validate → submit.
+
+        Never raises; returns a result dict with ok/summary plus session state.
+        """
         if self._key_missing:
             return {
                 "ok": False,
@@ -223,83 +269,114 @@ class UpgradeAgent:
                     f"{self.model_label()} planner cannot run — add it to .env and restart"
                 ),
                 "session_started": False,
-                "iterations": 0,
+                "status": self.service.status(),
             }
 
-        session = self.service.start_session(goal)
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Goal: {goal}"},
-        ]
         started = time.monotonic()
-        iterations = 0
-        submitted = False
+        if not self.service.branch:
+            res = self.service.start_session(goal)
+            if not res["ok"]:
+                return {"ok": False, "summary": res["error"],
+                        "status": self.service.status()}
 
-        while iterations < self.max_iterations:
-            if (time.monotonic() - started) > self.max_minutes * 60:
-                break
-            iterations += 1
-
-            request: dict[str, Any] = {
-                "model": self.model,
-                "messages": messages,
-                "tools": PLANNER_TOOLS,
-                "tool_choice": "auto",
-            }
-            if self.temperature is not None:
-                request["temperature"] = self.temperature
-            resp = self._client.chat.completions.create(**request)
-            msg = resp.choices[0].message
-            messages.append(msg.model_dump(exclude_none=True))
-
-            tool_calls = getattr(msg, "tool_calls", None) or []
-            if not tool_calls:
-                break
-            for call in tool_calls:
-                name = call.function.name
-                args = json.loads(call.function.arguments or "{}")
-                result = self._dispatch(name, args)
-                if name == "session_submit" and result.get("ok"):
-                    submitted = True
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": call.id,
-                        "content": json.dumps(result),
-                    }
-                )
-
-        status = self.service.status()
-        proposals = status.get("proposals", [])
-        summary_parts = [
-            f"{iterations} planning iterations with {self.model_label()}",
-            f"{len(proposals)} file edit(s) proposed",
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": goal},
         ]
-        if status.get("validated_ok"):
-            summary_parts.append("validation passed")
-        if submitted:
-            summary_parts.append(f"PR opened: {status.get('pr_url', '')}".rstrip())
-        return {
-            "ok": True,
-            "summary": ", ".join(summary_parts),
-            "session_started": True,
-            "iterations": iterations,
-            "submitted": submitted,
-            "status": status,
-        }
+        repairs_used = 0
+        summary = "the agent reached its iteration limit without finishing"
+        ok = False
 
-    def _dispatch(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
-        try:
-            if name == "file_read":
-                return self.service.file_read(args["path"])
-            if name == "edit_propose":
-                return self.service.propose_edit(
-                    args["path"], args["content"], args.get("rationale", "")
-                )
-            if name == "session_validate":
-                return self.service.validate()
-            if name == "session_submit":
-                return self.service.submit()
-            return {"ok": False, "error": f"unknown tool {name!r}"}
-        except Exception as exc:  # surface tool failures to the planner, never crash
-            return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        for _ in range(self.cfg["max_iterations"]):
+            if time.monotonic() - started > self.cfg["max_session_minutes"] * 60:
+                summary = "session time limit reached; no changes were submitted"
+                break
+            request: dict[str, Any] = {
+                "model": self.cfg["model"],
+                "messages": messages,
+                "tools": TOOL_SPECS,
+            }
+            if self.cfg["temperature"] is not None:
+                request["temperature"] = self.cfg["temperature"]
+            response = self._client.chat.completions.create(**request)
+            message = response.choices[0].message
+            tool_calls = list(getattr(message, "tool_calls", None) or [])
+            if not tool_calls:
+                summary = message.content or ""
+                ok = True
+                break
+            messages.append(_assistant_message(message))
+            for tc in tool_calls:
+                self._emit(on_event, {"type": "agent_tool", "tool": tc.function.name})
+                try:
+                    args = json.loads(tc.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                result = self._dispatch(tc.function.name, args)
+                if tc.function.name == "session_validate" and not result.get("ok"):
+                    repairs_used += 1
+                    if repairs_used > 1:
+                        result = {
+                            "ok": False,
+                            "error": "validation failed again after the single "
+                                     "allowed repair attempt — stop and report "
+                                     "the failure to the user",
+                            "checks": result.get("checks"),
+                        }
+                        messages.append({
+                            "role": "tool", "tool_call_id": tc.id,
+                            "content": json.dumps(result),
+                        })
+                        summary = ("validation failed twice; session ended without "
+                                   "submitting. " + json.dumps(result.get("checks")))
+                        self._emit(on_event, {"type": "agent_done", "ok": False})
+                        return {"ok": False, "summary": summary,
+                                "status": self.service.status()}
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": json.dumps(result)[:8000],
+                })
+
+        self._emit(on_event, {"type": "agent_done", "ok": ok})
+        return {"ok": ok, "summary": summary, "status": self.service.status()}
+
+    def _dispatch(self, name: str, args: dict) -> dict:
+        """Closed toolset — unknown tools are refused outright."""
+        if name == "file_read":
+            return self.service.read_file(str(args.get("path", "")))
+        if name == "edit_propose":
+            return self.service.propose_edit(
+                str(args.get("path", "")),
+                str(args.get("new_content", "")),
+                str(args.get("rationale", "")),
+            )
+        if name == "session_validate":
+            return self.service.validate()
+        if name == "session_submit":
+            return self.service.submit()
+        return {"ok": False, "error": f"unknown tool: {name}"}
+
+    @staticmethod
+    def _emit(on_event: Callable[[dict], None] | None, event: dict) -> None:
+        if on_event is not None:
+            try:
+                on_event(event)
+            except Exception:  # noqa: BLE001 — observers must not break agents
+                logger.exception("on_event callback failed")
+
+
+def _assistant_message(message: Any) -> dict:
+    return {
+        "role": "assistant",
+        "content": message.content,
+        "tool_calls": [
+            {
+                "id": tc.id,
+                "type": "function",
+                "function": {"name": tc.function.name,
+                             "arguments": tc.function.arguments},
+            }
+            for tc in message.tool_calls
+        ],
+    }
