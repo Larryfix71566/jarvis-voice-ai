@@ -10,6 +10,7 @@ import yaml
 from fastapi.testclient import TestClient
 
 import jarvis.admin.server as srv
+from jarvis.admin.server import app
 
 
 REGISTRY = {
@@ -86,82 +87,92 @@ def _install_fake_agent(monkeypatch, crash=False, gate=None):
 
 def _wait_for_job(client, state, timeout=5.0):
     deadline = time.time() + timeout
+    job = None
     while time.time() < deadline:
         job = client.get("/api/selfedit/run").json()["job"]
         if job["state"] == state:
             return job
-        time.sleep(0.05)
-    raise AssertionError(f"job never reached {state}: {job}")
+        time.sleep(0.02)
+    raise AssertionError(f"job never reached state {state!r}")
 
 
-@pytest.fixture
-def client(registry_file):
-    return TestClient(srv.app)
+# ----------------------------------------------------------------- models
 
 
-def test_models_endpoint_lists_profiles(client, monkeypatch):
-    monkeypatch.setenv("MOONSHOT_API_KEY", "sk-x")
-    j = client.get("/api/selfedit/models").json()
-    assert j["ok"] is True
-    by_name = {m["name"]: m for m in j["models"]}
-    assert by_name["kimi-k2"]["key_present"] is True
+def test_models_endpoint_lists_profiles(registry_file):
+    c = TestClient(app)
+    body = c.get("/api/selfedit/models").json()
+    assert body["ok"] is True
+    by_name = {p["name"]: p for p in body["models"]}
+    assert set(by_name) == {"kimi-k2", "claude-opus"}
     assert by_name["kimi-k2"]["default"] is True
-    assert by_name["claude-opus"]["key_present"] is False
+    assert by_name["kimi-k2"]["key_present"] is False  # env unset in fixture
+    assert all("key_env" in p for p in body["models"])
 
 
-def test_run_is_async_and_completes(client, monkeypatch):
+# -------------------------------------------------------------------- run
+
+
+def test_run_is_async_and_completes(registry_file, monkeypatch):
     _install_fake_agent(monkeypatch)
-    r = client.post("/api/selfedit/run", json={"goal": "add a clock", "profile": "claude-opus"})
-    j = r.json()
-    assert j["ok"] and j["started"]
-    assert j["profile"] == "claude-opus (fake-model)"
-    job = _wait_for_job(client, "done")
+    c = TestClient(app)
+    res = c.post("/api/selfedit/run",
+                 json={"goal": "add a clock", "profile": "claude-opus"}).json()
+    assert res["ok"] and res["started"]
+    assert res["profile"] == "claude-opus (fake-model)"
+    job = _wait_for_job(c, "done")
     assert job["summary"] == "planned 'add a clock'"
     assert job["profile"] == "claude-opus (fake-model)"
 
 
-def test_second_run_refused_while_running_and_writes_gated(client, monkeypatch):
+def test_second_run_refused_while_running_and_writes_gated(registry_file, monkeypatch):
     gate = threading.Event()
     _install_fake_agent(monkeypatch, gate=gate)
-    j = client.post("/api/selfedit/run", json={"goal": "one"}).json()
-    assert j["started"] is True
+    c = TestClient(app)
+    res = c.post("/api/selfedit/run", json={"goal": "one"}).json()
+    assert res["started"] is True
     try:
-        again = client.post("/api/selfedit/run", json={"goal": "two"}).json()
+        again = c.post("/api/selfedit/run", json={"goal": "two"}).json()
         assert again["ok"] is False and "already in progress" in again["error"]
         for ep in ("validate", "submit", "revert"):
-            blocked = client.post(f"/api/selfedit/{ep}").json()
+            blocked = c.post(f"/api/selfedit/{ep}").json()
             assert blocked["ok"] is False and "in progress" in blocked["error"]
     finally:
         gate.set()
-    _wait_for_job(client, "done")
+    _wait_for_job(c, "done")
 
 
-def test_unknown_profile_rejected_synchronously(client, monkeypatch):
-    # Real _make_agent → real UpgradeAgent → resolve_profile raises.
-    j = client.post("/api/selfedit/run", json={"goal": "x", "profile": "gpt-99"}).json()
-    assert j["ok"] is False
-    assert "unknown upgrade model profile" in j["error"]
-    assert "kimi-k2" in j["error"]
-    assert client.get("/api/selfedit/run").json()["job"]["state"] == "idle"
+def test_run_unknown_profile_rejected(registry_file):
+    c = TestClient(app)  # real _make_agent → resolves against the test registry
+    res = c.post("/api/selfedit/run",
+                 json={"goal": "add a clock", "profile": "gpt-99"}).json()
+    assert not res["ok"]
+    assert "unknown upgrade model profile" in res["error"]
+    assert "kimi-k2" in res["error"]
+    assert c.get("/api/selfedit/run").json()["job"]["state"] == "idle"
 
 
-def test_empty_goal_rejected(client):
-    j = client.post("/api/selfedit/run", json={"goal": "   "}).json()
-    assert j["ok"] is False and "goal" in j["error"]
+def test_empty_goal_rejected(registry_file):
+    c = TestClient(app)
+    res = c.post("/api/selfedit/run", json={"goal": "   "}).json()
+    assert res["ok"] is False and "goal" in res["error"]
 
 
-def test_agent_crash_settles_job_as_error(client, monkeypatch):
+def test_agent_crash_settles_job_as_error(registry_file, monkeypatch):
     _install_fake_agent(monkeypatch, crash=True)
-    client.post("/api/selfedit/run", json={"goal": "explode"})
-    job = _wait_for_job(client, "error")
+    c = TestClient(app)
+    c.post("/api/selfedit/run", json={"goal": "explode"})
+    job = _wait_for_job(c, "error")
     assert "boom" in job["summary"]
 
 
-def test_run_status_endpoint_shape(client, monkeypatch):
+def test_run_status_endpoint_shape(registry_file, monkeypatch):
     _install_fake_agent(monkeypatch)
-    client.post("/api/selfedit/run", json={"goal": "check shape"})
-    _wait_for_job(client, "done")
-    j = client.get("/api/selfedit/run").json()
-    assert j["ok"] is True
-    assert set(j["job"]) >= {"state", "goal", "profile", "summary", "started_at", "finished_at"}
-    assert "status" in j
+    c = TestClient(app)
+    c.post("/api/selfedit/run", json={"goal": "check shape"})
+    _wait_for_job(c, "done")
+    body = c.get("/api/selfedit/run").json()
+    assert body["ok"] is True
+    assert set(body["job"]) >= {"state", "goal", "profile", "summary",
+                                "started_at", "finished_at"}
+    assert "status" in body
