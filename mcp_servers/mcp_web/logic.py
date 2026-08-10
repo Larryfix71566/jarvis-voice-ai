@@ -10,11 +10,16 @@ their hosted MCP endpoint mcp.tavily.com serves the same key/account from
 the same source IP. web_search therefore tries the MCP JSON-RPC endpoint
 first and falls back to the classic REST API; the locked return contract
 ({"results": [{title,url,snippet}], "answer": str}) is unchanged.
+
+get_weather_radar adds keyless precipitation radar via RainViewer's public
+tile API: the tool returns tile URLs (never binary) and the frontend's
+DisplayPanel stitches them into a seamless 3×3 map.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import os
 
 import httpx
@@ -23,6 +28,7 @@ TAVILY_URL = "https://api.tavily.com/search"
 TAVILY_MCP_URL = "https://mcp.tavily.com/mcp/"
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+RAINVIEWER_URL = "https://api.rainviewer.com/public/weather-maps.json"
 TIMEOUT = 10.0
 
 # WMO weather interpretation codes -> short English conditions.
@@ -207,3 +213,75 @@ def get_weather(city: str, days: int = 1) -> dict:
         )
 
     return {"city": label, "current": current, "daily": daily_out, "human": human}
+
+
+# --------------------------------------------------------------- radar
+
+RADAR_ZOOM = 6
+
+
+def radar_tile_grid(lat: float, lon: float, zoom: int = RADAR_ZOOM) -> list[tuple[int, int]]:
+    """3×3 slippy-map tile coords (row-major) around (lat, lon).
+
+    Standard Web-Mercator math: fractional tile position -> floor to the
+    containing tile, then the surrounding ring. x wraps at the antimeridian;
+    out-of-range y rows (near the poles) are dropped.
+    """
+    n = 2 ** zoom
+    xf = (lon + 180.0) / 360.0 * n
+    lat_r = math.radians(lat)
+    yf = (
+        (1.0 - math.log(math.tan(lat_r) + 1.0 / math.cos(lat_r)) / math.pi)
+        / 2.0
+        * n
+    )
+    x0, y0 = int(math.floor(xf)), int(math.floor(yf))
+    tiles = []
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            y = y0 + dy
+            if 0 <= y < n:
+                tiles.append(((x0 + dx) % n, y))
+    return tiles
+
+
+def get_weather_radar(city: str) -> dict:
+    """Latest precipitation radar tiles for a city, via keyless RainViewer.
+
+    Returns {"city", "lat", "lon", "ts", "tiles": [9 tile URLs]} — the UI
+    stitches the 3×3 grid into one map. No API key, no binary transport.
+    """
+    city = (city or "").strip()
+    if not city:
+        return {"error": "A city name is required."}
+
+    try:
+        geo = httpx.get(GEOCODE_URL, params={"name": city, "count": 1}, timeout=TIMEOUT)
+        geo.raise_for_status()
+        geo_results = geo.json().get("results") or []
+    except Exception as exc:
+        return {"error": f"Radar lookup failed: {type(exc).__name__}."}
+    if not geo_results:
+        return {"error": f"I couldn't find a place called '{city}'."}
+
+    place = geo_results[0]
+    label = place["name"]
+    if place.get("country"):
+        label = f"{label}, {place['country']}"
+    lat, lon = float(place["latitude"]), float(place["longitude"])
+
+    try:
+        rv = httpx.get(RAINVIEWER_URL, timeout=TIMEOUT)
+        rv.raise_for_status()
+        data = rv.json()
+        host = data["host"]
+        past = data["radar"]["past"]
+        ts = past[-1]["time"]
+    except Exception as exc:
+        return {"error": f"Radar data failed: {type(exc).__name__}."}
+
+    tiles = [
+        f"{host}/v2/radar/{ts}/512/{RADAR_ZOOM}/{x}/{y}/2/1_1.png"
+        for x, y in radar_tile_grid(lat, lon)
+    ]
+    return {"city": label, "lat": lat, "lon": lon, "ts": ts, "tiles": tiles}

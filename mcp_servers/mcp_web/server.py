@@ -19,5 +19,11 @@ def get_weather(city: str, days: int = 1) -> dict:
     return logic.get_weather(city, days)
 
 
+@mcp.tool()
+def get_weather_radar(city: str) -> dict:
+    """Get the latest precipitation radar for a city as a 3×3 grid of map tile URLs (RainViewer, keyless) — show these to the user as one stitched radar map."""
+    return logic.get_weather_radar(city)
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
