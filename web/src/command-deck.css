@@ -76,7 +76,7 @@
   }
 }
 
-/* --- agent satellites --- */
+/* --- agent satellites: chip backdrop keeps them legible over the wave --- */
 .satellite {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -85,7 +85,14 @@
   gap: 8px;
   z-index: 2;
   opacity: 0.55;
-  transition: opacity 0.4s;
+  padding: 7px 12px;
+  background: rgba(4, 9, 12, 0.55);
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  backdrop-filter: blur(4px);
+  transition:
+    opacity 0.4s,
+    border-color 0.3s;
 }
 
 .satellite-dot {
@@ -107,6 +114,7 @@
 
 .satellite-working {
   opacity: 1;
+  border-color: var(--accent-dim);
 }
 
 .satellite-working .satellite-dot {
@@ -178,7 +186,7 @@
   }
 }
 
-/* --- live caption under the orb --- */
+/* --- live caption under the orb (soft scrim against the wave) --- */
 .live-caption {
   display: flex;
   flex-direction: column;
@@ -186,7 +194,13 @@
   gap: 4px;
   max-width: 560px;
   min-height: 44px;
+  padding: 4px 16px;
   text-align: center;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.55),
+    transparent 75%
+  );
 }
 
 .caption {
