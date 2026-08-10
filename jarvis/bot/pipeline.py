@@ -281,10 +281,13 @@ def _unwrap_client_message(message: Any) -> dict | None:
         return None
     if message.get("type") == "client-message":
         data = message.get("data")
-        if not isinstance(data, dict) or not isinstance(data.get("t"), str):
+        if not isinstance(data, dict):
             return None
+        msg_type = data.get("t")
         payload = data.get("d")
-        return {"type": data["t"], **(payload if isinstance(payload, dict) else {})}
+        if not isinstance(msg_type, str):
+            return None
+        return {"type": msg_type, **(payload if isinstance(payload, dict) else {})}
     return message
 
 
