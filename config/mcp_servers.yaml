@@ -1,3 +1,5 @@
+# MCP skill servers spawned by the SkillRegistry.
+# command/args are resolved from the repo root.
 servers:
   - name: mcp-time
     command: python
@@ -6,19 +8,15 @@ servers:
   - name: mcp-notes
     command: python
     args: ["-m", "mcp_servers.mcp_notes.server"]
-    env:
-      JARVIS_DB_PATH: "${JARVIS_DB_PATH}"
+    env: {}
   - name: mcp-reminders
     command: python
     args: ["-m", "mcp_servers.mcp_reminders.server"]
-    env:
-      JARVIS_DB_PATH: "${JARVIS_DB_PATH}"
-      JARVIS_TIMEZONE: "${JARVIS_TIMEZONE}"
+    env: {}
   - name: mcp-web
     command: python
     args: ["-m", "mcp_servers.mcp_web.server"]
-    env:
-      TAVILY_API_KEY: "${TAVILY_API_KEY}"
+    env: {}
   - name: mcp-system
     command: python
     args: ["-m", "mcp_servers.mcp_system.server"]
@@ -26,6 +24,8 @@ servers:
   - name: mcp-apps
     command: python
     args: ["-m", "mcp_servers.mcp_apps.server"]
-    env:
-      GITHUB_TOKEN: "${GITHUB_TOKEN}"
-      GITHUB_OWNER: "${GITHUB_OWNER}"
+    env: {}
+  - name: mcp-selfedit
+    command: python
+    args: ["-m", "mcp_servers.mcp_selfedit.server"]
+    env: {}

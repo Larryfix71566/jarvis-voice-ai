@@ -1,0 +1,11 @@
+name: mcp-selfedit
+version: 1.0.0
+class: privileged
+tools:
+  - selfedit_start
+  - selfedit_status
+  - selfedit_validate
+  - selfedit_submit
+  - selfedit_revert
+requires_env: []
+test: python3 -m pytest tests/unit/test_mcp_selfedit_logic.py -q

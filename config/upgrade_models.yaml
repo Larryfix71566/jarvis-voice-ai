@@ -1,0 +1,52 @@
+# Upgrade Agent model registry (the planner brain of the self-development loop).
+#
+# Selection order when a session starts:
+#   1. explicit per-session choice (Edit Mode dropdown, or a spoken "use Claude Opus")
+#   2. JARVIS_UPGRADE_PROFILE environment variable
+#   3. the `default` below
+#
+# Each profile points at an OpenAI-compatible Chat Completions endpoint with
+# tool calling. The API key comes from the profile's api_key_env — keys live in
+# .env, never in this file.
+#
+# temperature: set to null to OMIT the parameter entirely. Moonshot's kimi-k2.x
+# family rejects any temperature other than 1 (DEVIATIONS.md D-003), so all
+# Moonshot profiles omit it.
+#
+# This file is NOT on the self-edit allowlist: the agent cannot re-point its
+# own brain. Changes land via the normal human PR process.
+
+default: kimi-k3
+
+profiles:
+  - name: kimi-k3
+    label: "Kimi K3 — flagship, 1M context, always-on thinking (default)"
+    provider: moonshot
+    model: kimi-k3
+    base_url: https://api.moonshot.ai/v1
+    api_key_env: MOONSHOT_API_KEY
+    temperature: null
+
+  - name: kimi-k2
+    label: "Kimi K2.7 Code — coding-tuned K2 family, 256K context"
+    provider: moonshot
+    model: kimi-k2.7-code
+    base_url: https://api.moonshot.ai/v1
+    api_key_env: MOONSHOT_API_KEY
+    temperature: null
+
+  - name: claude-opus
+    label: "Claude Opus 5 — Anthropic Opus tier, 1M context"
+    provider: anthropic
+    model: claude-opus-5
+    base_url: https://api.anthropic.com/v1/
+    api_key_env: ANTHROPIC_API_KEY
+    temperature: 0.2
+
+  - name: gpt-4.1-mini
+    label: "GPT-4.1 mini — fast and cheap"
+    provider: openai
+    model: gpt-4.1-mini
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    temperature: 0.2
