@@ -39,10 +39,11 @@ Mortimer is an Ironman-style voice assistant that runs entirely on your machine:
 │  (time/dates)    (SQLite notes)  (SQLite reminders) (Tavily+weather)│
 │  + mcp-system (psutil machine status)                               │
 │  + mcp-apps   (app development: one private GitHub repo per app)    │
+│  + mcp-selfedit (voice front-end to the self-development loop)      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-*(Six skill servers spawned by the registry: `mcp-time`, `mcp-notes`, `mcp-reminders`, `mcp-web`, `mcp-system`, `mcp-apps` — plus `mcp-git`, which backs the admin sidecar and the Developer agent's repo tools.)*
+*(Seven skill servers spawned by the registry: `mcp-time`, `mcp-notes`, `mcp-reminders`, `mcp-web`, `mcp-system`, `mcp-apps`, `mcp-selfedit` — plus `mcp-git`, which backs the admin sidecar and the Developer agent's repo tools. `mcp-selfedit` and the console's ✎ Edit panel are both thin clients of the admin sidecar, the single owner of the self-edit service.)*
 
 ## 2. Prerequisites
 
@@ -59,6 +60,9 @@ Mortimer is an Ironman-style voice assistant that runs entirely on your machine:
 | Open-Meteo | no key | — | free, rate-limited | built-in |
 | openWakeWord (wake word) | no key — `pip install openwakeword` | `JARVIS_WAKEWORD_MODEL` (custom model file) | free, open source, fully local | Optional (stretch) |
 | GitHub (app development) | https://github.com/settings/tokens | `GITHUB_TOKEN`, `GITHUB_OWNER` | free | Optional (mcp-apps) |
+| Moonshot (Kimi) | https://platform.moonshot.ai | `MOONSHOT_API_KEY` | prepaid, low cost | Optional (default upgrade planner) |
+| Anthropic (Claude) | https://console.anthropic.com | `ANTHROPIC_API_KEY` | pay-as-you-go | Optional (upgrade planner) |
+| GitHub (self-development) | https://github.com/settings/tokens | `JARVIS_GITHUB_TOKEN` | free | Optional (edit-mode PRs) |
 
 Any OpenAI-compatible Chat Completions endpoint works as the LLM (set
 `OPENAI_BASE_URL` / `OPENAI_MODEL`, e.g. Moonshot/Kimi
@@ -120,6 +124,33 @@ python3 -m jarvis.cli
   apps have you built?" to list them. Requires `GITHUB_TOKEN` (a PAT that
   can create repos and read/write contents); without it the app tools
   report a clear unavailable error and everything else keeps working.
+- **Edit Mortimer itself (optional):** the self-development loop develops
+  changes to Mortimer's own interface — by voice *or* from the console's
+  **✎ Edit** panel. Say "Change your interface to add a clock panel — use
+  Claude Opus for it" and the Developer previews the run (goal + planner
+  model), starts it only after you confirm, and reports progress whenever
+  you ask ("how is the edit coming along?"). Proposed edits land as
+  reviewable diffs; ask Mortimer to **validate**, then — only after you
+  explicitly say so — it **submits a pull request**. Merging always happens
+  on GitHub, by you; Mortimer can never merge. The same flow is clickable
+  in the ✎ Edit panel (planner dropdown, diffs, Validate / Submit PR /
+  Revert buttons).
+  - **Planner models** live in `config/upgrade_models.yaml` as named
+    profiles (default: `kimi-k2`; `kimi-k3`, `claude-opus`, and
+    `gpt-4.1-mini` ship alongside — add your own). Choose one per session
+    (spoken or dropdown), set `JARVIS_UPGRADE_PROFILE` to change the
+    default for every run, or edit the registry's `default`. A profile is
+    usable once its provider key (`MOONSHOT_API_KEY`, `ANTHROPIC_API_KEY`,
+    …) is in `.env`; the picker flags profiles whose key is missing.
+  - **Safety:** edits are confined to the allowlist
+    (`config/self_edit_allowlist.json` — UI sources, non-secret config,
+    prompts, skills, docs; never wake word, agents, CI, dependencies, or
+    the self-edit machinery itself), land on `jarvis/self-edit/*` sandbox
+    branches with a rollback tag, and must pass validation (allowlist,
+    backend imports, frontend build) before any PR. PR creation requires
+    `JARVIS_GITHUB_TOKEN` scoped to this repo (contents + pull requests
+    only, no administration). Keep `main` a protected branch so even the
+    token cannot bypass review.
 - **Wake word (optional stretch):** start the local openWakeWord sidecar
   (`./scripts/run_wakeword.sh`), enable the **"Wake word"** toggle, and just
   say **"Mortimer"** — a chime plays and the mic unmutes. Detection is fully
@@ -174,7 +205,10 @@ jarvis/
 ├── config/
 │   ├── mcp_servers.yaml           # MCP server registry (paths, env)
 │   ├── voices.yaml                # voice catalog
-│   └── agents.yaml                # sub-agent roster + routing metadata
+│   ├── agents.yaml                # sub-agent roster + routing metadata
+│   ├── upgrade_agent.yaml         # upgrade agent loop bounds (+ legacy model slot)
+│   ├── upgrade_models.yaml        # planner model registry (NOT self-editable)
+│   └── self_edit_allowlist.json   # what the self-edit loop may touch
 ├── jarvis/
 │   ├── __init__.py
 │   ├── config.py                  # pydantic-settings Settings
@@ -189,7 +223,14 @@ jarvis/
 │   │   ├── __init__.py
 │   │   ├── base.py                # SubAgent class
 │   │   ├── supervisor.py          # Supervisor logic (used by CLI and bot)
-│   │   └── delegate.py            # delegate_task tool implementation
+│   │   ├── delegate.py            # delegate_task tool implementation
+│   │   └── upgrade_agent.py       # LLM brain of the self-development loop
+│   ├── selfedit/
+│   │   ├── allowlist.py           # path allow/deny matcher (shared with CI)
+│   │   └── service.py             # sandboxed session/edits/validate/submit
+│   ├── admin/
+│   │   └── server.py              # admin sidecar (:7861) — owns the self-edit
+│   │                              #   service; panel + mcp-selfedit are clients
 │   ├── cli.py                     # text REPL — python -m jarvis.cli
 │   ├── wakeword/                  # openWakeWord sidecar (wake word)
 │   │   ├── logic.py               # WakeGate: threshold + cooldown (pure)
@@ -209,14 +250,21 @@ jarvis/
 │   ├── mcp_web/
 │   ├── mcp_system/
 │   ├── mcp_git/                   # repo ops (admin sidecar + Developer agent)
-│   └── mcp_apps/                  # app development: logic.py (pure, injected
-│                                  #   client) + github.py (only network code)
-│                                  #   + templates/web_app/
+│   ├── mcp_apps/                  # app development: logic.py (pure, injected
+│   │                              #   client) + github.py (only network code)
+│   │                              #   + templates/web_app/
+│   └── mcp_selfedit/              # voice front-end to the self-development
+│                                  #   loop: logic.py (thin HTTP client of the
+│                                  #   admin sidecar) + server.py (FastMCP)
 ├── scripts/
 │   ├── check_env.py               # validates keys + connectivity
+│   ├── check_allowlist.py         # CI: self-edit branches stay inside the allowlist
+│   ├── check_skills.py            # CI: skill.yaml manifests match their servers
 │   ├── init_db.py                 # runs migrations
+│   ├── mortimer.sh                # one-command stack starter (bot+admin+web)
 │   ├── run_bot.sh
 │   ├── run_web.sh
+│   ├── run_admin.sh               # admin sidecar (:7861)
 │   ├── run_wakeword.sh            # optional wake-word sidecar
 │   ├── wakeword_gen_samples_mac.sh# generate wake-word training clips (macOS say)
 │   └── latency_probe.py           # per-turn latency stats from a bot log
@@ -236,6 +284,7 @@ jarvis/
         ├── App.tsx
         ├── App.css                    # base HUD theme
         ├── command-deck.css           # command-deck stage/satellite/drawer styles
+        ├── editmode.css               # edit mode panel styles
         ├── components/
         │   ├── ConnectButton.tsx
         │   ├── Orb.tsx                # canvas orb (state-driven dynamics)
@@ -244,6 +293,7 @@ jarvis/
         │   ├── TranscriptDrawer.tsx   # slide-in transcript history (T)
         │   ├── VoicePicker.tsx
         │   ├── GitPanel.tsx           # admin sidecar console
+        │   ├── EditModePanel.tsx      # self-development edit mode (✎ Edit)
         │   └── MicControls.tsx
         ├── wakeWord.ts                # wake-word sidecar client + chime
         └── jarvisClient.ts            # PipecatClient singleton
@@ -286,13 +336,17 @@ ls tests/acceptance/
 | Slow responses | Large LLM model, slow provider, or cold MCP servers | Use a faster `OPENAI_MODEL`; check `TURN` lines / `latency_probe.py`; keep the bot running between turns |
 | MCP server won't start | Missing deps after a partial install, or a stale venv | Re-run `pip install -r requirements-lock.txt`; start one manually: `python mcp_servers/mcp_time/server.py` |
 | App tools report unavailable | `GITHUB_TOKEN` missing or lacks repo permissions | Create a PAT at github.com/settings/tokens with repo creation + contents read/write, set `GITHUB_TOKEN` and `GITHUB_OWNER` in `.env`, restart the bot |
+| Edit mode says the sidecar is offline | Admin sidecar not running | `./scripts/mortimer.sh` starts bot + admin + web together; check `logs/admin.log`; browse to `http://localhost:7861/api/health` |
+| Voice edit asks for a key | The chosen planner profile's provider key is missing | Set `MOONSHOT_API_KEY` / `ANTHROPIC_API_KEY` in `.env` and restart the sidecar; the ✎ Edit dropdown flags profiles with missing keys |
+| Edit run "crashed" or never finishes | Planner endpoint unreachable, key invalid for that provider, or loop bounds hit | Check `logs/admin.log` for the run traceback; verify the key works against the profile's `base_url`; runs cap at the iteration/time bounds in `config/upgrade_agent.yaml` |
+| Submit says validation hasn't passed | Edits changed after the last green validation, or a check is red | Run Validate again and read the check output; allowlist/frontend-build failures tell you exactly what broke |
 | Port in use (7860 or 5173) | An old bot/web process is still running | `pkill -f jarvis.bot.bot` / `pkill -f vite`, or change the port (`JARVIS_BOT_PORT`, `npm run dev -- --port`) |
 | Voices not switching | Voice id not in `config/voices.yaml`, or TTS update failed | List valid ids: `python scripts/list_voices.py`; check the bot log for TTS errors |
 | Reminders not firing | Client not connected (watcher only delivers while connected), or `due_at` in the future | Reconnect and wait ≤ 30 s; inspect rows: `sqlite3 data/jarvis.db 'select * from reminders'` |
 | Wake-word toggle errors | Sidecar not running, `openwakeword` not installed, or model file missing | `pip install openwakeword websockets`; train the "Mortimer" model (see §4 wake-word setup) and set `JARVIS_WAKEWORD_MODEL`; run `./scripts/run_wakeword.sh` |
 | Wake word hears nothing / fires constantly | Threshold wrong for your mic/model | Adjust `JARVIS_WAKEWORD_THRESHOLD` (raise to reduce false wakes, lower to increase sensitivity) and restart the sidecar |
 | Wake-word training finds too few clips | Sample generator aborted early or a voice failed | Re-run `./scripts/wakeword_gen_samples_mac.sh`; the trainer needs ≥ 20 WAVs per class — check `ls data/wakeword/positive \| wc -l` |
-| `invalid temperature` from the LLM | Provider (e.g. kimi-k2.x) only accepts temperature=1 | Leave temperature unset — Mortimer omits it by default (DEVIATIONS.md D-003) |
+| `invalid temperature` from the LLM | Provider (e.g. kimi-k2.x) only accepts temperature=1 | Leave temperature unset — Mortimer omits it by default (DEVIATIONS.md D-003); Moonshot planner profiles omit it too |
 | Web build fails with missing module files | Flaky filesystem truncated `node_modules` | Reinstall on a healthy filesystem: `cd web && rm -rf node_modules && npm install --no-bin-links` (D-006) |
 | First bot boot or test run hangs for minutes | pipecat downloads NLTK `punkt_tab` on first import; the download stalls on restricted networks | One-time seed: `python -c "import nltk; nltk.download('punkt_tab')"`. If your network blocks raw.githubusercontent.com, download `https://cdn.jsdelivr.net/gh/nltk/nltk_data@gh-pages/packages/tokenizers/punkt_tab.zip` and unzip into `~/nltk_data/tokenizers/` |
 
@@ -310,6 +364,13 @@ ls tests/acceptance/
 | `TAVILY_API_KEY` | — | Web search key (required for Analyst research) |
 | `GITHUB_TOKEN` | — | GitHub PAT for app development (optional; enables mcp-apps) |
 | `GITHUB_OWNER` | — | GitHub user/org owning app repos (optional; defaults to the token's user) |
+| `MOONSHOT_API_KEY` | — | Kimi upgrade planner profiles (`kimi-k2` default, `kimi-k3`) |
+| `ANTHROPIC_API_KEY` | — | Claude upgrade planner profile (`claude-opus`) |
+| `JARVIS_UPGRADE_PROFILE` | registry `default` | Override the default upgrade planner profile |
+| `JARVIS_UPGRADE_MODELS` | `config/upgrade_models.yaml` | Point at an alternate planner registry file |
+| `JARVIS_GITHUB_TOKEN` | — | PAT for self-edit PRs (contents + pull requests on this repo only) |
+| `JARVIS_GITHUB_REPO` | `Larryfix71566/jarvis-voice-ai` | Repo the self-edit service targets |
+| `JARVIS_ADMIN_URL` | `http://127.0.0.1:7861` | Where mcp-selfedit reaches the admin sidecar |
 | `JARVIS_DB_PATH` | `data/jarvis.db` | SQLite database file |
 | `JARVIS_LOG_LEVEL` | `INFO` | Python logging level |
 | `JARVIS_BOT_PORT` | `7860` | Bot HTTP/WebRTC port |
@@ -329,4 +390,7 @@ ls tests/acceptance/
 | `config/mcp_servers.yaml` | The MCP skill servers: command, args, env |
 | `config/agents.yaml` | Sub-agent roster: name, display name, routing description, owned MCP servers |
 | `config/voices.yaml` | Voice catalog (`id`, `label`, `elevenlabs_voice_id`) + default voice |
+| `config/upgrade_models.yaml` | Upgrade planner registry: named OpenAI-compatible profiles + default. NOT on the self-edit allowlist — the agent cannot re-point its own brain |
+| `config/upgrade_agent.yaml` | Upgrade agent loop bounds (max iterations/minutes) + legacy single-slot model fallback |
+| `config/self_edit_allowlist.json` | Paths the self-development loop may read/write; the deny list always wins |
 | `jarvis/prompts.py` | All system prompts (Supervisor, sub-agents, voice addendum) — single source of truth |
