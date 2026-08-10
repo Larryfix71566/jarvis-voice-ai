@@ -40,6 +40,9 @@ const TARGETS: Record<VoiceState, Pick<Dyn, "base" | "speed" | "alpha" | "glow">
   speaking: { base: 0.016, speed: 1.0, alpha: 0.92, glow: 1 },
 };
 
+/** Global vertical scale for the whole wave (user-tuned: 2x). */
+const AMP_SCALE = 2;
+
 /** Trace layers: main + two phase-offset echoes for the phosphor look. */
 const LAYERS = [
   { aMul: 1, fMul: 1, po: 0, width: 2 },
@@ -197,7 +200,7 @@ export default function VoiceWave({ state }: { state: VoiceState }) {
       const breath = st === "listening" ? 0.004 + 0.004 * Math.sin(t * 0.9) : 0;
       const voice = st === "speaking" ? levelRef.current * 0.115 : 0;
       const amp =
-        h * (dyn.base + breath + voice + flash * 0.02) * (reduced ? 0.4 : 1);
+        h * (dyn.base + breath + voice + flash * 0.02) * (reduced ? 0.4 : 1) * AMP_SCALE;
       const alpha = Math.min(1, dyn.alpha + flash * 0.45);
       const glow = Math.min(1, dyn.glow + flash);
 
