@@ -31,6 +31,7 @@ from pipecat.pipeline.task import PipelineTask
 
 from jarvis.agents.base import load_sub_agents
 from jarvis.agents.delegate import build_delegate_tool
+from jarvis.bot.display import build_display_payload
 from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.voice_switch import (
@@ -97,20 +98,35 @@ def make_agent_event_handler(transport: Any) -> Any:
     """Plan Phase 6 step 6.3: log agent events AND feed them to the UI.
 
     on_event callbacks are sync (agents/base.py EventCallback), so the async
-    app-message send is scheduled on the running loop. Message shape (locked):
-    {"type": "agent", "name": "<agent>", "state": "working"|"done"}.
+    app-message send is scheduled on the running loop. Message shapes:
+    {"type": "agent", "name": "<agent>", "state": "working"|"done"} for
+    lifecycle events, and {"type": "display", "display": <payload>} when a
+    tool result is display-worthy (see jarvis/bot/display.py).
     """
 
     def on_agent_event(event: dict) -> None:
         bot_event_log(event)
         etype = event.get("type")
-        if etype not in ("agent_start", "agent_done"):
+        if etype == "agent_tool_result":
+            payload = build_display_payload(
+                agent=str(event.get("agent") or ""),
+                display_name=str(event.get("display_name") or ""),
+                tool=str(event.get("tool") or ""),
+                arguments=event.get("arguments")
+                if isinstance(event.get("arguments"), dict) else {},
+                result_str=str(event.get("result") or ""),
+            )
+            if payload is None:
+                return  # voice-only tool result — nothing to show
+            message = {"type": "display", "display": payload}
+        elif etype in ("agent_start", "agent_done"):
+            message = {
+                "type": "agent",
+                "name": event.get("agent"),
+                "state": "working" if etype == "agent_start" else "done",
+            }
+        else:
             return
-        message = {
-            "type": "agent",
-            "name": event.get("agent"),
-            "state": "working" if etype == "agent_start" else "done",
-        }
         try:
             asyncio.get_running_loop().create_task(
                 send_app_message(transport, message))
