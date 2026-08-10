@@ -65,8 +65,22 @@ body {
   flex-direction: column;
 }
 
+/* SILO-style voice wave: full-viewport canvas behind everything.
+   Bars/panels above it keep translucent backgrounds so the trace
+   reads through at the edges. */
+.voice-wave {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+}
+
 /* --- top bar --- */
 .topbar {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 24px;
@@ -221,6 +235,8 @@ body {
 
 /* --- error banner --- */
 .error-banner {
+  position: relative;
+  z-index: 2;
   font-family: var(--mono);
   font-size: 12px;
   letter-spacing: 0.06em;
@@ -232,6 +248,8 @@ body {
 
 /* --- main: orb panel + transcript side by side --- */
 .main {
+  position: relative;
+  z-index: 1;
   flex: 1;
   display: flex;
   flex-direction: row;
@@ -433,6 +451,8 @@ body {
 
 /* --- bottom bar --- */
 .bottombar {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
