@@ -1,0 +1,48 @@
+# Upgrade planner model registry.
+#
+# The upgrade agent (jarvis/agents/upgrade_agent.py) plans self-development
+# edits with ONE of the profiles below. Selection order:
+#   1. an explicit per-session choice (voice or the Edit panel dropdown)
+#   2. the JARVIS_UPGRADE_PROFILE environment variable
+#   3. the `default` key in this file
+#
+# Keys live ONLY in the environment (see .env.example) — never in this file.
+# This file is on the self-edit DENY list: the agent cannot re-point its own
+# brain. `temperature: null` means the parameter is omitted entirely (some
+# providers, e.g. kimi-k2.x, reject any value other than 1 — see
+# DEVIATIONS.md D-003).
+
+default: kimi-k2
+
+profiles:
+  - name: kimi-k2
+    label: Kimi K2.7 Code — coding-tuned K2 family, 256K context (default)
+    provider: moonshot
+    model: kimi-k2.7-code
+    base_url: https://api.moonshot.ai/v1
+    api_key_env: MOONSHOT_API_KEY
+    temperature: null
+
+  - name: kimi-k3
+    label: Kimi K3 — Moonshot flagship, strongest reasoning
+    provider: moonshot
+    model: kimi-k3
+    base_url: https://api.moonshot.ai/v1
+    api_key_env: MOONSHOT_API_KEY
+    temperature: null
+
+  - name: claude-opus
+    label: Claude Opus 5 — Anthropic's deepest planner
+    provider: anthropic
+    model: claude-opus-5
+    base_url: https://api.anthropic.com/v1/
+    api_key_env: ANTHROPIC_API_KEY
+    temperature: 0.2
+
+  - name: gpt-4.1-mini
+    label: GPT-4.1 mini — fast OpenAI fallback
+    provider: openai
+    model: gpt-4.1-mini
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    temperature: 0.2

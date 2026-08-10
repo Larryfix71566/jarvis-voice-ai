@@ -1,31 +1,34 @@
 {
   "allow": [
     "web/src/**",
-    "web/public/**",
-    "config/**",
+    "web/index.html",
+    "config/voices.yaml",
+    "config/mcp_servers.yaml",
     "jarvis/prompts.py",
-    "jarvis/skills/**",
-    "docs/**",
-    "*.md"
+    "mcp_servers/**",
+    "tests/**",
+    "README.md",
+    "DEVIATIONS.md"
   ],
   "deny": [
-    ".github/**",
-    "jarvis/selfedit/**",
-    "jarvis/agents/**",
-    "jarvis/wakeword/**",
-    "jarvis/bot/**",
-    "jarvis/admin/**",
-    "config/self_edit_allowlist.json",
+    "config/upgrade_models.yaml",
     "config/upgrade_agent.yaml",
     "config/agents.yaml",
-    "config/mcp_servers.yaml",
-    "requirements*.txt",
+    "jarvis/agents/**",
+    "jarvis/selfedit/**",
+    "jarvis/admin/**",
+    "jarvis/wakeword/**",
+    "jarvis/config.py",
+    ".github/**",
+    "scripts/check_allowlist.py",
+    "scripts/check_skills.py",
+    "requirements.txt",
+    "requirements-lock.txt",
     "web/package.json",
     "web/package-lock.json",
-    "DEVIATIONS.md",
     ".env",
     ".env.*",
-    "**/.env",
-    "**/.env.*"
+    "**/*.pem",
+    "**/*.key"
   ]
 }
