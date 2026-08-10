@@ -114,13 +114,30 @@ class TestSubAgentLoop:
 
     async def test_events_emitted_in_order(self):
         agent, _ = make_agent(
-            [("tool", "fake_tool", {}), ("text", "done")])
+            [("tool", "fake_tool", {"q": 1}), ("text", "done")])
         events = []
         await agent.run("task", on_event=events.append)
         assert [e["type"] for e in events] == [
-            "agent_start", "agent_tool", "agent_done"]
+            "agent_start", "agent_tool", "agent_tool_result", "agent_done"]
         assert events[0]["task"] == "task"
         assert events[1]["tool"] == "fake_tool"
+        assert events[2]["tool"] == "fake_tool"
+        assert events[2]["arguments"] == {"q": 1}
+        assert events[2]["result"] == '{"ok": true}'
+
+    async def test_tool_result_event_truncates_long_results(self):
+        class LongRegistry(FakeRegistry):
+            async def call(self, name, arguments, server_names=None):
+                return "x" * 50_000
+
+        agent, _ = make_agent(
+            [("tool", "fake_tool", {}), ("text", "done")],
+            registry=LongRegistry(),
+        )
+        events = []
+        await agent.run("task", on_event=events.append)
+        result_event = next(e for e in events if e["type"] == "agent_tool_result")
+        assert len(result_event["result"]) == 20_000
 
     async def test_client_exception_returns_failed(self):
         class Boom:

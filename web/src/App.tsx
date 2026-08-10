@@ -7,12 +7,13 @@ import {
 import ConnectButton from "./components/ConnectButton";
 import OrbField from "./components/OrbField";
 import VoiceWave from "./components/VoiceWave";
+import DisplayPanel from "./components/DisplayPanel";
 import MicControls from "./components/MicControls";
 import TranscriptDrawer from "./components/TranscriptDrawer";
 import VoicePicker from "./components/VoicePicker";
 import GitPanel from "./components/GitPanel";
 import EditModePanel from "./components/EditModePanel";
-import type { OrbState } from "./components/Orb";
+import type { VoiceState } from "./voiceState";
 import "./App.css";
 import "./command-deck.css";
 import "./editmode.css";
@@ -43,7 +44,7 @@ export default function App() {
   const transport = usePipecatClientTransportState();
 
   const connected = transport === "ready" || transport === "connected";
-  const orbState: OrbState = connected
+  const voiceState: VoiceState = connected
     ? speaking
       ? "speaking"
       : "listening"
@@ -72,7 +73,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <VoiceWave state={orbState} />
+      <VoiceWave state={voiceState} />
       <header className="topbar">
         <div className="brand">MORTIMER</div>
         <ConnectButton />
@@ -118,7 +119,7 @@ export default function App() {
       {error && <div className="error-banner">{error}</div>}
 
       <main className="main">
-        <OrbField state={orbState} />
+        <OrbField state={voiceState} />
       </main>
 
       <footer className="bottombar">
@@ -127,6 +128,9 @@ export default function App() {
       </footer>
 
       <TranscriptDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+
+      {/* results window — floats in front of everything (z-30) */}
+      <DisplayPanel />
     </div>
   );
 }

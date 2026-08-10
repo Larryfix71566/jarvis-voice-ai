@@ -5,8 +5,8 @@ import {
   useRTVIClientEvent,
 } from "@pipecat-ai/client-react";
 import type { ConversationMessage } from "@pipecat-ai/client-react";
-import Orb, { type OrbState } from "./Orb";
 import { isWakeWordRunning, subscribeWake } from "../wakeWord";
+import type { VoiceState } from "../voiceState";
 
 /** Fixed satellite positions on the stage (percent of the field). */
 const AGENTS = [
@@ -39,14 +39,19 @@ function truncate(s: string, max = 160): string {
   return t.length > max ? t.slice(0, max - 1) + "…" : t;
 }
 
-const ORB_LABEL: Record<OrbState, string> = {
+const STATE_LABEL: Record<VoiceState, string> = {
   offline: "Standby",
   connecting: "Spinning up",
   listening: "Listening",
   speaking: "Speaking",
 };
 
-export default function OrbField({ state }: { state: OrbState }) {
+/**
+ * The command-deck stage: agent satellites + live captions over the
+ * full-viewport VoiceWave (the wave owns voice display — the old orb
+ * was removed). Wake state shows as a center burst + readout glow.
+ */
+export default function OrbField({ state }: { state: VoiceState }) {
   const [working, setWorking] = useState<Record<string, boolean>>({});
   const [doneAt, setDoneAt] = useState<Record<string, number>>({});
   const [wakePulse, setWakePulse] = useState(0);
@@ -66,7 +71,8 @@ export default function OrbField({ state }: { state: OrbState }) {
     }
   });
 
-  // Wake ripple + armed halo (wake state lives in MicControls; poll cheaply).
+  // Wake burst + armed readout glow (wake state lives in MicControls;
+  // poll cheaply).
   useEffect(() => subscribeWake(() => setWakePulse((p) => p + 1)), []);
   useEffect(() => {
     const t = setInterval(() => setWakeArmed(isWakeWordRunning()), 1000);
@@ -82,7 +88,10 @@ export default function OrbField({ state }: { state: OrbState }) {
 
   return (
     <section className="orb-field">
-      {/* beams: satellite -> orb, lit while an agent works */}
+      {/* wake burst: expanding ring from the field center */}
+      {wakePulse > 0 && <div key={wakePulse} className="wake-ripple" />}
+
+      {/* beams: satellite -> center, lit while an agent works */}
       <svg className="orb-beams" viewBox="0 0 100 100" preserveAspectRatio="none">
         {AGENTS.map((a) => (
           <line
@@ -117,14 +126,12 @@ export default function OrbField({ state }: { state: OrbState }) {
       ))}
 
       <div className="orb-center">
-        <div className="orb-readout">M.O.R.T.I.M.E.R.</div>
-        <div className={wakeArmed ? "orb-halo orb-halo-armed" : "orb-halo"}>
-          <Orb state={state} />
-          {wakePulse > 0 && <div key={wakePulse} className="wake-ripple" />}
+        <div className={wakeArmed ? "orb-readout orb-readout-armed" : "orb-readout"}>
+          M.O.R.T.I.M.E.R.
         </div>
         <div className={`orb-label orb-label-${state}`}>
           <span className="orb-dot" />
-          {ORB_LABEL[state]}
+          {STATE_LABEL[state]}
         </div>
         <div className="live-caption">
           {lastUser && (
