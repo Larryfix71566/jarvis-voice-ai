@@ -216,8 +216,9 @@ export default function VoiceWave({ state }: { state: VoiceState }) {
       for (const L of LAYERS) {
         ctx.beginPath();
         for (let x = 0; x <= w; x += 3) {
-          // Gaussian window: the trace dies out toward the screen edges
-          const env = Math.exp(-(((x - cx) / (0.42 * w)) ** 2));
+          // Super-Gaussian window: a broad, strong plateau near the
+          // center that falls off fast — impact concentrates mid-screen
+          const env = Math.exp(-(((x - cx) / (0.3 * w)) ** 4));
           // slow speech-like wobble along the trace
           const mod = 0.65 + 0.35 * Math.sin(0.003 * x * L.fMul + t * 6.3 * dyn.speed + L.po);
           const y =
