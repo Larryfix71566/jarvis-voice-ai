@@ -223,13 +223,13 @@ export default function VoiceWave({ state }: { state: VoiceState }) {
           // the screen holds >=94% of peak) with fast falloff either side
           const env = Math.exp(-(((x - cx) / (0.11 * w)) ** 4));
           // slow speech-like wobble along the trace
-          const mod = 0.65 + 0.35 * Math.sin(0.006 * x * L.fMul + t * 6.3 * dyn.speed + L.po);
+          const mod = 0.65 + 0.35 * Math.sin(0.012 * x * L.fMul + t * 6.3 * dyn.speed + L.po);
           const y =
             cy +
             env * amp * L.aMul * mod *
-              (0.55 * Math.sin(0.02 * x * L.fMul + p1 * L.fMul + L.po) +
-                0.3 * Math.sin(0.042 * x * L.fMul + p2 * L.fMul - L.po) +
-                0.15 * Math.sin(0.086 * x * L.fMul + p3 * L.fMul + L.po * 2));
+              (0.55 * Math.sin(0.04 * x * L.fMul + p1 * L.fMul + L.po) +
+                0.3 * Math.sin(0.084 * x * L.fMul + p2 * L.fMul - L.po) +
+                0.15 * Math.sin(0.172 * x * L.fMul + p3 * L.fMul + L.po * 2));
           if (x === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
         }
