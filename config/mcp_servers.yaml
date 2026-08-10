@@ -23,6 +23,11 @@ servers:
     command: python
     args: ["-m", "mcp_servers.mcp_system.server"]
     env: {}
+  - name: mcp-git
+    command: python
+    args: ["-m", "mcp_servers.mcp_git.server"]
+    env:
+      JARVIS_DB_PATH: "${JARVIS_DB_PATH}"
   - name: mcp-apps
     command: python
     args: ["-m", "mcp_servers.mcp_apps.server"]
