@@ -227,3 +227,82 @@ class TestGetWeather:
         monkeypatch.setattr(logic.httpx, "get", fake_get)
         logic.get_weather("Tokyo", days=9)
         assert captured["forecast_days"] == 3
+
+
+RAINVIEWER_PAYLOAD = {
+    "host": "https://tilecache.rainviewer.com",
+    "radar": {"past": [{"time": 1754899200}, {"time": 1754900000}]},
+}
+
+
+def _fake_radar_get(url, params=None, timeout=None):
+    if "geocoding" in url:
+        return FakeResponse(GEO_PAYLOAD)
+    return FakeResponse(RAINVIEWER_PAYLOAD)
+
+
+class TestRadarTileGrid:
+    """Slippy-map math: 3×3 grid around the containing tile."""
+
+    def test_nine_tiles_mid_latitude(self):
+        tiles = logic.radar_tile_grid(35.69, 139.69)
+        assert len(tiles) == 9
+
+    def test_center_tile_correct_at_origin(self):
+        tiles = logic.radar_tile_grid(0.0, 0.0, zoom=6)
+        n = 2 ** 6
+        assert (n // 2, n // 2) in tiles  # equator/prime meridian tile
+
+    def test_row_major_order(self):
+        tiles = logic.radar_tile_grid(35.69, 139.69)
+        ys = [y for _, y in tiles]
+        assert ys == sorted(ys)
+        # first three tiles share the top row
+        assert len({y for _, y in tiles[:3]}) == 1
+
+    def test_antimeridian_wraps(self):
+        tiles = logic.radar_tile_grid(0.0, 179.99, zoom=6)
+        xs = {x for x, _ in tiles}
+        assert 0 in xs  # wrapped past x=63 to x=0
+
+    def test_polar_rows_dropped(self):
+        tiles = logic.radar_tile_grid(85.0, 0.0, zoom=6)
+        assert all(0 <= y < 2 ** 6 for _, y in tiles)
+        assert len(tiles) == 6  # top ring row is off the map
+
+    def test_near_pole_no_tiles(self):
+        # Past the Mercator limit nothing renders — grid is empty, never invalid.
+        tiles = logic.radar_tile_grid(89.9, 0.0, zoom=6)
+        assert tiles == []
+
+
+class TestGetWeatherRadar:
+    def test_happy_path(self, monkeypatch):
+        monkeypatch.setattr(logic.httpx, "get", _fake_radar_get)
+        result = logic.get_weather_radar("tokyo")
+        assert result["city"] == "Tokyo, Japan"
+        assert result["ts"] == 1754900000  # latest past frame
+        assert len(result["tiles"]) == 9
+        assert all(
+            t.startswith("https://tilecache.rainviewer.com/v2/radar/1754900000/512/6/")
+            for t in result["tiles"]
+        )
+        assert all(t.endswith("/2/1_1.png") for t in result["tiles"])
+
+    def test_empty_city_error(self):
+        assert "error" in logic.get_weather_radar("  ")
+
+    def test_city_not_found(self, monkeypatch):
+        monkeypatch.setattr(
+            logic.httpx, "get",
+            _fake_get_factory({"results": []}, RAINVIEWER_PAYLOAD),
+        )
+        assert "couldn't find" in logic.get_weather_radar("Atlantis")["error"]
+
+    def test_rainviewer_failure(self, monkeypatch):
+        def fake_get(url, params=None, timeout=None):
+            if "geocoding" in url:
+                return FakeResponse(GEO_PAYLOAD)
+            raise httpx.ConnectError("down")
+        monkeypatch.setattr(logic.httpx, "get", fake_get)
+        assert logic.get_weather_radar("Tokyo")["error"].startswith("Radar data failed")
