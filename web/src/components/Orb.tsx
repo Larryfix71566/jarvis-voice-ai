@@ -11,8 +11,8 @@ interface Dyn {
 const TARGETS: Record<OrbState, Dyn> = {
   offline: { energy: 0.05, speed: 0.12, glow: 0.22 },
   connecting: { energy: 0.22, speed: 2.4, glow: 0.45 },
-  listening: { energy: 0.3, speed: 0.55, glow: 0.65 },
-  speaking: { energy: 1.0, speed: 1.0, glow: 1.0 },
+  listening: { energy: 0.22, speed: 0.55, glow: 0.65 },
+  speaking: { energy: 0.55, speed: 1.0, glow: 1.0 },
 };
 
 const CYAN = "44, 201, 255";
@@ -107,16 +107,16 @@ export default function Orb({ state }: { state: OrbState }) {
       drawArcs(112, rot2, 5, 0.9, 0.35 + dyn.glow * 0.25, 1.6);
       drawArcs(98, -rot2 * 1.4, 3, 1.5, 0.25 + dyn.glow * 0.2, 1);
 
-      // --- voice-reactive waveform bars ---
+      // --- residual energy shimmer (slimmed: the VoiceWave layer owns voice) ---
       ctx.save();
       ctx.translate(c, c);
-      const bars = 72;
+      const bars = 48;
       for (let i = 0; i < bars; i++) {
         const a = (i / bars) * Math.PI * 2;
         const amp = spectrum(i, t) * dyn.energy;
         const r0 = 52;
-        const r1 = r0 + 5 + amp * 26;
-        ctx.strokeStyle = `rgba(${CYAN}, ${0.25 + amp * 0.65})`;
+        const r1 = r0 + 4 + amp * 13;
+        ctx.strokeStyle = `rgba(${CYAN}, ${0.16 + amp * 0.4})`;
         ctx.lineWidth = 2;
         ctx.lineCap = "round";
         ctx.beginPath();
