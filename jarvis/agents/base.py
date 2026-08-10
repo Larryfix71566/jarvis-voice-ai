@@ -8,7 +8,10 @@ Locked behavior:
 - Max 5 tool iterations, hard 45 s timeout (asyncio.wait_for) — on timeout
   return "FAILED: the task took too long; please try again."
 - Never raises: failures return "FAILED: <reason>" strings.
-- Emits on_event dicts: agent_start / agent_tool / agent_done.
+- Emits on_event dicts: agent_start / agent_tool / agent_tool_result /
+  agent_done. agent_tool_result carries the raw tool result (truncated to
+  TOOL_RESULT_EVENT_MAX chars) so the pipeline can forward display-worthy
+  output (research, radar, project plans, commit summaries) to the UI.
 """
 
 from __future__ import annotations
@@ -32,6 +35,8 @@ MAX_TOOL_ITERATIONS = 5
 DEFAULT_TIMEOUT_S = 45.0
 TIMEOUT_MESSAGE = "FAILED: the task took too long; please try again."
 STUCK_MESSAGE = "FAILED: the task could not be completed."
+# Cap tool results in events so a huge payload can't flood the data channel.
+TOOL_RESULT_EVENT_MAX = 20_000
 
 EventCallback = Callable[[dict], None]
 
@@ -113,6 +118,14 @@ class SubAgent:
                 result = await self._registry.call(
                     tool_call.function.name, arguments, self.mcp_servers
                 )
+                self._emit(on_event, {
+                    "type": "agent_tool_result",
+                    "agent": self.name,
+                    "display_name": self.display_name,
+                    "tool": tool_call.function.name,
+                    "arguments": arguments,
+                    "result": result[:TOOL_RESULT_EVENT_MAX],
+                })
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
