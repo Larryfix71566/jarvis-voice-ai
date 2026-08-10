@@ -1,38 +1,22 @@
-# Sub-agent roster. The Supervisor routes via delegate_task using these
-# descriptions; prompts.py stays the single source of truth for the prompts
-# themselves — this file is routing metadata + MCP server ownership.
-agents:
+# Sub-agent roster + routing metadata (plan §6.4, Phase 3 — exact schema)
+sub_agents:
   - name: scheduler
     display_name: Scheduler
-    description: >-
-      Time, dates, calendars, and reminders: current time, date math,
-      creating/listing/cancelling reminders.
     mcp_servers: [mcp-time, mcp-reminders]
+    description: "Time, dates, day-of-week and calendar questions in the user's timezone; reminders, alarms, scheduling and planning."
   - name: librarian
     display_name: Librarian
-    description: >-
-      Persistent memory: notes the user asked Mortimer to remember, recall of
-      stored facts, preferences, and prior conversations.
     mcp_servers: [mcp-notes]
+    description: "Long-term memory: store and recall facts, notes, preferences."
   - name: analyst
     display_name: Analyst
-    description: >-
-      Research and current information: web search, summarizing findings,
-      weather lookups.
     mcp_servers: [mcp-web]
+    description: "Web research, current events, sports results, weather, the time in other cities, and general lookups."
   - name: systems
     display_name: Systems
-    description: >-
-      The machine Mortimer runs on: CPU, memory, disk, battery, uptime and
-      other machine-status checks.
     mcp_servers: [mcp-system]
+    description: "Local machine status: CPU, memory, disk, battery, uptime."
   - name: developer
     display_name: Developer
-    description: >-
-      Building things: creating new apps as private GitHub repos from
-      templates, listing built apps, and repo operations. Also self-
-      development: editing Mortimer's own interface through the
-      self-development loop — preview with the user, plan in the background,
-      validate, and open a pull request only after explicit confirmation;
-      merging always stays with the human on GitHub.
     mcp_servers: [mcp-git, mcp-apps, mcp-selfedit]
+    description: "The Jarvis git repository: status, recent commits, diffs, committing and pushing changes (with confirmation), and the audit trail of repository actions. Also builds new applications: each app gets its own private GitHub repo (created only after user confirmation) and is recorded in the Mortimer app registry. Also self-development: edits to Mortimer's own interface through the self-development loop — preview with the user, plan in the background, validate, and open a pull request only after explicit confirmation; merging always stays with the human on GitHub."
