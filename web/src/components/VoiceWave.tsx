@@ -1,17 +1,19 @@
 import { useEffect, useRef } from "react";
 import { usePipecatClientMediaTrack } from "@pipecat-ai/client-react";
-import type { OrbState } from "./Orb";
+import { subscribeWake } from "../wakeWord";
+import type { VoiceState } from "../voiceState";
 
 /**
  * VoiceWave — SILO-style voice display.
  *
  * A full-viewport horizontal sine field rendered behind everything
- * (position: fixed, z-index 0): the orb, agent satellites, and bars float
- * over it. Silent states show a dim, slow-breathing trace; when Mortimer
- * speaks the wave blooms bright cyan-white and is driven by the REAL bot
- * audio (Web Audio AnalyserNode on the bot's WebRTC track). If the track
- * is unavailable it falls back to a simulated speech envelope, so the
- * display still answers BotStartedSpeaking/BotStoppedSpeaking.
+ * (position: fixed, z-index 0): the agent satellites, readout, and bars
+ * float over it. Silent states show a dim, slow-breathing trace; when
+ * Mortimer speaks the wave blooms bright cyan-white and is driven by the
+ * REAL bot audio (Web Audio AnalyserNode on the bot's WebRTC track). If
+ * the track is unavailable it falls back to a simulated speech envelope,
+ * so the display still answers BotStartedSpeaking/BotStoppedSpeaking.
+ * Wake-word detections flash the whole field briefly.
  */
 
 interface Dyn {
@@ -24,14 +26,14 @@ interface Dyn {
   cb: number;
 }
 
-const COLORS: Record<OrbState, [number, number, number]> = {
+const COLORS: Record<VoiceState, [number, number, number]> = {
   offline: [95, 130, 150], // dim slate
   connecting: [44, 201, 255],
   listening: [44, 201, 255], // silent: dim cyan
   speaking: [190, 240, 255], // talking: bright cyan-white
 };
 
-const TARGETS: Record<OrbState, Pick<Dyn, "base" | "speed" | "alpha" | "glow">> = {
+const TARGETS: Record<VoiceState, Pick<Dyn, "base" | "speed" | "alpha" | "glow">> = {
   offline: { base: 0.004, speed: 0.12, alpha: 0.16, glow: 0 },
   connecting: { base: 0.014, speed: 1.4, alpha: 0.3, glow: 0.25 },
   listening: { base: 0.01, speed: 0.45, alpha: 0.34, glow: 0.15 },
@@ -51,14 +53,24 @@ function simLevel(t: number): number {
   return 0.25 + 0.75 * s;
 }
 
-export default function VoiceWave({ state }: { state: OrbState }) {
+export default function VoiceWave({ state }: { state: VoiceState }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const stateRef = useRef<OrbState>(state);
+  const stateRef = useRef<VoiceState>(state);
   stateRef.current = state;
 
   const analyserRef = useRef<AnalyserNode | null>(null);
   const levelRef = useRef(0); // smoothed voice level 0..1
+  const wakeFlashRef = useRef(0); // 1 on wake detection, decays to 0
   const botTrack = usePipecatClientMediaTrack("audio", "bot");
+
+  // Wake-word flash: the field surges when "Mortimer" is detected.
+  useEffect(
+    () =>
+      subscribeWake(() => {
+        wakeFlashRef.current = 1;
+      }),
+    [],
+  );
 
   // Real-audio drive: analyse the bot's WebRTC track (tap only — audio
   // keeps playing through PipecatClientAudio; this graph never reaches a
@@ -158,6 +170,10 @@ export default function VoiceWave({ state }: { state: OrbState }) {
       levelRef.current =
         target > lv ? lv + (target - lv) * 0.45 : lv + (target - lv) * 0.06;
 
+      // --- wake flash decay (~0.7s surge across the whole field) ---
+      wakeFlashRef.current = Math.max(0, wakeFlashRef.current - dt * 1.4);
+      const flash = reduced ? 0 : wakeFlashRef.current;
+
       // --- ease dynamics + color toward the current state ---
       const tg = TARGETS[st];
       const [tr, tg_, tb] = COLORS[st];
@@ -180,14 +196,17 @@ export default function VoiceWave({ state }: { state: OrbState }) {
       const cy = h * 0.5;
       const breath = st === "listening" ? 0.004 + 0.004 * Math.sin(t * 0.9) : 0;
       const voice = st === "speaking" ? levelRef.current * 0.115 : 0;
-      const amp = h * (dyn.base + breath + voice) * (reduced ? 0.4 : 1);
+      const amp =
+        h * (dyn.base + breath + voice + flash * 0.02) * (reduced ? 0.4 : 1);
+      const alpha = Math.min(1, dyn.alpha + flash * 0.45);
+      const glow = Math.min(1, dyn.glow + flash);
 
       ctx.clearRect(0, 0, w, h);
 
-      const glowOn = dyn.glow > 0.05 && !reduced;
+      const glowOn = glow > 0.05 && !reduced;
       if (glowOn) {
-        ctx.shadowBlur = 26 * dyn.glow;
-        ctx.shadowColor = `rgba(44, 201, 255, ${0.75 * dyn.glow})`;
+        ctx.shadowBlur = 26 * glow;
+        ctx.shadowColor = `rgba(44, 201, 255, ${0.75 * glow})`;
       }
 
       const r = Math.round(dyn.cr);
@@ -210,7 +229,7 @@ export default function VoiceWave({ state }: { state: OrbState }) {
           if (x === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
         }
-        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${dyn.alpha * L.aMul})`;
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha * L.aMul})`;
         ctx.lineWidth = L.width;
         ctx.lineJoin = "round";
         ctx.stroke();
