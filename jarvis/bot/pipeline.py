@@ -44,6 +44,7 @@ from jarvis.bot.voice_switch import (
 from jarvis.cli import bridge_settings_to_env
 from jarvis.config import Settings, load_settings
 from jarvis.db import run_migrations
+from jarvis.logging_config import setup_logging
 from jarvis.memory import render_memory_context, update_memory_from_session
 from jarvis.prompts import (
     SUPERVISOR_PROMPT,
@@ -280,13 +281,10 @@ def _unwrap_client_message(message: Any) -> dict | None:
         return None
     if message.get("type") == "client-message":
         data = message.get("data")
-        if not isinstance(data, dict):
+        if not isinstance(data, dict) or not isinstance(data.get("t"), str):
             return None
-        msg_type = data.get("t")
         payload = data.get("d")
-        if not isinstance(msg_type, str):
-            return None
-        return {"type": msg_type, **(payload if isinstance(payload, dict) else {})}
+        return {"type": data["t"], **(payload if isinstance(payload, dict) else {})}
     return message
 
 
@@ -301,6 +299,9 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
     settings = load_settings()
     bridge_settings_to_env(settings)
     run_migrations()
+    # Enable INFO root logging so registry/subagent lifecycle lines
+    # (mcp_server_started, subagent_done, turn_complete) reach logs/bot.log.
+    setup_logging()
 
     registry = SkillRegistry(REPO_ROOT / "config" / "mcp_servers.yaml")
     await registry.start()
