@@ -136,7 +136,7 @@ python3 -m jarvis.cli
   in the ✎ Edit panel (planner dropdown, diffs, Validate / Submit PR /
   Revert buttons).
   - **Planner models** live in `config/upgrade_models.yaml` as named
-    profiles (default: `kimi-k2`; `kimi-k3`, `claude-opus`, and
+    profiles (default: `kimi-k3`; `kimi-k2`, `claude-opus`, and
     `gpt-4.1-mini` ship alongside — add your own). Choose one per session
     (spoken or dropdown), set `JARVIS_UPGRADE_PROFILE` to change the
     default for every run, or edit the registry's `default`. A profile is
@@ -364,7 +364,7 @@ ls tests/acceptance/
 | `TAVILY_API_KEY` | — | Web search key (required for Analyst research) |
 | `GITHUB_TOKEN` | — | GitHub PAT for app development (optional; enables mcp-apps) |
 | `GITHUB_OWNER` | — | GitHub user/org owning app repos (optional; defaults to the token's user) |
-| `MOONSHOT_API_KEY` | — | Kimi upgrade planner profiles (`kimi-k2` default, `kimi-k3`) |
+| `MOONSHOT_API_KEY` | — | Kimi upgrade planner profiles (`kimi-k3` default, `kimi-k2`) |
 | `ANTHROPIC_API_KEY` | — | Claude upgrade planner profile (`claude-opus`) |
 | `JARVIS_UPGRADE_PROFILE` | registry `default` | Override the default upgrade planner profile |
 | `JARVIS_UPGRADE_MODELS` | `config/upgrade_models.yaml` | Point at an alternate planner registry file |
