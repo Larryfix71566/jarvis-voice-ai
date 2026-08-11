@@ -7,6 +7,12 @@ import pytest
 from mcp_servers.mcp_selfedit import logic
 
 
+@pytest.fixture(autouse=True)
+def _clear_profile_env(monkeypatch):
+    """Selection order must not leak from the developer's own shell env."""
+    monkeypatch.delenv("JARVIS_UPGRADE_PROFILE", raising=False)
+
+
 class FakeClient:
     """Duck-typed AdminClient stand-in: routes keyed on (method, path)."""
 
@@ -106,6 +112,26 @@ def test_start_confirm_posts_goal_and_profile():
     r = logic.selfedit_start(c, "dark theme", confirm=True)
     assert r["started"]
     assert c.posts == [("/api/selfedit/run", {"goal": "dark theme", "profile": "kimi-k2"})]
+
+
+def test_start_env_profile_beats_registry_default(monkeypatch):
+    monkeypatch.setenv("JARVIS_UPGRADE_PROFILE", "claude-opus")
+    c = _client()
+    r = logic.selfedit_start(c, "add a clock")
+    assert r["ok"] and r["profile"] == "claude-opus"  # env beats registry default
+
+
+def test_start_explicit_profile_beats_env(monkeypatch):
+    monkeypatch.setenv("JARVIS_UPGRADE_PROFILE", "claude-opus")
+    c = _client()
+    logic.selfedit_start(c, "add a clock", profile="kimi-k2", confirm=True)
+    assert c.posts == [("/api/selfedit/run", {"goal": "add a clock", "profile": "kimi-k2"})]
+
+
+def test_start_env_profile_missing_key_names_env_profile(monkeypatch):
+    monkeypatch.setenv("JARVIS_UPGRADE_PROFILE", "kimi-k3")
+    r = logic.selfedit_start(_client(), "x")
+    assert r["ok"] is False and "MOONSHOT_API_KEY" in r["error"] and "kimi-k3" in r["error"]
 
 
 # ── selfedit_status ────────────────────────────────────────────────────────
