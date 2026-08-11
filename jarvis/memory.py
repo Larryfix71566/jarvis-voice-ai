@@ -68,6 +68,10 @@ Rules:
   pacing, tone. Keys are "user.style.<pattern>". Observations are
   evidence, not truth — record them even when unsure; they only become
   active after recurring across sessions.
+- NEVER record facts or observations about the assistant's own capabilities,
+  access rights, or restrictions (e.g. "cannot edit code", "no repository
+  access"). Capabilities change with every software update; remembered
+  restrictions become stale lies that contradict the current system prompt.
 - Do NOT record one-off requests, small talk, or anything time-bound
   (that is what reminders and notes are for).
 - The summary must stand alone: it replaces the previous summary, so carry

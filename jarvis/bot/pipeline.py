@@ -22,7 +22,9 @@ import asyncio
 import os
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from pipecat.frames.frames import OutputTransportMessageUrgentFrame
 from pipecat.pipeline.pipeline import Pipeline
@@ -362,10 +364,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             })
             # D-008: pipecat 1.4 has add_messages (plural) and requires an
             # explicit push_context_frame() to trigger the LLM run.
+            # Include the user's local time: the model has no clock, and a
+            # blind greeting guesses the wrong time of day.
+            now_local = datetime.now(ZoneInfo(settings.jarvis_timezone))
+            greeting_time = now_local.strftime("%I:%M %p").lstrip("0")
             aggregators.user().add_messages([{
                 "role": "user",
-                "content": "[system] The user just connected. "
-                           "Greet them briefly by name.",
+                "content": "[system] The user just connected. Greet them "
+                           f"briefly by name; it is {greeting_time} their time.",
             }])
             await aggregators.user().push_context_frame()
 
