@@ -57,6 +57,14 @@ class Settings(BaseSettings):
     # Skills (optional -> degraded mode)
     tavily_api_key: str | None = None
 
+    # Noise suppression (voice isolation plan, Workstream A) — OFF by default.
+    # Engine install required: pip install deepfilternet (or pyrnnoise).
+    jarvis_ns_enabled: bool = False  # feature flag + kill switch (plan A2)
+    jarvis_ns_filter: str = "deepfilternet"  # deepfilternet | rnnoise | null | none
+    jarvis_ns_atten_lim_db: float | None = None  # ⚙ strength knob (plan A3); None = full
+    jarvis_ns_post_filter: bool = False
+    jarvis_ns_log_stats: bool = True  # [ns] RTF telemetry (plan A2 step 4 / V1a)
+
     # Runtime
     jarvis_db_path: str = "data/jarvis.db"
     jarvis_log_level: str = "INFO"

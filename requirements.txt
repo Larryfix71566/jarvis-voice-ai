@@ -14,3 +14,9 @@ pytest
 pytest-asyncio
 pytest-cov
 ruff
+
+# --- Optional: server-side noise suppression (voice isolation plan, Workstream A) ---
+# Uncomment ONE engine, then set JARVIS_NS_ENABLED=true in .env:
+# deepfilternet      # DeepFilterNet 3 (best quality; pulls torch, ~2 GB)
+# pyrnnoise          # RNNoise (lightweight fallback)
+# pystoi             # eval harness metric (scripts/eval_ns.py)
