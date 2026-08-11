@@ -316,3 +316,33 @@ def test_parse_update_tolerates_missing_observations_key():
         "observations": [],
         "summary": "s",
     }
+
+
+# --- capability-claim firewall (render-time) ------------------------------
+
+from jarvis.memory import _is_capability_claim  # noqa: E402
+
+
+def test_capability_claim_filtered_from_render(conn):
+    upsert_fact(
+        conn, "mortimer.limitations",
+        "Cannot access or edit the Jarvis repository.", "s1",
+    )
+    upsert_fact(conn, "user.name", "Larry", "s1")
+    rendered = render_memory_context(conn)
+    assert "mortimer.limitations" not in rendered
+    assert "Cannot access" not in rendered
+    assert "- user.name: Larry" in rendered  # unrelated facts unaffected
+
+
+def test_capability_claim_detector():
+    assert _is_capability_claim("mortimer.limitations", "Cannot edit code")
+    assert _is_capability_claim("assistant.access", "has no access to the repo")
+    assert _is_capability_claim(
+        "jarvis.restrictions", "is unable to run commands")
+    # Positive or neutral assistant facts pass through.
+    assert not _is_capability_claim("assistant.name", "Mortimer")
+    assert not _is_capability_claim("mortimer.timezone", "America/New_York")
+    # User facts are never filtered, even when they contain marker words.
+    assert not _is_capability_claim(
+        "user.style.honesty", "Cannot stand evasive answers")
