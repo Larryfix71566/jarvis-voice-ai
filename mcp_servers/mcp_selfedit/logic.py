@@ -73,7 +73,15 @@ def selfedit_start(client, goal: str, profile: str | None = None, confirm: bool 
     models = models_resp.get("models", [])
     by_name = {m["name"]: m for m in models}
 
-    chosen = profile or next((m["name"] for m in models if m.get("default")), None)
+    # Selection order mirrors upgrade_agent.resolve_profile: an explicit
+    # (spoken) choice, then the JARVIS_UPGRADE_PROFILE env override, then
+    # the registry default. Ignoring the env override here sends the user
+    # to a planner whose key they deliberately replaced.
+    chosen = (
+        profile
+        or os.environ.get("JARVIS_UPGRADE_PROFILE")
+        or next((m["name"] for m in models if m.get("default")), None)
+    )
     if chosen and chosen not in by_name:
         return {
             "ok": False,
