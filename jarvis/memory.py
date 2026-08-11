@@ -81,6 +81,30 @@ Rules:
 - Output JSON only. No markdown, no commentary."""
 
 
+# Render-time firewall, complementing the EXTRACTION_PROMPT ban above:
+# stored claims about the assistant's own (in)capabilities never reach the
+# prompt. Capabilities change with every software update, and a remembered
+# "Mortimer cannot ..." contradicts the specialist roster (prompt rule 8)
+# and becomes a self-fulfilling refusal. Extraction now refuses to record
+# these; this filter keeps legacy or hand-written rows from being injected
+# anyway. Only assistant-referring keys are examined, and only for
+# incapability markers — positive facts (assistant.name, mortimer.timezone)
+# and every user.* fact pass through untouched.
+_ASSISTANT_KEY_PREFIXES = ("assistant.", "mortimer.", "jarvis.")
+_INCAPABILITY_MARKERS = (
+    "cannot", "can't", "unable", "not able", "no access",
+    "does not have", "do not have", "don't have", "lacks", "no permission",
+)
+
+
+def _is_capability_claim(key: str, content: str) -> bool:
+    """True for facts asserting the assistant's own (in)capabilities."""
+    if not key.startswith(_ASSISTANT_KEY_PREFIXES):
+        return False
+    text = content.lower()
+    return any(marker in text for marker in _INCAPABILITY_MARKERS)
+
+
 def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
     """Build the memory block for the Supervisor system prompt.
 
@@ -109,6 +133,11 @@ def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
 
     lines: list[str] = []
     for row in fact_rows:
+        if _is_capability_claim(row["key"], row["content"]):
+            logger.warning(
+                "memory_context_capability_claim_filtered key=%s", row["key"]
+            )
+            continue
         line = f"- {row['key']}: {row['content'][:MAX_FACT_CHARS]}"
         if sum(len(l) for l in lines) + len(line) > MAX_CONTEXT_CHARS:
             break
