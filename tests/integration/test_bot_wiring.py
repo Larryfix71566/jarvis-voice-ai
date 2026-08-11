@@ -205,7 +205,12 @@ def test_stt_model_is_flux(runtime, fakes):
 
 async def test_agent_events_pushed_as_app_messages(runtime, fakes, monkeypatch,
                                                    capsys):
-    """Plan Phase 6 step 6.3: agent_start/agent_done -> {"type":"agent",...}."""
+    """Plan Phase 6 step 6.3: delegate_start/delegate_done -> {"type":"agent",...}.
+
+    The delegate_* pair owns the UI lifecycle (one status card per
+    delegation); agent_start/agent_done are log-only so the UI never sees a
+    duplicate working/done pair, and agent_tool feeds the card's progress.
+    """
     captured = {}
     real = bp.build_delegate_tool
 
@@ -227,18 +232,24 @@ async def test_agent_events_pushed_as_app_messages(runtime, fakes, monkeypatch,
              "display_name": "Scheduler", "tool": "get_time"})
     handler({"type": "agent_done", "agent": "scheduler",
              "display_name": "Scheduler"})
+    handler({"type": "delegate_done", "agent": "scheduler",
+             "display_name": "Scheduler", "ok": True, "detail": ""})
     await asyncio.sleep(0)  # flush scheduled create_task sends
 
     # Locked payload shape, sent inside the rtvi-ai server-message envelope
-    # (D-005); agent_tool does not produce a UI message.
+    # (D-005); the log-only agent_start/agent_done produce no UI message.
     payloads = [m["data"] for m in transport.sent]
     for m in transport.sent:
         assert m["label"] == "rtvi-ai"
         assert m["type"] == "server-message"
         assert m["id"]
     assert payloads == [
-        {"type": "agent", "name": "scheduler", "state": "working"},
-        {"type": "agent", "name": "scheduler", "state": "done"},
+        {"type": "agent", "name": "scheduler", "display_name": "Scheduler",
+         "state": "working", "task": "t"},
+        {"type": "agent_tool", "name": "scheduler",
+         "display_name": "Scheduler", "tool": "get_time"},
+        {"type": "agent", "name": "scheduler", "display_name": "Scheduler",
+         "state": "done", "ok": True, "detail": ""},
     ]
     # stdout feed (Phase 4 behavior) still intact.
     assert "[AGENT] Scheduler working" in capsys.readouterr().out

@@ -8,8 +8,11 @@ import yaml
 
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 
-ALL_SERVERS = ["mcp-time", "mcp-notes", "mcp-reminders", "mcp-web", "mcp-system"]
-TOTAL_TOOLS = 19  # 4 + 6 + 5 + 2 + 2
+ALL_SERVERS = [
+    "mcp-time", "mcp-notes", "mcp-reminders", "mcp-web", "mcp-system",
+    "mcp-git", "mcp-apps", "mcp-selfedit",
+]
+TOTAL_TOOLS = 38  # 4 + 6 + 5 + 3 + 2 + 8 + 5 + 5
 
 
 @pytest.fixture

@@ -27,7 +27,7 @@ EXPECTED_TOOLS = {
         "set_reminder", "list_reminders", "complete_reminder", "cancel_reminder",
         "get_due_reminders",
     },
-    "mcp_servers.mcp_web.server": {"web_search", "get_weather"},
+    "mcp_servers.mcp_web.server": {"web_search", "get_weather", "get_weather_radar"},
     "mcp_servers.mcp_system.server": {"get_system_status", "get_top_processes"},
 }
 
