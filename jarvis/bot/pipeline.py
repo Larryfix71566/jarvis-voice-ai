@@ -102,9 +102,16 @@ def make_agent_event_handler(transport: Any) -> Any:
 
     on_event callbacks are sync (agents/base.py EventCallback), so the async
     app-message send is scheduled on the running loop. Message shapes:
-    {"type": "agent", "name": "<agent>", "state": "working"|"done"} for
-    lifecycle events, and {"type": "display", "display": <payload>} when a
-    tool result is display-worthy (see jarvis/bot/display.py).
+    {"type": "agent", "name", "display_name", "state": "working",
+     "task": <delegated task>} on delegate_start;
+    {"type": "agent", "name", "display_name", "state": "done",
+     "ok": <bool>, "detail": <failure reason or "">} on delegate_done;
+    {"type": "agent_tool", "name", "display_name", "tool"} while a
+    specialist calls a tool; and {"type": "display", "display": <payload>}
+    when a tool result is display-worthy (see jarvis/bot/display.py).
+    The delegate_* pair owns the lifecycle the UI shows (one status card
+    per delegation); agent_start/agent_done remain log-only so the UI
+    never sees duplicate working/done messages.
     """
 
     def on_agent_event(event: dict) -> None:
@@ -122,14 +129,32 @@ def make_agent_event_handler(transport: Any) -> Any:
             if payload is None:
                 return  # voice-only tool result — nothing to show
             message = {"type": "display", "display": payload}
-        elif etype in ("agent_start", "agent_done"):
+        elif etype == "delegate_start":
             message = {
                 "type": "agent",
                 "name": event.get("agent"),
-                "state": "working" if etype == "agent_start" else "done",
+                "display_name": event.get("display_name"),
+                "state": "working",
+                "task": str(event.get("task") or "")[:200],
+            }
+        elif etype == "delegate_done":
+            message = {
+                "type": "agent",
+                "name": event.get("agent"),
+                "display_name": event.get("display_name"),
+                "state": "done",
+                "ok": bool(event.get("ok", True)),
+                "detail": str(event.get("detail") or "")[:300],
+            }
+        elif etype == "agent_tool":
+            message = {
+                "type": "agent_tool",
+                "name": event.get("agent"),
+                "display_name": event.get("display_name"),
+                "tool": event.get("tool"),
             }
         else:
-            return
+            return  # agent_start / agent_done: log-only (lifecycle is delegate_*)
         try:
             asyncio.get_running_loop().create_task(
                 send_app_message(transport, message))

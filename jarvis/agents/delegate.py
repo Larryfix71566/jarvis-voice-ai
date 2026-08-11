@@ -57,8 +57,13 @@ def build_delegate_tool(
                       "display_name": agent.display_name, "task": task})
         result = await agent.run(task, on_event=on_event)
         if on_event is not None:
+            failed = result.startswith("FAILED:")
             on_event({"type": "delegate_done", "agent": agent_name,
-                      "display_name": agent.display_name})
+                      "display_name": agent.display_name,
+                      "ok": not failed,
+                      # Failure reasons surface in the UI status card;
+                      # successful output is spoken/displayed elsewhere.
+                      "detail": result[:300] if failed else ""})
         return result
 
     return schema, handler
