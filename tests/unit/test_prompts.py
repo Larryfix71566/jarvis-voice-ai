@@ -38,6 +38,14 @@ def test_supervisor_prompt_locked_rules_present():
         assert fragment in SUPERVISOR_PROMPT
 
 
+def test_supervisor_prompt_identity_and_no_hedging_rules():
+    # Delegating IS doing: the specialists' abilities are Mortimer's own.
+    assert "their abilities are your abilities" in SUPERVISOR_PROMPT
+    assert "IS you doing the task" in SUPERVISOR_PROMPT
+    # Rule 10: no capability commentary or hedging, ever.
+    assert "Never comment on what you can or cannot do" in SUPERVISOR_PROMPT
+
+
 def test_voice_addendum_is_plain_prose_rule():
     assert "plain prose" in VOICE_ADDENDUM
     assert "no markdown" in VOICE_ADDENDUM
