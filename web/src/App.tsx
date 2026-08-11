@@ -13,10 +13,12 @@ import TranscriptDrawer from "./components/TranscriptDrawer";
 import VoicePicker from "./components/VoicePicker";
 import GitPanel from "./components/GitPanel";
 import EditModePanel from "./components/EditModePanel";
+import AgentStatusPanel from "./components/AgentStatusPanel";
 import type { VoiceState } from "./voiceState";
 import "./App.css";
 import "./command-deck.css";
 import "./editmode.css";
+import "./agentstatus.css";
 
 function errorText(message: unknown): string {
   const m = message as { data?: unknown };
@@ -128,6 +130,9 @@ export default function App() {
       </footer>
 
       <TranscriptDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+
+      {/* agent status window — live sub-agent progress (z-25) */}
+      <AgentStatusPanel />
 
       {/* results window — floats in front of everything (z-30) */}
       <DisplayPanel />
