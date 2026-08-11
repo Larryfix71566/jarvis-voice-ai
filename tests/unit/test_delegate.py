@@ -48,6 +48,25 @@ class TestHandler:
         assert types[-1] == "delegate_done"
         assert events[0]["agent"] == "analyst"
 
+    async def test_delegate_done_marks_success(self):
+        events = []
+        _, handler = build_delegate_tool(AGENTS, on_event=events.append)
+        await handler({"agent_name": "analyst", "task": "weather"})
+        done = events[-1]
+        assert done["ok"] is True
+        assert done["detail"] == ""
+
+    async def test_delegate_done_marks_failure_with_detail(self):
+        agents = {"analyst": FakeSubAgent("analyst", result="FAILED: web_search down")}
+        events = []
+        _, handler = build_delegate_tool(agents, on_event=events.append)
+        result = await handler({"agent_name": "analyst", "task": "news"})
+        assert result.startswith("FAILED:")
+        done = events[-1]
+        assert done["type"] == "delegate_done"
+        assert done["ok"] is False
+        assert done["detail"] == "FAILED: web_search down"
+
 
 class TestAgentsYaml:
     def test_repo_agents_yaml_matches_locked_schema(self):
