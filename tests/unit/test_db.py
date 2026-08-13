@@ -6,12 +6,12 @@ from jarvis.db import get_conn, now_iso, run_migrations
 
 EXPECTED_TABLES = {
     "migrations", "notes", "reminders", "conversations", "actions", "memories",
-    "observations", "conversations_fts",
+    "observations", "conversations_fts", "agent_runs", "agent_events",
 }
 
 EXPECTED_MIGRATION_IDS = [
     "0001_init", "0002_actions", "0003_memory", "0004_observations",
-    "0005_conversation_search",
+    "0005_conversation_search", "0006_agent_runs",
 ]
 
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from typing import Any, Callable
 
 from jarvis.agents.base import EventCallback, SubAgent
@@ -34,6 +35,8 @@ def build_delegate_tool(
     sub_agents: dict[str, SubAgent],
     on_event: EventCallback | None = None,
     max_parallel: int = DEFAULT_MAX_PARALLEL_DELEGATIONS,
+    *,
+    session_id: str | None = None,
 ) -> tuple[dict, Callable[[dict], Any]]:
     """Return (openai_tool_schema, async_handler) for delegate_task."""
     names = list(sub_agents)
@@ -70,21 +73,32 @@ def build_delegate_tool(
         task = str(arguments.get("task", ""))
         agent = sub_agents.get(agent_name)
         if agent is None:
+            # No agent, nothing ran — this path does not create a run
+            # (run-logging plan §5.5).
             return f"Unknown agent '{agent_name}'. Available: {available}."
+        # run_id generated here, one per delegation (run-logging plan D1):
+        # this is the unit a human reviews, and generating it before the
+        # semaphore below means a queued-but-not-yet-running delegation
+        # still has an identity in the UI and the run log.
+        run_id = str(uuid.uuid4())
         if on_event is not None:
             on_event({"type": "delegate_start", "agent": agent_name,
-                      "display_name": agent.display_name, "task": task})
+                      "display_name": agent.display_name, "task": task,
+                      "run_id": run_id})
         # Cap actual concurrent execution — pipecat's own parallel tool-call
         # dispatch has no limit. A failure inside agent.run() (SubAgent.run()
         # never raises; failures come back as "FAILED: ..." strings) does not
         # affect the semaphore or any sibling delegation.
         async with semaphore:
-            result = await agent.run(task, on_event=on_event)
+            result = await agent.run(
+                task, on_event=on_event, run_id=run_id, session_id=session_id,
+            )
         if on_event is not None:
             failed = result.startswith("FAILED:")
             on_event({"type": "delegate_done", "agent": agent_name,
                       "display_name": agent.display_name,
                       "ok": not failed,
+                      "run_id": run_id,
                       # Failure reasons surface in the UI status card;
                       # successful output is spoken/displayed elsewhere.
                       "detail": result[:300] if failed else ""})

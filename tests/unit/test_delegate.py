@@ -28,7 +28,7 @@ class SlowFakeSubAgent:
         self.started_at: float | None = None
         self.finished_at: float | None = None
 
-    async def run(self, task, on_event=None):
+    async def run(self, task, on_event=None, **kwargs):
         self.started_at = time.perf_counter()
         self.tasks.append(task)
         await asyncio.sleep(self.delay)

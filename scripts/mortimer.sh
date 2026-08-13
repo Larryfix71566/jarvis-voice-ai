@@ -7,14 +7,24 @@
 #   ./scripts/mortimer.sh logs    tail all component logs
 #
 # Components run in the background (nohup, survives terminal close) and
-# write to logs/*.log. Idempotent: always safe to re-run; existing
+# append to logs/*.log. Idempotent: always safe to re-run; existing
 # processes are stopped first, so this doubles as "restart".
+#
+# Log rotation (run-logging plan D11/§5.9): each restart used to truncate
+# logs/*.log via `>`, destroying the previous session's diagnostics —
+# most of Mortimer's runtime output (TURN, [AGENT], [session], USER:/BOT:
+# lines) is print()-to-stdout, which a Python logging.FileHandler never
+# sees, so rotation has to happen here, shell-side. Before each start,
+# logs/<name>.log is shifted to .1, prior generations shift up to
+# LOG_GENERATIONS, and the new run appends (`>>`) rather than truncates.
+# Previous sessions live in logs/<name>.log.1 .. .LOG_GENERATIONS.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
 BOT_PORT="${JARVIS_BOT_PORT:-7860}"
 ADMIN_PORT=7861
 WEB_PORT=5173
+LOG_GENERATIONS=5
 
 cmd="${1:-start}"
 
@@ -24,6 +34,17 @@ stop_all() {
   pkill -f "vite"                  2>/dev/null
   sleep 1
   return 0
+}
+
+rotate_log() {  # name (e.g. "bot" -> logs/bot.log)
+  local name="$1" i
+  [ -f "logs/${name}.log" ] || return 0
+  for ((i = LOG_GENERATIONS - 1; i >= 1; i--)); do
+    if [ -f "logs/${name}.log.${i}" ]; then
+      mv "logs/${name}.log.${i}" "logs/${name}.log.$((i + 1))"
+    fi
+  done
+  mv "logs/${name}.log" "logs/${name}.log.1"
 }
 
 case "$cmd" in
@@ -58,11 +79,14 @@ echo "Restarting Mortimer..."
 stop_all
 
 mkdir -p logs
-nohup ./scripts/run_bot.sh   > logs/bot.log   2>&1 &
+rotate_log bot
+rotate_log admin
+rotate_log web
+nohup ./scripts/run_bot.sh   >> logs/bot.log   2>&1 &
 BOT_PID=$!
-nohup ./scripts/run_admin.sh > logs/admin.log 2>&1 &
+nohup ./scripts/run_admin.sh >> logs/admin.log 2>&1 &
 ADMIN_PID=$!
-nohup ./scripts/run_web.sh   > logs/web.log   2>&1 &
+nohup ./scripts/run_web.sh   >> logs/web.log   2>&1 &
 WEB_PID=$!
 
 # Give the components a moment, then report health (best-effort).
@@ -81,4 +105,5 @@ check web   "$WEB_PID"   "http://localhost:$WEB_PORT"
 echo
 echo "Open http://localhost:$WEB_PORT and click Connect."
 echo "Logs:  ./scripts/mortimer.sh logs   (or: tail -f logs/bot.log)"
+echo "       previous sessions: logs/<name>.log.1 .. .${LOG_GENERATIONS}"
 echo "Stop:  ./scripts/mortimer.sh stop"

@@ -86,6 +86,14 @@ class Settings(BaseSettings):
     # sub-agent LLM calls.
     jarvis_max_parallel_delegations: int = 3
 
+    # Run logging (MORTIMER_RUN_LOGGING_PLAN.md D17/D10) — durable records
+    # of every sub-agent delegation and the MCP calls it made. Disabling
+    # makes every RunLogger method a no-op (kill switch, plan §8 rollback).
+    # Retention in days for agent_runs/agent_events rows and logs/agents/
+    # date directories, pruned once at bot startup; <= 0 disables pruning.
+    jarvis_runlog_enabled: bool = True
+    jarvis_runlog_retention_days: int = 30
+
     @field_validator("jarvis_timezone")
     @classmethod
     def _timezone_must_be_iana(cls, v: str) -> str:

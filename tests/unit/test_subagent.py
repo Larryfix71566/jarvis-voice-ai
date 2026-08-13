@@ -21,6 +21,10 @@ def make_settings():
         openai_api_key="test",
         openai_base_url="http://unused",
         jarvis_timezone="America/New_York",
+        # Run-logging plan §5.4: SubAgent.run() reads this to construct
+        # its RunLogger. False here so these unit tests (which use tmp
+        # cwd / no migrated DB) don't attempt real SQLite writes.
+        jarvis_runlog_enabled=False,
     )
 
 

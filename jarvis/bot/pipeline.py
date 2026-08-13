@@ -19,6 +19,7 @@ changes again.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import uuid
 from dataclasses import dataclass
@@ -54,6 +55,7 @@ from jarvis.prompts import (
     VOICE_ADDENDUM,
     render_agent_catalog,
 )
+from jarvis.runlog import prune as prune_runlog
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 
 # Service imports are module-level names so tests can monkeypatch them.
@@ -77,6 +79,8 @@ from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -194,6 +198,7 @@ def build_pipeline(
         sub_agents,
         on_event=make_agent_event_handler(transport),
         max_parallel=settings.jarvis_max_parallel_delegations,
+        session_id=runtime.session_id,
     )
     set_voice_schema, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
 
@@ -335,6 +340,19 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
     # Enable INFO root logging so registry/subagent lifecycle lines
     # (mcp_server_started, subagent_done, turn_complete) reach logs/bot.log.
     setup_logging()
+
+    # Run-logging plan D10/§5.8: retention pruning runs once at startup —
+    # outside the latency-critical per-turn path, guaranteed to happen
+    # regularly, no scheduler needed. Best-effort; a failure here must
+    # never block the bot from starting.
+    try:
+        prune_counts = prune_runlog(settings.jarvis_runlog_retention_days)
+        _logger.info(
+            "runlog_prune runs_deleted=%d dirs_deleted=%d",
+            prune_counts["runs_deleted"], prune_counts["dirs_deleted"],
+        )
+    except Exception as exc:  # noqa: BLE001 — must never block startup
+        _logger.warning("runlog_prune_failed error=%s", exc)
 
     registry = SkillRegistry(REPO_ROOT / "config" / "mcp_servers.yaml")
     await registry.start()

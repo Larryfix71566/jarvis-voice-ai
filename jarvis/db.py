@@ -122,6 +122,48 @@ INSERT INTO conversations_fts(rowid, content, session_id, role, created_at)
 SELECT id, content, session_id, role, created_at FROM conversations;
 """
 
+# Run-logging plan (MORTIMER_RUN_LOGGING_PLAN.md §5.1): durable, queryable
+# records of every sub-agent delegation and the MCP calls it made. Full
+# payloads (untruncated tool args/results, the full reply) live in a JSONL
+# file per run under logs/agents/<date>/<run_id>.jsonl (payload_path);
+# these tables hold bounded, indexed previews plus the pointer to that
+# file. See jarvis/runlog/store.py.
+MIGRATION_0006 = """
+CREATE TABLE IF NOT EXISTS agent_runs (
+  run_id TEXT PRIMARY KEY,
+  session_id TEXT,
+  agent TEXT NOT NULL,
+  display_name TEXT NOT NULL DEFAULT '',
+  task TEXT NOT NULL,
+  status TEXT NOT NULL,              -- running | ok | failed | timeout
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  latency_ms INTEGER,
+  tool_count INTEGER NOT NULL DEFAULT 0,
+  error TEXT,                        -- the FAILED: reason, else NULL
+  reply_preview TEXT,                -- first PREVIEW_CHARS of the reply
+  payload_path TEXT                  -- repo-relative path to the JSONL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_agent  ON agent_runs(agent, started_at);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs(status, started_at);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_session ON agent_runs(session_id);
+
+CREATE TABLE IF NOT EXISTS agent_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  type TEXT NOT NULL,                -- tool_call | tool_result | mcp_call
+  tool TEXT,
+  server TEXT,                       -- MCP server name; mcp_call only
+  ok INTEGER,                        -- 1 | 0 | NULL
+  latency_ms INTEGER,
+  args_preview TEXT,
+  result_preview TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_events_run ON agent_events(run_id, seq);
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
@@ -129,6 +171,7 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0003_memory", MIGRATION_0003),
     ("0004_observations", MIGRATION_0004),
     ("0005_conversation_search", MIGRATION_0005),
+    ("0006_agent_runs", MIGRATION_0006),
 ]
 
 

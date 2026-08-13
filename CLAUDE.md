@@ -35,6 +35,12 @@ pytest tests/unit/test_delegate.py::test_name -q  # single test
 RUN_LIVE=1 python -m tests.evals.routing_eval   # Supervisor routing accuracy eval, must score >=90%
 ls tests/acceptance/                            # manual per-phase checklists
 
+# Run log — review sub-agent delegation history
+python -m jarvis.runlog                                     # last 20 runs
+python -m jarvis.runlog --agent developer --status failed --since 2d
+python -m jarvis.runlog --run <run_id>                       # full detail
+python -m jarvis.runlog --json                               # machine-readable
+
 # Web client
 cd web && npm run build     # strict TS + production build (CI gate)
 cd web && npm run lint      # oxlint
@@ -47,7 +53,7 @@ python scripts/latency_probe.py path/to/bot.log         # per-turn latency from 
 python scripts/list_voices.py
 ```
 
-CI (`.github/workflows/validate.yml`, on PRs to `main`) runs, in order: allowlist enforcement → backend import smoke (`python -c "import jarvis, jarvis.config, jarvis.cli"`) → `pytest tests/unit` (currently non-blocking) → `web/npm run build`.
+CI (`.github/workflows/validate.yml`, on PRs to `main`) runs, in order: allowlist enforcement → backend import smoke (`python -c "import jarvis, jarvis.config, jarvis.cli, jarvis.runlog"`) → `pytest tests/unit` (currently non-blocking) → `web/npm run build`.
 
 ## Architecture
 
@@ -68,6 +74,8 @@ Browser (React/Vite) --WebRTC--> Python bot (Pipecat pipeline) --MCP/stdio--> MC
 **Wake word** (optional, fully local): `jarvis/wakeword/` — `logic.py` (`WakeGate`: pure threshold/cooldown logic), `server.py` (localhost websocket sidecar, `:7862`), `train.py` (trains a custom ONNX model from `say`-generated samples, no cloud). Client hook is `web/src/wakeWord.ts`.
 
 **Config vs. code boundary**: routing (`config/agents.yaml`), server wiring (`config/mcp_servers.yaml`), voices (`config/voices.yaml`), and self-edit bounds/allowlist are all YAML/JSON, not Python — check config first when a behavior seems misrouted or over/under-permissioned rather than assuming it's hardcoded.
+
+**Run log** (`jarvis/runlog/`, MORTIMER_RUN_LOGGING_PLAN.md): every `delegate_task` call gets a `run_id`, generated in `jarvis/agents/delegate.py` and threaded through `SubAgent.run()` (`jarvis/agents/base.py`) down to each MCP call in `SkillRegistry.call()` (`jarvis/skills/registry.py`) via a `contextvars.ContextVar` holding the live `RunLogger` instance (not just the id — this is what lets an MCP-layer failure land in the same record as the sub-agent's own tool call). Each run writes one `agent_runs` row plus N `agent_events` rows (bounded previews, migration `0006_agent_runs` in `jarvis/db.py`) and one untruncated JSONL payload file under `logs/agents/<date>/<run_id>.jsonl`. Review with `python -m jarvis.runlog`, the admin sidecar's `GET /api/runs`/`GET /api/runs/{run_id}`, or the console's Runs panel — all three read the same `jarvis/runlog/store.py` helpers, so they can't disagree. `JARVIS_RUNLOG_ENABLED=false` is the kill switch; `JARVIS_RUNLOG_RETENTION_DAYS` controls pruning, applied once at bot startup.
 
 ## Testing conventions
 

@@ -55,6 +55,7 @@ from jarvis.agents.upgrade_agent import (
 )
 from jarvis import memory as memory_module
 from jarvis.db import get_conn, run_migrations
+from jarvis.runlog import get_run, list_runs, parse_since
 from jarvis.selfedit.service import SelfEditService
 from mcp_servers.mcp_git import logic
 
@@ -277,6 +278,41 @@ def memory_delete_fact(key: str) -> dict:
     if not deleted:
         return {"ok": False, "error": f"No fact with key '{key}'."}
     return {"ok": True, "key": key}
+
+
+# ----------------------------------------------------------------- runs
+# Run-logging plan §5.11: thin pass-throughs over jarvis.runlog, same
+# convention as memory/git above. Query normalization (since -> ISO, the
+# D9 orphan-status rule) lives in jarvis.runlog.store and must not be
+# reimplemented here — both endpoints call parse_since() before calling
+# list_runs()/get_run() so the CLI and the console panel can never
+# disagree about what "2d" means.
+
+
+@app.get("/api/runs")
+def runs_list(
+    agent: str = "", status: str = "", since: str = "", limit: int = 50,
+) -> dict:
+    run_migrations()
+    clamped_limit = max(1, min(200, limit))
+    return {
+        "ok": True,
+        "runs": list_runs(
+            agent=agent or None,
+            status=status or None,
+            since=parse_since(since or None),
+            limit=clamped_limit,
+        ),
+    }
+
+
+@app.get("/api/runs/{run_id}")
+def runs_detail(run_id: str) -> dict:
+    run_migrations()
+    detail = get_run(run_id)
+    if detail is None:
+        return {"ok": False, "error": "not found"}
+    return {"ok": True, **detail}
 
 
 def main() -> None:

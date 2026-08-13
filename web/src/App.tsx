@@ -15,12 +15,14 @@ import GitPanel from "./components/GitPanel";
 import EditModePanel from "./components/EditModePanel";
 import AgentStatusPanel from "./components/AgentStatusPanel";
 import MemoryPanel from "./components/MemoryPanel";
+import RunsPanel from "./components/RunsPanel";
 import type { VoiceState } from "./voiceState";
 import "./App.css";
 import "./command-deck.css";
 import "./editmode.css";
 import "./agentstatus.css";
 import "./memory.css";
+import "./runs.css";
 
 function errorText(message: unknown): string {
   const m = message as { data?: unknown };
@@ -46,6 +48,7 @@ export default function App() {
   const [gitOpen, setGitOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [runsOpen, setRunsOpen] = useState(false);
   const transport = usePipecatClientTransportState();
 
   const connected = transport === "ready" || transport === "connected";
@@ -110,6 +113,14 @@ export default function App() {
         <button
           type="button"
           className="btn"
+          onClick={() => setRunsOpen((o) => !o)}
+          title="Sub-agent run history"
+        >
+          📋 Runs
+        </button>
+        <button
+          type="button"
+          className="btn"
           onClick={() => setDrawerOpen((o) => !o)}
           title="Transcript history (T)"
         >
@@ -132,6 +143,12 @@ export default function App() {
       {memoryOpen && (
         <div className="git-popover">
           <MemoryPanel />
+        </div>
+      )}
+
+      {runsOpen && (
+        <div className="git-popover">
+          <RunsPanel />
         </div>
       )}
 

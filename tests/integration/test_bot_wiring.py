@@ -215,9 +215,10 @@ async def test_agent_events_pushed_as_app_messages(runtime, fakes, monkeypatch,
     captured = {}
     real = bp.build_delegate_tool
 
-    def spy(sub_agents, on_event=None, max_parallel=3):
+    def spy(sub_agents, on_event=None, max_parallel=3, **kwargs):
         captured["on_event"] = on_event
-        return real(sub_agents, on_event=on_event, max_parallel=max_parallel)
+        return real(sub_agents, on_event=on_event, max_parallel=max_parallel,
+                    **kwargs)
 
     monkeypatch.setattr(bp, "build_delegate_tool", spy)
     transport = FakeTransport()
