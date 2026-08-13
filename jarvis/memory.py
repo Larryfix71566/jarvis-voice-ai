@@ -150,6 +150,56 @@ _CREDENTIAL_PATTERNS: list[tuple[re.Pattern, str]] = [
 ]
 
 
+# Capability-claim firewall (render-time counterpart to EXTRACTION_PROMPT's
+# "NEVER record facts about the assistant's own capabilities" rule).
+#
+# The prompt rule is advisory: it asks the extraction LLM not to write these
+# facts. This is the enforcement half — even if a claim gets stored (by an
+# older build, a model that ignored the instruction, or a manual write), it
+# never reaches the Supervisor's system prompt. That matters because a
+# remembered restriction becomes a stale lie the moment the software gains
+# the capability, and the Supervisor will then repeat it to the user with
+# full confidence.
+#
+# Deliberately narrow, requiring BOTH conditions:
+#   1. the KEY is scoped to the assistant, not the user
+#   2. the VALUE asserts an inability
+# A user.* fact is never filtered, however it is phrased — "user.style.honesty:
+# Cannot stand evasive answers" is a real preference about the user and must
+# survive. Filtering on the value alone would eat it.
+
+_ASSISTANT_KEY_PREFIXES = ("mortimer.", "assistant.", "jarvis.")
+
+_LIMITATION_PATTERNS: tuple[re.Pattern, ...] = (
+    re.compile(r"\bcan(?:no|')?t\b"),
+    re.compile(r"\bcannot\b"),
+    re.compile(r"\bunable to\b"),
+    re.compile(r"\bno access\b"),
+    re.compile(r"\bnot able to\b"),
+    re.compile(r"\bdoes not have\b"),
+    re.compile(r"\bdoesn't have\b"),
+    re.compile(r"\blacks? (?:the )?(?:ability|access|permission)\b"),
+    re.compile(r"\bis not allowed\b"),
+    re.compile(r"\bhas no\b"),
+)
+
+
+def _is_capability_claim(key: str, value: str) -> bool:
+    """True when a stored fact asserts a limitation of the assistant itself.
+
+    Requires an assistant-scoped key AND a limitation phrase in the value —
+    see the note above for why both, and why user.* is never matched.
+    Pure and total; never raises.
+    """
+    if not key:
+        return False
+    key_l = key.strip().lower()
+    if not key_l.startswith(_ASSISTANT_KEY_PREFIXES):
+        return False
+    value_l = (value or "").lower()
+    return any(p.search(value_l) for p in _LIMITATION_PATTERNS)
+
+
 def scan_memory_content(text: str) -> str | None:
     """Return a short rejection reason if `text` is unsafe to persist as
     memory (prompt injection, credential/exfiltration pattern, or invisible
@@ -205,6 +255,24 @@ def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
     finally:
         if own_connection:
             conn.close()
+
+    # Capability-claim firewall: drop assistant self-limitation facts before
+    # anything else, so a stale "cannot edit code" can never reach the
+    # Supervisor prompt. Applied before the MAX_FACTS cap so a filtered fact
+    # does not consume a slot a real fact could have used.
+    kept_rows = []
+    firewalled: list[str] = []
+    for row in fact_rows:
+        if _is_capability_claim(row["key"], row["content"]):
+            firewalled.append(row["key"])
+        else:
+            kept_rows.append(row)
+    if firewalled:
+        logger.warning(
+            "memory_context_facts_dropped reason=capability_claim count=%d keys=%s",
+            len(firewalled), firewalled[:10],
+        )
+    fact_rows = kept_rows
 
     capped_rows = fact_rows[:MAX_FACTS]
     if len(fact_rows) > MAX_FACTS:

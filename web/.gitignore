@@ -11,6 +11,10 @@ node_modules
 dist
 dist_build
 dist-ssr
+# Any ad-hoc build output directory. `dist_verify` in particular is produced
+# when verifying a production build without disturbing dist/; 1.7 MB of it
+# was committed by accident once already.
+dist_*
 *.local
 
 # Editor directories and files
