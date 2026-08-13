@@ -34,6 +34,20 @@ Rules:
 
 VOICE_ADDENDUM = """You are speaking aloud through a voice interface. Output plain prose only: no markdown, no bullet points, no numbered lists, no emoji, no symbols. Use short sentences. Spell out times and dates naturally, for example "nine thirty AM tomorrow", not "09:30 2026-08-05"."""
 
+# Phase 3: interruption awareness. Injected as a plain context note (not part
+# of the system prompt) only when a genuine barge-in was detected — never on
+# a normal completed turn. Two variants distinguish being cut off mid-speech
+# from being cut off before any audio played (Appendix A.4 style: short,
+# costs tokens every time it fires).
+INTERRUPTION_NOTICE_MID_SPEECH = (
+    "[system] Your previous spoken reply was interrupted by the user before "
+    "it finished playing."
+)
+INTERRUPTION_NOTICE_WHILE_THINKING = (
+    "[system] Your previous reply was interrupted by the user before any "
+    "audio played."
+)
+
 SUBAGENT_PROMPTS = {
     "scheduler": """You are the Scheduler, a specialist for time, dates, and reminders. Timezone: {timezone}.
 Always use your tools for date math and for storing or retrieving reminders; never compute dates in your head. When given a relative time ("tomorrow at 9"), resolve it with your tools before storing.

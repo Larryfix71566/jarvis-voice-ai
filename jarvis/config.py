@@ -74,6 +74,18 @@ class Settings(BaseSettings):
     jarvis_user_name: str = "Boss"
     jarvis_name: str = "Mortimer"
 
+    # Interruption awareness (plan Phase 3) — surface a short context note
+    # to the Supervisor when the user genuinely barges in on a reply.
+    jarvis_interruption_notice_enabled: bool = True
+
+    # Parallel delegation (plan Phase 4) — pipecat dispatches multiple
+    # delegate_task calls from one assistant turn concurrently by default
+    # (LLMService run_in_parallel=True); this bounds how many of OUR
+    # delegate_task handlers may actually be running at once so a
+    # pathological multi-part request can't spawn unbounded concurrent
+    # sub-agent LLM calls.
+    jarvis_max_parallel_delegations: int = 3
+
     @field_validator("jarvis_timezone")
     @classmethod
     def _timezone_must_be_iana(cls, v: str) -> str:

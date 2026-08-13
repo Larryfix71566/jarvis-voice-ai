@@ -86,12 +86,49 @@ CREATE TABLE IF NOT EXISTS observations (
 CREATE INDEX IF NOT EXISTS idx_observations_key ON observations(key);
 """
 
+# Upgrade plan Phase 5a: FTS5 full-text search over conversations, so old
+# sessions become recallable ("what did we discuss last month?") instead of
+# unreachable once they fall out of memories' MAX_FACTS window.
+#
+# External-content table (content='conversations', content_rowid='id'):
+# the FTS index stores only the inverted index, not a copy of the text, so
+# it can never drift out of sync with row content itself — only with which
+# rows exist, which the three triggers below keep synchronized. This is the
+# standard SQLite-recommended pattern for FTS-over-an-existing-table.
+MIGRATION_0005 = """
+CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(
+  content, session_id UNINDEXED, role UNINDEXED, created_at UNINDEXED,
+  content='conversations', content_rowid='id'
+);
+
+CREATE TRIGGER IF NOT EXISTS conversations_fts_ai AFTER INSERT ON conversations BEGIN
+  INSERT INTO conversations_fts(rowid, content, session_id, role, created_at)
+  VALUES (new.id, new.content, new.session_id, new.role, new.created_at);
+END;
+
+CREATE TRIGGER IF NOT EXISTS conversations_fts_ad AFTER DELETE ON conversations BEGIN
+  INSERT INTO conversations_fts(conversations_fts, rowid, content, session_id, role, created_at)
+  VALUES ('delete', old.id, old.content, old.session_id, old.role, old.created_at);
+END;
+
+CREATE TRIGGER IF NOT EXISTS conversations_fts_au AFTER UPDATE ON conversations BEGIN
+  INSERT INTO conversations_fts(conversations_fts, rowid, content, session_id, role, created_at)
+  VALUES ('delete', old.id, old.content, old.session_id, old.role, old.created_at);
+  INSERT INTO conversations_fts(rowid, content, session_id, role, created_at)
+  VALUES (new.id, new.content, new.session_id, new.role, new.created_at);
+END;
+
+INSERT INTO conversations_fts(rowid, content, session_id, role, created_at)
+SELECT id, content, session_id, role, created_at FROM conversations;
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
     ("0002_actions", MIGRATION_0002),
     ("0003_memory", MIGRATION_0003),
     ("0004_observations", MIGRATION_0004),
+    ("0005_conversation_search", MIGRATION_0005),
 ]
 
 

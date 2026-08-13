@@ -28,7 +28,15 @@ jobs:
         continue-on-error: true
         run: pytest tests/unit -q
 
-      # Gate 4: frontend still compiles.
+      # Gate 3b: sub-agent quality evals (plan Phase 2b).
+      - name: Sub-agent evals
+        run: pytest tests/evals/sub_agent_evals.py -q
+
+      # Gate 4: latency regression check.
+      - name: Latency budget enforcement
+        run: python scripts/latency_probe.py --budget tests/fixtures/latency_sample.log
+
+      # Gate 5: frontend still compiles.
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
