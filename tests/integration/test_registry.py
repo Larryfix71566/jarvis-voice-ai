@@ -12,7 +12,7 @@ ALL_SERVERS = [
     "mcp-time", "mcp-notes", "mcp-reminders", "mcp-web", "mcp-system",
     "mcp-git", "mcp-apps", "mcp-selfedit",
 ]
-TOTAL_TOOLS = 39  # 4 + 7 + 5 + 3 + 2 + 8 + 5 + 5 (mcp-notes +1: search_sessions, plan Phase 5a)
+TOTAL_TOOLS = 38  # 4 + 6 + 5 + 3 + 2 + 8 + 5 + 5
 
 
 @pytest.fixture
