@@ -19,6 +19,7 @@ changes again.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import uuid
 from dataclasses import dataclass
@@ -34,6 +35,7 @@ from pipecat.pipeline.task import PipelineTask
 from jarvis.agents.base import load_sub_agents
 from jarvis.agents.delegate import build_delegate_tool
 from jarvis.bot.display import build_display_payload
+from jarvis.bot.interruption import InterruptionNotifier
 from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.voice_switch import (
@@ -53,6 +55,7 @@ from jarvis.prompts import (
     VOICE_ADDENDUM,
     render_agent_catalog,
 )
+from jarvis.runlog import prune as prune_runlog
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 
 # Service imports are module-level names so tests can monkeypatch them.
@@ -76,6 +79,8 @@ from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -102,9 +107,16 @@ def make_agent_event_handler(transport: Any) -> Any:
 
     on_event callbacks are sync (agents/base.py EventCallback), so the async
     app-message send is scheduled on the running loop. Message shapes:
-    {"type": "agent", "name": "<agent>", "state": "working"|"done"} for
-    lifecycle events, and {"type": "display", "display": <payload>} when a
-    tool result is display-worthy (see jarvis/bot/display.py).
+    {"type": "agent", "name", "display_name", "state": "working",
+     "task": <delegated task>} on delegate_start;
+    {"type": "agent", "name", "display_name", "state": "done",
+     "ok": <bool>, "detail": <failure reason or "">} on delegate_done;
+    {"type": "agent_tool", "name", "display_name", "tool"} while a
+    specialist calls a tool; and {"type": "display", "display": <payload>}
+    when a tool result is display-worthy (see jarvis/bot/display.py).
+    The delegate_* pair owns the lifecycle the UI shows (one status card
+    per delegation); agent_start/agent_done remain log-only so the UI
+    never sees duplicate working/done messages.
     """
 
     def on_agent_event(event: dict) -> None:
@@ -122,14 +134,32 @@ def make_agent_event_handler(transport: Any) -> Any:
             if payload is None:
                 return  # voice-only tool result — nothing to show
             message = {"type": "display", "display": payload}
-        elif etype in ("agent_start", "agent_done"):
+        elif etype == "delegate_start":
             message = {
                 "type": "agent",
                 "name": event.get("agent"),
-                "state": "working" if etype == "agent_start" else "done",
+                "display_name": event.get("display_name"),
+                "state": "working",
+                "task": str(event.get("task") or "")[:200],
+            }
+        elif etype == "delegate_done":
+            message = {
+                "type": "agent",
+                "name": event.get("agent"),
+                "display_name": event.get("display_name"),
+                "state": "done",
+                "ok": bool(event.get("ok", True)),
+                "detail": str(event.get("detail") or "")[:300],
+            }
+        elif etype == "agent_tool":
+            message = {
+                "type": "agent_tool",
+                "name": event.get("agent"),
+                "display_name": event.get("display_name"),
+                "tool": event.get("tool"),
             }
         else:
-            return
+            return  # agent_start / agent_done: log-only (lifecycle is delegate_*)
         try:
             asyncio.get_running_loop().create_task(
                 send_app_message(transport, message))
@@ -165,7 +195,10 @@ def build_pipeline(
 
     sub_agents = load_sub_agents(settings, runtime.registry)
     delegate_schema, delegate_handler = build_delegate_tool(
-        sub_agents, on_event=make_agent_event_handler(transport)
+        sub_agents,
+        on_event=make_agent_event_handler(transport),
+        max_parallel=settings.jarvis_max_parallel_delegations,
+        session_id=runtime.session_id,
     )
     set_voice_schema, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
 
@@ -308,6 +341,19 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
     # (mcp_server_started, subagent_done, turn_complete) reach logs/bot.log.
     setup_logging()
 
+    # Run-logging plan D10/§5.8: retention pruning runs once at startup —
+    # outside the latency-critical per-turn path, guaranteed to happen
+    # regularly, no scheduler needed. Best-effort; a failure here must
+    # never block the bot from starting.
+    try:
+        prune_counts = prune_runlog(settings.jarvis_runlog_retention_days)
+        _logger.info(
+            "runlog_prune runs_deleted=%d dirs_deleted=%d",
+            prune_counts["runs_deleted"], prune_counts["dirs_deleted"],
+        )
+    except Exception as exc:  # noqa: BLE001 — must never block startup
+        _logger.warning("runlog_prune_failed error=%s", exc)
+
     registry = SkillRegistry(REPO_ROOT / "config" / "mcp_servers.yaml")
     await registry.start()
     runtime = Runtime(settings=settings, registry=registry,
@@ -317,10 +363,26 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
     try:
         catalog = load_voice_catalog()
         pipeline, _llm, aggregators, pusher = build_pipeline(transport, runtime)
+        async def inject_silent(text: str) -> None:
+            # Phase 3: interruption notice. Unlike inject_context (greeting,
+            # reminders), this does NOT call push_context_frame() — it only
+            # appends to the shared context so the note surfaces naturally on
+            # the next real user turn instead of triggering an immediate,
+            # unprompted spoken reply.
+            aggregators.user().add_messages([{"role": "user", "content": text}])
+
         # D-007: user-side transcript logging lives in a task observer because
         # pipecat 1.4's user aggregator consumes TranscriptionFrame; the locked
-        # 9-processor order is unchanged.
-        observers = [TranscriptObserver(runtime.session_id)]
+        # 9-processor order is unchanged. InterruptionNotifier is a task
+        # observer for the same reason: BotStartedSpeakingFrame/
+        # BotStoppedSpeakingFrame are born downstream of the TTS service.
+        observers = [
+            TranscriptObserver(runtime.session_id),
+            InterruptionNotifier(
+                inject_silent,
+                enabled=settings.jarvis_interruption_notice_enabled,
+            ),
+        ]
         if os.environ.get("JARVIS_DEBUG_OBSERVER"):
             # Temporary diagnostic: print every function-call frame hop with
             # timestamps to find where post-result frames stall.
@@ -379,6 +441,16 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
         async def on_client_disconnected(transport: Any, client: Any) -> None:
             print("[session] client disconnected", flush=True)
             client_connected["value"] = False
+            # End the pipeline task so `await runner.run(task)` returns and the
+            # finally block below actually runs. Without this the task blocks
+            # forever after the client goes away: the session's memory fold-in
+            # never happens (facts/observations are lost until process exit,
+            # and only for the last session) and RemindersWatcher leaks one
+            # polling task per connection. One PipelineTask is built per
+            # WebRTC connection (jarvis/bot/bot.py builds a fresh transport
+            # and calls run_session per connection), so cancelling here ends
+            # only this session — a reconnect gets a new pipeline.
+            await task.cancel()
 
         async def inject_context(text: str) -> None:
             # D-008: same 1.4 context-injection pattern as the greeting.

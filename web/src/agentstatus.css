@@ -1,0 +1,245 @@
+/* Agent status window: live progress for delegated sub-agent runs. Additive only. */
+
+/* Star-layout plan §5.5: .agent-status is now a full-viewport passthrough
+   layer — individual cards position themselves (anchored near their
+   satellite, or inside .agent-status-fallback below the ANCHORED_CARDS_
+   MIN_WIDTH_PX breakpoint / before OrbField has measured / for an agent
+   missing from agentLayout.ts). pointer-events: none here so the layer
+   never blocks clicks on the star field or other panels; individual cards
+   re-enable pointer-events so their dismiss button stays clickable. */
+.agent-status {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  pointer-events: none;
+}
+
+.agent-card {
+  position: absolute;
+  pointer-events: auto;
+  background: rgba(4, 9, 12, 0.97);
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  padding: 10px 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+/* .agent-card-anchored carries no rules of its own: position (left/top/
+   width) is computed in AgentStatusPanel.tsx per plan §5.4 and applied via
+   inline style, and the shared .agent-card rule above already sets
+   position: absolute. The class exists as a marker for readability/
+   querying, not for styling. */
+
+/* Plan D12 fallback: below ANCHORED_CARDS_MIN_WIDTH_PX, before OrbField
+   has published a field rect, or for an agent not present in
+   agentLayout.ts, cards render here instead — the ORIGINAL fixed
+   bottom-left stacked column, verbatim, so no card is ever lost. */
+.agent-status-fallback {
+  position: absolute;
+  left: 16px;
+  bottom: 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 360px;
+  max-width: 92vw;
+  max-height: 55vh;
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+.agent-status-fallback .agent-card {
+  position: static;
+}
+
+.agent-card-working {
+  border-color: var(--accent-dim);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.6),
+    0 0 18px var(--accent-faint);
+}
+
+.agent-card-ok {
+  border-color: rgba(61, 220, 151, 0.35);
+}
+
+.agent-card-fail {
+  border-color: rgba(255, 95, 86, 0.45);
+}
+
+.agent-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-card-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex: none;
+}
+
+.agent-card-working .agent-card-dot {
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+  animation: dot-pulse 1s ease-in-out infinite;
+}
+
+.agent-card-ok .agent-card-dot {
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+}
+
+.agent-card-fail .agent-card-dot {
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red);
+}
+
+.agent-card-name {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-card-working .agent-card-name {
+  color: var(--accent);
+  text-shadow: 0 0 10px var(--accent-dim);
+}
+
+.agent-card-time {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.agent-card-ok .agent-card-time {
+  color: var(--green);
+}
+
+.agent-card-fail .agent-card-time {
+  color: var(--red);
+}
+
+.agent-card-close {
+  font-family: var(--mono);
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  flex: none;
+}
+
+.agent-card-close:hover {
+  color: var(--text);
+}
+
+.agent-card-task {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.agent-card-tools {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.agent-tool {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  padding: 2px 6px;
+}
+
+.agent-tool-live {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
+.agent-stages {
+  margin-top: 8px;
+  display: flex;
+  gap: 4px;
+}
+
+.agent-stage {
+  flex: 1;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  padding: 3px 0;
+}
+
+.agent-stage-hit {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+.agent-stage-live {
+  background: var(--accent-faint);
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+
+.agent-card-ok .agent-stage-hit {
+  color: var(--green);
+  border-color: rgba(61, 220, 151, 0.35);
+}
+
+.agent-card-detail {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--red);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-card-working .agent-card-dot,
+  .agent-tool-live,
+  .agent-stage-live {
+    animation: none;
+  }
+}
+
+/* Narrow screens (plan D12): below this width every card already routes
+   through .agent-status-fallback (AgentStatusPanel.tsx's canAnchor check
+   uses the same ANCHORED_CARDS_MIN_WIDTH_PX=860 breakpoint) — this only
+   tunes that fallback box's own sizing, mirroring pre-star-layout behavior
+   which tuned .agent-status directly (it had no independently-positioned
+   children then; now it does, so the narrow-screen tuning moves to the
+   fallback container specifically). */
+@media (max-width: 860px) {
+  .agent-status-fallback {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    bottom: 64px;
+  }
+}

@@ -20,6 +20,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Callable
 
@@ -28,6 +29,7 @@ from openai import AsyncOpenAI
 
 from jarvis.config import Settings
 from jarvis.prompts import SUBAGENT_PROMPTS
+from jarvis.runlog import RunLogger, get_run_id, run_logger_scope
 
 logger = logging.getLogger(__name__)
 
@@ -70,20 +72,53 @@ class SubAgent:
             timezone=settings.jarvis_timezone
         )
 
-    async def run(self, task: str, on_event: EventCallback | None = None) -> str:
-        """Execute a self-contained task. Never raises (plan step 3.1)."""
+    async def run(
+        self,
+        task: str,
+        on_event: EventCallback | None = None,
+        *,
+        run_id: str | None = None,
+        session_id: str | None = None,
+    ) -> str:
+        """Execute a self-contained task. Never raises (plan step 3.1).
+
+        run_id/session_id (plan D1/D16, run-logging plan §5.4): a
+        RunLogger is created here — not in _loop — because _loop can be
+        abandoned mid-flight by the asyncio.wait_for timeout below, and a
+        RunLogger created inside _loop would never see finish() called on
+        the timeout path, leaving the row stuck at status='running'
+        forever. finish() is idempotent, so calling it from the success
+        path and, separately, from an except branch is safe.
+        """
+        resolved_run_id = run_id or str(uuid.uuid4())
+        runlog = RunLogger(
+            resolved_run_id, self.name, self.display_name, task,
+            session_id=session_id,
+            enabled=self._settings.jarvis_runlog_enabled,
+        )
+        runlog.start()
         try:
-            return await asyncio.wait_for(
-                self._loop(task, on_event), timeout=self._timeout_s
-            )
+            with run_logger_scope(runlog):
+                reply = await asyncio.wait_for(
+                    self._loop(task, on_event, runlog), timeout=self._timeout_s
+                )
+            runlog.finish(reply)
+            return reply
         except asyncio.TimeoutError:
-            logger.warning("subagent_timeout agent=%s", self.name)
+            logger.warning("subagent_timeout agent=%s run_id=%s",
+                            self.name, resolved_run_id)
+            runlog.finish(TIMEOUT_MESSAGE)
             return TIMEOUT_MESSAGE
         except Exception as exc:  # noqa: BLE001 — contract: never raise
-            logger.exception("subagent_error agent=%s", self.name)
-            return f"FAILED: {exc}"
+            logger.exception("subagent_error agent=%s run_id=%s",
+                              self.name, resolved_run_id)
+            reply = f"FAILED: {exc}"
+            runlog.finish(reply)
+            return reply
 
-    async def _loop(self, task: str, on_event: EventCallback | None) -> str:
+    async def _loop(
+        self, task: str, on_event: EventCallback | None, runlog: RunLogger,
+    ) -> str:
         start = time.perf_counter()
         self._emit(on_event, {"type": "agent_start", "agent": self.name,
                               "display_name": self.display_name, "task": task})
@@ -115,14 +150,33 @@ class SubAgent:
                 self._emit(on_event, {"type": "agent_tool", "agent": self.name,
                                       "display_name": self.display_name,
                                       "tool": tool_call.function.name})
+                tool_name = tool_call.function.name
+                runlog.tool_call(tool_name, arguments)
+                tool_start = time.perf_counter()
                 result = await self._registry.call(
-                    tool_call.function.name, arguments, self.mcp_servers
+                    tool_name, arguments, self.mcp_servers
                 )
+                tool_latency_ms = int((time.perf_counter() - tool_start) * 1000)
+                # D18: SkillRegistry.call() is a locked contract that
+                # returns a bare string, so this is a heuristic — the
+                # three failure-string shapes it can return. The exact
+                # signal for the same call lives one layer down, on the
+                # mcp_call event SkillRegistry itself records via the
+                # ContextVar (jarvis/skills/registry.py). A tool_result
+                # marked ok=True next to an mcp_call marked ok=False means
+                # the tool's own text disguised a failure — that is
+                # useful information surfaced by the run log, not a bug.
+                ok = not (
+                    result.startswith(f"{tool_name} failed:")
+                    or result.startswith("Unknown tool ")
+                    or result.startswith(f"Tool '{tool_name}' is not available")
+                )
+                runlog.tool_result(tool_name, result, tool_latency_ms, ok)
                 self._emit(on_event, {
                     "type": "agent_tool_result",
                     "agent": self.name,
                     "display_name": self.display_name,
-                    "tool": tool_call.function.name,
+                    "tool": tool_name,
                     "arguments": arguments,
                     "result": result[:TOOL_RESULT_EVENT_MAX],
                 })
@@ -133,14 +187,20 @@ class SubAgent:
                 })
 
         latency_ms = int((time.perf_counter() - start) * 1000)
-        logger.info("subagent_done agent=%s latency_ms=%d", self.name, latency_ms)
+        logger.info("subagent_done agent=%s latency_ms=%d run_id=%s",
+                     self.name, latency_ms, runlog.run_id)
         self._emit(on_event, {"type": "agent_done", "agent": self.name,
                               "display_name": self.display_name,
                               "latency_ms": latency_ms})
         return reply
 
-    @staticmethod
-    def _emit(on_event: EventCallback | None, event: dict) -> None:
+    def _emit(self, on_event: EventCallback | None, event: dict) -> None:
+        """Adds run_id to every event when one is active (plan D2) —
+        additive field, existing consumers read specific keys and ignore
+        unknown ones."""
+        run_id = get_run_id()
+        if run_id is not None:
+            event = {**event, "run_id": run_id}
         if on_event is not None:
             try:
                 on_event(event)

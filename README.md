@@ -382,6 +382,8 @@ ls tests/acceptance/
 | `JARVIS_WAKEWORD_MODEL` | `models/mortimer.onnx` | Custom wake-word model file (sidecar exits if missing) |
 | `JARVIS_WAKEWORD_THRESHOLD` | `0.5` | Wake detection score threshold (0–1) |
 | `JARVIS_WAKEWORD_COOLDOWN` | `2.0` | Minimum seconds between wake events |
+| `JARVIS_INTERRUPTION_NOTICE_ENABLED` | `true` | Tell the Supervisor on the next turn when the user genuinely barged in on a reply (plan Phase 3) |
+| `JARVIS_MAX_PARALLEL_DELEGATIONS` | `3` | Cap on concurrently executing `delegate_task` calls when the Supervisor issues several in one turn (plan Phase 4) |
 
 **Config files:**
 

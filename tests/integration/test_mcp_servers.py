@@ -21,13 +21,13 @@ EXPECTED_TOOLS = {
     },
     "mcp_servers.mcp_notes.server": {
         "create_note", "list_notes", "search_notes", "get_note", "update_note",
-        "delete_note",
+        "delete_note", "search_sessions",
     },
     "mcp_servers.mcp_reminders.server": {
         "set_reminder", "list_reminders", "complete_reminder", "cancel_reminder",
         "get_due_reminders",
     },
-    "mcp_servers.mcp_web.server": {"web_search", "get_weather"},
+    "mcp_servers.mcp_web.server": {"web_search", "get_weather", "get_weather_radar"},
     "mcp_servers.mcp_system.server": {"get_system_status", "get_top_processes"},
 }
 
@@ -76,6 +76,34 @@ async def test_mcp_notes_server(tmp_path):
     assert tools == EXPECTED_TOOLS["mcp_servers.mcp_notes.server"]
     assert payload["id"] == 1
     assert "Note saved" in payload["message"]
+
+
+async def test_mcp_notes_search_sessions_over_stdio(tmp_path):
+    """Plan Phase 5a: search_sessions finds FTS5-indexed conversation rows
+    via the real stdio MCP round trip, not just the direct logic.py call."""
+    db = tmp_path / "int_notes_search.db"
+    os.environ["JARVIS_DB_PATH"] = str(db)
+    run_migrations()
+    from jarvis.db import get_conn, now_iso
+
+    with get_conn(db) as conn:
+        conn.execute(
+            "INSERT INTO conversations (session_id, role, content, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            ("s-int-1", "user", "the garage door code is four four eight two",
+             now_iso()),
+        )
+
+    tools, payload = await _call(
+        "mcp_servers.mcp_notes.server", "search_sessions",
+        {"query": "garage door", "limit": 5},
+        {"JARVIS_DB_PATH": str(db)},
+    )
+    assert tools == EXPECTED_TOOLS["mcp_servers.mcp_notes.server"]
+    assert "results" in payload
+    assert len(payload["results"]) == 1
+    assert payload["results"][0]["session_id"] == "s-int-1"
+    assert "garage" in payload["results"][0]["snippet"].lower()
 
 
 async def test_mcp_reminders_server(tmp_path):

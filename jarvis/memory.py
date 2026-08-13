@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 from typing import Any, Callable
 
@@ -81,28 +82,90 @@ Rules:
 - Output JSON only. No markdown, no commentary."""
 
 
-# Render-time firewall, complementing the EXTRACTION_PROMPT ban above:
-# stored claims about the assistant's own (in)capabilities never reach the
-# prompt. Capabilities change with every software update, and a remembered
-# "Mortimer cannot ..." contradicts the specialist roster (prompt rule 8)
-# and becomes a self-fulfilling refusal. Extraction now refuses to record
-# these; this filter keeps legacy or hand-written rows from being injected
-# anyway. Only assistant-referring keys are examined, and only for
-# incapability markers — positive facts (assistant.name, mortimer.timezone)
-# and every user.* fact pass through untouched.
-_ASSISTANT_KEY_PREFIXES = ("assistant.", "mortimer.", "jarvis.")
-_INCAPABILITY_MARKERS = (
-    "cannot", "can't", "unable", "not able", "no access",
-    "does not have", "do not have", "don't have", "lacks", "no permission",
+# Upgrade plan Phase 5b: injection/exfiltration scanning on memory writes.
+#
+# render_memory_context() output goes straight into the Supervisor's system
+# prompt. Content reaches memories/observations via the extraction LLM,
+# which reads full session transcripts — and those transcripts can contain
+# text quoted verbatim from mcp_web search results, or anything the user
+# read aloud from an untrusted source. Nothing screened that path before
+# this phase.
+#
+# Hand-rolled patterns, not a maintained library: keeps dependencies at
+# zero (the alternative outsources an adversarial, evolving pattern list to
+# a package that itself becomes an attack surface), at the cost of being
+# less comprehensive than a maintained scanner. Per the plan, adding a
+# dependency on hermes-agent for this was explicitly rejected — its module
+# paths are unstable across releases and this module must never import it.
+# Revisit if false negatives become a real problem in practice.
+#
+# Weighted toward NOT over-blocking (plan risk note): patterns require
+# fairly specific phrasing, not single trigger words, so ordinary facts
+# about the user's preferences, projects, and people don't collide with
+# them.
+
+# Zero-width and bidirectional-override code points used to hide text from
+# a human reader while an LLM still processes it (a known prompt-injection
+# vector — e.g. hiding "ignore previous instructions" inside invisible
+# characters around ordinary-looking text).
+_DANGEROUS_UNICODE = frozenset(
+    "​‌‍‎‏"  # zero-width space/joiners, LTR/RTL marks
+    "‪‫‬‭‮"  # bidi embedding/override controls
+    "⁠⁦⁧⁨⁩"  # word joiner, bidi isolates
+    "﻿"                          # BOM / zero-width no-break space
 )
 
+# (compiled pattern, rejection reason) — matched case-insensitively against
+# the whole text. Phrasing-based, not single keywords, to avoid flagging
+# ordinary facts that happen to contain a word like "system" or "ignore".
+_INJECTION_PATTERNS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"ignore (all |any )?(the )?(previous|prior|above) instructions"),
+     "prompt-injection pattern (ignore previous instructions)"),
+    (re.compile(r"disregard (all |any )?(the )?(previous|prior|above)"),
+     "prompt-injection pattern (disregard previous)"),
+    (re.compile(r"\bnew (system )?instructions?\s*:"),
+     "prompt-injection pattern (new instructions:)"),
+    (re.compile(r"\byou are now\b.{0,40}\b(a|an)\b"),
+     "prompt-injection pattern (role override)"),
+    (re.compile(r"reveal (your |the )?(system prompt|instructions|hidden prompt)"),
+     "prompt-injection pattern (reveal system prompt)"),
+    (re.compile(r"print (your |the )?(system prompt|instructions)"),
+     "prompt-injection pattern (print system prompt)"),
+    (re.compile(r"\bforget (everything|all)( you know)?\b"),
+     "prompt-injection pattern (forget everything)"),
+]
 
-def _is_capability_claim(key: str, content: str) -> bool:
-    """True for facts asserting the assistant's own (in)capabilities."""
-    if not key.startswith(_ASSISTANT_KEY_PREFIXES):
-        return False
-    text = content.lower()
-    return any(marker in text for marker in _INCAPABILITY_MARKERS)
+# (compiled pattern, rejection reason) — matched case-sensitively (secrets
+# have specific casing/format); these flag exfiltration content rather than
+# ordinary facts.
+_CREDENTIAL_PATTERNS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"sk-(ant-)?[A-Za-z0-9_-]{20,}"), "possible API key literal"),
+    (re.compile(r"AKIA[0-9A-Z]{16}"), "possible AWS access key literal"),
+    (re.compile(r"gh[pousr]_[A-Za-z0-9]{30,}"), "possible GitHub token literal"),
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), "possible private key literal"),
+    (re.compile(r"\bsend (this|the following|it|that) to https?://"),
+     "exfiltration pattern (send to URL)"),
+    (re.compile(r"https?://\S+[?&](token|api[_-]?key|password|secret)="),
+     "exfiltration pattern (credential in URL)"),
+]
+
+
+def scan_memory_content(text: str) -> str | None:
+    """Return a short rejection reason if `text` is unsafe to persist as
+    memory (prompt injection, credential/exfiltration pattern, or invisible
+    Unicode), else None. Pure and total — never raises."""
+    if not text:
+        return None
+    if any(ch in _DANGEROUS_UNICODE for ch in text):
+        return "invisible or bidirectional unicode detected"
+    for pattern, reason in _CREDENTIAL_PATTERNS:
+        if pattern.search(text):
+            return reason
+    lowered = text.lower()
+    for pattern, reason in _INJECTION_PATTERNS:
+        if pattern.search(lowered):
+            return reason
+    return None
 
 
 def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
@@ -111,14 +174,26 @@ def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
     Facts first (most actionable), then the running summary, total size
     capped at MAX_CONTEXT_CHARS. Returns EMPTY_CONTEXT when nothing is
     stored or when the read fails.
+
+    Phase 5c capacity policy — prioritization, not pure recency: facts
+    keyed ``user.*`` (explicit statements the user made about themselves —
+    name, preferences, standing instructions) are ordered ahead of every
+    other fact type, most-recent-first within each tier. This means a
+    ``user.*`` fact survives the MAX_FACTS cap even if it is older than a
+    flood of less-important facts recorded since. Chosen over consolidation
+    (would require an EXTRACTION_PROMPT change -> routing eval) and pure
+    surfacing (no prevention, only visibility — that piece lives in the
+    Phase 5e memory panel instead). Every truncation point below is logged,
+    never silent — this is the failure mode the plan calls out as the worst
+    of the five identified in the memory system.
     """
     own_connection = conn is None
     conn = conn or get_conn()
     try:
         fact_rows = conn.execute(
             "SELECT key, content FROM memories WHERE kind = 'fact' "
-            "ORDER BY updated_at DESC LIMIT ?",
-            (MAX_FACTS,),
+            "ORDER BY (CASE WHEN key LIKE 'user.%' THEN 0 ELSE 1 END), "
+            "updated_at DESC"
         ).fetchall()
         summary_row = conn.execute(
             "SELECT content FROM memories WHERE kind = 'summary' "
@@ -131,29 +206,50 @@ def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
         if own_connection:
             conn.close()
 
+    capped_rows = fact_rows[:MAX_FACTS]
+    if len(fact_rows) > MAX_FACTS:
+        dropped = [row["key"] for row in fact_rows[MAX_FACTS:]]
+        logger.warning(
+            "memory_context_facts_dropped reason=max_facts_cap count=%d keys=%s",
+            len(dropped), dropped[:10],
+        )
+
     lines: list[str] = []
-    for row in fact_rows:
-        if _is_capability_claim(row["key"], row["content"]):
-            logger.warning(
-                "memory_context_capability_claim_filtered key=%s", row["key"]
-            )
-            continue
+    budget_dropped: list[str] = []
+    for i, row in enumerate(capped_rows):
         line = f"- {row['key']}: {row['content'][:MAX_FACT_CHARS]}"
         if sum(len(l) for l in lines) + len(line) > MAX_CONTEXT_CHARS:
+            budget_dropped = [r["key"] for r in capped_rows[i:]]
             break
         lines.append(line)
+    if budget_dropped:
+        logger.warning(
+            "memory_context_facts_dropped reason=char_budget count=%d keys=%s",
+            len(budget_dropped), budget_dropped[:10],
+        )
+
     if summary_row is not None:
         summary = summary_row["content"][:MAX_SUMMARY_CHARS]
         remaining = MAX_CONTEXT_CHARS - sum(len(l) for l in lines)
         if remaining > 80:
             lines.append(f"Previously discussed: {summary[:remaining]}")
+        else:
+            logger.warning("memory_context_summary_dropped reason=char_budget")
     return "\n".join(lines) if lines else EMPTY_CONTEXT
 
 
 def upsert_fact(
     conn: sqlite3.Connection, key: str, value: str, session_id: str | None
 ) -> None:
-    """Insert or replace one keyed fact."""
+    """Insert or replace one keyed fact. Rejects and logs (never raises)
+    if the key or value trips the Phase 5b content scan."""
+    reason = scan_memory_content(key) or scan_memory_content(value)
+    if reason is not None:
+        logger.warning(
+            "memory_write_rejected kind=fact key=%s reason=%s session=%s",
+            key, reason, session_id,
+        )
+        return
     now = now_iso()
     conn.execute(
         "INSERT INTO memories (kind, key, content, source_session_id, "
@@ -169,7 +265,17 @@ def upsert_fact(
 def set_summary(
     conn: sqlite3.Connection, summary: str, session_id: str | None
 ) -> None:
-    """Rewrite the single running-summary row."""
+    """Rewrite the single running-summary row. Rejects and logs (never
+    raises) if the summary trips the Phase 5b content scan — the previous
+    summary is left in place rather than being overwritten with unsafe
+    content."""
+    reason = scan_memory_content(summary)
+    if reason is not None:
+        logger.warning(
+            "memory_write_rejected kind=summary reason=%s session=%s",
+            reason, session_id,
+        )
+        return
     now = now_iso()
     existing = conn.execute(
         "SELECT id FROM memories WHERE kind = 'summary' LIMIT 1"
@@ -191,7 +297,16 @@ def set_summary(
 def add_observation(
     conn: sqlite3.Connection, key: str, value: str, session_id: str | None
 ) -> None:
-    """Record one observed instance of an inferred behavioral tendency."""
+    """Record one observed instance of an inferred behavioral tendency.
+    Rejects and logs (never raises) if the key or value trips the Phase 5b
+    content scan."""
+    reason = scan_memory_content(key) or scan_memory_content(value)
+    if reason is not None:
+        logger.warning(
+            "memory_write_rejected kind=observation key=%s reason=%s "
+            "session=%s", key, reason, session_id,
+        )
+        return
     conn.execute(
         "INSERT INTO observations (key, content, source_session_id, "
         "created_at) VALUES (?, ?, ?, ?)",
@@ -230,6 +345,100 @@ def promote_observations(conn: sqlite3.Connection) -> list[str]:
         upsert_fact(conn, row["key"], latest["content"], None)
         promoted.append(row["key"])
     return promoted
+
+
+# Upgrade plan Phase 5e: read helpers for the admin sidecar's memory panel.
+# Unlike render_memory_context (capped, prioritized, meant for the
+# Supervisor's prompt), these are uncapped/unfiltered — the panel is meant
+# to show everything so the user can actually audit and correct what
+# Mortimer has learned, not just what fit in this turn's context budget.
+
+
+def list_facts(conn: sqlite3.Connection | None = None) -> list[dict]:
+    """All facts, most-recently-updated first. Uncapped (contrast with
+    render_memory_context's MAX_FACTS window) — the panel shows everything."""
+    own_connection = conn is None
+    conn = conn or get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT key, content, source_session_id, updated_at "
+            "FROM memories WHERE kind = 'fact' ORDER BY updated_at DESC"
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        if own_connection:
+            conn.close()
+
+
+def get_summary_text(conn: sqlite3.Connection | None = None) -> str:
+    """The current running summary, or '' if none exists yet."""
+    own_connection = conn is None
+    conn = conn or get_conn()
+    try:
+        row = conn.execute(
+            "SELECT content FROM memories WHERE kind = 'summary' "
+            "ORDER BY updated_at DESC LIMIT 1"
+        ).fetchone()
+        return row["content"] if row is not None else ""
+    finally:
+        if own_connection:
+            conn.close()
+
+
+def list_observation_groups(conn: sqlite3.Connection | None = None) -> list[dict]:
+    """Observed tendencies grouped by key, with distinct-session evidence
+    counts and promotion status. Mirrors promote_observations' own grouping
+    query exactly, so the panel's "N/PROMOTE_AFTER sessions" readout can
+    never disagree with what actually triggers promotion."""
+    own_connection = conn is None
+    conn = conn or get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT key, COUNT(DISTINCT source_session_id) AS sessions "
+            "FROM observations GROUP BY key ORDER BY sessions DESC, key"
+        ).fetchall()
+        groups: list[dict] = []
+        for row in rows:
+            latest = conn.execute(
+                "SELECT content FROM observations WHERE key = ? "
+                "ORDER BY id DESC LIMIT 1",
+                (row["key"],),
+            ).fetchone()
+            promoted = conn.execute(
+                "SELECT 1 FROM memories WHERE kind = 'fact' AND key = ?",
+                (row["key"],),
+            ).fetchone() is not None
+            groups.append({
+                "key": row["key"],
+                "sessions": row["sessions"],
+                "promote_after": PROMOTE_AFTER,
+                "latest_content": latest["content"] if latest else "",
+                "promoted": promoted,
+            })
+        return groups
+    finally:
+        if own_connection:
+            conn.close()
+
+
+def memory_usage(conn: sqlite3.Connection | None = None) -> dict:
+    """Capacity readout pairing with Phase 5c's prioritization policy — how
+    close the fact store is to the MAX_FACTS cap that policy exists for."""
+    own_connection = conn is None
+    conn = conn or get_conn()
+    try:
+        fact_count = conn.execute(
+            "SELECT COUNT(*) AS n FROM memories WHERE kind = 'fact'"
+        ).fetchone()["n"]
+    finally:
+        if own_connection:
+            conn.close()
+    return {
+        "fact_count": fact_count,
+        "max_facts": MAX_FACTS,
+        "max_context_chars": MAX_CONTEXT_CHARS,
+        "over_capacity": fact_count > MAX_FACTS,
+    }
 
 
 def delete_fact(conn: sqlite3.Connection, key: str) -> bool:

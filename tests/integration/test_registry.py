@@ -8,8 +8,11 @@ import yaml
 
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 
-ALL_SERVERS = ["mcp-time", "mcp-notes", "mcp-reminders", "mcp-web", "mcp-system"]
-TOTAL_TOOLS = 19  # 4 + 6 + 5 + 2 + 2
+ALL_SERVERS = [
+    "mcp-time", "mcp-notes", "mcp-reminders", "mcp-web", "mcp-system",
+    "mcp-git", "mcp-apps", "mcp-selfedit",
+]
+TOTAL_TOOLS = 38  # 4 + 6 + 5 + 3 + 2 + 8 + 5 + 5
 
 
 @pytest.fixture
@@ -43,7 +46,7 @@ async def test_server_filtering(registry):
     }
     assert set(registry.tools_for(["mcp-notes"])) == {
         "create_note", "list_notes", "search_notes", "get_note", "update_note",
-        "delete_note",
+        "delete_note", "search_sessions",
     }
 
 

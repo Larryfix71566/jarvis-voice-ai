@@ -26,6 +26,14 @@ refused with a spoken-friendly error — ask for status instead.
 
 There is deliberately no merge endpoint. Merging happens on GitHub only.
 
+Memory endpoints (plan Phase 5e — visibility/correction surface):
+- GET    /api/memory              — facts, observations (with promotion
+  progress), running summary, capacity usage
+- DELETE /api/memory/fact/{key}   — forget one fact ("forget that" via the
+  console instead of by voice)
+Both are thin pass-throughs over jarvis.memory, same convention as the git
+endpoints above — no memory logic is duplicated here.
+
 Run: scripts/run_admin.sh  (binds 127.0.0.1:7861)
 """
 
@@ -45,6 +53,9 @@ from jarvis.agents.upgrade_agent import (
     UpgradeAgent,
     available_models,
 )
+from jarvis import memory as memory_module
+from jarvis.db import get_conn, run_migrations
+from jarvis.runlog import get_run, list_runs, parse_since
 from jarvis.selfedit.service import SelfEditService
 from mcp_servers.mcp_git import logic
 
@@ -236,6 +247,72 @@ def selfedit_revert() -> dict:
     if _busy():
         return {"ok": False, "error": "an upgrade run is in progress — ask for status instead"}
     return _selfedit_service.revert()
+
+
+# --------------------------------------------------------------- memory
+# Plan Phase 5e: visibility/correction surface. Thin pass-throughs over
+# jarvis.memory — matching the git panel's convention above (logic lives in
+# the shared module; the sidecar only adapts it to HTTP). run_migrations()
+# is idempotent and mirrors mcp_git.logic._db()'s own pattern of ensuring
+# the schema exists before every call, since this endpoint can be hit
+# before any voice session has run migrations itself.
+
+
+@app.get("/api/memory")
+def memory_overview() -> dict:
+    run_migrations()
+    return {
+        "ok": True,
+        "facts": memory_module.list_facts(),
+        "summary": memory_module.get_summary_text(),
+        "observations": memory_module.list_observation_groups(),
+        "usage": memory_module.memory_usage(),
+    }
+
+
+@app.delete("/api/memory/fact/{key}")
+def memory_delete_fact(key: str) -> dict:
+    run_migrations()
+    with get_conn() as conn:
+        deleted = memory_module.delete_fact(conn, key)
+    if not deleted:
+        return {"ok": False, "error": f"No fact with key '{key}'."}
+    return {"ok": True, "key": key}
+
+
+# ----------------------------------------------------------------- runs
+# Run-logging plan §5.11: thin pass-throughs over jarvis.runlog, same
+# convention as memory/git above. Query normalization (since -> ISO, the
+# D9 orphan-status rule) lives in jarvis.runlog.store and must not be
+# reimplemented here — both endpoints call parse_since() before calling
+# list_runs()/get_run() so the CLI and the console panel can never
+# disagree about what "2d" means.
+
+
+@app.get("/api/runs")
+def runs_list(
+    agent: str = "", status: str = "", since: str = "", limit: int = 50,
+) -> dict:
+    run_migrations()
+    clamped_limit = max(1, min(200, limit))
+    return {
+        "ok": True,
+        "runs": list_runs(
+            agent=agent or None,
+            status=status or None,
+            since=parse_since(since or None),
+            limit=clamped_limit,
+        ),
+    }
+
+
+@app.get("/api/runs/{run_id}")
+def runs_detail(run_id: str) -> dict:
+    run_migrations()
+    detail = get_run(run_id)
+    if detail is None:
+        return {"ok": False, "error": "not found"}
+    return {"ok": True, **detail}
 
 
 def main() -> None:

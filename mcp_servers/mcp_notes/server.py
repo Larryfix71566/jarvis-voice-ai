@@ -43,5 +43,11 @@ def delete_note(note_id: int) -> dict:
     return logic.delete_note(note_id)
 
 
+@mcp.tool()
+def search_sessions(query: str, limit: int = 10) -> dict:
+    """Search past conversation sessions (not just saved notes) by keyword. Use this to recall something discussed earlier that was never explicitly saved as a note — e.g. "what did we talk about last week regarding the garage door." Returns ranked snippets with session id and timestamp."""
+    return logic.search_sessions(query, limit)
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

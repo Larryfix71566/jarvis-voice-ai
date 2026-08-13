@@ -112,3 +112,57 @@ def delete_note(note_id: int) -> dict:
     if cur.rowcount == 0:
         return {"error": f"No note with id {note_id}."}
     return {"message": f"Deleted note {note_id}."}
+
+
+# Upgrade plan Phase 5a: search across past conversation sessions, not just
+# saved notes. Lives here (rather than a new mcp_memory server) because the
+# Librarian is already the conceptual owner of "recall anything" and already
+# has this server's mcp_servers grant in config/agents.yaml — one process
+# fewer to spawn and supervise for a single tool. The trade-off is that
+# "mcp-notes" now touches conversations as well as notes; revisit if the
+# tool surface grows enough to warrant a split.
+MAX_SEARCH_RESULTS = 20
+SNIPPET_TOKENS = 12  # words of context either side of a match
+
+
+def search_sessions(query: str, limit: int = 10) -> dict:
+    """Full-text search over past conversation transcripts (FTS5, migration
+    0005_conversation_search). Returns ranked snippets with session id and
+    timestamp so the caller can ask a follow-up question about a specific
+    past session."""
+    query = (query or "").strip()
+    if not query:
+        return {"error": "A search query is required."}
+    limit = max(1, min(int(limit), MAX_SEARCH_RESULTS))
+
+    # Quote each token individually so FTS5 special characters/operators in
+    # user input (unbalanced quotes, "-", "*", "AND"/"OR"/"NOT" as literal
+    # words) can never produce a malformed MATCH query; tokens are ANDed,
+    # matching the "all these words" intuition search_notes already uses.
+    tokens = query.split()
+    fts_query = " AND ".join('"' + t.replace('"', '""') + '"' for t in tokens)
+
+    with get_conn() as conn:
+        try:
+            rows = conn.execute(
+                "SELECT session_id, role, created_at, "
+                "snippet(conversations_fts, 0, '[', ']', '…', ?) AS snippet, "
+                "bm25(conversations_fts) AS rank "
+                "FROM conversations_fts WHERE conversations_fts MATCH ? "
+                "ORDER BY rank LIMIT ?",
+                (SNIPPET_TOKENS, fts_query, limit),
+            ).fetchall()
+        except sqlite3.OperationalError as exc:
+            return {"error": f"Search failed: {exc}"}
+
+    return {
+        "results": [
+            {
+                "session_id": row["session_id"],
+                "role": row["role"],
+                "created_at": row["created_at"],
+                "snippet": row["snippet"],
+            }
+            for row in rows
+        ]
+    }

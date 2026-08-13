@@ -6,8 +6,13 @@ from jarvis.db import get_conn, now_iso, run_migrations
 
 EXPECTED_TABLES = {
     "migrations", "notes", "reminders", "conversations", "actions", "memories",
-    "observations",
+    "observations", "conversations_fts", "agent_runs", "agent_events",
 }
+
+EXPECTED_MIGRATION_IDS = [
+    "0001_init", "0002_actions", "0003_memory", "0004_observations",
+    "0005_conversation_search", "0006_agent_runs",
+]
 
 
 def _table_names(conn: sqlite3.Connection) -> set[str]:
@@ -18,7 +23,7 @@ def _table_names(conn: sqlite3.Connection) -> set[str]:
 def test_migrations_apply_cleanly_to_fresh_db(tmp_path):
     conn = get_conn(tmp_path / "fresh.db")
     newly = run_migrations(conn)
-    assert newly == ["0001_init", "0002_actions", "0003_memory", "0004_observations"]
+    assert newly == EXPECTED_MIGRATION_IDS
     assert EXPECTED_TABLES <= _table_names(conn)
     conn.close()
 
@@ -27,13 +32,11 @@ def test_migrations_are_idempotent(tmp_path):
     conn = get_conn(tmp_path / "twice.db")
     first = run_migrations(conn)
     second = run_migrations(conn)
-    assert first == ["0001_init", "0002_actions", "0003_memory", "0004_observations"]
+    assert first == EXPECTED_MIGRATION_IDS
     assert second == []
-    # Still exactly one recorded migration row.
+    # Still exactly one recorded migration row per migration.
     rows = conn.execute("SELECT id FROM migrations").fetchall()
-    assert [row["id"] for row in rows] == [
-        "0001_init", "0002_actions", "0003_memory", "0004_observations",
-    ]
+    assert [row["id"] for row in rows] == EXPECTED_MIGRATION_IDS
     conn.close()
 
 

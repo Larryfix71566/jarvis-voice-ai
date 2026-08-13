@@ -13,10 +13,16 @@ import TranscriptDrawer from "./components/TranscriptDrawer";
 import VoicePicker from "./components/VoicePicker";
 import GitPanel from "./components/GitPanel";
 import EditModePanel from "./components/EditModePanel";
+import AgentStatusPanel from "./components/AgentStatusPanel";
+import MemoryPanel from "./components/MemoryPanel";
+import RunsPanel from "./components/RunsPanel";
 import type { VoiceState } from "./voiceState";
 import "./App.css";
 import "./command-deck.css";
 import "./editmode.css";
+import "./agentstatus.css";
+import "./memory.css";
+import "./runs.css";
 
 function errorText(message: unknown): string {
   const m = message as { data?: unknown };
@@ -41,6 +47,8 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [gitOpen, setGitOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const [runsOpen, setRunsOpen] = useState(false);
   const transport = usePipecatClientTransportState();
 
   const connected = transport === "ready" || transport === "connected";
@@ -97,6 +105,22 @@ export default function App() {
         <button
           type="button"
           className="btn"
+          onClick={() => setMemoryOpen((o) => !o)}
+          title="Long-term memory (view and forget facts)"
+        >
+          🧠 Memory
+        </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => setRunsOpen((o) => !o)}
+          title="Sub-agent run history"
+        >
+          📋 Runs
+        </button>
+        <button
+          type="button"
+          className="btn"
           onClick={() => setDrawerOpen((o) => !o)}
           title="Transcript history (T)"
         >
@@ -116,6 +140,18 @@ export default function App() {
         </div>
       )}
 
+      {memoryOpen && (
+        <div className="git-popover">
+          <MemoryPanel />
+        </div>
+      )}
+
+      {runsOpen && (
+        <div className="git-popover">
+          <RunsPanel />
+        </div>
+      )}
+
       {error && <div className="error-banner">{error}</div>}
 
       <main className="main">
@@ -128,6 +164,9 @@ export default function App() {
       </footer>
 
       <TranscriptDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+
+      {/* agent status window — live sub-agent progress (z-25) */}
+      <AgentStatusPanel />
 
       {/* results window — floats in front of everything (z-30) */}
       <DisplayPanel />
