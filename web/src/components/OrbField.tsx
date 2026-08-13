@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RTVIEvent } from "@pipecat-ai/client-js";
 import {
   usePipecatConversation,
@@ -6,15 +6,13 @@ import {
 } from "@pipecat-ai/client-react";
 import type { ConversationMessage } from "@pipecat-ai/client-react";
 import { isWakeWordRunning, subscribeWake } from "../wakeWord";
+import { AGENT_LAYOUT, publishFieldRect } from "../agentLayout";
 import type { VoiceState } from "../voiceState";
 
-/** Fixed satellite positions on the stage (percent of the field). */
-const AGENTS = [
-  { key: "scheduler", label: "Scheduler", x: 17, y: 24 },
-  { key: "librarian", label: "Librarian", x: 17, y: 74 },
-  { key: "analyst", label: "Analyst", x: 83, y: 24 },
-  { key: "systems", label: "Systems", x: 83, y: 74 },
-];
+/** Satellite positions on the stage (star-layout plan §5.1) — shared with
+ * AgentStatusPanel via agentLayout.ts so the two can never drift apart
+ * again (plan D3). */
+const AGENTS = AGENT_LAYOUT;
 
 interface AgentMsg {
   type?: string;
@@ -57,6 +55,7 @@ export default function OrbField({ state }: { state: VoiceState }) {
   const [wakePulse, setWakePulse] = useState(0);
   const [wakeArmed, setWakeArmed] = useState(false);
   const { messages } = usePipecatConversation();
+  const fieldRef = useRef<HTMLElement | null>(null);
 
   // Sub-agent lifecycle: the Supervisor's delegate_task emissions.
   useRTVIClientEvent(RTVIEvent.ServerMessage, (data: unknown) => {
@@ -79,6 +78,37 @@ export default function OrbField({ state }: { state: VoiceState }) {
     return () => clearInterval(t);
   }, []);
 
+  // Publish .orb-field's measured rect (plan §5.2 step 2) so
+  // AgentStatusPanel can anchor status cards to their satellite's
+  // on-screen position — AgentStatusPanel lives outside .main (plan D4)
+  // and has no other way to know where the field is.
+  useEffect(() => {
+    const el = fieldRef.current;
+    if (!el) return;
+
+    const publish = () => {
+      const rect = el.getBoundingClientRect();
+      publishFieldRect({
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+      });
+    };
+
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    window.addEventListener("scroll", publish, true);
+    window.addEventListener("resize", publish);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("scroll", publish, true);
+      window.removeEventListener("resize", publish);
+      publishFieldRect(null);
+    };
+  }, []);
+
   const lastAssistant = [...messages]
     .reverse()
     .find((m) => m.role === "assistant" && messageText(m).trim() !== "");
@@ -87,7 +117,7 @@ export default function OrbField({ state }: { state: VoiceState }) {
     .find((m) => m.role === "user" && messageText(m).trim() !== "");
 
   return (
-    <section className="orb-field">
+    <section className="orb-field" ref={fieldRef}>
       {/* wake burst: expanding ring from the field center */}
       {wakePulse > 0 && <div key={wakePulse} className="wake-ripple" />}
 

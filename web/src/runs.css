@@ -1,0 +1,193 @@
+/* Runs panel (run-logging plan §5.12): read-only review surface for the
+   sub-agent run log, following the .git-popover / .memory-panel pattern
+   already used by Repo/Edit/Memory. Additive only. */
+
+.runs-panel {
+  background: rgba(12, 16, 24, 0.96);
+  border: 1px solid rgba(120, 180, 255, 0.25);
+  border-radius: 10px;
+  padding: 12px 14px;
+  width: 460px;
+  max-width: 92vw;
+  max-height: 70vh;
+  overflow-y: auto;
+  font-size: 13px;
+  color: #cfe3ff;
+}
+
+.runs-offline {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.runs-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.runs-filter-select {
+  background: rgba(4, 9, 12, 0.9);
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 6px;
+}
+
+.runs-refresh {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1;
+  padding: 3px 7px;
+  cursor: pointer;
+}
+
+.runs-refresh:hover {
+  color: var(--text);
+}
+
+.runs-empty {
+  color: #7c8db0;
+  font-size: 12px;
+}
+
+.runs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.runs-row-wrap {
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+}
+
+.runs-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  font-size: 12px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.runs-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.run-status-ok { background: var(--green); color: var(--green); }
+.run-status-failed { background: var(--red); color: var(--red); }
+.run-status-dim { background: var(--text-dim); color: var(--text-dim); }
+.run-status-live {
+  background: var(--accent);
+  color: var(--accent);
+  animation: dot-pulse 1s ease-in-out infinite;
+}
+
+.runs-agent {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text);
+  flex: none;
+  width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runs-time {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  flex: none;
+  width: 60px;
+}
+
+.runs-latency {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  flex: none;
+  width: 50px;
+}
+
+.runs-task {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.runs-detail {
+  border-top: 1px solid var(--hairline);
+  padding: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.runs-detail-error {
+  color: var(--red);
+  margin-bottom: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.runs-events {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.runs-event-row {
+  display: flex;
+  gap: 6px;
+  color: var(--text-dim);
+}
+
+.runs-event-seq { color: var(--text-dim); width: 28px; flex: none; }
+.runs-event-type { width: 80px; flex: none; }
+.runs-event-tool { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.runs-event-latency { flex: none; }
+
+.runs-payload {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.runs-payload-record {
+  margin: 0;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 2px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-dim);
+  font-size: 9px;
+}

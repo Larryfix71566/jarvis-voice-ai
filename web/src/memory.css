@@ -1,0 +1,149 @@
+/* Memory panel (visibility/correction surface, plan Phase 5e). Additive only. */
+
+.memory-panel {
+  background: rgba(12, 16, 24, 0.96);
+  border: 1px solid rgba(120, 180, 255, 0.25);
+  border-radius: 10px;
+  padding: 12px 14px;
+  width: 380px;
+  max-width: 92vw;
+  max-height: 70vh;
+  overflow-y: auto;
+  font-size: 13px;
+  color: #cfe3ff;
+}
+
+.memory-offline {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.memory-usage {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+
+.memory-usage-ok {
+  color: #8fe6a8;
+}
+
+.memory-usage-over {
+  color: #ffcf8f;
+}
+
+.memory-usage-note {
+  color: #8fa8cc;
+  font-size: 10px;
+}
+
+.memory-empty {
+  color: #7c8db0;
+  font-size: 12px;
+}
+
+.memory-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.memory-fact-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(120, 180, 255, 0.05);
+}
+
+.memory-fact-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.memory-fact-key {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #9ec7ff;
+}
+
+.memory-fact-content {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #cfe3ff;
+  word-break: break-word;
+}
+
+.memory-fact-delete {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  color: #ff9c9c;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.memory-fact-delete:hover {
+  color: #ffbcbc;
+}
+
+.memory-section-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7c8db0;
+  margin: 10px 0 6px;
+}
+
+.memory-summary-text {
+  padding: 8px 10px;
+  background: rgba(120, 180, 255, 0.08);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  line-height: 1.45;
+  font-size: 12px;
+}
+
+.memory-observations {
+  display: flex;
+  flex-direction: column;
+}
+
+.memory-obs-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 0;
+  color: #8fa8cc;
+}
+
+.memory-obs-key {
+  color: #cfe3ff;
+}
+
+.memory-note {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #8fa8cc;
+}

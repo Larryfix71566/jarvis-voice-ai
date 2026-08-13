@@ -46,7 +46,7 @@ async def test_server_filtering(registry):
     }
     assert set(registry.tools_for(["mcp-notes"])) == {
         "create_note", "list_notes", "search_notes", "get_note", "update_note",
-        "delete_note",
+        "delete_note", "search_sessions",
     }
 
 

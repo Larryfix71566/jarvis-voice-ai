@@ -199,7 +199,7 @@ class FakeSubAgent:
         self.result = result
         self.tasks = []
 
-    async def run(self, task, on_event=None):
+    async def run(self, task, on_event=None, **kwargs):
         self.tasks.append(task)
         return self.result
 

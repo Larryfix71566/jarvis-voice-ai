@@ -89,6 +89,7 @@ def runtime(monkeypatch, tmp_path):
         jarvis_name="Jarvis",
         jarvis_user_name="Boss",
         jarvis_timezone="America/New_York",
+        jarvis_max_parallel_delegations=3,
     )
     return Runtime(settings=settings, registry=None, session_id="test-session")
 
@@ -214,9 +215,10 @@ async def test_agent_events_pushed_as_app_messages(runtime, fakes, monkeypatch,
     captured = {}
     real = bp.build_delegate_tool
 
-    def spy(sub_agents, on_event=None):
+    def spy(sub_agents, on_event=None, max_parallel=3, **kwargs):
         captured["on_event"] = on_event
-        return real(sub_agents, on_event=on_event)
+        return real(sub_agents, on_event=on_event, max_parallel=max_parallel,
+                    **kwargs)
 
     monkeypatch.setattr(bp, "build_delegate_tool", spy)
     transport = FakeTransport()
@@ -342,3 +344,139 @@ async def test_observer_logs_first_audio_latency(capsys):
     assert lines[0].startswith("TURN user_end->first_audio = ")
     ms = int(lines[0].rsplit("=", 1)[1].strip().removesuffix("ms"))
     assert ms >= 0
+
+
+# --- session lifecycle -----------------------------------------------------
+
+
+class HandlerCapturingTransport(FakeTransport):
+    """FakeTransport that stores registered event handlers so a test can fire them."""
+
+    def __init__(self):
+        super().__init__()
+        self.handlers = {}
+
+    def event_handler(self, name):
+        def deco(fn):
+            self.handlers[name] = fn
+            return fn
+        return deco
+
+
+async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_path):
+    """Regression: a client disconnect must end the PipelineTask.
+
+    `run_session` blocks on `await runner.run(task)` and does its cleanup in the
+    following `finally`: the session's memory fold-in and `watcher.stop()`. The
+    on_client_disconnected handler previously only flipped a flag, so the task
+    never ended, `runner.run` never returned, and that finally never ran —
+    every session lost its memory (until process exit, and then only for the
+    last session) and leaked one RemindersWatcher polling task per connection.
+
+    This test models that shape: the fake runner blocks until the task is
+    cancelled, so if the handler stops cancelling, the test times out.
+    """
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "session.db"))
+
+    settings = SimpleNamespace(
+        deepgram_api_key="dg", openai_api_key="sk", openai_base_url="http://llm",
+        openai_model="m", elevenlabs_api_key="el", jarvis_name="Jarvis",
+        jarvis_user_name="Boss", jarvis_timezone="America/New_York",
+        jarvis_interruption_notice_enabled=True,
+    )
+    cancelled, folded, watcher_stopped, registry_stopped = [], [], [], []
+
+    class FakeTask:
+        def __init__(self, pipeline, observers=None):
+            self._ended = asyncio.Event()
+
+        async def cancel(self):
+            cancelled.append(True)
+            self._ended.set()
+
+        async def wait_ended(self):
+            await self._ended.wait()
+
+    class FakeRunner:
+        async def run(self, task):
+            # Real PipelineRunner.run returns when the task ends; blocking here
+            # is what makes the missing cancel() observable as a hang.
+            await task.wait_ended()
+
+    class FakeWatcher:
+        def __init__(self, *a, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        async def stop(self):
+            watcher_stopped.append(True)
+
+    class FakeRegistry:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def start(self):
+            pass
+
+        async def stop(self):
+            registry_stopped.append(True)
+
+    class FakePusher:
+        def bind(self, task):
+            pass
+
+    class FakeAggregators:
+        def user(self):
+            return SimpleNamespace()
+
+        def assistant(self):
+            return SimpleNamespace()
+
+    async def fake_fold(settings_arg, session_id):
+        folded.append(session_id)
+        return True
+
+    monkeypatch.setattr(bp, "load_settings", lambda: settings)
+    monkeypatch.setattr(bp, "bridge_settings_to_env", lambda s: None)
+    monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    monkeypatch.setattr(
+        bp, "load_voice_catalog",
+        lambda: {"default": "rachel",
+                 "voices": [{"id": "rachel", "label": "Rachel",
+                             "elevenlabs_voice_id": "vid"}]},
+    )
+    monkeypatch.setattr(
+        bp, "build_pipeline",
+        lambda transport, runtime: (
+            FakePipeline([]), FakeLLM("k", "u", "m"), FakeAggregators(), FakePusher()
+        ),
+    )
+    monkeypatch.setattr(bp, "PipelineTask", FakeTask)
+    monkeypatch.setattr(bp, "PipelineRunner", FakeRunner)
+    monkeypatch.setattr(bp, "RemindersWatcher", FakeWatcher)
+    monkeypatch.setattr(bp, "update_memory_from_session", fake_fold)
+
+    transport = HandlerCapturingTransport()
+
+    async def fire_disconnect():
+        for _ in range(500):  # wait for run_session to register its handlers
+            if "on_client_disconnected" in transport.handlers:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            raise AssertionError("on_client_disconnected was never registered")
+        await transport.handlers["on_client_disconnected"](transport, None)
+
+    # Without `await task.cancel()` in the handler this never returns.
+    await asyncio.wait_for(
+        asyncio.gather(bp.run_session(transport), fire_disconnect()), timeout=10
+    )
+
+    assert cancelled == [True], "disconnect handler must cancel the PipelineTask"
+    assert folded, "memory fold-in did not run for the disconnected session"
+    assert watcher_stopped, "RemindersWatcher was not stopped (leaks per connection)"
+    assert registry_stopped, "skill registry was not stopped"

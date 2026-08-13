@@ -86,13 +86,62 @@ def render_table(buckets: dict[str, list[int]]) -> str:
     return "\n".join(lines)
 
 
+def enforce_budget(buckets: dict[str, list[int]]) -> tuple[bool, list[str]]:
+    """Check latencies against budget targets. Returns (all_pass, violations)."""
+    violations = []
+    overall = buckets["delegated"] + buckets["non-delegated"]
+
+    p50_nd = percentile(buckets["non-delegated"], 50)
+    if buckets["non-delegated"] and (p50_nd is None or p50_nd > P50_NON_DELEGATED_TARGET_MS):
+        violations.append(
+            f"non-delegated p50: {fmt(p50_nd)} exceeds target {P50_NON_DELEGATED_TARGET_MS} ms"
+        )
+
+    p50_d = percentile(buckets["delegated"], 50)
+    if buckets["delegated"] and (p50_d is None or p50_d > P50_DELEGATED_TARGET_MS):
+        violations.append(
+            f"delegated p50: {fmt(p50_d)} exceeds target {P50_DELEGATED_TARGET_MS} ms"
+        )
+
+    p90_o = percentile(overall, 90)
+    if overall and (p90_o is None or p90_o > P90_OVERALL_TARGET_MS):
+        violations.append(
+            f"overall p90: {fmt(p90_o)} exceeds target {P90_OVERALL_TARGET_MS} ms"
+        )
+
+    return len(violations) == 0, violations
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) > 1:
-        with open(argv[1], encoding="utf-8") as handle:
+    # Parse arguments: script [logfile] [--budget]
+    logfile = None
+    check_budget = False
+
+    for arg in argv[1:]:
+        if arg == "--budget":
+            check_budget = True
+        elif not arg.startswith("-"):
+            logfile = arg
+
+    # Read log
+    if logfile:
+        with open(logfile, encoding="utf-8") as handle:
             text = handle.read()
     else:
         text = sys.stdin.read()
-    print(render_table(parse_latencies(text)))
+
+    buckets = parse_latencies(text)
+    print(render_table(buckets))
+
+    # If --budget flag is set, enforce targets and exit with error if violated
+    if check_budget:
+        all_pass, violations = enforce_budget(buckets)
+        if not all_pass:
+            print("\n❌ LATENCY BUDGET EXCEEDED:")
+            for v in violations:
+                print(f"  {v}")
+            return 1
+
     return 0
 
 

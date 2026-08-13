@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import sys
+import time
 from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from jarvis.config import expand_env_vars
+from jarvis.runlog.context import get_run_id, get_run_logger
 
 logger = logging.getLogger(__name__)
 
@@ -115,21 +117,47 @@ class SkillRegistry:
         if server_names is not None and server not in set(server_names):
             return f"Tool '{tool_name}' is not available in this context."
         session = self._sessions[server]
+        # Run-logging plan D3/D18/§5.6: record one mcp_call event with the
+        # *exact* ok signal for this call (unlike SubAgent's tool_result,
+        # which can only infer ok from this function's return string).
+        # Skipped entirely when there is no active run (e.g. a direct
+        # Supervisor tool call) — this is the normal case, not a warning.
+        runlog = get_run_logger()
+        call_start = time.perf_counter()
         try:
             result = await asyncio.wait_for(
                 session.call_tool(tool_name, arguments), timeout=CALL_TIMEOUT
             )
         except asyncio.TimeoutError:
-            return f"{tool_name} failed: timed out after {int(CALL_TIMEOUT)}s."
+            latency_ms = int((time.perf_counter() - call_start) * 1000)
+            error = f"timed out after {int(CALL_TIMEOUT)}s"
+            if runlog is not None:
+                runlog.mcp_call(tool_name, server, ok=False,
+                                 latency_ms=latency_ms, error=error)
+            return f"{tool_name} failed: {error}."
         except Exception as exc:
-            logger.warning("tool_call_failed tool=%s error=%s", tool_name, exc)
-            return f"{tool_name} failed: {type(exc).__name__}."
+            latency_ms = int((time.perf_counter() - call_start) * 1000)
+            error = type(exc).__name__
+            logger.warning("tool_call_failed tool=%s error=%s run_id=%s",
+                            tool_name, exc, get_run_id())
+            if runlog is not None:
+                runlog.mcp_call(tool_name, server, ok=False,
+                                 latency_ms=latency_ms, error=error)
+            return f"{tool_name} failed: {error}."
 
+        latency_ms = int((time.perf_counter() - call_start) * 1000)
         if getattr(result, "isError", False):
             text = " ".join(
                 getattr(c, "text", "") for c in result.content
             ).strip()
-            return f"{tool_name} failed: {text or 'unknown error'}"
+            error = text or "unknown error"
+            if runlog is not None:
+                runlog.mcp_call(tool_name, server, ok=False,
+                                 latency_ms=latency_ms, error=error)
+            return f"{tool_name} failed: {error}"
+
+        if runlog is not None:
+            runlog.mcp_call(tool_name, server, ok=True, latency_ms=latency_ms)
         structured = getattr(result, "structuredContent", None)
         if structured is not None:
             return json.dumps(structured, default=str)
