@@ -1,12 +1,26 @@
+# --- secrets: never commit ---
+# `.env` alone did NOT cover .env.bak / .env.local / .env.save, which is how
+# a backup containing live API keys reached a commit. Ignore every .env
+# variant, then re-allow the one file that is meant to be tracked:
+# .env.example, which holds placeholders only.
 .env
+.env.*
+!.env.example
+
+# Stray backups and editor/filesystem droppings that have previously been
+# swept into commits alongside secrets.
+*.bak
+.fuse_hidden*
+
 data/*.db
+data/*.db-*
+data/*.bak*
 __pycache__/
 *.pyc
 .venv/
 node_modules/
 dist/
 .coverage
-data/*.db-*
 .eval-logs/
 .acceptance-scratch/
 data/wakeword/
