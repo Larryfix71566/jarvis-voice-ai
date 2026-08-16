@@ -94,6 +94,42 @@ class Settings(BaseSettings):
     jarvis_runlog_enabled: bool = True
     jarvis_runlog_retention_days: int = 30
 
+    # Reliable-memory plan D4 — how often MemorySweepWatcher folds the live
+    # session into long-term memory while it is still running, not just at
+    # teardown. Bounds data loss on an unclean disconnect (crash, closed
+    # tab) to at most one interval. A tuning knob, not a hardcoded value.
+    jarvis_memory_sweep_interval_s: float = 300.0
+
+    # Procedures-as-hints (MORTIMER_MEMORY_PROCEDURES_PLAN.md D20) — kill
+    # switch. False makes match_procedure/learn_from_run no-ops: no hint is
+    # ever injected, no candidate is ever created. Single enforcement point
+    # inside jarvis/procedures.py itself, not re-checked at any call site.
+    jarvis_procedures_enabled: bool = True
+
+    # LLM Council (MORTIMER_LLM_COUNCIL_PLAN.md D11) — kill switch. False
+    # disables convene() entirely: no fan-out, no logging, no cost.
+    # Escalation then falls through to the ordinary failure path exactly
+    # as it behaved before the council existed. Enforced at exactly one
+    # place — jarvis/council/council.py's own env read at the top of
+    # convene() — so this Settings field and that read can never
+    # disagree on the default (true); this field exists for discoverability
+    # (matching jarvis_procedures_enabled/jarvis_runlog_enabled) rather
+    # than being consulted directly by council.py, which cannot import
+    # jarvis.config without a circular import (config.py doesn't import
+    # jarvis.agents/jarvis.council, but jarvis.council.council is invoked
+    # from deep inside jarvis.agents.upgrade_agent, which must stay
+    # import-light).
+    jarvis_council_enabled: bool = True
+
+    # LLM Council v2 (MORTIMER_LLM_COUNCIL_V2_PLAN.md V11) — retention for
+    # council_rounds/council_scores and logs/council/, pruned once at bot
+    # startup beside the runlog prune. Deliberately much longer than the
+    # runlog's 30 days: D8.2.4's judge-tier decision needs >= 20 SHADOWED
+    # rounds, which accumulate slowly (25% sample of escalated rounds
+    # only) — pruning faster than they accumulate would permanently
+    # starve the measurement. <= 0 disables.
+    jarvis_council_retention_days: int = 180
+
     @field_validator("jarvis_timezone")
     @classmethod
     def _timezone_must_be_iana(cls, v: str) -> str:

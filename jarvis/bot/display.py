@@ -37,6 +37,24 @@ DISPLAY_TOOLS = {
     "push",
 }
 
+# Which surface a tool's result belongs on (side-drawer plan D36).
+# "window" — an answer to a question the user just asked: glanceable,
+#            transient, and on a multi-monitor setup parkable on a second
+#            screen. "drawer" — work product: read carefully, kept.
+DISPLAY_SURFACE: dict[str, str] = {
+    "web_search": "window",
+    "get_weather": "window",
+    "get_weather_radar": "window",
+    "app_create": "drawer",
+    "app_write_file": "drawer",
+    "git_diff_summary": "drawer",
+    "prepare_commit": "drawer",
+    "commit": "drawer",
+    "prepare_push": "drawer",
+    "push": "drawer",
+}
+DEFAULT_DISPLAY_SURFACE = "drawer"
+
 MAX_SNIPPETS = 6
 
 
@@ -75,6 +93,7 @@ def build_display_payload(
         "links": links,
         "agent": display_name or agent,
         "ts": time.time(),
+        "surface": DISPLAY_SURFACE.get(tool, DEFAULT_DISPLAY_SURFACE),
     }
 
 

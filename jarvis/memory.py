@@ -40,6 +40,13 @@ MAX_CONTEXT_CHARS = 1600
 MAX_TRANSCRIPT_ROWS = 60
 MAX_ROW_CHARS = 300
 
+# Reliable-memory plan D5: names the timeout already used at every call site
+# of update_memory_from_session (pipeline.py teardown, and the periodic
+# MemorySweepWatcher — jarvis/bot/memory_watcher.py). Not a Settings field:
+# this is an internal safety bound, not something a user needs to tune
+# (mirrors CALL_TIMEOUT in jarvis/skills/registry.py).
+MEMORY_EXTRACTION_TIMEOUT_S = 30
+
 # U2.6 tendency learning: a behavioral pattern must be observed in this many
 # distinct sessions before it is promoted to a user.style.* fact and starts
 # shaping behavior. One odd session must never teach Jarvis a bad habit.

@@ -2,7 +2,11 @@
 
 import json
 
-from jarvis.bot.display import build_display_payload
+from jarvis.bot.display import (
+    DEFAULT_DISPLAY_SURFACE,
+    DISPLAY_SURFACE,
+    build_display_payload,
+)
 
 
 def build(tool, data, args=None, result=None):
@@ -129,6 +133,38 @@ class TestAppTools:
         assert p["title"] == "Code — weather-app/src/App.tsx"
         assert "fix layout" in p["body"]
         assert "abcdef1" in p["body"]
+
+
+class TestDisplaySurface:
+    """Plan D36 — surface routing (window vs drawer)."""
+
+    def test_web_search_is_window(self):
+        p = build("web_search", TestWebSearch.DATA, args={"query": "x"})
+        assert p["surface"] == "window"
+
+    def test_get_weather_is_window(self):
+        p = build("get_weather", TestGetWeather.DATA, args={"city": "tokyo"})
+        assert p["surface"] == "window"
+
+    def test_git_diff_summary_is_drawer(self):
+        data = {"stat": [" a | 1 +"], "summary_line": "1 file changed"}
+        p = build("git_diff_summary", data)
+        assert p["surface"] == "drawer"
+
+    def test_app_create_is_drawer(self):
+        data = {
+            "ok": True, "pending": True, "proposed_name": "weather-app",
+            "files": ["index.html"], "summary": "Ready…",
+        }
+        p = build("app_create", data, args={"name": "weather-app"})
+        assert p["surface"] == "drawer"
+
+    def test_unknown_tool_defaults_to_drawer(self):
+        # A future tool added to DISPLAY_TOOLS/formatters but not yet
+        # classified in DISPLAY_SURFACE must default to the non-intrusive
+        # surface (drawer), not silently pop a window (D36 rationale).
+        assert DISPLAY_SURFACE.get("some_future_tool", DEFAULT_DISPLAY_SURFACE) == "drawer"
+        assert DEFAULT_DISPLAY_SURFACE == "drawer"
 
 
 class TestGitTools:

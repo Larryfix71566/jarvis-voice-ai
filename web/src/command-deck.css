@@ -245,26 +245,12 @@
   padding: 16px 18px;
 }
 
-/* --- git popover --- */
-.git-popover {
-  position: absolute;
-  top: 56px;
-  right: 16px;
-  width: 340px;
-  max-width: 92vw;
-  background: rgba(4, 9, 12, 0.97);
-  border: 1px solid var(--hairline);
-  padding: 14px 16px;
-  z-index: 20;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-}
-
-.git-popover .git-panel {
-  max-width: none;
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
-}
+/* The .git-popover rules that used to live here were deleted by
+   MORTIMER_SIDE_DRAWER_PLAN.md D21 — all four panels (Repo/Edit/Memory/
+   Runs) now mount inside the side drawer (sidedrawer.css), which supplies
+   their chrome. The popover was one absolutely-positioned box shared by
+   four independently-toggled panels, so opening two stacked them at
+   identical coordinates. */
 
 /* --- display panel: results window in front of everything (z-30) --- */
 .display-panel {
@@ -315,7 +301,8 @@
   text-shadow: none;
 }
 
-.display-close {
+.display-close,
+.display-popout {
   padding: 2px 10px;
   font-size: 14px;
   line-height: 1;

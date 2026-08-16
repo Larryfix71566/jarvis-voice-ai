@@ -88,6 +88,64 @@ def test_docs_disabled():
     assert c.get("/openapi.json").status_code == 404
 
 
+# --- MORTIMER_AGENT_TRUST_PLAN.md D17: admin sidecar logging ------------
+
+
+class TestD17Logging:
+    def test_basic_config_call_present_in_source(self):
+        """The bug (§1.4/D17) was that nothing configured logging at all,
+        so uvicorn's own log_level='warning' left logs/admin.log at 0
+        bytes across every rotation. logging.basicConfig() is a no-op if
+        the root logger already has handlers (as it does under pytest's
+        own caplog setup), so this is checked by source inspection rather
+        than by asserting global logger state in-process — see the
+        module docstring above logging.basicConfig() in server.py for the
+        live verification (curl against a freshly spawned process) this
+        was confirmed against."""
+        import inspect
+        import jarvis.admin.server as admin_server
+        source = inspect.getsource(admin_server)
+        assert "logging.basicConfig(" in source
+        assert "level=logging.INFO" in source
+
+    def test_startup_log_line_present(self, caplog):
+        import jarvis.admin.server as admin_server
+        with caplog.at_level("INFO", logger="jarvis.admin.server"):
+            admin_server.logger.info(
+                "admin_sidecar_startup host=%s port=%d repo_root=%s",
+                "127.0.0.1", 7861, admin_server.REPO_ROOT,
+            )
+        assert any("admin_sidecar_startup" in r.message for r in caplog.records)
+
+    def test_5xx_response_is_logged(self, client, caplog):
+        c, _ = client
+        import jarvis.admin.server as admin_server
+
+        @admin_server.app.get("/api/__test_500")
+        def _boom():
+            from starlette.responses import Response
+            return Response(status_code=500)
+
+        with caplog.at_level("WARNING", logger="jarvis.admin.server"):
+            resp = c.get("/api/__test_500")
+        assert resp.status_code == 500
+        assert any("admin_5xx" in r.message for r in caplog.records)
+        assert any("path=/api/__test_500" in r.message for r in caplog.records)
+
+    def test_4xx_response_is_not_logged_as_5xx(self, client, caplog):
+        c, _ = client
+        with caplog.at_level("WARNING", logger="jarvis.admin.server"):
+            resp = c.delete("/api/memory/fact/does-not-exist")
+        assert resp.status_code == 200  # this endpoint reports via body, not HTTP status
+        assert not any("admin_5xx" in r.message for r in caplog.records)
+
+    def test_healthy_2xx_response_is_not_logged_as_5xx(self, client, caplog):
+        c, _ = client
+        with caplog.at_level("WARNING", logger="jarvis.admin.server"):
+            c.get("/api/health")
+        assert not any("admin_5xx" in r.message for r in caplog.records)
+
+
 # --- Phase 5e: memory visibility/correction endpoints -------------------
 
 

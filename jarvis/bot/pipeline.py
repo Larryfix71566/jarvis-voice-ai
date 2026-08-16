@@ -11,9 +11,9 @@ Locked processor order (Phase 5):
       -> transport.output()
       -> context_aggregator.assistant()
 
-Exactly two functions are registered on the LLM: delegate_task and set_voice.
-run_session() owns everything per-connection so bot.py's entry shape never
-changes again.
+Three functions are registered on the LLM: delegate_task, set_voice, and
+remember (reliable-memory plan D6). run_session() owns everything
+per-connection so bot.py's entry shape never changes again.
 """
 
 from __future__ import annotations
@@ -36,7 +36,9 @@ from jarvis.agents.base import load_sub_agents
 from jarvis.agents.delegate import build_delegate_tool
 from jarvis.bot.display import build_display_payload
 from jarvis.bot.interruption import InterruptionNotifier
+from jarvis.bot.memory_watcher import MemorySweepWatcher
 from jarvis.bot.reminders_watcher import RemindersWatcher
+from jarvis.bot.remember_tool import build_remember_tool
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.voice_switch import (
     available_list,
@@ -49,13 +51,19 @@ from jarvis.cli import bridge_settings_to_env
 from jarvis.config import Settings, load_settings
 from jarvis.db import run_migrations
 from jarvis.logging_config import setup_logging
-from jarvis.memory import render_memory_context, update_memory_from_session
+from jarvis.memory import (
+    MEMORY_EXTRACTION_TIMEOUT_S,
+    render_memory_context,
+    update_memory_from_session,
+)
 from jarvis.prompts import (
     SUPERVISOR_PROMPT,
     VOICE_ADDENDUM,
     render_agent_catalog,
 )
+from jarvis.council import prune as prune_council
 from jarvis.runlog import prune as prune_runlog
+from jarvis.runlog import reconcile_orphaned_runs
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 
 # Service imports are module-level names so tests can monkeypatch them.
@@ -133,6 +141,15 @@ def make_agent_event_handler(transport: Any) -> Any:
             )
             if payload is None:
                 return  # voice-only tool result — nothing to show
+            # MORTIMER_AGENT_TRUST_PLAN.md D18: one INFO line whenever a
+            # display payload is actually built, so MORTIMER_SIDE_DRAWER_
+            # PLAN.md D36's surface routing (drawer vs. floating window)
+            # is confirmable from logs alone, without a browser attached.
+            _logger.info(
+                "display_payload tool=%s surface=%s agent=%s kind=%s",
+                event.get("tool"), payload.get("surface"),
+                event.get("agent"), payload.get("kind"),
+            )
             message = {"type": "display", "display": payload}
         elif etype == "delegate_start":
             message = {
@@ -201,6 +218,7 @@ def build_pipeline(
         session_id=runtime.session_id,
     )
     set_voice_schema, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
+    remember_schema, remember_handler = build_remember_tool(runtime.session_id)
 
     def adapt_to_pipecat(dict_handler):
         """D-009: pipecat 1.4 register_function handlers receive one
@@ -243,6 +261,7 @@ def build_pipeline(
     )
     llm.register_function("delegate_task", adapt_to_pipecat(delegate_handler))
     llm.register_function("set_voice", adapt_to_pipecat(set_voice_handler))
+    llm.register_function("remember", adapt_to_pipecat(remember_handler))
     tts = ElevenLabsTTSService(
         api_key=settings.elevenlabs_api_key,
         settings=ElevenLabsTTSSettings(
@@ -267,6 +286,7 @@ def build_pipeline(
         tools=ToolsSchema(standard_tools=[
             to_function_schema(delegate_schema),
             to_function_schema(set_voice_schema),
+            to_function_schema(remember_schema),
         ]),
     )
     aggregators = LLMContextAggregatorPair(context)
@@ -353,6 +373,29 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
         )
     except Exception as exc:  # noqa: BLE001 — must never block startup
         _logger.warning("runlog_prune_failed error=%s", exc)
+
+    # MORTIMER_LLM_COUNCIL_V2_PLAN.md V11: council retention pruning, same
+    # startup moment and best-effort shape as the runlog prune above.
+    try:
+        council_prune_counts = prune_council(settings.jarvis_council_retention_days)
+        _logger.info(
+            "council_prune rounds_deleted=%d dirs_deleted=%d",
+            council_prune_counts["rounds_deleted"], council_prune_counts["dirs_deleted"],
+        )
+    except Exception as exc:  # noqa: BLE001 — must never block startup
+        _logger.warning("council_prune_failed error=%s", exc)
+
+    # MORTIMER_AGENT_TRUST_PLAN.md D16: reconcile orphaned runs at the same
+    # startup moment as the retention prune above — nothing is `running`
+    # in this process yet, so any row still marked `running` from a
+    # previous, now-dead process is definitionally orphaned. Best-effort,
+    # same as the prune call: must never block the bot from starting.
+    try:
+        orphaned_count = reconcile_orphaned_runs()
+        if orphaned_count:
+            _logger.info("runlog_reconcile_orphaned count=%d", orphaned_count)
+    except Exception as exc:  # noqa: BLE001 — must never block startup
+        _logger.warning("runlog_reconcile_orphaned_failed error=%s", exc)
 
     registry = SkillRegistry(REPO_ROOT / "config" / "mcp_servers.yaml")
     await registry.start()
@@ -464,6 +507,15 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
         )
         watcher.start()
 
+        # Reliable-memory plan D2: periodic mid-session fold-in, so an
+        # unclean disconnect loses at most one sweep interval instead of
+        # everything discussed. The end-of-session call below remains — it
+        # is the last sweep, covering anything since the watcher's last tick.
+        memory_watcher = MemorySweepWatcher(
+            settings, runtime.session_id, settings.jarvis_memory_sweep_interval_s,
+        )
+        memory_watcher.start()
+
         voice_state = {"current": catalog["default"]}
 
         async def handle_voice_set(message: Any) -> None:
@@ -482,10 +534,6 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             await send_app_message(transport, {
                 "type": "voice/current", "voice": voice_state["current"]})
 
-        @transport.event_handler("on_app_message")
-        async def on_app_message(message: Any, sender: str) -> None:
-            await handle_voice_set(message)
-
         if webrtc_connection is not None:
             # D-005 update: on the installed pipecat 1.4.0 runner stack the
             # transport-level on_app_message event demonstrably does NOT
@@ -496,6 +544,15 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             # "app-message" event is the same event the transport itself
             # subscribes to; registering there is the working receive path
             # for both the locked raw shape and the client-js envelope.
+            #
+            # MORTIMER_AGENT_TRUST_PLAN.md D19: the dead transport-level
+            # on_app_message handler (registered via @transport's own
+            # event_handler decorator) that used to sit above this comment
+            # never fired, per the D-005 note above, and has been removed.
+            # Its removal was gated on the plan's exact precondition —
+            # grepping this file for the connection-level registration
+            # immediately below and confirming it was the ONLY match —
+            # before deleting anything.
             @webrtc_connection.event_handler("app-message")
             async def on_connection_app_message(connection: Any, message: Any) -> None:
                 await handle_voice_set(message)
@@ -505,14 +562,29 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             await runner.run(task)
         finally:
             await watcher.stop()
+            await memory_watcher.stop()
             # U2.5: fold this session into long-term memory. Best-effort,
             # hard-capped — memory work must never delay shutdown.
+            #
+            # Reliable-memory plan D1: the only failure this outer except can
+            # actually catch is asyncio.TimeoutError from the wait_for below
+            # (update_memory_from_session already catches and logs every
+            # internal failure itself). Previously that specific case was
+            # swallowed with zero log line, making it impossible to tell from
+            # the logs whether a session's memory fold-in happened, timed
+            # out, or errored.
             try:
                 await asyncio.wait_for(
                     update_memory_from_session(settings, runtime.session_id),
-                    timeout=30,
+                    timeout=MEMORY_EXTRACTION_TIMEOUT_S,
                 )
-            except Exception:  # noqa: BLE001
-                pass
+            except asyncio.TimeoutError:
+                _logger.warning(
+                    "memory_extraction_timeout session=%s", runtime.session_id
+                )
+            except Exception:  # noqa: BLE001 — memory must never break shutdown
+                _logger.exception(
+                    "memory_extraction_failed session=%s", runtime.session_id
+                )
     finally:
         await registry.stop()

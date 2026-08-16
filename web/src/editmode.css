@@ -109,3 +109,134 @@
   color: #8fa8cc;
   font-size: 12px;
 }
+
+.editmode-reject {
+  color: #ffcf8f;
+}
+
+/* LLM Council (MORTIMER_LLM_COUNCIL_PLAN.md D9/D10). Additive only. */
+
+.editmode-council {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(120, 180, 255, 0.15);
+}
+
+.editmode-council-members summary {
+  cursor: pointer;
+  color: #9ec7ff;
+  margin-bottom: 6px;
+}
+
+.editmode-council-tier {
+  margin: 6px 0 10px 10px;
+}
+
+.editmode-council-tier-name {
+  color: #7c8db0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.editmode-council-checkbox {
+  display: block;
+  font-size: 12px;
+  margin: 2px 0;
+}
+
+.editmode-council-empty {
+  color: #7c8db0;
+  font-size: 12px;
+}
+
+.editmode-council-warning {
+  color: #ff9c9c;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.editmode-council-result {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: rgba(120, 180, 255, 0.08);
+  border-radius: 6px;
+}
+
+.editmode-council-winner {
+  color: #8fe6a8;
+  font-weight: 600;
+}
+
+.editmode-council-reason {
+  color: #8fa8cc;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.editmode-council-scores {
+  margin-top: 10px;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.editmode-council-scores th,
+.editmode-council-scores td {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(120, 180, 255, 0.12);
+  vertical-align: top;
+}
+
+.editmode-council-scores th {
+  color: #7c8db0;
+  font-weight: 500;
+}
+
+.editmode-council-shadow-row {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+/* V12 — "Recent rounds" list. Follows editmode-council-members'
+   collapsed-<details> pattern and editmode-council-scores' table
+   styling above. */
+
+.editmode-council-rounds {
+  margin-top: 12px;
+}
+
+.editmode-council-rounds summary {
+  cursor: pointer;
+  color: #9ec7ff;
+  margin-bottom: 6px;
+}
+
+.editmode-council-rounds-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.editmode-council-rounds-table th,
+.editmode-council-rounds-table td {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(120, 180, 255, 0.12);
+  vertical-align: top;
+}
+
+.editmode-council-rounds-table th {
+  color: #7c8db0;
+  font-weight: 500;
+}
+
+.editmode-council-rounds-row {
+  cursor: pointer;
+}
+
+.editmode-council-rounds-row:hover {
+  background: rgba(120, 180, 255, 0.08);
+}

@@ -50,6 +50,17 @@ MAX_PAYLOAD_BYTES = 5_000_000
 # only, so it is idempotent and cannot corrupt data.
 ORPHAN_AFTER_S = 300
 
+# ⚙ TUNING KNOB (MORTIMER_AGENT_TRUST_PLAN.md D16/D20) — a `running` row
+# older than this at BOT STARTUP is rewritten to `orphaned` by
+# reconcile_orphaned_runs below. Deliberately a separate, larger constant
+# from ORPHAN_AFTER_S above: that one only changes what a live reader
+# *displays* for a run that might still be in flight; this one only runs
+# once at startup, when nothing in the process is holding any run open,
+# so anything still `running` at that moment is definitionally orphaned
+# (D16's rationale) — the larger value just keeps it from ever being
+# mistaken for the display-only threshold.
+RUN_ORPHAN_AFTER_S = 900
+
 RUNLOG_DIR = Path("logs/agents")
 
 _DROPPED = "<dropped: run payload cap exceeded>"
@@ -107,6 +118,13 @@ class RunLogger:
         self._finished = False
         self._started_at: str | None = None
         self._tool_count = 0
+        # MORTIMER_AGENT_TRUST_PLAN.md D5 — counted here (mirroring
+        # _tool_count's existing pattern) rather than passed in from
+        # SubAgent._loop, so the classifier's verdict (jarvis.toolresult,
+        # D1) recorded via tool_result() below is the ONLY source of these
+        # counts. Two independent counters would risk drifting apart.
+        self._tools_ok = 0
+        self._tools_failed = 0
 
     # -- internal helpers ---------------------------------------------
 
@@ -250,6 +268,13 @@ class RunLogger:
 
     def tool_result(self, tool: str, result: str, latency_ms: int, ok: bool) -> None:
         def _do() -> None:
+            # D5: counted from the SAME `ok` the caller already derived via
+            # jarvis.toolresult.classify_tool_result (D1) — not re-derived
+            # here, so there is exactly one place this judgement is made.
+            if ok:
+                self._tools_ok += 1
+            else:
+                self._tools_failed += 1
             seq = self._next_seq()
             self._append(
                 {"type": "tool_result", "seq": seq, "tool": tool, "ok": bool(ok),
@@ -304,10 +329,10 @@ class RunLogger:
             )
             self._execute(
                 "UPDATE agent_runs SET status=?, ended_at=?, latency_ms=?, "
-                "tool_count=?, error=?, reply_preview=?, payload_path=? "
-                "WHERE run_id=?",
-                (status, ended_at, latency_ms, self._tool_count, error,
-                 reply_preview,
+                "tool_count=?, tools_ok=?, tools_failed=?, error=?, "
+                "reply_preview=?, payload_path=? WHERE run_id=?",
+                (status, ended_at, latency_ms, self._tool_count,
+                 self._tools_ok, self._tools_failed, error, reply_preview,
                  str(self.payload_path) if self.payload_path else None,
                  self.run_id),
             )
@@ -399,6 +424,32 @@ def list_runs(
     if status:
         out = [d for d in out if d["status"] == status]
     return out
+
+
+def reconcile_orphaned_runs(db_path: str | Path | None = None) -> int:
+    """MORTIMER_AGENT_TRUST_PLAN.md D16: run once at bot startup, alongside
+    the existing retention prune (jarvis.runlog.prune, called from
+    jarvis/bot/pipeline.py). One UPDATE over agent_runs: any row still
+    `status = 'running'` whose started_at is older than RUN_ORPHAN_AFTER_S
+    is rewritten to `status = 'orphaned'`. Safe to call on every boot —
+    a process is only ever `running` while it holds the row, and nothing
+    is running when the bot has just started, so anything left in that
+    state is, by definition, orphaned. Returns the number of rows updated.
+    """
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(seconds=RUN_ORPHAN_AFTER_S)
+    ).isoformat()
+    conn = get_conn(db_path)
+    try:
+        cur = conn.execute(
+            "UPDATE agent_runs SET status = 'orphaned' "
+            "WHERE status = 'running' AND started_at < ?",
+            (cutoff,),
+        )
+        conn.commit()
+        return cur.rowcount if cur.rowcount is not None and cur.rowcount > 0 else 0
+    finally:
+        conn.close()
 
 
 def get_run(

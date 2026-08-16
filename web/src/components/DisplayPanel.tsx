@@ -1,35 +1,33 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { RTVIEvent } from "@pipecat-ai/client-js";
-import { useRTVIClientEvent } from "@pipecat-ai/client-react";
-import { marked } from "marked";
-import DOMPurify from "dompurify";
+import { useCallback, useEffect, useState } from "react";
+import DisplayContent from "./DisplayContent";
+import type { DisplayPayload } from "../displayResults";
+import {
+  hasLivePopup,
+  openDisplayWindow,
+  readPopoutPreference,
+  subscribeLatest,
+  writePopoutPreference,
+} from "../displayWindow";
 
 /**
- * DisplayPanel — results window floating in FRONT of everything (z-30).
+ * DisplayPanel — INFORMATIONAL results window floating in FRONT of
+ * everything (z-30) (MORTIMER_SIDE_DRAWER_PLAN.md D28/D41/D43).
  *
- * When a sub-agent's tool produces something worth seeing (research
- * findings, a weather radar, a project plan, a coding diff/commit
- * summary), the bot sends {"type":"display","display":{...}} over the
- * RTVI server-message channel and this window opens with it. Markdown
- * bodies are rendered (sanitized), image payloads show as a seamless
- * tile grid (e.g. the 3×3 radar mosaic), and link lists open in new
- * tabs. Drag by the header, resize from the corner, Esc or × to close.
+ * Narrowed by the side-drawer plan: work-product results (diffs, commits,
+ * app scaffolds) now go to the drawer's Output tab (OutputTab.tsx) — this
+ * panel only ever shows `surface: "window"` payloads (a weather forecast
+ * or research brief: glanceable, transient, answers a question you just
+ * asked). It no longer listens to RTVI directly; App.tsx's single D30/D37
+ * display listener dispatches by `surface` and calls
+ * `displayWindow.publish()` for this panel's payloads.
+ *
+ * Also gains a pop-out (⧉) into a real second browser window that can be
+ * parked on a second monitor (D39–D42). While a live popup exists, this
+ * in-page window renders nothing — the result is showing on the other
+ * screen — and reappears automatically if the popup is closed or blocked
+ * (D41's mandatory fallback: an informational answer must never be
+ * silently lost to a popup blocker).
  */
-
-interface DisplayLink {
-  label?: string;
-  url: string;
-}
-
-export interface DisplayPayload {
-  kind?: string; // "markdown" | "image" | "links"
-  title?: string;
-  body?: string; // markdown
-  images?: string[];
-  links?: DisplayLink[];
-  agent?: string;
-  ts?: number;
-}
 
 interface Pos {
   x: number;
@@ -44,40 +42,65 @@ interface Size {
 const DEFAULT_W = 540;
 const DEFAULT_H = 420;
 
-function renderMarkdown(body: string): string {
-  const html = marked.parse(body, { async: false });
-  return DOMPurify.sanitize(html);
-}
-
 export default function DisplayPanel() {
   const [item, setItem] = useState<DisplayPayload | null>(null);
+  const [dismissed, setDismissed] = useState(false);
+  const [popupOpen, setPopupOpen] = useState(hasLivePopup);
+  const [popout, setPopout] = useState(readPopoutPreference);
   const [pos, setPos] = useState<Pos>(() => ({
     x: Math.max(16, window.innerWidth - DEFAULT_W - 48),
     y: 72,
   }));
   const [size, setSize] = useState<Size>({ w: DEFAULT_W, h: DEFAULT_H });
-  const panelRef = useRef<HTMLDivElement | null>(null);
 
-  // Incoming display payloads from the bot.
-  useRTVIClientEvent(RTVIEvent.ServerMessage, (data: unknown) => {
-    const msg = data as { type?: string; display?: DisplayPayload };
-    if (msg?.type !== "display" || !msg.display) return;
-    setItem(msg.display);
-  });
+  // The shared "latest informational payload" — published by App.tsx's
+  // surface dispatch. A new payload always un-dismisses the panel and, if
+  // the popout preference is on, attempts to (re)open the popup.
+  useEffect(
+    () =>
+      subscribeLatest((payload) => {
+        setItem(payload);
+        setDismissed(false);
+        if (payload && popout && !hasLivePopup()) {
+          const win = openDisplayWindow();
+          setPopupOpen(win !== null);
+          // win === null → browser blocked the popup; popupOpen stays
+          // false, so the in-page panel below renders the fallback.
+        }
+      }),
+    [popout],
+  );
 
-  const close = useCallback(() => setItem(null), []);
+  // Named-window reuse (D41) has no single open/close event to hook, so a
+  // short poll is what reliably brings the in-page fallback back when the
+  // popup is closed by the user or the OS.
+  useEffect(() => {
+    const id = window.setInterval(() => setPopupOpen(hasLivePopup()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const close = useCallback(() => setDismissed(true), []);
+
+  const popOut = useCallback(() => {
+    writePopoutPreference(true);
+    setPopout(true);
+    const win = openDisplayWindow();
+    setPopupOpen(win !== null);
+  }, []);
 
   // Esc closes.
   useEffect(() => {
-    if (!item) return;
+    if (!item || popupOpen || dismissed) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [item, close]);
+  }, [item, popupOpen, dismissed, close]);
 
-  if (!item) return null;
+  // While a live popup exists, the result is showing on the other screen —
+  // this window stays out of the way entirely (D41).
+  if (!item || popupOpen || dismissed) return null;
 
   /** Drag the window by its header. */
   const onHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -116,14 +139,8 @@ export default function DisplayPanel() {
     window.addEventListener("pointerup", up);
   };
 
-  const images = item.images ?? [];
-  const links = item.links ?? [];
-  // 9 radar tiles form one seamless 3×3 map; anything else is a gallery.
-  const seamless = images.length === 9;
-
   return (
     <div
-      ref={panelRef}
       className="display-panel"
       style={{ left: pos.x, top: pos.y, width: size.w, height: size.h }}
       role="dialog"
@@ -134,40 +151,20 @@ export default function DisplayPanel() {
           {item.title ?? "Result"}
           {item.agent && <span className="display-agent"> · {item.agent}</span>}
         </span>
+        <button
+          type="button"
+          className="btn display-popout"
+          onClick={popOut}
+          title="Pop out to a separate window (park on a second monitor)"
+        >
+          ⧉
+        </button>
         <button type="button" className="btn display-close" onClick={close}>
           ×
         </button>
       </div>
 
-      <div className="display-body">
-        {item.kind === "image" && images.length > 0 && (
-          <div className={seamless ? "display-tiles" : "display-gallery"}>
-            {images.map((src) => (
-              <img key={src} src={src} alt={item.title ?? "result image"} />
-            ))}
-          </div>
-        )}
-
-        {item.body && (
-          <div
-            className="display-markdown"
-            // Body is agent-generated markdown → sanitized HTML.
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(item.body) }}
-          />
-        )}
-
-        {links.length > 0 && (
-          <ul className="display-links">
-            {links.map((l) => (
-              <li key={l.url}>
-                <a href={l.url} target="_blank" rel="noreferrer">
-                  {l.label || l.url}
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      <DisplayContent payload={item} />
 
       <div className="display-resize" onPointerDown={onResizePointerDown} />
     </div>

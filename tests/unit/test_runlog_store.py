@@ -17,11 +17,13 @@ from jarvis.db import get_conn, run_migrations
 from jarvis.runlog import store
 from jarvis.runlog.store import (
     MAX_BUFFERED_EVENTS,
+    RUN_ORPHAN_AFTER_S,
     RunLogger,
     _display_status,
     get_run,
     list_runs,
     parse_since,
+    reconcile_orphaned_runs,
 )
 
 
@@ -228,6 +230,81 @@ class TestDisplayStatusOrphan:
 
         soon = datetime.now(timezone.utc) + timedelta(seconds=1)
         assert _display_status(row, soon) == "running"
+
+
+class TestReconcileOrphanedRuns:
+    """MORTIMER_AGENT_TRUST_PLAN.md D16."""
+
+    def _insert_running_row(self, db_path, run_id, started_at):
+        conn = get_conn(db_path)
+        conn.execute(
+            "INSERT INTO agent_runs (run_id, agent, display_name, task, "
+            "status, started_at, tool_count) VALUES (?, 'developer', "
+            "'Developer', 'task', 'running', ?, 0)",
+            (run_id, started_at),
+        )
+        conn.commit()
+        conn.close()
+
+    def test_old_running_row_rewritten_to_orphaned(self, db_path):
+        from datetime import datetime, timedelta, timezone
+        old = (datetime.now(timezone.utc)
+               - timedelta(seconds=RUN_ORPHAN_AFTER_S + 60)).isoformat()
+        self._insert_running_row(db_path, "r-old", old)
+
+        count = reconcile_orphaned_runs(db_path=db_path)
+        assert count == 1
+
+        conn = get_conn(db_path)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT status FROM agent_runs WHERE run_id=?", ("r-old",)
+        ).fetchone()
+        conn.close()
+        assert row["status"] == "orphaned"
+
+    def test_recent_running_row_untouched(self, db_path):
+        from datetime import datetime, timezone
+        recent = datetime.now(timezone.utc).isoformat()
+        self._insert_running_row(db_path, "r-recent", recent)
+
+        count = reconcile_orphaned_runs(db_path=db_path)
+        assert count == 0
+
+        conn = get_conn(db_path)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT status FROM agent_runs WHERE run_id=?", ("r-recent",)
+        ).fetchone()
+        conn.close()
+        assert row["status"] == "running"
+
+    def test_already_finished_rows_untouched(self, db_path, root):
+        rl = make_logger(db_path, root, run_id="r-done")
+        rl.start()
+        rl.finish("ok")
+
+        count = reconcile_orphaned_runs(db_path=db_path)
+        assert count == 0
+
+        conn = get_conn(db_path)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT status FROM agent_runs WHERE run_id=?", ("r-done",)
+        ).fetchone()
+        conn.close()
+        assert row["status"] == "ok"
+
+    def test_idempotent_on_repeated_calls(self, db_path):
+        from datetime import datetime, timedelta, timezone
+        old = (datetime.now(timezone.utc)
+               - timedelta(seconds=RUN_ORPHAN_AFTER_S + 60)).isoformat()
+        self._insert_running_row(db_path, "r-old2", old)
+
+        first = reconcile_orphaned_runs(db_path=db_path)
+        second = reconcile_orphaned_runs(db_path=db_path)
+        assert first == 1
+        assert second == 0  # already orphaned, not 'running' anymore
 
 
 class TestListAndGetRun:

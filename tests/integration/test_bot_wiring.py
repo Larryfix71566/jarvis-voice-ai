@@ -2,7 +2,8 @@
 
 Constructs the pipeline with mocked transport/STT/LLM and asserts:
 - processor order is exactly the locked Phase 4 order,
-- delegate_task is the one function registered on the LLM service,
+- delegate_task, set_voice, and remember (reliable-memory plan D6) are the
+  functions registered on the LLM service,
 - transcript logging writes conversations rows for both roles (user side via
   the D-007 task observer, assistant side via the TranscriptLogger processor).
 """
@@ -156,9 +157,9 @@ def test_interruptions_enabled_on_flux(runtime, fakes, monkeypatch):
     assert captured["should_interrupt"] is True
 
 
-def test_two_functions_registered(runtime, fakes):
+def test_three_functions_registered(runtime, fakes):
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
-    assert sorted(llm.functions) == ["delegate_task", "set_voice"]
+    assert sorted(llm.functions) == ["delegate_task", "remember", "set_voice"]
     assert llm.kwargs == {"api_key": "sk", "base_url": "http://llm", "model": "m"}
 
 
@@ -255,6 +256,22 @@ async def test_agent_events_pushed_as_app_messages(runtime, fakes, monkeypatch,
     ]
     # stdout feed (Phase 4 behavior) still intact.
     assert "[AGENT] Scheduler working" in capsys.readouterr().out
+
+
+def test_dead_on_app_message_handler_removed():
+    """MORTIMER_AGENT_TRUST_PLAN.md D19: the transport-level
+    @transport.event_handler("on_app_message") handler never fired on the
+    installed pipecat 1.4.0 runner stack (DEVIATIONS.md D-005) and has
+    been deleted. Regression guard, mirroring the plan's own exact
+    precondition command: exactly one "app-message" event registration
+    remains (the working connection-level handler), and the dead
+    "on_app_message" registration is gone."""
+    import inspect
+
+    source = inspect.getsource(bp)
+    assert source.count('event_handler("app-message")') == 1
+    assert 'event_handler("on_app_message")' not in source
+    assert "def on_app_message(" not in source
 
 
 def test_unwrap_client_message_shapes():
@@ -383,8 +400,10 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
         openai_model="m", elevenlabs_api_key="el", jarvis_name="Jarvis",
         jarvis_user_name="Boss", jarvis_timezone="America/New_York",
         jarvis_interruption_notice_enabled=True,
+        jarvis_memory_sweep_interval_s=300.0,
     )
     cancelled, folded, watcher_stopped, registry_stopped = [], [], [], []
+    memory_watcher_stopped = []
 
     class FakeTask:
         def __init__(self, pipeline, observers=None):
@@ -412,6 +431,16 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
 
         async def stop(self):
             watcher_stopped.append(True)
+
+    class FakeMemoryWatcher:
+        def __init__(self, *a, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        async def stop(self):
+            memory_watcher_stopped.append(True)
 
     class FakeRegistry:
         def __init__(self, *a, **kw):
@@ -458,6 +487,7 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
     monkeypatch.setattr(bp, "PipelineTask", FakeTask)
     monkeypatch.setattr(bp, "PipelineRunner", FakeRunner)
     monkeypatch.setattr(bp, "RemindersWatcher", FakeWatcher)
+    monkeypatch.setattr(bp, "MemorySweepWatcher", FakeMemoryWatcher)
     monkeypatch.setattr(bp, "update_memory_from_session", fake_fold)
 
     transport = HandlerCapturingTransport()
@@ -479,4 +509,5 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
     assert cancelled == [True], "disconnect handler must cancel the PipelineTask"
     assert folded, "memory fold-in did not run for the disconnected session"
     assert watcher_stopped, "RemindersWatcher was not stopped (leaks per connection)"
+    assert memory_watcher_stopped, "MemorySweepWatcher was not stopped (leaks per connection)"
     assert registry_stopped, "skill registry was not stopped"

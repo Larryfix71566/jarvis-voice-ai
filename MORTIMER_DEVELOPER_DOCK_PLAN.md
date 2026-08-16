@@ -1,6 +1,14 @@
 # Mortimer Console — Docked, Collapsible Status Cards for Long-Running Runs
 
-**Status:** DRAFT — awaiting approval. No code has been written.
+**SUPERSEDED by `MORTIMER_SIDE_DRAWER_PLAN.md`** (implemented). This plan
+docked the Developer status card to the top-right corner; the side-drawer
+plan puts the same content in a drawer tab instead — the same screen real
+estate, but inside the one tabbed drawer that also hosts Repo/Edit/Memory/
+Runs. Its D1 (route on `isSelfEditRun`, a property of the run) survives as
+the side-drawer plan's D9, with the correction that the predicate is
+currently equivalent to `name === "developer"`. Do not implement this plan.
+
+**Status:** DRAFT — never implemented, superseded.
 **Follows:** `MORTIMER_STAR_LAYOUT_PLAN.md` (anchored status cards, shipped)
 and `MORTIMER_RUN_LOGGING_PLAN.md` (shipped, unrelated system — not touched
 here).

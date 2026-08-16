@@ -1,0 +1,56 @@
+/**
+ * displaywindow.css — full-bleed layout for the popped-out display window
+ * (MORTIMER_SIDE_DRAWER_PLAN.md D43). The markdown/tiles/gallery/links
+ * rendering itself is the SHARED `.display-*` CSS in command-deck.css
+ * (DisplayContent, D33) — this file only styles the popup's own chrome,
+ * which has no equivalent in the in-page window or the drawer tab.
+ */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: #04090c;
+}
+
+#root {
+  height: 100%;
+}
+
+.display-window {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--mono, monospace);
+  color: var(--text, #d7f4ff);
+}
+
+.display-window-empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim, #6c8894);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+}
+
+.display-window-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--hairline, #16323c);
+  background: linear-gradient(180deg, rgba(44, 201, 255, 0.07), transparent);
+}
+
+.display-window-title {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent, #2cc9ff);
+}
+
+.display-window .display-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 22px;
+  font-size: 14px;
+  line-height: 1.6;
+}

@@ -28,8 +28,10 @@ import yaml
 from openai import AsyncOpenAI
 
 from jarvis.config import Settings
+from jarvis.procedures import match_procedure, mark_used
 from jarvis.prompts import SUBAGENT_PROMPTS
 from jarvis.runlog import RunLogger, get_run_id, run_logger_scope
+from jarvis.toolresult import classify_tool_result
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,35 @@ TIMEOUT_MESSAGE = "FAILED: the task took too long; please try again."
 STUCK_MESSAGE = "FAILED: the task could not be completed."
 # Cap tool results in events so a huge payload can't flood the data channel.
 TOOL_RESULT_EVENT_MAX = 20_000
+
+# MORTIMER_AGENT_TRUST_PLAN.md D3 — appended as a `system`-role message
+# immediately after a failed tool's `role: "tool"` message. This is the
+# direct fix for the fabrication defect in §1.1: a failed tool result
+# arrives as a JSON blob that happens to say `ok: false` — syntactically
+# indistinguishable, to the model, from data. An adjacent system-role
+# instruction is unambiguous. The wording forbids INFERENCE ("structure,
+# behavior"), not just quotation — do not shorten this, a model that is
+# merely told "the call failed" has still been observed describing a file
+# it never read.
+TOOL_FAILURE_CONSTRAINT_TEMPLATE = (
+    "The tool call `{tool_name}` FAILED: {error}. "
+    "You did not receive the data you asked for. "
+    "You MUST NOT state, summarize, guess, or infer the contents, "
+    "structure, or behavior of anything this call was meant to retrieve. "
+    "Either retry with corrected arguments, use a different tool, or tell "
+    "the user plainly that the call failed and what you therefore could "
+    "not determine."
+)
+
+# MORTIMER_AGENT_TRUST_PLAN.md D4 — the reply used when every tool call in
+# a run failed. Scoped to ALL tools failing, never ANY: a run with one
+# working call among several failures is handled by D3's per-failure
+# constraint plus D5's visible counts, not by a blunt status flip that
+# would mark most useful runs failed.
+ALL_TOOLS_FAILED_TEMPLATE = (
+    "FAILED: every tool call in this run failed ({failed}/{attempted}). "
+    "Last error: {error}"
+)
 
 EventCallback = Callable[[dict], None]
 
@@ -124,12 +155,40 @@ class SubAgent:
                               "display_name": self.display_name, "task": task})
         messages = [
             {"role": "system", "content": self._system_prompt},
-            {"role": "user", "content": task},
         ]
+        # Procedures-as-hints (MORTIMER_MEMORY_PROCEDURES_PLAN.md D11/D17):
+        # single enforcement point for the kill switch (D20) — when
+        # disabled, no FTS query runs at all, so there is no latency cost
+        # and no hint is ever injected. status="active" (the default) is
+        # deliberate here — a candidate or deprecated procedure must never
+        # be surfaced as a hint, only match_procedure's dedup caller
+        # (jarvis.procedures.learn_from_run) passes status=None.
+        if self._settings.jarvis_procedures_enabled:
+            try:
+                procedure = match_procedure(self.name, task)
+            except Exception:  # noqa: BLE001 — matching must never break a run
+                logger.exception("procedure_match_failed agent=%s", self.name)
+                procedure = None
+            if procedure is not None:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        f"A similar task has succeeded before: "
+                        f"{procedure['description']}"
+                    ),
+                })
+                mark_used(procedure["id"])
+        messages.append({"role": "user", "content": task})
         tools = self._registry.openai_tools(self.mcp_servers)
         tools_kwarg = {"tools": tools} if tools else {}
 
         reply = STUCK_MESSAGE
+        # MORTIMER_AGENT_TRUST_PLAN.md D4/D5 — counted across the WHOLE run,
+        # not per-iteration, since D4's rule ("every tool call failed") must
+        # see calls made across all MAX_TOOL_ITERATIONS rounds.
+        tools_attempted = 0
+        tools_failed = 0
+        last_error: str | None = None
         for _ in range(MAX_TOOL_ITERATIONS):
             response = await self._client.chat.completions.create(
                 model=self._settings.openai_model,
@@ -157,21 +216,24 @@ class SubAgent:
                     tool_name, arguments, self.mcp_servers
                 )
                 tool_latency_ms = int((time.perf_counter() - tool_start) * 1000)
-                # D18: SkillRegistry.call() is a locked contract that
-                # returns a bare string, so this is a heuristic — the
-                # three failure-string shapes it can return. The exact
-                # signal for the same call lives one layer down, on the
-                # mcp_call event SkillRegistry itself records via the
-                # ContextVar (jarvis/skills/registry.py). A tool_result
-                # marked ok=True next to an mcp_call marked ok=False means
-                # the tool's own text disguised a failure — that is
-                # useful information surfaced by the run log, not a bug.
-                ok = not (
-                    result.startswith(f"{tool_name} failed:")
-                    or result.startswith("Unknown tool ")
-                    or result.startswith(f"Tool '{tool_name}' is not available")
-                )
-                runlog.tool_result(tool_name, result, tool_latency_ms, ok)
+                # MORTIMER_AGENT_TRUST_PLAN.md D1/D2 — classify_tool_result
+                # is the SINGLE place this judgement is made now. It
+                # inspects both the three transport-failure prefixes
+                # SkillRegistry.call() can return AND the tool's own JSON
+                # body (e.g. {"ok": false, "error": "...401..."}), which the
+                # previous prefix-only heuristic here could not see — that
+                # gap is what let a run log four failed app_read calls as
+                # `ok=True` while the sub-agent fabricated their contents
+                # (plan §1.1/§1.2). The mcp_call event recorded one layer
+                # down in SkillRegistry.call() now uses the same function,
+                # so the two layers cannot disagree the way D18's original
+                # comment here described.
+                outcome = classify_tool_result(tool_name, result)
+                runlog.tool_result(tool_name, result, tool_latency_ms, outcome.ok)
+                tools_attempted += 1
+                if not outcome.ok:
+                    tools_failed += 1
+                    last_error = outcome.error
                 self._emit(on_event, {
                     "type": "agent_tool_result",
                     "agent": self.name,
@@ -185,6 +247,32 @@ class SubAgent:
                     "tool_call_id": tool_call.id,
                     "content": result,
                 })
+                if not outcome.ok:
+                    # D3 — the anti-hallucination constraint, injected
+                    # immediately after the failed tool's own message so it
+                    # is the freshest context the model sees before its next
+                    # turn. A prompt message, not a code path (§0's rule that
+                    # no confirmation gate is touched) — it constrains the
+                    # model but cannot guarantee compliance, which is why D4
+                    # exists as the mechanical backstop below.
+                    messages.append({
+                        "role": "system",
+                        "content": TOOL_FAILURE_CONSTRAINT_TEMPLATE.format(
+                            tool_name=tool_name, error=outcome.error,
+                        ),
+                    })
+
+        # D4 — a run in which every attempted tool call failed cannot be
+        # reported as successful, regardless of how confident the model's
+        # own reply reads. Deliberately does NOT trigger on partial failure
+        # (some calls ok, some failed) — that case is handled by D3's
+        # per-failure constraint and D5's visible tools_ok/tools_failed
+        # counts, not by a blunt status flip.
+        if tools_attempted > 0 and tools_failed == tools_attempted:
+            reply = ALL_TOOLS_FAILED_TEMPLATE.format(
+                failed=tools_failed, attempted=tools_attempted,
+                error=last_error or "unknown error",
+            )
 
         latency_ms = int((time.perf_counter() - start) * 1000)
         logger.info("subagent_done agent=%s latency_ms=%d run_id=%s",

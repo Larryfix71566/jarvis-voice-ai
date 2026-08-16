@@ -6,6 +6,7 @@ Push target is a local bare repo, so no network is involved.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -103,6 +104,63 @@ def test_push_flow(repo):
     res = logic.push(draft["action_id"])
     assert res["ok"] is True
     assert logic.git_status()["ahead"] == 0
+
+
+def test_stale_lock_reported_precisely_not_auto_deleted(repo):
+    """MORTIMER_AGENT_TRUST_PLAN.md D15: a held index.lock must produce the
+    precise path/age/remove-command message, and the file itself must be
+    left in place — no auto-deletion, even though this test's lock is
+    trivially "stale" by wall-clock age."""
+    (repo / "a.txt").write_text("two\n")
+    lock_path = repo / ".git" / "index.lock"
+    lock_path.write_text("")
+    try:
+        res = logic.prepare_commit("blocked by lock")
+        assert res["ok"] is False
+        assert "git index is locked by" in res["error"]
+        assert str(lock_path) in res["error"]
+        assert f"rm {lock_path}" in res["error"]
+        assert "created" in res["error"] and "ago" in res["error"]
+        # D15: never auto-deleted.
+        assert lock_path.exists()
+    finally:
+        lock_path.unlink(missing_ok=True)
+
+
+def test_old_lock_gets_stale_note(repo, monkeypatch):
+    (repo / "a.txt").write_text("two\n")
+    lock_path = repo / ".git" / "index.lock"
+    lock_path.write_text("")
+    old_time = logic._now_utc().timestamp() - 1000
+    os.utime(lock_path, (old_time, old_time))
+    try:
+        res = logic.prepare_commit("blocked by old lock")
+        assert res["ok"] is False
+        assert "older than expected" in res["error"]
+    finally:
+        lock_path.unlink(missing_ok=True)
+
+
+def test_recent_lock_has_no_stale_note(repo):
+    (repo / "a.txt").write_text("two\n")
+    lock_path = repo / ".git" / "index.lock"
+    lock_path.write_text("")
+    try:
+        res = logic.prepare_commit("blocked by fresh lock")
+        assert res["ok"] is False
+        assert "older than expected" not in res["error"]
+    finally:
+        lock_path.unlink(missing_ok=True)
+
+
+def test_non_lock_git_error_unaffected(repo):
+    # commit() with no such action id triggers no git call at all, but a
+    # plain git failure (nonexistent branch checkout) must pass through
+    # unchanged rather than being misidentified as a lock error.
+    code, out = logic._git("checkout", "no-such-branch")
+    assert code != 0
+    assert "index.lock" not in out
+    assert "git index is locked" not in out
 
 
 def test_audit_rows_recorded(repo):

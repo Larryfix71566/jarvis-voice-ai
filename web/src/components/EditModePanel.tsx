@@ -25,6 +25,7 @@ interface ModelProfile {
   key_env: string;
   key_present: boolean;
   default: boolean;
+  tier: TierName | null;
 }
 
 interface RunJob {
@@ -43,6 +44,100 @@ interface Check {
 const MERGE_NOTE =
   "Review and merge on GitHub — Jarvis cannot merge this.";
 
+// --- LLM Council (MORTIMER_LLM_COUNCIL_PLAN.md D9/D10) ------------------
+//
+// Membership selection is UI-only state, kept separate from the model
+// registry (config/upgrade_models.yaml stays off the self-edit allowlist —
+// D9's whole reason for this split). Same localStorage discipline as the
+// drawer's own `mortimer.drawer.*` keys (App.tsx): every read is wrapped
+// in try/catch and validated, never trusted as-is.
+
+type TierName = "economy" | "mid" | "frontier";
+const TIER_NAMES: TierName[] = ["economy", "mid", "frontier"];
+
+interface CouncilWinner {
+  profile: string;
+  content: string;
+}
+
+interface ConveneResult {
+  ok: boolean;
+  round_id?: string;
+  winner?: CouncilWinner | null;
+  winner_mean?: number | null;
+  select_reason?: string;
+  error?: string;
+}
+
+// MORTIMER_LLM_COUNCIL_V2_PLAN.md V5 — the shape of _council_job, polled
+// via GET /api/council/job (same idle/running/done/error shape as
+// RunJob's own job-polling pattern above).
+interface CouncilJob {
+  state: "idle" | "running" | "done" | "error";
+  trigger?: "manual" | "E3" | null;
+  goal?: string | null;
+  round_id?: string | null;
+  winner?: CouncilWinner | null;
+  winner_mean?: number | null;
+  select_reason?: string | null;
+  error?: string | null;
+}
+
+// V12 — one row of GET /api/council/rounds; a loose subset of the
+// council_rounds columns (jarvis/db.py MIGRATION_0009), only what the
+// "Recent rounds" list renders.
+interface CouncilRoundSummary {
+  round_id: string;
+  started_at: string;
+  trigger: string;
+  tier: number;
+  status: string;
+  winner_profile: string | null;
+  retry_validated: number | null;
+}
+
+interface CouncilScoreRow {
+  judge_profile: string;
+  judge_tier: string;
+  shadow: number;
+  proposal_label: string;
+  proposal_profile: string;
+  score: number | null;
+  abstain_reason: string | null;
+  justification: string | null;
+}
+
+interface CouncilRoundDetail {
+  ok: boolean;
+  round?: { round_id: string; goal: string; winner_label: string | null };
+  scores?: CouncilScoreRow[];
+}
+
+function lsKeyForTier(tier: TierName): string {
+  return `mortimer.council.${tier}`;
+}
+
+function readStoredTierSelection(tier: TierName): string[] {
+  try {
+    const raw = localStorage.getItem(lsKeyForTier(tier));
+    if (raw === null) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((x): x is string => typeof x === "string");
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredTierSelection(tier: TierName, names: string[]): void {
+  try {
+    localStorage.setItem(lsKeyForTier(tier), JSON.stringify(names));
+  } catch {
+    /* storage unavailable (private browsing, quota) — selection just
+       won't persist across reloads; convening still works this session */
+  }
+}
+
 export default function EditModePanel() {
   const [status, setStatus] = useState<SessionStatus | null>(null);
   const [unreachable, setUnreachable] = useState(false);
@@ -55,6 +150,23 @@ export default function EditModePanel() {
   const [models, setModels] = useState<ModelProfile[]>([]);
   const [profile, setProfile] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // --- council state ---
+  const [councilSelection, setCouncilSelection] = useState<
+    Record<TierName, string[]>
+  >(() => ({
+    economy: readStoredTierSelection("economy"),
+    mid: readStoredTierSelection("mid"),
+    frontier: readStoredTierSelection("frontier"),
+  }));
+  const [councilGoal, setCouncilGoal] = useState("");
+  const [councilBusy, setCouncilBusy] = useState(false);
+  const [councilNote, setCouncilNote] = useState<string | null>(null);
+  const [councilResult, setCouncilResult] = useState<ConveneResult | null>(null);
+  const [councilRound, setCouncilRound] = useState<CouncilRoundDetail | null>(null);
+  const councilPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [councilRoundsOpen, setCouncilRoundsOpen] = useState(false);
+  const [councilRounds, setCouncilRounds] = useState<CouncilRoundSummary[] | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -109,11 +221,21 @@ export default function EditModePanel() {
     }, 3000);
   }, [refresh, stopPolling]);
 
+  const stopCouncilPolling = useCallback(() => {
+    if (councilPollRef.current) {
+      clearInterval(councilPollRef.current);
+      councilPollRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     void refresh();
     void loadModels();
-    return stopPolling;
-  }, [refresh, loadModels, stopPolling]);
+    return () => {
+      stopPolling();
+      stopCouncilPolling();
+    };
+  }, [refresh, loadModels, stopPolling, stopCouncilPolling]);
 
   const post = async (path: string, body?: object) => {
     const r = await fetch(`${API}${path}`, {
@@ -179,6 +301,138 @@ export default function EditModePanel() {
     setNote(res.ok ? `session reverted to ${res.reverted_to}` : res.error);
     setChecks(null);
     setSummary(null);
+    void refresh();
+    setBusy(null);
+  };
+
+  // --- council -----------------------------------------------------------
+
+  const modelsByTier = (tier: TierName) => models.filter((m) => m.tier === tier);
+
+  const toggleCouncilMember = (tier: TierName, name: string) => {
+    setCouncilSelection((prev) => {
+      const current = prev[tier];
+      const next = current.includes(name)
+        ? current.filter((n) => n !== name)
+        : [...current, name];
+      writeStoredTierSelection(tier, next);
+      return { ...prev, [tier]: next };
+    });
+  };
+
+  // D9: "minimum 2 selectable members enforced in the UI." An empty
+  // selection means "use the full tier" (always valid — D9's fallback
+  // rule), so this only blocks a PARTIAL selection of exactly one, which
+  // is the one state that would silently shrink a council below the
+  // floor without the empty-selection fallback to save it.
+  const tierSelectionInvalid = (tier: TierName) =>
+    councilSelection[tier].length === 1;
+  const anyCouncilSelectionInvalid = TIER_NAMES.some(tierSelectionInvalid);
+
+  const loadCouncilRound = async (roundId: string) => {
+    try {
+      const r = await fetch(`${API}/api/council/round/${roundId}`);
+      const j = (await r.json()) as CouncilRoundDetail;
+      setCouncilRound(j.ok ? j : null);
+    } catch {
+      setCouncilRound(null);
+    }
+  };
+
+  const loadCouncilRounds = async () => {
+    try {
+      const r = await fetch(`${API}/api/council/rounds?limit=10`);
+      const j = (await r.json()) as { ok: boolean; rounds?: CouncilRoundSummary[] };
+      setCouncilRounds(j.ok ? j.rounds ?? [] : null);
+    } catch {
+      setCouncilRounds(null);
+    }
+  };
+
+  // V5: the round itself runs on the sidecar's background job thread —
+  // POST just starts it. This polls GET /api/council/job every 3s (same
+  // interval as startPolling above) until it settles, then renders the
+  // winner card / score table exactly as the old inline-await path did.
+  const startCouncilPolling = useCallback(() => {
+    stopCouncilPolling();
+    councilPollRef.current = setInterval(async () => {
+      try {
+        const r = await fetch(`${API}/api/council/job`);
+        const j = (await r.json()) as { ok: boolean; job: CouncilJob };
+        if (!j.ok) return;
+        if (j.job.state === "done" || j.job.state === "error") {
+          stopCouncilPolling();
+          setCouncilBusy(false);
+          if (j.job.state === "error") {
+            setCouncilResult({ ok: false, error: j.job.error ?? "council job failed" });
+            setCouncilNote(j.job.error ?? "council job failed");
+          } else {
+            setCouncilResult({
+              ok: true,
+              round_id: j.job.round_id ?? undefined,
+              winner: j.job.winner ?? null,
+              winner_mean: j.job.winner_mean ?? null,
+              select_reason: j.job.select_reason ?? undefined,
+            });
+            if (j.job.round_id) void loadCouncilRound(j.job.round_id);
+          }
+          if (councilRoundsOpen) void loadCouncilRounds();
+        }
+      } catch {
+        stopCouncilPolling();
+        setCouncilBusy(false);
+      }
+    }, 3000);
+  }, [stopCouncilPolling, councilRoundsOpen]);
+
+  const onConvene = async () => {
+    setCouncilBusy(true);
+    setCouncilNote(null);
+    setCouncilResult(null);
+    setCouncilRound(null);
+    try {
+      const members: Record<string, string[]> = {};
+      for (const tier of TIER_NAMES) {
+        if (councilSelection[tier].length > 0) members[tier] = councilSelection[tier];
+      }
+      const res = await post("/api/council/convene", {
+        placement: "planner",
+        goal: councilGoal.trim() || undefined,
+        members: Object.keys(members).length > 0 ? members : undefined,
+      });
+      if (res.ok && res.started) {
+        startCouncilPolling(); // councilBusy stays true until the job settles
+      } else {
+        setCouncilNote(res.error ?? "council convene failed");
+        setCouncilBusy(false);
+      }
+    } catch {
+      setCouncilNote("council convene failed — is the admin sidecar running?");
+      setCouncilBusy(false);
+    }
+  };
+
+  const onReject = async () => {
+    setBusy("reject");
+    setCouncilNote(null);
+    setCouncilResult(null);
+    setCouncilRound(null);
+    // V5: the revert stays synchronous — its result is in this response —
+    // but the E3 council (if started) settles later on the job slot.
+    const res = await post("/api/selfedit/reject");
+    if (res.ok) {
+      setNote(`session reverted to ${res.reverted?.reverted_to ?? "rollback point"}`);
+      setChecks(null);
+      setSummary(null);
+      if (res.council_started) {
+        setCouncilBusy(true);
+        startCouncilPolling();
+      } else {
+        setCouncilNote("session reverted; no council brief available for this rejection");
+      }
+    } else {
+      setNote(res.error ?? "reject failed");
+    }
     void refresh();
     setBusy(null);
   };
@@ -292,6 +546,17 @@ export default function EditModePanel() {
           >
             Revert session
           </button>
+          {status && status.proposals.length > 0 && (
+            <button
+              type="button"
+              className="btn editmode-reject"
+              onClick={onReject}
+              disabled={busy !== null}
+              title="Reject this diff and ask the council for a better approach"
+            >
+              {busy === "reject" ? "Rejecting…" : "Reject + ask council"}
+            </button>
+          )}
         </div>
       )}
 
@@ -316,6 +581,169 @@ export default function EditModePanel() {
         </div>
       )}
       {note && <div className="git-note">{note}</div>}
+
+      <div className="editmode-council">
+        <div className="panel-title">LLM Council</div>
+        <div className="editmode-disclaimer">
+          Convenes on validation failure automatically, or on request here.
+          A council ranks and advises — it never authors a diff itself.
+        </div>
+
+        <details className="editmode-council-members">
+          <summary>Council membership</summary>
+          {TIER_NAMES.map((tier) => (
+            <div key={tier} className="editmode-council-tier">
+              <div className="editmode-council-tier-name">{tier}</div>
+              {modelsByTier(tier).length === 0 && (
+                <div className="editmode-council-empty">no {tier}-tier profiles configured</div>
+              )}
+              {modelsByTier(tier).map((m) => (
+                <label key={m.name} className="editmode-council-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={councilSelection[tier].includes(m.name)}
+                    disabled={!m.key_present}
+                    onChange={() => toggleCouncilMember(tier, m.name)}
+                  />
+                  {m.label}
+                  {m.key_present ? "" : " — key missing"}
+                </label>
+              ))}
+              {tierSelectionInvalid(tier) && (
+                <div className="editmode-council-warning">
+                  select at least 2, or none (none = use the full tier)
+                </div>
+              )}
+            </div>
+          ))}
+        </details>
+
+        <div className="git-commit-row">
+          <input
+            className="git-input"
+            placeholder={
+              active && status?.goal
+                ? `optional — defaults to "${status.goal}"`
+                : "what should the council plan for?"
+            }
+            value={councilGoal}
+            onChange={(e) => setCouncilGoal(e.target.value)}
+            disabled={councilBusy}
+          />
+          <button
+            type="button"
+            className="btn"
+            onClick={onConvene}
+            disabled={councilBusy || anyCouncilSelectionInvalid || (!active && !councilGoal.trim())}
+            title={anyCouncilSelectionInvalid ? "fix an invalid tier selection above first" : undefined}
+          >
+            {councilBusy ? "Convening…" : "Convene the council"}
+          </button>
+        </div>
+
+        {councilNote && <div className="git-note">{councilNote}</div>}
+
+        {councilResult?.ok && (
+          <div className="editmode-council-result">
+            {councilResult.winner ? (
+              <>
+                <div className="editmode-council-winner">
+                  winner: {councilResult.winner.profile}
+                  {councilResult.winner_mean != null && ` (mean ${councilResult.winner_mean.toFixed(1)})`}
+                </div>
+                <div className="editmode-council-reason">{councilResult.select_reason}</div>
+                <pre className="editmode-diff">{councilResult.winner.content}</pre>
+              </>
+            ) : (
+              <div className="editmode-council-reason">
+                no winner — {councilResult.select_reason ?? "the round did not select a proposal"}
+              </div>
+            )}
+          </div>
+        )}
+
+        {councilRound?.scores && councilRound.scores.length > 0 && (
+          <table className="editmode-council-scores">
+            <thead>
+              <tr>
+                <th>judge</th>
+                <th>tier</th>
+                <th>proposal</th>
+                <th>score</th>
+                <th>justification</th>
+              </tr>
+            </thead>
+            <tbody>
+              {councilRound.scores.map((s, i) => (
+                <tr key={i} className={s.shadow ? "editmode-council-shadow-row" : undefined}>
+                  <td>
+                    {s.judge_profile}
+                    {s.shadow ? " (shadow)" : ""}
+                  </td>
+                  <td>{s.judge_tier}</td>
+                  <td>{s.proposal_profile}</td>
+                  <td>{s.score != null ? s.score.toFixed(1) : "abstained"}</td>
+                  <td>{s.score != null ? s.justification : s.abstain_reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        <details
+          className="editmode-council-rounds"
+          open={councilRoundsOpen}
+          onToggle={(e) => {
+            const open = (e.target as HTMLDetailsElement).open;
+            setCouncilRoundsOpen(open);
+            if (open) void loadCouncilRounds();
+          }}
+        >
+          <summary>Recent rounds</summary>
+          {councilRounds === null && (
+            <div className="editmode-council-empty">could not load rounds</div>
+          )}
+          {councilRounds?.length === 0 && (
+            <div className="editmode-council-empty">no rounds yet</div>
+          )}
+          {councilRounds && councilRounds.length > 0 && (
+            <table className="editmode-council-rounds-table">
+              <thead>
+                <tr>
+                  <th>when</th>
+                  <th>trigger</th>
+                  <th>tier</th>
+                  <th>status</th>
+                  <th>winner</th>
+                  <th>retry</th>
+                </tr>
+              </thead>
+              <tbody>
+                {councilRounds.map((r) => (
+                  <tr
+                    key={r.round_id}
+                    className="editmode-council-rounds-row"
+                    onClick={() => void loadCouncilRound(r.round_id)}
+                  >
+                    <td>{new Date(r.started_at).toLocaleString()}</td>
+                    <td>{r.trigger}</td>
+                    <td>{r.tier}</td>
+                    <td>{r.status}</td>
+                    <td>{r.winner_profile ?? "—"}</td>
+                    <td>
+                      {r.retry_validated === null
+                        ? "—"
+                        : r.retry_validated
+                        ? "✓"
+                        : "✗"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </details>
+      </div>
     </div>
   );
 }

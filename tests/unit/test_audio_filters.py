@@ -180,6 +180,43 @@ async def test_engine_missing_degrades_to_passthrough(monkeypatch):
     assert await filt.filter(audio) == audio  # unchanged, session survives
 
 
+async def test_engine_missing_logs_warning_not_error(monkeypatch):
+    """MORTIMER_AGENT_TRUST_PLAN.md D19: this is an expected, already-
+    handled optional-dependency state (degrades to pass-through, tested
+    above), not a fault — it must not be logged at ERROR. filters.py logs
+    via loguru, which does not feed pytest's caplog by default, so the
+    module's `logger` object is monkeypatched directly to record which
+    level was actually called."""
+    import jarvis.audio.filters as filters_module
+
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        filters_module.logger, "warning",
+        lambda msg: calls.append(("warning", msg)),
+    )
+    monkeypatch.setattr(
+        filters_module.logger, "error",
+        lambda msg: calls.append(("error", msg)),
+    )
+
+    filt = DeepFilterNetFilter(log_stats=False)
+
+    def _boom():
+        raise ImportError("No module named 'df'")
+
+    monkeypatch.setattr(filt, "_load_engine", _boom)
+    await filt.start(SR)
+
+    assert any(
+        level == "warning" and "DeepFilterNet unavailable" in msg
+        for level, msg in calls
+    )
+    assert not any(
+        level == "error" and "DeepFilterNet unavailable" in msg
+        for level, msg in calls
+    )
+
+
 async def test_buffers_until_one_full_block(monkeypatch):
     filt = DeepFilterNetFilter(log_stats=False)
     _install_fake_engine(monkeypatch, filt)
