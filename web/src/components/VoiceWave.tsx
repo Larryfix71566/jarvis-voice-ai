@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { usePipecatClientMediaTrack } from "@pipecat-ai/client-react";
+import { getFieldRect, subscribeFieldRect } from "../agentLayout";
 import { subscribeWake } from "../wakeWord";
 import type { VoiceState } from "../voiceState";
 
@@ -64,6 +65,14 @@ export default function VoiceWave({ state }: { state: VoiceState }) {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const levelRef = useRef(0); // smoothed voice level 0..1
   const wakeFlashRef = useRef(0); // 1 on wake detection, decays to 0
+  // Horizontal center of the STAGE (.orb-field), in viewport px — the
+  // canvas is full-viewport, but the stage shrinks when the side drawer
+  // pushes it (.stage-row flex), and the wave's peak must stay centered
+  // on the stage (aligned with the readout/satellites), not the viewport.
+  // OrbField already publishes its measured rect for exactly this kind of
+  // cross-component anchoring (agentLayout.ts); null = no rect yet, fall
+  // back to viewport center.
+  const stageCxRef = useRef<number | null>(null);
   const botTrack = usePipecatClientMediaTrack("audio", "bot");
 
   // Wake-word flash: the field surges when "Mortimer" is detected.
@@ -74,6 +83,17 @@ export default function VoiceWave({ state }: { state: VoiceState }) {
       }),
     [],
   );
+
+  // Track the stage center (drawer open/close/resize all re-publish the
+  // rect via OrbField's ResizeObserver — including every frame of the
+  // drawer's width transition, so the wave follows it smoothly).
+  useEffect(() => {
+    const apply = (rect: { left: number; width: number } | null) => {
+      stageCxRef.current = rect === null ? null : rect.left + rect.width / 2;
+    };
+    apply(getFieldRect());
+    return subscribeFieldRect(apply);
+  }, []);
 
   // Real-audio drive: analyse the bot's WebRTC track (tap only — audio
   // keeps playing through PipecatClientAudio; this graph never reaches a
@@ -144,6 +164,7 @@ export default function VoiceWave({ state }: { state: VoiceState }) {
     let p1 = 0;
     let p2 = 0;
     let p3 = 0;
+    let cxEased = -1; // sentinel: snap to target on the first frame
     let last = performance.now();
     let raf = 0;
 
@@ -195,7 +216,12 @@ export default function VoiceWave({ state }: { state: VoiceState }) {
       }
 
       const { w, h } = size;
-      const cx = w / 2;
+      // Center on the stage, not the viewport (see stageCxRef above);
+      // eased so a drawer snap (no CSS transition on open) still slides
+      // the wave over rather than teleporting it.
+      const cxTarget = stageCxRef.current ?? w / 2;
+      cxEased = cxEased < 0 ? cxTarget : cxEased + (cxTarget - cxEased) * 0.12;
+      const cx = cxEased;
       const cy = h * 0.5;
       const breath = st === "listening" ? 0.004 + 0.004 * Math.sin(t * 0.9) : 0;
       const voice = st === "speaking" ? levelRef.current * 0.115 : 0;

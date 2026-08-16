@@ -37,8 +37,14 @@ servers:
   - name: mcp-repo
     command: python
     args: ["-m", "mcp_servers.mcp_repo.server"]
-    env:
-      JARVIS_REPO_ROOT: "${JARVIS_REPO_ROOT}"
+    # No env entry (MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md F2): the child
+    # inherits the full parent environment, so an exported
+    # JARVIS_REPO_ROOT still reaches it. The previous
+    # `JARVIS_REPO_ROOT: "${JARVIS_REPO_ROOT}"` line handed the server a
+    # LITERAL "${JARVIS_REPO_ROOT}" when the variable was unset
+    # (expand_env_vars leaves unknown vars as-is by design), making every
+    # repo_read_file report "does not exist" against a phantom root.
+    env: {}
   - name: mcp-selfedit
     command: python
     args: ["-m", "mcp_servers.mcp_selfedit.server"]

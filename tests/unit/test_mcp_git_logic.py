@@ -170,3 +170,24 @@ def test_audit_rows_recorded(repo):
     rows = logic.list_actions()["actions"]
     assert rows[0]["tool"] == "git_commit"
     assert rows[0]["status"] == "committed"
+
+
+class TestRepoRootHardening:
+    """MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md F2 — mirrors
+    test_mcp_repo_logic.py's group; both servers' _repo_root must stay
+    immune to a literal ${VAR} leaked through config."""
+
+    def _real_root(self):
+        return Path(logic.__file__).resolve().parents[2]
+
+    def test_literal_placeholder_falls_back(self, monkeypatch):
+        monkeypatch.setenv("JARVIS_REPO_ROOT", "${JARVIS_REPO_ROOT}")
+        assert logic._repo_root() == self._real_root()
+
+    def test_empty_falls_back(self, monkeypatch):
+        monkeypatch.setenv("JARVIS_REPO_ROOT", "")
+        assert logic._repo_root() == self._real_root()
+
+    def test_real_value_respected(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("JARVIS_REPO_ROOT", str(tmp_path))
+        assert logic._repo_root() == tmp_path

@@ -48,6 +48,21 @@ class FakeCompletions:
             action = ("text", "late")
         if action[0] == "text":
             message = SimpleNamespace(content=action[1], tool_calls=None)
+        elif action[0] == "tools":
+            # Parallel tool calls in ONE assistant message (developer-fix
+            # plan F1) — action is ("tools", [(name, args), ...]).
+            calls = [
+                SimpleNamespace(
+                    id=f"call_{len(self.requests)}_{i}",
+                    type="function",
+                    function=SimpleNamespace(
+                        name=name,
+                        arguments=args if isinstance(args, str) else json.dumps(args),
+                    ),
+                )
+                for i, (name, args) in enumerate(action[1])
+            ]
+            message = SimpleNamespace(content=None, tool_calls=calls)
         else:
             raw = action[2] if isinstance(action[2], str) else json.dumps(action[2])
             tool_call = SimpleNamespace(
@@ -344,3 +359,111 @@ class TestLoadSubAgents:
         assert set(agents) == {"scheduler", "librarian", "analyst", "systems", "developer"}
         assert agents["scheduler"].mcp_servers == ["mcp-time", "mcp-reminders"]
         assert agents["analyst"].display_name == "Analyst"
+
+    def test_per_agent_timeout_from_yaml(self):
+        # MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md F3: developer gets its
+        # configured 120s; agents without a timeout_s key keep the default.
+        from jarvis.agents.base import DEFAULT_TIMEOUT_S
+
+        agents = load_sub_agents(make_settings(), FakeRegistry(),
+                                 client_factory=lambda s: FakeLLM([]))
+        assert agents["developer"]._timeout_s == 120.0
+        assert agents["scheduler"]._timeout_s == DEFAULT_TIMEOUT_S
+
+
+class FailByNameRegistry(FakeRegistry):
+    """Registry whose call() fails for tool names in `failing`."""
+
+    def __init__(self, failing):
+        super().__init__()
+        self.failing = set(failing)
+
+    async def call(self, name, arguments, server_names=None):
+        self.calls.append((name, arguments, server_names))
+        if name in self.failing:
+            return '{"ok": false, "error": "boom"}'
+        return '{"ok": true}'
+
+
+class TestParallelToolCallProtocol:
+    """MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md F1: on a turn with parallel
+    tool calls, the D3 constraint must land AFTER the whole tool-response
+    block — an interleaved system message orphans the remaining
+    tool_call_ids and the next completion call 400s (observed live on
+    two Developer runs with 21 parallel repo reads)."""
+
+    def _messages_of_last_request(self, completions):
+        return completions.requests[-1]["messages"]
+
+    async def test_mixed_batch_constraint_after_contiguous_tool_block(self):
+        registry = FailByNameRegistry({"bad_tool"})
+        agent, completions = make_agent(
+            [
+                ("tools", [("good_tool", {}), ("bad_tool", {}), ("good_tool", {})]),
+                ("text", "done"),
+            ],
+            registry=registry,
+        )
+        await agent.run("do things")
+
+        messages = self._messages_of_last_request(completions)
+        # Find the assistant tool_calls message and verify every one of
+        # its tool_call_ids is answered by a CONTIGUOUS run of tool
+        # messages, with the system constraint only after the block.
+        idx = next(
+            i for i, m in enumerate(messages)
+            if (m.get("role") if isinstance(m, dict) else None) == "assistant"
+            and (m.get("tool_calls") if isinstance(m, dict) else None)
+        )
+        call_ids = {tc["id"] for tc in messages[idx]["tool_calls"]}
+        block = messages[idx + 1 : idx + 1 + len(call_ids)]
+        assert [m["role"] for m in block] == ["tool"] * len(call_ids)
+        assert {m["tool_call_id"] for m in block} == call_ids
+        after = messages[idx + 1 + len(call_ids)]
+        assert after["role"] == "system"
+        assert "bad_tool" in after["content"]
+        # No system message inside the tool block.
+        assert all(m["role"] != "system" for m in block)
+
+    async def test_multi_failure_batch_names_every_failed_tool(self):
+        registry = FailByNameRegistry({"bad_one", "bad_two"})
+        agent, completions = make_agent(
+            [
+                ("tools", [("bad_one", {}), ("bad_two", {})]),
+                ("text", "done"),
+            ],
+            registry=registry,
+        )
+        await agent.run("do things")
+
+        messages = self._messages_of_last_request(completions)
+        # messages[0] is the agent's own system prompt, whose D6 grounding
+        # language also contains "FAILED" — skip it.
+        system_msgs = [
+            m for m in messages[1:]
+            if isinstance(m, dict) and m.get("role") == "system"
+            and "FAILED" in str(m.get("content", ""))
+        ]
+        assert len(system_msgs) == 1  # ONE batch constraint, not one per failure
+        content = system_msgs[0]["content"]
+        assert "bad_one" in content and "bad_two" in content
+        assert "MUST NOT" in content
+
+    async def test_single_failure_keeps_original_template(self):
+        registry = FailByNameRegistry({"bad_tool"})
+        agent, completions = make_agent(
+            [("tool", "bad_tool", {}), ("text", "done")],
+            registry=registry,
+        )
+        await agent.run("do things")
+
+        messages = self._messages_of_last_request(completions)
+        # messages[0] is the agent's own system prompt, whose D6 grounding
+        # language also contains "FAILED" — skip it.
+        system_msgs = [
+            m for m in messages[1:]
+            if isinstance(m, dict) and m.get("role") == "system"
+            and "FAILED" in str(m.get("content", ""))
+        ]
+        assert len(system_msgs) == 1
+        assert "`bad_tool` FAILED" in system_msgs[0]["content"]
