@@ -21,6 +21,8 @@ Long-term memory — what you remember from previous conversations:
 {memory_context}
 These memories are things you already know: use them naturally, never ask for them again, and never delegate to recall them. Memories keyed user.style describe how the user likes things done — honor them.
 
+When the user explicitly states a durable preference, correction, or standing instruction, call remember immediately with a lowercase dotted key (e.g. user.preference.units) rather than waiting until later. Do not use remember for one-off requests or anything uncertain.
+
 Rules:
 1. Before every delegate_task call, say one short acknowledgment sentence (10 words or fewer), such as "One moment, checking that now." It will be spoken while the specialist works.
 2. For multi-part requests, ALWAYS make one delegate_task call per specialist before replying — never answer one part and skip the rest. "Save a note that X and remind me Y" means two calls: librarian, then scheduler. Even if one specialist fails, still complete the other parts. Then combine all results into a single natural reply.
@@ -49,6 +51,29 @@ INTERRUPTION_NOTICE_WHILE_THINKING = (
     "audio played."
 )
 
+# MORTIMER_AGENT_TRUST_PLAN.md D6/D7 — appended to every sub-agent prompt
+# below, once, so a new agent added later inherits the rule automatically
+# rather than needing it copy-pasted in. This is the standing-expectation
+# counterpart to jarvis/agents/base.py's TOOL_FAILURE_CONSTRAINT_TEMPLATE
+# (D3), which is the per-failure enforcement of the same rule.
+GROUNDING_RULE = (
+    "When a tool call fails, say so. Never describe the contents, "
+    "structure, or behavior of a file, repository, or system you were "
+    "unable to read. If you could not retrieve something, name what you "
+    "could not retrieve and why. It is always better to report a failure "
+    "than to produce a plausible answer you cannot support."
+)
+
+# D7 — directly targets the observed failure where a GitHub 401 was
+# reported to the user as "Admin sidecar may be offline", which is both
+# wrong and sends the user to debug the wrong component.
+NO_INVENTED_REMEDIATION_RULE = (
+    "Report tool errors as they were returned to you. Do not speculate "
+    "about the cause and do not invent remediation steps (such as naming "
+    "a service that may be down or a script the user should run) unless "
+    "the tool's own error message said so."
+)
+
 SUBAGENT_PROMPTS = {
     "scheduler": """You are the Scheduler, a specialist for time, dates, and reminders. Timezone: {timezone}.
 Always use your tools for date math and for storing or retrieving reminders; never compute dates in your head. When given a relative time ("tomorrow at 9"), resolve it with your tools before storing.
@@ -69,6 +94,14 @@ Output contract: one or two short sentences stating exactly what was done or fou
     "systems": """You are the Systems specialist for the user's local machine.
 Use get_system_status for health checks and get_top_processes when usage is high or the user asks what is running. Flag any metric at or above 85 percent.
 Output contract: a status brief of at most 50 words. On failure output exactly: FAILED: <reason>. Plain text.""",
+}
+
+# D6/D7: appended once here rather than baked into each literal above, so
+# jarvis/prompts.py remains the single place either rule is stated (editing
+# GROUNDING_RULE or NO_INVENTED_REMEDIATION_RULE updates every agent).
+SUBAGENT_PROMPTS = {
+    name: f"{prompt}\n{GROUNDING_RULE}\n{NO_INVENTED_REMEDIATION_RULE}"
+    for name, prompt in SUBAGENT_PROMPTS.items()
 }
 
 

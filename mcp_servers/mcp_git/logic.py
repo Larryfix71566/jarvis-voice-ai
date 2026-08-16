@@ -27,6 +27,12 @@ from jarvis.db import get_conn, now_iso, run_migrations
 
 DRAFT_TTL_SECONDS = 900  # 15 minutes
 
+# ⚙ TUNING KNOB — age past which a held index.lock is called out as
+# unusually old in the D15 message below (MORTIMER_AGENT_TRUST_PLAN.md
+# D20). scripts/check_env.py duplicates this value locally (by value, not
+# import — see its own comment) for its independent stale-lock WARN.
+GIT_LOCK_STALE_AFTER_S = 300
+
 
 def _repo_root() -> Path:
     return Path(
@@ -43,8 +49,57 @@ def _db() -> sqlite3.Connection:
     return conn
 
 
+def _format_age(age_s: float) -> str:
+    age_s = max(0, int(age_s))
+    days, rem = divmod(age_s, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if days:
+        return f"{days}d{hours}h"
+    if hours:
+        return f"{hours}h{minutes}m"
+    if minutes:
+        return f"{minutes}m{seconds}s"
+    return f"{seconds}s"
+
+
+def _lock_error_message(raw_output: str) -> str | None:
+    """D15: if `raw_output` is git's held/stale index.lock error, return the
+    precise message naming the lock path, its creation time, and its age,
+    with the exact manual-removal command — instead of the raw git stderr,
+    which is what got paraphrased into "restart the admin sidecar" in the
+    incident this decision exists to prevent (plan §1.4). Returns None for
+    any other git error, in which case the caller keeps using raw_output
+    unchanged.
+
+    Deliberately does NOT delete the lock file itself, at any age — see the
+    plan's explicit "Do not implement auto-deletion" rule.
+    """
+    if "index.lock" not in raw_output or "File exists" not in raw_output:
+        return None
+    lock_path = _repo_root() / ".git" / "index.lock"
+    if not lock_path.exists():
+        return None
+    mtime = lock_path.stat().st_mtime
+    created = datetime.fromtimestamp(mtime, tz=timezone.utc)
+    age_s = _now_utc().timestamp() - mtime
+    age = _format_age(age_s)
+    stale_note = (
+        " — older than expected for an active git operation"
+        if age_s > GIT_LOCK_STALE_AFTER_S else ""
+    )
+    return (
+        f"git index is locked by {lock_path} (created {created.isoformat()}, "
+        f"{age} ago{stale_note}).\n"
+        "If no git process is running, remove it with:\n"
+        f"    rm {lock_path}"
+    )
+
+
 def _git(*args: str) -> tuple[int, str]:
-    """Run a git command in the repo. Returns (returncode, combined output)."""
+    """Run a git command in the repo. Returns (returncode, combined output).
+    On failure, a held/stale index.lock error is rewritten via
+    _lock_error_message (D15); any other failure passes through unchanged."""
     proc = subprocess.run(
         ["git", *args],
         cwd=_repo_root(),
@@ -52,7 +107,12 @@ def _git(*args: str) -> tuple[int, str]:
         text=True,
         timeout=30,
     )
-    return proc.returncode, (proc.stdout + proc.stderr).strip()
+    out = (proc.stdout + proc.stderr).strip()
+    if proc.returncode != 0:
+        lock_msg = _lock_error_message(out)
+        if lock_msg is not None:
+            return proc.returncode, lock_msg
+    return proc.returncode, out
 
 
 def _now_utc() -> datetime:

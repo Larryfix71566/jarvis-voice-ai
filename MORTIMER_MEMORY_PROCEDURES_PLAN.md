@@ -1,6 +1,7 @@
 # Mortimer — Reliable Automatic Memory + Procedures-as-Hints
 
-**Status:** DRAFT — awaiting approval. No code has been written.
+**Status:** Part A (D1–D8) and Part B (D9–D24) both APPROVED 2026-08-13 by
+Larry and IMPLEMENTED.
 **Scope decided by:** Larry, 2026-08-12 (two-question scoping round: both
 issues in one plan — §2).
 **Depends on:** `MORTIMER_RUN_LOGGING_PLAN.md` (shipped) — Part B of this
@@ -783,5 +784,50 @@ rollback precedent).
 
 ## §10 Approval
 
-- [ ] Larry has read §2 (scope) and §3 (decisions) and approves.
-- [ ] Implementation may begin.
+- [x] Larry has read §2 (scope) and §3 (decisions) and approves — Part A
+  only, 2026-08-13.
+- [x] Implementation may begin — Part A implemented same day (steps
+  5.1–5.6): `jarvis/memory.py` (`MEMORY_EXTRACTION_TIMEOUT_S`),
+  `jarvis/config.py` (`jarvis_memory_sweep_interval_s`),
+  `jarvis/bot/memory_watcher.py` (new), `jarvis/bot/remember_tool.py`
+  (new), `jarvis/bot/pipeline.py` (D1 logging fix + watcher wiring + tool
+  registration), `jarvis/prompts.py` (D7 guidance), `.env.example`.
+  `pytest tests/unit tests/integration -q` green (536 passed, 3 skipped;
+  the one pre-existing failure — `test_mcp_web_server` — is a live-network
+  weather lookup unrelated to this change). Routing eval (§0.6/D24) not yet
+  re-run — requires real API keys, run when available.
+- [x] Part B (procedures-as-hints) — approved and implemented 2026-08-13:
+  `jarvis/db.py` (`MIGRATION_0007_procedures`), `jarvis/procedures.py`
+  (new — `match_procedure`, `learn_from_run`, `mark_used`,
+  `_promote_or_deprecate`), `jarvis/config.py`
+  (`jarvis_procedures_enabled`), `jarvis/agents/base.py` (`_loop` hint
+  injection, D11/D17), `jarvis/agents/delegate.py` (`_spawn_background` +
+  D13 fire-and-forget `learn_from_run` call), `.env.example`, `CLAUDE.md`.
+  One deliberate deviation from the literal spec, documented at the
+  deviation site: D10 describes FTS5 matching without giving exact SQL for
+  the accept/reject decision (unlike D19's schema, which is exact).
+  `match_procedure` uses FTS5 to generate the candidate set, then a
+  Python-side stopword-filtered token-overlap ratio (`PROCEDURE_MATCH_THRESHOLD
+  = 0.5`) to decide — chosen over raw FTS5 `bm25()` ranking because bm25's
+  sign/magnitude degrades unpredictably on this table's small,
+  low-document-count corpus (one row per distinct task shape per agent),
+  which would have made the threshold nondeterministic in exactly the
+  volume regime §9's own risk table describes. Both the dedup and
+  retrieval call sites still go through the one function, preserving
+  D10's actual requirement (no ID drift between write-side dedup and
+  read-side retrieval).
+  A second, safety-motivated addition beyond the plan text: `delegate.py`
+  spawning `learn_from_run` unconditionally (D13/D20 as written) meant
+  every existing test that drives `build_delegate_tool`'s handler would
+  silently call the real `jarvis.config.load_settings()` — which reads
+  this repo's real `.env` — on every test run. Added an autouse
+  `_stub_procedures_learning` fixture in `tests/conftest.py` that no-ops
+  `jarvis.agents.delegate.learn_from_run` by default; tests that exercise
+  the real function re-patch it locally. No production code changed for
+  this — it is a test-suite safety net only.
+  `pytest tests/unit tests/integration -q` green (558 passed, 3 skipped;
+  the one pre-existing failure — `test_mcp_web_server` — is the same
+  unrelated live-network weather lookup noted under Part A).
+  `python scripts/init_db.py` on a fresh DB applies migration 0007
+  cleanly and idempotently (verified). Routing eval (§0.6/D24) not yet
+  re-run — requires real API keys, run when available.

@@ -30,6 +30,7 @@ from mcp.client.stdio import stdio_client
 
 from jarvis.config import expand_env_vars
 from jarvis.runlog.context import get_run_id, get_run_logger
+from jarvis.toolresult import classify_tool_result
 
 logger = logging.getLogger(__name__)
 
@@ -156,14 +157,27 @@ class SkillRegistry:
                                  latency_ms=latency_ms, error=error)
             return f"{tool_name} failed: {error}"
 
-        if runlog is not None:
-            runlog.mcp_call(tool_name, server, ok=True, latency_ms=latency_ms)
         structured = getattr(result, "structuredContent", None)
         if structured is not None:
-            return json.dumps(structured, default=str)
-        return "\n".join(
-            getattr(c, "text", "") for c in result.content
-        ).strip()
+            text_result = json.dumps(structured, default=str)
+        else:
+            text_result = "\n".join(
+                getattr(c, "text", "") for c in result.content
+            ).strip()
+
+        # D1/D2 (MORTIMER_AGENT_TRUST_PLAN.md): the MCP transport succeeded
+        # (no isError above), but the tool's own JSON body may still say it
+        # failed — e.g. mcp_apps returning {"ok": false, "error": "...401..."}
+        # as a perfectly normal MCP response. classify_tool_result is the
+        # single place that judgement is made; this call must never be
+        # replaced with a bare ok=True.
+        outcome = classify_tool_result(tool_name, text_result)
+        if runlog is not None:
+            runlog.mcp_call(
+                tool_name, server, ok=outcome.ok, latency_ms=latency_ms,
+                error=outcome.error,
+            )
+        return text_result
 
     async def _start_server(self, entry: dict[str, Any]) -> None:
         name = entry["name"]

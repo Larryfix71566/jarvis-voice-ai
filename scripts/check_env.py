@@ -33,17 +33,28 @@ def report(ok: bool | None, label: str, detail: str = "") -> None:
         failures.append(label)
 
 
+def read_dotenv_only() -> dict[str, str]:
+    """Parse .env WITHOUT merging os.environ — needed by the D9 shadowing
+    check below, which must compare the two sources separately rather than
+    the single merged view load_env() returns."""
+    env_file = REPO_ROOT / ".env"
+    values: dict[str, str] = {}
+    if not env_file.exists():
+        return values
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        values[key.strip()] = value.strip().strip('"').strip("'")
+    return values
+
+
 def load_env() -> dict[str, str]:
     """os.environ overlaid with repo .env (simple KEY=VALUE parser)."""
     env = dict(os.environ)
-    env_file = REPO_ROOT / ".env"
-    if env_file.exists():
-        for line in env_file.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, value = line.partition("=")
-            env.setdefault(key.strip(), value.strip())
+    for key, value in read_dotenv_only().items():
+        env.setdefault(key, value)
     return env
 
 
@@ -64,6 +75,90 @@ def http_status(url: str, headers: dict[str, str] | None = None,
         return e.code, ""
     except Exception as e:
         return None, str(e)
+
+
+def github_probe(token: str) -> tuple[str, str, str]:
+    """Return (outcome, detail, scopes) where outcome is "ok" | "rejected" |
+    "unreachable". Folded in from scripts/check_github.py
+    (MORTIMER_AGENT_TRUST_PLAN.md D9).
+
+    "rejected" and "unreachable" are kept DISTINCT on purpose. A dead
+    credential and a blocked network both stop the request, but they call
+    for opposite responses — rotate the token vs. check the connection —
+    and collapsing them into one FAIL is the same invent-a-cause error that
+    made a GitHub 401 get reported to a user as "admin sidecar may be
+    offline" (plan §1.4/D7). Never returns "ok" for something that was not
+    actually reached — that is the exact failure this check exists to
+    catch (§1.5: check_env.py said PASS for two days while GITHUB_TOKEN
+    was dead, because nothing here looked at GitHub at all).
+    """
+    req = urllib.request.Request(
+        "https://api.github.com/user",
+        headers={"Authorization": f"Bearer {token}",
+                 "Accept": "application/vnd.github+json",
+                 "User-Agent": "mortimer-check-env"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            data = json.loads(resp.read())
+            scopes = resp.headers.get("x-oauth-scopes") or ""
+            return "ok", f"HTTP {resp.status}, login={data.get('login')}", scopes
+    except urllib.error.HTTPError as exc:
+        return "rejected", f"HTTP {exc.code} {exc.reason}", ""
+    except Exception as exc:  # noqa: BLE001
+        return "unreachable", f"{type(exc).__name__}: {str(exc)[:120]}", ""
+
+
+# Two distinct credentials (plan D9) — GITHUB_TOKEN needs 'repo' scope
+# because app_create makes private repositories; JARVIS_GITHUB_TOKEN is a
+# fine-grained token for jarvis/selfedit/service.py and reports no
+# x-oauth-scopes header at all, so it is never scope-checked.
+_GITHUB_TOKENS = [
+    ("GITHUB_TOKEN", "mcp_apps (app_* tools)", "repo"),
+    ("JARVIS_GITHUB_TOKEN", "jarvis/selfedit (PR flow)", None),
+]
+
+
+def check_github(env: dict[str, str], env_file_values: dict[str, str]) -> None:
+    """WARN-degradable (plan D9) — voice, memory, scheduling and research
+    all work with no GitHub access at all, so a dead token here must never
+    produce a required FAIL, only visibility. Every branch below reports
+    via WARN or PASS, never FAIL, and is therefore never added to
+    `failures`."""
+    for name, consumer, needed_scope in _GITHUB_TOKENS:
+        label = f"GitHub: {name} ({consumer})"
+        file_val = env_file_values.get(name, "")
+        shell_val = os.environ.get(name, "")
+
+        # Shadowing check: pydantic-settings resolves the OS environment
+        # ahead of the .env file (jarvis/config.py's Settings), so an
+        # exported shell variable silently defeats every edit to .env.
+        if shell_val and file_val and shell_val != file_val:
+            report(None, label,
+                   "an exported shell variable DIFFERS from .env and will "
+                   f"win — edits to .env have no effect until `unset {name}`")
+            continue
+
+        effective = shell_val or file_val
+        if not effective:
+            report(None, label, "not configured")
+            continue
+
+        outcome, detail, scopes = github_probe(effective)
+        if outcome == "ok":
+            scope_note = ""
+            if needed_scope and scopes and needed_scope not in scopes.split(", "):
+                scope_note = (f"; WARNING: '{needed_scope}' scope missing — "
+                               "app_create/app_write_file will 403")
+            report(True, label, detail + scope_note)
+        elif outcome == "rejected":
+            report(None, label,
+                   f"{detail} — invalid, expired, or revoked. Fix: "
+                   f"./scripts/set_github_token.sh {name}")
+        else:  # unreachable
+            report(None, label,
+                   f"could not verify ({detail}) — network/proxy problem, "
+                   "not a credential verdict")
 
 
 def main() -> int:
@@ -149,6 +244,32 @@ def main() -> int:
         report(True, "JARVIS_TIMEZONE valid", tz)
     except Exception:
         report(False, "JARVIS_TIMEZONE valid", f"invalid: {tz!r}")
+
+    # 9. GitHub credentials (plan D9). WARN-degradable — see check_github's
+    # docstring for why this must never be a required FAIL.
+    check_github(env, read_dotenv_only())
+
+    # 10. Stale git index lock (plan D15). Mirrors mcp_git/logic.py's
+    # GIT_LOCK_STALE_AFTER_S (300s) by value, not by import — check_env.py
+    # is stdlib-only so it can run before dependencies are installed, and
+    # this constant is trivial enough that duplicating it beats coupling
+    # this script to the full package.
+    _GIT_LOCK_STALE_AFTER_S = 300
+    lock_path = REPO_ROOT / ".git" / "index.lock"
+    if lock_path.exists():
+        import time as _time
+        age_s = _time.time() - lock_path.stat().st_mtime
+        if age_s > _GIT_LOCK_STALE_AFTER_S:
+            report(None, "git index lock",
+                   f".git/index.lock is {int(age_s)}s old — if no git "
+                   "process is running, remove it manually: "
+                   "rm .git/index.lock")
+        else:
+            report(None, "git index lock",
+                   f".git/index.lock present ({int(age_s)}s old — may be "
+                   "an in-progress commit)")
+    else:
+        report(True, "git index lock", "not present")
 
     print()
     if failures:

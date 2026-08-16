@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { RTVIEvent } from "@pipecat-ai/client-js";
 import { useRTVIClientEvent } from "@pipecat-ai/client-react";
 import {
+  ANCHORED_CARDS_MIN_STAGE_PX,
   ANCHORED_CARDS_MIN_WIDTH_PX,
   ASSUMED_CARD_HEIGHT_PX,
   CARD_GAP_PX,
@@ -14,6 +15,16 @@ import {
   type AgentLayoutEntry,
   type FieldRect,
 } from "../agentLayout";
+import {
+  STAGES,
+  applyServerMessage,
+  fmtElapsed,
+  getRuns,
+  isSelfEditRun,
+  removeRun,
+  subscribeRuns,
+  type RunState,
+} from "../agentRuns";
 
 /**
  * AgentStatusPanel — live status window for delegated sub-agent runs.
@@ -26,87 +37,39 @@ import {
  * This panel opens a card on "working", appends tool chips as progress
  * arrives, and settles it on "done": success fades out after a few
  * seconds; failures stay until dismissed, showing the failure reason.
- * Development/self-edit runs additionally get a stage readout derived
- * from the tools being called (planning → proposing → validating →
- * submitting).
+ *
+ * Run STATE no longer lives here — it lives in agentRuns.ts (side-drawer
+ * plan D10), because the Developer tab inside the side drawer renders from
+ * the same store and its body unmounts on every tab switch. This component
+ * is the ONE place that registers the RTVI ServerMessage listener (plan
+ * D10's single-listener rule) and forwards it to applyServerMessage(); it
+ * renders only the runs that are NOT routed to the Developer tab
+ * (`!isSelfEditRun`, plan D9).
  *
  * Positioning (star-layout plan §5.3/§5.4): each card anchors near its
  * agent's satellite in OrbField instead of stacking in a fixed corner.
- * This component stays OUTSIDE .main and position: fixed (plan D4) —
+ * This component stays OUTSIDE .main and position: fixed (star plan D4) —
  * .orb-field has overflow: hidden and .main is a stacking context that
  * would trap cards under the top/bottom bars, so cards are positioned in
  * viewport pixels computed from OrbField's published field rect
- * (agentLayout.ts), not rendered inside OrbField itself. Card CONTENT is
- * unchanged from before this positioning work — this file only changes
- * where cards appear, not what they contain (plan §0.4).
+ * (agentLayout.ts), not rendered inside OrbField itself.
  *
- * Below ANCHORED_CARDS_MIN_WIDTH_PX, before the field has been measured,
- * or for an agent not present in the shared layout table (a future 6th
- * agent added to config/agents.yaml without updating agentLayout.ts —
- * plan §5.3 step 6), a card falls back to the original stacked
+ * Below ANCHORED_CARDS_MIN_WIDTH_PX (viewport), below
+ * ANCHORED_CARDS_MIN_STAGE_PX (measured stage width — side-drawer plan
+ * D15), before the field has been measured, or for an agent not present in
+ * the shared layout table, a card falls back to the original stacked
  * bottom-left column so it is never lost.
  */
 
-const DONE_FADE_MS = 8000;
-const MAX_TOOLS = 10;
-const STAGES = ["planning", "proposing", "validating", "submitting"] as const;
-
-interface RunState {
-  id: number;
-  name: string;
-  displayName: string;
-  task: string;
-  tools: string[];
-  stage: number; // index into STAGES (self-edit runs only)
-  startedAt: number;
-  doneAt: number | null;
-  ok: boolean;
-  detail: string;
-}
-
-interface AgentLifecycleMsg {
-  type?: string;
-  name?: string;
-  display_name?: string;
-  state?: string;
-  task?: string;
-  ok?: boolean;
-  detail?: string;
-  tool?: string;
-}
-
-function clamp(s: string, max: number): string {
-  const t = s.trim().replace(/\s+/g, " ");
-  return t.length > max ? t.slice(0, max - 1) + "…" : t;
-}
-
-function fmtElapsed(ms: number): string {
-  const s = Math.max(0, Math.round(ms / 1000));
-  const m = Math.floor(s / 60);
-  return m > 0 ? `${m}:${String(s % 60).padStart(2, "0")}` : `${s}s`;
-}
-
-/** Map a tool name onto a self-edit stage. */
-function toolStage(tool: string): number {
-  const t = tool.toLowerCase();
-  if (/valid|test|pytest|check/.test(t)) return 2;
-  if (/submit|push|pull_request|\bpr\b/.test(t)) return 3;
-  if (/propos|write|edit|apply|patch|create/.test(t)) return 1;
-  return 0;
-}
-
-/** Development runs (developer agent / selfedit_* tools) get stages. */
-function isSelfEditRun(name: string, tools: string[]): boolean {
-  const n = name.toLowerCase();
-  return (
-    n.includes("self") ||
-    n.includes("edit") ||
-    n.includes("develop") ||
-    tools.some((t) => t.toLowerCase().startsWith("selfedit"))
-  );
-}
-
-/** Anchored card viewport position, clamped on-screen (plan §5.4). */
+/** Anchored card viewport position, clamped on-screen (star plan §5.4).
+ *
+ * Horizontal bounds derive from the field rect, not window.innerWidth
+ * (side-drawer plan D14): with a pushing drawer the usable stage no longer
+ * reaches the window's right edge, and a window-clamped card would slide
+ * underneath the drawer. With the drawer closed the field spans the full
+ * width, so the two are equivalent — this is the bound that was always
+ * meant. Vertical bounds still use window.innerHeight; the drawer does not
+ * affect vertical extent. */
 function computeAnchoredStyle(
   entry: AgentLayoutEntry,
   fieldRect: FieldRect,
@@ -136,13 +99,14 @@ function computeAnchoredStyle(
       break;
   }
 
-  const vw = window.innerWidth;
+  const stageLeft = fieldRect.left;
+  const stageRight = fieldRect.left + fieldRect.width;
   const vh = window.innerHeight;
   const topFloor = TOPBAR_HEIGHT_PX + VIEWPORT_MARGIN_PX;
 
-  if (left < VIEWPORT_MARGIN_PX) left = VIEWPORT_MARGIN_PX;
-  if (left + CARD_WIDTH_PX > vw - VIEWPORT_MARGIN_PX) {
-    left = vw - CARD_WIDTH_PX - VIEWPORT_MARGIN_PX;
+  if (left < stageLeft + VIEWPORT_MARGIN_PX) left = stageLeft + VIEWPORT_MARGIN_PX;
+  if (left + CARD_WIDTH_PX > stageRight - VIEWPORT_MARGIN_PX) {
+    left = stageRight - CARD_WIDTH_PX - VIEWPORT_MARGIN_PX;
   }
   if (top < topFloor) top = topFloor;
   if (top + cardHeight > vh - VIEWPORT_MARGIN_PX) {
@@ -153,19 +117,17 @@ function computeAnchoredStyle(
 }
 
 export default function AgentStatusPanel() {
-  const [runs, setRuns] = useState<RunState[]>([]);
-  const seq = useRef(0);
-  const runIds = useRef(new Map<string, number>()); // agent name -> live run id
-  const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+  const [allRuns, setAllRuns] = useState<RunState[]>(getRuns);
   const [, setTick] = useState(0);
 
-  // Star-layout positioning state (plan §5.3).
+  // Star-layout positioning state (star plan §5.3).
   const [fieldRect, setFieldRect] = useState<FieldRect | null>(null);
   const [viewportWidth, setViewportWidth] = useState(
     typeof window === "undefined" ? ANCHORED_CARDS_MIN_WIDTH_PX : window.innerWidth,
   );
   const [cardHeights, setCardHeights] = useState<Record<number, number>>({});
 
+  useEffect(() => subscribeRuns(setAllRuns), []);
   useEffect(() => subscribeFieldRect(setFieldRect), []);
 
   useEffect(() => {
@@ -173,6 +135,18 @@ export default function AgentStatusPanel() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  // Drop measured heights for runs that no longer exist.
+  useEffect(() => {
+    setCardHeights((prev) => {
+      const live = new Set(allRuns.map((r) => r.id));
+      const stale = Object.keys(prev).filter((k) => !live.has(Number(k)));
+      if (stale.length === 0) return prev;
+      const next = { ...prev };
+      for (const k of stale) delete next[Number(k)];
+      return next;
+    });
+  }, [allRuns]);
 
   const measureCard = useCallback(
     (id: number) => (el: HTMLDivElement | null) => {
@@ -183,119 +157,32 @@ export default function AgentStatusPanel() {
     [],
   );
 
-  const clearTimer = (id: number) => {
-    const t = timers.current.get(id);
-    if (t !== undefined) {
-      clearTimeout(t);
-      timers.current.delete(id);
-    }
-  };
-
-  const removeRun = useCallback((id: number) => {
-    setRuns((rs) => {
-      const run = rs.find((r) => r.id === id);
-      if (run) runIds.current.delete(run.name);
-      return rs.filter((r) => r.id !== id);
-    });
-    setCardHeights((prev) => {
-      if (!(id in prev)) return prev;
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-    const t = timers.current.get(id);
-    if (t !== undefined) {
-      clearTimeout(t);
-      timers.current.delete(id);
-    }
-  }, []);
-
-  // Unmount: cancel pending fade removals.
-  useEffect(() => {
-    const pending = timers.current;
-    return () => pending.forEach((t) => clearTimeout(t));
-  }, []);
-
   // 1s heartbeat to keep elapsed times live while anything is working.
-  const anyWorking = runs.some((r) => r.doneAt === null);
+  const anyWorking = allRuns.some((r) => r.doneAt === null);
   useEffect(() => {
     if (!anyWorking) return;
     const t = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(t);
   }, [anyWorking]);
 
-  useRTVIClientEvent(RTVIEvent.ServerMessage, (data: unknown) => {
-    const msg = data as AgentLifecycleMsg;
-    if (typeof msg?.type !== "string" || typeof msg?.name !== "string") return;
-    const name = msg.name;
-    const displayName =
-      typeof msg.display_name === "string" && msg.display_name !== ""
-        ? msg.display_name
-        : name;
+  // The single RTVI listener for agent lifecycle messages (plan D10).
+  useRTVIClientEvent(RTVIEvent.ServerMessage, applyServerMessage);
 
-    if (msg.type === "agent" && msg.state === "working") {
-      // Fresh run for this agent — replaces any previous card.
-      const prevId = runIds.current.get(name);
-      if (prevId !== undefined) clearTimer(prevId);
-      seq.current += 1;
-      const id = seq.current;
-      runIds.current.set(name, id);
-      const run: RunState = {
-        id,
-        name,
-        displayName,
-        task: typeof msg.task === "string" ? clamp(msg.task, 200) : "",
-        tools: [],
-        stage: 0,
-        startedAt: Date.now(),
-        doneAt: null,
-        ok: false,
-        detail: "",
-      };
-      setRuns((rs) => [...rs.filter((r) => r.name !== name), run]);
-    } else if (msg.type === "agent_tool" && typeof msg.tool === "string") {
-      const tool = msg.tool;
-      setRuns((rs) =>
-        rs.map((r) =>
-          r.name === name && r.doneAt === null
-            ? {
-                ...r,
-                displayName,
-                tools: [...r.tools, tool].slice(-MAX_TOOLS),
-                stage: Math.max(r.stage, toolStage(tool)),
-              }
-            : r,
-        ),
-      );
-    } else if (msg.type === "agent" && msg.state === "done") {
-      // Bots predating ok/detail send neither — assume success.
-      const ok = msg.ok !== false;
-      const detail = typeof msg.detail === "string" ? clamp(msg.detail, 300) : "";
-      setRuns((rs) =>
-        rs.map((r) =>
-          r.name === name && r.doneAt === null
-            ? { ...r, displayName, doneAt: Date.now(), ok, detail }
-            : r,
-        ),
-      );
-      const id = runIds.current.get(name);
-      if (ok && id !== undefined) {
-        clearTimer(id);
-        timers.current.set(
-          id,
-          setTimeout(() => removeRun(id), DONE_FADE_MS),
-        );
-      }
-    }
-  });
+  // Developer/self-edit runs render in the side drawer's Developer tab
+  // (plan D9), not as anchored satellite cards.
+  const runs = allRuns.filter((r) => !isSelfEditRun(r.name, r.tools));
 
   if (runs.length === 0) return null;
 
   const now = Date.now();
 
-  // Plan D12: below the breakpoint, or before OrbField has published a
-  // field rect, no card can be anchored — all of them fall back together.
-  const canAnchor = viewportWidth >= ANCHORED_CARDS_MIN_WIDTH_PX && fieldRect !== null;
+  // Star plan D12 + side-drawer D15: below the viewport breakpoint, below
+  // the stage-width threshold, or before OrbField has published a field
+  // rect, no card can be anchored — all of them fall back together.
+  const canAnchor =
+    viewportWidth >= ANCHORED_CARDS_MIN_WIDTH_PX &&
+    fieldRect !== null &&
+    fieldRect.width >= ANCHORED_CARDS_MIN_STAGE_PX;
 
   const anchored: Array<{ run: RunState; entry: AgentLayoutEntry }> = [];
   const fallback: RunState[] = [];

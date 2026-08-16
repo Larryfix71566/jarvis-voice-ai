@@ -11,7 +11,13 @@ shape it.
 
 from jarvis.runlog.context import get_run_id, get_run_logger, run_logger_scope
 from jarvis.runlog.prune import prune
-from jarvis.runlog.store import RunLogger, get_run, list_runs, parse_since
+from jarvis.runlog.store import (
+    RunLogger,
+    get_run,
+    list_runs,
+    parse_since,
+    reconcile_orphaned_runs,
+)
 
 __all__ = [
     "RunLogger",
@@ -22,4 +28,5 @@ __all__ = [
     "get_run_logger",
     "run_logger_scope",
     "prune",
+    "reconcile_orphaned_runs",
 ]

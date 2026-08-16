@@ -1,0 +1,9 @@
+# Skill manifest (MORTIMER_AGENT_TRUST_PLAN.md D10)
+name: mcp-repo
+version: 0.1.0
+class: privileged
+tools: [repo_read_file, repo_list_files, repo_search, repo_write_file, repo_commit_write]
+requires_env: []
+requires_keychain: []
+scopes: []
+test: "python3 -m pytest tests/unit/test_mcp_repo_logic.py -q"

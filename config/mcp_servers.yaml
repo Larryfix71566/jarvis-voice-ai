@@ -34,6 +34,11 @@ servers:
     env:
       GITHUB_TOKEN: "${GITHUB_TOKEN}"
       GITHUB_OWNER: "${GITHUB_OWNER}"
+  - name: mcp-repo
+    command: python
+    args: ["-m", "mcp_servers.mcp_repo.server"]
+    env:
+      JARVIS_REPO_ROOT: "${JARVIS_REPO_ROOT}"
   - name: mcp-selfedit
     command: python
     args: ["-m", "mcp_servers.mcp_selfedit.server"]

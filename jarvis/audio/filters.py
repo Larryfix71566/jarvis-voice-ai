@@ -119,7 +119,13 @@ class DeepFilterNetFilter(BaseAudioFilter):
                 self._load_engine()
             )
         except Exception as e:  # noqa: BLE001 - any engine failure = passthrough
-            logger.error(
+            # MORTIMER_AGENT_TRUST_PLAN.md D19: WARNING, not ERROR — this is
+            # an expected, already-handled optional-dependency state (the
+            # code degrades to pass-through right below), not a fault. An
+            # ERROR here every boot when the engine isn't installed trains
+            # the operator to ignore ERROR, which should mean "look at
+            # this."
+            logger.warning(
                 f"[ns] DeepFilterNet unavailable, noise suppression OFF "
                 f"(audio passes through unchanged): {e}. "
                 f"Install with: pip install deepfilternet"

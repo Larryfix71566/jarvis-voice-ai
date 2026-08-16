@@ -25,10 +25,25 @@ import uuid
 from typing import Any, Callable
 
 from jarvis.agents.base import EventCallback, SubAgent
+from jarvis.procedures import learn_from_run
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_PARALLEL_DELEGATIONS = 3
+
+# Procedures-as-hints (MORTIMER_MEMORY_PROCEDURES_PLAN.md D13): a bare
+# asyncio.create_task(...) result has no strong reference anywhere else in
+# this module, so without holding one here a background learn_from_run
+# task could be garbage-collected — and silently cancelled — before it
+# finishes. Module-level so it survives across concurrent delegations;
+# add_done_callback discards each task's own reference once it completes.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _spawn_background(coro) -> None:
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 def build_delegate_tool(
@@ -93,6 +108,13 @@ def build_delegate_tool(
             result = await agent.run(
                 task, on_event=on_event, run_id=run_id, session_id=session_id,
             )
+        # D13: spawned unconditionally — D20 makes jarvis_procedures_enabled
+        # a single-enforcement-point flag, checked once inside
+        # learn_from_run itself (which loads its own settings). A disabled
+        # flag still spawns a task, which returns immediately as a no-op;
+        # this keeps delegate.py from reaching into SubAgent's private
+        # _settings attribute to check the flag redundantly.
+        _spawn_background(learn_from_run(run_id, agent_name))
         if on_event is not None:
             failed = result.startswith("FAILED:")
             on_event({"type": "delegate_done", "agent": agent_name,

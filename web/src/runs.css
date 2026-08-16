@@ -133,6 +133,16 @@
   width: 50px;
 }
 
+/* D5 (MORTIMER_AGENT_TRUST_PLAN.md) — ok/failed tool-call counts,
+   adjacent to latency so a run's grounding is visible at a glance. */
+.runs-tools {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  flex: none;
+  width: 36px;
+}
+
 .runs-task {
   flex: 1;
   overflow: hidden;

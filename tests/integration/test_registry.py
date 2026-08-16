@@ -10,14 +10,16 @@ from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 
 ALL_SERVERS = [
     "mcp-time", "mcp-notes", "mcp-reminders", "mcp-web", "mcp-system",
-    "mcp-git", "mcp-apps", "mcp-selfedit",
+    "mcp-git", "mcp-apps", "mcp-repo", "mcp-selfedit",
 ]
-# time 4, notes 7, reminders 5, web 3, system 2, git 8, apps 5, selfedit 5.
-# notes went 6 -> 7 when search_sessions (FTS5 conversation search) shipped;
-# its skill.yaml and server.py were updated then but this count was not, and
-# the mismatch only surfaced once the branch merged alongside a main that
-# still carried the old number.
-TOTAL_TOOLS = 39  # 4 + 7 + 5 + 3 + 2 + 8 + 5 + 5
+# time 4, notes 7, reminders 5, web 3, system 2, git 8, apps 5, repo 5,
+# selfedit 5. notes went 6 -> 7 when search_sessions (FTS5 conversation
+# search) shipped; its skill.yaml and server.py were updated then but this
+# count was not, and the mismatch only surfaced once the branch merged
+# alongside a main that still carried the old number. repo (5) added by
+# MORTIMER_AGENT_TRUST_PLAN.md D10-D12: repo_read_file, repo_list_files,
+# repo_search, repo_write_file, repo_commit_write.
+TOTAL_TOOLS = 44  # 4 + 7 + 5 + 3 + 2 + 8 + 5 + 5 + 5
 
 
 @pytest.fixture

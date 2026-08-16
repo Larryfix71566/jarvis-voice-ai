@@ -181,6 +181,34 @@ body {
   color: var(--red);
 }
 
+/* Topbar button whose tab is the side drawer's active tab (side-drawer
+   plan D26 — same shape as .btn-mic-on below). */
+.btn-active {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* Live self-edit indicator on the Dev button (side-drawer plan D7): the
+   topbar is the only surface visible regardless of drawer state, so a run
+   behind a closed drawer is still evident here. */
+.btn-live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: dot-pulse 1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-live-dot {
+    animation: none;
+  }
+}
+
 .pill {
   font-family: var(--mono);
   font-size: 10px;

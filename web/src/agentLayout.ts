@@ -78,6 +78,15 @@ export const VIEWPORT_MARGIN_PX = 12;
  * `@media (max-width: 860px)` breakpoint in command-deck.css. */
 export const ANCHORED_CARDS_MIN_WIDTH_PX = 860;
 
+/** ⚙ TUNING KNOB — below this measured `.orb-field` WIDTH, fall back to the
+ * stacked bottom-left column even on a wide viewport (side-drawer plan
+ * D15). Deliberately separate from ANCHORED_CARDS_MIN_WIDTH_PX, which is a
+ * *viewport* threshold mirroring the `@media (max-width: 860px)`
+ * breakpoint: with the side drawer open the stage is narrower than the
+ * window, so a 1200px window with a 420px drawer leaves a 780px stage —
+ * wide viewport, cramped stage. One number cannot mean both things. */
+export const ANCHORED_CARDS_MIN_STAGE_PX = 720;
+
 /** Fallback assumed card height in px, used for the first paint before a
  * card's real height has been measured (plan §5.4). */
 export const ASSUMED_CARD_HEIGHT_PX = 160;

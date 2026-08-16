@@ -15,6 +15,12 @@
 #
 # This file is NOT on the self-edit allowlist: the agent cannot re-point its
 # own brain. Changes land via the normal human PR process.
+#
+# tier: economy | mid | frontier — MORTIMER_LLM_COUNCIL_PLAN.md D4. Which
+# escalation tier's proposer/judge pool a profile belongs to. Read by
+# jarvis.agents.upgrade_agent.available_models() and jarvis.council.config,
+# so the council and the console picker (D9) share one source of truth for
+# "what tier is this model."
 
 default: kimi-k3
 
@@ -26,6 +32,7 @@ profiles:
     base_url: https://api.moonshot.ai/v1
     api_key_env: MOONSHOT_API_KEY
     temperature: null
+    tier: mid
 
   - name: kimi-k2
     label: "Kimi K2.7 Code — coding-tuned K2 family, 256K context"
@@ -34,6 +41,7 @@ profiles:
     base_url: https://api.moonshot.ai/v1
     api_key_env: MOONSHOT_API_KEY
     temperature: null
+    tier: economy
 
   - name: claude-opus
     label: "Claude Opus 5 — Anthropic Opus tier, 1M context"
@@ -42,6 +50,7 @@ profiles:
     base_url: https://api.anthropic.com/v1/
     api_key_env: ANTHROPIC_API_KEY
     temperature: 0.2
+    tier: frontier
 
   - name: gpt-4.1-mini
     label: "GPT-4.1 mini — fast and cheap"
@@ -50,3 +59,4 @@ profiles:
     base_url: https://api.openai.com/v1
     api_key_env: OPENAI_API_KEY
     temperature: 0.2
+    tier: economy

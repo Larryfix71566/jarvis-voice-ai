@@ -121,6 +121,38 @@ class TestDisplayPassthrough:
         await flush()
         assert sent == []
 
+    async def test_display_payload_build_is_logged(self, sent, caplog):
+        """MORTIMER_AGENT_TRUST_PLAN.md D18: one INFO line whenever a
+        display payload is actually built, naming tool/surface/agent/kind,
+        so MORTIMER_SIDE_DRAWER_PLAN.md D36's surface routing is
+        confirmable from logs alone."""
+        handler = make_agent_event_handler(transport=object())
+        with caplog.at_level("INFO", logger="jarvis.bot.pipeline"):
+            handler({
+                "type": "agent_tool_result", "agent": "analyst",
+                "display_name": "Analyst", "tool": "web_search",
+                "arguments": {"query": "meaning"},
+                "result": json.dumps(self.SEARCH),
+            })
+            await flush()
+        matches = [r for r in caplog.records if "display_payload" in r.message]
+        assert len(matches) == 1
+        assert "tool=web_search" in matches[0].message
+        assert "agent=analyst" in matches[0].message
+        assert "surface=" in matches[0].message
+        assert "kind=" in matches[0].message
+
+    async def test_voice_only_result_is_not_logged_as_display_payload(self, caplog):
+        handler = make_agent_event_handler(transport=object())
+        with caplog.at_level("INFO", logger="jarvis.bot.pipeline"):
+            handler({
+                "type": "agent_tool_result", "agent": "scheduler",
+                "display_name": "Scheduler", "tool": "set_reminder",
+                "arguments": {}, "result": '{"ok": true}',
+            })
+            await flush()
+        assert not any("display_payload" in r.message for r in caplog.records)
+
 
 def test_no_running_loop_does_not_raise(sent):
     # Sync callers without a running loop (CLI, direct tests) must not crash.

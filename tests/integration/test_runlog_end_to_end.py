@@ -37,6 +37,11 @@ def make_settings(**overrides):
         openai_base_url="http://unused",
         jarvis_timezone="America/New_York",
         jarvis_runlog_enabled=True,
+        # Procedures-as-hints (memory/procedures plan D20): off by default
+        # here so this run-logging-focused fixture doesn't also exercise
+        # matching — see tests/unit/test_procedures.py and
+        # tests/integration/test_procedures_end_to_end.py for that.
+        jarvis_procedures_enabled=False,
     )
     base.update(overrides)
     return SimpleNamespace(**base)

@@ -33,6 +33,17 @@ def _fmt_latency(latency_ms: int | None) -> str:
     return f"{latency_ms}ms" if latency_ms is not None else "-"
 
 
+def _fmt_tools(r: dict) -> str:
+    """D5 (MORTIMER_AGENT_TRUST_PLAN.md): render 'ok/failed' when both
+    counts are present; a row written before migration 0008 has NULL for
+    both and falls back to the pre-existing tool_count alone, since NULL
+    means "unknown", never "zero"."""
+    ok, failed = r.get("tools_ok"), r.get("tools_failed")
+    if ok is None or failed is None:
+        return str(r.get("tool_count", 0))
+    return f"{ok}/{failed}"
+
+
 def _terminal_width() -> int:
     try:
         return shutil.get_terminal_size(fallback=(100, 24)).columns
@@ -61,7 +72,7 @@ def _print_table(runs: list[dict]) -> None:
             f"{r['agent']:<10} "
             f"{r['status']:<9} "
             f"{_fmt_latency(r.get('latency_ms')):<8} "
-            f"{r.get('tool_count', 0):<5} "
+            f"{_fmt_tools(r):<5} "
             f"{task}"
         )
 
@@ -76,6 +87,7 @@ def _print_detail(detail: dict) -> None:
     print(f"ended_at     {run.get('ended_at') or '-'}")
     print(f"latency_ms   {run.get('latency_ms')}")
     print(f"tool_count   {run.get('tool_count', 0)}")
+    print(f"tools        {_fmt_tools(run)}")
     if run.get("error"):
         print(f"error        {run['error']}")
     print(f"task         {run['task']}")

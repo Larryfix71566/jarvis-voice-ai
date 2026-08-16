@@ -52,6 +52,21 @@ class GitHubClient:
     @staticmethod
     def _raise_for_status(resp: httpx.Response, what: str) -> None:
         if resp.status_code >= 400:
+            # MORTIMER_AGENT_TRUST_PLAN.md D8: 401/403 get a specific,
+            # correctly-attributed message. This is the ONE string a
+            # sub-agent is permitted to repeat verbatim (plan D7 — no
+            # invented remediation) — a prior incident had the agent report
+            # a GitHub 401 as "admin sidecar may be offline", which sent
+            # the user to debug an unrelated, healthy component. The
+            # explicit "unrelated to the admin sidecar" clause exists
+            # because that is the exact wrong conclusion already reached
+            # twice in the logged history (see the plan's Appendix A.5).
+            if resp.status_code in (401, 403):
+                raise GitHubError(
+                    f"GitHub authentication failed (HTTP {resp.status_code}). "
+                    "The GITHUB_TOKEN in .env is missing, expired, or "
+                    "revoked. This is unrelated to the admin sidecar."
+                )
             detail = ""
             try:
                 detail = resp.json().get("message", "")

@@ -164,6 +164,159 @@ CREATE TABLE IF NOT EXISTS agent_events (
 CREATE INDEX IF NOT EXISTS idx_agent_events_run ON agent_events(run_id, seq);
 """
 
+# Reliable-memory + procedures plan (MORTIMER_MEMORY_PROCEDURES_PLAN.md
+# D19), Part B: procedures learned from jarvis.runlog run outcomes and
+# injected as prompt hints (jarvis/procedures.py). FTS5 structure copied
+# field-for-field from conversations_fts's three triggers (MIGRATION_0005)
+# — same external-content pattern, same delete-then-reinsert shape for
+# UPDATE. No backfill INSERT here (unlike MIGRATION_0005) — procedures is a
+# brand-new, empty table at migration time.
+MIGRATION_0007 = """
+CREATE TABLE IF NOT EXISTS procedures (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent TEXT NOT NULL,
+  label TEXT NOT NULL,
+  description TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'candidate',  -- candidate | active | deprecated
+  success_count INTEGER NOT NULL DEFAULT 0,
+  failure_count INTEGER NOT NULL DEFAULT 0,
+  source_run_ids TEXT NOT NULL DEFAULT '[]', -- JSON array, capped
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_used_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_procedures_agent_status
+  ON procedures(agent, status);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS procedures_fts USING fts5(
+  label, description, agent UNINDEXED,
+  content='procedures', content_rowid='id'
+);
+
+CREATE TRIGGER IF NOT EXISTS procedures_fts_ai AFTER INSERT ON procedures BEGIN
+  INSERT INTO procedures_fts(rowid, label, description, agent)
+  VALUES (new.id, new.label, new.description, new.agent);
+END;
+
+CREATE TRIGGER IF NOT EXISTS procedures_fts_ad AFTER DELETE ON procedures BEGIN
+  INSERT INTO procedures_fts(procedures_fts, rowid, label, description, agent)
+  VALUES ('delete', old.id, old.label, old.description, old.agent);
+END;
+
+CREATE TRIGGER IF NOT EXISTS procedures_fts_au AFTER UPDATE ON procedures BEGIN
+  INSERT INTO procedures_fts(procedures_fts, rowid, label, description, agent)
+  VALUES ('delete', old.id, old.label, old.description, old.agent);
+  INSERT INTO procedures_fts(rowid, label, description, agent)
+  VALUES (new.id, new.label, new.description, new.agent);
+END;
+"""
+
+# MORTIMER_AGENT_TRUST_PLAN.md D24: both of the plan's schema changes land
+# in ONE migration deliberately — two independently-numbered migrations
+# from one plan is how a half-applied schema happens.
+#
+# agent_runs.tools_ok / tools_failed (D5): per-run counts of tool calls the
+# D1 classifier judged ok vs failed, so a run's success/failure is visible
+# as fact rather than inferred from a fabricated-sounding reply. Existing
+# rows get NULL (SQLite's ALTER TABLE ... ADD COLUMN default), NOT
+# backfilled from tool_count — a pre-migration row cannot actually
+# distinguish ok from failed calls, and asserting tools_failed=0 for it
+# would assert something the data does not support. Every reader (CLI,
+# admin API, console) must treat NULL as "unknown, fall back to
+# tool_count", never as zero.
+#
+# procedures.task_tokens (D21): the stopword-filtered token set of the task
+# that created each procedure, written once by _create_candidate
+# (jarvis/procedures.py) from the exact same _tokens(task) call the match
+# path uses. Existing rows default to '' (via SQLite's column default),
+# which can never match under D21's scoring — those 13 rows are
+# intentionally left inert rather than back-filled from their
+# descriptions; see the plan's D24 note for why.
+MIGRATION_0008 = """
+ALTER TABLE agent_runs ADD COLUMN tools_ok INTEGER;
+ALTER TABLE agent_runs ADD COLUMN tools_failed INTEGER;
+ALTER TABLE procedures ADD COLUMN task_tokens TEXT NOT NULL DEFAULT '';
+"""
+
+# MORTIMER_LLM_COUNCIL_PLAN.md D8: council rounds are delegations in all but
+# name, so the shape mirrors MIGRATION_0006's two-tier pattern (bounded
+# SQLite previews here; full proposal texts in logs/council/<date>/<round_id>
+# .jsonl, written by jarvis/council/council.py). Both tables land in ONE
+# migration deliberately (same D24 rule MIGRATION_0008's comment cites) —
+# two migrations from one plan is how a half-applied schema happens.
+#
+# council_scores.shadow (D8.2): 1 == an advisory-only score from a shadow
+# judge tier, written for judge-tier validation and NEVER consumed by
+# select_winner. council.py must filter WHERE shadow = 0 before selecting a
+# winner — this column is load-bearing, not cosmetic (D8's own note). The
+# composite index on (round_id, shadow) exists so that filter is cheap.
+MIGRATION_0009 = """
+CREATE TABLE IF NOT EXISTS council_rounds (
+  round_id TEXT PRIMARY KEY,
+  run_id TEXT,                       -- reserved: agent-run correlation for
+                                     -- future workflows (e.g. apps). NULL
+                                     -- for all selfedit rounds -- the
+                                     -- sidecar has no run_id
+                                     -- (MORTIMER_LLM_COUNCIL_V2_PLAN.md V12)
+  workflow TEXT NOT NULL,            -- 'selfedit' | 'apps'
+  placement TEXT NOT NULL,           -- 'planner' | 'reviewer'
+  trigger TEXT NOT NULL,             -- 'E1' | 'E2' | 'E3' | 'manual'
+  tier INTEGER NOT NULL,             -- 1 | 2
+  goal TEXT NOT NULL,
+  proposer_count INTEGER NOT NULL,
+  judge_count INTEGER NOT NULL,
+  abstentions INTEGER NOT NULL DEFAULT 0,
+  winner_profile TEXT,               -- unmasked AFTER selection
+  winner_label TEXT,                 -- 'Proposal A'
+  winner_mean REAL,
+  select_reason TEXT,                -- which D7 branch decided it
+  retry_validated INTEGER,           -- 1|0|NULL: did the retry pass? (D8.1)
+  status TEXT NOT NULL,              -- running | ok | failed | too_small
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  latency_ms INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_council_rounds_run ON council_rounds(run_id);
+
+CREATE TABLE IF NOT EXISTS council_scores (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  round_id TEXT NOT NULL,
+  judge_profile TEXT NOT NULL,
+  judge_tier TEXT NOT NULL,          -- 'economy'|'mid'|'frontier' (D8.2)
+  shadow INTEGER NOT NULL DEFAULT 0, -- 1 == advisory only, excluded from
+                                     -- selection (D8.2). Live scores are 0.
+  proposal_label TEXT NOT NULL,
+  proposal_profile TEXT NOT NULL,    -- unmasked at write time, post-selection
+  score REAL,                        -- NULL == abstained
+  abstain_reason TEXT,               -- NULL unless score IS NULL
+  justification TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_council_scores_round ON council_scores(round_id);
+CREATE INDEX IF NOT EXISTS idx_council_scores_shadow
+  ON council_scores(round_id, shadow);
+"""
+
+# MORTIMER_LLM_COUNCIL_V2_PLAN.md V9/V13: both new column groups land in
+# ONE migration deliberately (same D24 rule MIGRATION_0009's comment
+# cites). All three columns are nullable; pre-v2 rows stay NULL, readers
+# treat NULL as "unknown", never zero/empty — same discipline as
+# MIGRATION_0008's tools_ok/tools_failed.
+#
+# prompt_tokens/completion_tokens (V9): summed across a round's proposer
+# + live-judge calls only (never replay, never shadow — see V9's
+# _gather_* usage-dict contract); NULL when no member response reported
+# usage at all, not 0.
+#
+# registry_order (V13): JSON array of profile names in registry order at
+# convene() time, so agreement.py and --replay can reproduce D7's rule-4
+# tiebreak exactly instead of approximating it from row order.
+MIGRATION_0010 = """
+ALTER TABLE council_rounds ADD COLUMN prompt_tokens INTEGER;
+ALTER TABLE council_rounds ADD COLUMN completion_tokens INTEGER;
+ALTER TABLE council_rounds ADD COLUMN registry_order TEXT;
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
@@ -172,6 +325,10 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0004_observations", MIGRATION_0004),
     ("0005_conversation_search", MIGRATION_0005),
     ("0006_agent_runs", MIGRATION_0006),
+    ("0007_procedures", MIGRATION_0007),
+    ("0008_tool_outcomes", MIGRATION_0008),
+    ("0009_council", MIGRATION_0009),
+    ("0010_council_v2", MIGRATION_0010),
 ]
 
 

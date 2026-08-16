@@ -1,0 +1,83 @@
+/**
+ * displayResults.ts — module-level store for DRAWER-ROUTED display
+ * payloads (MORTIMER_SIDE_DRAWER_PLAN.md D29).
+ *
+ * Mirrors agentRuns.ts's publish/subscribe shape for the same reason as
+ * D10: the Output tab body unmounts on tab switch and on drawer close
+ * (plan D23), so state cannot live inside it — it has to outlive the
+ * component that renders it.
+ *
+ * Only `surface: "drawer"` payloads land here (plan D28/D36/D37).
+ * `surface: "window"` payloads go to displayWindow.ts instead — this
+ * store never sees them.
+ */
+
+export interface DisplayPayload {
+  kind?: string; // "markdown" | "image" | "links"
+  title?: string;
+  body?: string; // markdown
+  images?: string[];
+  links?: { label?: string; url: string }[];
+  agent?: string;
+  ts?: number; // epoch SECONDS from jarvis/bot/display.py — see timeFormat.ts's warning; do not use directly
+  surface?: string; // "drawer" | "window" — plan D36
+}
+
+/** One received payload plus a client-side identity, since the payload
+ *  itself has no id and two results can be identical. */
+export interface DisplayResult {
+  id: number;
+  payload: DisplayPayload;
+  receivedAt: number; // Date.now(), ms — see D34
+}
+
+export type DisplayListener = (results: DisplayResult[]) => void;
+
+/** ⚙ TUNING KNOB — bounded history; oldest dropped first. */
+export const MAX_DISPLAY_RESULTS = 20;
+
+let results: DisplayResult[] = [];
+let seq = 0;
+const listeners = new Set<DisplayListener>();
+
+function notify() {
+  const snapshot = results.slice();
+  for (const cb of listeners) cb(snapshot);
+}
+
+/** Newest FIRST (opposite of agentRuns.getRuns(), which is oldest-first —
+ *  a results log reads newest-down, a run list reads oldest-up). */
+export function getResults(): DisplayResult[] {
+  return results.slice();
+}
+
+export function subscribeResults(cb: DisplayListener): () => void {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
+}
+
+/** Type-guards internally; ignores anything that is not
+ *  {type: "display", display: {...}}. The ONLY mutator from RTVI events.
+ *  Callers (App.tsx's D30/D37 listener) are responsible for only
+ *  forwarding surface:"drawer" payloads here. */
+export function applyServerMessage(msg: unknown): void {
+  const m = msg as { type?: string; display?: DisplayPayload };
+  if (m?.type !== "display" || !m.display) return;
+  const entry: DisplayResult = {
+    id: ++seq,
+    payload: m.display,
+    receivedAt: Date.now(),
+  };
+  results = [entry, ...results].slice(0, MAX_DISPLAY_RESULTS);
+  notify();
+}
+
+export function removeResult(id: number): void {
+  results = results.filter((r) => r.id !== id);
+  notify();
+}
+
+export function clearResults(): void {
+  results = [];
+  notify();
+}

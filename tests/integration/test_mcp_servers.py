@@ -29,6 +29,10 @@ EXPECTED_TOOLS = {
     },
     "mcp_servers.mcp_web.server": {"web_search", "get_weather", "get_weather_radar"},
     "mcp_servers.mcp_system.server": {"get_system_status", "get_top_processes"},
+    "mcp_servers.mcp_repo.server": {
+        "repo_read_file", "repo_list_files", "repo_search",
+        "repo_write_file", "repo_commit_write",
+    },
 }
 
 
@@ -144,3 +148,46 @@ async def test_mcp_system_server():
     )
     assert tools == EXPECTED_TOOLS["mcp_servers.mcp_system.server"]
     assert "cpu_percent" in payload and "human" in payload
+
+
+async def test_mcp_repo_server_read(tmp_path):
+    """D10-D11 over the real stdio round trip: tool set is exactly the
+    five repo_* tools (never app_*, confirming the two servers stay
+    separate — see mcp_repo/logic.py's module docstring), and a read
+    returns real file content from a throwaway repo."""
+    repo_dir = tmp_path / "int_repo"
+    repo_dir.mkdir()
+    (repo_dir / "README.md").write_text("integration hello\n")
+    db = tmp_path / "int_repo.db"
+    tools, payload = await _call(
+        "mcp_servers.mcp_repo.server", "repo_read_file",
+        {"path": "README.md"},
+        {"JARVIS_REPO_ROOT": str(repo_dir), "JARVIS_DB_PATH": str(db)},
+    )
+    assert tools == EXPECTED_TOOLS["mcp_servers.mcp_repo.server"]
+    assert payload["ok"] is True
+    assert payload["content"] == "integration hello\n"
+
+
+async def test_mcp_repo_server_write_gate_over_stdio(tmp_path):
+    """D12's two-call gate end to end: repo_write_file must not touch disk,
+    and only repo_commit_write(action_id) actually writes."""
+    repo_dir = tmp_path / "int_repo_write"
+    repo_dir.mkdir()
+    db = tmp_path / "int_repo_write.db"
+    extra_env = {"JARVIS_REPO_ROOT": str(repo_dir), "JARVIS_DB_PATH": str(db)}
+
+    _, preview = await _call(
+        "mcp_servers.mcp_repo.server", "repo_write_file",
+        {"path": "new.txt", "content": "written via stdio\n"}, extra_env,
+    )
+    assert preview["ok"] is True
+    assert preview["pending"] is True
+    assert not (repo_dir / "new.txt").exists()
+
+    _, committed = await _call(
+        "mcp_servers.mcp_repo.server", "repo_commit_write",
+        {"action_id": preview["action_id"]}, extra_env,
+    )
+    assert committed["ok"] is True
+    assert (repo_dir / "new.txt").read_text() == "written via stdio\n"
