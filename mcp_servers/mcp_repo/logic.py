@@ -83,12 +83,17 @@ class RepoPathError(Exception):
 def _repo_root() -> Path:
     # Mirrors mcp_git/logic.py's _repo_root exactly, so both servers agree
     # on what "the repo" means without importing across the mcp_* boundary.
-    return Path(
-        os.environ.get(
-            "JARVIS_REPO_ROOT",
-            Path(__file__).resolve().parents[2],
-        )
-    )
+    #
+    # F2 hardening (MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md): a value that is
+    # empty, whitespace, or contains "${" is treated as unset. The
+    # registry's expand_env_vars leaves unknown ${VAR}s as literal text by
+    # design, and a config entry referencing an unset variable once handed
+    # this function the literal string "${JARVIS_REPO_ROOT}" — a phantom
+    # root under which no file exists.
+    value = os.environ.get("JARVIS_REPO_ROOT", "")
+    if not value.strip() or "${" in value:
+        return Path(__file__).resolve().parents[2]
+    return Path(value)
 
 
 def resolve_repo_path(repo_root: Path, path: str) -> Path:

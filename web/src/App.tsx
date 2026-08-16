@@ -407,17 +407,21 @@ export default function App() {
           onClose={() => setDrawerOpen(false)}
           onWidthChange={setDrawerWidth}
         />
+
+        {/* Inside .stage-row so opening the Log PUSHES the stage like the
+            side drawer does (the whole composition, wave included,
+            re-centers on the remaining width). D17's mutual exclusivity
+            means the two drawers never fight for the same edge. */}
+        <TranscriptDrawer
+          open={transcriptOpen}
+          onClose={() => setTranscriptOpen(false)}
+        />
       </div>
 
       <footer className="bottombar">
         <MicControls />
         <div className="hints">SPACE talk · T transcript</div>
       </footer>
-
-      <TranscriptDrawer
-        open={transcriptOpen}
-        onClose={() => setTranscriptOpen(false)}
-      />
 
       {/* agent status window — live sub-agent progress (z-25) */}
       <AgentStatusPanel />

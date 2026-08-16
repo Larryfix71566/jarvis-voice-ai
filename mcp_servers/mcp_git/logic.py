@@ -35,12 +35,16 @@ GIT_LOCK_STALE_AFTER_S = 300
 
 
 def _repo_root() -> Path:
-    return Path(
-        os.environ.get(
-            "JARVIS_REPO_ROOT",
-            Path(__file__).resolve().parents[2],
-        )
-    )
+    # Mirrored by mcp_repo/logic.py's _repo_root — keep in sync.
+    # F2 hardening (MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md): empty,
+    # whitespace, or "${"-containing values are treated as unset —
+    # expand_env_vars leaves unknown ${VAR}s literal by design, and a
+    # config entry referencing an unset variable would otherwise hand
+    # this function a phantom root.
+    value = os.environ.get("JARVIS_REPO_ROOT", "")
+    if not value.strip() or "${" in value:
+        return Path(__file__).resolve().parents[2]
+    return Path(value)
 
 
 def _db() -> sqlite3.Connection:

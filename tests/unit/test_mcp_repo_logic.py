@@ -135,6 +135,36 @@ class TestResolveRepoPath:
         with pytest.raises(RepoPathError):
             resolve_repo_path(repo, "misplaced/secrets.vault")
 
+
+class TestRepoRootHardening:
+    """MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md F2: a literal ${VAR} leaked
+    through config must never become the repo root."""
+
+    def _real_root(self):
+        from mcp_servers.mcp_repo import logic
+
+        return Path(logic.__file__).resolve().parents[2]
+
+    def test_literal_placeholder_falls_back(self, monkeypatch):
+        from mcp_servers.mcp_repo.logic import _repo_root
+
+        monkeypatch.setenv("JARVIS_REPO_ROOT", "${JARVIS_REPO_ROOT}")
+        assert _repo_root() == self._real_root()
+
+    def test_empty_and_whitespace_fall_back(self, monkeypatch):
+        from mcp_servers.mcp_repo.logic import _repo_root
+
+        monkeypatch.setenv("JARVIS_REPO_ROOT", "")
+        assert _repo_root() == self._real_root()
+        monkeypatch.setenv("JARVIS_REPO_ROOT", "   ")
+        assert _repo_root() == self._real_root()
+
+    def test_real_value_respected(self, monkeypatch, tmp_path):
+        from mcp_servers.mcp_repo.logic import _repo_root
+
+        monkeypatch.setenv("JARVIS_REPO_ROOT", str(tmp_path))
+        assert _repo_root() == tmp_path
+
     def test_node_modules_denied(self, repo):
         with pytest.raises(RepoPathError):
             resolve_repo_path(repo, "web/node_modules/foo/index.js")

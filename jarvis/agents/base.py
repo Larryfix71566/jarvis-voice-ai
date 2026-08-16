@@ -42,15 +42,24 @@ STUCK_MESSAGE = "FAILED: the task could not be completed."
 # Cap tool results in events so a huge payload can't flood the data channel.
 TOOL_RESULT_EVENT_MAX = 20_000
 
-# MORTIMER_AGENT_TRUST_PLAN.md D3 — appended as a `system`-role message
-# immediately after a failed tool's `role: "tool"` message. This is the
-# direct fix for the fabrication defect in §1.1: a failed tool result
-# arrives as a JSON blob that happens to say `ok: false` — syntactically
-# indistinguishable, to the model, from data. An adjacent system-role
-# instruction is unambiguous. The wording forbids INFERENCE ("structure,
-# behavior"), not just quotation — do not shorten this, a model that is
-# merely told "the call failed" has still been observed describing a file
-# it never read.
+# MORTIMER_AGENT_TRUST_PLAN.md D3 (amended 2026-08-16, MORTIMER_
+# DEVELOPER_AGENT_FIX_PLAN.md F1) — appended as a `system`-role message
+# immediately after the turn's tool-response BLOCK, never between tool
+# responses. The original per-failure placement ("immediately after the
+# failed tool's own message") violated the OpenAI protocol's requirement
+# that every tool response follow the assistant tool_calls message
+# contiguously: on a turn with parallel calls, the first interleaved
+# system message orphaned every remaining tool_call_id and the next
+# completion call died with a 400 (observed: two live Developer runs,
+# 21 parallel repo reads). The freshness property D3 wanted is preserved
+# — the constraint is still the last thing the model sees before its
+# next turn. This is the direct fix for the fabrication defect in §1.1:
+# a failed tool result arrives as a JSON blob that happens to say
+# `ok: false` — syntactically indistinguishable, to the model, from
+# data. A trailing system-role instruction is unambiguous. The wording
+# forbids INFERENCE ("structure, behavior"), not just quotation — do not
+# shorten this, a model that is merely told "the call failed" has still
+# been observed describing a file it never read.
 TOOL_FAILURE_CONSTRAINT_TEMPLATE = (
     "The tool call `{tool_name}` FAILED: {error}. "
     "You did not receive the data you asked for. "
@@ -59,6 +68,20 @@ TOOL_FAILURE_CONSTRAINT_TEMPLATE = (
     "Either retry with corrected arguments, use a different tool, or tell "
     "the user plainly that the call failed and what you therefore could "
     "not determine."
+)
+
+# F1 — the multi-failure variant for a parallel-call turn: one line per
+# failed tool, then the SAME obligations stated once (built from the same
+# wording as the single-failure template — the constraint's substance is
+# not forked).
+TOOL_FAILURES_BATCH_TEMPLATE = (
+    "These tool calls FAILED:\n{failures}\n"
+    "You did not receive the data they were meant to retrieve. "
+    "You MUST NOT state, summarize, guess, or infer the contents, "
+    "structure, or behavior of anything these calls were meant to "
+    "retrieve. Either retry with corrected arguments, use a different "
+    "tool, or tell the user plainly that the calls failed and what you "
+    "therefore could not determine."
 )
 
 # MORTIMER_AGENT_TRUST_PLAN.md D4 — the reply used when every tool call in
@@ -201,6 +224,10 @@ class SubAgent:
                 reply = message.content or ""
                 break
             messages.append(_assistant_message(message))
+            # F1: failures collected during the batch; the D3 constraint is
+            # appended AFTER every tool response (protocol contiguity),
+            # never between them.
+            batch_failures: list[tuple[str, str]] = []
             for tool_call in tool_calls:
                 try:
                     arguments = json.loads(tool_call.function.arguments or "{}")
@@ -248,19 +275,31 @@ class SubAgent:
                     "content": result,
                 })
                 if not outcome.ok:
-                    # D3 — the anti-hallucination constraint, injected
-                    # immediately after the failed tool's own message so it
-                    # is the freshest context the model sees before its next
-                    # turn. A prompt message, not a code path (§0's rule that
-                    # no confirmation gate is touched) — it constrains the
-                    # model but cannot guarantee compliance, which is why D4
-                    # exists as the mechanical backstop below.
-                    messages.append({
-                        "role": "system",
-                        "content": TOOL_FAILURE_CONSTRAINT_TEMPLATE.format(
-                            tool_name=tool_name, error=outcome.error,
+                    batch_failures.append((tool_name, outcome.error or ""))
+
+            if batch_failures:
+                # D3 — the anti-hallucination constraint, injected after the
+                # batch's tool-response block (F1: never BETWEEN tool
+                # responses — see the template comment above for the 400
+                # this placement fixes) so it is the freshest context the
+                # model sees before its next turn. A prompt message, not a
+                # code path (§0's rule that no confirmation gate is
+                # touched) — it constrains the model but cannot guarantee
+                # compliance, which is why D4 exists as the mechanical
+                # backstop below.
+                if len(batch_failures) == 1:
+                    name, error = batch_failures[0]
+                    content = TOOL_FAILURE_CONSTRAINT_TEMPLATE.format(
+                        tool_name=name, error=error,
+                    )
+                else:
+                    content = TOOL_FAILURES_BATCH_TEMPLATE.format(
+                        failures="\n".join(
+                            f"- `{name}`: {error}"
+                            for name, error in batch_failures
                         ),
-                    })
+                    )
+                messages.append({"role": "system", "content": content})
 
         # D4 — a run in which every attempted tool call failed cannot be
         # reported as successful, regardless of how confident the model's
@@ -333,5 +372,11 @@ def load_sub_agents(
             settings=settings,
             registry=registry,
             client_factory=client_factory,
+            # MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md F3 — optional per-agent
+            # timeout from agents.yaml (the routing/capability source of
+            # truth); absent = DEFAULT_TIMEOUT_S. Developer's legitimate
+            # tasks (multi-file review, plan drafting) need more than the
+            # voice-loop default.
+            timeout_s=float(entry.get("timeout_s", DEFAULT_TIMEOUT_S)),
         )
     return agents

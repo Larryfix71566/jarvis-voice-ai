@@ -71,6 +71,19 @@ async def test_call_note_round_trip_through_stdio(registry):
     assert any(n["id"] == created["id"] for n in found["notes"])
 
 
+async def test_repo_read_round_trip_through_stdio(registry):
+    """MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md F2: a registry-spawned
+    mcp-repo must resolve the REAL repo root. The yaml used to pass
+    `JARVIS_REPO_ROOT: "${JARVIS_REPO_ROOT}"`, which expand_env_vars
+    left as literal text when the variable was unset — every read then
+    reported "does not exist" against a phantom root. This exact
+    round-trip would have caught it before it reached a live run."""
+    result = json.loads(await registry.call("repo_read_file",
+                                            {"path": "README.md"}))
+    assert result.get("ok") is True, result
+    assert "Mortimer" in result.get("content", "")
+
+
 async def test_unknown_tool_returns_string_not_raise(registry):
     result = await registry.call("definitely_not_a_tool", {})
     assert "Unknown tool" in result

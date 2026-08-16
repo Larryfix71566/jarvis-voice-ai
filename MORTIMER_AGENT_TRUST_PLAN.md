@@ -295,7 +295,13 @@ this whole plan is about, one level up.
 
 **D3 — On a failed tool call, inject an explicit constraint message into
 the sub-agent's own message list. This is the anti-hallucination
-mechanism.** Immediately after appending the `role: "tool"` message for a
+mechanism.** *(Amended 2026-08-16, MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md
+F1: injected after the turn's tool-response BLOCK, not between tool
+responses — the original per-failure placement violated the tool-message
+contiguity the OpenAI protocol requires when a turn makes parallel
+calls, killing two live Developer runs with 400s. One combined
+constraint per batch; single-failure wording unchanged.)* Immediately
+after appending the `role: "tool"` message for a
 call the classifier marked failed, append:
 
 ```python
