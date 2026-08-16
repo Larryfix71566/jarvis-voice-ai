@@ -6,6 +6,10 @@
 .env
 .env.*
 !.env.example
+# Credential vault (MORTIMER_CREDENTIAL_VAULT_PLAN.md S8): encrypted,
+# but never committed anyway — same backup-file lesson as above.
+*.vault
+*.vault.lock
 
 # Stray backups and editor/filesystem droppings that have previously been
 # swept into commits alongside secrets.

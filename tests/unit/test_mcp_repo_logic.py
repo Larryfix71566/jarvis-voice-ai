@@ -129,6 +129,12 @@ class TestResolveRepoPath:
         with pytest.raises(RepoPathError):
             resolve_repo_path(repo, "data/jarvis.db")
 
+    def test_vault_glob_denied_outside_data(self, repo):
+        # MORTIMER_CREDENTIAL_VAULT_PLAN.md S8: data/ is already a denied
+        # segment; the *.vault glob covers a misplaced vault file too.
+        with pytest.raises(RepoPathError):
+            resolve_repo_path(repo, "misplaced/secrets.vault")
+
     def test_node_modules_denied(self, repo):
         with pytest.raises(RepoPathError):
             resolve_repo_path(repo, "web/node_modules/foo/index.js")

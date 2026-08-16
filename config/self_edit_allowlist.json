@@ -27,6 +27,10 @@
     ".env",
     ".env.*",
     "**/.env",
-    "**/.env.*"
+    "**/.env.*",
+    "jarvis/vault.py",
+    "data/**",
+    "*.vault",
+    "**/*.vault"
   ]
 }

@@ -5,8 +5,26 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import os
+import tempfile
 
 import pytest
+
+# Test isolation for the credential vault (MORTIMER_CREDENTIAL_VAULT_
+# PLAN.md): once a real data/secrets.vault exists on a dev machine,
+# load_settings() — and jarvis.admin.server's IMPORT-TIME inject_env()
+# call, which runs during collection, before any fixture — would decrypt
+# real credentials into the test process environment. Point the vault at
+# a nonexistent path at conftest-import time, which precedes every test-
+# module import. Module-level on purpose: a fixture is too late for
+# import-time side effects. Exemption: RUN_LIVE=1 runs deliberately use
+# real credentials, which post-migration live in the vault — those keep
+# real injection. test_vault.py's own autouse fixture overrides the path
+# per-test to exercise a real (temp) vault.
+if os.environ.get("RUN_LIVE") != "1":
+    os.environ.setdefault(
+        "JARVIS_VAULT_PATH",
+        os.path.join(tempfile.mkdtemp(prefix="mortimer-test-"), "no.vault"),
+    )
 
 from jarvis.db import run_migrations
 

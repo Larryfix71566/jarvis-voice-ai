@@ -10,6 +10,11 @@ httpx
 python-dateutil
 openwakeword
 websockets
+# Credential vault (MORTIMER_CREDENTIAL_VAULT_PLAN.md S9). Both were
+# already transitive deps (pinned in requirements-lock.txt); listed
+# directly so a future lock regeneration can never drop them.
+cryptography
+keyring
 pytest
 pytest-asyncio
 pytest-cov

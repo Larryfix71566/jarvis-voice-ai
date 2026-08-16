@@ -47,9 +47,12 @@ DENY_SEGMENTS = frozenset({
 })
 
 # Denied by filename glob, case-insensitive, applied to the FINAL segment.
+# "*.vault": the credential vault (MORTIMER_CREDENTIAL_VAULT_PLAN.md S8)
+# lives in data/ (already a denied segment); the glob covers a vault
+# file misplaced anywhere else.
 DENY_FILE_GLOBS = (
     "*.key", "*.pem", "*.p12", "*.pfx", "id_rsa*", "id_ed25519*",
-    ".env.*", "*.sqlite", "*.sqlite3", "*.db",
+    ".env.*", "*.sqlite", "*.sqlite3", "*.db", "*.vault",
 )
 
 # Explicit re-allow, checked AFTER the globs. Exactly one entry today.
