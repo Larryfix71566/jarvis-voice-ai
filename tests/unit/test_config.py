@@ -10,11 +10,18 @@ REQUIRED = ("OPENAI_API_KEY", "DEEPGRAM_API_KEY", "ELEVENLABS_API_KEY")
 
 
 @pytest.fixture
-def clean_env(monkeypatch):
+def clean_env(monkeypatch, tmp_path):
     """Strip all jarvis-related env vars so tests are hermetic."""
     for name in list(os.environ):
         if name.startswith(("OPENAI", "DEEPGRAM", "ELEVENLABS", "TAVILY", "JARVIS")):
             monkeypatch.delenv(name, raising=False)
+    # Re-apply the vault isolation the JARVIS_* sweep above just deleted
+    # (conftest.py sets it at collection time): load_settings() now calls
+    # jarvis.vault.inject_env() first, and on a dev machine with a REAL
+    # data/secrets.vault, an un-isolated call would either decrypt real
+    # credentials into these hermetic tests or hard-error (S6) where the
+    # keychain is unavailable. A nonexistent path = inject_env no-op.
+    monkeypatch.setenv("JARVIS_VAULT_PATH", str(tmp_path / "no-such.vault"))
     return monkeypatch
 
 

@@ -53,3 +53,21 @@
 - {input: "save a note that the plumber comes Friday and remind me Thursday evening", expect: [librarian, scheduler]}
 - {input: "look up the current time in Tokyo and save a note with what you find", expect: [analyst, librarian]}
 - {input: "check how my computer is doing and remind me to restart it tonight", expect: [systems, scheduler]}
+
+# --- voice UI control (10) (MORTIMER_VOICE_UI_PLAN.md U8) ---
+# The misrouting hazard these pin: rule 8 sends "changing your own
+# interface" to developer, but a VIEW change (open/close/switch panels,
+# windows, transcript, mic, wake word) must never be delegated. This
+# harness drives the text Orchestrator, which has no ui_control tool, so
+# "correct" here is NO delegation (the voice pipeline's tool choice is
+# covered by unit tests + the acceptance checklist instead).
+- {input: "open the drawer", expect: none}
+- {input: "close the drawer", expect: none}
+- {input: "show me the runs panel", expect: none}
+- {input: "switch to the memory tab", expect: none}
+- {input: "show the transcript log", expect: none}
+- {input: "hide the log", expect: none}
+- {input: "put that on the other screen", expect: none}
+- {input: "close that window", expect: none}
+- {input: "stop listening", expect: none}
+- {input: "turn on the wake word", expect: none}

@@ -121,6 +121,15 @@ class Settings(BaseSettings):
     # import-light).
     jarvis_council_enabled: bool = True
 
+    # Voice UI control (MORTIMER_VOICE_UI_PLAN.md U6) — kill switch. False
+    # means the ui_control tool is not registered and not in the schema
+    # list, and the prompt addendum is omitted: the Supervisor cannot call
+    # what it cannot see. Enforced at exactly one place — the registration
+    # site in jarvis/bot/pipeline.py's own env read — so this field and
+    # that read can never disagree on the default (true); this field
+    # exists for discoverability, matching jarvis_council_enabled.
+    jarvis_ui_control_enabled: bool = True
+
     # LLM Council v2 (MORTIMER_LLM_COUNCIL_V2_PLAN.md V11) — retention for
     # council_rounds/council_scores and logs/council/, pruned once at bot
     # startup beside the runlog prune. Deliberately much longer than the

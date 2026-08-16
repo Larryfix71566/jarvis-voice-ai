@@ -47,7 +47,20 @@ def scratch(tmp_path, mod):
     return tmp_path
 
 
-def test_real_repo_validates(mod):
+def test_real_repo_validates(mod, monkeypatch):
+    # Post-vault-migration (MORTIMER_CREDENTIAL_VAULT_PLAN.md), the
+    # requires_env credentials live in the encrypted vault, not .env —
+    # and conftest deliberately isolates tests from the real vault. Set
+    # every manifest-declared var to a dummy so this test pins what it
+    # always actually pinned: manifest/tool STRUCTURE, not which
+    # credentials happen to be configured on this machine. (The script's
+    # own main() vault-injects for real CLI runs.)
+    import yaml
+
+    for skill_yaml in (ROOT / "mcp_servers").glob("*/skill.yaml"):
+        manifest = yaml.safe_load(skill_yaml.read_text(encoding="utf-8"))
+        for var in manifest.get("requires_env", []):
+            monkeypatch.setenv(var, "test-set")
     assert mod.validate(ROOT) == []
 
 

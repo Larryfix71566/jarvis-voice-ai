@@ -268,19 +268,35 @@
    four independently-toggled panels, so opening two stacked them at
    identical coordinates. */
 
-/* --- display panel: results window in front of everything (z-30) --- */
+/* --- display panel: results window in front of everything (z-30) ---
+   MORTIMER_VOICE_UI_PLAN.md U4 — single-screen overlay: frosted
+   translucent (same visual language as .live-caption / .satellite)
+   so the wave and satellites read through it, with a footprint cap
+   (never more than ~40% of the viewport; content scrolls before it
+   grows) so the interface stays visibly alive behind content.
+   Persistent until dismissed — no auto-dismiss timeout. */
 .display-panel {
   position: fixed;
   z-index: 30;
   display: flex;
   flex-direction: column;
-  background: rgba(4, 9, 12, 0.97);
+  max-width: 40vw;
+  max-height: 40vh;
+  background: rgba(4, 9, 12, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--accent-dim);
-  border-radius: 2px;
+  border-radius: 10px;
   box-shadow:
     0 12px 48px rgba(0, 0, 0, 0.7),
     0 0 24px var(--accent-faint);
   overflow: hidden;
+}
+
+@supports not (backdrop-filter: blur(8px)) {
+  .display-panel {
+    background: rgba(4, 9, 12, 0.92);
+  }
 }
 
 .display-head {
