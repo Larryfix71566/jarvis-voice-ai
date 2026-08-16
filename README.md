@@ -84,6 +84,12 @@ uv pip install -r requirements-lock.txt
 # 2. Configure keys
 cp .env.example .env       # then edit .env and fill in your keys
 
+# 2b. (Recommended) Move credentials into the encrypted vault —
+#     data/secrets.vault, master key in the macOS Keychain. After this,
+#     .env holds configuration only; keys never sit in plaintext.
+python -m jarvis.vault init
+python -m jarvis.vault migrate
+
 # 3. Sanity-check keys and connectivity
 python scripts/check_env.py
 

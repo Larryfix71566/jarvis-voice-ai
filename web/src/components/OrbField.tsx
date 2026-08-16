@@ -163,6 +163,13 @@ export default function OrbField({ state }: { state: VoiceState }) {
           <span className="orb-dot" />
           {STATE_LABEL[state]}
         </div>
+      </div>
+
+      {/* MORTIMER_CAPTION_PLACEMENT_PLAN.md C1/C4: lives outside
+          .orb-center (own bottom-anchored position, see .live-caption
+          in command-deck.css) and only renders once there's something
+          to show — a visible frosted panel must never sit empty. */}
+      {(lastUser || lastAssistant) && (
         <div className="live-caption">
           {lastUser && (
             <div className="caption caption-user">
@@ -175,7 +182,7 @@ export default function OrbField({ state }: { state: VoiceState }) {
             </div>
           )}
         </div>
-      </div>
+      )}
     </section>
   );
 }

@@ -162,6 +162,27 @@ def check_github(env: dict[str, str], env_file_values: dict[str, str]) -> None:
 
 
 def main() -> int:
+    # Credential vault (MORTIMER_CREDENTIAL_VAULT_PLAN.md S4, call site
+    # 3 of 3): pull vault secrets into os.environ before any check reads
+    # them. Guarded import because this script is documented stdlib-only
+    # so it works in a fresh checkout before dependencies are installed —
+    # in that state there is no vault to read anyway.
+    try:
+        sys.path.insert(0, str(REPO_ROOT))
+        from jarvis.vault import VaultError, inject_env
+
+        try:
+            inject_env()
+        except VaultError as exc:
+            # S6's hard-error rule, rendered in this script's own
+            # PASS/FAIL format: a present-but-unreadable vault must
+            # stop the check (never validate half-configured), but a
+            # validator reports — it doesn't traceback.
+            report(False, "Credential vault readable", str(exc))
+            return 1
+    except ImportError:
+        pass
+
     env = load_env()
 
     # 1. Python version

@@ -153,6 +153,17 @@ def load_settings(env_file: str | None = ".env") -> Settings:
     environment variables are missing. Warns (does not fail) when
     TAVILY_API_KEY is absent.
     """
+    # Credential vault (MORTIMER_CREDENTIAL_VAULT_PLAN.md S4, call site
+    # 1 of 3): copy vault secrets into os.environ BEFORE Settings is
+    # constructed, so pydantic's env lookup, the registry's ${VAR}
+    # expansion for MCP child processes (spawned after this point), and
+    # everything downstream see them as ordinary environment variables.
+    # No-op when the vault is absent or disabled; hard error when the
+    # vault exists but can't be opened (S6 — never run half-configured).
+    from jarvis.vault import inject_env
+
+    inject_env()
+
     # _env_file=None explicitly disables dotenv loading (the class-level
     # model_config default would otherwise still read ./.env).
     kwargs: dict = {"_env_file": None} if env_file is None else {"_env_file": env_file}

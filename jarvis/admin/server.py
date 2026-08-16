@@ -61,9 +61,16 @@ from jarvis.council import council as council_mod
 from jarvis.db import get_conn, run_migrations
 from jarvis.runlog import get_run, list_runs, parse_since
 from jarvis.selfedit.service import SelfEditService
+from jarvis.vault import inject_env
 from mcp_servers.mcp_git import logic
 
 logger = logging.getLogger(__name__)
+
+# Credential vault (MORTIMER_CREDENTIAL_VAULT_PLAN.md S4, call site 2 of
+# 3): the sidecar never calls load_settings, and UpgradeAgent reads its
+# planner keys straight from os.environ — inject at import time, before
+# any endpoint or agent run can look for a token.
+inject_env()
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
