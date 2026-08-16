@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
+import { usePipecatClient } from "@pipecat-ai/client-react";
 import DisplayContent from "./DisplayContent";
 import type { DisplayPayload } from "../displayResults";
 import {
+  closeDisplayWindow,
   hasLivePopup,
   openDisplayWindow,
   readPopoutPreference,
   subscribeLatest,
   writePopoutPreference,
 } from "../displayWindow";
+import { subscribeUiCommands } from "../uiCommands";
 
 /**
  * DisplayPanel — INFORMATIONAL results window floating in FRONT of
@@ -43,6 +46,7 @@ const DEFAULT_W = 540;
 const DEFAULT_H = 420;
 
 export default function DisplayPanel() {
+  const client = usePipecatClient();
   const [item, setItem] = useState<DisplayPayload | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [popupOpen, setPopupOpen] = useState(hasLivePopup);
@@ -97,6 +101,59 @@ export default function DisplayPanel() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [item, popupOpen, dismissed, close]);
+
+  // Voice UI plan U2/U3: apply the display commands this component owns,
+  // through the same code paths its buttons use. display_popout/close
+  // also set/clear the persisted popout preference — voice has identical
+  // semantics to clicking ⧉ (U3). A command that changes nothing sends
+  // ui/noop with a spoken sentence — the bot voices it verbatim (no LLM).
+  useEffect(() => {
+    const noop = (reason: string) => {
+      client?.sendClientMessage("ui/noop", { reason });
+    };
+    return subscribeUiCommands((cmd) => {
+      switch (cmd.action) {
+        case "display_popout": {
+          if (hasLivePopup()) {
+            noop("It's already showing on the display window.");
+            return;
+          }
+          writePopoutPreference(true);
+          setPopout(true);
+          const win = openDisplayWindow();
+          setPopupOpen(win !== null);
+          if (win === null) {
+            noop("The browser blocked the display window — it may need a popup permission.");
+          }
+          return;
+        }
+        case "display_close": {
+          const hadPopup = hasLivePopup();
+          if (!hadPopup && !popout) {
+            noop("The display window is already closed.");
+            return;
+          }
+          closeDisplayWindow();
+          writePopoutPreference(false);
+          setPopout(false);
+          setPopupOpen(false);
+          // The current payload falls back to the in-page overlay (D41).
+          setDismissed(false);
+          return;
+        }
+        case "overlay_dismiss": {
+          if (!item || popupOpen || dismissed) {
+            noop("There's nothing showing to dismiss.");
+            return;
+          }
+          close();
+          return;
+        }
+        default:
+          return;
+      }
+    });
+  }, [client, item, popupOpen, dismissed, popout, close]);
 
   // While a live popup exists, the result is showing on the other screen —
   // this window stays out of the way entirely (D41).

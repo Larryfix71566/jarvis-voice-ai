@@ -124,7 +124,9 @@ any of them look. Rules:
   with the remediation message rather than running with silently
   missing keys.
 
-Call sites — exactly three, no more:
+Call sites — exactly four, no more (originally three; #4 was a
+documented amendment discovered when the first real migration landed —
+see below):
 
 1. Top of `load_settings()` in `jarvis/config.py`, before `Settings`
    is constructed (covers bot, CLI, and anything else that loads
@@ -136,6 +138,13 @@ Call sites — exactly three, no more:
 3. `scripts/check_env.py`, wrapped in `try: from jarvis.vault import
    inject_env … except ImportError: pass` — that script is documented
    stdlib-only-before-deps and must keep working in a fresh checkout.
+4. `scripts/check_skills.py` `main()` (same guarded pattern as #3) —
+   amendment, 2026-08-16: its `requires_env` presence check read
+   os.environ/.env, both of which the migration legitimately emptied;
+   without injection the validator reported every vaulted credential
+   as missing on a migrated machine. Its unit test
+   (`test_real_repo_validates`) now sets manifest-declared vars to
+   dummies instead of depending on machine credential state.
 
 ### S5 — What migrates: names, not guesses
 

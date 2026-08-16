@@ -73,14 +73,14 @@ async def run_eval() -> float:
             try:
                 await orch.chat(case["input"])
             except Exception as exc:  # noqa: BLE001 — record as wrong, continue
-                print(f"[{i:2d}/30] ERROR  {case['input']!r}: {exc}")
+                print(f"[{i:2d}/{len(cases)}] ERROR  {case['input']!r}: {exc}")
                 continue
 
             actual = set(delegated)
             ok = actual == expected if expected != {"none"} else not actual
             correct += ok
             mark = "ok " if ok else "MISS"
-            print(f"[{i:2d}/30] {mark} expect={sorted(expected)} "
+            print(f"[{i:2d}/{len(cases)}] {mark} expect={sorted(expected)} "
                   f"got={sorted(actual)}  {case['input']!r}")
     finally:
         await registry.stop()

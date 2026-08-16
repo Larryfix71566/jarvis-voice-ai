@@ -40,6 +40,7 @@ from jarvis.bot.memory_watcher import MemorySweepWatcher
 from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.remember_tool import build_remember_tool
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
+from jarvis.bot.ui_control import build_ui_control_tool
 from jarvis.bot.voice_switch import (
     available_list,
     build_set_voice_tool,
@@ -58,6 +59,7 @@ from jarvis.memory import (
 )
 from jarvis.prompts import (
     SUPERVISOR_PROMPT,
+    UI_CONTROL_ADDENDUM,
     VOICE_ADDENDUM,
     render_agent_catalog,
 )
@@ -220,6 +222,20 @@ def build_pipeline(
     set_voice_schema, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
     remember_schema, remember_handler = build_remember_tool(runtime.session_id)
 
+    # MORTIMER_VOICE_UI_PLAN.md U1/U6 — voice control of the console's UI
+    # chrome. Kill switch read here, at the single registration site (same
+    # env-first pattern as the council's): false = the tool is not
+    # registered and not in the schema list, so the Supervisor cannot call
+    # what it cannot see, and the prompt addendum is omitted to match.
+    ui_control_enabled = os.environ.get(
+        "JARVIS_UI_CONTROL_ENABLED", ""
+    ).strip().lower() not in ("false", "0", "no")
+
+    async def _send_ui_message(message: dict) -> None:
+        await send_app_message(transport, message)
+
+    ui_control_schema, ui_control_handler = build_ui_control_tool(_send_ui_message)
+
     def adapt_to_pipecat(dict_handler):
         """D-009: pipecat 1.4 register_function handlers receive one
         FunctionCallParams object and deliver results via
@@ -247,6 +263,9 @@ def build_pipeline(
         )
         + "\n"
         + VOICE_ADDENDUM
+        # U5/U6: the addendum ships only when the tool does — a prompt
+        # describing an unregistered tool would invite hallucinated calls.
+        + ("\n" + UI_CONTROL_ADDENDUM if ui_control_enabled else "")
     )
 
     stt = DeepgramFluxSTTService(
@@ -262,6 +281,8 @@ def build_pipeline(
     llm.register_function("delegate_task", adapt_to_pipecat(delegate_handler))
     llm.register_function("set_voice", adapt_to_pipecat(set_voice_handler))
     llm.register_function("remember", adapt_to_pipecat(remember_handler))
+    if ui_control_enabled:
+        llm.register_function("ui_control", adapt_to_pipecat(ui_control_handler))
     tts = ElevenLabsTTSService(
         api_key=settings.elevenlabs_api_key,
         settings=ElevenLabsTTSSettings(
@@ -281,13 +302,16 @@ def build_pipeline(
             required=fn["parameters"]["required"],
         )
 
+    standard_tools = [
+        to_function_schema(delegate_schema),
+        to_function_schema(set_voice_schema),
+        to_function_schema(remember_schema),
+    ]
+    if ui_control_enabled:
+        standard_tools.append(to_function_schema(ui_control_schema))
     context = LLMContext(
         messages=[{"role": "system", "content": system_prompt}],
-        tools=ToolsSchema(standard_tools=[
-            to_function_schema(delegate_schema),
-            to_function_schema(set_voice_schema),
-            to_function_schema(remember_schema),
-        ]),
+        tools=ToolsSchema(standard_tools=standard_tools),
     )
     aggregators = LLMContextAggregatorPair(context)
     transcript = TranscriptLogger(session_id=runtime.session_id)
@@ -534,6 +558,27 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             await send_app_message(transport, {
                 "type": "voice/current", "voice": voice_state["current"]})
 
+        async def handle_ui_noop(message: Any) -> None:
+            """MORTIMER_VOICE_UI_PLAN.md U2 — the hybrid feedback's spoken
+            half. When a ui_control command changed nothing client-side
+            (drawer already open, wake sidecar unavailable), the client
+            sends {"type": "ui/noop", "reason": "<sentence>"} and the bot
+            speaks the reason VERBATIM via TTSSpeakFrame — deliberately
+            NOT through the LLM: the tool call already returned "ok" and
+            the Supervisor's turn is over by the time the no-op is
+            detected, so canned TTS is immediate, deterministic, and
+            costs no tokens. No LLM involvement also means this path can
+            never trigger further tool calls (no feedback loop)."""
+            msg = _unwrap_client_message(message)
+            if msg is None or msg.get("type") != "ui/noop":
+                return
+            reason = str(msg.get("reason", "")).strip()
+            if not reason or len(reason) > 200:
+                return
+            print(f"[appmsg] ui/noop: {reason}", flush=True)
+            from pipecat.frames.frames import TTSSpeakFrame
+            await pusher.push(TTSSpeakFrame(text=reason))
+
         if webrtc_connection is not None:
             # D-005 update: on the installed pipecat 1.4.0 runner stack the
             # transport-level on_app_message event demonstrably does NOT
@@ -556,6 +601,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             @webrtc_connection.event_handler("app-message")
             async def on_connection_app_message(connection: Any, message: Any) -> None:
                 await handle_voice_set(message)
+                await handle_ui_noop(message)
 
         runner = PipelineRunner()
         try:

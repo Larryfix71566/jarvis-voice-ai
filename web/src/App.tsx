@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { RTVIEvent } from "@pipecat-ai/client-js";
 import {
+  usePipecatClient,
   usePipecatClientTransportState,
   useRTVIClientEvent,
 } from "@pipecat-ai/client-react";
@@ -21,6 +22,7 @@ import SideDrawer, {
 import { getRuns, isSelfEditRun, subscribeRuns, type RunState } from "./agentRuns";
 import { applyServerMessage as applyDisplayResult } from "./displayResults";
 import { publish as publishWindowPayload, wireConsoleSide } from "./displayWindow";
+import { applyUiMessage, subscribeUiCommands } from "./uiCommands";
 import type { VoiceState } from "./voiceState";
 import "./App.css";
 import "./command-deck.css";
@@ -97,6 +99,7 @@ export default function App() {
   const [drawerWidth, setDrawerWidth] = useState<number>(readStoredWidth);
   const [outputDot, setOutputDot] = useState(false);
   const [runs, setRuns] = useState<RunState[]>(getRuns);
+  const client = usePipecatClient();
   const transport = usePipecatClientTransportState();
 
   const connected = transport === "ready" || transport === "connected";
@@ -124,6 +127,10 @@ export default function App() {
   // `msg.type`); what must not happen is two listeners for the SAME type.
   useRTVIClientEvent(RTVIEvent.ServerMessage, (data: unknown) => {
     const msg = data as { type?: string; display?: { surface?: string } };
+    // Voice UI plan U2: forward ui_control commands into the module
+    // store; applyUiMessage ignores every other type, so this can sit
+    // unconditionally ahead of the display filter below.
+    applyUiMessage(data);
     if (msg?.type !== "display" || !msg.display) return;
     // A missing/unrecognized surface degrades to "drawer" (D36) — the
     // non-intrusive outcome, and correct for an older bot talking to a
@@ -152,6 +159,77 @@ export default function App() {
   useEffect(() => {
     if (drawerOpen && drawerTab === "output") setOutputDot(false);
   }, [drawerOpen, drawerTab]);
+
+  // Voice UI plan U2: apply the drawer/transcript commands this component
+  // owns, through the SAME state setters the buttons use. Deps include the
+  // current open/tab state so no-op detection reads fresh values; the
+  // store's subscribe/unsubscribe is cheap, so re-subscribing per render
+  // of these deps is fine. A command that changes nothing sends ui/noop
+  // with a spoken sentence — the bot voices it verbatim (no LLM).
+  useEffect(() => {
+    const noop = (reason: string) => {
+      client?.sendClientMessage("ui/noop", { reason });
+    };
+    return subscribeUiCommands((cmd) => {
+      switch (cmd.action) {
+        case "drawer_open": {
+          const tab = TAB_KEYS.includes(cmd.tab as TabKey)
+            ? (cmd.tab as TabKey)
+            : null;
+          if (drawerOpen && (tab === null || tab === drawerTab)) {
+            noop("The drawer is already open.");
+            return;
+          }
+          if (tab !== null) setDrawerTab(tab);
+          setDrawerOpen(true);
+          setTranscriptOpen(false); // plan D17
+          return;
+        }
+        case "drawer_close": {
+          if (!drawerOpen) {
+            noop("The drawer is already closed.");
+            return;
+          }
+          setDrawerOpen(false);
+          return;
+        }
+        case "drawer_tab": {
+          const tab = TAB_KEYS.includes(cmd.tab as TabKey)
+            ? (cmd.tab as TabKey)
+            : null;
+          if (tab === null) return; // bot validates; unknown tab never sent
+          if (drawerOpen && tab === drawerTab) {
+            noop(`The ${tab} panel is already showing.`);
+            return;
+          }
+          setDrawerTab(tab);
+          setDrawerOpen(true);
+          setTranscriptOpen(false); // plan D17
+          return;
+        }
+        case "transcript_open": {
+          if (transcriptOpen) {
+            noop("The transcript is already open.");
+            return;
+          }
+          setTranscriptOpen(true);
+          setDrawerOpen(false); // plan D17
+          return;
+        }
+        case "transcript_close": {
+          if (!transcriptOpen) {
+            noop("The transcript is already closed.");
+            return;
+          }
+          setTranscriptOpen(false);
+          return;
+        }
+        default:
+          // display_*/mic_*/wake_* belong to DisplayPanel/MicControls.
+          return;
+      }
+    });
+  }, [client, drawerOpen, drawerTab, transcriptOpen]);
 
   // Read-only subscription to the run store, for the D7 topbar indicator.
   // This must NOT register a second RTVI listener — AgentStatusPanel is the

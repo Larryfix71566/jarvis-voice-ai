@@ -119,6 +119,20 @@ def main() -> int:
     ap.add_argument("--run-tests", action="store_true", help="run each skill's smoke test")
     args = ap.parse_args()
 
+    # Credential vault (MORTIMER_CREDENTIAL_VAULT_PLAN.md S4 amendment,
+    # discovered when the first real migration landed): requires_env
+    # credentials now live in the vault, not .env, so this validator must
+    # inject them before checking presence — same guarded pattern as
+    # scripts/check_env.py. Guarded import: fresh checkouts without deps
+    # have no vault to read anyway.
+    try:
+        sys.path.insert(0, str(ROOT))
+        from jarvis.vault import inject_env
+
+        inject_env()
+    except ImportError:
+        pass
+
     errors = validate(ROOT, run_tests=args.run_tests)
     if errors:
         print("SKILLS FAIL")

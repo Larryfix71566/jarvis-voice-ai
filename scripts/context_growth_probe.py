@@ -48,12 +48,26 @@ class _CharApproxEncoder:
 
 
 def _encoder():
+    # tiktoken downloads its encoding file over HTTPS on first use with NO
+    # socket timeout — on a network that stalls (rather than refuses) the
+    # connection, get_encoding() hangs indefinitely and the except below
+    # never fires. Observed 2026-08-16: a first-ever local pytest run hung
+    # ~5 minutes inside ssl.read on exactly this call. A bounded default
+    # socket timeout turns the stall into the error the fallback was
+    # always meant to catch; restored in finally so nothing else in the
+    # process inherits it.
+    import socket
+
+    previous_timeout = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(15)
     try:
         import tiktoken
 
         return tiktoken.get_encoding("cl100k_base"), "tiktoken/cl100k_base"
     except Exception:
         return _CharApproxEncoder(), "char-approx (~4 chars/token, tiktoken unavailable)"
+    finally:
+        socket.setdefaulttimeout(previous_timeout)
 
 
 def _approx_system_prompt() -> str:
