@@ -5,6 +5,8 @@
     "config/**",
     "jarvis/prompts.py",
     "jarvis/skills/**",
+    "jarvis/services/**",
+    "tests/**",
     "docs/**",
     "*.md"
   ],

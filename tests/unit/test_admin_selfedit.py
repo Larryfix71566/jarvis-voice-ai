@@ -166,6 +166,70 @@ def test_agent_crash_settles_job_as_error(registry_file, monkeypatch):
     assert "boom" in job["summary"]
 
 
+def test_run_plan_path_read_and_seeded(registry_file, monkeypatch):
+    """plan_path is read synchronously and its CONTENT reaches the agent."""
+    seen = {}
+
+    class PlanCapturingAgent(FakeAgent):
+        def run(self, goal, plan=None):
+            seen["plan"] = plan
+            return {"ok": True, "summary": "done"}
+
+    monkeypatch.setattr(
+        srv, "_make_agent", lambda service, profile: PlanCapturingAgent(service, profile)
+    )
+    monkeypatch.setattr(
+        srv.repo_logic, "repo_read_file",
+        lambda path: {"ok": True, "path": path, "content": "# The Plan\ndo the thing"},
+    )
+    c = TestClient(app)
+    res = c.post("/api/selfedit/run", json={
+        "goal": "implement it", "plan_path": "docs/plans/X.md",
+    }).json()
+    assert res["ok"] and res["started"]
+    _wait_for_job(c, "done")
+    assert seen["plan"] == "# The Plan\ndo the thing"
+
+
+def test_run_plan_path_read_failure_refuses_synchronously(registry_file, monkeypatch):
+    _install_fake_agent(monkeypatch)
+    monkeypatch.setattr(
+        srv.repo_logic, "repo_read_file",
+        lambda path: {"ok": False, "error": f"{path} does not exist"},
+    )
+    c = TestClient(app)
+    res = c.post("/api/selfedit/run", json={
+        "goal": "implement it", "plan_path": "docs/plans/NOPE.md",
+    }).json()
+    assert res["ok"] is False and "does not exist" in res["error"]
+    assert c.get("/api/selfedit/run").json()["job"]["state"] == "idle"
+
+
+def test_run_explicit_plan_beats_plan_path(registry_file, monkeypatch):
+    """An explicit plan body wins; plan_path is not even read."""
+    seen = {}
+
+    class PlanCapturingAgent(FakeAgent):
+        def run(self, goal, plan=None):
+            seen["plan"] = plan
+            return {"ok": True, "summary": "done"}
+
+    def _explode(path):  # must never be called
+        raise AssertionError("plan_path was read despite explicit plan")
+
+    monkeypatch.setattr(
+        srv, "_make_agent", lambda service, profile: PlanCapturingAgent(service, profile)
+    )
+    monkeypatch.setattr(srv.repo_logic, "repo_read_file", _explode)
+    c = TestClient(app)
+    res = c.post("/api/selfedit/run", json={
+        "goal": "implement it", "plan": "inline plan", "plan_path": "docs/plans/X.md",
+    }).json()
+    assert res["ok"]
+    _wait_for_job(c, "done")
+    assert seen["plan"] == "inline plan"
+
+
 def test_run_status_endpoint_shape(registry_file, monkeypatch):
     _install_fake_agent(monkeypatch)
     c = TestClient(app)

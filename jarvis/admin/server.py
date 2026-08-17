@@ -138,6 +138,11 @@ class GoalIn(BaseModel):
     # (typically adopted via POST /api/plan/adopt) that UpgradeAgent.run()
     # injects as a system message before its edit loop begins.
     plan: str | None = None
+    # Voice-path equivalent of `plan`: a repo path to a plan document the
+    # sidecar reads ONCE, synchronously, at start (same read-and-refuse
+    # pattern as plan_start's review_path — an unreadable plan must never
+    # seed a run). Ignored when `plan` is set explicitly.
+    plan_path: str | None = None
 
 
 class ConveneIn(BaseModel):
@@ -482,6 +487,23 @@ def selfedit_run(body: GoalIn) -> dict:
     goal = (body.goal or "").strip()
     if not goal:
         return {"ok": False, "error": "a goal is required — what should I change?"}
+    plan = body.plan
+    plan_path = (body.plan_path or "").strip()
+    if plan is None and plan_path:
+        # Voice-path plan seeding: read the plan document once,
+        # synchronously, before the thread launches — mirrors plan_start's
+        # review_path read-and-refuse (MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md
+        # R1). Same truncation knob: a seeded plan is a document injection
+        # with the same size concerns as a reviewed one.
+        read_result = repo_logic.repo_read_file(plan_path)
+        if not read_result.get("ok"):
+            return {"ok": False, "error": read_result.get("error")}
+        plan = read_result.get("content") or ""
+        if len(plan) > council_config.PLAN_REVIEW_DOC_MAX_CHARS:
+            plan = (
+                plan[: council_config.PLAN_REVIEW_DOC_MAX_CHARS]
+                + "\n\n… (plan truncated at injection)"
+            )
     with _run_lock:
         if _run_job["state"] == "running":
             return {
@@ -506,7 +528,7 @@ def selfedit_run(body: GoalIn) -> dict:
     # D17 — every self-edit state transition is logged.
     logger.info("selfedit_state_transition state=running goal=%r", goal)
     threading.Thread(
-        target=_run_agent, args=(goal, body.profile, body.plan), daemon=True,
+        target=_run_agent, args=(goal, body.profile, plan), daemon=True,
     ).start()
     return {"ok": True, "started": True, "profile": agent.model_label()}
 
