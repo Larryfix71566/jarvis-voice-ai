@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 import uuid
 from pathlib import Path
@@ -27,6 +28,11 @@ from typing import Any, Callable
 import yaml
 from openai import AsyncOpenAI
 
+from jarvis.agents.upgrade_agent import (
+    UnknownModelProfileError,
+    load_model_registry,
+    resolve_profile,
+)
 from jarvis.config import Settings
 from jarvis.procedures import match_procedure, mark_used
 from jarvis.prompts import SUBAGENT_PROMPTS
@@ -37,6 +43,8 @@ logger = logging.getLogger(__name__)
 
 MAX_TOOL_ITERATIONS = 5
 DEFAULT_TIMEOUT_S = 45.0
+# A3 — repo map injection cap (chars), enforced at injection time.
+REPO_MAP_MAX_CHARS = 8000
 TIMEOUT_MESSAGE = "FAILED: the task took too long; please try again."
 STUCK_MESSAGE = "FAILED: the task could not be completed."
 # Cap tool results in events so a huge payload can't flood the data channel.
@@ -141,6 +149,8 @@ class SubAgent:
         registry: Any,
         client_factory: Callable[[Any], Any] | None = None,
         timeout_s: float = DEFAULT_TIMEOUT_S,
+        model_profile: str | None = None,
+        inject_repo_map: bool = False,
     ):
         self.name = name
         self.display_name = display_name
@@ -149,8 +159,38 @@ class SubAgent:
         self._settings = settings
         self._registry = registry
         self._timeout_s = timeout_s
+        # MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md A1 — the voice
+        # model (Haiku) is a dispatcher, never a design/build model. An
+        # injected client_factory (the test seam) always wins: profile
+        # resolution is skipped entirely so existing tests/fakes need no
+        # changes. Resolution failure (unknown profile, missing API key)
+        # fails soft, loudly — falls back to the settings client exactly
+        # as before A1 existed, with a warning; voice must still boot on
+        # a fresh checkout with one key.
+        self._model: str = settings.openai_model
         if client_factory is not None:
             self._client = client_factory(settings)
+        elif model_profile:
+            try:
+                registry_data = load_model_registry()
+                profile = resolve_profile(registry_data, model_profile)
+                key_env = profile.get("api_key_env", "OPENAI_API_KEY")
+                if not os.environ.get(key_env):
+                    raise UnknownModelProfileError(
+                        f"model profile {model_profile!r} needs {key_env}, which is unset"
+                    )
+                self._client = AsyncOpenAI(
+                    api_key=os.environ[key_env], base_url=profile["base_url"]
+                )
+                self._model = profile["model"]
+            except UnknownModelProfileError:
+                logger.warning(
+                    "subagent_model_profile_fallback agent=%s profile=%s",
+                    name, model_profile,
+                )
+                self._client = AsyncOpenAI(
+                    api_key=settings.openai_api_key, base_url=settings.openai_base_url
+                )
         else:
             self._client = AsyncOpenAI(
                 api_key=settings.openai_api_key, base_url=settings.openai_base_url
@@ -158,6 +198,23 @@ class SubAgent:
         self._system_prompt = SUBAGENT_PROMPTS[name].format(
             timezone=settings.jarvis_timezone
         )
+        # A3 — repo map injection, construction-time (one read per boot,
+        # not per run). Missing file = skip silently: a fresh checkout
+        # must not crash. Path resolution mirrors load_sub_agents' own
+        # repo-root convention (jarvis/agents/base.py) — one convention,
+        # not a second root-finding heuristic.
+        if inject_repo_map:
+            map_path = Path(__file__).resolve().parents[2] / "docs" / "REPO_MAP.md"
+            try:
+                content = map_path.read_text(encoding="utf-8")
+                if len(content) > REPO_MAP_MAX_CHARS:
+                    content = content[:REPO_MAP_MAX_CHARS]
+                self._system_prompt += (
+                    "\n\nRepository map (maintained, may lag reality — "
+                    "verify with tools before writing):\n" + content
+                )
+            except FileNotFoundError:
+                pass
 
     async def run(
         self,
@@ -185,7 +242,7 @@ class SubAgent:
             # MORTIMER_PLANNING_PATHWAY_PLAN.md P3 — the run's authoring
             # model, recorded once here (settings is only in hand at this
             # call site) and never re-derived downstream.
-            model=self._settings.openai_model,
+            model=self._model,
         )
         runlog.start()
         try:
@@ -256,7 +313,7 @@ class SubAgent:
         drafts_executed = 0
         for _ in range(MAX_TOOL_ITERATIONS):
             response = await self._client.chat.completions.create(
-                model=self._settings.openai_model,
+                model=self._model,
                 messages=messages,
                 **tools_kwarg,
             )
@@ -450,5 +507,7 @@ def load_sub_agents(
             # tasks (multi-file review, plan drafting) need more than the
             # voice-loop default.
             timeout_s=float(entry.get("timeout_s", DEFAULT_TIMEOUT_S)),
+            model_profile=entry.get("model_profile"),
+            inject_repo_map=bool(entry.get("inject_repo_map", False)),
         )
     return agents

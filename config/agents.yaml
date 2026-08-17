@@ -30,4 +30,16 @@ sub_agents:
     # recovery path for a stuck provider call (removing it entirely was
     # considered and rejected).
     timeout_s: 300
+    # MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md A1 — the voice
+    # model (Haiku) is a dispatcher, never a design/build model. The
+    # developer is the one sub-agent that does real implementation work,
+    # so it gets a build-grade model from the registry
+    # (config/upgrade_models.yaml). Change the profile name here to
+    # reassign; resolution failures fall back to the voice model with a
+    # logged warning.
+    model_profile: kimi-k3
+    # A3 — a maintained "where things live" map injected into this
+    # agent's system prompt at construction, so it stops burning its
+    # 5-iteration budget rediscovering its own codebase.
+    inject_repo_map: true
     description: "The Jarvis git repository: status, recent commits, diffs, committing and pushing changes (with confirmation), and the audit trail of repository actions. Also reads, searches, and edits files in the local working tree on this machine (previewed and confirmed before anything is written) — separate from GitHub, which is only used to create new app repos and to host pull requests. Also builds new applications: each app gets its own private GitHub repo (created only after user confirmation) and is recorded in the Mortimer app registry. Also self-development: edits to Mortimer's own interface through the self-development loop — preview with the user, plan in the background, validate, and open a pull request only after explicit confirmation; merging always stays with the human on GitHub."

@@ -581,3 +581,138 @@ class TestPendingDraftHandling:
         reply = await agent.run("write a spec")
         assert reply.startswith("FAILED: every tool call in this run failed")
         assert "[1 draft(s) are awaiting your confirmation" in reply
+
+
+# MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md A1 — per-agent model
+# profiles. These tests deliberately do NOT pass client_factory (that seam
+# always wins and skips profile resolution entirely — the tests above cover
+# that path already); they exercise real profile resolution against a
+# temp registry file.
+class TestModelProfile:
+    def _registry_file(self, tmp_path, monkeypatch, key_present=True):
+        import yaml
+        p = tmp_path / "upgrade_models.yaml"
+        p.write_text(yaml.safe_dump({
+            "default": "kimi-k2",
+            "profiles": [
+                {"name": "kimi-k2", "label": "Kimi K2", "provider": "moonshot",
+                 "model": "kimi-k2.7-code", "base_url": "https://api.moonshot.ai/v1",
+                 "api_key_env": "MOONSHOT_API_KEY"},
+            ],
+        }))
+        monkeypatch.setenv("JARVIS_UPGRADE_MODELS", str(p))
+        if key_present:
+            monkeypatch.setenv("MOONSHOT_API_KEY", "test-key")
+        else:
+            monkeypatch.delenv("MOONSHOT_API_KEY", raising=False)
+        return p
+
+    def test_resolved_profile_used_as_model(self, tmp_path, monkeypatch):
+        self._registry_file(tmp_path, monkeypatch)
+        agent = SubAgent(
+            name="developer", display_name="Developer", description="d",
+            mcp_servers=["mcp-repo"], settings=make_settings(),
+            registry=FakeRegistry(), model_profile="kimi-k2",
+        )
+        assert agent._model == "kimi-k2.7-code"
+        assert agent._client.api_key == "test-key"
+        assert str(agent._client.base_url) == "https://api.moonshot.ai/v1/"  # noqa: SLF001
+
+    def test_unknown_profile_falls_back_with_warning(self, tmp_path, monkeypatch, caplog):
+        self._registry_file(tmp_path, monkeypatch)
+        settings = make_settings()
+        agent = SubAgent(
+            name="developer", display_name="Developer", description="d",
+            mcp_servers=["mcp-repo"], settings=settings,
+            registry=FakeRegistry(), model_profile="does-not-exist",
+        )
+        assert agent._model == settings.openai_model  # fell back
+        assert "subagent_model_profile_fallback" in caplog.text
+
+    def test_missing_api_key_falls_back_with_warning(self, tmp_path, monkeypatch, caplog):
+        self._registry_file(tmp_path, monkeypatch, key_present=False)
+        settings = make_settings()
+        agent = SubAgent(
+            name="developer", display_name="Developer", description="d",
+            mcp_servers=["mcp-repo"], settings=settings,
+            registry=FakeRegistry(), model_profile="kimi-k2",
+        )
+        assert agent._model == settings.openai_model
+        assert "subagent_model_profile_fallback" in caplog.text
+
+    def test_no_profile_uses_settings_client(self):
+        settings = make_settings()
+        agent = SubAgent(
+            name="scheduler", display_name="Scheduler", description="d",
+            mcp_servers=["mcp-time"], settings=settings, registry=FakeRegistry(),
+        )
+        assert agent._model == settings.openai_model
+
+    def test_client_factory_skips_profile_resolution_entirely(self, tmp_path, monkeypatch):
+        """The test seam always wins — even a bogus profile name must not
+        raise or attempt resolution when client_factory is supplied."""
+        fake = FakeLLM([])
+        agent = SubAgent(
+            name="developer", display_name="Developer", description="d",
+            mcp_servers=["mcp-repo"], settings=make_settings(),
+            registry=FakeRegistry(), client_factory=lambda s: fake,
+            model_profile="totally-bogus-profile-name",
+        )
+        assert agent._client is fake
+
+
+# A3 — repo map injection.
+class TestRepoMapInjection:
+    def test_injected_when_flag_set(self, tmp_path, monkeypatch):
+        import jarvis.agents.base as base_module
+        repo_root = tmp_path
+        (repo_root / "docs").mkdir()
+        (repo_root / "docs" / "REPO_MAP.md").write_text("## Test map\n- foo lives in bar\n")
+        monkeypatch.setattr(base_module, "__file__", str(repo_root / "jarvis" / "agents" / "base.py"))
+        fake = FakeLLM([])
+        agent = SubAgent(
+            name="developer", display_name="Developer", description="d",
+            mcp_servers=["mcp-repo"], settings=make_settings(),
+            registry=FakeRegistry(), client_factory=lambda s: fake,
+            inject_repo_map=True,
+        )
+        assert "Test map" in agent._system_prompt
+        assert "foo lives in bar" in agent._system_prompt
+
+    def test_skipped_silently_when_missing(self, tmp_path, monkeypatch):
+        import jarvis.agents.base as base_module
+        monkeypatch.setattr(base_module, "__file__", str(tmp_path / "jarvis" / "agents" / "base.py"))
+        fake = FakeLLM([])
+        agent = SubAgent(
+            name="developer", display_name="Developer", description="d",
+            mcp_servers=["mcp-repo"], settings=make_settings(),
+            registry=FakeRegistry(), client_factory=lambda s: fake,
+            inject_repo_map=True,
+        )
+        assert "Repository map" not in agent._system_prompt
+
+    def test_not_injected_when_flag_unset(self):
+        fake = FakeLLM([])
+        agent = SubAgent(
+            name="developer", display_name="Developer", description="d",
+            mcp_servers=["mcp-repo"], settings=make_settings(),
+            registry=FakeRegistry(), client_factory=lambda s: fake,
+        )
+        assert "Repository map" not in agent._system_prompt
+
+    def test_truncated_at_cap(self, tmp_path, monkeypatch):
+        import jarvis.agents.base as base_module
+        repo_root = tmp_path
+        (repo_root / "docs").mkdir()
+        big = "x" * (base_module.REPO_MAP_MAX_CHARS + 500)
+        (repo_root / "docs" / "REPO_MAP.md").write_text(big)
+        monkeypatch.setattr(base_module, "__file__", str(repo_root / "jarvis" / "agents" / "base.py"))
+        fake = FakeLLM([])
+        agent = SubAgent(
+            name="developer", display_name="Developer", description="d",
+            mcp_servers=["mcp-repo"], settings=make_settings(),
+            registry=FakeRegistry(), client_factory=lambda s: fake,
+            inject_repo_map=True,
+        )
+        injected = agent._system_prompt.split("verify with tools before writing):\n")[1]
+        assert len(injected) == base_module.REPO_MAP_MAX_CHARS
