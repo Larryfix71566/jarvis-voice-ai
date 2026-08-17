@@ -18,7 +18,7 @@ sub_agents:
     description: "Local machine status: CPU, memory, disk, battery, uptime."
   - name: developer
     display_name: Developer
-    mcp_servers: [mcp-git, mcp-apps, mcp-repo, mcp-selfedit]
+    mcp_servers: [mcp-git, mcp-apps, mcp-repo, mcp-selfedit, mcp-runlog]
     # MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md F3: developer tasks (multi-file
     # review, plan drafting) legitimately exceed the 45s voice-loop
     # default; two live runs timed out doing exactly that. Other agents

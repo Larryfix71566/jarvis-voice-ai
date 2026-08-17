@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 GIT_TIMEOUT_S = 60
 BUILD_TIMEOUT_S = 600
+VALIDATE_PYTEST_TIMEOUT_S = 300
 SESSION_BRANCH_PREFIX = "jarvis/self-edit"
 ROLLBACK_TAG_PREFIX = "pre-selfedit"
 DEFAULT_BASE_REF = "origin/main"
@@ -234,6 +235,17 @@ class SelfEditService:
                                   timeout=BUILD_TIMEOUT_S)
         checks.append({"name": "frontend_build", "ok": code == 0,
                        "output": out[-2000:] or "build ok"})
+
+        # 4. Backend unit tests (C2, MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md).
+        # CI's own pytest step is a hard gate now for the same reason — a
+        # self-edit that imports cleanly and builds the frontend can still
+        # break backend behavior; only the test suite catches that.
+        code, out = self._run(
+            ["python", "-m", "pytest", "tests/unit", "-q"],
+            cwd=self.repo_root, timeout=VALIDATE_PYTEST_TIMEOUT_S,
+        )
+        checks.append({"name": "pytest", "ok": code == 0,
+                       "output": out[-2000:] or "tests ok"})
 
         ok = all(c["ok"] for c in checks)
         self._validated_ok = ok

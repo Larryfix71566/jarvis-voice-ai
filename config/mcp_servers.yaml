@@ -45,6 +45,13 @@ servers:
     # (expand_env_vars leaves unknown vars as-is by design), making every
     # repo_read_file report "does not exist" against a phantom root.
     env: {}
+  - name: mcp-runlog
+    command: python
+    args: ["-m", "mcp_servers.mcp_runlog.server"]
+    # No env entry, same rule as mcp-repo above: the child inherits the
+    # full parent environment, and JARVIS_DB_PATH (if set) reaches it
+    # that way — this server is read-only, so no other env is needed.
+    env: {}
   - name: mcp-selfedit
     command: python
     args: ["-m", "mcp_servers.mcp_selfedit.server"]

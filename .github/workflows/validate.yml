@@ -23,9 +23,11 @@ jobs:
       - name: Backend import smoke
         run: python -c "import jarvis, jarvis.config, jarvis.cli, jarvis.runlog"
 
-      # Gate 3: unit tests (non-blocking until the suite is green on main).
+      # Gate 3: unit tests (C2, MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md
+      # — blocking now that the suite has been green on main for a while and
+      # jarvis/selfedit/service.py's own validate() runs this same command
+      # as its own gate 4, so CI and the self-edit loop can't disagree).
       - name: Unit tests
-        continue-on-error: true
         run: pytest tests/unit -q
 
       # Gate 3b: sub-agent quality evals (plan Phase 2b).
