@@ -113,6 +113,81 @@ export function subscribeDisplay(cb: (m: DisplayMessage) => void): () => void {
 
 let popupRef: Window | null = null;
 
+// --- D42 implemented (2026-08-17): auto-place the popup on the extended
+// screen when one is available, and move it there when one is added.
+// Uses the Window Management API (Chromium; permission is prompted on
+// first use — safe here because openDisplayWindow always runs inside the
+// ⧉ button's user gesture). Firefox/Safari lack the API: feature-detect
+// and fall back to today's behavior (user drags once, the named window
+// remembers its position).
+
+interface ScreenDetailedLike {
+  availLeft: number;
+  availTop: number;
+  availWidth: number;
+  availHeight: number;
+  isPrimary: boolean;
+}
+interface ScreenDetailsLike {
+  screens: ScreenDetailedLike[];
+  currentScreen: ScreenDetailedLike;
+  addEventListener(type: "screenschange", cb: () => void): void;
+  removeEventListener(type: "screenschange", cb: () => void): void;
+}
+
+let screenDetails: ScreenDetailsLike | null = null;
+let screensChangeWired = false;
+
+/** The "extra" screen = any screen that is not the one hosting the console. */
+function extendedScreen(details: ScreenDetailsLike): ScreenDetailedLike | null {
+  return details.screens.find((s) => s !== details.currentScreen) ?? null;
+}
+
+function moveToScreen(win: Window, s: ScreenDetailedLike): void {
+  try {
+    win.moveTo(s.availLeft, s.availTop);
+    win.resizeTo(s.availWidth, s.availHeight);
+  } catch {
+    /* browser refused the move — user can still drag manually */
+  }
+}
+
+function wireScreensChange(details: ScreenDetailsLike): void {
+  if (screensChangeWired) return;
+  screensChangeWired = true;
+  details.addEventListener("screenschange", () => {
+    // A monitor was added (or removed). If the popup is live and an
+    // extended screen now exists, move the popup onto it.
+    if (!hasLivePopup()) return;
+    const target = extendedScreen(details);
+    if (target) moveToScreen(popupRef!, target);
+  });
+}
+
+/** Best-effort async placement — never blocks or fails the open. */
+function placeOnExtendedScreen(win: Window): void {
+  const getDetails = (
+    window as unknown as { getScreenDetails?: () => Promise<ScreenDetailsLike> }
+  ).getScreenDetails;
+  if (typeof getDetails !== "function") return; // API absent — fall back
+  const placed = (details: ScreenDetailsLike) => {
+    screenDetails = details;
+    wireScreensChange(details);
+    const target = extendedScreen(details);
+    if (target && !win.closed) moveToScreen(win, target);
+  };
+  if (screenDetails) {
+    placed(screenDetails);
+    return;
+  }
+  getDetails
+    .call(window)
+    .then(placed)
+    .catch(() => {
+      /* permission denied — popup stays where the browser put it */
+    });
+}
+
 /** Whether a live popup currently exists — DisplayPanel hides itself while
  * true (D41), since the payload is showing on the other screen. */
 export function hasLivePopup(): boolean {
@@ -129,16 +204,17 @@ export function openDisplayWindow(): Window | null {
     popupRef!.focus();
     return popupRef;
   }
-  // D42 (deferred): a future `placement` argument would consult
-  // window.getScreenDetails() here to position on a chosen screen. Today
-  // the user drags the popup to the target monitor once and the browser
-  // remembers the position for the named window.
   const win = window.open(
     "/display.html",
     "mortimer-display",
     "width=560,height=440,menubar=no,toolbar=no,location=no,status=no",
   );
   popupRef = win;
+  // D42: by default the popup lands on the extended screen when one is
+  // available (and follows one added later, via screenschange). Async and
+  // best-effort — a browser without the API or a denied permission leaves
+  // the popup exactly where today's behavior put it.
+  if (win) placeOnExtendedScreen(win);
   return win;
 }
 
