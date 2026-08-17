@@ -33,6 +33,7 @@
     "jarvis/vault.py",
     "data/**",
     "*.vault",
-    "**/*.vault"
+    "**/*.vault",
+    "macos/**"
   ]
 }

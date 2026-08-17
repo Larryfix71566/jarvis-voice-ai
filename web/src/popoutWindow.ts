@@ -127,6 +127,10 @@ function moveToSlot(win: Window, screen: ScreenDetailedLike, slot: Slot): void {
  * two-popout split and the >2-screen case are computed by repositionAll()
  * below, which calls this same geometry helper with an explicit screen. */
 export function placeOnExtendedScreen(win: Window, slot: Slot): void {
+  // B3 — inside the shell, native Swift code applies DP8's placement
+  // semantics directly against NSScreen; the web-side Window Management
+  // API path must never also run, or the two would race/double-place.
+  if ((window as unknown as { mortimerShell?: unknown }).mortimerShell) return;
   const getDetails = (
     window as unknown as { getScreenDetails?: () => Promise<ScreenDetailsLike> }
   ).getScreenDetails;
@@ -316,6 +320,26 @@ export function createPopoutChannel<M>(name: string, role: PopoutRole): PopoutCh
   }
 
   function open(url: string, windowName: string, features: string): Window | null {
+    // B2 (MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md): inside the
+    // Mortimer shell, a WKUserScript injects window.mortimerShell at
+    // documentStart before any app code runs. The shell owns opening and
+    // placing its own native Display/Drawer windows — posting through the
+    // injected message handler and returning null here means voice's
+    // display_popout/drawer_popout paths (which only check the return
+    // value via isAlive()'s heartbeat-based presence, unchanged since the
+    // console-reload fix) keep working with no Window ref at all. A plain
+    // browser has no window.mortimerShell, so this branch is dead there —
+    // existing behavior is untouched.
+    const shell = (window as unknown as { mortimerShell?: { version: number } }).mortimerShell;
+    if (shell) {
+      const handler = (
+        window as unknown as {
+          webkit?: { messageHandlers?: { mortimer?: { postMessage(msg: unknown): void } } };
+        }
+      ).webkit?.messageHandlers?.mortimer;
+      handler?.postMessage({ cmd: "openWindow", name: windowName });
+      return null;
+    }
     if (isAlive()) {
       // A popup alive only via heartbeat (console reloaded, ref lost):
       // recover the ref through named-window reuse — an empty URL returns

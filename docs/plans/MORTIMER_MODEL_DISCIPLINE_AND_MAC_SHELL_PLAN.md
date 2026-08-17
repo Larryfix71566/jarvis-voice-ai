@@ -510,7 +510,12 @@ system's first real autonomous-build exercise.
       finds `AmbientStrip.tsx` without exhausting iterations on search
       (map present in its system prompt), and routes the edit correctly.
 - [ ] B0: both spike verdicts recorded here with PASS/FAIL + fallback
-      taken.
+      taken. **Not yet run** — the scaffold at `macos/MortimerShell/`
+      was written 2026-08-17 without Xcode/macOS access (no such
+      environment was available); it compiles nowhere yet. Larry:
+      `open macos/MortimerShell/Package.swift` in Xcode, follow that
+      directory's README.md, and fill in the two verdicts there and
+      here before treating any of Part B as trustworthy.
 - [ ] B: three native windows on the right screens per B3's table; both
       voice popout commands work in-shell; `⧉` in a plain browser still
       works; drawer/display single-place rules hold in both modes;
@@ -569,5 +574,28 @@ data-shape changes anywhere in this plan.
 
 ## §7 Approval
 
-- [ ] Larry approves.
-- [ ] Implementation may begin.
+- [x] Larry approves.
+- [x] Implementation may begin.
+
+## §8 Implementation status (2026-08-17)
+
+- [x] Part A (model discipline): implemented, tested, committed
+      (`9045db8`). `pytest tests/unit tests/integration -q` green.
+- [x] Part C (investigator + pytest gate): implemented, tested,
+      committed (`c8e787d`). Found and fixed a real regression during
+      verification — `mcp_runlog/server.py` was missing its
+      `mcp.run()` entrypoint.
+- [x] Part D (app-build engine): implemented, tested, committed
+      (`0de19e2`). `TOTAL_TOOLS` 52 → 55; full suite green (1043
+      passed, 3 skipped, 1 pre-existing unrelated failure).
+- [ ] Part B (Mac shell): scaffolded (`macos/MortimerShell/`), NOT
+      built or run — no Xcode/macOS access in the environment that
+      wrote it. The B0 spike (§4's B0 checklist item, and
+      `macos/MortimerShell/README.md`) is the required next step
+      before any of Part B's other acceptance items can be checked.
+- [ ] Final cross-part verification (task tracking's "final
+      verification across all parts" item): pending Part B's spike
+      result — a clean pytest run alone doesn't cover the Swift code,
+      which has zero automated tests by construction (it's a thin UI
+      shell; the acceptance checklist is manual by design, same as
+      every other Mac-only surface this project has).
