@@ -128,6 +128,12 @@
   animation: dot-pulse 1s ease-in-out infinite;
 }
 
+/* Engagement plan E1 — amber attention variant (pending draft). */
+.side-drawer-tab-dot-attn {
+  background: var(--attn);
+  box-shadow: 0 0 8px var(--attn);
+}
+
 .side-drawer-close {
   margin-left: auto;
   font-family: var(--mono);

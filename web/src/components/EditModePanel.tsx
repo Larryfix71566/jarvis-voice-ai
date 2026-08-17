@@ -113,6 +113,33 @@ interface CouncilRoundDetail {
   scores?: CouncilScoreRow[];
 }
 
+// --- Planning pathway (MORTIMER_PLANNING_PATHWAY_PLAN.md P7) ------------
+
+interface PlanCandidate {
+  label: string;
+  profile: string;
+  content: string;
+  advisory_mean: number | null;
+}
+
+interface PlanJob {
+  state: "idle" | "running" | "awaiting_choice" | "done" | "error";
+  mode?: "single" | "council" | null;
+  goal?: string | null;
+  profile?: string | null;
+  round_id?: string | null;
+  candidates?: PlanCandidate[] | null;
+  plan?: string | null;
+  author?: string | null;
+  error?: string | null;
+  // MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R1 — set (repo-relative path)
+  // when this job is a review of an existing document rather than a
+  // fresh plan/spec authoring job.
+  review_path?: string | null;
+}
+
+const IDLE_PLAN_JOB: PlanJob = { state: "idle" };
+
 function lsKeyForTier(tier: TierName): string {
   return `mortimer.council.${tier}`;
 }
@@ -167,6 +194,16 @@ export default function EditModePanel() {
   const councilPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [councilRoundsOpen, setCouncilRoundsOpen] = useState(false);
   const [councilRounds, setCouncilRounds] = useState<CouncilRoundSummary[] | null>(null);
+
+  // --- planning pathway state (P7) ---
+  const [planGoal, setPlanGoal] = useState("");
+  const [planMode, setPlanMode] = useState<"single" | "council">("single");
+  const [planProfile, setPlanProfile] = useState("");
+  const [planJob, setPlanJob] = useState<PlanJob>(IDLE_PLAN_JOB);
+  const [planNote, setPlanNote] = useState<string | null>(null);
+  const [planAdoptPath, setPlanAdoptPath] = useState("");
+  const [planReviewPath, setPlanReviewPath] = useState("");
+  const planPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -228,14 +265,22 @@ export default function EditModePanel() {
     }
   }, []);
 
+  const stopPlanPolling = useCallback(() => {
+    if (planPollRef.current) {
+      clearInterval(planPollRef.current);
+      planPollRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     void refresh();
     void loadModels();
     return () => {
       stopPolling();
       stopCouncilPolling();
+      stopPlanPolling();
     };
-  }, [refresh, loadModels, stopPolling, stopCouncilPolling]);
+  }, [refresh, loadModels, stopPolling, stopCouncilPolling, stopPlanPolling]);
 
   const post = async (path: string, body?: object) => {
     const r = await fetch(`${API}${path}`, {
@@ -437,6 +482,110 @@ export default function EditModePanel() {
     setBusy(null);
   };
 
+  // --- planning pathway (P7) ---------------------------------------------
+  // Same "POST starts a background job, GET polls it" shape as the self-
+  // edit run and council convene above — one more instance of the sidecar's
+  // established job-slot pattern, not a new one.
+
+  const startPlanPolling = useCallback(() => {
+    stopPlanPolling();
+    planPollRef.current = setInterval(async () => {
+      try {
+        const r = await fetch(`${API}/api/plan/job`);
+        const j = (await r.json()) as { ok: boolean; job: PlanJob };
+        if (!j.ok) return;
+        setPlanJob(j.job);
+        if (j.job.state !== "running") stopPlanPolling();
+      } catch {
+        stopPlanPolling();
+      }
+    }, 3000);
+  }, [stopPlanPolling]);
+
+  const onPlanStart = async () => {
+    setPlanNote(null);
+    const reviewPath = planReviewPath.trim();
+    try {
+      const res = await post("/api/plan/start", {
+        goal: planGoal,
+        mode: planMode,
+        profile: planMode === "single" ? planProfile || undefined : undefined,
+        review_path: reviewPath,
+      });
+      if (res.ok && res.started) {
+        setPlanJob({
+          state: "running", mode: planMode, goal: planGoal,
+          review_path: reviewPath || null,
+        });
+        startPlanPolling();
+      } else {
+        setPlanNote(res.error ?? "could not start the planning job");
+      }
+    } catch {
+      setPlanNote("planning job failed to start — is the admin sidecar running?");
+    }
+  };
+
+  const onPlanChoose = async (label: string) => {
+    setPlanNote(null);
+    const res = await post("/api/plan/choose", { label });
+    if (res.ok) {
+      try {
+        const r = await fetch(`${API}/api/plan/job`);
+        const j = (await r.json()) as { ok: boolean; job: PlanJob };
+        if (j.ok) setPlanJob(j.job);
+      } catch {
+        /* the choice was still recorded server-side; just can't refresh */
+      }
+    } else {
+      setPlanNote(res.error ?? "could not record that choice");
+    }
+  };
+
+  const onPlanAdopt = async () => {
+    setPlanNote(null);
+    const res = await post("/api/plan/adopt", { path: planAdoptPath || undefined });
+    if (res.ok) {
+      setPlanNote(
+        `drafted at ${res.path ?? "the plan path"} — nothing is written yet; ` +
+          "confirm the write in the Repo tab",
+      );
+    } else {
+      setPlanNote(res.error ?? "adopt failed");
+    }
+  };
+
+  const onPlanStartSelfEdit = async () => {
+    setPlanNote(null);
+    setBusy("run");
+    setNote(null);
+    setPrUrl(null);
+    try {
+      const res = await post("/api/selfedit/run", {
+        goal: planJob.goal ?? "",
+        plan: planJob.plan ?? undefined,
+      });
+      if (res.ok && res.started) {
+        setNote(`planning with ${res.profile} — this can take several minutes…`);
+        startPolling();
+      } else {
+        setNote(res.error ?? "could not start the run");
+        setBusy(null);
+      }
+    } catch {
+      setNote("agent run failed — is the admin sidecar running?");
+      setBusy(null);
+    }
+  };
+
+  const onPlanCancel = async () => {
+    stopPlanPolling();
+    await post("/api/plan/cancel");
+    setPlanJob(IDLE_PLAN_JOB);
+    setPlanNote(null);
+    setPlanReviewPath("");
+  };
+
   if (unreachable) {
     return (
       <div className="editmode-panel">
@@ -582,6 +731,152 @@ export default function EditModePanel() {
       )}
       {note && <div className="git-note">{note}</div>}
 
+      <div className="editmode-planning">
+        <div className="panel-title">{planJob.review_path ? "Review" : "Planning"}</div>
+        <div className="editmode-disclaimer">
+          Drafts an implementation plan or spec — no files are touched.
+          Covers interface upgrades, new apps, and standalone plans alike.
+          Set a path below to review an existing document instead of
+          authoring a new one.
+        </div>
+
+        <input
+          className="git-input"
+          placeholder="review an existing document (path, optional) — e.g. docs/plans/my-plan.md"
+          value={planReviewPath}
+          onChange={(e) => setPlanReviewPath(e.target.value)}
+          disabled={planJob.state === "running"}
+        />
+
+        <div className="editmode-planning-mode">
+          <label>
+            <input
+              type="radio"
+              name="plan-mode"
+              checked={planMode === "single"}
+              onChange={() => setPlanMode("single")}
+              disabled={planJob.state === "running"}
+            />
+            single model
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="plan-mode"
+              checked={planMode === "council"}
+              onChange={() => setPlanMode("council")}
+              disabled={planJob.state === "running"}
+            />
+            council: parallel drafts
+          </label>
+        </div>
+
+        {planMode === "single" && (
+          <select
+            className="git-input"
+            value={planProfile}
+            onChange={(e) => setPlanProfile(e.target.value)}
+            disabled={planJob.state === "running"}
+            title="Planner model to author the plan"
+          >
+            <option value="">default planner</option>
+            {models.map((m) => (
+              <option key={m.name} value={m.name} disabled={!m.key_present}>
+                {m.label}
+                {m.default ? " (default)" : ""}
+                {m.key_present ? "" : " — key missing"}
+              </option>
+            ))}
+          </select>
+        )}
+
+        <div className="git-commit-row">
+          <input
+            className="git-input"
+            placeholder="what should the plan cover?"
+            value={planGoal}
+            onChange={(e) => setPlanGoal(e.target.value)}
+            disabled={planJob.state === "running"}
+          />
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={onPlanStart}
+            disabled={planJob.state === "running" || !planGoal.trim()}
+          >
+            {planJob.state === "running" ? "Drafting…" : "Start"}
+          </button>
+        </div>
+
+        {planNote && <div className="git-note">{planNote}</div>}
+
+        {planJob.state === "error" && (
+          <div className="editmode-planning-error">{planJob.error}</div>
+        )}
+
+        {planJob.state === "awaiting_choice" && planJob.candidates && (
+          <div className="editmode-planning-candidates">
+            {planJob.candidates.map((c) => (
+              <details key={c.label} className="editmode-planning-candidate">
+                <summary>
+                  {c.label} — {c.profile}
+                  {c.advisory_mean != null && ` (advisory ${c.advisory_mean.toFixed(1)})`}
+                </summary>
+                <pre className="editmode-diff">{c.content}</pre>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => void onPlanChoose(c.label)}
+                >
+                  Choose this plan
+                </button>
+              </details>
+            ))}
+          </div>
+        )}
+
+        {planJob.state === "done" && (
+          <div className="editmode-planning-done">
+            <div className="editmode-council-reason">
+              {planJob.review_path ? "reviewed" : "drafted"} by {planJob.author}
+              {planJob.review_path && ` — ${planJob.review_path}`}
+            </div>
+            <pre className="editmode-diff">{planJob.plan}</pre>
+            <div className="git-commit-row">
+              <input
+                className="git-input"
+                placeholder={
+                  planJob.review_path
+                    ? "docs/reviews/….md (optional)"
+                    : "docs/plans/….md (optional)"
+                }
+                value={planAdoptPath}
+                onChange={(e) => setPlanAdoptPath(e.target.value)}
+              />
+              <button type="button" className="btn" onClick={onPlanAdopt}>
+                Adopt as draft
+              </button>
+            </div>
+            {!planJob.review_path && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void onPlanStartSelfEdit()}
+                disabled={busy !== null}
+              >
+                Start self-edit with this plan
+              </button>
+            )}
+          </div>
+        )}
+
+        {planJob.state !== "idle" && (
+          <button type="button" className="btn editmode-revert" onClick={() => void onPlanCancel()}>
+            Cancel
+          </button>
+        )}
+      </div>
+
       <div className="editmode-council">
         <div className="panel-title">LLM Council</div>
         <div className="editmode-disclaimer">
@@ -658,6 +953,31 @@ export default function EditModePanel() {
               <div className="editmode-council-reason">
                 no winner — {councilResult.select_reason ?? "the round did not select a proposal"}
               </div>
+            )}
+          </div>
+        )}
+
+        {councilRound?.scores && councilRound.scores.length > 0 && (
+          <div className="editmode-council-roster">
+            Proposers:{" "}
+            {[...new Set(councilRound.scores.map((s) => s.proposal_profile))].join(", ")}
+            {" · "}
+            Judges:{" "}
+            {[
+              ...new Set(
+                councilRound.scores.filter((s) => !s.shadow).map((s) => s.judge_profile),
+              ),
+            ].join(", ") || "—"}
+            {councilRound.scores.some((s) => s.shadow) && (
+              <>
+                {" · "}
+                Shadow:{" "}
+                {[
+                  ...new Set(
+                    councilRound.scores.filter((s) => s.shadow).map((s) => s.judge_profile),
+                  ),
+                ].join(", ")}
+              </>
             )}
           </div>
         )}

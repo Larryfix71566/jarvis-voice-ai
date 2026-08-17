@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { AGENT_LAYOUT } from "../agentLayout";
+import {
+  consumeRequestedAgentFilter,
+  subscribeAgentFilter,
+} from "../agentRuns";
 import { relTime } from "../timeFormat";
 
 const API = "http://localhost:7861";
@@ -28,6 +32,9 @@ interface RunRow {
   error: string | null;
   reply_preview: string | null;
   payload_path: string | null;
+  // MORTIMER_PLANNING_PATHWAY_PLAN.md P3 — optional/null because a row
+  // written before migration 0011 has none; render falls back to "—".
+  model?: string | null;
 }
 
 interface AgentEvent {
@@ -89,7 +96,13 @@ const STATUS_CLASS: Record<RunStatus, string> = {
 export default function RunsPanel() {
   const [runs, setRuns] = useState<RunRow[] | null>(null);
   const [unreachable, setUnreachable] = useState(false);
-  const [agentFilter, setAgentFilter] = useState("");
+  // E5: a satellite click may have requested a filter before this tab
+  // body mounted — consume it at mount, and stay subscribed for clicks
+  // while mounted.
+  const [agentFilter, setAgentFilter] = useState(
+    () => consumeRequestedAgentFilter() ?? "",
+  );
+  useEffect(() => subscribeAgentFilter(setAgentFilter), []);
   const [statusFilter, setStatusFilter] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [detail, setDetail] = useState<RunDetail | null>(null);
@@ -175,7 +188,9 @@ export default function RunsPanel() {
       {!runs ? (
         <div className="runs-empty">loading…</div>
       ) : runs.length === 0 ? (
-        <div className="runs-empty">No runs yet.</div>
+        <div className="runs-empty">
+          No runs yet — try "check how my computer is doing".
+        </div>
       ) : (
         <div className="runs-list">
           {runs.map((r) => (
@@ -210,6 +225,13 @@ export default function RunsPanel() {
                       {detail.run.error && (
                         <div className="runs-detail-error">{detail.run.error}</div>
                       )}
+                      {/* MORTIMER_PLANNING_PATHWAY_PLAN.md P3 — the
+                          authoring model, invisible before this plan;
+                          "—" for pre-migration-0011 rows (NULL, never
+                          backfilled). */}
+                      <div className="runs-detail-model">
+                        model: {detail.run.model || "—"}
+                      </div>
                       <div className="runs-events">
                         {detail.events.map((ev) => (
                           <div key={ev.id} className="runs-event-row">

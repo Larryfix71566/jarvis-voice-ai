@@ -71,7 +71,7 @@ class FakeAgent:
     def model_label(self):
         return f"{self.profile or 'kimi-k2'} (fake-model)"
 
-    def run(self, goal):
+    def run(self, goal, plan=None):
         if FakeAgent.gate is not None:
             FakeAgent.gate.wait(timeout=5)
         if FakeAgent.crash:

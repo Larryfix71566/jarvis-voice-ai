@@ -11,6 +11,11 @@
   --amber: #ffb454;
   --green: #3ddc97;
   --red: #ff5f56;
+  /* Engagement plan E1 — semantic state tokens: cyan (--accent) = alive/
+     ok, --attn = needs-your-attention (pending draft confirmation),
+     --red = error. Dots mean things by COLOR now, not position. */
+  --attn: var(--amber);
+  --attn-dim: rgba(255, 180, 84, 0.35);
   --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
 }
 
@@ -200,6 +205,13 @@ body {
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 8px var(--accent);
+}
+
+/* E1 — attention variant: a pending draft confirmation outranks the
+   cyan live signal wherever a dot renders. */
+.btn-live-dot-attn {
+  background: var(--attn);
+  box-shadow: 0 0 8px var(--attn);
   animation: dot-pulse 1s ease-in-out infinite;
 }
 

@@ -147,3 +147,60 @@
   letter-spacing: 0.06em;
   color: #8fa8cc;
 }
+
+/* --- Engagement plan E6: dossier cards ----------------------------------
+   Frosted-card grouping (caption/satellite visual language). Content is
+   the hero (body text first); keys render dimmed mono beneath. */
+
+.memory-card {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(4, 9, 12, 0.55);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+@supports not (backdrop-filter: blur(4px)) {
+  .memory-card {
+    background: rgba(4, 9, 12, 0.88);
+  }
+}
+
+.memory-card-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.memory-card .memory-fact-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.memory-obs-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.memory-obs-bar {
+  margin: 4px 0 8px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent-faint);
+  overflow: hidden;
+}
+
+.memory-obs-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-dim);
+}

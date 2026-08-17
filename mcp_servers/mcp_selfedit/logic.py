@@ -228,6 +228,217 @@ def selfedit_submit(client, confirm: bool = False) -> dict[str, Any]:
     }
 
 
+# ------------------------------------------------------- planning pathway
+# MORTIMER_PLANNING_PATHWAY_PLAN.md P7. Same thin-HTTP-client, two-phase-
+# confirmation conventions as the self-edit tools above — no planning
+# logic lives here, only the sidecar's /api/plan/* pass-throughs shaped
+# into spoken-friendly summaries.
+
+
+def plan_start(
+    client, goal: str, mode: str = "single", profile: str | None = None,
+    confirm: bool = False, review_path: str = "",
+) -> dict[str, Any]:
+    """Two-phase start of a planning job. `mode` is 'single' (one named
+    model authors the plan) or 'council' (every usable model drafts a
+    full plan in parallel; the user chooses among them with plan_choose).
+    REVIEW_PATH, when set, reviews that existing repo document instead of
+    authoring a new plan — use this whenever the user asks to have a
+    plan, spec, or document reviewed, critiqued, or checked by a model."""
+    goal = (goal or "").strip()
+    if not goal:
+        return {"ok": False, "error": "I need a goal — what should the plan cover?"}
+    mode = (mode or "single").strip().lower()
+    if mode not in ("single", "council"):
+        return {
+            "ok": False,
+            "error": "mode must be 'single' (one model) or 'council' "
+                     "(parallel drafts you choose between).",
+        }
+    review_path = (review_path or "").strip()
+    is_review = bool(review_path)
+
+    if not confirm:
+        if is_review:
+            if mode == "single":
+                summary = (
+                    f"Ready to have {profile or 'the default planner'} review "
+                    f"{review_path}. This can take a few minutes. Say yes to start."
+                )
+            else:
+                summary = (
+                    f"Ready to have the council draft parallel reviews of "
+                    f"{review_path}, so you can choose between them. This can "
+                    f"take a few minutes. Say yes to start."
+                )
+        elif mode == "single":
+            summary = (
+                f"Ready to draft a plan for “{goal}” with "
+                f"{profile or 'the default planner'}. This can take a few "
+                f"minutes. Say yes to start."
+            )
+        else:
+            summary = (
+                f"Ready to have the council draft parallel plans for "
+                f"“{goal}”, so you can choose between them. This can take "
+                f"a few minutes. Say yes to start."
+            )
+        return {
+            "ok": True, "needs_confirmation": True, "summary": summary,
+            "goal": goal, "mode": mode, "profile": profile,
+            "review_path": review_path or None,
+        }
+
+    resp = _call(lambda: client.post(
+        "/api/plan/start", json={
+            "goal": goal, "mode": mode, "profile": profile,
+            "review_path": review_path,
+        },
+    ))
+    if not resp.get("ok"):
+        return resp
+    if is_review:
+        if mode == "single":
+            summary = (
+                f"Started the review with {profile or 'the default planner'}. "
+                f"This can take a few minutes — ask me how it's coming along anytime."
+            )
+        else:
+            summary = (
+                "Started the council drafting parallel reviews. This can take "
+                "a few minutes — ask me when they're ready."
+            )
+    elif mode == "single":
+        summary = (
+            f"Started drafting the plan with {profile or 'the default planner'}. "
+            f"This can take a few minutes — ask me how it's coming along anytime."
+        )
+    else:
+        summary = (
+            "Started the council drafting parallel plans. This can take a "
+            "few minutes — ask me when they're ready."
+        )
+    return {"ok": True, "started": True, "summary": summary}
+
+
+def plan_status(client) -> dict[str, Any]:
+    """Report the current planning job: still drafting, candidates ready
+    to choose between, or a finished plan ready to adopt."""
+    resp = _call(lambda: client.get("/api/plan/job"))
+    if not resp.get("ok"):
+        return resp
+    job = resp.get("job", {}) or {}
+    state = job.get("state")
+    # R5 — say "review" instead of "plan" when the polled job carries a
+    # review_path.
+    noun = "review" if job.get("review_path") else "plan"
+
+    if state in (None, "idle"):
+        return {"ok": True, "summary": "No planning job is active.", "job": job}
+    if state == "running":
+        mode = job.get("mode") or "planning"
+        return {
+            "ok": True,
+            "summary": (
+                f"Still drafting ({mode} mode) — goal: “{job.get('goal', '')}”. "
+                f"I'll keep at it."
+            ),
+            "job": job,
+        }
+    if state == "error":
+        return {
+            "ok": True,
+            "summary": f"The planning job failed: {job.get('error') or 'unknown error'}",
+            "job": job,
+        }
+    if state == "awaiting_choice":
+        candidates = job.get("candidates") or []
+        parts = []
+        for c in candidates:
+            score = c.get("advisory_mean")
+            score_note = f" (advisory score {score:.1f})" if score is not None else ""
+            parts.append(f"{c['label']} by {c['profile']}{score_note}")
+        return {
+            "ok": True,
+            "summary": (
+                f"{len(candidates)} candidate {noun}(s) are ready: "
+                + "; ".join(parts) + ". Which one would you like?"
+            ),
+            "job": job,
+        }
+    if state == "done":
+        return {
+            "ok": True,
+            "summary": (
+                f"The {noun} is ready, drafted by {job.get('author') or 'the planner'}. "
+                f"Say the word and I'll save it as a draft for your review."
+            ),
+            "job": job,
+        }
+    return {"ok": True, "summary": "Planning status unknown.", "job": job}
+
+
+def plan_choose(client, label: str) -> dict[str, Any]:
+    """Choose one candidate from a council-mode planning round. No
+    confirmation phase — choosing among drafts is not a write."""
+    label = (label or "").strip()
+    if not label:
+        return {"ok": False, "error": "which candidate? name its label, e.g. Proposal A."}
+    resp = _call(lambda: client.post("/api/plan/choose", json={"label": label}))
+    if not resp.get("ok"):
+        return resp
+    return {
+        "ok": True,
+        "summary": (
+            f"Chose {label}. Say the word and I'll save it as a draft "
+            f"for your review."
+        ),
+    }
+
+
+def plan_adopt(client, path: str | None = None, confirm: bool = False) -> dict[str, Any]:
+    """Two-phase: save the finished plan as a draft repo write (the same
+    draft-gated action_id flow as repo_write_file/repo_commit_write —
+    nothing is committed by this call, confirm or not)."""
+    status = _call(lambda: client.get("/api/plan/job"))
+    if not status.get("ok"):
+        return status
+    job = status.get("job", {}) or {}
+    if job.get("state") != "done":
+        return {"ok": False, "error": "there's no finished plan to adopt yet."}
+    # R5 — say "review" instead of "plan" when the polled job carries a
+    # review_path; the adopt preview names the docs/reviews/ default.
+    noun = "review" if job.get("review_path") else "plan"
+    default_dir = "docs/reviews/" if job.get("review_path") else "docs/plans/"
+
+    if not confirm:
+        target = path or f"a {default_dir} file named after the goal"
+        return {
+            "ok": True,
+            "needs_confirmation": True,
+            "summary": (
+                f"Ready to save the {noun} as a draft at {target}. Say yes to "
+                f"draft it — nothing is written until you separately confirm "
+                f"the write itself."
+            ),
+            "path": path,
+        }
+
+    resp = _call(lambda: client.post("/api/plan/adopt", json={"path": path}))
+    if not resp.get("ok"):
+        return resp
+    return {
+        "ok": True,
+        "pending": resp.get("pending"),
+        "action_id": resp.get("action_id"),
+        "path": resp.get("path"),
+        "summary": (
+            f"Drafted the {noun} at {resp.get('path')} — nothing has been "
+            f"written yet. Say the word to commit it."
+        ),
+    }
+
+
 def selfedit_revert(client, confirm: bool = False) -> dict[str, Any]:
     """Two-phase revert: discard the edit session entirely."""
     status = _call(lambda: client.get("/api/selfedit/run"))

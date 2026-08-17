@@ -317,6 +317,14 @@ ALTER TABLE council_rounds ADD COLUMN completion_tokens INTEGER;
 ALTER TABLE council_rounds ADD COLUMN registry_order TEXT;
 """
 
+# MORTIMER_PLANNING_PATHWAY_PLAN.md P3: which model authored a run was
+# recorded nowhere — invisible in the Runs panel and the runlog CLI alike.
+# Nullable, never backfilled — same discipline as MIGRATION_0008's
+# tools_ok/tools_failed: pre-migration rows show "—", not a guessed value.
+MIGRATION_0011 = """
+ALTER TABLE agent_runs ADD COLUMN model TEXT;
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
@@ -329,6 +337,7 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0008_tool_outcomes", MIGRATION_0008),
     ("0009_council", MIGRATION_0009),
     ("0010_council_v2", MIGRATION_0010),
+    ("0011_run_model", MIGRATION_0011),
 ]
 
 

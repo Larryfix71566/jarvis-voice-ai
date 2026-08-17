@@ -7,5 +7,9 @@ tools:
   - selfedit_validate
   - selfedit_submit
   - selfedit_revert
+  - plan_start
+  - plan_status
+  - plan_choose
+  - plan_adopt
 requires_env: []
 test: python3 -m pytest tests/unit/test_mcp_selfedit_logic.py -q

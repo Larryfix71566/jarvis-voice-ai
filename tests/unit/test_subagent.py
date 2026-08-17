@@ -361,13 +361,14 @@ class TestLoadSubAgents:
         assert agents["analyst"].display_name == "Analyst"
 
     def test_per_agent_timeout_from_yaml(self):
-        # MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md F3: developer gets its
-        # configured 120s; agents without a timeout_s key keep the default.
+        # MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md F3, raised to 300s by
+        # MORTIMER_PLANNING_PATHWAY_PLAN.md P1: developer gets its
+        # configured 300s; agents without a timeout_s key keep the default.
         from jarvis.agents.base import DEFAULT_TIMEOUT_S
 
         agents = load_sub_agents(make_settings(), FakeRegistry(),
                                  client_factory=lambda s: FakeLLM([]))
-        assert agents["developer"]._timeout_s == 120.0
+        assert agents["developer"]._timeout_s == 300.0
         assert agents["scheduler"]._timeout_s == DEFAULT_TIMEOUT_S
 
 
@@ -467,3 +468,116 @@ class TestParallelToolCallProtocol:
         ]
         assert len(system_msgs) == 1
         assert "`bad_tool` FAILED" in system_msgs[0]["content"]
+
+
+class PendingDraftRegistry(FakeRegistry):
+    """Registry whose call() returns a `{"ok": true, "pending": true}`
+    draft result for tool names in `pending`, and executes (plain ok) for
+    everything else."""
+
+    def __init__(self, pending):
+        super().__init__()
+        self.pending = set(pending)
+
+    async def call(self, name, arguments, server_names=None):
+        self.calls.append((name, arguments, server_names))
+        if name in self.pending:
+            return '{"ok": true, "pending": true, "action_id": 1}'
+        return '{"ok": true}'
+
+
+class TestPendingDraftHandling:
+    """MORTIMER_PLANNING_PATHWAY_PLAN.md P2 — the phantom-completion fix:
+    a `pending: true` tool result is a DRAFT, not a completed action."""
+
+    async def test_pending_draft_injects_constraint_message(self):
+        registry = PendingDraftRegistry({"repo_write_file"})
+        agent, completions = make_agent(
+            [("tool", "repo_write_file", {}), ("text", "I wrote the file")],
+            registry=registry,
+        )
+        await agent.run("write a spec and commit it")
+
+        second_request_messages = completions.requests[1]["messages"]
+        tool_msg_idx = next(
+            i for i, m in enumerate(second_request_messages) if m["role"] == "tool"
+        )
+        constraint = second_request_messages[tool_msg_idx + 1]
+        assert constraint["role"] == "system"
+        assert "DRAFTS" in constraint["content"]
+        assert "pending: true" in constraint["content"]
+        assert "NOTHING has been written" in constraint["content"]
+
+    async def test_non_pending_success_does_not_inject_draft_constraint(self):
+        agent, completions = make_agent(
+            [("tool", "fake_tool", {}), ("text", "done")],
+        )
+        await agent.run("task")
+        second_request_messages = completions.requests[1]["messages"]
+        assert not any(
+            "DRAFTS" in (m.get("content") or "") for m in second_request_messages
+        )
+
+    async def test_backstop_appends_when_draft_never_executed(self):
+        registry = PendingDraftRegistry({"repo_write_file"})
+        agent, _ = make_agent(
+            [("tool", "repo_write_file", {}),
+             ("text", "I've written and committed the spec.")],
+            registry=registry,
+        )
+        reply = await agent.run("write a spec and commit it")
+        assert reply.startswith("I've written and committed the spec.")
+        assert "[1 draft(s) are awaiting your confirmation" in reply
+        assert "nothing has been written yet.]" in reply
+
+    async def test_backstop_silent_when_draft_executed(self):
+        registry = PendingDraftRegistry({"repo_write_file"})
+        agent, _ = make_agent(
+            [("tool", "repo_write_file", {}),
+             ("tool", "repo_commit_write", {}),
+             ("text", "Drafted and committed.")],
+            registry=registry,
+        )
+        reply = await agent.run("write a spec and commit it")
+        assert reply == "Drafted and committed."
+        assert "draft(s) are awaiting" not in reply
+
+    async def test_backstop_net_counts_multiple_drafts(self):
+        class TwoDraftsRegistry(PendingDraftRegistry):
+            async def call(self, name, arguments, server_names=None):
+                self.calls.append((name, arguments, server_names))
+                if name == "repo_write_file":
+                    return '{"ok": true, "pending": true, "action_id": 1}'
+                if name == "repo_commit_write":
+                    return '{"ok": true}'
+                return '{"ok": true}'
+
+        registry = TwoDraftsRegistry({"repo_write_file"})
+        agent, _ = make_agent(
+            [
+                ("tools", [("repo_write_file", {}), ("repo_write_file", {})]),
+                ("tool", "repo_commit_write", {}),
+                ("text", "done"),
+            ],
+            registry=registry,
+        )
+        reply = await agent.run("write two specs and commit one")
+        assert "[1 draft(s) are awaiting your confirmation" in reply
+
+    async def test_backstop_appends_even_when_all_tools_failed(self):
+        """The pending-draft count is independent of classify_tool_result's
+        ok/fail judgement (P2's accounting reads the `pending` flag on its
+        own) — the backstop still amends a D4-overridden reply rather than
+        being silently dropped by it."""
+        class FailedDraftRegistry(FakeRegistry):
+            async def call(self, name, arguments, server_names=None):
+                self.calls.append((name, arguments, server_names))
+                return '{"ok": false, "pending": true, "error": "boom"}'
+
+        agent, _ = make_agent(
+            [("tool", "repo_write_file", {}), ("text", "unused")],
+            registry=FailedDraftRegistry(),
+        )
+        reply = await agent.run("write a spec")
+        assert reply.startswith("FAILED: every tool call in this run failed")
+        assert "[1 draft(s) are awaiting your confirmation" in reply

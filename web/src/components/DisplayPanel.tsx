@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePipecatClient } from "@pipecat-ai/client-react";
 import DisplayContent from "./DisplayContent";
 import type { DisplayPayload } from "../displayResults";
@@ -45,6 +45,55 @@ interface Size {
 const DEFAULT_W = 540;
 const DEFAULT_H = 420;
 
+// MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md W1 — persisted, user-resized
+// footprint, same read-guarded try/catch discipline as the drawer's
+// `mortimer.drawer.*` keys.
+const DISPLAY_SIZE_LS_KEY = "mortimer.display.size";
+
+// W1 clamp bounds. Min keeps content legible; max is evaluated at drag/
+// resize time since it depends on the current viewport.
+const DISPLAY_SIZE_MIN_W = 280;
+const DISPLAY_SIZE_MIN_H = 180;
+
+function displayMaxSize(): Size {
+  return { w: window.innerWidth * 0.9, h: window.innerHeight * 0.85 };
+}
+
+function clampDisplaySize(size: Size): Size {
+  const max = displayMaxSize();
+  return {
+    w: Math.min(max.w, Math.max(DISPLAY_SIZE_MIN_W, size.w)),
+    h: Math.min(max.h, Math.max(DISPLAY_SIZE_MIN_H, size.h)),
+  };
+}
+
+function readStoredDisplaySize(): Size | null {
+  try {
+    const raw = localStorage.getItem(DISPLAY_SIZE_LS_KEY);
+    if (raw === null) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed !== "object" || parsed === null ||
+      typeof (parsed as Size).w !== "number" ||
+      typeof (parsed as Size).h !== "number"
+    ) {
+      return null;
+    }
+    return clampDisplaySize(parsed as Size);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredDisplaySize(size: Size): void {
+  try {
+    localStorage.setItem(DISPLAY_SIZE_LS_KEY, JSON.stringify(size));
+  } catch {
+    /* storage unavailable (private browsing, quota) — size just won't
+       persist across reloads; resizing still works this session */
+  }
+}
+
 export default function DisplayPanel() {
   const client = usePipecatClient();
   const [item, setItem] = useState<DisplayPayload | null>(null);
@@ -55,7 +104,20 @@ export default function DisplayPanel() {
     x: Math.max(16, window.innerWidth - DEFAULT_W - 48),
     y: 72,
   }));
-  const [size, setSize] = useState<Size>({ w: DEFAULT_W, h: DEFAULT_H });
+  // null = no user resize yet — the CSS default (max-width: 40vw;
+  // max-height: 40vh, W1) governs; a resize (or a stored size from a
+  // previous session) sets explicit inline dimensions that override it.
+  const [size, setSize] = useState<Size | null>(readStoredDisplaySize);
+  const resizeStartRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+
+  // Re-clamp a stored/dragged size on viewport resize (W1).
+  useEffect(() => {
+    const onResize = () => {
+      setSize((prev) => (prev === null ? null : clampDisplaySize(prev)));
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   // The shared "latest informational payload" — published by App.tsx's
   // surface dispatch. A new payload always un-dismisses the panel and, if
@@ -178,28 +240,48 @@ export default function DisplayPanel() {
     window.addEventListener("pointerup", up);
   };
 
-  /** Resize from the bottom-right corner handle. */
+  /** Resize from the bottom-right corner handle (W1) — same pointer-
+   * capture drag pattern SideDrawer.tsx uses for its width handle, so
+   * the drag keeps tracking even if the pointer leaves the handle. */
   const onResizePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const start = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
-    const move = (ev: PointerEvent) => {
-      setSize({
-        w: Math.min(Math.max(320, start.w + ev.clientX - start.x), window.innerWidth - 32),
-        h: Math.min(Math.max(200, start.h + ev.clientY - start.y), window.innerHeight - 32),
-      });
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const current = size ?? { w: DEFAULT_W, h: DEFAULT_H };
+    resizeStartRef.current = {
+      x: e.clientX, y: e.clientY, w: current.w, h: current.h,
     };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+  };
+
+  const onResizePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const start = resizeStartRef.current;
+    if (start === null) return;
+    setSize(
+      clampDisplaySize({
+        w: start.w + (e.clientX - start.x),
+        h: start.h + (e.clientY - start.y),
+      }),
+    );
+  };
+
+  const endResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (resizeStartRef.current === null) return;
+    resizeStartRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    setSize((current) => {
+      if (current !== null) writeStoredDisplaySize(current);
+      return current;
+    });
   };
 
   return (
     <div
       className="display-panel"
-      style={{ left: pos.x, top: pos.y, width: size.w, height: size.h }}
+      style={{
+        left: pos.x, top: pos.y,
+        ...(size !== null ? { width: size.w, height: size.h } : {}),
+      }}
       role="dialog"
       aria-label={item.title ?? "Result"}
     >
@@ -223,7 +305,13 @@ export default function DisplayPanel() {
 
       <DisplayContent payload={item} />
 
-      <div className="display-resize" onPointerDown={onResizePointerDown} />
+      <div
+        className="display-resize"
+        onPointerDown={onResizePointerDown}
+        onPointerMove={onResizePointerMove}
+        onPointerUp={endResize}
+        onPointerCancel={endResize}
+      />
     </div>
   );
 }

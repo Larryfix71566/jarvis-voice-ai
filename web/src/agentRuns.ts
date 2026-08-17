@@ -20,6 +20,36 @@
  * double-apply every lifecycle event.
  */
 
+// --- Engagement plan E5: satellite click -> Runs tab pre-filtered -------
+// One-shot request slot + subscription: RunsPanel's tab body unmounts on
+// every tab switch (plan D23), so a click while it's unmounted must be
+// readable at its next mount (consumeRequestedAgentFilter), and a click
+// while it's mounted must reach it live (subscribeAgentFilter).
+
+type AgentFilterListener = (agent: string) => void;
+
+let requestedAgentFilter: string | null = null;
+const agentFilterListeners = new Set<AgentFilterListener>();
+
+export function requestAgentFilter(agent: string): void {
+  requestedAgentFilter = agent;
+  for (const cb of agentFilterListeners) cb(agent);
+}
+
+/** Read-and-clear (one-shot) — called from RunsPanel's mount. */
+export function consumeRequestedAgentFilter(): string | null {
+  const value = requestedAgentFilter;
+  requestedAgentFilter = null;
+  return value;
+}
+
+export function subscribeAgentFilter(cb: AgentFilterListener): () => void {
+  agentFilterListeners.add(cb);
+  return () => {
+    agentFilterListeners.delete(cb);
+  };
+}
+
 export const DONE_FADE_MS = 8000;
 export const MAX_TOOLS = 10;
 export const STAGES = [

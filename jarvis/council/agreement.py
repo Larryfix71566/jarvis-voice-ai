@@ -182,6 +182,18 @@ def compute_agreement(
     `round_rows` are plain dicts shaped like council_scores/council_rounds
     columns — the caller (jarvis/council/__main__.py) is responsible for
     fetching them, this function never touches a database."""
+    # MORTIMER_PLANNING_PATHWAY_PLAN.md P7 — planning rounds are a human
+    # choosing among candidates, never judge-quality evidence (draft_
+    # candidates never calls select_winner). Filtered once, here, so every
+    # metric below (agreement, abstention, discrimination) is automatically
+    # excluded rather than needing its own guard. In practice a planning
+    # round never has shadow=1 rows (draft_candidates never runs the
+    # shadow pass — that lives inside _convene_inner only), so this is
+    # belt-and-suspenders against a future caller writing shadow scores
+    # for one.
+    planning_round_ids = {r["round_id"] for r in round_rows if r.get("workflow") == "planning"}
+    score_rows = [r for r in score_rows if r["round_id"] not in planning_round_ids]
+
     round_ids_with_shadow = sorted({
         r["round_id"] for r in score_rows if int(r.get("shadow", 0) or 0) == 1
     })

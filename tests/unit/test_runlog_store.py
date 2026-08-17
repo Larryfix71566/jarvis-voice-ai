@@ -74,6 +74,30 @@ class TestFullRun:
         assert [e["type"] for e in events] == ["tool_call", "tool_result", "mcp_call"]
         conn.close()
 
+    def test_model_recorded_when_passed(self, db_path, root):
+        """MORTIMER_PLANNING_PATHWAY_PLAN.md P3."""
+        rl = make_logger(db_path, root, model="gpt-test-model")
+        rl.start()
+        rl.finish("ok")
+
+        conn = get_conn(db_path)
+        conn.row_factory = sqlite3.Row
+        row = dict(conn.execute("SELECT * FROM agent_runs").fetchone())
+        assert row["model"] == "gpt-test-model"
+        conn.close()
+
+    def test_model_null_when_not_passed(self, db_path, root):
+        """No caller-supplied model -> NULL, never a guessed/default value."""
+        rl = make_logger(db_path, root)
+        rl.start()
+        rl.finish("ok")
+
+        conn = get_conn(db_path)
+        conn.row_factory = sqlite3.Row
+        row = dict(conn.execute("SELECT * FROM agent_runs").fetchone())
+        assert row["model"] is None
+        conn.close()
+
     def test_jsonl_holds_untruncated_value_sqlite_holds_preview(self, db_path, root):
         rl = make_logger(db_path, root)
         big_result = "x" * (store.PREVIEW_CHARS + 500)

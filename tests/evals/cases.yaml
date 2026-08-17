@@ -1,5 +1,5 @@
 # Routing eval cases (plan Phase 3, step 3.4 — extended from Appendix B).
-# Coverage: 5 per single agent except developer (8), 6 none, 4 multi-agent = 38 total.
+# Coverage: 5 per single agent except developer (11), 6 none, 4 multi-agent = 41 total.
 # expect: scheduler | librarian | analyst | systems | developer | none | [agent, agent]
 
 # --- scheduler (5) ---
@@ -30,7 +30,7 @@
 - {input: "how long has my machine been running", expect: systems}
 - {input: "is my CPU under heavy load right now", expect: systems}
 
-# --- developer (8) ---
+# --- developer (11) ---
 - {input: "what branch is the repo on", expect: developer}
 - {input: "commit these changes", expect: developer}
 - {input: "push my commits to origin", expect: developer}
@@ -39,6 +39,12 @@
 - {input: "change your interface to use a darker theme", expect: developer}
 - {input: "add a clock panel to your own UI, and use Claude Opus for it", expect: developer}
 - {input: "how is the interface edit coming along", expect: developer}
+# MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R6 — the capability-denial fix:
+# named AI models are planner profiles, not something the Supervisor
+# should ever claim it lacks access to.
+- {input: "have Fable five review the geolocation plan and report gaps", expect: developer}
+- {input: "use Claude's frontier model to critique the backend spec", expect: developer}
+- {input: "get kimi to check the development plan for problems", expect: developer}
 
 # --- none (6): greetings, small talk, clarification ---
 - {input: "hello", expect: none}

@@ -46,7 +46,9 @@ def repo_write_file(path: str, content: str, rationale: str = "") -> dict:
     a summary to read back to the user. Nothing is written until the
     user confirms and repo_commit_write(action_id) is called. Refuses
     protected configuration paths (agents.yaml, CLAUDE.md, CI, lockfiles,
-    etc.)."""
+    etc.). Plan, spec, and design documents live under docs/plans/ and
+    reviews under docs/reviews/ — write them there and never invent new
+    documentation directories."""
     return logic.repo_write_file(path, content, rationale)
 
 

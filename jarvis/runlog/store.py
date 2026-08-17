@@ -99,6 +99,7 @@ class RunLogger:
         enabled: bool = True,
         db_path: str | Path | None = None,
         root: Path | None = None,
+        model: str | None = None,
     ) -> None:
         self.run_id = run_id
         self.agent = agent
@@ -107,6 +108,11 @@ class RunLogger:
         self.session_id = session_id
         self.enabled = enabled
         self.payload_path: Path | None = None
+        # MORTIMER_PLANNING_PATHWAY_PLAN.md P3 — which model authored this
+        # run (settings.openai_model), NULL when the caller doesn't pass
+        # one (never re-derived or defaulted here; the caller is the only
+        # place that has settings in hand).
+        self.model = model
 
         self._db_path = db_path
         self._root = root if root is not None else Path(".")
@@ -243,10 +249,10 @@ class RunLogger:
             })
             self._execute(
                 "INSERT INTO agent_runs (run_id, session_id, agent, "
-                "display_name, task, status, started_at, tool_count) "
-                "VALUES (?, ?, ?, ?, ?, 'running', ?, 0)",
+                "display_name, task, status, started_at, tool_count, model) "
+                "VALUES (?, ?, ?, ?, ?, 'running', ?, 0, ?)",
                 (self.run_id, self.session_id, self.agent, self.display_name,
-                 self.task, self._started_at),
+                 self.task, self._started_at, self.model),
             )
         self._safe("start", _do)
 

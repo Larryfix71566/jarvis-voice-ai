@@ -94,7 +94,40 @@ ALL_TOOLS_FAILED_TEMPLATE = (
     "Last error: {error}"
 )
 
+# MORTIMER_PLANNING_PATHWAY_PLAN.md P2 — the phantom-completion fix,
+# extending D3/D4 one level up. A tool result with `pending: true` at its
+# top level is a DRAFT the mcp_repo/mcp_git draft-confirm gate created —
+# nothing has actually been written, committed, or pushed. Left alone, a
+# model narrates the JSON body ("I've written the file...") exactly the
+# way D3 already found it doing for failures: syntactically the body reads
+# like success. One message per batch (same batching rule as F1), appended
+# after the tool-response block, never between responses.
+PENDING_DRAFT_CONSTRAINT = (
+    "The call(s) marked pending: true created DRAFTS awaiting the user's "
+    "explicit confirmation — NOTHING has been written, committed, or "
+    "pushed yet. You MUST describe these as drafts awaiting confirmation. "
+    "Never state or imply the file was written or the action was "
+    "performed."
+)
+
+# P2 backstop — tools whose success actually executes a pending draft
+# (as opposed to merely creating one). Mirrors the draft-confirm pattern
+# in mcp_repo/mcp_git: `repo_write_file`/`prepare_commit`/`prepare_push`
+# create drafts; these three execute them.
+DRAFT_EXECUTING_TOOLS = frozenset({"repo_commit_write", "commit", "push"})
+
 EventCallback = Callable[[dict], None]
+
+
+def _result_is_pending_draft(result: str) -> bool:
+    """True iff a tool result's JSON body has `pending: true` at the top
+    level (P2). Non-JSON or non-dict bodies are tolerated as not-pending —
+    this backstop only recognizes our own draft-gated tools' shape."""
+    try:
+        body = json.loads(result)
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return isinstance(body, dict) and body.get("pending") is True
 
 
 class SubAgent:
@@ -149,6 +182,10 @@ class SubAgent:
             resolved_run_id, self.name, self.display_name, task,
             session_id=session_id,
             enabled=self._settings.jarvis_runlog_enabled,
+            # MORTIMER_PLANNING_PATHWAY_PLAN.md P3 — the run's authoring
+            # model, recorded once here (settings is only in hand at this
+            # call site) and never re-derived downstream.
+            model=self._settings.openai_model,
         )
         runlog.start()
         try:
@@ -212,6 +249,11 @@ class SubAgent:
         tools_attempted = 0
         tools_failed = 0
         last_error: str | None = None
+        # P2 — counted across the WHOLE run, same reasoning as D4/D5 above:
+        # a draft created in an early iteration and confirmed in a later
+        # one must not be double-flagged.
+        drafts_created = 0
+        drafts_executed = 0
         for _ in range(MAX_TOOL_ITERATIONS):
             response = await self._client.chat.completions.create(
                 model=self._settings.openai_model,
@@ -228,6 +270,7 @@ class SubAgent:
             # appended AFTER every tool response (protocol contiguity),
             # never between them.
             batch_failures: list[tuple[str, str]] = []
+            batch_has_pending_draft = False
             for tool_call in tool_calls:
                 try:
                     arguments = json.loads(tool_call.function.arguments or "{}")
@@ -261,6 +304,14 @@ class SubAgent:
                 if not outcome.ok:
                     tools_failed += 1
                     last_error = outcome.error
+                # P2 — mechanical draft accounting, independent of outcome.ok
+                # (a pending draft's transport call itself succeeded; it is
+                # the ACTION that is incomplete, not the tool call).
+                if _result_is_pending_draft(result):
+                    drafts_created += 1
+                    batch_has_pending_draft = True
+                if outcome.ok and tool_name in DRAFT_EXECUTING_TOOLS:
+                    drafts_executed += 1
                 self._emit(on_event, {
                     "type": "agent_tool_result",
                     "agent": self.name,
@@ -301,6 +352,14 @@ class SubAgent:
                     )
                 messages.append({"role": "system", "content": content})
 
+            if batch_has_pending_draft:
+                # P2 constraint — appended after the tool-response block for
+                # the SAME reason D3 is (protocol contiguity; freshest thing
+                # the model sees before its next turn). Independent of the
+                # D3/F1 failure message above: a batch can contain both a
+                # failure and a pending draft, and both messages are added.
+                messages.append({"role": "system", "content": PENDING_DRAFT_CONSTRAINT})
+
         # D4 — a run in which every attempted tool call failed cannot be
         # reported as successful, regardless of how confident the model's
         # own reply reads. Deliberately does NOT trigger on partial failure
@@ -311,6 +370,19 @@ class SubAgent:
             reply = ALL_TOOLS_FAILED_TEMPLATE.format(
                 failed=tools_failed, attempted=tools_attempted,
                 error=last_error or "unknown error",
+            )
+
+        # P2 backstop — deliberately count-based and append-only, like D4:
+        # it cannot be argued with by the model, and unlike a status flip
+        # it does not mark an otherwise-useful run failed. Runs after the
+        # D4 override on purpose so an all-failed reply can still be
+        # amended (a run can fail every read tool yet still have created an
+        # earlier draft in the same batch of iterations).
+        if drafts_created > drafts_executed:
+            reply = reply + (
+                f"\n\n[{drafts_created - drafts_executed} draft(s) are "
+                "awaiting your confirmation — nothing has been written "
+                "yet.]"
             )
 
         latency_ms = int((time.perf_counter() - start) * 1000)

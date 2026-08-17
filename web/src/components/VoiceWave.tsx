@@ -57,6 +57,18 @@ function simLevel(t: number): number {
   return 0.25 + 0.75 * s;
 }
 
+// Engagement plan E2 — boot ramp: the wave rises from flatline over
+// 900ms when a connection arrives. Module-level trigger (same pub/sub-
+// lite style as wakeWord's flash) so OrbField can fire it without prop
+// drilling; 0 = never booted = full amplitude (e.g. a hot reload
+// mid-session must not flatline the wave).
+const BOOT_RAMP_MS = 900;
+const bootStart = { current: 0 };
+
+export function bootWave(): void {
+  bootStart.current = performance.now();
+}
+
 export default function VoiceWave({ state }: { state: VoiceState }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<VoiceState>(state);
@@ -225,8 +237,16 @@ export default function VoiceWave({ state }: { state: VoiceState }) {
       const cy = h * 0.5;
       const breath = st === "listening" ? 0.004 + 0.004 * Math.sin(t * 0.9) : 0;
       const voice = st === "speaking" ? levelRef.current * 0.115 : 0;
+      // E2 boot ramp — eased 0→1 over BOOT_RAMP_MS from bootWave();
+      // instant under reduced motion.
+      let bootRamp = 1;
+      if (!reduced && bootStart.current > 0) {
+        const p = Math.min(1, (now - bootStart.current) / BOOT_RAMP_MS);
+        bootRamp = p * (2 - p); // ease-out
+      }
       const amp =
-        h * (dyn.base + breath + voice + flash * 0.02) * (reduced ? 0.4 : 1) * AMP_SCALE;
+        h * (dyn.base + breath + voice + flash * 0.02) * (reduced ? 0.4 : 1) *
+        AMP_SCALE * bootRamp;
       const alpha = Math.min(1, dyn.alpha + flash * 0.45);
       const glow = Math.min(1, dyn.glow + flash);
 

@@ -165,6 +165,13 @@
   word-break: break-word;
 }
 
+/* MORTIMER_PLANNING_PATHWAY_PLAN.md P3 */
+.runs-detail-model {
+  color: var(--text-dim);
+  font-size: 0.85em;
+  margin-bottom: 6px;
+}
+
 .runs-events {
   display: flex;
   flex-direction: column;

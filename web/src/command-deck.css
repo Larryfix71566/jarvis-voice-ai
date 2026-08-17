@@ -61,6 +61,203 @@
   text-shadow: 0 0 12px var(--accent-dim);
 }
 
+/* Engagement plan E1 — amber underglow while a draft awaits the user's
+   confirmation. Outranks the armed glow (declared after it). */
+.orb-readout-attn {
+  color: var(--attn);
+  text-shadow: 0 0 14px var(--attn-dim);
+}
+
+/* E1 — thinking shimmer: slow opacity cycle on the state dot during LLM
+   inference. The label text swaps to "Thinking" in OrbField.tsx. */
+.orb-label-thinking {
+  color: var(--text-dim);
+}
+
+.orb-label-thinking .orb-dot {
+  background: var(--accent);
+  animation: think-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes think-shimmer {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+/* --- Engagement plan E2: boot sequence (once per connect) ---------------
+   One-shot entrance animations, replayed by React keys (bootPulse), so
+   no class juggling. fill-mode backwards holds the "from" state through
+   each element's stagger delay; NO forwards fill — after the entrance,
+   the natural cascade (satellite-working etc.) owns the styles again. */
+
+.boot-letter {
+  display: inline-block;
+  animation: boot-letter-in 0.3s ease backwards;
+}
+
+@keyframes boot-letter-in {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.boot-sat {
+  animation: boot-sat-in 0.4s ease backwards;
+}
+
+@keyframes boot-sat-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.55; /* .satellite's resting opacity */
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-letter,
+  .boot-sat {
+    animation: none;
+  }
+}
+
+/* --- Engagement plan E4: ambient strip (idle signs of life) -------------
+   Frosted-chip language (caption/satellite tokens), top-left of the
+   stage, glanceable-only — nothing here is interactive. */
+
+.ambient-strip {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: min(340px, 40%);
+  pointer-events: none;
+}
+
+.ambient-chip {
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: rgba(4, 9, 12, 0.55);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.ambient-clock {
+  font-family: var(--mono);
+  color: var(--text);
+  letter-spacing: 0.06em;
+}
+
+.ambient-summary {
+  white-space: normal;
+  line-height: 1.4;
+}
+
+@supports not (backdrop-filter: blur(4px)) {
+  .ambient-chip {
+    background: rgba(4, 9, 12, 0.88);
+  }
+}
+
+/* --- Engagement plan E5: satellites as instruments ----------------------
+   Clickable (Runs tab, pre-filtered) with a last-run tick. The tick
+   renders at reduced opacity — history, not alarm. */
+
+.satellite-clickable {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.satellite-clickable:hover {
+  opacity: 0.9;
+  border-color: var(--accent-dim);
+}
+
+.satellite-tick {
+  font-size: 10px;
+  opacity: 0.7;
+  /* Pop in when it lands so the outcome registers, then rest quietly. */
+  animation: tick-pop 0.5s ease-out;
+}
+
+@keyframes tick-pop {
+  0% {
+    transform: scale(2.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .satellite-tick {
+    animation: none;
+  }
+}
+
+.satellite-tick-ok {
+  color: var(--accent);
+}
+
+.satellite-tick-fail {
+  color: var(--red);
+}
+
+/* --- Engagement plan E7: transcript action chips ------------------------
+   Small centered non-interactive markers between bubbles — the Log
+   tells what HAPPENED, not just what was said. */
+
+.transcript-chip {
+  align-self: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  padding: 2px 10px;
+  margin: 2px 0;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: rgba(4, 9, 12, 0.4);
+}
+
+.transcript-chip-ok {
+  color: var(--accent);
+}
+
+.transcript-chip-fail {
+  color: var(--red);
+}
+
+/* E8 — first-run stage hint: dimmer than a real caption. */
+.stage-hint .caption {
+  color: var(--text-dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orb-label-thinking .orb-dot {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
 /* --- agent satellites: chip backdrop keeps them legible over the wave --- */
 .satellite {
   position: absolute;
@@ -116,7 +313,9 @@
 .satellite-done .satellite-dot {
   background: var(--green);
   box-shadow: 0 0 10px var(--green);
-  animation: done-flash 0.9s ease-out forwards;
+  /* Presence window: 0.9s read as a blink — the completion afterglow
+     now lingers long enough to catch peripherally. */
+  animation: done-flash 3s ease-out forwards;
 }
 
 @keyframes done-flash {
@@ -159,7 +358,8 @@
 
 .beam-done {
   opacity: 0.5;
-  animation: beam-fade 0.8s ease-out forwards;
+  /* Presence window: match the satellite's slower afterglow. */
+  animation: beam-fade 2.4s ease-out forwards;
 }
 
 @keyframes beam-fade {
@@ -266,9 +466,9 @@
   flex-direction: column;
   max-width: 40vw;
   max-height: 40vh;
-  background: rgba(4, 9, 12, 0.55);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(4, 9, 12, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--accent-dim);
   border-radius: 10px;
   box-shadow:
@@ -279,7 +479,7 @@
 
 @supports not (backdrop-filter: blur(8px)) {
   .display-panel {
-    background: rgba(4, 9, 12, 0.92);
+    background: rgba(4, 9, 12, 0.85);
   }
 }
 
@@ -462,8 +662,8 @@
   position: absolute;
   right: 0;
   bottom: 0;
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   cursor: nwse-resize;
   touch-action: none;
   background: linear-gradient(
@@ -516,5 +716,11 @@
     left: 8px !important;
     right: 8px;
     width: auto !important;
+  }
+
+  /* W1 — corner-drag on a full-width phone layout is noise; the panel
+     already spans the viewport width via the override above. */
+  .display-resize {
+    display: none;
   }
 }

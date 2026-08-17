@@ -19,7 +19,7 @@ ALL_SERVERS = [
 # alongside a main that still carried the old number. repo (5) added by
 # MORTIMER_AGENT_TRUST_PLAN.md D10-D12: repo_read_file, repo_list_files,
 # repo_search, repo_write_file, repo_commit_write.
-TOTAL_TOOLS = 44  # 4 + 7 + 5 + 3 + 2 + 8 + 5 + 5 + 5
+TOTAL_TOOLS = 48  # 4 + 7 + 5 + 3 + 2 + 8 + 5 + 5 + 9 (selfedit 5->9, P7 plan_* tools)
 
 
 @pytest.fixture
