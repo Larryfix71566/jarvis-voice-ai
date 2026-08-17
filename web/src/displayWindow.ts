@@ -19,7 +19,16 @@ export const DISPLAY_CHANNEL = "mortimer.display";
 type DisplayMessage =
   | { t: "payload"; payload: DisplayPayload }
   | { t: "hello" } // popup -> console: "I just opened, send current"
-  | { t: "clear" };
+  | { t: "clear" }
+  // Popup presence protocol (2026-08-17): a console reload loses popupRef
+  // (module state), which used to make hasLivePopup() report false while
+  // the popup was still open — showing the same result in BOTH places.
+  // The popup broadcasts a heartbeat; the console tracks its freshness,
+  // and hasLivePopup() consults both the ref and the heartbeat.
+  | { t: "alive" } // popup -> console: heartbeat, every ALIVE_INTERVAL_MS
+  | { t: "bye" } // popup -> console: closing now (pagehide)
+  | { t: "close" } // console -> popup: close yourself (ref-less close)
+  | { t: "ping" }; // console -> popup: "anyone there?" (fresh console load)
 
 const LS_POPOUT = "mortimer.display.popout";
 
@@ -88,8 +97,18 @@ export function wireConsoleSide(): () => void {
     if (e.data?.t === "hello" && latest) {
       ch.postMessage({ t: "payload", payload: latest } satisfies DisplayMessage);
     }
+    if (e.data?.t === "hello" || e.data?.t === "alive") {
+      lastAliveAt = Date.now();
+    }
+    if (e.data?.t === "bye") {
+      lastAliveAt = 0;
+    }
   };
   ch.addEventListener("message", onMessage);
+  // A console that just loaded has no idea whether a popup from a previous
+  // page-load is still open — ask, so the in-page panel can hide within
+  // one round-trip instead of waiting out a heartbeat interval.
+  ch.postMessage({ t: "ping" } satisfies DisplayMessage);
   return () => {
     ch.removeEventListener("message", onMessage);
     consoleWired = false;
@@ -99,19 +118,52 @@ export function wireConsoleSide(): () => void {
 // --- popup side ------------------------------------------------------------
 
 /** Popup side: subscribe. Posts {t:"hello"} once on first subscription so
- * a window opened after a result arrived is not blank (D40). Returns an
- * unsubscribe function. */
+ * a window opened after a result arrived is not blank (D40). Also runs the
+ * presence protocol: an {t:"alive"} heartbeat while open, {t:"bye"} on
+ * pagehide, and self-close on a console {t:"close"} — so a console that
+ * reloaded (and lost its window ref) still knows this popup exists and can
+ * still close it. Returns an unsubscribe function. */
 export function subscribeDisplay(cb: (m: DisplayMessage) => void): () => void {
   const ch = getChannel();
-  const onMessage = (e: MessageEvent<DisplayMessage>) => cb(e.data);
+  const onMessage = (e: MessageEvent<DisplayMessage>) => {
+    if (e.data?.t === "close") {
+      window.close(); // script-opened window: self-close is permitted
+      return;
+    }
+    if (e.data?.t === "ping") {
+      ch.postMessage({ t: "alive" } satisfies DisplayMessage);
+      return;
+    }
+    cb(e.data);
+  };
   ch.addEventListener("message", onMessage);
   ch.postMessage({ t: "hello" } satisfies DisplayMessage);
-  return () => ch.removeEventListener("message", onMessage);
+  const heartbeat = window.setInterval(() => {
+    ch.postMessage({ t: "alive" } satisfies DisplayMessage);
+  }, ALIVE_INTERVAL_MS);
+  const onPageHide = () => {
+    ch.postMessage({ t: "bye" } satisfies DisplayMessage);
+  };
+  window.addEventListener("pagehide", onPageHide);
+  return () => {
+    ch.removeEventListener("message", onMessage);
+    window.clearInterval(heartbeat);
+    window.removeEventListener("pagehide", onPageHide);
+  };
 }
 
 // --- popup lifecycle (console side) ---------------------------------------
 
 let popupRef: Window | null = null;
+
+// Presence protocol timing: the popup heartbeats every 2s; the console
+// treats it as live while the last beat is fresher than 2.5 intervals —
+// tolerant of one dropped message, still fast enough that a killed popup
+// brings the in-page fallback back within ~5s (DisplayPanel's 1s poll
+// re-evaluates hasLivePopup continuously).
+const ALIVE_INTERVAL_MS = 2000;
+const ALIVE_STALE_MS = ALIVE_INTERVAL_MS * 2.5;
+let lastAliveAt = 0;
 
 // --- D42 implemented (2026-08-17): auto-place the popup on the extended
 // screen when one is available, and move it there when one is added.
@@ -189,9 +241,13 @@ function placeOnExtendedScreen(win: Window): void {
 }
 
 /** Whether a live popup currently exists — DisplayPanel hides itself while
- * true (D41), since the payload is showing on the other screen. */
+ * true (D41), since the payload is showing on the other screen. Consults
+ * BOTH the window ref (this tab opened it) and the heartbeat (it was
+ * opened before this console loaded — a reload loses the ref, and without
+ * the heartbeat the same result would show in both places). */
 export function hasLivePopup(): boolean {
-  return popupRef !== null && !popupRef.closed;
+  if (popupRef !== null && !popupRef.closed) return true;
+  return lastAliveAt > 0 && Date.now() - lastAliveAt < ALIVE_STALE_MS;
 }
 
 /** Console side: open (or refocus) the pop-out window. The fixed window
@@ -221,6 +277,15 @@ export function openDisplayWindow(): Window | null {
 export function closeDisplayWindow(): void {
   if (popupRef && !popupRef.closed) popupRef.close();
   popupRef = null;
+  // Ref-less close: a popup surviving a console reload has no popupRef,
+  // but it obeys {t:"close"} over the channel (it self-closes — permitted
+  // because it is a script-opened window).
+  try {
+    getChannel().postMessage({ t: "close" } satisfies DisplayMessage);
+  } catch {
+    /* channel unavailable — nothing left to close remotely */
+  }
+  lastAliveAt = 0;
 }
 
 // --- preference (guarded localStorage reads, D13's discipline) -----------
