@@ -45,6 +45,20 @@ COUNCIL_JUDGE_TARGET = 2
 # absolute.
 COUNCIL_RETRY_EXTRA_ITERATIONS = 4
 
+# ⚙ TUNING KNOB — MORTIMER_PLANNING_PATHWAY_PLAN.md P7. Per-member-call
+# timeout for the planning pathway (single-mode and council-parallel
+# draft_candidates alike): a full implementation-plan document takes
+# longer to write than a corrective brief, so this is deliberately looser
+# than COUNCIL_MEMBER_TIMEOUT_S (120s, jarvis/council/council.py) — a plan
+# is a document, not a brief.
+PLANNING_MEMBER_TIMEOUT_S = 300.0
+
+# ⚙ TUNING KNOB — MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R3. The sidecar
+# truncates a review document to this many characters BEFORE building the
+# council context, so a reviewer never receives an unbounded document; the
+# truncation suffix instructs the reviewer to flag it in its verdict.
+PLAN_REVIEW_DOC_MAX_CHARS = 60_000
+
 # ⚙ TUNING KNOB (D8.2.1) — fraction of rounds that also get a shadow judge
 # pass. 0.0 disables shadow judging entirely. 1.0 shadows every round.
 COUNCIL_SHADOW_RATE = 0.25

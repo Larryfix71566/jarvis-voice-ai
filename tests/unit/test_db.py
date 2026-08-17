@@ -14,6 +14,7 @@ EXPECTED_MIGRATION_IDS = [
     "0001_init", "0002_actions", "0003_memory", "0004_observations",
     "0005_conversation_search", "0006_agent_runs", "0007_procedures",
     "0008_tool_outcomes", "0009_council", "0010_council_v2",
+    "0011_run_model",
 ]
 
 
@@ -165,6 +166,26 @@ def test_migration_0010_council_v2_columns_and_defaults(tmp_path):
     conn.close()
 
 
+def test_migration_0011_run_model_column_and_default(tmp_path):
+    """MORTIMER_PLANNING_PATHWAY_PLAN.md P3 — `model` exists on agent_runs
+    and defaults to NULL (unknown), never an empty string, same discipline
+    as MIGRATION_0008's tools_ok/tools_failed."""
+    conn = get_conn(tmp_path / "run_model.db")
+    run_migrations(conn)
+
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(agent_runs)")}
+    assert "model" in cols
+
+    conn.execute(
+        "INSERT INTO agent_runs (run_id, agent, display_name, task, status, "
+        "started_at, tool_count) VALUES ('r1', 'developer', 'Developer', "
+        "'t', 'running', '2026-01-01T00:00:00+00:00', 0)"
+    )
+    row = conn.execute("SELECT model FROM agent_runs WHERE run_id='r1'").fetchone()
+    assert row["model"] is None
+    conn.close()
+
+
 def test_row_factory_and_wal(tmp_path):
     conn = get_conn(tmp_path / "wal.db")
     run_migrations(conn)
@@ -209,7 +230,10 @@ def test_migration_0010_applies_over_existing_0009_db(tmp_path):
     conn.commit()
 
     newly = run_migrations(conn)
-    assert newly == ["0010_council_v2"]
+    # 0011_run_model also applies in this same upgrade run — it comes
+    # after 0010_council_v2 in MIGRATIONS and was equally absent from
+    # this pre-v2 DB.
+    assert newly == ["0010_council_v2", "0011_run_model"]
     row = conn.execute(
         "SELECT prompt_tokens, completion_tokens, registry_order "
         "FROM council_rounds WHERE round_id='pre-v2'"

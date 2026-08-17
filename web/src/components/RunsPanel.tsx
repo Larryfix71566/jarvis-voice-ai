@@ -32,6 +32,9 @@ interface RunRow {
   error: string | null;
   reply_preview: string | null;
   payload_path: string | null;
+  // MORTIMER_PLANNING_PATHWAY_PLAN.md P3 — optional/null because a row
+  // written before migration 0011 has none; render falls back to "—".
+  model?: string | null;
 }
 
 interface AgentEvent {
@@ -222,6 +225,13 @@ export default function RunsPanel() {
                       {detail.run.error && (
                         <div className="runs-detail-error">{detail.run.error}</div>
                       )}
+                      {/* MORTIMER_PLANNING_PATHWAY_PLAN.md P3 — the
+                          authoring model, invisible before this plan;
+                          "—" for pre-migration-0011 rows (NULL, never
+                          backfilled). */}
+                      <div className="runs-detail-model">
+                        model: {detail.run.model || "—"}
+                      </div>
                       <div className="runs-events">
                         {detail.events.map((ev) => (
                           <div key={ev.id} className="runs-event-row">

@@ -149,6 +149,9 @@ class TestDelegationProducesQueryableRun:
         assert detail is not None
         assert detail["run"]["status"] == "ok"
         assert detail["run"]["agent"] == "scheduler"
+        # MORTIMER_PLANNING_PATHWAY_PLAN.md P3 — settings.openai_model
+        # threads through SubAgent.run() -> RunLogger -> the row.
+        assert detail["run"]["model"] == "test-model"
 
     async def test_session_id_threads_when_given_and_null_when_not(
         self, db_path,

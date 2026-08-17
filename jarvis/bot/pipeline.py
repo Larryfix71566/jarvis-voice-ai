@@ -202,6 +202,17 @@ class FramePusher:
             await self._task.queue_frame(frame)
 
 
+# Deepgram Flux keyterm boosting — proper nouns this vocabulary-heavy
+# console actually needs recognized. Static by design: deriving these
+# from the model registry at boot would couple STT config to
+# upgrade_models.yaml for marginal benefit. Observed failure this fixes:
+# "Fable 5" -> "table five" -> "Clyde's frontier model" (2026-08-17).
+STT_KEYTERMS = [
+    "Mortimer", "Jarvis", "Fable", "Claude", "Opus", "Kimi",
+    "geolocation", "self-edit",
+]
+
+
 def build_pipeline(
     transport: Any, runtime: Runtime, pusher: FramePusher | None = None
 ) -> tuple[Pipeline, Any, Any, FramePusher]:
@@ -270,7 +281,9 @@ def build_pipeline(
 
     stt = DeepgramFluxSTTService(
         api_key=settings.deepgram_api_key,
-        settings=DeepgramFluxSTTSettings(model="flux-general-en"),
+        settings=DeepgramFluxSTTSettings(
+            model="flux-general-en", keyterm=STT_KEYTERMS,
+        ),
         should_interrupt=True,  # plan Phase 5: allow_interruptions (D-004)
     )
     llm = OpenAILLMService(

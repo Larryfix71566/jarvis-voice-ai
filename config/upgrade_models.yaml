@@ -52,6 +52,15 @@ profiles:
     temperature: 0.2
     tier: frontier
 
+  - name: claude-fable-5
+    label: "Claude Fable 5 — Anthropic Mythos-class, above Opus"
+    provider: anthropic
+    model: claude-fable-5
+    base_url: https://api.anthropic.com/v1/
+    api_key_env: ANTHROPIC_API_KEY
+    temperature: 0.2
+    tier: frontier
+
   - name: gpt-4.1-mini
     label: "GPT-4.1 mini — fast and cheap"
     provider: openai

@@ -88,6 +88,9 @@ def _print_detail(detail: dict) -> None:
     print(f"latency_ms   {run.get('latency_ms')}")
     print(f"tool_count   {run.get('tool_count', 0)}")
     print(f"tools        {_fmt_tools(run)}")
+    # MORTIMER_PLANNING_PATHWAY_PLAN.md P3 — NULL on pre-migration-0011
+    # rows, never backfilled; "—" makes that explicit rather than blank.
+    print(f"model        {run.get('model') or '—'}")
     if run.get("error"):
         print(f"error        {run['error']}")
     print(f"task         {run['task']}")

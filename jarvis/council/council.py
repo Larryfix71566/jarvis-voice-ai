@@ -23,11 +23,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from jarvis.agents.upgrade_agent import load_model_registry
+from jarvis.agents.upgrade_agent import available_models, load_model_registry
 from jarvis.council import config as council_config
 from jarvis.council.scoring import council_size_ok, mean_of, parse_scores, select_winner
 from jarvis.council.types import Proposal, RoundResult, Score
 from jarvis.db import get_conn, now_iso
+from jarvis.prompts import PLAN_AUTHOR_PROMPT, PLAN_REVIEW_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +164,38 @@ Proposal B: 8.1 - one-line justification
 One line per proposal. Score every proposal shown. Do not add any other \
 text after the SCORES section."""
 
+# MORTIMER_PLANNING_PATHWAY_PLAN.md P7 — the planning pathway's judge
+# prompt, used ONLY by draft_candidates below (never by convene()). A
+# fresh plan has no prior failed attempt to diagnose, so JUDGE_PROMPT's
+# "why did the previous attempt fail" framing does not apply; this is the
+# same kind of companion prompt SCOPE_JUDGE_PROMPT already is for the
+# scope-advisor placement. Scores here are advisory only — draft_candidates
+# never calls select_winner; the user chooses (record_user_choice).
+PLAN_JUDGE_PROMPT = """You are evaluating competing implementation-plan documents for the same goal.
+
+You did NOT write any of these plans. Judge them on merit alone. Your scores are advisory — a human will make the final choice, not you.
+
+Score EVERY proposal listed below on a scale of 1.0 to 10.0, using ONE \
+decimal place. Use the full range: 1.0 means unusable, 5.0 means mediocre, \
+10.0 means excellent. Avoid clustering every proposal around the same \
+value — the point of this exercise is to discriminate between them.
+
+Judge on:
+- Is every decision actually made, with nothing left for the implementer \
+to guess?
+- Does it correctly and completely address the stated goal?
+- Is the implementation order sound and the file list accurate?
+- Is it honest about risks and about anything left out of scope?
+
+Your response MUST end with a section in EXACTLY this format:
+
+SCORES:
+Proposal A: 7.4 - one-line justification
+Proposal B: 8.1 - one-line justification
+
+One line per proposal. Score every proposal shown. Do not add any other \
+text after the SCORES section."""
+
 
 # --------------------------------------------------------------- transport
 
@@ -237,6 +270,15 @@ def _proposer_user_message(goal: str, context: dict[str, Any], placement: str) -
         parts.append(f"FAILURE CONTEXT — the attempt being corrected:\n{context['diff']}")
     if context.get("checks") is not None:
         parts.append(f"VALIDATION CHECKS:\n{context['checks']}")
+    if context.get("document") is not None:
+        # MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R3 — additive branch: a
+        # review job's context carries the (already-truncated) document
+        # under review. convene() never sets this key, so escalation
+        # rounds are untouched.
+        parts.append(
+            f"DOCUMENT UNDER REVIEW ({context.get('document_path')}):\n"
+            f"{context['document']}"
+        )
     return "\n\n".join(str(p) for p in parts)
 
 
@@ -264,6 +306,13 @@ def _judge_user_message(
         parts.append(f"FAILURE CONTEXT — the attempt being corrected:\n{context['diff']}")
     if context.get("checks") is not None:
         parts.append(f"VALIDATION CHECKS:\n{context['checks']}")
+    if context.get("document") is not None:
+        # R3 — same additive branch as _proposer_user_message, so a
+        # council-mode review's judges see the document too.
+        parts.append(
+            f"DOCUMENT UNDER REVIEW ({context.get('document_path')}):\n"
+            f"{context['document']}"
+        )
     for p in proposals:
         parts.append(f"{p.label}:\n{p.content}")
     return "\n\n".join(parts)
@@ -285,6 +334,7 @@ async def _gather_proposals(
     names: list[str], profiles_by_name: dict[str, dict[str, Any]],
     user_content: str, system_prompt: str = PROPOSER_PROMPT,
     usage_by_name: dict[str, dict[str, int] | None] | None = None,
+    *, timeout_s: float = COUNCIL_MEMBER_TIMEOUT_S,
 ) -> tuple[list[Proposal], dict[str, int]]:
     """Fan out `system_prompt` (V14: PROPOSER_PROMPT or, for a scope
     round, SCOPE_ADVISOR_PROMPT — `_convene_inner` selects the pair once
@@ -316,7 +366,7 @@ async def _gather_proposals(
         try:
             content, usage = await _call_profile(
                 profiles_by_name[name], system_prompt, user_content,
-                COUNCIL_MEMBER_TIMEOUT_S,
+                timeout_s,
             )
             return name, content, usage
         except Exception as exc:  # noqa: BLE001 — never raise into convene()
@@ -377,6 +427,7 @@ async def _gather_scores(
     judge_user_content: str, labels: list[str], *, shadow: bool,
     system_prompt: str = JUDGE_PROMPT,
     usage_by_name: dict[str, dict[str, int] | None] | None = None,
+    timeout_s: float = COUNCIL_MEMBER_TIMEOUT_S,
 ) -> tuple[list[Score], dict[str, int]]:
     """Fan out `system_prompt` (V14: JUDGE_PROMPT or, for a scope round,
     SCOPE_JUDGE_PROMPT — selected once by the caller, same rule as
@@ -396,7 +447,7 @@ async def _gather_scores(
         try:
             raw, usage = await _call_profile(
                 profiles_by_name[name], system_prompt, judge_user_content,
-                COUNCIL_MEMBER_TIMEOUT_S,
+                timeout_s,
             )
             return parse_scores(name, raw, labels), usage
         except Exception as exc:  # noqa: BLE001
@@ -714,6 +765,239 @@ def _finalize_too_small(
     )
 
 
+# ------------------------------------------------------- planning pathway
+# MORTIMER_PLANNING_PATHWAY_PLAN.md P7 — additive: convene()/select_winner
+# above are UNCHANGED by everything below (self-edit escalation behavior
+# cannot change). draft_candidates never calls select_winner; the round
+# stays workflow="planning" and awaits a human's record_user_choice call.
+
+async def draft_candidates(
+    goal: str, *, members: dict[str, list[str]] | None = None, judge: bool = True,
+    context: dict | None = None,
+) -> RoundResult | None:
+    """Fan out PLAN_AUTHOR_PROMPT to every usable proposer (or the subset
+    named in `members["proposers"]`) and, when `judge` is True, score the
+    results ADVISORILY with the same judge machinery convene() uses (V4
+    label shuffle, V6 parsing) — narrowed to `members["judges"]` if given.
+    Returns None on any structural failure (kill switch off, unexpected
+    exception), matching convene()'s D13 contract. Returns a RoundResult
+    with `winner=None` always — this function never selects a winner; a
+    human does, via record_user_choice. Never raises.
+
+    MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R3 — `context` is optional and
+    additive (default None -> {}, so every existing caller is unchanged).
+    When `context["document"]` is present this is a REVIEW job: proposers
+    and judges use PLAN_REVIEW_PROMPT/PLAN_JUDGE_PROMPT instead of
+    PLAN_AUTHOR_PROMPT, the document is injected via the shared
+    `_proposer_user_message`/`_judge_user_message` assembly, and the
+    round is written with `placement="review"` instead of `"doc"`."""
+    if not _council_enabled():
+        return None
+    try:
+        return await _draft_candidates_inner(
+            goal, members=members, judge=judge, context=context or {},
+        )
+    except Exception:  # noqa: BLE001 — D13, never raise into the caller
+        logger.warning("council_draft_candidates_failed", exc_info=True)
+        return None
+
+
+async def _draft_candidates_inner(
+    goal: str, *, members: dict[str, list[str]] | None, judge: bool,
+    context: dict,
+) -> RoundResult:
+    round_id = uuid.uuid4().hex
+    started_at = now_iso()
+    started_monotonic = time.monotonic()
+
+    is_review = context.get("document") is not None
+    placement = "review" if is_review else "doc"
+    proposer_system_prompt = PLAN_REVIEW_PROMPT if is_review else PLAN_AUTHOR_PROMPT
+
+    registry = load_model_registry()
+    profiles_by_name: dict[str, dict[str, Any]] = registry.get("profiles", {})
+    registry_order = list(profiles_by_name.keys())
+
+    def _sort_by_registry(names: list[str]) -> list[str]:
+        return sorted(
+            names,
+            key=lambda n: registry_order.index(n) if n in registry_order else len(registry_order),
+        )
+
+    # V2-P7: proposer set = the FULL registry's key-present profiles by
+    # default, NOT tier-1 only (unlike convene(), which always resolves
+    # through the escalation tier ladder) — the user is paying deliberate
+    # attention here, per Larry's 2026-08-17 clarification.
+    proposer_names = [m["name"] for m in available_models() if m["key_present"]]
+    picked_proposers = (members or {}).get("proposers") or []
+    if picked_proposers:
+        proposer_names = [n for n in proposer_names if n in picked_proposers]
+    proposer_names = _sort_by_registry(proposer_names)
+
+    if not proposer_names:
+        return _finalize_too_small(
+            round_id=round_id, run_id=None, workflow="planning", placement=placement,
+            trigger="user", tier=0, goal=goal, proposer_count=0, judge_count=0,
+            reason="no usable proposers for planning", started_at=started_at,
+        )
+
+    proposer_user_content = _proposer_user_message(goal, context, "doc")
+    proposer_usage_by_name: dict[str, dict[str, int] | None] = {}
+    proposals, proposer_usage = await _gather_proposals(
+        proposer_names, profiles_by_name, proposer_user_content,
+        proposer_system_prompt, usage_by_name=proposer_usage_by_name,
+        timeout_s=council_config.PLANNING_MEMBER_TIMEOUT_S,
+    )
+
+    if not proposals:
+        return _finalize_too_small(
+            round_id=round_id, run_id=None, workflow="planning", placement=placement,
+            trigger="user", tier=0, goal=goal, proposer_count=len(proposer_names),
+            judge_count=0,
+            reason=(
+                f"no proposer responded: 0 of {len(proposer_names)} produced a plan"
+            ),
+            started_at=started_at,
+        )
+
+    # V4 — the single labeling site, same as convene()'s (no carry-forward
+    # concept in the planning pathway).
+    proposals, _carried_labels = _shuffle_and_label(round_id, proposals)
+    labels = [p.label for p in proposals]
+
+    judge_names: list[str] = []
+    live_scores: list[Score] = []
+    judge_usage_by_name: dict[str, dict[str, int] | None] = {}
+    live_usage = _empty_usage_totals()
+    if judge:
+        judge_names = [
+            m["name"] for m in available_models()
+            if m["key_present"] and m["name"] not in {p.profile for p in proposals}
+        ]
+        picked_judges = (members or {}).get("judges") or []
+        if picked_judges:
+            judge_names = [n for n in judge_names if n in picked_judges]
+        judge_names = _sort_by_registry(judge_names)
+        if judge_names:
+            judge_user_content = _judge_user_message(goal, context, proposals, "doc")
+            live_scores, live_usage = await _gather_scores(
+                judge_names, profiles_by_name, judge_user_content, labels,
+                shadow=False, system_prompt=PLAN_JUDGE_PROMPT,
+                usage_by_name=judge_usage_by_name,
+                timeout_s=council_config.PLANNING_MEMBER_TIMEOUT_S,
+            )
+
+    reported_calls = proposer_usage["reported_calls"] + live_usage["reported_calls"]
+    if reported_calls > 0:
+        round_prompt_tokens = proposer_usage["prompt_tokens"] + live_usage["prompt_tokens"]
+        round_completion_tokens = (
+            proposer_usage["completion_tokens"] + live_usage["completion_tokens"]
+        )
+    else:
+        round_prompt_tokens = None
+        round_completion_tokens = None
+
+    ended_at = now_iso()
+    latency_ms = int((time.monotonic() - started_monotonic) * 1000)
+    abstentions = sum(1 for s in live_scores if s.value is None)
+
+    # No select_winner call — P7's whole point: the council never picks
+    # the winner in this pathway, a human does (record_user_choice).
+    result = RoundResult(
+        round_id=round_id, winner=None, winner_mean=None,
+        select_reason=f"awaiting user choice among {len(proposals)} candidate(s)",
+        proposals=proposals, scores=live_scores,
+        abstentions=abstentions, tier=0,
+    )
+
+    profile_tiers = {name: prof.get("tier") for name, prof in profiles_by_name.items()}
+    _write_round_row(
+        round_id=round_id, run_id=None, workflow="planning", placement=placement,
+        trigger="user", tier=0, goal=goal,
+        proposer_count=len(proposals), judge_count=len(judge_names),
+        abstentions=abstentions, winner=None, winner_mean=None,
+        select_reason=result.select_reason, status="awaiting_user",
+        started_at=started_at, ended_at=ended_at, latency_ms=latency_ms,
+        prompt_tokens=round_prompt_tokens, completion_tokens=round_completion_tokens,
+        registry_order=registry_order,
+    )
+    label_to_profile = {p.label: p.profile for p in proposals}
+    _write_score_rows(round_id, live_scores, profile_tiers, label_to_profile, shadow=False)
+    _write_payload(
+        round_id=round_id, workflow="planning", placement=placement, trigger="user",
+        tier=0, goal=goal, context=context, proposals=proposals, live_scores=live_scores,
+        result=result, started_at=started_at, ended_at=ended_at,
+        proposal_usage_by_profile=dict(proposer_usage_by_name),
+        score_usage_by_profile=judge_usage_by_name,
+        registry_order=registry_order, status="awaiting_user",
+    )
+
+    return result
+
+
+def _profile_for_label_from_payload(round_id: str, started_at: str, label: str) -> str | None:
+    """Reads the round's JSONL payload back to resolve a label to the
+    profile that proposed it. council_scores only carries a label ->
+    profile mapping when judging actually ran (judge=True and at least
+    one usable judge); the payload's `proposal` records are the one place
+    this mapping ALWAYS exists, judged or not — the same reason
+    __main__.py's --replay reads the payload rather than council_scores
+    for proposal content."""
+    path = _payload_path(round_id, started_at)
+    if not path.exists():
+        return None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if record.get("type") == "proposal" and record.get("label") == label:
+            return record.get("profile")
+    return None
+
+
+def record_user_choice(round_id: str, label: str) -> None:
+    """P7 — the human's choice among draft_candidates' parallel plans.
+    This is the ONLY function that sets winner_* on a workflow="planning"
+    round — the council's founding rule (rank, review, advise; NEVER
+    select) survives because this is a human decision recorded, not a
+    scoring outcome computed. Best-effort, like every other D8 writer
+    here: a failure must never raise into the sidecar's request handler."""
+    try:
+        conn = get_conn()
+        try:
+            row = conn.execute(
+                "SELECT * FROM council_rounds WHERE round_id = ?", (round_id,)
+            ).fetchone()
+            if row is None or row["workflow"] != "planning":
+                logger.warning(
+                    "council_record_user_choice_bad_round round_id=%s", round_id,
+                )
+                return
+            profile = _profile_for_label_from_payload(round_id, row["started_at"], label)
+            if profile is None:
+                logger.warning(
+                    "council_record_user_choice_unknown_label round_id=%s label=%s",
+                    round_id, label,
+                )
+                return
+            conn.execute(
+                "UPDATE council_rounds SET winner_label = ?, winner_profile = ?, "
+                "select_reason = 'user choice', status = 'ok' WHERE round_id = ?",
+                (label, profile, round_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "council_record_user_choice_failed round_id=%s", round_id, exc_info=True,
+        )
+
+
 # --------------------------------------------------------------------- D8
 
 def _truncate(value: str | None, limit: int = COUNCIL_PREVIEW_CHARS) -> str | None:
@@ -899,6 +1183,7 @@ def _write_payload(
     proposal_usage_by_profile: dict[str, dict[str, int] | None] | None = None,
     score_usage_by_profile: dict[str, dict[str, int] | None] | None = None,
     registry_order: list[str] | None = None,
+    status: str | None = None,
 ) -> None:
     """Full, untruncated record for one round: mirrors logs/agents/'s
     two-tier pattern (jarvis/runlog/store.py). Read by
@@ -947,8 +1232,16 @@ def _write_payload(
                 "abstain_reason": s.abstain_reason, "shadow": False,
                 "usage": (score_usage_by_profile or {}).get(s.judge_profile),
             })
+        # MORTIMER_PLANNING_PATHWAY_PLAN.md P7 — `status` override: a
+        # planning round with judge=True can have live scores and yet no
+        # winner (draft_candidates never calls select_winner), which the
+        # old "ok" if result.winner else "failed" derivation would
+        # mislabel as failed. Existing convene() callers pass nothing and
+        # get the exact old behavior.
         records.append({
-            "type": "round_end", "status": "ok" if result.winner else "failed",
+            "type": "round_end",
+            "status": status if status is not None
+                      else ("ok" if result.winner else "failed"),
             "winner_label": result.winner.label if result.winner else None,
             "winner_profile": result.winner.profile if result.winner else None,
             "winner_mean": result.winner_mean,

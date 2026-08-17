@@ -200,3 +200,56 @@ class TestGitTools:
         data = {"ok": True, "result": "To github.com:x/y.git\n   a..b  main -> main"}
         p = build("push", data)
         assert p["title"] == "Git — pushed"
+
+
+class TestRepoWriteDraft:
+    """MORTIMER_PLANNING_PATHWAY_PLAN.md P5 — the phantom-completion fix's
+    display half: full draft content in the Output tab, not just a
+    summary."""
+
+    def test_draft_shows_full_content_from_arguments(self):
+        data = {"ok": True, "pending": True, "action_id": 7,
+                 "path": "docs/plans/x.md", "action": "create", "bytes": 42,
+                 "summary": "Will create docs/plans/x.md (42 bytes)."}
+        args = {"path": "docs/plans/x.md", "content": "# Plan\n\nBody here."}
+        p = build("repo_write_file", data, args=args)
+        assert p["title"] == "Repo — draft create docs/plans/x.md"
+        assert p["body"] == "# Plan\n\nBody here."
+        assert p["kind"] == "markdown"
+
+    def test_missing_content_returns_none(self):
+        data = {"ok": True, "pending": True, "path": "x.md", "action": "create"}
+        assert build("repo_write_file", data, args={"path": "x.md"}) is None
+
+    def test_content_truncated_over_30000_chars(self):
+        from jarvis.bot.display import DOC_DISPLAY_MAX_CHARS
+
+        long_content = "x" * (DOC_DISPLAY_MAX_CHARS + 500)
+        data = {"ok": True, "pending": True, "path": "big.md", "action": "create"}
+        p = build("repo_write_file", data, args={"content": long_content})
+        assert len(p["body"]) > DOC_DISPLAY_MAX_CHARS
+        assert p["body"].startswith("x" * 100)
+        assert "truncated for display" in p["body"]
+        assert "the draft itself is complete" in p["body"]
+
+    def test_surface_is_drawer(self):
+        assert DISPLAY_SURFACE["repo_write_file"] == "drawer"
+
+
+class TestRepoRead:
+    """MORTIMER_PLANNING_PATHWAY_PLAN.md P6 — "show me the geolocation
+    plan" renders the committed doc in the overlay/popup."""
+
+    def test_read_shows_content(self):
+        data = {"ok": True, "path": "docs/plans/geo.md", "bytes": 10,
+                 "content": "# Geolocation plan"}
+        p = build("repo_read_file", data, args={"path": "docs/plans/geo.md"})
+        assert p["title"] == "Repo — docs/plans/geo.md"
+        assert p["body"] == "# Geolocation plan"
+
+    def test_empty_content_returns_none(self):
+        data = {"ok": True, "path": "empty.md", "content": ""}
+        assert build("repo_read_file", data, args={"path": "empty.md"}) is None
+
+    def test_surface_is_window(self):
+        assert DISPLAY_SURFACE["repo_read_file"] == "window"

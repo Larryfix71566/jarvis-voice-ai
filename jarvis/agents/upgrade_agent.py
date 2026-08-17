@@ -297,10 +297,21 @@ class UpgradeAgent:
             return f"{self.profile_name} ({self.model})"
         return self.model
 
-    def run(self, goal: str, on_event: Callable[[dict], None] | None = None) -> dict:
+    def run(
+        self, goal: str, on_event: Callable[[dict], None] | None = None,
+        *, plan: str | None = None,
+    ) -> dict:
         """Execute a full session: start → edit loop → validate → submit.
 
         Never raises; returns a result dict with ok/summary plus session state.
+
+        `plan` (MORTIMER_PLANNING_PATHWAY_PLAN.md P7): an optional pre-
+        written implementation plan — from the planning pathway's
+        POST /api/plan/adopt or POST /api/selfedit/run's own `plan` param
+        — injected as a system message right after the goal, before the
+        edit loop's first completion call. Same injection SHAPE as the
+        mid-run council escalation brief below (a system message wrapping
+        the plan text), just at session start instead of after a failure.
         """
         if self._key_missing:
             return {
@@ -330,6 +341,14 @@ class UpgradeAgent:
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": goal},
         ]
+        if plan:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "A pre-written implementation plan for this goal "
+                    "follows. Follow it.\n\n" + plan
+                ),
+            })
         repairs_used = 0
         summary = "the agent reached its iteration limit without finishing"
         ok = False

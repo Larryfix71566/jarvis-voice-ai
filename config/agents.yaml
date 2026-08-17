@@ -23,5 +23,11 @@ sub_agents:
     # review, plan drafting) legitimately exceed the 45s voice-loop
     # default; two live runs timed out doing exactly that. Other agents
     # stay snappy at the default.
-    timeout_s: 120
+    # MORTIMER_PLANNING_PATHWAY_PLAN.md P1 (2026-08-17): 120s was still
+    # too short — observed successful spec writes ran 70-95s with little
+    # headroom, and two more runs timed out outright (9ed79982, e097fc31).
+    # 300s gives real headroom; the hard stop itself stays as the hang
+    # recovery path for a stuck provider call (removing it entirely was
+    # considered and rejected).
+    timeout_s: 300
     description: "The Jarvis git repository: status, recent commits, diffs, committing and pushing changes (with confirmation), and the audit trail of repository actions. Also reads, searches, and edits files in the local working tree on this machine (previewed and confirmed before anything is written) — separate from GitHub, which is only used to create new app repos and to host pull requests. Also builds new applications: each app gets its own private GitHub repo (created only after user confirmation) and is recorded in the Mortimer app registry. Also self-development: edits to Mortimer's own interface through the self-development loop — preview with the user, plan in the background, validate, and open a pull request only after explicit confirmation; merging always stays with the human on GitHub."

@@ -222,8 +222,208 @@ def test_revert_refused_while_running():
     lambda c: logic.selfedit_validate(c),
     lambda c: logic.selfedit_submit(c, confirm=True),
     lambda c: logic.selfedit_revert(c, confirm=True),
+    lambda c: logic.plan_start(c, "goal", confirm=True),
+    lambda c: logic.plan_status(c),
+    lambda c: logic.plan_choose(c, "Proposal A"),
+    lambda c: logic.plan_adopt(c, confirm=True),
 ])
 def test_offline_degrades_to_spoken_error(call):
     r = call(FakeClient(fail=True))
     assert r["ok"] is False
     assert "mortimer.sh" in r["error"]
+
+
+# ── plan_start / plan_status / plan_choose / plan_adopt (P7) ───────────────
+
+
+def test_plan_start_requires_goal():
+    r = logic.plan_start(_client(), "  ", confirm=False)
+    assert r["ok"] is False
+    assert "goal" in r["error"]
+
+
+def test_plan_start_rejects_bad_mode():
+    r = logic.plan_start(_client(), "write a spec", mode="parallel", confirm=False)
+    assert r["ok"] is False
+    assert "mode" in r["error"]
+
+
+def test_plan_start_previews_without_confirm():
+    r = logic.plan_start(_client(), "write a spec", mode="single", confirm=False)
+    assert r["ok"] is True
+    assert r["needs_confirmation"] is True
+    assert "write a spec" in r["summary"]
+
+
+def test_plan_start_council_confirm_posts_and_summarizes(monkeypatch):
+    c = _client({("POST", "/api/plan/start"): {"ok": True, "started": True}})
+    r = logic.plan_start(c, "write a spec", mode="council", confirm=True)
+    assert r["ok"] is True
+    assert r["started"] is True
+    assert c.posts[0] == ("/api/plan/start", {
+        "goal": "write a spec", "mode": "council", "profile": None,
+        "review_path": "",
+    })
+
+
+def test_plan_status_idle():
+    c = _client({("GET", "/api/plan/job"): {"ok": True, "job": {"state": "idle"}}})
+    r = logic.plan_status(c)
+    assert r["ok"] is True
+    assert "No planning job" in r["summary"]
+
+
+def test_plan_status_running():
+    c = _client({("GET", "/api/plan/job"): {
+        "ok": True,
+        "job": {"state": "running", "mode": "single", "goal": "write a spec"},
+    }})
+    r = logic.plan_status(c)
+    assert "Still drafting" in r["summary"]
+    assert "write a spec" in r["summary"]
+
+
+def test_plan_status_awaiting_choice_lists_candidates():
+    c = _client({("GET", "/api/plan/job"): {
+        "ok": True,
+        "job": {
+            "state": "awaiting_choice",
+            "candidates": [
+                {"label": "Proposal A", "profile": "kimi-k2", "advisory_mean": 8.1},
+                {"label": "Proposal B", "profile": "claude-opus", "advisory_mean": None},
+            ],
+        },
+    }})
+    r = logic.plan_status(c)
+    assert "Proposal A by kimi-k2 (advisory score 8.1)" in r["summary"]
+    assert "Proposal B by claude-opus" in r["summary"]
+    assert "which one" in r["summary"].lower()
+
+
+def test_plan_status_done():
+    c = _client({("GET", "/api/plan/job"): {
+        "ok": True, "job": {"state": "done", "author": "kimi-k2"},
+    }})
+    r = logic.plan_status(c)
+    assert "kimi-k2" in r["summary"]
+    assert "draft" in r["summary"].lower()
+
+
+def test_plan_choose_requires_label():
+    r = logic.plan_choose(_client(), "")
+    assert r["ok"] is False
+
+
+def test_plan_choose_posts_label():
+    c = _client({("POST", "/api/plan/choose"): {"ok": True}})
+    r = logic.plan_choose(c, "Proposal B")
+    assert r["ok"] is True
+    assert c.posts[0] == ("/api/plan/choose", {"label": "Proposal B"})
+    assert "Proposal B" in r["summary"]
+
+
+def test_plan_adopt_requires_finished_plan():
+    c = _client({("GET", "/api/plan/job"): {"ok": True, "job": {"state": "running"}}})
+    r = logic.plan_adopt(c, confirm=True)
+    assert r["ok"] is False
+    assert "no finished plan" in r["error"]
+
+
+def test_plan_adopt_previews_without_confirm():
+    c = _client({("GET", "/api/plan/job"): {"ok": True, "job": {"state": "done"}}})
+    r = logic.plan_adopt(c, confirm=False)
+    assert r["ok"] is True
+    assert r["needs_confirmation"] is True
+
+
+def test_plan_adopt_confirm_posts_and_reports_pending():
+    c = _client({
+        ("GET", "/api/plan/job"): {"ok": True, "job": {"state": "done"}},
+        ("POST", "/api/plan/adopt"): {
+            "ok": True, "pending": True, "action_id": 5,
+            "path": "docs/plans/write-a-spec.md",
+        },
+    })
+    r = logic.plan_adopt(c, path="docs/plans/write-a-spec.md", confirm=True)
+    assert r["ok"] is True
+    assert r["pending"] is True
+    assert r["action_id"] == 5
+    assert "nothing has been" in r["summary"].lower()
+    assert c.posts[0] == ("/api/plan/adopt", {"path": "docs/plans/write-a-spec.md"})
+
+
+# ── review mode (MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R5) ────────────────
+
+
+def test_plan_start_review_path_passed_through_on_confirm():
+    c = _client({("POST", "/api/plan/start"): {"ok": True, "started": True}})
+    r = logic.plan_start(
+        c, "review the geolocation plan", mode="single", confirm=True,
+        review_path="docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md",
+    )
+    assert r["ok"] is True
+    assert c.posts[0] == ("/api/plan/start", {
+        "goal": "review the geolocation plan", "mode": "single", "profile": None,
+        "review_path": "docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md",
+    })
+    assert "started the review" in r["summary"].lower()
+
+
+def test_plan_start_review_path_empty_is_authoring_mode_unchanged():
+    r = logic.plan_start(_client(), "write a spec", mode="single", confirm=False)
+    assert r["review_path"] is None
+    assert "review" not in r["summary"].lower()
+
+
+def test_plan_start_review_preview_names_the_document():
+    r = logic.plan_start(
+        _client(), "review the plan", mode="single", profile="kimi-k2",
+        confirm=False, review_path="docs/plans/x.md",
+    )
+    assert r["ok"] is True
+    assert r["needs_confirmation"] is True
+    assert "review" in r["summary"].lower()
+    assert "docs/plans/x.md" in r["summary"]
+
+
+def test_plan_status_says_review_when_job_has_review_path():
+    c = _client({("GET", "/api/plan/job"): {
+        "ok": True,
+        "job": {"state": "done", "author": "kimi-k2", "review_path": "docs/plans/x.md"},
+    }})
+    r = logic.plan_status(c)
+    assert "review is ready" in r["summary"].lower()
+    assert "plan is ready" not in r["summary"].lower()
+
+
+def test_plan_status_says_plan_when_job_has_no_review_path():
+    c = _client({("GET", "/api/plan/job"): {
+        "ok": True, "job": {"state": "done", "author": "kimi-k2"},
+    }})
+    r = logic.plan_status(c)
+    assert "plan is ready" in r["summary"].lower()
+
+
+def test_plan_adopt_preview_names_reviews_default_when_review_path_set():
+    c = _client({("GET", "/api/plan/job"): {
+        "ok": True, "job": {"state": "done", "review_path": "docs/plans/x.md"},
+    }})
+    r = logic.plan_adopt(c, confirm=False)
+    assert r["ok"] is True
+    assert "docs/reviews/" in r["summary"]
+    assert "docs/plans/" not in r["summary"]
+
+
+def test_plan_adopt_confirm_reports_review_wording():
+    c = _client({
+        ("GET", "/api/plan/job"): {
+            "ok": True, "job": {"state": "done", "review_path": "docs/plans/x.md"},
+        },
+        ("POST", "/api/plan/adopt"): {
+            "ok": True, "pending": True, "action_id": 7,
+            "path": "docs/reviews/x.md",
+        },
+    })
+    r = logic.plan_adopt(c, confirm=True)
+    assert r["ok"] is True
+    assert "drafted the review" in r["summary"].lower()

@@ -18,9 +18,22 @@ import yaml
 import jarvis.council.council as council_mod
 from jarvis.agents.upgrade_agent import TOOL_SPECS, UpgradeAgent
 from jarvis.council.types import Proposal, RoundResult
+from jarvis.db import get_conn, run_migrations
 from jarvis.selfedit.service import SelfEditService
 
 ALLOWLIST = {"allow": ["web/src/**"], "deny": ["jarvis/**"]}
+
+
+@pytest.fixture(autouse=True)
+def _isolated_db(tmp_path, monkeypatch):
+    """Council escalation paths write rounds via get_conn()'s default
+    path — without this, every pytest run pollutes the LIVE
+    data/jarvis.db (8 junk rounds observed on 2026-08-17)."""
+    db_path = tmp_path / "upgrade_agent_test.db"
+    monkeypatch.setenv("JARVIS_DB_PATH", str(db_path))
+    conn = get_conn(db_path)
+    run_migrations(conn)
+    conn.close()
 
 
 def _git(cwd: Path, *args: str) -> None:
@@ -548,3 +561,35 @@ def test_kill_switch_disables_escalation_entirely(
     result = agent.run("validate me")
     assert not result["ok"]
     assert "validation failed twice" in result["summary"]
+
+
+# ------------------------------------------------ P7: pre-written plan input
+
+def test_plan_kwarg_injects_system_message_before_first_completion_call(
+    service: SelfEditService,
+) -> None:
+    """MORTIMER_PLANNING_PATHWAY_PLAN.md P7 — a plan adopted via the
+    planning pathway (or passed to POST /api/selfedit/run) is injected as
+    a system message, before the edit loop's first completion call."""
+    client = ScriptedClient([_msg(content="done")])
+    agent = _agent(service, client)
+    result = agent.run("do the thing", plan="# The Plan\n\nStep one, step two.")
+    assert result["ok"]
+    first_call_messages = client.received[0]["messages"]
+    plan_messages = [
+        m for m in first_call_messages
+        if m["role"] == "system" and "Step one, step two" in m["content"]
+    ]
+    assert len(plan_messages) == 1
+    assert "pre-written implementation plan" in plan_messages[0]["content"]
+
+
+def test_no_plan_kwarg_omits_plan_system_message(service: SelfEditService) -> None:
+    client = ScriptedClient([_msg(content="done")])
+    agent = _agent(service, client)
+    agent.run("do the thing")
+    first_call_messages = client.received[0]["messages"]
+    assert not any(
+        "pre-written implementation plan" in (m.get("content") or "")
+        for m in first_call_messages
+    )

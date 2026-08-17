@@ -41,6 +41,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import re
 import sys
 import threading
 import time
@@ -55,14 +57,19 @@ from jarvis.agents.upgrade_agent import (
     UnknownModelProfileError,
     UpgradeAgent,
     available_models,
+    load_model_registry,
+    resolve_profile,
 )
 from jarvis import memory as memory_module
+from jarvis.council import config as council_config
 from jarvis.council import council as council_mod
-from jarvis.db import get_conn, run_migrations
+from jarvis.db import get_conn, now_iso, run_migrations
+from jarvis.prompts import PLAN_AUTHOR_PROMPT, PLAN_REVIEW_PROMPT
 from jarvis.runlog import get_run, list_runs, parse_since
 from jarvis.selfedit.service import SelfEditService
 from jarvis.vault import inject_env
 from mcp_servers.mcp_git import logic
+from mcp_servers.mcp_repo import logic as repo_logic
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +134,10 @@ class ActionIn(BaseModel):
 class GoalIn(BaseModel):
     goal: str
     profile: str | None = None
+    # MORTIMER_PLANNING_PATHWAY_PLAN.md P7 — an optional pre-written plan
+    # (typically adopted via POST /api/plan/adopt) that UpgradeAgent.run()
+    # injects as a system message before its edit loop begins.
+    plan: str | None = None
 
 
 class ConveneIn(BaseModel):
@@ -138,6 +149,29 @@ class ConveneIn(BaseModel):
     # (economy/mid/frontier). Omitted/empty per tier falls back to that
     # tier's full registry membership.
     members: dict[str, list[str]] | None = None
+
+
+class PlanStartIn(BaseModel):
+    """MORTIMER_PLANNING_PATHWAY_PLAN.md P7."""
+    goal: str
+    mode: str  # "single" | "council"
+    profile: str | None = None
+    # council mode only: {"proposers": [...], "judges": [...]} — profile
+    # names, not tier names (draft_candidates fans out the full registry
+    # by default, unlike convene()'s tier ladder).
+    members: dict[str, list[str]] | None = None
+    # MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R1 — when set, this job is a
+    # REVIEW of the repo document at this path instead of authoring a new
+    # plan; empty (default) is today's authoring behavior, unchanged.
+    review_path: str = ""
+
+
+class PlanChooseIn(BaseModel):
+    label: str
+
+
+class PlanAdoptIn(BaseModel):
+    path: str | None = None
 
 
 # Single self-edit session for the sidecar process (plan §3: one at a time).
@@ -173,17 +207,37 @@ _council_job: dict[str, Any] = {
     "finished_at": None,
 }
 
+# MORTIMER_PLANNING_PATHWAY_PLAN.md P7 — a third async-job slot, same
+# shape/pattern as _run_job/_council_job above (one planning job at a
+# time, ever). GET /api/plan/job is the polling target.
+_plan_lock = threading.Lock()
+_plan_job: dict[str, Any] = {
+    "state": "idle",   # idle | running | awaiting_choice | done | error
+    "mode": None,       # "single" | "council"
+    "goal": None,
+    "profile": None,    # single mode: the resolved author profile name
+    "round_id": None,   # council mode
+    "candidates": None,  # council mode: [{"label", "profile", "content",
+                         #   "advisory_mean": float | None}, ...]
+    "plan": None,        # the final chosen/authored plan text
+    "author": None,      # profile name of the chosen/single author
+    "error": None, "started_at": None, "finished_at": None,
+    # MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R1 — set (repo-relative path)
+    # for a review job, None for an authoring job.
+    "review_path": None,
+}
+
 
 def _make_agent(service: SelfEditService, profile: str | None) -> UpgradeAgent:
     """Construct the planner (seam for tests)."""
     return UpgradeAgent(service, profile=profile)
 
 
-def _run_agent(goal: str, profile: str | None) -> None:
+def _run_agent(goal: str, profile: str | None, plan: str | None = None) -> None:
     """Background thread target: plan edits, then settle the job state."""
     try:
         agent = _make_agent(_selfedit_service, profile)
-        result = agent.run(goal)
+        result = agent.run(goal, plan=plan)
         state = "done" if result.get("ok") else "error"
         with _run_lock:
             _run_job.update(
@@ -259,6 +313,107 @@ def _run_council_job(
             winner_mean=result.winner_mean, select_reason=result.select_reason,
             error=None, finished_at=time.time(),
         )
+
+
+# --------------------------------------------------------- planning pathway
+# MORTIMER_PLANNING_PATHWAY_PLAN.md P7. Two background-thread targets
+# (single-model vs council-parallel), mirroring `_run_agent`/`_run_council_
+# job`'s shape: each settles `_plan_job` on every exit path, never leaving
+# it stuck at "running".
+
+
+def _resolve_planning_profile(explicit: str | None) -> dict[str, Any]:
+    """explicit > JARVIS_PLANNING_PROFILE env > registry default — the
+    same three-level precedence `resolve_profile` already implements for
+    self-edit's PROFILE_ENV, just fed OUR env var so the two pathways
+    can be configured independently. Raises UnknownModelProfileError
+    (caught by callers, same as `_make_agent` above) for an unknown name."""
+    registry = load_model_registry()
+    name = explicit or os.environ.get("JARVIS_PLANNING_PROFILE") or registry.get("default")
+    return resolve_profile(registry, name)
+
+
+def _run_plan_single(
+    goal: str, profile: dict[str, Any], context: dict[str, Any],
+) -> None:
+    # MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R3 — single mode now shares
+    # the same _proposer_user_message assembly council mode uses, so a
+    # review job's document lands here automatically instead of via an
+    # ad-hoc f-string that had no room for it.
+    is_review = context.get("document") is not None
+    system_prompt = PLAN_REVIEW_PROMPT if is_review else PLAN_AUTHOR_PROMPT
+    user_content = council_mod._proposer_user_message(goal, context, "doc")
+    try:
+        content, _usage = asyncio.run(council_mod._call_profile(
+            profile, system_prompt, user_content,
+            council_config.PLANNING_MEMBER_TIMEOUT_S,
+        ))
+    except Exception as exc:  # noqa: BLE001 — a crash must still settle the job
+        logger.exception("plan single-mode job crashed")
+        with _plan_lock:
+            _plan_job.update(
+                state="error",
+                error=f"planning call failed: {type(exc).__name__}: {exc}",
+                finished_at=time.time(),
+            )
+        return
+    with _plan_lock:
+        _plan_job.update(
+            state="done", plan=content, author=profile["name"],
+            finished_at=time.time(),
+        )
+
+
+def _run_plan_council(
+    goal: str, members: dict[str, list[str]] | None, context: dict[str, Any],
+) -> None:
+    try:
+        result = asyncio.run(council_mod.draft_candidates(
+            goal, members=members, judge=True, context=context,
+        ))
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("plan council-mode job crashed")
+        with _plan_lock:
+            _plan_job.update(
+                state="error",
+                error=f"planning round crashed: {type(exc).__name__}: {exc}",
+                finished_at=time.time(),
+            )
+        return
+    if result is None:
+        with _plan_lock:
+            _plan_job.update(
+                state="error",
+                error="council unavailable — see admin sidecar logs",
+                finished_at=time.time(),
+            )
+        return
+    if not result.proposals:
+        with _plan_lock:
+            _plan_job.update(
+                state="error",
+                error=result.select_reason or "no candidates were produced",
+                finished_at=time.time(),
+            )
+        return
+    candidates = [
+        {
+            "label": p.label, "profile": p.profile, "content": p.content,
+            "advisory_mean": council_mod.mean_of(p.label, result.scores),
+        }
+        for p in result.proposals
+    ]
+    with _plan_lock:
+        _plan_job.update(
+            state="awaiting_choice", round_id=result.round_id,
+            candidates=candidates, finished_at=time.time(),
+        )
+
+
+def _slugify_goal(goal: str) -> str:
+    """Default adopt path (P7's endpoint table): docs/plans/<slug>.md."""
+    slug = re.sub(r"[^a-z0-9]+", "-", goal.lower()).strip("-")
+    return slug[:60] or "plan"
 
 
 @app.get("/api/health")
@@ -350,7 +505,9 @@ def selfedit_run(body: GoalIn) -> dict:
         )
     # D17 — every self-edit state transition is logged.
     logger.info("selfedit_state_transition state=running goal=%r", goal)
-    threading.Thread(target=_run_agent, args=(goal, body.profile), daemon=True).start()
+    threading.Thread(
+        target=_run_agent, args=(goal, body.profile, body.plan), daemon=True,
+    ).start()
     return {"ok": True, "started": True, "profile": agent.model_label()}
 
 
@@ -598,6 +755,164 @@ def council_rounds_list(
             since=parse_since(since or None), limit=clamped_limit,
         ),
     }
+
+
+# ------------------------------------------------------- planning pathway
+# MORTIMER_PLANNING_PATHWAY_PLAN.md P7. Thin pass-throughs over
+# jarvis.council.council (draft_candidates/record_user_choice) and
+# mcp_repo.logic (the SAME draft-gated write voice uses) — no write
+# primitive is duplicated here.
+
+
+@app.post("/api/plan/start")
+def plan_start(body: PlanStartIn) -> dict:
+    run_migrations()
+    goal = (body.goal or "").strip()
+    if not goal:
+        return {"ok": False, "error": "a goal is required — what should the plan cover?"}
+    if body.mode not in ("single", "council"):
+        return {"ok": False, "error": f"mode={body.mode!r} must be 'single' or 'council'"}
+
+    review_path = (body.review_path or "").strip()
+    context: dict[str, Any] = {}
+    if review_path:
+        # MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R1 — read the document to
+        # review ONCE, synchronously, before any thread launches. A
+        # review of an unreadable document must never start.
+        read_result = repo_logic.repo_read_file(review_path)
+        if not read_result.get("ok"):
+            return {"ok": False, "error": read_result.get("error")}
+        content = read_result.get("content") or ""
+        if len(content) > council_config.PLAN_REVIEW_DOC_MAX_CHARS:
+            content = (
+                content[: council_config.PLAN_REVIEW_DOC_MAX_CHARS]
+                + "\n\n… (truncated for review — flag this truncation in your verdict)"
+            )
+        context = {"document": content, "document_path": review_path}
+
+    with _plan_lock:
+        if _plan_job["state"] == "running":
+            return {
+                "ok": False,
+                "error": "a planning job is already in progress — ask for status instead",
+                "job": dict(_plan_job),
+            }
+        resolved_profile_name: str | None = None
+        profile: dict[str, Any] | None = None
+        if body.mode == "single":
+            try:
+                # Construct now so an unknown profile fails fast,
+                # synchronously — same rule selfedit_run's _make_agent
+                # call follows above.
+                profile = _resolve_planning_profile(body.profile)
+            except UnknownModelProfileError as exc:
+                return {"ok": False, "error": str(exc)}
+            resolved_profile_name = profile["name"]
+        _plan_job.update(
+            state="running", mode=body.mode, goal=goal,
+            profile=resolved_profile_name, round_id=None, candidates=None,
+            plan=None, author=None, error=None,
+            started_at=time.time(), finished_at=None,
+            review_path=review_path or None,
+        )
+    if body.mode == "single":
+        threading.Thread(
+            target=_run_plan_single, args=(goal, profile, context), daemon=True,
+        ).start()
+    else:
+        threading.Thread(
+            target=_run_plan_council, args=(goal, body.members, context), daemon=True,
+        ).start()
+    return {"ok": True, "started": True}
+
+
+@app.get("/api/plan/job")
+def plan_job_status() -> dict:
+    with _plan_lock:
+        job = dict(_plan_job)
+    return {"ok": True, "job": job}
+
+
+@app.post("/api/plan/choose")
+def plan_choose(body: PlanChooseIn) -> dict:
+    with _plan_lock:
+        if _plan_job["state"] != "awaiting_choice":
+            return {"ok": False, "error": "no planning round is awaiting a choice"}
+        round_id = _plan_job["round_id"]
+        candidates = list(_plan_job["candidates"] or [])
+    label = (body.label or "").strip()
+    match = next((c for c in candidates if c["label"] == label), None)
+    if match is None:
+        return {"ok": False, "error": f"no candidate with label {label!r}"}
+    council_mod.record_user_choice(round_id, label)
+    with _plan_lock:
+        _plan_job.update(
+            state="done", plan=match["content"], author=match["profile"],
+            finished_at=time.time(),
+        )
+    return {"ok": True}
+
+
+@app.post("/api/plan/adopt")
+def plan_adopt(body: PlanAdoptIn) -> dict:
+    """Creates a draft-gated repo write of the finished plan (the SAME
+    actions-table gate voice's repo_write_file/repo_commit_write use) —
+    P7's attribution footer is appended HERE, once, at adoption: a
+    candidate on the ballot stays footer-free and byte-comparable, and a
+    plan never adopted stamps nothing."""
+    with _plan_lock:
+        if _plan_job["state"] != "done":
+            return {"ok": False, "error": "no finished plan to adopt"}
+        job = dict(_plan_job)
+    plan_text = job.get("plan") or ""
+    if not plan_text:
+        return {"ok": False, "error": "the plan is empty"}
+    review_path = job.get("review_path")
+    if body.path:
+        path = body.path.strip()
+    elif review_path:
+        # MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R4 — a review's default
+        # adopt path is docs/reviews/, not docs/plans/.
+        path = f"docs/reviews/{_slugify_goal(job.get('goal') or 'review')}.md"
+    else:
+        path = f"docs/plans/{_slugify_goal(job.get('goal') or 'plan')}.md"
+
+    registry = load_model_registry()
+    profiles = registry.get("profiles", {})
+    author_name = job.get("author") or "unknown"
+    provider_model = (profiles.get(author_name) or {}).get("model", author_name)
+    if review_path:
+        # R4 — the review-mode footer verb, exact template.
+        footer = (
+            f"\n\n---\n*Review by {author_name} ({provider_model}) — "
+            f"{now_iso()[:10]}. Reviewed: {review_path}.*"
+        )
+    else:
+        footer = f"\n\n---\n*Drafted by {author_name} ({provider_model}) — {now_iso()[:10]}.*"
+    if job.get("mode") == "council" and job.get("round_id"):
+        n = len(job.get("candidates") or [])
+        footer += (
+            f" Selected by Larry from {n} council candidate"
+            f"{'s' if n != 1 else ''} (round {job['round_id']})."
+        )
+
+    result = repo_logic.repo_write_file(
+        path, plan_text + footer, rationale=f"Adopted plan: {job.get('goal') or ''}",
+    )
+    return dict(result)
+
+
+@app.post("/api/plan/cancel")
+def plan_cancel() -> dict:
+    with _plan_lock:
+        if _plan_job["state"] == "idle":
+            return {"ok": True, "already_idle": True}
+        _plan_job.update(
+            state="idle", mode=None, goal=None, profile=None, round_id=None,
+            candidates=None, plan=None, author=None, error=None,
+            started_at=None, finished_at=None, review_path=None,
+        )
+    return {"ok": True}
 
 
 def main() -> None:

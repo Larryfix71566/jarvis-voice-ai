@@ -192,6 +192,25 @@
 .satellite-tick {
   font-size: 10px;
   opacity: 0.7;
+  /* Pop in when it lands so the outcome registers, then rest quietly. */
+  animation: tick-pop 0.5s ease-out;
+}
+
+@keyframes tick-pop {
+  0% {
+    transform: scale(2.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .satellite-tick {
+    animation: none;
+  }
 }
 
 .satellite-tick-ok {
@@ -294,7 +313,9 @@
 .satellite-done .satellite-dot {
   background: var(--green);
   box-shadow: 0 0 10px var(--green);
-  animation: done-flash 0.9s ease-out forwards;
+  /* Presence window: 0.9s read as a blink — the completion afterglow
+     now lingers long enough to catch peripherally. */
+  animation: done-flash 3s ease-out forwards;
 }
 
 @keyframes done-flash {
@@ -337,7 +358,8 @@
 
 .beam-done {
   opacity: 0.5;
-  animation: beam-fade 0.8s ease-out forwards;
+  /* Presence window: match the satellite's slower afterglow. */
+  animation: beam-fade 2.4s ease-out forwards;
 }
 
 @keyframes beam-fade {
@@ -444,9 +466,9 @@
   flex-direction: column;
   max-width: 40vw;
   max-height: 40vh;
-  background: rgba(4, 9, 12, 0.55);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(4, 9, 12, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--accent-dim);
   border-radius: 10px;
   box-shadow:
@@ -457,7 +479,7 @@
 
 @supports not (backdrop-filter: blur(8px)) {
   .display-panel {
-    background: rgba(4, 9, 12, 0.92);
+    background: rgba(4, 9, 12, 0.85);
   }
 }
 
@@ -640,8 +662,8 @@
   position: absolute;
   right: 0;
   bottom: 0;
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   cursor: nwse-resize;
   touch-action: none;
   background: linear-gradient(
@@ -694,5 +716,11 @@
     left: 8px !important;
     right: 8px;
     width: auto !important;
+  }
+
+  /* W1 — corner-drag on a full-width phone layout is noise; the panel
+     already spans the viewport width via the override above. */
+  .display-resize {
+    display: none;
   }
 }

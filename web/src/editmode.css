@@ -114,6 +114,57 @@
   color: #ffcf8f;
 }
 
+/* Planning pathway (MORTIMER_PLANNING_PATHWAY_PLAN.md P7). Additive only,
+   same visual language as .editmode-council-* below. */
+
+.editmode-planning {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(120, 180, 255, 0.15);
+}
+
+.editmode-planning-mode {
+  display: flex;
+  gap: 14px;
+  margin: 6px 0 8px;
+  font-size: 12px;
+}
+
+.editmode-planning-error {
+  margin-top: 6px;
+  color: #ff9c9c;
+  font-size: 12px;
+}
+
+.editmode-planning-candidates {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.editmode-planning-candidate summary {
+  cursor: pointer;
+  color: #9ec7ff;
+}
+
+.editmode-planning-candidate .btn {
+  margin-top: 6px;
+}
+
+.editmode-planning-done {
+  margin-top: 8px;
+}
+
+.editmode-planning-done .git-commit-row {
+  margin-top: 8px;
+}
+
+.editmode-planning-done .btn-primary {
+  margin-top: 8px;
+  width: 100%;
+}
+
 /* LLM Council (MORTIMER_LLM_COUNCIL_PLAN.md D9/D10). Additive only. */
 
 .editmode-council {
@@ -173,6 +224,13 @@
   color: #8fa8cc;
   font-size: 12px;
   margin-top: 2px;
+}
+
+/* P4 — the roster line above the score table. */
+.editmode-council-roster {
+  margin-top: 8px;
+  color: #8fa8cc;
+  font-size: 11px;
 }
 
 .editmode-council-scores {

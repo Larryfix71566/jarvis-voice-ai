@@ -35,6 +35,9 @@ DISPLAY_TOOLS = {
     "commit",
     "prepare_push",
     "push",
+    # MORTIMER_PLANNING_PATHWAY_PLAN.md P5/P6.
+    "repo_write_file",
+    "repo_read_file",
 }
 
 # Which surface a tool's result belongs on (side-drawer plan D36).
@@ -52,10 +55,29 @@ DISPLAY_SURFACE: dict[str, str] = {
     "commit": "drawer",
     "prepare_push": "drawer",
     "push": "drawer",
+    # P5 — draft review content is work product, kept in the Output tab
+    # so the amber attention dot points at a fully reviewable document.
+    "repo_write_file": "drawer",
+    # P6 — an informational read, parkable on a second screen like the
+    # other "window" surfaces.
+    "repo_read_file": "window",
 }
 DEFAULT_DISPLAY_SURFACE = "drawer"
 
 MAX_SNIPPETS = 6
+
+# MORTIMER_PLANNING_PATHWAY_PLAN.md P5/P6 — display truncation for full
+# document content (distinct from PREVIEW_CHARS in jarvis/runlog/store.py,
+# which bounds SQLite preview columns, not the UI). 30,000 chars comfortably
+# covers a full plan/spec document while keeping the payload bounded.
+DOC_DISPLAY_MAX_CHARS = 30_000
+_TRUNCATION_SUFFIX = "\n\n… (truncated for display — the draft itself is complete)"
+
+
+def _truncate_doc(text: str) -> str:
+    if len(text) <= DOC_DISPLAY_MAX_CHARS:
+        return text
+    return text[:DOC_DISPLAY_MAX_CHARS] + _TRUNCATION_SUFFIX
 
 
 def build_display_payload(
@@ -230,6 +252,31 @@ def _fmt_git_executed(tool: str):
     return fmt
 
 
+def _fmt_repo_write_draft(args: dict, data: dict) -> tuple | None:
+    """P5 — the phantom-completion fix's display half: the draft's FULL
+    content (not just a commit-list summary, which is all _fmt_git_draft
+    has to show), so the amber dot points at something actually reviewable.
+    Content comes from the tool call's arguments (what was drafted), not
+    `data` (the write-preview response, which never echoes it back)."""
+    content = args.get("content")
+    if not isinstance(content, str) or not content:
+        return None
+    action = data.get("action") or "write"
+    path = data.get("path") or args.get("path") or ""
+    return ("markdown", f"Repo — draft {action} {path}",
+            _truncate_doc(content), [], [])
+
+
+def _fmt_repo_read(args: dict, data: dict) -> tuple | None:
+    """P6 — "show me the geolocation plan" renders the committed doc
+    through the same display pipeline drafts use."""
+    content = data.get("content")
+    if not isinstance(content, str) or not content:
+        return None
+    path = data.get("path") or args.get("path") or ""
+    return ("markdown", f"Repo — {path}", _truncate_doc(content), [], [])
+
+
 _FORMATTERS = {
     "web_search": _fmt_web_search,
     "get_weather": _fmt_get_weather,
@@ -241,4 +288,6 @@ _FORMATTERS = {
     "prepare_push": _fmt_git_draft("prepare_push"),
     "commit": _fmt_git_executed("commit"),
     "push": _fmt_git_executed("push"),
+    "repo_write_file": _fmt_repo_write_draft,
+    "repo_read_file": _fmt_repo_read,
 }

@@ -90,17 +90,44 @@ export default function OrbField({ state }: { state: VoiceState }) {
 
   // Sub-agent lifecycle: the Supervisor's delegate_task emissions.
   // E3: the delegation tick / outcome tones ride this existing listener.
+  //
+  // MINIMUM PRESENCE WINDOW (Larry, 2026-08-16: "the agent enhancements
+  // were very fast and almost not noticeable"): most delegations finish
+  // in 3-7s, so the lit satellite + flowing beam were gone before the
+  // eye arrived. The working VISUAL now holds at least MIN_WORKING_MS
+  // from its start even when the run finishes sooner — the done sound
+  // still plays immediately (audio is truthful; the visual lingers).
+  const workingSinceRef = useRef<Record<string, number>>({});
+  const holdTimersRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    const timers = holdTimersRef.current;
+    return () => {
+      for (const id of Object.values(timers)) window.clearTimeout(id);
+    };
+  }, []);
   useRTVIClientEvent(RTVIEvent.ServerMessage, (data: unknown) => {
     const msg = data as AgentMsg;
     if (msg?.type !== "agent" || typeof msg.name !== "string") return;
     const name = msg.name.toLowerCase();
     if (msg.state === "working") {
+      workingSinceRef.current[name] = Date.now();
       setWorking((w) => ({ ...w, [name]: true }));
       playSound("tick");
     } else if (msg.state === "done") {
-      setWorking((w) => ({ ...w, [name]: false }));
-      setDoneAt((d) => ({ ...d, [name]: Date.now() }));
       playSound(msg.ok === false ? "fail" : "done");
+      const MIN_WORKING_MS = 2500;
+      const elapsed = Date.now() - (workingSinceRef.current[name] ?? 0);
+      const settle = () => {
+        setWorking((w) => ({ ...w, [name]: false }));
+        setDoneAt((d) => ({ ...d, [name]: Date.now() }));
+      };
+      const remaining = MIN_WORKING_MS - elapsed;
+      if (remaining <= 0) {
+        settle();
+      } else {
+        window.clearTimeout(holdTimersRef.current[name]);
+        holdTimersRef.current[name] = window.setTimeout(settle, remaining);
+      }
     }
   });
 
