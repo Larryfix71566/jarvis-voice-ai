@@ -268,5 +268,24 @@ ui_control actions (self-contained in one module + its tests).
 
 ## §7 Approval
 
-- [ ] Larry approves.
-- [ ] Implementation may begin.
+- [x] Larry approves.
+- [x] Implementation may begin.
+
+**Implementation complete (2026-08-17).** All 6 steps done: shared
+`popoutWindow.ts` plumbing (display window refactored onto it with zero
+behavior change, verified by symbol/channel/message-shape diff review);
+`conversationFeed.ts` unwelding the Log tab from the session object;
+third Vite entry (`drawer.html`/`drawerMain.tsx`/`DrawerWindowApp.tsx`);
+DP5 single-place rule + DP6 controls (`⧉` in the drawer, topbar Panels
+popped state, `drawer_popout`/`drawer_popin` ui_control actions);
+DP8 slot placement built into `popoutWindow.ts`'s registry. 974 passed /
+1 pre-existing sandbox-network failure (`test_mcp_web_server`,
+unrelated) / 3 skipped. Web `tsc -b` and `oxlint` both clean (4
+pre-existing warnings, none introduced). Verified independently: no
+second RTVI `ServerMessage` listener was added (grep confirms only
+`App.tsx`'s pre-existing dispatcher and `AgentStatusPanel.tsx`'s D10
+listener exist, filtering on different `msg.type`s) and none of the
+seven reused tab-body components import `@pipecat-ai/*`. Not yet done
+in this sandbox (needs Larry, live browser): actual second-monitor
+placement, the two-popout left/right split, Safari fallback behavior,
+and `RUN_LIVE=1` routing eval for the two new ui_control cases.
