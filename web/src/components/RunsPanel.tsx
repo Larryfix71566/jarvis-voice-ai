@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { AGENT_LAYOUT } from "../agentLayout";
+import {
+  consumeRequestedAgentFilter,
+  subscribeAgentFilter,
+} from "../agentRuns";
 import { relTime } from "../timeFormat";
 
 const API = "http://localhost:7861";
@@ -89,7 +93,13 @@ const STATUS_CLASS: Record<RunStatus, string> = {
 export default function RunsPanel() {
   const [runs, setRuns] = useState<RunRow[] | null>(null);
   const [unreachable, setUnreachable] = useState(false);
-  const [agentFilter, setAgentFilter] = useState("");
+  // E5: a satellite click may have requested a filter before this tab
+  // body mounted — consume it at mount, and stay subscribed for clicks
+  // while mounted.
+  const [agentFilter, setAgentFilter] = useState(
+    () => consumeRequestedAgentFilter() ?? "",
+  );
+  useEffect(() => subscribeAgentFilter(setAgentFilter), []);
   const [statusFilter, setStatusFilter] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [detail, setDetail] = useState<RunDetail | null>(null);
@@ -175,7 +185,9 @@ export default function RunsPanel() {
       {!runs ? (
         <div className="runs-empty">loading…</div>
       ) : runs.length === 0 ? (
-        <div className="runs-empty">No runs yet.</div>
+        <div className="runs-empty">
+          No runs yet — try "check how my computer is doing".
+        </div>
       ) : (
         <div className="runs-list">
           {runs.map((r) => (

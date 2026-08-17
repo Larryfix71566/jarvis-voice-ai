@@ -54,7 +54,10 @@ export default function OutputTab() {
       </div>
 
       {results.length === 0 ? (
-        <div className="output-empty">No output yet.</div>
+        <div className="output-empty">
+          Work products — diffs, commits, scaffolds — land here. Try "show
+          the repo status".
+        </div>
       ) : (
         <div className="output-list">
           {results.map((r) => (

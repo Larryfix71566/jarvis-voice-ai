@@ -21,6 +21,7 @@ export interface DisplayPayload {
   agent?: string;
   ts?: number; // epoch SECONDS from jarvis/bot/display.py — see timeFormat.ts's warning; do not use directly
   surface?: string; // "drawer" | "window" — plan D36
+  tool?: string; // engagement plan E1 — which tool produced this (additive; absent from pre-E1 bots)
 }
 
 /** One received payload plus a client-side identity, since the payload
@@ -75,6 +76,18 @@ export function applyServerMessage(msg: unknown): void {
 export function removeResult(id: number): void {
   results = results.filter((r) => r.id !== id);
   notify();
+}
+
+/** Engagement plan E1 — the deterministic "needs your confirmation"
+ * rule, in its ONE home: attention is active iff the NEWEST drawer
+ * item was produced by a draft-gated tool (the draft→confirm pattern's
+ * first halves). Self-clearing: the confirm's executed payload — or
+ * anything newer — replaces it at the head of the list. */
+const DRAFT_TOOLS = new Set(["prepare_commit", "prepare_push", "repo_write_file"]);
+
+export function hasPendingDraft(): boolean {
+  const newest = results[0];
+  return newest !== undefined && DRAFT_TOOLS.has(newest.payload.tool ?? "");
 }
 
 export function clearResults(): void {

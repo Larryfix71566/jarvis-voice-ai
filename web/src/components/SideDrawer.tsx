@@ -8,6 +8,7 @@ import DeveloperRunsTab from "./DeveloperRunsTab";
 import OutputTab from "./OutputTab";
 import Transcript from "./Transcript";
 import { getRuns, isSelfEditRun, subscribeRuns } from "../agentRuns";
+import { hasPendingDraft, subscribeResults } from "../displayResults";
 
 /**
  * SideDrawer — the console's single right-side tabbed drawer
@@ -128,6 +129,15 @@ export default function SideDrawer({
           runs.some((r) => isSelfEditRun(r.name, r.tools) && r.doneAt === null),
         ),
       ),
+    [],
+  );
+
+  // Engagement plan E1 — the Output tab's dot goes amber while the
+  // newest result is a pending draft (same one-rule source as the
+  // topbar toggle's dot).
+  const [attention, setAttention] = useState(hasPendingDraft);
+  useEffect(
+    () => subscribeResults(() => setAttention(hasPendingDraft())),
     [],
   );
 
@@ -257,8 +267,14 @@ export default function SideDrawer({
                 {key === "developer" && devRunning && (
                   <span className="side-drawer-tab-dot" aria-hidden="true" />
                 )}
-                {key === "output" && outputDot && (
-                  <span className="side-drawer-tab-dot" aria-hidden="true" />
+                {key === "output" && (outputDot || attention) && (
+                  <span
+                    className={
+                      "side-drawer-tab-dot" +
+                      (attention ? " side-drawer-tab-dot-attn" : "")
+                    }
+                    aria-hidden="true"
+                  />
                 )}
               </button>
             ))}

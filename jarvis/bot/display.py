@@ -94,6 +94,13 @@ def build_display_payload(
         "agent": display_name or agent,
         "ts": time.time(),
         "surface": DISPLAY_SURFACE.get(tool, DEFAULT_DISPLAY_SURFACE),
+        # MORTIMER_ENGAGEMENT_DESIGN_PLAN.md E1 — additive (same D36
+        # discipline as `surface`): lets the client derive deterministic
+        # state from WHICH tool produced a payload — the amber
+        # needs-your-confirmation signal (newest drawer item is a
+        # draft-gated tool) and the ambient weather cache (tool ==
+        # "get_weather") both read it.
+        "tool": tool,
     }
 
 

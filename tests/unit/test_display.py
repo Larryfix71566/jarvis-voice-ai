@@ -58,6 +58,10 @@ class TestWebSearch:
         ]
         assert p["agent"] == "Analyst"
         assert p["ts"] > 0
+        # Engagement plan E1 — additive tool field: the client's
+        # attention rule (draft-gated tools) and ambient weather cache
+        # both key off which tool produced the payload.
+        assert p["tool"] == "web_search"
 
     def test_empty_result_returns_none(self):
         assert build("web_search", {"answer": "", "results": []}) is None

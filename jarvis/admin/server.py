@@ -452,6 +452,26 @@ def memory_overview() -> dict:
     }
 
 
+@app.get("/api/ambient")
+def ambient() -> dict:
+    """Engagement plan E4 — the console's idle ambient strip. Read-only:
+    the next pending reminder (mcp_reminders.logic, same cross-boundary
+    import pattern as mcp_git's logic above) and the running session
+    summary (same jarvis.memory helper /api/memory uses). The client
+    polls this every 60s while connected; chips for null fields hide."""
+    run_migrations()
+    from mcp_servers.mcp_reminders.logic import list_reminders
+
+    reminder = None
+    result = list_reminders("pending")
+    for r in result.get("reminders", []):
+        # due_at ASC — first row is the next one up.
+        reminder = {"text": r["message"], "due_at": r["due_at"]}
+        break
+    summary = memory_module.get_summary_text() or None
+    return {"ok": True, "reminder": reminder, "summary": summary}
+
+
 @app.delete("/api/memory/fact/{key}")
 def memory_delete_fact(key: str) -> dict:
     run_migrations()

@@ -91,6 +91,29 @@ export default function MemoryPanel() {
 
   const { facts, summary, observations, usage } = overview;
 
+  // Engagement plan E6 — dossier grouping by key prefix. The content is
+  // the hero; keys render dimmed mono. Empty groups are omitted.
+  const groups: { title: string; facts: Fact[] }[] = [
+    {
+      title: "About you",
+      facts: facts.filter(
+        (f) =>
+          !f.key.startsWith("user.preference.") &&
+          !f.key.startsWith("user.style."),
+      ),
+    },
+    {
+      title: "Preferences",
+      facts: facts.filter((f) => f.key.startsWith("user.preference.")),
+    },
+    {
+      title: "Style",
+      facts: facts.filter((f) => f.key.startsWith("user.style.")),
+    },
+  ].filter((g) => g.facts.length > 0);
+
+  const pendingObs = observations.filter((o) => !o.promoted);
+
   return (
     <div className="memory-panel">
       <div className="panel-title">Memory</div>
@@ -106,15 +129,18 @@ export default function MemoryPanel() {
         )}
       </div>
 
-      {facts.length === 0 ? (
+      {facts.length === 0 && (
         <div className="memory-empty">No facts stored yet.</div>
-      ) : (
-        <div className="memory-facts">
-          {facts.map((f) => (
+      )}
+
+      {groups.map((g) => (
+        <div key={g.title} className="memory-card">
+          <div className="memory-card-title">{g.title}</div>
+          {g.facts.map((f) => (
             <div key={f.key} className="memory-fact-row">
               <div className="memory-fact-body">
-                <span className="memory-fact-key">{f.key}</span>
                 <span className="memory-fact-content">{f.content}</span>
+                <span className="memory-fact-key">{f.key}</span>
               </div>
               <button
                 type="button"
@@ -128,28 +154,37 @@ export default function MemoryPanel() {
             </div>
           ))}
         </div>
-      )}
+      ))}
 
-      {summary && (
-        <div className="memory-summary">
-          <div className="memory-section-label">Running summary</div>
-          <div className="memory-summary-text">{summary}</div>
+      {pendingObs.length > 0 && (
+        <div className="memory-card">
+          <div className="memory-card-title">Observations (not yet facts)</div>
+          {pendingObs.map((o) => (
+            <div key={o.key} className="memory-obs-row">
+              <div className="memory-obs-body">
+                <span className="memory-fact-content">{o.latest_content}</span>
+                <span className="memory-fact-key">{o.key}</span>
+              </div>
+              <div
+                className="memory-obs-bar"
+                title={`${o.sessions}/${o.promote_after} sessions toward becoming a fact`}
+              >
+                <div
+                  className="memory-obs-bar-fill"
+                  style={{
+                    width: `${Math.min(100, (o.sessions / o.promote_after) * 100)}%`,
+                  }}
+                />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      {observations.length > 0 && (
-        <div className="memory-observations">
-          <div className="memory-section-label">Learning (not yet facts)</div>
-          {observations
-            .filter((o) => !o.promoted)
-            .map((o) => (
-              <div key={o.key} className="memory-obs-row">
-                <span className="memory-obs-key">{o.key}</span>
-                <span className="memory-obs-progress">
-                  {o.sessions}/{o.promote_after} sessions
-                </span>
-              </div>
-            ))}
+      {summary && (
+        <div className="memory-card memory-card-summary">
+          <div className="memory-card-title">Session summary</div>
+          <div className="memory-summary-text">{summary}</div>
         </div>
       )}
 

@@ -46,6 +46,20 @@ function notifyInPage() {
 export function publish(payload: DisplayPayload): void {
   latest = payload;
   notifyInPage();
+  // Engagement plan E4 — ambient weather cache: remember the last
+  // weather answer's title + when it arrived, purely as a side effect
+  // of the user asking (NO proactive fetching, ever). AmbientStrip
+  // renders it with its age.
+  if (payload.tool === "get_weather" && payload.title) {
+    try {
+      localStorage.setItem(
+        "mortimer.ambient.weather",
+        JSON.stringify({ title: payload.title, at: Date.now() }),
+      );
+    } catch {
+      /* storage unavailable — the ambient chip just won't show */
+    }
+  }
   try {
     getChannel().postMessage({ t: "payload", payload } satisfies DisplayMessage);
   } catch {

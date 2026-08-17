@@ -19,9 +19,14 @@ import SideDrawer, {
   type TabKey,
 } from "./components/SideDrawer";
 import { getRuns, isSelfEditRun, subscribeRuns, type RunState } from "./agentRuns";
-import { applyServerMessage as applyDisplayResult } from "./displayResults";
+import {
+  applyServerMessage as applyDisplayResult,
+  hasPendingDraft,
+  subscribeResults,
+} from "./displayResults";
 import { publish as publishWindowPayload, wireConsoleSide } from "./displayWindow";
 import { applyUiMessage, subscribeUiCommands } from "./uiCommands";
+import { play as playSound, setSoundsEnabled, soundsEnabled } from "./sounds";
 import type { VoiceState } from "./voiceState";
 import "./App.css";
 import "./command-deck.css";
@@ -46,6 +51,28 @@ function errorText(message: unknown): string {
 function isTypingTarget(target: EventTarget | null): boolean {
   const tag = (target as HTMLElement | null)?.tagName;
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
+/** E3 — master sound toggle (bottombar). Plays the boot chirp on
+ * re-enable as its own confirmation. */
+function SoundToggle() {
+  const [on, setOn] = useState(soundsEnabled);
+  const toggle = () => {
+    const next = !on;
+    setSoundsEnabled(next);
+    setOn(next);
+    if (next) playSound("boot");
+  };
+  return (
+    <button
+      type="button"
+      className="btn"
+      onClick={toggle}
+      title={on ? "Sounds on" : "Sounds off"}
+    >
+      {on ? "🔊" : "🔇"}
+    </button>
+  );
 }
 
 // --- side-drawer preferences (plan D13) ---------------------------------
@@ -114,9 +141,10 @@ export default function App() {
     setError(null); // a successful turn dismisses the banner
   });
   useRTVIClientEvent(RTVIEvent.BotStoppedSpeaking, () => setSpeaking(false));
-  useRTVIClientEvent(RTVIEvent.Error, (message: unknown) =>
-    setError(errorText(message)),
-  );
+  useRTVIClientEvent(RTVIEvent.Error, (message: unknown) => {
+    setError(errorText(message));
+    playSound("fail"); // E3 — the error banner has a voice too
+  });
 
   // Plan D30/D37 — the single "type: display" listener, dispatching by
   // `surface`. This is a DIFFERENT type than D10's agent-lifecycle
@@ -237,6 +265,14 @@ export default function App() {
     (r) => isSelfEditRun(r.name, r.tools) && r.doneAt === null,
   );
 
+  // Engagement plan E1 — amber needs-your-confirmation state, derived
+  // from the display-results store's one rule (hasPendingDraft).
+  const [attention, setAttention] = useState(hasPendingDraft);
+  useEffect(
+    () => subscribeResults(() => setAttention(hasPendingDraft())),
+    [],
+  );
+
   // Persist drawer preferences (plan D13).
   useEffect(() => {
     try {
@@ -311,8 +347,13 @@ export default function App() {
           title="Console panels (Esc closes · T opens the Log)"
         >
           {drawerOpen ? "◨ Close" : "◧ Panels"}
-          {!drawerOpen && (devRunning || outputDot) && (
-            <span className="btn-live-dot" aria-hidden="true" />
+          {/* E1: attention (amber, pending confirmation) outranks the
+              cyan live/new signal. */}
+          {!drawerOpen && (devRunning || outputDot || attention) && (
+            <span
+              className={attention ? "btn-live-dot btn-live-dot-attn" : "btn-live-dot"}
+              aria-hidden="true"
+            />
           )}
         </button>
       </header>
@@ -339,6 +380,7 @@ export default function App() {
 
       <footer className="bottombar">
         <MicControls />
+        <SoundToggle />
         <div className="hints">SPACE talk · T transcript</div>
       </footer>
 
