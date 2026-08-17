@@ -151,9 +151,21 @@ TOOL_SPECS: list[dict] = [
 ]
 
 
-def load_agent_config(path: str | Path | None = None) -> dict:
+def load_agent_config(path: str | Path | None = None, section: str | None = None) -> dict:
+    """`section`, when given (D1/D7: e.g. "app_build"), overlays that
+    subsection's `max_iterations`/`max_session_minutes` on top of the
+    top-level provider/model/base_url/temperature defaults — those stay
+    self-edit's legacy fallback values either way; the registry profile
+    resolution in UpgradeAgent.__init__ overrides them for both workflows
+    whenever config/upgrade_models.yaml has profiles, which it does. A
+    missing section falls back to the top-level (self-edit) loop bounds,
+    so an app_build section left unconfigured degrades gracefully rather
+    than raising."""
     cfg_path = Path(path) if path else DEFAULT_CONFIG_PATH
     data = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    bounds = data.get(section, {}) if section else data
+    if not isinstance(bounds, dict):
+        bounds = {}
     return {
         "provider": data.get("provider", "openai"),
         "model": os.environ.get("JARVIS_UPGRADE_MODEL")
@@ -161,8 +173,10 @@ def load_agent_config(path: str | Path | None = None) -> dict:
         "base_url": os.environ.get("JARVIS_UPGRADE_BASE_URL")
                     or data.get("base_url", "https://api.openai.com/v1"),
         "temperature": float(data.get("temperature", 0.2)),
-        "max_iterations": int(data.get("max_iterations", 10)),
-        "max_session_minutes": int(data.get("max_session_minutes", 30)),
+        "max_iterations": int(bounds.get("max_iterations", data.get("max_iterations", 10))),
+        "max_session_minutes": int(
+            bounds.get("max_session_minutes", data.get("max_session_minutes", 30))
+        ),
     }
 
 
@@ -237,9 +251,19 @@ class UpgradeAgent:
         registry_path: str | os.PathLike[str] | None = None,
         profile: str | None = None,
         client_factory: Callable[[], Any] | None = None,
+        *,
+        config_section: str | None = None,
+        system_prompt: str | None = None,
+        council_workflow: str = "selfedit",
     ):
         self.service = service
-        self.cfg = load_agent_config(config_path)
+        self.cfg = load_agent_config(config_path, section=config_section)
+        self._system_prompt = system_prompt or SYSTEM_PROMPT
+        # D7 — council rounds convened from this loop are tagged with the
+        # workflow that started them ("selfedit" vs "appbuild"), so
+        # compute_agreement (which excludes only workflow="planning") keeps
+        # treating both as judge-quality evidence without special-casing.
+        self._council_workflow = council_workflow
 
         # Registry mode overlays the planner slot; loop bounds always come
         # from the agent config.
@@ -338,7 +362,7 @@ class UpgradeAgent:
                         "status": self.service.status()}
 
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": self._system_prompt},
             {"role": "user", "content": goal},
         ]
         if plan:
@@ -402,10 +426,7 @@ class UpgradeAgent:
                     if not self._scope_council_used:
                         self._scope_council_used = True
                         try:
-                            allowlist_text = (
-                                self.service.repo_root / "config"
-                                / "self_edit_allowlist.json"
-                            ).read_text(encoding="utf-8")
+                            allowlist_text = self.service.describe_boundary()
                         except Exception:  # noqa: BLE001 — best-effort context
                             allowlist_text = "(allowlist file unavailable)"
                         scope_brief = self._maybe_scope_council(
@@ -543,7 +564,7 @@ class UpgradeAgent:
         try:
             from jarvis.council.council import convene
             result = asyncio.run(convene(
-                workflow="selfedit", placement="planner", trigger=trigger,
+                workflow=self._council_workflow, placement="planner", trigger=trigger,
                 goal=goal, tier=tier, context=context,
             ))
         except Exception:                           # noqa: BLE001
@@ -574,7 +595,7 @@ class UpgradeAgent:
         try:
             from jarvis.council.council import convene
             result = asyncio.run(convene(
-                workflow="selfedit", placement="scope", trigger="E2",
+                workflow=self._council_workflow, placement="scope", trigger="E2",
                 goal=goal, tier=1,
                 context={"reason": reason, "allowlist": allowlist},
             ))
@@ -611,6 +632,73 @@ class UpgradeAgent:
                 on_event(event)
             except Exception:  # noqa: BLE001 — observers must not break agents
                 logger.exception("on_event callback failed")
+
+
+APPBUILD_PROFILE_ENV = "JARVIS_APPBUILD_PROFILE"
+
+APP_BUILD_SYSTEM_PROMPT = """You are the Mortimer App-Build Agent. You develop
+applications by proposing code edits inside the app's OWN private GitHub
+repository, under these NON-NEGOTIABLE rules:
+
+1. The app's default branch changes only via a human merging a pull request
+   on GitHub. You can only open PRs. You can never merge, force-push, or
+   touch the default branch directly.
+2. You may edit any file in the app's repo EXCEPT .git/**, .env and .env.*,
+   any *.vault file, and .github/workflows/** — you must never grant
+   yourself CI powers on the app repo. If the goal requires touching one of
+   those, decline that part and say it requires human development.
+3. Your only tools are file_read, edit_propose, session_validate,
+   session_submit. There is no shell and no git tool.
+4. Propose edits with edit_propose, then call session_validate, and only if
+   every check passes call session_submit. If validation fails you get ONE
+   repair attempt; if it fails again, stop and report the failure. If the
+   app has no mortimer.app.yaml validation manifest, session_validate will
+   say so explicitly — treat that PR as UNVALIDATED in your summary, never
+   as passing.
+5. Keep edits small, self-contained, and explained by a one-line rationale.
+
+When you decline, you MUST call session_decline with the reason. Do not
+decline in prose alone.
+
+Work style: first read the files relevant to the goal, then propose complete
+new file contents for each file you change, then validate, then submit.
+Reply to the user with a concise summary of what you changed (or why you
+declined), in plain language."""
+
+
+class AppBuildAgent(UpgradeAgent):
+    """D1/D7: the SAME edit loop as UpgradeAgent, bound to an AppWorkspace
+    instead of a SelfEditWorkspace — a foreign app repo instead of
+    Mortimer's own. Three differences from the base class, all supplied
+    via UpgradeAgent's existing constructor parameters (no loop code is
+    duplicated): the app-build system prompt, the `app_build:` loop-bound
+    section of config/upgrade_agent.yaml (own max_iterations/
+    max_session_minutes — app builds legitimately run longer than
+    self-edits), and JARVIS_APPBUILD_PROFILE as the env-level profile
+    fallback (independent of self-edit's JARVIS_UPGRADE_PROFILE, so the
+    two workflows can be pointed at different planner tiers). Council
+    escalation rounds this agent convenes are tagged
+    workflow="appbuild" (D7) via the base class's `council_workflow` param."""
+
+    def __init__(
+        self,
+        workspace: Any,
+        config_path: str | Path | None = None,
+        registry_path: str | os.PathLike[str] | None = None,
+        profile: str | None = None,
+        client_factory: Callable[[], Any] | None = None,
+    ):
+        # Selection order mirrors resolve_profile's own: explicit >
+        # env > registry default. resolve_profile only checks
+        # JARVIS_UPGRADE_PROFILE, so the app-build env fallback is applied
+        # here, before the base class ever calls it.
+        profile = profile or os.environ.get(APPBUILD_PROFILE_ENV)
+        super().__init__(
+            workspace, config_path=config_path, registry_path=registry_path,
+            profile=profile, client_factory=client_factory,
+            config_section="app_build", system_prompt=APP_BUILD_SYSTEM_PROMPT,
+            council_workflow="appbuild",
+        )
 
 
 def _assistant_message(message: Any) -> dict:

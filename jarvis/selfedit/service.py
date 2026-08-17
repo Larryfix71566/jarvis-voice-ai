@@ -347,6 +347,19 @@ class SelfEditService:
         self._validated_ok = False
         return {"ok": True, "reverted_to": tag}
 
+    def describe_boundary(self) -> str:
+        """A human-readable statement of what this workspace will and
+        won't let an edit touch — surfaced to a scope-advisor council
+        round when the agent declines a goal
+        (jarvis/agents/upgrade_agent.py's session_decline handling).
+        Self-edit's boundary is its allowlist file, verbatim."""
+        try:
+            return (
+                self.repo_root / "config" / "self_edit_allowlist.json"
+            ).read_text(encoding="utf-8")
+        except OSError:
+            return "(allowlist file unavailable)"
+
     def status(self) -> dict:
         return {
             "active": self.branch is not None,

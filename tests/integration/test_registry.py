@@ -19,7 +19,7 @@ ALL_SERVERS = [
 # alongside a main that still carried the old number. repo (5) added by
 # MORTIMER_AGENT_TRUST_PLAN.md D10-D12: repo_read_file, repo_list_files,
 # repo_search, repo_write_file, repo_commit_write.
-TOTAL_TOOLS = 52  # 4 + 7 + 5 + 3 + 2 + 8 + 5 + 5 + 9 + 4 (C1: mcp-runlog)
+TOTAL_TOOLS = 55  # 4+7+5+3+2+8+5(apps)+5(repo)+9+4(runlog) + 3 (D6: app_build_*)
 
 
 @pytest.fixture
