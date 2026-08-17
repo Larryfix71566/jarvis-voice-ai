@@ -29,7 +29,9 @@ UI_ACTIONS = frozenset({
     "mic_mute", "wake_on", "wake_off",
 })
 
-UI_TABS = frozenset({"repo", "edit", "memory", "runs", "developer", "output"})
+UI_TABS = frozenset({
+    "repo", "edit", "memory", "runs", "developer", "output", "transcript",
+})
 
 # Actions for which a tab argument is meaningful. drawer_tab REQUIRES it;
 # drawer_open accepts it optionally.
@@ -44,10 +46,11 @@ UI_CONTROL_SCHEMA = {
             "Control the console interface. Call when the user asks to "
             "open/close/show/hide a UI element by voice. Actions: "
             "drawer_open (optional tab) — the right-side tabbed panel "
-            "holding Repo/Edit/Memory/Runs/Developer/Output; users may "
-            "call it the drawer, side panel, sidebar, or sidecar — "
-            "drawer_close, drawer_tab (requires tab), transcript_open, "
-            "transcript_close (the conversation log), display_popout "
+            "holding Repo/Edit/Memory/Runs/Developer/Output/Transcript; "
+            "users may call it the drawer, side panel, sidebar, or "
+            "sidecar — drawer_close, drawer_tab (requires tab; the "
+            "transcript tab is the conversation log), transcript_open, "
+            "transcript_close (shortcuts for the log tab), display_popout "
             "(move informational content like weather or research to the "
             "SEPARATE pop-out display window — 'the big screen' / 'the "
             "other screen' / 'second monitor'; NOT the drawer), "

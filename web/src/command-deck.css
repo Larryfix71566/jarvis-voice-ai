@@ -221,36 +221,10 @@
   text-shadow: 0 0 14px var(--accent-faint);
 }
 
-/* --- transcript drawer ---
-   A .stage-row flex child that PUSHES the stage, exactly like the side
-   drawer (sidedrawer.css), rather than the fixed overlay it used to be —
-   an overlay covered the stage's right edge while the readout/satellites/
-   wave stayed centered on the full viewport, so nothing re-centered when
-   the Log opened. As a flex sibling, opening it shrinks .orb-field, whose
-   published rect re-centers everything (including the wave, which tracks
-   the stage center). Width transition matches the side drawer's 0.28s. */
-.drawer {
-  flex: 0 0 auto;
-  width: 0;
-  overflow: hidden;
-  background: rgba(4, 9, 12, 0.97);
-  border-left: 1px solid var(--hairline);
-  transition: width 0.28s ease;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.drawer-open {
-  width: min(400px, 90vw);
-}
-
-/* Keep inner content at full width during the collapse transition so
-   text doesn't reflow/squish while the panel animates shut. */
-.drawer-head,
-.drawer-body {
-  min-width: min(400px, 90vw);
-}
+/* --- transcript drawer: RETIRED (topbar-collapse) --- the Log is now a
+   tab inside the side drawer (SideDrawer.tsx "transcript"); the
+   standalone .drawer panel and its styles are gone. .transcript /
+   .bubble-* styles below live on as the tab's content. */
 
 .drawer-head {
   display: flex;
