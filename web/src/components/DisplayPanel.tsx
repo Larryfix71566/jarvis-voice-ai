@@ -127,14 +127,17 @@ export default function DisplayPanel() {
       subscribeLatest((payload) => {
         setItem(payload);
         setDismissed(false);
-        if (payload && popout && !hasLivePopup()) {
+        // Preference is read from its source of truth at decision time,
+        // not from mount-time state — the topbar's ⧉ Display button also
+        // sets it, and localStorage is not reactive.
+        if (payload && readPopoutPreference() && !hasLivePopup()) {
           const win = openDisplayWindow();
           setPopupOpen(win !== null);
           // win === null → browser blocked the popup; popupOpen stays
           // false, so the in-page panel below renders the fallback.
         }
       }),
-    [popout],
+    [],
   );
 
   // Named-window reuse (D41) has no single open/close event to hook, so a

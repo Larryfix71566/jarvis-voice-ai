@@ -24,7 +24,13 @@ import {
   hasPendingDraft,
   subscribeResults,
 } from "./displayResults";
-import { publish as publishWindowPayload, wireConsoleSide } from "./displayWindow";
+import {
+  hasLivePopup,
+  openDisplayWindow,
+  publish as publishWindowPayload,
+  wireConsoleSide,
+  writePopoutPreference,
+} from "./displayWindow";
 import { applyUiMessage, subscribeUiCommands } from "./uiCommands";
 import { play as playSound, setSoundsEnabled, soundsEnabled } from "./sounds";
 import type { VoiceState } from "./voiceState";
@@ -268,6 +274,21 @@ export default function App() {
   // Engagement plan E1 — amber needs-your-confirmation state, derived
   // from the display-results store's one rule (hasPendingDraft).
   const [attention, setAttention] = useState(hasPendingDraft);
+
+  // Topbar ⧉ Display button: live state mirrors DisplayPanel's 1s poll
+  // (named-window reuse has no open/close event to hook).
+  const [displayLive, setDisplayLive] = useState(hasLivePopup);
+  useEffect(() => {
+    const id = window.setInterval(() => setDisplayLive(hasLivePopup()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const openDisplay = () => {
+    // Same semantics as DisplayPanel's ⧉: opening from the topbar also
+    // opts in to future payloads going to the popup.
+    writePopoutPreference(true);
+    const win = openDisplayWindow();
+    setDisplayLive(win !== null);
+  };
   useEffect(
     () => subscribeResults(() => setAttention(hasPendingDraft())),
     [],
@@ -355,6 +376,25 @@ export default function App() {
               aria-hidden="true"
             />
           )}
+        </button>
+        {/* Persistent display-window control: the ⧉ inside DisplayPanel
+            only exists while a result is showing, which left no way to
+            open (or re-place) the second-screen window from an idle
+            console. Opening with no payload shows "Waiting for a
+            result…"; clicking while it's already open re-runs
+            extended-screen placement (a no-op on browsers without the
+            Window Management API — Safari drags it once by hand). */}
+        <button
+          type="button"
+          className={displayLive ? "btn btn-active" : "btn"}
+          onClick={openDisplay}
+          title={
+            displayLive
+              ? "Display window is open — click to refocus / move it to the extra screen"
+              : "Open the display window (park it on a second monitor)"
+          }
+        >
+          ⧉ Display
         </button>
       </header>
 
