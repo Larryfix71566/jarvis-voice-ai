@@ -27,6 +27,16 @@ assignment at dispatch (A1), the existing E1 escalation council when the
 assigned model demonstrably fails, and run-log evidence (`model` column,
 migration 0011) for periodic tuning.
 
+**Extended scope (Larry, 2026-08-17, second decision round):** three
+capability gaps between "what a Cowork session can do" and "what
+Mortimer can do from its own interface" are folded in as Parts C and D —
+(C1) Mortimer cannot read its own run logs, so diagnosis has no agent
+pathway; (C2) the self-edit validation gate does not run the test suite,
+so a self-edit's quality bar is below a human session's; (D) building
+separate applications still runs through the primitive per-file voice
+pathway — the project's founding goal has no equivalent of the
+UpgradeAgent loop.
+
 **Ground rule (same as every plan in this repo):** every decision below
 has already been made. Implement it exactly as written; if something is
 genuinely undecided, that is a defect in this document — stop and report
@@ -252,6 +262,164 @@ is "the shell" — never "sidecar" (the `:7861` admin process), never
 
 ---
 
+## Part C — Investigator + test gate (C1–C2)
+
+### C1 — `mcp_runlog`: read-only run-log access for agents
+
+New MCP server `mcp_servers/mcp_runlog/` (`logic.py` + `server.py` +
+`skill.yaml`, the standard convention — logic pure, DB connection
+injected), READ-ONLY by construction: no tool writes anything. Backed by
+the same `jarvis/runlog/store.py` read helpers the CLI, sidecar, and
+Runs panel already share — a fourth consumer must not grow its own
+query layer. Four tools:
+
+- `runlog_list(agent="", status="", since="", task_contains="",
+  limit=20)` — filters matching the CLI's; `limit` capped at 50; rows
+  return run_id, started_at, agent, status, latency_ms,
+  tools_ok/tools_failed, model, and the task preview.
+- `runlog_detail(run_id)` — the run row plus its events with the
+  bounded previews already stored (never the raw JSONL payload; the
+  detail includes the payload file's path as a string for human
+  follow-up).
+- `runlog_stats(since="7d")` — per-agent, per-status counts and
+  per-model success rates: the "is the tier table working" evidence
+  query, precomputed so a small model can't misaggregate it.
+- `council_list(limit=10)` — round_id, workflow, placement, status,
+  goal preview, winner profile.
+
+Registered in `config/mcp_servers.yaml`; granted to the `developer`
+agent in `config/agents.yaml` (tool descriptions start with "Run log
+(read-only):" per the D13/D14 selection-happens-off-schema-text rule).
+`tests/integration/test_registry.py`'s `TOTAL_TOOLS` becomes 52
+(+4). Every tool description states timestamps are UTC. Non-goal
+(explicit): no `runlog_export`/document-dump tool in v1 — deep
+"have Fable diagnose twenty runs" analysis waits until a real need
+defines its shape; the developer summarizing `runlog_list`/`detail`
+output covers the observed use case ("review the recent logs and find
+why this failed").
+
+### C2 — pytest joins the self-edit validation gate
+
+`jarvis/selfedit/service.py`'s validation sequence gains one check
+after the existing three (allowlist → backend import → frontend build):
+`pytest tests/unit -q`, run as a subprocess from the repo root with the
+same interpreter/venv the import-smoke check uses, timeout
+`VALIDATE_PYTEST_TIMEOUT_S = 300.0` (suite currently ~20s; headroom is
+for cold caches, and a hang must not wedge the sidecar). Output handling
+matches the existing checks: pass/fail plus a bounded output tail in
+the check result. `tests/integration` stays OUT of the gate
+(deliberate: slower, and `test_mcp_web_server`-style
+environment-sensitive tests must not block an edit). A failed suite
+fails validation, which feeds the existing repair attempt and E1
+council escalation unchanged — the quality loop comes free.
+
+CI (`.github/workflows/validate.yml`): the `pytest tests/unit` step
+flips from non-blocking to BLOCKING in the same change — self-edits are
+now held to that bar locally, so CI holding humans to less would be
+backwards.
+
+---
+
+## Part D — App-build engine (D1–D8)
+
+The founding goal: build entire separate applications by voice. Today
+`mcp_apps` scaffolds a repo and writes files one at a time through the
+5-iteration voice loop — no iteration engine exists for apps. Part D
+generalizes the UpgradeAgent loop to foreign repos.
+
+### D1 — `Workspace` seam, then `AppBuildAgent`
+
+`jarvis/agents/upgrade_agent.py`'s edit loop is parameterized by a
+small `Workspace` interface — repo root, write-boundary check,
+validation command list, branch/PR operations — with two
+implementations: `SelfEditWorkspace` (exactly today's behavior: the
+Mortimer repo, the allowlist, allowlist→import→build→pytest checks) and
+`AppWorkspace` (D2–D4). `UpgradeAgent` + `SelfEditWorkspace` must be
+behavior-identical to today — the refactor lands FIRST, alone, with the
+full existing self-edit test suite green, before `AppBuildAgent`
+exists (same lands-alone rule as the popoutWindow extraction).
+`AppBuildAgent` is the same loop bound to an `AppWorkspace`; loop
+bounds come from `config/upgrade_agent.yaml` under a new `app_build:`
+section (own max iterations/minutes — app builds legitimately run
+longer than self-edits; values: `max_iterations: 40`,
+`max_minutes: 60`).
+
+### D2 — Workspace on disk
+
+`data/app_workspaces/<app-name>/` — cloned via the existing
+`mcp_apps/github.py` authenticated client (the ONLY network-touching
+module, unchanged rule). `data/**` is already self-edit-denied and
+gitignored; nothing new leaks into Mortimer's repo. Clone on first
+build; `git pull --ff-only` on subsequent builds; a dirty workspace or
+failed pull refuses the start synchronously (same read-and-refuse
+discipline as review_path).
+
+### D3 — Per-app validation manifest
+
+`mortimer.app.yaml` at the app repo's root: `build:` and `test:` —
+each a list of shell commands run in the workspace root, in order, all
+must exit 0. `app_create`'s scaffold writes a starter manifest from now
+on. An app with no manifest validates as "no checks defined" — the
+build proceeds but the PR body and the spoken summary both say so
+explicitly (an unvalidated PR must never be mistaken for a validated
+one). Command execution uses the same subprocess pattern as C2, timeout
+per command `APP_CHECK_TIMEOUT_S = 600.0`.
+
+### D4 — Write boundary for foreign repos
+
+Inside the workspace tree only, deny-listed: `.git/**`, `.env`,
+`.env.*`, `**/*.vault`, `.github/workflows/**` (an agent must not
+grant itself CI powers on the app repo either). Everything else is
+writable WITHOUT per-file draft→confirm — confirmation happens at the
+two boundaries that matter: the user approves the start (goal + plan +
+app name, two-phase like selfedit_start), and the PR is opened only
+after validation passes AND the user explicitly confirms submission in
+a new turn (same rule as selfedit_submit). Merging stays human, on
+GitHub, always.
+
+### D5 — Sidecar job slot + endpoints
+
+`_appbuild_job`/`_appbuild_lock` in `jarvis/admin/server.py`, the same
+background-thread-plus-polling shape as `_run_job`/`_plan_job`:
+`POST /api/appbuild/start {app, goal, profile?, plan?, plan_path?}`
+(plan_path read-and-refuse identical to selfedit's),
+`GET /api/appbuild/job`, `POST /api/appbuild/submit`,
+`POST /api/appbuild/cancel`. One app build at a time (one slot), and an
+app build does not block self-edit jobs (separate slots, separate
+locks).
+
+### D6 — Voice tools
+
+`mcp_apps` gains `app_build_start` / `app_build_status` /
+`app_build_submit` — thin two-phase HTTP passthroughs, same convention
+as `selfedit_*`/`plan_*`. `TOTAL_TOOLS` becomes 55 (+3 on top of C1's
+52). The developer prompt's app-development paragraph is extended: an
+app implementation of any size goes through `app_build_start` (with
+`plan_path` when a plan exists — plans for apps are authored through
+the existing planning pathway, which is app-agnostic already);
+`app_write_file` remains only for small dictated single-file edits,
+the same routing rule Part A's self-edit sentence uses.
+
+### D7 — Model + escalation
+
+Profile resolution: explicit spoken choice → `JARVIS_APPBUILD_PROFILE`
+env → registry default (mirrors self-edit's order). Council escalation:
+`AppBuildAgent` inherits the E1 trigger through the shared loop
+(validation failed twice + repair failed → convene), rounds written
+with `workflow="appbuild"` — `compute_agreement` needs no change
+(it excludes by workflow only for `"planning"`; appbuild rounds are
+judge-quality evidence like self-edit rounds). No kill switch: an app
+build only runs when explicitly started and confirmed (same rationale
+as DP10).
+
+### D8 — v1 UI: none
+
+Status by voice (`app_build_status`) and `GET /api/appbuild/job` only.
+No console panel in v1 — the Edit panel grew organically from real use;
+the app-build panel should too. Explicit scope guard.
+
+---
+
 ## §2 Files
 
 **Part A — modified:** `config/agents.yaml` (A1 `model_profile`, A3
@@ -271,6 +439,27 @@ short-circuit); `config/self_edit_allowlist.json` (B5 deny `macos/**`);
 `CLAUDE.md` (shell paragraph); `.gitignore` (Xcode noise: `xcuserdata/`,
 `build/`, `DerivedData/`).
 
+**Part C — new:** `mcp_servers/mcp_runlog/{logic.py,server.py,skill.yaml}`,
+`tests/unit/test_mcp_runlog_logic.py`. **Part C — modified:**
+`config/mcp_servers.yaml` + `config/agents.yaml` (register + grant);
+`jarvis/selfedit/service.py` (C2 check + constant);
+`.github/workflows/validate.yml` (pytest blocking);
+`tests/integration/test_registry.py` (`TOTAL_TOOLS` 48→52);
+`tests/unit/test_selfedit_service.py` (C2 gate tests).
+
+**Part D — new:** `jarvis/agents/workspace.py` (the `Workspace` seam +
+both implementations), `jarvis/agents/app_build_agent.py`,
+`tests/unit/test_workspace.py`, `tests/unit/test_app_build_agent.py`,
+`tests/unit/test_admin_appbuild.py`, `tests/acceptance/app-build.md`.
+**Part D — modified:** `jarvis/agents/upgrade_agent.py` (loop
+parameterized by Workspace — behavior-identical refactor);
+`config/upgrade_agent.yaml` (`app_build:` bounds);
+`jarvis/admin/server.py` (D5 slot + endpoints);
+`mcp_servers/mcp_apps/{logic.py,server.py,skill.yaml}` (D6 tools +
+scaffold manifest); `jarvis/prompts.py` (D6 routing sentence);
+`tests/integration/test_registry.py` (`TOTAL_TOOLS` 52→55);
+`.env.example` (`JARVIS_APPBUILD_PROFILE`).
+
 ---
 
 ## §3 Implementation order
@@ -281,15 +470,29 @@ short-circuit); `config/self_edit_allowlist.json` (B5 deny `macos/**`);
 4. A5 docs + acceptance; full pytest; **restart the bot** (prompt and
    config changes are read at boot — last night's failures ran on
    pre-fix prompts for exactly this reason).
-5. B0 spike; record both verdicts in this file.
-6. B1–B4 shell windows + placement + web-side branches (order inside:
+5. C1 `mcp_runlog` server + registration + tests (`TOTAL_TOOLS` 52) —
+   the investigator then helps verify everything after it.
+6. C2 pytest validation gate + CI flip + tests.
+7. B0 spike; record both verdicts in this file.
+8. B1–B4 shell windows + placement + web-side branches (order inside:
    B2 shim first, then windows, then placement).
-7. B5 boundary + build script; B7 naming sweep; acceptance checklists;
+9. B5 boundary + build script; B7 naming sweep; shell acceptance;
    web tsc/lint; full pytest.
+10. D1 Workspace seam refactor — lands ALONE, full existing self-edit
+    suite green, before any AppBuildAgent code.
+11. D2–D4 AppWorkspace (clone/pull, manifest, boundary) + tests.
+12. D5–D7 sidecar slot, mcp_apps tools (`TOTAL_TOOLS` 55), prompts,
+    profile env + tests.
+13. App-build acceptance: one real small app built end-to-end by voice
+    (scaffold → plan via planning pathway → app_build_start with
+    plan_path → validate → confirm → PR).
 
-Part A ships and is verified live before B0 begins — the shell is built
-by voice-driven self-edits wherever possible, which is itself the first
-real test of Part A.
+Ordering rationale, locked: A and C are small and compounding — they
+harden the delegation layer everything later is driven through. B before
+D because the shell changes the daily surface everything is operated
+from, and D (the largest part) then gets built and verified through the
+hardened A+C machinery — Part D's own acceptance test doubles as the
+system's first real autonomous-build exercise.
 
 ---
 
@@ -312,6 +515,20 @@ real test of Part A.
       voice popout commands work in-shell; `⧉` in a plain browser still
       works; drawer/display single-place rules hold in both modes;
       `macos/**` refused by a test self-edit.
+- [ ] C1: "review the recent developer runs and tell me why the last
+      one failed" → developer answers from `runlog_list`/`runlog_detail`
+      with real run data, no fabrication; `runlog_stats` shows per-model
+      success rates.
+- [ ] C2: a self-edit that breaks a unit test FAILS validation with the
+      test output in the check result; repair/escalation proceed; CI
+      pytest step is blocking.
+- [ ] D refactor: full self-edit test suite green with UpgradeAgent on
+      SelfEditWorkspace, zero behavior change, BEFORE AppBuildAgent
+      lands.
+- [ ] D end-to-end: one small real app — scaffold, plan, build from
+      plan_path, manifest checks pass, user-confirmed PR on the app
+      repo; a manifest-less app's PR and spoken summary both flag "no
+      checks defined"; deny-listed paths (`.git`, workflows) refused.
 - [ ] Full pytest + web build/lint clean after every step above.
 
 ---
@@ -326,6 +543,10 @@ real test of Part A.
 | WKWebView mic fails (B0-1) | Medium | Predecided partial-adoption fallback keeps console in browser; multi-screen goal still met |
 | BroadcastChannel doesn't span webviews (B0-2) | Medium | Predecided shim relay; pages unchanged |
 | Shell drifts into an app platform | Low | B6 scope guard: three windows and placement, nothing else in v1 |
+| Flaky unit test blocks all self-edits (C2) | Low | Suite is network-free/deterministic today; a flake is fixed or skipped as its own bug, not by weakening the gate |
+| Workspace-seam refactor regresses self-edit (D1) | High | Lands alone with the full existing suite green before any new code; behavior-identical is the acceptance bar |
+| App build damages a foreign repo | Medium | Work confined to `data/app_workspaces/`; PR-only delivery (never direct push to main); deny list on `.git`/workflows/secrets; human merges |
+| 40-iteration app builds run up cost | Medium | Explicit start confirmation names the profile; bounds in `config/upgrade_agent.yaml`; run log records model + tokens |
 
 ---
 
@@ -336,7 +557,13 @@ behavior; `docs/REPO_MAP.md` inert when unreferenced. A2: delete the
 guard block + prompt rule. B: the shell is additive — deleting
 `macos/` and the two web-side branches restores the browser-only
 console; `web/src` never depends on the shell's presence (every branch
-is feature-detected). No migrations, no data.
+is feature-detected). C1: unregister the server (tool count reverts).
+C2: remove the check + revert the CI flip. D: `AppBuildAgent`, the
+sidecar slot, and the mcp_apps tools are additive and revert
+file-by-file; the D1 refactor is NOT rolled back once landed (it is
+behavior-identical by its own acceptance bar — rolling it back buys
+nothing); `data/app_workspaces/` is disposable. No migrations, no
+data-shape changes anywhere in this plan.
 
 ---
 
