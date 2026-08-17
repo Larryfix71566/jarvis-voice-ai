@@ -10,7 +10,6 @@ import OrbField from "./components/OrbField";
 import VoiceWave from "./components/VoiceWave";
 import DisplayPanel from "./components/DisplayPanel";
 import MicControls from "./components/MicControls";
-import TranscriptDrawer from "./components/TranscriptDrawer";
 import VoicePicker from "./components/VoicePicker";
 import AgentStatusPanel from "./components/AgentStatusPanel";
 import SideDrawer, {
@@ -93,7 +92,6 @@ function readStoredTab(): TabKey {
 export default function App() {
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState<boolean>(readStoredOpen);
   const [drawerTab, setDrawerTab] = useState<TabKey>(readStoredTab);
   const [drawerWidth, setDrawerWidth] = useState<number>(readStoredWidth);
@@ -182,7 +180,6 @@ export default function App() {
           }
           if (tab !== null) setDrawerTab(tab);
           setDrawerOpen(true);
-          setTranscriptOpen(false); // plan D17
           return;
         }
         case "drawer_close": {
@@ -204,24 +201,25 @@ export default function App() {
           }
           setDrawerTab(tab);
           setDrawerOpen(true);
-          setTranscriptOpen(false); // plan D17
           return;
         }
+        // The Log is a drawer tab now (topbar-collapse) — these two
+        // actions remain in the tool vocabulary as shortcuts for it.
         case "transcript_open": {
-          if (transcriptOpen) {
+          if (drawerOpen && drawerTab === "transcript") {
             noop("The transcript is already open.");
             return;
           }
-          setTranscriptOpen(true);
-          setDrawerOpen(false); // plan D17
+          setDrawerTab("transcript");
+          setDrawerOpen(true);
           return;
         }
         case "transcript_close": {
-          if (!transcriptOpen) {
-            noop("The transcript is already closed.");
+          if (!drawerOpen || drawerTab !== "transcript") {
+            noop("The transcript isn't open.");
             return;
           }
-          setTranscriptOpen(false);
+          setDrawerOpen(false);
           return;
         }
         default:
@@ -229,7 +227,7 @@ export default function App() {
           return;
       }
     });
-  }, [client, drawerOpen, drawerTab, transcriptOpen]);
+  }, [client, drawerOpen, drawerTab]);
 
   // Read-only subscription to the run store, for the D7 topbar indicator.
   // This must NOT register a second RTVI listener — AgentStatusPanel is the
@@ -262,49 +260,34 @@ export default function App() {
     }
   }, [drawerTab]);
 
-  // Plan D5's three-case toggle: closed -> open on X; open on X -> close
-  // (tab stays X for next open); open on Y -> switch to X, stay open.
-  // Opening or switching the side drawer closes the transcript drawer
-  // (plan D17 — both live at the right edge, z-20).
-  const onTabButton = (tab: TabKey) => {
-    if (drawerOpen && drawerTab === tab) {
-      setDrawerOpen(false);
-      return;
-    }
-    setDrawerTab(tab);
-    setDrawerOpen(true);
-    setTranscriptOpen(false);
-  };
+  // Topbar-collapse: one toggle button replaces the six per-tab buttons
+  // (the drawer's own tab strip is the tab switcher; voice reaches tabs
+  // directly). Toggle = open on the last-used tab / close.
+  const toggleDrawer = () => setDrawerOpen((o) => !o);
 
-  const openTranscript = (open: boolean) => {
-    setTranscriptOpen(open);
-    if (open) setDrawerOpen(false); // plan D17
-  };
-
-  // T toggles the transcript drawer (voice-first; text on demand).
-  // Escape closes the side drawer (plan D20) — window-level, same shape and
-  // same isTypingTarget guard, so there is one keyboard pattern in this
-  // file rather than two. The guard is why Escape inside a panel's text
-  // input does not close the drawer out from under the user mid-edit.
+  // T toggles the Log — now the drawer's transcript tab (three-case:
+  // closed -> open on transcript; open on transcript -> close; open on
+  // another tab -> switch). Escape closes the drawer (plan D20) —
+  // window-level, one keyboard pattern, with the isTypingTarget guard so
+  // Escape inside a panel's text input does not close the drawer out
+  // from under the user mid-edit.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat || isTypingTarget(e.target)) return;
       if (e.code === "KeyT") {
-        setTranscriptOpen((o) => {
-          const next = !o;
-          if (next) setDrawerOpen(false); // plan D17
-          return next;
-        });
+        if (drawerOpen && drawerTab === "transcript") {
+          setDrawerOpen(false);
+        } else {
+          setDrawerTab("transcript");
+          setDrawerOpen(true);
+        }
       } else if (e.key === "Escape") {
         setDrawerOpen((o) => (o ? false : o));
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  const tabButtonClass = (tab: TabKey) =>
-    "btn" + (drawerOpen && drawerTab === tab ? " btn-active" : "");
+  }, [drawerOpen, drawerTab]);
 
   return (
     <div className="app">
@@ -313,76 +296,24 @@ export default function App() {
         <div className="brand">MORTIMER</div>
         <ConnectButton />
         <VoicePicker />
+        {/* Topbar-collapse: ONE toggle replaces the old six per-tab
+            buttons and the Log button — the drawer's own tab strip (now
+            including a Log tab) is the switcher, and voice reaches every
+            tab directly ("show me the runs"). The aggregate dot carries
+            the D7/D31 always-visible signals (live self-edit run, new
+            output) while the drawer is closed; the per-tab dots inside
+            the drawer say which tab wants attention once it's open. */}
         <button
           type="button"
-          className={tabButtonClass("repo")}
-          aria-expanded={drawerOpen && drawerTab === "repo"}
-          onClick={() => onTabButton("repo")}
-          title="Repository (admin sidecar)"
+          className={drawerOpen ? "btn btn-active" : "btn"}
+          aria-expanded={drawerOpen}
+          onClick={toggleDrawer}
+          title="Console panels (Esc closes · T opens the Log)"
         >
-          ⚙ Repo
-        </button>
-        <button
-          type="button"
-          className={tabButtonClass("edit")}
-          aria-expanded={drawerOpen && drawerTab === "edit"}
-          onClick={() => onTabButton("edit")}
-          title="Self-development edit mode (PRs only — merge on GitHub)"
-        >
-          ✎ Edit
-        </button>
-        <button
-          type="button"
-          className={tabButtonClass("memory")}
-          aria-expanded={drawerOpen && drawerTab === "memory"}
-          onClick={() => onTabButton("memory")}
-          title="Long-term memory (view and forget facts)"
-        >
-          🧠 Memory
-        </button>
-        <button
-          type="button"
-          className={tabButtonClass("runs")}
-          aria-expanded={drawerOpen && drawerTab === "runs"}
-          onClick={() => onTabButton("runs")}
-          title="Sub-agent run history"
-        >
-          📋 Runs
-        </button>
-        <button
-          type="button"
-          className={tabButtonClass("developer")}
-          aria-expanded={drawerOpen && drawerTab === "developer"}
-          onClick={() => onTabButton("developer")}
-          title="Development run status (live self-edit progress)"
-        >
-          🛠 Dev
-          {/* Plan D7: the topbar is the only always-visible surface, so the
-              live self-edit indicator has to live here — otherwise a
-              multi-minute run behind a closed drawer has no on-screen
-              evidence at all. */}
-          {devRunning && <span className="btn-live-dot" aria-hidden="true" />}
-        </button>
-        <button
-          type="button"
-          className={tabButtonClass("output")}
-          aria-expanded={drawerOpen && drawerTab === "output"}
-          onClick={() => onTabButton("output")}
-          title="Output — work-product results (diffs, commits, app scaffolds)"
-        >
-          📄 Output
-          {/* Plan D31: a new drawer-routed result while the drawer is open
-              on another tab shows a dot here rather than yanking the user
-              off what they're reading. */}
-          {outputDot && <span className="btn-live-dot" aria-hidden="true" />}
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={() => openTranscript(!transcriptOpen)}
-          title="Transcript history (T)"
-        >
-          Log
+          {drawerOpen ? "◨ Close" : "◧ Panels"}
+          {!drawerOpen && (devRunning || outputDot) && (
+            <span className="btn-live-dot" aria-hidden="true" />
+          )}
         </button>
       </header>
 
@@ -400,21 +331,9 @@ export default function App() {
           activeTab={drawerTab}
           width={drawerWidth}
           outputDot={outputDot}
-          onTabChange={(tab) => {
-            setDrawerTab(tab);
-            setTranscriptOpen(false);
-          }}
+          onTabChange={setDrawerTab}
           onClose={() => setDrawerOpen(false)}
           onWidthChange={setDrawerWidth}
-        />
-
-        {/* Inside .stage-row so opening the Log PUSHES the stage like the
-            side drawer does (the whole composition, wave included,
-            re-centers on the remaining width). D17's mutual exclusivity
-            means the two drawers never fight for the same edge. */}
-        <TranscriptDrawer
-          open={transcriptOpen}
-          onClose={() => setTranscriptOpen(false)}
         />
       </div>
 

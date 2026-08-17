@@ -6,6 +6,7 @@ import MemoryPanel from "./MemoryPanel";
 import RunsPanel from "./RunsPanel";
 import DeveloperRunsTab from "./DeveloperRunsTab";
 import OutputTab from "./OutputTab";
+import Transcript from "./Transcript";
 import { getRuns, isSelfEditRun, subscribeRuns } from "../agentRuns";
 
 /**
@@ -34,7 +35,10 @@ export type TabKey =
   | "memory"
   | "runs"
   | "developer"
-  | "output"; // plan D35 — drawer-routed display results (D28/D32)
+  | "output" // plan D35 — drawer-routed display results (D28/D32)
+  | "transcript"; // topbar-collapse: the Log folded in as a tab (the old
+                  // standalone TranscriptDrawer is retired — one drawer,
+                  // one right edge, no exclusivity dance)
 
 /** Tab order in the strip — also the order used to validate a stored
  * `mortimer.drawer.tab` value in App.tsx (plan D13). */
@@ -45,6 +49,7 @@ export const TAB_KEYS: readonly TabKey[] = [
   "runs",
   "developer",
   "output",
+  "transcript",
 ];
 
 const TAB_LABELS: Record<TabKey, string> = {
@@ -54,6 +59,7 @@ const TAB_LABELS: Record<TabKey, string> = {
   runs: "Runs",
   developer: "Developer",
   output: "Output",
+  transcript: "Log",
 };
 
 // --- tuning knobs (plan §6) ---------------------------------------------
@@ -199,6 +205,8 @@ export default function SideDrawer({
         return <DeveloperRunsTab />;
       case "output":
         return <OutputTab />;
+      case "transcript":
+        return <Transcript />;
     }
   };
 
