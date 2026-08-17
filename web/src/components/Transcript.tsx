@@ -1,19 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { usePipecatConversation } from "@pipecat-ai/client-react";
-import type { ConversationMessage } from "@pipecat-ai/client-react";
 import { getRuns, subscribeRuns, type RunState } from "../agentRuns";
-
-function messageText(message: ConversationMessage): string {
-  return message.parts
-    .map((part) => {
-      if (typeof part.text === "string") return part.text;
-      if (part.text && typeof part.text === "object" && "spoken" in part.text) {
-        return part.text.spoken;
-      }
-      return "";
-    })
-    .join("");
-}
+import {
+  getConversation,
+  subscribeConversation,
+  type ConversationEntry,
+} from "../conversationFeed";
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -24,28 +15,30 @@ function formatTime(iso: string): string {
 // spoken message or a run-event chip ("→ Analyst" at start, "✓/✗" at
 // completion), ordered by timestamp so the Log tells the session's
 // story, not just its words.
+//
+// DP4: this used to read `usePipecatConversation()` directly — a session
+// hook unusable in the popped-out drawer window. It now reads
+// conversationFeed.ts's store instead (fed, in the console, by the ONE
+// remaining usePipecatConversation consumer in App.tsx; fed, in the
+// drawer window, by relayed events) — same content, same ordering, same
+// live updates, just a different supply line depending on context.
 type FlowItem =
-  | { kind: "message"; at: number; message: ConversationMessage }
+  | { kind: "message"; at: number; entry: ConversationEntry }
   | { kind: "chip"; at: number; label: string; tone: "start" | "ok" | "fail" };
 
 export default function Transcript() {
-  const { messages } = usePipecatConversation();
+  const [visible, setVisible] = useState<ConversationEntry[]>(getConversation);
   const [runs, setRuns] = useState<RunState[]>(getRuns);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
+  useEffect(() => subscribeConversation(setVisible), []);
   useEffect(() => subscribeRuns(setRuns), []);
-
-  const visible = messages.filter(
-    (m) =>
-      (m.role === "user" || m.role === "assistant") &&
-      messageText(m).trim() !== "",
-  );
 
   const flow: FlowItem[] = [
     ...visible.map((m): FlowItem => ({
       kind: "message",
       at: new Date(m.createdAt).getTime() || 0,
-      message: m,
+      entry: m,
     })),
     ...runs.flatMap((r): FlowItem[] => {
       const items: FlowItem[] = [
@@ -70,7 +63,7 @@ export default function Transcript() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, runs]);
+  }, [visible, runs]);
 
   return (
     <div className="transcript">
@@ -89,23 +82,23 @@ export default function Transcript() {
           </div>
         ) : (
           <div
-            key={`${item.message.createdAt}-${i}`}
+            key={`${item.entry.id}-${i}`}
             className={
-              item.message.role === "user"
+              item.entry.role === "user"
                 ? "bubble-row bubble-right"
                 : "bubble-row bubble-left"
             }
           >
             <div
               className={
-                item.message.role === "user" ? "bubble bubble-user" : "bubble bubble-jarvis"
+                item.entry.role === "user" ? "bubble bubble-user" : "bubble bubble-jarvis"
               }
             >
               <div className="bubble-meta">
-                {item.message.role === "user" ? "You" : "Mortimer"} ·{" "}
-                {formatTime(item.message.createdAt)}
+                {item.entry.role === "user" ? "You" : "Mortimer"} ·{" "}
+                {formatTime(item.entry.createdAt)}
               </div>
-              <div className="bubble-text">{messageText(item.message)}</div>
+              <div className="bubble-text">{item.entry.text}</div>
             </div>
           </div>
         ),

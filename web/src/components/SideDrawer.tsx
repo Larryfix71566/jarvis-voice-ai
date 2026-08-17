@@ -100,6 +100,9 @@ export interface SideDrawerProps {
   onTabChange: (tab: TabKey) => void;
   onClose: () => void;
   onWidthChange: (width: number) => void;
+  /** MORTIMER_DRAWER_POPOUT_PLAN.md DP6 — pop the drawer to the second
+   * screen. App.tsx passes openDrawerWindow (write-preference + open). */
+  onPopOut: () => void;
 }
 
 export default function SideDrawer({
@@ -110,6 +113,7 @@ export default function SideDrawer({
   onTabChange,
   onClose,
   onWidthChange,
+  onPopOut,
 }: SideDrawerProps) {
   const [resizing, setResizing] = useState(false);
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -278,6 +282,15 @@ export default function SideDrawer({
                 )}
               </button>
             ))}
+            <button
+              type="button"
+              className="side-drawer-popout"
+              onClick={onPopOut}
+              title="Pop out to a separate window (park on a second monitor)"
+              aria-label="Pop out panels"
+            >
+              ⧉
+            </button>
             <button
               type="button"
               className="side-drawer-close"

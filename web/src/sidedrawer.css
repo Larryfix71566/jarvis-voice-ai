@@ -134,8 +134,26 @@
   box-shadow: 0 0 8px var(--attn);
 }
 
-.side-drawer-close {
+/* MORTIMER_DRAWER_POPOUT_PLAN.md DP6 — pop-out button, right end of the
+   tab strip, left of the close ×. Reuses .side-drawer-close's plain-text
+   button styling since both are chrome controls, not tabs. */
+.side-drawer-popout {
   margin-left: auto;
+  font-family: var(--mono);
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 6px;
+}
+
+.side-drawer-popout:hover {
+  color: var(--accent);
+}
+
+.side-drawer-close {
   font-family: var(--mono);
   background: none;
   border: none;
@@ -346,4 +364,43 @@
   .side-drawer-handle {
     display: none;
   }
+}
+
+/* --- popped-out drawer window chrome (MORTIMER_DRAWER_POPOUT_PLAN.md DP1)
+   — full-bleed, no width drag (the OS window is the size control). Reuses
+   .side-drawer-tabs/.side-drawer-tab/.side-drawer-tab-dot for the strip so
+   the popped window's tab strip looks identical to the in-page one; only
+   the outer chrome (full-height flex column instead of a fixed-width
+   flex-basis aside) is new. The html/body/#root page reset lives in
+   drawerwindow.css instead (imported ONLY by drawerMain.tsx, mirroring
+   displaywindow.css) — this file is also imported by the main console's
+   App.tsx, and a body{} rule here would leak into it. */
+.drawer-window {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: rgba(4, 9, 12, 0.97);
+}
+
+.drawer-window-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+
+.drawer-window-body :is(.git-panel, .editmode-panel, .memory-panel, .runs-panel, .output-tab) {
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.drawer-window-body .git-panel {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }

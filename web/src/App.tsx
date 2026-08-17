@@ -3,8 +3,10 @@ import { RTVIEvent } from "@pipecat-ai/client-js";
 import {
   usePipecatClient,
   usePipecatClientTransportState,
+  usePipecatConversation,
   useRTVIClientEvent,
 } from "@pipecat-ai/client-react";
+import type { ConversationMessage } from "@pipecat-ai/client-react";
 import ConnectButton from "./components/ConnectButton";
 import OrbField from "./components/OrbField";
 import VoiceWave from "./components/VoiceWave";
@@ -32,6 +34,15 @@ import {
   writePopoutPreference,
 } from "./displayWindow";
 import { applyUiMessage, subscribeUiCommands } from "./uiCommands";
+import { _setConversation } from "./conversationFeed";
+import {
+  closeDrawerWindow,
+  hasLiveDrawerWindow,
+  openDrawerWindow,
+  readDrawerPopoutPreference,
+  wireDrawerConsoleSide,
+  writeDrawerPopoutPreference,
+} from "./drawerRelay";
 import { play as playSound, setSoundsEnabled, soundsEnabled } from "./sounds";
 import type { VoiceState } from "./voiceState";
 import "./App.css";
@@ -52,6 +63,49 @@ function errorText(message: unknown): string {
     if (typeof o.message === "string") return o.message;
   }
   return "An error occurred.";
+}
+
+function messageText(message: ConversationMessage): string {
+  return message.parts
+    .map((part) => {
+      if (typeof part.text === "string") return part.text;
+      if (part.text && typeof part.text === "object" && "spoken" in part.text) {
+        return part.text.spoken;
+      }
+      return "";
+    })
+    .join("");
+}
+
+/**
+ * ConversationFeeder — DP4's ONE remaining usePipecatConversation()
+ * consumer. Headless (renders nothing): every time the session's message
+ * list changes, it filters to visible user/assistant text (same filter
+ * Transcript.tsx used to apply itself) and pushes the result into
+ * conversationFeed.ts, which both the in-page Log tab and (via the drawer
+ * relay) a popped-out drawer window read from. Keeping this the only
+ * caller of the hook is what lets Transcript.tsx be reused, unmodified,
+ * inside drawerMain.tsx's Vite entry — which must never construct a
+ * PipecatClient or call a pipecat-client-react hook (DP1).
+ */
+function ConversationFeeder() {
+  const { messages } = usePipecatConversation();
+  useEffect(() => {
+    const visible = messages.filter(
+      (m) =>
+        (m.role === "user" || m.role === "assistant") &&
+        messageText(m).trim() !== "",
+    );
+    _setConversation(
+      visible.map((m, i) => ({
+        id: `${m.createdAt}-${i}`,
+        role: m.role,
+        createdAt: m.createdAt,
+        text: messageText(m),
+      })),
+    );
+  }, [messages]);
+  return null;
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -186,6 +240,42 @@ export default function App() {
   // Wire the console side of the popup relay once (D40's hello/replay
   // handshake) — idempotent internally, but one mount is enough.
   useEffect(() => wireConsoleSide(), []);
+  // Same idea for the drawer window's store relay (DP3) — separate
+  // channel, separate wiring, same one-mount-is-enough guard internally.
+  useEffect(() => wireDrawerConsoleSide(), []);
+
+  // DP5: while a drawer window is alive, the in-page drawer body must not
+  // render and the topbar Panels button switches meaning. Polled like
+  // displayLive below (named-window reuse/heartbeat presence has no
+  // single open/close event to hook).
+  const [drawerWinLive, setDrawerWinLive] = useState(hasLiveDrawerWindow);
+  useEffect(() => {
+    const id = window.setInterval(() => setDrawerWinLive(hasLiveDrawerWindow()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const openDrawerPopout = () => {
+    writeDrawerPopoutPreference(true);
+    openDrawerWindow();
+    setDrawerWinLive(true);
+  };
+  // DP9: if a previous session left the popout preference on (the window
+  // outlived the console's ref but died some other way before this load),
+  // reopen it on the FIRST user gesture anywhere — matching browser popup
+  // rules, which block window.open() outside a gesture. One-shot: removes
+  // itself after firing, and never fires at all if a live window is
+  // already found (nothing to reopen).
+  useEffect(() => {
+    if (!readDrawerPopoutPreference() || hasLiveDrawerWindow()) return;
+    const onFirstGesture = () => {
+      window.removeEventListener("pointerdown", onFirstGesture);
+      if (!hasLiveDrawerWindow()) {
+        openDrawerWindow();
+        setDrawerWinLive(true);
+      }
+    };
+    window.addEventListener("pointerdown", onFirstGesture);
+    return () => window.removeEventListener("pointerdown", onFirstGesture);
+  }, []);
 
   // Clear the Output dot once the tab is actually viewed (D31).
   useEffect(() => {
@@ -256,12 +346,31 @@ export default function App() {
           setDrawerOpen(false);
           return;
         }
+        // DP6 — pop the panels out to the second screen / bring them back.
+        case "drawer_popout": {
+          if (drawerWinLive) {
+            noop("The panels are already on the display screen.");
+            return;
+          }
+          openDrawerPopout();
+          return;
+        }
+        case "drawer_popin": {
+          if (!drawerWinLive) {
+            noop("The panels aren't popped out.");
+            return;
+          }
+          closeDrawerWindow();
+          writeDrawerPopoutPreference(false);
+          setDrawerWinLive(false);
+          return;
+        }
         default:
           // display_*/mic_*/wake_* belong to DisplayPanel/MicControls.
           return;
       }
     });
-  }, [client, drawerOpen, drawerTab]);
+  }, [client, drawerOpen, drawerTab, drawerWinLive]);
 
   // Read-only subscription to the run store, for the D7 topbar indicator.
   // This must NOT register a second RTVI listener — AgentStatusPanel is the
@@ -348,6 +457,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <ConversationFeeder />
       <VoiceWave state={voiceState} />
       <header className="topbar">
         <div className="brand">MORTIMER</div>
@@ -362,15 +472,22 @@ export default function App() {
             the drawer say which tab wants attention once it's open. */}
         <button
           type="button"
-          className={drawerOpen ? "btn btn-active" : "btn"}
+          className={drawerOpen || drawerWinLive ? "btn btn-active" : "btn"}
           aria-expanded={drawerOpen}
-          onClick={toggleDrawer}
-          title="Console panels (Esc closes · T opens the Log)"
+          onClick={drawerWinLive ? openDrawerPopout : toggleDrawer}
+          title={
+            drawerWinLive
+              ? "Panels are on the display screen — click to focus/move"
+              : "Console panels (Esc closes · T opens the Log)"
+          }
         >
-          {drawerOpen ? "◨ Close" : "◧ Panels"}
+          {/* DP5: while popped, the button's meaning and label change —
+              it no longer toggles the in-page drawer (which is hidden),
+              it refocuses/re-places the popped window. */}
+          {drawerWinLive ? "◪ Panels ⧉" : drawerOpen ? "◨ Close" : "◧ Panels"}
           {/* E1: attention (amber, pending confirmation) outranks the
-              cyan live/new signal. */}
-          {!drawerOpen && (devRunning || outputDot || attention) && (
+              cyan live/new signal. Fed by the same stores in both modes. */}
+          {!drawerOpen && !drawerWinLive && (devRunning || outputDot || attention) && (
             <span
               className={attention ? "btn-live-dot btn-live-dot-attn" : "btn-live-dot"}
               aria-hidden="true"
@@ -406,15 +523,20 @@ export default function App() {
         </main>
 
         {/* Always mounted (plan D23) — an element cannot transition into
-            existence, and the run store outlives the tab bodies. */}
+            existence, and the run store outlives the tab bodies. DP5:
+            `open` is forced false while a drawer window is live — the
+            underlying `drawerOpen`/`drawerTab` state is left untouched so
+            it can be restored verbatim once the window closes (D41's
+            fallback-never-loses-anything rule). */}
         <SideDrawer
-          open={drawerOpen}
+          open={drawerOpen && !drawerWinLive}
           activeTab={drawerTab}
           width={drawerWidth}
           outputDot={outputDot}
           onTabChange={setDrawerTab}
           onClose={() => setDrawerOpen(false)}
           onWidthChange={setDrawerWidth}
+          onPopOut={openDrawerPopout}
         />
       </div>
 
