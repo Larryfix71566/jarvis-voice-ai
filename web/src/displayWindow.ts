@@ -257,7 +257,19 @@ export function hasLivePopup(): boolean {
  * rather than silently losing the payload. */
 export function openDisplayWindow(): Window | null {
   if (hasLivePopup()) {
-    popupRef!.focus();
+    // A popup alive only via heartbeat (console reloaded, ref lost):
+    // recover the ref through named-window reuse — an empty URL returns
+    // the existing window WITHOUT navigating/reloading it.
+    if (popupRef === null || popupRef.closed) {
+      popupRef = window.open("", "mortimer-display");
+    }
+    if (popupRef && !popupRef.closed) {
+      popupRef.focus();
+      // Re-run placement on every open request, not just the first: an
+      // already-open popup sitting on the console's screen is exactly
+      // the case "move it to the extra monitor" needs to handle.
+      placeOnExtendedScreen(popupRef);
+    }
     return popupRef;
   }
   const win = window.open(

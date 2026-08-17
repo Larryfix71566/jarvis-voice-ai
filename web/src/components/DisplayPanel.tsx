@@ -176,10 +176,9 @@ export default function DisplayPanel() {
     return subscribeUiCommands((cmd) => {
       switch (cmd.action) {
         case "display_popout": {
-          if (hasLivePopup()) {
-            noop("It's already showing on the display window.");
-            return;
-          }
+          // Already-open popups are NOT a noop: openDisplayWindow re-runs
+          // extended-screen placement, so "pop out the display" while the
+          // popup sits on the console's monitor moves it to the extra one.
           writePopoutPreference(true);
           setPopout(true);
           const win = openDisplayWindow();
