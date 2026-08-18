@@ -1,13 +1,19 @@
 /* JARVIS console — arc-reactor HUD theme */
+/* Larry 2026-08-18: lifted from pure black — the console read as too
+   dark — then pulled back halfway (#2b323a was too light): graphite,
+   the midpoint between the original black and the first slate attempt.
+   --panel/--hairline/--text-dim rebalanced with it so panels still sit
+   slightly below the field and hairlines/dim text keep roughly the same
+   relative contrast they had on black. */
 :root {
-  --bg: #000000;
-  --panel: #060b0f;
-  --hairline: #14252f;
+  --bg: #15191d;
+  --panel: #11151a;
+  --hairline: #2a343d;
   --accent: #2cc9ff;
   --accent-dim: rgba(44, 201, 255, 0.35);
   --accent-faint: rgba(44, 201, 255, 0.12);
-  --text: #d7edf7;
-  --text-dim: #5f8296;
+  --text: #e2f1f9;
+  --text-dim: #8fa8b8;
   --amber: #ffb454;
   --green: #3ddc97;
   --red: #ff5f56;
@@ -17,6 +23,22 @@
   --attn: var(--amber);
   --attn-dim: rgba(255, 180, 84, 0.35);
   --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  /* Vibrancy glass (Larry 2026-08-18, option 1): ONE material for every
+     translucent surface, mirroring Apple's glass as it renders in
+     Safari/WKWebView — heavy blur + saturation so what's behind bleeds
+     through color-boosted, a top-lit inner edge (the specular cue), and
+     a depth shadow. True refraction (backdrop-filter: url()) is
+     Chromium-only and deliberately not used — invisible in the shell.
+     `-heavy` variants are for dense text panels (drawer, agent cards):
+     more tint so body text keeps HIG-level contrast over the wave. */
+  --glass-bg: rgba(43, 50, 58, 0.35);
+  --glass-bg-heavy: rgba(30, 36, 43, 0.82);
+  --glass-bg-opaque: rgba(30, 36, 43, 0.94); /* no-backdrop-filter fallback */
+  --glass-blur: blur(20px) saturate(180%);
+  --glass-blur-heavy: blur(24px) saturate(160%);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  --glass-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 * {
@@ -36,9 +58,9 @@ body {
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
   /* faint blueprint grid + edge vignette */
   background-image:
-    radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.75) 100%),
-    linear-gradient(rgba(44, 201, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(44, 201, 255, 0.04) 1px, transparent 1px);
+    radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, 0.35) 100%),
+    linear-gradient(rgba(44, 201, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(44, 201, 255, 0.05) 1px, transparent 1px);
   background-size:
     100% 100%,
     44px 44px,
@@ -191,6 +213,25 @@ body {
 .btn-active {
   border-color: var(--accent-dim);
   color: var(--accent);
+}
+
+/* Pop-in control (2026-08-18 fix): a small icon-only button that appears
+   next to Panels/Display only while that window is popped out — the only
+   click target that brings it back in-page instead of just refocusing
+   it. Narrower padding than .btn since it's a single glyph. */
+.btn-popin {
+  padding: 8px 10px;
+}
+
+/* S3 (MORTIMER_SHELL_FIX_AND_SCREEN_VISION_PLAN.md): a button-initiated
+   popout that fails confirmation says so, briefly, beside the button.
+   Amber to match the --attn "needs your attention" vocabulary rather
+   than the error banner's red (a blocked popup is a nudge, not a
+   failure state). Auto-dismissed in JS after 4s. */
+.popout-error-notice {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--attn);
 }
 
 /* Live self-edit indicator on the Dev button (side-drawer plan D7): the

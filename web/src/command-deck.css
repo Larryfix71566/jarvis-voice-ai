@@ -115,7 +115,7 @@
     opacity: 0;
   }
   to {
-    opacity: 0.55; /* .satellite's resting opacity */
+    opacity: 0.9; /* .satellite's resting opacity */
   }
 }
 
@@ -128,7 +128,10 @@
 
 /* --- Engagement plan E4: ambient strip (idle signs of life) -------------
    Frosted-chip language (caption/satellite tokens), top-left of the
-   stage, glanceable-only — nothing here is interactive. */
+   stage, glanceable-first. Larry 2026-08-18: the informational chips
+   are now dismissible (hover ×) — the strip container stays
+   pointer-events:none so the empty column never blocks stage clicks;
+   only the chips themselves accept the pointer. */
 
 .ambient-strip {
   position: absolute;
@@ -144,14 +147,16 @@
 }
 
 .ambient-chip {
+  position: relative;
   padding: 5px 10px;
   font-size: 12px;
   color: var(--text-dim);
-  background: rgba(4, 9, 12, 0.55);
-  border: 1px solid var(--hairline);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
   border-radius: 8px;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -169,9 +174,42 @@
   line-height: 1.4;
 }
 
+/* Dismissible chips: interactive (unlike the clock), with a × that only
+   materializes on hover so the resting strip stays quiet. Extra right
+   padding reserves the ×'s spot — no text reflow on hover. */
+.ambient-chip-dismissible {
+  pointer-events: auto;
+  padding-right: 24px;
+}
+
+.ambient-dismiss {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.2s,
+    color 0.2s;
+}
+
+.ambient-chip-dismissible:hover .ambient-dismiss {
+  opacity: 1;
+}
+
+.ambient-dismiss:hover {
+  color: var(--text);
+}
+
 @supports not (backdrop-filter: blur(4px)) {
   .ambient-chip {
-    background: rgba(4, 9, 12, 0.88);
+    background: var(--glass-bg-opaque);
   }
 }
 
@@ -185,7 +223,7 @@
 }
 
 .satellite-clickable:hover {
-  opacity: 0.9;
+  opacity: 1;
   border-color: var(--accent-dim);
 }
 
@@ -235,7 +273,7 @@
   margin: 2px 0;
   border: 1px solid var(--hairline);
   border-radius: 10px;
-  background: rgba(4, 9, 12, 0.4);
+  background: rgba(30, 36, 43, 0.4);
 }
 
 .transcript-chip-ok {
@@ -266,12 +304,17 @@
   align-items: center;
   gap: 8px;
   z-index: 2;
-  opacity: 0.55;
+  /* Larry 2026-08-18: satellites were too dim at rest (0.55 opacity AND
+     dim text color). Brighter at rest; working/done glow states are
+     unchanged and still read as the louder layer. */
+  opacity: 0.9;
   padding: 7px 12px;
-  background: rgba(4, 9, 12, 0.55);
-  border: 1px solid var(--hairline);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
   border-radius: 2px;
-  backdrop-filter: blur(4px);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
   transition:
     opacity 0.4s,
     border-color 0.3s;
@@ -290,7 +333,7 @@
   font-size: 10px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--text);
   transition: color 0.3s;
 }
 
@@ -392,15 +435,16 @@
   padding: 10px 18px;
   text-align: center;
   border-radius: 10px;
-  background: rgba(4, 9, 12, 0.55);
-  border: 1px solid var(--hairline);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
 }
 
 @supports not (backdrop-filter: blur(8px)) {
   .live-caption {
-    background: rgba(4, 9, 12, 0.88);
+    background: var(--glass-bg-opaque);
   }
 }
 
@@ -466,12 +510,13 @@
   flex-direction: column;
   max-width: 40vw;
   max-height: 40vh;
-  background: rgba(4, 9, 12, 0.35);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--accent-dim);
   border-radius: 10px;
   box-shadow:
+    var(--glass-edge),
     0 12px 48px rgba(0, 0, 0, 0.7),
     0 0 24px var(--accent-faint);
   overflow: hidden;
@@ -479,7 +524,7 @@
 
 @supports not (backdrop-filter: blur(8px)) {
   .display-panel {
-    background: rgba(4, 9, 12, 0.85);
+    background: rgba(30, 36, 43, 0.85);
   }
 }
 

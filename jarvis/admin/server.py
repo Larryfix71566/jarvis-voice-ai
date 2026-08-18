@@ -822,7 +822,39 @@ def ambient() -> dict:
         reminder = {"text": r["message"], "due_at": r["due_at"]}
         break
     summary = memory_module.get_summary_text() or None
-    return {"ok": True, "reminder": reminder, "summary": summary}
+    # Larry 2026-08-18: live weather for the current location — fetched
+    # HERE (sidecar), never by the client; jarvis/ambient_weather.py
+    # caches 15 min and degrades to None on any failure.
+    from jarvis.ambient_weather import get_weather
+
+    return {
+        "ok": True,
+        "reminder": reminder,
+        "summary": summary,
+        "weather": get_weather(),
+    }
+
+
+class LocationBody(BaseModel):
+    lat: float
+    lon: float
+    label: str = ""
+
+
+@app.post("/api/location")
+def set_location(body: LocationBody) -> dict:
+    """Device location, posted by the Mac shell's CoreLocation manager
+    (Larry 2026-08-18 — "I want to know where I am so that current
+    weather is correct for my current location"). Coordinates are held in
+    memory only (jarvis/ambient_weather.py), never written to disk or the
+    run log, and go stale after an hour so a shell that stops reporting
+    falls back to IP geolocation rather than pinning a place Larry left."""
+    if not (-90.0 <= body.lat <= 90.0 and -180.0 <= body.lon <= 180.0):
+        return {"ok": False, "error": "coordinates out of range"}
+    from jarvis.ambient_weather import set_device_location
+
+    set_device_location(body.lat, body.lon, body.label)
+    return {"ok": True}
 
 
 @app.delete("/api/memory/fact/{key}")

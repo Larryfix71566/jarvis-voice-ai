@@ -25,12 +25,20 @@
   overflow: hidden;
   display: flex;
   flex-direction: row;
-  background: rgba(4, 9, 12, 0.97);
+  background: var(--glass-bg-heavy);
+  backdrop-filter: var(--glass-blur-heavy);
+  -webkit-backdrop-filter: var(--glass-blur-heavy);
   transition: flex-basis 0.28s ease;
 }
 
 .side-drawer-open {
   border-left: 1px solid var(--hairline);
+}
+
+@supports not (backdrop-filter: blur(4px)) {
+  .side-drawer {
+    background: var(--glass-bg-opaque);
+  }
 }
 
 /* Plan D25: a drag must not fight the easing — every pointermove would
@@ -379,7 +387,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: rgba(4, 9, 12, 0.97);
+  background: rgba(30, 36, 43, 0.97);
 }
 
 .drawer-window-body {

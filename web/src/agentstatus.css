@@ -17,11 +17,19 @@
 .agent-card {
   position: absolute;
   pointer-events: auto;
-  background: rgba(4, 9, 12, 0.97);
-  border: 1px solid var(--hairline);
+  background: var(--glass-bg-heavy);
+  backdrop-filter: var(--glass-blur-heavy);
+  -webkit-backdrop-filter: var(--glass-blur-heavy);
+  border: 1px solid var(--glass-border);
   border-radius: 2px;
   padding: 10px 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--glass-edge), 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+@supports not (backdrop-filter: blur(4px)) {
+  .agent-card {
+    background: var(--glass-bg-opaque);
+  }
 }
 
 /* .agent-card-anchored carries no rules of its own: position (left/top/

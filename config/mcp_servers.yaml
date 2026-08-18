@@ -56,3 +56,13 @@ servers:
     command: python
     args: ["-m", "mcp_servers.mcp_selfedit.server"]
     env: {}
+  - name: mcp-screen
+    command: python
+    args: ["-m", "mcp_servers.mcp_screen.server"]
+    # No env entry, same rule as mcp-repo/mcp-runlog above: the child
+    # inherits the full parent environment, so JARVIS_SCREEN_ENABLED and
+    # JARVIS_VISION_PROFILE (plus whichever vision profile's API key)
+    # reach it without an explicit allowlist here — and an explicit list
+    # would be actively wrong, since which key is needed depends on
+    # which profile config/upgrade_models.yaml resolves to.
+    env: {}
