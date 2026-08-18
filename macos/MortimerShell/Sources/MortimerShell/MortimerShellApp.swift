@@ -15,10 +15,14 @@ struct MortimerShellApp: App {
     // B4 — the console dev server ./scripts/mortimer.sh already starts.
     // Production packaging/bundled static assets are an explicit
     // NON-GOAL of this plan (B4) — the shell always talks to the same
-    // localhost dev server a browser tab would.
-    static let consoleURL = URL(string: "http://127.0.0.1:5173")!
-    static let displayURL = URL(string: "http://127.0.0.1:5173/display.html")!
-    static let drawerURL = URL(string: "http://127.0.0.1:5173/drawer.html")!
+    // localhost dev server a browser tab would. "localhost", NOT
+    // 127.0.0.1: Vite's default bind on modern Node is the localhost
+    // hostname, which commonly resolves to IPv6 ::1 only — the first
+    // real run of this shell got ECONNREFUSED on 127.0.0.1 while the
+    // browser at localhost:5173 worked fine. Match the browser exactly.
+    static let consoleURL = URL(string: "http://localhost:5173")!
+    static let displayURL = URL(string: "http://localhost:5173/display.html")!
+    static let drawerURL = URL(string: "http://localhost:5173/drawer.html")!
 
     // B0: every WKWebView in the shell shares one web-content process
     // space automatically (WKProcessPool is deprecated for exactly this
