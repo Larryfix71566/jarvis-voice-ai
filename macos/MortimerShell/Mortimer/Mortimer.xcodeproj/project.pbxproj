@@ -1,0 +1,397 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		F68DCA673033DCAB001B1390 /* ScreenPlacement.swift in Sources */ = {isa = PBXBuildFile; fileRef = F68DCA623033DCAB001B1390 /* ScreenPlacement.swift */; };
+		F68DCA683033DCAB001B1390 /* ShellRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F68DCA653033DCAB001B1390 /* ShellRootView.swift */; };
+		F68DCA693033DCAB001B1390 /* ShellBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F68DCA633033DCAB001B1390 /* ShellBridge.swift */; };
+		F68DCA6A3033DCAB001B1390 /* ShellController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F68DCA643033DCAB001B1390 /* ShellController.swift */; };
+		F68DCA6B3033DCAB001B1390 /* MortimerShellApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F68DCA603033DCAB001B1390 /* MortimerShellApp.swift */; };
+		F68DCA6C3033DCAB001B1390 /* ShellWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F68DCA663033DCAB001B1390 /* ShellWebView.swift */; };
+		F68DCA6D3033DCAB001B1390 /* RetryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F68DCA613033DCAB001B1390 /* RetryView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		F68DCA523033DC82001B1390 /* Mortimer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mortimer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F68DCA603033DCAB001B1390 /* MortimerShellApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MortimerShellApp.swift; path = ../Sources/MortimerShell/MortimerShellApp.swift; sourceTree = SOURCE_ROOT; };
+		F68DCA613033DCAB001B1390 /* RetryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RetryView.swift; path = ../Sources/MortimerShell/RetryView.swift; sourceTree = SOURCE_ROOT; };
+		F68DCA623033DCAB001B1390 /* ScreenPlacement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ScreenPlacement.swift; path = ../Sources/MortimerShell/ScreenPlacement.swift; sourceTree = SOURCE_ROOT; };
+		F68DCA633033DCAB001B1390 /* ShellBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ShellBridge.swift; path = ../Sources/MortimerShell/ShellBridge.swift; sourceTree = SOURCE_ROOT; };
+		F68DCA643033DCAB001B1390 /* ShellController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ShellController.swift; path = ../Sources/MortimerShell/ShellController.swift; sourceTree = SOURCE_ROOT; };
+		F68DCA653033DCAB001B1390 /* ShellRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ShellRootView.swift; path = ../Sources/MortimerShell/ShellRootView.swift; sourceTree = SOURCE_ROOT; };
+		F68DCA663033DCAB001B1390 /* ShellWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ShellWebView.swift; path = ../Sources/MortimerShell/ShellWebView.swift; sourceTree = SOURCE_ROOT; };
+		F68DCA6E3033DCBB001B1390 /* Mortimer-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Mortimer-Bridging-Header.h"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		F68DCA543033DC82001B1390 /* Mortimer */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Mortimer;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		F68DCA4F3033DC82001B1390 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		F68DCA493033DC82001B1390 = {
+			isa = PBXGroup;
+			children = (
+				F68DCA543033DC82001B1390 /* Mortimer */,
+				F68DCA533033DC82001B1390 /* Products */,
+				F68DCA603033DCAB001B1390 /* MortimerShellApp.swift */,
+				F68DCA613033DCAB001B1390 /* RetryView.swift */,
+				F68DCA623033DCAB001B1390 /* ScreenPlacement.swift */,
+				F68DCA633033DCAB001B1390 /* ShellBridge.swift */,
+				F68DCA643033DCAB001B1390 /* ShellController.swift */,
+				F68DCA653033DCAB001B1390 /* ShellRootView.swift */,
+				F68DCA663033DCAB001B1390 /* ShellWebView.swift */,
+				F68DCA6E3033DCBB001B1390 /* Mortimer-Bridging-Header.h */,
+			);
+			sourceTree = "<group>";
+		};
+		F68DCA533033DC82001B1390 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F68DCA523033DC82001B1390 /* Mortimer.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		F68DCA513033DC82001B1390 /* Mortimer */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F68DCA5D3033DC82001B1390 /* Build configuration list for PBXNativeTarget "Mortimer" */;
+			buildPhases = (
+				F68DCA4E3033DC82001B1390 /* Sources */,
+				F68DCA4F3033DC82001B1390 /* Frameworks */,
+				F68DCA503033DC82001B1390 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				F68DCA543033DC82001B1390 /* Mortimer */,
+			);
+			name = Mortimer;
+			packageProductDependencies = (
+			);
+			productName = Mortimer;
+			productReference = F68DCA523033DC82001B1390 /* Mortimer.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		F68DCA4A3033DC82001B1390 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					F68DCA513033DC82001B1390 = {
+						CreatedOnToolsVersion = 26.6;
+						LastSwiftMigration = 2660;
+					};
+				};
+			};
+			buildConfigurationList = F68DCA4D3033DC82001B1390 /* Build configuration list for PBXProject "Mortimer" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = F68DCA493033DC82001B1390;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = F68DCA533033DC82001B1390 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				F68DCA513033DC82001B1390 /* Mortimer */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		F68DCA503033DC82001B1390 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		F68DCA4E3033DC82001B1390 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F68DCA673033DCAB001B1390 /* ScreenPlacement.swift in Sources */,
+				F68DCA683033DCAB001B1390 /* ShellRootView.swift in Sources */,
+				F68DCA693033DCAB001B1390 /* ShellBridge.swift in Sources */,
+				F68DCA6A3033DCAB001B1390 /* ShellController.swift in Sources */,
+				F68DCA6B3033DCAB001B1390 /* MortimerShellApp.swift in Sources */,
+				F68DCA6C3033DCAB001B1390 /* ShellWebView.swift in Sources */,
+				F68DCA6D3033DCAB001B1390 /* RetryView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		F68DCA5B3033DC82001B1390 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 9DAJ3UGJRJ;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		F68DCA5C3033DC82001B1390 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 9DAJ3UGJRJ;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		F68DCA5E3033DC82001B1390 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9DAJ3UGJRJ;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Mortimer needs microphone access for voice conversations.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "Documents-jarvis-voice-ai-clean-macos-.Mortimer";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Mortimer-Bridging-Header.h";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		F68DCA5F3033DC82001B1390 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9DAJ3UGJRJ;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Mortimer needs microphone access for voice conversations.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "Documents-jarvis-voice-ai-clean-macos-.Mortimer";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Mortimer-Bridging-Header.h";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		F68DCA4D3033DC82001B1390 /* Build configuration list for PBXProject "Mortimer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F68DCA5B3033DC82001B1390 /* Debug */,
+				F68DCA5C3033DC82001B1390 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F68DCA5D3033DC82001B1390 /* Build configuration list for PBXNativeTarget "Mortimer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F68DCA5E3033DC82001B1390 /* Debug */,
+				F68DCA5F3033DC82001B1390 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = F68DCA4A3033DC82001B1390 /* Project object */;
+}

@@ -32,7 +32,6 @@ private let broadcastRelayFallbackScript = """
 
 struct ShellWebView: NSViewRepresentable {
     let url: URL
-    let processPool: WKProcessPool
     let dataStore: WKWebsiteDataStore
     let controller: ShellController
     let openWindow: OpenWindowAction
@@ -43,7 +42,6 @@ struct ShellWebView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
-        config.processPool = processPool
         config.websiteDataStore = dataStore
 
         let userContent = WKUserContentController()

@@ -25,7 +25,6 @@ struct ShellRootView: View {
             if shell.consoleReachable {
                 ShellWebView(
                     url: url,
-                    processPool: shell.processPool,
                     dataStore: shell.dataStore,
                     controller: shell,
                     openWindow: openWindow

@@ -6,6 +6,7 @@
 // message channel (B2/B3).
 
 import AppKit
+import Combine
 import SwiftUI
 import WebKit
 
@@ -21,15 +22,16 @@ enum ShellWindowKind: String {
 let micCaptureAssumedWorking = true
 
 @MainActor
-final class ShellController: NSObject, ObservableObject {
-    /// B0 — one process pool across the console/display/drawer webviews,
-    /// so BroadcastChannel messages posted by one reach the others (the
-    /// same-origin same-process-pool requirement WebKit imposes). If the
-    /// spike shows this does NOT hold across separate WKWebViews even
-    /// with a shared pool, the predecided fallback (plan B0 item 2) is a
-    /// WKUserScript-based relay through WKScriptMessageHandler instead —
-    /// see ShellWebView.relayFallbackScript, currently unused/inactive.
-    let processPool = WKProcessPool()
+final class ShellController: ObservableObject {
+    /// B0 — WKProcessPool is deprecated since macOS 12: every WKWebView in
+    /// an app now shares one web-content process space automatically, which
+    /// is exactly the property spike question 2 (BroadcastChannel across
+    /// webviews) depends on. Sharing the default WKWebsiteDataStore below
+    /// keeps storage/origin state common across the three windows. If the
+    /// spike still shows BroadcastChannel NOT crossing WKWebViews, the
+    /// predecided fallback (plan B0 item 2) is a WKUserScript-based relay
+    /// through WKScriptMessageHandler — see
+    /// ShellWebView.useBroadcastRelayFallback, currently inactive.
     let dataStore = WKWebsiteDataStore.default()
 
     @Published var consoleReachable: Bool = true
@@ -37,8 +39,7 @@ final class ShellController: NSObject, ObservableObject {
 
     private var checkTimer: Timer?
 
-    override init() {
-        super.init()
+    init() {
         checkReachability()
         checkTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.checkReachability() }

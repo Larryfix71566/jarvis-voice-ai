@@ -20,10 +20,11 @@ struct MortimerShellApp: App {
     static let displayURL = URL(string: "http://127.0.0.1:5173/display.html")!
     static let drawerURL = URL(string: "http://127.0.0.1:5173/drawer.html")!
 
-    // B0: one shared WKProcessPool + the default WKWebsiteDataStore across
-    // every WKWebView in the shell — required for BroadcastChannel to
-    // reach across windows (spike question 2) and for the console/
-    // display/drawer webviews to share one origin's storage.
+    // B0: every WKWebView in the shell shares one web-content process
+    // space automatically (WKProcessPool is deprecated for exactly this
+    // reason) plus the default WKWebsiteDataStore — required for
+    // BroadcastChannel to reach across windows (spike question 2) and for
+    // the console/display/drawer webviews to share one origin's storage.
     @StateObject private var shell = ShellController()
 
     var body: some Scene {
