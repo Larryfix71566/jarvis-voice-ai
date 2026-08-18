@@ -33,8 +33,13 @@ final class ScreenPlacement {
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            self?.reposition()
+        ) { _ in
+            // The observer closure is nonisolated even on the main queue;
+            // hop explicitly rather than assume — reposition() and the
+            // shared singleton are both main-actor-isolated.
+            Task { @MainActor in
+                ScreenPlacement.shared.reposition()
+            }
         }
     }
 
