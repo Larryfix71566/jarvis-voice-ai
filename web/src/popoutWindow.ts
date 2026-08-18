@@ -41,6 +41,58 @@ function isPresenceType(t: string): t is PresenceMessage["t"] {
 const ALIVE_INTERVAL_MS = 2000;
 const ALIVE_STALE_MS = ALIVE_INTERVAL_MS * 2.5;
 
+// Shell zombie-webview fix (2026-08-18): after a {t:"close"} command, a
+// shell popup waits this long, then goes silent only if its document
+// actually went hidden (i.e. the native close visibly worked). The
+// shell closes windows same-millisecond per its own log, so 1.5s is
+// generous; a close that failed leaves the page visible and beating.
+const CLOSE_CONFIRM_DELAY_MS = 1500;
+
+// S3: verified (not assumed) popout success. window.open()'s return
+// value is uninformative in two failure-shaped-like-success cases:
+// inside the shell it is ALWAYS null by design (the shell branch hands
+// off to native code), and in a plain browser a popup-blocker rejection
+// also returns null — same value, opposite meanings. confirmPopout
+// resolves the ambiguity by polling isAlive() (window ref OR heartbeat)
+// until it reports true or the timeout elapses. Every open path (button
+// and voice, display and drawer) must go through this rather than
+// branching on `win !== null`.
+const POPOUT_CONFIRM_TIMEOUT_MS = 5000;
+const POPOUT_CONFIRM_POLL_MS = 200;
+
+export function confirmPopout(
+  isAlive: () => boolean,
+  timeoutMs: number = POPOUT_CONFIRM_TIMEOUT_MS,
+): Promise<boolean> {
+  if (isAlive()) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const deadline = Date.now() + timeoutMs;
+    const tick = () => {
+      if (isAlive()) {
+        resolve(true);
+        return;
+      }
+      if (Date.now() >= deadline) {
+        resolve(false);
+        return;
+      }
+      setTimeout(tick, POPOUT_CONFIRM_POLL_MS);
+    };
+    tick();
+  });
+}
+
+/** A human-readable reason for a confirmed popout failure,
+ * distinguishing the shell (something is wrong natively — check its
+ * logs) from a plain browser (almost certainly the popup blocker) so
+ * the spoken/inline message points at the right fix. */
+export function describePopoutFailure(): string {
+  const inShell = Boolean((window as unknown as { mortimerShell?: unknown }).mortimerShell);
+  return inShell
+    ? "The panel window didn't open — check the shell logs."
+    : "The browser blocked the popup — allow pop-ups for this page and try again.";
+}
+
 // --- DP8: shared registry of every live popout, across both channels ------
 //
 // Keyed by BroadcastChannel name. `win` is only present on the console tab
@@ -291,30 +343,80 @@ export function createPopoutChannel<M>(name: string, role: PopoutRole): PopoutCh
 
   function wirePopupSide(onMessage: (m: M | PresenceMessage) => void): () => void {
     const ch = getChannel();
+    const inShell = Boolean((window as unknown as { mortimerShell?: unknown }).mortimerShell);
+
+    // Zombie-webview handling (2026-08-18, confirmed via the
+    // com.mortimer.shell log): SwiftUI keeps a closed Window scene's
+    // content — this webview and its timers — ALIVE after
+    // NSWindow.close(). pagehide never fires, so the old unconditional
+    // heartbeat kept claiming presence from inside an invisible, closed
+    // window, and the console flipped right back to "popped" within a
+    // beat of every pop-in. The heartbeat is now start/stoppable; on a
+    // {t:"close"} command inside the shell we confirm shortly after
+    // that the document actually went hidden (the native close visibly
+    // worked) and only then go silent — a close that FAILED leaves the
+    // page visible and beating, so the console still flips back
+    // honestly. Gating silence on the explicit close command (never on
+    // visibilitychange alone) keeps mere occlusion from reading as
+    // "closed".
+    let heartbeatId: number | null = null;
+    const startBeat = () => {
+      if (heartbeatId !== null) return;
+      heartbeatId = window.setInterval(() => {
+        ch.postMessage({ t: "alive" } satisfies PresenceMessage);
+      }, ALIVE_INTERVAL_MS);
+    };
+    const stopBeat = () => {
+      if (heartbeatId === null) return;
+      window.clearInterval(heartbeatId);
+      heartbeatId = null;
+    };
+    // Re-popout after a shell pop-in re-shows this SAME kept-alive
+    // webview — resume presence when it becomes visible again (the
+    // hello also triggers the console's snapshot replay).
+    const onVisibility = () => {
+      if (document.visibilityState === "visible" && heartbeatId === null) {
+        ch.postMessage({ t: "hello" } satisfies PresenceMessage);
+        startBeat();
+      }
+    };
+
     const onEvent = (e: MessageEvent<M | PresenceMessage>) => {
       const data = e.data as { t?: string };
       if (data?.t === "close") {
-        window.close(); // script-opened window: self-close is permitted
+        window.close(); // browser: permitted; shell: a no-op
+        if (inShell) {
+          window.setTimeout(() => {
+            if (document.visibilityState === "hidden") {
+              ch.postMessage({ t: "bye" } satisfies PresenceMessage);
+              stopBeat();
+            }
+          }, CLOSE_CONFIRM_DELAY_MS);
+        }
         return;
       }
       if (data?.t === "ping") {
-        ch.postMessage({ t: "alive" } satisfies PresenceMessage);
+        // A silenced zombie must not answer a fresh console's ping and
+        // resurrect presence — only reply while actively beating.
+        if (heartbeatId !== null) {
+          ch.postMessage({ t: "alive" } satisfies PresenceMessage);
+        }
         return;
       }
       onMessage(e.data);
     };
     ch.addEventListener("message", onEvent);
+    if (inShell) document.addEventListener("visibilitychange", onVisibility);
     ch.postMessage({ t: "hello" } satisfies PresenceMessage);
-    const heartbeat = window.setInterval(() => {
-      ch.postMessage({ t: "alive" } satisfies PresenceMessage);
-    }, ALIVE_INTERVAL_MS);
+    startBeat();
     const onPageHide = () => {
       ch.postMessage({ t: "bye" } satisfies PresenceMessage);
     };
     window.addEventListener("pagehide", onPageHide);
     return () => {
       ch.removeEventListener("message", onEvent);
-      window.clearInterval(heartbeat);
+      if (inShell) document.removeEventListener("visibilitychange", onVisibility);
+      stopBeat();
       window.removeEventListener("pagehide", onPageHide);
     };
   }
@@ -337,7 +439,17 @@ export function createPopoutChannel<M>(name: string, role: PopoutRole): PopoutCh
           webkit?: { messageHandlers?: { mortimer?: { postMessage(msg: unknown): void } } };
         }
       ).webkit?.messageHandlers?.mortimer;
-      handler?.postMessage({ cmd: "openWindow", name: windowName });
+      // S1 (MORTIMER_SHELL_FIX_AND_SCREEN_VISION_PLAN.md): the native
+      // side (ShellController.openWindow / ShellWindowKind) only
+      // recognizes the bare role — "display" | "drawer" | "console" —
+      // NOT the browser window name passed in as `windowName`
+      // ("mortimer-display" / "mortimer-drawer"). Sending `windowName`
+      // was the exact cause of the shell's popout doing nothing on its
+      // first real test: ShellWindowKind(rawValue:) failed to parse and
+      // the bridge's ignore-unknown design swallowed it with no error
+      // anywhere. `entry.role` is the contract — do not reintroduce
+      // `windowName` here.
+      handler?.postMessage({ cmd: "openWindow", name: entry.role });
       return null;
     }
     if (isAlive()) {
@@ -360,6 +472,32 @@ export function createPopoutChannel<M>(name: string, role: PopoutRole): PopoutCh
   }
 
   function close(): void {
+    // Shell branch (2026-08-18): inside the shell, entry.win is ALWAYS
+    // null (open() returned null by design) so the ref-based close does
+    // nothing, and a WKWebView hosted by a native window cannot
+    // window.close() itself. Ask the native side to close it instead,
+    // same bare-role contract as openWindow (see the S1 comment above).
+    const shell = (window as unknown as { mortimerShell?: { version: number } }).mortimerShell;
+    if (shell) {
+      const handler = (
+        window as unknown as {
+          webkit?: { messageHandlers?: { mortimer?: { postMessage(msg: unknown): void } } };
+        }
+      ).webkit?.messageHandlers?.mortimer;
+      handler?.postMessage({ cmd: "closeWindow", name: entry.role });
+      // Also broadcast: the popup uses {t:"close"} as the explicit
+      // signal to confirm-hidden-then-go-silent (the zombie-webview fix
+      // in wirePopupSide — SwiftUI keeps the closed window's webview
+      // alive, so pagehide never fires and the heartbeat would
+      // otherwise run forever inside an invisible window).
+      postMessage({ t: "close" } satisfies PresenceMessage);
+      entry.win = null;
+      // Deliberately do NOT zero lastAliveAt: if the native close
+      // fails, the popup stays visible and keeps beating, so presence
+      // honestly flips the UI back (S3's honesty rule). On success the
+      // popup's confirm-hidden logic sends {t:"bye"} and stops beating.
+      return;
+    }
     if (entry.win && !entry.win.closed) entry.win.close();
     entry.win = null;
     postMessage({ t: "close" } satisfies PresenceMessage);

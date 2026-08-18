@@ -17,6 +17,9 @@
 //     beside the console (no explicit repositioning needed)
 
 import AppKit
+import os
+
+private let logger = Logger(subsystem: "com.mortimer.shell", category: "screen-placement")
 
 @MainActor
 final class ScreenPlacement {
@@ -51,7 +54,10 @@ final class ScreenPlacement {
     }
 
     private func window(kind: ShellWindowKind) -> NSWindow? {
-        NSApp.windows.first { $0.identifier?.rawValue == kind.rawValue && $0.isVisible }
+        // S2: shared robust lookup (WindowLookup.swift) — this used to
+        // be exact identifier equality, the prime suspect for placement
+        // silently doing nothing.
+        findShellWindow(kind: kind)
     }
 
     private func consoleWindow() -> NSWindow? {
@@ -73,23 +79,31 @@ final class ScreenPlacement {
     /// repositions the first) and on a screens-changed notification.
     func reposition() {
         let ext = extendedScreens()
-        guard !ext.isEmpty else { return } // no extra monitor — leave as AppKit placed it
+        guard !ext.isEmpty else {
+            logger.debug("reposition: no extended screen detected — leaving windows as placed")
+            return
+        } // no extra monitor — leave as AppKit placed it
 
         let display = window(kind: .display)
         let drawer = window(kind: .drawer)
 
         switch (display, drawer) {
         case (nil, nil):
+            logger.debug("reposition: extended screen present but neither display nor drawer found")
             return
         case let (.some(d), nil):
+            logger.debug("reposition: filling display-only onto \(ext.count) extended screen(s)")
             fill(d, on: ext[0])
         case let (nil, .some(dr)):
+            logger.debug("reposition: filling drawer-only onto \(ext.count) extended screen(s)")
             fill(dr, on: ext[0])
         case let (.some(d), .some(dr)):
             if ext.count >= 2 {
+                logger.debug("reposition: two+ extended screens — display and drawer each fill one")
                 fill(d, on: ext[0])
                 fill(dr, on: ext[1])
             } else {
+                logger.debug("reposition: one extended screen — splitting display 60% / drawer 40%")
                 slot(d, on: ext[0], left: true)
                 slot(dr, on: ext[0], left: false)
             }

@@ -28,6 +28,45 @@ real build, not as tested code.
    nothing is listening there — B4).
 5. Build and run (⌘R).
 
+### 2026-08-18 — pop-in close path + device location (needs rebuild + 2 settings)
+
+Two things landed after the S1–S3 fixes above, both needing another
+Xcode build:
+
+1. **Close path.** The native close works, but SwiftUI keeps a closed
+   `Window` scene's WKWebView and its JS timers alive, so `pagehide`
+   never fires and the popup's heartbeat kept the console believing it
+   was still popped (the drawer flickered in-page then popped back).
+   `ShellBridge` now handles `{cmd:"closeWindow"}` ->
+   `ShellController.closeWindow(named:)` (refuses `console`), and the
+   web side confirms the document actually went hidden before going
+   silent.
+2. **Device location.** `ShellLocation.swift` runs a `CLLocationManager`
+   and POSTs coordinates straight to the sidecar's `POST /api/location`
+   — never through the web layer — so the ambient weather chip is right
+   for where you actually are. Macs have no GPS receiver; CoreLocation
+   resolves from surrounding WiFi, accurate to roughly a city block
+   versus IP geolocation's tens of miles (which put Larry in Forestbrook
+   SC, ~350 miles off).
+
+**Two settings must be applied by hand in Xcode** (see `templates/`,
+both updated):
+
+- Info tab -> add `Privacy - Location When In Use Usage Description` ->
+  "Mortimer uses your location to show current local weather."
+- Signing & Capabilities -> App Sandbox -> check **Location** under App
+  Data.
+
+Without them CoreLocation reports `.denied`, `ShellLocation` logs the
+reason (subsystem `com.mortimer.shell`, category `location`) and stays
+silent — the sidecar keeps using IP geolocation, so a build missing the
+entitlement degrades rather than breaks.
+
+`WindowLookup.swift` and `ShellLocation.swift` are both NEW files and
+have been added to `Mortimer.xcodeproj/project.pbxproj` directly; if
+Xcode still reports "cannot find … in scope", close and reopen the
+project (it caches the parsed pbxproj).
+
 ## B0 spike — record the verdict here before trusting Part B proper
 
 Two go/no-go questions, both with a predecided fallback if they fail

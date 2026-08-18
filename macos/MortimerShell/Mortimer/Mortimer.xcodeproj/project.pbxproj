@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		F68DCA673033DCAB001B1390 /* ScreenPlacement.swift in Sources */ = {isa = PBXBuildFile; fileRef = F68DCA623033DCAB001B1390 /* ScreenPlacement.swift */; };
+		F65ABED23034A7B000C0325C /* ShellLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F65ABED13034A7B000C0325C /* ShellLocation.swift */; };
+		F65ABED03034A7B000C0325C /* WindowLookup.swift in Sources */ = {isa = PBXBuildFile; fileRef = F65ABECF3034A7B000C0325C /* WindowLookup.swift */; };
 		F68DCA683033DCAB001B1390 /* ShellRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F68DCA653033DCAB001B1390 /* ShellRootView.swift */; };
 		F68DCA693033DCAB001B1390 /* ShellBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F68DCA633033DCAB001B1390 /* ShellBridge.swift */; };
 		F68DCA6A3033DCAB001B1390 /* ShellController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F68DCA643033DCAB001B1390 /* ShellController.swift */; };
@@ -21,6 +23,8 @@
 		F68DCA603033DCAB001B1390 /* MortimerShellApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MortimerShellApp.swift; path = ../Sources/MortimerShell/MortimerShellApp.swift; sourceTree = SOURCE_ROOT; };
 		F68DCA613033DCAB001B1390 /* RetryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RetryView.swift; path = ../Sources/MortimerShell/RetryView.swift; sourceTree = SOURCE_ROOT; };
 		F68DCA623033DCAB001B1390 /* ScreenPlacement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ScreenPlacement.swift; path = ../Sources/MortimerShell/ScreenPlacement.swift; sourceTree = SOURCE_ROOT; };
+		F65ABED13034A7B000C0325C /* ShellLocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ShellLocation.swift; path = ../Sources/MortimerShell/ShellLocation.swift; sourceTree = SOURCE_ROOT; };
+		F65ABECF3034A7B000C0325C /* WindowLookup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WindowLookup.swift; path = ../Sources/MortimerShell/WindowLookup.swift; sourceTree = SOURCE_ROOT; };
 		F68DCA633033DCAB001B1390 /* ShellBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ShellBridge.swift; path = ../Sources/MortimerShell/ShellBridge.swift; sourceTree = SOURCE_ROOT; };
 		F68DCA643033DCAB001B1390 /* ShellController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ShellController.swift; path = ../Sources/MortimerShell/ShellController.swift; sourceTree = SOURCE_ROOT; };
 		F68DCA653033DCAB001B1390 /* ShellRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ShellRootView.swift; path = ../Sources/MortimerShell/ShellRootView.swift; sourceTree = SOURCE_ROOT; };
@@ -55,6 +59,8 @@
 				F68DCA603033DCAB001B1390 /* MortimerShellApp.swift */,
 				F68DCA613033DCAB001B1390 /* RetryView.swift */,
 				F68DCA623033DCAB001B1390 /* ScreenPlacement.swift */,
+				F65ABED13034A7B000C0325C /* ShellLocation.swift */,
+				F65ABECF3034A7B000C0325C /* WindowLookup.swift */,
 				F68DCA633033DCAB001B1390 /* ShellBridge.swift */,
 				F68DCA643033DCAB001B1390 /* ShellController.swift */,
 				F68DCA653033DCAB001B1390 /* ShellRootView.swift */,
@@ -147,6 +153,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				F68DCA673033DCAB001B1390 /* ScreenPlacement.swift in Sources */,
+				F65ABED23034A7B000C0325C /* ShellLocation.swift in Sources */,
+				F65ABED03034A7B000C0325C /* WindowLookup.swift in Sources */,
 				F68DCA683033DCAB001B1390 /* ShellRootView.swift in Sources */,
 				F68DCA693033DCAB001B1390 /* ShellBridge.swift in Sources */,
 				F68DCA6A3033DCAB001B1390 /* ShellController.swift in Sources */,

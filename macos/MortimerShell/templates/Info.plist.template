@@ -11,6 +11,11 @@
 
     Privacy - Microphone Usage Description
       -> "Mortimer needs microphone access for voice conversations."
+    Privacy - Location When In Use Usage Description
+      -> "Mortimer uses your location to show current local weather."
+      (Larry 2026-08-18 — ShellLocation.swift. Without this key
+       CoreLocation is denied and the sidecar falls back to IP
+       geolocation; the app still runs, the chip is just coarser.)
 
   (This file documents the exact key/value pair; it is not consumed by
   the build directly. If a later step in this project moves to a real
@@ -20,6 +25,8 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Mortimer needs microphone access for voice conversations.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Mortimer uses your location to show current local weather.</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>NSPrincipalClass</key>

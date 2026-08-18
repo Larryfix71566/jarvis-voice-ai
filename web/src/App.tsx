@@ -13,6 +13,7 @@ import VoiceWave from "./components/VoiceWave";
 import DisplayPanel from "./components/DisplayPanel";
 import MicControls from "./components/MicControls";
 import VoicePicker from "./components/VoicePicker";
+import CapabilityChip from "./components/CapabilityChip";
 import AgentStatusPanel from "./components/AgentStatusPanel";
 import SideDrawer, {
   DRAWER_DEFAULT_WIDTH_PX,
@@ -27,12 +28,14 @@ import {
   subscribeResults,
 } from "./displayResults";
 import {
+  closeDisplayWindow,
   hasLivePopup,
   openDisplayWindow,
   publish as publishWindowPayload,
   wireConsoleSide,
   writePopoutPreference,
 } from "./displayWindow";
+import { confirmPopout, describePopoutFailure } from "./popoutWindow";
 import { applyUiMessage, subscribeUiCommands } from "./uiCommands";
 import { _setConversation } from "./conversationFeed";
 import {
@@ -253,10 +256,45 @@ export default function App() {
     const id = window.setInterval(() => setDrawerWinLive(hasLiveDrawerWindow()), 1000);
     return () => window.clearInterval(id);
   }, []);
-  const openDrawerPopout = () => {
+  // S3: transient inline notices for a button-initiated popout that
+  // fails confirmation — auto-dismiss, no persistent chrome.
+  const [drawerPopoutError, setDrawerPopoutError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!drawerPopoutError) return;
+    const id = window.setTimeout(() => setDrawerPopoutError(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [drawerPopoutError]);
+  const [displayPopoutError, setDisplayPopoutError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!displayPopoutError) return;
+    const id = window.setTimeout(() => setDisplayPopoutError(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [displayPopoutError]);
+  const openDrawerPopout = (onFail?: (reason: string) => void) => {
     writeDrawerPopoutPreference(true);
     openDrawerWindow();
-    setDrawerWinLive(true);
+    // S3: openDrawerWindow()'s return value is uninformative on its own
+    // — always null inside the shell (success arrives asynchronously via
+    // the heartbeat) and also null when a browser blocks the popup.
+    // Confirm via presence instead, and never persist the preference on
+    // an unconfirmed open.
+    void confirmPopout(hasLiveDrawerWindow).then((ok) => {
+      setDrawerWinLive(ok);
+      if (!ok) {
+        writeDrawerPopoutPreference(false);
+        const reason = describePopoutFailure();
+        setDrawerPopoutError(reason);
+        onFail?.(reason);
+      }
+    });
+  };
+  // Larry 2026-08-18: there was no click target anywhere to bring a
+  // popped drawer back in-page — the topbar button only refocused it.
+  // Same close path the "bring the panels back" voice command uses.
+  const popInDrawer = () => {
+    closeDrawerWindow();
+    writeDrawerPopoutPreference(false);
+    setDrawerWinLive(false);
   };
   // DP9: if a previous session left the popout preference on (the window
   // outlived the console's ref but died some other way before this load),
@@ -392,11 +430,21 @@ export default function App() {
     return () => window.clearInterval(id);
   }, []);
   const openDisplay = () => {
-    // Same semantics as DisplayPanel's ⧉: opening from the topbar also
-    // opts in to future payloads going to the popup.
     writePopoutPreference(true);
-    const win = openDisplayWindow();
-    setDisplayLive(win !== null);
+    openDisplayWindow();
+    void confirmPopout(hasLivePopup).then((ok) => {
+      setDisplayLive(ok);
+      if (!ok) {
+        writePopoutPreference(false);
+        setDisplayPopoutError(describePopoutFailure());
+      }
+    });
+  };
+  // Same pop-in gap, same fix, for the display window.
+  const popInDisplay = () => {
+    closeDisplayWindow();
+    writePopoutPreference(false);
+    setDisplayLive(false);
   };
   useEffect(
     () => subscribeResults(() => setAttention(hasPendingDraft())),
@@ -463,6 +511,7 @@ export default function App() {
         <div className="brand">MORTIMER</div>
         <ConnectButton />
         <VoicePicker />
+        <CapabilityChip />
         {/* Topbar-collapse: ONE toggle replaces the old six per-tab
             buttons and the Log button — the drawer's own tab strip (now
             including a Log tab) is the switcher, and voice reaches every
@@ -474,7 +523,7 @@ export default function App() {
           type="button"
           className={drawerOpen || drawerWinLive ? "btn btn-active" : "btn"}
           aria-expanded={drawerOpen}
-          onClick={drawerWinLive ? openDrawerPopout : toggleDrawer}
+          onClick={() => (drawerWinLive ? openDrawerPopout() : toggleDrawer())}
           title={
             drawerWinLive
               ? "Panels are on the display screen — click to focus/move"
@@ -494,6 +543,40 @@ export default function App() {
             />
           )}
         </button>
+        {/* Same pop-in gap, same fix, for the display window. */}
+        {displayLive && (
+          <button
+            type="button"
+            className="btn btn-popin"
+            onClick={popInDisplay}
+            title="Bring the display back into this window"
+          >
+            ↩︎
+          </button>
+        )}
+        {displayPopoutError && (
+          <span className="popout-error-notice" role="status">
+            {displayPopoutError}
+          </span>
+        )}
+        {/* Larry 2026-08-18: while popped out, the button above only
+            refocuses the popout — this is the click target that brings
+            it back in-page (previously voice-only). */}
+        {drawerWinLive && (
+          <button
+            type="button"
+            className="btn btn-popin"
+            onClick={popInDrawer}
+            title="Bring the panels back into this window"
+          >
+            ↩︎
+          </button>
+        )}
+        {drawerPopoutError && (
+          <span className="popout-error-notice" role="status">
+            {drawerPopoutError}
+          </span>
+        )}
         {/* Persistent display-window control: the ⧉ inside DisplayPanel
             only exists while a result is showing, which left no way to
             open (or re-place) the second-screen window from an idle
@@ -504,7 +587,7 @@ export default function App() {
         <button
           type="button"
           className={displayLive ? "btn btn-active" : "btn"}
-          onClick={openDisplay}
+          onClick={() => openDisplay()}
           title={
             displayLive
               ? "Display window is open — click to refocus / move it to the extra screen"

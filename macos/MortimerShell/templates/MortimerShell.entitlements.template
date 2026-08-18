@@ -9,6 +9,10 @@
       - check "Outgoing Connections (Client)" under Network (the shell
         loads http://127.0.0.1:5173 — see B4; this is loopback-only, no
         server capability needed)
+      - check "Location" under App Data (Larry 2026-08-18 —
+        ShellLocation.swift reports device coordinates to the sidecar so
+        the weather chip is right for where you actually are; without
+        it CoreLocation is denied and the sidecar falls back to IP)
 
   Xcode writes these into its own generated .entitlements file when you
   check those boxes in the UI; this template documents the exact keys it
@@ -21,6 +25,8 @@
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
 	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.personal-information.location</key>
 	<true/>
 </dict>
 </plist>

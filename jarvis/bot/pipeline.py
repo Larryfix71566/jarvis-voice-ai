@@ -37,10 +37,12 @@ from jarvis.agents.delegate import build_delegate_tool
 from jarvis.bot.display import build_display_payload
 from jarvis.bot.interruption import InterruptionNotifier
 from jarvis.bot.memory_watcher import MemorySweepWatcher
+from jarvis.bot.plan_watcher import PlanWatcher
 from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.remember_tool import build_remember_tool
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.ui_control import build_ui_control_tool
+from jarvis.bot.screen_tool import build_list_screens_tool, build_view_screen_tool
 from jarvis.bot.voice_switch import (
     available_list,
     build_set_voice_tool,
@@ -59,6 +61,7 @@ from jarvis.memory import (
 )
 from jarvis.prompts import (
     SUPERVISOR_PROMPT,
+    SCREEN_VISION_ADDENDUM,
     UI_CONTROL_ADDENDUM,
     VOICE_ADDENDUM,
     render_agent_catalog,
@@ -241,6 +244,14 @@ def build_pipeline(
     ui_control_enabled = os.environ.get(
         "JARVIS_UI_CONTROL_ENABLED", ""
     ).strip().lower() not in ("false", "0", "no")
+    # V3/V4: screen vision is a DIRECT Supervisor tool (like set_voice /
+    # ui_control), never a delegation. Same kill-switch-at-registration
+    # pattern as ui_control above.
+    screen_enabled = os.environ.get(
+        "JARVIS_SCREEN_ENABLED", ""
+    ).strip().lower() not in ("false", "0", "no")
+    view_screen_schema, view_screen_handler = build_view_screen_tool()
+    list_screens_schema, list_screens_handler = build_list_screens_tool()
 
     async def _send_ui_message(message: dict) -> None:
         await send_app_message(transport, message)
@@ -277,6 +288,7 @@ def build_pipeline(
         # U5/U6: the addendum ships only when the tool does — a prompt
         # describing an unregistered tool would invite hallucinated calls.
         + ("\n" + UI_CONTROL_ADDENDUM if ui_control_enabled else "")
+        + ("\n" + SCREEN_VISION_ADDENDUM if screen_enabled else "")
     )
 
     stt = DeepgramFluxSTTService(
@@ -296,6 +308,9 @@ def build_pipeline(
     llm.register_function("remember", adapt_to_pipecat(remember_handler))
     if ui_control_enabled:
         llm.register_function("ui_control", adapt_to_pipecat(ui_control_handler))
+    if screen_enabled:
+        llm.register_function("view_screen", adapt_to_pipecat(view_screen_handler))
+        llm.register_function("list_screens", adapt_to_pipecat(list_screens_handler))
     tts = ElevenLabsTTSService(
         api_key=settings.elevenlabs_api_key,
         settings=ElevenLabsTTSSettings(
@@ -322,6 +337,9 @@ def build_pipeline(
     ]
     if ui_control_enabled:
         standard_tools.append(to_function_schema(ui_control_schema))
+    if screen_enabled:
+        standard_tools.append(to_function_schema(view_screen_schema))
+        standard_tools.append(to_function_schema(list_screens_schema))
     context = LLMContext(
         messages=[{"role": "system", "content": system_prompt}],
         tools=ToolsSchema(standard_tools=standard_tools),
@@ -553,6 +571,30 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
         )
         memory_watcher.start()
 
+        # F4 (MORTIMER_CONFIRMATION_AND_CAPABILITY_PLAN.md): a background
+        # plan/review job finishes in the SIDECAR, which has no voice. The
+        # watcher polls it and announces completion once, pushing the
+        # finished document through the existing display pipeline
+        # (display.py's plan_ready pseudo-tool). Kill switch:
+        # JARVIS_PLAN_WATCHER_ENABLED=false.
+        plan_watcher = None
+        if os.environ.get("JARVIS_PLAN_WATCHER_ENABLED", "").strip().lower() not in (
+            "false", "0", "no",
+        ):
+            async def _speak_plan(text: str) -> None:
+                from pipecat.frames.frames import TTSSpeakFrame
+                await pusher.push(TTSSpeakFrame(text=text))
+
+            async def _push_plan_display(payload: dict) -> None:
+                await send_app_message(transport, {"type": "display", "display": payload})
+
+            plan_watcher = PlanWatcher(
+                speak=_speak_plan,
+                push_display=_push_plan_display,
+                is_connected=lambda: client_connected["value"],
+            )
+            plan_watcher.start()
+
         voice_state = {"current": catalog["default"]}
 
         async def handle_voice_set(message: Any) -> None:
@@ -622,6 +664,8 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
         finally:
             await watcher.stop()
             await memory_watcher.stop()
+            if plan_watcher is not None:
+                await plan_watcher.stop()
             # U2.5: fold this session into long-term memory. Best-effort,
             # hard-capped — memory work must never delay shutdown.
             #

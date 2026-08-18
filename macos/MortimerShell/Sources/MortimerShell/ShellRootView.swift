@@ -35,6 +35,9 @@ struct ShellRootView: View {
         }
         .onAppear {
             ScreenPlacement.shared.startObserving()
+            // Larry 2026-08-18: device location for the ambient weather
+            // chip. Idempotent.
+            ShellLocation.shared.start()
         }
     }
 }

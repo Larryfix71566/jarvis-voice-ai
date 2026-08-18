@@ -10,6 +10,7 @@ import {
   subscribeLatest,
   writePopoutPreference,
 } from "../displayWindow";
+import { confirmPopout, describePopoutFailure } from "../popoutWindow";
 import { subscribeUiCommands } from "../uiCommands";
 
 /**
@@ -99,6 +100,14 @@ export default function DisplayPanel() {
   const [item, setItem] = useState<DisplayPayload | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [popupOpen, setPopupOpen] = useState(hasLivePopup);
+  // S3: a button-initiated popout that fails confirmation says so
+  // briefly, beside the button, instead of failing silently.
+  const [popoutError, setPopoutError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!popoutError) return;
+    const id = window.setTimeout(() => setPopoutError(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [popoutError]);
   const [popout, setPopout] = useState(readPopoutPreference);
   const [pos, setPos] = useState<Pos>(() => ({
     x: Math.max(16, window.innerWidth - DEFAULT_W - 48),
@@ -131,8 +140,11 @@ export default function DisplayPanel() {
         // not from mount-time state — the topbar's ⧉ Display button also
         // sets it, and localStorage is not reactive.
         if (payload && readPopoutPreference() && !hasLivePopup()) {
-          const win = openDisplayWindow();
-          setPopupOpen(win !== null);
+          openDisplayWindow();
+          // S3: window.open()'s return value can't distinguish success
+          // from failure (always null in the shell, also null on a
+          // blocked popup) — confirm via the presence heartbeat.
+          void confirmPopout(hasLivePopup).then(setPopupOpen);
           // win === null → browser blocked the popup; popupOpen stays
           // false, so the in-page panel below renders the fallback.
         }
@@ -153,8 +165,11 @@ export default function DisplayPanel() {
   const popOut = useCallback(() => {
     writePopoutPreference(true);
     setPopout(true);
-    const win = openDisplayWindow();
-    setPopupOpen(win !== null);
+    openDisplayWindow();
+    void confirmPopout(hasLivePopup).then((ok) => {
+      setPopupOpen(ok);
+      if (!ok) setPopoutError(describePopoutFailure());
+    });
   }, []);
 
   // Esc closes.
@@ -184,11 +199,11 @@ export default function DisplayPanel() {
           // popup sits on the console's monitor moves it to the extra one.
           writePopoutPreference(true);
           setPopout(true);
-          const win = openDisplayWindow();
-          setPopupOpen(win !== null);
-          if (win === null) {
-            noop("The browser blocked the display window — it may need a popup permission.");
-          }
+          openDisplayWindow();
+          void confirmPopout(hasLivePopup).then((ok) => {
+            setPopupOpen(ok);
+            if (!ok) noop(describePopoutFailure());
+          });
           return;
         }
         case "display_close": {
@@ -300,6 +315,11 @@ export default function DisplayPanel() {
         >
           ⧉
         </button>
+        {popoutError && (
+          <span className="popout-error-notice" role="status">
+            {popoutError}
+          </span>
+        )}
         <button type="button" className="btn display-close" onClick={close}>
           ×
         </button>

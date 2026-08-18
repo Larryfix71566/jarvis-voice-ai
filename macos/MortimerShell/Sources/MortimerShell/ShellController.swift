@@ -9,6 +9,9 @@ import AppKit
 import Combine
 import SwiftUI
 import WebKit
+import os
+
+private let logger = Logger(subsystem: "com.mortimer.shell", category: "controller")
 
 enum ShellWindowKind: String {
     case console, display, drawer
@@ -85,12 +88,44 @@ final class ShellController: ObservableObject {
     // (see popoutWindow.ts's shell branch — it returns null and relies
     // on the existing heartbeat-based presence check instead).
     func openWindow(named name: String, environment: OpenWindowAction) {
-        guard let kind = ShellWindowKind(rawValue: name) else { return }
+        // S3 — log every bridge message, including a rejected one. This
+        // is the exact spot S1's bug (the web side sending the browser
+        // window name instead of the bare role) failed silently before.
+        guard let kind = ShellWindowKind(rawValue: name) else {
+            logger.error("openWindow: rejected unrecognized name '\(name, privacy: .public)' (expected console/display/drawer)")
+            return
+        }
+        logger.debug("openWindow: opening/focusing \(kind.rawValue, privacy: .public)")
         environment(id: kind.rawValue)
-        // Bring it forward even if it was already open.
-        for window in NSApp.windows where window.identifier?.rawValue == kind.rawValue {
+        // S2: shared robust lookup, not exact identifier equality.
+        if let window = findShellWindow(kind: kind) {
             window.makeKeyAndOrderFront(nil)
+        } else {
+            logger.error("openWindow: environment(id:) returned but findShellWindow found nothing for \(kind.rawValue, privacy: .public) — focus skipped")
         }
         ScreenPlacement.shared.reposition()
+    }
+
+    // Close-path mirror of openWindow (2026-08-18): dispatched from
+    // ShellBridge on {cmd:"closeWindow", name:"display"|"drawer"}. The
+    // web side can't close a native window itself, which made the
+    // console's pop-in control silently fail inside the shell. The
+    // console window is deliberately refused: web code must never be
+    // able to close the app's main window.
+    func closeWindow(named name: String) {
+        guard let kind = ShellWindowKind(rawValue: name) else {
+            logger.error("closeWindow: rejected unrecognized name '\(name, privacy: .public)' (expected display/drawer)")
+            return
+        }
+        guard kind != .console else {
+            logger.error("closeWindow: refusing to close the console window")
+            return
+        }
+        guard let window = findShellWindow(kind: kind) else {
+            logger.error("closeWindow: no live window found for \(kind.rawValue, privacy: .public) — nothing to close")
+            return
+        }
+        logger.debug("closeWindow: closing \(kind.rawValue, privacy: .public)")
+        window.close()
     }
 }

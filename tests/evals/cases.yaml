@@ -82,3 +82,11 @@
 - {input: "turn on the wake word", expect: none}
 - {input: "send the panels to the display screen", expect: none}
 - {input: "bring the panels back", expect: none}
+
+# --- screen vision (2) ---
+# view_screen/list_screens are DIRECT Supervisor tools (like ui_control),
+# so the correct routing outcome is no delegation at all.
+- input: "what's on my second screen right now"
+  expect: none
+- input: "check if the panel window actually landed on the other monitor"
+  expect: none
