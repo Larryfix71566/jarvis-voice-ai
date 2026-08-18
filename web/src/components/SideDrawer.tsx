@@ -4,7 +4,7 @@ import GitPanel from "./GitPanel";
 import EditModePanel from "./EditModePanel";
 import MemoryPanel from "./MemoryPanel";
 import RunsPanel from "./RunsPanel";
-import DeveloperRunsTab from "./DeveloperRunsTab";
+import AgentsTab from "./AgentsTab";
 import OutputTab from "./OutputTab";
 import Transcript from "./Transcript";
 import { getRuns, isSelfEditRun, subscribeRuns } from "../agentRuns";
@@ -35,7 +35,7 @@ export type TabKey =
   | "edit"
   | "memory"
   | "runs"
-  | "developer"
+  | "agents"
   | "output" // plan D35 — drawer-routed display results (D28/D32)
   | "transcript"; // topbar-collapse: the Log folded in as a tab (the old
                   // standalone TranscriptDrawer is retired — one drawer,
@@ -48,7 +48,7 @@ export const TAB_KEYS: readonly TabKey[] = [
   "edit",
   "memory",
   "runs",
-  "developer",
+  "agents",
   "output",
   "transcript",
 ];
@@ -58,7 +58,7 @@ const TAB_LABELS: Record<TabKey, string> = {
   edit: "Edit",
   memory: "Memory",
   runs: "Runs",
-  developer: "Developer",
+  agents: "Agents",
   output: "Output",
   transcript: "Log",
 };
@@ -123,13 +123,13 @@ export default function SideDrawer({
   // Plan D7: the Developer TAB carries the same live indicator the topbar
   // button does, for when the drawer is already open. Read-only
   // subscription — no RTVI listener here (plan D10's single-listener rule).
-  const [devRunning, setDevRunning] = useState(() =>
+  const [selfEditRunning, setSelfEditRunning] = useState(() =>
     getRuns().some((r) => isSelfEditRun(r.name, r.tools) && r.doneAt === null),
   );
   useEffect(
     () =>
       subscribeRuns((runs) =>
-        setDevRunning(
+        setSelfEditRunning(
           runs.some((r) => isSelfEditRun(r.name, r.tools) && r.doneAt === null),
         ),
       ),
@@ -215,8 +215,8 @@ export default function SideDrawer({
         return <MemoryPanel />;
       case "runs":
         return <RunsPanel />;
-      case "developer":
-        return <DeveloperRunsTab />;
+      case "agents":
+        return <AgentsTab />;
       case "output":
         return <OutputTab />;
       case "transcript":
@@ -268,7 +268,7 @@ export default function SideDrawer({
                 onClick={() => onTabChange(key)}
               >
                 {TAB_LABELS[key]}
-                {key === "developer" && devRunning && (
+                {key === "agents" && selfEditRunning && (
                   <span className="side-drawer-tab-dot" aria-hidden="true" />
                 )}
                 {key === "output" && (outputDot || attention) && (

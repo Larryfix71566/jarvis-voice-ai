@@ -122,7 +122,7 @@
   border-color: var(--accent-dim);
 }
 
-/* Plan D7: live self-edit indicator on the Developer tab (the topbar button
+/* Plan D7: live self-edit indicator on the Agents tab (the topbar button
    carries the same dot, for when the drawer is closed). */
 .side-drawer-tab-dot {
   display: inline-block;
@@ -209,13 +209,13 @@
 }
 
 /* --- Developer tab (plan D8) --- */
-.developer-runs {
+.agent-runs {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.developer-runs-empty {
+.agent-runs-empty {
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.14em;

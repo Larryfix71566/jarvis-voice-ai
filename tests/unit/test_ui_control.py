@@ -118,3 +118,27 @@ class TestHandler:
         reply = await handler({"action": "drawer_tab"})
         assert "Which panel" in reply
         assert sent == []
+
+
+# --- Agents tab rename (Larry 2026-08-18) --------------------------------
+
+
+def test_agents_is_a_real_tab():
+    message, reply = resolve_ui_command({"action": "drawer_tab", "tab": "agents"})
+    assert message is not None, reply
+    assert message["tab"] == "agents"
+
+
+def test_developer_alias_still_resolves_to_agents():
+    """The Developer tab became Agents; old phrasing must keep working."""
+    for spoken in ("developer", "dev", "agent", "Developer", " DEV "):
+        message, reply = resolve_ui_command({"action": "drawer_tab", "tab": spoken})
+        assert message is not None, f"{spoken!r} rejected: {reply}"
+        assert message["tab"] == "agents", f"{spoken!r} -> {message['tab']}"
+
+
+def test_developer_is_not_advertised_as_a_tab_in_the_schema():
+    """Aliases are an input convenience, not part of the tab vocabulary —
+    UI_TABS stays the single list of real keys."""
+    assert "agents" in UI_TABS
+    assert "developer" not in UI_TABS

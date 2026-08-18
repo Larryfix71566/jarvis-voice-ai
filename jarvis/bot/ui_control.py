@@ -31,11 +31,18 @@ UI_ACTIONS = frozenset({
 })
 
 UI_TABS = frozenset({
-    "repo", "edit", "memory", "runs", "developer", "output", "transcript",
+    "repo", "edit", "memory", "runs", "agents", "output", "transcript",
 })
 
 # Actions for which a tab argument is meaningful. drawer_tab REQUIRES it;
 # drawer_open accepts it optionally.
+# Larry 2026-08-18: the Developer tab became Agents (all five sub-agents
+# render there now, not just self-edit runs). Old phrasing still works —
+# an alias costs nothing and "show me the developer tab" is muscle
+# memory. Aliases are resolved BEFORE validation, so UI_TABS stays the
+# single list of real tab keys.
+TAB_ALIASES = {"developer": "agents", "dev": "agents", "agent": "agents"}
+
 _TAB_REQUIRED = frozenset({"drawer_tab"})
 _TAB_ALLOWED = frozenset({"drawer_open", "drawer_tab"})
 
@@ -94,6 +101,7 @@ def resolve_ui_command(arguments: dict) -> tuple[dict | None, str]:
     """
     action = str(arguments.get("action", "")).strip()
     tab = str(arguments.get("tab", "")).strip().lower()
+    tab = TAB_ALIASES.get(tab, tab)
 
     if action not in UI_ACTIONS:
         return None, (

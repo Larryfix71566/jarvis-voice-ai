@@ -14,7 +14,7 @@ import DisplayPanel from "./components/DisplayPanel";
 import MicControls from "./components/MicControls";
 import VoicePicker from "./components/VoicePicker";
 import CapabilityChip from "./components/CapabilityChip";
-import AgentStatusPanel from "./components/AgentStatusPanel";
+import AgentRunFeeder from "./components/AgentRunFeeder";
 import SideDrawer, {
   DRAWER_DEFAULT_WIDTH_PX,
   TAB_KEYS,
@@ -211,7 +211,7 @@ export default function App() {
 
   // Plan D30/D37 — the single "type: display" listener, dispatching by
   // `surface`. This is a DIFFERENT type than D10's agent-lifecycle
-  // listener in AgentStatusPanel, so two useRTVIClientEvent(ServerMessage)
+  // listener in AgentRunFeeder, so two useRTVIClientEvent(ServerMessage)
   // registrations coexisting here is fine (they filter on different
   // `msg.type`); what must not happen is two listeners for the SAME type.
   useRTVIClientEvent(RTVIEvent.ServerMessage, (data: unknown) => {
@@ -411,10 +411,10 @@ export default function App() {
   }, [client, drawerOpen, drawerTab, drawerWinLive]);
 
   // Read-only subscription to the run store, for the D7 topbar indicator.
-  // This must NOT register a second RTVI listener — AgentStatusPanel is the
+  // This must NOT register a second RTVI listener — AgentRunFeeder is the
   // single listener (plan D10).
   useEffect(() => subscribeRuns(setRuns), []);
-  const devRunning = runs.some(
+  const selfEditRunning = runs.some(
     (r) => isSelfEditRun(r.name, r.tools) && r.doneAt === null,
   );
 
@@ -536,7 +536,7 @@ export default function App() {
           {drawerWinLive ? "◪ Panels ⧉" : drawerOpen ? "◨ Close" : "◧ Panels"}
           {/* E1: attention (amber, pending confirmation) outranks the
               cyan live/new signal. Fed by the same stores in both modes. */}
-          {!drawerOpen && !drawerWinLive && (devRunning || outputDot || attention) && (
+          {!drawerOpen && !drawerWinLive && (selfEditRunning || outputDot || attention) && (
             <span
               className={attention ? "btn-live-dot btn-live-dot-attn" : "btn-live-dot"}
               aria-hidden="true"
@@ -629,8 +629,10 @@ export default function App() {
         <div className="hints">SPACE talk · T transcript</div>
       </footer>
 
-      {/* agent status window — live sub-agent progress (z-25) */}
-      <AgentStatusPanel />
+      {/* Headless: owns the single RTVI ServerMessage subscription that
+          feeds agentRuns.ts (plan D10). The live sub-agent view itself
+          now lives in the drawer's Agents tab. */}
+      <AgentRunFeeder />
 
       {/* results window — floats in front of everything (z-30) */}
       <DisplayPanel />

@@ -12,7 +12,7 @@
  * usePipecatConversation consumer) feeds every new message in here via
  * _pushMessage, and Transcript.tsx reads from the store instead. Bounded
  * at 200 entries — same "bounded, oldest-dropped-first" discipline as
- * agentRuns.ts's MAX_DEVELOPER_RUNS and displayResults.ts's
+ * agentRuns.ts's MAX_AGENT_RUNS and displayResults.ts's
  * MAX_DISPLAY_RESULTS.
  *
  * The console also relays every pushed message onto the drawer's

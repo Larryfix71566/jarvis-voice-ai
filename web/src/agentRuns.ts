@@ -5,7 +5,7 @@
  * This state used to live inside AgentStatusPanel as component state. It
  * moved out because two components now render from it: AgentStatusPanel
  * (non-Developer runs, anchored near their satellite) and
- * DeveloperRunsTab (Developer/self-edit runs, inside the side drawer).
+ * AgentsTab (Developer/self-edit runs, inside the side drawer).
  * The drawer's tab body unmounts on every tab switch and whenever the
  * drawer closes (plan D23), so run state must outlive it — otherwise a
  * multi-minute self-edit's progress would be destroyed by a tab switch.
@@ -59,10 +59,10 @@ export const STAGES = [
   "submitting",
 ] as const;
 
-/** ⚙ TUNING KNOB — how many Developer runs the Developer tab keeps
+/** ⚙ TUNING KNOB — how many Developer runs the Agents tab keeps
  * (plan D8). Completed runs are evicted oldest-first past this cap; a run
  * still in flight is never evicted. */
-export const MAX_DEVELOPER_RUNS = 20;
+export const MAX_AGENT_RUNS = 20;
 
 export interface RunState {
   id: number;
@@ -110,7 +110,7 @@ export function toolStage(tool: string): number {
 
 /**
  * Development runs (developer agent / selfedit_* tools) get stages, and —
- * since the side drawer — render in the Developer tab instead of as an
+ * since the side drawer — render in the Agents tab instead of as an
  * anchored satellite card.
  *
  * Plan D9 states plainly what this currently means: `name` is the agent
@@ -195,8 +195,8 @@ export function removeRun(id: number): void {
  *
  * Non-Developer runs keep the original behavior: a new run for an agent
  * replaces that agent's previous card. Developer runs APPEND instead, so
- * the Developer tab accumulates history (D8); when the agent's list
- * exceeds MAX_DEVELOPER_RUNS the OLDEST COMPLETED run is dropped. A run
+ * the Agents tab accumulates history (D8); when the agent's list
+ * exceeds MAX_AGENT_RUNS the OLDEST COMPLETED run is dropped. A run
  * still in flight is never dropped, even if it is the oldest.
  */
 function insertRun(list: RunState[], run: RunState): RunState[] {
@@ -204,7 +204,7 @@ function insertRun(list: RunState[], run: RunState): RunState[] {
     return [...list.filter((r) => r.name !== run.name), run];
   }
   let next = [...list, run];
-  while (next.filter((r) => r.name === run.name).length > MAX_DEVELOPER_RUNS) {
+  while (next.filter((r) => r.name === run.name).length > MAX_AGENT_RUNS) {
     const victim = next.find((r) => r.name === run.name && r.doneAt !== null);
     if (victim === undefined) break; // all in flight — never evict a live run
     clearTimer(victim.id);

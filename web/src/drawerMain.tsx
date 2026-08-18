@@ -11,7 +11,7 @@ import DrawerWindowApp from "./components/DrawerWindowApp";
 // jarvisClient.ts patches getUserMedia and constructs a PipecatClient at
 // module load time, and this window never has (and must never request)
 // a voice session. Every tab component DrawerWindowApp renders (GitPanel,
-// EditModePanel, MemoryPanel, RunsPanel, DeveloperRunsTab, OutputTab,
+// EditModePanel, MemoryPanel, RunsPanel, AgentsTab, OutputTab,
 // Transcript) is already free of pipecat-client-react imports — verified
 // by grep before this entry was wired up, and worth re-checking if any of
 // them ever gains a new import.

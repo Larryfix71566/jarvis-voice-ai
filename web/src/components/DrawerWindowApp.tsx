@@ -3,7 +3,7 @@ import GitPanel from "./GitPanel";
 import EditModePanel from "./EditModePanel";
 import MemoryPanel from "./MemoryPanel";
 import RunsPanel from "./RunsPanel";
-import DeveloperRunsTab from "./DeveloperRunsTab";
+import AgentsTab from "./AgentsTab";
 import OutputTab from "./OutputTab";
 import Transcript from "./Transcript";
 import { TAB_KEYS, type TabKey } from "./SideDrawer";
@@ -39,7 +39,7 @@ const TAB_LABELS: Record<TabKey, string> = {
   edit: "Edit",
   memory: "Memory",
   runs: "Runs",
-  developer: "Developer",
+  agents: "Agents",
   output: "Output",
   transcript: "Log",
 };
@@ -65,7 +65,7 @@ function writeStoredTab(tab: TabKey): void {
 
 export default function DrawerWindowApp() {
   const [activeTab, setActiveTabState] = useState<TabKey>(readStoredTab);
-  const [devRunning, setDevRunning] = useState(() =>
+  const [selfEditRunning, setSelfEditRunning] = useState(() =>
     getRuns().some((r) => isSelfEditRun(r.name, r.tools) && r.doneAt === null),
   );
   const [attention, setAttention] = useState(hasPendingDraft);
@@ -78,7 +78,7 @@ export default function DrawerWindowApp() {
   useEffect(
     () =>
       subscribeRuns((runs) =>
-        setDevRunning(
+        setSelfEditRunning(
           runs.some((r) => isSelfEditRun(r.name, r.tools) && r.doneAt === null),
         ),
       ),
@@ -112,8 +112,8 @@ export default function DrawerWindowApp() {
         return <MemoryPanel />;
       case "runs":
         return <RunsPanel />;
-      case "developer":
-        return <DeveloperRunsTab />;
+      case "agents":
+        return <AgentsTab />;
       case "output":
         return <OutputTab />;
       case "transcript":
@@ -138,7 +138,7 @@ export default function DrawerWindowApp() {
             onClick={() => setActiveTab(key)}
           >
             {TAB_LABELS[key]}
-            {key === "developer" && devRunning && (
+            {key === "agents" && selfEditRunning && (
               <span className="side-drawer-tab-dot" aria-hidden="true" />
             )}
             {key === "output" && attention && (
