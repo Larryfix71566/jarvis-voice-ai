@@ -66,6 +66,23 @@ class TestResolve:
         message, _ = resolve_ui_command({"action": "drawer_tab", "tab": "Runs"})
         assert message == {"type": "ui", "action": "drawer_tab", "tab": "runs"}
 
+    # MORTIMER_DRAWER_POPOUT_PLAN.md DP6
+    def test_drawer_popout(self):
+        message, reply = resolve_ui_command({"action": "drawer_popout"})
+        assert message == {"type": "ui", "action": "drawer_popout"}
+        assert reply == "ok"
+
+    def test_drawer_popin(self):
+        message, reply = resolve_ui_command({"action": "drawer_popin"})
+        assert message == {"type": "ui", "action": "drawer_popin"}
+        assert reply == "ok"
+
+    def test_drawer_popout_tab_ignored(self):
+        # Neither drawer_popout nor drawer_popin takes a tab — a stray one
+        # is dropped, same as mic_mute's test above.
+        message, _ = resolve_ui_command({"action": "drawer_popout", "tab": "runs"})
+        assert message == {"type": "ui", "action": "drawer_popout"}
+
 
 class TestSchema:
     def test_schema_enums_match_constants(self):

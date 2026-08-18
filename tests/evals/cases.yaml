@@ -1,5 +1,7 @@
 # Routing eval cases (plan Phase 3, step 3.4 — extended from Appendix B).
-# Coverage: 5 per single agent except developer (11), 6 none, 4 multi-agent = 41 total.
+# Coverage: 5 per single agent except developer (11), 6 none, 4 multi-agent,
+# 12 voice UI control (MORTIMER_VOICE_UI_PLAN.md U8, extended by
+# MORTIMER_DRAWER_POPOUT_PLAN.md DP6) = 43 total.
 # expect: scheduler | librarian | analyst | systems | developer | none | [agent, agent]
 
 # --- scheduler (5) ---
@@ -60,7 +62,8 @@
 - {input: "look up the current time in Tokyo and save a note with what you find", expect: [analyst, librarian]}
 - {input: "check how my computer is doing and remind me to restart it tonight", expect: [systems, scheduler]}
 
-# --- voice UI control (10) (MORTIMER_VOICE_UI_PLAN.md U8) ---
+# --- voice UI control (12) (MORTIMER_VOICE_UI_PLAN.md U8, extended by
+#     MORTIMER_DRAWER_POPOUT_PLAN.md DP6's drawer_popout/drawer_popin) ---
 # The misrouting hazard these pin: rule 8 sends "changing your own
 # interface" to developer, but a VIEW change (open/close/switch panels,
 # windows, transcript, mic, wake word) must never be delegated. This
@@ -77,3 +80,13 @@
 - {input: "close that window", expect: none}
 - {input: "stop listening", expect: none}
 - {input: "turn on the wake word", expect: none}
+- {input: "send the panels to the display screen", expect: none}
+- {input: "bring the panels back", expect: none}
+
+# --- screen vision (2) ---
+# view_screen/list_screens are DIRECT Supervisor tools (like ui_control),
+# so the correct routing outcome is no delegation at all.
+- input: "what's on my second screen right now"
+  expect: none
+- input: "check if the panel window actually landed on the other monitor"
+  expect: none

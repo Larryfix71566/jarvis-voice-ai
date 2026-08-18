@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md B0/B4.
+
+  SPM executable targets opened in Xcode don't read a physical Info.plist
+  from disk automatically — Xcode generates one from the target's build
+  settings and the "Info" tab of the target editor. Apply these entries
+  there (Xcode > MortimerShell target > Info tab > Custom macOS Application
+  Target Properties > +):
+
+    Privacy - Microphone Usage Description
+      -> "Mortimer needs microphone access for voice conversations."
+    Privacy - Location When In Use Usage Description
+      -> "Mortimer uses your location to show current local weather."
+      (Larry 2026-08-18 — ShellLocation.swift. Without this key
+       CoreLocation is denied and the sidecar falls back to IP
+       geolocation; the app still runs, the chip is just coarser.)
+
+  (This file documents the exact key/value pair; it is not consumed by
+  the build directly. If a later step in this project moves to a real
+  .xcodeproj, this file's contents can be pasted in as-is.)
+-->
+<plist version="1.0">
+<dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Mortimer needs microphone access for voice conversations.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Mortimer uses your location to show current local weather.</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+</dict>
+</plist>

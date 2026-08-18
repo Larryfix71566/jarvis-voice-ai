@@ -157,11 +157,12 @@ def test_interruptions_enabled_on_flux(runtime, fakes, monkeypatch):
     assert captured["should_interrupt"] is True
 
 
-def test_four_functions_registered(runtime, fakes):
+def test_six_functions_registered(runtime, fakes):
     # remember (memory plan D6), ui_control (MORTIMER_VOICE_UI_PLAN.md U1)
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "delegate_task", "remember", "set_voice", "ui_control",
+        "delegate_task", "list_screens", "remember", "set_voice",
+        "ui_control", "view_screen",
     ]
     assert llm.kwargs == {"api_key": "sk", "base_url": "http://llm", "model": "m"}
 
@@ -172,7 +173,19 @@ def test_ui_control_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
     what it cannot see."""
     monkeypatch.setenv("JARVIS_UI_CONTROL_ENABLED", "false")
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
-    assert sorted(llm.functions) == ["delegate_task", "remember", "set_voice"]
+    assert sorted(llm.functions) == [
+        "delegate_task", "list_screens", "remember", "set_voice", "view_screen",
+    ]
+
+
+def test_screen_vision_kill_switch_unregisters_tools(runtime, fakes, monkeypatch):
+    """V4: JARVIS_SCREEN_ENABLED=false removes view_screen/list_screens
+    from both the registered functions and the schema list."""
+    monkeypatch.setenv("JARVIS_SCREEN_ENABLED", "false")
+    _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
+    assert sorted(llm.functions) == [
+        "delegate_task", "remember", "set_voice", "ui_control",
+    ]
 
 
 async def test_registered_handlers_accept_pipecat_params(runtime, fakes):

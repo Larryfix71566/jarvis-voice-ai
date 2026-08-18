@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 GIT_TIMEOUT_S = 60
 BUILD_TIMEOUT_S = 600
+VALIDATE_PYTEST_TIMEOUT_S = 300
 SESSION_BRANCH_PREFIX = "jarvis/self-edit"
 ROLLBACK_TAG_PREFIX = "pre-selfedit"
 DEFAULT_BASE_REF = "origin/main"
@@ -235,6 +236,17 @@ class SelfEditService:
         checks.append({"name": "frontend_build", "ok": code == 0,
                        "output": out[-2000:] or "build ok"})
 
+        # 4. Backend unit tests (C2, MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md).
+        # CI's own pytest step is a hard gate now for the same reason — a
+        # self-edit that imports cleanly and builds the frontend can still
+        # break backend behavior; only the test suite catches that.
+        code, out = self._run(
+            ["python", "-m", "pytest", "tests/unit", "-q"],
+            cwd=self.repo_root, timeout=VALIDATE_PYTEST_TIMEOUT_S,
+        )
+        checks.append({"name": "pytest", "ok": code == 0,
+                       "output": out[-2000:] or "tests ok"})
+
         ok = all(c["ok"] for c in checks)
         self._validated_ok = ok
         logger.info("selfedit_validate ok=%s", ok)
@@ -334,6 +346,19 @@ class SelfEditService:
         self.proposals = []
         self._validated_ok = False
         return {"ok": True, "reverted_to": tag}
+
+    def describe_boundary(self) -> str:
+        """A human-readable statement of what this workspace will and
+        won't let an edit touch — surfaced to a scope-advisor council
+        round when the agent declines a goal
+        (jarvis/agents/upgrade_agent.py's session_decline handling).
+        Self-edit's boundary is its allowlist file, verbatim."""
+        try:
+            return (
+                self.repo_root / "config" / "self_edit_allowlist.json"
+            ).read_text(encoding="utf-8")
+        except OSError:
+            return "(allowlist file unavailable)"
 
     def status(self) -> dict:
         return {

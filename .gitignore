@@ -30,3 +30,13 @@ dist/
 data/wakeword/
 models/
 logs/
+
+# Mac shell (MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md B5): Xcode/SPM
+# build noise. macos/MortimerShell's source, Package.swift, and templates/
+# are tracked; everything Xcode generates locally is not.
+macos/**/.build/
+macos/**/.swiftpm/
+macos/**/xcuserdata/
+macos/**/DerivedData/
+macos/**/build/
+macos/**/*.xcuserstate

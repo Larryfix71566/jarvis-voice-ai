@@ -2,7 +2,8 @@
 name: mcp-apps
 version: 0.1.0
 class: privileged
-tools: [app_create, app_write_file, app_register, app_list, app_read]
+tools: [app_create, app_write_file, app_register, app_list, app_read,
+        app_build_start, app_build_status, app_build_submit]
 requires_env: [GITHUB_TOKEN]
 requires_keychain: []
 scopes: []

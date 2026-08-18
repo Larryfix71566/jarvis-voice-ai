@@ -160,6 +160,21 @@ function setRuns(next: RunState[]): void {
   for (const cb of listeners) cb(runs);
 }
 
+/**
+ * MORTIMER_DRAWER_POPOUT_PLAN.md DP3 — the drawer window's copy of this
+ * store has no RTVI connection (D10's single-listener rule lives in
+ * AgentStatusPanel, console-only) and is instead fed by the console
+ * relaying every applyServerMessage-driven change onto the drawer's
+ * BroadcastChannel (web/src/drawerRelay.ts). This setter is that relay's
+ * ONLY mutator on the popped side: it replaces the array wholesale rather
+ * than replaying insertRun/timer bookkeeping, which is console-only
+ * concern (fade-out timers only matter for the anchored satellite cards
+ * that never render in the drawer window).
+ */
+export function applyRelayedRuns(next: RunState[]): void {
+  setRuns(next);
+}
+
 function clearTimer(id: number): void {
   const t = timers.get(id);
   if (t !== undefined) {

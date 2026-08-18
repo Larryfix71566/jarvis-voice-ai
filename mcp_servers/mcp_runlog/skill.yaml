@@ -1,0 +1,9 @@
+# Skill manifest (MORTIMER_AGENT_TRUST_PLAN.md D10)
+name: mcp-runlog
+version: 0.1.0
+class: standard
+tools: [runlog_list, runlog_detail, runlog_stats, council_list]
+requires_env: []
+requires_keychain: []
+scopes: []
+test: "python3 -m pytest tests/unit/test_mcp_runlog_logic.py -q"

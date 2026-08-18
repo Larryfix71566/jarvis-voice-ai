@@ -21,15 +21,26 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from typing import Any, Callable
 
 from jarvis.agents.base import EventCallback, SubAgent
-from jarvis.procedures import learn_from_run
+from jarvis.procedures import _overlap_score, _tokens, learn_from_run
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_PARALLEL_DELEGATIONS = 3
+
+# MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md A2 — the mechanical
+# half of the stop rule: the Supervisor prompt asks it not to retry a
+# failed delegation with reworded instructions, but a live session
+# showed six such retries in a row (one inventing "vault credentials"),
+# so a prompt alone cannot be trusted. Reuses the procedures module's
+# own symmetric token-overlap scorer — one scoring implementation, not a
+# second one invented here.
+RETRY_GUARD_WINDOW_S = 120.0
+RETRY_GUARD_OVERLAP = 0.5
 
 # Procedures-as-hints (MORTIMER_MEMORY_PROCEDURES_PLAN.md D13): a bare
 # asyncio.create_task(...) result has no strong reference anywhere else in
@@ -82,6 +93,9 @@ def build_delegate_tool(
     }
 
     semaphore = asyncio.Semaphore(max(1, max_parallel))
+    # A2 — per-session, per-agent: (task_tokens, failed_at_monotonic).
+    # Session-scoped closure state, same lifetime as the semaphore above.
+    last_failure: dict[str, tuple[set[str], float]] = {}
 
     async def handler(arguments: dict) -> str:
         agent_name = str(arguments.get("agent_name", ""))
@@ -91,6 +105,23 @@ def build_delegate_tool(
             # No agent, nothing ran — this path does not create a run
             # (run-logging plan §5.5).
             return f"Unknown agent '{agent_name}'. Available: {available}."
+
+        prior = last_failure.get(agent_name)
+        if prior is not None:
+            prior_tokens, failed_at = prior
+            if time.monotonic() - failed_at < RETRY_GUARD_WINDOW_S:
+                overlap = _overlap_score(prior_tokens, _tokens(task))
+                if overlap >= RETRY_GUARD_OVERLAP:
+                    logger.info(
+                        "delegate_retry_guard_refused agent=%s overlap=%.2f",
+                        agent_name, overlap,
+                    )
+                    return (
+                        f"REFUSED: the {agent_name} agent just failed this "
+                        "same task. Report that failure to the user and ask "
+                        "how to proceed — do not retry with reworded "
+                        "instructions."
+                    )
         # run_id generated here, one per delegation (run-logging plan D1):
         # this is the unit a human reviews, and generating it before the
         # semaphore below means a queued-but-not-yet-running delegation
@@ -115,8 +146,14 @@ def build_delegate_tool(
         # this keeps delegate.py from reaching into SubAgent's private
         # _settings attribute to check the flag redundantly.
         _spawn_background(learn_from_run(run_id, agent_name))
+        failed = result.startswith("FAILED:")
+        # A2 — a failure arms the guard for this agent; a success clears
+        # it (the agent is demonstrably working again).
+        if failed:
+            last_failure[agent_name] = (_tokens(task), time.monotonic())
+        else:
+            last_failure.pop(agent_name, None)
         if on_event is not None:
-            failed = result.startswith("FAILED:")
             on_event({"type": "delegate_done", "agent": agent_name,
                       "display_name": agent.display_name,
                       "ok": not failed,

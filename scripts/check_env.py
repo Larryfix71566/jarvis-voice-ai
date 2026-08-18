@@ -161,6 +161,137 @@ def check_github(env: dict[str, str], env_file_values: dict[str, str]) -> None:
                    "not a credential verdict")
 
 
+def check_model_registry() -> None:
+    """H2 (MORTIMER_CONFIRMATION_AND_CAPABILITY_PLAN.md): report which
+    model profiles in config/upgrade_models.yaml actually have their API
+    key present, then cross-reference config/agents.yaml so a sub-agent
+    pinned to a profile whose key is missing is visible BEFORE a
+    delegation fails. WARN-only by design — a missing planner key must
+    never block preflight, since voice itself still boots on one key.
+    The refuse-mode wording is the point: developer with
+    on_profile_fallback=refuse and no key refuses every delegation.
+    """
+    try:
+        import yaml
+    except ImportError:
+        report(None, "Model registry", "PyYAML not installed — skipped")
+        return
+
+    registry_path = REPO_ROOT / "config" / "upgrade_models.yaml"
+    if not registry_path.exists():
+        report(None, "Model registry", f"file not found ({registry_path})")
+        return
+    try:
+        registry = yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:
+        report(None, "Model registry", f"could not parse upgrade_models.yaml: {exc}")
+        return
+
+    profiles = registry.get("profiles") or []
+    default_name = registry.get("default")
+    by_name = {}
+    for profile in profiles:
+        if not isinstance(profile, dict):
+            continue
+        name = str(profile.get("name", ""))
+        if not name:
+            continue
+        by_name[name] = profile
+        key_env = str(profile.get("api_key_env", "OPENAI_API_KEY"))
+        label = f"{name} (registry default)" if name == default_name else name
+        present = bool(os.environ.get(key_env, "").strip())
+        report(
+            True if present else None,
+            f"Model profile {label}",
+            f"{key_env} {'present' if present else 'missing'}",
+        )
+
+    agents_path = REPO_ROOT / "config" / "agents.yaml"
+    if not agents_path.exists():
+        return
+    try:
+        agents_cfg = yaml.safe_load(agents_path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return
+
+    entries = agents_cfg.get("sub_agents")
+    if isinstance(entries, dict):
+        entries = [{"name": k, **(v or {})} for k, v in entries.items()]
+    for agent in entries or []:
+        if not isinstance(agent, dict):
+            continue
+        name = str(agent.get("name", ""))
+        profile_name = agent.get("model_profile")
+        if not name or not profile_name:
+            continue
+        mode = str(agent.get("on_profile_fallback", "warn")).strip().lower()
+        profile = by_name.get(str(profile_name)) or {}
+        key_env = str(profile.get("api_key_env", "OPENAI_API_KEY"))
+        present = bool(os.environ.get(key_env, "").strip())
+        label = f"{name}'s model_profile ({profile_name}, on_profile_fallback={mode})"
+        if present:
+            report(True, label, f"{key_env} present")
+        elif mode == "refuse":
+            report(None, label,
+                   f"{key_env} missing — {name} will REFUSE every delegation until this is fixed")
+        else:
+            report(None, label,
+                   f"{key_env} missing — {name} will silently fall back to the voice model")
+
+
+def check_screen_vision() -> None:
+    """V5 (MORTIMER_SHELL_FIX_AND_SCREEN_VISION_PLAN.md): report whether
+    screen vision is on and which vision profile would answer a
+    view_screen call. WARN-only, and it always ends with the macOS
+    Screen Recording reminder — that permission cannot be detected from
+    a script and its failure mode is silent (wallpaper-only capture).
+    """
+    enabled = os.environ.get("JARVIS_SCREEN_ENABLED", "").strip().lower() not in (
+        "false", "0", "no",
+    )
+    if not enabled:
+        report(None, "Screen vision", "disabled (JARVIS_SCREEN_ENABLED=false)")
+        return
+    try:
+        import yaml
+    except ImportError:
+        report(None, "Screen vision", "PyYAML not installed — skipped")
+        return
+    registry_path = REPO_ROOT / "config" / "upgrade_models.yaml"
+    if not registry_path.exists():
+        report(None, "Screen vision", "config/upgrade_models.yaml not found")
+        return
+    try:
+        registry = yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:
+        report(None, "Screen vision", f"could not parse upgrade_models.yaml: {exc}")
+        return
+
+    vision = [p for p in (registry.get("profiles") or [])
+              if isinstance(p, dict) and p.get("vision")]
+    named = os.environ.get("JARVIS_VISION_PROFILE", "").strip()
+    chosen = None
+    if named:
+        match = next((p for p in vision if str(p.get("name")) == named), None)
+        if match is None:
+            report(None, "Screen vision",
+                   f"JARVIS_VISION_PROFILE={named} is not a vision:true profile")
+        elif not os.environ.get(str(match.get("api_key_env", "")), "").strip():
+            report(None, "Screen vision", f"{named}'s {match.get('api_key_env')} is missing")
+        else:
+            chosen = match
+    else:
+        chosen = next((p for p in vision
+                       if os.environ.get(str(p.get("api_key_env", "")), "").strip()), None)
+        if chosen is None:
+            report(None, "Screen vision", "no vision:true profile has its API key set")
+    if chosen is not None:
+        report(True, "Screen vision", f"will use profile {chosen.get('name')}")
+    report(None, "Screen recording permission",
+           "cannot be checked from a script — grant it in System Settings > Privacy "
+           "& Security > Screen Recording, or captures come back as wallpaper only")
+
+
 def main() -> int:
     # Credential vault (MORTIMER_CREDENTIAL_VAULT_PLAN.md S4, call site
     # 3 of 3): pull vault secrets into os.environ before any check reads
@@ -291,6 +422,10 @@ def main() -> int:
                    "an in-progress commit)")
     else:
         report(True, "git index lock", "not present")
+
+    # 9.5/9.6 — planner-model and screen-vision preflight (WARN-only).
+    check_model_registry()
+    check_screen_vision()
 
     print()
     if failures:

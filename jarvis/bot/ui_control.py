@@ -24,6 +24,7 @@ from typing import Any, Awaitable, Callable
 
 UI_ACTIONS = frozenset({
     "drawer_open", "drawer_close", "drawer_tab",
+    "drawer_popout", "drawer_popin",
     "transcript_open", "transcript_close",
     "display_popout", "display_close", "overlay_dismiss",
     "mic_mute", "wake_on", "wake_off",
@@ -49,7 +50,12 @@ UI_CONTROL_SCHEMA = {
             "holding Repo/Edit/Memory/Runs/Developer/Output/Transcript; "
             "users may call it the drawer, side panel, sidebar, or "
             "sidecar — drawer_close, drawer_tab (requires tab; the "
-            "transcript tab is the conversation log), transcript_open, "
+            "transcript tab is the conversation log), drawer_popout (send "
+            "the drawer/panels themselves to a separate second-screen "
+            "window — 'put the panels on the other screen' / 'pop out "
+            "the drawer'), drawer_popin (bring the popped-out drawer back "
+            "in-page — 'bring the panels back' / 'show the drawer here "
+            "again'), transcript_open, "
             "transcript_close (shortcuts for the log tab), display_popout "
             "(move informational content like weather or research to the "
             "SEPARATE pop-out display window — 'the big screen' / 'the "

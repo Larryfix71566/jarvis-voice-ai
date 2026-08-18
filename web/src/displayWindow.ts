@@ -10,24 +10,30 @@
  * BroadcastChannel is same-origin/same-browser only — this does NOT cross
  * devices. A second physical machine as a display would need server-side
  * fan-out (bot/admin sidecar over a websocket), out of scope here.
+ *
+ * The presence protocol (hello/alive/bye/ping/close heartbeat) and the
+ * Window Management API placement logic used to live here; both are now
+ * shared plumbing in popoutWindow.ts (MORTIMER_DRAWER_POPOUT_PLAN.md DP2),
+ * extracted so the new drawer pop-out window (drawer relay module) can use
+ * the exact same implementation. This file is a thin domain wrapper around
+ * one `PopoutChannel<DisplayMessage>` — same channel name, same messages,
+ * same exported function names/signatures as before the extraction.
  */
 
 import type { DisplayPayload } from "./displayResults";
+import { createPopoutChannel, type PresenceMessage } from "./popoutWindow";
 
 export const DISPLAY_CHANNEL = "mortimer.display";
 
-type DisplayMessage =
+type DisplayDomainMessage =
   | { t: "payload"; payload: DisplayPayload }
-  | { t: "hello" } // popup -> console: "I just opened, send current"
   | { t: "clear" };
+
+type DisplayMessage = DisplayDomainMessage | PresenceMessage;
 
 const LS_POPOUT = "mortimer.display.popout";
 
-let channel: BroadcastChannel | null = null;
-function getChannel(): BroadcastChannel {
-  if (!channel) channel = new BroadcastChannel(DISPLAY_CHANNEL);
-  return channel;
-}
+const popout = createPopoutChannel<DisplayDomainMessage>(DISPLAY_CHANNEL, "display");
 
 // --- console side --------------------------------------------------------
 
@@ -60,11 +66,7 @@ export function publish(payload: DisplayPayload): void {
       /* storage unavailable — the ambient chip just won't show */
     }
   }
-  try {
-    getChannel().postMessage({ t: "payload", payload } satisfies DisplayMessage);
-  } catch {
-    /* BroadcastChannel unavailable (very old browser) — in-page still works */
-  }
+  popout.postMessage({ t: "payload", payload });
 }
 
 /** In-page (DisplayPanel) subscription — mirrors the same `latest` value
@@ -78,73 +80,57 @@ export function subscribeLatest(cb: (payload: DisplayPayload | null) => void): (
 
 /** Console side: reply to a popup's hello with the current payload, and
  * listen for hello on the channel. Call once from App.tsx (or wherever
- * the console mounts) — idempotent-ish via a module-level guard. */
-let consoleWired = false;
+ * the console mounts) — idempotent-ish via popoutWindow's own guard. */
 export function wireConsoleSide(): () => void {
-  if (consoleWired) return () => {};
-  consoleWired = true;
-  const ch = getChannel();
-  const onMessage = (e: MessageEvent<DisplayMessage>) => {
-    if (e.data?.t === "hello" && latest) {
-      ch.postMessage({ t: "payload", payload: latest } satisfies DisplayMessage);
+  return popout.wireConsoleSide((m) => {
+    if ((m as DisplayDomainMessage).t === "payload" || (m as DisplayDomainMessage).t === "clear") {
+      return; // domain messages have no console-side reaction here
     }
-  };
-  ch.addEventListener("message", onMessage);
-  return () => {
-    ch.removeEventListener("message", onMessage);
-    consoleWired = false;
-  };
+    if ((m as PresenceMessage).t === "hello" && latest) {
+      popout.postMessage({ t: "payload", payload: latest });
+    }
+  });
 }
 
 // --- popup side ------------------------------------------------------------
 
 /** Popup side: subscribe. Posts {t:"hello"} once on first subscription so
- * a window opened after a result arrived is not blank (D40). Returns an
- * unsubscribe function. */
+ * a window opened after a result arrived is not blank (D40). Also runs the
+ * presence protocol via popoutWindow.ts: an {t:"alive"} heartbeat while
+ * open, {t:"bye"} on pagehide, and self-close on a console {t:"close"} —
+ * so a console that reloaded (and lost its window ref) still knows this
+ * popup exists and can still close it. Returns an unsubscribe function. */
 export function subscribeDisplay(cb: (m: DisplayMessage) => void): () => void {
-  const ch = getChannel();
-  const onMessage = (e: MessageEvent<DisplayMessage>) => cb(e.data);
-  ch.addEventListener("message", onMessage);
-  ch.postMessage({ t: "hello" } satisfies DisplayMessage);
-  return () => ch.removeEventListener("message", onMessage);
+  return popout.wirePopupSide(cb);
 }
 
 // --- popup lifecycle (console side) ---------------------------------------
 
-let popupRef: Window | null = null;
-
 /** Whether a live popup currently exists — DisplayPanel hides itself while
- * true (D41), since the payload is showing on the other screen. */
+ * true (D41), since the payload is showing on the other screen. Consults
+ * BOTH the window ref (this tab opened it) and the heartbeat (it was
+ * opened before this console loaded — a reload loses the ref, and without
+ * the heartbeat the same result would show in both places). */
 export function hasLivePopup(): boolean {
-  return popupRef !== null && !popupRef.closed;
+  return popout.isAlive();
 }
 
 /** Console side: open (or refocus) the pop-out window. The fixed window
  * NAME is what makes the browser reuse and remember the same window
  * across opens (D41). Returns the window, or null if the browser blocked
  * it — callers MUST handle null and fall back to the in-page window
- * rather than silently losing the payload. */
+ * rather than silently losing the payload. Placement (D42/DP8) is handled
+ * by popoutWindow.ts on every call, not just the first. */
 export function openDisplayWindow(): Window | null {
-  if (hasLivePopup()) {
-    popupRef!.focus();
-    return popupRef;
-  }
-  // D42 (deferred): a future `placement` argument would consult
-  // window.getScreenDetails() here to position on a chosen screen. Today
-  // the user drags the popup to the target monitor once and the browser
-  // remembers the position for the named window.
-  const win = window.open(
+  return popout.open(
     "/display.html",
     "mortimer-display",
     "width=560,height=440,menubar=no,toolbar=no,location=no,status=no",
   );
-  popupRef = win;
-  return win;
 }
 
 export function closeDisplayWindow(): void {
-  if (popupRef && !popupRef.closed) popupRef.close();
-  popupRef = null;
+  popout.close();
 }
 
 // --- preference (guarded localStorage reads, D13's discipline) -----------

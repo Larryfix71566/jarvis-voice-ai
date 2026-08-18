@@ -155,16 +155,17 @@
 .memory-card {
   margin-top: 12px;
   padding: 10px 12px;
-  background: rgba(4, 9, 12, 0.55);
-  border: 1px solid var(--hairline);
+  background: var(--glass-bg-heavy);
+  border: 1px solid var(--glass-border);
   border-radius: 10px;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: var(--glass-blur-heavy);
+  -webkit-backdrop-filter: var(--glass-blur-heavy);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
 }
 
 @supports not (backdrop-filter: blur(4px)) {
   .memory-card {
-    background: rgba(4, 9, 12, 0.88);
+    background: var(--glass-bg-opaque);
   }
 }
 

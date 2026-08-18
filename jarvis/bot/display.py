@@ -38,6 +38,11 @@ DISPLAY_TOOLS = {
     # MORTIMER_PLANNING_PATHWAY_PLAN.md P5/P6.
     "repo_write_file",
     "repo_read_file",
+    # F4 (MORTIMER_CONFIRMATION_AND_CAPABILITY_PLAN.md) — a pseudo-tool,
+    # not a real MCP tool: jarvis/bot/plan_watcher.py pushes a finished
+    # plan/review through this SAME display pipeline rather than opening
+    # a second display code path.
+    "plan_ready",
 }
 
 # Which surface a tool's result belongs on (side-drawer plan D36).
@@ -61,6 +66,9 @@ DISPLAY_SURFACE: dict[str, str] = {
     # P6 — an informational read, parkable on a second screen like the
     # other "window" surfaces.
     "repo_read_file": "window",
+    # F4 — a finished plan is the answer to something the user asked for
+    # and is parkable on a second screen while they read it.
+    "plan_ready": "window",
 }
 DEFAULT_DISPLAY_SURFACE = "drawer"
 
@@ -277,6 +285,21 @@ def _fmt_repo_read(args: dict, data: dict) -> tuple | None:
     return ("markdown", f"Repo — {path}", _truncate_doc(content), [], [])
 
 
+def _fmt_plan_ready(args: dict, data: dict) -> tuple | None:
+    """F4 — the planning pathway's finished document, pushed by
+    plan_watcher.py when a background plan/review job reaches `done`.
+    Titled by job kind so a review never reads as a fresh plan."""
+    plan = data.get("plan")
+    if not isinstance(plan, str) or not plan.strip():
+        return None
+    noun = "Review" if data.get("review_path") else "Plan"
+    goal = str(data.get("goal") or "").strip()
+    saved = str(data.get("saved_path") or "").strip()
+    title = f"{noun} — {goal}" if goal else noun
+    footer = [f"saved to {saved}"] if saved else []
+    return ("markdown", title, _truncate_doc(plan), footer, [])
+
+
 _FORMATTERS = {
     "web_search": _fmt_web_search,
     "get_weather": _fmt_get_weather,
@@ -290,4 +313,5 @@ _FORMATTERS = {
     "push": _fmt_git_executed("push"),
     "repo_write_file": _fmt_repo_write_draft,
     "repo_read_file": _fmt_repo_read,
+    "plan_ready": _fmt_plan_ready,
 }

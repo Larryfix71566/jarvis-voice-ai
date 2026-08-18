@@ -1,0 +1,9 @@
+# Skill manifest (upgrade plan §3.1)
+name: mcp-screen
+version: 1.0.0
+class: standard
+tools: [screen_list, screen_view]
+requires_env: []
+requires_keychain: []
+scopes: []
+test: "python3 -m pytest tests/unit/test_mcp_screen_logic.py -q"

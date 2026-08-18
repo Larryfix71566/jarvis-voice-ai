@@ -7,7 +7,11 @@ import time
 import pytest
 import yaml
 
-from jarvis.agents.delegate import build_delegate_tool
+from jarvis.agents.delegate import (
+    RETRY_GUARD_OVERLAP,
+    RETRY_GUARD_WINDOW_S,
+    build_delegate_tool,
+)
 from jarvis.prompts import render_agent_catalog
 
 from tests.unit.test_orchestrator import FakeSubAgent
@@ -238,3 +242,86 @@ class TestAgentsYaml:
             {"name": "scheduler", "display_name": "Scheduler",
              "description": "Time stuff."}])
         assert catalog == "- scheduler (Scheduler): Time stuff."
+
+
+# MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md A2 — the mechanical
+# retry guard: a same-shaped retry within the window after a failure is
+# refused without running; a genuinely different task, or one arriving
+# after the window, or a retry after a SUCCESS, all pass through.
+class TestRetryGuard:
+    async def test_reworded_retry_refused_after_failure(self):
+        agents = {"developer": FakeSubAgent("developer", result="FAILED: boom")}
+        _, handler = build_delegate_tool(agents)
+        first = await handler({
+            "agent_name": "developer",
+            "task": "find the upper left updates display component and add a close button",
+        })
+        assert first == "FAILED: boom"
+        second = await handler({
+            "agent_name": "developer",
+            "task": "locate the upper left status panel and add a dismiss button to it",
+        })
+        assert second.startswith("REFUSED:")
+        assert "developer" in second
+        # The agent must not have actually been invoked a second time.
+        assert agents["developer"].tasks == [
+            "find the upper left updates display component and add a close button",
+        ]
+
+    async def test_unrelated_task_not_refused(self):
+        """Low-overlap wording passes the guard — the agent actually runs
+        (and returns its scripted result, whatever that is) rather than
+        being refused mechanically."""
+        agents = {"developer": FakeSubAgent("developer", result="FAILED: boom")}
+        _, handler = build_delegate_tool(agents)
+        await handler({"agent_name": "developer", "task": "find the upper left status panel"})
+        result = await handler({"agent_name": "developer", "task": "show me the last five commits"})
+        assert result == "FAILED: boom"  # ran again — not "REFUSED: ..."
+        assert len(agents["developer"].tasks) == 2
+
+    async def test_guard_clears_after_success(self):
+        """A low-overlap task that SUCCEEDS clears the guard, so a later
+        retry of the ORIGINAL failed wording is no longer refused."""
+        calls = {"n": 0}
+
+        class FlakySubAgent(FakeSubAgent):
+            async def run(self, task, on_event=None, **kwargs):
+                calls["n"] += 1
+                self.tasks.append(task)
+                return self.result
+
+        agents = {"developer": FlakySubAgent("developer", result="FAILED: boom")}
+        _, handler = build_delegate_tool(agents)
+        first = await handler({"agent_name": "developer", "task": "add a dismiss button"})
+        assert first == "FAILED: boom"
+        agents["developer"].result = "done"
+        second = await handler({"agent_name": "developer", "task": "show me the last five commits"})
+        assert second == "done"  # unrelated wording, not refused, and it succeeded
+        # The guard was cleared by that success — a retry of the ORIGINAL
+        # failed wording now runs instead of being refused.
+        third = await handler({"agent_name": "developer", "task": "add a dismiss button"})
+        assert third == "done"
+        assert calls["n"] == 3
+
+    async def test_window_expiry_allows_retry(self, monkeypatch):
+        import jarvis.agents.delegate as delegate_module
+        agents = {"developer": FakeSubAgent("developer", result="FAILED: boom")}
+        _, handler = build_delegate_tool(agents)
+        clock = {"t": 1000.0}
+        monkeypatch.setattr(delegate_module.time, "monotonic", lambda: clock["t"])
+        await handler({"agent_name": "developer", "task": "add a dismiss button"})
+        clock["t"] += RETRY_GUARD_WINDOW_S + 1
+        result = await handler({"agent_name": "developer", "task": "add a dismiss button"})
+        # Same wording, but the window expired — not refused (agent ran,
+        # returning its scripted FAILED result rather than REFUSED).
+        assert result == "FAILED: boom"
+
+    async def test_different_agent_not_guarded_by_another_agents_failure(self):
+        agents = {
+            "developer": FakeSubAgent("developer", result="FAILED: boom"),
+            "analyst": FakeSubAgent("analyst", result="done"),
+        }
+        _, handler = build_delegate_tool(agents)
+        await handler({"agent_name": "developer", "task": "add a dismiss button"})
+        result = await handler({"agent_name": "analyst", "task": "add a dismiss button"})
+        assert result == "done"

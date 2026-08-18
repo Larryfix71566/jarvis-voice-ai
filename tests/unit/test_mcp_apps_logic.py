@@ -195,3 +195,89 @@ def test_app_read_roundtrip(client):
     result = logic.app_read(client, "app1", "README.md")
     assert result["ok"] and result["content"] == "hello"
     assert not logic.app_read(client, "app1", "missing.txt")["ok"]
+
+
+# ------------------------------------------------------------- app-build
+# D6 — thin HTTP clients of the admin sidecar's /api/appbuild/* endpoints;
+# `client` here is a fake AdminClient (get/post), not the FakeClient above.
+
+
+class FakeAdminClient:
+    def __init__(self, get_responses=None, post_responses=None):
+        self._get_responses = get_responses or {}
+        self._post_responses = post_responses or {}
+        self.posts: list[tuple[str, dict]] = []
+
+    def get(self, path):
+        return self._get_responses.get(path, {"ok": True, "job": {}, "status": {}})
+
+    def post(self, path, json=None):
+        self.posts.append((path, json or {}))
+        return self._post_responses.get(path, {"ok": True})
+
+
+def test_app_build_start_previews_without_confirm():
+    result = logic.app_build_start(FakeAdminClient(), "demo-app", "add a button")
+    assert result["ok"] and result["needs_confirmation"]
+    assert result["app"] == "demo-app"
+
+
+def test_app_build_start_rejects_bad_app_name():
+    result = logic.app_build_start(FakeAdminClient(), "Not Valid!", "goal", confirm=True)
+    assert not result["ok"]
+    assert "invalid app name" in result["error"]
+
+
+def test_app_build_start_rejects_empty_goal():
+    result = logic.app_build_start(FakeAdminClient(), "demo-app", "  ", confirm=True)
+    assert not result["ok"]
+    assert "goal" in result["error"]
+
+
+def test_app_build_start_confirmed_posts_to_sidecar():
+    admin = FakeAdminClient(
+        post_responses={"/api/appbuild/start": {"ok": True, "started": True, "profile": "kimi-k3"}},
+    )
+    result = logic.app_build_start(admin, "demo-app", "add a button", confirm=True)
+    assert result["ok"] and result["started"]
+    assert admin.posts[0][0] == "/api/appbuild/start"
+    assert admin.posts[0][1]["app"] == "demo-app"
+
+
+def test_app_build_status_reports_running():
+    admin = FakeAdminClient(get_responses={
+        "/api/appbuild/job": {"ok": True, "job": {
+            "state": "running", "app": "demo-app", "profile": "kimi-k3", "goal": "add a button",
+        }, "status": {}},
+    })
+    result = logic.app_build_status(admin)
+    assert result["ok"]
+    assert "Still building" in result["summary"]
+
+
+def test_app_build_submit_refused_before_validation():
+    admin = FakeAdminClient(get_responses={
+        "/api/appbuild/job": {"ok": True, "job": {"state": "done"}, "status": {
+            "active": True, "proposals": [{"path": "src/x.js", "rationale": "y"}],
+            "validated_ok": False,
+        }},
+    })
+    result = logic.app_build_submit(admin, confirm=True)
+    assert not result["ok"]
+    assert "validation" in result["error"]
+
+
+def test_app_build_submit_previews_then_confirms():
+    admin = FakeAdminClient(
+        get_responses={
+            "/api/appbuild/job": {"ok": True, "job": {"state": "done"}, "status": {
+                "active": True, "proposals": [{"path": "src/x.js", "rationale": "y"}],
+                "validated_ok": True,
+            }},
+        },
+        post_responses={"/api/appbuild/submit": {"ok": True, "pr_url": "https://example.invalid/pr/1"}},
+    )
+    preview = logic.app_build_submit(admin, confirm=False)
+    assert preview["ok"] and preview["needs_confirmation"]
+    confirmed = logic.app_build_submit(admin, confirm=True)
+    assert confirmed["ok"] and confirmed["pr_url"] == "https://example.invalid/pr/1"

@@ -61,11 +61,22 @@ def _format_models(models: list[dict[str, Any]]) -> str:
     return ", ".join(parts) if parts else "none"
 
 
-def selfedit_start(client, goal: str, profile: str | None = None, confirm: bool = False) -> dict[str, Any]:
-    """Two-phase start of an upgrade run (preview, then confirm)."""
+def selfedit_start(
+    client,
+    goal: str,
+    profile: str | None = None,
+    confirm: bool = False,
+    plan_path: str = "",
+) -> dict[str, Any]:
+    """Two-phase start of an upgrade run (preview, then confirm).
+
+    PLAN_PATH, when set, names a repo plan/spec document the sidecar reads
+    and injects into the run — use it whenever the user asks to implement
+    an existing plan, spec, or phase document."""
     goal = (goal or "").strip()
     if not goal:
         return {"ok": False, "error": "I need a goal — what should I change about myself?"}
+    plan_path = (plan_path or "").strip()
 
     models_resp = _call(lambda: client.get("/api/selfedit/models"))
     if not models_resp.get("ok"):
@@ -101,11 +112,12 @@ def selfedit_start(client, goal: str, profile: str | None = None, confirm: bool 
         }
 
     if not confirm:
+        seeded = f", seeded with the plan at {plan_path}" if plan_path else ""
         return {
             "ok": True,
             "needs_confirmation": True,
             "summary": (
-                f"Ready to plan this edit with {chosen or 'the default planner'}: "
+                f"Ready to plan this edit with {chosen or 'the default planner'}{seeded}: "
                 f"“{goal}”. Planning runs in the background and can take several "
                 f"minutes; I can check progress anytime. Say yes to start."
             ),
@@ -113,7 +125,10 @@ def selfedit_start(client, goal: str, profile: str | None = None, confirm: bool 
             "profile": chosen,
         }
 
-    run_resp = _call(lambda: client.post("/api/selfedit/run", json={"goal": goal, "profile": chosen}))
+    payload: dict[str, Any] = {"goal": goal, "profile": chosen}
+    if plan_path:
+        payload["plan_path"] = plan_path
+    run_resp = _call(lambda: client.post("/api/selfedit/run", json=payload))
     if not run_resp.get("ok"):
         return run_resp
     return {

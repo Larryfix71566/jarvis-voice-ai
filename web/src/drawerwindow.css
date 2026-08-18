@@ -1,0 +1,17 @@
+/**
+ * drawerwindow.css — page-level reset for the popped-out drawer window
+ * (MORTIMER_DRAWER_POPOUT_PLAN.md DP1), mirroring displaywindow.css.
+ * Imported ONLY by drawerMain.tsx, never by App.tsx — a body{} rule at
+ * this scope would leak into the main console if it were.
+ */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: #04090c;
+}
+
+#root {
+  height: 100%;
+}

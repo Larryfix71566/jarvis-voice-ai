@@ -125,3 +125,28 @@ def test_second_session_refused_while_active(service: SelfEditService) -> None:
     res = service.start_session("second")
     assert not res["ok"]
     assert "already active" in res["error"]
+
+
+def test_validate_runs_pytest_gate_and_passes(service: SelfEditService) -> None:
+    """C2 (MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md): validate() must
+    run `pytest tests/unit -q` as its own check, alongside allowlist/import/
+    build, not just leave backend behavior unverified once those three
+    pass."""
+    service.start_session("add passing test")
+    tests_dir = service.repo_root / "tests" / "unit"
+    tests_dir.mkdir(parents=True)
+    (tests_dir / "test_ok.py").write_text("def test_ok():\n    assert True\n")
+    res = service.validate()
+    pytest_check = next(c for c in res["checks"] if c["name"] == "pytest")
+    assert pytest_check["ok"], pytest_check
+
+
+def test_validate_pytest_gate_fails_on_broken_test(service: SelfEditService) -> None:
+    service.start_session("add failing test")
+    tests_dir = service.repo_root / "tests" / "unit"
+    tests_dir.mkdir(parents=True)
+    (tests_dir / "test_broken.py").write_text("def test_broken():\n    assert False\n")
+    res = service.validate()
+    pytest_check = next(c for c in res["checks"] if c["name"] == "pytest")
+    assert not pytest_check["ok"]
+    assert res["ok"] is False

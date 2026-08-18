@@ -306,6 +306,145 @@ def app_list(client) -> dict:
     return {"ok": True, "apps": registry.get("apps", [])}
 
 
+# --------------------------------------------------------------- app-build
+# MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md D6. These three
+# functions are thin HTTP clients of the admin sidecar's /api/appbuild/*
+# endpoints (jarvis/admin/server.py), the SAME kind of exception to
+# "only github.py touches the network" that mcp_selfedit/logic.py already
+# makes for its own AdminClient calls — the sidecar is Mortimer's own
+# process on 127.0.0.1, not GitHub or any other external network. `client`
+# here is an AdminClient (or fake), never a GitHubClient — a different
+# object from every other function in this module, on purpose: app-build
+# state lives in the sidecar, not on the app's own GitHub API surface.
+
+
+def app_build_start(
+    client, app: str, goal: str, profile: str = "", confirm: bool = False,
+    plan_path: str = "",
+) -> dict:
+    """Two-phase start of an app-build run (preview, then confirm), same
+    convention as mcp_selfedit.logic.selfedit_start."""
+    try:
+        app = validate_app_name(app)
+    except ValueError as exc:
+        return _err(str(exc))
+    goal = (goal or "").strip()
+    if not goal:
+        return _err("I need a goal — what should I build in this app?")
+    if not confirm:
+        seeded = f", seeded with the plan at {plan_path}" if plan_path else ""
+        return {
+            "ok": True,
+            "needs_confirmation": True,
+            "summary": (
+                f"Ready to build in '{app}'{seeded}: “{goal}”. This runs in "
+                "the background and can take a while; I can check progress "
+                "anytime. Say yes to start."
+            ),
+            "app": app, "goal": goal, "profile": profile or None,
+        }
+    payload: dict = {"app": app, "goal": goal, "profile": profile or None}
+    if plan_path:
+        payload["plan_path"] = plan_path
+    try:
+        resp = client.post("/api/appbuild/start", json=payload)
+    except Exception as exc:  # noqa: BLE001 — sidecar offline
+        return _err(f"the admin sidecar looks offline: {exc}")
+    if not resp.get("ok"):
+        return resp
+    return {
+        "ok": True, "started": True,
+        "summary": (
+            f"Started building in '{app}' with {resp.get('profile', profile)}. "
+            "This can take a while — ask me how it's coming along anytime."
+        ),
+        "profile": resp.get("profile", profile),
+    }
+
+
+def app_build_status(client) -> dict:
+    """Compose the app-build job + workspace state into one spoken
+    summary, same shape as mcp_selfedit.logic.selfedit_status."""
+    try:
+        resp = client.get("/api/appbuild/job")
+    except Exception as exc:  # noqa: BLE001
+        return _err(f"the admin sidecar looks offline: {exc}")
+    if not resp.get("ok"):
+        return resp
+    job = resp.get("job", {}) or {}
+    status = resp.get("status", {}) or {}
+
+    if job.get("state") == "running":
+        return {
+            "ok": True,
+            "summary": (
+                f"Still building in '{job.get('app', 'the app')}' with "
+                f"{job.get('profile', 'the planner')} — goal: “{job.get('goal', '')}”. "
+                "I'll keep at it."
+            ),
+            "job": job,
+        }
+    parts: list[str] = []
+    if job.get("state") in ("done", "error") and job.get("summary"):
+        parts.append(str(job["summary"]))
+    if status.get("active"):
+        proposals = status.get("proposals", []) or []
+        if proposals:
+            parts.append(
+                "Proposed edits: "
+                + "; ".join(f"{p['path']} — {p.get('rationale', '')}" for p in proposals)
+            )
+        if status.get("validated_ok"):
+            parts.append("Validation has passed — say the word and I'll submit the pull request.")
+    elif not parts:
+        parts.append("No app-build run or session is active right now.")
+    return {"ok": True, "summary": " ".join(parts), "job": job, "active": bool(status.get("active"))}
+
+
+def app_build_submit(client, confirm: bool = False) -> dict:
+    """Two-phase PR submission for the active app-build session, same
+    convention as mcp_selfedit.logic.selfedit_submit."""
+    try:
+        status_resp = client.get("/api/appbuild/job")
+    except Exception as exc:  # noqa: BLE001
+        return _err(f"the admin sidecar looks offline: {exc}")
+    if not status_resp.get("ok"):
+        return status_resp
+    if status_resp.get("job", {}).get("state") == "running":
+        return _err("the app build is still working — ask for status instead.")
+    sess = status_resp.get("status", {}) or {}
+    if not sess.get("active"):
+        return _err("there's no app-build session to submit — start one first.")
+    if not sess.get("proposals"):
+        return _err("no edits have been proposed yet.")
+    if not sess.get("validated_ok"):
+        return _err("validation hasn't passed — the build agent must validate before this can be called.")
+    if not confirm:
+        files = ", ".join(p["path"] for p in sess["proposals"])
+        return {
+            "ok": True,
+            "needs_confirmation": True,
+            "summary": (
+                f"Ready to open a pull request with these edits: {files}. "
+                "I cannot merge it — merging always stays with you on GitHub. "
+                "Say ‘submit the PR’ to proceed."
+            ),
+        }
+    try:
+        resp = client.post("/api/appbuild/submit")
+    except Exception as exc:  # noqa: BLE001
+        return _err(f"the admin sidecar looks offline: {exc}")
+    if not resp.get("ok"):
+        return resp
+    return {
+        "ok": True, "pr_url": resp.get("pr_url"),
+        "summary": (
+            f"Pull request opened: {resp.get('pr_url')}. Review and merge it on "
+            "GitHub — I cannot merge it myself."
+        ),
+    }
+
+
 def app_read(client, app: str, path: str) -> dict:
     """Read-only: one file from an app's repo."""
     try:

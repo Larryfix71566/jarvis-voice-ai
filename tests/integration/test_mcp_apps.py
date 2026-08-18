@@ -15,6 +15,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 EXPECTED_TOOLS = {
     "app_create", "app_write_file", "app_register", "app_list", "app_read",
+    # D6 (MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md): thin HTTP
+    # clients of the admin sidecar, not GitHub — GITHUB_TOKEN degraded
+    # mode above doesn't apply to these three.
+    "app_build_start", "app_build_status", "app_build_submit",
 }
 
 

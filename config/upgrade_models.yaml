@@ -16,6 +16,13 @@
 # This file is NOT on the self-edit allowlist: the agent cannot re-point its
 # own brain. Changes land via the normal human PR process.
 #
+# vision: true — MORTIMER_SHELL_FIX_AND_SCREEN_VISION_PLAN.md V2. Marks a
+# profile whose model can read IMAGES, making it eligible to answer
+# view_screen questions (resolution order: JARVIS_VISION_PROFILE, then
+# the first key-present vision profile in this file's order). Set it
+# only for models actually confirmed multimodal — do not set it
+# speculatively; an unset profile is simply never chosen for vision.
+#
 # tier: economy | mid | frontier — MORTIMER_LLM_COUNCIL_PLAN.md D4. Which
 # escalation tier's proposer/judge pool a profile belongs to. Read by
 # jarvis.agents.upgrade_agent.available_models() and jarvis.council.config,
@@ -51,6 +58,7 @@ profiles:
     api_key_env: ANTHROPIC_API_KEY
     temperature: 0.2
     tier: frontier
+    vision: true
 
   - name: claude-fable-5
     label: "Claude Fable 5 — Anthropic Mythos-class, above Opus"
@@ -60,6 +68,7 @@ profiles:
     api_key_env: ANTHROPIC_API_KEY
     temperature: 0.2
     tier: frontier
+    vision: true
 
   - name: gpt-4.1-mini
     label: "GPT-4.1 mini — fast and cheap"

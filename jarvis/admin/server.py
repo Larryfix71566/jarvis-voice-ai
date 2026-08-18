@@ -54,12 +54,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from jarvis.agents.upgrade_agent import (
+    AppBuildAgent,
     UnknownModelProfileError,
     UpgradeAgent,
     available_models,
     load_model_registry,
     resolve_profile,
 )
+from jarvis.agents.workspace import AppWorkspace
 from jarvis import memory as memory_module
 from jarvis.council import config as council_config
 from jarvis.council import council as council_mod
@@ -68,6 +70,7 @@ from jarvis.prompts import PLAN_AUTHOR_PROMPT, PLAN_REVIEW_PROMPT
 from jarvis.runlog import get_run, list_runs, parse_since
 from jarvis.selfedit.service import SelfEditService
 from jarvis.vault import inject_env
+from mcp_servers.mcp_apps.logic import validate_app_name
 from mcp_servers.mcp_git import logic
 from mcp_servers.mcp_repo import logic as repo_logic
 
@@ -138,6 +141,11 @@ class GoalIn(BaseModel):
     # (typically adopted via POST /api/plan/adopt) that UpgradeAgent.run()
     # injects as a system message before its edit loop begins.
     plan: str | None = None
+    # Voice-path equivalent of `plan`: a repo path to a plan document the
+    # sidecar reads ONCE, synchronously, at start (same read-and-refuse
+    # pattern as plan_start's review_path — an unreadable plan must never
+    # seed a run). Ignored when `plan` is set explicitly.
+    plan_path: str | None = None
 
 
 class ConveneIn(BaseModel):
@@ -172,6 +180,17 @@ class PlanChooseIn(BaseModel):
 
 class PlanAdoptIn(BaseModel):
     path: str | None = None
+
+
+class AppBuildGoalIn(BaseModel):
+    """MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md D5. Same
+    plan/plan_path shape as GoalIn — plan_path is read-and-refuse
+    identical to selfedit's."""
+    app: str
+    goal: str
+    profile: str | None = None
+    plan: str | None = None
+    plan_path: str | None = None
 
 
 # Single self-edit session for the sidecar process (plan §3: one at a time).
@@ -227,6 +246,26 @@ _plan_job: dict[str, Any] = {
     "review_path": None,
 }
 
+# MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md D5 — a fourth async-job
+# slot, same shape/pattern as _run_job/_plan_job/_council_job above. Unlike
+# _selfedit_service (one fixed Mortimer-repo session), the AppWorkspace is
+# constructed fresh per app-build job (the app name varies), so there is
+# no persistent module-level workspace — _appbuild_workspace holds the
+# CURRENT job's workspace only, for the status/submit/cancel endpoints to
+# reach. One app build at a time (one slot), and an app build does not
+# block self-edit jobs — separate slots, separate locks.
+_appbuild_lock = threading.Lock()
+_appbuild_workspace: AppWorkspace | None = None
+_appbuild_job: dict[str, Any] = {
+    "state": "idle",  # idle | running | done | error
+    "app": None,
+    "goal": None,
+    "profile": None,
+    "summary": None,
+    "started_at": None,
+    "finished_at": None,
+}
+
 
 def _make_agent(service: SelfEditService, profile: str | None) -> UpgradeAgent:
     """Construct the planner (seam for tests)."""
@@ -261,6 +300,48 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None) -> None:
 def _busy() -> bool:
     with _run_lock:
         return _run_job["state"] == "running"
+
+
+def _make_appbuild_agent(workspace: AppWorkspace, profile: str | None) -> AppBuildAgent:
+    """Construct the planner (seam for tests), mirroring _make_agent."""
+    return AppBuildAgent(workspace, profile=profile)
+
+
+def _appbuild_busy() -> bool:
+    with _appbuild_lock:
+        return _appbuild_job["state"] == "running"
+
+
+def _run_appbuild_agent(
+    app: str, goal: str, profile: str | None, plan: str | None = None,
+) -> None:
+    """Background thread target, mirroring _run_agent: build one app, then
+    settle _appbuild_job. The AppWorkspace itself lives on _appbuild_
+    workspace so the status/submit/cancel endpoints can reach the same
+    session this thread is driving."""
+    global _appbuild_workspace
+    try:
+        workspace = AppWorkspace(app)
+        with _appbuild_lock:
+            _appbuild_workspace = workspace
+        agent = _make_appbuild_agent(workspace, profile)
+        result = agent.run(goal, plan=plan)
+        state = "done" if result.get("ok") else "error"
+        with _appbuild_lock:
+            _appbuild_job.update(
+                state=state, summary=result.get("summary", ""),
+                finished_at=time.time(),
+            )
+        logger.info("appbuild_state_transition state=%s app=%r goal=%r", state, app, goal)
+    except Exception as exc:  # a build crash must still settle the job
+        logger.exception("app build run crashed")
+        with _appbuild_lock:
+            _appbuild_job.update(
+                state="error",
+                summary=f"app build run crashed: {type(exc).__name__}: {exc}",
+                finished_at=time.time(),
+            )
+        logger.info("appbuild_state_transition state=error app=%r goal=%r", app, goal)
 
 
 def _council_busy() -> bool:
@@ -482,6 +563,23 @@ def selfedit_run(body: GoalIn) -> dict:
     goal = (body.goal or "").strip()
     if not goal:
         return {"ok": False, "error": "a goal is required — what should I change?"}
+    plan = body.plan
+    plan_path = (body.plan_path or "").strip()
+    if plan is None and plan_path:
+        # Voice-path plan seeding: read the plan document once,
+        # synchronously, before the thread launches — mirrors plan_start's
+        # review_path read-and-refuse (MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md
+        # R1). Same truncation knob: a seeded plan is a document injection
+        # with the same size concerns as a reviewed one.
+        read_result = repo_logic.repo_read_file(plan_path)
+        if not read_result.get("ok"):
+            return {"ok": False, "error": read_result.get("error")}
+        plan = read_result.get("content") or ""
+        if len(plan) > council_config.PLAN_REVIEW_DOC_MAX_CHARS:
+            plan = (
+                plan[: council_config.PLAN_REVIEW_DOC_MAX_CHARS]
+                + "\n\n… (plan truncated at injection)"
+            )
     with _run_lock:
         if _run_job["state"] == "running":
             return {
@@ -506,7 +604,7 @@ def selfedit_run(body: GoalIn) -> dict:
     # D17 — every self-edit state transition is logged.
     logger.info("selfedit_state_transition state=running goal=%r", goal)
     threading.Thread(
-        target=_run_agent, args=(goal, body.profile, body.plan), daemon=True,
+        target=_run_agent, args=(goal, body.profile, plan), daemon=True,
     ).start()
     return {"ok": True, "started": True, "profile": agent.model_label()}
 
@@ -588,6 +686,104 @@ def selfedit_reject() -> dict:
     }
 
 
+# ------------------------------------------------------------- app-build
+# MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md D5. Same background-
+# thread-plus-polling shape as self-edit above, in its own job slot/lock
+# so an app build never blocks a self-edit run (or vice versa). No merge
+# endpoint here either — merging an app-build PR is human, on GitHub,
+# always, same rule as self-edit.
+
+
+@app.post("/api/appbuild/start")
+def appbuild_start(body: AppBuildGoalIn) -> dict:
+    """Start an app-build run in the background; poll GET /api/appbuild/job."""
+    goal = (body.goal or "").strip()
+    if not goal:
+        return {"ok": False, "error": "a goal is required — what should I build?"}
+    try:
+        app_name = validate_app_name(body.app)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+    plan = body.plan
+    plan_path = (body.plan_path or "").strip()
+    if plan is None and plan_path:
+        # Voice-path plan seeding — identical read-and-refuse pattern to
+        # selfedit_run's, so an unreadable plan can never seed a build.
+        read_result = repo_logic.repo_read_file(plan_path)
+        if not read_result.get("ok"):
+            return {"ok": False, "error": read_result.get("error")}
+        plan = read_result.get("content") or ""
+        if len(plan) > council_config.PLAN_REVIEW_DOC_MAX_CHARS:
+            plan = (
+                plan[: council_config.PLAN_REVIEW_DOC_MAX_CHARS]
+                + "\n\n… (plan truncated at injection)"
+            )
+    with _appbuild_lock:
+        if _appbuild_job["state"] == "running":
+            return {
+                "ok": False,
+                "error": "an app build is already in progress — ask for status instead",
+                "job": dict(_appbuild_job),
+            }
+        try:
+            # Construct now (against a throwaway probe workspace, never
+            # cloned) so an unknown profile or a missing GITHUB_TOKEN fails
+            # fast, synchronously, before we report the build as started —
+            # same rule selfedit_run's _make_agent call follows.
+            probe = AppWorkspace(app_name)
+            agent = _make_appbuild_agent(probe, body.profile)
+        except UnknownModelProfileError as exc:
+            return {"ok": False, "error": str(exc)}
+        except Exception as exc:  # noqa: BLE001 — e.g. GitHubError: no token configured
+            return {"ok": False, "error": str(exc)}
+        _appbuild_job.update(
+            state="running", app=app_name, goal=goal,
+            profile=agent.model_label(), summary=None,
+            started_at=time.time(), finished_at=None,
+        )
+    logger.info("appbuild_state_transition state=running app=%r goal=%r", app_name, goal)
+    threading.Thread(
+        target=_run_appbuild_agent, args=(app_name, goal, body.profile, plan), daemon=True,
+    ).start()
+    return {"ok": True, "started": True, "profile": agent.model_label()}
+
+
+@app.get("/api/appbuild/job")
+def appbuild_job_status() -> dict:
+    with _appbuild_lock:
+        job = dict(_appbuild_job)
+        workspace = _appbuild_workspace
+    status = workspace.status() if workspace is not None else {"active": False}
+    return {"ok": True, "job": job, "status": status}
+
+
+@app.post("/api/appbuild/submit")
+def appbuild_submit() -> dict:
+    if _appbuild_busy():
+        return {"ok": False, "error": "an app build is in progress — ask for status instead"}
+    with _appbuild_lock:
+        workspace = _appbuild_workspace
+    if workspace is None or not workspace.branch:
+        return {"ok": False, "error": "no active app-build session to submit"}
+    result = workspace.submit()
+    logger.info("appbuild_state_transition state=submitted ok=%s", result.get("ok"))
+    return result
+
+
+@app.post("/api/appbuild/cancel")
+def appbuild_cancel() -> dict:
+    """Discard the active app-build session (mirrors selfedit_revert)."""
+    if _appbuild_busy():
+        return {"ok": False, "error": "an app build is in progress — ask for status instead"}
+    with _appbuild_lock:
+        workspace = _appbuild_workspace
+    if workspace is None or not workspace.branch:
+        return {"ok": False, "error": "no active app-build session to cancel"}
+    result = workspace.revert()
+    logger.info("appbuild_state_transition state=cancelled ok=%s", result.get("ok"))
+    return result
+
+
 # --------------------------------------------------------------- memory
 # Plan Phase 5e: visibility/correction surface. Thin pass-throughs over
 # jarvis.memory — matching the git panel's convention above (logic lives in
@@ -626,7 +822,39 @@ def ambient() -> dict:
         reminder = {"text": r["message"], "due_at": r["due_at"]}
         break
     summary = memory_module.get_summary_text() or None
-    return {"ok": True, "reminder": reminder, "summary": summary}
+    # Larry 2026-08-18: live weather for the current location — fetched
+    # HERE (sidecar), never by the client; jarvis/ambient_weather.py
+    # caches 15 min and degrades to None on any failure.
+    from jarvis.ambient_weather import get_weather
+
+    return {
+        "ok": True,
+        "reminder": reminder,
+        "summary": summary,
+        "weather": get_weather(),
+    }
+
+
+class LocationBody(BaseModel):
+    lat: float
+    lon: float
+    label: str = ""
+
+
+@app.post("/api/location")
+def set_location(body: LocationBody) -> dict:
+    """Device location, posted by the Mac shell's CoreLocation manager
+    (Larry 2026-08-18 — "I want to know where I am so that current
+    weather is correct for my current location"). Coordinates are held in
+    memory only (jarvis/ambient_weather.py), never written to disk or the
+    run log, and go stale after an hour so a shell that stops reporting
+    falls back to IP geolocation rather than pinning a place Larry left."""
+    if not (-90.0 <= body.lat <= 90.0 and -180.0 <= body.lon <= 180.0):
+        return {"ok": False, "error": "coordinates out of range"}
+    from jarvis.ambient_weather import set_device_location
+
+    set_device_location(body.lat, body.lon, body.label)
+    return {"ok": True}
 
 
 @app.delete("/api/memory/fact/{key}")

@@ -23,17 +23,24 @@ def _get_client():
 
 
 @mcp.tool()
-def selfedit_start(goal: str, profile: str = "", confirm: bool = False) -> dict:
+def selfedit_start(
+    goal: str, profile: str = "", confirm: bool = False, plan_path: str = ""
+) -> dict:
     """Start a self-development run for GOAL (a change to Mortimer itself).
 
     Two-phase: call with confirm=false to preview the goal and planner model,
     then — only after the user explicitly agrees — call again with
     confirm=true. PROFILE optionally names a planner from the registry (e.g.
-    'kimi-k2', 'kimi-k3', 'claude-opus'); empty uses the default. The run is
-    asynchronous: it plans in the background for several minutes; use
+    'kimi-k2', 'kimi-k3', 'claude-opus'); empty uses the default. PLAN_PATH,
+    when set, names an existing repo plan/spec document (e.g.
+    docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md) that seeds the run — use it
+    whenever the user asks to implement a plan, spec, or phase document. The
+    run is asynchronous: it plans in the background for several minutes; use
     selfedit_status to check progress.
     """
-    return logic.selfedit_start(_get_client(), goal, profile or None, confirm)
+    return logic.selfedit_start(
+        _get_client(), goal, profile or None, confirm, plan_path=plan_path
+    )
 
 
 @mcp.tool()

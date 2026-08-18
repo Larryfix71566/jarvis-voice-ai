@@ -78,6 +78,15 @@ export function removeResult(id: number): void {
   notify();
 }
 
+/** MORTIMER_DRAWER_POPOUT_PLAN.md DP3 — same relay pattern as
+ * agentRuns.ts's applyRelayedRuns: the drawer window's copy of this store
+ * has no RTVI connection and is fed wholesale by the console's relay
+ * (web/src/drawerRelay.ts) instead of applyServerMessage. */
+export function applyRelayedResults(next: DisplayResult[]): void {
+  results = next;
+  notify();
+}
+
 /** Engagement plan E1 — the deterministic "needs your confirmation"
  * rule, in its ONE home: attention is active iff the NEWEST drawer
  * item was produced by a draft-gated tool (the draft→confirm pattern's

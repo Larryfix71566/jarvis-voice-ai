@@ -134,6 +134,37 @@ def test_start_env_profile_missing_key_names_env_profile(monkeypatch):
     assert r["ok"] is False and "MOONSHOT_API_KEY" in r["error"] and "kimi-k3" in r["error"]
 
 
+def test_start_plan_path_in_preview_summary():
+    c = _client()
+    r = logic.selfedit_start(
+        c, "implement geolocation phase 1",
+        plan_path="docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md",
+    )
+    assert r["ok"] and r["needs_confirmation"]
+    assert "docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md" in r["summary"]
+    assert c.posts == []  # preview never POSTs
+
+
+def test_start_confirm_posts_plan_path():
+    c = _client()
+    r = logic.selfedit_start(
+        c, "implement geolocation phase 1", confirm=True,
+        plan_path="docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md",
+    )
+    assert r["started"]
+    assert c.posts == [("/api/selfedit/run", {
+        "goal": "implement geolocation phase 1",
+        "profile": "kimi-k2",
+        "plan_path": "docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md",
+    })]
+
+
+def test_start_empty_plan_path_omitted_from_post():
+    c = _client()
+    logic.selfedit_start(c, "dark theme", confirm=True, plan_path="  ")
+    assert c.posts == [("/api/selfedit/run", {"goal": "dark theme", "profile": "kimi-k2"})]
+
+
 # ── selfedit_status ────────────────────────────────────────────────────────
 
 def test_status_while_running():
