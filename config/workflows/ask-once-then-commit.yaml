@@ -1,0 +1,10 @@
+# Consolidated from 1 memory fact(s) on conversion (K6.2).
+name: ask-once-then-commit
+when: "branch merge approach choice option direction which way"
+steps:
+  - Ask the clarifying question up front (new branch vs merge, which approach).
+  - Once Larry answers, proceed decisively without re-litigating.
+done_when:
+  - The question was asked before work started, and not asked twice
+# source facts:
+#   user.style.decision_making

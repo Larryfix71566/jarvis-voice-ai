@@ -1,0 +1,9 @@
+# Consolidated from 1 memory fact(s) on conversion (K6.2).
+name: use-screen-vision-to-verify
+when: "terminal error screen window check what happened verify visually"
+steps:
+  - Use screen vision to look at the terminal or window rather than asking Larry to describe it.
+done_when:
+  - The visual state was observed, not narrated
+# source facts:
+#   user.style.prefer_visual_check

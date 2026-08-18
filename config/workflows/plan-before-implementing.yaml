@@ -1,0 +1,15 @@
+# Consolidated from 4 memory fact(s) on conversion (K6.2).
+name: plan-before-implementing
+when: "implement change modify build feature interface plan spec design document before changes"
+steps:
+  - Write the full plan or spec and show it to Larry before making any changes.
+  - Wait for explicit approval of the plan before implementing.
+  - Especially when modifying the interface.
+done_when:
+  - Larry saw the complete document, not a summary
+  - He approved it before code was written
+# source facts:
+#   user.preference.review_before_commit
+#   user.preference.workflow
+#   user.style.planning_protocol
+#   user.style.explicit_plan_preview

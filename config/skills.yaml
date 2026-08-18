@@ -1,0 +1,29 @@
+# Which skills are actually loaded (K3, MORTIMER_KNOWLEDGE_FRAMEWORK_PLAN.md).
+#
+# Larry, 2026-08-18: "skills should only be added one at a time so the
+# risk can be reviewed individually."
+#
+# A skill folder under `skills/` does NOTHING until its name appears
+# here. Cloning a repository of community skills therefore enables
+# exactly zero of them. That is the review gate, and it is the reason
+# this file exists rather than the loader simply globbing the directory.
+#
+# Read the SKILL.md before you uncomment its name. Two things to look
+# for, in order:
+#
+#   1. Does the body tell an agent to do anything you would not do
+#      yourself? It goes into a prompt verbatim.
+#   2. Does the folder carry a `scripts/` directory? Mortimer never
+#      executes those — but their presence means the skill was written
+#      expecting capabilities it will not have here, so its instructions
+#      may reference tools that do not exist.
+#
+# `python -m jarvis.agent_skills --list` shows what is on disk and which
+# of it is live.
+
+enabled: []
+  # Promoted from active procedures on 2026-08-18, awaiting review:
+  # - git-history-and-status-review
+  # - current-weather-with-fahrenheit
+  # - layered-geolocation
+  # - technical-plan-document

@@ -67,6 +67,11 @@ DENY_WRITE_PATHS = frozenset({
     "config/mcp_servers.yaml",
     "config/self_edit_allowlist.json",
     "config/upgrade_models.yaml",
+    # K3: the skill registration gate. A skill is inert until Larry adds
+    # its name here after reading it, so an agent able to write this file
+    # could enable capability text for itself — the same "never touch
+    # your own machinery" rule that denies the model registry.
+    "config/skills.yaml",
     "claude.md",  # compared lowercase; see _check_write_allowed
 })
 DENY_WRITE_SEGMENTS = frozenset({".github", "scripts"})

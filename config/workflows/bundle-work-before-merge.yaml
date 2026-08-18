@@ -1,0 +1,10 @@
+# Consolidated from 1 memory fact(s) on conversion (K6.2).
+name: bundle-work-before-merge
+when: "commit merge main branch uncommitted feature work push"
+steps:
+  - Bundle outstanding feature work into commits before merging to main.
+  - Do not leave feature work uncommitted across a merge.
+done_when:
+  - Nothing related was left uncommitted at merge time
+# source facts:
+#   user.style.commit_prep

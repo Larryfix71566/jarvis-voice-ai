@@ -22,6 +22,8 @@
     "config/upgrade_models.yaml",
     "config/agents.yaml",
     "config/mcp_servers.yaml",
+    "config/skills.yaml",
+    "skills/**",
     "requirements*.txt",
     "web/package.json",
     "web/package-lock.json",

@@ -1,0 +1,11 @@
+# Consolidated from 2 memory fact(s) on conversion (K6.2).
+name: live-progress-during-runs
+when: "run task execute long working progress status waiting subagent card"
+steps:
+  - Show real-time progress while a task runs.
+  - Never leave Larry watching an empty window with no indication of work.
+done_when:
+  - Status was visible throughout, not only at the end
+# source facts:
+#   user.preference.sidecar_status
+#   user.style.progress_visibility

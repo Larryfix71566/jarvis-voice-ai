@@ -34,7 +34,9 @@ from jarvis.agents.upgrade_agent import (
     resolve_profile,
 )
 from jarvis.config import Settings
+from jarvis.agent_skills import match_skill
 from jarvis.procedures import match_procedure, mark_used
+from jarvis.workflows import match_workflow
 from jarvis.prompts import SUBAGENT_PROMPTS
 from jarvis.runlog import RunLogger, get_run_id, run_logger_scope
 from jarvis.toolresult import classify_tool_result
@@ -315,6 +317,47 @@ class SubAgent:
                     ),
                 })
                 mark_used(procedure["id"])
+
+        # K3 skills — authored capability knowledge in the Agent Skills
+        # format, injected between the procedure hint and the workflow
+        # rule. That position is the whole ordering argument in one line:
+        # evidence (what worked once) < reference (how this is done) <
+        # requirement (how Larry wants it done), with the strongest claim
+        # read last. Matching reads only name+description; the body is
+        # read from disk for the ONE skill that matched, which is what
+        # progressive disclosure buys. Two gates upstream mean a match is
+        # already reviewed: the skill had to be registered by name in
+        # config/skills.yaml, and nothing in that module can execute a
+        # bundled script. Never raises; kill switch is inside load_skills.
+        try:
+            skill = match_skill(task)
+        except Exception:  # noqa: BLE001
+            logger.exception("skill_match_failed agent=%s", self.name)
+            skill = None
+        if skill is not None:
+            messages.append({"role": "system", "content": skill.as_prompt()})
+            logger.info("skill_injected agent=%s name=%s", self.name, skill.name)
+
+        # K4 workflows — authored, normative, injected AFTER the procedure
+        # hint so the standing instruction is the last thing read before
+        # the task. Order matters and is deliberate: a procedure says what
+        # worked once, a workflow says what Larry requires; when they
+        # disagree the rule should be the fresher context.
+        #
+        # Guidance only — nothing here executes steps or blocks on
+        # done_when. Never raises: a matching failure must not break a
+        # run, and the kill switch (JARVIS_WORKFLOWS_ENABLED) is enforced
+        # inside load_workflows.
+        try:
+            workflow = match_workflow(self.name, task)
+        except Exception:  # noqa: BLE001
+            logger.exception("workflow_match_failed agent=%s", self.name)
+            workflow = None
+        if workflow is not None:
+            messages.append({"role": "system", "content": workflow.as_prompt()})
+            logger.info("workflow_injected agent=%s name=%s source=%s",
+                        self.name, workflow.name, workflow.source)
+
         messages.append({"role": "user", "content": task})
         tools = self._registry.openai_tools(self.mcp_servers)
         tools_kwarg = {"tools": tools} if tools else {}

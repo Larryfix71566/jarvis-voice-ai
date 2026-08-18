@@ -1,8 +1,23 @@
 # Mortimer knowledge framework — memory, procedures, skills, workflows
 
 **Status:** APPROVED 2026-08-18. IMPLEMENTED: §1.5 Golden Rules, K1 tiering,
-K2 consolidation + volatile firewall, K6 conversion layer. NOT YET BUILT:
-K3 skills, K4 workflows, K5 console. Open decisions D3/D4/D6/D7/D8/D9.
+K2 consolidation + volatile firewall, K3 skills, K4 workflows, K5 console,
+K6 conversion layer — all six parts built and tested.
+
+D7 decided by Larry 2026-08-18 ("skills should only be added one at a time
+so the risk can be reviewed individually"): enforced as `config/skills.yaml`,
+which a skill must be named in before it loads. Scripts are never executed —
+`jarvis/agent_skills.py` has no execution path at all, which is stronger
+than the per-skill opt-in §5 originally proposed and made that opt-in
+unnecessary.
+
+D6 (the `skill.yaml` / `SKILL.md` collision) remains OPEN and is no longer
+blocking: the module is `jarvis/agent_skills.py` and the content lives in
+`skills/` at the repo root, so nothing was renamed. Renaming the 11 MCP
+manifests to `server.yaml` is still the cleaner end state.
+
+Still open: D3/D4/D8/D9, plus 67 facts sitting in `needs-review` from the
+K6 classification pass.
 
 **Author:** drafted 2026-08-18 for Larry.
 **Origin:** Larry, by voice, 2026-08-18: *"I'm afraid that we're distorting

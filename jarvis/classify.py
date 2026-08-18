@@ -222,6 +222,55 @@ def _load_facts(conn) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def extract_workflow(conn, key: str, slug: str | None = None) -> str:
+    """K6.2 — turn ONE fact into a workflow file and archive the source.
+
+    Deliberately one key per invocation, named explicitly: there is no
+    bulk apply, because a classifier that is subtly wrong across 29 facts
+    at once is far more expensive than 29 reviewed decisions. Returns the
+    path written.
+
+    The fact is ARCHIVED, not deleted (K6.3) — `became` records the
+    workflow it turned into, so a wrong extraction is reversible by
+    reading the row instead of reconstructing text from a transcript.
+    """
+    import re as _re
+
+    from jarvis.memory import archive_fact
+    from jarvis.workflows import WORKFLOWS_DIR
+
+    row = conn.execute(
+        "SELECT key, content, COALESCE(tier,'project') AS tier FROM memories "
+        "WHERE key = ? AND kind = 'fact' AND archived_at IS NULL",
+        (key,),
+    ).fetchone()
+    if row is None:
+        raise SystemExit(f"no live fact with key {key!r}")
+
+    slug = slug or _re.sub(r"[^a-z0-9]+", "-", key.lower()).strip("-")
+    WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
+    path = WORKFLOWS_DIR / f"{slug}.yaml"
+    if path.exists():
+        raise SystemExit(f"{path} already exists — pick a slug with --slug")
+
+    content = row["content"]
+    # The extracted file is a DRAFT: `when` and `done_when` are seeded
+    # from the fact but are exactly the fields a human should sharpen.
+    path.write_text(
+        f"# Extracted from memory fact {key!r} on conversion (K6.2).\n"
+        f"# REVIEW ME: `when` decides what this matches and `done_when` is\n"
+        f"# what makes it more than a note. Both are drafts.\n"
+        f"name: {slug}\n"
+        f"when: \"{content[:160].replace(chr(34), chr(39))}\"\n"
+        f"steps:\n"
+        f"  - {content}\n"
+        f"done_when: []\n",
+        encoding="utf-8",
+    )
+    archive_fact(conn, key, f"workflow:{slug}")
+    return str(path)
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
     import sys
@@ -229,12 +278,24 @@ def main(argv: list[str] | None = None) -> int:
     from jarvis.db import get_conn
 
     p = argparse.ArgumentParser(prog="python -m jarvis.classify")
+    p.add_argument("--extract-workflow", metavar="KEY",
+                   help="write ONE fact out as a workflow file and archive it")
+    p.add_argument("--slug", help="filename slug for --extract-workflow")
     p.add_argument("--only", choices=[DELETE_STALE, TO_WORKFLOW, TO_SKILL,
                                       NEEDS_REVIEW, KEEP],
                    help="show one destination only")
     p.add_argument("--keys", action="store_true",
                    help="print bare keys (pipe into --drop)")
     args = p.parse_args(argv)
+
+    if args.extract_workflow:
+        with get_conn() as conn:
+            path = extract_workflow(conn, args.extract_workflow, args.slug)
+            conn.commit()
+        print(f"wrote {path}")
+        print("The source fact is ARCHIVED, not deleted — reversible.")
+        print("Review `when` and fill in `done_when` before relying on it.")
+        return 0
 
     with get_conn() as conn:
         facts = _load_facts(conn)

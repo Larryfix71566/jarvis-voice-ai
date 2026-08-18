@@ -1,0 +1,17 @@
+# Consolidated from 6 memory fact(s) on conversion (K6.2).
+name: authorization-is-binding
+when: "implement build execute the approved task plan work step permission confirm authorized proceed"
+steps:
+  - One explicit yes from Larry authorizes the whole task — do not re-ask permission per step.
+  - Execute end to end, then report what was done.
+  - Still stop for the confirmation gates that exist mechanically (repo writes, commits, pushes).
+done_when:
+  - The authorized task ran to completion without asking again mid-way
+  - Any mechanical confirmation gate was still honored
+# source facts:
+#   user.style.no_permission_requests
+#   user.style.no_step_permission_requests
+#   user.style.explicit_instruction.no_permission_requests
+#   user.style.permissions
+#   user.style.confirmation_handling
+#   user.frustration_point

@@ -1,0 +1,12 @@
+# Consolidated from 3 memory fact(s) on conversion (K6.2).
+name: plans-render-in-display-window
+when: "show display plan spec document output review readability window"
+steps:
+  - Render plans and long documents in the main display window, not the drawer.
+  - Maximize readability and review space.
+done_when:
+  - The document is in the display window, not a cramped panel
+# source facts:
+#   user.style.plan_display
+#   user.style.plan_display_preference
+#   user.style.display_preference

@@ -134,3 +134,64 @@ class TestArchiveNotDelete:
         assert archive_fact(conn, "k", "x") is True
         assert archive_fact(conn, "k", "y") is False  # already archived
         conn.close()
+
+
+class TestKnowledgeEndpoint:
+    """K5 — the console must be able to see all four layers, and above
+    all must surface silent context truncation."""
+
+    def test_reports_all_four_layers_and_the_drop_count(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        from jarvis.db import get_conn, run_migrations
+        from jarvis.memory import archive_fact, upsert_fact
+
+        db = tmp_path / "k.db"
+        monkeypatch.setenv("JARVIS_DB_PATH", str(db))
+        monkeypatch.setenv("JARVIS_VAULT_ENABLED", "false")
+        conn = get_conn(db)
+        run_migrations(conn)
+        upsert_fact(conn, "user.name", "Larry", "s1")
+        upsert_fact(conn, "user.preference.units", "Fahrenheit", "s1")
+        upsert_fact(conn, "mortimer.config.thing", "hidden from the prompt", "s1")
+        upsert_fact(conn, "user.style.gone", "converted away", "s1")
+        archive_fact(conn, "user.style.gone", "workflow:x")
+        conn.commit()
+        conn.close()
+
+        import jarvis.admin.server as srv
+
+        body = TestClient(srv.app).get("/api/knowledge").json()
+        assert body["ok"] is True
+        mem = body["memory"]
+        assert mem["live"] == 3          # the archived one is not live
+        assert mem["archived"] == 1
+        assert mem["tiers"]["system"] == 1
+        # The number that was previously log-only.
+        assert "not_reaching_prompt" in mem
+        assert mem["reaching_prompt"] + mem["not_reaching_prompt"] == mem["live"]
+        assert "procedures" in body
+        assert isinstance(body["workflows"], list)
+
+    def test_system_facts_are_counted_but_never_reach_the_prompt(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        from jarvis.db import get_conn, run_migrations
+        from jarvis.memory import upsert_fact
+
+        db = tmp_path / "k2.db"
+        monkeypatch.setenv("JARVIS_DB_PATH", str(db))
+        monkeypatch.setenv("JARVIS_VAULT_ENABLED", "false")
+        conn = get_conn(db)
+        run_migrations(conn)
+        for i in range(5):
+            upsert_fact(conn, f"mortimer.cfg{i}", f"config detail {i}", "s1")
+        conn.commit()
+        conn.close()
+
+        import jarvis.admin.server as srv
+
+        mem = TestClient(srv.app).get("/api/knowledge").json()["memory"]
+        assert mem["live"] == 5
+        assert mem["reaching_prompt"] == 0
+        assert mem["not_reaching_prompt"] == 5

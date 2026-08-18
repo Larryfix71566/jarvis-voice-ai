@@ -1,0 +1,10 @@
+# Consolidated from 1 memory fact(s) on conversion (K6.2).
+name: verify-in-repo-not-memory
+when: "check verify confirm state configuration what does the code say assumption"
+steps:
+  - Verify facts by reading the repository, not by recalling them.
+  - A remembered assumption is not evidence.
+done_when:
+  - The claim is backed by a file that was actually read
+# source facts:
+#   user.style.explicit_before_implied

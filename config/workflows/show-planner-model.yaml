@@ -1,0 +1,12 @@
+# Consolidated from 3 memory fact(s) on conversion (K6.2).
+name: show-planner-model
+when: "planning plan step developer card model profile which model display"
+steps:
+  - The developer card must show WHICH planner model is used for each planning step.
+  - Track and display the model name per step, not just once.
+done_when:
+  - The model in use is visible for every planning step
+# source facts:
+#   user.style.developer_card
+#   user.style.developer_sidecar_requirements
+#   user.style.model_transparency

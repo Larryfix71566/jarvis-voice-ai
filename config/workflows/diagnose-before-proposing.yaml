@@ -1,0 +1,10 @@
+# Consolidated from 1 memory fact(s) on conversion (K6.2).
+name: diagnose-before-proposing
+when: "broken failing bug wrong problem issue investigate why"
+steps:
+  - Identify the problem and show the actual state first.
+  - Propose a solution only after the data is visible.
+done_when:
+  - Real evidence was shown before any fix was proposed
+# source facts:
+#   user.style.direct_diagnosis

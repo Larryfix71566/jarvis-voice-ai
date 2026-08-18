@@ -24,6 +24,27 @@ interface Usage {
   over_capacity: boolean;
 }
 
+/** K5 — the four knowledge layers, from GET /api/knowledge. */
+interface Knowledge {
+  ok: boolean;
+  memory: {
+    live: number;
+    archived: number;
+    tiers: Record<string, number>;
+    reaching_prompt: number;
+    not_reaching_prompt: number;
+    context_chars: number;
+  };
+  procedures: Record<string, number>;
+  skills: {
+    on_disk: number;
+    invalid: number;
+    registered: number;
+    enabled: { name: string; has_scripts: boolean }[];
+  };
+  workflows: { name: string; source: string; has_done_when: boolean }[];
+}
+
 interface Overview {
   ok: boolean;
   facts: Fact[];
@@ -43,6 +64,7 @@ interface Overview {
  */
 export default function MemoryPanel() {
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [knowledge, setKnowledge] = useState<Knowledge | null>(null);
   const [unreachable, setUnreachable] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
@@ -50,6 +72,15 @@ export default function MemoryPanel() {
     try {
       const r = await fetch(`${API}/api/memory`);
       setOverview(await r.json());
+      // K5: the four layers. Failing to load this must not blank the
+      // panel — memory visibility is the more important half.
+      try {
+        const k = await fetch(`${API}/api/knowledge`);
+        const kj = (await k.json()) as Knowledge;
+        setKnowledge(kj.ok ? kj : null);
+      } catch {
+        setKnowledge(null);
+      }
       setUnreachable(false);
     } catch {
       setUnreachable(true);
@@ -117,6 +148,70 @@ export default function MemoryPanel() {
   return (
     <div className="memory-panel">
       <div className="panel-title">Memory</div>
+
+      {/* K5 — the four knowledge layers. The number that matters is
+          `not_reaching_prompt`: on 2026-08-18 the store held 180 facts
+          and ~14 reached the Supervisor, discoverable ONLY by reading a
+          log line. Truncation is visible here now. */}
+      {knowledge && (
+        <div className="knowledge-layers">
+          <div className="knowledge-row">
+            <span className="knowledge-label">Memory</span>
+            <span className="knowledge-value">
+              {knowledge.memory.live} live
+              {knowledge.memory.archived > 0 &&
+                ` · ${knowledge.memory.archived} archived`}
+            </span>
+          </div>
+          <div className="knowledge-tiers">
+            {(["identity", "preference", "project", "system"] as const).map((t) =>
+              knowledge.memory.tiers[t] ? (
+                <span key={t} className="knowledge-tier">
+                  {t} {knowledge.memory.tiers[t]}
+                  {t === "system" && " (hidden)"}
+                </span>
+              ) : null,
+            )}
+          </div>
+          {knowledge.memory.not_reaching_prompt > 0 && (
+            <div className="knowledge-warn" role="status">
+              {knowledge.memory.not_reaching_prompt} of {knowledge.memory.live}{" "}
+              facts do not reach the prompt ({knowledge.memory.reaching_prompt}{" "}
+              do, {knowledge.memory.context_chars} chars)
+            </div>
+          )}
+          <div className="knowledge-row">
+            <span className="knowledge-label">Procedures</span>
+            <span className="knowledge-value">
+              {Object.entries(knowledge.procedures)
+                .map(([k, v]) => `${v} ${k}`)
+                .join(" · ") || "none"}
+            </span>
+          </div>
+          {/* K3 — "on disk" and "enabled" are deliberately separate.
+              A large gap is the normal state after importing skills:
+              each one is inert until its name is added by hand to
+              config/skills.yaml, which is the individual review Larry
+              asked for. Only `invalid` is a defect. */}
+          <div className="knowledge-row">
+            <span className="knowledge-label">Skills</span>
+            <span className="knowledge-value">
+              {knowledge.skills
+                ? `${knowledge.skills.enabled.length} enabled of ${knowledge.skills.on_disk} on disk`
+                : "none"}
+              {knowledge.skills?.invalid ? ` · ${knowledge.skills.invalid} invalid` : ""}
+            </span>
+          </div>
+          <div className="knowledge-row">
+            <span className="knowledge-label">Workflows</span>
+            <span className="knowledge-value">
+              {knowledge.workflows.length || "none"}
+              {knowledge.workflows.some((w) => !w.has_done_when) &&
+                ` · ${knowledge.workflows.filter((w) => !w.has_done_when).length} without done_when`}
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="memory-usage">
         <span className={usage.over_capacity ? "memory-usage-over" : "memory-usage-ok"}>

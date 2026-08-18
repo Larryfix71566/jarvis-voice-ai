@@ -205,3 +205,58 @@
   background: var(--accent);
   box-shadow: 0 0 6px var(--accent-dim);
 }
+
+/* K5 — the four knowledge layers, above the fact list. Deliberately
+   dense and quiet: this is a status readout, not a control surface. The
+   one loud element is .knowledge-warn, because silent context truncation
+   is the failure this section exists to make visible. */
+.knowledge-layers {
+  margin: 8px 0 12px;
+  padding: 8px 10px;
+  background: var(--glass-bg-heavy);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.knowledge-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+}
+
+.knowledge-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.knowledge-value {
+  color: var(--text);
+}
+
+.knowledge-tiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0 6px;
+}
+
+.knowledge-tier {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  padding: 1px 6px;
+}
+
+.knowledge-warn {
+  margin: 4px 0 8px;
+  color: var(--attn);
+  font-size: 11px;
+  line-height: 1.4;
+}
