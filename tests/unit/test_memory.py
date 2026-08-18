@@ -369,17 +369,62 @@ class TestCapacityHandling:
     MAX_CONTEXT_CHARS budget) — both must log, and neither may silently
     drop a user.* fact ahead of a less important one."""
 
-    def test_over_max_facts_logs_and_drops_least_important(self, conn, caplog):
-        # 35 non-user facts, all fitting comfortably under the char budget
-        # individually, to isolate the MAX_FACTS cap from the char budget.
-        for i in range(MAX_FACTS + 5):
+    def test_over_tier_cap_logs_and_drops(self, conn, caplog):
+        """K1: the cap is now PER TIER, not one flat pool. These keys are
+        unrecognized, so infer_tier puts them in 'project'
+        (MAX_PROJECT_FACTS), and the drop names the tier it happened in."""
+        from jarvis.memory import MAX_PROJECT_FACTS
+
+        for i in range(MAX_PROJECT_FACTS + 5):
             upsert_fact(conn, f"project.item{i:02d}", f"detail {i}", "s1")
 
         rendered = render_memory_context(conn)
         lines = [l for l in rendered.split("\n") if l.startswith("- ")]
-        assert len(lines) == MAX_FACTS
+        assert len(lines) == MAX_PROJECT_FACTS
         assert "memory_context_facts_dropped" in caplog.text
-        assert "reason=max_facts_cap" in caplog.text
+        assert "reason=tier_cap" in caplog.text
+        assert "project:" in caplog.text
+
+    def test_system_facts_never_reach_the_prompt(self, conn):
+        """K1's central win: 78 of Larry's 180 facts were about Mortimer's
+        own config, competing for slots that belonged to his preferences.
+        They stay stored, they just stop competing."""
+        upsert_fact(conn, "user.preference.units", "Fahrenheit", "s1")
+        upsert_fact(conn, "mortimer.config.timeout", "300s", "s1")
+        upsert_fact(conn, "user.mortimer.display", "two screens", "s1")
+
+        rendered = render_memory_context(conn)
+        assert "user.preference.units" in rendered
+        assert "mortimer.config.timeout" not in rendered
+        assert "user.mortimer.display" not in rendered
+
+    def test_identity_survives_a_flood_of_preferences(self, conn):
+        """identity is uncapped AND exempt from the char budget — losing
+        the user's name to a budget is the worst outcome this can have."""
+        upsert_fact(conn, "user.name", "Larry", "s0")
+        upsert_fact(conn, "user.location", "Alpharetta", "s0")
+        for i in range(80):
+            upsert_fact(conn, f"user.style.thing{i:02d}", "x" * 150, "s1")
+
+        rendered = render_memory_context(conn)
+        assert "user.name: Larry" in rendered
+        assert "user.location: Alpharetta" in rendered
+
+    def test_infer_tier_agrees_with_the_migration_heuristic(self):
+        from jarvis.memory import infer_tier
+
+        assert infer_tier("user.name") == "identity"
+        assert infer_tier("user.location.primary") == "identity"
+        assert infer_tier("user.timezone") == "identity"
+        assert infer_tier("user.preference.units") == "preference"
+        assert infer_tier("user.style.conciseness") == "preference"
+        assert infer_tier("user.frustration_point") == "preference"
+        assert infer_tier("mortimer.anything") == "system"
+        assert infer_tier("user.mortimer.display") == "system"
+        assert infer_tier("jarvis.config") == "system"
+        # Unrecognized keys land in the middle tier, never identity/system.
+        assert infer_tier("something.random") == "project"
+        assert infer_tier("") == "project"
 
     def test_user_fact_survives_max_facts_cap_even_if_oldest(self, conn):
         # The user.* fact is written FIRST (oldest updated_at), then a
@@ -602,3 +647,63 @@ def test_capability_claim_detector():
     # User facts are never filtered, even when they contain marker words.
     assert not _is_capability_claim(
         "user.style.honesty", "Cannot stand evasive answers")
+
+
+class TestVolatileStateFirewall:
+    """Larry 2026-08-18: transient repo state 'was never the intent of the
+    memory function and should not have been saved'. Rejected at WRITE
+    time — a fact that should not exist should not occupy a row."""
+
+    def test_rejects_commit_counts(self, conn):
+        upsert_fact(conn, "project.branch.current",
+                    "feat/plan-review-and-docs, 19 commits ahead of main", "s1")
+        assert render_memory_context(conn).find("19 commits") == -1
+
+    def test_rejects_uncommitted_file_counts(self, conn):
+        upsert_fact(conn, "project.repo", "47 uncommitted files across backend", "s1")
+        upsert_fact(conn, "project.state", "Main branch, 32 files modified", "s1")
+        rendered = render_memory_context(conn)
+        assert "47 uncommitted" not in rendered
+        assert "32 files modified" not in rendered
+
+    def test_rejects_by_key_hint(self, conn):
+        upsert_fact(conn, "user.project.mortimer.repo_state", "anything at all", "s1")
+        assert "repo_state" not in render_memory_context(conn)
+
+    def test_keeps_durable_project_facts(self, conn):
+        """Narrow by design — a decision is not a snapshot. 'Feature branch
+        created; Phase 1 committed' describes what was decided and is
+        kept; '19 commits ahead' is a reading that expires."""
+        # NB: a `.jarvis.`/`.mortimer.` key would tier as `system` and be
+        # excluded from the prompt by K1 regardless — use a plain project
+        # key so this tests the firewall and not the tier.
+        upsert_fact(conn, "project.geolocation.decision",
+                    "Feature branch feature/geolocation-systems-agent created", "s1")
+        assert "geolocation-systems-agent" in render_memory_context(conn)
+
+    def test_keeps_ordinary_preferences(self, conn):
+        upsert_fact(conn, "user.preference.units", "Fahrenheit for all displays", "s1")
+        assert "Fahrenheit" in render_memory_context(conn)
+
+    def test_is_pure_and_total(self):
+        from jarvis.memory import _is_volatile_state
+
+        assert _is_volatile_state("", "") is False
+        assert _is_volatile_state(None, None) is False
+
+    def test_progress_notes_are_not_volatile(self, conn):
+        """REGRESSION (2026-08-18): the first pattern matched
+        `\\d+ (un)?committed`, so "Phase 1 committed" — a decision with a
+        commit hash — was deleted as if it were a repo snapshot. Patterns
+        must require a countable NOUN next to the number."""
+        from jarvis.memory import _is_volatile_state
+
+        assert not _is_volatile_state(
+            "project.geo",
+            "Feature branch feature/geolocation-systems-agent created; "
+            "Phase 1 committed (hash 6dc0a8)",
+        )
+        assert not _is_volatile_state("project.x", "Phase 1 committed")
+        # ...while the real snapshots still go.
+        assert _is_volatile_state("project.x", "19 commits ahead of main")
+        assert _is_volatile_state("project.x", "47 uncommitted files")

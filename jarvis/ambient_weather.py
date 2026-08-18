@@ -20,7 +20,19 @@ Design, matching house conventions (mcp_web's sync/never-raise shape):
   give up (None). Device location is what makes the chip follow Larry
   when he travels; IP geolocation is only the fallback for a plain
   browser or a shell without the location entitlement granted.
-- weather from Open-Meteo (open-meteo.com, free, no API key).
+- weather from Weather.gov (api.weather.gov, free, no API key, US-only),
+  falling back to Open-Meteo outside the US or on any failure. Larry
+  2026-08-18: "let's go with the plan and modify the earlier work" — the
+  stored project decision was Weather.gov for forecast text plus
+  RainViewer for radar, and the first cut used Open-Meteo. Weather.gov
+  reports Fahrenheit natively (matching user.preference.units), gives a
+  human forecast phrase rather than a numeric code, and returns the
+  nearest city name for free — which is a better label than the
+  IP-geolocation guess. It covers the US only, so Open-Meteo remains the
+  fallback rather than being removed.
+  NOTE: RainViewer radar tiles are the OTHER half of that decision and
+  are NOT implemented here — radar is imagery for a display surface, not
+  a one-line ambient chip.
 - one module-level cache, WEATHER_CACHE_TTL_S; /api/ambient is polled
   every 60s by the console but the upstream APIs see at most one call
   per TTL.
@@ -39,6 +51,11 @@ WEATHER_CACHE_TTL_S = 900  # 15 min
 HTTP_TIMEOUT_S = 10.0
 
 GEO_URL = "http://ip-api.com/json/?fields=status,lat,lon,city"
+# Weather.gov asks every client to identify itself; an anonymous request
+# can be rejected. This is the documented contact-info form.
+WEATHERGOV_UA = "(Mortimer personal assistant, github.com/Larryfix71566/jarvis-voice-ai)"
+WEATHERGOV_POINTS_URL = "https://api.weather.gov/points/{lat:.4f},{lon:.4f}"
+
 FORECAST_URL = (
     "https://api.open-meteo.com/v1/forecast"
     "?latitude={lat}&longitude={lon}"
@@ -90,9 +107,49 @@ def weather_enabled() -> bool:
 
 
 def _fetch_json(url: str) -> Any:
-    resp = httpx.get(url, timeout=HTTP_TIMEOUT_S)
+    headers = {"User-Agent": WEATHERGOV_UA} if "weather.gov" in url else {}
+    resp = httpx.get(url, timeout=HTTP_TIMEOUT_S, headers=headers)
     resp.raise_for_status()
     return resp.json()
+
+
+def _weathergov_current(lat: float, lon: float, fetch: Callable[[str], Any]) -> Optional[dict]:
+    """Current conditions from Weather.gov, or None if unavailable.
+
+    Two hops by design of their API: /points resolves a coordinate to a
+    gridpoint and hands back the forecast URL plus the nearest city.
+    Returns None (never raises) outside the US, on a 404, or on any
+    malformed response — the caller falls back to Open-Meteo.
+    """
+    try:
+        point = fetch(WEATHERGOV_POINTS_URL.format(lat=lat, lon=lon))
+        props = point.get("properties") or {}
+        forecast_url = props.get("forecast")
+        if not forecast_url:
+            return None
+        rel = (props.get("relativeLocation") or {}).get("properties") or {}
+        city = str(rel.get("city") or "")
+
+        periods = ((fetch(forecast_url).get("properties") or {}).get("periods")) or []
+        if not periods:
+            return None
+        now = periods[0]
+        temp = now.get("temperature")
+        if temp is None:
+            return None
+        # Weather.gov reports Fahrenheit natively for US offices, but the
+        # unit is explicit in the payload — convert rather than assume.
+        if str(now.get("temperatureUnit", "F")).upper() == "C":
+            temp = temp * 9 / 5 + 32
+        return {
+            "summary": str(now.get("shortForecast") or "Weather"),
+            "temp_f": round(float(temp)),
+            "location": city,
+            "at": int(time.time()),
+            "source": "weather.gov",
+        }
+    except Exception:
+        return None
 
 
 # --- device location (Mac shell / CoreLocation) --------------------------
@@ -195,6 +252,15 @@ def get_weather(fetch: Callable[[str], Any] = _fetch_json) -> Optional[dict]:
     try:
         loc = _resolve_location(fetch)
         if loc is not None:
+            # Weather.gov first (Larry's stored decision): native
+            # Fahrenheit, a real forecast phrase, and a city name.
+            result = _weathergov_current(loc["lat"], loc["lon"], fetch)
+            if result is not None:
+                if not result["location"]:
+                    result["location"] = loc["label"]
+                _cache = (now, result)
+                return result
+            # Outside the US, or Weather.gov unavailable.
             data = fetch(FORECAST_URL.format(lat=loc["lat"], lon=loc["lon"]))
             current = data.get("current") or {}
             temp = current.get("temperature_2m")
@@ -205,6 +271,7 @@ def get_weather(fetch: Callable[[str], Any] = _fetch_json) -> Optional[dict]:
                     "temp_f": round(float(temp)),
                     "location": loc["label"],
                     "at": int(time.time()),
+                    "source": "open-meteo",
                 }
     except Exception:
         result = None

@@ -1,8 +1,9 @@
-# Mortimer knowledge framework — golden rules, memory, skills, workflows
+# Mortimer knowledge framework — memory, procedures, skills, workflows
 
-**Status:** DRAFT — §1.5 (Golden Rules) is IMPLEMENTED and tested; §2 onward
-(memory tiering, consolidation, vocabulary, workflows) is not approved and
-nothing there is built.
+**Status:** APPROVED 2026-08-18. IMPLEMENTED: §1.5 Golden Rules, K1 tiering,
+K2 consolidation + volatile firewall, K6 conversion layer. NOT YET BUILT:
+K3 skills, K4 workflows, K5 console. Open decisions D3/D4/D6/D7/D8/D9.
+
 **Author:** drafted 2026-08-18 for Larry.
 **Origin:** Larry, by voice, 2026-08-18: *"I'm afraid that we're distorting
 everything as memory when there should be three separate categories.
@@ -161,175 +162,303 @@ was nothing left to invent.
 
 ---
 
-## 2. The proposed framework
+## 2. The framework — four layers
 
-Three layers, each with one owner, one storage shape, one lifecycle.
+Larry proposed three categories. Implementation found a fourth already
+running: `procedures`. Rather than force it into "skills", it gets its
+own layer — because **the four differ in trust, not just in content**,
+and collapsing any two forces one trust model onto both.
 
 ```
 KNOWLEDGE
-├── Memory     — what is true about Larry and his world   (facts; durable)
-├── Skills     — what has worked before                   (learned; evidential)
-└── Workflows  — how work should be done, and when it's done  (authored; normative)
+├── Memory      what is true                observed/stated   declarative
+├── Procedures  what worked before          learned from runs evidential
+├── Skills      how to do a thing           authored/imported capability
+└── Workflows   how it SHOULD be done       authored by Larry normative
 ```
 
-### K1 — Memory becomes tiered, not just capped
+| | Memory | Procedures | Skills | Workflows |
+| --- | --- | --- | --- | --- |
+| Origin | extraction, `remember` | `learn_from_run` | authored or imported | Larry |
+| Storage | `memories` rows | `procedures` rows | `SKILL.md` folders | config files |
+| Trust | asserted | earned (counters) | assumed correct | binding |
+| Lifecycle | consolidated | promote/deprecate | versioned files | edited |
+| Portable | no | no | **yes** | no |
+| Failure mode | stale fact | misleading hint | bad instruction | wrong policy |
 
-The single flat pool is the root defect. Split by **durability**, not by
-topic:
+### Why procedures must not merge into skills
 
-| Tier | Contents | Cap | Eviction |
-| --- | --- | --- | --- |
-| `identity` | Name, location, role, hard constraints | never dropped | manual only |
-| `preference` | How Larry wants to be worked with | generous | consolidated, not evicted |
-| `project` | Current work, goals, live context | moderate | ages out |
-| `system` | Facts about Mortimer's own config | **excluded from context by default** | prunable wholesale |
+A procedure is **evidence**: `PROCEDURE_PROMOTE_AFTER` net successes make
+it `active`, accumulating failures make it `deprecated`, and it is
+explicitly a hint — never a replay. A skill is an **instruction**:
+authored once, assumed correct, versioned as a file, portable to another
+machine or another agent.
 
-`system` is the big win: 67 of 180 rows leave the competition immediately,
-and they are the most re-derivable facts in the store — the repo already
-says what `config/agents.yaml` contains.
+Merge them and one trust model has to win. If authored skills must earn
+trust through counters, importing an ecosystem skill becomes useless. If
+learned procedures are treated as authoritative, a stale hint becomes a
+confident wrong answer — the exact failure §1.5 exists to prevent.
 
-*Open decision D1:* whether `kind` gains these values or a new `tier`
-column is added (migration either way).
+Keeping them separate also frees the word "skill" to mean precisely what
+the Agent Skills standard means, with no local redefinition.
 
-### K2 — Consolidation, so the store stops growing monotonically
+### The promotion path (deferred, not designed here)
 
-Today a fact is written and never revisited; three phrasings of one
-preference all persist and all compete. Add a periodic consolidation pass
-(same fire-and-forget shape as `learn_from_run`): cluster near-duplicate
-facts within a tier, ask one small model to merge each cluster into a
-single canonical fact, keep provenance.
-
-Two rules this must respect, both learned the hard way elsewhere in this
-codebase:
-- Consolidation **rewrites**, never silently deletes — the merged fact
-  carries the ids it replaced, and the originals are archived not dropped.
-- It runs off the live path, like the council's shadow judging (V7).
-
-*Open decision D2:* automatic on a schedule, or a manual
-`python -m jarvis.memory --consolidate` Larry runs and reviews. Given the
-data loss earlier today, manual-first is the conservative read.
-
-### K3 — Skills: keep the machinery, fix the vocabulary
-
-Do **not** rebuild procedures. They work, they are tested, and 25 have
-accumulated. The change is naming and visibility:
-
-- Keep the internal identifier `procedures` (tables, module, FTS index)
-  to avoid a rename that touches migrations for zero functional gain.
-- Introduce **"skill"** as the *user-facing* word in prompts, the console,
-  and voice — the way "Mortimer" is user-facing while `jarvis` is
-  internal. This is an established pattern in this repo, not a new one.
-- Resolve the collision explicitly: MCP servers are **"tool servers"** in
-  user-facing language. `skill.yaml` filenames stay as they are.
-
-*Open decision D3:* Larry may prefer the opposite — keep saying
-"procedure" out loud and drop "skill" entirely. Cheaper, and avoids
-overloading a word that already has a meaning in the repo. Recommend
-deciding this before any prompt text changes.
-
-### K4 — Workflows: the genuinely new layer
-
-A workflow is an authored, named recipe with acceptance criteria.
-
-```yaml
-# config/workflows/plan-first-change.yaml   (shape illustrative)
-name: plan-first-change
-when: "any implementation-scale change to Mortimer itself"
-steps:
-  - Write a plan document under docs/plans/
-  - Get Larry's explicit approval before writing code
-  - Implement via selfedit_start, never inline drafting
-  - Run the full suite; report failures honestly
-done_when:
-  - "A plan doc exists and was approved"
-  - "pytest tests/unit tests/integration is green"
-  - "Larry has been told what still needs his machine"
-```
-
-Design constraints, inherited from how this codebase already works:
-
-1. **Authored, not learned.** Workflows are config, edited by Larry (or
-   drafted by the plan pathway and approved). Never auto-created from
-   runs — that is what skills are for.
-2. **A workflow is guidance, not a state machine.** Same rule procedures
-   live under: injected as prompt context when matched, never a code path
-   that executes steps. Building an executor is a much larger project and
-   is explicitly out of scope here.
-3. **Matching is explicit before it is clever.** v1 matches on the `when:`
-   text and an optional agent list. No embeddings.
-4. `done_when` is what makes it more than a note: it gives the agent a
-   self-check before reporting completion, and gives Larry a concrete
-   thing to point at when work comes back wrong.
-
-*Open decision D4:* where workflows are injected — Supervisor prompt
-(shapes routing), sub-agent prompt (shapes execution), or both. Sub-agent
-is the safer v1: the Supervisor prompt is already long and its budget is
-the voice loop's latency.
-
-### K5 — Make the layers visible
-
-The Memory tab currently shows a flat list. Three sections, one per layer,
-each with counts, and — critically — **a visible indicator when facts are
-being dropped from context**. The 8%-of-180 situation should never again
-be discoverable only by reading a log line.
+A procedure with a strong success record is a **candidate** to be
+promoted into an authored skill: evidence graduating into capability,
+with Larry approving each graduation. Explicitly out of scope for v1 —
+noted so it is not accidentally designed against.
 
 ---
 
-## 3. What this fixes, traced to evidence
+## 3. K1 — Memory tiering  *(IMPLEMENTED 2026-08-18)*
 
-| Symptom | Layer | Mechanism |
+Facts carry a `tier` classified by DURABILITY, not topic:
+
+| Tier | Cap | Behaviour |
 | --- | --- | --- |
-| Mortimer forgets stated preferences | K1 + K2 | Preferences stop competing with 67 system facts; duplicates merge |
-| Memory grows without bound | K2 | Consolidation makes the store converge |
-| "Is that memory or a skill?" | K3 | One word per concept, decided |
-| Repeating how work should be done | K4 | Workflows hold it, `done_when` checks it |
-| Silent context truncation | K5 | Drops become visible |
+| `identity` | none | never dropped; exempt from `MAX_CONTEXT_CHARS` |
+| `preference` | `MAX_PREFERENCE_FACTS` | consolidated, not evicted |
+| `project` | `MAX_PROJECT_FACTS` | ages out |
+| `system` | — | **excluded from the prompt entirely** |
+
+Migration `0012_memory_tiers` backfilled by key prefix; `infer_tier()`
+classifies on write and must stay in agreement with it. Both share a
+conservative bias: anything unrecognized becomes `project`, never
+`identity` (never evicted) and never `system` (hidden).
+
+**Measured result on Larry's store:** 68 system facts stopped competing;
+identity is guaranteed. But only ~17 facts now reach the Supervisor —
+**tiering decided who competes, not how much room exists.** The
+`MAX_CONTEXT_CHARS` budget is now the binding constraint, which is what
+makes K2 load-bearing rather than optional.
+
+## 4. K2 — Consolidation  *(IMPLEMENTED 2026-08-18)*
+
+`python -m jarvis.consolidate` REPORTS duplicate clusters and writes
+nothing; `--drop <key>...` is the only writing verb. No "merge
+everything" command exists, by design.
+
+Three rules enforced by construction, each from a real failure:
+
+1. **Never merge across tiers**; `identity` is excluded entirely.
+2. **Clusters are cliques, not connected components.** Transitive
+   closure chained 18 unrelated facts on the real store.
+3. **`MIN_SHARED_TOKENS = 2`.** The symmetric scorer divides by the
+   smaller token set, so a one-token fact matched anything containing
+   that word at 1.0. A key-similarity guard was tried first and rejected
+   — it also blocked the main use case.
+
+Plus `mixed_content_warning()`: a fact whose CONTENT covers a topic its
+KEY doesn't (`user.location` carrying a Fahrenheit preference) is flagged
+before any merge.
+
+**Also implemented:** a volatile-state firewall at the write point.
+Transient repo snapshots ("19 commits ahead", "47 uncommitted files") are
+rejected — Larry: *"these were never the intent of the memory function
+in the first place."* Patterns require a countable noun next to the
+number, after the first version deleted "Phase 1 committed" as if it
+were a snapshot.
 
 ---
 
-## 4. Scope boundaries
+## 5. K3 — Skills, mirroring the Agent Skills standard
 
-**In scope:** memory tiering, consolidation, vocabulary decision, the
-workflow concept as injected guidance, console visibility.
+Larry: *"I want our implementation of Skills to mirror what Claude does
+for skills so that we could leverage that repository as well."*
+
+Agent Skills became an **open standard on 2025-12-18** (agentskills.io),
+supported by 40+ platforms. Mortimer should consume that format
+directly rather than invent a parallel one.
+
+### The format
+
+- A folder containing **`SKILL.md`**: YAML frontmatter + Markdown body.
+- Required frontmatter: **`name`** (≤64 chars, lowercase/digits/hyphens,
+  no XML tags, cannot contain "anthropic"/"claude") and **`description`**
+  (≤1024 chars). Optional: `license`, `allowed-tools`, `metadata`,
+  `compatibility`.
+- Optional sibling folders: `scripts/`, `references/`, `assets/`.
+- **Progressive disclosure, three tiers:** name+description at startup
+  (~100 tokens each), full body on activation (<5k tokens), reference
+  files only on demand.
+
+### Why the standard fits Mortimer specifically
+
+Progressive disclosure solves a problem Mortimer already has. The
+Supervisor prompt is 4,631 chars plus 1,623 of addenda plus memory
+context, on `claude-haiku-4-5`. A layer costing ~100 tokens per skill
+until activated is the right shape for a small dispatcher — and it is
+a better design than anything invented locally would have been.
+
+### Security: scripts are the real decision
+
+Skills may bundle executable `scripts/`. Importing a community skill and
+running its code is arbitrary code execution from the internet, on
+Larry's machine. Consistent with the self-edit allowlist and vault
+discipline, the recommendation is **instructions-only by default**:
+`SKILL.md` + `references/` are read; `scripts/` is NOT executed without
+an explicit per-skill opt-in recorded in config.
+
+### Naming collision (unresolved)
+
+`mcp_servers/*/skill.yaml` already claims the word against `SKILL.md`.
+Options: rename MCP manifests to `server.yaml` (touches 11 servers and
+`check_skills.py`), or accept the collision with loud documentation.
+
+## 6. K4 — Workflows, seeded from existing memory
+
+A workflow is authored, named, prescriptive, and carries acceptance
+criteria — *how work should be done and what "done" means*.
+
+**K4 is not a blank slate.** Scanning the live store found workflows
+already accumulating in memory, misfiled as facts because there was
+nowhere else to put them:
+
+```
+user.style.git_workflow        commit all uncommitted files together before
+                               pushing; thorough review before merging to main
+user.style.research_first      research alternatives before modifying code
+project.mortimer.development.workflow
+                               confirm commits explicitly before writes;
+                               break large tasks into chunks
+user.style.progress_visibility real-time status during execution; will not
+                               accept silent waiting
+user.location.rule             use CURRENT device location — never default
+                               to home or work
+```
+
+So workflows are **extracted**, not authored from scratch — which is
+also the highest-confidence seed data available, since Larry stated each
+one himself.
+
+Design constraints:
+
+1. **Authored, never learned.** Auto-creation from runs is what
+   procedures are for.
+2. **Guidance, not a state machine.** Injected as prompt context on
+   match; never a code path that executes steps. A workflow *executor*
+   is explicitly out of scope.
+3. **Matching is explicit before clever** — `when:` text plus an
+   optional agent list. No embeddings.
+4. **`done_when` is the point.** It gives an agent a self-check before
+   claiming completion, and Larry something concrete to point at when
+   work comes back wrong.
+
+---
+
+## 7. K6 — The conversion layer  *(NEW — Larry 2026-08-18)*
+
+> *"add to the plan a conversion layer to get everything we currently
+> have into the right bucket"*
+
+Four layers are worthless if everything stays in bucket one. Today's
+inventory, measured:
+
+| Holding | Count | Belongs where |
+| --- | --- | --- |
+| Facts, `identity` | 6 | Memory (correct) |
+| Facts, `preference` | 66 | Memory, minus workflows to extract |
+| Facts, `project` | 29 | Memory, minus stale |
+| Facts, `system` | 68 | mostly **delete** — re-derivable from the repo |
+| Procedures, `active` | 5 | Procedures (correct) |
+| Procedures, `candidate` | 20 | Procedures (correct) |
+| Procedures, `task_tokens=''` | 14 | **unmatchable by design** — operator cleanup |
+
+### K6.1 Classification pass (report-only)
+
+One command, `python -m jarvis.classify`, that reads every fact and
+proposes a destination: `keep-memory`, `-> workflow`, `-> skill`,
+`delete-stale`, `needs-review`. Pure detection, same discipline as K2:
+**it writes nothing.** Output is a review document Larry reads.
+
+Signals, in order of reliability:
+- **`-> workflow`**: imperative/normative language ("must", "always",
+  "before", "prefers X before Y") in a `preference` fact that describes
+  a PROCESS rather than a taste.
+- **`delete-stale`**: `system` tier AND re-derivable from the repo
+  (config, branch, file layout) — the volatile firewall already blocks
+  the worst class at write time; this catches what predates it.
+- **`-> skill`**: expected to be nearly empty. The scan found no
+  reusable how-to knowledge in memory; that lives in procedures.
+- **`needs-review`**: anything ambiguous. Ambiguity goes to a human,
+  never to a default.
+
+### K6.2 Extraction, one bucket at a time
+
+Each destination gets its own explicit command, never a bulk "apply
+all": `--extract-workflow <key>` writes a workflow file and archives the
+source fact; `--drop <key>` already exists. The 2026-08-18 lesson stands
+— a rewriter that is subtly wrong costs more than the mess it fixes.
+
+### K6.3 Archive, never destroy
+
+Converted facts are moved to an `archived` state carrying the id they
+became, not deleted. Two reasons: the day's revert showed how expensive
+losing content is, and a misclassification must be reversible without
+reconstructing text from memory. (During today's cleanup a fact was
+over-deleted and had to be restored from truncated console output — the
+tail is still incomplete. That must not be the recovery story.)
+
+### K6.4 Order matters
+
+```
+1. delete-stale        (biggest win, lowest risk — 68 system facts)
+2. extract workflows   (seeds K4 with Larry's own stated rules)
+3. consolidate         (K2 on what remains, now much smaller)
+4. procedures cleanup  (drop the 14 permanently-unmatchable rows)
+5. skills              (import/author — nothing to convert INTO it)
+```
+
+Steps 1–3 shrink the memory store by roughly half before any new layer
+is built, which is the honest prerequisite: **do not build four buckets
+and then pour an unsorted pile into the first one.**
+
+---
+
+## 8. Scope boundaries
+
+**In scope:** four layers, tiering, consolidation, the Agent Skills
+format, workflows as injected guidance, the conversion layer, console
+visibility.
 
 **Explicitly out of scope:**
 - A workflow *executor*. Workflows are prompt context in v1.
-- Embeddings/vector search. The FTS + token-overlap matcher is adequate
-  and has a calibration tool (`--calibrate`); adding a vector store is a
-  separate decision with its own dependency cost.
+- Executing skill `scripts/` without per-skill opt-in.
+- Promoting procedures into skills (deferred, §2).
+- Embeddings/vector search — the FTS + token-overlap matcher has a
+  calibration tool and is adequate.
 - Renaming the `procedures` table or module.
-- Touching the Developer sub-agent's identity.
+- The Developer sub-agent's identity.
 
----
-
-## 5. Open decisions for Larry
+## 9. Open decisions
 
 | # | Decision | Recommendation |
 | --- | --- | --- |
-| D1 | New `tier` column vs. reusing `kind` | New column; `kind` already means fact/summary |
-| D2 | Consolidation automatic or manual | Manual first (`--consolidate`), automate once trusted |
-| D3 | Say "skill" or keep "procedure" | Decide before prompt edits; "procedure" is cheaper |
+| D1 | ~~`tier` column vs `kind`~~ | **Resolved** — new column, migration 0012 |
+| D2 | ~~Consolidation automatic or manual~~ | **Resolved** — manual (`--consolidate`) |
+| D3 | Vocabulary: "procedures" + "skills" both, now that they are separate layers | Keep both; they are genuinely different things |
 | D4 | Where workflows inject | Sub-agent prompt for v1 |
-| D5 | Prune the 67 `system` facts outright, or tier and hide them | Tier first, prune after review |
+| D5 | ~~Prune vs tier the system facts~~ | **Resolved** — tiered; K6.1 proposes deletion |
+| D6 | **`skill.yaml` vs `SKILL.md` collision** | Rename MCP manifests to `server.yaml` |
+| D7 | **Skill `scripts/` execution** | Instructions-only by default; per-skill opt-in |
+| D8 | **"Procedures" vs "Workflows" are close in English** | Consider Precedents / Policies — Larry speaks these aloud |
+| D9 | Which agents get skills | Sub-agents first, same reasoning as D4 |
+| G1–G4 | Golden Rules follow-ons (§1.5) | Unchanged |
 
----
+## 10. Sequencing
 
-## 6. Suggested sequencing
+| Step | Status |
+| --- | --- |
+| Golden Rules (§1.5) | **done** |
+| K1 tiering | **done** |
+| K2 consolidation + volatile firewall | **done** |
+| **K6 conversion layer** | next — classification report first |
+| K4 workflows | after K6.2 supplies the seeds |
+| K3 skills | after D6/D7 are decided |
+| K5 console visibility | last — it displays whatever settles |
 
-1. **Triage** (no schema change): review and dedupe the existing 180 by
-   hand or with a one-off script. Immediate relief.
-2. **K1 tiering** + migration. Preferences stop being evicted.
-3. **K2 consolidation**, manual command first.
-4. **K3 vocabulary**, once D3 is decided.
-5. **K4 workflows**, the only genuinely new build.
-6. **K5 console**, last — it displays whatever the layers settle into.
+## 11. Approval
 
-Steps 1–2 deliver most of the value and are independently useful if the
-rest is never built.
-
----
-
-## 7. Approval
-
-Not approved. Larry decides D1–D5 and whether the sequencing above is the
-right order, before any code is written.
+§1.5, K1 and K2 are implemented. K3, K4, K5 and K6 are not approved;
+D3, D4, D6, D7, D8 and D9 are open for Larry.

@@ -35,6 +35,31 @@ logger = logging.getLogger(__name__)
 
 MAX_FACTS = 30
 MAX_FACT_CHARS = 200
+
+# K1 (MORTIMER_KNOWLEDGE_FRAMEWORK_PLAN.md) — memory tiers, by DURABILITY.
+#
+# The flat pool was the defect: measured 2026-08-18, the store held 180
+# facts and ~14 reached the Supervisor, because 78 facts about Mortimer's
+# own configuration competed for the same 30 slots as durable facts about
+# Larry. Tiering does not raise the total budget — it decides who is
+# allowed to compete for it.
+#
+#   identity   — name, location, timezone. NEVER dropped, and exempt from
+#                the char budget: it is a handful of rows and losing them
+#                is the worst failure this system has.
+#   preference — how Larry wants to be worked with. Generous cap;
+#                duplicates are K2 consolidation's job, not eviction's.
+#   project    — current work and live context. Ages out normally.
+#   system     — facts about Mortimer itself. EXCLUDED from the prompt by
+#                default: re-derivable from the repo, and the single
+#                biggest consumer of slots that belonged to real
+#                preferences. Still stored, still visible in the console,
+#                just not competing.
+MEMORY_TIERS = ("identity", "preference", "project", "system")
+CONTEXT_TIERS = ("identity", "preference", "project")  # system deliberately absent
+DEFAULT_TIER = "project"  # unknown/legacy rows land in the middle, never identity
+MAX_PREFERENCE_FACTS = 25
+MAX_PROJECT_FACTS = 10
 MAX_SUMMARY_CHARS = 600
 MAX_CONTEXT_CHARS = 1600
 MAX_TRANSCRIPT_ROWS = 60
@@ -191,6 +216,61 @@ _LIMITATION_PATTERNS: tuple[re.Pattern, ...] = (
 )
 
 
+# Volatile-state firewall (Larry 2026-08-18): "these were never the intent
+# of the memory function in the first place and should not have been
+# saved."
+#
+# The store had accumulated `project.mortimer.branch.current:
+# "feat/plan-review-and-docs, 19 commits ahead of main"`,
+# `"47 uncommitted files"`, `"Main branch, 32 files modified"` — all true
+# once, all false within hours, and none of them re-checked because memory
+# has no expiry. Worse, they are re-derivable on demand: `git status`
+# answers them correctly every time, so storing a snapshot can only ever
+# be wrong more often than asking.
+#
+# Rejected at WRITE time rather than filtered at read time, because a fact
+# that should never exist should not occupy a row. Prompt guidance alone
+# would be a wish — this is its mechanical backstop, matching the Golden
+# Rules discipline in jarvis/prompts.py.
+# NB (2026-08-18, caught on the first real run): the first version of the
+# third pattern was `\d+\+?\s+(?:un)?committed`, which also matched
+# "Phase 1 committed" — a DECISION, not a snapshot — and deleted two facts
+# it should have kept. Every pattern below now requires a countable NOUN
+# ("files", "commits") next to the number, never a bare participle, so
+# progress notes survive and only readings-that-expire are rejected.
+_VOLATILE_PATTERNS = (
+    re.compile(r"\b\d+\+?\s+uncommitted\b"),
+    re.compile(r"\buncommitted\s+files?\b"),
+    re.compile(r"\b\d+\+?\s+(?:modified|changed|staged|untracked)\s+files?\b"),
+    re.compile(r"\b\d+\+?\s+files?\s+(?:modified|changed|staged|uncommitted)\b"),
+    re.compile(r"\bcommits?\s+(?:ahead|behind)\b"),
+    re.compile(r"\b\d+\s+commits\b"),  # plural only: "1 committed" is not this
+    re.compile(r"\bhead\s+(?:is\s+)?at\s+[0-9a-f]{7,}\b"),
+)
+
+# Keys whose whole purpose is to snapshot something git already knows.
+_VOLATILE_KEY_HINTS = (
+    "repo_state", "repo.state", "current_branch", "branch.current",
+    "uncommitted", "working_tree", "git_status",
+)
+
+
+def _is_volatile_state(key: str, value: str) -> bool:
+    """True when a fact snapshots transient repo/system state.
+
+    Deliberately narrow: it matches counts-of-things and branch positions,
+    not ordinary project facts. "Feature branch X created; Phase 1
+    committed" describes a decision and is kept; "19 commits ahead of
+    main" is a reading that expires and is not. Pure and total; never
+    raises.
+    """
+    key_l = (key or "").strip().lower()
+    if any(h in key_l for h in _VOLATILE_KEY_HINTS):
+        return True
+    value_l = (value or "").lower()
+    return any(p.search(value_l) for p in _VOLATILE_PATTERNS)
+
+
 def _is_capability_claim(key: str, value: str) -> bool:
     """True when a stored fact asserts a limitation of the assistant itself.
 
@@ -247,10 +327,17 @@ def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
     own_connection = conn is None
     conn = conn or get_conn()
     try:
+        # K1: order by tier rank first, then recency within the tier.
+        # COALESCE covers pre-0012 rows and anything written before the
+        # writer learned about tiers — they behave as 'project'.
         fact_rows = conn.execute(
-            "SELECT key, content FROM memories WHERE kind = 'fact' "
-            "ORDER BY (CASE WHEN key LIKE 'user.%' THEN 0 ELSE 1 END), "
-            "updated_at DESC"
+            "SELECT key, content, COALESCE(tier, ?) AS tier FROM memories "
+            "WHERE kind = 'fact' AND archived_at IS NULL "
+            "AND COALESCE(tier, ?) IN (?, ?, ?) "
+            "ORDER BY CASE COALESCE(tier, ?) "
+            "  WHEN 'identity' THEN 0 WHEN 'preference' THEN 1 ELSE 2 END, "
+            "updated_at DESC",
+            (DEFAULT_TIER, DEFAULT_TIER, *CONTEXT_TIERS, DEFAULT_TIER),
         ).fetchall()
         summary_row = conn.execute(
             "SELECT content FROM memories WHERE kind = 'summary' "
@@ -281,19 +368,37 @@ def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
         )
     fact_rows = kept_rows
 
-    capped_rows = fact_rows[:MAX_FACTS]
-    if len(fact_rows) > MAX_FACTS:
-        dropped = [row["key"] for row in fact_rows[MAX_FACTS:]]
+    # K1: cap PER TIER, not across the whole pool. identity has no cap —
+    # it is small and irreplaceable. A drop is still always logged, with
+    # the tier named, so "what fell out" stays answerable.
+    per_tier_cap = {"preference": MAX_PREFERENCE_FACTS, "project": MAX_PROJECT_FACTS}
+    seen: dict[str, int] = {}
+    capped_rows = []
+    tier_dropped: list[str] = []
+    for row in fact_rows:
+        tier = row["tier"] or DEFAULT_TIER
+        seen[tier] = seen.get(tier, 0) + 1
+        cap = per_tier_cap.get(tier)
+        if cap is not None and seen[tier] > cap:
+            tier_dropped.append(f"{tier}:{row['key']}")
+            continue
+        capped_rows.append(row)
+    if tier_dropped:
         logger.warning(
-            "memory_context_facts_dropped reason=max_facts_cap count=%d keys=%s",
-            len(dropped), dropped[:10],
+            "memory_context_facts_dropped reason=tier_cap count=%d keys=%s",
+            len(tier_dropped), tier_dropped[:10],
         )
 
     lines: list[str] = []
     budget_dropped: list[str] = []
     for i, row in enumerate(capped_rows):
         line = f"- {row['key']}: {row['content'][:MAX_FACT_CHARS]}"
-        if sum(len(l) for l in lines) + len(line) > MAX_CONTEXT_CHARS:
+        # K1: identity is exempt — it is ordered first and is a handful of
+        # rows, and silently losing the user's name or location to a char
+        # budget is the worst outcome this function can produce.
+        if (row["tier"] or DEFAULT_TIER) != "identity" and (
+            sum(len(l) for l in lines) + len(line) > MAX_CONTEXT_CHARS
+        ):
             budget_dropped = [r["key"] for r in capped_rows[i:]]
             break
         lines.append(line)
@@ -313,6 +418,50 @@ def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
     return "\n".join(lines) if lines else EMPTY_CONTEXT
 
 
+def archive_fact(conn, key: str, became: str) -> bool:
+    """K6.3 — retire a fact WITHOUT destroying it.
+
+    `became` records what it turned into ("workflow:research-first",
+    "deleted:stale") so a misclassification is reversible by reading the
+    row rather than reconstructing text from a console transcript. Use
+    this for every conversion; `delete_fact` remains for genuine garbage
+    the user has explicitly identified.
+    """
+    cur = conn.execute(
+        "UPDATE memories SET archived_at = ?, became = ? "
+        "WHERE key = ? AND kind = 'fact' AND archived_at IS NULL",
+        (now_iso(), became, key),
+    )
+    return cur.rowcount > 0
+
+
+def infer_tier(key: str) -> str:
+    """K1 — which tier a fact key belongs to.
+
+    MUST stay in agreement with migration 0012's backfill in jarvis/db.py:
+    that migration classified the rows that already existed, this
+    classifies every row written afterwards, and a disagreement would mean
+    a fact's tier depends on whether it predates the migration. Same
+    conservative bias: anything unrecognized becomes DEFAULT_TIER
+    ('project'), never 'identity' (which is never evicted) and never
+    'system' (which is hidden from the prompt) — a misclassification must
+    not be able to pin junk forever or silently hide something real.
+    """
+    k = (key or "").strip().lower()
+    if (".mortimer." in k or k.startswith("mortimer.")
+            or ".jarvis." in k or k.startswith("jarvis.")
+            or ".system." in k or k.startswith("system.")):
+        return "system"
+    if (k == "user.name" or k.startswith("user.identity.")
+            or k.startswith("user.location") or k.startswith("user.timezone")
+            or k.startswith("user.contact.")):
+        return "identity"
+    if (k.startswith("user.preference.") or k.startswith("user.style.")
+            or k.startswith("user.frustration")):
+        return "preference"
+    return DEFAULT_TIER
+
+
 def upsert_fact(
     conn: sqlite3.Connection, key: str, value: str, session_id: str | None
 ) -> None:
@@ -325,15 +474,22 @@ def upsert_fact(
             key, reason, session_id,
         )
         return
+    if _is_volatile_state(key, value):
+        logger.warning(
+            "memory_write_rejected kind=fact key=%s reason=volatile_state session=%s",
+            key, session_id,
+        )
+        return
     now = now_iso()
     conn.execute(
         "INSERT INTO memories (kind, key, content, source_session_id, "
-        "created_at, updated_at) VALUES ('fact', ?, ?, ?, ?, ?) "
+        "created_at, updated_at, tier) VALUES ('fact', ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(key) WHERE kind = 'fact' "
         "DO UPDATE SET content = excluded.content, "
         "source_session_id = excluded.source_session_id, "
-        "updated_at = excluded.updated_at",
-        (key, value[:MAX_FACT_CHARS], session_id, now, now),
+        "updated_at = excluded.updated_at, "
+        "tier = COALESCE(memories.tier, excluded.tier)",
+        (key, value[:MAX_FACT_CHARS], session_id, now, now, infer_tier(key)),
     )
 
 

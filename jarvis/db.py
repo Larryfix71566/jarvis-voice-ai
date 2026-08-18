@@ -325,6 +325,59 @@ MIGRATION_0011 = """
 ALTER TABLE agent_runs ADD COLUMN model TEXT;
 """
 
+# K1 (MORTIMER_KNOWLEDGE_FRAMEWORK_PLAN.md) — memory tiers. The single
+# flat fact pool was the structural defect: on 2026-08-18 the store held
+# 180 facts and only ~14 reached the Supervisor, because 67 facts ABOUT
+# MORTIMER'S OWN CONFIG (re-derivable from the repo) competed for the same
+# 30 slots as durable facts about Larry. Tier is about DURABILITY, not
+# topic: identity never drops, preference is consolidated rather than
+# evicted, project ages out, system is excluded from context by default.
+#
+# Backfill is a best-effort key-prefix heuristic — deliberately
+# conservative: anything unrecognized lands in 'project', the middle tier,
+# so a misclassification can neither pin junk forever (identity) nor hide
+# something real (system). Larry re-tiers by review, not by trusting this.
+MIGRATION_0012 = """
+ALTER TABLE memories ADD COLUMN tier TEXT;
+
+UPDATE memories SET tier = 'system'
+ WHERE tier IS NULL AND (
+   key LIKE '%.mortimer.%' OR key LIKE 'mortimer.%'
+   OR key LIKE '%.jarvis.%' OR key LIKE 'jarvis.%'
+   OR key LIKE '%.system.%' OR key LIKE 'system.%'
+ );
+
+UPDATE memories SET tier = 'identity'
+ WHERE tier IS NULL AND (
+   key = 'user.name' OR key LIKE 'user.identity.%'
+   OR key LIKE 'user.location%' OR key LIKE 'user.timezone%'
+   OR key LIKE 'user.contact.%'
+ );
+
+UPDATE memories SET tier = 'preference'
+ WHERE tier IS NULL AND (
+   key LIKE 'user.preference.%' OR key LIKE 'user.style.%'
+   OR key LIKE 'user.frustration%'
+ );
+
+UPDATE memories SET tier = 'project' WHERE tier IS NULL AND kind = 'fact';
+"""
+
+# K6.3 (MORTIMER_KNOWLEDGE_FRAMEWORK_PLAN.md) — archive, never destroy.
+#
+# The conversion layer moves facts between buckets. On 2026-08-18 a fact
+# was over-deleted during cleanup and had to be reconstructed from
+# TRUNCATED console output — its tail is still incomplete. That is not an
+# acceptable recovery story for a layer whose whole job is moving things
+# around, so a converted fact is marked, not removed:
+#   archived_at  — when it left active memory (NULL = still live)
+#   became       — what it turned into ("workflow:git-flow", "deleted:stale")
+# Reads filter on archived_at IS NULL; nothing has to be reconstructed.
+MIGRATION_0013 = """
+ALTER TABLE memories ADD COLUMN archived_at TEXT;
+ALTER TABLE memories ADD COLUMN became TEXT;
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
@@ -338,6 +391,8 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0009_council", MIGRATION_0009),
     ("0010_council_v2", MIGRATION_0010),
     ("0011_run_model", MIGRATION_0011),
+    ("0012_memory_tiers", MIGRATION_0012),
+    ("0013_memory_archive", MIGRATION_0013),
 ]
 
 

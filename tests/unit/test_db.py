@@ -15,6 +15,8 @@ EXPECTED_MIGRATION_IDS = [
     "0005_conversation_search", "0006_agent_runs", "0007_procedures",
     "0008_tool_outcomes", "0009_council", "0010_council_v2",
     "0011_run_model",
+    "0012_memory_tiers",
+    "0013_memory_archive",
 ]
 
 
@@ -230,10 +232,14 @@ def test_migration_0010_applies_over_existing_0009_db(tmp_path):
     conn.commit()
 
     newly = run_migrations(conn)
-    # 0011_run_model also applies in this same upgrade run — it comes
-    # after 0010_council_v2 in MIGRATIONS and was equally absent from
-    # this pre-v2 DB.
-    assert newly == ["0010_council_v2", "0011_run_model"]
+    # Every migration after 0010 applies in this same upgrade run — they
+    # come later in MIGRATIONS and were equally absent from this pre-v2
+    # DB. Asserted as a prefix + membership rather than a frozen list so
+    # adding a migration doesn't falsely fail this upgrade-path test.
+    assert newly[0] == "0010_council_v2"
+    assert "0011_run_model" in newly
+    assert "0012_memory_tiers" in newly
+    assert "0013_memory_archive" in newly
     row = conn.execute(
         "SELECT prompt_tokens, completion_tokens, registry_order "
         "FROM council_rounds WHERE round_id='pre-v2'"

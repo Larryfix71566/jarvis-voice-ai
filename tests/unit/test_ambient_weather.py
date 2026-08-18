@@ -151,3 +151,83 @@ class TestGetWeather:
         n = len(calls)
         assert aw.get_weather(fetch=broken) is None
         assert len(calls) == n  # a dead network is not re-hammered per poll
+
+
+# --- Weather.gov primary, Open-Meteo fallback (Larry 2026-08-18) ---------
+
+WX_POINT = {
+    "properties": {
+        "forecast": "https://api.weather.gov/gridpoints/GSP/50,80/forecast",
+        "relativeLocation": {"properties": {"city": "Spartanburg", "state": "SC"}},
+    }
+}
+WX_FORECAST = {
+    "properties": {
+        "periods": [
+            {"name": "This Afternoon", "temperature": 88,
+             "temperatureUnit": "F", "shortForecast": "Partly Sunny"}
+        ]
+    }
+}
+
+
+def _wx_fetch(point=WX_POINT, forecast=WX_FORECAST, calls=None):
+    def fetch(url: str):
+        if calls is not None:
+            calls.append(url)
+        if "ip-api.com" in url:
+            return GEO_OK
+        if "api.weather.gov/points" in url:
+            return point
+        if "gridpoints" in url:
+            return forecast
+        return FORECAST_OK  # open-meteo
+    return fetch
+
+
+class TestWeatherGov:
+    def test_weathergov_is_preferred(self):
+        calls: list[str] = []
+        r = aw.get_weather(fetch=_wx_fetch(calls=calls))
+        assert r is not None
+        assert r["source"] == "weather.gov"
+        assert r["summary"] == "Partly Sunny"       # a phrase, not a WMO code
+        assert r["temp_f"] == 88
+        assert r["location"] == "Spartanburg"        # city comes free
+        assert all("open-meteo" not in u for u in calls)
+
+    def test_falls_back_to_open_meteo_outside_the_us(self):
+        """Weather.gov 404s outside the US — Open-Meteo stays as the
+        global fallback rather than being removed."""
+        def fetch(url: str):
+            if "ip-api.com" in url:
+                return GEO_OK
+            if "weather.gov" in url:
+                raise RuntimeError("404 not found")
+            return FORECAST_OK
+        r = aw.get_weather(fetch=fetch)
+        assert r is not None
+        assert r["source"] == "open-meteo"
+        assert r["temp_f"] == 87
+
+    def test_celsius_from_weathergov_is_converted(self):
+        forecast = {"properties": {"periods": [
+            {"temperature": 20, "temperatureUnit": "C", "shortForecast": "Clear"}]}}
+        r = aw.get_weather(fetch=_wx_fetch(forecast=forecast))
+        assert r["temp_f"] == 68
+
+    def test_missing_forecast_url_falls_back(self):
+        r = aw.get_weather(fetch=_wx_fetch(point={"properties": {}}))
+        assert r["source"] == "open-meteo"
+
+    def test_empty_periods_falls_back(self):
+        r = aw.get_weather(fetch=_wx_fetch(forecast={"properties": {"periods": []}}))
+        assert r["source"] == "open-meteo"
+
+    def test_weathergov_city_beats_the_ip_guess(self):
+        """The IP label is only used when Weather.gov gives no city."""
+        point = {"properties": {
+            "forecast": "https://api.weather.gov/gridpoints/x/1,2/forecast",
+            "relativeLocation": {"properties": {}}}}
+        r = aw.get_weather(fetch=_wx_fetch(point=point))
+        assert r["location"] == "Marietta"  # falls back to the geo label
