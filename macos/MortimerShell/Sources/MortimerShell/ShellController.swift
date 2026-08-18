@@ -37,13 +37,23 @@ final class ShellController: ObservableObject {
     @Published var consoleReachable: Bool = true
     @Published var lastReachabilityCheck: Date = .init()
 
-    private var checkTimer: Timer?
+    private var checkTask: Task<Void, Never>?
 
     init() {
         checkReachability()
-        checkTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.checkReachability() }
+        // A Task created from this @MainActor context inherits the main
+        // actor, so self access inside is legal without hopping — cleaner
+        // under strict concurrency than Timer + nested Task closures.
+        checkTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                self?.checkReachability()
+            }
         }
+    }
+
+    deinit {
+        checkTask?.cancel()
     }
 
     // B4 — the shell always loads http://127.0.0.1:5173 (the console dev
@@ -53,13 +63,15 @@ final class ShellController: ObservableObject {
         var request = URLRequest(url: MortimerShellApp.consoleURL)
         request.timeoutInterval = 2.0
         request.httpMethod = "HEAD"
-        URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
-            let ok = error == nil && (response as? HTTPURLResponse)?.statusCode.map { $0 < 500 } ?? false
-            Task { @MainActor in
-                self?.consoleReachable = ok
-                self?.lastReachabilityCheck = Date()
+        Task { [weak self] in
+            var ok = false
+            if let (_, response) = try? await URLSession.shared.data(for: request) {
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 500
+                ok = status < 500
             }
-        }.resume()
+            self?.consoleReachable = ok
+            self?.lastReachabilityCheck = Date()
+        }
     }
 
     func retryNow() {
