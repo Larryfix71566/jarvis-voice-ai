@@ -69,3 +69,44 @@ def test_render_agent_catalog():
 def test_render_voice_catalog():
     voices = [{"id": "rachel", "label": "Rachel (calm)"}]
     assert render_voice_catalog(voices) == "- rachel: Rachel (calm)"
+
+
+# --- Golden Rules (Larry 2026-08-18) -------------------------------------
+
+
+def test_golden_rules_come_first_in_the_supervisor_prompt():
+    """Primacy is the point: they sit ahead of the specialists list and the
+    numbered rules so they aren't buried in a long prompt on a small
+    dispatcher model."""
+    from jarvis.prompts import GOLDEN_RULES
+
+    assert SUPERVISOR_PROMPT.startswith(GOLDEN_RULES)
+    assert SUPERVISOR_PROMPT.index("Golden Rules") < SUPERVISOR_PROMPT.index("Rules:")
+
+
+def test_golden_rule_1_authorizes_saying_i_dont_know():
+    """The 2026-08-18 fabrication happened because no rule sanctioned
+    ignorance, so the model supplied a plausible cause instead."""
+    from jarvis.prompts import GOLDEN_RULES
+
+    assert "I don't know why" in GOLDEN_RULES
+
+
+def test_rule_3_no_longer_mandates_suggesting_a_fix():
+    """Rule 3 used to end 'and suggest the fix' — an instruction to
+    speculate when the specialist named none. That phrasing was the
+    proximate cause of "the codebase access is blocked"."""
+    assert "and suggest the fix." not in SUPERVISOR_PROMPT
+    assert "Suggest a fix ONLY if" in SUPERVISOR_PROMPT
+
+
+def test_rule_11_authorizes_reporting_an_absent_reason():
+    assert "didn't finish and didn't say why" in SUPERVISOR_PROMPT
+
+
+def test_no_guessing_at_causes():
+    """Rule 2 names the exact categories that were invented."""
+    from jarvis.prompts import GOLDEN_RULES
+
+    for word in ("access", "permissions", "credentials", "connectivity"):
+        assert word in GOLDEN_RULES

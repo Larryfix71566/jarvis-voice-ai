@@ -33,6 +33,15 @@ sub_agents:
     # recovery path for a stuck provider call (removing it entirely was
     # considered and rejected).
     timeout_s: 300
+    # Larry 2026-08-18 — the iteration cap, not the timeout, was the real
+    # wall. Two runs (54b62f69, 9f0684e2) read 9-11 files with every tool
+    # call SUCCEEDING and still returned "FAILED: the task could not be
+    # completed" after 5 rounds; the Supervisor then told Larry "the
+    # codebase access is blocked", which was invented. Analysis work needs
+    # room to orient before it can answer. Conversational agents stay at
+    # the default 5 — this is the one agent that reads its way to an
+    # answer.
+    max_iterations: 15
     # MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md A1 — the voice
     # model (Haiku) is a dispatcher, never a design/build model. The
     # developer is the one sub-agent that does real implementation work,

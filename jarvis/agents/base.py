@@ -43,10 +43,28 @@ logger = logging.getLogger(__name__)
 
 MAX_TOOL_ITERATIONS = 5
 DEFAULT_TIMEOUT_S = 45.0
+# A (Larry 2026-08-18): the per-agent override lives in config/agents.yaml
+# as `max_iterations:`, exactly like `timeout_s:` — read-heavy analysis
+# ("review the memory framework and tell me how it works") legitimately
+# needs more rounds than a conversational lookup, and the observed
+# failures were runs that read 9-11 files successfully and then died on
+# the cap with every tool call green.
 # A3 — repo map injection cap (chars), enforced at injection time.
 REPO_MAP_MAX_CHARS = 8000
 TIMEOUT_MESSAGE = "FAILED: the task took too long; please try again."
 STUCK_MESSAGE = "FAILED: the task could not be completed."
+# B (Larry 2026-08-18): running out of iterations is NOT the same failure
+# as "could not be completed", and saying so matters. Two runs whose tool
+# calls all SUCCEEDED returned the generic message above, and the
+# Supervisor — given no reason — narrated it to the user as "the codebase
+# access is blocked right now", which was pure invention. A reason the
+# Supervisor can relay is the fix: same discipline as D6/D7, applied to
+# the one channel that still carried no information.
+ITERATIONS_EXHAUSTED_MESSAGE = (
+    "FAILED: ran out of tool-call rounds ({used} of {used}) before finishing. "
+    "Nothing was blocked — the work was incomplete, not refused. "
+    "Narrow the task, or raise this agent's max_iterations in config/agents.yaml."
+)
 # Cap tool results in events so a huge payload can't flood the data channel.
 TOOL_RESULT_EVENT_MAX = 20_000
 
@@ -149,6 +167,7 @@ class SubAgent:
         registry: Any,
         client_factory: Callable[[Any], Any] | None = None,
         timeout_s: float = DEFAULT_TIMEOUT_S,
+        max_iterations: int = MAX_TOOL_ITERATIONS,
         model_profile: str | None = None,
         inject_repo_map: bool = False,
     ):
@@ -159,6 +178,7 @@ class SubAgent:
         self._settings = settings
         self._registry = registry
         self._timeout_s = timeout_s
+        self._max_iterations = max(1, int(max_iterations))
         # MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md A1 — the voice
         # model (Haiku) is a dispatcher, never a design/build model. An
         # injected client_factory (the test seam) always wins: profile
@@ -311,7 +331,8 @@ class SubAgent:
         # one must not be double-flagged.
         drafts_created = 0
         drafts_executed = 0
-        for _ in range(MAX_TOOL_ITERATIONS):
+        exhausted = True  # cleared by the no-more-tool-calls break below
+        for _ in range(self._max_iterations):
             response = await self._client.chat.completions.create(
                 model=self._model,
                 messages=messages,
@@ -321,6 +342,7 @@ class SubAgent:
             tool_calls = list(getattr(message, "tool_calls", None) or [])
             if not tool_calls:
                 reply = message.content or ""
+                exhausted = False  # finished on its own terms, not on the cap
                 break
             messages.append(_assistant_message(message))
             # F1: failures collected during the batch; the D3 constraint is
@@ -417,6 +439,14 @@ class SubAgent:
                 # failure and a pending draft, and both messages are added.
                 messages.append({"role": "system", "content": PENDING_DRAFT_CONSTRAINT})
 
+        # B — the run used every round without the model ever answering.
+        # Say that plainly; the generic STUCK_MESSAGE is what let the
+        # Supervisor invent "access is blocked". Only overrides the
+        # untouched default, so a real reply the model produced is never
+        # clobbered.
+        if exhausted and reply == STUCK_MESSAGE:
+            reply = ITERATIONS_EXHAUSTED_MESSAGE.format(used=self._max_iterations)
+
         # D4 — a run in which every attempted tool call failed cannot be
         # reported as successful, regardless of how confident the model's
         # own reply reads. Deliberately does NOT trigger on partial failure
@@ -507,6 +537,7 @@ def load_sub_agents(
             # tasks (multi-file review, plan drafting) need more than the
             # voice-loop default.
             timeout_s=float(entry.get("timeout_s", DEFAULT_TIMEOUT_S)),
+            max_iterations=int(entry.get("max_iterations", MAX_TOOL_ITERATIONS)),
             model_profile=entry.get("model_profile"),
             inject_repo_map=bool(entry.get("inject_repo_map", False)),
         )

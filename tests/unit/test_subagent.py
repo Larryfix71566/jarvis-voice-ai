@@ -128,10 +128,29 @@ class TestSubAgentLoop:
         assert registry.calls == [("get_time", {}, ["mcp-time"])]
         assert completions.requests[0]["tools"][0]["function"]["name"] == "fake_tool"
 
-    async def test_iteration_cap_returns_stuck(self):
+    async def test_iteration_cap_says_it_ran_out_of_rounds(self):
+        """B (Larry 2026-08-18): exhausting the iteration budget is NOT the
+        same failure as "could not be completed". Two real runs whose tool
+        calls ALL succeeded returned the generic message, and the
+        Supervisor narrated it to the user as "the codebase access is
+        blocked" — an invention. The reply must carry the real reason."""
         agent, _ = make_agent([("tool", "fake_tool", {})])
         reply = await agent.run("loop forever")
-        assert reply == STUCK_MESSAGE
+        assert "ran out of tool-call rounds" in reply
+        assert "Nothing was blocked" in reply
+        assert reply != STUCK_MESSAGE
+
+    async def test_max_iterations_is_configurable_per_agent(self):
+        """A: config/agents.yaml's max_iterations, same shape as timeout_s."""
+        agent, completions = make_agent(
+            [("tool", "fake_tool", {})], max_iterations=2)
+        await agent.run("loop forever")
+        assert len(completions.requests) == 2
+
+    async def test_a_real_reply_is_never_clobbered_by_the_exhaustion_message(self):
+        """The override only replaces the untouched default."""
+        agent, _ = make_agent([("tool", "fake_tool", {}), ("text", "here it is")])
+        assert await agent.run("task") == "here it is"
 
     async def test_timeout_returns_failed_message(self):
         agent, _ = make_agent([("sleep", 5.0)], timeout_s=0.05)
