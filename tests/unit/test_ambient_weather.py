@@ -158,9 +158,26 @@ class TestGetWeather:
 WX_POINT = {
     "properties": {
         "forecast": "https://api.weather.gov/gridpoints/GSP/50,80/forecast",
+        "observationStations": "https://api.weather.gov/gridpoints/GSP/50,80/stations",
         "relativeLocation": {"properties": {"city": "Spartanburg", "state": "SC"}},
     }
 }
+# The station list is ordered by distance; the first few are tried.
+WX_STATIONS = {"features": [
+    {"properties": {"stationIdentifier": "KSPA"}},
+    {"properties": {"stationIdentifier": "KGSP"}},
+]}
+# Observations report CELSIUS (wmoUnit:degC) — 31.1C == 88F. Getting this
+# unit wrong is a 30-degree error, which is why the code reads unitCode
+# instead of assuming.
+WX_OBS = {"properties": {
+    "temperature": {"value": 31.1, "unitCode": "wmoUnit:degC"},
+    "textDescription": "Partly Cloudy",
+}}
+WX_OBS_NULL = {"properties": {
+    "temperature": {"value": None, "unitCode": "wmoUnit:degC"},
+    "textDescription": "",
+}}
 WX_FORECAST = {
     "properties": {
         "periods": [
@@ -171,7 +188,8 @@ WX_FORECAST = {
 }
 
 
-def _wx_fetch(point=WX_POINT, forecast=WX_FORECAST, calls=None):
+def _wx_fetch(point=WX_POINT, forecast=WX_FORECAST, calls=None,
+              stations=WX_STATIONS, obs=WX_OBS):
     def fetch(url: str):
         if calls is not None:
             calls.append(url)
@@ -179,6 +197,10 @@ def _wx_fetch(point=WX_POINT, forecast=WX_FORECAST, calls=None):
             return GEO_OK
         if "api.weather.gov/points" in url:
             return point
+        if "/stations" in url and "observations" not in url:
+            return stations
+        if "observations/latest" in url:
+            return obs(url) if callable(obs) else obs
         if "gridpoints" in url:
             return forecast
         return FORECAST_OK  # open-meteo
@@ -186,15 +208,23 @@ def _wx_fetch(point=WX_POINT, forecast=WX_FORECAST, calls=None):
 
 
 class TestWeatherGov:
-    def test_weathergov_is_preferred(self):
+    def test_weathergov_observation_is_preferred(self):
+        """The OBSERVATION, not the forecast period. Larry 2026-08-18:
+        the chip read 69F at 9:52pm while the macOS widget read 82F,
+        because periods[0] after sunset is Tonight and its temperature is
+        the overnight LOW."""
         calls: list[str] = []
         r = aw.get_weather(fetch=_wx_fetch(calls=calls))
         assert r is not None
         assert r["source"] == "weather.gov"
-        assert r["summary"] == "Partly Sunny"       # a phrase, not a WMO code
-        assert r["temp_f"] == 88
+        assert r["summary"] == "Partly Cloudy"       # textDescription
+        assert r["temp_f"] == 88                     # 31.1C converted
         assert r["location"] == "Spartanburg"        # city comes free
+        assert r["station"] == "KSPA"
         assert all("open-meteo" not in u for u in calls)
+        # The forecast endpoint must not even be consulted when an
+        # observation is available — that call is what caused the bug.
+        assert all("gridpoints" not in u or "stations" in u for u in calls)
 
     def test_falls_back_to_open_meteo_outside_the_us(self):
         """Weather.gov 404s outside the US — Open-Meteo stays as the
@@ -210,24 +240,63 @@ class TestWeatherGov:
         assert r["source"] == "open-meteo"
         assert r["temp_f"] == 87
 
-    def test_celsius_from_weathergov_is_converted(self):
-        forecast = {"properties": {"periods": [
-            {"temperature": 20, "temperatureUnit": "C", "shortForecast": "Clear"}]}}
-        r = aw.get_weather(fetch=_wx_fetch(forecast=forecast))
+    def test_celsius_observation_is_converted(self):
+        obs = {"properties": {"temperature": {"value": 20.0,
+                                              "unitCode": "wmoUnit:degC"},
+                              "textDescription": "Clear"}}
+        r = aw.get_weather(fetch=_wx_fetch(obs=obs))
         assert r["temp_f"] == 68
+
+    def test_a_fahrenheit_observation_is_left_alone(self):
+        obs = {"properties": {"temperature": {"value": 68.0,
+                                              "unitCode": "wmoUnit:degF"},
+                              "textDescription": "Clear"}}
+        assert aw.get_weather(fetch=_wx_fetch(obs=obs))["temp_f"] == 68
+
+    def test_a_quiet_station_is_skipped_for_the_next_one(self):
+        """The nearest station is often a small airport reporting
+        irregularly; value: null must be skipped, never read as zero."""
+        def obs(url: str):
+            return WX_OBS_NULL if "KSPA" in url else WX_OBS
+        r = aw.get_weather(fetch=_wx_fetch(obs=obs))
+        assert r["temp_f"] == 88
+        assert r["station"] == "KGSP"
+
+    def test_all_stations_quiet_degrades_to_the_forecast(self):
+        """A forecast temperature beats an empty chip — but it is
+        labelled differently so the two can never be confused."""
+        r = aw.get_weather(fetch=_wx_fetch(obs=WX_OBS_NULL))
+        assert r["source"] == "weather.gov-forecast"
+        assert r["temp_f"] == 88
+        assert r["period"] == "This Afternoon"
+
+    def test_no_station_list_degrades_to_the_forecast(self):
+        point = {"properties": {
+            "forecast": "https://api.weather.gov/gridpoints/GSP/50,80/forecast",
+            "relativeLocation": {"properties": {"city": "Spartanburg"}}}}
+        r = aw.get_weather(fetch=_wx_fetch(point=point))
+        assert r["source"] == "weather.gov-forecast"
+
+    def test_the_forecast_source_label_is_never_plain_weather_gov(self):
+        """The label IS the guard against repeating this bug: a reader of
+        the payload can always tell an observation from a forecast."""
+        r = aw.get_weather(fetch=_wx_fetch(obs=WX_OBS_NULL))
+        assert r["source"] != "weather.gov"
 
     def test_missing_forecast_url_falls_back(self):
         r = aw.get_weather(fetch=_wx_fetch(point={"properties": {}}))
         assert r["source"] == "open-meteo"
 
     def test_empty_periods_falls_back(self):
-        r = aw.get_weather(fetch=_wx_fetch(forecast={"properties": {"periods": []}}))
+        r = aw.get_weather(fetch=_wx_fetch(
+            forecast={"properties": {"periods": []}}, obs=WX_OBS_NULL))
         assert r["source"] == "open-meteo"
 
     def test_weathergov_city_beats_the_ip_guess(self):
         """The IP label is only used when Weather.gov gives no city."""
         point = {"properties": {
             "forecast": "https://api.weather.gov/gridpoints/x/1,2/forecast",
+            "observationStations": "https://api.weather.gov/gridpoints/x/1,2/stations",
             "relativeLocation": {"properties": {}}}}
         r = aw.get_weather(fetch=_wx_fetch(point=point))
         assert r["location"] == "Marietta"  # falls back to the geo label

@@ -314,6 +314,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Mortimer needs microphone access for voice conversations.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Mortimer uses your location to show current local weather.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -360,6 +361,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Mortimer needs microphone access for voice conversations.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Mortimer uses your location to show current local weather.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
