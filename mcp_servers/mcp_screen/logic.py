@@ -20,22 +20,66 @@ caller; only the vision model's TEXT answer crosses back into the loop.
 Trade-off Larry accepted 2026-08-18: every screen_view call sends the
 captured image to a cloud vision API. Anything visible on the captured
 display leaves the machine. JARVIS_SCREEN_ENABLED=false is the off-ramp.
+
+DIAGNOSTICS (MORTIMER_SKILL_LIBRARY_PLAN.md Part G, Larry 2026-08-18:
+*"since computer vision is untested ... add what it sees into the logs,
+not indefinitely, only for a short period"*). Two tiers, and the
+paragraph above is now conditionally false, which is why this note
+exists:
+
+  Tier 1 (always on) — one structured log line per capture: the model's
+  TEXT answer preview, display index, image byte size, low_confidence,
+  profile, and latency. The answer already crosses back to the caller,
+  so logging it adds no exposure; the byte size and latency are what
+  actually diagnose a bad capture.
+
+  G3 (always on) — an image whose capture came back `low_confidence` IS
+  retained under logs/screen/. That is a few KB of wallpaper, it is the
+  exact artifact proving a missing Screen Recording grant, and it is the
+  one case where the image is nearly certain to contain nothing private.
+
+Tier 2 — retaining EVERY captured image — was designed (a self-expiring
+`JARVIS_SCREEN_DEBUG_UNTIL` deadline) and deliberately NOT built: Tier 1
+and G3 are cheap and may well be sufficient. Do not add it without a
+real failure that survives them, and if it is added, the deadline must
+be an absolute timestamp with no boolean form — "remember to turn it
+off" is a wish, not a backstop.
+
+Retention is JARVIS_SCREEN_RETENTION_HOURS (default 48) — by a wide
+margin the shortest in the system (run log: 30 days; council: 180), and
+deliberately so.
 """
 
 from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import subprocess
 import tempfile
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 from jarvis.agents.upgrade_agent import load_model_registry
 
+logger = logging.getLogger(__name__)
+
 SCREEN_ENABLED_ENV = "JARVIS_SCREEN_ENABLED"
 VISION_PROFILE_ENV = "JARVIS_VISION_PROFILE"
+SCREEN_RETENTION_ENV = "JARVIS_SCREEN_RETENTION_HOURS"
+
+# logs/ is gitignored, so nothing retained here can reach GitHub.
+SCREEN_LOG_DIR = Path(__file__).resolve().parents[2] / "logs" / "screen"
+
+DEFAULT_RETENTION_HOURS = 48
+
+# Only a preview of the answer goes to the log line; the full text is
+# already returned to the caller, and an unbounded log line is how a log
+# becomes unreadable.
+ANSWER_PREVIEW_CHARS = 200
 
 # A real screenshot of any populated display is comfortably above this;
 # an empty/wallpaper-only capture (the classic symptom of a missing
@@ -57,6 +101,83 @@ def screen_enabled() -> bool:
 
 def _disabled_error() -> dict:
     return {"error": "Screen vision is disabled (JARVIS_SCREEN_ENABLED=false)."}
+
+
+def retention_hours() -> int:
+    """How long a retained diagnostic image lives. Never raises."""
+    raw = os.environ.get(SCREEN_RETENTION_ENV, "").strip()
+    if not raw:
+        return DEFAULT_RETENTION_HOURS
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("screen_retention_unparseable value=%r using=%d",
+                       raw, DEFAULT_RETENTION_HOURS)
+        return DEFAULT_RETENTION_HOURS
+    return max(0, value)
+
+
+def prune_screen_logs(directory: Path | None = None, now: float | None = None) -> int:
+    """Delete retained diagnostic images older than the retention window.
+
+    Called at bot startup beside the run-log prune. Returns the number
+    deleted. Never raises — a prune failure must not stop a boot.
+
+    This is the backstop that makes retention real rather than promised:
+    even if nothing else runs, an image cannot outlive the window.
+    """
+    directory = directory or SCREEN_LOG_DIR
+    if not directory.exists():
+        return 0
+    hours = retention_hours()
+    cutoff = (now if now is not None else time.time()) - hours * 3600
+    deleted = 0
+    try:
+        for path in directory.rglob("*.png"):
+            try:
+                if path.stat().st_mtime < cutoff:
+                    path.unlink()
+                    deleted += 1
+            except OSError:
+                continue
+        # Tidy empty date folders so the directory does not accumulate.
+        for child in sorted(directory.glob("*"), reverse=True):
+            if child.is_dir() and not any(child.iterdir()):
+                child.rmdir()
+    except Exception:  # noqa: BLE001 — pruning must never break startup
+        logger.exception("screen_prune_failed dir=%s", directory)
+    if deleted:
+        logger.info("screen_logs_pruned deleted=%d older_than_hours=%d",
+                    deleted, hours)
+    return deleted
+
+
+def _retain_failed_capture(image_bytes: bytes, display: int,
+                           directory: Path | None = None) -> str | None:
+    """G3 — keep a LOW-CONFIDENCE capture only.
+
+    Deliberately not a general "save the screenshot" helper: it is called
+    from exactly one branch, the one where the image is almost certainly
+    wallpaper and the question is whether macOS granted Screen Recording
+    at all. Returns the path written, or None. Never raises — a
+    diagnostic must not break the tool it is diagnosing.
+    """
+    directory = directory or SCREEN_LOG_DIR
+    try:
+        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        folder = directory / day
+        folder.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%H%M%S")
+        path = folder / f"lowconf-display{display}-{stamp}.png"
+        path.write_bytes(image_bytes)
+        logger.warning(
+            "screen_lowconf_retained path=%s bytes=%d — kept for "
+            "troubleshooting; pruned after %dh",
+            path, len(image_bytes), retention_hours())
+        return str(path)
+    except Exception:  # noqa: BLE001
+        logger.exception("screen_lowconf_retain_failed display=%s", display)
+        return None
 
 
 # --- screen_list -------------------------------------------------------
@@ -216,9 +337,12 @@ def screen_view(
     except NoVisionProfileError as exc:
         return {"error": str(exc)}
 
+    started = time.perf_counter()
     try:
         path = capture_fn(display)
     except Exception as exc:  # subprocess failure, bad display index, etc.
+        logger.warning("screen_view display=%s outcome=capture_failed error=%s",
+                       display, exc)
         return {"error": f"Screen capture failed: {exc}"}
 
     try:
@@ -229,6 +353,14 @@ def screen_view(
             # rather than erroring. Report this plainly instead of
             # sending a useless image to the vision model and presenting
             # its confused answer as a real one.
+            # G3 — this is the one image worth keeping.
+            retained = _retain_failed_capture(image_bytes, display)
+            logger.warning(
+                "screen_view display=%s outcome=low_confidence bytes=%d "
+                "min_bytes=%d profile=%s retained=%s ms=%d",
+                display, len(image_bytes), MIN_SCREENSHOT_BYTES,
+                profile.get("name"), retained,
+                int((time.perf_counter() - started) * 1000))
             return {
                 "answer": (
                     "The captured image looks empty or wallpaper-only — "
@@ -259,7 +391,25 @@ def screen_view(
             )
             answer = response.choices[0].message.content or ""
         except Exception as exc:
+            logger.warning(
+                "screen_view display=%s outcome=model_failed bytes=%d "
+                "profile=%s error=%s ms=%d",
+                display, len(image_bytes), profile.get("name"), exc,
+                int((time.perf_counter() - started) * 1000))
             return {"error": f"Vision model call failed: {exc}"}
+
+        # Tier 1 — the diagnostic record. The answer already crosses back
+        # to the caller, so a bounded preview here costs no new exposure;
+        # bytes and latency are what actually distinguish "the capture was
+        # wrong" from "the model was wrong", which is the question the
+        # direct view_screen path could not answer at all before this
+        # (it is not a delegation, so it writes no run-log row).
+        logger.info(
+            "screen_view display=%s outcome=ok bytes=%d profile=%s ms=%d "
+            "answer=%r",
+            display, len(image_bytes), profile.get("name"),
+            int((time.perf_counter() - started) * 1000),
+            answer[:ANSWER_PREVIEW_CHARS])
 
         return {
             "answer": answer,

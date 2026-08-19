@@ -1,6 +1,6 @@
 ---
 name: technical-plan-document
-description: Write an implementation plan or technical specification that another model can build from without making design decisions — required sections, explicit decisions with their rationale, acceptance criteria, and a self-audit for contradictions. Use when asked for a plan, spec, design document or phased implementation write-up.
+description: Write an implementation plan or technical specification that another model can build from without making design decisions — required sections, explicit decisions with their rationale, acceptance criteria, and a self-audit for contradictions. Use when asked to author a spec, design document or phased implementation write-up.
 metadata:
   source: procedure:18+22
   agent: developer
@@ -9,6 +9,13 @@ metadata:
 ---
 
 # Technical plan and specification documents
+
+## When this does not apply
+
+Stop and ignore this skill if the request is conversational rather than a
+request to author a document — asking what you intend to do next, what is
+on the schedule, or the status of a document that already exists. Those
+share vocabulary with this skill but want a sentence, not a spec.
 
 ## When to use this
 
@@ -69,3 +76,8 @@ Real plan authoring runs through the planning pathway (`plan_start`),
 not inline in the voice loop. A full document does not fit in a
 five-round tool budget, and attempting it there is what produced the
 timeouts that created the pathway.
+
+If `plan_start` is unavailable — the admin sidecar is not running, or the
+tool is not in your list — say so and stop. Do not fall back to writing
+the document inline: that is the failure mode the pathway exists to
+prevent, and a truncated plan looks like a finished one.

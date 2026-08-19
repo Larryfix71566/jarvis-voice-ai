@@ -10,6 +10,12 @@ metadata:
 
 # Repository history and status review
 
+## When this does not apply
+
+Reading only. Committing, pushing, and editing files are two-phase
+confirmed actions with their own rules — nothing here authorizes a write
+or describes how to perform one.
+
 ## When to use this
 
 Any question of the form "what have we shipped", "what's uncommitted",
@@ -56,8 +62,16 @@ git diff --cached --stat   # staged
 - Never state a branch's position relative to origin without having seen
   it in `git status --branch` output — a stale `git log` cannot tell you
   whether it has been pushed.
-- If a command fails, say what failed. An index lock, a detached HEAD or
-  a missing remote are all specific and all worth naming.
+- Name the specific failure: an index lock, a detached HEAD, or a missing
+  remote are each worth saying by name rather than "the command failed".
+
+## If the tools are unavailable
+
+If `git_status` / `git_log` / `git_diff_summary` are not available to you,
+say that you could not read the repository and stop. Do not answer from
+what you remember of this repository — repository state is exactly the
+kind of fact that changes between when it was learned and when it is
+asked for.
 
 ## Do not store the answer
 

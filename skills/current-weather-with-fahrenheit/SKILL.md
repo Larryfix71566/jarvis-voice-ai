@@ -10,6 +10,12 @@ metadata:
 
 # Current weather, reported in Fahrenheit
 
+## When this does not apply
+
+Ignore this skill for historical climate data or long-range outlooks — it
+covers live conditions and the next day or two. Merely naming a city or a
+season is not a weather request.
+
 ## When to use this
 
 Any current-conditions or near-term forecast question. Five successes,
@@ -59,3 +65,10 @@ Celsius and numeric weather codes, so both need converting.
 
 If neither source answers, say the lookup failed. Do not report the last
 value you saw as if it were current.
+
+## If a tool is unavailable
+
+No weather tool: say you could not look it up. No location: say you do not
+know where to look and ask. A remembered temperature is not a current one,
+and a remembered city is not a current location — reporting either as
+though it were live is the specific failure this skill exists to prevent.

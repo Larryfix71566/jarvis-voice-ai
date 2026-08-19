@@ -110,3 +110,54 @@ def test_no_guessing_at_causes():
 
     for word in ("access", "permissions", "credentials", "connectivity"):
         assert word in GOLDEN_RULES
+
+
+class TestVerificationTaxonomy:
+    """MORTIMER_SKILL_LIBRARY_PLAN.md Part B — the discernment taxonomy
+    lives in the prompt layer, NOT in a skill, because MAX_INJECTED = 1
+    means a general skill loses to every specific one."""
+
+    def test_every_subagent_gets_it(self):
+        """No matching involved: it reaches all five agents, always."""
+        from jarvis.prompts import SUBAGENT_PROMPTS, VERIFICATION_TAXONOMY_RULE
+
+        assert len(SUBAGENT_PROMPTS) == 5
+        for name, prompt in SUBAGENT_PROMPTS.items():
+            assert VERIFICATION_TAXONOMY_RULE in prompt, name
+
+    def test_it_appears_exactly_once_per_prompt(self):
+        """Appended in one place (the dict comprehension), never baked
+        into a literal — same discipline as D6/D7."""
+        from jarvis.prompts import SUBAGENT_PROMPTS, VERIFICATION_TAXONOMY_RULE
+
+        for name, prompt in SUBAGENT_PROMPTS.items():
+            assert prompt.count(VERIFICATION_TAXONOMY_RULE) == 1, name
+
+    def test_names_all_three_claim_categories(self):
+        from jarvis.prompts import VERIFICATION_TAXONOMY_RULE as rule
+
+        assert "did a tool return it in this run" in rule       # facts/figures
+        assert "cause for a failure" in rule                     # reasoning
+        assert "say what you assumed" in rule                    # missing context
+
+    def test_forbids_the_appended_caveat_list(self):
+        """B2 — discernment-nudge's output format must NOT port. Sub-agents
+        have a 60-word plain-text contract and speak through TTS."""
+        from jarvis.prompts import VERIFICATION_TAXONOMY_RULE as rule
+
+        assert "never append a list" in rule.lower()
+
+    def test_stays_short(self):
+        """B3 — this is injected into EVERY sub-agent run, so length costs
+        more here than in a skill that fires on match."""
+        from jarvis.prompts import VERIFICATION_TAXONOMY_RULE
+
+        assert len(VERIFICATION_TAXONOMY_RULE) < 400
+
+    def test_conversational_agents_stay_lean(self):
+        """The four non-developer prompts must not drift toward the
+        developer's size; the shared rules are the only thing they share."""
+        from jarvis.prompts import SUBAGENT_PROMPTS
+
+        for name in ("scheduler", "librarian", "analyst", "systems"):
+            assert len(SUBAGENT_PROMPTS[name]) < 1600, name

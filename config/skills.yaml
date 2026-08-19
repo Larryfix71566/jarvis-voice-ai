@@ -22,7 +22,13 @@
 # of it is live.
 
 enabled:
+  # Promoted from active procedures, 2026-08-18.
   - git-history-and-status-review
   - current-weather-with-fahrenheit
   - layered-geolocation
   - technical-plan-document
+  # Authored here, 2026-08-18 (MORTIMER_SKILL_LIBRARY_PLAN.md Part C).
+  # Skills authored in this repository ship enabled: they are reviewed in
+  # their own diff and carry no scripts. The one-at-a-time rule above
+  # still governs anything IMPORTED from a third party.
+  - mcp-server-authoring

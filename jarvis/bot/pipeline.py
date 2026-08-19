@@ -452,6 +452,21 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
     except Exception as exc:  # noqa: BLE001 — must never block startup
         _logger.warning("runlog_reconcile_orphaned_failed error=%s", exc)
 
+    # MORTIMER_SKILL_LIBRARY_PLAN.md Part G: prune retained screen-vision
+    # diagnostic images, same startup moment and same best-effort shape as
+    # the two prunes above. This is what makes the retention window real
+    # rather than promised — a low-confidence capture kept for
+    # troubleshooting cannot outlive JARVIS_SCREEN_RETENTION_HOURS even if
+    # nothing else ever runs.
+    try:
+        from mcp_servers.mcp_screen.logic import prune_screen_logs
+
+        pruned_screens = prune_screen_logs()
+        if pruned_screens:
+            _logger.info("screen_logs_pruned count=%d", pruned_screens)
+    except Exception as exc:  # noqa: BLE001 — must never block startup
+        _logger.warning("screen_prune_failed error=%s", exc)
+
     registry = SkillRegistry(REPO_ROOT / "config" / "mcp_servers.yaml")
     await registry.start()
     runtime = Runtime(settings=settings, registry=registry,

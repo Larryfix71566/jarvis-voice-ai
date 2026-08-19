@@ -203,6 +203,27 @@ class TestMatching:
         got = match_skill("current weather fahrenheit humidity wind", [weak, strong])
         assert got.name == "strong"
 
+    def test_one_coincidental_word_is_not_a_match(self):
+        """Measured 2026-08-18: "what's the plan for today" tokenizes to
+        {plan, today} and scored 0.500 against technical-plan-document on
+        the word "plan" alone — above the 0.30 threshold. _overlap_score
+        divides by the SMALLER set, so a short task is cheap to satisfy.
+        MIN_SHARED_TOKENS targets that directly."""
+        s = sk(name="technical-plan-document",
+               desc="write an implementation plan or technical specification "
+                    "document with sections and acceptance criteria")
+        assert match_skill("what is the plan for today", [s]) is None
+        # …while the real request, sharing several tokens, still matches.
+        assert match_skill(
+            "write an implementation plan for the new feature", [s]) is s
+
+    def test_min_shared_tokens_agrees_with_consolidate(self):
+        """One idea applied twice, not two ideas that can drift apart."""
+        from jarvis.agent_skills import MIN_SHARED_TOKENS
+        from jarvis.consolidate import MIN_SHARED_TOKENS as CONSOLIDATE_MIN
+
+        assert MIN_SHARED_TOKENS == CONSOLIDATE_MIN == 2
+
     def test_empty_task_matches_nothing(self):
         assert match_skill("", [sk()]) is None
 
@@ -326,6 +347,70 @@ class TestPromotionFromProcedure:
         skill, problems = parse_skill(path)
         assert problems == []
         assert len(skill.description) <= DESCRIPTION_MAX_CHARS
+
+
+class TestExplain:
+    """Part A — the enable gate (D2a). Without it, 'does this match the
+    right tasks' is only answerable by restarting the bot."""
+
+    def test_shows_the_score_and_the_winner(self, tmp_path):
+        from jarvis.agent_skills import explain
+
+        root = tmp_path / "skills"
+        make_skill(root, name="weather-skill",
+                   desc="current weather fahrenheit temperature conditions")
+        cfg = config_with(tmp_path, ["weather-skill"])
+        text = explain("what is the current weather in fahrenheit", root, cfg)
+        assert "weather-skill" in text
+        assert "PASS" in text
+        assert "Would inject: weather-skill" in text
+
+    def test_an_inert_skill_is_never_reported_as_injected(self, tmp_path):
+        """The most misleading possible output would be showing a match
+        for a skill that cannot fire."""
+        from jarvis.agent_skills import explain
+
+        root = tmp_path / "skills"
+        make_skill(root, name="weather-skill",
+                   desc="current weather fahrenheit temperature conditions")
+        cfg = config_with(tmp_path, [])
+        text = explain("what is the current weather in fahrenheit", root, cfg)
+        assert "Would inject" not in text
+        assert "are inert" in text
+
+    def test_reports_competing_skills_above_threshold(self, tmp_path):
+        """MAX_INJECTED is 1, so a second skill above threshold is a
+        silent loser. Overlap has to be visible to be fixed (B5)."""
+        from jarvis.agent_skills import explain
+
+        root = tmp_path / "skills"
+        make_skill(root, name="skill-one",
+                   desc="current weather fahrenheit temperature conditions wind")
+        make_skill(root, name="skill-two",
+                   desc="current weather fahrenheit temperature conditions")
+        cfg = config_with(tmp_path, ["skill-one", "skill-two"])
+        text = explain("current weather fahrenheit temperature conditions", root, cfg)
+        assert "NOT injected" in text
+        assert "merge or sharpen" in text
+
+    def test_empty_task_is_not_an_error(self, tmp_path):
+        from jarvis.agent_skills import explain
+
+        root = tmp_path / "skills"
+        make_skill(root)
+        text = explain("", root, config_with(tmp_path, ["a-skill"]))
+        assert "nothing can match" in text
+
+    def test_needs_no_database(self, tmp_path, monkeypatch):
+        """Skills are files, not rows — this must work on a fresh
+        checkout where data/jarvis.db does not exist."""
+        from jarvis.agent_skills import explain
+
+        monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "nonexistent.db"))
+        root = tmp_path / "skills"
+        make_skill(root)
+        assert "threshold" in explain("do the thing", root,
+                                      config_with(tmp_path, []))
 
 
 class TestShippedSkills:

@@ -87,6 +87,24 @@ MATCH_THRESHOLD = 0.30
 # competing how-tos in one prompt is how a small model stalls.
 MAX_INJECTED = 1
 
+# A single coincidental word is not a match. `_overlap_score` divides by
+# the SMALLER token set, so a short task whose one or two tokens both
+# appear somewhere in a long description scores 1.0 — measured
+# 2026-08-18: "what's the plan for today" tokenizes to {plan, today} and
+# scored 0.500 against `technical-plan-document` on the word "plan"
+# alone, well above the 0.30 threshold.
+#
+# Requiring two shared tokens targets that cause directly. Same constant,
+# same value, same reasoning as jarvis/consolidate.py's MIN_SHARED_TOKENS
+# — one idea, applied twice, not two ideas.
+#
+# This is why an anti-trigger belongs in the BODY, never the description:
+# naming the false-positive phrases in the description adds their exact
+# words to the matchable token set. Measured on the same day, adding
+# "what are you planning to do next" to this skill's description moved
+# that task's score from 0.000 to 1.000 — precisely backwards.
+MIN_SHARED_TOKENS = 2
+
 # Limits from the standard itself.
 NAME_MAX_CHARS = 64
 DESCRIPTION_MAX_CHARS = 1024
@@ -339,8 +357,11 @@ def match_skill(
 
     best: tuple[float, Skill] | None = None
     for skill in candidates:
-        score = _overlap_score(_tokens(skill.card), task_tokens)
+        card_tokens = _tokens(skill.card)
+        score = _overlap_score(card_tokens, task_tokens)
         if score < threshold:
+            continue
+        if len(card_tokens & task_tokens) < MIN_SHARED_TOKENS:
             continue
         if best is None or score > best[0]:
             best = (score, skill)
@@ -441,6 +462,102 @@ def skill_from_procedure(row: dict, directory: Path | None = None) -> Path:
 # --- CLI -------------------------------------------------------------------
 
 
+def explain(
+    task: str,
+    directory: Path | None = None,
+    config_path: Path | None = None,
+) -> str:
+    """Part A — score every skill on disk against `task` and show the work.
+
+    Mirrors `jarvis.procedures._explain` (D23) deliberately: same purpose,
+    same shape, one convention. Without it, "does this skill match the
+    right tasks?" can only be answered by restarting the bot and running a
+    live delegation, which gives a yes/no and no score to reason about.
+
+    Deliberately DB-free — skills are files, not rows, so this works on a
+    fresh checkout with no database.
+
+    This is also the enable gate (D2a): a skill is not registered in
+    config/skills.yaml without recorded scores for two tasks it should
+    match and two it must not. The negative cases are the ones that
+    matter — MAX_INJECTED is 1, so an over-matching skill does not merely
+    add noise, it displaces the skill that should have won.
+    """
+    found = discover(directory)
+    allowed = set(enabled_names(config_path))
+    task_tokens = _tokens(task)
+
+    out = [
+        f"task: {task!r}",
+        f"task tokens ({len(task_tokens)}): {sorted(task_tokens)}",
+        f"threshold: {MATCH_THRESHOLD}",
+        "",
+    ]
+    if not found:
+        out.append(f"no skills found under {directory or SKILLS_DIR}")
+        return "\n".join(out)
+    if not task_tokens:
+        out.append("no scorable tokens in the task — nothing can match")
+        return "\n".join(out)
+
+    scored: list[tuple[float, Skill, set[str]]] = []
+    for path, skill, _problems in found:
+        if skill is None:
+            out.append(f"[ INVALID ] {path.parent.name} — cannot be scored")
+            continue
+        card_tokens = _tokens(skill.card)
+        scored.append((_overlap_score(card_tokens, task_tokens), skill,
+                       card_tokens & task_tokens))
+
+    scored.sort(key=lambda t: t[0], reverse=True)
+
+    def qualifies(score: float, shared: set[str]) -> bool:
+        return score >= MATCH_THRESHOLD and len(shared) >= MIN_SHARED_TOKENS
+
+    # Only an ENABLED, qualifying skill can be injected, and only the top
+    # one of those — exactly what match_skill returns.
+    winner = next(
+        (s for score, s, shared in scored
+         if qualifies(score, shared) and s.name in allowed), None)
+
+    for score, skill, shared in scored:
+        state = "enabled" if skill.name in allowed else "inert  "
+        ok = qualifies(score, shared)
+        mark = "<< INJECTED" if skill is winner else ""
+        out.append(
+            f"[{state}] score={score:.3f} {'PASS' if ok else 'fail':<4} "
+            f"{skill.name} {mark}".rstrip()
+        )
+        out.append(f"          shared_tokens={sorted(shared)}")
+        if score >= MATCH_THRESHOLD and len(shared) < MIN_SHARED_TOKENS:
+            out.append(
+                f"          (above threshold but only {len(shared)} shared "
+                f"token — needs {MIN_SHARED_TOKENS}; a single coincidental "
+                "word is not a match)")
+
+    out.append("")
+    if winner is None:
+        above = [s.name for sc, s, sh in scored if qualifies(sc, sh)]
+        if above:
+            out.append(
+                "Nothing would be injected: the skills above threshold "
+                f"({', '.join(above)}) are inert. Enable one in "
+                f"{(config_path or SKILLS_CONFIG).name} to use it.")
+        else:
+            out.append("Nothing would be injected — no skill reached the threshold.")
+    else:
+        out.append(f"Would inject: {winner.name}")
+        others = [s.name for sc, s, sh in scored
+                  if qualifies(sc, sh) and s is not winner]
+        if others:
+            out.append(
+                f"Also above threshold but NOT injected (MAX_INJECTED={MAX_INJECTED}): "
+                f"{', '.join(others)}. If one of those should have won, the two "
+                "descriptions overlap — merge or sharpen them rather than "
+                "shipping competitors.")
+    return "\n".join(out)
+
+
 def format_inventory(directory: Path | None = None,
                      config_path: Path | None = None) -> str:
     """What is on disk, what is enabled, and what is wrong with the rest."""
@@ -483,7 +600,14 @@ def main(argv: list[str] | None = None) -> int:
                    help="write a SKILL.md draft from one procedure (kept, not moved)")
     p.add_argument("--force", action="store_true",
                    help="allow --from-procedure on a non-active procedure")
+    p.add_argument("--explain", metavar="TASK",
+                   help="score every skill against a task and show which "
+                        "would be injected")
     args = p.parse_args(argv)
+
+    if args.explain:
+        print(explain(args.explain))
+        return 0
 
     if args.from_procedure is not None:
         from jarvis.db import get_conn

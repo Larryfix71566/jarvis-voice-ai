@@ -45,6 +45,48 @@ working around it.
 - [ ] `python -m jarvis.runlog` still shows that procedure being matched
       afterwards — promotion is a copy, not a move.
 
+## Skill library (MORTIMER_SKILL_LIBRARY_PLAN.md, 2026-08-18)
+
+- [ ] `python -m jarvis.agent_skills --list` shows **5 skills, all
+      enabled**. Authored skills ship enabled; the one-at-a-time gate now
+      applies to imported skills only.
+- [ ] `python -m jarvis.agent_skills --validate` exits 0.
+- [ ] `--explain "write a new MCP server for the calendar API"` →
+      `mcp-server-authoring` (0.500).
+- [ ] `--explain "show me the recent commits"` →
+      `git-history-and-status-review`, NOT `mcp-server-authoring`. This is
+      the negative that matters: `MAX_INJECTED = 1` means an over-match
+      displaces the right skill rather than adding noise.
+- [ ] `--explain "what's the plan for today"` → nothing injected.
+      (Before `MIN_SHARED_TOKENS`, this scored 0.500 on the word "plan".)
+- [ ] After a restart, a delegation that mentions writing an MCP server
+      logs `skill_injected agent=developer name=mcp-server-authoring`.
+- [ ] After a day of use:
+      `grep skill_injected logs/bot.log | awk '{print $NF}' | sort | uniq -c`
+      — a skill firing on nearly every run is over-matching, and its
+      **body** needs a sharper "when this does not apply" section. Do NOT
+      put the anti-trigger in the description: measured 2026-08-18, that
+      moves the false positive's score UP, because the negative example's
+      own words become matchable tokens.
+- [ ] Every sub-agent's system prompt carries the verification taxonomy
+      exactly once, whether or not a skill matched.
+
+## Screen-vision diagnostics (Part G)
+
+- [ ] Ask "what's on my second screen". `grep screen_view logs/bot.log`
+      shows one line with display, bytes, profile, ms, and an answer
+      preview — including for the DIRECT `view_screen` path, which writes
+      no run-log row and was previously invisible.
+- [ ] A successful capture leaves **no image on disk**: `ls logs/screen/`
+      is empty. Tier 2 was deliberately not built.
+- [ ] Revoke Screen Recording permission and ask again. The answer names
+      the permission, and `logs/screen/<date>/lowconf-*.png` now holds the
+      wallpaper frame with a `screen_lowconf_retained` warning in the log.
+- [ ] Restore permission. Set `JARVIS_SCREEN_RETENTION_HOURS=0`, restart,
+      and confirm the retained image is pruned at startup
+      (`screen_logs_pruned` in the log).
+- [ ] `JARVIS_SCREEN_ENABLED=false` still suppresses everything.
+
 ## K4 — Workflows
 
 - [ ] A task matching a `config/workflows/*.yaml` `when:` logs

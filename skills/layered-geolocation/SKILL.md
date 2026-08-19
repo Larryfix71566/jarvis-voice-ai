@@ -1,6 +1,6 @@
 ---
 name: layered-geolocation
-description: Design or debug location resolution in an application — a layered chain of stored preference, device/browser API, and IP fallback, with consent, explicit staleness, and honest reporting of which layer answered. Use when implementing, reviewing or fixing any feature that needs to know where the user is.
+description: Design or debug location-resolution code in an application — a layered chain of stored preference, device API, and IP fallback, with consent handling, explicit staleness, and honest reporting of which layer answered. Use when implementing, reviewing or fixing a geolocation feature.
 metadata:
   source: procedure:17
   agent: developer
@@ -9,6 +9,13 @@ metadata:
 ---
 
 # Layered geolocation
+
+## When this does not apply
+
+This is about BUILDING location code, not about using it. If the request
+merely needs a position — where the user is now, what the weather is here
+— that is a lookup, and this skill has nothing to say about it. Ignore it
+and answer the question.
 
 ## When to use this
 
@@ -52,3 +59,10 @@ Each layer falls through to the next on failure. None of them raises.
 Coordinates are personal data. Keep them in memory or in a short-lived
 cache; do not write them to the fact store, do not log them, and do not
 put them in a URL or query string.
+
+## If you cannot read the code
+
+If the repository tools are unavailable, say you could not read the
+current implementation and describe only the general pattern — labelled
+as the general pattern, not as what this codebase does. Describing code
+you did not read is the failure this note exists to prevent.

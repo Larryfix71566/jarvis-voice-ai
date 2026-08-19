@@ -117,6 +117,32 @@ NO_INVENTED_REMEDIATION_RULE = (
     "the tool's own error message said so."
 )
 
+# MORTIMER_SKILL_LIBRARY_PLAN.md Part B — the discernment taxonomy, ported
+# from Anthropic's `discernment-nudge` skill and deliberately placed HERE
+# rather than in a skill.
+#
+# Why not a skill: MAX_INJECTED = 1 (jarvis/agent_skills.py), so only the
+# single highest-scoring skill is ever injected. A general verification
+# rule written as a skill would lose to whatever specific skill matched,
+# and fire only when nothing specific did — a rule that goes quiet exactly
+# when the agent is doing something particular. The two rules above are
+# already appended to every sub-agent prompt with no matching involved;
+# this belongs beside them.
+#
+# What the two rules above did NOT say: they forbid describing what you
+# could not read and forbid inventing causes, but neither names WHICH
+# claims are worth checking before stating them. That gap is what let run
+# 54b62f69's "the codebase access is blocked" through — a cause asserted
+# with no failed tool behind it.
+VERIFICATION_TAXONOMY_RULE = (
+    "Before stating something as fact, check which kind of claim it is. "
+    "A number, path, branch, or status: did a tool return it in this run? "
+    "A cause for a failure: did a tool result say so in those words? "
+    "An assumption the task did not give you: say what you assumed. "
+    "Hedge inline where the evidence is thin — never append a list of "
+    "caveats."
+)
+
 # MORTIMER_PLANNING_PATHWAY_PLAN.md P7 — the ONE prompt used to author an
 # implementation-plan document, whether by a single named model (the
 # sidecar's single-mode planning job) or by every proposer in a
@@ -184,7 +210,8 @@ Output contract: a status brief of at most 50 words. On failure output exactly: 
 # jarvis/prompts.py remains the single place either rule is stated (editing
 # GROUNDING_RULE or NO_INVENTED_REMEDIATION_RULE updates every agent).
 SUBAGENT_PROMPTS = {
-    name: f"{prompt}\n{GROUNDING_RULE}\n{NO_INVENTED_REMEDIATION_RULE}"
+    name: (f"{prompt}\n{GROUNDING_RULE}\n{NO_INVENTED_REMEDIATION_RULE}"
+           f"\n{VERIFICATION_TAXONOMY_RULE}")
     for name, prompt in SUBAGENT_PROMPTS.items()
 }
 

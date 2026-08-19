@@ -230,3 +230,119 @@ class TestScreenView:
         )
         assert "error" in result
         assert not shot.exists()  # cleanup still happens on failure
+
+
+class TestDiagnostics:
+    """MORTIMER_SKILL_LIBRARY_PLAN.md Part G. Larry asked for what the
+    vision model sees to reach the logs, time-boxed, so an untested
+    capability can be troubleshot. Tier 1 (text + metadata) and G3
+    (retain FAILED captures) are built; Tier 2 (retain every image) was
+    designed and deliberately not built."""
+
+    def _profile_registry(self):
+        return {"profiles": {"v": {"model": "m", "base_url": "http://x",
+                                   "api_key_env": "K", "vision": True}}}
+
+    def test_low_confidence_capture_is_retained(self, tmp_path, monkeypatch):
+        """G3 — a wallpaper-only image is the artifact that proves a
+        missing Screen Recording grant, and is the one image nearly
+        certain to hold nothing private."""
+        import mcp_servers.mcp_screen.logic as mod
+
+        monkeypatch.setenv("K", "key")
+        monkeypatch.setattr(mod, "SCREEN_LOG_DIR", tmp_path / "screen")
+        shot = tmp_path / "s.png"
+        shot.write_bytes(b"x" * 10)          # below MIN_SCREENSHOT_BYTES
+
+        result = mod.screen_view(
+            "what is this", 1,
+            capture_fn=lambda d: shot,
+            registry=self._profile_registry(),
+        )
+        assert result["low_confidence"] is True
+        kept = list((tmp_path / "screen").rglob("*.png"))
+        assert len(kept) == 1
+        assert "lowconf" in kept[0].name
+
+    def test_a_good_capture_is_never_retained(self, tmp_path, monkeypatch):
+        """Tier 2 was NOT built. A successful capture still leaves no
+        image on disk — the original guarantee holds for the normal path."""
+        import mcp_servers.mcp_screen.logic as mod
+
+        monkeypatch.setenv("K", "key")
+        monkeypatch.setattr(mod, "SCREEN_LOG_DIR", tmp_path / "screen")
+        shot = tmp_path / "s.png"
+        shot.write_bytes(b"x" * 5000)
+
+        class _Resp:
+            choices = [type("C", (), {"message": type("M", (), {"content": "a desk"})()})()]
+
+        class _Client:
+            class chat:
+                class completions:
+                    @staticmethod
+                    def create(**kw):
+                        return _Resp()
+
+        result = mod.screen_view(
+            "what is this", 1,
+            capture_fn=lambda d: shot,
+            client_factory=lambda p: (_Client(), "m"),
+            registry=self._profile_registry(),
+        )
+        assert result["low_confidence"] is False
+        assert not (tmp_path / "screen").exists() or not list(
+            (tmp_path / "screen").rglob("*.png"))
+
+    def test_the_temp_file_is_still_always_deleted(self, tmp_path, monkeypatch):
+        """The pre-existing guarantee must survive Part G."""
+        import mcp_servers.mcp_screen.logic as mod
+
+        monkeypatch.setenv("K", "key")
+        monkeypatch.setattr(mod, "SCREEN_LOG_DIR", tmp_path / "screen")
+        shot = tmp_path / "s.png"
+        shot.write_bytes(b"x" * 10)
+        mod.screen_view("q", 1, capture_fn=lambda d: shot,
+                        registry=self._profile_registry())
+        assert not shot.exists()
+
+    def test_prune_deletes_only_expired_images(self, tmp_path, monkeypatch):
+        import os
+
+        import mcp_servers.mcp_screen.logic as mod
+
+        monkeypatch.setenv("JARVIS_SCREEN_RETENTION_HOURS", "48")
+        d = tmp_path / "screen" / "2026-08-18"
+        d.mkdir(parents=True)
+        old, new = d / "old.png", d / "new.png"
+        old.write_bytes(b"x")
+        new.write_bytes(b"x")
+        now = 1_000_000.0
+        os.utime(old, (now - 60 * 3600, now - 60 * 3600))   # 60h — expired
+        os.utime(new, (now - 1 * 3600, now - 1 * 3600))     # 1h  — fresh
+
+        assert mod.prune_screen_logs(tmp_path / "screen", now=now) == 1
+        assert not old.exists()
+        assert new.exists()
+
+    def test_prune_never_raises_on_a_missing_directory(self, tmp_path):
+        import mcp_servers.mcp_screen.logic as mod
+
+        assert mod.prune_screen_logs(tmp_path / "nope") == 0
+
+    def test_retention_default_and_bad_values(self, monkeypatch):
+        import mcp_servers.mcp_screen.logic as mod
+
+        monkeypatch.delenv("JARVIS_SCREEN_RETENTION_HOURS", raising=False)
+        assert mod.retention_hours() == 48
+        monkeypatch.setenv("JARVIS_SCREEN_RETENTION_HOURS", "banana")
+        assert mod.retention_hours() == 48        # unparseable falls back
+        monkeypatch.setenv("JARVIS_SCREEN_RETENTION_HOURS", "-5")
+        assert mod.retention_hours() == 0         # never negative
+
+    def test_retention_is_the_shortest_in_the_system(self):
+        """Screenshots are the most sensitive artifact Mortimer holds;
+        the run log keeps 30 days and council rounds 180."""
+        import mcp_servers.mcp_screen.logic as mod
+
+        assert mod.DEFAULT_RETENTION_HOURS <= 48
