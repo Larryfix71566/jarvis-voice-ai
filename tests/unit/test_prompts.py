@@ -145,7 +145,7 @@ class TestVerificationTaxonomy:
         have a 60-word plain-text contract and speak through TTS."""
         from jarvis.prompts import VERIFICATION_TAXONOMY_RULE as rule
 
-        assert "never append a list" in rule.lower()
+        assert "never append caveats" in rule.lower()
 
     def test_stays_short(self):
         """B3 — this is injected into EVERY sub-agent run, so length costs
@@ -156,8 +156,78 @@ class TestVerificationTaxonomy:
 
     def test_conversational_agents_stay_lean(self):
         """The four non-developer prompts must not drift toward the
-        developer's size; the shared rules are the only thing they share."""
+        developer's size.
+
+        **The ceiling moved from 1600 to 1800 on 2026-08-18** when
+        HANDOFF_RULE was added, and the reason is worth recording rather
+        than quietly raising: measured at that point, the four shared
+        discipline rules (grounding, no-invented-remediation,
+        verification taxonomy, handoff) total ~1,226 chars against ~490
+        of scheduler-specific instruction — **71% of a conversational
+        agent's prompt is now shared rules**, a 2.5:1 ratio.
+
+        That is not obviously wrong; the discipline is the valuable part
+        and these agents are simple. But it is the same dilution shape
+        the meta-prompts review measured on the developer from the other
+        direction, and the four rules overlap substantially — all are
+        variations on "do not state what you did not observe". If this
+        ceiling needs raising again, CONSOLIDATE them first, the way
+        GOLDEN_RULES consolidated rules 3/11 rather than adding to them.
+        """
         from jarvis.prompts import SUBAGENT_PROMPTS
 
         for name in ("scheduler", "librarian", "analyst", "systems"):
-            assert len(SUBAGENT_PROMPTS[name]) < 1600, name
+            assert len(SUBAGENT_PROMPTS[name]) < 1800, name
+
+
+class TestHandoffRule:
+    """MORTIMER_HANDOFF_LOOP_PLAN.md H2 — Larry: "quitting is not
+    acceptable". The run log showed Mortimer did not quit; it stopped at
+    "I cannot" instead of converting the blocker into a handoff."""
+
+    def test_every_subagent_gets_it(self):
+        from jarvis.prompts import HANDOFF_RULE, SUBAGENT_PROMPTS
+
+        for name, prompt in SUBAGENT_PROMPTS.items():
+            assert HANDOFF_RULE in prompt, name
+
+    def test_it_names_the_marker_delegate_py_keys_off(self):
+        """The marker is the mechanical half: delegate.py reads it from
+        the agent's OWN reply to authorise a continuation, so a Supervisor
+        cannot forge permission for its own retry."""
+        from jarvis.agents.delegate import HANDOFF_MARKER
+        from jarvis.prompts import HANDOFF_RULE
+
+        assert HANDOFF_MARKER in HANDOFF_RULE
+
+    def test_it_asks_for_the_command_not_just_the_complaint(self):
+        from jarvis.prompts import HANDOFF_RULE
+
+        assert "exact command" in HANDOFF_RULE
+
+    def test_search_discipline_is_stated(self):
+        """Rounds 9-15 of b74ed019 were a widening search after the answer
+        was already in hand."""
+        from jarvis.prompts import HANDOFF_RULE
+
+        assert "more searching is not more progress" in HANDOFF_RULE
+
+    def test_the_magnitude_check_is_in_the_taxonomy(self):
+        """The question that actually cracked the weather bug: 13F does
+        not fit a 15-minute cache, so staleness was the wrong hypothesis."""
+        from jarvis.prompts import VERIFICATION_TAXONOMY_RULE as rule
+
+        assert "MAGNITUDE" in rule
+
+    def test_the_addendum_forbids_shell_comments(self):
+        """zsh does not treat # as a comment interactively — it cost two
+        broken command handoffs on 2026-08-18."""
+        from jarvis.prompts import HANDOFF_ADDENDUM
+
+        assert "zsh" in HANDOFF_ADDENDUM
+
+    def test_the_addendum_explains_continuation(self):
+        from jarvis.prompts import HANDOFF_ADDENDUM
+
+        assert "continuation" in HANDOFF_ADDENDUM
+        assert "not a retry" in HANDOFF_ADDENDUM

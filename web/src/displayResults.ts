@@ -22,6 +22,23 @@ export interface DisplayPayload {
   ts?: number; // epoch SECONDS from jarvis/bot/display.py — see timeFormat.ts's warning; do not use directly
   surface?: string; // "drawer" | "window" — plan D36
   tool?: string; // engagement plan E1 — which tool produced this (additive; absent from pre-E1 bots)
+  // MORTIMER_HANDOFF_LOOP_PLAN.md H3 — commands the USER runs themselves.
+  // A spoken command cannot be copied, so it goes here instead of into
+  // dialog text.
+  commands?: string[];
+  note?: string;
+  // H6.1 — the card renders its own "copy the output and say 'read my
+  // clipboard'" footer from THIS FLAG, not from model-authored prose. A
+  // prompt rule asking the model to mention the return path gets dropped
+  // the moment it is terse, and the 60-word voice contract rewards
+  // terseness.
+  expect_output?: boolean;
+  // H4 — clipboard text read back from the user. Shown here (ephemeral)
+  // rather than in the Log tab, because the transcript is swept into
+  // long-term memory and this content must never be remembered.
+  content?: string;
+  chars?: number;
+  truncated?: boolean;
 }
 
 /** One received payload plus a client-side identity, since the payload

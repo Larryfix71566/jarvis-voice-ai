@@ -769,3 +769,97 @@
     display: none;
   }
 }
+
+/* MORTIMER_HANDOFF_LOOP_PLAN.md H3/H6 — commands the USER runs.
+   A spoken command cannot be copied, so it renders here instead of in
+   dialog text, with a copy button per line (H3.3a: before this the app
+   had no copy affordance anywhere, so "copyable" meant dragging a
+   selection across a floating overlay). */
+.display-commands {
+  margin: 0 0 12px;
+}
+
+.display-command-note {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.display-commands ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.display-command {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.display-command code {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+  /* Selection stays available as a fallback when the clipboard API is
+     unavailable (the copy button catches and ignores that case). */
+  user-select: text;
+}
+
+.display-command-copy {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  font-size: 11px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.display-command-copy:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* H6.1 — the return path, rendered from the payload's own flag rather
+   than from model-authored prose, so a terse reply cannot drop it. */
+.display-command-return {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+/* H4/D4 — clipboard content is shown here (ephemeral) and never in the
+   Log tab, because the transcript is swept into long-term memory. */
+.display-clipboard-head {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.display-clipboard pre {
+  margin: 0;
+  padding: 10px;
+  max-height: 40vh;
+  overflow: auto;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

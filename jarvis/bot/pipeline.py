@@ -42,6 +42,11 @@ from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.remember_tool import build_remember_tool
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.ui_control import build_ui_control_tool
+from jarvis.bot.handoff_tools import (
+    build_clear_clipboard_tool,
+    build_read_clipboard_tool,
+    build_show_commands_tool,
+)
 from jarvis.bot.screen_tool import build_list_screens_tool, build_view_screen_tool
 from jarvis.bot.voice_switch import (
     available_list,
@@ -61,6 +66,7 @@ from jarvis.memory import (
 )
 from jarvis.prompts import (
     SUPERVISOR_PROMPT,
+    HANDOFF_ADDENDUM,
     SCREEN_VISION_ADDENDUM,
     UI_CONTROL_ADDENDUM,
     VOICE_ADDENDUM,
@@ -258,6 +264,72 @@ def build_pipeline(
 
     ui_control_schema, ui_control_handler = build_ui_control_tool(_send_ui_message)
 
+    # MORTIMER_HANDOFF_LOOP_PLAN.md H3/H4/H6 — the handoff loop: show a
+    # command in the display window, let Larry run it, read the output back
+    # from the clipboard, continue. Same kill-switch-at-registration
+    # pattern as ui_control/screen above.
+    clipboard_enabled = os.environ.get(
+        "JARVIS_CLIPBOARD_ENABLED", ""
+    ).strip().lower() not in ("false", "0", "no")
+
+    def _emit_display(payload: dict) -> None:
+        """Direct-tool display payloads. Sub-agent tool results go through
+        build_display_payload in on_agent_event; a direct Supervisor tool
+        has no agent run, so it publishes its own payload in the same
+        message shape the client already handles."""
+        _logger.info("display_payload tool=%s surface=%s agent=%s kind=direct",
+                     payload.get("tool"), payload.get("surface"), "supervisor")
+        asyncio.create_task(
+            send_app_message(transport, {"type": "display", "display": payload}))
+
+    # Late-bound: the context aggregators are created further down, after
+    # tools are registered. The holder is populated there; a tool can only
+    # ever be CALLED once the pipeline is running, so it is always set by
+    # the time this is read.
+    _context_holder: dict[str, Any] = {}
+
+    async def _inject_silent_clipboard(text: str) -> None:
+        """H5 — append to the LIVE context without becoming a transcript
+        entry. MemoryWatcher folds the transcript into long-term memory via
+        an LLM extraction call, so clipboard content in the transcript
+        could be persisted as a durable fact — a password copied moments
+        earlier included. The exclusion is structural: this is not the
+        speech path, and TranscriptObserver only sees the speech path."""
+        user_agg = _context_holder.get("user")
+        if user_agg is None:  # pragma: no cover - pipeline always sets it
+            _logger.warning("clipboard_inject_dropped reason=no_context")
+            return
+        user_agg.add_messages([{"role": "user", "content": text}])
+
+    def _clipboard_call(path: str, post: bool = False) -> dict:
+        """One owner of the armed flag: the sidecar. The bot could run
+        pbpaste itself (both processes are on Larry's Mac), but then the
+        armed state would exist in two places and a clear in one would not
+        arm the other."""
+        from mcp_servers.mcp_selfedit.logic import AdminClient
+
+        try:
+            client = AdminClient()
+            return client.post(path) if post else client.get(path)
+        except Exception as exc:  # noqa: BLE001
+            _logger.warning("clipboard_sidecar_unreachable path=%s error=%s", path, exc)
+            return {"ok": False,
+                    "error": "The admin sidecar isn't running, so I can't reach "
+                             "the clipboard. Start it with ./scripts/mortimer.sh start."}
+
+    show_commands_schema, show_commands_handler = build_show_commands_tool(
+        _emit_display,
+        lambda: _clipboard_call("/api/clipboard/clear", post=True),
+    )
+    clear_clipboard_schema, clear_clipboard_handler = build_clear_clipboard_tool(
+        lambda: _clipboard_call("/api/clipboard/clear", post=True),
+    )
+    read_clipboard_schema, read_clipboard_handler = build_read_clipboard_tool(
+        lambda: _clipboard_call("/api/clipboard"),
+        _inject_silent_clipboard,
+        _emit_display,
+    )
+
     def adapt_to_pipecat(dict_handler):
         """D-009: pipecat 1.4 register_function handlers receive one
         FunctionCallParams object and deliver results via
@@ -289,6 +361,9 @@ def build_pipeline(
         # describing an unregistered tool would invite hallucinated calls.
         + ("\n" + UI_CONTROL_ADDENDUM if ui_control_enabled else "")
         + ("\n" + SCREEN_VISION_ADDENDUM if screen_enabled else "")
+        # H3/H6 — show_commands is always registered; the clipboard half
+        # of the addendum only makes sense when its tools are.
+        + ("\n" + HANDOFF_ADDENDUM if clipboard_enabled else "")
     )
 
     stt = DeepgramFluxSTTService(
@@ -311,6 +386,15 @@ def build_pipeline(
     if screen_enabled:
         llm.register_function("view_screen", adapt_to_pipecat(view_screen_handler))
         llm.register_function("list_screens", adapt_to_pipecat(list_screens_handler))
+    # H3 — show_commands is registered regardless of the clipboard switch:
+    # putting a command on screen instead of speaking it is useful even
+    # when the return channel is off. Only the clipboard pair is gated.
+    llm.register_function("show_commands", adapt_to_pipecat(show_commands_handler))
+    if clipboard_enabled:
+        llm.register_function(
+            "clear_clipboard", adapt_to_pipecat(clear_clipboard_handler))
+        llm.register_function(
+            "read_clipboard", adapt_to_pipecat(read_clipboard_handler))
     tts = ElevenLabsTTSService(
         api_key=settings.elevenlabs_api_key,
         settings=ElevenLabsTTSSettings(
@@ -340,11 +424,18 @@ def build_pipeline(
     if screen_enabled:
         standard_tools.append(to_function_schema(view_screen_schema))
         standard_tools.append(to_function_schema(list_screens_schema))
+    standard_tools.append(to_function_schema(show_commands_schema))
+    if clipboard_enabled:
+        standard_tools.append(to_function_schema(clear_clipboard_schema))
+        standard_tools.append(to_function_schema(read_clipboard_schema))
     context = LLMContext(
         messages=[{"role": "system", "content": system_prompt}],
         tools=ToolsSchema(standard_tools=standard_tools),
     )
     aggregators = LLMContextAggregatorPair(context)
+    # H4/H5 — hand the user aggregator to the clipboard injector built
+    # above. Set here because the tools are registered before this line.
+    _context_holder["user"] = aggregators.user()
     transcript = TranscriptLogger(session_id=runtime.session_id)
 
     pipeline = Pipeline([

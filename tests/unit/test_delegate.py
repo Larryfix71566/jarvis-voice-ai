@@ -325,3 +325,179 @@ class TestRetryGuard:
         await handler({"agent_name": "developer", "task": "add a dismiss button"})
         result = await handler({"agent_name": "analyst", "task": "add a dismiss button"})
         assert result == "done"
+
+
+# --- MORTIMER_HANDOFF_LOOP_PLAN.md H1 -------------------------------------
+
+
+class ScriptedAgent:
+    """Returns a queued reply per call, so a test can drive a multi-run
+    handoff conversation."""
+
+    def __init__(self, name, replies):
+        self.name = name
+        self.display_name = name.title()
+        self.description = f"{name} things."
+        self.mcp_servers = []
+        self.replies = list(replies)
+        self.tasks = []
+
+    async def run(self, task, on_event=None, **kwargs):
+        self.tasks.append(task)
+        return self.replies.pop(0) if self.replies else "done"
+
+
+EXHAUSTED = (
+    "FAILED: ran out of tool-call rounds (15 of 15) before finishing. "
+    "Nothing was blocked — the work was incomplete, not refused."
+)
+
+
+def _tool(agent):
+    schema, handler = build_delegate_tool({agent.name: agent})
+    return schema, handler
+
+
+class TestExhaustedDoesNotArmTheGuard:
+    """H1.1 — an exhausted budget is an unfinished job, not a failed
+    approach. Arming the guard on it refuses the one thing that should
+    happen next: continuing where it stopped."""
+
+    async def test_exhausted_run_allows_an_immediate_follow_up(self):
+        agent = ScriptedAgent("developer", [EXHAUSTED, "found it"])
+        _, handler = _tool(agent)
+        first = await handler({"agent_name": "developer",
+                               "task": "investigate the weather chip staleness"})
+        assert first.startswith("FAILED: ran out of tool-call rounds")
+        second = await handler({"agent_name": "developer",
+                                "task": "investigate the weather chip staleness"})
+        assert second == "found it"          # not REFUSED
+        assert len(agent.tasks) == 2
+
+    async def test_a_real_failure_still_arms_the_guard(self):
+        """The original defect must stay fixed: a reworded retry after a
+        genuine failure is still refused."""
+        agent = ScriptedAgent("developer", ["FAILED: the API key is invalid", "x"])
+        _, handler = _tool(agent)
+        await handler({"agent_name": "developer", "task": "read the weather config file"})
+        again = await handler({"agent_name": "developer",
+                               "task": "read the weather config file please"})
+        assert again.startswith("REFUSED:")
+
+
+class TestContinuationMustBeEarned:
+    """H1.2 — the reset is earned by a RECORDED handoff, not claimed by a
+    flag. Unlimited reset plus a self-declared marker would be infinite
+    guard-free retries, which is what the guard exists to prevent."""
+
+    async def test_claiming_continuation_without_a_handoff_is_refused(self):
+        agent = ScriptedAgent("developer", ["FAILED: the API key is invalid", "x"])
+        _, handler = _tool(agent)
+        await handler({"agent_name": "developer", "task": "read the weather config file"})
+        again = await handler({"agent_name": "developer",
+                               "task": "read the weather config file",
+                               "continuation": True})
+        assert again.startswith("REFUSED:")
+
+    async def test_continuation_after_a_real_handoff_is_allowed(self):
+        agent = ScriptedAgent("developer", [
+            "FAILED: NEEDS-INPUT: run `curl localhost:7861/api/ambient` and tell me the source field",
+            "the source field proves it",
+        ])
+        _, handler = _tool(agent)
+        first = await handler({"agent_name": "developer",
+                               "task": "find why the weather chip is wrong"})
+        assert "NEEDS-INPUT:" in first
+        second = await handler({"agent_name": "developer",
+                                "task": "find why the weather chip is wrong; source is weather.gov",
+                                "continuation": True})
+        assert second == "the source field proves it"
+
+    async def test_the_refusal_message_teaches_the_way_forward(self):
+        agent = ScriptedAgent("developer", ["FAILED: nope", "x"])
+        _, handler = _tool(agent)
+        await handler({"agent_name": "developer", "task": "check the weather config"})
+        msg = await handler({"agent_name": "developer", "task": "check the weather config"})
+        assert "continuation" in msg
+        assert "not a retry" in msg
+
+
+class TestHandoffDepth:
+    """H1.4 — visible, never capped. A cap is quitting on a timer, which
+    is the behaviour this plan exists to remove."""
+
+    async def test_notice_appears_only_after_repeated_handoffs(self):
+        from jarvis.agents.delegate import HANDOFF_DEPTH_NOTICE
+
+        asks = [f"NEEDS-INPUT: run command {i}" for i in range(HANDOFF_DEPTH_NOTICE + 2)]
+        agent = ScriptedAgent("developer", asks)
+        _, handler = _tool(agent)
+
+        first = await handler({"agent_name": "developer", "task": "investigate the thing"})
+        assert "handoff" not in first.lower() or "This is handoff" not in first
+
+        last = first
+        for _ in range(HANDOFF_DEPTH_NOTICE):
+            last = await handler({"agent_name": "developer",
+                                  "task": "investigate the thing, here is the output",
+                                  "continuation": True})
+        assert "This is handoff" in last
+        assert "what you still do not know" in last
+
+    async def test_there_is_no_cap(self):
+        """Ten handoffs must all be allowed — the notice is guidance."""
+        agent = ScriptedAgent("developer", [f"NEEDS-INPUT: step {i}" for i in range(12)])
+        _, handler = _tool(agent)
+        await handler({"agent_name": "developer", "task": "long investigation"})
+        for _ in range(10):
+            out = await handler({"agent_name": "developer",
+                                 "task": "long investigation, more output",
+                                 "continuation": True})
+            assert not out.startswith("REFUSED:")
+
+    async def test_a_resolved_run_resets_the_depth(self):
+        agent = ScriptedAgent("developer", [
+            "NEEDS-INPUT: run this", "all done — no further input needed",
+            "NEEDS-INPUT: a new investigation",
+        ])
+        _, handler = _tool(agent)
+        await handler({"agent_name": "developer", "task": "first investigation"})
+        await handler({"agent_name": "developer", "task": "first investigation, output",
+                       "continuation": True})
+        third = await handler({"agent_name": "developer", "task": "second investigation"})
+        assert "This is handoff" not in third
+
+
+class TestFindingsCarryForward:
+    """H2.2 — a reset that hands back 15 rounds is only progress if those
+    rounds start where the last one stopped."""
+
+    async def test_findings_are_prepended_to_the_task(self, monkeypatch):
+        """Patch the real reader: _read_findings goes through mcp_repo so
+        path confinement and the secret deny-list apply to an
+        agent-supplied path too."""
+        from mcp_servers.mcp_repo import logic as repo_logic
+
+        monkeypatch.setattr(
+            repo_logic, "repo_read_file",
+            lambda path, **kw: {"content": "The temperature comes from periods[0]."})
+
+        agent = ScriptedAgent("developer", ["NEEDS-INPUT: run it", "done"])
+        _, handler = _tool(agent)
+        await handler({"agent_name": "developer", "task": "investigate"})
+        await handler({"agent_name": "developer", "task": "here is the output",
+                       "continuation": True,
+                       "findings_path": "docs/findings/x.md"})
+        assert "periods[0]" in agent.tasks[1]
+        assert "continue from here rather than starting over" in agent.tasks[1]
+
+    async def test_an_unreadable_findings_path_refuses_rather_than_silently_continuing(self):
+        agent = ScriptedAgent("developer", ["NEEDS-INPUT: run it", "done"])
+        _, handler = _tool(agent)
+        await handler({"agent_name": "developer", "task": "investigate"})
+        out = await handler({"agent_name": "developer", "task": "here is the output",
+                             "continuation": True,
+                             "findings_path": "does/not/exist.md"})
+        assert out.startswith("REFUSED:")
+        assert "without them" in out
+        assert len(agent.tasks) == 1        # the run never happened

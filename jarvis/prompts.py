@@ -139,8 +139,31 @@ VERIFICATION_TAXONOMY_RULE = (
     "A number, path, branch, or status: did a tool return it in this run? "
     "A cause for a failure: did a tool result say so in those words? "
     "An assumption the task did not give you: say what you assumed. "
-    "Hedge inline where the evidence is thin — never append a list of "
-    "caveats."
+    "Check MAGNITUDE: if the size of the error does not fit your "
+    "explanation, the explanation is wrong. "
+    "Hedge inline; never append caveats."
+)
+
+# MORTIMER_HANDOFF_LOOP_PLAN.md H2.1/H2.3 — Larry, 2026-08-18: *"Mortimer
+# gives up after the first road block… quitting is not acceptable."*
+#
+# The run log showed he was half right. Run b74ed019 ran 27 of 28 tool
+# calls successfully and was stopped by the iteration cap, not by giving
+# up — but it spent rounds 9-15 on a widening search after it already had
+# every file it needed by round 8. And run ce0fe118 stated a real limit
+# ("I cannot curl localhost:7861/api/ambient") and stopped there, where a
+# human hit the same wall and handed the command over instead.
+#
+# So two rules: stop searching once you can reason, and treat a blocker as
+# a handoff rather than a terminus. The mechanical backstops are
+# elsewhere — delegate.py's HANDOFF_MARKER authorises the continuation,
+# and show_commands puts the command somewhere copyable — but the
+# behaviour has to be asked for here.
+HANDOFF_RULE = (
+    "If something is beyond your tools, do not stop at \"I cannot\": write "
+    "NEEDS-INPUT: then the exact command for the user to run and what its "
+    "result would tell you. Once you have the data you need, stop gathering "
+    "and reason about it — more searching is not more progress."
 )
 
 # MORTIMER_PLANNING_PATHWAY_PLAN.md P7 — the ONE prompt used to author an
@@ -211,9 +234,15 @@ Output contract: a status brief of at most 50 words. On failure output exactly: 
 # GROUNDING_RULE or NO_INVENTED_REMEDIATION_RULE updates every agent).
 SUBAGENT_PROMPTS = {
     name: (f"{prompt}\n{GROUNDING_RULE}\n{NO_INVENTED_REMEDIATION_RULE}"
-           f"\n{VERIFICATION_TAXONOMY_RULE}")
+           f"\n{VERIFICATION_TAXONOMY_RULE}\n{HANDOFF_RULE}")
     for name, prompt in SUBAGENT_PROMPTS.items()
 }
+
+# H3/H4/H6 — the Supervisor's half of the same loop. Shipped only when the
+# tools are registered (pipeline.py), matching UI_CONTROL_ADDENDUM's rule
+# that a prompt describing an unregistered tool invites hallucinated calls.
+HANDOFF_ADDENDUM = """Handing work back to Larry: when a specialist's reply contains NEEDS-INPUT, or you need a command run that you cannot run yourself, call show_commands with the exact commands — never speak a command aloud, because a spoken command cannot be copied. Set expect_output true when you need what it prints; that arms the clipboard, so Larry only has to run it, copy the output, and say "read my clipboard". Never write a shell comment (#) into a command: zsh does not treat it as a comment interactively and will try to glob the rest of the line.
+When Larry gives you that output, delegate again with continuation set to true and the output included in the task, plus findings_path if the specialist gave you one. That is a continuation, not a retry, and the specialist resumes with its budget reset rather than starting over. If a specialist asked for something, do not answer for it and do not drop the thread — relay the request, then relay the answer back."""
 
 
 def render_agent_catalog(agents: list[dict]) -> str:

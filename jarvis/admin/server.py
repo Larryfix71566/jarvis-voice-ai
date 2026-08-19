@@ -955,6 +955,29 @@ def set_location(body: LocationBody) -> dict:
     return {"ok": True}
 
 
+@app.post("/api/clipboard/clear")
+def clipboard_clear() -> dict:
+    """MORTIMER_HANDOFF_LOOP_PLAN.md H4 — wipe the clipboard and arm a
+    read. The sidecar runs on Larry's Mac, so pbcopy/pbpaste are reachable
+    here without any Swift change; the WKWebView bridge is fire-and-forget
+    and browser clipboard read needs a user gesture a voice command cannot
+    supply."""
+    from jarvis import clipboard
+
+    return clipboard.clear()
+
+
+@app.get("/api/clipboard")
+def clipboard_read() -> dict:
+    """H4 — read the clipboard, but ONLY if a clear armed it, and disarm
+    afterwards. The refusal is the safety property: an unarmed read would
+    return whatever happened to be there, which may be a credential copied
+    for an unrelated reason."""
+    from jarvis import clipboard
+
+    return clipboard.read()
+
+
 @app.delete("/api/memory/fact/{key}")
 def memory_delete_fact(key: str) -> dict:
     run_migrations()

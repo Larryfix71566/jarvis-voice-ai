@@ -42,6 +42,31 @@ DEFAULT_MAX_PARALLEL_DELEGATIONS = 3
 RETRY_GUARD_WINDOW_S = 120.0
 RETRY_GUARD_OVERLAP = 0.5
 
+# MORTIMER_HANDOFF_LOOP_PLAN.md H1/H2.
+#
+# The marker a sub-agent puts in its reply when it needs something only the
+# user can get — a command's output, a value it cannot read. It is the
+# AGENT's own word, produced by a different model run against a different
+# prompt than the Supervisor's, which is what makes it usable as
+# authorization: the Supervisor cannot forge permission for its own retry.
+HANDOFF_MARKER = "NEEDS-INPUT:"
+
+# H1.1 — matches ITERATIONS_EXHAUSTED_MESSAGE's opening. An exhausted
+# budget is an unfinished job, not a failed approach, so it must not arm
+# the retry guard.
+EXHAUSTED_PREFIX = "FAILED: ran out of tool-call rounds"
+
+# H1.4 — after this many handoffs on one investigation, the agent is asked
+# to state where it stands before requesting anything more. Deliberately a
+# NOTICE and not a cap: a cap is quitting on a timer, which is the thing
+# this plan exists to stop.
+HANDOFF_DEPTH_NOTICE = 4
+
+# H2.2 — a findings document carried between runs. Bounded for the same
+# reason REPO_MAP_MAX_CHARS is: it is prepended to a task the agent must
+# still have room to work on.
+FINDINGS_MAX_CHARS = 8000
+
 # Procedures-as-hints (MORTIMER_MEMORY_PROCEDURES_PLAN.md D13): a bare
 # asyncio.create_task(...) result has no strong reference anywhere else in
 # this module, so without holding one here a background learn_from_run
@@ -55,6 +80,30 @@ def _spawn_background(coro) -> None:
     task = asyncio.create_task(coro)
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
+
+
+def _read_findings(path: str, max_chars: int = FINDINGS_MAX_CHARS) -> str | None:
+    """H2.2 — read a findings document, or None if it cannot be read.
+
+    Goes through mcp_repo's own reader so path confinement and the secret
+    deny-list apply identically here; a findings path is agent-supplied and
+    must not become a way to read `.env`. Never raises.
+    """
+    try:
+        from mcp_servers.mcp_repo import logic as repo_logic
+
+        result = repo_logic.repo_read_file(path)
+    except Exception:  # noqa: BLE001 — a bad path must not break a run
+        logger.exception("delegate_findings_read_failed path=%s", path)
+        return None
+    if not isinstance(result, dict) or result.get("error"):
+        logger.info("delegate_findings_unreadable path=%s reason=%s",
+                    path, (result or {}).get("error") if isinstance(result, dict) else "?")
+        return None
+    content = str(result.get("content") or "").strip()
+    if not content:
+        return None
+    return content[:max_chars]
 
 
 def build_delegate_tool(
@@ -86,6 +135,25 @@ def build_delegate_tool(
                             "all facts needed."
                         ),
                     },
+                    "continuation": {
+                        "type": "boolean",
+                        "description": (
+                            "True ONLY when you are handing back results the "
+                            "user just produced for this agent (command "
+                            "output, a pasted value) after it asked for them. "
+                            "Include the results in the task text. This is "
+                            "refused if the agent's previous run did not "
+                            "actually ask you for anything."
+                        ),
+                    },
+                    "findings_path": {
+                        "type": "string",
+                        "description": (
+                            "Repository path the agent's previous run wrote "
+                            "its findings to, so it resumes instead of "
+                            "starting over. Use the path that run returned."
+                        ),
+                    },
                 },
                 "required": ["agent_name", "task"],
             },
@@ -96,18 +164,43 @@ def build_delegate_tool(
     # A2 — per-session, per-agent: (task_tokens, failed_at_monotonic).
     # Session-scoped closure state, same lifetime as the semaphore above.
     last_failure: dict[str, tuple[set[str], float]] = {}
+    # H1.2 — per-agent: did that agent's last run actually ASK the user for
+    # something? A continuation is only legitimate after a real handoff, and
+    # this is the record of one. Set from the run's own reply, never from the
+    # Supervisor's claim.
+    awaiting_user: dict[str, bool] = {}
+    # H1.4 — handoffs taken in this session, for the honesty checkpoint. Not
+    # a cap: Larry's rule is that quitting is unacceptable, and a limit is
+    # quitting on a timer.
+    handoff_depth: dict[str, int] = {}
 
     async def handler(arguments: dict) -> str:
         agent_name = str(arguments.get("agent_name", ""))
         task = str(arguments.get("task", ""))
+        claims_continuation = bool(arguments.get("continuation"))
+        findings_path = str(arguments.get("findings_path") or "").strip()
         agent = sub_agents.get(agent_name)
         if agent is None:
             # No agent, nothing ran — this path does not create a run
             # (run-logging plan §5.5).
             return f"Unknown agent '{agent_name}'. Available: {available}."
 
+        # H1.2 — the reset is EARNED, not claimed. A continuation is valid
+        # only if this agent's previous run actually offered a handoff; that
+        # is recorded from the reply itself (`awaiting_user`), so a
+        # Supervisor that simply sets the flag gets nothing. Without this
+        # condition, an unlimited handoff reset plus a self-declared marker
+        # would be infinite guard-free retries — exactly what the guard
+        # below exists to prevent, unbounded.
+        continuation = claims_continuation and awaiting_user.get(agent_name, False)
+        if claims_continuation and not continuation:
+            logger.info(
+                "delegate_continuation_unearned agent=%s — no handoff was "
+                "recorded for this agent's previous run", agent_name,
+            )
+
         prior = last_failure.get(agent_name)
-        if prior is not None:
+        if prior is not None and not continuation:
             prior_tokens, failed_at = prior
             if time.monotonic() - failed_at < RETRY_GUARD_WINDOW_S:
                 overlap = _overlap_score(prior_tokens, _tokens(task))
@@ -120,8 +213,37 @@ def build_delegate_tool(
                         f"REFUSED: the {agent_name} agent just failed this "
                         "same task. Report that failure to the user and ask "
                         "how to proceed — do not retry with reworded "
-                        "instructions."
+                        "instructions. If you obtain NEW information the "
+                        "agent asked for (the output of a command it gave "
+                        "the user), include it in the task and set "
+                        "continuation to true; that is not a retry."
                     )
+        if continuation:
+            handoff_depth[agent_name] = handoff_depth.get(agent_name, 0) + 1
+            logger.info(
+                "delegate_continuation agent=%s depth=%d findings_path=%s",
+                agent_name, handoff_depth[agent_name], findings_path or "-",
+            )
+
+        # H2.2 — carry the prior run's findings forward. Read here, once,
+        # synchronously, and REFUSE on a read failure rather than running a
+        # continuation that silently starts from nothing: the same
+        # read-and-refuse shape plan_path/review_path already use. Without
+        # this a reset hands back 15 rounds that get spent re-deriving what
+        # the last run already knew — in b74ed019 that was rounds 1-8.
+        if findings_path:
+            findings = _read_findings(findings_path)
+            if findings is None:
+                return (
+                    f"REFUSED: could not read findings at {findings_path!r}. "
+                    "Do not continue without them — re-state what is known "
+                    "in the task itself, or omit findings_path."
+                )
+            task = (
+                "Findings established by your previous run on this problem "
+                f"(from {findings_path}) — continue from here rather than "
+                f"starting over:\n\n{findings}\n\n---\n\n{task}"
+            )
         # run_id generated here, one per delegation (run-logging plan D1):
         # this is the unit a human reviews, and generating it before the
         # semaphore below means a queued-but-not-yet-running delegation
@@ -147,12 +269,35 @@ def build_delegate_tool(
         # _settings attribute to check the flag redundantly.
         _spawn_background(learn_from_run(run_id, agent_name))
         failed = result.startswith("FAILED:")
+        # H1.1 — an exhausted iteration budget is NOT a failed approach, it
+        # is an unfinished job; ITERATIONS_EXHAUSTED_MESSAGE says so in
+        # those words. Arming the guard on it would refuse the one thing
+        # that should happen next: continuing where it stopped.
+        exhausted = result.startswith(EXHAUSTED_PREFIX)
+        # H1.2 — did the agent itself ask the user for something? Read from
+        # the agent's OWN reply, which the Supervisor does not author, so a
+        # Supervisor cannot forge the authorization for its own retry.
+        awaiting_user[agent_name] = HANDOFF_MARKER in result or exhausted
         # A2 — a failure arms the guard for this agent; a success clears
         # it (the agent is demonstrably working again).
-        if failed:
+        if failed and not exhausted:
             last_failure[agent_name] = (_tokens(task), time.monotonic())
         else:
             last_failure.pop(agent_name, None)
+        if not failed and HANDOFF_MARKER not in result:
+            # Resolved: the chain is over, so the depth counter starts fresh
+            # for whatever Larry asks next.
+            handoff_depth.pop(agent_name, None)
+        # H1.4 — an honesty checkpoint, never a brake. Appended so the
+        # Supervisor relays it; the run itself is unaffected.
+        depth = handoff_depth.get(agent_name, 0)
+        if depth >= HANDOFF_DEPTH_NOTICE and HANDOFF_MARKER in result:
+            result += (
+                f"\n\n[This is handoff {depth} on this investigation. Before "
+                "asking for anything else, tell the user what you have "
+                "established, what you still do not know, and what the next "
+                "command would settle.]"
+            )
         if on_event is not None:
             on_event({"type": "delegate_done", "agent": agent_name,
                       "display_name": agent.display_name,

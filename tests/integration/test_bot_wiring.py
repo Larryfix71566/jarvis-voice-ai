@@ -158,11 +158,13 @@ def test_interruptions_enabled_on_flux(runtime, fakes, monkeypatch):
 
 
 def test_six_functions_registered(runtime, fakes):
-    # remember (memory plan D6), ui_control (MORTIMER_VOICE_UI_PLAN.md U1)
+    # remember (memory plan D6), ui_control (MORTIMER_VOICE_UI_PLAN.md U1),
+    # show_commands/clear_clipboard/read_clipboard (HANDOFF_LOOP H3/H4 —
+    # the handoff loop: show a command, Larry runs it, read the output back)
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "delegate_task", "list_screens", "remember", "set_voice",
-        "ui_control", "view_screen",
+        "clear_clipboard", "delegate_task", "list_screens", "read_clipboard",
+        "remember", "set_voice", "show_commands", "ui_control", "view_screen",
     ]
     assert llm.kwargs == {"api_key": "sk", "base_url": "http://llm", "model": "m"}
 
@@ -174,7 +176,8 @@ def test_ui_control_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
     monkeypatch.setenv("JARVIS_UI_CONTROL_ENABLED", "false")
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "delegate_task", "list_screens", "remember", "set_voice", "view_screen",
+        "clear_clipboard", "delegate_task", "list_screens", "read_clipboard",
+        "remember", "set_voice", "show_commands", "view_screen",
     ]
 
 
@@ -184,8 +187,42 @@ def test_screen_vision_kill_switch_unregisters_tools(runtime, fakes, monkeypatch
     monkeypatch.setenv("JARVIS_SCREEN_ENABLED", "false")
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "delegate_task", "remember", "set_voice", "ui_control",
+        "clear_clipboard", "delegate_task", "read_clipboard", "remember",
+        "set_voice", "show_commands", "ui_control",
     ]
+
+
+def _system_prompt_of(aggregators) -> str:
+    """The system message the pipeline actually built, however the
+    installed pipecat exposes its context."""
+    ctx = getattr(aggregators.user(), "context", None) or getattr(
+        aggregators, "_context", None)
+    messages = ctx.get_messages() if hasattr(ctx, "get_messages") else ctx.messages
+    return str(messages[0]["content"])
+
+
+def test_clipboard_kill_switch_unregisters_the_pair(runtime, fakes, monkeypatch):
+    """HANDOFF_LOOP H4.5 — JARVIS_CLIPBOARD_ENABLED=false removes the
+    clipboard pair. show_commands SURVIVES: putting a command on screen
+    instead of speaking it is useful even with the return channel off."""
+    monkeypatch.setenv("JARVIS_CLIPBOARD_ENABLED", "false")
+    _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
+    assert "clear_clipboard" not in llm.functions
+    assert "read_clipboard" not in llm.functions
+    assert "show_commands" in llm.functions
+
+
+def test_the_handoff_addendum_ships_only_with_the_tools(runtime, fakes, monkeypatch):
+    """Same rule as UI_CONTROL_ADDENDUM: a prompt describing an
+    unregistered tool invites hallucinated calls."""
+    from jarvis.prompts import HANDOFF_ADDENDUM
+
+    _, _, aggregators, _ = build_pipeline(FakeTransport(), runtime)
+    assert HANDOFF_ADDENDUM in _system_prompt_of(aggregators)
+
+    monkeypatch.setenv("JARVIS_CLIPBOARD_ENABLED", "false")
+    _, _, aggregators, _ = build_pipeline(FakeTransport(), runtime)
+    assert HANDOFF_ADDENDUM not in _system_prompt_of(aggregators)
 
 
 async def test_registered_handlers_accept_pipecat_params(runtime, fakes):
