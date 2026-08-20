@@ -240,3 +240,52 @@ def test_agreement_zero_rounds():
     assert report.rounds_considered == 0
     assert report.winner_agreement is None
     assert "insufficient data" in report.branch
+
+
+class TestShortHandedVisibility:
+    """MORTIMER_KEY_VALIDITY_PLAN.md K6. A member whose call fails is logged
+    and dropped from the fan-out (`council_proposer_failed`), so the round
+    row recorded who ANSWERED and nothing recorded who was ASKED. Measured
+    2026-08-19: gpt-4.1-mini had no usable credential, tier 1 fans out all
+    economy profiles, and every tier-1 round had therefore been running on a
+    single proposer — with select_winner dutifully "selecting" the only
+    candidate and every report above showing a perfectly normal round."""
+
+    def test_a_round_that_lost_a_proposer_is_counted(self):
+        from jarvis.council.agreement import _count_short_handed
+        assert _count_short_handed([
+            {"proposer_count": 2, "proposers_attempted": 4,
+             "judge_count": 2, "judges_attempted": 2},
+        ]) == 1
+
+    def test_a_round_that_lost_a_judge_is_counted(self):
+        from jarvis.council.agreement import _count_short_handed
+        assert _count_short_handed([
+            {"proposer_count": 4, "proposers_attempted": 4,
+             "judge_count": 1, "judges_attempted": 2},
+        ]) == 1
+
+    def test_a_complete_round_is_not_counted(self):
+        from jarvis.council.agreement import _count_short_handed
+        assert _count_short_handed([
+            {"proposer_count": 4, "proposers_attempted": 4,
+             "judge_count": 2, "judges_attempted": 2},
+        ]) == 0
+
+    def test_pre_migration_rows_are_excluded_not_assumed_complete(self):
+        """NULL means the round does not know. Treating it as complete would
+        manufacture reassurance out of missing data — the same rule
+        tools_ok/tools_failed follow by never being backfilled."""
+        from jarvis.council.agreement import _count_short_handed
+        assert _count_short_handed([
+            {"proposer_count": 1, "proposers_attempted": None,
+             "judge_count": 1, "judges_attempted": None},
+        ]) == 0
+
+    def test_single_proposer_rounds_are_counted_separately(self):
+        """Distinct from short-handed: a tier that only ever HAD one usable
+        profile is not short-handed, but its winner is still not evidence."""
+        from jarvis.council.agreement import _count_single_proposer
+        assert _count_single_proposer([
+            {"proposer_count": 1}, {"proposer_count": 3}, {"proposer_count": 1},
+        ]) == 2

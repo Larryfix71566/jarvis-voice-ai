@@ -9,9 +9,22 @@ html,
 body {
   height: 100%;
   margin: 0;
-  background: #04090c;
+  /* Larry 2026-08-18 — matches displaywindow.css. A translucent wash
+     as far as CSS can honestly go; when the shell marks the document
+     (html.shell-vibrancy) the native NSVisualEffectView is doing the
+     real work and this wash gets out of its way. */
+  background: rgba(10, 16, 21, 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
 }
 
 #root {
   height: 100%;
+}
+
+html.shell-vibrancy,
+html.shell-vibrancy body {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }

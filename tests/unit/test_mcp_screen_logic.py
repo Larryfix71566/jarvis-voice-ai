@@ -7,6 +7,7 @@ fetch — no real screenshot or network call happens in this suite.
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -346,3 +347,55 @@ class TestDiagnostics:
         import mcp_servers.mcp_screen.logic as mod
 
         assert mod.DEFAULT_RETENTION_HOURS <= 48
+
+
+class TestAuthFailureIsNamed:
+    """MORTIMER_KEY_VALIDITY_PLAN.md K7. MIN_SCREENSHOT_BYTES exists because
+    a macOS Screen Recording denial fails silently into a wallpaper-only
+    image; nothing did the same job for a dead credential. Since every
+    `vision: true` profile is Anthropic, one bad ANTHROPIC_API_KEY kills
+    screen vision entirely while _resolve_vision_profile reports SUCCESS —
+    the key is present. Without this the user gets a capture-shaped error
+    for a credential-shaped problem."""
+
+    def _run(self, exc):
+        from mcp_servers.mcp_screen import logic
+
+        def fake_capture(display):
+            p = Path(tempfile.mkdtemp()) / "shot.png"
+            p.write_bytes(b"x" * (logic.MIN_SCREENSHOT_BYTES + 100))
+            return p
+
+        class Boom:
+            class chat:
+                class completions:
+                    @staticmethod
+                    def create(**kwargs):
+                        raise exc
+
+        return logic.screen_view(
+            "what is on screen?",
+            capture_fn=fake_capture,
+            client_factory=lambda p: (Boom, "fake-vision-model"),
+            registry={"profiles": {"v": {
+                "name": "v", "model": "m", "base_url": "b",
+                "api_key_env": "ANTHROPIC_API_KEY", "vision": True}}},
+        )
+
+    def test_a_401_is_reported_as_a_credential_problem(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "present-but-dead")
+        exc = RuntimeError("Unauthorized")
+        exc.status_code = 401
+        result = self._run(exc)
+        assert result.get("auth_rejected") is True
+        assert "rejected the credential" in result["error"]
+        assert "ANTHROPIC_API_KEY" in result["error"]
+        assert "captured fine" in result["error"]
+
+    def test_a_non_auth_failure_is_not_mislabelled(self, monkeypatch):
+        """The mirror risk: calling every model error a dead key would send
+        the user to rotate a working credential."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "fine")
+        result = self._run(RuntimeError("model is overloaded"))
+        assert "auth_rejected" not in result
+        assert "Vision model call failed" in result["error"]

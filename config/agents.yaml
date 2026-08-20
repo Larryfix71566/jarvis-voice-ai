@@ -49,7 +49,37 @@ sub_agents:
     # (config/upgrade_models.yaml). Change the profile name here to
     # reassign; resolution failures fall back to the voice model with a
     # logged warning.
-    model_profile: kimi-k3
+    # Larry 2026-08-19 — moved from kimi-k3 (direct Moonshot) to a
+    # coding-tuned frontier model reached through OpenRouter, for the
+    # reason he gave: one key buys access to genuinely frontier build
+    # models instead of the one mid-tier model a single vendor offered.
+    #
+    # This is the ONE place the proxy carries something tool-critical, so
+    # two things matter. First, reverting is a one-line change back to
+    # `kimi-k3` if tool-calling fidelity through OpenRouter disappoints —
+    # OpenRouter can route a slug to upstreams of differing tool support,
+    # and this agent lives on tool calls. Second, a missing or dead
+    # OPENROUTER_API_KEY makes SubAgent fall back to the VOICE model, which
+    # would put a dispatcher on build work; that is now visible rather than
+    # silent — the Agents tab card chip renders the resolved model amber
+    # with a warning when it is a fallback, and `python scripts/check_keys.py`
+    # reports the key's real state.
+    model_profile: or-codex-max
+    # K5 (Larry 2026-08-19). Verified that day: this key was read by
+    # scripts/check_env.py and by NOTHING in jarvis/ — the preflight warned
+    # that a refuse-mode agent would "refuse every delegation" while the
+    # agent quietly fell back to the voice model instead. Now implemented
+    # in SubAgent, and set here rather than left implicit.
+    #
+    # `refuse` for the developer specifically: this is the one agent whose
+    # assigned model IS the point. A build-grade task silently executed by
+    # the voice dispatcher produces plausible-looking work from the wrong
+    # model, which is far harder to catch than a refusal — and harder still
+    # now that the profile lives behind a proxy key that can lapse
+    # independently of everything else. Conversational agents stay on the
+    # `warn` default: Haiku is genuinely correct for them, so a fallback
+    # costs nothing and voice must still boot on a fresh checkout.
+    on_profile_fallback: refuse
     # A3 — a maintained "where things live" map injected into this
     # agent's system prompt at construction, so it stops burning its
     # 5-iteration budget rediscovering its own codebase.

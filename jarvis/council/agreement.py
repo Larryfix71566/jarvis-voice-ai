@@ -51,6 +51,14 @@ class AgreementReport:
     disagreement_cost: float | None         # None if no differing-winner round had a retry
     branch: str                             # D8.2.4's decision, human-readable
     recommend_promote: bool
+    # K6 — rounds whose fan-out lost at least one member it invited
+    # (proposer_count < proposers_attempted, or the judge equivalent), and
+    # rounds that ran on a SINGLE proposer, where select_winner "selects"
+    # the only candidate and every tiebreak is inert. Both count only rows
+    # that carry the migration-0014 columns; pre-migration rounds are NULL
+    # and are excluded rather than assumed complete.
+    short_handed_rounds: int = 0
+    single_proposer_rounds: int = 0
 
 
 def _spearman(a: list[float], b: list[float]) -> float | None:
@@ -278,4 +286,33 @@ def compute_agreement(
         discrimination_by_tier=discrimination_by_tier,
         disagreement_cost=disagreement_cost, branch=branch,
         recommend_promote=recommend_promote,
+        short_handed_rounds=_count_short_handed(round_rows),
+        single_proposer_rounds=_count_single_proposer(round_rows),
     )
+
+
+def _count_short_handed(round_rows: list[dict]) -> int:
+    """K6 — rounds that lost a member they invited.
+
+    Counts only rows carrying migration 0014's columns. A pre-migration
+    round genuinely does not know, and treating NULL as "complete" would
+    manufacture reassurance out of missing data — the same reason
+    tools_ok/tools_failed are never backfilled."""
+    n = 0
+    for r in round_rows:
+        pa, ja = r.get("proposers_attempted"), r.get("judges_attempted")
+        if pa is not None and (r.get("proposer_count") or 0) < pa:
+            n += 1
+        elif ja is not None and (r.get("judge_count") or 0) < ja:
+            n += 1
+    return n
+
+
+def _count_single_proposer(round_rows: list[dict]) -> int:
+    """Rounds decided among exactly one proposal. select_winner still
+    returns a winner and records a select_reason, so these look like normal
+    rounds in every existing report — but a council of one is one model's
+    output with ceremony around it, and its winner is not evidence of
+    anything. Measured 2026-08-19, every tier-1 round had been running this
+    way because gpt-4.1-mini had no usable credential."""
+    return sum(1 for r in round_rows if (r.get("proposer_count") or 0) == 1)

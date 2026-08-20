@@ -28,7 +28,7 @@ import yaml
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from jarvis.config import expand_env_vars
+from jarvis.config import bridge_settings_to_env, expand_env_vars
 from jarvis.runlog.context import get_run_id, get_run_logger
 from jarvis.toolresult import classify_tool_result
 
@@ -58,6 +58,14 @@ class SkillRegistry:
         """Spawn all servers, initialize sessions, discover tools."""
         if self._stack is not None:
             return  # idempotent
+        # MORTIMER_ENV_BRIDGE_PLAN.md E1 — bridge Settings into os.environ
+        # HERE, not at each caller. `.env` is a file; os.environ is a
+        # process, and _start_server below expands ${VAR} against the
+        # process. Three entrypoints remembered to call this; routing_eval
+        # did not, and every set_reminder in it died on the literal string
+        # "${JARVIS_TIMEZONE}". Idempotent (setdefault), so the callers that
+        # already bridge are unaffected.
+        bridge_settings_to_env()
         config = yaml.safe_load(self._config_path.read_text())
         self._server_configs = list(config["servers"])
         self._stack = AsyncExitStack()
@@ -183,7 +191,25 @@ class SkillRegistry:
         name = entry["name"]
         env = dict(os.environ)
         for key, value in (entry.get("env") or {}).items():
-            env[key] = expand_env_vars(str(value))
+            expanded = expand_env_vars(str(value))
+            # E2 — expand_env_vars leaves an unresolved ${VAR} as literal
+            # text BY DESIGN, and that design is relied on elsewhere. But
+            # handing a child the seven characters "${JARVIS_TIMEZONE}" is
+            # never correct; it surfaced as a ZoneInfoNotFoundError five
+            # frames deep inside a subprocess, naming nothing useful.
+            #
+            # A warning, not a refusal: refusing would turn a degraded
+            # reminder into a dead voice loop, and mcp_git/mcp_repo already
+            # set the precedent of IGNORING "${"-containing values rather
+            # than raising. This makes the condition visible in the parent,
+            # at the moment it happens, with the variable named.
+            if "${" in expanded:
+                logger.warning(
+                    "mcp_server_env_unresolved server=%s var=%s value=%s "
+                    "(the variable is not set in this process — the child "
+                    "will receive the literal placeholder)",
+                    name, key, expanded)
+            env[key] = expanded
         env["PYTHONPATH"] = str(REPO_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
 
         command = entry["command"]

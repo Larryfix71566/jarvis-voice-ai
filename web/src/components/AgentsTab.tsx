@@ -5,6 +5,7 @@ import {
   fmtElapsed,
   getRuns,
   removeRun,
+  shortModel,
   subscribeRuns,
   type RunState,
 } from "../agentRuns";
@@ -75,6 +76,38 @@ export default function AgentsTab() {
               <div className="agent-card-head">
                 <span className="agent-card-dot" />
                 <span className="agent-card-name">{r.displayName}</span>
+                {/* Larry 2026-08-19 — which LLM is doing this work.
+                    Shows the RESOLVED model, so a profile that silently
+                    fell back to the voice model reads as the voice model
+                    here (and gets the amber treatment), rather than
+                    claiming the assignment it failed to get. Empty for
+                    runs from a bot that predates the field. */}
+                {r.model && (
+                  <span
+                    className={
+                      "agent-card-model" +
+                      /* K4 — unusable outranks fallback. A fallback still
+                         has a working model behind it; an unusable
+                         credential means every call fails, so it takes the
+                         louder colour. */
+                      (r.modelUnusable
+                        ? " agent-card-model-unusable"
+                        : r.modelFallback
+                          ? " agent-card-model-fallback"
+                          : "")
+                    }
+                    title={
+                      r.modelUnusable
+                        ? `${r.model} — credential refused: ${r.modelUnusableDetail || "every call through this model will fail"}`
+                        : r.modelFallback
+                          ? `${r.model} — fallback: the configured model profile could not be resolved`
+                          : r.model
+                    }
+                  >
+                    {shortModel(r.model)}
+                    {r.modelUnusable ? " ✕" : r.modelFallback ? " ⚠" : ""}
+                  </span>
+                )}
                 <span className="agent-card-time">
                   {working ? elapsed : `${r.ok ? "done" : "failed"} · ${elapsed}`}
                 </span>

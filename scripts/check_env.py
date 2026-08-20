@@ -119,6 +119,160 @@ _GITHUB_TOKENS = [
 ]
 
 
+def model_key_probe(base_url: str, api_key: str, model: str) -> tuple[str, str]:
+    """Return (outcome, detail) where outcome is "ok" | "rejected" |
+    "unreachable". MORTIMER_KEY_VALIDITY_PLAN.md K1.
+
+    Same contract as github_probe above, and for the same reason: every
+    other LLM key check in this repo is `os.environ.get(name)`, a presence
+    test, and presence is not validity. github_probe exists because
+    check_env said PASS for two days against a dead GITHUB_TOKEN; nothing
+    carried that lesson to a single model key until this function.
+
+    WHY chat/completions AND NOT GET /models. The first cut of
+    scripts/check_keys.py probed `/models` because it is free and
+    read-only. Measured on Larry's machine 2026-08-19, it reported
+    ANTHROPIC_API_KEY and OPENAI_API_KEY as REJECTED (401) while Mortimer
+    was answering questions by voice on that exact key: Anthropic's
+    OpenAI-compatibility layer authenticates /chat/completions with a
+    Bearer token but does not serve /models the same way. A probe must
+    exercise the SAME call the consumers make, or its verdict answers a
+    different question than the one asked.
+
+    Auth is evaluated before request validity on every provider here, so a
+    status that is NOT 401/403 means the key was accepted — even a 400 for
+    a malformed request. That is reported as ok with the reason attached,
+    never as a failure.
+
+    Never logs, prints, or returns the key, not even a prefix: the value
+    appears only in the Authorization header of the request it makes.
+    """
+    body = json.dumps({
+        "model": model,
+        "max_tokens": 16,
+        "messages": [{"role": "user", "content": "ping"}],
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        base_url.rstrip("/") + "/chat/completions",
+        data=body,
+        headers={"Authorization": f"Bearer {api_key}",
+                 "Content-Type": "application/json",
+                 "User-Agent": "mortimer-check-env"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            return "ok", f"chat/completions accepted the key (HTTP {resp.status})"
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            return "rejected", f"HTTP {exc.code} {exc.reason} — key was refused"
+        if exc.code == 402:
+            # Observed on Larry's OpenRouter key 2026-08-19. Auth succeeded,
+            # so the key is genuinely valid — but every model call through it
+            # will fail until the account is funded. "Valid" and "usable" are
+            # not the same claim, and this is the one status where they
+            # diverge, so it gets its own verdict rather than being rounded
+            # to the nearer neighbour.
+            return "unfunded", (
+                f"HTTP 402 Payment Required — the key is VALID but the "
+                f"account has no credit, so every call through it will fail")
+        return "ok", (f"auth passed; the request itself failed "
+                      f"(HTTP {exc.code} {exc.reason}) — key is valid")
+    except Exception as exc:  # noqa: BLE001
+        return "unreachable", f"{type(exc).__name__}: {str(exc)[:100]}"
+
+
+def secret_source(name: str, pre_vault_env: dict[str, str],
+                  vault_names: set[str]) -> str:
+    """Where the value production will actually use came from. K2.
+
+    The vault's precedence rule is that a NON-EMPTY environment variable
+    beats the vault, so rotating a key correctly in the vault while a stale
+    export sits in the shell produces permanent, silent failure — and until
+    this function nothing anywhere reported which source won. Names and
+    sources only; never a value.
+    """
+    if name in pre_vault_env:
+        return ("environment — ALSO IN VAULT, the vault copy is ignored"
+                if name in vault_names else "environment (.env or shell)")
+    return "vault" if os.environ.get(name, "").strip() else "not set"
+
+
+def check_model_keys(env: dict[str, str], pre_vault_env: set[str],
+                     vault_names: set[str]) -> None:
+    """One live probe per distinct (api_key_env, base_url) — per KEY and
+    ENDPOINT, not per profile, so one dead Moonshot key reads as one
+    problem rather than two.
+
+    The endpoint is part of the question, not a detail: OPENAI_API_KEY may
+    hold an Anthropic credential when OPENAI_BASE_URL points at Anthropic
+    (which .env.example documents), and probing it against api.openai.com
+    returns 401 meaning only "not an OpenAI key." Grouping by key alone
+    made exactly that mistake and produced a false "renew this key."
+    """
+    registry_path = REPO_ROOT / "config" / "upgrade_models.yaml"
+    if not registry_path.exists():
+        return
+    try:
+        import yaml
+        registry = yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:  # noqa: BLE001
+        report(None, "Model key validity", f"could not read registry: {exc}")
+        return
+
+    groups: dict[tuple[str, str], dict] = {}
+    for prof in registry.get("profiles") or []:
+        if not isinstance(prof, dict):
+            continue
+        key_env = str(prof.get("api_key_env", "OPENAI_API_KEY"))
+        base = str(prof.get("base_url", ""))
+        g = groups.setdefault((key_env, base),
+                              {"model": str(prof.get("model", "")), "names": []})
+        g["names"].append(str(prof.get("name", "?")))
+
+    # The voice model is not in the registry but is the single most
+    # important credential in the system — omitting it would leave the one
+    # key whose failure silences Mortimer entirely unchecked.
+    # `env` (load_env()), NOT os.environ. OPENAI_BASE_URL lives in .env as
+    # plain configuration, and .env is NOT exported into os.environ by this
+    # script — only the vault's secrets are. Reading os.environ here fell
+    # back to the api.openai.com default and probed Larry's ANTHROPIC key
+    # against OpenAI's server, producing a required-check FAIL on a system
+    # whose voice loop was working perfectly. Third time this exact mistake
+    # has been made today: the endpoint a key is used against is part of the
+    # question, and it has to come from the same place production reads it.
+    voice_base = env.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    voice_model = env.get("OPENAI_MODEL", "gpt-4.1-mini")
+    groups.setdefault(("OPENAI_API_KEY", voice_base),
+                      {"model": voice_model, "names": []})["names"].append("voice model")
+
+    for (key_env, base), g in sorted(groups.items()):
+        used_by = ", ".join(g["names"])
+        source = secret_source(key_env, pre_vault_env, vault_names)
+        label = f"Key {key_env} -> {base}"
+        key = (os.environ.get(key_env) or env.get(key_env, "")).strip()
+        if not key:
+            report(False, label, f"MISSING (needed by {used_by})")
+            continue
+        outcome, detail = model_key_probe(base, key, g["model"])
+        if outcome == "ok":
+            report(True, label, f"{detail} [source: {source}]")
+        elif outcome == "unfunded":
+            # A valid credential with no balance is a THIRD state, and
+            # collapsing it into either neighbour misleads: reported as ok it
+            # says a model will answer when every call will fail, reported as
+            # rejected it sends you to rotate a perfectly good key. The
+            # action is neither "renew" nor "nothing" — it is "add credit".
+            report(False, label,
+                   f"{detail} — breaks {used_by} [source: {source}]")
+        elif outcome == "rejected":
+            report(False, label,
+                   f"{detail} — breaks {used_by} [source: {source}]")
+        else:
+            # Never "renew this key": a blocked network and a dead
+            # credential call for opposite responses.
+            report(None, label, f"{detail} — NOT proven bad [source: {source}]")
+
+
 def check_github(env: dict[str, str], env_file_values: dict[str, str]) -> None:
     """WARN-degradable (plan D9) — voice, memory, scheduling and research
     all work with no GitHub access at all, so a dead token here must never
@@ -298,11 +452,22 @@ def main() -> int:
     # them. Guarded import because this script is documented stdlib-only
     # so it works in a fresh checkout before dependencies are installed —
     # in that state there is no vault to read anyway.
+    # K2: snapshot which vars the ENVIRONMENT supplies BEFORE the vault gets
+    # a chance. A non-empty env var beats the vault, so anything captured
+    # here is what production actually uses — and a name that appears in
+    # both is a stale export silently shadowing a rotated vault entry.
+    pre_vault_env = {k for k, v in os.environ.items() if v.strip()}
+    vault_names: set[str] = set()
+
     try:
         sys.path.insert(0, str(REPO_ROOT))
-        from jarvis.vault import VaultError, inject_env
+        from jarvis.vault import VaultError, inject_env, load_secrets
 
         try:
+            try:
+                vault_names = set(load_secrets().keys())
+            except Exception:  # noqa: BLE001
+                pass  # names only, for the shadowing report; not required
             inject_env()
         except VaultError as exc:
             # S6's hard-error rule, rendered in this script's own
@@ -425,6 +590,9 @@ def main() -> int:
 
     # 9.5/9.6 — planner-model and screen-vision preflight (WARN-only).
     check_model_registry()
+    # K1/K2 — presence is checked above; this is the only thing here that
+    # asks whether the credentials actually WORK.
+    check_model_keys(env, pre_vault_env, vault_names)
     check_screen_vision()
 
     print()

@@ -625,6 +625,27 @@ def selfedit_validate() -> dict:
     return result
 
 
+class VerifyAppearanceBody(BaseModel):
+    branch_override: bool = False
+    display: int = 1
+
+
+@app.post("/api/selfedit/verify-appearance")
+def selfedit_verify_appearance(body: VerifyAppearanceBody | None = None) -> dict:
+    """B2 — a CHECK, not a gate. Deliberately absent from validate()'s checks
+    list: validation runs before the branch is on screen, so a capture then
+    photographs the pre-change console and its green tick would mean
+    nothing."""
+    if _busy():
+        return {"ok": False, "error": "an upgrade run is in progress — ask for status instead"}
+    body = body or VerifyAppearanceBody()
+    result = _selfedit_service.verify_appearance(
+        branch_override=body.branch_override, display=body.display)
+    logger.info("selfedit_verify_appearance ok=%s branch=%s",
+                result.get("ok"), result.get("branch"))
+    return result
+
+
 @app.post("/api/selfedit/submit")
 def selfedit_submit() -> dict:
     if _busy():
@@ -930,7 +951,53 @@ def ambient() -> dict:
         "reminder": reminder,
         "summary": summary,
         "weather": get_weather(),
+        "system": _system_vitals(),
     }
+
+
+# Machine vitals for the console's bottom-right readout (Larry
+# 2026-08-18). Served from the SAME mcp_system.logic the systems agent
+# uses — one implementation, so the chip and the spoken answer can never
+# disagree about the same machine, the same discipline mcp_runlog follows
+# for the run log.
+#
+# Deliberately NOT a separate endpoint or a faster poll: this rides the
+# existing 60s /api/ambient call. psutil is local and cheap, but a
+# second poller would be a second thing to keep in sync, and a 1s gauge
+# refresh would put continuous motion in the corner of a voice-first
+# interface — the engagement layer's rule is that the wave keeps its
+# motion monopoly.
+def _system_vitals() -> dict | None:
+    """CPU/memory/disk/battery/uptime plus which metrics are over the
+    threshold. None (chip hidden) on any failure — a vitals readout must
+    never be the reason the ambient strip breaks."""
+    try:
+        from mcp_servers.mcp_system.logic import FLAG_THRESHOLD, get_system_status
+
+        s = get_system_status()
+        # The SAME 85% rule the systems agent speaks aloud, read from the
+        # module rather than re-declared here, so the chip turns amber at
+        # exactly the point the agent starts warning.
+        flags = [
+            name for name, value in (
+                ("cpu", s.get("cpu_percent")),
+                ("memory", s.get("memory_percent")),
+                ("disk", s.get("disk_percent")),
+            )
+            if isinstance(value, (int, float)) and value >= FLAG_THRESHOLD
+        ]
+        return {
+            "cpu": s.get("cpu_percent"),
+            "memory": s.get("memory_percent"),
+            "disk": s.get("disk_percent"),
+            "battery": s.get("battery_percent"),
+            "uptime_hours": s.get("uptime_hours"),
+            "flags": flags,
+            "threshold": FLAG_THRESHOLD,
+        }
+    except Exception:  # noqa: BLE001 — never break the ambient strip
+        logger.exception("ambient_system_vitals_failed")
+        return None
 
 
 class LocationBody(BaseModel):

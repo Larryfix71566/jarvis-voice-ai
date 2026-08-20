@@ -5,6 +5,10 @@ tools:
   - selfedit_start
   - selfedit_status
   - selfedit_validate
+  # B2 — a CHECK, not a gate: the four validation gates cannot see the
+  # screen, so a visual change stays unverified until a human runs the
+  # branch and Mortimer looks at it.
+  - selfedit_verify_appearance
   - selfedit_submit
   - selfedit_revert
   - plan_start

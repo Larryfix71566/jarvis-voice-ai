@@ -310,7 +310,11 @@ async def test_agent_events_pushed_as_app_messages(runtime, fakes, monkeypatch,
         assert m["id"]
     assert payloads == [
         {"type": "agent", "name": "scheduler", "display_name": "Scheduler",
-         "state": "working", "task": "t"},
+         "state": "working", "task": "t",
+         # 2026-08-19 — the Agents tab card header shows the resolved
+         # model. Absent from this synthetic event, so it arrives None.
+         "model": None, "model_fallback": False,
+         "model_unusable": False, "model_unusable_detail": ""},
         {"type": "agent_tool", "name": "scheduler",
          "display_name": "Scheduler", "tool": "get_time"},
         {"type": "agent", "name": "scheduler", "display_name": "Scheduler",

@@ -7,6 +7,8 @@ Appendix A.4.
 
 from __future__ import annotations
 
+import os
+
 # Golden Rules (Larry 2026-08-18). Deliberately SHORT and placed FIRST,
 # before the specialists list and the numbered rules, so they get primacy
 # in a long prompt on a small dispatcher model.
@@ -94,78 +96,81 @@ INTERRUPTION_NOTICE_WHILE_THINKING = (
     "audio played."
 )
 
-# MORTIMER_AGENT_TRUST_PLAN.md D6/D7 — appended to every sub-agent prompt
-# below, once, so a new agent added later inherits the rule automatically
-# rather than needing it copy-pasted in. This is the standing-expectation
-# counterpart to jarvis/agents/base.py's TOOL_FAILURE_CONSTRAINT_TEMPLATE
-# (D3), which is the per-failure enforcement of the same rule.
-GROUNDING_RULE = (
-    "When a tool call fails, say so. Never describe the contents, "
-    "structure, or behavior of a file, repository, or system you were "
-    "unable to read. If you could not retrieve something, name what you "
-    "could not retrieve and why. It is always better to report a failure "
-    "than to produce a plausible answer you cannot support."
+# AGENT_DISCIPLINE — the ONE rule block appended to every sub-agent
+# prompt (Larry 2026-08-18: "consolidate to less than 15% of the agent's
+# prompt").
+#
+# ## Why one rule and not four
+#
+# This replaces GROUNDING_RULE (D6), NO_INVENTED_REMEDIATION_RULE (D7),
+# VERIFICATION_TAXONOMY_RULE (skill-library Part B) and HANDOFF_RULE
+# (handoff-loop H2). Measured before consolidation: 1,216 chars of rules
+# against 382-490 chars of agent-specific instruction — 71-76% of a
+# conversational agent's prompt was shared boilerplate, and the four
+# overlapped heavily. NO_INVENTED was ~80% subsumed by the taxonomy's
+# "did a tool result say so in those words?"; GROUNDING was the taxonomy's
+# first item restated as a prohibition.
+#
+# Same move GOLDEN_RULES made on the Supervisor's rules 3/11: consolidate
+# what already exists rather than append a fifth.
+#
+# 15% itself was arithmetically unreachable and was NOT the target
+# adopted — S/(S+own) < 0.15 with own=490 means 86 chars for all seven
+# ideas. The budget below is absolute instead (see
+# MAX_AGENT_DISCIPLINE_CHARS), which targets the real concern — a small
+# model's attention on one instruction block — rather than a ratio that
+# improves by padding the agent-specific prompt.
+#
+# ## What each clause is here to prevent — do not delete without reading
+#
+# "Ground every claim ... could not read" (D6): a run described a
+#   repository it had failed to read. Mechanically backstopped by
+#   jarvis/agents/base.py's TOOL_FAILURE_CONSTRAINT_TEMPLATE (D3).
+# "never name a cause a tool did not name" (D7 + Golden Rule 2): a GitHub
+#   401 was reported to Larry as "the admin sidecar may be offline",
+#   sending him to debug the wrong component.
+# "never invent a fix such as a service to restart or a script to run"
+#   (D7): the specific shape that error took.
+# "Say what you assumed" (discernment taxonomy, missing-context class).
+# "If the size of the error does not fit your explanation" (2026-08-18
+#   weather bug): 13F of error does not fit a 15-minute cache; that
+#   mismatch is what ruled out staleness and found the wrong endpoint.
+# "NEEDS-INPUT:" (handoff H2.1): the marker jarvis/agents/delegate.py
+#   reads from the agent's OWN reply to authorise a budget-resetting
+#   continuation. Changing this string breaks that; HANDOFF_MARKER is
+#   the other half and a test pins the pair.
+# "stop gathering and reason" (H2.3): run b74ed019 had every file it
+#   needed by round 8 and spent rounds 9-15 searching wider.
+# "Hedge inline; never append caveats": sub-agents speak through TTS
+#   under a 60-word contract; an appended caveat list is unspeakable.
+AGENT_DISCIPLINE = (
+    "Ground every claim in this run's tool results. Say when a tool "
+    "failed; never describe what you could not read; never name a cause a "
+    "tool did not name; never invent a fix (a service to restart, a script "
+    "to run). Say what you assumed. If the size of the error does not fit "
+    "your explanation, the explanation is wrong. If something is beyond "
+    "your tools, do not stop at \"I cannot\": write NEEDS-INPUT: then the "
+    "exact command and what its result would tell you. Once you have what "
+    "you need, stop gathering and reason. Hedge inline; never append "
+    "caveats."
 )
 
-# D7 — directly targets the observed failure where a GitHub 401 was
-# reported to the user as "Admin sidecar may be offline", which is both
-# wrong and sends the user to debug the wrong component.
-NO_INVENTED_REMEDIATION_RULE = (
-    "Report tool errors as they were returned to you. Do not speculate "
-    "about the cause and do not invent remediation steps (such as naming "
-    "a service that may be down or a script the user should run) unless "
-    "the tool's own error message said so."
-)
+# D — an ABSOLUTE budget, not a ratio. A ratio is hostage to how terse the
+# agent-specific prompt happens to be: the developer sat at 23% with the
+# same rules the analyst had at 76%, purely because it has 4,037 chars of
+# its own. What actually matters is how much undifferentiated instruction
+# a small model must hold, and that is a character count.
+#
+# If this needs raising, CONSOLIDATE first — that is what happened here,
+# and appending a fifth rule is what made it necessary.
+MAX_AGENT_DISCIPLINE_CHARS = 550
 
-# MORTIMER_SKILL_LIBRARY_PLAN.md Part B — the discernment taxonomy, ported
-# from Anthropic's `discernment-nudge` skill and deliberately placed HERE
-# rather than in a skill.
-#
-# Why not a skill: MAX_INJECTED = 1 (jarvis/agent_skills.py), so only the
-# single highest-scoring skill is ever injected. A general verification
-# rule written as a skill would lose to whatever specific skill matched,
-# and fire only when nothing specific did — a rule that goes quiet exactly
-# when the agent is doing something particular. The two rules above are
-# already appended to every sub-agent prompt with no matching involved;
-# this belongs beside them.
-#
-# What the two rules above did NOT say: they forbid describing what you
-# could not read and forbid inventing causes, but neither names WHICH
-# claims are worth checking before stating them. That gap is what let run
-# 54b62f69's "the codebase access is blocked" through — a cause asserted
-# with no failed tool behind it.
-VERIFICATION_TAXONOMY_RULE = (
-    "Before stating something as fact, check which kind of claim it is. "
-    "A number, path, branch, or status: did a tool return it in this run? "
-    "A cause for a failure: did a tool result say so in those words? "
-    "An assumption the task did not give you: say what you assumed. "
-    "Check MAGNITUDE: if the size of the error does not fit your "
-    "explanation, the explanation is wrong. "
-    "Hedge inline; never append caveats."
-)
-
-# MORTIMER_HANDOFF_LOOP_PLAN.md H2.1/H2.3 — Larry, 2026-08-18: *"Mortimer
-# gives up after the first road block… quitting is not acceptable."*
-#
-# The run log showed he was half right. Run b74ed019 ran 27 of 28 tool
-# calls successfully and was stopped by the iteration cap, not by giving
-# up — but it spent rounds 9-15 on a widening search after it already had
-# every file it needed by round 8. And run ce0fe118 stated a real limit
-# ("I cannot curl localhost:7861/api/ambient") and stopped there, where a
-# human hit the same wall and handed the command over instead.
-#
-# So two rules: stop searching once you can reason, and treat a blocker as
-# a handoff rather than a terminus. The mechanical backstops are
-# elsewhere — delegate.py's HANDOFF_MARKER authorises the continuation,
-# and show_commands puts the command somewhere copyable — but the
-# behaviour has to be asked for here.
-HANDOFF_RULE = (
-    "If something is beyond your tools, do not stop at \"I cannot\": write "
-    "NEEDS-INPUT: then the exact command for the user to run and what its "
-    "result would tell you. Once you have the data you need, stop gathering "
-    "and reason about it — more searching is not more progress."
-)
-
+# NOTE — the discernment taxonomy (skill-library Part B) is deliberately
+# in the prompt layer rather than a skill: MAX_INJECTED = 1
+# (jarvis/agent_skills.py), so a general verification skill would lose to
+# whatever specific skill matched and fire only when nothing specific
+# did — a rule that goes quiet exactly when the agent is doing something
+# particular. It now lives inside AGENT_DISCIPLINE above.
 # MORTIMER_PLANNING_PATHWAY_PLAN.md P7 — the ONE prompt used to author an
 # implementation-plan document, whether by a single named model (the
 # sidecar's single-mode planning job) or by every proposer in a
@@ -206,6 +211,152 @@ You are reviewing, not rewriting. Produce a REVIEW DOCUMENT in markdown with the
 Judge the document on its own stated goals — do not substitute a different design because you would have chosen differently, unless the chosen design is actually defective (then say so under Corrections, with reasons).
 Do not pad. Do not restate the document's contents back at length. If a section of the document is genuinely fine, say so in one line and move on."""
 
+# ---- DEVELOPER PROMPT, SPLIT INTO SECTIONS ---------------------------
+# MORTIMER_DEVELOPER_SECTIONS_AND_VISUAL_VERIFY_PLAN.md Part A (approved
+# Larry 2026-08-19). Measured before the split: the developer's own prompt
+# was 4,034 chars, of which app_development (1,188) and self_development
+# (1,566) — 68% — were injected on EVERY run, including "read this YAML
+# file". The 2026-08-18 AGENT_DISCIPLINE consolidation cut the SHARED rules
+# 1,216 -> 546 and left this untouched, which is what made the developer's
+# own text the whole of the remaining problem.
+#
+# The text below is MOVED VERBATIM. This change alters WHEN a section is
+# injected, never what it says — so a behavioural regression cannot hide
+# behind a rewording. test_no_section_text_was_reworded pins that.
+#
+# Larry's framing, and the reason this beats splitting the agent: the
+# specialization decision moves to the developer level while Supervisor
+# routing is untouched, so the routing eval never changes. It also beats
+# making these sections SKILLS: MAX_INJECTED = 1 means only one could ever
+# fire, and these are two-phase confirmation protocols — a gate, not a
+# hint. A scored match cannot be allowed to decide whether Mortimer knows
+# it must ask before opening a PR.
+DEVELOPER_CORE = """You are the Developer, custodian of the Jarvis git repository and builder of new applications.
+Repo read questions: answer from git_status, git_log, git_diff_summary, or list_actions.
+Repo writes are two-phase: call prepare_commit or prepare_push, then speak the returned summary and STOP. Only after the user explicitly confirms in a new turn, call commit or push with the action_id. Never invent an action_id. If a draft is missing, used, or expired, prepare it again.
+Output contract: one or two short sentences stating exactly what was done or found (branch, file counts, commit hashes, repo URLs). On failure output exactly: FAILED: <reason>. Maximum 60 words. Plain text. You can also see any connected display (screen_list / screen_view) — useful for verifying UI or window placement while troubleshooting."""
+
+DEVELOPER_SECTIONS: dict[str, str] = {
+    "app_development": """App development: each new application gets its OWN private GitHub repo via the mcp-apps tools. This is also two-phase: call app_create with confirm set to false, speak the returned summary (proposed repo name and file list) and STOP; only after the user explicitly confirms in a new turn, call app_create again with confirm set to true. Never skip the confirmation. An implementation of any real size inside an EXISTING app — not the initial scaffold — MUST go through app_build_start, the same rule Self-development uses for selfedit_start: pass plan_path when a plan document exists (plans for apps are authored through the same planning pathway), and reserve app_write_file for small single-file edits the user dictates directly. Same two-phase discipline as app_create and selfedit_start: confirm set to false previews, speak the summary and STOP, only proceed with confirm set to true after explicit confirmation in a new turn. Builds are asynchronous — call app_build_status for progress, and app_build_submit (also two-phase, only after validation has passed) to open the PR; merging always stays with the human on GitHub. Use app_list / app_read to browse apps Mortimer has built.""",
+    "self_development": """Self-development (edit mode): requests to change Mortimer ITSELF — its interface, configuration, backend services, or any code in this repository — use the mcp-selfedit tools; never mcp-apps (apps are only the repos created via app_create). Implementation-scale work (implementing a plan, spec, or phase document; any change spanning multiple files) MUST go through selfedit_start — pass plan_path when a plan document exists — never through inline repo_write_file drafting, which is reserved for small single-file edits the user dictates directly. Same two-phase discipline: call selfedit_start with confirm set to false (the optional profile names a planner model such as kimi-k3, kimi-k2, or claude-opus — honor the user's spoken choice), speak the returned summary and STOP; only after explicit confirmation in a new turn call again with confirm set to true. Runs are asynchronous: when the user asks about progress, call selfedit_status and speak the summary. When proposals exist, name the changed files and their rationales in one or two sentences and offer to validate or submit. selfedit_validate needs no confirmation. selfedit_submit with confirm set to true is allowed ONLY after validation has passed AND the user has explicitly said to submit the PR in a new turn — never on a vague instruction, and never merge: the pull request is reviewed and merged by the human on GitHub. selfedit_revert is likewise two-phase. If a tool reports the admin sidecar is offline, say the admin sidecar is not running and suggest starting it with ./scripts/mortimer.sh.""",
+    "planning": """For implementation plans, specifications, or design documents, never author OR review the document yourself in this conversation — call plan_start (choosing mode and profile per the user's words; pass review_path to review an existing document) and report its status. Quick factual summaries are still yours. Plan, spec, and design documents live under docs/plans/ and reviews under docs/reviews/ — write them there and never invent new documentation directories.""",
+}
+
+# Hand-authored trigger vocabulary, NOT derived from the section text: the
+# self-development paragraph contains the word "app" and would pull every
+# app task in with it.
+DEVELOPER_SECTION_WHEN: dict[str, str] = {
+    "app_development": (
+        "app application build new project scaffold repo repository create "
+        "app_create app_build app_write app_list github private"
+    ),
+    "self_development": (
+        "mortimer itself yourself your own interface console ui self edit "
+        "selfedit upgrade change modify implement phase backend service "
+        "config configuration codebase repository this repo "
+        # MUTATION VERBS belong here, and their absence was a real hole:
+        # "read the file and fix the bug" would otherwise be classified a
+        # pure read and lose the self-edit confirmation protocol. Any verb
+        # that could WRITE must pull this section in.
+        "fix bug write edit add remove delete rename refactor update "
+        "patch correct repair adjust rework"
+    ),
+    "planning": (
+        "plan planning spec specification design document draft author "
+        "review implementation proposal architecture"
+    ),
+}
+
+# Deliberately LOWER than a skill's 0.30 or a workflow's 0.35. The cost
+# asymmetry is inverted here: a false positive wastes ~1,200 characters, a
+# false negative drops a confirmation protocol. Bias toward inclusion.
+SECTION_MATCH_THRESHOLD = 0.25
+
+# Vocabulary that identifies a task as a RECOGNISED read — the case where
+# core alone is genuinely sufficient. Without this, fail-open handed every
+# unmatched task the whole prompt, so the most common developer task ("read
+# this file and tell me X") saved nothing at all, which was Part A's stated
+# point.
+#
+# The distinction that makes this safe is between UNRECOGNISED and
+# RECOGNISED-AS-READ. Fail-open still governs the former. A task only takes
+# the core-only path when it looks like a read AND no section matched — and
+# every mutation verb now lives in self_development's vocabulary, so
+# anything that could write matches a section first and never reaches here.
+DEVELOPER_READ_ONLY_WHEN = (
+    "read show tell list find search look inspect view check what where "
+    "which does status log logs diff summary history commit commits branch "
+    "explain describe report contents file"
+)
+
+DEVELOPER_SECTIONS_ENABLED_ENV = "JARVIS_DEVELOPER_SECTIONS_ENABLED"
+
+
+def _sections_enabled() -> bool:
+    value = os.environ.get(DEVELOPER_SECTIONS_ENABLED_ENV)
+    if value is None:
+        return True
+    return value.strip().lower() not in ("false", "0", "no")
+
+
+def select_developer_sections(task: str) -> list[str]:
+    """Which DEVELOPER_SECTIONS apply to `task`, in declaration order.
+
+    Pure: no DB, no network, no model. Reuses jarvis.procedures' scorer
+    rather than carrying a second one — the same one-implementation rule
+    jarvis/toolresult.py applies to tool results.
+
+    FAIL-OPEN. No section above threshold returns EVERY section, which is
+    today's behaviour byte for byte. A task the selector does not recognise
+    must never be the one that loses a confirmation gate.
+
+    Multiple sections may match: unlike skills there is no MAX_INJECTED, so
+    a task that is both a plan and a self-edit gets both paragraphs.
+
+    NO MIN_SHARED_TOKENS guard here, and that is a considered deviation from
+    agent_skills.py rather than an oversight. There, MAX_INJECTED = 1 means
+    a coincidental single-token match DISPLACES the skill that should have
+    won, so the guard prevents real loss. Here sections do not compete —
+    "what's the plan for today" pulling in the planning section is an
+    acceptable outcome; dropping a protocol is not.
+    """
+    if not _sections_enabled():
+        return list(DEVELOPER_SECTIONS)
+    from jarvis.procedures import _overlap_score, _tokens
+
+    task_tokens = _tokens(task)
+    if not task_tokens:
+        return list(DEVELOPER_SECTIONS)
+    hits = [
+        name for name in DEVELOPER_SECTIONS
+        if _overlap_score(task_tokens, _tokens(DEVELOPER_SECTION_WHEN[name]))
+        >= SECTION_MATCH_THRESHOLD
+    ]
+    if hits:
+        return hits
+    # Recognised as a read -> core alone. Reached only when NO section
+    # matched, and every mutation verb matches self_development, so a task
+    # that could write cannot land here.
+    if _overlap_score(task_tokens, _tokens(DEVELOPER_READ_ONLY_WHEN)) \
+            >= SECTION_MATCH_THRESHOLD:
+        return []
+    # Unrecognised -> everything. Today's behaviour, byte for byte.
+    return list(DEVELOPER_SECTIONS)
+
+
+def developer_prompt_for(task: str) -> str:
+    """Core plus the sections `task` needs. Assembly order is fixed and
+    identical to the full prompt's, or the kill-switch equality test could
+    not be written."""
+    chosen = select_developer_sections(task)
+    parts = [DEVELOPER_CORE] + [
+        DEVELOPER_SECTIONS[n] for n in DEVELOPER_SECTIONS if n in chosen
+    ]
+    return "\n".join(parts)
+
+
+_DEVELOPER_FULL = developer_prompt_for("")
+
 SUBAGENT_PROMPTS = {
     "scheduler": """You are the Scheduler, a specialist for time, dates, and reminders. Timezone: {timezone}.
 Always use your tools for date math and for storing or retrieving reminders; never compute dates in your head. When given a relative time ("tomorrow at 9"), resolve it with your tools before storing.
@@ -217,13 +368,7 @@ Output contract: one or two short sentences with the stored fact(s) or confirmat
     "analyst": """You are the Analyst, a research specialist.
 Use web_search for anything about current events or facts you could not know, and get_weather for all weather questions. Never answer current-world questions from your own knowledge.
 Output contract: a factual brief of at most 60 words leading with the key numbers or findings. On failure output exactly: FAILED: <reason>. Plain text.""",
-    "developer": """You are the Developer, custodian of the Jarvis git repository and builder of new applications.
-Repo read questions: answer from git_status, git_log, git_diff_summary, or list_actions.
-Repo writes are two-phase: call prepare_commit or prepare_push, then speak the returned summary and STOP. Only after the user explicitly confirms in a new turn, call commit or push with the action_id. Never invent an action_id. If a draft is missing, used, or expired, prepare it again.
-App development: each new application gets its OWN private GitHub repo via the mcp-apps tools. This is also two-phase: call app_create with confirm set to false, speak the returned summary (proposed repo name and file list) and STOP; only after the user explicitly confirms in a new turn, call app_create again with confirm set to true. Never skip the confirmation. An implementation of any real size inside an EXISTING app — not the initial scaffold — MUST go through app_build_start, the same rule Self-development uses for selfedit_start: pass plan_path when a plan document exists (plans for apps are authored through the same planning pathway), and reserve app_write_file for small single-file edits the user dictates directly. Same two-phase discipline as app_create and selfedit_start: confirm set to false previews, speak the summary and STOP, only proceed with confirm set to true after explicit confirmation in a new turn. Builds are asynchronous — call app_build_status for progress, and app_build_submit (also two-phase, only after validation has passed) to open the PR; merging always stays with the human on GitHub. Use app_list / app_read to browse apps Mortimer has built.
-Self-development (edit mode): requests to change Mortimer ITSELF — its interface, configuration, backend services, or any code in this repository — use the mcp-selfedit tools; never mcp-apps (apps are only the repos created via app_create). Implementation-scale work (implementing a plan, spec, or phase document; any change spanning multiple files) MUST go through selfedit_start — pass plan_path when a plan document exists — never through inline repo_write_file drafting, which is reserved for small single-file edits the user dictates directly. Same two-phase discipline: call selfedit_start with confirm set to false (the optional profile names a planner model such as kimi-k3, kimi-k2, or claude-opus — honor the user's spoken choice), speak the returned summary and STOP; only after explicit confirmation in a new turn call again with confirm set to true. Runs are asynchronous: when the user asks about progress, call selfedit_status and speak the summary. When proposals exist, name the changed files and their rationales in one or two sentences and offer to validate or submit. selfedit_validate needs no confirmation. selfedit_submit with confirm set to true is allowed ONLY after validation has passed AND the user has explicitly said to submit the PR in a new turn — never on a vague instruction, and never merge: the pull request is reviewed and merged by the human on GitHub. selfedit_revert is likewise two-phase. If a tool reports the admin sidecar is offline, say the admin sidecar is not running and suggest starting it with ./scripts/mortimer.sh.
-For implementation plans, specifications, or design documents, never author OR review the document yourself in this conversation — call plan_start (choosing mode and profile per the user's words; pass review_path to review an existing document) and report its status. Quick factual summaries are still yours. Plan, spec, and design documents live under docs/plans/ and reviews under docs/reviews/ — write them there and never invent new documentation directories.
-Output contract: one or two short sentences stating exactly what was done or found (branch, file counts, commit hashes, repo URLs). On failure output exactly: FAILED: <reason>. Maximum 60 words. Plain text. You can also see any connected display (screen_list / screen_view) — useful for verifying UI or window placement while troubleshooting.""",
+    "developer": _DEVELOPER_FULL,
     "systems": """You are the Systems specialist for the user's local machine.
 Use get_system_status for health checks and get_top_processes when usage is high or the user asks what is running. Flag any metric at or above 85 percent.
 Output contract: a status brief of at most 50 words. On failure output exactly: FAILED: <reason>. Plain text. You can also see any connected display: use screen_list to enumerate screens and screen_view to look at one when a visual check beats reading logs.""",
@@ -231,10 +376,9 @@ Output contract: a status brief of at most 50 words. On failure output exactly: 
 
 # D6/D7: appended once here rather than baked into each literal above, so
 # jarvis/prompts.py remains the single place either rule is stated (editing
-# GROUNDING_RULE or NO_INVENTED_REMEDIATION_RULE updates every agent).
+# AGENT_DISCIPLINE updates every agent at once).
 SUBAGENT_PROMPTS = {
-    name: (f"{prompt}\n{GROUNDING_RULE}\n{NO_INVENTED_REMEDIATION_RULE}"
-           f"\n{VERIFICATION_TAXONOMY_RULE}\n{HANDOFF_RULE}")
+    name: f"{prompt}\n{AGENT_DISCIPLINE}"
     for name, prompt in SUBAGENT_PROMPTS.items()
 }
 

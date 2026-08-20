@@ -37,7 +37,7 @@ from jarvis.config import Settings
 from jarvis.agent_skills import match_skill
 from jarvis.procedures import match_procedure, mark_used
 from jarvis.workflows import match_workflow
-from jarvis.prompts import SUBAGENT_PROMPTS
+from jarvis.prompts import AGENT_DISCIPLINE, SUBAGENT_PROMPTS
 from jarvis.runlog import RunLogger, get_run_id, run_logger_scope
 from jarvis.toolresult import classify_tool_result
 
@@ -172,6 +172,7 @@ class SubAgent:
         max_iterations: int = MAX_TOOL_ITERATIONS,
         model_profile: str | None = None,
         inject_repo_map: bool = False,
+        on_profile_fallback: str = "warn",
     ):
         self.name = name
         self.display_name = display_name
@@ -190,6 +191,20 @@ class SubAgent:
         # as before A1 existed, with a warning; voice must still boot on
         # a fresh checkout with one key.
         self._model: str = settings.openai_model
+        # Larry 2026-08-19 — the Agents tab shows which model is doing the
+        # work, and a FALLBACK must be distinguishable from a deliberate
+        # assignment there. The warning below already says so in the log;
+        # this flag is what carries the same fact to the UI, extending
+        # "the resolved model is what gets recorded, never the configured
+        # name" (model discipline, Part A) from the run log to the screen.
+        self._model_fallback: bool = False
+        # K5 — non-empty means every run() refuses immediately with this
+        # text instead of silently running on the fallback model.
+        self._refuse_reason: str = ""
+        # K4 — which credential this agent's model actually rides on,
+        # so `model_unusable` can ask jarvis.keyhealth about it at RUN
+        # time. Empty for the voice-model path (settings client).
+        self._api_key_env: str = ""
         if client_factory is not None:
             self._client = client_factory(settings)
         elif model_profile:
@@ -205,10 +220,27 @@ class SubAgent:
                     api_key=os.environ[key_env], base_url=profile["base_url"]
                 )
                 self._model = profile["model"]
-            except UnknownModelProfileError:
+                self._api_key_env = key_env
+            except UnknownModelProfileError as exc:
+                self._model_fallback = True
+                # K5 — refuse mode, finally implemented. `warn` keeps the
+                # long-standing fail-soft behaviour (voice must boot on a
+                # fresh checkout with one key). `refuse` is for an agent
+                # whose assigned model is the point: a build-grade task
+                # silently executed by the voice dispatcher produces
+                # plausible-looking work from the wrong model, which is far
+                # harder to catch than a refusal.
+                if on_profile_fallback == "refuse":
+                    self._refuse_reason = (
+                        f"model profile {model_profile!r} could not be "
+                        f"resolved ({exc}). This agent is configured "
+                        f"on_profile_fallback=refuse, so it will not run on "
+                        f"the voice model instead. Fix the credential "
+                        f"(python scripts/check_keys.py) and retry."
+                    )
                 logger.warning(
-                    "subagent_model_profile_fallback agent=%s profile=%s",
-                    name, model_profile,
+                    "subagent_model_profile_fallback agent=%s profile=%s mode=%s",
+                    name, model_profile, on_profile_fallback,
                 )
                 self._client = AsyncOpenAI(
                     api_key=settings.openai_api_key, base_url=settings.openai_base_url
@@ -220,6 +252,10 @@ class SubAgent:
         self._system_prompt = SUBAGENT_PROMPTS[name].format(
             timezone=settings.jarvis_timezone
         )
+        # Part A — the repo-map suffix is kept SEPARATE as well as appended
+        # below, so _system_prompt_for() can reassemble a per-task prompt
+        # without re-reading the file. One read per boot, not per run.
+        self._repo_map_suffix: str = ""
         # A3 — repo map injection, construction-time (one read per boot,
         # not per run). Missing file = skip silently: a fresh checkout
         # must not crash. Path resolution mirrors load_sub_agents' own
@@ -231,12 +267,81 @@ class SubAgent:
                 content = map_path.read_text(encoding="utf-8")
                 if len(content) > REPO_MAP_MAX_CHARS:
                     content = content[:REPO_MAP_MAX_CHARS]
-                self._system_prompt += (
+                self._repo_map_suffix = (
                     "\n\nRepository map (maintained, may lag reality — "
                     "verify with tools before writing):\n" + content
                 )
+                self._system_prompt += self._repo_map_suffix
             except FileNotFoundError:
                 pass
+
+    @property
+    def model(self) -> str:
+        """The RESOLVED model string this agent will call — the same value
+        RunLogger records, never the configured profile name. On a profile
+        resolution failure this is the voice model, which is the honest
+        answer and the one the Agents tab must show."""
+        return self._model
+
+    def _system_prompt_for(self, task: str) -> str:
+        """The system prompt this RUN gets.
+
+        Identical to `self._system_prompt` for every agent except the
+        developer, whose own text was 4,034 chars of which 68% was two
+        confirmation protocols injected on every task including "read this
+        YAML file" (MORTIMER_DEVELOPER_SECTIONS_AND_VISUAL_VERIFY_PLAN.md
+        Part A, approved Larry 2026-08-19).
+
+        Assembled here rather than in __init__ because the choice depends on
+        the task, and placed in the same method _loop already uses to pick
+        per-run text — procedure hint, skill, workflow. Section selection is
+        the fourth such decision, not a fourth mechanism in a fourth file.
+        """
+        if self.name != "developer":
+            return self._system_prompt
+        from jarvis.prompts import developer_prompt_for
+
+        base = developer_prompt_for(task).format(
+            timezone=self._settings.jarvis_timezone)
+        return f"{base}\n{AGENT_DISCIPLINE}{self._repo_map_suffix}"
+
+    @property
+    def model_unusable(self) -> bool:
+        """True when this agent's model resolved fine but its credential was
+        actively refused or could not be billed (K4).
+
+        Read at RUN time, not construction: the startup probe is a
+        background thread, so a value captured in __init__ would almost
+        always be `unknown`. `unreachable` and `unknown` are both False —
+        a network blip must never paint a working agent red, which is the
+        same rejected/unreachable discipline github_probe established."""
+        if not self._api_key_env:
+            return False
+        from jarvis import keyhealth
+        return keyhealth.is_unusable(self._api_key_env)
+
+    @property
+    def model_unusable_detail(self) -> str:
+        if not self._api_key_env:
+            return ""
+        from jarvis import keyhealth
+        return keyhealth.detail(self._api_key_env)
+
+    @property
+    def refuses(self) -> str:
+        """Non-empty when this agent is configured on_profile_fallback=refuse
+        AND its model profile failed to resolve. The string is the reason,
+        shown to the user verbatim — never a generic failure, because the
+        whole point is that "the wrong model did your build work" is the
+        thing that must not happen quietly."""
+        return self._refuse_reason
+
+    @property
+    def model_is_fallback(self) -> bool:
+        """True when a `model_profile:` was configured but could not be
+        resolved (unknown profile, or its api_key_env unset), so `model`
+        is the voice-model fallback rather than the assignment."""
+        return self._model_fallback
 
     async def run(
         self,
@@ -256,6 +361,18 @@ class SubAgent:
         forever. finish() is idempotent, so calling it from the success
         path and, separately, from an except branch is safe.
         """
+        # K5 — refuse BEFORE anything else: no run row, no model call, no
+        # tools. A refusing agent has no assigned model, so there is no
+        # work it could honestly attempt; running on the fallback is the
+        # exact outcome the setting exists to prevent. The reason is
+        # returned verbatim so the Supervisor can relay it — Golden Rule 1
+        # and rule 11 both require a stated cause, and "REFUSED:" with no
+        # explanation is how the model ends up inventing one.
+        if self._refuse_reason:
+            logger.warning("subagent_refused agent=%s reason=%s",
+                           self.name, self._refuse_reason)
+            return f"REFUSED: {self._refuse_reason}"
+
         resolved_run_id = run_id or str(uuid.uuid4())
         runlog = RunLogger(
             resolved_run_id, self.name, self.display_name, task,
@@ -293,7 +410,7 @@ class SubAgent:
         self._emit(on_event, {"type": "agent_start", "agent": self.name,
                               "display_name": self.display_name, "task": task})
         messages = [
-            {"role": "system", "content": self._system_prompt},
+            {"role": "system", "content": self._system_prompt_for(task)},
         ]
         # Procedures-as-hints (MORTIMER_MEMORY_PROCEDURES_PLAN.md D11/D17):
         # single enforcement point for the kill switch (D20) — when
@@ -582,6 +699,15 @@ def load_sub_agents(
             timeout_s=float(entry.get("timeout_s", DEFAULT_TIMEOUT_S)),
             max_iterations=int(entry.get("max_iterations", MAX_TOOL_ITERATIONS)),
             model_profile=entry.get("model_profile"),
+            # MORTIMER_KEY_VALIDITY_PLAN.md K5. This key was read by
+            # scripts/check_env.py — which warns that a refuse-mode agent
+            # with no key "refuses every delegation" — and by NOTHING in
+            # jarvis/. The preflight was reporting on a guarantee that did
+            # not exist: the agent fell back to the voice model silently,
+            # exactly as if the setting were absent. Reassuring the reader
+            # about an unimplemented behaviour is worse than not checking.
+            on_profile_fallback=str(
+                entry.get("on_profile_fallback", "warn")).strip().lower(),
             inject_repo_map=bool(entry.get("inject_repo_map", False)),
         )
     return agents

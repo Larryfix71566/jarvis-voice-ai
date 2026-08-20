@@ -378,6 +378,26 @@ ALTER TABLE memories ADD COLUMN archived_at TEXT;
 ALTER TABLE memories ADD COLUMN became TEXT;
 """
 
+# MORTIMER_KEY_VALIDITY_PLAN.md K6 (Larry 2026-08-19). proposer_count and
+# judge_count record who ANSWERED, not who was asked. A member whose call
+# fails is logged as a warning and dropped from the list
+# (`council_proposer_failed` in council.py's `_gather_proposals._one`), so a
+# round convened with four proposers and lost two to a dead credential is
+# indistinguishable in the database from a round that only ever had two.
+#
+# That is the same class of blindness that hid a credential-less
+# gpt-4.1-mini for months: tier 1 fans out ALL economy profiles, one had no
+# usable key, and every tier-1 round quietly ran on a single proposer while
+# `select_winner` dutifully "selected" the only candidate. A council of one
+# is not a council, and nothing recorded that it had happened.
+#
+# NULL on pre-migration rows and never backfilled — the information does
+# not exist for them, and inventing it is worse than admitting the gap.
+MIGRATION_0014 = """
+ALTER TABLE council_rounds ADD COLUMN proposers_attempted INTEGER;
+ALTER TABLE council_rounds ADD COLUMN judges_attempted INTEGER;
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
@@ -393,6 +413,7 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0011_run_model", MIGRATION_0011),
     ("0012_memory_tiers", MIGRATION_0012),
     ("0013_memory_archive", MIGRATION_0013),
+    ("0014_council_attempted", MIGRATION_0014),
 ]
 
 

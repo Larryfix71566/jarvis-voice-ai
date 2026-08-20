@@ -392,6 +392,82 @@ def _cmd_list(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_verify(_args: argparse.Namespace) -> int:
+    """MORTIMER_KEY_VALIDITY_PLAN.md K3 — do the stored model credentials
+    actually WORK?
+
+    `status` and `list` answer "is it there", which is the same presence
+    test every other check in this repo performs and which reported a dead
+    ANTHROPIC_API_KEY as fine for as long as it sat in the vault. This is
+    the only vault verb that asks the provider.
+
+    Read-only: writes nothing, and prints names, endpoints and verdicts —
+    never a value. Deliberately NOT wired into `set`: a probe at write time
+    would make storing a key fail when the network is down, and the vault
+    must stay usable offline. Verification is a separate act you invoke.
+
+    Reuses scripts/check_env.py's model_key_probe rather than carrying a
+    second "is this key good" implementation — the same one-judge rule
+    jarvis/toolresult.py applies to tool results.
+    """
+    import importlib.util
+
+    repo_root = Path(__file__).resolve().parent.parent
+    spec = importlib.util.spec_from_file_location(
+        "_check_env", repo_root / "scripts" / "check_env.py")
+    if spec is None or spec.loader is None:
+        print("could not load scripts/check_env.py for the probe")
+        return 1
+    check_env = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(check_env)
+
+    try:
+        import yaml
+        registry = yaml.safe_load(
+            (repo_root / "config" / "upgrade_models.yaml").read_text(
+                encoding="utf-8")) or {}
+    except Exception as exc:  # noqa: BLE001
+        print(f"could not read the model registry: {exc}")
+        return 1
+
+    secrets = load_secrets()
+    # Group by (key, endpoint): one credential can legitimately serve two
+    # endpoints, and a verdict is only meaningful against the endpoint that
+    # produced it.
+    groups: dict[tuple[str, str], dict] = {}
+    for prof in registry.get("profiles") or []:
+        if not isinstance(prof, dict):
+            continue
+        key_env = str(prof.get("api_key_env", "OPENAI_API_KEY"))
+        base = str(prof.get("base_url", ""))
+        g = groups.setdefault((key_env, base),
+                              {"model": str(prof.get("model", "")), "names": []})
+        g["names"].append(str(prof.get("name", "?")))
+
+    if not groups:
+        print("no model profiles in the registry")
+        return 0
+
+    bad = 0
+    for (key_env, base), g in sorted(groups.items()):
+        used_by = ", ".join(g["names"])
+        if key_env not in secrets:
+            print(f"  --  {key_env:22} not in the vault  ({used_by})")
+            continue
+        outcome, detail = check_env.model_key_probe(
+            base, secrets[key_env], g["model"])
+        tag = {"ok": "OK  ", "rejected": "DEAD", "unreachable": "??  "}[outcome]
+        print(f"  {tag} {key_env:22} {base}")
+        print(f"       {detail}")
+        print(f"       used by: {used_by}")
+        if outcome == "rejected":
+            bad += 1
+    if bad:
+        print(f"\n{bad} credential(s) were REFUSED by their own endpoint. "
+              f"Rotate with `python -m jarvis.vault set NAME`.")
+    return 0
+
+
 def _cmd_set(args: argparse.Namespace) -> int:
     value = getpass.getpass(f"value for {args.name}: ")
     set_secret(args.name, value)
@@ -470,6 +546,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("init", help="create the vault + keychain key").set_defaults(fn=_cmd_init)
     sub.add_parser("status", help="exists? decryptable? how many names").set_defaults(fn=_cmd_status)
     sub.add_parser("list", help="secret names (never values)").set_defaults(fn=_cmd_list)
+    sub.add_parser(
+        "verify",
+        help="do the stored model keys actually work? (read-only, no values)",
+    ).set_defaults(fn=_cmd_verify)
 
     p = sub.add_parser("set", help="store a secret (value prompted, never argv)")
     p.add_argument("name")

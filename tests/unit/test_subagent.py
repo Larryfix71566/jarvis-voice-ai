@@ -636,6 +636,9 @@ class TestModelProfile:
         assert agent._model == "kimi-k2.7-code"
         assert agent._client.api_key == "test-key"
         assert str(agent._client.base_url) == "https://api.moonshot.ai/v1/"  # noqa: SLF001
+        # Larry 2026-08-19 — the public pair the Agents tab card reads.
+        assert agent.model == "kimi-k2.7-code"
+        assert agent.model_is_fallback is False
 
     def test_unknown_profile_falls_back_with_warning(self, tmp_path, monkeypatch, caplog):
         self._registry_file(tmp_path, monkeypatch)
@@ -647,6 +650,11 @@ class TestModelProfile:
         )
         assert agent._model == settings.openai_model  # fell back
         assert "subagent_model_profile_fallback" in caplog.text
+        # The card must show the model actually in use AND mark it as a
+        # fallback — otherwise a silent misconfiguration reads on screen
+        # as a deliberate assignment.
+        assert agent.model == settings.openai_model
+        assert agent.model_is_fallback is True
 
     def test_missing_api_key_falls_back_with_warning(self, tmp_path, monkeypatch, caplog):
         self._registry_file(tmp_path, monkeypatch, key_present=False)
@@ -735,3 +743,47 @@ class TestRepoMapInjection:
         )
         injected = agent._system_prompt.split("verify with tools before writing):\n")[1]
         assert len(injected) == base_module.REPO_MAP_MAX_CHARS
+
+
+class TestRefuseMode:
+    """MORTIMER_KEY_VALIDITY_PLAN.md K5. Verified 2026-08-19:
+    `on_profile_fallback` was read by scripts/check_env.py — which warns
+    that a refuse-mode agent with no key "refuses every delegation" — and by
+    NOTHING in jarvis/. The preflight was reassuring the reader about a
+    guarantee that did not exist; the agent fell back to the voice model
+    exactly as if the setting were absent. A check that reports on
+    unimplemented behaviour is worse than no check."""
+
+    def _agent(self, tmp_path, monkeypatch, mode, profile="does-not-exist"):
+        reg = TestModelProfile()._registry_file(tmp_path, monkeypatch)
+        return SubAgent(
+            name="developer", display_name="Developer", description="d",
+            mcp_servers=["mcp-repo"], settings=make_settings(),
+            registry=FakeRegistry(), model_profile=profile,
+            on_profile_fallback=mode,
+        ), reg
+
+    async def test_refuse_mode_refuses_instead_of_running_on_the_fallback(
+            self, tmp_path, monkeypatch):
+        agent, _ = self._agent(tmp_path, monkeypatch, "refuse")
+        assert agent.refuses
+        result = await agent.run("implement the plan")
+        assert result.startswith("REFUSED:")
+        # The reason must be stated, not merely signalled: Golden Rule 1 and
+        # rule 11 both require a cause the Supervisor can relay, and a bare
+        # "REFUSED:" is how the model ends up inventing one.
+        assert "could not be resolved" in result
+        assert "does-not-exist" in result
+
+    async def test_warn_mode_still_falls_back_silently(
+            self, tmp_path, monkeypatch):
+        """The default must not change: voice has to boot on a fresh
+        checkout with one key."""
+        agent, _ = self._agent(tmp_path, monkeypatch, "warn")
+        assert agent.refuses == ""
+        assert agent.model_is_fallback is True
+
+    async def test_a_resolved_profile_never_refuses(self, tmp_path, monkeypatch):
+        agent, _ = self._agent(tmp_path, monkeypatch, "refuse", profile="kimi-k2")
+        assert agent.refuses == ""
+        assert agent.model_is_fallback is False

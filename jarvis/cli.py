@@ -14,7 +14,7 @@ import time
 import uuid
 
 from jarvis.agents.supervisor import Orchestrator
-from jarvis.config import load_settings
+from jarvis.config import bridge_settings_to_env, load_settings
 from jarvis.logging_config import setup_logging
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 
@@ -23,13 +23,11 @@ GRAY = "\033[90m"
 RESET = "\033[0m"
 
 
-def bridge_settings_to_env(settings) -> None:
-    """MCP children read config from the process environment (plan §6.3);
-    bridge Settings values so stdio servers inherit them."""
-    os.environ.setdefault("JARVIS_DB_PATH", settings.jarvis_db_path)
-    os.environ.setdefault("JARVIS_TIMEZONE", settings.jarvis_timezone)
-    if settings.tavily_api_key:
-        os.environ.setdefault("TAVILY_API_KEY", settings.tavily_api_key)
+# E1 — the implementation moved to jarvis/config.py, beside load_settings
+# and expand_env_vars, and SkillRegistry.start() now calls it itself. Kept as
+# a re-export because pipeline.py and two tests import it from here; the
+# import above IS the definition.
+__all__ = ["bridge_settings_to_env"]
 
 
 async def main() -> None:

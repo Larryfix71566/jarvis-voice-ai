@@ -169,6 +169,11 @@ def make_agent_event_handler(transport: Any) -> Any:
                 "display_name": event.get("display_name"),
                 "state": "working",
                 "task": str(event.get("task") or "")[:200],
+                "model": event.get("model"),
+                "model_fallback": bool(event.get("model_fallback", False)),
+                "model_unusable": bool(event.get("model_unusable", False)),
+                "model_unusable_detail": str(
+                    event.get("model_unusable_detail") or "")[:200],
             }
         elif etype == "delegate_done":
             message = {
@@ -542,6 +547,21 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             _logger.info("runlog_reconcile_orphaned count=%d", orphaned_count)
     except Exception as exc:  # noqa: BLE001 — must never block startup
         _logger.warning("runlog_reconcile_orphaned_failed error=%s", exc)
+
+    # MORTIMER_KEY_VALIDITY_PLAN.md K4: probe every configured model
+    # credential once, on a daemon thread, at the same startup moment as the
+    # prunes above. Detached rather than awaited for the same reason the
+    # council's shadow pass is (V7): a measurement must never delay the
+    # thing being measured. Boot proceeds immediately; verdicts land a few
+    # seconds later and are read at delegation time, so the first run of a
+    # session may legitimately see `unknown` — which is not `unusable`.
+    try:
+        from jarvis import keyhealth
+
+        if keyhealth.start_background_probe() is not None:
+            _logger.info("key_health_probe_started")
+    except Exception as exc:  # noqa: BLE001 — must never block startup
+        _logger.warning("key_health_probe_start_failed error=%s", exc)
 
     # MORTIMER_SKILL_LIBRARY_PLAN.md Part G: prune retained screen-vision
     # diagnostic images, same startup moment and same best-effort shape as

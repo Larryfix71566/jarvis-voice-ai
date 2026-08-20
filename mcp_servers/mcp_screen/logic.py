@@ -391,11 +391,42 @@ def screen_view(
             )
             answer = response.choices[0].message.content or ""
         except Exception as exc:
+            # MORTIMER_KEY_VALIDITY_PLAN.md K7 — an auth failure is named as
+            # one, never folded into a generic "vision model call failed"
+            # that reads like a capture problem.
+            #
+            # MIN_SCREENSHOT_BYTES above exists because macOS Screen
+            # Recording denial fails SILENTLY into a wallpaper-only image.
+            # There was no equivalent for a dead credential, and since every
+            # `vision: true` profile is Anthropic, one bad ANTHROPIC_API_KEY
+            # kills screen vision entirely while _resolve_vision_profile
+            # reports success — because the key is PRESENT. The user then
+            # sees a capture-shaped error for a credential-shaped problem,
+            # which is the same mistake that once reported a GitHub 401 as
+            # "the sidecar may be offline" (AGENT_TRUST_PLAN D8).
+            status = getattr(exc, "status_code", None)
+            name = type(exc).__name__
+            rejected = (status in (401, 403)
+                        or name in ("AuthenticationError", "PermissionDeniedError"))
+            outcome = "auth_rejected" if rejected else "model_failed"
             logger.warning(
-                "screen_view display=%s outcome=model_failed bytes=%d "
+                "screen_view display=%s outcome=%s bytes=%d "
                 "profile=%s error=%s ms=%d",
-                display, len(image_bytes), profile.get("name"), exc,
+                display, outcome, len(image_bytes), profile.get("name"), exc,
                 int((time.perf_counter() - started) * 1000))
+            if rejected:
+                key_env = profile.get("api_key_env", "the vision API key")
+                return {
+                    "error": (
+                        f"The vision model rejected the credential "
+                        f"(HTTP {status}). The screen was captured fine — "
+                        f"{key_env} for profile "
+                        f"{profile.get('name')!r} is dead or wrong. Check it "
+                        f"with `python scripts/check_keys.py`."
+                    ),
+                    "auth_rejected": True,
+                    "profile": profile.get("name"),
+                }
             return {"error": f"Vision model call failed: {exc}"}
 
         # Tier 1 — the diagnostic record. The answer already crosses back

@@ -91,14 +91,20 @@ export default function AmbientStrip({ connected }: { connected: boolean }) {
   const [dismissed, setDismissed] =
     useState<Partial<Record<ChipType, string>>>(readDismissed);
 
-  // Clock + weather-cache refresh, every 30s. This tick is also what
-  // re-evaluates reminder expiry below (`now` is a render dependency).
+  // Clock + weather-cache refresh. This tick is also what re-evaluates
+  // reminder expiry below (`now` is a render dependency).
+  //
+  // 10s, tightened from 30s (2026-08-18) for the minute hairline: at 30s
+  // it only had two positions per minute and read as broken rather than
+  // progressing. 10s gives six steps — enough to see movement between
+  // glances — without a per-second re-render, which would cost a React
+  // pass every second to move a bar by 1.6% of its width.
   useEffect(() => {
     if (!connected) return;
     const id = window.setInterval(() => {
       setNow(new Date());
       setWeather(readWeatherCache());
-    }, 30_000);
+    }, 10_000);
     return () => window.clearInterval(id);
   }, [connected]);
 
@@ -165,8 +171,38 @@ export default function AmbientStrip({ connected }: { connected: boolean }) {
 
   return (
     <div className="ambient-strip" aria-label="Ambient status">
-      <div className="ambient-chip ambient-clock">
-        {now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+      {/* Larry 2026-08-18: "the time display is boring and needs more
+          work and the addition of the date."
+
+          Three changes, all presentation — no new data source, no new
+          failure mode:
+          1. TYPOGRAPHY. A large thin time over a small dim date, so it
+             reads as a display rather than a label. `font-variant-numeric:
+             tabular-nums` in the CSS is load-bearing: without it the
+             digits shift width as they change and the whole block twitches
+             every minute.
+          2. THE DATE, SPOKEN-STYLE. "Tuesday, 19 August" rather than
+             8/19/2026 — the same choice VOICE_ADDENDUM already makes for
+             dates aloud, so screen and speech agree.
+          3. SECONDS AS A HAIRLINE. A one-pixel bar filling across each
+             minute, not a ticking digit. It gives the sense of live time
+             while keeping the wave's motion monopoly: one pixel of slow
+             travel, updated on the existing 30s tick rather than a new
+             per-second timer. */}
+      <div className="ambient-clockblock" aria-label="Current time and date">
+        <div className="ambient-time">
+          {now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+        </div>
+        <div className="ambient-date">
+          {now.toLocaleDateString([], {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+          })}
+        </div>
+        <div className="ambient-minute" aria-hidden="true">
+          <i style={{ width: `${(now.getSeconds() / 60) * 100}%` }} />
+        </div>
       </div>
       {data?.reminder &&
         reminderKey !== null &&

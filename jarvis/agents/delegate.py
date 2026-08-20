@@ -252,7 +252,20 @@ def build_delegate_tool(
         if on_event is not None:
             on_event({"type": "delegate_start", "agent": agent_name,
                       "display_name": agent.display_name, "task": task,
-                      "run_id": run_id})
+                      "run_id": run_id,
+                      # Larry 2026-08-19 — the Agents tab card header shows
+                      # which LLM is doing the work. Read from the agent
+                      # itself (the RESOLVED model, not config/agents.yaml's
+                      # configured name), so a silent profile fallback is
+                      # visible on screen rather than only in a log line.
+                      "model": agent.model,
+                      "model_fallback": agent.model_is_fallback,
+                      # K4 — the credential behind this model was
+                      # actively refused or could not be billed. Distinct
+                      # from a fallback: the profile resolved fine, so
+                      # nothing upstream noticed anything wrong.
+                      "model_unusable": agent.model_unusable,
+                      "model_unusable_detail": agent.model_unusable_detail})
         # Cap actual concurrent execution — pipecat's own parallel tool-call
         # dispatch has no limit. A failure inside agent.run() (SubAgent.run()
         # never raises; failures come back as "FAILED: ..." strings) does not

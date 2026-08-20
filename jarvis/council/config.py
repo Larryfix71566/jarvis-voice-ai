@@ -19,6 +19,7 @@ decisions already name; it invents no new selection semantics.
 from __future__ import annotations
 
 import hashlib
+import random
 from typing import Any
 
 from jarvis.agents.upgrade_agent import available_models
@@ -94,6 +95,61 @@ TIER_MEMBERS: dict[int, dict[str, list[str]]] = {
 
 # Ascending cost, used only by the degenerate-tier fallback below.
 _TIER_ORDER = ["economy", "mid", "frontier"]
+
+# --- Tier-2 frontier partition (Larry 2026-08-19, option b) ------------
+#
+# THE BUG THIS FIXES. Tier 2 lists "frontier" for BOTH roles: proposers
+# ["frontier", "mid"], judges ["frontier"]. Proposers therefore take every
+# frontier profile, and per-member disjointness (`exclude`) then removes
+# every one of them from the judge pool. _fallback_up cannot rescue it —
+# frontier is the top of _TIER_ORDER, so there is nowhere above to climb.
+# resolve_members raised NoUsableProfilesError and convene() turned that
+# into _finalize_too_small, meaning a SECOND escalation silently declined
+# to convene the very council it exists to convene. Measured 2026-08-19:
+# tier 1 resolved 4 proposers and 4 judges; tier 2 resolved 9 proposers
+# and then failed. This was latent from the start — the pre-OpenRouter
+# registry (2 frontier, 1 mid) produced the identical zero — and it went
+# unseen because tier 2 needs two validation failures plus a failed repair
+# to fire at all.
+#
+# THE FIX. At a partitioned tier, the named tier's usable membership is
+# SPLIT between the two roles instead of being offered whole to both:
+# judges are reserved first, and whatever remains proposes (alongside the
+# other proposer tier names, which are untouched). Disjointness then holds
+# by construction rather than by exclusion-after-the-fact, which is what
+# made the pools collide in the first place.
+#
+# Judges are reserved rather than proposers because a round with no judges
+# cannot happen at all, while a round with fewer proposers merely has less
+# to choose from. Reserve COUNCIL_JUDGE_TARGET, but never so many that no
+# frontier profile is left to propose — tier 2's whole purpose is frontier
+# PROPOSALS, and a partition that reserved all of them would fix the crash
+# by defeating the tier.
+TIER_PARTITION: dict[int, str] = {2: "frontier"}
+
+
+def _partition_judges(names: list[str], seed: str | None = None) -> list[str]:
+    """Which of a partitioned tier's usable profiles are reserved as judges.
+
+    Deterministic, and seeded per round rather than fixed, reusing V4's
+    approach exactly (SHA256 of the round id into a LOCAL random.Random,
+    never the global module) — one idea applied twice, not two that can
+    drift. A fixed split would make the same two models the permanent
+    arbiters of every tier-2 winner, which is a systematic taste bias the
+    council exists to avoid; rotating per round spreads it while keeping
+    any single round reproducible for --replay.
+
+    Falls back to registry order when no seed is supplied, so callers that
+    do not have a round id (tests, --agreement) still get a stable answer.
+    """
+    if len(names) < 2:
+        return list(names)
+    reserved = min(COUNCIL_JUDGE_TARGET, len(names) - 1)
+    ordered = list(names)
+    if seed is not None:
+        rng = random.Random(hashlib.sha256(seed.encode("utf-8")).hexdigest())
+        rng.shuffle(ordered)
+    return sorted(ordered[:reserved])
 
 
 def tier_members(tier: int) -> dict[str, list[str]]:
@@ -175,6 +231,7 @@ def resolve_members(
     registry_path: str | None = None,
     selected: dict[str, list[str]] | None = None,
     exclude: set[str] | None = None,
+    seed: str | None = None,
 ) -> list[str]:
     """Resolve the actual profile names for one role ('proposers' |
     'judges') at one escalation tier. Never returns a duplicate name.
@@ -185,11 +242,43 @@ def resolve_members(
     never also judge it, regardless of whether the tier ladder's tier
     NAMES happen to overlap for this tier number.
 
+    `seed` (2026-08-19): the round id, used only to rotate TIER_PARTITION's
+    judge reservation. Both roles of one round MUST be resolved with the
+    same seed or the partition they agree on differs between the two calls
+    and the split stops being a split. council.py passes round_id to both.
+
     Raises NoUsableProfilesError if, after D4's degenerate-tier fallback,
     no profile at all is usable for this role. Never convenes a council
     with zero candidates for a role silently (D7's size floor still runs
     on top of this in council.py)."""
     tier_names = tier_members(tier)[role]
+
+    # TIER_PARTITION — split a tier that both roles claim, BEFORE anything
+    # else looks at it. Done as an addition to `exclude` rather than as a
+    # filter on the result so that _fallback_up and V8's backfill both see
+    # a pool that is already correctly restricted; filtering afterwards
+    # would let the fallback re-admit a profile the partition just gave to
+    # the other role.
+    part_tier = TIER_PARTITION.get(tier)
+    if part_tier is not None:
+        # The partition basis is the tier's FULL usable membership, so
+        # `exclude` is deliberately not passed here. It is passed on the
+        # judges call (council.py hands over the resolved proposer set), and
+        # letting it shrink the basis would make _partition_judges reserve
+        # from an already-halved pool: measured 2026-08-19, 5 frontier
+        # profiles yielded 3 proposers and then only ONE judge, because the
+        # judges call saw a pool of 2 and reserved min(2, 2-1) = 1. The
+        # split must be computed identically for both roles or it is not a
+        # split. `selected` and key-presence still apply — those narrow what
+        # is genuinely available, rather than describing the other role.
+        pool = _usable_profiles_for_tier_name(
+            part_tier, registry_path=registry_path, selected=selected,
+        )
+        reserved = set(_partition_judges(pool, seed))
+        other = set(pool) - reserved
+        # judges get the reservation, proposers get the remainder.
+        exclude = (exclude or set()) | (other if role == "judges" else reserved)
+
     out: list[str] = []
     seen: set[str] = set()
     for tier_name in tier_names:

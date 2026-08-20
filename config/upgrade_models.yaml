@@ -28,14 +28,40 @@
 # jarvis.agents.upgrade_agent.available_models() and jarvis.council.config,
 # so the council and the console picker (D9) share one source of truth for
 # "what tier is this model."
+#
+# identity: REQUIRED, and it is not decorative (Larry 2026-08-19). It is the
+# canonical vendor/model string — the thing that identifies the MODEL, as
+# distinct from `name` (this profile) or `model` (the string this endpoint
+# wants). Two profiles may legitimately differ in name, base_url, key and
+# model string while being the same underlying model: `openai/gpt-5.1`
+# reached through OpenRouter and a direct OpenAI `gpt-5.1` are one model
+# wearing two profile names.
+#
+# That is a correctness problem, not tidiness. The council's founding rule
+# is that a model never scores its own proposal, and resolve_members'
+# `exclude` enforces it on PROFILE NAMES — so a duplicate underlying model
+# would let a model judge itself while the guarantee still read as enforced.
+# tests/unit/test_model_registry.py fails if two profiles share an identity.
+#
+# The rule when adding an OpenRouter profile: if you can already reach that
+# model directly, do not add it. Pick a different one — the whole value of a
+# second route is a model you did not already have.
 
 default: kimi-k3
 
 profiles:
+  # ---- DIRECT PROVIDER PROFILES -------------------------------------
+  # Reached with that vendor's own key. The developer agent and the voice
+  # model both live here deliberately: voice is latency-critical and wants
+  # no proxy hop, and the developer lives on tool calling, where a known-good
+  # direct route beats a proxy that may route the same slug to upstreams of
+  # differing tool fidelity.
+
   - name: kimi-k3
     label: "Kimi K3 — flagship, 1M context, always-on thinking (default)"
     provider: moonshot
     model: kimi-k3
+    identity: moonshotai/kimi-k3
     base_url: https://api.moonshot.ai/v1
     api_key_env: MOONSHOT_API_KEY
     temperature: null
@@ -45,6 +71,7 @@ profiles:
     label: "Kimi K2.7 Code — coding-tuned K2 family, 256K context"
     provider: moonshot
     model: kimi-k2.7-code
+    identity: moonshotai/kimi-k2.7-code
     base_url: https://api.moonshot.ai/v1
     api_key_env: MOONSHOT_API_KEY
     temperature: null
@@ -54,6 +81,7 @@ profiles:
     label: "Claude Opus 5 — Anthropic Opus tier, 1M context"
     provider: anthropic
     model: claude-opus-5
+    identity: anthropic/claude-opus-5
     base_url: https://api.anthropic.com/v1/
     api_key_env: ANTHROPIC_API_KEY
     temperature: 0.2
@@ -64,17 +92,127 @@ profiles:
     label: "Claude Fable 5 — Anthropic Mythos-class, above Opus"
     provider: anthropic
     model: claude-fable-5
+    identity: anthropic/claude-fable-5
     base_url: https://api.anthropic.com/v1/
     api_key_env: ANTHROPIC_API_KEY
     temperature: 0.2
     tier: frontier
     vision: true
 
-  - name: gpt-4.1-mini
-    label: "GPT-4.1 mini — fast and cheap"
-    provider: openai
-    model: gpt-4.1-mini
-    base_url: https://api.openai.com/v1
-    api_key_env: OPENAI_API_KEY
-    temperature: 0.2
+  # ---- OPENROUTER PROFILES ------------------------------------------
+  # Larry 2026-08-19. One key, many vendors. Added for the COUNCIL and
+  # PLANNER tiers only — diversity of proposers and judges is the council's
+  # entire product, and before this every tier was thin: economy had one
+  # working model (gpt-4.1-mini had no credential — OPENAI_API_KEY holds an
+  # Anthropic key in this deployment), mid had exactly one, and frontier was
+  # two profiles behind a SINGLE Anthropic key, so one outage took tier-2
+  # proposers and judges to zero simultaneously.
+  #
+  # temperature is null on every one of these, deliberately. OpenRouter may
+  # route a slug to different upstream providers, and several of these
+  # families reject a temperature other than 1 (DEVIATIONS.md D-003, first
+  # hit with Moonshot). Omitting the parameter can never error; a rejected
+  # request during a council fan-out silently costs a proposer, which is the
+  # failure this whole section exists to prevent.
+  #
+  # No `vision: true` on any of them. Several are certainly multimodal, but
+  # the registry's own rule is not to set that flag speculatively, and the
+  # listing used to pick these filtered on TOOL support, not image support.
+  # Verify a candidate before flagging it — screen vision depending on a
+  # single Anthropic key is a real gap, but an unverified flag is worse.
+
+  - name: or-gpt-5-mini
+    label: "GPT-5 mini (OpenRouter) — cheap OpenAI-family proposer, 400K"
+    provider: openrouter
+    model: openai/gpt-5-mini
+    identity: openai/gpt-5-mini
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    temperature: null
     tier: economy
+
+  - name: or-gemini-flash
+    label: "Gemini 3.7 Flash (OpenRouter) — Google-family proposer, 1M"
+    provider: openrouter
+    model: google/gemini-3.7-flash
+    identity: google/gemini-3.7-flash
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    temperature: null
+    tier: economy
+
+  - name: or-deepseek
+    label: "DeepSeek V3.2 (OpenRouter) — independent lineage, 163K"
+    provider: openrouter
+    model: deepseek/deepseek-v3.2
+    identity: deepseek/deepseek-v3.2
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    temperature: null
+    tier: economy
+
+  - name: or-gpt-5.1
+    label: "GPT-5.1 (OpenRouter) — mid-tier judge, 400K"
+    provider: openrouter
+    model: openai/gpt-5.1
+    identity: openai/gpt-5.1
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    temperature: null
+    tier: mid
+
+  - name: or-sonnet-5
+    label: "Claude Sonnet 5 (OpenRouter) — mid-tier judge, 1M"
+    provider: openrouter
+    model: anthropic/claude-sonnet-5
+    identity: anthropic/claude-sonnet-5
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    temperature: null
+    tier: mid
+
+  - name: or-grok-4.3
+    label: "Grok 4.3 (OpenRouter) — mid-tier judge, separate lineage, 1M"
+    provider: openrouter
+    model: x-ai/grok-4.3
+    identity: x-ai/grok-4.3
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    temperature: null
+    tier: mid
+
+  # Larry 2026-08-19 — the developer's build model, and a frontier council
+  # proposer. Chosen over a general frontier model (gpt-5.2) rather than
+  # alongside it: a coding-tuned model is exactly what an E1 escalation
+  # wants proposing, since that council convenes only after a self-edit's
+  # validation has already failed twice. Keeping ONE profile per vendor
+  # family also keeps tier-2's fan-out from doubling up on OpenAI.
+  - name: or-codex-max
+    label: "GPT-5.1 Codex Max (OpenRouter) — coding-tuned frontier, 400K"
+    provider: openrouter
+    model: openai/gpt-5.1-codex-max
+    identity: openai/gpt-5.1-codex-max
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    temperature: null
+    tier: frontier
+
+  - name: or-grok-4.6
+    label: "Grok 4.6 (OpenRouter) — frontier, 500K"
+    provider: openrouter
+    model: x-ai/grok-4.6
+    identity: x-ai/grok-4.6
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    temperature: null
+    tier: frontier
+
+  - name: or-deepseek-v4-pro
+    label: "DeepSeek V4 Pro (OpenRouter) — frontier, 1M"
+    provider: openrouter
+    model: deepseek/deepseek-v4-pro
+    identity: deepseek/deepseek-v4-pro
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    temperature: null
+    tier: frontier

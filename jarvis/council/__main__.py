@@ -219,6 +219,14 @@ def _do_agreement(since: str | None) -> int:
     print(f"abstention rate        {report.abstention_rate_by_tier}")
     print(f"discrimination         {report.discrimination_by_tier}")
     print(f"disagreement cost      {report.disagreement_cost}")
+    # K6 — a round that lost members it invited, or ran on one proposal,
+    # still produces a winner and a select_reason and looks entirely normal
+    # in every metric above. These two lines are the only place that shows
+    # otherwise, so they print even when zero.
+    print(f"short-handed rounds    {report.short_handed_rounds}")
+    print(f"single-proposer rounds {report.single_proposer_rounds}"
+          + ("   <- a council of one; its winner is not evidence"
+             if report.single_proposer_rounds else ""))
     print(f"decision               {report.branch}")
     print(f"recommend promote      {report.recommend_promote}")
     # V9 — this finally lets v1 §9's "observed cost per escalated

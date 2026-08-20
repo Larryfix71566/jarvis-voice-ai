@@ -6,11 +6,40 @@
  * which has no equivalent in the in-page window or the drawer tab.
  */
 
+/* Larry 2026-08-18 — the popped-out window was `#04090c`, fully opaque,
+   the one display surface with no glass at all.
+
+   IMPORTANT, and the reason this is not simply `transparent`: CSS
+   backdrop-filter blurs what is behind an element WITHIN the page. In a
+   separate window there is nothing behind it but the window's own
+   background, so CSS alone cannot show the desktop through it. Making
+   the body fully transparent here would reveal whatever the host window
+   paints — white in a browser, and in the shell whatever NSWindow's
+   backgroundColor happens to be.
+   
+   So: a translucent dark wash carrying the same tint and hairline as the
+   in-page panel, which is as far as CSS can honestly go. TRUE
+   see-through needs the native side — NSWindow.isOpaque = false,
+   backgroundColor = .clear, and an NSVisualEffectView behind the
+   WKWebView. That is a Swift change and an Xcode rebuild; until it
+   lands, this is a lighter pane rather than a real one. */
 html,
 body {
   height: 100%;
   margin: 0;
-  background: #04090c;
+  background: rgba(10, 16, 21, 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* When the native window IS made non-opaque, this class (set by the
+   shell's injected script) drops the wash entirely so the vibrancy view
+   behind shows through. Harmless in a browser, where it never applies. */
+html.shell-vibrancy,
+html.shell-vibrancy body {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 #root {
@@ -25,6 +54,14 @@ body {
   color: var(--text, #d7f4ff);
 }
 
+/* Ensure popped-out display text renders fully opaque. */
+.display-window,
+.display-window-title,
+.display-window .display-body,
+.display-window-empty {
+  opacity: 1;
+}
+
 .display-window-empty {
   align-items: center;
   justify-content: center;
@@ -35,8 +72,11 @@ body {
 
 .display-window-head {
   padding: 14px 18px;
-  border-bottom: 1px solid var(--hairline, #16323c);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
   background: linear-gradient(180deg, rgba(44, 201, 255, 0.07), transparent);
+  /* Top-lit inner edge, the same cue the in-page panel uses to read as a
+     pane rather than a box. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
 .display-window-title {

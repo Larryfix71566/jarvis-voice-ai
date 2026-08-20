@@ -25,14 +25,25 @@
   overflow: hidden;
   display: flex;
   flex-direction: row;
-  background: var(--glass-bg-heavy);
-  backdrop-filter: var(--glass-blur-heavy);
-  -webkit-backdrop-filter: var(--glass-blur-heavy);
+  /* Larry 2026-08-18: "I would like them to be the same as the display
+     is currently." So this uses the BASE glass tokens — the exact pair
+     .display-panel uses — not the -heavy variants it carried before.
+     The -heavy pair still exists and is still correct for the agent and
+     memory CARDS, which sit directly over the moving wave; the drawer
+     occupies its own column and pushes the stage aside, so it never has
+     the wave behind it and does not need the extra opacity. */
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   transition: flex-basis 0.28s ease;
 }
 
 .side-drawer-open {
-  border-left: 1px solid var(--hairline);
+  /* The same edge treatment as .display-panel: a glass hairline plus a
+     top-lit inner edge, so the drawer reads as a pane rather than a wall
+     with a line drawn on it. */
+  border-left: 1px solid var(--glass-border);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
 }
 
 @supports not (backdrop-filter: blur(4px)) {

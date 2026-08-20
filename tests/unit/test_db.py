@@ -17,6 +17,7 @@ EXPECTED_MIGRATION_IDS = [
     "0011_run_model",
     "0012_memory_tiers",
     "0013_memory_archive",
+    "0014_council_attempted",
 ]
 
 

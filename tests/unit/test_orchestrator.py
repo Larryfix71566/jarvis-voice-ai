@@ -191,13 +191,24 @@ class TestPersistence:
 class FakeSubAgent:
     """Stands in for SubAgent in delegating-mode tests."""
 
-    def __init__(self, name, result="done"):
+    def __init__(self, name, result="done", model="fake-model",
+                 model_is_fallback=False):
         self.name = name
         self.display_name = name.title()
         self.description = f"{name} things."
         self.mcp_servers = []
         self.result = result
         self.tasks = []
+        # Part of SubAgent's public surface since 2026-08-19 —
+        # delegate_start reads both so the Agents tab card can show which
+        # LLM did the work. Kept as plain attributes rather than
+        # properties: the fake only has to answer, not resolve.
+        self.model = model
+        self.model_is_fallback = model_is_fallback
+        # K4: a resolved-but-refused credential. Default False — the
+        # measurement is absent in tests, and absent is not unusable.
+        self.model_unusable = False
+        self.model_unusable_detail = ""
 
     async def run(self, task, on_event=None, **kwargs):
         self.tasks.append(task)

@@ -7,6 +7,7 @@ mcp-time) — per the plan, MCP servers must not import each other.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import sqlite3
@@ -35,11 +36,40 @@ _TIME_RE = re.compile(
     r"(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b|(?:at\s+)(\d{1,2}):(\d{2})\b",
     re.IGNORECASE,
 )
+logger = logging.getLogger(__name__)
+
 _VALID_STATUSES = ("pending", "done", "cancelled", "all")
 
 
 def _tz() -> ZoneInfo:
-    return ZoneInfo(os.environ.get("JARVIS_TIMEZONE", "UTC"))
+    """The configured timezone, or UTC.
+
+    MORTIMER_ENV_BRIDGE_PLAN.md E2. `expand_env_vars` leaves an unresolved
+    `${VAR}` as literal text by design, so this once received the seven
+    characters `"${JARVIS_TIMEZONE}"` and raised ZoneInfoNotFoundError from
+    inside a subprocess — a stack trace whose top frame named `zoneinfo`,
+    not the configuration that caused it.
+
+    Same defence `mcp_git`/`mcp_repo`'s `_repo_root()` already applies to a
+    phantom repo root: a value containing `"${"` is treated as UNSET.
+    Wrong-but-running beats a crash, and E1's parent-side warning is what
+    makes the misconfiguration findable — this half only keeps the tool
+    alive while someone reads it.
+    """
+    value = os.environ.get("JARVIS_TIMEZONE", "").strip()
+    if not value or "${" in value:
+        if value:
+            logger.warning(
+                "reminders_timezone_unresolved value=%s — falling back to "
+                "UTC; JARVIS_TIMEZONE was not set in the parent process",
+                value)
+        return ZoneInfo("UTC")
+    try:
+        return ZoneInfo(value)
+    except Exception:  # noqa: BLE001 — a bad zone must not kill the tool
+        logger.warning(
+            "reminders_timezone_invalid value=%s — falling back to UTC", value)
+        return ZoneInfo("UTC")
 
 
 def _now() -> datetime:

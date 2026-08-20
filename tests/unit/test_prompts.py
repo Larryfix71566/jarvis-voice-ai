@@ -112,112 +112,108 @@ def test_no_guessing_at_causes():
         assert word in GOLDEN_RULES
 
 
-class TestVerificationTaxonomy:
-    """MORTIMER_SKILL_LIBRARY_PLAN.md Part B — the discernment taxonomy
-    lives in the prompt layer, NOT in a skill, because MAX_INJECTED = 1
-    means a general skill loses to every specific one."""
+class TestAgentDiscipline:
+    """The ONE rule block on every sub-agent prompt.
 
-    def test_every_subagent_gets_it(self):
-        """No matching involved: it reaches all five agents, always."""
-        from jarvis.prompts import SUBAGENT_PROMPTS, VERIFICATION_TAXONOMY_RULE
+    Consolidated 2026-08-18 from four rules (grounding D6,
+    no-invented-remediation D7, verification taxonomy, handoff H2) that
+    overlapped heavily — 1,216 chars down to ~546. Larry asked for under
+    15%; that was arithmetically unreachable (86 chars for the scheduler)
+    because the conversational prompts carry only 382-490 chars of their
+    own, so the guardrail below is an ABSOLUTE budget instead. A ratio is
+    hostage to how terse the agent-specific text happens to be: the
+    developer sat at 23% with the same rules the analyst had at 76%.
+    """
+
+    def test_every_subagent_gets_it_exactly_once(self):
+        from jarvis.prompts import AGENT_DISCIPLINE, SUBAGENT_PROMPTS
 
         assert len(SUBAGENT_PROMPTS) == 5
         for name, prompt in SUBAGENT_PROMPTS.items():
-            assert VERIFICATION_TAXONOMY_RULE in prompt, name
+            assert prompt.count(AGENT_DISCIPLINE) == 1, name
 
-    def test_it_appears_exactly_once_per_prompt(self):
-        """Appended in one place (the dict comprehension), never baked
-        into a literal — same discipline as D6/D7."""
-        from jarvis.prompts import SUBAGENT_PROMPTS, VERIFICATION_TAXONOMY_RULE
+    def test_it_fits_the_absolute_budget(self):
+        """D — what matters is how much undifferentiated instruction a
+        small model must hold, and that is a character count. If this
+        needs raising, CONSOLIDATE first; appending a fifth rule is what
+        made the last consolidation necessary."""
+        from jarvis.prompts import AGENT_DISCIPLINE, MAX_AGENT_DISCIPLINE_CHARS
 
-        for name, prompt in SUBAGENT_PROMPTS.items():
-            assert prompt.count(VERIFICATION_TAXONOMY_RULE) == 1, name
+        assert len(AGENT_DISCIPLINE) <= MAX_AGENT_DISCIPLINE_CHARS
 
-    def test_names_all_three_claim_categories(self):
-        from jarvis.prompts import VERIFICATION_TAXONOMY_RULE as rule
+    def test_it_is_smaller_than_what_it_replaced(self):
+        """The four rules totalled 1,216 chars."""
+        from jarvis.prompts import AGENT_DISCIPLINE
 
-        assert "did a tool return it in this run" in rule       # facts/figures
-        assert "cause for a failure" in rule                     # reasoning
-        assert "say what you assumed" in rule                    # missing context
+        assert len(AGENT_DISCIPLINE) < 1216 * 0.6
 
-    def test_forbids_the_appended_caveat_list(self):
-        """B2 — discernment-nudge's output format must NOT port. Sub-agents
-        have a 60-word plain-text contract and speak through TTS."""
-        from jarvis.prompts import VERIFICATION_TAXONOMY_RULE as rule
-
-        assert "never append caveats" in rule.lower()
-
-    def test_stays_short(self):
-        """B3 — this is injected into EVERY sub-agent run, so length costs
-        more here than in a skill that fires on match."""
-        from jarvis.prompts import VERIFICATION_TAXONOMY_RULE
-
-        assert len(VERIFICATION_TAXONOMY_RULE) < 400
-
-    def test_conversational_agents_stay_lean(self):
-        """The four non-developer prompts must not drift toward the
-        developer's size.
-
-        **The ceiling moved from 1600 to 1800 on 2026-08-18** when
-        HANDOFF_RULE was added, and the reason is worth recording rather
-        than quietly raising: measured at that point, the four shared
-        discipline rules (grounding, no-invented-remediation,
-        verification taxonomy, handoff) total ~1,226 chars against ~490
-        of scheduler-specific instruction — **71% of a conversational
-        agent's prompt is now shared rules**, a 2.5:1 ratio.
-
-        That is not obviously wrong; the discipline is the valuable part
-        and these agents are simple. But it is the same dilution shape
-        the meta-prompts review measured on the developer from the other
-        direction, and the four rules overlap substantially — all are
-        variations on "do not state what you did not observe". If this
-        ceiling needs raising again, CONSOLIDATE them first, the way
-        GOLDEN_RULES consolidated rules 3/11 rather than adding to them.
-        """
+    def test_no_agent_prompt_is_mostly_boilerplate(self):
+        """A per-agent ceiling, so the shared block cannot creep back by
+        being appended to rather than consolidated."""
         from jarvis.prompts import SUBAGENT_PROMPTS
 
         for name in ("scheduler", "librarian", "analyst", "systems"):
-            assert len(SUBAGENT_PROMPTS[name]) < 1800, name
+            assert len(SUBAGENT_PROMPTS[name]) < 1200, name
 
+    # --- every clause earns its place; each maps to an observed failure --
 
-class TestHandoffRule:
-    """MORTIMER_HANDOFF_LOOP_PLAN.md H2 — Larry: "quitting is not
-    acceptable". The run log showed Mortimer did not quit; it stopped at
-    "I cannot" instead of converting the blocker into a handoff."""
+    def test_grounding_survived(self):
+        """D6 — a run described a repository it had failed to read."""
+        from jarvis.prompts import AGENT_DISCIPLINE as R
 
-    def test_every_subagent_gets_it(self):
-        from jarvis.prompts import HANDOFF_RULE, SUBAGENT_PROMPTS
+        assert "never describe what you could not read" in R
+        assert "Say when a tool failed" in R
 
-        for name, prompt in SUBAGENT_PROMPTS.items():
-            assert HANDOFF_RULE in prompt, name
+    def test_no_invented_cause_or_fix_survived(self):
+        """D7 — a GitHub 401 was reported as "the admin sidecar may be
+        offline", sending Larry to debug the wrong component."""
+        from jarvis.prompts import AGENT_DISCIPLINE as R
 
-    def test_it_names_the_marker_delegate_py_keys_off(self):
-        """The marker is the mechanical half: delegate.py reads it from
-        the agent's OWN reply to authorise a continuation, so a Supervisor
-        cannot forge permission for its own retry."""
+        assert "never name a cause a tool did not name" in R
+        assert "never invent a fix" in R
+        assert "a service to restart" in R      # the concrete D7 shape
+
+    def test_missing_context_survived(self):
+        from jarvis.prompts import AGENT_DISCIPLINE as R
+
+        assert "Say what you assumed" in R
+
+    def test_magnitude_check_survived(self):
+        """The question that cracked the weather bug: 13F does not fit a
+        15-minute cache."""
+        from jarvis.prompts import AGENT_DISCIPLINE as R
+
+        assert "size of the error does not fit your explanation" in R
+
+    def test_handoff_survived_and_still_names_the_marker(self):
+        """H2.1 — delegate.py reads this marker from the agent's OWN reply
+        to authorise a budget-resetting continuation. Changing the string
+        here breaks that; this pins the pair."""
         from jarvis.agents.delegate import HANDOFF_MARKER
-        from jarvis.prompts import HANDOFF_RULE
+        from jarvis.prompts import AGENT_DISCIPLINE as R
 
-        assert HANDOFF_MARKER in HANDOFF_RULE
+        assert HANDOFF_MARKER in R
+        assert 'do not stop at "I cannot"' in R
+        assert "exact command" in R
 
-    def test_it_asks_for_the_command_not_just_the_complaint(self):
-        from jarvis.prompts import HANDOFF_RULE
+    def test_search_discipline_survived(self):
+        """H2.3 — run b74ed019 had every file it needed by round 8 and
+        spent rounds 9-15 searching wider."""
+        from jarvis.prompts import AGENT_DISCIPLINE as R
 
-        assert "exact command" in HANDOFF_RULE
+        assert "stop gathering and reason" in R
 
-    def test_search_discipline_is_stated(self):
-        """Rounds 9-15 of b74ed019 were a widening search after the answer
-        was already in hand."""
-        from jarvis.prompts import HANDOFF_RULE
+    def test_voice_output_shape_survived(self):
+        """Sub-agents speak through TTS under a 60-word contract; an
+        appended caveat list is unspeakable."""
+        from jarvis.prompts import AGENT_DISCIPLINE as R
 
-        assert "more searching is not more progress" in HANDOFF_RULE
+        assert "Hedge inline; never append caveats" in R
 
-    def test_the_magnitude_check_is_in_the_taxonomy(self):
-        """The question that actually cracked the weather bug: 13F does
-        not fit a 15-minute cache, so staleness was the wrong hypothesis."""
-        from jarvis.prompts import VERIFICATION_TAXONOMY_RULE as rule
 
-        assert "MAGNITUDE" in rule
+class TestHandoffAddendum:
+    """The Supervisor's half of the handoff loop (H3/H6), shipped only
+    when its tools are registered."""
 
     def test_the_addendum_forbids_shell_comments(self):
         """zsh does not treat # as a comment interactively — it cost two
@@ -231,3 +227,88 @@ class TestHandoffRule:
 
         assert "continuation" in HANDOFF_ADDENDUM
         assert "not a retry" in HANDOFF_ADDENDUM
+
+
+class TestDeveloperSections:
+    """MORTIMER_DEVELOPER_SECTIONS_AND_VISUAL_VERIFY_PLAN.md Part A.
+
+    Measured before the split: the developer's own prompt was 4,034 chars,
+    of which app_development (1,188) and self_development (1,566) — 68% —
+    were injected on EVERY run including "read this YAML file".
+
+    The property that matters most here is not the saving; it is that no
+    task can lose a confirmation protocol. Two of these tests exist purely
+    to pin failure modes, not features.
+    """
+
+    def _own(self, task):
+        from jarvis.prompts import developer_prompt_for
+        return developer_prompt_for(task)
+
+    def test_full_prompt_is_core_plus_every_section(self):
+        """The reassembly identity — no text was lost in the split."""
+        from jarvis.prompts import (
+            DEVELOPER_CORE, DEVELOPER_SECTIONS, developer_prompt_for)
+        full = developer_prompt_for("")
+        assert DEVELOPER_CORE in full
+        for text in DEVELOPER_SECTIONS.values():
+            assert text in full
+
+    def test_no_section_text_was_reworded(self):
+        """This change alters WHEN text is injected, never what it says. A
+        rewording here would let a behavioural regression hide behind an
+        editorial one."""
+        from jarvis.prompts import DEVELOPER_SECTIONS
+        for name, text in DEVELOPER_SECTIONS.items():
+            assert "two-phase" in text or "plan_start" in text, name
+            assert text.strip() == text
+
+    def test_a_self_edit_task_gets_the_self_development_section(self):
+        from jarvis.prompts import select_developer_sections as sel
+        assert "self_development" in sel("implement the drawer plan in mortimer")
+
+    def test_an_app_task_gets_the_app_section(self):
+        from jarvis.prompts import select_developer_sections as sel
+        assert "app_development" in sel("create a new app for tracking runs")
+
+    def test_a_plain_repo_read_gets_neither_protocol(self):
+        """The actual saving, and the case that motivated Part A."""
+        from jarvis.prompts import select_developer_sections as sel
+        assert sel("read config/agents.yaml and tell me the timeout") == []
+        assert len(self._own("show me the git log")) < 1000
+
+    def test_a_read_that_could_write_keeps_the_protocol(self):
+        """THE hazard of the core-only path. "read the file and fix the bug"
+        looks like a read; it is a self-edit. Every mutation verb lives in
+        self_development's vocabulary precisely so this cannot slip
+        through."""
+        from jarvis.prompts import select_developer_sections as sel
+        for task in ("read the file and fix the bug in it",
+                     "look at prompts.py and update the wording",
+                     "check the config then add a new field"):
+            assert "self_development" in sel(task), task
+
+    def test_an_unrecognized_task_gets_every_section(self):
+        """Fail-open. A task the selector does not understand must never be
+        the one that loses a gate."""
+        from jarvis.prompts import DEVELOPER_SECTIONS
+        from jarvis.prompts import select_developer_sections as sel
+        assert set(sel("zzz qqq wibble")) == set(DEVELOPER_SECTIONS)
+
+    def test_a_task_that_is_both_gets_both_sections(self):
+        """No MAX_INJECTED here — sections do not compete."""
+        from jarvis.prompts import select_developer_sections as sel
+        picked = sel("write an implementation plan then implement it in mortimer")
+        assert "planning" in picked and "self_development" in picked
+
+    def test_the_kill_switch_restores_the_full_prompt(self, monkeypatch):
+        from jarvis.prompts import (
+            DEVELOPER_SECTIONS_ENABLED_ENV, developer_prompt_for)
+        monkeypatch.setenv(DEVELOPER_SECTIONS_ENABLED_ENV, "false")
+        assert developer_prompt_for("show me the git log") == developer_prompt_for("")
+
+    def test_selection_is_pure(self):
+        """No DB, no network, no model — it runs in a unit test with no
+        fixtures at all, which is the assertion."""
+        from jarvis.prompts import select_developer_sections as sel
+        assert sel("read a file") == sel("read a file")

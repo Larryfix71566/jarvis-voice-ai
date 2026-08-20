@@ -28,6 +28,10 @@ class SlowFakeSubAgent:
         self.mcp_servers = []
         self.delay = delay
         self.result = result
+        self.model = "fake-model"
+        self.model_is_fallback = False
+        self.model_unusable = False
+        self.model_unusable_detail = ""
         self.tasks = []
         self.started_at: float | None = None
         self.finished_at: float | None = None
@@ -81,6 +85,28 @@ class TestHandler:
         assert types[0] == "delegate_start"
         assert types[-1] == "delegate_done"
         assert events[0]["agent"] == "analyst"
+
+    async def test_delegate_start_carries_the_resolved_model(self):
+        """Larry 2026-08-19 — the Agents tab card header shows which LLM
+        is doing the work. It can only show what delegate_start carries."""
+        events = []
+        _, handler = build_delegate_tool(AGENTS, on_event=events.append)
+        await handler({"agent_name": "analyst", "task": "weather"})
+        assert events[0]["model"] == "fake-model"
+        assert events[0]["model_fallback"] is False
+
+    async def test_a_model_profile_fallback_is_carried_not_hidden(self):
+        """A profile that failed to resolve must reach the UI as a
+        fallback. Reporting the configured name, or reporting nothing,
+        would make a misconfiguration look like a deliberate assignment —
+        the same reason RunLogger records the resolved model."""
+        agents = {"analyst": FakeSubAgent(
+            "analyst", model="voice-model", model_is_fallback=True)}
+        events = []
+        _, handler = build_delegate_tool(agents, on_event=events.append)
+        await handler({"agent_name": "analyst", "task": "weather"})
+        assert events[0]["model"] == "voice-model"
+        assert events[0]["model_fallback"] is True
 
     async def test_delegate_done_marks_success(self):
         events = []

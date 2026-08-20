@@ -13,11 +13,14 @@ Validation rules (locked by the plan):
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import warnings
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+logger = logging.getLogger(__name__)
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -193,3 +196,71 @@ def load_settings(env_file: str | None = ".env") -> Settings:
             "(web_search unavailable)."
         )
     return settings
+
+
+def bridge_settings_to_env(settings=None) -> None:
+    """Copy Settings values MCP children need into `os.environ`.
+
+    MORTIMER_ENV_BRIDGE_PLAN.md E1. `.env` is a FILE; `os.environ` is a
+    PROCESS. pydantic-settings reads the file into a Settings object and puts
+    nothing into the environment, so a stdio child inherits none of it unless
+    something explicitly bridges — and `SkillRegistry._start_server` expands
+    `${VAR}` against `os.environ`.
+
+    Lived in jarvis/cli.py and had to be REMEMBERED by every entrypoint that
+    starts a registry. Three remembered; `tests/evals/routing_eval.py` did
+    not, so every set_reminder in that eval crashed with
+    `ZoneInfoNotFoundError: 'No time zone found with key ${JARVIS_TIMEZONE}'`
+    — the literal placeholder, five frames deep inside a subprocess, naming
+    nothing useful. It now lives here, beside load_settings and
+    expand_env_vars (the module that owns "where configuration comes from"),
+    and SkillRegistry.start() calls it so no future entrypoint can forget.
+
+    `setdefault`, never assignment: a real environment variable is the
+    CI/override channel and must keep winning. That also makes this
+    idempotent, which is why cli.py and pipeline.py keep their own calls —
+    bridging before doing other work is not wrong, and removing those lines
+    would be an unrelated edit.
+
+    `settings=None` loads them. Best-effort: a Settings that cannot be built
+    must not turn one stale env entry into a bot that will not start.
+    """
+    try:
+        if settings is None:
+            settings = load_settings()
+        os.environ.setdefault("JARVIS_DB_PATH", settings.jarvis_db_path)
+        os.environ.setdefault("JARVIS_TIMEZONE", settings.jarvis_timezone)
+        if getattr(settings, "tavily_api_key", None):
+            os.environ.setdefault("TAVILY_API_KEY", settings.tavily_api_key)
+        return
+    except Exception as exc:  # noqa: BLE001 — must never block startup
+        logger.warning("settings_env_bridge_degraded error=%s", exc)
+
+    # Settings validation FAILS without OPENAI/DEEPGRAM/ELEVENLABS keys —
+    # none of which this function needs. Left there, a fresh checkout or a
+    # CI run gets no bridge at all and children see the literal ${VAR}
+    # again: the original bug, surviving in a different form. Read the three
+    # names straight out of .env instead. Same setdefault precedence, so a
+    # real environment variable still wins.
+    for name, value in _dotenv_values().items():
+        if name in ("JARVIS_DB_PATH", "JARVIS_TIMEZONE", "TAVILY_API_KEY"):
+            if value:
+                os.environ.setdefault(name, value)
+
+
+def _dotenv_values(path: Path | None = None) -> dict[str, str]:
+    """Minimal KEY=VALUE parse of the repo .env. Deliberately NOT a second
+    configuration system — it exists only so bridge_settings_to_env can
+    still do its one job when full Settings validation is impossible."""
+    env_file = path or (Path(__file__).resolve().parent.parent / ".env")
+    values: dict[str, str] = {}
+    try:
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            values[key.strip()] = value.strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return values

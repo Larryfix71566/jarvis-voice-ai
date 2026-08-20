@@ -60,6 +60,23 @@ def selfedit_validate() -> dict:
 
 
 @mcp.tool()
+def selfedit_verify_appearance(branch_override: bool = False,
+                               display: int = 1) -> dict:
+    """Look at the running console and report whether this session's
+    intended appearance is actually true.
+
+    Use AFTER the user has pulled and run the branch — the validation checks
+    cannot see the screen, so a visual change is unverified until someone
+    looks. Read-only, no confirmation needed, and it never blocks a submit.
+
+    Refuses if a different branch is checked out (pass branch_override=true
+    only when the changes are already merged into what is running), or if
+    the session recorded no intended appearance to check for."""
+    return logic.selfedit_verify_appearance(
+        _get_client(), branch_override, display)
+
+
+@mcp.tool()
 def selfedit_submit(confirm: bool = False) -> dict:
     """Open a pull request with the validated edits.
 

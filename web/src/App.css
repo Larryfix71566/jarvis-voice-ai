@@ -32,10 +32,25 @@
      `-heavy` variants are for dense text panels (drawer, agent cards):
      more tint so body text keeps HIG-level contrast over the wave. */
   --glass-bg: rgba(43, 50, 58, 0.35);
-  --glass-bg-heavy: rgba(30, 36, 43, 0.82);
+  /* Larry 2026-08-18: "apply the same treatment to the drawer" — it was
+     0.82, effectively opaque, which is why it never read as glass.
+
+     The -heavy variant exists for a real reason (the HIG's post-blur
+     contrast rule: the drawer, agent cards and memory cards all carry
+     dense scrolling text), but 0.82 is far past what legibility needs.
+     0.58 with the stronger blur below is the trade Apple actually makes:
+     MORE diffusion is what buys you LESS opacity. Dropping alpha alone
+     would have made text sit on a busy, legible-through background —
+     which is the failure this variant was created to avoid.
+
+     Four surfaces share this token (side drawer, agent status cards, and
+     two in memory.css). They are all the same class — dense text over the
+     stage — so moving them together is the consistent choice, not a
+     side effect. */
+  --glass-bg-heavy: rgba(30, 36, 43, 0.58);
   --glass-bg-opaque: rgba(30, 36, 43, 0.94); /* no-backdrop-filter fallback */
   --glass-blur: blur(20px) saturate(180%);
-  --glass-blur-heavy: blur(24px) saturate(160%);
+  --glass-blur-heavy: blur(30px) saturate(180%);
   --glass-border: rgba(255, 255, 255, 0.14);
   --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.18);
   --glass-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);

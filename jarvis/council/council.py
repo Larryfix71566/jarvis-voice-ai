@@ -546,7 +546,11 @@ async def _convene_inner(
 
     try:
         proposer_names = _sort_by_registry(
-            council_config.resolve_members(tier, "proposers", selected=selected)
+            # seed=round_id — TIER_PARTITION rotates which frontier profiles
+            # are reserved as judges. BOTH calls must pass the SAME seed or
+            # the two roles disagree about the split and it stops being one.
+            council_config.resolve_members(
+                tier, "proposers", selected=selected, seed=round_id)
         )
     except council_config.NoUsableProfilesError as exc:
         return _finalize_too_small(
@@ -561,6 +565,7 @@ async def _convene_inner(
             council_config.resolve_members(
                 tier, "judges", selected=selected,
                 exclude=set(proposer_names) | carry_profile,
+                seed=round_id,
             )
         )
     except council_config.NoUsableProfilesError as exc:
@@ -684,6 +689,12 @@ async def _convene_inner(
         ended_at=ended_at, latency_ms=latency_ms,
         prompt_tokens=round_prompt_tokens, completion_tokens=round_completion_tokens,
         registry_order=registry_order,
+        # K6 — asked vs answered. len(proposer_names) is who was invited;
+        # len(proposals) is who came back. _gather_proposals drops a failed
+        # member with only a log line, so without this pair a round gutted
+        # by a dead credential is indistinguishable from a small one.
+        proposers_attempted=len(proposer_names),
+        judges_attempted=len(judge_names),
     )
     label_to_profile = {p.label: p.profile for p in proposals}
     _write_score_rows(
@@ -920,6 +931,8 @@ async def _draft_candidates_inner(
         started_at=started_at, ended_at=ended_at, latency_ms=latency_ms,
         prompt_tokens=round_prompt_tokens, completion_tokens=round_completion_tokens,
         registry_order=registry_order,
+        proposers_attempted=len(proposer_names),
+        judges_attempted=len(judge_names),
     )
     label_to_profile = {p.label: p.profile for p in proposals}
     _write_score_rows(round_id, live_scores, profile_tiers, label_to_profile, shadow=False)
@@ -1014,6 +1027,8 @@ def _write_round_row(
     latency_ms: int | None,
     prompt_tokens: int | None = None, completion_tokens: int | None = None,
     registry_order: list[str] | None = None,
+    proposers_attempted: int | None = None,
+    judges_attempted: int | None = None,
 ) -> None:
     """V9 — `prompt_tokens`/`completion_tokens` are NULL (unknown) unless
     at least one member call in this round reported usage; never 0 —
@@ -1023,7 +1038,15 @@ def _write_round_row(
     time) is stored as a JSON array, NULL when not given (pre-v2 rows,
     or `_finalize_too_small`'s too-small-to-ever-resolve-a-registry
     case), so `agreement.py`/`--replay` can reproduce D7's rule-4
-    tiebreak exactly instead of approximating it from row order."""
+    tiebreak exactly instead of approximating it from row order.
+
+    K6 — `proposers_attempted`/`judges_attempted` are how many members were
+    ASKED; proposer_count/judge_count are how many answered. A member whose
+    call fails is logged and dropped (`council_proposer_failed`), so without
+    the pair a round that lost half its proposers to a dead credential looks
+    identical to one that never had them. NULL when the caller does not know
+    (pre-migration rows, `_finalize_too_small`'s never-resolved cases) —
+    never 0, which would assert a fact instead of admitting a gap."""
     try:
         conn = get_conn()
         try:
@@ -1032,8 +1055,9 @@ def _write_round_row(
                 "placement, trigger, tier, goal, proposer_count, judge_count, "
                 "abstentions, winner_profile, winner_label, winner_mean, "
                 "select_reason, status, started_at, ended_at, latency_ms, "
-                "prompt_tokens, completion_tokens, registry_order) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "prompt_tokens, completion_tokens, registry_order, "
+                "proposers_attempted, judges_attempted) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     round_id, run_id, workflow, placement, trigger, tier,
                     _truncate(goal), proposer_count, judge_count, abstentions,
@@ -1042,6 +1066,7 @@ def _write_round_row(
                     winner_mean, _truncate(select_reason), status, started_at,
                     ended_at, latency_ms, prompt_tokens, completion_tokens,
                     json.dumps(registry_order) if registry_order is not None else None,
+                    proposers_attempted, judges_attempted,
                 ),
             )
             conn.commit()

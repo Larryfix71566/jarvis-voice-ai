@@ -150,3 +150,132 @@ def test_validate_pytest_gate_fails_on_broken_test(service: SelfEditService) -> 
     pytest_check = next(c for c in res["checks"] if c["name"] == "pytest")
     assert not pytest_check["ok"]
     assert res["ok"] is False
+
+
+class TestVisualVerification:
+    """MORTIMER_DEVELOPER_SECTIONS_AND_VISUAL_VERIFY_PLAN.md Part B.
+
+    `web/src/**` is on the self-edit allowlist — the interface is the
+    PRIMARY self-edit target by design. All four validation gates prove the
+    code compiles, imports and passes tests; not one can tell whether the
+    console still looks right. Every glass change made 2026-08-18 would have
+    passed all four while rendering as anything at all.
+    """
+
+    def _svc(self, tmp_path, monkeypatch):
+        from jarvis.selfedit.service import SelfEditService
+        svc = SelfEditService()
+        svc.branch = "jarvis/self-edit/test"
+        svc.goal = "make the drawer translucent"
+        return svc
+
+    def test_is_visual_path(self):
+        from jarvis.selfedit.service import is_visual_path
+        assert is_visual_path("web/src/App.css")
+        assert is_visual_path("web/public/icon.svg")
+        assert not is_visual_path("jarvis/prompts.py")
+        assert not is_visual_path("tests/unit/test_x.py")
+
+    def test_pr_body_flags_a_visual_change(self, tmp_path, monkeypatch):
+        svc = self._svc(tmp_path, monkeypatch)
+        svc.proposals = [{"path": "web/src/sidedrawer.css", "rationale": "r",
+                          "diff": "", "visual_intent": "the drawer is translucent"}]
+        block = "\n".join(svc._visual_change_block())
+        assert "Visual change" in block
+        assert "the drawer is translucent" in block
+        assert "cannot see the screen" in block
+
+    def test_pr_body_still_warns_without_a_stated_intent(self, tmp_path, monkeypatch):
+        """The warning is the useful half. Omitting the block because the
+        agent failed to author a sentence would hide a visual change exactly
+        when the agent was least careful about it."""
+        svc = self._svc(tmp_path, monkeypatch)
+        svc.proposals = [{"path": "web/src/App.css", "rationale": "r",
+                          "diff": "", "visual_intent": ""}]
+        block = "\n".join(svc._visual_change_block())
+        assert "Visual change" in block
+        assert "No intended appearance was stated" in block
+
+    def test_a_non_visual_change_gets_no_block(self, tmp_path, monkeypatch):
+        svc = self._svc(tmp_path, monkeypatch)
+        svc.proposals = [{"path": "jarvis/prompts.py", "rationale": "r", "diff": ""}]
+        assert svc._visual_change_block() == []
+
+    def test_verify_refuses_when_the_branch_does_not_match(self, tmp_path, monkeypatch):
+        """A pass claimed against the wrong code is the failure this whole
+        check exists to prevent."""
+        svc = self._svc(tmp_path, monkeypatch)
+        svc.proposals = [{"path": "web/src/App.css", "rationale": "r",
+                          "diff": "", "visual_intent": "it is blue"}]
+        monkeypatch.setattr(svc, "_git", lambda *a, **k: (0, "main"))
+        result = svc.verify_appearance()
+        assert result["ok"] is False
+        assert "main" in result["error"]
+        assert result["branch"] == "main"
+
+    def test_branch_override_proceeds_but_names_the_branch(self, tmp_path, monkeypatch):
+        """A merged PR leaves the user on main WITH the changes, so the
+        mismatch is refusable rather than fatal — but an overridden pass must
+        never be indistinguishable from a matched one."""
+        svc = self._svc(tmp_path, monkeypatch)
+        svc.proposals = [{"path": "web/src/App.css", "rationale": "r",
+                          "diff": "", "visual_intent": "it is blue"}]
+        monkeypatch.setattr(svc, "_git", lambda *a, **k: (0, "main"))
+        result = svc.verify_appearance(
+            branch_override=True, view=lambda q, display=1: {"answer": "it is blue"})
+        assert result["ok"] is True
+        assert result["branch"] == "main"
+        assert result["branch_matched"] is False
+
+    def test_verify_refuses_when_no_visual_intent_was_recorded(
+            self, tmp_path, monkeypatch):
+        """Absent is reported, never invented. A vision model given a
+        fabricated question produces agreeable prose about nothing."""
+        svc = self._svc(tmp_path, monkeypatch)
+        svc.proposals = [{"path": "web/src/App.css", "rationale": "r",
+                          "diff": "", "visual_intent": ""}]
+        monkeypatch.setattr(
+            svc, "_git", lambda *a, **k: (0, "jarvis/self-edit/test"))
+        result = svc.verify_appearance()
+        assert result["ok"] is False
+        assert "no intended appearance was recorded" in result["error"]
+
+    def test_the_question_contains_the_recorded_intent(self, tmp_path, monkeypatch):
+        """Not a generic "does this look ok" — that is the difference
+        between a check that can be wrong detectably and one that cannot."""
+        svc = self._svc(tmp_path, monkeypatch)
+        svc.proposals = [{"path": "web/src/App.css", "rationale": "r", "diff": "",
+                          "visual_intent": "the side drawer is translucent"}]
+        monkeypatch.setattr(
+            svc, "_git", lambda *a, **k: (0, "jarvis/self-edit/test"))
+        asked = {}
+
+        def fake_view(question, display=1):
+            asked["q"] = question
+            return {"answer": "yes, it is translucent"}
+
+        result = svc.verify_appearance(view=fake_view)
+        assert "the side drawer is translucent" in asked["q"]
+        assert result["ok"] is True
+        # The residual assumption is stated EVERY time, not just on override.
+        assert "browser reload is not" in result["assumption"]
+
+    def test_low_confidence_is_surfaced_not_swallowed(self, tmp_path, monkeypatch):
+        svc = self._svc(tmp_path, monkeypatch)
+        svc.proposals = [{"path": "web/src/App.css", "rationale": "r",
+                          "diff": "", "visual_intent": "blue"}]
+        monkeypatch.setattr(
+            svc, "_git", lambda *a, **k: (0, "jarvis/self-edit/test"))
+        result = svc.verify_appearance(
+            view=lambda q, display=1: {"answer": "wallpaper", "low_confidence": True})
+        assert result["low_confidence"] is True
+
+    def test_verify_is_not_in_the_validate_checks_list(self):
+        """It is a CHECK, never a gate. A capture during validate() would
+        photograph the PRE-change console, so its green tick would mean
+        nothing — and a meaningless green tick is worse than no check."""
+        import inspect
+        from jarvis.selfedit.service import SelfEditService
+        source = inspect.getsource(SelfEditService.validate)
+        assert "verify_appearance" not in source
+        assert "screen" not in source.lower()

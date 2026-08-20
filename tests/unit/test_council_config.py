@@ -92,10 +92,21 @@ def test_resolve_members_tier1_judges_are_mid(registry_path, monkeypatch):
     assert names == ["k-mid-1"]
 
 
-def test_resolve_members_tier2_proposers_are_frontier_plus_mid(registry_path, monkeypatch):
+def test_resolve_members_tier2_partitions_a_single_frontier_to_judging(
+        registry_path, monkeypatch):
+    """Larry 2026-08-19 (option b). Was: proposers == {frontier, mid}, which
+    is exactly what left the judge pool empty — proposers took the whole
+    frontier tier and `exclude` then removed every one of them from judging.
+
+    TIER_PARTITION now splits frontier between the roles before either
+    resolves. This fixture has ONE frontier profile, so the split is
+    degenerate and it is reserved for JUDGING: a round with no judges cannot
+    happen at all, while a round proposing only from mid merely has less to
+    choose from. The degenerate case is a deliberate outcome, not an
+    accident — see _partition_judges."""
     _set_keys(monkeypatch, "TESTKEY_MID_1", "TESTKEY_FRONTIER_1")
     names = resolve_members(2, "proposers", registry_path=registry_path)
-    assert set(names) == {"k-frontier-1", "k-mid-1"}
+    assert set(names) == {"k-mid-1"}
 
 
 def test_resolve_members_tier2_judges_are_frontier(registry_path, monkeypatch):
@@ -104,22 +115,36 @@ def test_resolve_members_tier2_judges_are_frontier(registry_path, monkeypatch):
     assert names == ["k-frontier-1"]
 
 
-def test_resolve_members_exclude_enforces_disjointness(registry_path, monkeypatch):
-    # Only one frontier profile exists, and it's also the only tier-2
-    # proposer with a key besides mid. Excluding it (as council.py would,
-    # having already used it as a proposer) must fall back up the ladder
-    # rather than letting it also judge.
+def test_resolve_members_tier2_convenes_with_disjoint_roles(
+        registry_path, monkeypatch):
+    """Replaces a test that asserted NoUsableProfilesError here and called it
+    correct. It was correct only in the sense of being what the code did:
+    every tier-2 escalation hit it, convene() turned it into
+    _finalize_too_small, and a second escalation therefore declined to
+    convene the council that tier exists for — silently, in the one path
+    that only fires after two validation failures and a failed repair.
+
+    The property worth pinning is not "raises" but the pair: BOTH roles
+    resolve, and no model does both jobs in one round."""
     _set_keys(monkeypatch, "TESTKEY_MID_1", "TESTKEY_FRONTIER_1")
     proposer_names = resolve_members(2, "proposers", registry_path=registry_path)
-    assert "k-frontier-1" in proposer_names
-    # frontier is the top of _TIER_ORDER, so once its one profile is
-    # excluded there is nowhere higher to fall back to in this fixture —
-    # NoUsableProfilesError is correct (council.py treats this as a
-    # convene() failure, D13), not a silent empty judge pool.
+    judge_names = resolve_members(
+        2, "judges", registry_path=registry_path, exclude=set(proposer_names),
+    )
+    assert proposer_names, "tier 2 must resolve proposers"
+    assert judge_names, "tier 2 must resolve judges — this is the bug that was"
+    assert not set(proposer_names) & set(judge_names)
+
+
+def test_resolve_members_still_raises_when_a_role_is_truly_empty(
+        registry_path, monkeypatch):
+    """The partition must not paper over a genuinely unusable council. With
+    no frontier key at all, tier-2 judges have nothing to reserve and the
+    loud failure is still correct (council.py treats it as a convene()
+    failure, D13) — never a silent empty judge pool."""
+    _set_keys(monkeypatch, "TESTKEY_MID_1")
     with pytest.raises(NoUsableProfilesError):
-        resolve_members(
-            2, "judges", registry_path=registry_path, exclude=set(proposer_names),
-        )
+        resolve_members(2, "judges", registry_path=registry_path)
 
 
 def test_resolve_members_missing_key_excluded(registry_path, monkeypatch):

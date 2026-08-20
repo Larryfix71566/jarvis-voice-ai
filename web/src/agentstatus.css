@@ -121,6 +121,48 @@
   text-shadow: 0 0 10px var(--accent-dim);
 }
 
+/* Larry 2026-08-19 — which LLM is doing this work.
+   Deliberately quiet: it sits beside the agent name as reference
+   information, not as a status signal. The ONE case it raises its voice
+   is a model-profile fallback, which is a misconfiguration the user
+   would otherwise only find by grepping the bot log for
+   `subagent_model_profile_fallback`. */
+.agent-card-model {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  padding: 1px 5px;
+  border: 1px solid var(--glass-border);
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 15ch;
+  flex: 0 1 auto;
+}
+
+.agent-card-working .agent-card-model {
+  color: var(--text);
+  border-color: var(--accent-faint);
+}
+
+.agent-card-model-fallback,
+.agent-card-working .agent-card-model-fallback {
+  color: var(--attn);
+  border-color: var(--attn);
+}
+
+/* K4 — RED, not amber. The engagement layer's semantic colours are fixed:
+   amber means "needs your confirmation", red means error. A credential the
+   provider refused is an error, and borrowing the confirmation colour for
+   it would blunt both signals. */
+.agent-card-model-unusable,
+.agent-card-working .agent-card-model-unusable {
+  color: var(--red);
+  border-color: var(--red);
+}
+
 .agent-card-time {
   margin-left: auto;
   font-family: var(--mono);

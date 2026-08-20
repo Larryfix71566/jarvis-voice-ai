@@ -183,6 +183,19 @@ def selfedit_status(client) -> dict[str, Any]:
     return {"ok": True, "summary": " ".join(parts), "job": job, "active": bool(status.get("active"))}
 
 
+def selfedit_verify_appearance(client, branch_override: bool = False,
+                               display: int = 1) -> dict[str, Any]:
+    """MORTIMER_DEVELOPER_SECTIONS_AND_VISUAL_VERIFY_PLAN.md B2.
+
+    A CHECK, not a gate: it cannot block a submit and is not part of
+    validation. The four validation gates prove the code compiles, imports
+    and passes tests; none of them can see the screen.
+    """
+    return _call(lambda: client.post(
+        "/api/selfedit/verify-appearance",
+        json={"branch_override": branch_override, "display": display}))
+
+
 def selfedit_validate(client) -> dict[str, Any]:
     """Run the validation pipeline (read-only — no confirmation needed)."""
     resp = _call(lambda: client.post("/api/selfedit/validate"))

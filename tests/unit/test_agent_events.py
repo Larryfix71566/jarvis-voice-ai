@@ -36,12 +36,27 @@ class TestLifecycleCards:
     async def test_delegate_start_sends_working_card(self, sent):
         handler = make_agent_event_handler(transport=object())
         handler({"type": "delegate_start", "agent": "analyst",
-                 "display_name": "Analyst", "task": "weather in tokyo"})
+                 "display_name": "Analyst", "task": "weather in tokyo",
+                 "model": "claude-haiku-4-5", "model_fallback": False})
         await flush()
         assert sent == [{
             "type": "agent", "name": "analyst", "display_name": "Analyst",
             "state": "working", "task": "weather in tokyo",
+            "model": "claude-haiku-4-5", "model_fallback": False,
+            "model_unusable": False, "model_unusable_detail": "",
         }]
+
+    async def test_a_start_without_model_still_sends_a_card(self, sent):
+        """Defensive, and the reason the client treats `model` as
+        optional: the working card is the primary signal and must never
+        depend on the model field being present."""
+        handler = make_agent_event_handler(transport=object())
+        handler({"type": "delegate_start", "agent": "analyst",
+                 "display_name": "Analyst", "task": "t"})
+        await flush()
+        assert sent[0]["state"] == "working"
+        assert sent[0]["model"] is None
+        assert sent[0]["model_fallback"] is False
 
     async def test_delegate_start_truncates_long_task(self, sent):
         handler = make_agent_event_handler(transport=object())

@@ -58,6 +58,17 @@ def _slugify(text: str, max_len: int = 32) -> str:
     return (slug[:max_len].strip("-") or "change")
 
 
+# B1/B3 — paths whose change is VISIBLE and therefore unverifiable by any of
+# the four validation gates. web/src is the primary self-edit target by
+# design (the Edit panel grew out of it), which is precisely why this needs
+# saying out loud.
+VISUAL_PATH_PREFIXES = ("web/src/", "web/public/")
+
+
+def is_visual_path(path: str) -> bool:
+    return str(path).replace("\\", "/").startswith(VISUAL_PATH_PREFIXES)
+
+
 class SelfEditError(Exception):
     """Raised for refused operations; the service API converts to dicts."""
 
@@ -168,8 +179,21 @@ class SelfEditService:
             return {"ok": False, "error": f"file too large to read: {rel}"}
         return {"ok": True, "path": rel, "content": full.read_text(encoding="utf-8")}
 
-    def propose_edit(self, path: str, new_content: str, rationale: str) -> dict:
-        """Stage one allowlisted edit; returns the resulting diff."""
+    def propose_edit(self, path: str, new_content: str, rationale: str,
+                     visual_intent: str = "") -> dict:
+        """Stage one allowlisted edit; returns the resulting diff.
+
+        `visual_intent` (MORTIMER_DEVELOPER_SECTIONS_AND_VISUAL_VERIFY_PLAN.md
+        B1) — ONE sentence saying what should look different, recorded only
+        for edits under web/src or web/public.
+
+        It exists because a vision model asked "does this look right?" has no
+        reference and will produce agreeable prose. Asked "is the side drawer
+        translucent, with the desktop visible through it?" it can be wrong in
+        a way that is DETECTABLE. Absent is a legal state and is reported as
+        such — never a fabricated question, the same discipline AppWorkspace
+        applies to a missing `mortimer.app.yaml`.
+        """
         if self.branch is None:
             return {"ok": False, "error": "no active session — call start_session first"}
         try:
@@ -184,10 +208,126 @@ class SelfEditService:
         self._validated_ok = False  # any new edit invalidates prior validation
         _c, diff = self._git("diff", "--", rel)
         proposal = {"path": rel, "rationale": rationale, "diff": diff}
+        if is_visual_path(rel):
+            proposal["visual_intent"] = visual_intent.strip()
         self.proposals = [p for p in self.proposals if p["path"] != rel]
         self.proposals.append(proposal)
         logger.info("selfedit_propose path=%s", rel)
         return {"ok": True, "path": rel, "diff": diff}
+
+    def verify_appearance(self, *, branch_override: bool = False,
+                          display: int = 1, view=None) -> dict:
+        """B2 — look at the running console and say whether the recorded
+        `visual_intent` is actually true.
+
+        THIS IS A CHECK, NEVER A GATE. It cannot be called from validate()
+        and must never join the checks list: a screenshot taken during
+        validation photographs whatever console happens to be running —
+        almost always the PRE-change one — and would hand back a green tick
+        that means nothing. It is only meaningful once the branch is on
+        screen, which is after a human has pulled and run it.
+
+        Order matters and each step can refuse:
+          1. Confirm what is checked out. A pass claimed against the wrong
+             code is exactly the failure this exists to prevent.
+          2. State the residual assumption every time — the branch is
+             confirmed, a browser RELOAD is not. Under `npm run dev` Vite
+             hot-reloads so the two coincide; against a stale production
+             build they do not.
+          3. Refuse when no visual_intent was recorded, naming that as the
+             reason rather than inventing a question.
+        """
+        visual = [p for p in self.proposals if is_visual_path(p["path"])]
+        if not visual:
+            return {"ok": False,
+                    "error": "this session changed nothing visible "
+                             "(no web/src or web/public edits)"}
+
+        code, current = self._git("rev-parse", "--abbrev-ref", "HEAD")
+        current = current.strip() if code == 0 else "<unknown>"
+        matched = self.branch is not None and current == self.branch
+        if not matched and not branch_override:
+            return {
+                "ok": False,
+                "branch": current,
+                "expected_branch": self.branch,
+                "error": (
+                    f"the checked-out branch is {current!r}, not this "
+                    f"session's {self.branch!r}. Looking at the screen now "
+                    f"would judge different code. Check out the branch, or "
+                    f"pass branch_override if these changes are already "
+                    f"merged into what is running."
+                ),
+            }
+
+        intent = next((p.get("visual_intent", "") for p in visual
+                       if p.get("visual_intent")), "")
+        if not intent:
+            return {
+                "ok": False,
+                "branch": current,
+                "error": "no intended appearance was recorded for this "
+                         "session, so there is nothing specific to check "
+                         "for. Say what should look different and retry.",
+            }
+
+        question = (
+            f"{intent}\n\nAnswer only from what is on screen. Also report "
+            f"anything unreadable, clipped, or overlapping, and say plainly "
+            f"if you cannot tell."
+        )
+        if view is None:
+            from mcp_servers.mcp_screen.logic import screen_view as view
+        result = view(question, display=display)
+        if result.get("error"):
+            return {"ok": False, "branch": current, "error": result["error"]}
+        return {
+            "ok": True,
+            "branch": current,
+            "branch_matched": matched,
+            "intent": intent,
+            "answer": result.get("answer", ""),
+            "low_confidence": bool(result.get("low_confidence")),
+            # Stated EVERY time, not only on the override path: confirming
+            # the branch is not confirming that the browser reloaded.
+            "assumption": ("the branch is confirmed; a browser reload is "
+                           "not. Under `npm run dev` Vite hot-reloads, so "
+                           "these coincide; against a stale production "
+                           "build they do not."),
+        }
+
+    def _visual_change_block(self) -> list[str]:
+        """B3 — the PR body flags a change the four validation gates cannot
+        see.
+
+        allowlist/backend-import/frontend-build/pytest prove the code
+        compiles, imports and passes tests. NONE of them can tell whether the
+        console still looks right: every glass change made 2026-08-18 would
+        have sailed through all four while rendering as anything at all. The
+        only thing between a self-edit and an unusable console is a human
+        running the branch, so the PR says so.
+        """
+        visual = [p for p in self.proposals if is_visual_path(p["path"])]
+        if not visual:
+            return []
+        stated = [p.get("visual_intent", "") for p in visual]
+        intent = next((s for s in stated if s), "")
+        lines = ["", "### Visual change — run the branch before merging", ""]
+        if intent:
+            lines.append(f"Intended appearance: {intent}")
+        else:
+            # The warning is the useful half. Omitting the block because the
+            # agent failed to author a sentence would hide a visual change
+            # exactly when the agent was least careful about it.
+            lines.append("_No intended appearance was stated — describe what "
+                         "should look different before verifying._")
+        lines += [
+            "",
+            "The four validation checks cannot see the screen. Run this "
+            "branch and say \"check your appearance\" to have Mortimer look "
+            "at the result.",
+        ]
+        return lines
 
     def _check_path(self, path: str, must_exist: bool = False) -> str:
         if not self.allowlist.is_allowed(path):
@@ -307,6 +447,7 @@ class SelfEditService:
         ]
         for p in self.proposals:
             body_lines.append(f"- `{p['path']}` — {p['rationale']}")
+        body_lines += self._visual_change_block()
         body_lines += ["", "---", _MERGE_NOTE]
         req = urllib.request.Request(
             f"https://api.github.com/repos/{self._github_repo}/pulls",

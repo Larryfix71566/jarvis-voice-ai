@@ -163,10 +163,57 @@
   max-width: 100%;
 }
 
-.ambient-clock {
+/* Clock block (Larry 2026-08-18: "the time display is boring").
+   A display, not a label: large thin time, spoken-style date beneath,
+   and the minute as a hairline instead of a ticking seconds digit. */
+.ambient-clockblock {
+  padding: 2px 2px 0;
+  margin-bottom: 2px;
+}
+
+.ambient-time {
   font-family: var(--mono);
+  font-size: 30px;
+  font-weight: 250;
+  line-height: 1;
+  letter-spacing: 0.02em;
   color: var(--text);
-  letter-spacing: 0.06em;
+  /* Load-bearing: without tabular figures the digits change width as
+     they change value and the whole block twitches every minute. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.ambient-date {
+  margin-top: 5px;
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The minute, as one pixel of slow travel. Six steps per minute on the
+   10s tick — enough to read as progressing between glances, and far
+   short of competing with the wave for motion. No transition, so it
+   steps honestly rather than animating. */
+.ambient-minute {
+  margin-top: 7px;
+  width: 84px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.10);
+  overflow: hidden;
+}
+
+.ambient-minute i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  opacity: 0.55;
+}
+
+@media (max-width: 900px) {
+  .ambient-time { font-size: 24px; }
+  .ambient-minute { width: 68px; }
 }
 
 .ambient-summary {
@@ -510,16 +557,31 @@
   flex-direction: column;
   max-width: 40vw;
   max-height: 40vh;
+  /* Larry 2026-08-18: "the display panel is not like liquid glass, I
+     would like it see-through". It already carried the glass tokens —
+     what made it read as a solid card sitting ON the page rather than a
+     pane IN it was the chrome around them: a 0.7-alpha 48px black shadow
+     and a solid cyan border, both of which announce an edge. Apple's
+     material does the opposite: the edge is a top-lit hairline and the
+     depth comes from a soft shadow, so the eye reads depth without
+     reading a boundary. */
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--accent-dim);
-  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
   box-shadow:
     var(--glass-edge),
-    0 12px 48px rgba(0, 0, 0, 0.7),
-    0 0 24px var(--accent-faint);
+    var(--glass-shadow),
+    0 0 20px var(--accent-faint);
   overflow: hidden;
+}
+
+/* No backdrop-filter (older WebKit, some Linux GPUs): fall back to the
+   opaque token rather than leaving unreadable text on a see-through
+   background — the same @supports guard every other glass surface has. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .display-panel { background: var(--glass-bg-opaque); }
 }
 
 @supports not (backdrop-filter: blur(8px)) {
@@ -862,4 +924,109 @@
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* --- System vitals, bottom-right (Larry 2026-08-18) ---------------------
+   Deliberately NOT a live gauge cluster: no animation, no fast timer, and
+   nothing rendered at all when every metric is healthy. The wave keeps
+   its motion monopoly, and a corner that is usually empty stays worth
+   looking at on the day it is not. Amber uses the same --attn token as a
+   pending draft, at the same 85% the systems agent warns aloud at. */
+.vitals {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 5;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  box-shadow: var(--glass-shadow), var(--glass-edge);
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .vitals { background: var(--glass-bg-opaque); }
+}
+
+.vitals-collapsed {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.vitals-collapsed:hover { color: var(--text); }
+
+.vitals-chip { white-space: nowrap; }
+
+/* The one loud state — semantic amber, same meaning as elsewhere:
+   something wants your attention. */
+.vitals-flagged { color: var(--attn); }
+
+.vitals-expanded {
+  padding: 12px 14px 10px;
+  min-width: 190px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.vitals-row {
+  display: grid;
+  grid-template-columns: 34px 1fr 38px;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 7px;
+}
+
+.vitals-label { color: var(--muted); }
+.vitals-value { text-align: right; color: var(--text); }
+
+.vitals-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+/* Static width, no transition: a bar that animates on every 60s poll is
+   the motion this component exists to avoid. */
+.vitals-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.vitals-flagged .vitals-bar i { background: var(--attn); }
+.vitals-flagged .vitals-value { color: var(--attn); }
+
+.vitals-uptime {
+  margin-top: 2px;
+  padding-top: 7px;
+  border-top: 1px solid var(--hairline);
+  text-align: right;
+  color: var(--muted);
+}
+
+.vitals-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.vitals-close:hover { color: var(--text); }
+
+@media (prefers-reduced-motion: reduce) {
+  .vitals, .vitals * { transition: none !important; }
 }

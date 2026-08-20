@@ -14,6 +14,17 @@ import WebKit
 /// see ShellBridge below for the native side of that channel.
 private let shellDetectionScript = """
 window.mortimerShell = { version: 1 };
+// Larry 2026-08-18 — vibrancy handshake. WindowVibrancy.swift makes the
+// AUXILIARY windows non-opaque with an NSVisualEffectView behind the
+// webview; the page must then stop painting its own dark wash, or it
+// covers the very material it is meant to sit on. Marking the document
+// here (rather than letting the CSS assume) means a plain browser tab,
+// where no such window exists, keeps its opaque background and stays
+// readable. Console is excluded for the same reason it is on the native
+// side: nothing useful is behind it.
+if (/display\\.html|drawer\\.html/.test(location.pathname)) {
+  document.documentElement.classList.add("shell-vibrancy");
+}
 """
 
 /// B0 fallback (item 2, predecided): if native BroadcastChannel does NOT

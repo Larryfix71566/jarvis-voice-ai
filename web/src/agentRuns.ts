@@ -75,6 +75,17 @@ export interface RunState {
   doneAt: number | null;
   ok: boolean;
   detail: string;
+  /** Resolved model string for this run — "" when the bot predates the
+   * field. Never the configured profile name (see `model` on SubAgent). */
+  model: string;
+  /** A `model_profile:` was configured but could not be resolved, so
+   * `model` is the voice-model fallback rather than the assignment. */
+  modelFallback: boolean;
+  /** K4 — the model resolved fine, but its credential was actively refused
+   * or could not be billed, so every call through it will fail. Distinct
+   * from modelFallback: nothing upstream noticed anything wrong. */
+  modelUnusable: boolean;
+  modelUnusableDetail: string;
 }
 
 interface AgentLifecycleMsg {
@@ -86,6 +97,22 @@ interface AgentLifecycleMsg {
   ok?: boolean;
   detail?: string;
   tool?: string;
+  model?: string;
+  model_fallback?: boolean;
+  model_unusable?: boolean;
+  model_unusable_detail?: string;
+}
+
+/**
+ * Shorten a model string for the card header, keeping the part that
+ * identifies it. `moonshotai/kimi-k2.5-instruct` -> `kimi-k2.5-instruct`;
+ * anything still long is truncated. The FULL string goes in the element's
+ * title attribute, so shortening never destroys information — it only
+ * decides what fits.
+ */
+export function shortModel(model: string, max = 22): string {
+  const tail = model.trim().split("/").pop() ?? "";
+  return tail.length > max ? tail.slice(0, max - 1) + "…" : tail;
 }
 
 export function clamp(s: string, max: number): string {
@@ -244,6 +271,11 @@ export function applyServerMessage(msg: unknown): void {
       doneAt: null,
       ok: false,
       detail: "",
+      model: typeof m.model === "string" ? m.model : "",
+      modelFallback: m.model_fallback === true,
+      modelUnusable: m.model_unusable === true,
+      modelUnusableDetail:
+        typeof m.model_unusable_detail === "string" ? m.model_unusable_detail : "",
     };
     setRuns(insertRun(runs, run));
   } else if (m.type === "agent_tool" && typeof m.tool === "string") {

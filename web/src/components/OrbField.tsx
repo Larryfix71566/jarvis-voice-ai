@@ -17,6 +17,7 @@ import { hasPendingDraft, subscribeResults } from "../displayResults";
 import { applyUiMessage } from "../uiCommands";
 import { play as playSound } from "../sounds";
 import AmbientStrip from "./AmbientStrip";
+import SystemVitals from "./SystemVitals";
 import { bootWave } from "./VoiceWave";
 import type { VoiceState } from "../voiceState";
 
@@ -212,6 +213,13 @@ export default function OrbField({ state }: { state: VoiceState }) {
       {/* E4 — ambient signs of life, top-left; renders nothing while
           disconnected. */}
       <AmbientStrip
+        connected={state === "listening" || state === "speaking"}
+      />
+
+      {/* Machine vitals, bottom-right (Larry 2026-08-18). Renders NOTHING
+          while every metric is healthy — see SystemVitals.tsx for why this
+          is not a live gauge cluster. */}
+      <SystemVitals
         connected={state === "listening" || state === "speaking"}
       />
 
