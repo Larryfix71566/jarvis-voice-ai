@@ -1,16 +1,21 @@
 # Sub-agent roster + routing metadata (plan §6.4, Phase 3 — exact schema)
 sub_agents:
+  # Larry 2026-08-21 — "all of the agents should have screen vision":
+  # mcp-screen is now wired to every sub-agent, not just systems and
+  # developer. Same guardrails apply everywhere (JARVIS_SCREEN_ENABLED is
+  # the one kill switch; capture happens only inside an explicit tool
+  # call; the image never persists on success).
   - name: scheduler
     display_name: Scheduler
-    mcp_servers: [mcp-time, mcp-reminders]
+    mcp_servers: [mcp-time, mcp-reminders, mcp-screen]
     description: "Time, dates, day-of-week and calendar questions in the user's timezone; reminders, alarms, scheduling and planning."
   - name: librarian
     display_name: Librarian
-    mcp_servers: [mcp-notes]
-    description: "Long-term memory: store and recall facts, notes, preferences."
+    mcp_servers: [mcp-notes, mcp-memory, mcp-screen]
+    description: "Long-term memory: store and recall facts, notes, preferences. Also resolves flagged memory conflicts and cleanup items awaiting review: list them, keep one side, rewrite, dismiss, convert to a workflow, or archive as implemented."
   - name: analyst
     display_name: Analyst
-    mcp_servers: [mcp-web]
+    mcp_servers: [mcp-web, mcp-screen]
     description: "Web research, current events, sports results, weather, the time in other cities, and general lookups."
   - name: systems
     display_name: Systems
@@ -41,7 +46,17 @@ sub_agents:
     # room to orient before it can answer. Conversational agents stay at
     # the default 5 — this is the one agent that reads its way to an
     # answer.
-    max_iterations: 15
+    #
+    # Larry 2026-08-20 — 15 was still too low: 3 of 12 recent runs
+    # (b0121fee, a2af4494, 8c0ff7ff — investigate-then-edit tasks, every
+    # tool call fine) exhausted 15/15 rounds and returned
+    # ITERATIONS_EXHAUSTED. 25 is not arbitrary: measured round cost is
+    # 5-11s, so 25 rounds is ~125-275s against the 300s timeout_s above —
+    # past ~28 rounds the timeout binds first, and a larger cap would only
+    # convert cap-failures into timeout-failures. If runs start dying at
+    # 25/25, the next lever is the timeout (or routing the task through
+    # selfedit_start, which has its own budget), not this number again.
+    max_iterations: 25
     # MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md A1 — the voice
     # model (Haiku) is a dispatcher, never a design/build model. The
     # developer is the one sub-agent that does real implementation work,
@@ -84,4 +99,4 @@ sub_agents:
     # agent's system prompt at construction, so it stops burning its
     # 5-iteration budget rediscovering its own codebase.
     inject_repo_map: true
-    description: "The Jarvis git repository: status, recent commits, diffs, committing and pushing changes (with confirmation), and the audit trail of repository actions. Also reads, searches, and edits files in the local working tree on this machine (previewed and confirmed before anything is written) — separate from GitHub, which is only used to create new app repos and to host pull requests. Also builds new applications: each app gets its own private GitHub repo (created only after user confirmation) and is recorded in the Mortimer app registry. Also self-development: edits to Mortimer's own interface through the self-development loop — preview with the user, plan in the background, validate, and open a pull request only after explicit confirmation; merging always stays with the human on GitHub."
+    description: "The Jarvis git repository: status, recent commits, diffs, committing and pushing changes (with confirmation), and the audit trail of repository actions. Also reads, searches, and edits files in the local working tree on this machine (previewed and confirmed before anything is written) — separate from GitHub, which is only used to create new app repos and to host pull requests. Also builds new applications: each app gets its own private GitHub repo (created only after user confirmation) and is recorded in the Mortimer app registry. Also self-development: edits to Mortimer's own interface through the self-development loop — preview with the user, plan in the background, validate, and open a pull request only after explicit confirmation; merging always stays with the human on GitHub. Also troubleshooting: investigates why any past task or specialist run failed or found nothing, by reading the run log that records every delegation's tool calls and results."

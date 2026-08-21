@@ -41,7 +41,7 @@ class TestLifecycleCards:
         await flush()
         assert sent == [{
             "type": "agent", "name": "analyst", "display_name": "Analyst",
-            "state": "working", "task": "weather in tokyo",
+            "state": "working", "run_id": None, "task": "weather in tokyo",
             "model": "claude-haiku-4-5", "model_fallback": False,
             "model_unusable": False, "model_unusable_detail": "",
         }]
@@ -122,19 +122,29 @@ class TestDisplayPassthrough:
             "result": json.dumps(self.SEARCH),
         })
         await flush()
-        assert len(sent) == 1
-        assert sent[0]["type"] == "display"
-        assert sent[0]["display"]["title"] == "Research — meaning"
+        # Activity ticker (2026-08-21): every tool result now ALSO sends
+        # one agent_activity line before the display-worthiness check.
+        assert len(sent) == 2
+        assert sent[0]["type"] == "agent_activity"
+        assert sent[0]["tool"] == "web_search"
+        assert sent[1]["type"] == "display"
+        assert sent[1]["display"]["title"] == "Research — meaning"
 
-    async def test_voice_only_result_sends_nothing(self, sent):
+    async def test_voice_only_result_sends_activity_but_no_display(self, sent):
+        """A voice-only tool result opens no display surface — but it still
+        ticks the activity line (2026-08-21), because the Agents card's
+        work narrative covers every call, not just display-worthy ones."""
         handler = make_agent_event_handler(transport=object())
         handler({
             "type": "agent_tool_result", "agent": "scheduler",
             "display_name": "Scheduler", "tool": "set_reminder",
             "arguments": {}, "result": '{"ok": true}',
+            "ok": True, "latency_ms": 12,
         })
         await flush()
-        assert sent == []
+        assert [m["type"] for m in sent] == ["agent_activity"]
+        assert sent[0]["ok"] is True
+        assert sent[0]["latency_ms"] == 12
 
     async def test_display_payload_build_is_logged(self, sent, caplog):
         """MORTIMER_AGENT_TRUST_PLAN.md D18: one INFO line whenever a

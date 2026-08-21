@@ -260,3 +260,90 @@
   font-size: 11px;
   line-height: 1.4;
 }
+
+/* A3 (MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md) — the confirmation
+   loop. Amber border/heading matches --attn, the same "needs your
+   confirmation" semantic as a pending draft elsewhere in the console;
+   the row body itself stays quiet so this doesn't compete with the wave
+   for attention outside the panel. */
+.memory-review-section {
+  margin: 8px 0 12px;
+  padding: 8px 10px;
+  background: var(--glass-bg-heavy);
+  border: 1px solid var(--attn-dim);
+  border-radius: 8px;
+}
+
+.memory-review-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--attn);
+  margin-bottom: 6px;
+}
+
+.memory-review-row {
+  padding: 6px 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.memory-review-row:first-of-type {
+  border-top: none;
+}
+
+.memory-review-detail {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.memory-review-keys {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  margin: 2px 0 6px;
+}
+
+.memory-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.memory-review-actions button {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--hairline);
+  background: rgba(120, 180, 255, 0.08);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.memory-review-actions button:hover {
+  background: rgba(120, 180, 255, 0.16);
+}
+
+.memory-review-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.memory-review-dismiss {
+  color: var(--text-dim);
+  background: none !important;
+}
+
+.memory-review-rewrite-input {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--hairline);
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--text);
+  min-width: 140px;
+}

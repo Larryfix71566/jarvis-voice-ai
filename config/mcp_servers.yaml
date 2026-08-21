@@ -8,6 +8,13 @@ servers:
     args: ["-m", "mcp_servers.mcp_notes.server"]
     env:
       JARVIS_DB_PATH: "${JARVIS_DB_PATH}"
+  # Larry 2026-08-21 — voice control of the Memory panel's review queue
+  # (librarian only; see config/agents.yaml).
+  - name: mcp-memory
+    command: python
+    args: ["-m", "mcp_servers.mcp_memory.server"]
+    env:
+      JARVIS_DB_PATH: "${JARVIS_DB_PATH}"
   - name: mcp-reminders
     command: python
     args: ["-m", "mcp_servers.mcp_reminders.server"]

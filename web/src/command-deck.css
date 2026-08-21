@@ -564,10 +564,22 @@
      and a solid cyan border, both of which announce an edge. Apple's
      material does the opposite: the edge is a top-lit hairline and the
      depth comes from a soft shadow, so the eye reads depth without
-     reading a boundary. */
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+     reading a boundary.
+
+     Larry 2026-08-20: "display panel font is still not opaque". The
+     glyphs were always opaque (--text is solid hex; the 0c1220f fix
+     added opacity:1 to containers that were already at 1) — what reads
+     as translucent text is the WAVE animating through a 0.35-alpha
+     background directly behind dense text. That is the exact case the
+     -heavy tokens exist for (CLAUDE.md vibrancy: not "dense text" but
+     "dense text with the wave behind it" — same reason the agent
+     status cards carry them). The trade is diffusion for opacity: 0.58
+     alpha + 30px blur still reads as glass, per the 2026-08-18
+     recalibration, while the wave behind the text goes dim and soft
+     enough that the glyphs read solid again. */
+  background: var(--glass-bg-heavy);
+  backdrop-filter: var(--glass-blur-heavy);
+  -webkit-backdrop-filter: var(--glass-blur-heavy);
   border: 1px solid var(--glass-border);
   border-radius: 14px;
   box-shadow:

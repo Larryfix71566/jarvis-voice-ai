@@ -293,3 +293,67 @@
     bottom: 64px;
   }
 }
+
+/* Activity ticker (Larry 2026-08-21) — the running work narrative inside
+   each agent card. Scrollable, auto-follows the newest line while live
+   (AgentsTab.tsx's ActivityTicker unpins when the user scrolls up).
+   Every line is a recorded tool result, styled like terminal output:
+   quiet ✓ lines, --err ✗ lines, latency right-aligned and dim. */
+.agent-activity {
+  margin-top: 6px;
+  max-height: 132px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.agent-activity-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-activity-mark {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.agent-activity-fail .agent-activity-mark,
+.agent-activity-fail .agent-activity-tool {
+  color: var(--err, #ff6b6b);
+}
+
+.agent-activity-tool {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.agent-activity-ms {
+  flex: 0 0 auto;
+  color: var(--text-dim);
+}
+
+/* Blinking caret while the run is live — the "still working" cue. */
+.agent-activity-cursor {
+  color: var(--accent);
+  animation: activity-cursor-blink 1.1s steps(1) infinite;
+}
+
+@keyframes activity-cursor-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0.15; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-activity-cursor { animation: none; }
+}

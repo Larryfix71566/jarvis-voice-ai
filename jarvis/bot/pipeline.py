@@ -22,7 +22,7 @@ import asyncio
 import logging
 import os
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -109,6 +109,15 @@ class Runtime:
     settings: Settings
     registry: SkillRegistry
     session_id: str
+    # Barge-in survival (Larry 2026-08-21: "me continuing to talk should
+    # not kill existing work"): late-bound delivery hook for delegation
+    # results whose voice turn was cancelled mid-flight. build_pipeline
+    # hands this holder to build_delegate_tool; run_session fills in
+    # "fn" (the inject_context closure) once the aggregators exist. A
+    # dict rather than a Callable field because the hook cannot exist yet
+    # at construction time — same late-binding reason RemindersWatcher
+    # takes inject= at run_session level.
+    late_delivery: dict = field(default_factory=dict)
 
 
 def bot_event_log(event: dict) -> None:
@@ -142,6 +151,25 @@ def make_agent_event_handler(transport: Any) -> Any:
         bot_event_log(event)
         etype = event.get("type")
         if etype == "agent_tool_result":
+            # Activity ticker (Larry 2026-08-21, "like how claude displays
+            # updates to current work"): every finished tool call becomes
+            # one line on the run's Agents card — truthful by construction,
+            # since ok comes from the same classify_tool_result verdict the
+            # run log records, not from a model narrating itself. Sent for
+            # EVERY result, before the display-worthiness check below,
+            # which only decides whether a separate content payload opens.
+            try:
+                asyncio.get_running_loop().create_task(
+                    send_app_message(transport, {
+                        "type": "agent_activity",
+                        "name": event.get("agent"),
+                        "run_id": event.get("run_id"),
+                        "tool": event.get("tool"),
+                        "ok": bool(event.get("ok", True)),
+                        "latency_ms": int(event.get("latency_ms") or 0),
+                    }))
+            except RuntimeError:
+                pass  # no running loop (tests calling the handler directly)
             payload = build_display_payload(
                 agent=str(event.get("agent") or ""),
                 display_name=str(event.get("display_name") or ""),
@@ -168,6 +196,7 @@ def make_agent_event_handler(transport: Any) -> Any:
                 "name": event.get("agent"),
                 "display_name": event.get("display_name"),
                 "state": "working",
+                "run_id": event.get("run_id"),
                 "task": str(event.get("task") or "")[:200],
                 "model": event.get("model"),
                 "model_fallback": bool(event.get("model_fallback", False)),
@@ -243,6 +272,11 @@ def build_pipeline(
         on_event=make_agent_event_handler(transport),
         max_parallel=settings.jarvis_max_parallel_delegations,
         session_id=runtime.session_id,
+        # Barge-in survival: run_session fills runtime.late_delivery["fn"]
+        # with the inject_context closure once the aggregators exist, so a
+        # delegation orphaned by user interruption can still deliver its
+        # result into the conversation.
+        late_delivery=runtime.late_delivery,
     )
     set_voice_schema, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
     remember_schema, remember_handler = build_remember_tool(runtime.session_id)
@@ -378,11 +412,31 @@ def build_pipeline(
         ),
         should_interrupt=True,  # plan Phase 5: allow_interruptions (D-004)
     )
-    llm = OpenAILLMService(
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_base_url,
-        model=settings.openai_model,
-    )
+    # MORTIMER_VOICE_MODEL_BENCH_PLAN.md V3 — provider-aware Supervisor
+    # service. Google's OpenAI-compat endpoint CANNOT carry the voice loop:
+    # Gemini 3 requires thought signatures echoed back on history replay,
+    # and pipecat's OpenAI streaming aggregation (base_llm._process_context)
+    # coalesces tool calls down to id/name/arguments, destroying the
+    # signature before anything downstream could preserve it. Pipecat's
+    # NATIVE GoogleLLMService handles signatures completely (capture,
+    # bookmark, re-apply on replay — services/google/llm.py), so a Google
+    # base_url routes there. Everything else keeps OpenAILLMService
+    # unchanged. Lazy import: google-genai is an optional dependency and a
+    # non-Google deployment must not need it installed.
+    if "generativelanguage.googleapis.com" in (settings.openai_base_url or ""):
+        from pipecat.services.google.llm import GoogleLLMService
+        llm = GoogleLLMService(
+            api_key=settings.openai_api_key,
+            model=settings.openai_model,
+        )
+        _logger.info("supervisor_llm_service service=google model=%s",
+                     settings.openai_model)
+    else:
+        llm = OpenAILLMService(
+            api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url,
+            model=settings.openai_model,
+        )
     llm.register_function("delegate_task", adapt_to_pipecat(delegate_handler))
     llm.register_function("set_voice", adapt_to_pipecat(set_voice_handler))
     llm.register_function("remember", adapt_to_pipecat(remember_handler))
@@ -578,6 +632,19 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
     except Exception as exc:  # noqa: BLE001 — must never block startup
         _logger.warning("screen_prune_failed error=%s", exc)
 
+    # MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md A1/A2/A4/A5: same startup
+    # moment and same detached-thread shape as the key-health probe above
+    # — a memory cleanup pass must never delay boot, and its one small
+    # model call (batched contradiction + audience classification) has no
+    # business happening on the latency-critical path.
+    try:
+        from jarvis import memory_sweep
+
+        if memory_sweep.start_background_sweep() is not None:
+            _logger.info("memory_sweep_started")
+    except Exception as exc:  # noqa: BLE001 — must never block startup
+        _logger.warning("memory_sweep_start_failed error=%s", exc)
+
     registry = SkillRegistry(REPO_ROOT / "config" / "mcp_servers.yaml")
     await registry.start()
     runtime = Runtime(settings=settings, registry=registry,
@@ -654,10 +721,41 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             # blind greeting guesses the wrong time of day.
             now_local = datetime.now(ZoneInfo(settings.jarvis_timezone))
             greeting_time = now_local.strftime("%I:%M %p").lstrip("0")
+            greeting_note = (
+                "[system] The user just connected. Greet them briefly by "
+                f"name; it is {greeting_time} their time."
+            )
+            # MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md A3: offered once
+            # per connect, never repeating in-session (same ambient-strip
+            # dismiss discipline as the reminder/weather chips) — a
+            # dismissed offer is not the same as a resolved review, so
+            # this simply doesn't re-fire until the NEXT connect.
+            try:
+                from jarvis import memory_sweep
+
+                review_count = memory_sweep.open_review_count()
+                if review_count > 0:
+                    # 2026-08-21, from a live miss: the announcement alone
+                    # sent the model hunting for a tool that doesn't exist
+                    # (it tried librarian, then developer, which punted to
+                    # a curl handoff) when the list was already rendered in
+                    # the console. Showing the queue is a VIEW change, so
+                    # the note names the exact ui_control call — same
+                    # disambiguation rule 8 makes for panels generally.
+                    greeting_note += (
+                        f" You also have {review_count} memory "
+                        "conflict(s)/cleanup item(s) waiting for review — "
+                        "mention this in one short sentence after greeting "
+                        "them. Two ways to handle them: to SHOW the list, "
+                        "call ui_control with action=drawer_tab, tab=memory "
+                        "(never a delegation); to work through them BY "
+                        "VOICE, delegate to librarian, which can list each "
+                        "item and resolve it per the user's choice."
+                    )
+            except Exception as exc:  # noqa: BLE001 — greeting must never fail
+                _logger.warning("memory_review_greeting_check_failed error=%s", exc)
             aggregators.user().add_messages([{
-                "role": "user",
-                "content": "[system] The user just connected. Greet them "
-                           f"briefly by name; it is {greeting_time} their time.",
+                "role": "user", "content": greeting_note,
             }])
             await aggregators.user().push_context_frame()
 
@@ -680,6 +778,13 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             # D-008: same 1.4 context-injection pattern as the greeting.
             aggregators.user().add_messages([{"role": "user", "content": text}])
             await aggregators.user().push_context_frame()
+
+        # Barge-in survival — install the late-delivery hook the delegate
+        # tool uses for results whose voice turn was cancelled. Same
+        # inject_context channel the reminders watcher speaks through: the
+        # result arrives as a context note and Mortimer reports it on its
+        # own initiative, exactly like a due reminder.
+        runtime.late_delivery["fn"] = inject_context
 
         watcher = RemindersWatcher(
             runtime.registry,

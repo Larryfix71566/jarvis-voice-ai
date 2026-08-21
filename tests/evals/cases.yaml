@@ -1,7 +1,9 @@
 # Routing eval cases (plan Phase 3, step 3.4 — extended from Appendix B).
 # Coverage: 5 per single agent except developer (11), 6 none, 4 multi-agent,
 # 12 voice UI control (MORTIMER_VOICE_UI_PLAN.md U8, extended by
-# MORTIMER_DRAWER_POPOUT_PLAN.md DP6) = 43 total.
+# MORTIMER_DRAWER_POPOUT_PLAN.md DP6), 2 screen vision, 10 terse-imperative/
+# status-ask (MORTIMER_VOICE_MODEL_BENCH_PLAN.md §4, 2026-08-20),
+# 3 troubleshooting->developer (2026-08-20) = 68 total.
 # expect: scheduler | librarian | analyst | systems | developer | none | [agent, agent]
 
 # --- scheduler (5) ---
@@ -90,3 +92,39 @@
   expect: none
 - input: "check if the panel window actually landed on the other monitor"
   expect: none
+
+# --- terse imperative / status-ask extension (10) ---
+# MORTIMER_VOICE_MODEL_BENCH_PLAN.md §4 — shaped like the 3 cases that
+# missed BOTH prior eval runs ("commit these changes", "change your
+# interface to use a darker theme", "how is the interface edit coming
+# along"): a strong verb or a self-referential status ask, single turn,
+# no antecedent supplied — this is what a more capable dispatcher is
+# being measured against, not a corpus a weak model happens to fit. Every
+# case here runs against EVERY candidate including the Haiku baseline, so
+# none of this extension's 3 `none` controls exist to be gamed by
+# over-delegating (a candidate that routes everything to developer must
+# fail these three, not just pass the seven above them).
+- {input: "commit that", expect: developer}
+- {input: "revert the last commit", expect: developer}
+- {input: "pull the latest changes", expect: developer}
+- {input: "check the build status", expect: developer}
+- {input: "how's the app build going", expect: developer}
+- {input: "is the self-edit still running", expect: developer}
+- {input: "cancel the current build", expect: developer}
+- {input: "do it now", expect: none}          # no antecedent at all
+- {input: "just fix it", expect: none}        # "it" has no referent
+- {input: "check on that", expect: none}      # "that" has no referent
+
+# --- troubleshooting -> developer (3) ---
+# 2026-08-20, from a live miss: the analyst found no NFL games when two
+# existed, Larry asked why, and the Supervisor had no route to the answer
+# — it guessed instead of delegating to the developer, the one agent
+# wired to mcp-runlog (runlog_list/runlog_detail read every delegation's
+# recorded tool calls). Rule 8 now names this route explicitly; these pin
+# it. Note the third case: a "found nothing" run is NOT a failure (all
+# its tool calls succeeded), so failure-triggered surfacing would never
+# fire — on-demand investigation is the only path, which is why routing
+# it correctly matters.
+- {input: "why did that search fail", expect: developer}
+- {input: "what did the analyst actually search for", expect: developer}
+- {input: "you said there were no games today, look into why you missed them", expect: developer}

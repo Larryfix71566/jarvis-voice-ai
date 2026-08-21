@@ -52,6 +52,20 @@ export function subscribeAgentFilter(cb: AgentFilterListener): () => void {
 
 export const DONE_FADE_MS = 8000;
 export const MAX_TOOLS = 10;
+
+/** ⚙ TUNING KNOB — activity ticker length per run (Larry 2026-08-21:
+ * "a running text narrative related to the work being done in a
+ * scrollable window"). One line per finished tool call, oldest evicted
+ * past the cap. Every line is a recorded fact (the same ok verdict the
+ * run log stores), never a model narrating itself. */
+export const MAX_ACTIVITY = 50;
+
+export interface ActivityLine {
+  tool: string;
+  ok: boolean;
+  latencyMs: number;
+  ts: number;
+}
 export const STAGES = [
   "planning",
   "proposing",
@@ -68,8 +82,13 @@ export interface RunState {
   id: number;
   name: string;
   displayName: string;
+  /** Backend run_id — matches the run log's identifier. "" for messages
+   * from a bot that predates the field. */
+  runId: string;
   task: string;
   tools: string[];
+  /** Live per-tool-call ticker, bounded at MAX_ACTIVITY. */
+  activity: ActivityLine[];
   stage: number; // index into STAGES (self-edit runs only)
   startedAt: number;
   doneAt: number | null;
@@ -93,10 +112,12 @@ interface AgentLifecycleMsg {
   name?: string;
   display_name?: string;
   state?: string;
+  run_id?: string;
   task?: string;
   ok?: boolean;
   detail?: string;
   tool?: string;
+  latency_ms?: number;
   model?: string;
   model_fallback?: boolean;
   model_unusable?: boolean;
@@ -264,8 +285,10 @@ export function applyServerMessage(msg: unknown): void {
       id,
       name,
       displayName,
+      runId: typeof m.run_id === "string" ? m.run_id : "",
       task: typeof m.task === "string" ? clamp(m.task, 200) : "",
       tools: [],
+      activity: [],
       stage: 0,
       startedAt: Date.now(),
       doneAt: null,
@@ -278,6 +301,28 @@ export function applyServerMessage(msg: unknown): void {
         typeof m.model_unusable_detail === "string" ? m.model_unusable_detail : "",
     };
     setRuns(insertRun(runs, run));
+  } else if (m.type === "agent_activity" && typeof m.tool === "string") {
+    // One line per FINISHED tool call. Matched by backend run_id when
+    // both sides carry one (precise even with parallel same-agent runs),
+    // else by the agent's live run — the same fallback agent_tool uses.
+    const runId = typeof m.run_id === "string" ? m.run_id : "";
+    const line: ActivityLine = {
+      tool: m.tool,
+      ok: m.ok !== false,
+      latencyMs: typeof m.latency_ms === "number" ? m.latency_ms : 0,
+      ts: Date.now(),
+    };
+    setRuns(
+      runs.map((r) => {
+        const match =
+          runId !== "" && r.runId !== ""
+            ? r.runId === runId
+            : r.name === name && r.doneAt === null;
+        return match
+          ? { ...r, activity: [...r.activity, line].slice(-MAX_ACTIVITY) }
+          : r;
+      }),
+    );
   } else if (m.type === "agent_tool" && typeof m.tool === "string") {
     const tool = m.tool;
     setRuns(

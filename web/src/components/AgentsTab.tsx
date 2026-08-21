@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   MAX_AGENT_RUNS,
   STAGES,
@@ -7,8 +7,64 @@ import {
   removeRun,
   shortModel,
   subscribeRuns,
+  type ActivityLine,
   type RunState,
 } from "../agentRuns";
+
+/**
+ * Activity ticker (Larry 2026-08-21: "a running text narrative related
+ * to the work being done in a scrollable window, like how claude
+ * displays updates to current work"). One line per finished tool call —
+ * every line is a recorded fact (the run log's own ok verdict), never a
+ * model narrating itself. Auto-follows the newest line while the run is
+ * live, unless the user has scrolled up to read history.
+ */
+function ActivityTicker({
+  lines,
+  working,
+}: {
+  lines: ActivityLine[];
+  working: boolean;
+}) {
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const pinnedRef = useRef(true); // following the bottom?
+
+  useEffect(() => {
+    const box = boxRef.current;
+    if (box && pinnedRef.current) box.scrollTop = box.scrollHeight;
+  }, [lines.length]);
+
+  const onScroll = () => {
+    const box = boxRef.current;
+    if (!box) return;
+    pinnedRef.current =
+      box.scrollHeight - box.scrollTop - box.clientHeight < 16;
+  };
+
+  return (
+    <div
+      className={"agent-activity" + (working ? " agent-activity-live" : "")}
+      ref={boxRef}
+      onScroll={onScroll}
+    >
+      {lines.map((l, i) => (
+        <div
+          key={`${l.ts}-${i}`}
+          className={"agent-activity-line" + (l.ok ? "" : " agent-activity-fail")}
+        >
+          <span className="agent-activity-mark">{l.ok ? "✓" : "✗"}</span>
+          <span className="agent-activity-tool">{l.tool}</span>
+          <span className="agent-activity-ms">
+            {l.latencyMs >= 1000
+              ? `${(l.latencyMs / 1000).toFixed(1)}s`
+              : `${l.latencyMs}ms`}
+          </span>
+        </div>
+      ))}
+      {working && <div className="agent-activity-cursor">▁</div>}
+    </div>
+  );
+}
 
 /**
  * AgentsTab — the side drawer's Agents tab body.
@@ -125,22 +181,30 @@ export default function AgentsTab() {
 
               {r.task && <div className="agent-card-task">{r.task}</div>}
 
-              {r.tools.length > 0 && (
-                <div className="agent-card-tools">
-                  {r.tools.map((t, i) => (
-                    <span
-                      key={`${r.id}-${i}`}
-                      className={
-                        "agent-tool" +
-                        (working && i === r.tools.length - 1
-                          ? " agent-tool-live"
-                          : "")
-                      }
-                    >
-                      {t}
-                    </span>
-                  ))}
-                </div>
+              {/* The old tool-name chips are subsumed by the ticker: it
+                  carries the same names plus ok/latency, scrollable. The
+                  chips remain only as a fallback for runs from a bot that
+                  predates agent_activity (activity stays empty there). */}
+              {r.activity.length > 0 ? (
+                <ActivityTicker lines={r.activity} working={working} />
+              ) : (
+                r.tools.length > 0 && (
+                  <div className="agent-card-tools">
+                    {r.tools.map((t, i) => (
+                      <span
+                        key={`${r.id}-${i}`}
+                        className={
+                          "agent-tool" +
+                          (working && i === r.tools.length - 1
+                            ? " agent-tool-live"
+                            : "")
+                        }
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                )
               )}
 
               <div className="agent-stages">

@@ -330,10 +330,20 @@ def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
         # K1: order by tier rank first, then recency within the tier.
         # COALESCE covers pre-0012 rows and anything written before the
         # writer learned about tiers — they behave as 'project'.
+        #
+        # A5 (MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md, Larry 2026-08-20):
+        # audience segmentation. A fact classified 'task-rule' or
+        # 'implemented' by the sweep's LLM pass belongs in a sub-agent's
+        # workflow prompt or nowhere, not here — but only once a human has
+        # confirmed the conversion (A3's review queue). NULL/'interaction'
+        # is the fail-open default: an unclassified fact keeps reaching
+        # the prompt rather than silently vanishing while it waits for the
+        # next sweep, which would be the worse failure.
         fact_rows = conn.execute(
             "SELECT key, content, COALESCE(tier, ?) AS tier FROM memories "
             "WHERE kind = 'fact' AND archived_at IS NULL "
             "AND COALESCE(tier, ?) IN (?, ?, ?) "
+            "AND COALESCE(audience, 'interaction') = 'interaction' "
             "ORDER BY CASE COALESCE(tier, ?) "
             "  WHEN 'identity' THEN 0 WHEN 'preference' THEN 1 ELSE 2 END, "
             "updated_at DESC",
@@ -592,8 +602,11 @@ def list_facts(conn: sqlite3.Connection | None = None) -> list[dict]:
     conn = conn or get_conn()
     try:
         rows = conn.execute(
-            "SELECT key, content, source_session_id, updated_at "
-            "FROM memories WHERE kind = 'fact' ORDER BY updated_at DESC"
+            "SELECT key, content, source_session_id, updated_at, "
+            "COALESCE(tier, 'project') AS tier, "
+            "COALESCE(audience, 'interaction') AS audience "
+            "FROM memories WHERE kind = 'fact' AND archived_at IS NULL "
+            "ORDER BY updated_at DESC"
         ).fetchall()
         return [dict(row) for row in rows]
     finally:

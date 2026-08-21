@@ -33,11 +33,21 @@ body {
 }
 
 /* When the native window IS made non-opaque, this class (set by the
-   shell's injected script) drops the wash entirely so the vibrancy view
-   behind shows through. Harmless in a browser, where it never applies. */
+   shell's injected script) hands blur duty to the NSVisualEffectView
+   behind the webview — but NOT tint duty. Larry 2026-08-21: "display
+   font is still not visible, I want it to match the agent cards." The
+   first cut made this fully transparent, which put light text straight
+   onto the native `.sidebar` material — a LIGHT macOS material — so the
+   glyphs (always opaque) sat on a near-white frosted pane and read as
+   invisible. The agent cards look right because they carry the dark
+   `--glass-bg-heavy` tint over CSS blur; here the native view supplies
+   the blur, and this wash supplies the SAME dark tint on top of it
+   (literal fallback because this entry may not load App.css's :root
+   tokens). backdrop-filter stays off — the native blur already did
+   that job, and double-blurring costs GPU for nothing. */
 html.shell-vibrancy,
 html.shell-vibrancy body {
-  background: transparent;
+  background: var(--glass-bg-heavy, rgba(30, 36, 43, 0.58));
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }

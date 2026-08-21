@@ -517,7 +517,11 @@ class SubAgent:
                     arguments = {}
                 self._emit(on_event, {"type": "agent_tool", "agent": self.name,
                                       "display_name": self.display_name,
-                                      "tool": tool_call.function.name})
+                                      "tool": tool_call.function.name,
+                                      # Activity ticker (Larry 2026-08-21):
+                                      # the Agents card shows a live line
+                                      # per tool call, keyed by run.
+                                      "run_id": runlog.run_id})
                 tool_name = tool_call.function.name
                 runlog.tool_call(tool_name, arguments)
                 tool_start = time.perf_counter()
@@ -558,6 +562,13 @@ class SubAgent:
                     "tool": tool_name,
                     "arguments": arguments,
                     "result": result[:TOOL_RESULT_EVENT_MAX],
+                    # Activity ticker (Larry 2026-08-21): ok/latency feed
+                    # the per-run line the Agents card renders — the same
+                    # verdict the run log records (classify_tool_result),
+                    # so the card can never disagree with the log.
+                    "run_id": runlog.run_id,
+                    "ok": outcome.ok,
+                    "latency_ms": tool_latency_ms,
                 })
                 messages.append({
                     "role": "tool",
@@ -654,20 +665,48 @@ class SubAgent:
                 logger.exception("on_event callback failed")
 
 
+def _merge_vendor_extras(target: dict, model_obj: Any) -> None:
+    """Copy provider-specific fields the SDK captured into a history dict.
+
+    The openai SDK's response models are pydantic with extra="allow", so any
+    field a provider adds beyond the OpenAI schema lands in `model_extra`.
+    Google's Gemini 3 endpoint is the motivating case
+    (MORTIMER_VOICE_MODEL_BENCH_PLAN.md V3): it attaches an encrypted
+    `thought_signature` to tool calls and REQUIRES it echoed back when the
+    conversation history is replayed — dropping it fails the very next
+    request with HTTP 400, which is exactly what the hand-built dicts below
+    used to do.
+
+    Safe by construction for every other provider: extras are only added
+    when the provider actually sent them, and a history is only ever
+    replayed to the same client that produced it, so Anthropic/Moonshot/
+    OpenRouter responses (no extras) are byte-identical to before.
+    """
+    extras = getattr(model_obj, "model_extra", None) or {}
+    for key, value in extras.items():
+        if value is not None:
+            target[key] = value
+
+
 def _assistant_message(message: Any) -> dict:
-    return {
+    result: dict = {
         "role": "assistant",
         "content": message.content,
-        "tool_calls": [
-            {
-                "id": tc.id,
-                "type": "function",
-                "function": {"name": tc.function.name,
-                             "arguments": tc.function.arguments},
-            }
-            for tc in message.tool_calls
-        ],
     }
+    tool_calls = []
+    for tc in message.tool_calls or []:
+        call = {
+            "id": tc.id,
+            "type": "function",
+            "function": {"name": tc.function.name,
+                         "arguments": tc.function.arguments},
+        }
+        _merge_vendor_extras(call, tc)
+        tool_calls.append(call)
+    if tool_calls:
+        result["tool_calls"] = tool_calls
+    _merge_vendor_extras(result, message)
+    return result
 
 
 def load_sub_agents(

@@ -20,7 +20,7 @@ ALL_SERVERS = [
 # alongside a main that still carried the old number. repo (5) added by
 # MORTIMER_AGENT_TRUST_PLAN.md D10-D12: repo_read_file, repo_list_files,
 # repo_search, repo_write_file, repo_commit_write.
-TOTAL_TOOLS = 58  # ...+2 (V1: mcp-screen's screen_list + screen_view)
+TOTAL_TOOLS = 60  # ...+2 (2026-08-21: mcp-memory's memory_review_list/_resolve)
                   # ...+1 (B2: mcp-selfedit's selfedit_verify_appearance)
 
 

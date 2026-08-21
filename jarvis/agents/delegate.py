@@ -112,8 +112,25 @@ def build_delegate_tool(
     max_parallel: int = DEFAULT_MAX_PARALLEL_DELEGATIONS,
     *,
     session_id: str | None = None,
+    late_delivery: dict | None = None,
 ) -> tuple[dict, Callable[[dict], Any]]:
-    """Return (openai_tool_schema, async_handler) for delegate_task."""
+    """Return (openai_tool_schema, async_handler) for delegate_task.
+
+    Barge-in survival (Larry 2026-08-21: "me continuing to talk should not
+    kill existing work" — observed live that morning: 5 of 9 developer runs
+    were killed mid-flight by pipecat's function-call cancellation on user
+    interruption, one AFTER its repo write had already executed, leaving
+    zombie 'running' rows and no spoken result, which invited the re-ask
+    that killed the next run too). The sub-agent run therefore executes in
+    a DETACHED task the voice turn's cancellation cannot reach; the handler
+    awaits it through asyncio.shield. On the normal path nothing changes.
+    When the awaiting turn IS cancelled, the work continues, every piece of
+    bookkeeping (run log terminal status, retry guard, handoff record,
+    delegate_done event, learn_from_run) still happens inside the detached
+    task, and the finished result is delivered to the conversation through
+    `late_delivery["fn"]` — the inject_context hook run_session installs —
+    so Mortimer reports it when it lands instead of losing it.
+    """
     names = list(sub_agents)
     available = ", ".join(names)
     schema = {
@@ -266,59 +283,113 @@ def build_delegate_tool(
                       # nothing upstream noticed anything wrong.
                       "model_unusable": agent.model_unusable,
                       "model_unusable_detail": agent.model_unusable_detail})
-        # Cap actual concurrent execution — pipecat's own parallel tool-call
-        # dispatch has no limit. A failure inside agent.run() (SubAgent.run()
-        # never raises; failures come back as "FAILED: ..." strings) does not
-        # affect the semaphore or any sibling delegation.
-        async with semaphore:
-            result = await agent.run(
-                task, on_event=on_event, run_id=run_id, session_id=session_id,
+        async def _execute() -> str:
+            # Cap actual concurrent execution — pipecat's own parallel
+            # tool-call dispatch has no limit. A failure inside agent.run()
+            # (SubAgent.run() never raises; failures come back as
+            # "FAILED: ..." strings) does not affect the semaphore or any
+            # sibling delegation.
+            async with semaphore:
+                result = await agent.run(
+                    task, on_event=on_event, run_id=run_id,
+                    session_id=session_id,
+                )
+            # D13: spawned unconditionally — D20 makes
+            # jarvis_procedures_enabled a single-enforcement-point flag,
+            # checked once inside learn_from_run itself (which loads its own
+            # settings). A disabled flag still spawns a task, which returns
+            # immediately as a no-op; this keeps delegate.py from reaching
+            # into SubAgent's private _settings attribute to check the flag
+            # redundantly.
+            _spawn_background(learn_from_run(run_id, agent_name))
+            failed = result.startswith("FAILED:")
+            # H1.1 — an exhausted iteration budget is NOT a failed approach,
+            # it is an unfinished job; ITERATIONS_EXHAUSTED_MESSAGE says so
+            # in those words. Arming the guard on it would refuse the one
+            # thing that should happen next: continuing where it stopped.
+            exhausted = result.startswith(EXHAUSTED_PREFIX)
+            # H1.2 — did the agent itself ask the user for something? Read
+            # from the agent's OWN reply, which the Supervisor does not
+            # author, so a Supervisor cannot forge the authorization for its
+            # own retry.
+            awaiting_user[agent_name] = HANDOFF_MARKER in result or exhausted
+            # A2 — a failure arms the guard for this agent; a success clears
+            # it (the agent is demonstrably working again).
+            if failed and not exhausted:
+                last_failure[agent_name] = (_tokens(task), time.monotonic())
+            else:
+                last_failure.pop(agent_name, None)
+            if not failed and HANDOFF_MARKER not in result:
+                # Resolved: the chain is over, so the depth counter starts
+                # fresh for whatever Larry asks next.
+                handoff_depth.pop(agent_name, None)
+            # H1.4 — an honesty checkpoint, never a brake. Appended so the
+            # Supervisor relays it; the run itself is unaffected.
+            depth = handoff_depth.get(agent_name, 0)
+            if depth >= HANDOFF_DEPTH_NOTICE and HANDOFF_MARKER in result:
+                result += (
+                    f"\n\n[This is handoff {depth} on this investigation. "
+                    "Before asking for anything else, tell the user what you "
+                    "have established, what you still do not know, and what "
+                    "the next command would settle.]"
+                )
+            if on_event is not None:
+                on_event({"type": "delegate_done", "agent": agent_name,
+                          "display_name": agent.display_name,
+                          "ok": not failed,
+                          "run_id": run_id,
+                          # Failure reasons surface in the UI status card;
+                          # successful output is spoken/displayed elsewhere.
+                          "detail": result[:300] if failed else ""})
+            return result
+
+        # Barge-in survival: the WORK runs in a detached task; only the
+        # AWAIT below belongs to the voice turn. When the user speaks over
+        # a delegation, pipecat cancels the function call — the shield lets
+        # that cancellation land here without touching _execute, which
+        # keeps running to completion (run log terminal status, guards,
+        # delegate_done, all of it). The finished result is then handed to
+        # late_delivery so the next thing Mortimer says can include it.
+        run_task = asyncio.create_task(_execute())
+        _background_tasks.add(run_task)
+        run_task.add_done_callback(_background_tasks.discard)
+        try:
+            return await asyncio.shield(run_task)
+        except asyncio.CancelledError:
+            if run_task.cancelled():
+                # The work itself was cancelled (session shutdown), not
+                # just this await — nothing survives to deliver.
+                raise
+            logger.info(
+                "delegate_orphaned_by_interruption agent=%s run_id=%s — "
+                "work continues; result will be delivered when it lands",
+                agent_name, run_id,
             )
-        # D13: spawned unconditionally — D20 makes jarvis_procedures_enabled
-        # a single-enforcement-point flag, checked once inside
-        # learn_from_run itself (which loads its own settings). A disabled
-        # flag still spawns a task, which returns immediately as a no-op;
-        # this keeps delegate.py from reaching into SubAgent's private
-        # _settings attribute to check the flag redundantly.
-        _spawn_background(learn_from_run(run_id, agent_name))
-        failed = result.startswith("FAILED:")
-        # H1.1 — an exhausted iteration budget is NOT a failed approach, it
-        # is an unfinished job; ITERATIONS_EXHAUSTED_MESSAGE says so in
-        # those words. Arming the guard on it would refuse the one thing
-        # that should happen next: continuing where it stopped.
-        exhausted = result.startswith(EXHAUSTED_PREFIX)
-        # H1.2 — did the agent itself ask the user for something? Read from
-        # the agent's OWN reply, which the Supervisor does not author, so a
-        # Supervisor cannot forge the authorization for its own retry.
-        awaiting_user[agent_name] = HANDOFF_MARKER in result or exhausted
-        # A2 — a failure arms the guard for this agent; a success clears
-        # it (the agent is demonstrably working again).
-        if failed and not exhausted:
-            last_failure[agent_name] = (_tokens(task), time.monotonic())
-        else:
-            last_failure.pop(agent_name, None)
-        if not failed and HANDOFF_MARKER not in result:
-            # Resolved: the chain is over, so the depth counter starts fresh
-            # for whatever Larry asks next.
-            handoff_depth.pop(agent_name, None)
-        # H1.4 — an honesty checkpoint, never a brake. Appended so the
-        # Supervisor relays it; the run itself is unaffected.
-        depth = handoff_depth.get(agent_name, 0)
-        if depth >= HANDOFF_DEPTH_NOTICE and HANDOFF_MARKER in result:
-            result += (
-                f"\n\n[This is handoff {depth} on this investigation. Before "
-                "asking for anything else, tell the user what you have "
-                "established, what you still do not know, and what the next "
-                "command would settle.]"
-            )
-        if on_event is not None:
-            on_event({"type": "delegate_done", "agent": agent_name,
-                      "display_name": agent.display_name,
-                      "ok": not failed,
-                      "run_id": run_id,
-                      # Failure reasons surface in the UI status card;
-                      # successful output is spoken/displayed elsewhere.
-                      "detail": result[:300] if failed else ""})
-        return result
+
+            def _deliver(task: asyncio.Task) -> None:
+                if task.cancelled():
+                    return
+                exc = task.exception()
+                outcome = f"FAILED: {exc}" if exc else task.result()
+                fn = (late_delivery or {}).get("fn")
+                if fn is None:
+                    logger.warning(
+                        "delegate_late_result_undeliverable agent=%s "
+                        "run_id=%s", agent_name, run_id)
+                    return
+                note = (
+                    f"[system] Background update: the {agent.display_name} "
+                    "task delegated earlier finished after the conversation "
+                    f"moved on. Result: {outcome}\nRelay this to the user in "
+                    "one or two short sentences. If it prepared an action "
+                    "that needs their confirmation, say so."
+                )
+                _spawn_background(fn(note))
+
+            if run_task.done():
+                _deliver(run_task)
+            else:
+                run_task.add_done_callback(_deliver)
+            raise
 
     return schema, handler

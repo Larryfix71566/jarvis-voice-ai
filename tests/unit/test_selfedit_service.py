@@ -279,3 +279,58 @@ class TestVisualVerification:
         source = inspect.getsource(SelfEditService.validate)
         assert "verify_appearance" not in source
         assert "screen" not in source.lower()
+
+
+class TestCapabilityChangeFlag:
+    """Larry 2026-08-21: "when those self change edits are present they
+    have to be highlighted so they can't go thru quietly." The same day
+    mcp_servers/** and the two wiring configs joined the allowlist, moving
+    the privilege-escalation gate to the human merging the PR — which only
+    works if the PR (and the spoken submit summary) announce the class."""
+
+    def _svc(self):
+        from jarvis.selfedit.service import SelfEditService
+        svc = SelfEditService()
+        svc.branch = "jarvis/self-edit/test"
+        svc.goal = "add a memory review tool to the librarian"
+        return svc
+
+    def test_is_capability_path(self):
+        from jarvis.selfedit.service import is_capability_path
+        assert is_capability_path("config/agents.yaml")
+        assert is_capability_path("config/mcp_servers.yaml")
+        assert is_capability_path("mcp_servers/mcp_memory/logic.py")
+        assert not is_capability_path("web/src/App.css")
+        assert not is_capability_path("jarvis/prompts.py")
+        assert not is_capability_path("config/voices.yaml")
+
+    def test_pr_body_flags_a_capability_change(self):
+        svc = self._svc()
+        svc.proposals = [
+            {"path": "mcp_servers/mcp_new/logic.py", "rationale": "r", "diff": ""},
+            {"path": "config/agents.yaml", "rationale": "r", "diff": ""},
+        ]
+        block = "\n".join(svc._capability_change_block())
+        assert "CAPABILITY CHANGE" in block
+        assert "config/agents.yaml" in block
+        assert "mcp_servers/mcp_new/logic.py" in block
+        assert "line by line" in block
+
+    def test_a_non_capability_change_gets_no_block(self):
+        svc = self._svc()
+        svc.proposals = [
+            {"path": "web/src/App.css", "rationale": "r", "diff": ""},
+            {"path": "jarvis/prompts.py", "rationale": "r", "diff": ""},
+        ]
+        assert svc._capability_change_block() == []
+
+    def test_capability_block_cannot_be_omitted_by_missing_rationale(self):
+        """Mirror of the visual block's no-intent rule: the flag depends
+        only on WHICH paths changed, never on what the agent wrote about
+        them — the agent least careful about a grant is exactly the one
+        whose grant must not slip through."""
+        svc = self._svc()
+        svc.proposals = [{"path": "config/mcp_servers.yaml",
+                          "rationale": "", "diff": ""}]
+        block = "\n".join(svc._capability_change_block())
+        assert "CAPABILITY CHANGE" in block

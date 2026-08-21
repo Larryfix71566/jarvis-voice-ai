@@ -182,6 +182,15 @@ class PlanAdoptIn(BaseModel):
     path: str | None = None
 
 
+class MemoryReviewResolveIn(BaseModel):
+    """MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md A3. `action` is
+    kind-dependent — see jarvis.memory_sweep.resolve_review's docstring
+    for the valid set per review kind."""
+
+    action: str
+    rewrite_content: str | None = None
+
+
 class AppBuildGoalIn(BaseModel):
     """MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md D5. Same
     plan/plan_path shape as GoalIn — plan_path is read-and-refuse
@@ -1053,6 +1062,43 @@ def memory_delete_fact(key: str) -> dict:
     if not deleted:
         return {"ok": False, "error": f"No fact with key '{key}'."}
     return {"ok": True, "key": key}
+
+
+# MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md A3 — thin wrappers over
+# jarvis.memory_sweep, same convention as the memory endpoints above:
+# the sidecar owns nothing new, it just exposes the review queue the
+# startup sweep (A1/A2/A4/A5) populates.
+
+
+@app.get("/api/memory/reviews")
+def memory_reviews_list() -> dict:
+    run_migrations()
+    from jarvis import memory_sweep
+
+    try:
+        return {"ok": True, "reviews": memory_sweep.list_open_reviews()}
+    except Exception:  # noqa: BLE001 — a panel must never break the sidecar
+        logger.exception("memory_reviews_list_failed")
+        return {"ok": False, "error": "could not read the review queue"}
+
+
+@app.post("/api/memory/reviews/{review_id}/resolve")
+def memory_reviews_resolve(review_id: int, body: MemoryReviewResolveIn) -> dict:
+    run_migrations()
+    from jarvis import memory_sweep
+
+    try:
+        with get_conn() as conn:
+            result = memory_sweep.resolve_review(
+                conn, review_id, body.action, body.rewrite_content,
+            )
+            conn.commit()
+        return {"ok": True, **result}
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+    except Exception:  # noqa: BLE001 — a panel must never break the sidecar
+        logger.exception("memory_reviews_resolve_failed id=%s", review_id)
+        return {"ok": False, "error": "could not resolve that review"}
 
 
 # ----------------------------------------------------------------- runs

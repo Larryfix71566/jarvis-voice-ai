@@ -36,12 +36,50 @@ def _normalize(expect) -> set[str]:
     return {expect}
 
 
+def _apply_candidate_overrides() -> None:
+    """MORTIMER_VOICE_MODEL_BENCH_PLAN.md §4 — run the eval against a
+    CANDIDATE voice model without touching .env.
+
+    EVAL_MODEL / EVAL_BASE_URL override OPENAI_MODEL / OPENAI_BASE_URL for
+    this process only (env beats .env in pydantic-settings, so no file edit).
+
+    EVAL_KEY_ENV names ANOTHER environment variable whose value becomes
+    OPENAI_API_KEY — a name, never a value, because the OpenRouter key lives
+    in the vault and the vault never prints values by design; there is
+    nothing to paste onto a command line. inject_env() is called first so a
+    vault-held key is present to be copied; it is idempotent, and
+    load_settings() calling it again later changes nothing.
+    """
+    wants = any(os.environ.get(k) for k in
+                ("EVAL_MODEL", "EVAL_BASE_URL", "EVAL_KEY_ENV"))
+    if not wants:
+        return
+    try:
+        from jarvis.vault import inject_env
+        inject_env()
+    except Exception:  # noqa: BLE001 — .env-only setups still work
+        pass
+    if os.environ.get("EVAL_MODEL"):
+        os.environ["OPENAI_MODEL"] = os.environ["EVAL_MODEL"]
+    if os.environ.get("EVAL_BASE_URL"):
+        os.environ["OPENAI_BASE_URL"] = os.environ["EVAL_BASE_URL"]
+    key_env = os.environ.get("EVAL_KEY_ENV", "").strip()
+    if key_env:
+        value = os.environ.get(key_env, "").strip()
+        if value:
+            os.environ["OPENAI_API_KEY"] = value
+        else:
+            print(f"EVAL_KEY_ENV names {key_env!r}, which is empty — "
+                  f"the eval will run on the DEFAULT key, not the candidate's")
+
+
 async def run_eval() -> float:
     # Isolate eval side effects (notes/reminders/conversations) in a temp db
     # BEFORE importing jarvis modules that read JARVIS_DB_PATH.
     os.environ["JARVIS_DB_PATH"] = str(
         Path(tempfile.mkdtemp(prefix="jarvis-eval-")) / "eval.db"
     )
+    _apply_candidate_overrides()
 
     from jarvis.agents.supervisor import Orchestrator
     from jarvis.config import load_settings
@@ -51,6 +89,10 @@ async def run_eval() -> float:
     from jarvis.skills.registry import SkillRegistry
 
     settings = load_settings()
+    # Named in the output so a 3-run record is attributable to its candidate
+    # — five terminal scrollbacks that all just say "Routing accuracy" are
+    # how numbers get credited to the wrong model.
+    print(f"eval model: {settings.openai_model}  ({settings.openai_base_url})")
     setup_logging("WARNING")
     run_migrations()
 

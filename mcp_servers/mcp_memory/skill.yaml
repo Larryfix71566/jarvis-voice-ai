@@ -1,0 +1,9 @@
+# Skill manifest (upgrade plan §3.1)
+name: mcp-memory
+version: 1.0.0
+class: standard
+tools: [memory_review_list, memory_review_resolve]
+requires_env: []
+requires_keychain: []
+scopes: []
+test: "python3 -m pytest tests/unit/test_mcp_memory_logic.py -q"

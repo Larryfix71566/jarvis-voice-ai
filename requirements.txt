@@ -1,4 +1,4 @@
-pipecat-ai[deepgram,elevenlabs,openai,silero,mcp,runner,webrtc]
+pipecat-ai[deepgram,elevenlabs,openai,google,silero,mcp,runner,webrtc]
 mcp[cli]
 fastmcp>=3.4.5
 openai

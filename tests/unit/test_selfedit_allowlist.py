@@ -26,6 +26,14 @@ def allowlist() -> Allowlist:
     "jarvis/skills/new_skill.py",
     "docs/upgrade-notes.md",
     "README.md",
+    # Larry 2026-08-21 — "the interface thru self-edit could resolve the
+    # issue when I ask": a missing agent tool is fixable by voice, which
+    # needs the server code AND the two wiring files. The privilege-
+    # escalation gate moves to where it always really was — the human
+    # merging the PR on GitHub — plus the validation gates before it.
+    "mcp_servers/mcp_memory/logic.py",
+    "config/agents.yaml",
+    "config/mcp_servers.yaml",
 ])
 def test_allowed_paths(allowlist: Allowlist, path: str) -> None:
     assert allowlist.is_allowed(path), path
@@ -57,7 +65,11 @@ def test_allowed_paths(allowlist: Allowlist, path: str) -> None:
     "jarvis/cli.py",
     "web/index.html",
     "scripts/run_admin.sh",
-    "mcp_servers/mcp_git/logic.py",
+    # still denied even though mcp_servers/config opened up (2026-08-21):
+    # the agent's own brain, the enable gate for agent skills, and the
+    # allowlist itself remain human-only.
+    "config/upgrade_models.yaml",
+    "config/skills.yaml",
 ])
 def test_forbidden_paths(allowlist: Allowlist, path: str) -> None:
     assert not allowlist.is_allowed(path), path

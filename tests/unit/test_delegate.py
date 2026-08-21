@@ -261,7 +261,9 @@ class TestAgentsYaml:
         for e in entries:
             assert e["display_name"] and e["description"]
             assert e["mcp_servers"], e["name"]
-        assert entries[0]["mcp_servers"] == ["mcp-time", "mcp-reminders"]
+        # Larry 2026-08-21: every agent carries mcp-screen now.
+        assert entries[0]["mcp_servers"] == [
+            "mcp-time", "mcp-reminders", "mcp-screen"]
 
     def test_catalog_rendering_format(self):
         catalog = render_agent_catalog([
@@ -527,3 +529,85 @@ class TestFindingsCarryForward:
         assert out.startswith("REFUSED:")
         assert "without them" in out
         assert len(agent.tasks) == 1        # the run never happened
+
+
+class TestBargeInSurvival:
+    """Larry 2026-08-21: "me continuing to talk should not kill existing
+    work." Observed live: pipecat cancels the delegate_task function call
+    on user interruption, which killed 5 of 9 developer runs mid-flight —
+    one AFTER its repo write had executed — leaving zombie 'running' rows
+    and no spoken result. The handler now shields a detached task: the
+    voice turn's cancellation lands, the work finishes anyway, and the
+    result is delivered through the late_delivery hook."""
+
+    async def test_cancelling_the_handler_does_not_cancel_the_work(self):
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="done late")
+        delivered: list[str] = []
+
+        async def deliver(text):
+            delivered.append(text)
+
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": deliver})
+        turn = asyncio.create_task(
+            handler({"agent_name": "developer", "task": "do the thing"}))
+        await asyncio.sleep(0.01)  # let the run start
+        turn.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await turn
+        # The work survives the turn's death and finishes...
+        await asyncio.sleep(0.1)
+        assert agent.finished_at is not None
+        # ...and the result reaches the conversation via the hook.
+        assert len(delivered) == 1
+        assert "done late" in delivered[0]
+        assert "Background update" in delivered[0]
+
+    async def test_normal_completion_never_uses_late_delivery(self):
+        agent = SlowFakeSubAgent("developer", delay=0.01, result="done now")
+        delivered: list[str] = []
+
+        async def deliver(text):
+            delivered.append(text)
+
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": deliver})
+        result = await handler(
+            {"agent_name": "developer", "task": "do the thing"})
+        assert result == "done now"
+        await asyncio.sleep(0.05)
+        assert delivered == []
+
+    async def test_bookkeeping_still_runs_on_the_orphaned_path(self):
+        """delegate_done must fire from the detached task so the Agents
+        card resolves instead of showing 'running' forever — the zombie
+        symptom this exists to kill."""
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="done late")
+        events: list[dict] = []
+        _, handler = build_delegate_tool(
+            {"developer": agent}, on_event=events.append,
+            late_delivery={"fn": lambda t: asyncio.sleep(0)})
+        turn = asyncio.create_task(
+            handler({"agent_name": "developer", "task": "do the thing"}))
+        await asyncio.sleep(0.01)
+        turn.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await turn
+        await asyncio.sleep(0.1)
+        types = [e["type"] for e in events]
+        assert "delegate_start" in types
+        assert "delegate_done" in types
+
+    async def test_no_hook_installed_is_logged_not_raised(self):
+        """A missing late_delivery hook must not take down anything —
+        the run still completes and finalizes."""
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="done late")
+        _, handler = build_delegate_tool({"developer": agent})
+        turn = asyncio.create_task(
+            handler({"agent_name": "developer", "task": "do the thing"}))
+        await asyncio.sleep(0.01)
+        turn.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await turn
+        await asyncio.sleep(0.1)
+        assert agent.finished_at is not None

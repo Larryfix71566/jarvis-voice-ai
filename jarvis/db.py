@@ -398,6 +398,40 @@ ALTER TABLE council_rounds ADD COLUMN proposers_attempted INTEGER;
 ALTER TABLE council_rounds ADD COLUMN judges_attempted INTEGER;
 """
 
+# MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md A3/A5 (Larry 2026-08-20). The
+# manual 2026-08-20 cleanup proved automation can resolve ~80% of memory
+# bloat mechanically but the remaining ~20% (real contradictions, a
+# scorer's wrong keep-choice, mixed-content facts) needs Larry — this
+# table is where those cases wait for him rather than being silently
+# guessed at.
+#
+# memory_reviews: one row per contradiction/cluster the sweep found but
+# would not act on. `keys_json` is the JSON list of the memories.key
+# values involved (never the row ids — keys survive archive/restore,
+# ids are an implementation detail); `detail` is the human-readable
+# explanation shown in the console panel and read aloud by voice.
+# `dismissed` is a resolution ("both true"), not a delete — the pair's
+# hash stays in the sweep's classification cache either way so it is
+# never re-queued for the same content.
+#
+# audience column on memories: A5's segmentation. NULL means
+# unclassified and is treated as 'interaction' by render_memory_context
+# (fail-open — see jarvis/memory.py) so an unclassified fact never
+# silently drops out of the prompt while waiting for the next sweep to
+# classify it.
+MIGRATION_0015 = """
+CREATE TABLE IF NOT EXISTS memory_reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL,                 -- 'contradiction' | 'cluster'
+  keys_json TEXT NOT NULL,
+  detail TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',  -- 'open' | 'resolved' | 'dismissed'
+  created_at TEXT NOT NULL,
+  resolved_at TEXT
+);
+ALTER TABLE memories ADD COLUMN audience TEXT;
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
@@ -414,6 +448,7 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0012_memory_tiers", MIGRATION_0012),
     ("0013_memory_archive", MIGRATION_0013),
     ("0014_council_attempted", MIGRATION_0014),
+    ("0015_memory_reviews", MIGRATION_0015),
 ]
 
 

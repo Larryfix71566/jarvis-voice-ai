@@ -272,10 +272,14 @@ class TestDeveloperSections:
         assert "app_development" in sel("create a new app for tracking runs")
 
     def test_a_plain_repo_read_gets_neither_protocol(self):
-        """The actual saving, and the case that motivated Part A."""
+        """The actual saving, and the case that motivated Part A. The pin
+        is against the 4,034-char full prompt; it was 1000 when core had
+        no runlog or confirmation-shortcut sentences (2026-08-20/21 —
+        each one earned its place by a live failure) and moves to 1100
+        with them. If core needs to grow again, trim it first."""
         from jarvis.prompts import select_developer_sections as sel
         assert sel("read config/agents.yaml and tell me the timeout") == []
-        assert len(self._own("show me the git log")) < 1000
+        assert len(self._own("show me the git log")) < 1100
 
     def test_a_read_that_could_write_keeps_the_protocol(self):
         """THE hazard of the core-only path. "read the file and fix the bug"
@@ -312,3 +316,31 @@ class TestDeveloperSections:
         fixtures at all, which is the assertion."""
         from jarvis.prompts import select_developer_sections as sel
         assert sel("read a file") == sel("read a file")
+
+    def test_core_names_the_runlog_tools(self):
+        """2026-08-20, from a live miss: the developer has mcp-runlog wired
+        in agents.yaml but its prompt never named the tools, so an
+        investigation delegation could land on an agent that didn't know it
+        could read run history. The route from ear to evidence is
+        prompt-text at both layers (Supervisor rule 8, and here) — losing
+        this sentence severs the second hop."""
+        from jarvis.prompts import DEVELOPER_CORE
+        assert "runlog_list" in DEVELOPER_CORE
+        assert "runlog_detail" in DEVELOPER_CORE
+
+    def test_an_investigation_task_is_a_read(self):
+        """Run-log investigation is read-only work and takes the core-only
+        path — the runlog sentence lives in CORE, so it is always present,
+        and no confirmation protocol is needed to read history."""
+        from jarvis.prompts import select_developer_sections as sel
+        assert sel(
+            "investigate why the analyst run found nothing when it searched"
+        ) == []
+
+    def test_investigate_and_fix_keeps_the_protocol(self):
+        """Same hazard shape as test_a_read_that_could_write: an
+        investigation that could end in a write must still carry the
+        self-development gate."""
+        from jarvis.prompts import select_developer_sections as sel
+        assert "self_development" in sel(
+            "investigate why the run failed and fix the bug behind it")

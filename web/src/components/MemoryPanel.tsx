@@ -53,6 +53,19 @@ interface Overview {
   usage: Usage;
 }
 
+/** MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md A3 — one row per
+ * contradiction/cluster/audience item the sweep queued rather than
+ * resolving on its own. `keys` has 2 entries for cluster/contradiction,
+ * 1 for audience. */
+interface MemoryReview {
+  id: number;
+  kind: "cluster" | "contradiction" | "audience";
+  keys: string[];
+  detail: string;
+  status: string;
+  created_at: string;
+}
+
 /**
  * MemoryPanel — visibility/correction surface for Mortimer's long-term
  * memory (plan Phase 5e). The only correction path before this was
@@ -65,6 +78,8 @@ interface Overview {
 export default function MemoryPanel() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [knowledge, setKnowledge] = useState<Knowledge | null>(null);
+  const [reviews, setReviews] = useState<MemoryReview[]>([]);
+  const [rewriteDrafts, setRewriteDrafts] = useState<Record<number, string>>({});
   const [unreachable, setUnreachable] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
@@ -81,6 +96,14 @@ export default function MemoryPanel() {
       } catch {
         setKnowledge(null);
       }
+      // A3: the review queue. Same "must not blank the panel" discipline.
+      try {
+        const rv = await fetch(`${API}/api/memory/reviews`);
+        const rvj = await rv.json();
+        setReviews(rvj.ok ? rvj.reviews : []);
+      } catch {
+        setReviews([]);
+      }
       setUnreachable(false);
     } catch {
       setUnreachable(true);
@@ -92,6 +115,22 @@ export default function MemoryPanel() {
     const t = setInterval(refresh, 15000);
     return () => clearInterval(t);
   }, [refresh]);
+
+  const onResolveReview = async (
+    id: number,
+    action: string,
+    rewriteContent?: string,
+  ) => {
+    setNote(null);
+    const r = await fetch(`${API}/api/memory/reviews/${id}/resolve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, rewrite_content: rewriteContent ?? null }),
+    });
+    const res = await r.json();
+    setNote(res.ok ? "Review resolved." : (res.error ?? "resolve failed"));
+    void refresh();
+  };
 
   const onDelete = async (key: string) => {
     setNote(null);
@@ -210,6 +249,95 @@ export default function MemoryPanel() {
                 ` · ${knowledge.workflows.filter((w) => !w.has_done_when).length} without done_when`}
             </span>
           </div>
+        </div>
+      )}
+
+      {/* A3 — Larry resolves what the sweep would not (contradictions,
+          mixed-content clusters it capped/skipped, task-rule/implemented
+          audience calls). Amber matches the engagement layer's existing
+          needs-your-confirmation semantic (--attn), same vocabulary as
+          .knowledge-warn above. */}
+      {reviews.length > 0 && (
+        <div className="memory-review-section">
+          <div className="memory-review-title">
+            Needs your review ({reviews.length})
+          </div>
+          {reviews.map((rv) => (
+            <div key={rv.id} className="memory-review-row">
+              <div className="memory-review-detail">{rv.detail}</div>
+              <div className="memory-review-keys">{rv.keys.join(" · ")}</div>
+              <div className="memory-review-actions">
+                {rv.kind === "audience" ? (
+                  <>
+                    {rv.detail.includes("task rule") ? (
+                      <button
+                        type="button"
+                        onClick={() => void onResolveReview(rv.id, "convert_workflow")}
+                      >
+                        Convert to workflow
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void onResolveReview(rv.id, "archive_implemented")}
+                      >
+                        Archive as implemented
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void onResolveReview(rv.id, "keep_interaction")}
+                    >
+                      Keep as-is
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void onResolveReview(rv.id, "keep_a")}
+                    >
+                      Keep {rv.keys[0]}
+                    </button>
+                    {rv.keys[1] && (
+                      <button
+                        type="button"
+                        onClick={() => void onResolveReview(rv.id, "keep_b")}
+                      >
+                        Keep {rv.keys[1]}
+                      </button>
+                    )}
+                    <input
+                      type="text"
+                      placeholder="rewrite instead…"
+                      className="memory-review-rewrite-input"
+                      value={rewriteDrafts[rv.id] ?? ""}
+                      onChange={(e) =>
+                        setRewriteDrafts((prev) => ({ ...prev, [rv.id]: e.target.value }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      disabled={!rewriteDrafts[rv.id]}
+                      onClick={() =>
+                        void onResolveReview(rv.id, "rewrite", rewriteDrafts[rv.id])
+                      }
+                    >
+                      Rewrite
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  className="memory-review-dismiss"
+                  onClick={() => void onResolveReview(rv.id, "dismiss")}
+                  title="Both are true — leave as-is, don't ask again"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

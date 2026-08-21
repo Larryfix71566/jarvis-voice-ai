@@ -22,9 +22,13 @@ body {
   height: 100%;
 }
 
+/* Same fix as displaywindow.css (Larry 2026-08-21): fully transparent
+   put dense panel text on the native `.sidebar` material, which is
+   LIGHT — the dark tint must come from CSS even when the native view
+   supplies the blur. Same value as the agent cards' --glass-bg-heavy. */
 html.shell-vibrancy,
 html.shell-vibrancy body {
-  background: transparent;
+  background: var(--glass-bg-heavy, rgba(30, 36, 43, 0.58));
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }

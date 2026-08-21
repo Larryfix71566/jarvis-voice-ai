@@ -69,6 +69,22 @@ def is_visual_path(path: str) -> bool:
     return str(path).replace("\\", "/").startswith(VISUAL_PATH_PREFIXES)
 
 
+# Larry 2026-08-21 ("when those self change edits are present they have to
+# be highlighted so they can't go thru quietly"): paths whose change GRANTS
+# OR REWIRES AGENT CAPABILITIES. These joined the allowlist the same day so
+# a missing tool can be fixed by voice — which deliberately moved the
+# privilege-escalation gate to the human merging the PR. That only works if
+# the PR announces itself: a capability grant buried in a routine-looking
+# diff is the quiet pass-through this flag exists to prevent.
+CAPABILITY_PATHS = ("config/agents.yaml", "config/mcp_servers.yaml")
+CAPABILITY_PATH_PREFIXES = ("mcp_servers/",)
+
+
+def is_capability_path(path: str) -> bool:
+    p = str(path).replace("\\", "/")
+    return p in CAPABILITY_PATHS or p.startswith(CAPABILITY_PATH_PREFIXES)
+
+
 class SelfEditError(Exception):
     """Raised for refused operations; the service API converts to dicts."""
 
@@ -329,6 +345,36 @@ class SelfEditService:
         ]
         return lines
 
+    def _capability_change_block(self) -> list[str]:
+        """The PR body flags a change that grants or rewires agent tools.
+
+        Unlike the visual block (which flags what validation cannot SEE),
+        this flags what validation cannot JUDGE: all four gates can pass
+        on a diff that hands an agent a capability it should not have.
+        The human merging on GitHub is the enforcement point for that
+        class, so the PR must make the class unmissable.
+        """
+        cap = [p for p in self.proposals if is_capability_path(p["path"])]
+        if not cap:
+            return []
+        lines = [
+            "",
+            "### ⚠ CAPABILITY CHANGE — this PR grants or rewires agent tools",
+            "",
+            "Files that define what agents can do:",
+        ]
+        for p in cap:
+            lines.append(f"- `{p['path']}`")
+        lines += [
+            "",
+            "Review the `config/agents.yaml` and `config/mcp_servers.yaml` "
+            "diffs line by line before merging: every added server or tool "
+            "is a standing grant to that agent, not a one-off. Validation "
+            "gates verify the code works — only this review verifies the "
+            "grant is intended.",
+        ]
+        return lines
+
     def _check_path(self, path: str, must_exist: bool = False) -> str:
         if not self.allowlist.is_allowed(path):
             raise SelfEditError(
@@ -422,12 +468,25 @@ class SelfEditService:
         except SelfEditError as exc:
             return {"ok": False, "error": str(exc)}
         logger.info("selfedit_submit branch=%s pr=%s", self.branch, pr.get("html_url"))
+        capability = [p["path"] for p in self.proposals
+                      if is_capability_path(p["path"])]
         result = {
             "ok": True,
             "branch": self.branch,
             "pr_url": pr.get("html_url"),
             "notice": _MERGE_NOTE,
         }
+        if capability:
+            # Spoken by the developer when it reports the submit — the
+            # human must HEAR that this PR changes what agents can do, not
+            # just find the block later on GitHub.
+            result["capability_change"] = True
+            result["notice"] = (
+                "CAPABILITY CHANGE: this PR grants or rewires agent tools ("
+                + ", ".join(capability)
+                + ") — review those diffs line by line before merging. "
+                + _MERGE_NOTE
+            )
         # Session is complete; local checkout returns to main.
         branch, tag = self.branch, self.rollback_tag
         self._git("checkout", "main")
@@ -447,6 +506,8 @@ class SelfEditService:
         ]
         for p in self.proposals:
             body_lines.append(f"- `{p['path']}` — {p['rationale']}")
+        # Capability block FIRST — it is the louder of the two flags.
+        body_lines += self._capability_change_block()
         body_lines += self._visual_change_block()
         body_lines += ["", "---", _MERGE_NOTE]
         req = urllib.request.Request(

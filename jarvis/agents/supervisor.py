@@ -28,6 +28,7 @@ from typing import Any, Callable, Literal
 from openai import AsyncOpenAI
 
 from jarvis.agents.base import SubAgent, load_sub_agents
+from jarvis.agents.base import _assistant_message as _base_assistant_message
 from jarvis.agents.delegate import build_delegate_tool
 from jarvis.db import get_conn, now_iso
 from jarvis.prompts import SUPERVISOR_PROMPT, render_agent_catalog
@@ -175,21 +176,10 @@ class Orchestrator:
 
     @staticmethod
     def _assistant_message(message: Any) -> dict:
-        return {
-            "role": "assistant",
-            "content": message.content,
-            "tool_calls": [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {
-                        "name": tc.function.name,
-                        "arguments": tc.function.arguments,
-                    },
-                }
-                for tc in message.tool_calls
-            ],
-        }
+        # One implementation with SubAgent's loop (jarvis/agents/base.py) —
+        # both replay tool-call history, and both must round-trip vendor
+        # extras (Gemini thought signatures) or the next request 400s.
+        return _base_assistant_message(message)
 
     def _trim_history(self) -> None:
         if len(self._history) > MAX_HISTORY_MESSAGES:

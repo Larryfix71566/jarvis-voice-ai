@@ -376,7 +376,9 @@ class TestLoadSubAgents:
         agents = load_sub_agents(make_settings(), FakeRegistry(),
                                  client_factory=lambda s: FakeLLM([]))
         assert set(agents) == {"scheduler", "librarian", "analyst", "systems", "developer"}
-        assert agents["scheduler"].mcp_servers == ["mcp-time", "mcp-reminders"]
+        # Larry 2026-08-21: every agent carries mcp-screen now.
+        assert agents["scheduler"].mcp_servers == [
+            "mcp-time", "mcp-reminders", "mcp-screen"]
         assert agents["analyst"].display_name == "Analyst"
 
     def test_per_agent_timeout_from_yaml(self):
