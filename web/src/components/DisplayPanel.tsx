@@ -1,36 +1,41 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePipecatClient } from "@pipecat-ai/client-react";
 import DisplayContent from "./DisplayContent";
-import type { DisplayPayload } from "../displayResults";
 import {
   closeDisplayWindow,
+  closePanel,
   hasLivePopup,
   openDisplayWindow,
+  popOutPanel,
   readPopoutPreference,
-  subscribeLatest,
+  restoreLatestAsPanel,
+  subscribeEvictionNotice,
+  subscribePanels,
   writePopoutPreference,
+  type DisplayWindowPanel,
 } from "../displayWindow";
 import { confirmPopout, describePopoutFailure } from "../popoutWindow";
 import { subscribeUiCommands } from "../uiCommands";
 
 /**
- * DisplayPanel — INFORMATIONAL results window floating in FRONT of
- * everything (z-30) (MORTIMER_SIDE_DRAWER_PLAN.md D28/D41/D43).
+ * DisplayPanel — container for INFORMATIONAL results windows floating in
+ * FRONT of everything (z-30) (MORTIMER_SIDE_DRAWER_PLAN.md D28/D41/D43).
+ *
+ * G8 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): this used
+ * to render exactly one payload at a time — a follow-up result while the
+ * first was still open silently replaced it. It now renders the FULL
+ * in-page panel stack from displayWindow.ts's registry (`subscribePanels`),
+ * each an independent `SingleDisplayPanel` with its own position, size,
+ * and close button, cascade-offset so a new one never lands exactly on
+ * top of the last. See displayWindow.ts's module docstring for why
+ * pop-out (⧉) still targets the single external window rather than a
+ * per-panel OS window.
  *
  * Narrowed by the side-drawer plan: work-product results (diffs, commits,
  * app scaffolds) now go to the drawer's Output tab (OutputTab.tsx) — this
- * panel only ever shows `surface: "window"` payloads (a weather forecast
- * or research brief: glanceable, transient, answers a question you just
- * asked). It no longer listens to RTVI directly; App.tsx's single D30/D37
- * display listener dispatches by `surface` and calls
- * `displayWindow.publish()` for this panel's payloads.
- *
- * Also gains a pop-out (⧉) into a real second browser window that can be
- * parked on a second monitor (D39–D42). While a live popup exists, this
- * in-page window renders nothing — the result is showing on the other
- * screen — and reappears automatically if the popup is closed or blocked
- * (D41's mandatory fallback: an informational answer must never be
- * silently lost to a popup blocker).
+ * container only ever shows `surface: "window"` payloads. It no longer
+ * listens to RTVI directly; App.tsx's single D30/D37 display listener
+ * dispatches by `surface` and calls `displayWindow.publish()`.
  */
 
 interface Pos {
@@ -46,9 +51,18 @@ interface Size {
 const DEFAULT_W = 540;
 const DEFAULT_H = 420;
 
+// G8 — successive panels cascade so they never land exactly on top of one
+// another; wraps back to the top-left band after a few so it never marches
+// fully off screen.
+const CASCADE_STEP = 28;
+const CASCADE_WRAP = 6;
+
 // MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md W1 — persisted, user-resized
 // footprint, same read-guarded try/catch discipline as the drawer's
-// `mortimer.drawer.*` keys.
+// `mortimer.drawer.*` keys. Shared across panels as the default for any
+// NEW panel — the last size the user chose is the best guess for the
+// next one, not per-panel persistence (which would need a growing key set
+// for no real benefit).
 const DISPLAY_SIZE_LS_KEY = "mortimer.display.size";
 
 // W1 clamp bounds. Min keeps content legible; max is evaluated at drag/
@@ -95,31 +109,33 @@ function writeStoredDisplaySize(size: Size): void {
   }
 }
 
-export default function DisplayPanel() {
-  const client = usePipecatClient();
-  const [item, setItem] = useState<DisplayPayload | null>(null);
-  const [dismissed, setDismissed] = useState(false);
-  const [popupOpen, setPopupOpen] = useState(hasLivePopup);
-  // S3: a button-initiated popout that fails confirmation says so
-  // briefly, beside the button, instead of failing silently.
+function cascadePos(index: number): Pos {
+  const slot = index % CASCADE_WRAP;
+  return {
+    x: Math.max(16, window.innerWidth - DEFAULT_W - 48 - slot * CASCADE_STEP),
+    y: 72 + slot * CASCADE_STEP,
+  };
+}
+
+interface SingleDisplayPanelProps {
+  panel: DisplayWindowPanel;
+  index: number;
+  onClose: (id: string) => void;
+  onPopOut: (id: string) => void;
+}
+
+function SingleDisplayPanel({ panel, index, onClose, onPopOut }: SingleDisplayPanelProps) {
+  const item = panel.payload;
   const [popoutError, setPopoutError] = useState<string | null>(null);
   useEffect(() => {
     if (!popoutError) return;
     const id = window.setTimeout(() => setPopoutError(null), 4000);
     return () => window.clearTimeout(id);
   }, [popoutError]);
-  const [popout, setPopout] = useState(readPopoutPreference);
-  const [pos, setPos] = useState<Pos>(() => ({
-    x: Math.max(16, window.innerWidth - DEFAULT_W - 48),
-    y: 72,
-  }));
-  // null = no user resize yet — the CSS default (max-width: 40vw;
-  // max-height: 40vh, W1) governs; a resize (or a stored size from a
-  // previous session) sets explicit inline dimensions that override it.
+  const [pos, setPos] = useState<Pos>(() => cascadePos(index));
   const [size, setSize] = useState<Size | null>(readStoredDisplaySize);
   const resizeStartRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 
-  // Re-clamp a stored/dragged size on viewport resize (W1).
   useEffect(() => {
     const onResize = () => {
       setSize((prev) => (prev === null ? null : clampDisplaySize(prev)));
@@ -128,117 +144,16 @@ export default function DisplayPanel() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // The shared "latest informational payload" — published by App.tsx's
-  // surface dispatch. A new payload always un-dismisses the panel and, if
-  // the popout preference is on, attempts to (re)open the popup.
-  useEffect(
-    () =>
-      subscribeLatest((payload) => {
-        setItem(payload);
-        setDismissed(false);
-        // Preference is read from its source of truth at decision time,
-        // not from mount-time state — the topbar's ⧉ Display button also
-        // sets it, and localStorage is not reactive.
-        if (payload && readPopoutPreference() && !hasLivePopup()) {
-          openDisplayWindow();
-          // S3: window.open()'s return value can't distinguish success
-          // from failure (always null in the shell, also null on a
-          // blocked popup) — confirm via the presence heartbeat.
-          void confirmPopout(hasLivePopup).then(setPopupOpen);
-          // win === null → browser blocked the popup; popupOpen stays
-          // false, so the in-page panel below renders the fallback.
-        }
-      }),
-    [],
-  );
-
-  // Named-window reuse (D41) has no single open/close event to hook, so a
-  // short poll is what reliably brings the in-page fallback back when the
-  // popup is closed by the user or the OS.
-  useEffect(() => {
-    const id = window.setInterval(() => setPopupOpen(hasLivePopup()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  const close = useCallback(() => setDismissed(true), []);
+  const close = useCallback(() => onClose(panel.id), [onClose, panel.id]);
 
   const popOut = useCallback(() => {
     writePopoutPreference(true);
-    setPopout(true);
-    openDisplayWindow();
+    onPopOut(panel.id);
     void confirmPopout(hasLivePopup).then((ok) => {
-      setPopupOpen(ok);
       if (!ok) setPopoutError(describePopoutFailure());
     });
-  }, []);
+  }, [onPopOut, panel.id]);
 
-  // Esc closes.
-  useEffect(() => {
-    if (!item || popupOpen || dismissed) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [item, popupOpen, dismissed, close]);
-
-  // Voice UI plan U2/U3: apply the display commands this component owns,
-  // through the same code paths its buttons use. display_popout/close
-  // also set/clear the persisted popout preference — voice has identical
-  // semantics to clicking ⧉ (U3). A command that changes nothing sends
-  // ui/noop with a spoken sentence — the bot voices it verbatim (no LLM).
-  useEffect(() => {
-    const noop = (reason: string) => {
-      client?.sendClientMessage("ui/noop", { reason });
-    };
-    return subscribeUiCommands((cmd) => {
-      switch (cmd.action) {
-        case "display_popout": {
-          // Already-open popups are NOT a noop: openDisplayWindow re-runs
-          // extended-screen placement, so "pop out the display" while the
-          // popup sits on the console's monitor moves it to the extra one.
-          writePopoutPreference(true);
-          setPopout(true);
-          openDisplayWindow();
-          void confirmPopout(hasLivePopup).then((ok) => {
-            setPopupOpen(ok);
-            if (!ok) noop(describePopoutFailure());
-          });
-          return;
-        }
-        case "display_close": {
-          const hadPopup = hasLivePopup();
-          if (!hadPopup && !popout) {
-            noop("The display window is already closed.");
-            return;
-          }
-          closeDisplayWindow();
-          writePopoutPreference(false);
-          setPopout(false);
-          setPopupOpen(false);
-          // The current payload falls back to the in-page overlay (D41).
-          setDismissed(false);
-          return;
-        }
-        case "overlay_dismiss": {
-          if (!item || popupOpen || dismissed) {
-            noop("There's nothing showing to dismiss.");
-            return;
-          }
-          close();
-          return;
-        }
-        default:
-          return;
-      }
-    });
-  }, [client, item, popupOpen, dismissed, popout, close]);
-
-  // While a live popup exists, the result is showing on the other screen —
-  // this window stays out of the way entirely (D41).
-  if (!item || popupOpen || dismissed) return null;
-
-  /** Drag the window by its header. */
   const onHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest("button")) return;
     e.preventDefault();
@@ -257,27 +172,17 @@ export default function DisplayPanel() {
     window.addEventListener("pointerup", up);
   };
 
-  /** Resize from the bottom-right corner handle (W1) — same pointer-
-   * capture drag pattern SideDrawer.tsx uses for its width handle, so
-   * the drag keeps tracking even if the pointer leaves the handle. */
   const onResizePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     const current = size ?? { w: DEFAULT_W, h: DEFAULT_H };
-    resizeStartRef.current = {
-      x: e.clientX, y: e.clientY, w: current.w, h: current.h,
-    };
+    resizeStartRef.current = { x: e.clientX, y: e.clientY, w: current.w, h: current.h };
   };
 
   const onResizePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const start = resizeStartRef.current;
     if (start === null) return;
-    setSize(
-      clampDisplaySize({
-        w: start.w + (e.clientX - start.x),
-        h: start.h + (e.clientY - start.y),
-      }),
-    );
+    setSize(clampDisplaySize({ w: start.w + (e.clientX - start.x), h: start.h + (e.clientY - start.y) }));
   };
 
   const endResize = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -297,6 +202,7 @@ export default function DisplayPanel() {
       className="display-panel"
       style={{
         left: pos.x, top: pos.y,
+        zIndex: 30 + index,
         ...(size !== null ? { width: size.w, height: size.h } : {}),
       }}
       role="dialog"
@@ -335,5 +241,122 @@ export default function DisplayPanel() {
         onPointerCancel={endResize}
       />
     </div>
+  );
+}
+
+export default function DisplayPanel() {
+  const client = usePipecatClient();
+  const [panels, setPanels] = useState<DisplayWindowPanel[]>([]);
+  const [popupOpen, setPopupOpen] = useState(hasLivePopup);
+  const [popout, setPopout] = useState(readPopoutPreference);
+  const [evictionNotice, setEvictionNotice] = useState<string | null>(null);
+
+  useEffect(() => subscribePanels(setPanels), []);
+
+  useEffect(
+    () =>
+      subscribeEvictionNotice((text) => {
+        setEvictionNotice(text);
+        window.setTimeout(() => setEvictionNotice(null), 4000);
+      }),
+    [],
+  );
+
+  // Named-window reuse (D41) has no single open/close event to hook, so a
+  // short poll is what reliably brings the in-page fallback back when the
+  // popup is closed by the user or the OS. On the FALLING edge (was live,
+  // now isn't), D41's mandatory fallback re-surfaces whatever was showing
+  // externally as an in-page panel rather than losing it silently.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setPopupOpen((was) => {
+        const now = hasLivePopup();
+        if (was && !now) restoreLatestAsPanel();
+        return now;
+      });
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const handleClose = useCallback((id: string) => closePanel(id), []);
+  const handlePopOut = useCallback((id: string) => {
+    popOutPanel(id);
+    setPopout(true);
+  }, []);
+
+  // Esc closes the most recently opened (topmost) panel.
+  useEffect(() => {
+    if (panels.length === 0 || popupOpen) return;
+    const topId = panels[panels.length - 1].id;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closePanel(topId);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [panels, popupOpen]);
+
+  // Voice UI plan U2/U3: apply the display commands this component owns,
+  // through the same code paths its buttons use.
+  useEffect(() => {
+    const noop = (reason: string) => {
+      client?.sendClientMessage("ui/noop", { reason });
+    };
+    return subscribeUiCommands((cmd) => {
+      switch (cmd.action) {
+        case "display_popout": {
+          writePopoutPreference(true);
+          setPopout(true);
+          openDisplayWindow();
+          void confirmPopout(hasLivePopup).then((ok) => {
+            setPopupOpen(ok);
+            if (!ok) noop(describePopoutFailure());
+          });
+          return;
+        }
+        case "display_close": {
+          const hadPopup = hasLivePopup();
+          if (!hadPopup && !popout && panels.length === 0) {
+            noop("The display window is already closed.");
+            return;
+          }
+          closeDisplayWindow();
+          writePopoutPreference(false);
+          setPopout(false);
+          setPopupOpen(false);
+          return;
+        }
+        case "overlay_dismiss": {
+          if (panels.length === 0 || popupOpen) {
+            noop("There's nothing showing to dismiss.");
+            return;
+          }
+          closePanel(panels[panels.length - 1].id);
+          return;
+        }
+        default:
+          return;
+      }
+    });
+  }, [client, panels, popupOpen, popout]);
+
+  if (popupOpen) return null; // showing on the external window instead
+
+  return (
+    <>
+      {panels.map((p, i) => (
+        <SingleDisplayPanel
+          key={p.id}
+          panel={p}
+          index={i}
+          onClose={handleClose}
+          onPopOut={handlePopOut}
+        />
+      ))}
+      {evictionNotice && (
+        <div className="display-eviction-notice" role="status">
+          {evictionNotice}
+        </div>
+      )}
+    </>
   );
 }

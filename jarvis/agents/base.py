@@ -38,6 +38,7 @@ from jarvis.agent_skills import match_skill
 from jarvis.procedures import match_procedure, mark_used
 from jarvis.workflows import match_workflow
 from jarvis.prompts import AGENT_DISCIPLINE, SUBAGENT_PROMPTS
+from jarvis.repo_map import REPO_MAP_MAX_CHARS, load_repo_map_suffix
 from jarvis.runlog import RunLogger, get_run_id, run_logger_scope
 from jarvis.toolresult import classify_tool_result
 
@@ -51,8 +52,6 @@ DEFAULT_TIMEOUT_S = 45.0
 # needs more rounds than a conversational lookup, and the observed
 # failures were runs that read 9-11 files successfully and then died on
 # the cap with every tool call green.
-# A3 — repo map injection cap (chars), enforced at injection time.
-REPO_MAP_MAX_CHARS = 8000
 TIMEOUT_MESSAGE = "FAILED: the task took too long; please try again."
 STUCK_MESSAGE = "FAILED: the task could not be completed."
 # B (Larry 2026-08-18): running out of iterations is NOT the same failure
@@ -256,24 +255,13 @@ class SubAgent:
         # below, so _system_prompt_for() can reassemble a per-task prompt
         # without re-reading the file. One read per boot, not per run.
         self._repo_map_suffix: str = ""
-        # A3 — repo map injection, construction-time (one read per boot,
-        # not per run). Missing file = skip silently: a fresh checkout
-        # must not crash. Path resolution mirrors load_sub_agents' own
-        # repo-root convention (jarvis/agents/base.py) — one convention,
-        # not a second root-finding heuristic.
+        # A3/G5 — repo map injection, construction-time (one read per boot,
+        # not per run). `load_repo_map_suffix` is the ONE shared read/cap/
+        # skip implementation (jarvis/repo_map.py) — UpgradeAgent uses the
+        # same function so the two loops can never drift on this logic.
         if inject_repo_map:
-            map_path = Path(__file__).resolve().parents[2] / "docs" / "REPO_MAP.md"
-            try:
-                content = map_path.read_text(encoding="utf-8")
-                if len(content) > REPO_MAP_MAX_CHARS:
-                    content = content[:REPO_MAP_MAX_CHARS]
-                self._repo_map_suffix = (
-                    "\n\nRepository map (maintained, may lag reality — "
-                    "verify with tools before writing):\n" + content
-                )
-                self._system_prompt += self._repo_map_suffix
-            except FileNotFoundError:
-                pass
+            self._repo_map_suffix = load_repo_map_suffix(REPO_MAP_MAX_CHARS)
+            self._system_prompt += self._repo_map_suffix
 
     @property
     def model(self) -> str:

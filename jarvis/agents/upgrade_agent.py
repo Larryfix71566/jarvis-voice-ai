@@ -46,6 +46,7 @@ from typing import Any, Callable
 
 import yaml
 
+from jarvis.repo_map import load_repo_map_suffix
 from jarvis.selfedit.service import SelfEditService
 
 logger = logging.getLogger(__name__)
@@ -259,6 +260,14 @@ class UpgradeAgent:
         self.service = service
         self.cfg = load_agent_config(config_path, section=config_section)
         self._system_prompt = system_prompt or SYSTEM_PROMPT
+        # G5 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): the
+        # developer-loop (SubAgent) has read docs/REPO_MAP.md into its
+        # prompt since the Model Discipline plan; this loop — which does
+        # most of the actual self-edit authoring — never did, so a self-
+        # edit session rediscovered the codebase from scratch every run.
+        # `load_repo_map_suffix` is the SAME shared helper SubAgent uses
+        # (jarvis/repo_map.py) — one read/cap/skip implementation, not two.
+        self._system_prompt += load_repo_map_suffix()
         # D7 — council rounds convened from this loop are tagged with the
         # workflow that started them ("selfedit" vs "appbuild"), so
         # compute_agreement (which excludes only workflow="planning") keeps
@@ -385,8 +394,31 @@ class UpgradeAgent:
         # absolute outer bound.
         iterations_used = 0
         iterations_budget = self.cfg["max_iterations"]
+        # G6 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md):
+        # halfway through the ORIGINAL budget (not a council-extended one —
+        # this checkpoint is about the session's initial allotment, not a
+        # moving target), if zero edits have been proposed yet, force a
+        # convergence nudge. Two live self-edit runs (the independent-
+        # display-windows build and the model-card fix) died at the cap
+        # having produced ZERO edit_propose calls — the whole budget spent
+        # reading/orienting. Equality (not >=) makes this fire exactly
+        # once: iterations_used only increases, and a later council-retry
+        # budget extension can't push it back to this value.
+        halfway_checkpoint = self.cfg["max_iterations"] // 2
         while iterations_used < iterations_budget:
             iterations_used += 1
+            if iterations_used == halfway_checkpoint and not self.service.proposals:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "You are halfway through this session's iteration budget "
+                        "and have not proposed a single edit yet. Stop reading "
+                        "further files unless strictly necessary — call "
+                        "edit_propose now with a concrete change, even a partial "
+                        "one, so the remaining iterations can refine it instead "
+                        "of being spent entirely on exploration."
+                    ),
+                })
             if time.monotonic() - started > self.cfg["max_session_minutes"] * 60:
                 summary = "session time limit reached; no changes were submitted"
                 break
@@ -531,6 +563,23 @@ class UpgradeAgent:
                     "tool_call_id": tc.id,
                     "content": json.dumps(result)[:8000],
                 })
+
+        # G6 — name the REAL cause of a natural iteration-budget exhaustion
+        # when it happened with zero edit proposals: not a failed edit, a
+        # session that never got to a first one. Only reachable when the
+        # loop exited by exhausting `iterations_budget` (the time-limit and
+        # validation-failure paths already set/return their own summary).
+        if (
+            not ok
+            and summary == "the agent reached its iteration limit without finishing"
+            and not self.service.proposals
+        ):
+            summary = (
+                "the session never converged on a first edit within its "
+                "iteration budget — every iteration was spent reading and "
+                "orienting, not failing on a bad edit; a plan_path or named "
+                "files would likely narrow this"
+            )
 
         self._emit(on_event, {"type": "agent_done", "ok": ok})
         return {"ok": ok, "summary": summary, "status": self.service.status()}

@@ -281,6 +281,30 @@ body {
   100% { opacity: 0; }
 }
 
+/* G8 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): the
+   in-page display-panel stack's "closed the oldest panel to make room"
+   toast — same ambient, auto-fading, non-blocking treatment as
+   .speaker-gate-notice above (one idea reused, not a third variant). */
+.display-eviction-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 8%;
+  transform: translateX(-50%);
+  z-index: 50;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--attn);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  pointer-events: none;
+  animation: speaker-gate-notice-fade 4s ease-out forwards;
+}
+
 /* Live self-edit indicator on the Dev button (side-drawer plan D7): the
    topbar is the only surface visible regardless of drawer state, so a run
    behind a closed drawer is still evident here. */

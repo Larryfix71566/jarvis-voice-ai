@@ -139,6 +139,36 @@ def test_rule_11_authorizes_reporting_an_absent_reason():
     assert "didn't finish and didn't say why" in SUPERVISOR_PROMPT
 
 
+def test_rule_12_single_selfedit_slot_and_no_wait_primitive():
+    """G9/G10 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): no
+    parallel self-edit slot exists and there is no wait/timer capability —
+    the Supervisor must say so rather than imply either."""
+    assert "Only one self-edit runs at a time" in SUPERVISOR_PROMPT
+    assert "There is no wait or timer capability" in SUPERVISOR_PROMPT
+
+
+def test_developer_prompt_forbids_unwritten_commit_claims():
+    """G11: a commit/PR summary must never describe a change the staged
+    diff doesn't actually contain — the direct fix for the phantom radar-
+    fix commit found in session log review."""
+    from jarvis.prompts import DEVELOPER_SECTIONS
+
+    assert (
+        "describe ONLY changes actually present in the staged diff"
+        in DEVELOPER_SECTIONS["self_development"]
+    )
+
+
+def test_rule_9_forbids_soliciting_approval_before_preview_relayed():
+    """G3 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): the
+    confirmation death spiral was partly a Supervisor-side habit of asking
+    for approval of an action whose preview the user never actually
+    heard. Rule 9 now forbids that, and requires the staging_id (G2's
+    stateful handshake) in a self-edit confirmation task."""
+    assert "Never solicit the user's approval before a specialist's preview" in SUPERVISOR_PROMPT
+    assert "staging_id" in SUPERVISOR_PROMPT
+
+
 def test_no_guessing_at_causes():
     """Rule 2 names the exact categories that were invented."""
     from jarvis.prompts import GOLDEN_RULES

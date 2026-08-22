@@ -7,7 +7,15 @@ provider: openai
 model: gpt-4.1-mini
 base_url: https://api.openai.com/v1
 temperature: 0.2
-max_iterations: 10
+# Larry 2026-08-22: raised 10 -> 50 after two live self-edit runs (the
+# independent-display-windows build and the model-card fix, both
+# kimi-k3) died at the 10-iteration cap having produced ZERO edit
+# proposals — the cap was exhausted entirely by read/orient calls before
+# planning could converge. 50 puts self-edits above app_build's 40,
+# which is defensible: a self-edit's validation gates are stricter, so a
+# run that survives to an edit proposal is worth more iterations, and
+# max_session_minutes below still bounds wall-clock spend.
+max_iterations: 50
 max_session_minutes: 30
 
 # MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md D1/D7: the app-build

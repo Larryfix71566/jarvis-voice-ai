@@ -146,6 +146,69 @@ class TestDisplayPassthrough:
         assert sent[0]["ok"] is True
         assert sent[0]["latency_ms"] == 12
 
+    async def test_selfedit_start_result_carries_planner_model(self, sent):
+        """G7 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): the
+        Agents-tab card needs to distinguish the developer's OWN dispatch
+        model from the model actually doing self-edit work — the latter
+        rides the agent_activity message as `planner_model`."""
+        handler = make_agent_event_handler(transport=object())
+        handler({
+            "type": "agent_tool_result", "agent": "developer",
+            "display_name": "Developer", "tool": "selfedit_start",
+            "arguments": {}, "result": json.dumps({
+                "ok": True, "started": True, "profile": "kimi-k3 (kimi-k3-model)",
+                "planner_model": "kimi-k3 (kimi-k3-model)",
+            }),
+            "ok": True, "latency_ms": 5,
+        })
+        await flush()
+        assert sent[0]["type"] == "agent_activity"
+        assert sent[0]["planner_model"] == "kimi-k3 (kimi-k3-model)"
+
+    async def test_selfedit_status_result_carries_planner_model(self, sent):
+        handler = make_agent_event_handler(transport=object())
+        handler({
+            "type": "agent_tool_result", "agent": "developer",
+            "display_name": "Developer", "tool": "selfedit_status",
+            "arguments": {}, "result": json.dumps({
+                "ok": True, "summary": "Still planning", "job": {},
+                "planner_model": "claude-opus (claude-opus-5)",
+            }),
+            "ok": True, "latency_ms": 5,
+        })
+        await flush()
+        assert sent[0]["planner_model"] == "claude-opus (claude-opus-5)"
+
+    async def test_other_tools_never_carry_planner_model(self, sent):
+        """The planner_model field is specific to the two self-edit polling
+        tools — it must not leak onto unrelated tool activity lines even if
+        their result JSON happens to contain a same-named key."""
+        handler = make_agent_event_handler(transport=object())
+        handler({
+            "type": "agent_tool_result", "agent": "scheduler",
+            "display_name": "Scheduler", "tool": "set_reminder",
+            "arguments": {}, "result": json.dumps({
+                "ok": True, "planner_model": "should-not-appear",
+            }),
+            "ok": True, "latency_ms": 5,
+        })
+        await flush()
+        assert "planner_model" not in sent[0]
+
+    async def test_missing_planner_model_omits_field(self, sent):
+        """A selfedit_start/status result without a planner_model (e.g. an
+        error response) must not send an empty or None field — the client
+        treats absence as 'unknown', not 'no planner'."""
+        handler = make_agent_event_handler(transport=object())
+        handler({
+            "type": "agent_tool_result", "agent": "developer",
+            "display_name": "Developer", "tool": "selfedit_start",
+            "arguments": {}, "result": json.dumps({"ok": False, "error": "no goal"}),
+            "ok": False, "latency_ms": 5,
+        })
+        await flush()
+        assert "planner_model" not in sent[0]
+
     async def test_display_payload_build_is_logged(self, sent, caplog):
         """MORTIMER_AGENT_TRUST_PLAN.md D18: one INFO line whenever a
         display payload is actually built, naming tool/surface/agent/kind,

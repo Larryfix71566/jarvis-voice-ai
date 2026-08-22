@@ -399,6 +399,18 @@ class TestGetWeatherWeatherGov:
 
 RAINVIEWER_PAYLOAD = {
     "host": "https://tilecache.rainviewer.com",
+    "radar": {
+        "past": [
+            {"time": 1754899200, "path": "/v2/radar/nowcast_abc111"},
+            {"time": 1754900000, "path": "/v2/radar/nowcast_abc222"},
+        ]
+    },
+}
+
+# G1: an older/unexpected RainViewer shape with no `path` field at all —
+# exercises the fallback to the constructed-ts form.
+RAINVIEWER_PAYLOAD_NO_PATH = {
+    "host": "https://tilecache.rainviewer.com",
     "radar": {"past": [{"time": 1754899200}, {"time": 1754900000}]},
 }
 
@@ -407,6 +419,12 @@ def _fake_radar_get(url, params=None, timeout=None):
     if "geocoding" in url:
         return FakeResponse(GEO_PAYLOAD)
     return FakeResponse(RAINVIEWER_PAYLOAD)
+
+
+def _fake_radar_get_no_path(url, params=None, timeout=None):
+    if "geocoding" in url:
+        return FakeResponse(GEO_PAYLOAD)
+    return FakeResponse(RAINVIEWER_PAYLOAD_NO_PATH)
 
 
 class TestRadarTileGrid:
@@ -449,13 +467,35 @@ class TestGetWeatherRadar:
         monkeypatch.setattr(logic.httpx, "get", _fake_radar_get)
         result = logic.get_weather_radar("tokyo")
         assert result["city"] == "Tokyo, Japan"
-        assert result["ts"] == 1754900000  # latest past frame
+        assert result["ts"] == 1754900000  # latest past frame, display stamp only
+        assert len(result["tiles"]) == 9
+        assert all(
+            t.startswith("https://tilecache.rainviewer.com/v2/radar/nowcast_abc222/512/6/")
+            for t in result["tiles"]
+        )
+        assert all(t.endswith("/2/1_1.png") for t in result["tiles"])
+
+    def test_radar_uses_api_path_not_constructed_ts(self, monkeypatch):
+        """G1: RainViewer moved to hashed `path`-based tile URLs; a URL
+        built from the raw `time` value 410s. Tiles must come from
+        frame["path"], and `time` must appear only as `ts`, never inside
+        a tile URL."""
+        monkeypatch.setattr(logic.httpx, "get", _fake_radar_get)
+        result = logic.get_weather_radar("tokyo")
+        assert all("/v2/radar/1754900000/" not in t for t in result["tiles"])
+        assert all("nowcast_abc222" in t for t in result["tiles"])
+
+    def test_radar_missing_path_falls_back_to_constructed(self, monkeypatch):
+        """G1: if a frame lacks `path` (older/unexpected API shape), fall
+        back to the old ts-constructed URL rather than erroring."""
+        monkeypatch.setattr(logic.httpx, "get", _fake_radar_get_no_path)
+        result = logic.get_weather_radar("tokyo")
+        assert "error" not in result
         assert len(result["tiles"]) == 9
         assert all(
             t.startswith("https://tilecache.rainviewer.com/v2/radar/1754900000/512/6/")
             for t in result["tiles"]
         )
-        assert all(t.endswith("/2/1_1.png") for t in result["tiles"])
 
     def test_basemap_tiles_same_coords_as_radar_tiles(self, monkeypatch):
         """W6: the basemap must use the SAME z/x/y as the radar overlay,

@@ -63,16 +63,50 @@ def _format_models(models: list[dict[str, Any]]) -> str:
 
 def selfedit_start(
     client,
-    goal: str,
+    goal: str = "",
     profile: str | None = None,
     confirm: bool = False,
     plan_path: str = "",
+    staging_id: str = "",
 ) -> dict[str, Any]:
     """Two-phase start of an upgrade run (preview, then confirm).
 
     PLAN_PATH, when set, names a repo plan/spec document the sidecar reads
     and injects into the run — use it whenever the user asks to implement
-    an existing plan, spec, or phase document."""
+    an existing plan, spec, or phase document.
+
+    G2 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): the
+    confirm=false call now STAGES the preview on the sidecar (POST
+    /api/selfedit/stage) and returns a `staging_id`. Pass that SAME
+    staging_id back with confirm=true instead of restating goal/profile —
+    the sidecar replays the exact staged record, so nothing can drift
+    between preview and confirm. GOAL/PROFILE on the confirm=true call are
+    then optional and ignored when staging_id is present; they remain
+    required (goal) for a bare confirm=true with no staging_id, which
+    still works for one release as a deprecated fallback."""
+    staging_id = (staging_id or "").strip()
+
+    # Confirm path with a staging_id: skip re-deriving anything, replay it.
+    if confirm and staging_id:
+        run_resp = _call(
+            lambda: client.post("/api/selfedit/run", json={"staging_id": staging_id})
+        )
+        if not run_resp.get("ok"):
+            return run_resp
+        return {
+            "ok": True,
+            "started": True,
+            "summary": (
+                f"Started planning with {run_resp.get('profile', 'the chosen planner')}. "
+                f"This can take several minutes — ask me how the edit is coming "
+                f"along anytime."
+            ),
+            "profile": run_resp.get("profile"),
+            # G7 — same value, explicit name: this is the field the Agents-
+            # tab card actually looks for on this tool's result.
+            "planner_model": run_resp.get("profile"),
+        }
+
     goal = (goal or "").strip()
     if not goal:
         return {"ok": False, "error": "I need a goal — what should I change about myself?"}
@@ -112,6 +146,15 @@ def selfedit_start(
         }
 
     if not confirm:
+        # G2 — stage the preview on the sidecar; the returned staging_id is
+        # what the confirm=true call must pass back.
+        stage_resp = _call(lambda: client.post(
+            "/api/selfedit/stage",
+            json={"goal": goal, "profile": chosen, "plan_path": plan_path or None},
+        ))
+        if not stage_resp.get("ok"):
+            return stage_resp
+        sid = stage_resp.get("staging_id", "")
         seeded = f", seeded with the plan at {plan_path}" if plan_path else ""
         return {
             "ok": True,
@@ -119,12 +162,15 @@ def selfedit_start(
             "summary": (
                 f"Ready to plan this edit with {chosen or 'the default planner'}{seeded}: "
                 f"“{goal}”. Planning runs in the background and can take several "
-                f"minutes; I can check progress anytime. Say yes to start."
+                f"minutes; I can check progress anytime. Say yes to start "
+                f"(staging_id {sid})."
             ),
             "goal": goal,
             "profile": chosen,
+            "staging_id": sid,
         }
 
+    # Deprecated fallback: confirm=true with no staging_id, goal restated.
     payload: dict[str, Any] = {"goal": goal, "profile": chosen}
     if plan_path:
         payload["plan_path"] = plan_path
@@ -139,6 +185,7 @@ def selfedit_start(
             f"several minutes — ask me how the edit is coming along anytime."
         ),
         "profile": run_resp.get("profile", chosen),
+        "planner_model": run_resp.get("profile", chosen),  # G7
     }
 
 
@@ -158,6 +205,9 @@ def selfedit_status(client) -> dict[str, Any]:
                 f"goal: “{job.get('goal', '')}”. I'll keep at it."
             ),
             "job": job,
+            # G7 — same value as job["profile"], named for what the
+            # Agents-tab card looks for on this tool's result.
+            "planner_model": job.get("profile"),
         }
 
     parts: list[str] = []
@@ -180,7 +230,11 @@ def selfedit_status(client) -> dict[str, Any]:
     elif not parts:
         parts.append("No upgrade run or edit session is active right now.")
 
-    return {"ok": True, "summary": " ".join(parts), "job": job, "active": bool(status.get("active"))}
+    return {
+        "ok": True, "summary": " ".join(parts), "job": job,
+        "active": bool(status.get("active")),
+        "planner_model": job.get("profile"),  # G7
+    }
 
 
 def selfedit_verify_appearance(client, branch_override: bool = False,

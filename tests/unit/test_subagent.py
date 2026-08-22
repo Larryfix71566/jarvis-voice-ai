@@ -827,11 +827,14 @@ class TestRuntimeModelOverride:
 # A3 — repo map injection.
 class TestRepoMapInjection:
     def test_injected_when_flag_set(self, tmp_path, monkeypatch):
-        import jarvis.agents.base as base_module
+        # G5: path resolution now lives in jarvis.repo_map (shared with
+        # UpgradeAgent), so the fixture repo root is pointed at via THAT
+        # module's __file__, not base_module's.
+        import jarvis.repo_map as repo_map_module
         repo_root = tmp_path
         (repo_root / "docs").mkdir()
         (repo_root / "docs" / "REPO_MAP.md").write_text("## Test map\n- foo lives in bar\n")
-        monkeypatch.setattr(base_module, "__file__", str(repo_root / "jarvis" / "agents" / "base.py"))
+        monkeypatch.setattr(repo_map_module, "__file__", str(repo_root / "jarvis" / "repo_map.py"))
         fake = FakeLLM([])
         agent = SubAgent(
             name="developer", display_name="Developer", description="d",
@@ -843,8 +846,8 @@ class TestRepoMapInjection:
         assert "foo lives in bar" in agent._system_prompt
 
     def test_skipped_silently_when_missing(self, tmp_path, monkeypatch):
-        import jarvis.agents.base as base_module
-        monkeypatch.setattr(base_module, "__file__", str(tmp_path / "jarvis" / "agents" / "base.py"))
+        import jarvis.repo_map as repo_map_module
+        monkeypatch.setattr(repo_map_module, "__file__", str(tmp_path / "jarvis" / "repo_map.py"))
         fake = FakeLLM([])
         agent = SubAgent(
             name="developer", display_name="Developer", description="d",
@@ -865,11 +868,12 @@ class TestRepoMapInjection:
 
     def test_truncated_at_cap(self, tmp_path, monkeypatch):
         import jarvis.agents.base as base_module
+        import jarvis.repo_map as repo_map_module
         repo_root = tmp_path
         (repo_root / "docs").mkdir()
         big = "x" * (base_module.REPO_MAP_MAX_CHARS + 500)
         (repo_root / "docs" / "REPO_MAP.md").write_text(big)
-        monkeypatch.setattr(base_module, "__file__", str(repo_root / "jarvis" / "agents" / "base.py"))
+        monkeypatch.setattr(repo_map_module, "__file__", str(repo_root / "jarvis" / "repo_map.py"))
         fake = FakeLLM([])
         agent = SubAgent(
             name="developer", display_name="Developer", description="d",

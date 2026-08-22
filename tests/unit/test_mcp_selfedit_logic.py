@@ -66,6 +66,9 @@ def _client(overrides: dict | None = None) -> FakeClient:
     routes = {
         ("GET", "/api/selfedit/models"): MODELS,
         ("GET", "/api/selfedit/run"): {"ok": True, "job": {"state": "idle"}, "status": {}},
+        # G2: confirm=false now stages, rather than staying entirely local.
+        ("POST", "/api/selfedit/stage"): {"ok": True, "staging_id": "stg-fake",
+                                           "expires_in_s": 600.0},
         ("POST", "/api/selfedit/run"): {"ok": True, "started": True,
                                          "profile": "kimi-k2 (kimi-k2.7-code)"},
         ("POST", "/api/selfedit/validate"): {"ok": True, "checks": [{"name": "allowlist", "ok": True, "output": ""}]},
@@ -84,7 +87,13 @@ def test_start_preview_starts_nothing():
     assert r["ok"] and r["needs_confirmation"]
     assert r["profile"] == "kimi-k2"  # registry default
     assert "add a clock panel" in r["summary"]
-    assert c.posts == []  # preview never POSTs
+    assert r["staging_id"] == "stg-fake"
+    # G2: preview STAGES (so confirm=true can replay it byte-identical) but
+    # never starts a run — the invariant is "doesn't start", not "no POST".
+    assert c.posts == [
+        ("/api/selfedit/stage",
+         {"goal": "add a clock panel", "profile": "kimi-k2", "plan_path": None}),
+    ]
 
 
 def test_start_honors_spoken_profile():
@@ -142,7 +151,14 @@ def test_start_plan_path_in_preview_summary():
     )
     assert r["ok"] and r["needs_confirmation"]
     assert "docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md" in r["summary"]
-    assert c.posts == []  # preview never POSTs
+    assert r["staging_id"] == "stg-fake"
+    assert c.posts == [
+        ("/api/selfedit/stage", {
+            "goal": "implement geolocation phase 1",
+            "profile": "kimi-k2",
+            "plan_path": "docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md",
+        }),
+    ]
 
 
 def test_start_confirm_posts_plan_path():
@@ -163,6 +179,51 @@ def test_start_empty_plan_path_omitted_from_post():
     c = _client()
     logic.selfedit_start(c, "dark theme", confirm=True, plan_path="  ")
     assert c.posts == [("/api/selfedit/run", {"goal": "dark theme", "profile": "kimi-k2"})]
+
+
+# ── selfedit_start: G2 staged confirm flow ──────────────────────────────────
+
+def test_start_confirm_with_staging_id_replays_without_restating_goal():
+    """G2: confirm=true + staging_id skips model selection AND goal/profile
+    entirely — the sidecar replays the staged record. No models lookup, no
+    goal required on this call."""
+    c = _client(overrides={
+        ("POST", "/api/selfedit/run"): {"ok": True, "started": True, "profile": "kimi-k3"},
+    })
+    r = logic.selfedit_start(c, confirm=True, staging_id="stg-abc")
+    assert r["ok"] and r["started"]
+    assert r["profile"] == "kimi-k3"
+    assert c.posts == [("/api/selfedit/run", {"staging_id": "stg-abc"})]
+
+
+def test_start_confirm_staging_id_takes_priority_over_goal():
+    """Even if goal/profile are (redundantly) also passed, a present
+    staging_id short-circuits straight to the replay — it never re-derives
+    from the restated goal."""
+    c = _client()
+    r = logic.selfedit_start(
+        c, goal="some other goal entirely", confirm=True, staging_id="stg-abc",
+    )
+    assert r["ok"] and r["started"]
+    assert c.posts == [("/api/selfedit/run", {"staging_id": "stg-abc"})]
+
+
+def test_start_confirm_stale_staging_id_surfaces_sidecar_error():
+    """G2: the sidecar's own 'no staged edit' error (TTL or already-used)
+    must pass straight through — it names the real state, never a
+    fabricated 'session expired' narrative."""
+    c = _client(overrides={
+        ("POST", "/api/selfedit/run"): {
+            "ok": False,
+            "error": "no staged edit with id 'stg-old' — it may have expired "
+                     "(staging lasts 10 minutes) or was already used. Call "
+                     "selfedit_start again (confirm=false) to preview a new one.",
+        },
+    })
+    r = logic.selfedit_start(c, confirm=True, staging_id="stg-old")
+    assert r["ok"] is False
+    assert "no staged edit" in r["error"]
+    assert "session expired" not in r["error"]
 
 
 # ── selfedit_status ────────────────────────────────────────────────────────
