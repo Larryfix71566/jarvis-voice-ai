@@ -410,6 +410,15 @@ def get_weather_radar(city: str) -> dict:
     cannot desync if the zoom level ever changes. `dark_all` was chosen to
     suit the console's `--bg: #15191d` graphite theme rather than glaring
     against it like standard OSM tiles would.
+
+    G1 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): RainViewer
+    moved from timestamp-based tile paths (`/v2/radar/{time}/...`) to a
+    hashed `path` field per frame (`/v2/radar/{hash}/...`); URLs built from
+    `time` now 410. Tile URLs are built from `frame["path"]` when present —
+    `time` is kept ONLY as the payload's `ts` display timestamp, never used
+    to construct a URL again. If `path` is missing from the frame (an older
+    or unexpected API shape), fall back to the old ts-constructed form
+    rather than erroring — a possibly-stale tile beats no radar at all.
     """
     city = (city or "").strip()
     if not city:
@@ -436,15 +445,25 @@ def get_weather_radar(city: str) -> dict:
         data = rv.json()
         host = data["host"]
         past = data["radar"]["past"]
-        ts = past[-1]["time"]
+        frame = past[-1]
+        ts = frame["time"]
+        path = frame.get("path")
     except Exception as exc:
         return {"error": f"Radar data failed: {type(exc).__name__}."}
 
     coords = radar_tile_grid(lat, lon)
-    tiles = [
-        f"{host}/v2/radar/{ts}/512/{RADAR_ZOOM}/{x}/{y}/2/1_1.png"
-        for x, y in coords
-    ]
+    if path:
+        # G1: RainViewer's current API — hashed path, not a constructed ts.
+        tiles = [
+            f"{host}{path}/512/{RADAR_ZOOM}/{x}/{y}/2/1_1.png"
+            for x, y in coords
+        ]
+    else:
+        # Fallback: old constructed form, only if the frame lacks `path`.
+        tiles = [
+            f"{host}/v2/radar/{ts}/512/{RADAR_ZOOM}/{x}/{y}/2/1_1.png"
+            for x, y in coords
+        ]
     # W6: SAME coords as `tiles`, reused rather than recomputed — the
     # basemap and the precipitation overlay can never desync.
     basemap_tiles = [

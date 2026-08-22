@@ -12,9 +12,20 @@ process ever runs git against the live repo.
 
 Self-edit endpoints (plan §3/§3.5):
 - GET  /api/selfedit/models           — planner registry (key presence only)
-- POST /api/selfedit/run      {goal, profile?} — start an upgrade run ASYNC
-  (background thread + GET /api/selfedit/run polling): planning takes
-  minutes and voice turns cannot block
+- POST /api/selfedit/stage    {goal, profile?, plan_path?} — G2
+  (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): create a
+  stateful staging record for a preview, returns {staging_id}. mcp_selfedit
+  calls this on confirm=false so the confirm=true call can replay the
+  EXACT goal rather than the model re-deriving it — the previous stateless
+  form let goal/profile drift between the two calls and produced an
+  invented "session expired" narrative (there was never a session to
+  expire). TTL 10 minutes (SELFEDIT_STAGING_TTL_S).
+- POST /api/selfedit/run      {staging_id} or {goal, profile?} — start an
+  upgrade run ASYNC (background thread + GET /api/selfedit/run polling):
+  planning takes minutes and voice turns cannot block. `staging_id`
+  replays a /api/selfedit/stage record (preferred); the bare {goal,
+  profile?} form still works for one release as a logged-deprecation
+  fallback (G2).
 - GET  /api/selfedit/run              — poll the current/last run job
 - GET  /api/selfedit/status           — session state, proposals, validation
 - POST /api/selfedit/validate         — run the validation gate
@@ -46,6 +57,7 @@ import re
 import sys
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -135,7 +147,7 @@ class ActionIn(BaseModel):
 
 
 class GoalIn(BaseModel):
-    goal: str
+    goal: str = ""
     profile: str | None = None
     # MORTIMER_PLANNING_PATHWAY_PLAN.md P7 — an optional pre-written plan
     # (typically adopted via POST /api/plan/adopt) that UpgradeAgent.run()
@@ -145,6 +157,17 @@ class GoalIn(BaseModel):
     # sidecar reads ONCE, synchronously, at start (same read-and-refuse
     # pattern as plan_start's review_path — an unreadable plan must never
     # seed a run). Ignored when `plan` is set explicitly.
+    plan_path: str | None = None
+    # G2 — when set, replaces goal/profile/plan_path with the staged
+    # record from POST /api/selfedit/stage; `goal` may be empty in that
+    # case (it's optional above specifically to allow this).
+    staging_id: str | None = None
+
+
+class SelfEditStageIn(BaseModel):
+    """G2 — the confirm=false half of the stateful staging handshake."""
+    goal: str
+    profile: str | None = None
     plan_path: str | None = None
 
 
@@ -200,6 +223,31 @@ class AppBuildGoalIn(BaseModel):
     profile: str | None = None
     plan: str | None = None
     plan_path: str | None = None
+
+
+# G2 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md) — stateful
+# staging for the selfedit_start confirm=false/confirm=true handshake,
+# mirroring the git `actions` draft→confirm-by-id pattern (jarvis/db.py's
+# `actions` table) but kept in-process rather than in SQLite: like every
+# other job slot on this page, staging state is sidecar-process state, not
+# durable across a restart, and a restart mid-confirmation was never a
+# case any of these slots handled either. Sole owner of the "did goal/
+# profile drift between confirm=false and confirm=true" question that used
+# to be answered by the model re-stating the goal from memory.
+SELFEDIT_STAGING_TTL_S = 600.0  # 10 minutes
+_staging_lock = threading.Lock()
+_selfedit_stagings: dict[str, dict[str, Any]] = {}
+
+
+def _prune_expired_stagings() -> None:
+    """Drop stagings past TTL. Caller must hold _staging_lock."""
+    now = time.time()
+    expired = [
+        sid for sid, rec in _selfedit_stagings.items()
+        if now - rec["created_at"] > SELFEDIT_STAGING_TTL_S
+    ]
+    for sid in expired:
+        del _selfedit_stagings[sid]
 
 
 # Single self-edit session for the sidecar process (plan §3: one at a time).
@@ -566,14 +614,73 @@ def selfedit_status() -> dict:
     return _selfedit_service.status()
 
 
-@app.post("/api/selfedit/run")
-def selfedit_run(body: GoalIn) -> dict:
-    """Start an upgrade run in the background; poll GET /api/selfedit/run."""
+@app.post("/api/selfedit/stage")
+def selfedit_stage(body: SelfEditStageIn) -> dict:
+    """G2: create a stateful staging record for a self-edit preview.
+
+    mcp_selfedit.logic.selfedit_start(confirm=false) calls this instead of
+    just composing a summary client-side — the returned staging_id is what
+    confirm=true must pass back, so the goal/profile/plan_path actually
+    started are BYTE-IDENTICAL to what was previewed, never re-derived by
+    the model from conversational memory."""
     goal = (body.goal or "").strip()
     if not goal:
         return {"ok": False, "error": "a goal is required — what should I change?"}
+    staging_id = uuid.uuid4().hex[:12]
+    with _staging_lock:
+        _prune_expired_stagings()
+        _selfedit_stagings[staging_id] = {
+            "goal": goal,
+            "profile": body.profile,
+            "plan_path": (body.plan_path or "").strip() or None,
+            "created_at": time.time(),
+        }
+    return {
+        "ok": True,
+        "staging_id": staging_id,
+        "expires_in_s": SELFEDIT_STAGING_TTL_S,
+    }
+
+
+@app.post("/api/selfedit/run")
+def selfedit_run(body: GoalIn) -> dict:
+    """Start an upgrade run in the background; poll GET /api/selfedit/run.
+
+    G2: prefer {staging_id} (from POST /api/selfedit/stage) over the bare
+    {goal, profile?} form — the staged record is the source of truth for
+    what was actually previewed. The bare form still works for one release
+    (logged as a deprecation signal), so an older mcp_selfedit build in the
+    field doesn't break."""
+    staging_id = (body.staging_id or "").strip()
+    if staging_id:
+        with _staging_lock:
+            _prune_expired_stagings()
+            rec = _selfedit_stagings.pop(staging_id, None)
+        if rec is None:
+            return {
+                "ok": False,
+                "error": (
+                    f"no staged edit with id '{staging_id}' — it may have "
+                    f"expired (staging lasts {int(SELFEDIT_STAGING_TTL_S // 60)} "
+                    "minutes) or was already used. Call selfedit_start again "
+                    "(confirm=false) to preview a new one."
+                ),
+            }
+        goal = rec["goal"]
+        profile = rec["profile"]
+        plan_path = rec["plan_path"] or ""
+    else:
+        goal = (body.goal or "").strip()
+        if not goal:
+            return {"ok": False, "error": "a goal is required — what should I change?"}
+        logger.warning(
+            "selfedit_run_stateless_confirm goal=%r — pass staging_id instead "
+            "(deprecated fallback, see G2)", goal,
+        )
+        profile = body.profile
+        plan_path = (body.plan_path or "").strip()
+
     plan = body.plan
-    plan_path = (body.plan_path or "").strip()
     if plan is None and plan_path:
         # Voice-path plan seeding: read the plan document once,
         # synchronously, before the thread launches — mirrors plan_start's
@@ -599,7 +706,7 @@ def selfedit_run(body: GoalIn) -> dict:
         try:
             # Construct now so an unknown profile fails fast, synchronously,
             # before we report the run as started.
-            agent = _make_agent(_selfedit_service, body.profile)
+            agent = _make_agent(_selfedit_service, profile)
         except UnknownModelProfileError as exc:
             return {"ok": False, "error": str(exc)}
         _run_job.update(
@@ -613,7 +720,7 @@ def selfedit_run(body: GoalIn) -> dict:
     # D17 — every self-edit state transition is logged.
     logger.info("selfedit_state_transition state=running goal=%r", goal)
     threading.Thread(
-        target=_run_agent, args=(goal, body.profile, plan), daemon=True,
+        target=_run_agent, args=(goal, profile, plan), daemon=True,
     ).start()
     return {"ok": True, "started": True, "profile": agent.model_label()}
 

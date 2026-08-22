@@ -19,6 +19,7 @@ per-connection so bot.py's entry shape never changes again.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import uuid
@@ -40,6 +41,7 @@ from jarvis.bot.display import WeatherReportMerger, build_display_payload
 from jarvis.bot.interruption import InterruptionNotifier
 from jarvis.bot.memory_watcher import MemorySweepWatcher
 from jarvis.bot.plan_watcher import PlanWatcher
+from jarvis.bot.progress_watcher import ProgressWatcher, SpeakingStateTracker
 from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.remember_tool import build_remember_tool
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
@@ -181,19 +183,37 @@ def make_agent_event_handler(transport: Any) -> Any:
             # run log records, not from a model narrating itself. Sent for
             # EVERY result, before the display-worthiness check below,
             # which only decides whether a separate content payload opens.
+            tool_name = str(event.get("tool") or "")
+            activity_msg: dict[str, Any] = {
+                "type": "agent_activity",
+                "name": event.get("agent"),
+                "run_id": event.get("run_id"),
+                "tool": tool_name,
+                "ok": bool(event.get("ok", True)),
+                "latency_ms": int(event.get("latency_ms") or 0),
+            }
+            # G7 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md):
+            # the Agents-tab card shows SubAgent.model (the developer's OWN
+            # resolved model, e.g. Haiku or kimi-k3) — but the model doing
+            # the actual self-edit WORK is a separate planner picked inside
+            # the admin sidecar and only known once selfedit_start/status
+            # returns. Both mcp_selfedit tools echo it back as
+            # `planner_model` (see mcp_servers/mcp_selfedit/logic.py) — ride
+            # it on the SAME per-tool-call channel already sent for every
+            # result, rather than inventing a second message type.
+            if tool_name in ("selfedit_start", "selfedit_status"):
+                try:
+                    parsed = json.loads(str(event.get("result") or "{}"))
+                except (TypeError, ValueError):
+                    parsed = {}
+                planner_model = parsed.get("planner_model") if isinstance(parsed, dict) else None
+                if isinstance(planner_model, str) and planner_model:
+                    activity_msg["planner_model"] = planner_model
             try:
                 asyncio.get_running_loop().create_task(
-                    send_app_message(transport, {
-                        "type": "agent_activity",
-                        "name": event.get("agent"),
-                        "run_id": event.get("run_id"),
-                        "tool": event.get("tool"),
-                        "ok": bool(event.get("ok", True)),
-                        "latency_ms": int(event.get("latency_ms") or 0),
-                    }))
+                    send_app_message(transport, activity_msg))
             except RuntimeError:
                 pass  # no running loop (tests calling the handler directly)
-            tool_name = str(event.get("tool") or "")
             if tool_name in ("get_weather", "get_weather_radar"):
                 # W5 — route through the merger instead of displaying each
                 # tool's result on its own; offer() returns a payload only
@@ -823,12 +843,18 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
         # 9-processor order is unchanged. InterruptionNotifier is a task
         # observer for the same reason: BotStartedSpeakingFrame/
         # BotStoppedSpeakingFrame are born downstream of the TTS service.
+        # G12 — a small task observer feeding ProgressWatcher's "don't speak
+        # over anyone" suppression; same D-007/Phase-3 pattern
+        # InterruptionNotifier already uses (BotStartedSpeakingFrame/
+        # BotStoppedSpeakingFrame are born downstream of the TTS service).
+        speaking_tracker = SpeakingStateTracker()
         observers = [
             TranscriptObserver(runtime.session_id, only_from=runtime.speaker_gate),
             InterruptionNotifier(
                 inject_silent,
                 enabled=settings.jarvis_interruption_notice_enabled,
             ),
+            speaking_tracker,
         ]
         if os.environ.get("JARVIS_DEBUG_OBSERVER"):
             # Temporary diagnostic: print every function-call frame hop with
@@ -982,6 +1008,26 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             )
             plan_watcher.start()
 
+        # G12 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md) —
+        # verbal "still working" pings every 30s while a delegation or
+        # self-edit run is in flight. Kill switch:
+        # JARVIS_PROGRESS_UPDATES_ENABLED=false.
+        progress_watcher = None
+        if os.environ.get("JARVIS_PROGRESS_UPDATES_ENABLED", "").strip().lower() not in (
+            "false", "0", "no",
+        ):
+            async def _speak_progress(text: str) -> None:
+                from pipecat.frames.frames import TTSSpeakFrame
+                await pusher.push(TTSSpeakFrame(text=text))
+
+            progress_watcher = ProgressWatcher(
+                speak=_speak_progress,
+                is_connected=lambda: client_connected["value"],
+                is_speaking=speaking_tracker.is_busy,
+                session_id=runtime.session_id,
+            )
+            progress_watcher.start()
+
         voice_state = {"current": catalog["default"]}
 
         async def handle_voice_set(message: Any) -> None:
@@ -1053,6 +1099,8 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             await memory_watcher.stop()
             if plan_watcher is not None:
                 await plan_watcher.stop()
+            if progress_watcher is not None:
+                await progress_watcher.stop()
             # U2.5: fold this session into long-term memory. Best-effort,
             # hard-capped — memory work must never delay shutdown.
             #

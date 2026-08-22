@@ -118,6 +118,40 @@ def test_unknown_tool_refused(service: SelfEditService) -> None:
     assert not result["ok"]
 
 
+class TestRepoMapInjection:
+    """G5 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): the
+    self-edit loop's own prompt now carries docs/REPO_MAP.md via the SAME
+    shared helper SubAgent uses (jarvis/repo_map.py) — one implementation,
+    not two."""
+
+    def test_upgrade_agent_prompt_carries_repo_map(
+        self, service: SelfEditService, tmp_path, monkeypatch
+    ) -> None:
+        import jarvis.repo_map as repo_map_module
+
+        repo_root = tmp_path / "fake_repo"
+        (repo_root / "docs").mkdir(parents=True)
+        (repo_root / "docs" / "REPO_MAP.md").write_text(
+            "## Test map\n- delegate_task lives in jarvis/agents/delegate.py\n"
+        )
+        monkeypatch.setattr(repo_map_module, "__file__", str(repo_root / "jarvis" / "repo_map.py"))
+
+        agent = _agent(service, ScriptedClient([_msg(content="done")]))
+        assert "Test map" in agent._system_prompt
+        assert "delegate_task lives in jarvis/agents/delegate.py" in agent._system_prompt
+
+    def test_missing_repo_map_skipped_silently(
+        self, service: SelfEditService, tmp_path, monkeypatch
+    ) -> None:
+        import jarvis.repo_map as repo_map_module
+
+        monkeypatch.setattr(
+            repo_map_module, "__file__", str(tmp_path / "no_docs_here" / "jarvis" / "repo_map.py")
+        )
+        agent = _agent(service, ScriptedClient([_msg(content="done")]))
+        assert "Repository map" not in agent._system_prompt
+
+
 def test_off_allowlist_goal_cannot_edit(service: SelfEditService) -> None:
     client = ScriptedClient([
         _msg(tool_calls=[_tool_call("edit_propose", {
@@ -131,6 +165,68 @@ def test_off_allowlist_goal_cannot_edit(service: SelfEditService) -> None:
     assert result["ok"]  # agent finished by declining
     assert "declined" in result["summary"].lower() or "human" in result["summary"].lower()
     assert not (service.repo_root / "jarvis/wakeword.py").exists()
+
+
+def test_halfway_checkpoint_injected_at_half_budget_zero_edits(service: SelfEditService) -> None:
+    """G6 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): a
+    session that only reads, never proposing an edit, gets a forcing
+    nudge injected once it's halfway through its iteration budget."""
+    client = ScriptedClient([
+        _msg(tool_calls=[_tool_call(
+            "file_read", {"path": "web/src/App.tsx"}, call_id=f"c{i}",
+        )])
+        for i in range(6)
+    ])
+    agent = _agent(service, client)
+    result = agent.run("read everything forever")
+    assert not result["ok"]
+    transcript = client.received[-1]["messages"]  # append-only: final call sees everything
+    assert any(
+        m.get("role") == "system"
+        and "halfway through this session's iteration budget" in (m.get("content") or "")
+        for m in transcript
+    )
+
+
+def test_halfway_checkpoint_not_injected_once_an_edit_exists(service: SelfEditService) -> None:
+    """The nudge is specifically for ZERO proposals — a session that
+    already proposed something legitimately keeps reading/refining."""
+    client = ScriptedClient([
+        _msg(tool_calls=[_tool_call("edit_propose", {
+            "path": "web/src/App.tsx", "new_content": "export default 2;\n",
+            "rationale": "first edit",
+        }, call_id="c0")]),
+    ] + [
+        _msg(tool_calls=[_tool_call(
+            "file_read", {"path": "web/src/App.tsx"}, call_id=f"c{i}",
+        )])
+        for i in range(1, 6)
+    ])
+    agent = _agent(service, client)
+    agent.run("propose then keep reading")
+    transcript = client.received[-1]["messages"]
+    assert not any(
+        m.get("role") == "system"
+        and "halfway through this session's iteration budget" in (m.get("content") or "")
+        for m in transcript
+    )
+
+
+def test_exhaustion_with_zero_proposals_names_never_converged(service: SelfEditService) -> None:
+    """G6: exhausting the budget having never proposed a single edit is a
+    DIFFERENT failure from exhausting it mid-edit — the summary must say
+    so, not the generic 'iteration limit' message."""
+    client = ScriptedClient([
+        _msg(tool_calls=[_tool_call(
+            "file_read", {"path": "web/src/App.tsx"}, call_id=f"c{i}",
+        )])
+        for i in range(6)
+    ])
+    agent = _agent(service, client)
+    result = agent.run("read everything forever")
+    assert not result["ok"]
+    assert "never converged on a first edit" in result["summary"]
+    assert "iteration limit" not in result["summary"]
 
 
 def test_iteration_bound_stops_runaway(service: SelfEditService) -> None:

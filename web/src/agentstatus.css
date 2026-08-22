@@ -163,6 +163,16 @@
   border-color: var(--red);
 }
 
+/* G7 — the self-edit planner chip, deliberately distinct from
+   .agent-card-model rather than reusing it verbatim: the two chips name
+   DIFFERENT models (dispatcher vs. planner) and must never be visually
+   confusable as duplicates or as one model correcting the other. */
+.agent-card-planner-model {
+  color: var(--accent);
+  border-color: var(--accent-faint);
+  max-width: 17ch;
+}
+
 .agent-card-time {
   margin-left: auto;
   font-family: var(--mono);

@@ -164,6 +164,18 @@ export default function AgentsTab() {
                     {r.modelUnusable ? " ✕" : r.modelFallback ? " ⚠" : ""}
                   </span>
                 )}
+                {/* G7 — the model actually doing self-edit WORK inside the
+                    admin sidecar, alongside (never replacing) the dispatch
+                    model above. Only ever set for self-edit runs, once
+                    selfedit_start/selfedit_status has reported one. */}
+                {r.plannerModel && (
+                  <span
+                    className="agent-card-model agent-card-planner-model"
+                    title={`Self-edit planner: ${r.plannerModel}`}
+                  >
+                    ⚙ {shortModel(r.plannerModel)}
+                  </span>
+                )}
                 <span className="agent-card-time">
                   {working ? elapsed : `${r.ok ? "done" : "failed"} · ${elapsed}`}
                 </span>

@@ -39,8 +39,10 @@ const popout = createPopoutChannel<DisplayDomainMessage>(DISPLAY_CHANNEL, "displ
 
 /** Latest informational payload — kept here so a `{t:"hello"}` from a
  * freshly-opened popup can be answered even if the console has no other
- * listener for it (D40's replay handshake). Also what the in-page
- * DisplayPanel falls back to reading when no popup is live (D41). */
+ * listener for it (D40's replay handshake). This is ALSO what the popped-
+ * out external window itself always shows (there is only one physical
+ * popup — see the G8 module docstring below for why per-panel POPOUT
+ * still means "this panel's content, on the one external window"). */
 let latest: DisplayPayload | null = null;
 const inPageListeners = new Set<(payload: DisplayPayload | null) => void>();
 
@@ -48,7 +50,64 @@ function notifyInPage() {
   for (const cb of inPageListeners) cb(latest);
 }
 
-/** Console side: publish to the in-page window AND the channel. */
+/**
+ * G8 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md, in-page
+ * panel registry): before this, a second `surface: "window"` result while
+ * the first was still open silently REPLACED it — a follow-up weather
+ * check while a research brief was still on screen made the brief
+ * disappear with no way back short of asking again. `publish()` now
+ * appends a new, independently-closable panel instead of overwriting a
+ * single `latest` slot, up to `MAX_OPEN_DISPLAY_PANELS`.
+ *
+ * The external pop-out window is UNCHANGED in shape: there is exactly one
+ * physical browser window (`popout`, channel "mortimer.display"), and the
+ * shell's native side only knows the three fixed roles console/display/
+ * drawer (see popoutWindow.ts's `open()` — `entry.role` is the contract,
+ * not an arbitrary id), so per-panel real OS windows is out of scope here
+ * without shell changes. "Pop-out works per-panel" instead means: popping
+ * out ANY specific in-page panel sends THAT panel's payload to the one
+ * external window (via `popOutPanel`) and removes it from the in-page
+ * stack, exactly mirroring what closing/graduating a card to the second
+ * screen should feel like. While the popup is live, new publishes still
+ * update the external window (via `latest`/the channel) but do NOT also
+ * open a redundant in-page panel — unchanged from the pre-G8 behavior.
+ */
+export const MAX_OPEN_DISPLAY_PANELS = 6;
+
+export interface DisplayWindowPanel {
+  id: string;
+  payload: DisplayPayload;
+}
+
+let panels: DisplayWindowPanel[] = [];
+let panelSeq = 0;
+const panelListeners = new Set<(panels: DisplayWindowPanel[]) => void>();
+const noticeListeners = new Set<(text: string) => void>();
+
+function notifyPanels() {
+  for (const cb of panelListeners) cb(panels);
+}
+
+function notifyEviction(text: string) {
+  for (const cb of noticeListeners) cb(text);
+}
+
+/** Subscribe to the live in-page panel stack. Returns an unsubscribe fn. */
+export function subscribePanels(cb: (panels: DisplayWindowPanel[]) => void): () => void {
+  panelListeners.add(cb);
+  cb(panels);
+  return () => panelListeners.delete(cb);
+}
+
+/** Subscribe to transient "an old panel was auto-closed" notices (shown as
+ * a small toast, mirroring the existing popout-error transient pattern). */
+export function subscribeEvictionNotice(cb: (text: string) => void): () => void {
+  noticeListeners.add(cb);
+  return () => noticeListeners.delete(cb);
+}
+
+/** Console side: publish to the popout channel and (unless a popup is
+ * already live — see the docstring above) append a new in-page panel. */
 export function publish(payload: DisplayPayload): void {
   latest = payload;
   notifyInPage();
@@ -67,6 +126,53 @@ export function publish(payload: DisplayPayload): void {
     }
   }
   popout.postMessage({ t: "payload", payload });
+  if (hasLivePopup()) return; // shown externally already — no in-page panel
+  panelSeq += 1;
+  const panel: DisplayWindowPanel = { id: String(panelSeq), payload };
+  panels = [...panels, panel];
+  if (panels.length > MAX_OPEN_DISPLAY_PANELS) {
+    panels = panels.slice(panels.length - MAX_OPEN_DISPLAY_PANELS);
+    notifyEviction(
+      `Closed the oldest of ${MAX_OPEN_DISPLAY_PANELS} open panels to make room.`,
+    );
+  }
+  notifyPanels();
+}
+
+/** Console side: close one in-page panel by id (the panel's own × button). */
+export function closePanel(id: string): void {
+  const next = panels.filter((p) => p.id !== id);
+  if (next.length === panels.length) return;
+  panels = next;
+  notifyPanels();
+}
+
+/** Console side: pop ONE panel's payload out to the single external
+ * window, and remove it from the in-page stack — see the module docstring
+ * for why this is "per-panel pop-out" without per-panel OS windows. */
+export function popOutPanel(id: string): void {
+  const panel = panels.find((p) => p.id === id);
+  if (panel) {
+    latest = panel.payload;
+    notifyInPage();
+    popout.postMessage({ t: "payload", payload: panel.payload });
+  }
+  closePanel(id);
+  openDisplayWindow();
+}
+
+/** D41's mandatory fallback, carried into the multi-panel world: if the
+ * external popup goes away (closed, or a blocked/failed pop attempt) while
+ * it was the ONLY place a result was showing, that result must not be
+ * silently lost. Call when the container detects popupOpen flipping from
+ * true to false; re-adds `latest` as an in-page panel unless one already
+ * shows it (avoids a duplicate if publish() already handled it). */
+export function restoreLatestAsPanel(): void {
+  if (!latest) return;
+  if (panels.some((p) => p.payload === latest)) return;
+  panelSeq += 1;
+  panels = [...panels, { id: String(panelSeq), payload: latest }];
+  notifyPanels();
 }
 
 /** In-page (DisplayPanel) subscription — mirrors the same `latest` value

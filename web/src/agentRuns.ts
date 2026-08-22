@@ -105,6 +105,12 @@ export interface RunState {
    * from modelFallback: nothing upstream noticed anything wrong. */
   modelUnusable: boolean;
   modelUnusableDetail: string;
+  /** G7 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): the
+   * model actually doing self-edit WORK inside the admin sidecar — distinct
+   * from `model` above (the developer SubAgent's own resolved model, e.g.
+   * Haiku or kimi-k3, which merely dispatched selfedit_start). "" until a
+   * selfedit_start/selfedit_status result has reported it. */
+  plannerModel: string;
 }
 
 interface AgentLifecycleMsg {
@@ -122,6 +128,7 @@ interface AgentLifecycleMsg {
   model_fallback?: boolean;
   model_unusable?: boolean;
   model_unusable_detail?: string;
+  planner_model?: string;
 }
 
 /**
@@ -299,6 +306,7 @@ export function applyServerMessage(msg: unknown): void {
       modelUnusable: m.model_unusable === true,
       modelUnusableDetail:
         typeof m.model_unusable_detail === "string" ? m.model_unusable_detail : "",
+      plannerModel: "",
     };
     setRuns(insertRun(runs, run));
   } else if (m.type === "agent_activity" && typeof m.tool === "string") {
@@ -312,6 +320,14 @@ export function applyServerMessage(msg: unknown): void {
       latencyMs: typeof m.latency_ms === "number" ? m.latency_ms : 0,
       ts: Date.now(),
     };
+    // G7 — selfedit_start/selfedit_status results ride planner_model on
+    // this SAME per-tool-call message; once seen it sticks on the card
+    // (never cleared back to "" by a later tool call that didn't report
+    // one — a card that HAD a planner model never silently loses the chip).
+    const plannerModel =
+      typeof m.planner_model === "string" && m.planner_model !== ""
+        ? m.planner_model
+        : undefined;
     setRuns(
       runs.map((r) => {
         const match =
@@ -319,7 +335,11 @@ export function applyServerMessage(msg: unknown): void {
             ? r.runId === runId
             : r.name === name && r.doneAt === null;
         return match
-          ? { ...r, activity: [...r.activity, line].slice(-MAX_ACTIVITY) }
+          ? {
+              ...r,
+              activity: [...r.activity, line].slice(-MAX_ACTIVITY),
+              plannerModel: plannerModel ?? r.plannerModel,
+            }
           : r;
       }),
     );

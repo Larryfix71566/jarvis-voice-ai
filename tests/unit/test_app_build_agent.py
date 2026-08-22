@@ -37,6 +37,22 @@ def _isolated_db(tmp_path, monkeypatch):
     conn.close()
 
 
+@pytest.fixture(autouse=True)
+def _no_repo_map(tmp_path, monkeypatch):
+    """G5 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md):
+    UpgradeAgent.__init__ — which AppBuildAgent shares — now appends
+    docs/REPO_MAP.md via jarvis.repo_map.load_repo_map_suffix(). Tests in
+    this file assert exact system-prompt equality against
+    APP_BUILD_SYSTEM_PROMPT, so point the loader at a path with no
+    docs/REPO_MAP.md rather than depending on this real checkout's file
+    (which would make the test's pass/fail depend on repo state)."""
+    import jarvis.repo_map as repo_map_module
+
+    monkeypatch.setattr(
+        repo_map_module, "__file__", str(tmp_path / "no_docs_here" / "jarvis" / "repo_map.py")
+    )
+
+
 def _git(cwd: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=cwd, check=True,
                    capture_output=True, text=True)

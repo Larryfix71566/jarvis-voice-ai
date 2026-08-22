@@ -24,22 +24,28 @@ def _get_client():
 
 @mcp.tool()
 def selfedit_start(
-    goal: str, profile: str = "", confirm: bool = False, plan_path: str = ""
+    goal: str = "", profile: str = "", confirm: bool = False, plan_path: str = "",
+    staging_id: str = "",
 ) -> dict:
     """Start a self-development run for GOAL (a change to Mortimer itself).
 
-    Two-phase: call with confirm=false to preview the goal and planner model,
-    then — only after the user explicitly agrees — call again with
-    confirm=true. PROFILE optionally names a planner from the registry (e.g.
-    'kimi-k2', 'kimi-k3', 'claude-opus'); empty uses the default. PLAN_PATH,
-    when set, names an existing repo plan/spec document (e.g.
+    Two-phase: call with confirm=false to preview the goal and planner
+    model. The result carries a `staging_id` — after the user explicitly
+    agrees, call again with confirm=true AND that same staging_id (goal/
+    profile don't need to be restated; the sidecar replays exactly what
+    was previewed). PROFILE optionally names a planner from the registry
+    (e.g. 'kimi-k2', 'kimi-k3', 'claude-opus'); empty uses the default.
+    PLAN_PATH, when set, names an existing repo plan/spec document (e.g.
     docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md) that seeds the run — use it
-    whenever the user asks to implement a plan, spec, or phase document. The
-    run is asynchronous: it plans in the background for several minutes; use
-    selfedit_status to check progress.
+    whenever the user asks to implement a plan, spec, or phase document.
+    Staging expires after 10 minutes; if confirm=true reports the staging
+    is gone, call selfedit_start again to preview a fresh one. The run
+    itself is asynchronous: it plans in the background for several
+    minutes; use selfedit_status to check progress.
     """
     return logic.selfedit_start(
-        _get_client(), goal, profile or None, confirm, plan_path=plan_path
+        _get_client(), goal, profile or None, confirm,
+        plan_path=plan_path, staging_id=staging_id,
     )
 
 

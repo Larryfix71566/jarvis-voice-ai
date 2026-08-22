@@ -48,6 +48,16 @@ def reset_run_job():
     yield
 
 
+@pytest.fixture(autouse=True)
+def reset_stagings():
+    """G2: staging state must not leak between tests."""
+    with srv._staging_lock:
+        srv._selfedit_stagings.clear()
+    yield
+    with srv._staging_lock:
+        srv._selfedit_stagings.clear()
+
+
 @pytest.fixture
 def registry_file(tmp_path, monkeypatch):
     p = tmp_path / "upgrade_models.yaml"
@@ -240,3 +250,101 @@ def test_run_status_endpoint_shape(registry_file, monkeypatch):
     assert set(body["job"]) >= {"state", "goal", "profile", "summary",
                                 "started_at", "finished_at"}
     assert "status" in body
+
+
+# ---------------------------------------------------------------- staging (G2)
+
+
+def test_stage_returns_staging_id(registry_file):
+    c = TestClient(app)
+    res = c.post("/api/selfedit/stage", json={"goal": "add a clock panel"}).json()
+    assert res["ok"] is True
+    assert res["staging_id"]
+    assert res["expires_in_s"] == srv.SELFEDIT_STAGING_TTL_S
+
+
+def test_stage_empty_goal_rejected(registry_file):
+    c = TestClient(app)
+    res = c.post("/api/selfedit/stage", json={"goal": "   "}).json()
+    assert res["ok"] is False and "goal" in res["error"]
+
+
+def test_run_with_staging_id_replays_staged_goal(registry_file, monkeypatch):
+    """G2: the staged goal/profile — never anything re-derived on the
+    confirm call — is what actually reaches the agent."""
+    seen = {}
+
+    class CapturingAgent(FakeAgent):
+        def run(self, goal, plan=None):
+            seen["goal"] = goal
+            return {"ok": True, "summary": "done"}
+
+    monkeypatch.setattr(
+        srv, "_make_agent", lambda service, profile: CapturingAgent(service, profile)
+    )
+    c = TestClient(app)
+    stage = c.post("/api/selfedit/stage", json={
+        "goal": "add a clock panel", "profile": "claude-opus",
+    }).json()
+    sid = stage["staging_id"]
+
+    res = c.post("/api/selfedit/run", json={"staging_id": sid}).json()
+    assert res["ok"] and res["started"]
+    assert res["profile"] == "claude-opus (fake-model)"
+    _wait_for_job(c, "done")
+    assert seen["goal"] == "add a clock panel"
+
+
+def test_run_with_staging_id_consumes_it_once(registry_file, monkeypatch):
+    """A staging record is single-use — a second confirm with the SAME id
+    must fail honestly rather than silently starting a second run."""
+    _install_fake_agent(monkeypatch)
+    c = TestClient(app)
+    stage = c.post("/api/selfedit/stage", json={"goal": "add a clock"}).json()
+    sid = stage["staging_id"]
+    first = c.post("/api/selfedit/run", json={"staging_id": sid}).json()
+    assert first["ok"] and first["started"]
+    _wait_for_job(c, "done")
+
+    second = c.post("/api/selfedit/run", json={"staging_id": sid}).json()
+    assert second["ok"] is False
+    assert "no staged edit" in second["error"]
+    assert "session expired" not in second["error"]  # G2: name the real state
+
+
+def test_run_unknown_staging_id_names_real_state(registry_file):
+    c = TestClient(app)
+    res = c.post("/api/selfedit/run", json={"staging_id": "does-not-exist"}).json()
+    assert res["ok"] is False
+    assert "does-not-exist" in res["error"]
+    assert "expired" in res["error"] or "already used" in res["error"]
+
+
+def test_run_stale_staging_id_errors_honestly(registry_file, monkeypatch):
+    """G2: TTL expiry names the real cause, never an invented narrative."""
+    c = TestClient(app)
+    stage = c.post("/api/selfedit/stage", json={"goal": "add a clock"}).json()
+    sid = stage["staging_id"]
+    with srv._staging_lock:
+        srv._selfedit_stagings[sid]["created_at"] -= srv.SELFEDIT_STAGING_TTL_S + 1
+    res = c.post("/api/selfedit/run", json={"staging_id": sid}).json()
+    assert res["ok"] is False
+    assert "expired" in res["error"] or "no staged edit" in res["error"]
+
+
+def test_run_bare_form_without_staging_id_still_works(registry_file, monkeypatch):
+    """G2: the deprecated stateless {goal, profile} form must keep working
+    for one release — an older mcp_selfedit build must not break."""
+    _install_fake_agent(monkeypatch)
+    c = TestClient(app)
+    res = c.post("/api/selfedit/run", json={"goal": "dark theme"}).json()
+    assert res["ok"] and res["started"]
+    _wait_for_job(c, "done")
+
+
+def test_stage_does_not_start_a_run(registry_file):
+    """Staging is a preview-time record only — GET /api/selfedit/run must
+    still report idle until confirm actually replays it."""
+    c = TestClient(app)
+    c.post("/api/selfedit/stage", json={"goal": "add a clock panel"})
+    assert c.get("/api/selfedit/run").json()["job"]["state"] == "idle"
