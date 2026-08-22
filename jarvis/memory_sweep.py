@@ -48,7 +48,12 @@ from openai import AsyncOpenAI
 
 from jarvis.consolidate import propose_merges
 from jarvis.db import get_conn, now_iso
-from jarvis.memory import archive_fact, upsert_fact
+from jarvis.memory import (
+    MAX_PREFERENCE_FACTS,
+    MAX_PROJECT_FACTS,
+    archive_fact,
+    upsert_fact,
+)
 from jarvis.procedures import _tokens
 
 logger = logging.getLogger(__name__)
@@ -241,6 +246,259 @@ def run_auto_consolidation(conn) -> dict:
                 queued += 1
 
     return {"archived": archived, "queued": queued}
+
+
+# --------------------------------------------------------------------- #
+# A1.5 — capacity enforcement ladder (M3/M9, MORTIMER_MEMORY_CAPACITY_
+# PLAN.md): the "live = injected" invariant. Every live fact must reach
+# the prompt, so a tier sitting over its cap is a defect this sweep must
+# eliminate, not one render_memory_context papers over by silently
+# dropping. identity is never a target — CAPACITY_CAPS deliberately omits
+# it, matching A1's own never-touch-identity rule.
+# --------------------------------------------------------------------- #
+
+# M2's per-tier caps, imported rather than redefined — one set of
+# numbers, not two. system's live cap is 0 (M4): a tier CONTEXT_TIERS
+# never surfaces to the prompt has no business staying "live"; still
+# stored, still searchable via mcp-memory's memory_search (M6).
+CAPACITY_CAPS: dict[str, int] = {
+    "preference": MAX_PREFERENCE_FACTS,
+    "project": MAX_PROJECT_FACTS,
+    "system": 0,
+}
+
+# Rung (b)'s clustering threshold — deliberately LOWER than A1's
+# SWEEP_AUTO_THRESHOLD (0.8). A1 auto-merges near-duplicates without a
+# model in the loop; this rung asks a model to REWRITE related-but-not-
+# identical facts into one, so the threshold only has to find a
+# plausible cluster, and the rewrite step is what has to be trustworthy.
+CAPACITY_MERGE_THRESHOLD = 0.55
+
+MERGE_PROMPT = """You maintain the long-term memory of a personal AI \
+assistant named Mortimer, belonging to a user named Larry. You are given \
+a cluster of related facts (same tier) being merged into one fact \
+because the store is over its capacity for that tier. Rewrite them into \
+ONE fact that preserves every distinct piece of information across all \
+of them.
+
+Rules:
+- Prefer general, durable phrasing over specific, episodic phrasing — a
+  rule stated once beats a single dated example of it (the 2026-08-20
+  cluster-26 lesson: a specific project echo is not a better survivor
+  than a durable general statement, even when it reads more concrete).
+- Do not drop any detail that appears in only ONE of the input facts.
+- Output ONE sentence, plain text. No markdown, no commentary, no
+  preamble — output ONLY the rewritten fact content, nothing else.
+
+Facts:
+{facts}"""
+
+
+def _tier_count(conn, tier: str) -> int:
+    return conn.execute(
+        "SELECT COUNT(*) FROM memories WHERE kind = 'fact' "
+        "AND archived_at IS NULL AND COALESCE(tier, 'project') = ?",
+        (tier,),
+    ).fetchone()[0]
+
+
+def _age_out_oldest(conn, tier: str, n: int) -> list[str]:
+    """Rung (c) — the mechanical backstop that holds M1's invariant even
+    with no API key. Archives the `n` oldest live facts in `tier`,
+    oldest-`updated_at`-first. Never touches identity (not a valid `tier`
+    argument from this module's own caller)."""
+    if n <= 0:
+        return []
+    rows = conn.execute(
+        "SELECT key FROM memories WHERE kind = 'fact' AND archived_at IS NULL "
+        "AND COALESCE(tier, 'project') = ? ORDER BY updated_at ASC LIMIT ?",
+        (tier, n),
+    ).fetchall()
+    archived: list[str] = []
+    for r in rows:
+        if archive_fact(conn, r["key"], "aged-out"):
+            archived.append(r["key"])
+    return archived
+
+
+def _best_capacity_cluster(conn, tier: str):
+    """The single best (highest-overlap) mergeable cluster for `tier`, or
+    None. Mixed-content-hazard clusters are excluded — A1's hard stop
+    against automation applies here too; a fact carrying a topic its key
+    doesn't advertise is never auto-merged, only ever queued for a human
+    (and capacity enforcement queues nothing — M7 — so such a cluster
+    simply falls through to rung (c) instead)."""
+    facts = [f for f in _load_facts(conn) if f["tier"] == tier]
+    proposals = propose_merges(facts, threshold=CAPACITY_MERGE_THRESHOLD)
+    for p in proposals:
+        if not p.warnings:
+            return p
+    return None
+
+
+async def _merge_cluster(
+    proposal, settings: Any, client_factory: Callable[[Any], Any] | None = None,
+) -> str | None:
+    """One small-model call rewriting a MergeProposal's facts into a
+    single fact. Returns None on ANY failure (network, empty/malformed
+    output) — the caller falls through to rung (c) rather than trusting a
+    bad rewrite. Reuses the sweep's existing client-construction pattern
+    (jarvis.memory_sweep._classify_batch)."""
+    try:
+        client = (
+            client_factory(settings)
+            if client_factory is not None
+            else AsyncOpenAI(
+                api_key=settings.openai_api_key, base_url=settings.openai_base_url,
+            )
+        )
+        # `settings` may be None when a test-seam `client_factory` supplies
+        # its own fake client — getattr rather than assume, so that seam
+        # never has to fabricate a whole Settings object.
+        model = getattr(settings, "openai_model", None)
+        facts_block = "\n".join(
+            f"- {k}: {c}" for k, c in zip(proposal.keys, proposal.contents)
+        )
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "user", "content": MERGE_PROMPT.format(facts=facts_block)},
+            ],
+        )
+        text = (response.choices[0].message.content or "").strip()
+        return text or None
+    except Exception:  # noqa: BLE001 — a failed merge falls through to age-out
+        logger.warning(
+            "memory_enforce_merge_failed tier=%s keys=%s",
+            proposal.tier, proposal.keys, exc_info=True,
+        )
+        return None
+
+
+async def run_capacity_enforcement(
+    conn,
+    settings: Any | None = None,
+    client_factory: Callable[[Any], Any] | None = None,
+    ignore_boot_cap: bool = False,
+) -> dict:
+    """M3/M5 — the per-tier ladder that holds M1's invariant: every live
+    fact reaches the prompt. Runs as A1.5 in run_sweep, right after
+    run_auto_consolidation (rung a) and before A2/A5 classification;
+    never touches identity.
+
+    Per tier (preference, project, system), while the tier is over its
+    cap:
+      (b) merge the single best cluster via one small-model call, when a
+          model/key is available and a mergeable cluster exists —
+          otherwise this rung is skipped, logged once, and rung (c)
+          takes the rest.
+      (c) mechanical age-out — archive the oldest facts beyond the cap.
+          The backstop that holds the invariant with zero API dependency.
+    system's cap is 0 (M4): every live system fact is archived on sight,
+    with no merge rung at all — merging facts the prompt never sees would
+    waste a model call on pure storage noise.
+
+    `ignore_boot_cap=True` (M5, the `--enforce` CLI) runs the full ladder
+    in one pass; otherwise each tier's total archived-this-call count is
+    bounded by SWEEP_MAX_ARCHIVES, the same per-boot damage limit A1
+    uses, so an unattended boot can only move the store this far before
+    the next restart drains the rest.
+
+    Never queues anything for Larry (M7) — capacity is arithmetic, not a
+    judgment call; the only queuing left after this rung is A1's
+    mixed-content-hazard path and A2/A5's classification, both untouched.
+    Returns {tier: {"before", "after", "cap", "merged", "aged_out"}}.
+    """
+    report: dict[str, dict] = {}
+    for tier, cap in CAPACITY_CAPS.items():
+        before = _tier_count(conn, tier)
+        merged = 0
+        aged_out = 0
+        merge_skipped = False
+
+        if tier == "system":
+            # M4: archive on sight, no merge rung — see docstring.
+            aged_out = len(_age_out_oldest(conn, tier, before))
+        else:
+            archive_budget = None if ignore_boot_cap else SWEEP_MAX_ARCHIVES
+            spent = 0
+            over = before - cap
+            while over > 0 and (archive_budget is None or spent < archive_budget):
+                proposal = _best_capacity_cluster(conn, tier)
+                if proposal is None:
+                    merge_skipped = True
+                    break
+                if settings is None and client_factory is None:
+                    try:
+                        from jarvis.config import load_settings
+
+                        settings = load_settings()
+                    except Exception:  # noqa: BLE001
+                        merge_skipped = True
+                        break
+                rewritten = await _merge_cluster(proposal, settings, client_factory)
+                if not rewritten:
+                    merge_skipped = True
+                    break
+                kept_key = proposal.keys[0]
+                upsert_fact(conn, kept_key, rewritten, None)
+                for key in proposal.keys[1:]:
+                    if archive_fact(conn, key, f"merged:{kept_key}"):
+                        merged += 1
+                        spent += 1
+                over = _tier_count(conn, tier) - cap
+
+            if merge_skipped:
+                logger.info(
+                    "memory_enforce_merge_skipped tier=%s reason=no_key_model_or_cluster",
+                    tier,
+                )
+
+            over = _tier_count(conn, tier) - cap
+            # W7 (MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md, 2026-08-22,
+            # from a live regression: an unattended --enforce run with no
+            # API key aged out the user's only surviving Fahrenheit
+            # preference fact, silently and irreversibly-looking, because
+            # mechanical age-out is blind to importance — it archives by
+            # AGE, and a stated preference is not distinguishable from a
+            # stale scratch note by that measure alone). preference facts
+            # are things Larry explicitly told Mortimer; project/system
+            # facts are largely re-derivable (git log, repo state). So
+            # when the merge rung could not run this pass — for ANY
+            # reason merge_skipped covers, not only a missing key, since
+            # "no mergeable cluster" leaves the SAME blind-deletion risk
+            # for preference — mechanical age-out stops for `preference`
+            # specifically rather than silently emptying the overage.
+            # The tier is left over cap; that is a visible, recoverable
+            # state (the Memory panel's not_reaching_prompt line, M5's
+            # `--enforce` re-run once a key is available) — strictly
+            # preferable to a preference vanishing without a trace. This
+            # is a deliberate, scoped weakening of M1's "live = injected"
+            # invariant: do not restore unconditional age-out here to
+            # satisfy that invariant — see the plan's self-audit.
+            if tier == "preference" and merge_skipped and over > 0:
+                logger.warning(
+                    "memory_enforce_preference_left_over_cap tier=%s "
+                    "over=%d cap=%d reason=merge_rung_unavailable",
+                    tier, over, cap,
+                )
+            elif over > 0:
+                remaining_budget = (
+                    over if ignore_boot_cap
+                    else max(0, (archive_budget or 0) - spent)
+                )
+                aged_out = len(
+                    _age_out_oldest(conn, tier, min(over, remaining_budget))
+                )
+
+        after = _tier_count(conn, tier)
+        report[tier] = {
+            "before": before, "after": after, "cap": cap,
+            "merged": merged, "aged_out": aged_out,
+        }
+
+    logger.info("memory_enforce %s", report)
+    return report
 
 
 # --------------------------------------------------------------------- #
@@ -589,6 +847,7 @@ async def run_sweep(
 
     summary = {
         "archived": 0, "queued": 0, "contradictions": 0, "stale_archived": 0,
+        "capacity_enforced": 0,
     }
     try:
         conn = get_conn(db_path)
@@ -596,6 +855,18 @@ async def run_sweep(
             a1 = run_auto_consolidation(conn)
             summary["archived"] += len(a1["archived"])
             summary["queued"] += a1["queued"]
+
+            # A1.5 (M3/M9) — capacity enforcement ladder. Runs bounded
+            # (ignore_boot_cap=False) on the unattended sweep path; the
+            # --enforce CLI below calls this same function unbounded.
+            enforcement = await run_capacity_enforcement(
+                conn, settings, client_factory,
+            )
+            capacity_moved = sum(
+                t["merged"] + t["aged_out"] for t in enforcement.values()
+            )
+            summary["archived"] += capacity_moved
+            summary["capacity_enforced"] = capacity_moved
 
             pairs = _select_contradiction_pairs(conn)
             audience_candidates = _select_audience_candidates(conn)
@@ -628,9 +899,9 @@ async def run_sweep(
 
     logger.info(
         "memory_sweep archived=%d queued=%d contradictions=%d "
-        "stale_archived=%d",
+        "stale_archived=%d capacity_enforced=%d",
         summary["archived"], summary["queued"], summary["contradictions"],
-        summary["stale_archived"],
+        summary["stale_archived"], summary["capacity_enforced"],
     )
     return summary
 
@@ -653,3 +924,70 @@ def start_background_sweep(db_path: str | None = None) -> threading.Thread | Non
     thread = threading.Thread(target=_runner, name="memory-sweep", daemon=True)
     thread.start()
     return thread
+
+
+# --------------------------------------------------------------------- #
+# M5 — one-shot rein-in CLI
+# --------------------------------------------------------------------- #
+
+
+async def _run_enforce_cli() -> dict:
+    """`python -m jarvis.memory_sweep --enforce` — runs the FULL capacity
+    ladder immediately, ignoring SWEEP_MAX_ARCHIVES (that cap protects
+    unattended boots; an explicit CLI invocation is attended). Answers
+    M5's "can it be reined in from its current state?" in one supervised
+    command, with every demotion reversible via `became`."""
+    conn = get_conn()
+    try:
+        before = {
+            tier: _tier_count(conn, tier) for tier in CAPACITY_CAPS
+        }
+        report = await run_capacity_enforcement(conn, ignore_boot_cap=True)
+        conn.commit()
+    finally:
+        conn.close()
+
+    print("Capacity enforcement — before -> after (cap):\n")
+    for tier, r in report.items():
+        line = (
+            f"  {tier:<11} {r['before']:>3} -> {r['after']:>3}  "
+            f"(cap {r['cap']}, merged {r['merged']}, aged-out {r['aged_out']})"
+        )
+        # W7 — a preference tier left over cap because the merge rung
+        # couldn't run is not a quiet log line here; --enforce is an
+        # attended, explicit invocation and the operator should see it.
+        if tier == "preference" and r["after"] > r["cap"]:
+            line += (
+                f"  ⚠ still {r['after'] - r['cap']} over cap — no model "
+                "available to merge; nothing was aged out"
+            )
+        print(line)
+    total_before = sum(before.values())
+    total_after = sum(r["after"] for r in report.values())
+    print(f"\ntotal (capped tiers): {total_before} -> {total_after}")
+    return report
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    p = argparse.ArgumentParser(prog="python -m jarvis.memory_sweep")
+    p.add_argument(
+        "--enforce", action="store_true",
+        help="run the full per-tier capacity enforcement ladder now, "
+             "ignoring the per-boot archive cap (M5)",
+    )
+    args = p.parse_args(argv)
+
+    if args.enforce:
+        asyncio.run(_run_enforce_cli())
+        return 0
+
+    p.print_help()
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(main())

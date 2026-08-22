@@ -88,7 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_observations_key ON observations(key);
 
 # Upgrade plan Phase 5a: FTS5 full-text search over conversations, so old
 # sessions become recallable ("what did we discuss last month?") instead of
-# unreachable once they fall out of memories' MAX_FACTS window.
+# unreachable once they fall out of memories' per-tier fact caps.
 #
 # External-content table (content='conversations', content_rowid='id'):
 # the FTS index stores only the inverted index, not a copy of the text, so

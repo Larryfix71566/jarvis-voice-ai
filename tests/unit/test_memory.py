@@ -9,7 +9,7 @@ from jarvis.db import get_conn, now_iso, run_migrations
 from jarvis.memory import (
     EMPTY_CONTEXT,
     MAX_CONTEXT_CHARS,
-    MAX_FACTS,
+    MAX_PREFERENCE_FACTS,
     _parse_update,
     add_observation,
     render_memory_context,
@@ -365,7 +365,7 @@ class TestScanWiredIntoWritePaths:
 
 
 class TestCapacityHandling:
-    """render_memory_context has two truncation points (MAX_FACTS cap,
+    """render_memory_context has two truncation points (per-tier caps,
     MAX_CONTEXT_CHARS budget) — both must log, and neither may silently
     drop a user.* fact ahead of a less important one."""
 
@@ -426,13 +426,16 @@ class TestCapacityHandling:
         assert infer_tier("something.random") == "project"
         assert infer_tier("") == "project"
 
-    def test_user_fact_survives_max_facts_cap_even_if_oldest(self, conn):
-        # The user.* fact is written FIRST (oldest updated_at), then a
-        # flood of newer non-user facts pushes total count past MAX_FACTS.
-        # Pure recency ordering would drop the user fact; prioritization
-        # must not.
+    def test_user_fact_survives_tier_cap_even_if_oldest(self, conn):
+        # The identity fact is written FIRST (oldest updated_at), then a
+        # flood of newer project facts pushes the project tier well past
+        # its own cap. Identity is uncapped and ordered first, so pure
+        # recency ordering would never even threaten it — this pins that
+        # identity keeps surviving regardless of how much else is written.
+        from jarvis.memory import MAX_PROJECT_FACTS
+
         upsert_fact(conn, "user.name", "Larry", "s0")
-        for i in range(MAX_FACTS + 5):
+        for i in range(MAX_PROJECT_FACTS + 20):
             upsert_fact(conn, f"project.item{i:02d}", f"detail {i}", "s1")
 
         rendered = render_memory_context(conn)
@@ -448,15 +451,19 @@ class TestCapacityHandling:
         assert user_idx < project_idx
 
     def test_char_budget_overflow_logs_and_drops_remainder(self, conn, caplog):
-        # Each fact line is long enough that only a handful fit in
-        # MAX_CONTEXT_CHARS; well under MAX_FACTS so the cap doesn't fire.
+        # Exactly MAX_PREFERENCE_FACTS facts — AT the tier cap, not over it,
+        # so this exercises the char-budget truncation point in isolation
+        # from the tier-cap one. Each line is long enough (~218 chars) that
+        # MAX_PREFERENCE_FACTS of them (~3,270 chars) overflows the 3,000
+        # char budget.
         long_value = "x" * 190  # near MAX_FACT_CHARS (200)
-        for i in range(15):
-            upsert_fact(conn, f"project.item{i:02d}", long_value, "s1")
+        for i in range(MAX_PREFERENCE_FACTS):
+            upsert_fact(conn, f"user.preference.item{i:02d}", long_value, "s1")
 
         rendered = render_memory_context(conn)
         assert len(rendered) <= MAX_CONTEXT_CHARS + 100  # some slack for summary line
         assert "memory_context_facts_dropped" in caplog.text
+        assert "reason=char_budget" in caplog.text
         assert "reason=char_budget" in caplog.text
 
     def test_no_drop_logged_when_everything_fits(self, conn, caplog):

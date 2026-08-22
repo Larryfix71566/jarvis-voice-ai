@@ -96,6 +96,7 @@ def _approx_system_prompt() -> str:
     return (
         SUPERVISOR_PROMPT.format(
             jarvis_name="Mortimer", user_name="Boss", timezone="America/New_York",
+            units="imperial",
             agent_catalog=agent_catalog, voice_catalog=voice_catalog,
             memory_context=memory_context,
         )

@@ -1,8 +1,15 @@
-"""Unit tests for jarvis/bot/interruption.py (plan Phase 3).
+"""Unit tests for jarvis/bot/interruption.py (plan Phase 3, arming fix
+2026-08-22).
 
-Mandatory negative case: a normal completed turn — where Flux's
-should_interrupt=True broadcasts an InterruptionFrame at the START of every
-new user turn, not just genuine barge-ins — must produce NO injected note.
+Two mandatory negative cases:
+1. A normal completed turn — a routine turn-boundary InterruptionFrame
+   (the LLMUserAggregator broadcasts one whenever a user turn opens) must
+   produce NO injected note.
+2. The TV-flood case (2026-08-22): a VAD-level user turn whose transcript
+   the speaker gate DROPS never starts an LLM response, so the routine
+   InterruptionFrame that follows must produce NO note. The old
+   UserStoppedSpeakingFrame arming failed exactly this — one live session
+   accumulated 90 false notices against 12 real user messages.
 """
 
 from __future__ import annotations
@@ -12,6 +19,7 @@ from pipecat.frames.frames import (
     BotStoppedSpeakingFrame,
     InterruptionFrame,
     LLMFullResponseEndFrame,
+    LLMFullResponseStartFrame,
     UserStoppedSpeakingFrame,
 )
 from pipecat.observers.base_observer import FramePushed
@@ -32,14 +40,14 @@ def pushed(frame):
 
 
 async def _full_normal_turn(notifier: InterruptionNotifier) -> None:
-    """Simulate a turn that completes cleanly: text ends, audio plays and
-    stops, THEN the next user turn's StartOfTurn fires an InterruptionFrame
-    (the routine Flux broadcast, not a barge-in)."""
-    await notifier.on_push_frame(pushed(UserStoppedSpeakingFrame()))
+    """Simulate a turn that completes cleanly: generation starts and ends,
+    audio plays and stops, THEN the next user turn's opening fires an
+    InterruptionFrame (the routine aggregator broadcast, not a barge-in)."""
+    await notifier.on_push_frame(pushed(LLMFullResponseStartFrame()))
     await notifier.on_push_frame(pushed(LLMFullResponseEndFrame()))
     await notifier.on_push_frame(pushed(BotStartedSpeakingFrame()))
     await notifier.on_push_frame(pushed(BotStoppedSpeakingFrame()))
-    # Next turn's StartOfTurn always broadcasts InterruptionFrame.
+    # Next turn's opening always broadcasts InterruptionFrame.
     await notifier.on_push_frame(pushed(InterruptionFrame()))
 
 
@@ -56,6 +64,41 @@ class TestNoFalsePositive:
 
         assert injected == []
 
+    async def test_dropped_turn_with_no_reply_in_flight_produces_no_note(self):
+        """The 2026-08-22 TV-flood defect, pinned: a VAD-level user stop
+        (an utterance the speaker gate then dropped — no LLM response ever
+        started) followed by a routine InterruptionFrame must inject
+        NOTHING. The old arming on UserStoppedSpeakingFrame injected a
+        false 'your reply was interrupted' note for every TV line."""
+        injected = []
+
+        async def inject(text):
+            injected.append(text)
+
+        notifier = InterruptionNotifier(inject, enabled=True)
+        # TV speaks: VAD opens and closes a turn, gate drops the
+        # transcript, no LLM run follows.
+        await notifier.on_push_frame(pushed(UserStoppedSpeakingFrame()))
+        # Next sound triggers the routine interruption broadcast.
+        await notifier.on_push_frame(pushed(InterruptionFrame()))
+
+        assert injected == []
+
+    async def test_repeated_dropped_turns_never_accumulate_notes(self):
+        """The flood shape itself: many dropped turns in a row (a TV left
+        on) must inject zero notes total, not one per turn."""
+        injected = []
+
+        async def inject(text):
+            injected.append(text)
+
+        notifier = InterruptionNotifier(inject, enabled=True)
+        for _ in range(20):
+            await notifier.on_push_frame(pushed(UserStoppedSpeakingFrame()))
+            await notifier.on_push_frame(pushed(InterruptionFrame()))
+
+        assert injected == []
+
 
 class TestGenuineInterruption:
     async def test_mid_speech_interruption(self):
@@ -66,7 +109,7 @@ class TestGenuineInterruption:
             injected.append(text)
 
         notifier = InterruptionNotifier(inject, enabled=True)
-        await notifier.on_push_frame(pushed(UserStoppedSpeakingFrame()))
+        await notifier.on_push_frame(pushed(LLMFullResponseStartFrame()))
         await notifier.on_push_frame(pushed(LLMFullResponseEndFrame()))
         await notifier.on_push_frame(pushed(BotStartedSpeakingFrame()))
         # User barges in mid-speech — no BotStoppedSpeakingFrame yet.
@@ -82,7 +125,7 @@ class TestGenuineInterruption:
             injected.append(text)
 
         notifier = InterruptionNotifier(inject, enabled=True)
-        await notifier.on_push_frame(pushed(UserStoppedSpeakingFrame()))
+        await notifier.on_push_frame(pushed(LLMFullResponseStartFrame()))
         # No LLMFullResponseEndFrame, no BotStartedSpeakingFrame yet —
         # the assistant is still "thinking" when the user barges in.
         await notifier.on_push_frame(pushed(InterruptionFrame()))
@@ -98,7 +141,7 @@ class TestGenuineInterruption:
             injected.append(text)
 
         notifier = InterruptionNotifier(inject, enabled=False)
-        await notifier.on_push_frame(pushed(UserStoppedSpeakingFrame()))
+        await notifier.on_push_frame(pushed(LLMFullResponseStartFrame()))
         await notifier.on_push_frame(pushed(InterruptionFrame()))
 
         assert injected == []
@@ -112,7 +155,7 @@ class TestGenuineInterruption:
             injected.append(text)
 
         notifier = InterruptionNotifier(inject, enabled=True)
-        await notifier.on_push_frame(pushed(UserStoppedSpeakingFrame()))
+        await notifier.on_push_frame(pushed(LLMFullResponseStartFrame()))
         upstream_interrupt = FramePushed(
             source=None, destination=None, frame=InterruptionFrame(),
             direction=FrameDirection.UPSTREAM, timestamp=0,
@@ -123,7 +166,7 @@ class TestGenuineInterruption:
 
     async def test_second_interruption_in_same_turn_not_double_counted(self):
         """After a barge-in resets assistant_active, a second
-        InterruptionFrame with no new UserStoppedSpeakingFrame in between
+        InterruptionFrame with no new LLMFullResponseStartFrame in between
         must not fire again."""
         injected = []
 
@@ -131,7 +174,7 @@ class TestGenuineInterruption:
             injected.append(text)
 
         notifier = InterruptionNotifier(inject, enabled=True)
-        await notifier.on_push_frame(pushed(UserStoppedSpeakingFrame()))
+        await notifier.on_push_frame(pushed(LLMFullResponseStartFrame()))
         await notifier.on_push_frame(pushed(InterruptionFrame()))
         await notifier.on_push_frame(pushed(InterruptionFrame()))
 

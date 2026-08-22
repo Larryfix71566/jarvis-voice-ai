@@ -5,8 +5,10 @@ Then open http://localhost:7860/client and click Connect.
 
 D-004 (pipecat 1.4.0): TransportParams has no vad_analyzer or
 allow_interruptions fields. VAD runs as VADProcessor inside the pipeline
-and interruptions come from Flux STT's should_interrupt=True — both in
-pipeline.py. The entry shape (SmallWebRTC only, run_session) is unchanged.
+and interruptions come from the aggregator's user-turn-start strategy
+(speaker-verified min-words; Flux's own should_interrupt is False since
+2026-08-22) — both in pipeline.py. The entry shape (SmallWebRTC only,
+run_session) is unchanged.
 """
 
 from pipecat.runner.types import RunnerArguments, SmallWebRTCRunnerArguments

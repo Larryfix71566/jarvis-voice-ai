@@ -171,6 +171,26 @@ def build_delegate_tool(
                             "starting over. Use the path that run returned."
                         ),
                     },
+                    "model_profile": {
+                        "type": "string",
+                        "description": (
+                            "Set ONLY when the user EXPLICITLY named a "
+                            "specific model for this task (e.g. 'use "
+                            "Fable', 'have the developer check with Opus', "
+                            "'use Kimi for this'). Map the spoken name to "
+                            "the exact profile: Fable -> claude-fable-5, "
+                            "Opus -> claude-opus, Kimi -> kimi-k3, Sonnet "
+                            "-> or-sonnet-5, Grok -> or-grok-4.6, DeepSeek "
+                            "-> or-deepseek-v4-pro, GPT-5.1 -> or-gpt-5.1. "
+                            "Omit this field entirely otherwise — never "
+                            "guess or default to a model the user did not "
+                            "name. If the profile can't be resolved (wrong "
+                            "name, missing credential), the run refuses "
+                            "rather than silently using a different model — "
+                            "report that refusal plainly, do not retry on "
+                            "the default."
+                        ),
+                    },
                 },
                 "required": ["agent_name", "task"],
             },
@@ -196,11 +216,34 @@ def build_delegate_tool(
         task = str(arguments.get("task", ""))
         claims_continuation = bool(arguments.get("continuation"))
         findings_path = str(arguments.get("findings_path") or "").strip()
+        model_profile = str(arguments.get("model_profile") or "").strip()
         agent = sub_agents.get(agent_name)
         if agent is None:
             # No agent, nothing ran — this path does not create a run
             # (run-logging plan §5.5).
             return f"Unknown agent '{agent_name}'. Available: {available}."
+
+        # F6/F7 (MORTIMER_GATE_V2_AND_MODEL_REQUEST_PLAN.md, 2026-08-22) —
+        # a named per-run model request. Resolved HERE, before
+        # delegate_start, so the Agents-tab chip shows the requested model
+        # from the moment the card appears rather than the agent's
+        # configured default; an unresolvable request refuses immediately
+        # with no run row at all (F7's "before any run row or model
+        # call"). agent.run() below resolves the SAME profile again
+        # (resolve_model_profile is deterministic and does no I/O at
+        # construction — see its docstring) — one source of truth, called
+        # twice, not two.
+        override_model = ""
+        if model_profile:
+            _preview_client, override_model, override_refused = (
+                agent.resolve_model_profile(model_profile)
+            )
+            if override_refused:
+                logger.info(
+                    "delegate_override_refused agent=%s profile=%s",
+                    agent_name, model_profile,
+                )
+                return f"REFUSED: {override_refused}"
 
         # H1.2 — the reset is EARNED, not claimed. A continuation is valid
         # only if this agent's previous run actually offered a handoff; that
@@ -275,12 +318,19 @@ def build_delegate_tool(
                       # itself (the RESOLVED model, not config/agents.yaml's
                       # configured name), so a silent profile fallback is
                       # visible on screen rather than only in a log line.
-                      "model": agent.model,
-                      "model_fallback": agent.model_is_fallback,
+                      # F8, 2026-08-22 — a named override (resolved above)
+                      # takes precedence: it is what will ACTUALLY run, and
+                      # is never a "fallback" (it was explicitly requested).
+                      "model": override_model if model_profile else agent.model,
+                      "model_fallback": False if model_profile else agent.model_is_fallback,
                       # K4 — the credential behind this model was
                       # actively refused or could not be billed. Distinct
                       # from a fallback: the profile resolved fine, so
-                      # nothing upstream noticed anything wrong.
+                      # nothing upstream noticed anything wrong. Tied to
+                      # the agent's CONFIGURED credential regardless of an
+                      # override — keyhealth has no per-override signal
+                      # yet, and an override that failed its own key check
+                      # already refused above without reaching here.
                       "model_unusable": agent.model_unusable,
                       "model_unusable_detail": agent.model_unusable_detail})
         async def _execute() -> str:
@@ -293,7 +343,17 @@ def build_delegate_tool(
                 result = await agent.run(
                     task, on_event=on_event, run_id=run_id,
                     session_id=session_id,
+                    model_profile_override=model_profile or None,
                 )
+            # F9 — the honesty backstop. "Checking with Fable now" was a
+            # promise the Supervisor had no mechanism to keep (measured
+            # live, 2026-08-22: the developer ran on its DEFAULT model
+            # while the Supervisor announced Fable). This line is
+            # APPENDED BY CODE, not authored by any model, so when the
+            # Supervisor quotes it back it is grounded by construction —
+            # it reports what the tool result names, not what it intended.
+            if model_profile:
+                result += f"\n[ran on {override_model}]"
             # D13: spawned unconditionally — D20 makes
             # jarvis_procedures_enabled a single-enforcement-point flag,
             # checked once inside learn_from_run itself (which loads its own

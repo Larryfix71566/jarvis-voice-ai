@@ -62,10 +62,14 @@ function CommandLine({ command }: { command: string }) {
 
 export default function DisplayContent({ payload }: { payload: DisplayPayload }) {
   const images = payload.images ?? [];
+  const basemapImages = payload.basemap_images ?? [];
   const links = payload.links ?? [];
   const commands = payload.commands ?? [];
   // 9 radar tiles form one seamless 3×3 map; anything else is a gallery.
   const seamless = images.length === 9;
+  // W6 (MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md) — only meaningful
+  // for the seamless 3×3 radar case; a plain gallery has no basemap.
+  const hasBasemap = seamless && basemapImages.length === images.length;
 
   return (
     <div className="display-body">
@@ -96,11 +100,48 @@ export default function DisplayContent({ payload }: { payload: DisplayPayload })
       )}
 
       {payload.kind === "image" && images.length > 0 && (
-        <div className={seamless ? "display-tiles" : "display-gallery"}>
-          {images.map((src) => (
-            <img key={src} src={src} alt={payload.title ?? "result image"} />
-          ))}
-        </div>
+        <>
+          <div
+            className={
+              hasBasemap
+                ? "display-tiles display-tiles-radar"
+                : seamless
+                ? "display-tiles"
+                : "display-gallery"
+            }
+          >
+            {hasBasemap &&
+              basemapImages.map((src, i) => (
+                // W6: the basemap grid sits UNDERNEATH the precipitation
+                // overlay via CSS grid-area stacking (command-deck.css) —
+                // both grids render the SAME 3×3 layout, one on top of
+                // the other, at the SAME z/x/y coordinates the backend
+                // already guaranteed match (jarvis/bot/display.py).
+                <img
+                  key={`basemap-${i}-${src}`}
+                  src={src}
+                  alt=""
+                  aria-hidden="true"
+                  className="display-tile-basemap"
+                  style={{ gridArea: `tile-${i}` }}
+                />
+              ))}
+            {images.map((src, i) => (
+              <img
+                key={src}
+                src={src}
+                alt={payload.title ?? "result image"}
+                className={hasBasemap ? "display-tile-overlay" : undefined}
+                style={hasBasemap ? { gridArea: `tile-${i}` } : undefined}
+              />
+            ))}
+          </div>
+          {hasBasemap && (
+            <p className="display-basemap-attribution">
+              Basemap © CARTO, © OpenStreetMap contributors
+            </p>
+          )}
+        </>
       )}
 
       {payload.body && (

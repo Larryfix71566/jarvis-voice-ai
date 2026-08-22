@@ -343,6 +343,57 @@ class SubAgent:
         is the voice-model fallback rather than the assignment."""
         return self._model_fallback
 
+    def resolve_model_profile(self, profile_name: str) -> tuple[Any | None, str, str]:
+        """F6/F7 (MORTIMER_GATE_V2_AND_MODEL_REQUEST_PLAN.md, 2026-08-22)
+        — resolve a NAMED, per-run model request into (client, model,
+        refused_reason). Exactly the same resolution `__init__` runs for
+        a configured `model_profile:`, reused rather than forked (K5's
+        `UnknownModelProfileError` path), so a named request and a
+        configured default can never disagree about what "resolved"
+        means.
+
+        `refused_reason` is non-empty iff resolution failed — an
+        unresolvable named request ALWAYS refuses (never falls back to
+        this agent's default model), regardless of this agent's own
+        `on_profile_fallback` setting: that setting governs an
+        infrastructure default, this is a per-run user instruction, and
+        silently disobeying it is never correct (F7). On success,
+        `client`/`model` are ready to use; on failure both are
+        None/"" and `refused_reason` names both the requested profile
+        and this agent's own (unaffected) default model, so the caller's
+        refusal message can say what did NOT happen.
+
+        Pure with respect to instance state (F8) — never touches
+        `self._client`/`self._model`/`self._model_fallback`. Called
+        twice per overridden delegation by design (once by
+        jarvis.agents.delegate's handler, to know the model BEFORE
+        emitting the `delegate_start` event; once inside `run()`, to
+        actually execute on it) — deterministic given the same profile
+        name and environment, so the duplication costs an extra client
+        object construction (no I/O — the network call happens at
+        `chat.completions.create`), not a second source of truth.
+        """
+        try:
+            registry_data = load_model_registry()
+            profile = resolve_profile(registry_data, profile_name)
+            key_env = profile.get("api_key_env", "OPENAI_API_KEY")
+            if not os.environ.get(key_env):
+                raise UnknownModelProfileError(
+                    f"model profile {profile_name!r} needs {key_env}, which is unset"
+                )
+            client = AsyncOpenAI(
+                api_key=os.environ[key_env], base_url=profile["base_url"]
+            )
+            return client, profile["model"], ""
+        except UnknownModelProfileError as exc:
+            reason = (
+                f"model profile {profile_name!r} could not be resolved "
+                f"({exc}) — this run was requested on that model "
+                f"specifically, so it was not started on {self._model} "
+                f"instead."
+            )
+            return None, "", reason
+
     async def run(
         self,
         task: str,
@@ -350,6 +401,7 @@ class SubAgent:
         *,
         run_id: str | None = None,
         session_id: str | None = None,
+        model_profile_override: str | None = None,
     ) -> str:
         """Execute a self-contained task. Never raises (plan step 3.1).
 
@@ -360,6 +412,19 @@ class SubAgent:
         the timeout path, leaving the row stuck at status='running'
         forever. finish() is idempotent, so calling it from the success
         path and, separately, from an except branch is safe.
+
+        model_profile_override (F6/F7/F8, MORTIMER_GATE_V2_AND_MODEL_
+        REQUEST_PLAN.md, 2026-08-22): a NAMED per-run model request —
+        set only when the user explicitly asked for a specific model
+        (jarvis.agents.delegate's handler is the one caller). Resolved
+        via resolve_model_profile() into LOCAL run_client/run_model —
+        self._client/self._model/self._model_fallback are never touched
+        (F8: barge-in survival runs delegations as detached tasks, so two
+        concurrent run() calls can be in flight on one SubAgent instance;
+        mutating instance state for one run would corrupt the other). An
+        unresolvable override ALWAYS refuses (F7) — see
+        resolve_model_profile's docstring for why that is unconditional,
+        unlike this agent's own on_profile_fallback setting.
         """
         # K5 — refuse BEFORE anything else: no run row, no model call, no
         # tools. A refusing agent has no assigned model, so there is no
@@ -373,6 +438,19 @@ class SubAgent:
                            self.name, self._refuse_reason)
             return f"REFUSED: {self._refuse_reason}"
 
+        run_client, run_model = self._client, self._model
+        if model_profile_override:
+            override_client, override_model, refused_reason = (
+                self.resolve_model_profile(model_profile_override)
+            )
+            if refused_reason:
+                logger.warning(
+                    "subagent_override_refused agent=%s profile=%s reason=%s",
+                    self.name, model_profile_override, refused_reason,
+                )
+                return f"REFUSED: {refused_reason}"
+            run_client, run_model = override_client, override_model
+
         resolved_run_id = run_id or str(uuid.uuid4())
         runlog = RunLogger(
             resolved_run_id, self.name, self.display_name, task,
@@ -380,14 +458,18 @@ class SubAgent:
             enabled=self._settings.jarvis_runlog_enabled,
             # MORTIMER_PLANNING_PATHWAY_PLAN.md P3 — the run's authoring
             # model, recorded once here (settings is only in hand at this
-            # call site) and never re-derived downstream.
-            model=self._model,
+            # call site) and never re-derived downstream. F8: this is now
+            # the OVERRIDE-resolved model when one was requested, never
+            # self._model — the run log must record what actually ran.
+            model=run_model,
         )
         runlog.start()
         try:
             with run_logger_scope(runlog):
                 reply = await asyncio.wait_for(
-                    self._loop(task, on_event, runlog), timeout=self._timeout_s
+                    self._loop(task, on_event, runlog,
+                               client=run_client, model=run_model),
+                    timeout=self._timeout_s,
                 )
             runlog.finish(reply)
             return reply
@@ -405,7 +487,15 @@ class SubAgent:
 
     async def _loop(
         self, task: str, on_event: EventCallback | None, runlog: RunLogger,
+        client: Any = None, model: str | None = None,
     ) -> str:
+        # F8 — locals, defaulting to the instance's configured client/model
+        # when no override was resolved by run(). Every model call below
+        # uses these locals, never self._client/self._model directly, so
+        # an overridden run can never leak into a concurrent default run
+        # on the same SubAgent instance.
+        client = client if client is not None else self._client
+        model = model if model is not None else self._model
         start = time.perf_counter()
         self._emit(on_event, {"type": "agent_start", "agent": self.name,
                               "display_name": self.display_name, "task": task})
@@ -493,8 +583,8 @@ class SubAgent:
         drafts_executed = 0
         exhausted = True  # cleared by the no-more-tool-calls break below
         for _ in range(self._max_iterations):
-            response = await self._client.chat.completions.create(
-                model=self._model,
+            response = await client.chat.completions.create(
+                model=model,
                 messages=messages,
                 **tools_kwarg,
             )

@@ -207,6 +207,27 @@ def _wx_fetch(point=WX_POINT, forecast=WX_FORECAST, calls=None,
     return fetch
 
 
+class TestExtractionUnchanged:
+    def test_ambient_payload_unchanged_after_extraction(self):
+        """W1 (MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md) — the
+        equality check for the 2026-08-22 extraction: ambient_weather.py's
+        get_weather() is now a thin wrapper calling straight through to
+        jarvis.weathergov.weathergov_current, but its OWN payload for the
+        chip must be byte-identical to what it returned before the
+        extraction (verified live on Larry's machine 2026-08-18 — see
+        CLAUDE.md's Weather source paragraph). Pinned as an exact dict,
+        not a subset of key checks, so any drift is caught."""
+        r = aw.get_weather(fetch=_wx_fetch())
+        assert r == {
+            "summary": "Partly Cloudy",
+            "temp_f": 88,          # 31.1C converted
+            "location": "Spartanburg",
+            "at": r["at"],          # wall-clock; not the thing under test
+            "source": "weather.gov",
+            "station": "KSPA",
+        }
+
+
 class TestWeatherGov:
     def test_weathergov_observation_is_preferred(self):
         """The OBSERVATION, not the forecast period. Larry 2026-08-18:

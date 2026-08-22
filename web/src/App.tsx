@@ -215,11 +215,25 @@ export default function App() {
   // registrations coexisting here is fine (they filter on different
   // `msg.type`); what must not happen is two listeners for the SAME type.
   useRTVIClientEvent(RTVIEvent.ServerMessage, (data: unknown) => {
-    const msg = data as { type?: string; display?: { surface?: string } };
+    const msg = data as {
+      type?: string;
+      display?: { surface?: string };
+      near_threshold?: boolean;
+    };
     // Voice UI plan U2: forward ui_control commands into the module
     // store; applyUiMessage ignores every other type, so this can sit
     // unconditionally ahead of the display filter below.
     applyUiMessage(data);
+    // F4 (MORTIMER_GATE_V2_AND_MODEL_REQUEST_PLAN.md, 2026-08-22): a
+    // near-threshold speaker-gate drop (plausibly Larry, not the TV —
+    // see F3's DROP_NOTE_MIN_SCORE) surfaces a brief, auto-fading chip.
+    // TV drops (near_threshold=false) render NOTHING — the engagement
+    // layer's rule that nothing ambient may demand attention while the
+    // TV chatters. This mirrors displayPopoutError's transient pattern
+    // below, not a persistent panel.
+    if (msg?.type === "speaker_gate" && msg.near_threshold) {
+      setSpeakerGateNotice("Voice not recognized — try again");
+    }
     if (msg?.type !== "display" || !msg.display) return;
     // A missing/unrecognized surface degrades to "drawer" (D36) — the
     // non-intrusive outcome, and correct for an older bot talking to a
@@ -270,6 +284,16 @@ export default function App() {
     const id = window.setTimeout(() => setDisplayPopoutError(null), 4000);
     return () => window.clearTimeout(id);
   }, [displayPopoutError]);
+  // F4 — the speaker-gate "voice not recognized" chip. Same transient
+  // pattern as displayPopoutError/drawerPopoutError above: brief,
+  // auto-fading, no interaction required (the engagement layer's rule
+  // for anything ambient).
+  const [speakerGateNotice, setSpeakerGateNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!speakerGateNotice) return;
+    const id = window.setTimeout(() => setSpeakerGateNotice(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [speakerGateNotice]);
   const openDrawerPopout = (onFail?: (reason: string) => void) => {
     writeDrawerPopoutPreference(true);
     openDrawerWindow();
@@ -603,6 +627,11 @@ export default function App() {
       <div className="stage-row">
         <main className="main">
           <OrbField state={voiceState} />
+          {speakerGateNotice && (
+            <span className="speaker-gate-notice" role="status">
+              {speakerGateNotice}
+            </span>
+          )}
         </main>
 
         {/* Always mounted (plan D23) — an element cannot transition into

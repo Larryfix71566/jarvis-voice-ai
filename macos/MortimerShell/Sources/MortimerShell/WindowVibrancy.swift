@@ -150,7 +150,31 @@ func applyVibrancy(to window: NSWindow?) {
     // to edge rather than stopping under a solid bar.
     window.titlebarAppearsTransparent = true
 
-    if let existing = contentView.subviews.compactMap({ $0 as? NSVisualEffectView }).first {
+    // PLACEMENT (fixed 2026-08-21, from Larry's screenshot of a uniformly
+    // dimmed drawer window): the effect view must NOT be a subview of the
+    // window's contentView. In a SwiftUI window the contentView IS the
+    // NSHostingView, and a view's SUBVIEWS always render on top of the
+    // view's OWN drawn content — `positioned: .below` only orders among
+    // sibling subviews, so the "background" material was actually a
+    // frosted pane OVER the webview, dimming every pixel of web content
+    // uniformly (and making every CSS change invisible, which is what
+    // kept this bug alive through three CSS-side attempts). The correct
+    // host is the contentView's SUPERVIEW (the window frame view), where
+    // the effect view is a true sibling of the contentView and sibling
+    // ordering genuinely puts it behind.
+    guard let frameView = contentView.superview else {
+        vibrancyLog.error("applyVibrancy: contentView has no superview — vibrancy not applied")
+        return
+    }
+
+    // Clean up any effect view a previous (buggy) placement left INSIDE
+    // the contentView — it would sit over the content and re-dim it.
+    for stray in contentView.subviews.compactMap({ $0 as? NSVisualEffectView }) {
+        stray.removeFromSuperview()
+        vibrancyLog.info("applyVibrancy: removed stray effect view from contentView")
+    }
+
+    if let existing = frameView.subviews.compactMap({ $0 as? NSVisualEffectView }).first {
         // Re-apply rather than skip: tweaking the knobs above and
         // reloading should show the change without an app restart.
         existing.material = vibrancyMaterial
@@ -162,10 +186,10 @@ func applyVibrancy(to window: NSWindow?) {
         effect.blendingMode = .behindWindow      // sample the DESKTOP, not this window
         effect.state = .active                   // stay lit even when unfocused
         effect.autoresizingMask = [.width, .height]
-        effect.frame = contentView.bounds
+        effect.frame = contentView.frame
         effect.alphaValue = vibrancyAlpha
-        contentView.addSubview(effect, positioned: .below, relativeTo: nil)
-        vibrancyLog.info("applyVibrancy: installed \(String(describing: vibrancyMaterial)) alpha=\(vibrancyAlpha)")
+        frameView.addSubview(effect, positioned: .below, relativeTo: contentView)
+        vibrancyLog.info("applyVibrancy: installed \(String(describing: vibrancyMaterial)) alpha=\(vibrancyAlpha) behind contentView")
     }
 
     // Step 3 — without this the webview paints an opaque base over the

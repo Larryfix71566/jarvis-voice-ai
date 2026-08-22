@@ -68,11 +68,16 @@ class TestWebSearch:
 
 
 class TestGetWeather:
+    # W2 (MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md): the payload
+    # always carries BOTH unit sets plus a `units` field naming which is
+    # primary — this is the shape get_weather actually returns now.
     DATA = {
         "city": "Tokyo, Japan",
-        "human": "In Tokyo, Japan it's currently 30°C and partly cloudy.",
+        "units": "imperial",
+        "human": "In Tokyo, Japan it's currently 86°F and partly cloudy.",
         "daily": [
-            {"date": "2026-08-11", "max_c": 33, "min_c": 25,
+            {"date": "2026-08-11", "max_f": 91, "min_f": 77,
+             "max_c": 33, "min_c": 25,
              "precip_probability": 20, "condition": "partly cloudy"},
         ],
     }
@@ -81,8 +86,24 @@ class TestGetWeather:
         p = build("get_weather", self.DATA, args={"city": "tokyo"})
         assert p["kind"] == "markdown"
         assert p["title"] == "Weather — Tokyo, Japan"
+        assert "86°F" in p["body"]
+        assert "| 2026-08-11 | 91°F | 77°F | 20% | partly cloudy |" in p["body"]
+
+    def test_table_follows_units_field(self):
+        """W3: the formatter reads the payload's OWN `units` field — it
+        never guesses from which keys happen to be present (W2 guarantees
+        both f/c are always there together)."""
+        metric_data = dict(self.DATA, units="metric",
+                            human="In Tokyo, Japan it's currently 30°C and partly cloudy.")
+        p = build("get_weather", metric_data, args={"city": "tokyo"})
         assert "30°C" in p["body"]
         assert "| 2026-08-11 | 33°C | 25°C | 20% | partly cloudy |" in p["body"]
+        assert "°F" not in p["body"]
+
+    def test_missing_units_field_defaults_to_imperial(self):
+        data = {k: v for k, v in self.DATA.items() if k != "units"}
+        p = build("get_weather", data, args={"city": "tokyo"})
+        assert "91°F" in p["body"]
 
 
 class TestGetWeatherRadar:
@@ -90,6 +111,7 @@ class TestGetWeatherRadar:
         "city": "Berlin, Germany",
         "lat": 52.52, "lon": 13.4, "ts": 1754900000,
         "tiles": [f"https://tilecache.rainviewer.com/t{i}.png" for i in range(9)],
+        "basemap_tiles": [f"https://a.basemaps.cartocdn.com/b{i}.png" for i in range(9)],
     }
 
     def test_image_payload(self):
@@ -101,6 +123,120 @@ class TestGetWeatherRadar:
 
     def test_no_tiles_returns_none(self):
         assert build("get_weather_radar", {"city": "X", "tiles": []}) is None
+
+    def test_basemap_images_passed_through(self):
+        """W6: the payload carries the basemap tiles the frontend stacks
+        underneath the precipitation overlay."""
+        p = build("get_weather_radar", self.DATA, args={"city": "berlin"})
+        assert len(p["basemap_images"]) == 9
+        assert p["basemap_images"][0].startswith("https://a.basemaps.cartocdn.com/")
+
+    def test_missing_basemap_tiles_defaults_to_empty(self):
+        data = {k: v for k, v in self.DATA.items() if k != "basemap_tiles"}
+        p = build("get_weather_radar", data, args={"city": "berlin"})
+        assert p["basemap_images"] == []
+
+
+class TestWeatherReport:
+    """W5 — the merged get_weather + get_weather_radar card."""
+
+    WEATHER = TestGetWeather.DATA
+    RADAR = TestGetWeatherRadar.DATA
+
+    def test_merges_conditions_and_radar(self):
+        p = build("weather_report", {"weather": self.WEATHER, "radar": self.RADAR})
+        assert p is not None
+        assert p["kind"] == "image"
+        assert len(p["images"]) == 9
+        assert "86°F" in p["body"]
+        assert "Latest precipitation radar" in p["body"]
+        assert p["title"] == "Weather — Tokyo, Japan"
+
+    def test_survives_missing_radar(self):
+        """Never suppress the answer — a lone conditions result still
+        renders as a (markdown-only) card."""
+        p = build("weather_report", {"weather": self.WEATHER, "radar": None})
+        assert p is not None
+        assert p["kind"] == "markdown"
+        assert p["images"] == []
+        assert "86°F" in p["body"]
+
+    def test_survives_missing_weather(self):
+        p = build("weather_report", {"weather": None, "radar": self.RADAR})
+        assert p is not None
+        assert p["kind"] == "image"
+        assert len(p["images"]) == 9
+
+    def test_both_missing_returns_none(self):
+        assert build("weather_report", {"weather": None, "radar": None}) is None
+
+    def test_basemap_images_carried_through_merge(self):
+        p = build("weather_report", {"weather": self.WEATHER, "radar": self.RADAR})
+        assert len(p["basemap_images"]) == 9
+
+
+class TestWeatherReportMerger:
+    """W5 — the pairing/flush state machine itself, independent of the
+    formatter tested above."""
+
+    def _merger(self):
+        from jarvis.bot.display import WeatherReportMerger
+        return WeatherReportMerger()
+
+    def test_waits_for_the_pair(self):
+        m = self._merger()
+        first = m.offer("run-1", "analyst", "Analyst", "get_weather",
+                         json.dumps(TestGetWeather.DATA))
+        assert first is None  # still waiting on radar
+
+    def test_emits_once_both_arrive(self):
+        m = self._merger()
+        m.offer("run-1", "analyst", "Analyst", "get_weather",
+                 json.dumps(TestGetWeather.DATA))
+        second = m.offer("run-1", "analyst", "Analyst", "get_weather_radar",
+                          json.dumps(TestGetWeatherRadar.DATA))
+        assert second is not None
+        assert second["kind"] == "image"
+        assert "86°F" in second["body"]
+
+    def test_radar_error_still_finalizes_with_conditions_only(self):
+        m = self._merger()
+        m.offer("run-1", "analyst", "Analyst", "get_weather",
+                 json.dumps(TestGetWeather.DATA))
+        result = m.offer("run-1", "analyst", "Analyst", "get_weather_radar",
+                          json.dumps({"error": "Radar data failed."}))
+        assert result is not None
+        assert result["kind"] == "markdown"
+        assert "86°F" in result["body"]
+
+    def test_finalize_flushes_a_lone_pending_half(self):
+        """A run that only ever calls get_weather (radar tool never
+        invoked at all) must still show its answer once the run ends."""
+        m = self._merger()
+        assert m.offer("run-1", "analyst", "Analyst", "get_weather",
+                        json.dumps(TestGetWeather.DATA)) is None
+        flushed = m.finalize("run-1")
+        assert flushed is not None
+        assert flushed["kind"] == "markdown"
+        assert "86°F" in flushed["body"]
+
+    def test_finalize_on_empty_run_returns_none(self):
+        m = self._merger()
+        assert m.finalize("never-existed") is None
+
+    def test_separate_runs_do_not_cross_contaminate(self):
+        m = self._merger()
+        m.offer("run-A", "analyst", "Analyst", "get_weather",
+                 json.dumps(TestGetWeather.DATA))
+        # run-B's radar arriving must not complete run-A's pending half,
+        # and (having no get_weather half of its own) must still wait.
+        result_b = m.offer("run-B", "analyst", "Analyst", "get_weather_radar",
+                            json.dumps(TestGetWeatherRadar.DATA))
+        assert result_b is None
+        # run-A's half is untouched by run-B's activity.
+        flushed_a = m.finalize("run-A")
+        assert flushed_a is not None
+        assert "86°F" in flushed_a["body"]
 
 
 class TestAppTools:

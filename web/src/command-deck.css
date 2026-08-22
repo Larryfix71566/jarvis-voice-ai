@@ -667,6 +667,42 @@
   display: block;
 }
 
+/* W6 (MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md) — a radar payload
+ * stacks a keyless CARTO basemap UNDER RainViewer's transparent
+ * precipitation overlay. The trick: give the basemap tile and the radar
+ * tile at the SAME position the SAME named grid-area (tile-0..tile-8,
+ * row-major, matching radar_tile_grid's own row-major order) — CSS Grid
+ * overlaps same-area items in DOM order, so no position:absolute or
+ * extra wrapper elements are needed. Without this rule .display-tiles-
+ * radar behaves exactly like plain .display-tiles (3 even columns); this
+ * rule ONLY adds the named areas so gridArea assignment has somewhere to
+ * land. */
+.display-tiles-radar {
+  grid-template-areas:
+    "tile-0 tile-1 tile-2"
+    "tile-3 tile-4 tile-5"
+    "tile-6 tile-7 tile-8";
+}
+
+.display-tile-basemap {
+  /* Base layer: opaque, sits behind the precipitation overlay. */
+  z-index: 1;
+}
+
+.display-tile-overlay {
+  /* Precipitation layer: RainViewer tiles are PNGs with an alpha
+   * channel, so the basemap shows through wherever there's no rain. */
+  z-index: 2;
+  position: relative;
+}
+
+.display-basemap-attribution {
+  margin: -8px 0 12px;
+  font-size: 10px;
+  color: var(--text-dim, #8a8f98);
+  text-align: right;
+}
+
 /* generic image gallery */
 .display-gallery {
   display: grid;

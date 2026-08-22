@@ -22,6 +22,7 @@ def make_settings():
         jarvis_name="Jarvis",
         jarvis_user_name="Boss",
         jarvis_timezone="America/New_York",
+        jarvis_units="imperial",
     )
 
 
@@ -192,13 +193,15 @@ class FakeSubAgent:
     """Stands in for SubAgent in delegating-mode tests."""
 
     def __init__(self, name, result="done", model="fake-model",
-                 model_is_fallback=False):
+                 model_is_fallback=False, override_model="fake-override-model",
+                 override_refused=""):
         self.name = name
         self.display_name = name.title()
         self.description = f"{name} things."
         self.mcp_servers = []
         self.result = result
         self.tasks = []
+        self.run_kwargs: list[dict] = []
         # Part of SubAgent's public surface since 2026-08-19 —
         # delegate_start reads both so the Agents tab card can show which
         # LLM did the work. Kept as plain attributes rather than
@@ -209,9 +212,20 @@ class FakeSubAgent:
         # measurement is absent in tests, and absent is not unusable.
         self.model_unusable = False
         self.model_unusable_detail = ""
+        # F6/F7 (MORTIMER_GATE_V2_AND_MODEL_REQUEST_PLAN.md) — stands in
+        # for SubAgent.resolve_model_profile. Set override_refused (a
+        # non-empty string) to simulate an unresolvable named request.
+        self.override_model = override_model
+        self.override_refused = override_refused
+
+    def resolve_model_profile(self, profile_name):
+        if self.override_refused:
+            return None, "", self.override_refused
+        return object(), self.override_model, ""
 
     async def run(self, task, on_event=None, **kwargs):
         self.tasks.append(task)
+        self.run_kwargs.append(kwargs)
         return self.result
 
 

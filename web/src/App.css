@@ -249,6 +249,38 @@ body {
   color: var(--attn);
 }
 
+/* F4 (MORTIMER_GATE_V2_AND_MODEL_REQUEST_PLAN.md): the speaker gate's
+   "voice not recognized" chip — a near-threshold drop only (TV drops
+   render nothing, see App.tsx). Ambient and glanceable: floats at the
+   bottom of the stage over the wave, auto-fades in JS after 4s, no
+   interaction required — same --attn amber vocabulary as
+   .popout-error-notice, since this is a nudge, not an error. */
+.speaker-gate-notice {
+  position: absolute;
+  left: 50%;
+  bottom: 8%;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--attn);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  pointer-events: none;
+  animation: speaker-gate-notice-fade 4s ease-out forwards;
+}
+
+@keyframes speaker-gate-notice-fade {
+  0% { opacity: 0; }
+  10% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* Live self-edit indicator on the Dev button (side-drawer plan D7): the
    topbar is the only surface visible regardless of drawer state, so a run
    behind a closed drawer is still evident here. */

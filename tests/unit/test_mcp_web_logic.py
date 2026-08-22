@@ -170,18 +170,70 @@ def _fake_get_factory(geo_payload, forecast_payload):
 
 
 class TestGetWeather:
+    """Note: none of these mock the Weather.gov points/stations/forecast
+    URLs, so _wg_current gracefully returns None (weathergov_current's own
+    try/except swallows the resulting malformed-payload parse) and every
+    call here exercises the Open-Meteo FALLBACK path — the same path this
+    class always tested, now with W2's added °F fields and W3's `units`
+    selection on top. TestGetWeatherUnits and TestGetWeatherWeatherGov
+    below cover the primary paths this class doesn't reach."""
+
     def test_happy_path(self, monkeypatch):
         monkeypatch.setattr(
             logic.httpx, "get", _fake_get_factory(GEO_PAYLOAD, FORECAST_PAYLOAD)
         )
         result = logic.get_weather("tokyo", days=2)
         assert result["city"] == "Tokyo, Japan"
+        assert result["source"] == "open-meteo"
         assert result["current"]["condition"] == "partly cloudy"
         assert result["current"]["temperature_c"] == 30.4
         assert len(result["daily"]) == 2
         assert result["daily"][1]["condition"] == "slight rain"
-        assert "30.4°C" in result["human"]
         assert "Tokyo, Japan" in result["human"]
+
+    def test_defaults_to_fahrenheit_primary(self, monkeypatch):
+        monkeypatch.delenv("JARVIS_UNITS", raising=False)
+        monkeypatch.setattr(
+            logic.httpx, "get", _fake_get_factory(GEO_PAYLOAD, FORECAST_PAYLOAD)
+        )
+        result = logic.get_weather("tokyo", days=2)
+        assert result["units"] == "imperial"
+        assert "°F" in result["human"]
+        assert "°C" not in result["human"]
+
+    def test_honors_metric_setting(self, monkeypatch):
+        """W3's falsifiable test at the tool layer: the setting must
+        actually change the output, or it is decorative."""
+        monkeypatch.setenv("JARVIS_UNITS", "metric")
+        monkeypatch.setattr(
+            logic.httpx, "get", _fake_get_factory(GEO_PAYLOAD, FORECAST_PAYLOAD)
+        )
+        result = logic.get_weather("tokyo", days=2)
+        assert result["units"] == "metric"
+        assert "30.4°C" in result["human"]
+        assert "°F" not in result["human"]
+
+    def test_returns_both_unit_sets_regardless_of_setting(self, monkeypatch):
+        """W2: the payload shape never varies with the units setting."""
+        for units in ("imperial", "metric"):
+            monkeypatch.setenv("JARVIS_UNITS", units)
+            monkeypatch.setattr(
+                logic.httpx, "get", _fake_get_factory(GEO_PAYLOAD, FORECAST_PAYLOAD)
+            )
+            result = logic.get_weather("tokyo", days=2)
+            assert result["current"]["temperature_f"] is not None
+            assert result["current"]["temperature_c"] is not None
+            for d in result["daily"]:
+                assert d["max_f"] is not None and d["max_c"] is not None
+                assert d["min_f"] is not None and d["min_c"] is not None
+
+    def test_unknown_units_env_value_defaults_to_imperial(self, monkeypatch):
+        monkeypatch.setenv("JARVIS_UNITS", "furlongs")
+        monkeypatch.setattr(
+            logic.httpx, "get", _fake_get_factory(GEO_PAYLOAD, FORECAST_PAYLOAD)
+        )
+        result = logic.get_weather("tokyo")
+        assert result["units"] == "imperial"
 
     def test_city_not_found(self, monkeypatch):
         monkeypatch.setattr(
@@ -227,6 +279,122 @@ class TestGetWeather:
         monkeypatch.setattr(logic.httpx, "get", fake_get)
         logic.get_weather("Tokyo", days=9)
         assert captured["forecast_days"] == 3
+
+
+WG_POINT_PAYLOAD = {
+    "properties": {
+        "relativeLocation": {"properties": {"city": "Spartanburg"}},
+        "observationStations": "https://api.weather.gov/gridpoints/GSP/1,2/stations",
+        "forecast": "https://api.weather.gov/gridpoints/GSP/1,2/forecast",
+    }
+}
+WG_STATIONS_PAYLOAD = {
+    "features": [{"properties": {"stationIdentifier": "KSPA"}}],
+}
+WG_OBS_PAYLOAD = {
+    "properties": {
+        "temperature": {"value": 31.1, "unitCode": "wmoUnit:degC"},
+        "textDescription": "Partly Cloudy",
+    }
+}
+WG_FORECAST_PAYLOAD = {
+    "properties": {
+        "periods": [
+            {"name": "Today", "isDaytime": True, "temperature": 91,
+             "temperatureUnit": "F", "shortForecast": "Sunny"},
+            {"name": "Tonight", "isDaytime": False, "temperature": 68,
+             "temperatureUnit": "F", "shortForecast": "Clear"},
+        ]
+    }
+}
+
+
+def _fake_get_weathergov_primary(geo_payload=GEO_PAYLOAD):
+    def fake_get(url, params=None, timeout=None, headers=None):
+        if "geocoding" in url:
+            return FakeResponse(geo_payload)
+        if "stations" in url and "observations" not in url:
+            return FakeResponse(WG_STATIONS_PAYLOAD)
+        if "observations/latest" in url:
+            return FakeResponse(WG_OBS_PAYLOAD)
+        if "gridpoints" in url and "forecast" in url:
+            return FakeResponse(WG_FORECAST_PAYLOAD)
+        if "api.weather.gov/points" in url:
+            return FakeResponse(WG_POINT_PAYLOAD)
+        raise AssertionError(f"unexpected URL in weathergov-primary fake: {url}")
+    return fake_get
+
+
+class TestGetWeatherWeatherGov:
+    """W1/W4: the Weather.gov-PRIMARY path, with all three of its URLs
+    mocked so weathergov_current actually succeeds (contrast with
+    TestGetWeather above, where the absence of these mocks exercises the
+    fallback instead)."""
+
+    def test_weathergov_primary_used_when_available(self, monkeypatch):
+        monkeypatch.delenv("JARVIS_UNITS", raising=False)
+        monkeypatch.setattr(logic.httpx, "get", _fake_get_weathergov_primary())
+        result = logic.get_weather("Spartanburg", days=1)
+        assert result["source"] == "weather.gov"
+        assert result["current"]["temperature_f"] == 88  # 31.1C converted
+        assert result["current"]["condition"] == "Partly Cloudy"
+        assert result["city"] == "Spartanburg"
+
+    def test_weathergov_daily_forecast_converted_both_ways(self, monkeypatch):
+        monkeypatch.setattr(logic.httpx, "get", _fake_get_weathergov_primary())
+        result = logic.get_weather("Spartanburg", days=1)
+        assert len(result["daily"]) == 1
+        assert result["daily"][0]["max_f"] == 91
+        assert result["daily"][0]["min_f"] == 68
+        assert result["daily"][0]["max_c"] is not None
+        assert result["daily"][0]["min_c"] is not None
+
+    def test_source_label_is_never_plain_weather_gov_for_forecast_fallback(self, monkeypatch):
+        """W4's mechanical guard, extended to the tool layer: a period
+        fallback (no station reporting) is labelled weather.gov-forecast,
+        never weather.gov, mirroring the ambient chip's own guard."""
+        def fake_get(url, params=None, timeout=None, headers=None):
+            if "geocoding" in url:
+                return FakeResponse(GEO_PAYLOAD)
+            if "stations" in url and "observations" not in url:
+                return FakeResponse({"features": []})  # no stations
+            if "gridpoints" in url and "forecast" in url:
+                return FakeResponse(WG_FORECAST_PAYLOAD)
+            if "api.weather.gov/points" in url:
+                return FakeResponse(WG_POINT_PAYLOAD)
+            raise AssertionError(f"unexpected URL: {url}")
+
+        monkeypatch.setattr(logic.httpx, "get", fake_get)
+        result = logic.get_weather("Spartanburg", days=1)
+        assert result["source"] == "weather.gov-forecast"
+        assert result["source"] != "weather.gov"
+
+    def test_weathergov_current_missing_falls_back_to_open_meteo(self, monkeypatch):
+        """Outside the US (or any Weather.gov failure): falls back
+        cleanly, source says open-meteo."""
+        def fake_get(url, params=None, timeout=None, headers=None):
+            if "geocoding" in url:
+                return FakeResponse(GEO_PAYLOAD)
+            if "api.weather.gov" in url:
+                raise httpx.ConnectError("404-like failure")
+            return FakeResponse(FORECAST_PAYLOAD)
+
+        monkeypatch.setattr(logic.httpx, "get", fake_get)
+        result = logic.get_weather("Tokyo", days=1)
+        assert result["source"] == "open-meteo"
+
+    def test_falls_back_to_open_meteo_in_fahrenheit(self, monkeypatch):
+        """W4/W2: the Open-Meteo FALLBACK path also carries a correctly
+        converted °F figure, not just the °C it fetches natively —
+        30.4°C -> 86.7°F exactly."""
+        monkeypatch.delenv("JARVIS_UNITS", raising=False)
+        monkeypatch.setattr(
+            logic.httpx, "get", _fake_get_factory(GEO_PAYLOAD, FORECAST_PAYLOAD)
+        )
+        result = logic.get_weather("Tokyo", days=1)
+        assert result["source"] == "open-meteo"
+        assert result["current"]["temperature_c"] == 30.4
+        assert result["current"]["temperature_f"] == 86.7
 
 
 RAINVIEWER_PAYLOAD = {
@@ -288,6 +456,34 @@ class TestGetWeatherRadar:
             for t in result["tiles"]
         )
         assert all(t.endswith("/2/1_1.png") for t in result["tiles"])
+
+    def test_basemap_tiles_same_coords_as_radar_tiles(self, monkeypatch):
+        """W6: the basemap must use the SAME z/x/y as the radar overlay,
+        never recomputed, or the two layers can desync."""
+        monkeypatch.setattr(logic.httpx, "get", _fake_radar_get)
+        result = logic.get_weather_radar("tokyo")
+        assert len(result["basemap_tiles"]) == 9
+
+        def _xy(url: str) -> tuple[str, str]:
+            # .../{z}/{x}/{y}.png or .../{z}/{x}/{y}/2/1_1.png
+            parts = url.rstrip("/").split("/")
+            if parts[-1].endswith(".png") and "_" not in parts[-1]:
+                z, x, y_png = parts[-3], parts[-2], parts[-1]
+                y = y_png[: -len(".png")]
+            else:
+                y = parts[-3]
+                x = parts[-4]
+            return x, y
+
+        radar_coords = {_xy(t) for t in result["tiles"]}
+        basemap_coords = {_xy(t) for t in result["basemap_tiles"]}
+        assert radar_coords == basemap_coords
+
+    def test_basemap_tiles_are_keyless_carto(self, monkeypatch):
+        monkeypatch.setattr(logic.httpx, "get", _fake_radar_get)
+        result = logic.get_weather_radar("tokyo")
+        assert all("basemaps.cartocdn.com/dark_all" in t for t in result["basemap_tiles"])
+        assert all("key" not in t.lower() for t in result["basemap_tiles"])
 
     def test_empty_city_error(self):
         assert "error" in logic.get_weather_radar("  ")

@@ -33,7 +33,6 @@ from jarvis.db import get_conn, now_iso
 
 logger = logging.getLogger(__name__)
 
-MAX_FACTS = 30
 MAX_FACT_CHARS = 200
 
 # K1 (MORTIMER_KNOWLEDGE_FRAMEWORK_PLAN.md) — memory tiers, by DURABILITY.
@@ -58,10 +57,22 @@ MAX_FACT_CHARS = 200
 MEMORY_TIERS = ("identity", "preference", "project", "system")
 CONTEXT_TIERS = ("identity", "preference", "project")  # system deliberately absent
 DEFAULT_TIER = "project"  # unknown/legacy rows land in the middle, never identity
-MAX_PREFERENCE_FACTS = 25
-MAX_PROJECT_FACTS = 10
+
+# M1/M2 (MORTIMER_MEMORY_CAPACITY_PLAN.md, 2026-08-21) — "live = injected"
+# invariant: every live fact must reach the prompt, so over-capacity is a
+# state jarvis.memory_sweep's capacity-enforcement ladder eliminates, not
+# one this renderer papers over by silently dropping. These numbers are
+# sized so a FULL store (every tier at its cap) fits inside
+# MAX_CONTEXT_CHARS: 8ish identity + 15 preference + 8 project facts at the
+# observed ~90 chars/fact is ~2,800 chars, comfortably under 3,000 — a
+# prompt already ~10KB deep can afford that. The old flat MAX_FACTS = 30
+# global cap is DELETED here: it overlapped with these per-tier caps (the
+# combination is how the panel once showed an unexplainable "261 / 30"),
+# and the per-tier numbers are now the one set of caps that matters.
+MAX_PREFERENCE_FACTS = 15
+MAX_PROJECT_FACTS = 8
 MAX_SUMMARY_CHARS = 600
-MAX_CONTEXT_CHARS = 1600
+MAX_CONTEXT_CHARS = 3000
 MAX_TRANSCRIPT_ROWS = 60
 MAX_ROW_CHARS = 300
 
@@ -316,7 +327,7 @@ def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
     keyed ``user.*`` (explicit statements the user made about themselves —
     name, preferences, standing instructions) are ordered ahead of every
     other fact type, most-recent-first within each tier. This means a
-    ``user.*`` fact survives the MAX_FACTS cap even if it is older than a
+    ``user.*`` fact survives the per-tier cap even if it is older than a
     flood of less-important facts recorded since. Chosen over consolidation
     (would require an EXTRACTION_PROMPT change -> routing eval) and pure
     surfacing (no prevention, only visibility — that piece lives in the
@@ -362,7 +373,7 @@ def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
 
     # Capability-claim firewall: drop assistant self-limitation facts before
     # anything else, so a stale "cannot edit code" can never reach the
-    # Supervisor prompt. Applied before the MAX_FACTS cap so a filtered fact
+    # Supervisor prompt. Applied before the per-tier cap so a filtered fact
     # does not consume a slot a real fact could have used.
     kept_rows = []
     firewalled: list[str] = []
@@ -443,6 +454,57 @@ def archive_fact(conn, key: str, became: str) -> bool:
         (now_iso(), became, key),
     )
     return cur.rowcount > 0
+
+
+MAX_SEARCH_RESULTS = 25
+
+
+def search_facts(
+    conn: sqlite3.Connection | None, query: str, limit: int = 10
+) -> list[dict]:
+    """M6 (MORTIMER_MEMORY_CAPACITY_PLAN.md) — the recall path for demoted
+    facts. Aggressive per-tier capping (M2) and system-tier archive-on-
+    sight (M4) are only safe if nothing becomes unreachable; this is
+    Hermes' "don't inject what you can look up" discipline applied to
+    Mortimer's own fact store, and mcp-memory's `memory_search` tool is
+    its voice-facing surface.
+
+    LIKE over key+content, ACROSS live and archived facts — an archived
+    fact is still fully searchable, which is the whole point of archiving
+    instead of deleting. Deliberately LIKE, not FTS5: the memories table
+    is small (hundreds of rows, not the conversations table's history),
+    so a virtual table + triggers here would be over-engineering.
+    Bounded by MAX_SEARCH_RESULTS regardless of caller-requested `limit`.
+    Pure and total for a bad/empty query — returns []."""
+    query = (query or "").strip()
+    if not query:
+        return []
+    own_connection = conn is None
+    conn = conn or get_conn()
+    try:
+        limit = max(1, min(int(limit), MAX_SEARCH_RESULTS))
+        like = f"%{query}%"
+        rows = conn.execute(
+            "SELECT key, content, COALESCE(tier, 'project') AS tier, "
+            "updated_at, (archived_at IS NOT NULL) AS archived "
+            "FROM memories WHERE kind = 'fact' "
+            "AND (key LIKE ? OR content LIKE ?) "
+            "ORDER BY archived_at IS NOT NULL, updated_at DESC LIMIT ?",
+            (like, like, limit),
+        ).fetchall()
+        return [
+            {
+                "key": r["key"],
+                "content": r["content"],
+                "tier": r["tier"],
+                "updated_at": r["updated_at"],
+                "archived": bool(r["archived"]),
+            }
+            for r in rows
+        ]
+    finally:
+        if own_connection:
+            conn.close()
 
 
 def infer_tier(key: str) -> str:
@@ -597,7 +659,7 @@ def promote_observations(conn: sqlite3.Connection) -> list[str]:
 
 def list_facts(conn: sqlite3.Connection | None = None) -> list[dict]:
     """All facts, most-recently-updated first. Uncapped (contrast with
-    render_memory_context's MAX_FACTS window) — the panel shows everything."""
+    render_memory_context's per-tier caps) — the panel shows everything."""
     own_connection = conn is None
     conn = conn or get_conn()
     try:
@@ -666,22 +728,40 @@ def list_observation_groups(conn: sqlite3.Connection | None = None) -> list[dict
 
 
 def memory_usage(conn: sqlite3.Connection | None = None) -> dict:
-    """Capacity readout pairing with Phase 5c's prioritization policy — how
-    close the fact store is to the MAX_FACTS cap that policy exists for."""
+    """Capacity readout pairing with K1's per-tier caps (M2,
+    MORTIMER_MEMORY_CAPACITY_PLAN.md) — how close each capped tier is to
+    the cap that jarvis.memory_sweep's enforcement ladder exists to hold.
+
+    Replaces the old single flat `fact_count`/`max_facts`/`over_capacity`
+    triple (which compared the WHOLE store, across all tiers, against one
+    global MAX_FACTS — the thing that produced an unexplainable "261 / 30"
+    reading once tiering existed but capacity policy hadn't caught up).
+    `over_capacity` is now true only when a CAPPED tier (preference,
+    project) exceeds its own cap — identity is never capped and system is
+    reported for visibility only, matching CONTEXT_TIERS."""
     own_connection = conn is None
     conn = conn or get_conn()
     try:
-        fact_count = conn.execute(
-            "SELECT COUNT(*) AS n FROM memories WHERE kind = 'fact'"
-        ).fetchone()["n"]
+        rows = conn.execute(
+            "SELECT COALESCE(tier, ?) AS tier, COUNT(*) AS n FROM memories "
+            "WHERE kind = 'fact' AND archived_at IS NULL GROUP BY 1",
+            (DEFAULT_TIER,),
+        ).fetchall()
     finally:
         if own_connection:
             conn.close()
+    tiers = {t: 0 for t in MEMORY_TIERS}
+    for row in rows:
+        tiers[row["tier"]] = row["n"]
+    fact_count = sum(tiers.values())
+    caps = {"preference": MAX_PREFERENCE_FACTS, "project": MAX_PROJECT_FACTS}
+    over_capacity = any(tiers[t] > cap for t, cap in caps.items())
     return {
         "fact_count": fact_count,
-        "max_facts": MAX_FACTS,
+        "tiers": tiers,
+        "caps": caps,
         "max_context_chars": MAX_CONTEXT_CHARS,
-        "over_capacity": fact_count > MAX_FACTS,
+        "over_capacity": over_capacity,
     }
 
 

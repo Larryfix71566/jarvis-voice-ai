@@ -90,6 +90,7 @@ def runtime(monkeypatch, tmp_path):
         jarvis_name="Jarvis",
         jarvis_user_name="Boss",
         jarvis_timezone="America/New_York",
+        jarvis_units="imperial",
         jarvis_max_parallel_delegations=3,
     )
     return Runtime(settings=settings, registry=None, session_id="test-session")
@@ -144,7 +145,13 @@ def test_pipeline_processor_order_locked(runtime, fakes):
     ]
 
 
-def test_interruptions_enabled_on_flux(runtime, fakes, monkeypatch):
+def test_flux_never_interrupts_on_its_own(runtime, fakes, monkeypatch):
+    """2026-08-22: should_interrupt must stay False. True made Flux
+    broadcast an interruption on every VAD-level StartOfTurn — before any
+    transcript or speaker score existed — so the TV kept killing in-flight
+    replies while the speaker gate correctly dropped its transcripts.
+    Interruption duty belongs solely to the (speaker-verified) user-turn-
+    start strategy on the aggregator."""
     captured = {}
 
     class InterruptCheckingSTT(FakeSTT):
@@ -154,7 +161,7 @@ def test_interruptions_enabled_on_flux(runtime, fakes, monkeypatch):
 
     monkeypatch.setattr(bp, "DeepgramFluxSTTService", InterruptCheckingSTT)
     build_pipeline(FakeTransport(), runtime)
-    assert captured["should_interrupt"] is True
+    assert captured["should_interrupt"] is False
 
 
 def test_six_functions_registered(runtime, fakes):
@@ -310,7 +317,7 @@ async def test_agent_events_pushed_as_app_messages(runtime, fakes, monkeypatch,
         assert m["id"]
     assert payloads == [
         {"type": "agent", "name": "scheduler", "display_name": "Scheduler",
-         "state": "working", "task": "t",
+         "state": "working", "run_id": None, "task": "t",
          # 2026-08-19 — the Agents tab card header shows the resolved
          # model. Absent from this synthetic event, so it arrives None.
          "model": None, "model_fallback": False,
@@ -465,6 +472,7 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
         deepgram_api_key="dg", openai_api_key="sk", openai_base_url="http://llm",
         openai_model="m", elevenlabs_api_key="el", jarvis_name="Jarvis",
         jarvis_user_name="Boss", jarvis_timezone="America/New_York",
+        jarvis_units="imperial",
         jarvis_interruption_notice_enabled=True,
         jarvis_memory_sweep_interval_s=300.0,
     )
@@ -472,7 +480,7 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
     memory_watcher_stopped = []
 
     class FakeTask:
-        def __init__(self, pipeline, observers=None):
+        def __init__(self, pipeline, observers=None, params=None):
             self._ended = asyncio.Event()
 
         async def cancel(self):

@@ -19,7 +19,8 @@ interface ObservationGroup {
 
 interface Usage {
   fact_count: number;
-  max_facts: number;
+  tiers: Record<string, number>;
+  caps: { preference: number; project: number };
   max_context_chars: number;
   over_capacity: boolean;
 }
@@ -343,11 +344,12 @@ export default function MemoryPanel() {
 
       <div className="memory-usage">
         <span className={usage.over_capacity ? "memory-usage-over" : "memory-usage-ok"}>
-          {usage.fact_count} / {usage.max_facts} facts
+          preference {usage.tiers.preference ?? 0}/{usage.caps.preference} · project{" "}
+          {usage.tiers.project ?? 0}/{usage.caps.project}
         </span>
         {usage.over_capacity && (
           <span className="memory-usage-note">
-            over capacity — user.* facts prioritized, oldest others dropped
+            over capacity — oldest facts in that tier dropped
           </span>
         )}
       </div>

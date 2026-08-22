@@ -91,9 +91,19 @@ class TranscriptObserver(BaseObserver):
     TranscriptionFrame downstream.
     """
 
-    def __init__(self, session_id: str):
+    def __init__(self, session_id: str, only_from: Any = None):
+        """``only_from`` (Tier 2 speaker gate, 2026-08-21): when set to a
+        pipeline processor, USER transcript lines are logged/persisted ONLY
+        for TranscriptionFrames pushed BY that processor. The speaker
+        gate's TranscriptGate sits between STT and the aggregator; without
+        this filter the observer logs the STT->gate hop and a dropped
+        (unknown-speaker) utterance still lands in the conversations table
+        — which the memory sweep folds into long-term memory. Observed
+        live: TV dialogue persisted as a USER line. With the filter, what
+        is persisted is exactly what the LLM received."""
         super().__init__()
         self._session_id = session_id
+        self._only_from = only_from
         self._turn_start: float | None = None
         self._audio_logged_for_turn = False
 
@@ -118,6 +128,11 @@ class TranscriptObserver(BaseObserver):
             return
 
         if not isinstance(frame, TranscriptionFrame):
+            return
+        if self._only_from is not None and data.source is not self._only_from:
+            # Speaker gate active: only the gate's own downstream push
+            # counts — the STT->gate hop may carry an utterance the gate
+            # is about to drop.
             return
         if not getattr(frame, "finalized", True):
             return

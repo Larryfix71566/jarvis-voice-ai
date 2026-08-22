@@ -17,6 +17,12 @@ export interface DisplayPayload {
   title?: string;
   body?: string; // markdown
   images?: string[];
+  // W6 (MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md) — a keyless CARTO
+  // basemap layer at the SAME z/x/y as `images`, present only on radar
+  // payloads (get_weather_radar, weather_report). RainViewer's tiles are
+  // transparent precipitation overlays with nothing to composite onto
+  // otherwise — DisplayContent stacks this UNDER `images` when present.
+  basemap_images?: string[];
   links?: { label?: string; url: string }[];
   agent?: string;
   ts?: number; // epoch SECONDS from jarvis/bot/display.py — see timeFormat.ts's warning; do not use directly

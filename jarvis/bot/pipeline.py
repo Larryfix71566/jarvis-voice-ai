@@ -3,7 +3,7 @@
 Locked processor order (Phase 5):
     transport.input()
       -> VADProcessor(SileroVADAnalyzer)          # D-004: VAD is a processor in pipecat 1.4
-      -> DeepgramFluxSTTService (flux-general-en) # should_interrupt=True => interruptions
+      -> DeepgramFluxSTTService (flux-general-en) # should_interrupt=False; interruptions come from the turn-start strategy
       -> context_aggregator.user()
       -> OpenAILLMService
       -> TranscriptLogger
@@ -31,10 +31,12 @@ from pipecat.frames.frames import OutputTransportMessageUrgentFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineTask
+from pipecat.turns.user_start import MinWordsUserTurnStartStrategy
+from pipecat.turns.user_turn_strategies import UserTurnStrategies
 
 from jarvis.agents.base import load_sub_agents
 from jarvis.agents.delegate import build_delegate_tool
-from jarvis.bot.display import build_display_payload
+from jarvis.bot.display import WeatherReportMerger, build_display_payload
 from jarvis.bot.interruption import InterruptionNotifier
 from jarvis.bot.memory_watcher import MemorySweepWatcher
 from jarvis.bot.plan_watcher import PlanWatcher
@@ -48,6 +50,12 @@ from jarvis.bot.handoff_tools import (
     build_show_commands_tool,
 )
 from jarvis.bot.screen_tool import build_list_screens_tool, build_view_screen_tool
+from jarvis.bot.speaker_gate import (
+    GateState,
+    SpeakerTap,
+    SpeakerVerifiedMinWordsTurnStartStrategy,
+    TranscriptGate,
+)
 from jarvis.bot.voice_switch import (
     available_list,
     build_set_voice_tool,
@@ -55,6 +63,7 @@ from jarvis.bot.voice_switch import (
     load_voice_catalog,
     resolve_voice,
 )
+from jarvis import speaker
 from jarvis.cli import bridge_settings_to_env
 from jarvis.config import Settings, load_settings
 from jarvis.db import run_migrations
@@ -81,7 +90,7 @@ from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 # D-004: pipecat 1.4.0 class locations/settings classes differ from the
 # plan's draft API (Flux under services.deepgram.flux.stt, ToolsSchema
 # under adapters.schemas, FunctionSchema instead of raw OpenAI dicts,
-# VAD as VADProcessor, interruptions via Flux should_interrupt).
+# VAD as VADProcessor, interruptions via the turn-start strategy).
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -97,6 +106,7 @@ from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
+    LLMUserAggregatorParams,
 )
 
 _logger = logging.getLogger(__name__)
@@ -118,6 +128,12 @@ class Runtime:
     # at construction time — same late-binding reason RemindersWatcher
     # takes inject= at run_session level.
     late_delivery: dict = field(default_factory=dict)
+    # Tier 2 (2026-08-21): the live TranscriptGate instance when the
+    # speaker gate is active, else None. run_session hands it to
+    # TranscriptObserver so persisted USER lines match what the LLM
+    # actually received — a dropped speaker's words must not reach the
+    # conversations table (the memory sweep folds it into memory).
+    speaker_gate: Any = None
 
 
 def bot_event_log(event: dict) -> None:
@@ -147,6 +163,13 @@ def make_agent_event_handler(transport: Any) -> Any:
     never sees duplicate working/done messages.
     """
 
+    # W5 (MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md) — one instance per
+    # connection, keyed internally by run_id, pairing get_weather +
+    # get_weather_radar tool results into a single display card. See
+    # jarvis.bot.display.WeatherReportMerger's own docstring for the
+    # merge semantics (never suppresses a lone result).
+    weather_merger = WeatherReportMerger()
+
     def on_agent_event(event: dict) -> None:
         bot_event_log(event)
         etype = event.get("type")
@@ -170,16 +193,30 @@ def make_agent_event_handler(transport: Any) -> Any:
                     }))
             except RuntimeError:
                 pass  # no running loop (tests calling the handler directly)
-            payload = build_display_payload(
-                agent=str(event.get("agent") or ""),
-                display_name=str(event.get("display_name") or ""),
-                tool=str(event.get("tool") or ""),
-                arguments=event.get("arguments")
-                if isinstance(event.get("arguments"), dict) else {},
-                result_str=str(event.get("result") or ""),
-            )
+            tool_name = str(event.get("tool") or "")
+            if tool_name in ("get_weather", "get_weather_radar"):
+                # W5 — route through the merger instead of displaying each
+                # tool's result on its own; offer() returns a payload only
+                # once both halves are accounted for (or None while still
+                # waiting on the pair — see WeatherReportMerger).
+                payload = weather_merger.offer(
+                    run_id=str(event.get("run_id") or ""),
+                    agent=str(event.get("agent") or ""),
+                    display_name=str(event.get("display_name") or ""),
+                    tool=tool_name,
+                    result_str=str(event.get("result") or ""),
+                )
+            else:
+                payload = build_display_payload(
+                    agent=str(event.get("agent") or ""),
+                    display_name=str(event.get("display_name") or ""),
+                    tool=tool_name,
+                    arguments=event.get("arguments")
+                    if isinstance(event.get("arguments"), dict) else {},
+                    result_str=str(event.get("result") or ""),
+                )
             if payload is None:
-                return  # voice-only tool result — nothing to show
+                return  # voice-only tool result, or still awaiting the pair
             # MORTIMER_AGENT_TRUST_PLAN.md D18: one INFO line whenever a
             # display payload is actually built, so MORTIMER_SIDE_DRAWER_
             # PLAN.md D36's surface routing (drawer vs. floating window)
@@ -205,6 +242,19 @@ def make_agent_event_handler(transport: Any) -> Any:
                     event.get("model_unusable_detail") or "")[:200],
             }
         elif etype == "delegate_done":
+            # W5 — a run that called only ONE of get_weather/
+            # get_weather_radar leaves a lone half sitting in the merger
+            # (offer() only fires once both are accounted for). Flush it
+            # now rather than losing it silently: the run is over, so
+            # nothing more is coming.
+            flushed = weather_merger.finalize(str(event.get("run_id") or ""))
+            if flushed is not None:
+                try:
+                    asyncio.get_running_loop().create_task(
+                        send_app_message(
+                            transport, {"type": "display", "display": flushed}))
+                except RuntimeError:
+                    pass  # no running loop (tests calling the handler directly)
             message = {
                 "type": "agent",
                 "name": event.get("agent"),
@@ -390,6 +440,7 @@ def build_pipeline(
             jarvis_name=settings.jarvis_name,
             user_name=settings.jarvis_user_name,
             timezone=settings.jarvis_timezone,
+            units=settings.jarvis_units,
             agent_catalog=agent_catalog,
             voice_catalog=catalog_summary(catalog),
             memory_context=render_memory_context(),  # U2.5 persistent memory
@@ -410,7 +461,21 @@ def build_pipeline(
         settings=DeepgramFluxSTTSettings(
             model="flux-general-en", keyterm=STT_KEYTERMS,
         ),
-        should_interrupt=True,  # plan Phase 5: allow_interruptions (D-004)
+        # was True (plan Phase 5, D-004) until 2026-08-22. With
+        # should_interrupt=True, Flux broadcasts an interruption on EVERY
+        # StartOfTurn — at VAD level, before any transcript or speaker
+        # score exists — so the speaker gate's verification never saw it:
+        # the TV kept killing in-flight replies "before any audio played"
+        # (26 broadcasts in one 19-minute session, 2026-08-21 logs) even
+        # while every TV transcript was being correctly dropped. False
+        # hands interruption duty to the ONE gated path that already
+        # exists: the user-turn-start strategy below (speaker-verified
+        # min-words while the bot is speaking), whose trigger makes the
+        # LLMUserAggregator broadcast the interruption. Cost: barge-in now
+        # fires at first transcript (~0.5s after speech starts) instead of
+        # at VAD onset — an unverified interruption a TV can fire is worse
+        # than a verified one that arrives half a second later.
+        should_interrupt=False,
     )
     # MORTIMER_VOICE_MODEL_BENCH_PLAN.md V3 — provider-aware Supervisor
     # service. Google's OpenAI-compat endpoint CANNOT carry the voice loop:
@@ -491,13 +556,97 @@ def build_pipeline(
         messages=[{"role": "system", "content": system_prompt}],
         tools=ToolsSchema(standard_tools=standard_tools),
     )
-    aggregators = LLMContextAggregatorPair(context)
+    # Tier 2 (MORTIMER_VOICE_ISOLATION_TIER12_PLAN.md §4.3) — a local
+    # speaker-verification gate on final transcripts. Inserted ONLY when
+    # all three hold: the kill switch is on, a profile is enrolled, and the
+    # embedding model actually loads from disk. Any one missing means
+    # NEITHER processor is added — a half-configured gate costs nothing and
+    # changes nothing, matching the fail-open discipline in jarvis/speaker.py.
+    # Constructed BEFORE the aggregators because the Tier 1b turn-start
+    # strategy below shares the gate's state when the gate is active.
+    # F3 (MORTIMER_GATE_V2_AND_MODEL_REQUEST_PLAN.md, 2026-08-22) split
+    # this block: TranscriptGate's honest-drop note needs a way to append
+    # to the shared context (the same silent-append mechanism as
+    # inject_silent below), which only exists once `aggregators` is
+    # built. So gate/profile/encoder setup happens here, but
+    # TranscriptGate itself is constructed further down, right after
+    # `aggregators` — construction ORDER doesn't have to match the
+    # pipeline's processor LIST order (assembled separately below).
+    speaker_tap = None
+    speaker_transcript_gate = None
+    speaker_gate_state = None
+    if speaker.enabled():
+        profile = speaker.load_profile()
+        encoder = speaker.Encoder()
+        if profile is None:
+            _logger.info("speaker_gate_inactive reason=no_profile")
+        elif not encoder.load():
+            _logger.info("speaker_gate_inactive reason=encoder_load_failed")
+        else:
+            speaker_gate_state = GateState()
+            speaker_tap = SpeakerTap(speaker_gate_state, encoder, profile)
+    else:
+        _logger.info("speaker_gate_inactive reason=kill_switch_off")
+
+    # Tier 1b (MORTIMER_VOICE_ISOLATION_TIER12_PLAN.md §3, REWIRED for
+    # pipecat 1.4 on 2026-08-21): in 1.4 turn strategies live on the USER
+    # AGGREGATOR, not PipelineTask — the plan's original
+    # PipelineParams(interruption_strategies=...) path was verified against
+    # a 0.0.108 install and does not exist here (the first boot died on the
+    # import). min_words applies ONLY while the bot is speaking (a cough or
+    # "hm" no longer interrupts TTS); when the bot is quiet, a single word
+    # still starts a turn normally. When the speaker gate is active, the
+    # strategy ALSO requires a passing speaker score to allow an
+    # interruption (first live session: the TV never got a transcript
+    # through, but it interrupted Mortimer constantly — transcripts alone
+    # were the wrong boundary). Barge-in survival (2026-08-21) already
+    # makes real interruptions non-destructive; this cuts spurious ones.
+    if speaker_gate_state is not None:
+        turn_start_strategy = SpeakerVerifiedMinWordsTurnStartStrategy(
+            speaker_gate_state, min_words=2
+        )
+    else:
+        turn_start_strategy = MinWordsUserTurnStartStrategy(min_words=2)
+    aggregators = LLMContextAggregatorPair(
+        context,
+        user_params=LLMUserAggregatorParams(
+            user_turn_strategies=UserTurnStrategies(
+                start=[turn_start_strategy],
+            ),
+        ),
+    )
     # H4/H5 — hand the user aggregator to the clipboard injector built
     # above. Set here because the tools are registered before this line.
     _context_holder["user"] = aggregators.user()
+
+    # F3 — now that `aggregators` exists, finish constructing the gate:
+    # its honest-drop note appends to the SAME shared context
+    # inject_silent (below, in run_session) uses — a plain
+    # add_messages() call, never push_context_frame(), so a drop note
+    # surfaces on the next real turn instead of an unprompted spoken
+    # reply. Only built when the gate is actually active (speaker_gate_
+    # state is not None); a disabled/half-configured gate still costs
+    # nothing.
+    if speaker_gate_state is not None:
+        async def _inject_speaker_drop_note(text: str) -> None:
+            aggregators.user().add_messages([{"role": "user", "content": text}])
+
+        speaker_transcript_gate = TranscriptGate(
+            speaker_gate_state,
+            lambda message: send_app_message(transport, message),
+            profile_loaded=True,
+            inject=_inject_speaker_drop_note,
+        )
+        _logger.info("speaker_gate_active threshold=%.2f", speaker.threshold())
+    # TranscriptObserver (run_session) filters persisted USER lines through
+    # this: a gated pipeline must never write a dropped speaker's words to
+    # the conversations table (the memory sweep folds that table into
+    # long-term memory — observed live 2026-08-21: TV dialogue persisted).
+    runtime.speaker_gate = speaker_transcript_gate
+
     transcript = TranscriptLogger(session_id=runtime.session_id)
 
-    pipeline = Pipeline([
+    pipeline_steps = [
         transport.input(),
         # stop_secs 2.5 (default 0.2): wiring tuning so a mid-sentence pause
         # (~2 s) does not trigger the local smart-turn analyzer to close the
@@ -506,7 +655,13 @@ def build_pipeline(
         # so the VAD stop window is the lever — Flux EOT only finalizes
         # transcripts, which accumulate harmlessly mid-turn.
         VADProcessor(vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=2.5))),
-        stt,
+    ]
+    if speaker_tap is not None:
+        pipeline_steps.append(speaker_tap)
+    pipeline_steps.append(stt)
+    if speaker_transcript_gate is not None:
+        pipeline_steps.append(speaker_transcript_gate)
+    pipeline_steps.extend([
         aggregators.user(),
         llm,
         transcript,
@@ -514,6 +669,7 @@ def build_pipeline(
         transport.output(),
         aggregators.assistant(),
     ])
+    pipeline = Pipeline(pipeline_steps)
     return pipeline, llm, aggregators, pusher
 
 
@@ -668,7 +824,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
         # observer for the same reason: BotStartedSpeakingFrame/
         # BotStoppedSpeakingFrame are born downstream of the TTS service.
         observers = [
-            TranscriptObserver(runtime.session_id),
+            TranscriptObserver(runtime.session_id, only_from=runtime.speaker_gate),
             InterruptionNotifier(
                 inject_silent,
                 enabled=settings.jarvis_interruption_notice_enabled,

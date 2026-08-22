@@ -43,6 +43,13 @@ Design, matching house conventions (mcp_web's sync/never-raise shape):
   every 60s by the console but the upstream APIs see at most one call
   per TTL.
 - kill switch: JARVIS_AMBIENT_WEATHER_ENABLED=false, checked once here.
+
+W1 (MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md, 2026-08-22): the
+Weather.gov client (fetch_headers/weathergov_current, plus
+WEATHERGOV_UA/STATION_ATTEMPTS) moved verbatim to jarvis/weathergov.py so
+mcp_servers/mcp_web/logic.py's get_weather tool can share it rather than
+running a second, independent Weather.gov client — this module's own
+payload and tests are unchanged.
 """
 
 from __future__ import annotations
@@ -53,22 +60,17 @@ from typing import Any, Callable, Optional
 
 import httpx
 
+from jarvis.weathergov import (  # noqa: F401 — WEATHERGOV_UA/STATION_ATTEMPTS
+    STATION_ATTEMPTS,           # re-exported: this module's own code below
+    WEATHERGOV_UA,               # references them, and W1's extraction must
+    fetch_headers,                # not change this module's public surface.
+    weathergov_current,
+)
+
 WEATHER_CACHE_TTL_S = 900  # 15 min
 HTTP_TIMEOUT_S = 10.0
 
 GEO_URL = "http://ip-api.com/json/?fields=status,lat,lon,city"
-# Weather.gov asks every client to identify itself; an anonymous request
-# can be rejected. This is the documented contact-info form.
-WEATHERGOV_UA = "(Mortimer personal assistant, github.com/Larryfix71566/jarvis-voice-ai)"
-WEATHERGOV_POINTS_URL = "https://api.weather.gov/points/{lat:.4f},{lon:.4f}"
-WEATHERGOV_OBSERVATION_URL = (
-    "https://api.weather.gov/stations/{station}/observations/latest"
-)
-# How many nearby stations to try before giving up on an observation.
-# The nearest station is often a small airport that reports irregularly,
-# so one attempt is not enough; the list is ordered by distance, so a few
-# attempts stay geographically honest while tolerating a quiet station.
-STATION_ATTEMPTS = 3
 
 FORECAST_URL = (
     "https://api.open-meteo.com/v1/forecast"
@@ -121,118 +123,9 @@ def weather_enabled() -> bool:
 
 
 def _fetch_json(url: str) -> Any:
-    headers = {"User-Agent": WEATHERGOV_UA} if "weather.gov" in url else {}
-    resp = httpx.get(url, timeout=HTTP_TIMEOUT_S, headers=headers)
+    resp = httpx.get(url, timeout=HTTP_TIMEOUT_S, headers=fetch_headers(url))
     resp.raise_for_status()
     return resp.json()
-
-
-def _observation_temp_f(obs: Any) -> Optional[tuple[float, str]]:
-    """(°F, conditions) from one /observations/latest payload, or None.
-
-    Pure. Split out because the null case is the common one, not the edge
-    case: a station that is offline, or reporting only wind, returns
-    `temperature.value: null` and must be skipped rather than treated as
-    zero degrees.
-    """
-    props = (obs or {}).get("properties") or {}
-    temp = (props.get("temperature") or {})
-    value = temp.get("value")
-    if value is None:
-        return None
-    unit = str(temp.get("unitCode") or "")
-    # Observations report Celsius (`wmoUnit:degC`) — unlike the forecast
-    # endpoint, which reports Fahrenheit for US offices. Converting on the
-    # wrong assumption here is a 30-degree error, so read the unit.
-    fahrenheit = float(value) if "degF" in unit else float(value) * 9 / 5 + 32
-    return fahrenheit, str(props.get("textDescription") or "").strip()
-
-
-def _weathergov_current(lat: float, lon: float, fetch: Callable[[str], Any]) -> Optional[dict]:
-    """CURRENT conditions from Weather.gov, or None if unavailable.
-
-    Larry 2026-08-18, from a live mismatch: the console read 69°F while
-    the macOS widget read 82°F for the same city at 9:52 PM. Cause — this
-    function used `properties.forecast` and took `periods[0].temperature`,
-    which is a FORECAST PERIOD, not an observation. After sunset
-    `periods[0]` is "Tonight" and its temperature is the overnight LOW.
-    The chip was showing tonight's low labelled as the current
-    temperature: roughly right by day, badly wrong after dark. (The
-    module's original note that this was never verified against the live
-    API was correct, and this is what it was warning about.)
-
-    The observation chain is three hops:
-      /points/{lat},{lon}          -> observationStations URL + city
-      .../stations                 -> station list
-      /stations/{id}/observations/latest -> properties.temperature (°C)
-
-    Stations go quiet, so several are tried (STATION_ATTEMPTS). If none
-    reports a temperature, this falls back to the FORECAST period rather
-    than returning nothing — a forecast temperature is worth more than an
-    empty chip, and `source` says which one the caller got so the two are
-    never confused.
-
-    Returns None (never raises) outside the US, on a 404, or on any
-    malformed response; the caller then falls back to Open-Meteo.
-    """
-    try:
-        point = fetch(WEATHERGOV_POINTS_URL.format(lat=lat, lon=lon))
-        props = point.get("properties") or {}
-        rel = (props.get("relativeLocation") or {}).get("properties") or {}
-        city = str(rel.get("city") or "")
-
-        # --- preferred: a real observation -----------------------------
-        stations_url = props.get("observationStations")
-        if stations_url:
-            try:
-                features = (fetch(stations_url).get("features")) or []
-                for feature in features[:STATION_ATTEMPTS]:
-                    station_id = ((feature or {}).get("properties") or {}).get(
-                        "stationIdentifier")
-                    if not station_id:
-                        continue
-                    reading = _observation_temp_f(
-                        fetch(WEATHERGOV_OBSERVATION_URL.format(station=station_id)))
-                    if reading is None:
-                        continue          # station reported no temperature
-                    temp_f, conditions = reading
-                    return {
-                        "summary": conditions or "Weather",
-                        "temp_f": round(temp_f),
-                        "location": city,
-                        "at": int(time.time()),
-                        "source": "weather.gov",
-                        "station": station_id,
-                    }
-            except Exception:
-                pass  # fall through to the forecast below
-
-        # --- fallback: the forecast period -----------------------------
-        # Explicitly labelled `weather.gov-forecast`, never `weather.gov`,
-        # so a period temperature can never again be mistaken for an
-        # observation by a reader of this payload.
-        forecast_url = props.get("forecast")
-        if not forecast_url:
-            return None
-        periods = ((fetch(forecast_url).get("properties") or {}).get("periods")) or []
-        if not periods:
-            return None
-        now = periods[0]
-        temp = now.get("temperature")
-        if temp is None:
-            return None
-        if str(now.get("temperatureUnit", "F")).upper() == "C":
-            temp = temp * 9 / 5 + 32
-        return {
-            "summary": str(now.get("shortForecast") or "Weather"),
-            "temp_f": round(float(temp)),
-            "location": city,
-            "at": int(time.time()),
-            "source": "weather.gov-forecast",
-            "period": str(now.get("name") or ""),
-        }
-    except Exception:
-        return None
 
 
 # --- device location (Mac shell / CoreLocation) --------------------------
@@ -337,7 +230,7 @@ def get_weather(fetch: Callable[[str], Any] = _fetch_json) -> Optional[dict]:
         if loc is not None:
             # Weather.gov first (Larry's stored decision): native
             # Fahrenheit, a real forecast phrase, and a city name.
-            result = _weathergov_current(loc["lat"], loc["lon"], fetch)
+            result = weathergov_current(loc["lat"], loc["lon"], fetch)
             if result is not None:
                 if not result["location"]:
                     result["location"] = loc["label"]

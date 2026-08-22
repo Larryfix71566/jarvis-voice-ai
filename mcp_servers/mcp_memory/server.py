@@ -26,5 +26,11 @@ def memory_review_resolve(review_id: int, action: str, rewrite_content: str | No
     return logic.review_resolve(review_id, action, rewrite_content)
 
 
+@mcp.tool()
+def memory_search(query: str, limit: int = 10) -> dict:
+    """Search stored memory by keyword, across BOTH live facts (already in the prompt) and archived facts (demoted by capacity enforcement or consolidation, but never deleted). Use this to recall something that isn't showing up in ordinary conversation context — a preference, note, or fact that was merged, aged out, or otherwise archived is still findable here."""
+    return logic.memory_search(query, limit)
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

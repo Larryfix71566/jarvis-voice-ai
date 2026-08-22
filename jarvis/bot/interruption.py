@@ -6,15 +6,17 @@ that its previous reply was cut off — without triggering an immediate
 spoken reaction the way the greeting/reminder injections do.
 
 Why "genuine" needs its own detection:
-`DeepgramFluxSTTService(should_interrupt=True)` calls
-`broadcast_interruption()` (emits `InterruptionFrame` both upstream and
-downstream) on every StartOfTurn event — i.e. every time the user starts
-speaking, including the ordinary case where the assistant has already
-finished its previous reply. Naively treating every `InterruptionFrame` as
-a barge-in would attach a false note to every single turn. An
-`InterruptionFrame` only reflects a real interruption when the assistant's
-turn was still active (LLM still generating, or TTS audio still playing) at
-the moment it fires.
+the LLMUserAggregator calls `broadcast_interruption()` (emits
+`InterruptionFrame` both upstream and downstream) whenever its user-turn-
+start strategy triggers — i.e. every time a user turn opens, including the
+ordinary case where the assistant has already finished its previous reply.
+(Until 2026-08-22 Flux's `should_interrupt=True` did the same thing one
+layer earlier, on every VAD-level StartOfTurn — that's now off; see
+pipeline.py's stt construction.) Naively treating every
+`InterruptionFrame` as a barge-in would attach a false note to every
+single turn. An `InterruptionFrame` only reflects a real interruption when
+the assistant's turn was still active (LLM still generating, or TTS audio
+still playing) at the moment it fires.
 
 This is a task-level observer (the `TranscriptObserver` / D-007 pattern in
 `transcript_log.py`): it sees frames at every hop regardless of the locked
@@ -31,7 +33,7 @@ from pipecat.frames.frames import (
     BotStoppedSpeakingFrame,
     InterruptionFrame,
     LLMFullResponseEndFrame,
-    UserStoppedSpeakingFrame,
+    LLMFullResponseStartFrame,
 )
 from pipecat.observers.base_observer import BaseObserver, FramePushed
 from pipecat.processors.frame_processor import FrameDirection
@@ -48,7 +50,18 @@ class InterruptionNotifier(BaseObserver):
     """Detects genuine barge-in; injects a context note when one happens.
 
     State machine (reset each assistant turn):
-    - ``UserStoppedSpeakingFrame`` -> assistant turn begins (active=True).
+    - ``LLMFullResponseStartFrame`` -> a reply is genuinely in flight
+      (active=True). NOT ``UserStoppedSpeakingFrame`` — that was the
+      2026-08-22 defect: VAD-level user-stop fires for utterances the
+      speaker gate then DROPS (TV speech), so every TV line armed the
+      notifier with no reply in flight, and the next routine
+      InterruptionFrame injected a false "your reply was interrupted"
+      note. Measured in one 2026-08-21 session's final LLM context:
+      90 notices against 12 real user messages — the model's view of the
+      conversation was 88% interruption spam, which is what made its
+      replies read clipped and apologetic. Arming on the LLM's own
+      response-start frame makes "active" mean exactly "there is a reply
+      to interrupt", by construction.
     - ``LLMFullResponseEndFrame`` -> text generation finished.
     - ``BotStartedSpeakingFrame`` -> audio has started playing this turn.
     - ``BotStoppedSpeakingFrame`` -> if text was also done, the turn ended
@@ -76,7 +89,7 @@ class InterruptionNotifier(BaseObserver):
 
         frame = data.frame
 
-        if isinstance(frame, UserStoppedSpeakingFrame):
+        if isinstance(frame, LLMFullResponseStartFrame):
             self._assistant_active = True
             self._llm_response_ended = False
             self._audio_played = False

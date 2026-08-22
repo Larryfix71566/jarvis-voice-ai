@@ -690,6 +690,140 @@ class TestModelProfile:
         assert agent._client is fake
 
 
+class TestRuntimeModelOverride:
+    """F6/F7/F8 (MORTIMER_GATE_V2_AND_MODEL_REQUEST_PLAN.md, 2026-08-22)
+    — a per-run NAMED model request via run(model_profile_override=...),
+    independent of this agent's own configured `model_profile:`."""
+
+    def _registry_file(self, tmp_path, monkeypatch, key_present=True):
+        import yaml
+        p = tmp_path / "upgrade_models.yaml"
+        p.write_text(yaml.safe_dump({
+            "default": "kimi-k2",
+            "profiles": [
+                {"name": "fable", "label": "Fable", "provider": "anthropic",
+                 "model": "claude-fable-5",
+                 "base_url": "https://api.anthropic.com/v1/",
+                 "api_key_env": "ANTHROPIC_API_KEY"},
+            ],
+        }))
+        monkeypatch.setenv("JARVIS_UPGRADE_MODELS", str(p))
+        if key_present:
+            monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+        else:
+            monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        return p
+
+    def _agent_with_fake_override_client(self, tmp_path, monkeypatch, script):
+        """Builds an agent whose DEFAULT client is the normal FakeLLM test
+        seam (client_factory), while base.AsyncOpenAI — used ONLY by
+        resolve_model_profile's override path — is monkeypatched so an
+        override run never touches the real network."""
+        self._registry_file(tmp_path, monkeypatch)
+        import jarvis.agents.base as base_module
+
+        default_fake = FakeLLM([("text", "default reply")])
+        constructed: dict = {}
+
+        class FakeAsyncOpenAI:
+            def __init__(self, api_key, base_url):
+                constructed["api_key"] = api_key
+                constructed["base_url"] = base_url
+                self.chat = SimpleNamespace(completions=FakeCompletions(script))
+
+        monkeypatch.setattr(base_module, "AsyncOpenAI", FakeAsyncOpenAI)
+
+        agent = SubAgent(
+            name="developer", display_name="Developer", description="d",
+            mcp_servers=["mcp-repo"], settings=make_settings(),
+            registry=FakeRegistry(), client_factory=lambda s: default_fake,
+        )
+        return agent, default_fake, constructed
+
+    async def test_override_resolves_and_runs_on_named_model(self, tmp_path, monkeypatch):
+        agent, _default, constructed = self._agent_with_fake_override_client(
+            tmp_path, monkeypatch, [("text", "override reply")],
+        )
+        reply = await agent.run("research radar", model_profile_override="fable")
+        assert reply == "override reply"
+        assert constructed["api_key"] == "test-key"
+        assert constructed["base_url"] == "https://api.anthropic.com/v1/"
+
+    async def test_override_failure_refuses_never_falls_back(self, tmp_path, monkeypatch):
+        self._registry_file(tmp_path, monkeypatch, key_present=False)
+        agent, completions = make_agent([("text", "should never run")], name="developer")
+        reply = await agent.run("research radar", model_profile_override="fable")
+        assert reply.startswith("REFUSED:")
+        assert "fable" in reply
+        # Named the agent's own (unaffected) default too — F7's rationale.
+        assert make_settings().openai_model in reply
+        assert completions.requests == []  # no model call attempted
+
+    async def test_override_unknown_profile_refuses(self, tmp_path, monkeypatch):
+        self._registry_file(tmp_path, monkeypatch)
+        agent, completions = make_agent([("text", "should never run")], name="developer")
+        reply = await agent.run(
+            "research radar", model_profile_override="totally-bogus-profile"
+        )
+        assert reply.startswith("REFUSED:")
+        assert completions.requests == []
+
+    async def test_override_ignores_this_agents_on_profile_fallback_warn(
+        self, tmp_path, monkeypatch,
+    ):
+        """F7: an override ALWAYS refuses on failure, even for an agent
+        configured on_profile_fallback='warn' (the conversational-agent
+        default) — the configured mode governs the agent's OWN default
+        profile, never a per-run user instruction."""
+        self._registry_file(tmp_path, monkeypatch, key_present=False)
+        agent, completions = make_agent(
+            [("text", "should never run")], name="scheduler",
+            on_profile_fallback="warn",
+        )
+        reply = await agent.run("research radar", model_profile_override="fable")
+        assert reply.startswith("REFUSED:")
+        assert completions.requests == []
+
+    async def test_override_does_not_mutate_instance(self, tmp_path, monkeypatch):
+        agent, default_fake, _constructed = self._agent_with_fake_override_client(
+            tmp_path, monkeypatch, [("text", "override reply")],
+        )
+        before_client = agent._client  # noqa: SLF001
+        before_model = agent._model  # noqa: SLF001
+
+        await agent.run("research radar", model_profile_override="fable")
+
+        assert agent._client is before_client  # noqa: SLF001
+        assert agent._model == before_model  # noqa: SLF001
+        # A subsequent DEFAULT run (no override) still uses the default
+        # client — the override never leaked into instance state.
+        reply2 = await agent.run("what time is it")
+        assert reply2 == "default reply"
+
+    async def test_run_log_records_override_model(self, tmp_path, monkeypatch):
+        """F8: RunLogger gets the OVERRIDE-resolved model, never
+        self._model — verified via the model kwarg construction-time
+        capture rather than a real DB write (jarvis_runlog_enabled=False
+        in make_settings())."""
+        agent, _default, _constructed = self._agent_with_fake_override_client(
+            tmp_path, monkeypatch, [("text", "override reply")],
+        )
+        captured_models = []
+        import jarvis.agents.base as base_module
+
+        real_runlogger = base_module.RunLogger
+
+        class CapturingRunLogger(real_runlogger):
+            def __init__(self, *args, **kwargs):
+                captured_models.append(kwargs.get("model"))
+                super().__init__(*args, **kwargs)
+
+        monkeypatch.setattr(base_module, "RunLogger", CapturingRunLogger)
+
+        await agent.run("research radar", model_profile_override="fable")
+        assert captured_models == ["claude-fable-5"]
+
+
 # A3 — repo map injection.
 class TestRepoMapInjection:
     def test_injected_when_flag_set(self, tmp_path, monkeypatch):

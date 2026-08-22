@@ -9,26 +9,44 @@ html,
 body {
   height: 100%;
   margin: 0;
-  /* Larry 2026-08-18 — matches displaywindow.css. A translucent wash
-     as far as CSS can honestly go; when the shell marks the document
-     (html.shell-vibrancy) the native NSVisualEffectView is doing the
-     real work and this wash gets out of its way. */
-  background: rgba(10, 16, 21, 0.72);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  backdrop-filter: blur(20px) saturate(180%);
+  /* Larry 2026-08-21 (root cause of the recurring "dimmed text"): in a
+     BROWSER popup this page's translucent background composites against
+     the browser's WHITE canvas — rgba(10,16,21,0.72) over white is a
+     medium gray, and light text on it reads as dim. There is nothing
+     behind a separate browser window for translucency to reveal, so the
+     glass look was fake anyway; opaque dark is the honest rendering and
+     matches the in-page panels. Real translucency remains the shell's
+     job (html.shell-vibrancy below). */
+  background: #10151a;
 }
 
 #root {
   height: 100%;
 }
 
-/* Same fix as displaywindow.css (Larry 2026-08-21): fully transparent
-   put dense panel text on the native `.sidebar` material, which is
-   LIGHT — the dark tint must come from CSS even when the native view
-   supplies the blur. Same value as the agent cards' --glass-bg-heavy. */
+/* Larry 2026-08-21 (third pass on "the font is transparent"): the glyphs
+   were never translucent — the BACKDROP was too bright. The native
+   material is .sidebar (the lightest one), and 0.58 of dark tint over a
+   light blurred desktop leaves near-white text on a light background,
+   which reads as see-through text. Popped windows sit over the DESKTOP
+   (arbitrary, often light), not the console's graphite stage, so they
+   need far more opacity than the in-page glass; 0.88 keeps a real hint
+   of the desktop while restoring text contrast. Deliberately NOT
+   var(--glass-bg-heavy): that token is tuned for glass over the wave. */
 html.shell-vibrancy,
 html.shell-vibrancy body {
-  background: var(--glass-bg-heavy, rgba(30, 36, 43, 0.58));
+  background: rgba(16, 21, 26, 0.88);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+}
+
+/* Larry 2026-08-21 — "popped windows have dimmed text, in-page is fine":
+   a TRANSPARENT WKWebView (drawsBackground=false, required for the
+   see-through window) renders text with grayscale antialiasing instead
+   of subpixel smoothing, which visibly thins light-on-dark glyphs. The
+   in-page console keeps an opaque webview, so only the popped windows
+   suffer. A hairline same-color text-shadow restores the lost visual
+   weight without changing any color or layout. */
+html.shell-vibrancy body * {
+  text-shadow: 0 0 0.6px currentColor;
 }

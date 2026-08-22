@@ -100,3 +100,28 @@ class TestReviewResolve:
     def test_unknown_id_returns_error_not_traceback(self, conn):
         out = logic.review_resolve(99999, "dismiss")
         assert out["ok"] is False
+
+
+class TestMemorySearch:
+    """M6 (MORTIMER_MEMORY_CAPACITY_PLAN.md) — thin wrapper over
+    jarvis.memory.search_facts; pins that the tool finds archived facts
+    too, since that is the whole point of the recall path."""
+
+    def test_finds_live_and_archived_facts(self, conn):
+        from jarvis.memory import archive_fact
+
+        _fact(conn, "user.preference.old_layout", "Larry liked the old dashboard layout")
+        conn.commit()
+        archive_fact(conn, "user.preference.old_layout", "aged-out")
+        conn.commit()
+
+        out = logic.memory_search("dashboard")
+        assert out["ok"] is True
+        assert out["count"] == 1
+        assert out["results"][0]["key"] == "user.preference.old_layout"
+        assert out["results"][0]["archived"] is True
+
+    def test_empty_query_returns_no_results_not_error(self, conn):
+        out = logic.memory_search("")
+        assert out["ok"] is True
+        assert out["results"] == []

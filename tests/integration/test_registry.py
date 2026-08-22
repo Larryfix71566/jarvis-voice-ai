@@ -9,9 +9,9 @@ import yaml
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 
 ALL_SERVERS = [
-    "mcp-time", "mcp-notes", "mcp-reminders", "mcp-web", "mcp-system",
-    "mcp-git", "mcp-apps", "mcp-repo", "mcp-runlog", "mcp-selfedit",
-    "mcp-screen",
+    "mcp-time", "mcp-notes", "mcp-memory", "mcp-reminders", "mcp-web",
+    "mcp-system", "mcp-git", "mcp-apps", "mcp-repo", "mcp-runlog",
+    "mcp-selfedit", "mcp-screen",
 ]
 # time 4, notes 7, reminders 5, web 3, system 2, git 8, apps 5, repo 5,
 # selfedit 5. notes went 6 -> 7 when search_sessions (FTS5 conversation
@@ -20,8 +20,9 @@ ALL_SERVERS = [
 # alongside a main that still carried the old number. repo (5) added by
 # MORTIMER_AGENT_TRUST_PLAN.md D10-D12: repo_read_file, repo_list_files,
 # repo_search, repo_write_file, repo_commit_write.
-TOTAL_TOOLS = 60  # ...+2 (2026-08-21: mcp-memory's memory_review_list/_resolve)
+TOTAL_TOOLS = 61  # ...+2 (2026-08-21: mcp-memory's memory_review_list/_resolve)
                   # ...+1 (B2: mcp-selfedit's selfedit_verify_appearance)
+                  # ...+1 (M6, MORTIMER_MEMORY_CAPACITY_PLAN.md: mcp-memory's memory_search)
 
 
 @pytest.fixture

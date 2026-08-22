@@ -30,6 +30,12 @@ dist/
 data/wakeword/
 models/
 logs/
+# Speaker gate (MORTIMER_VOICE_ISOLATION_TIER12_PLAN.md Tier 2): the
+# downloaded ECAPA model, Larry's voice profile, and live-path enrollment
+# captures — a voiceprint and raw voice recordings must never be committed.
+data/models/
+data/speaker_profile.*
+data/speaker_captures/
 
 # Mac shell (MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md B5): Xcode/SPM
 # build noise. macos/MortimerShell's source, Package.swift, and templates/

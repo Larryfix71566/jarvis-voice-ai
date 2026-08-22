@@ -91,6 +91,7 @@ class Orchestrator:
             jarvis_name=settings.jarvis_name,
             user_name=settings.jarvis_user_name,
             timezone=settings.jarvis_timezone,
+            units=settings.jarvis_units,
             agent_catalog=agent_catalog,
             voice_catalog="(none configured yet)",
             memory_context=render_memory_context(),  # U2.5 persistent memory

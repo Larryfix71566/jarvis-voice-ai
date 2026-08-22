@@ -73,3 +73,52 @@ def test_expand_env_vars(clean_env):
     # Unknown variables stay literal so misconfiguration is visible.
     assert expand_env_vars("${JARVIS_NOPE_NOPE}") == "${JARVIS_NOPE_NOPE}"
     assert expand_env_vars("no placeholders") == "no placeholders"
+
+
+# --- W3 (MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md) -------------------
+
+
+def test_units_defaults_to_imperial(clean_env):
+    _set_required(clean_env)
+    settings = load_settings(env_file=None)
+    assert settings.jarvis_units == "imperial"
+
+
+def test_units_setting_rejects_unknown_values(clean_env):
+    _set_required(clean_env)
+    clean_env.setenv("JARVIS_UNITS", "furlongs")
+    with pytest.raises(RuntimeError, match="JARVIS_UNITS"):
+        load_settings(env_file=None)
+
+
+def test_units_setting_accepts_metric(clean_env):
+    _set_required(clean_env)
+    clean_env.setenv("JARVIS_UNITS", "metric")
+    settings = load_settings(env_file=None)
+    assert settings.jarvis_units == "metric"
+
+
+def test_units_bridged_to_child_env(clean_env):
+    """W3: the same transport JARVIS_TIMEZONE already uses to reach MCP
+    children — a real env var wins (setdefault precedence), matching every
+    other name bridge_settings_to_env carries."""
+    from jarvis.config import bridge_settings_to_env
+
+    _set_required(clean_env)
+    clean_env.setenv("JARVIS_UNITS", "metric")
+    settings = load_settings(env_file=None)
+
+    clean_env.delenv("JARVIS_UNITS", raising=False)
+    bridge_settings_to_env(settings)
+    assert os.environ["JARVIS_UNITS"] == "metric"
+
+
+def test_units_bridge_does_not_override_real_env_var(clean_env):
+    from jarvis.config import bridge_settings_to_env
+
+    _set_required(clean_env)
+    settings = load_settings(env_file=None)  # settings.jarvis_units == imperial
+
+    clean_env.setenv("JARVIS_UNITS", "metric")  # a real override already present
+    bridge_settings_to_env(settings)
+    assert os.environ["JARVIS_UNITS"] == "metric"  # untouched, not overwritten

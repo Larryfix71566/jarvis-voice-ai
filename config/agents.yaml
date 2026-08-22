@@ -12,7 +12,7 @@ sub_agents:
   - name: librarian
     display_name: Librarian
     mcp_servers: [mcp-notes, mcp-memory, mcp-screen]
-    description: "Long-term memory: store and recall facts, notes, preferences. Also resolves flagged memory conflicts and cleanup items awaiting review: list them, keep one side, rewrite, dismiss, convert to a workflow, or archive as implemented."
+    description: "Long-term memory: store and recall facts, notes, preferences. Also resolves flagged memory conflicts and cleanup items awaiting review: list them, keep one side, rewrite, dismiss, convert to a workflow, or archive as implemented. Archived facts (merged or aged out by capacity enforcement, never deleted) are still searchable with memory_search — use it before telling the user something is forgotten."
   - name: analyst
     display_name: Analyst
     mcp_servers: [mcp-web, mcp-screen]
@@ -65,21 +65,27 @@ sub_agents:
     # reassign; resolution failures fall back to the voice model with a
     # logged warning.
     # Larry 2026-08-19 — moved from kimi-k3 (direct Moonshot) to a
-    # coding-tuned frontier model reached through OpenRouter, for the
-    # reason he gave: one key buys access to genuinely frontier build
-    # models instead of the one mid-tier model a single vendor offered.
+    # coding-tuned frontier model reached through OpenRouter (or-codex-max),
+    # for the reason he gave: one key buys access to genuinely frontier
+    # build models instead of the one mid-tier model a single vendor
+    # offered.
     #
-    # This is the ONE place the proxy carries something tool-critical, so
-    # two things matter. First, reverting is a one-line change back to
-    # `kimi-k3` if tool-calling fidelity through OpenRouter disappoints —
-    # OpenRouter can route a slug to upstreams of differing tool support,
-    # and this agent lives on tool calls. Second, a missing or dead
-    # OPENROUTER_API_KEY makes SubAgent fall back to the VOICE model, which
-    # would put a dispatcher on build work; that is now visible rather than
-    # silent — the Agents tab card chip renders the resolved model amber
-    # with a warning when it is a fallback, and `python scripts/check_keys.py`
-    # reports the key's real state.
-    model_profile: or-codex-max
+    # Larry 2026-08-22 — moved again, or-codex-max -> claude-opus ("I would
+    # rather the default developer model be opus 5 not gpt-5.1"), after a
+    # live session where the model chip reading "gpt-5.1-codex-max" was
+    # itself a source of confusion. claude-opus is a DIRECT Anthropic
+    # profile (no proxy hop), which the registry's own guidance prefers for
+    # this agent — the developer lives on tool calls, and a known-good
+    # direct route beats a proxy that may route the same slug to upstreams
+    # of differing tool fidelity. It also rides ANTHROPIC_API_KEY, the same
+    # key the voice loop already proves alive at every boot.
+    #
+    # A dead/missing key would make SubAgent fall back to the VOICE model,
+    # which would put a dispatcher on build work; on_profile_fallback:
+    # refuse below turns that into a loud refusal instead — and the Agents
+    # tab card chip always names the RESOLVED model, so what actually ran
+    # is never a guess.
+    model_profile: claude-opus
     # K5 (Larry 2026-08-19). Verified that day: this key was read by
     # scripts/check_env.py and by NOTHING in jarvis/ — the preflight warned
     # that a refuse-mode agent would "refuse every delegation" while the

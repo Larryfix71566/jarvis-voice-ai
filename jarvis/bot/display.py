@@ -43,6 +43,13 @@ DISPLAY_TOOLS = {
     # plan/review through this SAME display pipeline rather than opening
     # a second display code path.
     "plan_ready",
+    # W5 (MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md) — another
+    # pseudo-tool, same plan_ready convention: WeatherReportMerger below
+    # assembles a combined {"weather": ..., "radar": ...} dict from two
+    # REAL tool results (get_weather + get_weather_radar) and calls
+    # build_display_payload with this tool name, so the analyst's two
+    # calls render as ONE card instead of two stacked ones.
+    "weather_report",
 }
 
 # Which surface a tool's result belongs on (side-drawer plan D36).
@@ -69,6 +76,9 @@ DISPLAY_SURFACE: dict[str, str] = {
     # F4 — a finished plan is the answer to something the user asked for
     # and is parkable on a second screen while they read it.
     "plan_ready": "window",
+    # W5 — same "answer to a question just asked" reasoning as get_weather
+    # and get_weather_radar, which this pseudo-tool replaces on screen.
+    "weather_report": "window",
 }
 DEFAULT_DISPLAY_SURFACE = "drawer"
 
@@ -114,12 +124,22 @@ def build_display_payload(
     built = formatter(arguments, data)
     if built is None:
         return None
-    kind, title, body, images, links = built
+    # W6 (MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md): a formatter may
+    # return a 6th element, basemap_images, for a radar-carrying payload —
+    # the keyless CARTO layer the frontend stacks UNDER the precipitation
+    # tiles. Optional/backward-compatible: every other formatter's 5-tuple
+    # is unchanged.
+    if len(built) == 6:
+        kind, title, body, images, links, basemap_images = built
+    else:
+        kind, title, body, images, links = built
+        basemap_images = []
     return {
         "kind": kind,
         "title": title,
         "body": body,
         "images": images,
+        "basemap_images": basemap_images,
         "links": links,
         "agent": display_name or agent,
         "ts": time.time(),
@@ -157,26 +177,35 @@ def _fmt_web_search(args: dict, data: dict) -> tuple | None:
     return ("markdown", f"Research — {query}", "\n\n".join(parts), [], links)
 
 
+def _weather_daily_table(daily: list[dict], units: str) -> str:
+    """W3: reads the payload's OWN units field to pick which key/suffix to
+    render — never guesses from which keys happen to be present, since W2
+    guarantees both max_f/max_c (etc.) are always there together."""
+    suffix = "c" if units == "metric" else "f"
+    label = "°C" if units == "metric" else "°F"
+    rows = ["| Date | High | Low | Precip | Conditions |", "|---|---|---|---|---|"]
+    for d in daily:
+        precip = d.get("precip_probability")
+        hi = d.get(f"max_{suffix}", "?")
+        lo = d.get(f"min_{suffix}", "?")
+        rows.append(
+            f"| {d.get('date', '')} "
+            f"| {hi}{label} "
+            f"| {lo}{label} "
+            f"| {precip if precip is not None else '?'}% "
+            f"| {d.get('condition', '')} |"
+        )
+    return "\n".join(rows)
+
+
 def _fmt_get_weather(args: dict, data: dict) -> tuple | None:
     city = data.get("city") or (args.get("city") or "").strip()
     human = (data.get("human") or "").strip()
     daily = data.get("daily") or []
+    units = data.get("units") or "imperial"
     parts = [human] if human else []
     if daily:
-        rows = [
-            "| Date | High | Low | Precip | Conditions |",
-            "|---|---|---|---|---|",
-        ]
-        for d in daily:
-            precip = d.get("precip_probability")
-            rows.append(
-                f"| {d.get('date', '')} "
-                f"| {d.get('max_c', '?')}°C "
-                f"| {d.get('min_c', '?')}°C "
-                f"| {precip if precip is not None else '?'}% "
-                f"| {d.get('condition', '')} |"
-            )
-        parts.append("\n".join(rows))
+        parts.append(_weather_daily_table(daily, units))
     if not parts:
         return None
     return ("markdown", f"Weather — {city}", "\n\n".join(parts), [], [])
@@ -186,13 +215,17 @@ def _fmt_get_weather_radar(args: dict, data: dict) -> tuple | None:
     tiles = [u for u in data.get("tiles", []) if isinstance(u, str) and u]
     if not tiles:
         return None
+    # W6 — the keyless CARTO basemap, same z/x/y as `tiles`, passed
+    # through as the 6th tuple element so the frontend can stack it
+    # underneath the transparent precipitation overlay.
+    basemap = [u for u in data.get("basemap_tiles", []) if isinstance(u, str) and u]
     city = data.get("city") or (args.get("city") or "").strip()
     stamp = ""
     ts = data.get("ts")
     if isinstance(ts, (int, float)):
         stamp = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M UTC")
     body = f"Latest precipitation radar ({stamp or 'time unknown'}) centered on {city}."
-    return ("image", f"Radar — {city}", body, tiles, [])
+    return ("image", f"Radar — {city}", body, tiles, [], basemap)
 
 
 def _fmt_app_create(args: dict, data: dict) -> tuple | None:
@@ -300,6 +333,51 @@ def _fmt_plan_ready(args: dict, data: dict) -> tuple | None:
     return ("markdown", title, _truncate_doc(plan), footer, [])
 
 
+def _fmt_weather_report(args: dict, data: dict) -> tuple | None:
+    """W5 — merges a get_weather result and a get_weather_radar result
+    into ONE card. `data` is `{"weather": <get_weather dict or None>,
+    "radar": <get_weather_radar dict or None>}`, assembled by
+    WeatherReportMerger below — NOT a real tool's JSON, same pseudo-tool
+    convention _fmt_plan_ready already established. Never suppresses an
+    answer: a lone conditions result or a lone radar result (the other
+    tool errored, or was never called) still renders as a partial card
+    rather than nothing."""
+    weather = data.get("weather")
+    radar = data.get("radar")
+    if not weather and not radar:
+        return None
+
+    parts: list[str] = []
+    images: list[str] = []
+    basemap: list[str] = []
+    city = ""
+
+    if weather:
+        city = str(weather.get("city") or "")
+        human = str(weather.get("human") or "").strip()
+        if human:
+            parts.append(human)
+        daily = weather.get("daily") or []
+        if daily:
+            parts.append(_weather_daily_table(daily, weather.get("units") or "imperial"))
+
+    if radar:
+        city = city or str(radar.get("city") or "")
+        images = [u for u in radar.get("tiles", []) if isinstance(u, str) and u]
+        basemap = [u for u in radar.get("basemap_tiles", []) if isinstance(u, str) and u]
+        stamp = ""
+        ts = radar.get("ts")
+        if isinstance(ts, (int, float)):
+            stamp = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M UTC")
+        parts.append(f"Latest precipitation radar ({stamp or 'time unknown'}).")
+
+    if not parts and not images:
+        return None
+    title = f"Weather — {city}" if city else "Weather"
+    kind = "image" if images else "markdown"
+    return (kind, title, "\n\n".join(parts), images, [], basemap)
+
+
 _FORMATTERS = {
     "web_search": _fmt_web_search,
     "get_weather": _fmt_get_weather,
@@ -314,4 +392,66 @@ _FORMATTERS = {
     "repo_write_file": _fmt_repo_write_draft,
     "repo_read_file": _fmt_repo_read,
     "plan_ready": _fmt_plan_ready,
+    "weather_report": _fmt_weather_report,
 }
+
+
+class WeatherReportMerger:
+    """W5 — pairs a run's get_weather and get_weather_radar tool results
+    into ONE weather_report display payload, in code rather than by
+    asking the model to combine two stacked cards sensibly. One instance
+    per connection (constructed once in
+    jarvis.bot.pipeline.make_agent_event_handler, mirroring every other
+    per-connection dict built there), keyed by run_id so concurrent
+    delegations (barge-in survival can run more than one at once) never
+    cross-contaminate each other's pending halves.
+
+    Call `offer()` for every get_weather/get_weather_radar tool result;
+    it returns a merged display payload once both halves are accounted
+    for (either arrived, or the other definitively failed), else None
+    (still waiting on the pair). Call `finalize(run_id)` on delegate_done
+    to flush a lone pending half — the other tool was simply never called
+    (e.g. the model only asked about conditions) — so a real result is
+    never silently dropped."""
+
+    def __init__(self) -> None:
+        self._pending: dict[str, dict[str, Any]] = {}
+
+    def offer(
+        self, run_id: str, agent: str, display_name: str, tool: str,
+        result_str: str,
+    ) -> dict | None:
+        if not run_id or tool not in ("get_weather", "get_weather_radar"):
+            return None
+        slot = self._pending.setdefault(
+            run_id, {"agent": agent, "display_name": display_name})
+        try:
+            data = json.loads(result_str)
+        except (json.JSONDecodeError, TypeError):
+            data = None
+        if isinstance(data, dict) and not data.get("error"):
+            slot[tool] = data
+        else:
+            slot[f"{tool}_failed"] = True
+
+        other = "get_weather_radar" if tool == "get_weather" else "get_weather"
+        other_settled = other in slot or slot.get(f"{other}_failed")
+        if not other_settled:
+            return None  # still waiting on the pair
+        return self._finalize(self._pending.pop(run_id))
+
+    def finalize(self, run_id: str) -> dict | None:
+        slot = self._pending.pop(run_id, None)
+        if slot is None:
+            return None
+        return self._finalize(slot)
+
+    def _finalize(self, slot: dict[str, Any]) -> dict | None:
+        weather = slot.get("get_weather")
+        radar = slot.get("get_weather_radar")
+        if weather is None and radar is None:
+            return None
+        return build_display_payload(
+            slot.get("agent", ""), slot.get("display_name", ""),
+            "weather_report", {}, json.dumps({"weather": weather, "radar": radar}),
+        )

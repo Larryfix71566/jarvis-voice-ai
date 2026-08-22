@@ -2,7 +2,7 @@
 name: mcp-memory
 version: 1.0.0
 class: standard
-tools: [memory_review_list, memory_review_resolve]
+tools: [memory_review_list, memory_review_resolve, memory_search]
 requires_env: []
 requires_keychain: []
 scopes: []

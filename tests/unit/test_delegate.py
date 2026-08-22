@@ -62,6 +62,78 @@ class TestSchema:
             "scheduler", "librarian", "analyst", "systems", "developer"]
         assert fn["parameters"]["required"] == ["agent_name", "task"]
 
+    def test_schema_has_optional_model_profile(self):
+        """F6 (MORTIMER_GATE_V2_AND_MODEL_REQUEST_PLAN.md) — a named
+        per-run model request is an OPTIONAL parameter, never required:
+        omitting it (the overwhelming majority of delegations) must not
+        become a validation error."""
+        schema, _ = build_delegate_tool(AGENTS)
+        fn = schema["function"]
+        props = fn["parameters"]["properties"]
+        assert "model_profile" in props
+        assert props["model_profile"]["type"] == "string"
+        assert "model_profile" not in fn["parameters"]["required"]
+
+
+class TestModelProfileOverride:
+    """F6/F7/F8/F9 — delegate.py's side of the named-model request."""
+
+    async def test_overridden_reply_names_resolved_model(self):
+        agents = {"developer": FakeSubAgent(
+            "developer", result="done", override_model="claude-fable-5")}
+        _, handler = build_delegate_tool(agents)
+        result = await handler({
+            "agent_name": "developer", "task": "research radar",
+            "model_profile": "fable",
+        })
+        assert result == "done\n[ran on claude-fable-5]"
+        # The override was passed through to SubAgent.run() itself.
+        assert agents["developer"].run_kwargs[-1]["model_profile_override"] == "fable"
+
+    async def test_no_model_profile_no_suffix(self):
+        agents = {"developer": FakeSubAgent("developer", result="done")}
+        _, handler = build_delegate_tool(agents)
+        result = await handler({"agent_name": "developer", "task": "research radar"})
+        assert result == "done"
+        assert agents["developer"].run_kwargs[-1]["model_profile_override"] is None
+
+    async def test_unresolvable_override_refuses_before_any_run_row(self):
+        """F7: an unresolvable named request refuses immediately — no
+        delegate_start event, no run row, agent.run() never called."""
+        agents = {"developer": FakeSubAgent(
+            "developer", override_refused=(
+                "model profile 'fable' could not be resolved "
+                "(ANTHROPIC_API_KEY is unset)"
+            ),
+        )}
+        events = []
+        _, handler = build_delegate_tool(agents, on_event=events.append)
+        result = await handler({
+            "agent_name": "developer", "task": "research radar",
+            "model_profile": "fable",
+        })
+        assert result.startswith("REFUSED:")
+        assert "fable" in result
+        assert events == []  # no delegate_start fired
+        assert agents["developer"].tasks == []  # run() never called
+
+    async def test_delegate_start_shows_override_model_never_as_fallback(self):
+        """F8: an explicit override is never reported as a 'fallback' —
+        it was requested, not defaulted into."""
+        agents = {"developer": FakeSubAgent(
+            "developer", model="or-codex-max", model_is_fallback=False,
+            override_model="claude-fable-5",
+        )}
+        events = []
+        _, handler = build_delegate_tool(agents, on_event=events.append)
+        await handler({
+            "agent_name": "developer", "task": "research radar",
+            "model_profile": "fable",
+        })
+        assert events[0]["type"] == "delegate_start"
+        assert events[0]["model"] == "claude-fable-5"
+        assert events[0]["model_fallback"] is False
+
 
 class TestHandler:
     async def test_routes_to_named_agent_and_returns_result(self):

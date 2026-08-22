@@ -61,9 +61,14 @@ class Settings(BaseSettings):
     tavily_api_key: str | None = None
 
     # Noise suppression (voice isolation plan, Workstream A) — OFF by default.
-    # Engine install required: pip install deepfilternet (or pyrnnoise).
+    # Engine install required: pip install pyrnnoise (see requirements.txt).
     jarvis_ns_enabled: bool = False  # feature flag + kill switch (plan A2)
-    jarvis_ns_filter: str = "deepfilternet"  # deepfilternet | rnnoise | null | none
+    # Default is rnnoise, NOT deepfilternet: DFN proved uninstallable on
+    # py3.12 (no cp312 wheels ever; imports an API torchaudio removed;
+    # unmaintained) — a default that cannot install is a trap. The
+    # "deepfilternet" branch in jarvis/audio/filters.py remains for a
+    # future where the project revives. (TIER12 plan §10, 2026-08-21.)
+    jarvis_ns_filter: str = "rnnoise"  # rnnoise | deepfilternet | null | none
     jarvis_ns_atten_lim_db: float | None = None  # ⚙ strength knob (plan A3); None = full
     jarvis_ns_post_filter: bool = False
     jarvis_ns_log_stats: bool = True  # [ns] RTF telemetry (plan A2 step 4 / V1a)
@@ -76,6 +81,17 @@ class Settings(BaseSettings):
     jarvis_timezone: str = "America/New_York"
     jarvis_user_name: str = "Boss"
     jarvis_name: str = "Mortimer"
+
+    # W3 (MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md) — a durable,
+    # locale-derived display setting, the same kind of thing as
+    # jarvis_timezone above and deliberately placed beside it: NOT a memory
+    # fact (a memory fact carrying this rule was live and correct on
+    # 2026-08-20 while the weather display still rendered Celsius, because
+    # nothing in the code path ever read it — config is read by
+    # get_weather and turned into arithmetic, memory is only ever advisory
+    # to a model). "imperial" | "metric"; imperial is correct for this
+    # deployment's user.
+    jarvis_units: str = "imperial"
 
     # Interruption awareness (plan Phase 3) — surface a short context note
     # to the Supervisor when the user genuinely barges in on a reply.
@@ -151,6 +167,18 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"JARVIS_TIMEZONE is not a valid IANA timezone: {v!r}"
             ) from exc
+        return v
+
+    @field_validator("jarvis_units")
+    @classmethod
+    def _units_must_be_known(cls, v: str) -> str:
+        # W3 — no `false`/off state and no silent degrade: an unrecognized
+        # value is rejected outright, matching the timezone validator just
+        # above rather than defaulting quietly to one system or the other.
+        if v not in ("imperial", "metric"):
+            raise ValueError(
+                f"JARVIS_UNITS must be 'imperial' or 'metric', got {v!r}"
+            )
         return v
 
     @property
@@ -230,6 +258,13 @@ def bridge_settings_to_env(settings=None) -> None:
             settings = load_settings()
         os.environ.setdefault("JARVIS_DB_PATH", settings.jarvis_db_path)
         os.environ.setdefault("JARVIS_TIMEZONE", settings.jarvis_timezone)
+        # W3 — same transport JARVIS_TIMEZONE already uses to reach MCP
+        # children; mcp_web.get_weather reads this to decide its primary
+        # unit. setdefault keeps a real env var winning, same precedence
+        # rule as every other bridged name here.
+        os.environ.setdefault(
+            "JARVIS_UNITS", getattr(settings, "jarvis_units", "imperial")
+        )
         if getattr(settings, "tavily_api_key", None):
             os.environ.setdefault("TAVILY_API_KEY", settings.tavily_api_key)
         return
@@ -243,7 +278,10 @@ def bridge_settings_to_env(settings=None) -> None:
     # names straight out of .env instead. Same setdefault precedence, so a
     # real environment variable still wins.
     for name, value in _dotenv_values().items():
-        if name in ("JARVIS_DB_PATH", "JARVIS_TIMEZONE", "TAVILY_API_KEY"):
+        if name in (
+            "JARVIS_DB_PATH", "JARVIS_TIMEZONE", "TAVILY_API_KEY",
+            "JARVIS_UNITS",
+        ):
             if value:
                 os.environ.setdefault(name, value)
 

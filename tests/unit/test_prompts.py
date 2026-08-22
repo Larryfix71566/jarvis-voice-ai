@@ -16,16 +16,37 @@ def test_supervisor_prompt_formats_all_placeholders():
         jarvis_name="Jarvis",
         user_name="Boss",
         timezone="America/New_York",
+        units="imperial",
         agent_catalog="- scheduler (Scheduler): time stuff",
         voice_catalog="- rachel: Rachel (calm)",
         memory_context="- user.name: Larry",
     )
     assert "Jarvis" in rendered
     assert "America/New_York" in rendered
+    assert "imperial" in rendered
     assert "- scheduler (Scheduler): time stuff" in rendered
     assert "- rachel: Rachel (calm)" in rendered
     assert "- user.name: Larry" in rendered
     assert "{" not in rendered  # no unformatted placeholders remain
+
+
+def test_supervisor_prompt_carries_units():
+    """W3 (MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md) — {units} is a
+    real placeholder in the template (so a missed call site raises
+    KeyError at render time, not silently), and the rendered text tells
+    the Supervisor when NOT to re-convert a get_weather figure."""
+    assert "{units}" in SUPERVISOR_PROMPT
+    with pytest.raises(KeyError):
+        SUPERVISOR_PROMPT.format(
+            jarvis_name="Jarvis", user_name="Boss", timezone="America/New_York",
+            agent_catalog="", voice_catalog="", memory_context="",
+        )  # units= omitted on purpose
+    rendered = SUPERVISOR_PROMPT.format(
+        jarvis_name="Jarvis", user_name="Boss", timezone="America/New_York",
+        units="metric", agent_catalog="", voice_catalog="", memory_context="",
+    )
+    assert "metric" in rendered
+    assert "never re-convert" in rendered.lower()
 
 
 def test_supervisor_prompt_memory_section_present():
@@ -58,6 +79,20 @@ def test_subagent_prompts_roster_and_contracts():
     assert "{timezone}" not in SUBAGENT_PROMPTS["scheduler"].format(
         timezone="America/New_York"
     )
+
+
+def test_analyst_prompt_requires_both_weather_tools():
+    """W5 (MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md) — radar is
+    'standard for this display/workflow' per Larry, so the analyst's own
+    prompt must require BOTH get_weather and get_weather_radar for a
+    local/current weather question, not just get_weather alone. Also
+    checks the prompt tells the analyst not to describe the merge
+    mechanism (WeatherReportMerger renders them as one card automatically
+    — the analyst shouldn't narrate that)."""
+    p = SUBAGENT_PROMPTS["analyst"]
+    assert "get_weather_radar" in p
+    assert "get_weather" in p
+    assert "both" in p.lower()
 
 
 def test_render_agent_catalog():

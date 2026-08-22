@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 from jarvis.db import get_conn, run_migrations
+from jarvis.memory import search_facts
 from jarvis.memory_sweep import list_open_reviews, resolve_review
 
 # Actions a review supports, by kind — mirrored from resolve_review's
@@ -71,3 +72,16 @@ def review_resolve(
     except Exception as exc:  # noqa: BLE001 — a tool returns, never raises
         return {"ok": False, "error": f"could not resolve review: {exc}"}
     return {"ok": True, "review_id": int(review_id), **result}
+
+
+def memory_search(query: str, limit: int = 10) -> dict[str, Any]:
+    """M6 (MORTIMER_MEMORY_CAPACITY_PLAN.md) — search live AND archived
+    facts by key/content substring. Thin over jarvis.memory.search_facts,
+    the same recall path the panel and any future surface would use — no
+    second implementation."""
+    try:
+        run_migrations()
+        results = search_facts(None, query, limit)
+    except Exception as exc:  # noqa: BLE001 — a tool returns, never raises
+        return {"ok": False, "error": f"could not search memory: {exc}"}
+    return {"ok": True, "query": query, "count": len(results), "results": results}

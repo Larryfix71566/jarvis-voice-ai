@@ -27,9 +27,12 @@ html,
 body {
   height: 100%;
   margin: 0;
-  background: rgba(10, 16, 21, 0.72);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  backdrop-filter: blur(20px) saturate(180%);
+  /* Larry 2026-08-21 — same fix as drawerwindow.css: in a browser popup
+     the 0.72 wash composited against the browser's WHITE canvas into a
+     medium gray, dimming light text. Opaque dark is honest (nothing sits
+     behind a separate browser window) and matches the in-page panels;
+     the shell path (html.shell-vibrancy) keeps real translucency. */
+  background: #10151a;
 }
 
 /* When the native window IS made non-opaque, this class (set by the
@@ -47,9 +50,21 @@ body {
    that job, and double-blurring costs GPU for nothing. */
 html.shell-vibrancy,
 html.shell-vibrancy body {
-  background: var(--glass-bg-heavy, rgba(30, 36, 43, 0.58));
+  /* Larry 2026-08-21 third pass: 0.58 was still too bright over a light
+     desktop through the .sidebar material — white text kept reading as
+     "transparent font." Popped windows sit over the DESKTOP, not the
+     graphite stage; 0.88 restores text contrast while keeping a real
+     hint of translucency. Matches drawerwindow.css. */
+  background: rgba(16, 21, 26, 0.88);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+}
+
+/* Same dimmed-text compensation as drawerwindow.css: a transparent
+   WKWebView loses subpixel text smoothing; the hairline same-color
+   text-shadow restores glyph weight. */
+html.shell-vibrancy body * {
+  text-shadow: 0 0 0.6px currentColor;
 }
 
 #root {

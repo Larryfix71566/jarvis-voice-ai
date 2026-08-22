@@ -20,8 +20,22 @@ pytest-asyncio
 pytest-cov
 ruff
 
-# --- Optional: server-side noise suppression (voice isolation plan, Workstream A) ---
-# Uncomment ONE engine, then set JARVIS_NS_ENABLED=true in .env:
-# deepfilternet      # DeepFilterNet 3 (best quality; pulls torch, ~2 GB)
-# pyrnnoise          # RNNoise (lightweight fallback)
-# pystoi             # eval harness metric (scripts/eval_ns.py)
+# Voice isolation Tier 1 (MORTIMER_VOICE_ISOLATION_TIER12_PLAN.md, §10
+# 2026-08-21): rnnoise is the ONE engine. deepfilternet was removed after
+# proving unfixable on py3.12 — deepfilterlib has never shipped cp312
+# wheels (resolver backtracks to a broken 2022 release), and even the
+# latest 0.5.6 unconditionally imports torchaudio.backend, removed in
+# torchaudio >=2.1; the project is unmaintained since mid-2023.
+pyrnnoise
+pystoi          # scripts/eval_ns.py metric
+# av pin: pyrnnoise -> audiolab imports av.option, which PyAV REMOVED in
+# av 17. aiortc (the WebRTC transport, the other consumer of av) accepts
+# av>=14,<18, so 16.x satisfies both. Verified working end-to-end
+# (RNNoise.denoise_chunk processes audio) against av 16.0.1. Do not
+# unpin without re-testing `from pyrnnoise import RNNoise`.
+av>=16,<17
+
+# Voice isolation Tier 2 (MORTIMER_VOICE_ISOLATION_TIER12_PLAN.md):
+# local speaker verification gate (opt-in, JARVIS_SPEAKER_GATE_ENABLED).
+speechbrain
+soundfile       # WAV reading for enrollment/verify CLI

@@ -8,8 +8,17 @@ import json
 import pytest
 
 from jarvis.db import get_conn, now_iso, run_migrations
-from jarvis.memory import archive_fact, render_memory_context, upsert_fact
+from jarvis.memory import (
+    MAX_CONTEXT_CHARS,
+    MAX_PREFERENCE_FACTS,
+    MAX_PROJECT_FACTS,
+    archive_fact,
+    render_memory_context,
+    search_facts,
+    upsert_fact,
+)
 from jarvis.memory_sweep import (
+    CAPACITY_CAPS,
     SWEEP_MAX_ARCHIVES,
     _apply_classification,
     _parse_classification,
@@ -19,6 +28,7 @@ from jarvis.memory_sweep import (
     list_open_reviews,
     resolve_review,
     run_auto_consolidation,
+    run_capacity_enforcement,
     run_sweep,
     run_stale_sweep,
 )
@@ -250,6 +260,255 @@ def test_interaction_audience_reaches_the_prompt(conn):
     conn.commit()
     text = render_memory_context(conn)
     assert "user.preference.terse" in text
+
+
+# --- A1.5: capacity enforcement ladder (MORTIMER_MEMORY_CAPACITY_PLAN.md) --
+
+
+def _unique_tokens_fact(conn, key, tier, i, n_tokens=6):
+    """A fact guaranteed to share NO tokens with any other fact produced
+    by this helper (every token embeds `i`), so propose_merges can never
+    cluster it with anything — used to fill a tier past its cap without
+    ever triggering rung (b)'s merge path or a real model call."""
+    content = " ".join(f"tok{i}_{j}" for j in range(n_tokens))
+    _fact(conn, key, content, tier)
+
+
+async def test_enforcement_reaches_cap_without_llm(conn, monkeypatch):
+    """M3(c) / superseded by W7 for `preference` specifically
+    (MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md) — a key-less/model-less
+    environment still lands EXACTLY at the cap via mechanical age-out for
+    `project`, the backstop that holds M1's invariant with zero API
+    dependency. This test now exercises `project`, not `preference`: W7
+    changed preference's behavior in this exact scenario (see
+    test_preference_left_over_cap_when_merge_rung_unavailable below) because
+    mechanical age-out is blind to importance and a live regression showed
+    it silently archiving a stated user preference. `project` facts are
+    largely re-derivable (git log, repo state) and keep the old backstop."""
+    def _raise():
+        raise RuntimeError("no key configured")
+
+    monkeypatch.setattr("jarvis.config.load_settings", _raise)
+
+    # A real mergeable cluster (would satisfy rung (b) if a model existed).
+    _fact(conn, "project.mortimer.conciseness", "Status: short summaries", "project")
+    _fact(conn, "project.mortimer.verbosity",
+          "Status: short, terse, direct summaries with minimal detail",
+          "project")
+    # Fill the rest of the tier with facts that can never cluster.
+    n_fill = MAX_PROJECT_FACTS + 5
+    for i in range(n_fill):
+        _unique_tokens_fact(conn, f"project.fill{i:02d}", "project", i)
+    conn.commit()
+
+    report = await run_capacity_enforcement(conn, ignore_boot_cap=True)
+
+    assert report["project"]["after"] == MAX_PROJECT_FACTS
+    assert report["project"]["merged"] == 0
+    assert report["project"]["aged_out"] > 0
+    live = conn.execute(
+        "SELECT COUNT(*) AS n FROM memories WHERE kind='fact' "
+        "AND archived_at IS NULL AND COALESCE(tier,'project')='project'"
+    ).fetchone()["n"]
+    assert live == MAX_PROJECT_FACTS
+
+
+async def test_preference_left_over_cap_when_merge_rung_unavailable(conn, monkeypatch, caplog):
+    """W7 — the fix for the D0 regression: with no key/model available and
+    no mergeable cluster, the preference tier is left OVER cap rather than
+    mechanically aging out a fact that might be a stated preference.
+    Nothing is archived; a WARNING names the tier and the overage."""
+    def _raise():
+        raise RuntimeError("no key configured")
+
+    monkeypatch.setattr("jarvis.config.load_settings", _raise)
+
+    n_fill = MAX_PREFERENCE_FACTS + 5
+    for i in range(n_fill):
+        _unique_tokens_fact(conn, f"user.preference.fill{i:02d}", "preference", i)
+    conn.commit()
+
+    import logging
+    with caplog.at_level(logging.WARNING, logger="jarvis.memory_sweep"):
+        report = await run_capacity_enforcement(conn, ignore_boot_cap=True)
+
+    assert report["preference"]["aged_out"] == 0
+    assert report["preference"]["merged"] == 0
+    assert report["preference"]["after"] == n_fill  # untouched, still over cap
+    assert report["preference"]["after"] > report["preference"]["cap"]
+    live = conn.execute(
+        "SELECT COUNT(*) AS n FROM memories WHERE kind='fact' "
+        "AND archived_at IS NULL AND COALESCE(tier,'project')='preference'"
+    ).fetchone()["n"]
+    assert live == n_fill
+    assert any(
+        "memory_enforce_preference_left_over_cap" in r.message for r in caplog.records
+    )
+
+
+async def test_preference_still_merges_when_model_available(conn):
+    """W7 does not disable rung (b) for preference — merging still runs
+    normally, and only the FALLBACK to mechanical age-out is suppressed."""
+    _fact(conn, "user.preference.conciseness", "Larry prefers short answers", "preference")
+    _fact(conn, "user.preference.verbosity",
+          "Larry prefers short, terse, direct answers with minimal detail",
+          "preference")
+    n_fill = MAX_PREFERENCE_FACTS - 1
+    for i in range(n_fill):
+        _unique_tokens_fact(conn, f"user.preference.fill{i:02d}", "preference", i)
+    conn.commit()
+
+    rewritten = "Larry prefers short, terse, direct spoken answers."
+    report = await run_capacity_enforcement(
+        conn, client_factory=_factory(rewritten), ignore_boot_cap=True,
+    )
+
+    assert report["preference"]["merged"] == 1
+    assert report["preference"]["aged_out"] == 0
+    assert report["preference"]["after"] == MAX_PREFERENCE_FACTS
+
+
+async def test_enforcement_never_touches_identity(conn):
+    """M3: identity is never a target — CAPACITY_CAPS omits it entirely,
+    over any size."""
+    assert "identity" not in CAPACITY_CAPS
+    for i in range(50):
+        _unique_tokens_fact(conn, f"user.identity.item{i:02d}", "identity", i)
+    conn.commit()
+
+    await run_capacity_enforcement(conn, ignore_boot_cap=True)
+
+    live = conn.execute(
+        "SELECT COUNT(*) AS n FROM memories WHERE kind='fact' "
+        "AND archived_at IS NULL AND COALESCE(tier,'project')='identity'"
+    ).fetchone()["n"]
+    assert live == 50
+
+
+async def test_merge_archives_sources_with_became(conn):
+    """M3(b): reversibility — merge sources are archived `became=merged:
+    <kept_key>`, never deleted, and the survivor's content is the model's
+    rewrite."""
+    _fact(conn, "user.preference.conciseness", "Larry prefers short answers", "preference")
+    _fact(conn, "user.preference.verbosity",
+          "Larry prefers short, terse, direct answers with minimal detail",
+          "preference")
+    # One fact over cap, via the mergeable pair above.
+    n_fill = MAX_PREFERENCE_FACTS - 1
+    for i in range(n_fill):
+        _unique_tokens_fact(conn, f"user.preference.fill{i:02d}", "preference", i)
+    conn.commit()
+
+    rewritten = "Larry prefers short, terse, direct spoken answers."
+    report = await run_capacity_enforcement(
+        conn, client_factory=_factory(rewritten), ignore_boot_cap=True,
+    )
+
+    assert report["preference"]["merged"] == 1
+    assert report["preference"]["after"] == MAX_PREFERENCE_FACTS
+
+    rows = {
+        r["key"]: dict(r)
+        for r in conn.execute(
+            "SELECT key, content, archived_at, became FROM memories "
+            "WHERE key IN ('user.preference.conciseness', "
+            "'user.preference.verbosity')"
+        ).fetchall()
+    }
+    archived_rows = [r for r in rows.values() if r["archived_at"] is not None]
+    survivor_rows = [r for r in rows.values() if r["archived_at"] is None]
+    assert len(archived_rows) == 1
+    assert len(survivor_rows) == 1
+    assert archived_rows[0]["became"].startswith("merged:")
+    assert survivor_rows[0]["content"] == rewritten
+
+
+async def test_system_tier_archives_on_sight(conn):
+    """M4: system's live cap is 0 — every live system fact is archived,
+    no merge rung involved (a merge would need a model call for facts the
+    prompt never sees)."""
+    for i in range(4):
+        _unique_tokens_fact(conn, f"mortimer.config.item{i:02d}", "system", i)
+    conn.commit()
+
+    report = await run_capacity_enforcement(conn, ignore_boot_cap=True)
+
+    assert report["system"]["before"] == 4
+    assert report["system"]["after"] == 0
+    assert report["system"]["merged"] == 0
+    assert report["system"]["aged_out"] == 4
+    rows = conn.execute(
+        "SELECT became FROM memories WHERE kind='fact' "
+        "AND COALESCE(tier,'project')='system'"
+    ).fetchall()
+    assert all(r["became"] == "aged-out" for r in rows)
+
+
+async def test_enforce_cli_ignores_boot_archive_cap(conn):
+    """M5: ignore_boot_cap=True (the --enforce CLI path) drains a tier
+    fully in one pass, past SWEEP_MAX_ARCHIVES — the per-boot cap that
+    protects an UNATTENDED sweep does not apply to an explicit, attended
+    invocation."""
+    n_over = SWEEP_MAX_ARCHIVES + 10  # comfortably past the boot cap
+    for i in range(MAX_PROJECT_FACTS + n_over):
+        _unique_tokens_fact(conn, f"project.item{i:03d}", "project", i)
+    conn.commit()
+
+    report = await run_capacity_enforcement(conn, ignore_boot_cap=True)
+
+    assert report["project"]["aged_out"] > SWEEP_MAX_ARCHIVES
+    assert report["project"]["after"] == MAX_PROJECT_FACTS
+
+
+async def test_full_store_fits_prompt_budget(conn, caplog):
+    """M1/M2: a store with every capped tier sitting exactly AT its cap
+    (identity uncapped, sized realistically) renders with ZERO facts
+    dropped — the invariant this whole plan exists to hold."""
+    for i in range(8):
+        _fact(conn, f"user.identity.item{i:02d}", "x" * 50, "identity")
+    for i in range(MAX_PREFERENCE_FACTS):
+        _fact(conn, f"user.preference.item{i:02d}", "x" * 50, "preference")
+    for i in range(MAX_PROJECT_FACTS):
+        _fact(conn, f"project.item{i:02d}", "x" * 50, "project")
+    conn.commit()
+
+    rendered = render_memory_context(conn)
+    lines = [l for l in rendered.split("\n") if l.startswith("- ")]
+    assert len(lines) == 8 + MAX_PREFERENCE_FACTS + MAX_PROJECT_FACTS
+    assert "memory_context_facts_dropped" not in caplog.text
+    assert len(rendered) <= MAX_CONTEXT_CHARS + 100  # slack for the summary line
+
+
+def test_memory_search_finds_archived(conn):
+    """M6: the recall path for demoted facts — an archived fact (merged
+    or aged out, never deleted) is still fully searchable by key/content
+    substring."""
+    upsert_fact(conn, "user.preference.old_thing", "Larry liked the old dashboard layout", "s1")
+    conn.commit()
+    archive_fact(conn, "user.preference.old_thing", "aged-out")
+    conn.commit()
+
+    live_hits = search_facts(conn, "dashboard")
+    assert len(live_hits) == 1
+    assert live_hits[0]["key"] == "user.preference.old_thing"
+    assert live_hits[0]["archived"] is True
+
+    key_hits = search_facts(conn, "old_thing")
+    assert any(r["key"] == "user.preference.old_thing" for r in key_hits)
+
+
+async def test_enforcement_queues_nothing_for_plain_overflow(conn):
+    """M7: capacity is arithmetic, not judgment — plain over-cap overflow
+    with no mergeable cluster is aged out silently, never queued for
+    Larry (contrast with A1's mixed-content-hazard queue, which this
+    rung never touches)."""
+    for i in range(MAX_PROJECT_FACTS + 6):
+        _unique_tokens_fact(conn, f"project.item{i:02d}", "project", i)
+    conn.commit()
+
+    await run_capacity_enforcement(conn, ignore_boot_cap=True)
+
+    assert list_open_reviews(conn) == []
 
 
 # --- kill switch + entry point ---------------------------------------------
