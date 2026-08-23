@@ -72,7 +72,7 @@ function notifyInPage() {
  * update the external window (via `latest`/the channel) but do NOT also
  * open a redundant in-page panel — unchanged from the pre-G8 behavior.
  */
-export const MAX_OPEN_DISPLAY_PANELS = 6;
+export const MAX_OPEN_DISPLAY_PANELS = 15;
 
 export interface DisplayWindowPanel {
   id: string;

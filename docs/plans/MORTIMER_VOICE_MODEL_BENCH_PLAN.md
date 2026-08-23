@@ -514,7 +514,32 @@ would then reopen sonnet-4-5: TTFT at parity with Haiku, direct trusted
 route, +6 accuracy, and its only per-case failures are the prompt-level
 commit imperatives the same follow-up fixes.
 
-**What this plan permanently shipped regardless of the verdict:** the
+### Haiku live baseline — the open finding, closed (2026-08-22)
+
+The final verdict's open question ("is Haiku's own live p50 also a miss?")
+is answered: **no**. `latency_probe` over the 2026-08-22 live session
+(47 turns, all Haiku — the log starts post-revert): non-delegated p50
+**1004 ms** (target 1200, PASS), delegated p50 **1550 ms** (target 2500,
+PASS), overall p90 **2489 ms** (target 3500, PASS). The gate is
+attainable and Haiku attains it with headroom. The live head-to-head is
+therefore Haiku 1004 ms vs Gemini-via-OpenRouter 2544 ms non-delegated
+p50 — not the ~400 ms bench delta. [guessing] The bench/live divergence
+is Anthropic prompt caching on the direct route, which the bench's
+cold-ish reps never captured and which OpenRouter-routed Gemini never got.
+
+### Reopened for live trial (Larry, 2026-08-22)
+
+Larry's hypothesis: the 8/20 failures — the direct route's 35% 503 rate
+in particular — were early-release congestion, not steady state. The
+DIRECT route is the one this theory applies to, and it was never
+latency-measured live (serving failed first), so a multi-session direct
+trial is genuinely new information, not a re-run of a settled question.
+Protocol: flip `.env` to Gemini direct (the V3 step-4 shape; the
+signature fix and GoogleLLMService routing are already shipped), several
+sessions of ≥15 turns at different hours, `latency_probe --budget` per
+session on a clean log slice, plus a count of 503/error turns. Compare
+against the Haiku baseline above. Revert is the same three lines as
+before. the
 10-case eval-corpus extension; `scripts/voice_model_bench.py`;
 `EVAL_MODEL`/`EVAL_BASE_URL`/`EVAL_KEY_ENV` overrides in the routing
 eval; the vendor-extras (thought-signature) round-trip in
