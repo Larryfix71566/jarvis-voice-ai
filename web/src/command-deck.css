@@ -478,7 +478,19 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  max-width: min(560px, 86%);
+  /* Larry 2026-08-22 — sized for the 600-char caption budget
+     (CAPTION_MAX_BOT in OrbField.tsx). Widened 560 -> 900px: at 13px/1.45
+     a 600-char reply is ~9 lines in the old box and only ~5 here, which
+     is the difference between a wall of text over the wave and a
+     readable caption. max-height is what keeps "taller" from becoming
+     "covers the stage" — the panel sits at bottom 8%, so an unbounded
+     one would climb into the satellite ring at y=72% and the wave's
+     energy band. Overflow scrolls instead of growing; `overscroll-
+     behavior: contain` stops that scroll from chaining to the page. */
+  max-width: min(900px, 92%);
+  max-height: 38vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 10px 18px;
   text-align: center;
   border-radius: 10px;

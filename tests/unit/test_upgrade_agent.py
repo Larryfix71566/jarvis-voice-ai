@@ -118,6 +118,170 @@ def test_unknown_tool_refused(service: SelfEditService) -> None:
     assert not result["ok"]
 
 
+class TestPlannerFailover:
+    """Larry 2026-08-22: "spin on a dead model is not a great look."
+
+    Before this, UpgradeAgent's client carried NO timeout, so the openai
+    SDK default (600s read) applied, and max_session_minutes could not
+    help — it is checked between iterations, while a hung call blocks
+    inside the HTTP read.
+    """
+
+    def _registry(self, tmp_path, monkeypatch):
+        """Two key-present profiles so failover has somewhere to go."""
+        reg = {
+            "default": "alpha",
+            "profiles": [
+                {"name": "alpha", "label": "Alpha", "provider": "openai",
+                 "model": "alpha-model", "base_url": "https://alpha.example/v1",
+                 "api_key_env": "ALPHA_KEY", "temperature": None, "tier": "mid"},
+                {"name": "beta", "label": "Beta", "provider": "openai",
+                 "model": "beta-model", "base_url": "https://beta.example/v1",
+                 "api_key_env": "BETA_KEY", "temperature": None, "tier": "mid"},
+            ],
+        }
+        path = tmp_path / "registry.yaml"
+        path.write_text(yaml.safe_dump(reg))
+        monkeypatch.setenv("ALPHA_KEY", "x")
+        monkeypatch.setenv("BETA_KEY", "y")
+        monkeypatch.delenv("JARVIS_UPGRADE_PROFILE", raising=False)
+        return path
+
+    def test_client_call_timeout_is_bounded(
+        self, service: SelfEditService, monkeypatch
+    ) -> None:
+        """The whole point: a bounded call, and no SDK retry silently
+        tripling it."""
+        from jarvis.agents.upgrade_agent import PLANNER_CALL_TIMEOUT_S
+
+        monkeypatch.setenv("ALPHA_KEY", "x")
+        captured = {}
+
+        class FakeOpenAI:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+        agent = UpgradeAgent(
+            service, config_path=service.repo_root / "config/upgrade_agent.yaml",
+            client_factory=lambda: object(),
+        )
+        import openai
+        original = openai.OpenAI
+        openai.OpenAI = FakeOpenAI
+        try:
+            agent._build_client("ALPHA_KEY", "https://alpha.example/v1")
+        finally:
+            openai.OpenAI = original
+        assert captured["timeout"] == PLANNER_CALL_TIMEOUT_S
+        assert captured["max_retries"] == 0
+
+    def test_only_unreachable_class_triggers_failover(self, service) -> None:
+        """A 4xx must NOT fail over — it would repeat identically on every
+        profile AND mask a real config bug (the 2026-08-22 claude-opus
+        `temperature` 400 is the worked example)."""
+        import httpx
+        from openai import APIStatusError, APITimeoutError
+
+        req = httpx.Request("POST", "https://x.example/v1/chat/completions")
+        bad_request = APIStatusError(
+            "temperature is deprecated",
+            response=httpx.Response(400, request=req), body=None,
+        )
+        server_error = APIStatusError(
+            "upstream boom",
+            response=httpx.Response(503, request=req), body=None,
+        )
+        assert UpgradeAgent._is_unreachable(bad_request) is False
+        assert UpgradeAgent._is_unreachable(server_error) is True
+        assert UpgradeAgent._is_unreachable(APITimeoutError(request=req)) is True
+        assert UpgradeAgent._is_unreachable(ValueError("nope")) is False
+
+    def test_timeout_fails_over_and_announces(
+        self, service: SelfEditService, tmp_path, monkeypatch
+    ) -> None:
+        """The headline behaviour Larry chose: kill, switch, and SAY SO."""
+        import httpx
+        from openai import APITimeoutError
+
+        registry_path = self._registry(tmp_path, monkeypatch)
+        req = httpx.Request("POST", "https://alpha.example/v1/chat/completions")
+
+        class FailingThenWorkingClient:
+            def __init__(self):
+                self.calls = 0
+                self.chat = SimpleNamespace(
+                    completions=SimpleNamespace(create=self._create))
+
+            def _create(self, **kwargs):
+                self.calls += 1
+                if self.calls == 1:
+                    raise APITimeoutError(request=req)
+                return _response(_msg(content="done on the second model"))
+
+        client = FailingThenWorkingClient()
+        agent = UpgradeAgent(
+            service,
+            config_path=service.repo_root / "config/upgrade_agent.yaml",
+            registry_path=registry_path,
+            client_factory=lambda: client,
+        )
+        # Failover rebuilds the client; keep the same fake so the retry is
+        # observable rather than reaching the network.
+        monkeypatch.setattr(agent, "_build_client", lambda *a, **k: client)
+
+        assert agent.profile_name == "alpha"
+        result = agent.run("do a small thing")
+
+        assert result["ok"] is True
+        assert agent.profile_name == "beta"          # switched
+        assert "alpha" not in (agent.model or "")     # really on beta now
+        assert result["failovers"], "failover must be reported, never silent"
+        assert "alpha" in result["failovers"][0]
+        assert "beta" in result["failovers"][0]
+        # Mechanical disclosure in the spoken summary (never prompt-reliant).
+        assert "continued on beta" in result["summary"]
+
+    def test_failed_profile_is_never_retried_in_the_same_session(
+        self, service: SelfEditService, tmp_path, monkeypatch
+    ) -> None:
+        registry_path = self._registry(tmp_path, monkeypatch)
+        agent = UpgradeAgent(
+            service,
+            config_path=service.repo_root / "config/upgrade_agent.yaml",
+            registry_path=registry_path,
+            client_factory=lambda: ScriptedClient([_msg(content="x")]),
+        )
+        agent._failed_profiles.add("alpha")
+        nxt = agent._next_failover_profile()
+        assert nxt is not None and nxt["name"] == "beta"
+        agent._failed_profiles.add("beta")
+        assert agent._next_failover_profile() is None  # nothing left
+
+    def test_profile_without_key_is_not_a_failover_candidate(
+        self, service: SelfEditService, tmp_path, monkeypatch
+    ) -> None:
+        registry_path = self._registry(tmp_path, monkeypatch)
+        monkeypatch.delenv("BETA_KEY", raising=False)
+        agent = UpgradeAgent(
+            service,
+            config_path=service.repo_root / "config/upgrade_agent.yaml",
+            registry_path=registry_path,
+            client_factory=lambda: ScriptedClient([_msg(content="x")]),
+        )
+        assert agent._next_failover_profile() is None
+
+    def test_no_failover_notes_means_clean_summary(
+        self, service: SelfEditService
+    ) -> None:
+        """A run with no failover must be byte-identical to before this
+        feature — no stray bracket appended."""
+        client = ScriptedClient([_msg(content="all good")])
+        agent = _agent(service, client)
+        result = agent.run("do a small thing")
+        assert result["summary"] == "all good"
+        assert result["failovers"] == []
+
+
 class TestRepoMapInjection:
     """G5 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): the
     self-edit loop's own prompt now carries docs/REPO_MAP.md via the SAME

@@ -45,7 +45,16 @@ function messageText(message: ConversationMessage): string {
     .join("");
 }
 
-function truncate(s: string, max = 160): string {
+/** Live-caption budget (Larry 2026-08-22: 160 was cutting replies
+ * mid-sentence). The USER line stays short — it is an echo you already
+ * know the content of, and a long one pushes the reply off screen — while
+ * the assistant line gets the real budget. `.live-caption` in
+ * command-deck.css carries the matching max-height, so an overlong reply
+ * scrolls inside the panel rather than growing it into the wave. */
+const CAPTION_MAX_USER = 160;
+const CAPTION_MAX_BOT = 600;
+
+function truncate(s: string, max = CAPTION_MAX_BOT): string {
   const t = s.trim().replace(/\s+/g, " ");
   return t.length > max ? t.slice(0, max - 1) + "…" : t;
 }
@@ -346,7 +355,7 @@ export default function OrbField({ state }: { state: VoiceState }) {
         <div className="live-caption">
           {lastUser && (
             <div className="caption caption-user">
-              You — {truncate(messageText(lastUser))}
+              You — {truncate(messageText(lastUser), CAPTION_MAX_USER)}
             </div>
           )}
           {lastAssistant && (
