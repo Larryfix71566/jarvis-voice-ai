@@ -60,6 +60,28 @@ DEFAULT_REGISTRY_PATH = (
 REGISTRY_PATH_ENV = "JARVIS_UPGRADE_MODELS"
 PROFILE_ENV = "JARVIS_UPGRADE_PROFILE"
 
+# Planner call bounds + model failover (Larry 2026-08-22: "if we are going
+# to choose a model that ends up unreachable then we need a way to kill the
+# request so that it can be delegated to another model — spin on a dead
+# model is not a great look").
+#
+# 120s matches COUNCIL_MEMBER_TIMEOUT_S deliberately: the council already
+# solved this exact problem (bound the call, drop the member, keep going)
+# and one number is better than two that drift. Calibration note from the
+# same day: a measured kimi-k3 planner call took 112.2s for a two-sentence
+# answer (always-on thinking, 1,369 completion tokens), so kimi-k3 sits
+# just inside this bound and WILL trip it under any additional load. That
+# is the correct outcome, not a mis-set threshold — a planner that needs
+# ~2 minutes per round cannot finish a 25-round session inside
+# max_session_minutes anyway, so failing over is strictly better than
+# spinning.
+PLANNER_CALL_TIMEOUT_S = 120.0
+
+# At most two failovers per session: three distinct models failing
+# unreachably is an outage, not a bad pick, and continuing to shop makes
+# the user wait longer for the same bad news.
+MAX_PLANNER_FAILOVERS = 2
+
 SYSTEM_PROMPT = """You are the Jarvis Upgrade Agent. You develop upgrades to the
 Jarvis interface by proposing code edits, under these NON-NEGOTIABLE rules:
 
@@ -277,6 +299,9 @@ class UpgradeAgent:
         # Registry mode overlays the planner slot; loop bounds always come
         # from the agent config.
         self.profile_name: str | None = None
+        # Kept so _next_failover_profile resolves against the SAME registry
+        # this agent was constructed from (tests point it elsewhere).
+        self._registry_path = registry_path
         registry = load_model_registry(registry_path)
         if registry.get("profiles"):
             prof = resolve_profile(registry, profile)
@@ -313,22 +338,154 @@ class UpgradeAgent:
         # Defer client construction when the key is absent: run() fails fast
         # with a clear summary instead of the SDK raising at construction.
         self._key_missing = client_factory is None and not os.environ.get(self._api_key_env)
+        # Failover state (Larry 2026-08-22: "spin on a dead model is not a
+        # great look"). Profiles that have already failed UNREACHABLY this
+        # session are never selected again by _completion_with_failover.
+        self._failed_profiles: set[str] = set()
+        self._failover_notes: list[str] = []
+
         self._client: Any = None
         if client_factory is not None:
             self._client = client_factory()
         elif not self._key_missing:
-            from openai import OpenAI
+            self._client = self._build_client(
+                self._api_key_env, self.cfg["base_url"])
 
-            self._client = OpenAI(
-                api_key=os.environ[self._api_key_env],
-                base_url=self.cfg["base_url"],
-            )
+    def _build_client(self, api_key_env: str, base_url: str | None) -> Any:
+        """Construct the planner client with a BOUNDED call timeout.
+
+        Before 2026-08-22 this passed no `timeout`, so the openai SDK's
+        default applied: a 600-second read timeout. `max_session_minutes`
+        could not save it — that bound is checked BETWEEN iterations, and a
+        hung call blocks inside the HTTP read where the loop never regains
+        control. One unreachable kimi-k3 call therefore spun for up to ten
+        minutes. `max_retries=0` is deliberate and load-bearing: the SDK's
+        default of 2 would silently turn a 120s bound into a 360s one, and
+        retrying a model that just proved unreachable is strictly worse
+        than failing over to one that answers.
+        """
+        from openai import OpenAI
+
+        return OpenAI(
+            api_key=os.environ[api_key_env],
+            base_url=base_url,
+            timeout=PLANNER_CALL_TIMEOUT_S,
+            max_retries=0,
+        )
 
     def model_label(self) -> str:
         """Human-readable 'profile (model)' for status lines and TTS summaries."""
         if self.profile_name:
             return f"{self.profile_name} ({self.model})"
         return self.model
+
+    @staticmethod
+    def _is_unreachable(exc: Exception) -> bool:
+        """Is this failure the UNREACHABLE class, i.e. worth failing over?
+
+        Deliberately narrow, mirroring `jarvis/keyhealth.py`'s three-verdict
+        discipline (rejected / unfunded / unreachable): only a timeout, a
+        connection failure, or a 5xx means "this endpoint isn't answering,
+        try another one." A 4xx is a REAL error that would repeat
+        identically on every profile — and worse, failing over on 4xx would
+        MASK it. That is not hypothetical: on 2026-08-22 `claude-opus` sent
+        a `temperature` the model rejects, 400ing every self-edit in ~38ms;
+        had failover been triggered by 4xx, it would have burned through
+        every profile in the registry and reported an outage instead of the
+        one-line config bug it actually was.
+        """
+        from openai import APIConnectionError, APIStatusError, APITimeoutError
+
+        if isinstance(exc, (APITimeoutError, APIConnectionError)):
+            return True
+        if isinstance(exc, APIStatusError):
+            return getattr(exc, "status_code", 0) >= 500
+        return False
+
+    def _next_failover_profile(self) -> dict[str, Any] | None:
+        """The next key-present registry profile that has not failed yet.
+
+        Registry order, skipping the current profile, anything already
+        failed this session, and anything whose key is absent. Returns the
+        resolved profile dict, or None when nothing is left to try.
+        """
+        try:
+            registry = load_model_registry(self._registry_path)
+        except Exception:  # noqa: BLE001 — failover must never itself raise
+            return None
+        for entry in available_models(self._registry_path):
+            name = entry["name"]
+            if name == self.profile_name or name in self._failed_profiles:
+                continue
+            if not entry.get("key_present"):
+                continue
+            try:
+                return resolve_profile(registry, name)
+            except Exception:  # noqa: BLE001 — try the next candidate
+                continue
+        return None
+
+    def _completion(self, request: dict[str, Any]) -> Any:
+        """One completion call, bounded and failover-capable.
+
+        On an UNREACHABLE-class failure the current profile is retired for
+        this session and the next key-present profile takes over mid-run —
+        the conversation so far (`request["messages"]`) carries across
+        unchanged, so the new model resumes rather than restarting.
+
+        Larry chose announce-then-failover (2026-08-22) over ask-first even
+        for an explicitly NAMED model. That is a deliberate, recorded
+        narrowing of the F6-F9 rule ("an explicit request always REFUSES
+        rather than silently falling back"): F6-F9 governs RESOLUTION
+        failure — an unknown profile or missing key, knowable BEFORE any
+        work starts — whereas this is a runtime timeout on a model that
+        resolved fine and may have already done half the session. The
+        no-silent-substitution half of that rule is preserved by
+        `_failover_notes`, which the run summary appends mechanically, so
+        Mortimer can never report work as done by a model that did not do
+        it.
+        """
+        attempts = 0
+        while True:
+            try:
+                return self._client.chat.completions.create(**request)
+            except Exception as exc:  # noqa: BLE001 — classified immediately below
+                if not self._is_unreachable(exc) or attempts >= MAX_PLANNER_FAILOVERS:
+                    raise
+                failed_name = self.profile_name or self.model
+                self._failed_profiles.add(failed_name)
+                nxt = self._next_failover_profile()
+                if nxt is None:
+                    logger.warning(
+                        "planner_failover_exhausted failed=%s error=%s",
+                        failed_name, type(exc).__name__,
+                    )
+                    raise
+                note = (
+                    f"{failed_name} did not respond "
+                    f"({type(exc).__name__}); continued on {nxt['name']}"
+                )
+                logger.warning("planner_failover from=%s to=%s error=%s",
+                               failed_name, nxt["name"], type(exc).__name__)
+                self._failover_notes.append(note)
+
+                self.profile_name = nxt["name"]
+                self.cfg["model"] = nxt.get("model", self.cfg["model"])
+                self.cfg["base_url"] = nxt.get("base_url") or self.cfg["base_url"]
+                self.cfg["temperature"] = nxt.get("temperature")
+                self._api_key_env = nxt.get("api_key_env", "OPENAI_API_KEY")
+                self.model = self.cfg["model"]
+                self.base_url = self.cfg["base_url"]
+                self._client = self._build_client(
+                    self._api_key_env, self.cfg["base_url"])
+
+                # The retry must carry the NEW model and its temperature
+                # rule (D-003), not the dead profile's.
+                request["model"] = self.cfg["model"]
+                request.pop("temperature", None)
+                if self.cfg["temperature"] is not None:
+                    request["temperature"] = self.cfg["temperature"]
+                attempts += 1
 
     def run(
         self, goal: str, on_event: Callable[[dict], None] | None = None,
@@ -362,6 +519,8 @@ class UpgradeAgent:
         self._pending_council_round_id = None
         self._last_council_winner = None  # V1 — clean slate per session
         self._scope_council_used = False  # V14 — clean slate per session
+        self._failed_profiles = set()     # failover — clean slate per session
+        self._failover_notes = []
 
         started = time.monotonic()
         if not self.service.branch:
@@ -429,7 +588,7 @@ class UpgradeAgent:
             }
             if self.cfg["temperature"] is not None:
                 request["temperature"] = self.cfg["temperature"]
-            response = self._client.chat.completions.create(**request)
+            response = self._completion(request)
             message = response.choices[0].message
             tool_calls = list(getattr(message, "tool_calls", None) or [])
             if not tool_calls:
@@ -581,8 +740,20 @@ class UpgradeAgent:
                 "files would likely narrow this"
             )
 
+        # Failover disclosure — a MECHANICAL backstop, not a prompt
+        # instruction, mirroring the `[ran on <model>]` suffix delegate.py
+        # appends: grounded by construction, so Mortimer can never report
+        # work as done by a model that did not do it. This is what keeps
+        # announce-then-failover honest for an explicitly NAMED model.
+        if self._failover_notes:
+            summary = (summary or "") + " [" + "; ".join(self._failover_notes) + "]"
+
         self._emit(on_event, {"type": "agent_done", "ok": ok})
-        return {"ok": ok, "summary": summary, "status": self.service.status()}
+        return {
+            "ok": ok, "summary": summary, "status": self.service.status(),
+            "failovers": list(self._failover_notes),
+            "final_profile": self.profile_name,
+        }
 
     def _maybe_escalate(self, *, goal: str, trigger: str,
                         context: dict) -> str | None:

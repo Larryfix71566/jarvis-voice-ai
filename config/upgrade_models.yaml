@@ -84,7 +84,13 @@ profiles:
     identity: anthropic/claude-opus-5
     base_url: https://api.anthropic.com/v1/
     api_key_env: ANTHROPIC_API_KEY
-    temperature: 0.2
+    # temperature: null (D-003) — claude-opus-5 REJECTS the parameter
+    # outright: "`temperature` is deprecated for this model" (HTTP 400,
+    # measured 2026-08-22 via scripts/probe_planner.py). This was 0.2, so
+    # EVERY self-edit run on this profile died in ~38ms; admin.log shows
+    # state=running -> state=error 38ms apart at 21:13:14. SubAgent was
+    # unaffected because it never sends temperature at all.
+    temperature: null
     tier: frontier
     vision: true
 
@@ -95,7 +101,11 @@ profiles:
     identity: anthropic/claude-fable-5
     base_url: https://api.anthropic.com/v1/
     api_key_env: ANTHROPIC_API_KEY
-    temperature: 0.2
+    # Same D-003 fix as claude-opus above: a current-generation Anthropic
+    # model rejects `temperature` outright. Changed together because they
+    # share the failure mode, though only claude-opus was measured 400ing
+    # (claude-fable-5 is unverified — see the plan note).
+    temperature: null
     tier: frontier
     vision: true
 
