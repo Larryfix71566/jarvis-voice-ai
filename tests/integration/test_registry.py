@@ -20,9 +20,11 @@ ALL_SERVERS = [
 # alongside a main that still carried the old number. repo (5) added by
 # MORTIMER_AGENT_TRUST_PLAN.md D10-D12: repo_read_file, repo_list_files,
 # repo_search, repo_write_file, repo_commit_write.
-TOTAL_TOOLS = 61  # ...+2 (2026-08-21: mcp-memory's memory_review_list/_resolve)
+TOTAL_TOOLS = 64  # ...+2 (2026-08-21: mcp-memory's memory_review_list/_resolve)
                   # ...+1 (B2: mcp-selfedit's selfedit_verify_appearance)
                   # ...+1 (M6, MORTIMER_MEMORY_CAPACITY_PLAN.md: mcp-memory's memory_search)
+                  # ...+3 (MORTIMER_SITE_RESEARCH_AND_COMPARISON_PLAN.md R1:
+                  #   mcp-web's research_compare_start/research_status/research_save)
 
 
 @pytest.fixture

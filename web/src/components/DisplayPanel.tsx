@@ -135,6 +135,7 @@ function SingleDisplayPanel({ panel, index, onClose, onPopOut }: SingleDisplayPa
   const [pos, setPos] = useState<Pos>(() => cascadePos(index));
   const [size, setSize] = useState<Size | null>(readStoredDisplaySize);
   const resizeStartRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const onResize = () => {
@@ -175,7 +176,16 @@ function SingleDisplayPanel({ panel, index, onClose, onPopOut }: SingleDisplayPa
   const onResizePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    const current = size ?? { w: DEFAULT_W, h: DEFAULT_H };
+    // Measure what is ACTUALLY on screen rather than assuming DEFAULT_W/H.
+    // Until the first resize the panel is sized by CSS (max-width: 40vw /
+    // max-height: 40vh, plus its content), so seeding the drag from the
+    // 540x420 constants made the very first pull JUMP to that size before
+    // it started tracking the pointer. Reading the live box means a drag
+    // always continues from where the panel visibly is.
+    const box = panelRef.current;
+    const current = size ?? (box
+      ? { w: box.offsetWidth, h: box.offsetHeight }
+      : { w: DEFAULT_W, h: DEFAULT_H });
     resizeStartRef.current = { x: e.clientX, y: e.clientY, w: current.w, h: current.h };
   };
 
@@ -200,10 +210,23 @@ function SingleDisplayPanel({ panel, index, onClose, onPopOut }: SingleDisplayPa
   return (
     <div
       className="display-panel"
+      ref={panelRef}
       style={{
         left: pos.x, top: pos.y,
         zIndex: 30 + index,
-        ...(size !== null ? { width: size.w, height: size.h } : {}),
+        // Larry 2026-08-22: "if the display window is not popped out the
+        // resize doesn't work." `.display-panel` carries max-width: 40vw /
+        // max-height: 40vh (U4's footprint cap, so the wave stays visible
+        // behind content) — those caps CLAMP the inline width/height this
+        // drag sets, so dragging past 40% did nothing and the handle
+        // looked broken. The popped-out window is a different component
+        // with no such cap, which is why it only failed in-page. Once the
+        // user has explicitly resized, their choice outranks the ambient
+        // cap; clampDisplaySize (90vw/85vh) is still the real bound, so
+        // this cannot grow without limit.
+        ...(size !== null
+          ? { width: size.w, height: size.h, maxWidth: "none", maxHeight: "none" }
+          : {}),
       }}
       role="dialog"
       aria-label={item.title ?? "Result"}

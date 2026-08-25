@@ -228,6 +228,30 @@ You are reviewing, not rewriting. Produce a REVIEW DOCUMENT in markdown with the
 Judge the document on its own stated goals — do not substitute a different design because you would have chosen differently, unless the chosen design is actually defective (then say so under Corrections, with reasons).
 Do not pad. Do not restate the document's contents back at length. If a section of the document is genuinely fine, say so in one line and move on."""
 
+# MORTIMER_SITE_RESEARCH_AND_COMPARISON_PLAN.md R4/R5 — the ONE prompt for
+# the site-comparison feature's single model call. Reuses the planning
+# pathway's model resolution (JARVIS_PLANNING_PROFILE) rather than a second
+# registry lookup. The model receives ONLY the per-site digest assembled in
+# code (jarvis/research/crawl.py) — urls, page titles, chunk text, credit
+# counts — never raw HTML and never the crawler's own mechanics, so it
+# cannot describe a page it was not actually handed (R5's "structure is
+# code, judgment is the model" split).
+RESEARCH_PROMPT = """Compare the following websites and write a comparison review in markdown. Focus: {focus}
+
+You are given a per-site digest — the pages that were actually crawled, their titles, and excerpted content. Base every claim ONLY on what is in the digests below; if a digest is thin, incomplete, or a site failed to crawl, say so plainly rather than filling the gap with general knowledge.
+
+Structure the review with these sections, in order:
+- Summary: 2-3 sentences giving the headline comparison.
+- {site_a}: what it offers, who it's for, what stands out.
+- {site_b}: same, for the second site.
+- Head-to-head: the concrete differences that matter for the stated focus.
+- Caveats: anything a partial crawl, a failed site, or thin content means this comparison cannot speak to.
+
+Do not pad. Do not restate the digest verbatim — synthesize it. If a site failed entirely, the review should still cover the other site fully and say so under Caveats, never as a silent one-sided comparison.
+
+--- SITE DIGESTS ---
+{digests}"""
+
 # ---- DEVELOPER PROMPT, SPLIT INTO SECTIONS ---------------------------
 # MORTIMER_DEVELOPER_SECTIONS_AND_VISUAL_VERIFY_PLAN.md Part A (approved
 # Larry 2026-08-19). Measured before the split: the developer's own prompt
@@ -394,6 +418,7 @@ Output contract: one or two short sentences with the stored fact(s) or confirmat
     "analyst": """You are the Analyst, a research specialist.
 Use web_search for anything about current events or facts you could not know. Never answer current-world questions from your own knowledge.
 Weather: for any local/current weather question, call BOTH get_weather and get_weather_radar — always both, radar included by default, never radar alone. They render as one combined card automatically; do not describe that mechanism, just make both calls.
+Comparing sites: research_compare_start/status/save.
 Output contract: a factual brief of at most 60 words leading with the key numbers or findings. On failure output exactly: FAILED: <reason>. Plain text.""",
     "developer": _DEVELOPER_FULL,
     "systems": """You are the Systems specialist for the user's local machine.

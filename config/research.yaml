@@ -1,0 +1,14 @@
+# Site research & comparison — crawl bounds (MORTIMER_SITE_RESEARCH_AND_
+# COMPARISON_PLAN.md R2). CONFIG, never model-chosen: the analyst's tool
+# schema exposes only `urls` and `focus` — nothing here is settable by a
+# delegation. `limit` is ALSO clamped server-side to
+# RESEARCH_HARD_PAGE_CAP (jarvis/research/crawl.py) regardless of what this
+# file says, on purpose: this file guards against a model, the hard cap
+# guards against a typo in this file.
+max_depth: 2
+max_breadth: 20
+limit: 40
+extract_depth: basic
+chunks_per_source: 3
+timeout_s: 120
+max_sites: 2
