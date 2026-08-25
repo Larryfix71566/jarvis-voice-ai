@@ -16,6 +16,22 @@ sub_agents:
   - name: analyst
     display_name: Analyst
     mcp_servers: [mcp-web, mcp-screen]
+    # Larry 2026-08-25 — measured, not guessed: six analyst runs died on
+    # ITERATIONS_EXHAUSTED the same evening (462da350, 97d5cecc, 9bd877dc,
+    # d125f5a3, fd13d883, 06e6ad89), all at the base default (5 rounds,
+    # 45s). Analyst had been left on the conversational default alongside
+    # scheduler/librarian/systems, but it does real multi-query research
+    # now — a single-site profile or a benchmark search legitimately needs
+    # more than 5 rounds of web_search. Observed round cost in those
+    # failures was ~1.2-5.3s (network-bound); 15 rounds at the slow end is
+    # ~80s, so timeout_s rises with it to 120s — raising the cap alone
+    # would just convert an iteration failure into a timeout failure. Note
+    # this does NOT cover deep multi-site content comparison (two of the
+    # six failures were that shape) — that's what research_compare_start
+    # exists for; a bigger budget here would make the wrong tool slightly
+    # less wrong rather than fixing the routing.
+    timeout_s: 120
+    max_iterations: 15
     description: "Web research, current events, sports results, weather, the time in other cities, and general lookups."
   - name: systems
     display_name: Systems

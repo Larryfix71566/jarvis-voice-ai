@@ -348,3 +348,45 @@ def test_stage_does_not_start_a_run(registry_file):
     c = TestClient(app)
     c.post("/api/selfedit/stage", json={"goal": "add a clock panel"})
     assert c.get("/api/selfedit/run").json()["job"]["state"] == "idle"
+
+
+# ------------------------------------------------- staging visibility (2026-08-25)
+
+
+def test_run_status_reports_live_staging(registry_file):
+    """2026-08-25 — GET /api/selfedit/run previously had no way to answer
+    'is staging X still live'. A live staged record must now appear in
+    the `stagings` list, without leaking its goal text."""
+    c = TestClient(app)
+    stage = c.post("/api/selfedit/stage", json={"goal": "add a clock panel"}).json()
+    sid = stage["staging_id"]
+    body = c.get("/api/selfedit/run").json()
+    assert body["ok"] is True
+    ids = [s["staging_id"] for s in body["stagings"]]
+    assert sid in ids
+    entry = next(s for s in body["stagings"] if s["staging_id"] == sid)
+    assert "goal" not in entry
+    assert entry["expires_in_s"] > 0
+
+
+def test_run_status_omits_consumed_staging(registry_file, monkeypatch):
+    """A staging_id already consumed by a confirm call must not still
+    appear as live."""
+    _install_fake_agent(monkeypatch)
+    c = TestClient(app)
+    stage = c.post("/api/selfedit/stage", json={"goal": "add a clock"}).json()
+    sid = stage["staging_id"]
+    c.post("/api/selfedit/run", json={"staging_id": sid})
+    _wait_for_job(c, "done")
+    body = c.get("/api/selfedit/run").json()
+    assert sid not in [s["staging_id"] for s in body["stagings"]]
+
+
+def test_run_status_omits_expired_staging(registry_file):
+    c = TestClient(app)
+    stage = c.post("/api/selfedit/stage", json={"goal": "add a clock"}).json()
+    sid = stage["staging_id"]
+    with srv._staging_lock:
+        srv._selfedit_stagings[sid]["created_at"] -= srv.SELFEDIT_STAGING_TTL_S + 1
+    body = c.get("/api/selfedit/run").json()
+    assert sid not in [s["staging_id"] for s in body["stagings"]]

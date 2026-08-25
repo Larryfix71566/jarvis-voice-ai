@@ -427,6 +427,108 @@ class TestRetryGuard:
         assert result == "done"
 
 
+class TestRetryGuardSharedIdentifierExemption:
+    """2026-08-25 — a live incident (staging_id 469bff19ef49) showed the
+    guard refusing the LEGITIMATE confirm-half of a two-phase flow: a
+    preview call failed for an expected, benign reason, and the very next
+    call — confirming and starting that same staged edit — necessarily
+    shares most of its wording (same files, same goal, same staging_id)
+    and scored well above RETRY_GUARD_OVERLAP. A shared long identifier
+    (staging_id, commit hash) is the signal that distinguishes "same
+    in-flight thing being confirmed" from an actual reworded retry."""
+
+    async def test_shared_staging_id_exempts_high_overlap_from_refusal(self):
+        agents = {"developer": FakeSubAgent(
+            "developer", result="FAILED: nothing to preview yet",
+        )}
+        _, handler = build_delegate_tool(agents)
+        first = await handler({
+            "agent_name": "developer",
+            "task": "preview self-edit staging_id 469bff19ef49 for the "
+                    "drawer glass fix",
+        })
+        assert first == "FAILED: nothing to preview yet"
+        agents["developer"].result = "started"
+        second = await handler({
+            "agent_name": "developer",
+            "task": "confirm and start self-edit staging_id 469bff19ef49 "
+                    "for the drawer glass fix",
+        })
+        # High wording overlap, but the shared 12-char staging_id exempts
+        # it — the agent actually ran rather than being refused.
+        assert second == "started"
+        assert len(agents["developer"].tasks) == 2
+
+    @pytest.mark.parametrize("word", [
+        "implement", "component", "refactor", "configuration", "investigate",
+    ])
+    async def test_shared_long_english_word_does_not_exempt(self, word):
+        """The first cut of this exemption keyed on LENGTH ALONE, which
+        broke the guard rather than narrowing it: ordinary developer
+        wording shares 8+ char English words constantly, so a reworded
+        retry containing any of these sailed straight through. The digit
+        requirement is what makes the carve-out narrow — no English word
+        has one, an identifier essentially always does."""
+        agents = {"developer": FakeSubAgent("developer", result="FAILED: boom")}
+        _, handler = build_delegate_tool(agents)
+        await handler({
+            "agent_name": "developer",
+            "task": f"{word} the drawer translucency change per the plan",
+        })
+        second = await handler({
+            "agent_name": "developer",
+            "task": f"{word} the drawer transparency update per the plan",
+        })
+        assert second.startswith("REFUSED:")
+        assert len(agents["developer"].tasks) == 1
+
+    async def test_short_or_digitless_token_does_not_exempt(self):
+        """A 7-char short git hash is below the length floor, and a
+        digit-free token is not identifier-shaped — both fall back to the
+        pre-existing refusal, which is the safe direction."""
+        from jarvis.agents.delegate import _shares_long_identifier
+        assert not _shares_long_identifier({"88d58bc"}, {"88d58bc"})   # 7 chars
+        assert not _shares_long_identifier({"abcdefgh"}, {"abcdefgh"})  # no digit
+        assert _shares_long_identifier({"469bff19ef49"}, {"469bff19ef49"})
+        assert _shares_long_identifier({"a2af4494"}, {"a2af4494"})
+
+    async def test_high_overlap_without_shared_id_still_refused(self):
+        """The exemption must not swallow the original guard: ordinary
+        reworded retries with no shared long identifier are still
+        refused."""
+        agents = {"developer": FakeSubAgent("developer", result="FAILED: boom")}
+        _, handler = build_delegate_tool(agents)
+        await handler({
+            "agent_name": "developer",
+            "task": "find the upper left updates display component and add a close button",
+        })
+        second = await handler({
+            "agent_name": "developer",
+            "task": "locate the upper left status panel and add a dismiss button to it",
+        })
+        assert second.startswith("REFUSED:")
+
+    async def test_refused_message_disclaims_expiry_and_validity(self):
+        """2026-08-25 — the Supervisor once fabricated 'the staging ID is
+        expired or invalid' from a REFUSED message that said no such
+        thing. The message must explicitly disclaim that class of cause
+        so a paraphrase can't reintroduce it."""
+        agents = {"developer": FakeSubAgent("developer", result="FAILED: boom")}
+        _, handler = build_delegate_tool(agents)
+        await handler({
+            "agent_name": "developer",
+            "task": "find the upper left updates display component and add a close button",
+        })
+        second = await handler({
+            "agent_name": "developer",
+            "task": "locate the upper left status panel and add a dismiss button to it",
+        })
+        assert second.startswith("REFUSED:")
+        assert "safety guard" in second
+        assert "NOTHING about any ID" in second
+        assert "expired" in second and "invalid" in second
+
+
 # --- MORTIMER_HANDOFF_LOOP_PLAN.md H1 -------------------------------------
 
 

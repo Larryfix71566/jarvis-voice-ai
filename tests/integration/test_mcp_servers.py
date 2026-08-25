@@ -27,7 +27,15 @@ EXPECTED_TOOLS = {
         "set_reminder", "list_reminders", "complete_reminder", "cancel_reminder",
         "get_due_reminders",
     },
-    "mcp_servers.mcp_web.server": {"web_search", "get_weather", "get_weather_radar"},
+    # 2026-08-25 — research_compare_start/status/save shipped with the
+    # site-research feature (commit 5609692) but this set was never
+    # updated, so this assertion has been failing since that merge: the
+    # feature work verified `pytest tests/unit` only. If a tool is added
+    # to a server, it belongs here in the same commit.
+    "mcp_servers.mcp_web.server": {
+        "web_search", "get_weather", "get_weather_radar",
+        "research_compare_start", "research_status", "research_save",
+    },
     "mcp_servers.mcp_system.server": {"get_system_status", "get_top_processes"},
     "mcp_servers.mcp_repo.server": {
         "repo_read_file", "repo_list_files", "repo_search",

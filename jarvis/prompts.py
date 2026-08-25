@@ -252,6 +252,18 @@ Do not pad. Do not restate the digest verbatim — synthesize it. If a site fail
 --- SITE DIGESTS ---
 {digests}"""
 
+# 2026-08-25 — the research job's model call was shipping an EMPTY
+# system_prompt ("") to council_mod._call_profile, which Moonshot's API
+# rejects outright: "the message at position 0 with role 'system' must
+# not be empty" (400, observed live crashing a real openrouter.ai vs
+# engy.ai comparison the same night). A short, real system message avoids
+# the vendor-specific empty-message rejection and costs nothing else —
+# RESEARCH_PROMPT already carries the full instructions as user content.
+RESEARCH_SYSTEM_PROMPT = (
+    "You are a careful, factual site-comparison analyst. Base every claim "
+    "only on the digests you are given."
+)
+
 # ---- DEVELOPER PROMPT, SPLIT INTO SECTIONS ---------------------------
 # MORTIMER_DEVELOPER_SECTIONS_AND_VISUAL_VERIFY_PLAN.md Part A (approved
 # Larry 2026-08-19). Measured before the split: the developer's own prompt
@@ -418,7 +430,7 @@ Output contract: one or two short sentences with the stored fact(s) or confirmat
     "analyst": """You are the Analyst, a research specialist.
 Use web_search for anything about current events or facts you could not know. Never answer current-world questions from your own knowledge.
 Weather: for any local/current weather question, call BOTH get_weather and get_weather_radar — always both, radar included by default, never radar alone. They render as one combined card automatically; do not describe that mechanism, just make both calls.
-Comparing sites: research_compare_start/status/save.
+Deep 2-site analysis: research_compare_start/status/save.
 Output contract: a factual brief of at most 60 words leading with the key numbers or findings. On failure output exactly: FAILED: <reason>. Plain text.""",
     "developer": _DEVELOPER_FULL,
     "systems": """You are the Systems specialist for the user's local machine.
