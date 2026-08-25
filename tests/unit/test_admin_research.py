@@ -93,6 +93,30 @@ def test_happy_path_both_sites_succeed(monkeypatch):
     assert job["credits_used"] == 9  # R8
 
 
+def test_comparison_call_never_ships_an_empty_system_prompt(monkeypatch):
+    """2026-08-25 — _run_research_job used to call _call_profile with
+    system_prompt="", which Moonshot's API rejects outright (400: 'the
+    message at position 0 with role system must not be empty'), crashing
+    a real comparison. RESEARCH_SYSTEM_PROMPT must always be sent."""
+    from jarvis.prompts import RESEARCH_SYSTEM_PROMPT
+
+    monkeypatch.setattr(srv.research_crawl, "crawl_site", _fake_crawl())
+    seen = {}
+
+    async def _capturing_call_profile(profile, system_prompt, user_content, timeout_s):
+        seen["system_prompt"] = system_prompt
+        return "# Comparison\n\nSite A beats Site B on X.", None
+
+    monkeypatch.setattr(srv.council_mod, "_call_profile", _capturing_call_profile)
+    c = TestClient(app)
+    c.post("/api/research/start", json={
+        "urls": ["https://a.com", "https://b.com"], "focus": "pricing",
+    })
+    _wait_for_job(c)
+    assert seen["system_prompt"] == RESEARCH_SYSTEM_PROMPT
+    assert seen["system_prompt"].strip() != ""
+
+
 # ------------------------------------------------------------------- R9
 
 def test_one_site_failure_still_reports_the_other(monkeypatch):

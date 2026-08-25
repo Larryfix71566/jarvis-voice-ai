@@ -50,11 +50,15 @@ def selfedit_start(
 
 
 @mcp.tool()
-def selfedit_status() -> dict:
+def selfedit_status(staging_id: str = "") -> dict:
     """Report progress of the current upgrade run and edit session: whether
     the planner is still working, which files are proposed and why, whether
-    validation passed, and the PR URL once submitted."""
-    return logic.selfedit_status(_get_client())
+    validation passed, and the PR URL once submitted.
+
+    Pass staging_id to check whether a specific staged preview (from
+    selfedit_start with confirm=false) is still live before confirming it —
+    the answer comes from the real staging record, not a guess about TTLs."""
+    return logic.selfedit_status(_get_client(), staging_id)
 
 
 @mcp.tool()

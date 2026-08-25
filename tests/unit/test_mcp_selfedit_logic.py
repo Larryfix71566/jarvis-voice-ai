@@ -250,6 +250,62 @@ def test_status_when_idle():
     assert "No upgrade run" in r["summary"]
 
 
+def test_status_reports_live_staging_when_asked():
+    """2026-08-25 — a developer run once fabricated 'staging expired'
+    from this exact tool, which had no way to know that. Passing
+    staging_id must answer from the real `stagings` list the sidecar
+    now returns."""
+    c = _client({("GET", "/api/selfedit/run"): {
+        "ok": True, "job": {"state": "idle"}, "status": {},
+        "stagings": [{"staging_id": "469bff19ef49", "age_s": 5.0,
+                      "expires_in_s": 595.0}],
+    }})
+    r = logic.selfedit_status(c, staging_id="469bff19ef49")
+    assert r["staging_found"] is True
+    assert "still live" in r["summary"]
+    assert "469bff19ef49" in r["summary"]
+
+
+def test_status_reports_missing_staging_honestly():
+    c = _client({("GET", "/api/selfedit/run"): {
+        "ok": True, "job": {"state": "idle"}, "status": {}, "stagings": [],
+    }})
+    r = logic.selfedit_status(c, staging_id="does-not-exist")
+    assert r["staging_found"] is False
+    assert "not currently live" in r["summary"]
+    # Must not fabricate a specific cause — "may have" hedges honestly.
+    assert "may have" in r["summary"]
+
+
+def test_status_without_staging_id_omits_staging_language():
+    r = logic.selfedit_status(_client())
+    assert r["staging_found"] is None
+    assert "staging" not in r["summary"].lower()
+
+
+def test_status_answers_staging_question_even_while_running():
+    """The running-state branch returns early. The first cut computed the
+    staging answer only on the idle path, so asking during a run got a
+    cheerful 'still planning…' with no staging_found key and no mention of
+    the question — a silent non-answer, exactly the shape that invites the
+    model to invent one. If it was asked, it gets an answer."""
+    c = _client({("GET", "/api/selfedit/run"): {
+        "ok": True,
+        "job": {"state": "running", "goal": "add a clock", "profile": "kimi-k2"},
+        "status": {},
+        "stagings": [{"staging_id": "469bff19ef49", "age_s": 5.0,
+                      "expires_in_s": 595.0}],
+    }})
+    r = logic.selfedit_status(c, staging_id="469bff19ef49")
+    assert r["staging_found"] is True
+    assert "Still planning" in r["summary"]
+    assert "still live" in r["summary"]
+
+    missing = logic.selfedit_status(c, staging_id="nope")
+    assert missing["staging_found"] is False
+    assert "not currently live" in missing["summary"]
+
+
 # ── selfedit_validate ──────────────────────────────────────────────────────
 
 def test_validate_pass():

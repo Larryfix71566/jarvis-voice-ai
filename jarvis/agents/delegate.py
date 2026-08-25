@@ -42,6 +42,48 @@ DEFAULT_MAX_PARALLEL_DELEGATIONS = 3
 RETRY_GUARD_WINDOW_S = 120.0
 RETRY_GUARD_OVERLAP = 0.5
 
+# 2026-08-25 — a live incident (staging_id 469bff19ef49) showed the guard
+# refusing the LEGITIMATE confirm-half of a two-phase flow, not a reworded
+# retry: a preview call failed for an expected, benign reason ("nothing to
+# preview yet"), and the very next call — actually confirming and starting
+# the staged self-edit — necessarily shares most of its wording with that
+# preview (same files, same goal, same staging_id), so it scored well
+# above RETRY_GUARD_OVERLAP and was refused before ever reaching the agent.
+# `_shares_long_identifier` is a narrow, low-false-positive carve-out: a
+# shared token that is BOTH long and contains a digit is essentially
+# always the same in-flight thing being confirmed (a staging_id, a
+# commit-ish hash, a run_id), not a retry.
+#
+# The digit requirement is load-bearing and was added after the first cut
+# of this fix — length alone was measured WRONG, and it broke the guard
+# rather than narrowing it: ordinary developer wording shares 8+ char
+# English words constantly ("implement", "component", "refactor",
+# "configuration", "investigate" all measured as exempting a genuine
+# reworded retry), so a length-only rule silently disabled the guard for
+# most developer tasks — the exact class of task it exists to protect.
+# No English word contains a digit; an identifier essentially always
+# does. A uuid4 hex[:12] staging_id lacking any digit is ~1 in 200,000,
+# and that case simply falls back to the pre-existing refusal, which is
+# the safe direction.
+#
+# Deliberately NOT exempting short numeric ids (e.g. `action 35`):
+# `_tokens()` already drops tokens under 3 chars, and a 2-digit id is
+# common enough that guessing it apart from ordinary overlap would be a
+# real false-positive risk. A 7-char short git hash is likewise below the
+# length floor and is not exempted — conservative on purpose.
+RETRY_GUARD_ID_TOKEN_MIN_LEN = 8
+
+
+def _shares_long_identifier(a: set[str], b: set[str]) -> bool:
+    """True if `a` and `b` share a token that looks like an identifier
+    (a staging_id, a commit-ish hash) rather than an ordinary word two
+    unrelated tasks both happen to use: long enough AND containing a
+    digit, since no English word does."""
+    return any(
+        len(t) >= RETRY_GUARD_ID_TOKEN_MIN_LEN and any(c.isdigit() for c in t)
+        for t in (a & b)
+    )
+
 # MORTIMER_HANDOFF_LOOP_PLAN.md H1/H2.
 #
 # The marker a sub-agent puts in its reply when it needs something only the
@@ -263,20 +305,35 @@ def build_delegate_tool(
         if prior is not None and not continuation:
             prior_tokens, failed_at = prior
             if time.monotonic() - failed_at < RETRY_GUARD_WINDOW_S:
-                overlap = _overlap_score(prior_tokens, _tokens(task))
-                if overlap >= RETRY_GUARD_OVERLAP:
+                task_tokens = _tokens(task)
+                overlap = _overlap_score(prior_tokens, task_tokens)
+                if overlap >= RETRY_GUARD_OVERLAP and _shares_long_identifier(
+                    prior_tokens, task_tokens,
+                ):
+                    logger.info(
+                        "delegate_retry_guard_exempted_shared_id agent=%s "
+                        "overlap=%.2f", agent_name, overlap,
+                    )
+                elif overlap >= RETRY_GUARD_OVERLAP:
                     logger.info(
                         "delegate_retry_guard_refused agent=%s overlap=%.2f",
                         agent_name, overlap,
                     )
                     return (
-                        f"REFUSED: the {agent_name} agent just failed this "
-                        "same task. Report that failure to the user and ask "
-                        "how to proceed — do not retry with reworded "
-                        "instructions. If you obtain NEW information the "
-                        "agent asked for (the output of a command it gave "
-                        "the user), include it in the task and set "
-                        "continuation to true; that is not a retry."
+                        f"REFUSED: this delegation was blocked by a safety "
+                        f"guard because it overlaps too closely with the "
+                        f"{agent_name} agent's immediately prior FAILED "
+                        "task — the guard's only job is to stop a reworded "
+                        "retry of a failed approach. This message says "
+                        "NOTHING about any ID's validity or expiry, and "
+                        "carries no other cause — relay this reason to the "
+                        "user in your own words, but do not attribute the "
+                        "refusal to an expired, invalid, or unrecognized "
+                        "ID, or any other cause not stated here. If you "
+                        "obtain NEW information the agent asked for (the "
+                        "output of a command it gave the user), include it "
+                        "in the task and set continuation to true; that is "
+                        "not a retry."
                     )
         if continuation:
             handoff_depth[agent_name] = handoff_depth.get(agent_name, 0) + 1

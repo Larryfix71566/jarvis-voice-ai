@@ -189,25 +189,74 @@ def selfedit_start(
     }
 
 
-def selfedit_status(client) -> dict[str, Any]:
-    """Compose the run job + session state into one spoken summary."""
+def _describe_staging(
+    staging_id: str, stagings: list[dict[str, Any]],
+) -> tuple[str, bool | None]:
+    """One sentence answering "is this staging_id still live", plus the
+    machine-readable verdict. Returns ("", None) when no staging_id was
+    asked about — the caller then says nothing about staging at all,
+    rather than volunteering a state nobody asked for."""
+    staging_id = (staging_id or "").strip()
+    if not staging_id:
+        return "", None
+    matched = next(
+        (s for s in stagings if s.get("staging_id") == staging_id), None,
+    )
+    if matched is not None:
+        return (
+            f"Staging {staging_id} is still live, expires in "
+            f"{int(matched.get('expires_in_s', 0))}s."
+        ), True
+    return (
+        f"Staging {staging_id} is not currently live — it may have "
+        "already been used to start a run, expired, or never existed. "
+        "This is the actual staging list, not a guess."
+    ), False
+
+
+def selfedit_status(client, staging_id: str = "") -> dict[str, Any]:
+    """Compose the run job + session state into one spoken summary.
+
+    2026-08-25 — this endpoint used to have NO way to answer "is staging
+    X still live": it only ever read _run_job/_selfedit_service.status(),
+    entirely separate state from the _selfedit_stagings dict a staging_id
+    lives in. A developer run once fabricated "staging expires after 10
+    minutes... it's gone" from this exact tool, which could not possibly
+    have known that. GET /api/selfedit/run now also returns a `stagings`
+    list; when the caller names a staging_id, report plainly whether it is
+    present there — never guessed, never inferred from silence."""
     resp = _call(lambda: client.get("/api/selfedit/run"))
     if not resp.get("ok"):
         return resp
     job = resp.get("job", {})
     status = resp.get("status", {}) or {}
+    stagings = resp.get("stagings", []) or []
+
+    # The staging answer is computed BEFORE the running-state branch and
+    # attached to every return path. The first cut computed it only on the
+    # idle path, so asking "is staging X live?" during a run returned a
+    # cheerful "still planning…" with no staging_found key and no mention
+    # of the question at all — a silent non-answer, which is the precise
+    # shape that invites the model to fill the gap with an invention. If
+    # the question was asked, it gets an answer.
+    staging_sentence, staging_found = _describe_staging(staging_id, stagings)
 
     if job.get("state") == "running":
+        summary = (
+            f"Still planning with {job.get('profile', 'the planner')} — "
+            f"goal: “{job.get('goal', '')}”. I'll keep at it."
+        )
+        if staging_sentence:
+            summary = f"{summary} {staging_sentence}"
         return {
             "ok": True,
-            "summary": (
-                f"Still planning with {job.get('profile', 'the planner')} — "
-                f"goal: “{job.get('goal', '')}”. I'll keep at it."
-            ),
+            "summary": summary,
             "job": job,
             # G7 — same value as job["profile"], named for what the
             # Agents-tab card looks for on this tool's result.
             "planner_model": job.get("profile"),
+            "stagings": stagings,
+            "staging_found": staging_found,
         }
 
     parts: list[str] = []
@@ -230,10 +279,15 @@ def selfedit_status(client) -> dict[str, Any]:
     elif not parts:
         parts.append("No upgrade run or edit session is active right now.")
 
+    if staging_sentence:
+        parts.append(staging_sentence)
+
     return {
         "ok": True, "summary": " ".join(parts), "job": job,
         "active": bool(status.get("active")),
         "planner_model": job.get("profile"),  # G7
+        "stagings": stagings,
+        "staging_found": staging_found,
     }
 
 

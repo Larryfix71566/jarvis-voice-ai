@@ -78,7 +78,12 @@ from jarvis import memory as memory_module
 from jarvis.council import config as council_config
 from jarvis.council import council as council_mod
 from jarvis.db import get_conn, now_iso, run_migrations
-from jarvis.prompts import PLAN_AUTHOR_PROMPT, PLAN_REVIEW_PROMPT, RESEARCH_PROMPT
+from jarvis.prompts import (
+    PLAN_AUTHOR_PROMPT,
+    PLAN_REVIEW_PROMPT,
+    RESEARCH_PROMPT,
+    RESEARCH_SYSTEM_PROMPT,
+)
 from jarvis.research import crawl as research_crawl
 from jarvis.runlog import get_run, list_runs, parse_since
 from jarvis.selfedit.service import SelfEditService
@@ -429,7 +434,8 @@ def _run_research_job(urls: list[str], focus: str) -> None:
                 )
             return
         content, _usage = asyncio.run(council_mod._call_profile(
-            profile, "", user_content, council_config.PLANNING_MEMBER_TIMEOUT_S,
+            profile, RESEARCH_SYSTEM_PROMPT, user_content,
+            council_config.PLANNING_MEMBER_TIMEOUT_S,
         ))
         with _research_lock:
             _research_job.update(
@@ -873,7 +879,32 @@ def selfedit_run(body: GoalIn) -> dict:
 def selfedit_run_status() -> dict:
     with _run_lock:
         job = dict(_run_job)
-    return {"ok": True, "job": job, "status": _selfedit_service.status()}
+    # 2026-08-25 — a live incident: the developer fabricated "staging
+    # expires after 10 minutes... it's gone" from THIS endpoint, which had
+    # no way to answer that question at all — job/status describe the run
+    # loop, not the separate _selfedit_stagings dict a staging_id lives in.
+    # Surfacing real staging records (never their goal/plan_path text, just
+    # enough to confirm liveness) closes that gap: a tool that gets asked
+    # "is staging X still live" can now check, instead of guessing.
+    with _staging_lock:
+        _prune_expired_stagings()
+        now = time.time()
+        stagings = [
+            {
+                "staging_id": sid,
+                "age_s": round(now - rec["created_at"], 1),
+                "expires_in_s": round(
+                    SELFEDIT_STAGING_TTL_S - (now - rec["created_at"]), 1,
+                ),
+            }
+            for sid, rec in _selfedit_stagings.items()
+        ]
+    return {
+        "ok": True,
+        "job": job,
+        "status": _selfedit_service.status(),
+        "stagings": stagings,
+    }
 
 
 @app.post("/api/selfedit/validate")
