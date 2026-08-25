@@ -50,6 +50,11 @@ DISPLAY_TOOLS = {
     # build_display_payload with this tool name, so the analyst's two
     # calls render as ONE card instead of two stacked ones.
     "weather_report",
+    # MORTIMER_SITE_RESEARCH_AND_COMPARISON_PLAN.md R6/R7 — a third
+    # pseudo-tool, same plan_ready convention: jarvis/bot/research_watcher.py
+    # pushes a finished site comparison through this SAME display pipeline
+    # rather than opening a second display code path.
+    "research_report",
 }
 
 # Which surface a tool's result belongs on (side-drawer plan D36).
@@ -79,6 +84,10 @@ DISPLAY_SURFACE: dict[str, str] = {
     # W5 — same "answer to a question just asked" reasoning as get_weather
     # and get_weather_radar, which this pseudo-tool replaces on screen.
     "weather_report": "window",
+    # R6 — an answer to a question the user just asked, parkable on a
+    # second screen while they read it (Larry's choice: display now,
+    # save on request).
+    "research_report": "window",
 }
 DEFAULT_DISPLAY_SURFACE = "drawer"
 
@@ -378,6 +387,44 @@ def _fmt_weather_report(args: dict, data: dict) -> tuple | None:
     return (kind, title, "\n\n".join(parts), images, [], basemap)
 
 
+def _fmt_research_report(args: dict, data: dict) -> tuple | None:
+    """R6/R8 — the site-comparison feature's finished document, pushed by
+    research_watcher.py when a background comparison job reaches `done`.
+    `data` mirrors the /api/research/job shape: {"comparison", "urls",
+    "sites", "credits_used", "model", "saved_path"}. R9 — a per-site
+    failure is stated in the card, never silently dropped: `sites` may
+    contain a failed entry even when `comparison` covers only the other
+    site."""
+    comparison = data.get("comparison")
+    if not isinstance(comparison, str) or not comparison.strip():
+        return None
+    urls = data.get("urls") or []
+    title = f"Comparison — {' vs '.join(urls)}" if urls else "Site Comparison"
+
+    parts = [comparison]
+    sites = data.get("sites") or []
+    failed = [s for s in sites if not s.get("ok")]
+    if failed:
+        parts.append(
+            "**Crawl issues**\n" + "\n".join(
+                f"- {s.get('url')}: {s.get('error', 'unknown error')} "
+                f"({s.get('error_kind', 'unknown')})"
+                for s in failed
+            )
+        )
+    credits = data.get("credits_used")
+    footer_bits = []
+    if credits is not None:
+        footer_bits.append(f"{credits} credits used")
+    saved = data.get("saved_path")
+    if saved:
+        footer_bits.append(f"saved to {saved}")
+    if footer_bits:
+        parts.append("_" + " · ".join(footer_bits) + "_")
+
+    return ("markdown", title, "\n\n".join(parts), [], [])
+
+
 _FORMATTERS = {
     "web_search": _fmt_web_search,
     "get_weather": _fmt_get_weather,
@@ -393,6 +440,7 @@ _FORMATTERS = {
     "repo_read_file": _fmt_repo_read,
     "plan_ready": _fmt_plan_ready,
     "weather_report": _fmt_weather_report,
+    "research_report": _fmt_research_report,
 }
 
 

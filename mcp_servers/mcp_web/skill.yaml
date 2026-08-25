@@ -2,7 +2,7 @@
 name: mcp-web
 version: 1.0.0
 class: standard
-tools: [web_search, get_weather, get_weather_radar]
+tools: [web_search, get_weather, get_weather_radar, research_compare_start, research_status, research_save]
 requires_env: 
   - TAVILY_API_KEY
 requires_keychain: []

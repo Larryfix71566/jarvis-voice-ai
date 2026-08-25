@@ -6,6 +6,18 @@ from . import logic
 
 mcp = FastMCP("mcp-web")
 
+# MORTIMER_SITE_RESEARCH_AND_COMPARISON_PLAN.md R1 — same lazy-singleton
+# AdminClient pattern as mcp_selfedit/server.py.
+_admin_client = None
+
+
+def _get_admin_client():
+    global _admin_client
+    if _admin_client is None:
+        from mcp_servers.mcp_selfedit.logic import AdminClient
+        _admin_client = AdminClient()
+    return _admin_client
+
 
 @mcp.tool()
 def web_search(query: str, max_results: int = 5) -> dict:
@@ -23,6 +35,24 @@ def get_weather(city: str, days: int = 1) -> dict:
 def get_weather_radar(city: str) -> dict:
     """Get the latest precipitation radar for a city as a 3×3 grid of map tile URLs (RainViewer, keyless) — show these to the user as one stitched radar map."""
     return logic.get_weather_radar(city)
+
+
+@mcp.tool()
+def research_compare_start(urls: list, focus: str = "", confirm: bool = False) -> dict:
+    """Start a deep comparison of TWO websites' content (not a quick search) — crawls each site and writes a comparison review. Two-phase: confirm=false previews the cost and asks; only after the user explicitly agrees, call again with confirm=true. FOCUS optionally steers what the comparison is about (e.g. "pricing and support"). Runs in the background for a few minutes — use research_status for progress."""
+    return logic.research_compare_start(_get_admin_client(), urls, focus, confirm)
+
+
+@mcp.tool()
+def research_status() -> dict:
+    """Report progress of the current site comparison: still crawling, failed, or ready to view/save."""
+    return logic.research_status(_get_admin_client())
+
+
+@mcp.tool()
+def research_save(path: str = "", confirm: bool = False) -> dict:
+    """Save the finished site comparison as a draft document in the repo (PATH defaults to docs/research/<sites>.md). Two-phase, same as other repo drafts: confirm=false previews; confirm=true creates the draft — nothing is written until it is separately committed."""
+    return logic.research_save(_get_admin_client(), path or None, confirm)
 
 
 if __name__ == "__main__":

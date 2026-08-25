@@ -708,6 +708,58 @@
   position: relative;
 }
 
+/* Radar pan/zoom (Larry 2026-08-22). The viewport clips; the inner
+   wrapper is what actually transforms. `touch-action: none` is required
+   for pointer-drag panning on a trackpad/touch surface — without it the
+   browser claims the gesture for scrolling and the drag never fires. */
+.display-map {
+  margin-bottom: 12px;
+}
+
+.display-map-viewport {
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  touch-action: none;
+  line-height: 0;
+}
+
+.display-map-inner {
+  transform-origin: center center;
+  will-change: transform;
+}
+
+/* The grid supplies its own border in .display-tiles; inside the viewport
+   that would double up with the viewport's own. */
+.display-map-inner .display-tiles {
+  border: 0;
+  margin-bottom: 0;
+}
+
+.display-map-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0 0;
+}
+
+.display-map-controls .btn {
+  min-width: 26px;
+  padding: 2px 8px;
+  font-size: 13px;
+}
+
+.display-map-controls .btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.display-map-level {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  min-width: 34px;
+}
+
 .display-basemap-attribution {
   margin: -8px 0 12px;
   font-size: 10px;

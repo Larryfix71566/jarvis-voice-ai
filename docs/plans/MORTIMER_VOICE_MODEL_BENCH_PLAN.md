@@ -514,6 +514,67 @@ would then reopen sonnet-4-5: TTFT at parity with Haiku, direct trusted
 route, +6 accuracy, and its only per-case failures are the prompt-level
 commit imperatives the same follow-up fixes.
 
+### Second trial round (2026-08-22) — reverted to Haiku, inconclusive on capacity
+
+Larry reopened the question (hypothesis: 8/20's failures were early-release
+congestion). Both candidates were tried live and both were reverted the
+same evening. **Verdict: Haiku stays, and this round did NOT settle the
+capability question** — neither candidate got a fair hearing, for reasons
+unrelated to their routing ability.
+
+**Gemini 3.7 Flash (direct) — never completed a turn.** Every request
+400'd: *"Thinking level MINIMAL is not supported for this model."*
+Pipecat's `GoogleLLMService._maybe_unset_thinking_budget` applies a
+latency default of `thinking_level: "minimal"` to any model matching
+`gemini-3*flash*`, and 3.7-flash rejects that value. Fixed in
+`pipeline.py` by naming the level explicitly (`JARVIS_GEMINI_THINKING_
+LEVEL`, default `low`) — the service's own rule is "if thinking_config is
+already set, don't override it", so a future retry now boots clean. Larry
+called it off before re-testing ("gemini is too busy").
+
+**Sonnet 4.5 (direct) — measured, and it lost on behaviour, not speed.**
+Live session, 17 turns: non-delegated p50 **1655 ms** (vs Haiku 1004),
+delegated p50 **8211 ms** (vs Haiku 1550), p90 **11024 ms** (vs 2489).
+All three gates missed. But the delegated number is NOT latency: **Sonnet
+skips rule 1's acknowledgment sentence entirely.** Every `[AGENT] ...
+working:` line in the session has zero spoken text before it — it goes
+straight to the tool call, so nothing is spoken until the specialist
+returns 8-13s later. Haiku speaks the ack and lands audio at ~1.5s. The
+only reason those turns had any audio at all was G12's ProgressWatcher
+filling the silence. Quality was otherwise good (drove the new staging_id
+flow correctly, caught a blocker, asked a sharp question), and it
+hallucinated its own identity ("Claude Sonnet 3.5 v2") — stale model
+self-knowledge, not evidence about config.
+
+**Model-string note:** `claude-sonnet-4-5` was tested rather than
+`claude-sonnet-5` deliberately — it is the string the 8/20 bench measured
+(94% accuracy, TTFT parity), so the comparison stays apples-to-apples.
+Sonnet 5 is untested here and is a one-line change if the question
+reopens; [guessing] the missing-ack behaviour is likely a family trait
+rather than version-specific, so expect the same delegated-silence problem.
+
+**Haiku's live baseline, for any future comparison:** 47 turns,
+2026-08-22 — non-delegated p50 **1004 ms**, delegated p50 **1550 ms**,
+p90 **2489 ms**. All three gates PASS with headroom.
+
+**What this round actually bought** (all kept, all independent of the
+verdict): the pipecat thinking-level fix; `scripts/probe_planner.py`
+(times a REALISTIC planner call, which `check_env`'s tiny credential probe
+cannot); the discovery that `claude-opus` sent a `temperature` that
+`claude-opus-5` rejects, 400ing EVERY self-edit in ~38ms (fixed,
+`temperature: null`, D-003); the measurement that kimi-k3 takes **112s per
+call** with always-on thinking, which is why it never finished a session;
+and planner call bounds + model failover in `UpgradeAgent`
+(`PLANNER_CALL_TIMEOUT_S = 120`, `max_retries=0`, announce-then-failover
+on unreachable-class failures only — never on 4xx, which would have masked
+exactly that temperature bug).
+
+**If this reopens a third time,** the honest next step is not another model
+swap: it is the rule-1 ack behaviour (does the candidate speak before
+delegating? — measurable from any log without a full session) and the
+prompt-reduction follow-up (§5.4), which is the only lever that has ever
+plausibly moved Haiku's own numbers.
+
 **What this plan permanently shipped regardless of the verdict:** the
 10-case eval-corpus extension; `scripts/voice_model_bench.py`;
 `EVAL_MODEL`/`EVAL_BASE_URL`/`EVAL_KEY_ENV` overrides in the routing

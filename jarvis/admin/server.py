@@ -78,7 +78,8 @@ from jarvis import memory as memory_module
 from jarvis.council import config as council_config
 from jarvis.council import council as council_mod
 from jarvis.db import get_conn, now_iso, run_migrations
-from jarvis.prompts import PLAN_AUTHOR_PROMPT, PLAN_REVIEW_PROMPT
+from jarvis.prompts import PLAN_AUTHOR_PROMPT, PLAN_REVIEW_PROMPT, RESEARCH_PROMPT
+from jarvis.research import crawl as research_crawl
 from jarvis.runlog import get_run, list_runs, parse_since
 from jarvis.selfedit.service import SelfEditService
 from jarvis.vault import inject_env
@@ -214,6 +215,19 @@ class MemoryReviewResolveIn(BaseModel):
     rewrite_content: str | None = None
 
 
+class ResearchStartIn(BaseModel):
+    """MORTIMER_SITE_RESEARCH_AND_COMPARISON_PLAN.md R1/R2. `urls` is
+    exactly the two URLs to compare — the schema exposes no crawl bounds
+    (max_depth/limit/etc.) at all; those live only in config/research.yaml
+    plus the hard cap in jarvis/research/crawl.py, per R2."""
+    urls: list[str]
+    focus: str = ""
+
+
+class ResearchSaveIn(BaseModel):
+    path: str | None = None
+
+
 class AppBuildGoalIn(BaseModel):
     """MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md D5. Same
     plan/plan_path shape as GoalIn — plan_path is read-and-refuse
@@ -322,6 +336,136 @@ _appbuild_job: dict[str, Any] = {
     "started_at": None,
     "finished_at": None,
 }
+
+
+# MORTIMER_SITE_RESEARCH_AND_COMPARISON_PLAN.md R1 — a fifth async-job
+# slot, same background-thread-plus-polling shape as _run_job/_plan_job/
+# _council_job/_appbuild_job. R10 — the kill switch is checked ONCE, at
+# the top of research_start below.
+RESEARCH_ENABLED_ENV = "JARVIS_RESEARCH_ENABLED"
+RESEARCH_DISABLED_MESSAGE = "site research is turned off"
+
+_research_lock = threading.Lock()
+_research_job: dict[str, Any] = {
+    "state": "idle",  # idle | running | done | error
+    "urls": None,
+    "focus": None,
+    "sites": None,       # [{"url","ok","page_count","credits","error","error_kind"}, ...]
+    "comparison": None,  # the model's markdown review text
+    "model": None,
+    "credits_used": None,
+    "error": None,
+    "started_at": None,
+    "finished_at": None,
+    "saved_path": None,
+    "save_error": None,
+}
+
+
+def _research_enabled() -> bool:
+    return os.environ.get(RESEARCH_ENABLED_ENV, "").strip().lower() not in ("false", "0", "no")
+
+
+def _research_busy() -> bool:
+    with _research_lock:
+        return _research_job["state"] == "running"
+
+
+def _run_research_job(urls: list[str], focus: str) -> None:
+    """Background thread target (R1): crawl both sites (sync, one at a
+    time — Tavily's own crawl is already parallel internally, and two
+    concurrent 120s calls would only double the memory footprint for no
+    real time saving), assemble the digest in CODE, then one model call
+    for the prose comparison (R4/R5). Settles _research_job on every exit
+    path, mirroring every other job target on this page."""
+    try:
+        cfg = research_crawl.load_research_config()
+        api_key = os.environ.get(research_crawl.TAVILY_API_KEY_ENV)
+        if not api_key:
+            with _research_lock:
+                _research_job.update(
+                    state="error",
+                    error="TAVILY_API_KEY is not configured",
+                    finished_at=time.time(),
+                )
+            return
+        client = research_crawl.TavilyCrawlClient(timeout=float(cfg.get("timeout_s", 120)) + 10.0)
+        results = [
+            research_crawl.crawl_site(client, url, focus, api_key, cfg)
+            for url in urls
+        ]
+        # R9 — per-site failure, never all-or-nothing: only when EVERY
+        # site failed does this become a terminal error.
+        if not any(r.get("ok") for r in results):
+            with _research_lock:
+                _research_job.update(
+                    state="error",
+                    sites=[_site_summary(r) for r in results],
+                    error="both sites failed to crawl — " + "; ".join(
+                        f"{r['url']}: {r.get('error', 'unknown')}" for r in results
+                    ),
+                    finished_at=time.time(),
+                )
+            return
+
+        digests = research_crawl.assemble_digests(results[0], results[1])
+        site_a = results[0].get("url", urls[0] if urls else "")
+        site_b = results[1].get("url", urls[1] if len(urls) > 1 else "")
+        user_content = RESEARCH_PROMPT.format(
+            focus=(focus or research_crawl.DEFAULT_FOCUS),
+            site_a=site_a, site_b=site_b, digests=digests,
+        )
+        registry = load_model_registry()
+        profile_name = os.environ.get("JARVIS_PLANNING_PROFILE") or registry.get("default")
+        try:
+            profile = resolve_profile(registry, profile_name)
+        except UnknownModelProfileError as exc:
+            with _research_lock:
+                _research_job.update(
+                    state="error",
+                    sites=[_site_summary(r) for r in results],
+                    error=f"no usable planner model: {exc}",
+                    finished_at=time.time(),
+                )
+            return
+        content, _usage = asyncio.run(council_mod._call_profile(
+            profile, "", user_content, council_config.PLANNING_MEMBER_TIMEOUT_S,
+        ))
+        with _research_lock:
+            _research_job.update(
+                state="done",
+                sites=[_site_summary(r) for r in results],
+                comparison=content,
+                model=profile["name"],
+                credits_used=research_crawl.total_credits(*results),
+                finished_at=time.time(),
+            )
+        logger.info("research_state_transition state=done urls=%r", urls)
+    except Exception as exc:  # noqa: BLE001 — a crash must still settle the job
+        logger.exception("research job crashed")
+        with _research_lock:
+            _research_job.update(
+                state="error",
+                error=f"research job crashed: {type(exc).__name__}: {exc}",
+                finished_at=time.time(),
+            )
+
+
+def _site_summary(result: dict[str, Any]) -> dict[str, Any]:
+    """R8 — the job-status view of one site's crawl: enough to report
+    credits/page counts/failures without echoing full page content back
+    through the polling endpoint (the comparison text is what carries the
+    substance)."""
+    if result.get("ok"):
+        return {
+            "url": result.get("url"), "ok": True,
+            "page_count": result.get("page_count"),
+            "credits": result.get("credits"),
+        }
+    return {
+        "url": result.get("url"), "ok": False,
+        "error": result.get("error"), "error_kind": result.get("error_kind"),
+    }
 
 
 def _make_agent(service: SelfEditService, profile: str | None) -> UpgradeAgent:
@@ -919,6 +1063,112 @@ def appbuild_cancel() -> dict:
     result = workspace.revert()
     logger.info("appbuild_state_transition state=cancelled ok=%s", result.get("ok"))
     return result
+
+
+# ------------------------------------------------------------- research
+# MORTIMER_SITE_RESEARCH_AND_COMPARISON_PLAN.md R1/R6/R10. Same background-
+# thread-plus-polling shape as self-edit/plan/council/app-build above.
+
+
+@app.post("/api/research/start")
+def research_start(body: ResearchStartIn) -> dict:
+    if not _research_enabled():
+        return {"ok": False, "error": RESEARCH_DISABLED_MESSAGE}
+    urls = [u.strip() for u in (body.urls or []) if u.strip()]
+    cfg = research_crawl.load_research_config()
+    max_sites = int(cfg.get("max_sites", 2))
+    if len(urls) < 2:
+        return {"ok": False, "error": "two URLs are required to compare"}
+    if len(urls) > max_sites:
+        return {"ok": False, "error": f"at most {max_sites} sites can be compared at once"}
+    if not os.environ.get(research_crawl.TAVILY_API_KEY_ENV):
+        return {"ok": False, "error": "TAVILY_API_KEY is not configured"}
+    with _research_lock:
+        if _research_job["state"] == "running":
+            return {
+                "ok": False,
+                "error": "a comparison is already in progress — ask for status instead",
+                "job": dict(_research_job),
+            }
+        _research_job.update(
+            state="running", urls=urls, focus=(body.focus or "").strip() or None,
+            sites=None, comparison=None, model=None, credits_used=None, error=None,
+            started_at=time.time(), finished_at=None, saved_path=None, save_error=None,
+        )
+    logger.info("research_state_transition state=running urls=%r", urls)
+    threading.Thread(
+        target=_run_research_job, args=(urls, body.focus or ""), daemon=True,
+    ).start()
+    return {"ok": True, "started": True}
+
+
+@app.get("/api/research/job")
+def research_job_status() -> dict:
+    with _research_lock:
+        job = dict(_research_job)
+    return {"ok": True, "job": job}
+
+
+@app.post("/api/research/save")
+def research_save(body: ResearchSaveIn) -> dict:
+    """R6 — the SAME draft-gated mcp_repo.logic.repo_write_file voice
+    already uses for every other repo write; nothing here is a second
+    write primitive. Attribution footer names the model, both URLs, page
+    counts, and credits — a comparison without its sources and cost is a
+    claim with no provenance (R6/R8)."""
+    with _research_lock:
+        if _research_job["state"] != "done":
+            return {"ok": False, "error": "no finished comparison to save"}
+        job = dict(_research_job)
+    comparison = job.get("comparison") or ""
+    if not comparison:
+        return {"ok": False, "error": "the comparison is empty"}
+
+    urls = job.get("urls") or []
+    slug = re.sub(r"[^a-z0-9]+", "-", "-vs-".join(urls).lower()).strip("-")[:60] or "comparison"
+    path = (body.path or "").strip() or f"docs/research/{slug}.md"
+
+    registry = load_model_registry()
+    profiles = registry.get("profiles", {})
+    model_name = job.get("model") or "unknown"
+    provider_model = (profiles.get(model_name) or {}).get("model", model_name)
+    sites = job.get("sites") or []
+    pages_note = ", ".join(
+        f"{s.get('url')}: {s.get('page_count')} pages" if s.get("ok")
+        else f"{s.get('url')}: failed ({s.get('error_kind', 'unknown')})"
+        for s in sites
+    )
+    footer = (
+        f"\n\n---\n*Comparison by {model_name} ({provider_model}) — {now_iso()[:10]}. "
+        f"Sites: {', '.join(urls)}. Pages: {pages_note}. "
+        f"Credits used: {job.get('credits_used', 0)}.*"
+    )
+    result = repo_logic.repo_write_file(
+        path, comparison + footer,
+        rationale=f"Site comparison: {', '.join(urls)}",
+    )
+    if result.get("ok"):
+        with _research_lock:
+            _research_job.update(saved_path=result.get("path"), save_error=None)
+    else:
+        with _research_lock:
+            _research_job.update(save_error=result.get("error"))
+    return dict(result)
+
+
+@app.post("/api/research/cancel")
+def research_cancel() -> dict:
+    if _research_busy():
+        return {"ok": False, "error": "a comparison is in progress — ask for status instead"}
+    with _research_lock:
+        if _research_job["state"] == "idle":
+            return {"ok": True, "already_idle": True}
+        _research_job.update(
+            state="idle", urls=None, focus=None, sites=None, comparison=None,
+            model=None, credits_used=None, error=None, started_at=None,
+            finished_at=None, saved_path=None, save_error=None,
+        )
+    return {"ok": True}
 
 
 # --------------------------------------------------------------- memory

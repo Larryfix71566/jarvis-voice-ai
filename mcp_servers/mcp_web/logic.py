@@ -44,6 +44,7 @@ import os
 
 import httpx
 
+from mcp_servers.mcp_selfedit.logic import AdminClient, OFFLINE_ERROR
 from jarvis.weathergov import daily_forecast as _wg_daily_forecast
 from jarvis.weathergov import fetch_headers as _wg_fetch_headers
 from jarvis.weathergov import weathergov_current as _wg_current
@@ -472,4 +473,133 @@ def get_weather_radar(city: str) -> dict:
     return {
         "city": label, "lat": lat, "lon": lon, "ts": ts,
         "tiles": tiles, "basemap_tiles": basemap_tiles,
+    }
+
+
+# ------------------------------------------------- site research & comparison
+# MORTIMER_SITE_RESEARCH_AND_COMPARISON_PLAN.md R1. Thin HTTP-client tools,
+# same two-phase-confirmation convention as mcp_selfedit.logic's
+# selfedit_start/plan_start (this module reuses AdminClient rather than a
+# second sidecar-client implementation) — all crawl/model logic lives in
+# the admin sidecar's /api/research/* endpoints and jarvis/research/crawl.py;
+# nothing here duplicates it.
+
+
+def _call(fn):
+    try:
+        return fn()
+    except Exception:
+        return {"ok": False, "error": OFFLINE_ERROR}
+
+
+def research_compare_start(
+    client, urls: list, focus: str = "", confirm: bool = False,
+) -> dict:
+    """Two-phase start of a site comparison. URLS must name exactly two
+    sites; FOCUS steers the crawl (e.g. "pricing and support") and, when
+    given, is what the review compares on — leave empty for a general
+    comparison. Crawling costs Tavily credits and runs in the background
+    for a few minutes; the confirm=false preview names the approximate
+    cost so the user is deciding with that in view."""
+    urls = [u.strip() for u in (urls or []) if isinstance(u, str) and u.strip()]
+    if len(urls) != 2:
+        return {"ok": False, "error": "I need exactly two URLs to compare."}
+    if not confirm:
+        focus_note = f" — focus: {focus}" if (focus or "").strip() else ""
+        return {
+            "ok": True,
+            "needs_confirmation": True,
+            "summary": (
+                f"Ready to crawl and compare {urls[0]} and {urls[1]}{focus_note}. "
+                f"This costs Tavily credits (roughly 40 for a full comparison) and "
+                f"runs in the background for a few minutes. Say yes to start."
+            ),
+            "urls": urls, "focus": focus,
+        }
+    resp = _call(lambda: client.post(
+        "/api/research/start", json={"urls": urls, "focus": focus}))
+    if not resp.get("ok"):
+        return resp
+    return {
+        "ok": True, "started": True,
+        "summary": (
+            f"Started comparing {urls[0]} and {urls[1]}. This can take a few "
+            f"minutes — ask me for status anytime."
+        ),
+    }
+
+
+def research_status(client) -> dict:
+    """Report progress of the current site comparison: still crawling,
+    failed (naming which site and why), or ready to view/save."""
+    resp = _call(lambda: client.get("/api/research/job"))
+    if not resp.get("ok"):
+        return resp
+    job = resp.get("job", {}) or {}
+    state = job.get("state")
+    if state in (None, "idle"):
+        return {"ok": True, "summary": "No comparison is active.", "job": job}
+    if state == "running":
+        urls = job.get("urls") or []
+        return {
+            "ok": True,
+            "summary": f"Still crawling and comparing {', '.join(urls)}. I'll keep at it.",
+            "job": job,
+        }
+    if state == "error":
+        return {
+            "ok": True,
+            "summary": f"The comparison failed: {job.get('error') or 'unknown error'}",
+            "job": job,
+        }
+    if state == "done":
+        credits = job.get("credits_used")
+        credit_note = f" ({credits} credits used)" if credits is not None else ""
+        return {
+            "ok": True,
+            "summary": (
+                f"The comparison is ready{credit_note} — it's on your display. "
+                f"Say the word and I'll save it as a document."
+            ),
+            "job": job,
+        }
+    return {"ok": True, "summary": "Comparison status unknown.", "job": job}
+
+
+def research_save(client, path: str | None = None, confirm: bool = False) -> dict:
+    """Save the finished comparison as a draft repo document (PATH
+    defaults to docs/research/<sites>.md). Two-phase, same as
+    repo_write_file/plan_adopt: confirm=false previews; confirm=true
+    creates the DRAFT — nothing is actually written until the draft is
+    separately committed with repo_commit_write."""
+    status = _call(lambda: client.get("/api/research/job"))
+    if not status.get("ok"):
+        return status
+    job = status.get("job", {}) or {}
+    if job.get("state") != "done":
+        return {"ok": False, "error": "there's no finished comparison to save yet."}
+    if not confirm:
+        target = path or "a docs/research/ file named after the sites"
+        return {
+            "ok": True,
+            "needs_confirmation": True,
+            "summary": (
+                f"Ready to save the comparison as a draft at {target}. Say yes "
+                f"to draft it — nothing is written until you separately "
+                f"confirm the write itself."
+            ),
+            "path": path,
+        }
+    resp = _call(lambda: client.post("/api/research/save", json={"path": path}))
+    if not resp.get("ok"):
+        return resp
+    return {
+        "ok": True,
+        "pending": resp.get("pending"),
+        "action_id": resp.get("action_id"),
+        "path": resp.get("path"),
+        "summary": (
+            f"Drafted the comparison at {resp.get('path')} — nothing has been "
+            f"written yet. Say the word to commit it."
+        ),
     }

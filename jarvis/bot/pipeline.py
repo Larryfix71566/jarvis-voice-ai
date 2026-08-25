@@ -41,6 +41,7 @@ from jarvis.bot.display import WeatherReportMerger, build_display_payload
 from jarvis.bot.interruption import InterruptionNotifier
 from jarvis.bot.memory_watcher import MemorySweepWatcher
 from jarvis.bot.plan_watcher import PlanWatcher
+from jarvis.bot.research_watcher import ResearchWatcher
 from jarvis.bot.progress_watcher import ProgressWatcher, SpeakingStateTracker
 from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.remember_tool import build_remember_tool
@@ -1008,6 +1009,29 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             )
             plan_watcher.start()
 
+        # MORTIMER_SITE_RESEARCH_AND_COMPARISON_PLAN.md R7 — same rationale
+        # as plan_watcher above: a background site comparison finishes in
+        # the sidecar, which has no voice. Kill switch:
+        # JARVIS_RESEARCH_WATCHER_ENABLED=false (independent of R10's
+        # JARVIS_RESEARCH_ENABLED, which disables the feature itself).
+        research_watcher = None
+        if os.environ.get("JARVIS_RESEARCH_WATCHER_ENABLED", "").strip().lower() not in (
+            "false", "0", "no",
+        ):
+            async def _speak_research(text: str) -> None:
+                from pipecat.frames.frames import TTSSpeakFrame
+                await pusher.push(TTSSpeakFrame(text=text))
+
+            async def _push_research_display(payload: dict) -> None:
+                await send_app_message(transport, {"type": "display", "display": payload})
+
+            research_watcher = ResearchWatcher(
+                speak=_speak_research,
+                push_display=_push_research_display,
+                is_connected=lambda: client_connected["value"],
+            )
+            research_watcher.start()
+
         # G12 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md) —
         # verbal "still working" pings every 30s while a delegation or
         # self-edit run is in flight. Kill switch:
@@ -1099,6 +1123,8 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             await memory_watcher.stop()
             if plan_watcher is not None:
                 await plan_watcher.stop()
+            if research_watcher is not None:
+                await research_watcher.stop()
             if progress_watcher is not None:
                 await progress_watcher.stop()
             # U2.5: fold this session into long-term memory. Best-effort,
