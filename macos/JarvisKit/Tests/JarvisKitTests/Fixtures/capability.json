@@ -1,0 +1,11 @@
+{
+  "id": "msg-10",
+  "label": "rtvi-ai",
+  "type": "server-message",
+  "data": {
+    "type": "capability",
+    "agents": [
+      {"name": "analyst", "display_name": "Analyst", "profile": "deep", "resolved_model": null, "fallback": true}
+    ]
+  }
+}

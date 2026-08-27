@@ -1,0 +1,13 @@
+{
+  "id": "msg-2",
+  "label": "rtvi-ai",
+  "type": "server-message",
+  "data": {
+    "type": "agent",
+    "name": "analyst",
+    "display_name": "Analyst",
+    "state": "done",
+    "ok": false,
+    "detail": "tool failed"
+  }
+}

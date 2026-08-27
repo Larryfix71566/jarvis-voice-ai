@@ -1,0 +1,17 @@
+{
+  "id": "msg-1",
+  "label": "rtvi-ai",
+  "type": "server-message",
+  "data": {
+    "type": "agent",
+    "name": "analyst",
+    "display_name": "Analyst",
+    "state": "working",
+    "run_id": "r-1",
+    "task": "compare hosts",
+    "model": "moonshotai/kimi-k2.5-instruct",
+    "model_fallback": false,
+    "model_unusable": false,
+    "model_unusable_detail": ""
+  }
+}

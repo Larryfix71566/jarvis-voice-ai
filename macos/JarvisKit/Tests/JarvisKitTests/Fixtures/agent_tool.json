@@ -1,0 +1,11 @@
+{
+  "id": "msg-3",
+  "label": "rtvi-ai",
+  "type": "server-message",
+  "data": {
+    "type": "agent_tool",
+    "name": "developer",
+    "display_name": "Developer",
+    "tool": "selfedit_start"
+  }
+}

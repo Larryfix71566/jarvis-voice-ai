@@ -1,0 +1,9 @@
+{
+  "id": "msg-8",
+  "label": "rtvi-ai",
+  "type": "server-message",
+  "data": {
+    "type": "voice/current",
+    "voice": "bella"
+  }
+}

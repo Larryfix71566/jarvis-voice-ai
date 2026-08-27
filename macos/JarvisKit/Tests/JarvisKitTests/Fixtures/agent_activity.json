@@ -1,0 +1,14 @@
+{
+  "id": "msg-4",
+  "label": "rtvi-ai",
+  "type": "server-message",
+  "data": {
+    "type": "agent_activity",
+    "name": "developer",
+    "run_id": "r-2",
+    "tool": "selfedit_status",
+    "ok": true,
+    "latency_ms": 812,
+    "planner_model": "claude-opus-4"
+  }
+}

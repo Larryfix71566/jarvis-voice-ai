@@ -17,7 +17,7 @@ This plan is the **T1.3** half of the native track that `CROSS_PLAN_RESOLUTION.m
 | **C2** — localhost is the trust boundary until G2 | This plan adds no networking of its own; every request goes through `JarvisKit`'s `JarvisConfig`/`JarvisHTTP` (CORE §3 N13), whose loopback defaults and `validate()` refusal are unchanged. |
 | **C3** — sensitive tier waits for G3 | No financial data, no second store, no new Keychain item. Views render what the sidecar returns; they never persist it. The Output tab's clipboard `content` field is display-only and never written to disk (§3 P9). |
 | **C4** — every mutation stays draft → confirm | The Repo and Edit tabs surface the sidecar's draft routes and confirm routes as **two separate user actions** with a visible pending state (§3 P6); there is no one-tap "commit and push". |
-| **C5** — Supervisor owns interface chrome | The three UI commands `JarvisKit` owns (`mic_mute`/`wake_on`/`wake_off`) are applied by their state owners; every other `ui` app-message (tab switch, drawer open, display surface) is applied by the **view** that owns that state through the *same* setter its buttons call (§3 P4), exactly as the web `uiCommands.ts` store does. No view originates a `ui` message. |
+| **C5** — Supervisor owns interface chrome | The three UI commands `JarvisKit` owns (`mic_mute`/`wake_on`/`wake_off`) are applied by their state owners; every other `ui` app-message (tab switch, drawer open/close/popout/popin, display popout/close, overlay dismiss) is applied by the **view** that owns that state through the *same* setter its buttons call (§3 P15, `UICommandRouter`), exactly as the web `uiCommands.ts` store does. No view originates a `ui` message. All eleven `UI_ACTIONS` (`jarvis/bot/ui_control.py:25-30`) have a named owner — review F2. |
 | **C6** — untrusted content never shares an agent with an outbound channel | No agent, no MCP server, no `config/agents.yaml` change. |
 | **C7** — routing eval ≥ 90 % | No Supervisor, prompt, or agent change. |
 | **C8** — self-edit allow/deny changes are human commits | `macos/**` is on the deny list (`config/self_edit_allowlist.json`); this plan does not change it. Every file here is a normal working-tree write committed by Larry (§0.2). |
@@ -32,6 +32,29 @@ This plan is the **T1.3** half of the native track that `CROSS_PLAN_RESOLUTION.m
 - **K1 — client bearer tokens** and **K5 — host/URL configuration.** Consumed transitively through `JarvisConfig`; not restated (see CORE header).
 
 **Corrections to the roadmap:** none beyond those `MORTIMER_NATIVE_CLIENT_CORE_PLAN.md` already recorded (its corrections 1–6). Correction 6 (no RTVI transcript messages are emitted, so a native Log tab is silent against today's bot) is the direct precondition for this plan's §3 P16 and §10 R-A1; it is consumed, not re-derived.
+
+---
+
+## Revision table (review findings closed, 2026-08-27)
+
+This revision closes the first-pass adversarial review
+(`review-opus/MORTIMER_NATIVE_CLIENT_APP_PLAN.review.md`, 1 BLOCKER / 3 MAJOR /
+1 MINOR). This plan had never been reviewed before (it was written after the
+first review round); this is the first pass, not a re-check. All five findings
+are re-measured against the repo snapshot, not re-read — see each row's cited
+evidence, which was independently re-run before the fix was applied.
+
+| Finding | Sev | Section(s) changed | What changed |
+|---|---|---|---|
+| F1 | BLOCKER | §8 V(-1) (new) | Added a precondition step, before V0, that checks whether REMOTE's auth is live (`curl -w '%{http_code}'` on an unauthenticated route) and mints/stores a token via `KeychainStore` before any of V0–V6 run, since T1.3 and T2 land in the same wave with no ordering guarantee and `JARVIS_AUTH_ENABLED` defaults to `true`. States explicitly that a `.error("Token required...")` state on first launch is expected, not a defect. |
+| F2 | MAJOR | C5 header row, §3 P15 (rewritten), §4 manifest (`UICommandRouter.swift`), §5 Step 5, §7.3 (new) | Added `UICommandRouter`, a second `messageStream()` consumer that applies the eight non-MicControls `UI_ACTIONS` (`drawer_open/close/tab/popout/popin`, `display_popout/close`, `overlay_dismiss`) through the same setter each target view's own buttons call, closing the gap where 8 of 11 real voice UI commands had no wired subscriber despite the plan's C5 row claiming full compliance. One test per action added (§7.3). |
+| F3 | MAJOR | §3 P5 (`RunSummary`), §5 Step 9 | Added `model`, `toolsOk`, `toolsFailed` — three real, populated `agent_runs` columns the web's own Runs panel renders that the struct silently dropped — as nullable `Codable` fields with `CodingKeys`, and wired their display (model chip, ok/failed readout falling back to `toolCount`) into the Runs tab row. |
+| F4 | MAJOR | §6 tuning table | `maxDisplayResults` corrected from `6` (wrong store's constant, `MAX_OPEN_DISPLAY_PANELS`) to `20` (the Output tab's real cap, `displayResults.ts`'s `MAX_DISPLAY_RESULTS`); added a separate `maxDisplayWindowPanels = 15` knob for the display window's own store (`DisplayWindowStore`, P14), which previously had no bound specified at all. Re-measured: `grep -n "MAX_OPEN_DISPLAY_PANELS\|MAX_DISPLAY_RESULTS" web/src/displayWindow.ts web/src/displayResults.ts` confirms `15` and `20` respectively. |
+| F5 | MINOR | §6 tuning table, §5 Steps 6/8/9, P6 | Split the single `httpPollSeconds = 3.0` (claimed as web parity for all four HTTP tabs) into four named constants: `editRunPollSeconds = 3.0` (the one tab that's actually 3 s parity), `repoPollSeconds = 15.0`, `memoryPollSeconds = 15.0` (both re-measured at `setInterval(refresh, 15000)` in the real web files), and `runsPollSeconds = 5.0` (stated explicitly as new behavior — the web's Runs panel has no periodic poll today, confirmed by `grep -c setInterval RunsPanel.tsx` → 0). |
+
+Section numbering note: adding §7.3 (`UICommandRouterTests.swift`) pushed the
+original §7.3 (`TabStateTests.swift`) to §7.4; every in-plan cross-reference to
+either was updated to match (§4 manifest, §5 Steps 5/6, §8 V(-1)).
 
 ---
 
@@ -273,7 +296,7 @@ public struct KnowledgeOverview: Codable, Sendable {
 Write methods: `deleteFact(key:)` and `resolveReview(id:action:rewriteContent:)` already exist in CORE (N14). **Why `notReachingPrompt` is surfaced prominently (§5 step 8):** it is the one number the `/api/knowledge` endpoint exists to make visible (`server.py:1226` docstring — silent truncation must not be archaeology); the native Memory tab renders it as the loud element, matching the web's amber `.knowledge-warn` line.
 
 ### P5 — Runs tab: `RunsList` + `RunDetail` structs.
-`/api/runs` (`server.py:1501`) → `{"ok": true, "runs": list_runs()}`; each run is an `agent_runs` row (`db.py:132`) with the D9 display status applied (`store.py:396`). **`latencyMs` is `Int?`** (nullable column) and **`toolCount` is non-optional** (`NOT NULL DEFAULT 0`):
+`/api/runs` (`server.py:1501`) → `{"ok": true, "runs": list_runs()}`; each run is an `agent_runs` row (`db.py:132`) with the D9 display status applied (`store.py:396`). **`latencyMs` is `Int?`** (nullable column) and **`toolCount` is non-optional** (`NOT NULL DEFAULT 0`). Three later migrations added `model` (`db.py:325`), `tools_ok`, `tools_failed` (`db.py:236-237`), all populated in production and all rendered by the web's own Runs panel (`RunsPanel.tsx:232-233` `model: {detail.run.model || "—"}`; `:210-211` `${r.tools_ok}/${r.tools_failed}`); since `runs_list`/`runs_detail` do `SELECT * FROM agent_runs`, they are already in every JSON response and are added here as nullable fields (review F3 — pre-migration rows have neither `NOT NULL` nor `DEFAULT`, so `nil` is a real decoded state, not just a missing-key fallback):
 ```swift
 public struct RunSummary: Codable, Sendable {
     public let runId: String
@@ -289,11 +312,15 @@ public struct RunSummary: Codable, Sendable {
     public let error: String?
     public let replyPreview: String?
     public let payloadPath: String?
+    public let model: String?          // review F3 — db.py:325, ALTER TABLE ... ADD COLUMN model TEXT
+    public let toolsOk: Int?           // review F3 — db.py:236, nullable, pre-migration rows are nil
+    public let toolsFailed: Int?       // review F3 — db.py:237, nullable, pre-migration rows are nil
     enum CodingKeys: String, CodingKey {
-        case agent, task, status, error
+        case agent, task, status, error, model
         case runId = "run_id", sessionId = "session_id", displayName = "display_name"
         case startedAt = "started_at", endedAt = "ended_at", latencyMs = "latency_ms"
         case toolCount = "tool_count", replyPreview = "reply_preview", payloadPath = "payload_path"
+        case toolsOk = "tools_ok", toolsFailed = "tools_failed"
     }
 }
 public struct RunsList: Codable, Sendable { public let ok: Bool; public let runs: [RunSummary] }
@@ -329,7 +356,7 @@ public struct RunDetail: Codable, Sendable {
 **Why these are typed here and nowhere else (F12):** these are the concrete structs CORE deferred; T1.5 (iOS) and any later native surface read them from `AdminAPI` rather than re-deriving. Every non-optional scalar decodes with `decodeIfPresent` + a default (CORE §5 step 4, F8), so a field an older sidecar omits degrades to a default rather than a decode failure.
 
 ### P6 — HTTP tabs are `@Observable` view-models that poll; mutations are draft→confirm two-step.
-Each HTTP tab (Repo/Edit/Memory/Runs) is a `@MainActor @Observable` view-model owning `state: TabState<T>` (P7), a `Task` that calls its `AdminAPI` read on appear and every `AppTuning.httpPollSeconds`, and cancels the task on disappear. Mutations (commit/push, run/validate/submit/revert, deleteFact, resolveReview) are explicit user actions that call the write method, then immediately re-poll. Draft→confirm (Repo commit/push; §5 step 6) holds the `GitDraft.actionId` in the view-model between the two taps and renders a distinct pending row until the confirm call returns. **Why a view-model, not a raw `.task` in the view:** the drawer tab views mount/unmount on every tab switch (the web forced `agentRuns.ts` to be a module store for exactly this reason, `agentRuns.ts:9-11`); a view-model owned by the drawer scene (not the tab view) keeps a poll from restarting on every switch and keeps a half-finished draft alive across a switch.
+Each HTTP tab (Repo/Edit/Memory/Runs) is a `@MainActor @Observable` view-model owning `state: TabState<T>` (P7), a `Task` that calls its `AdminAPI` read on appear and every that tab's own poll interval (`AppTuning.editRunPollSeconds` for Edit, `.repoPollSeconds` for Repo, `.memoryPollSeconds` for Memory, `.runsPollSeconds` for Runs — §6; these are four distinct constants, not one shared value, since only the Edit tab's 3 s cadence is actual web parity — review F5), and cancels the task on disappear. Mutations (commit/push, run/validate/submit/revert, deleteFact, resolveReview) are explicit user actions that call the write method, then immediately re-poll. Draft→confirm (Repo commit/push; §5 step 6) holds the `GitDraft.actionId` in the view-model between the two taps and renders a distinct pending row until the confirm call returns. **Why a view-model, not a raw `.task` in the view:** the drawer tab views mount/unmount on every tab switch (the web forced `agentRuns.ts` to be a module store for exactly this reason, `agentRuns.ts:9-11`); a view-model owned by the drawer scene (not the tab view) keeps a poll from restarting on every switch and keeps a half-finished draft alive across a switch.
 
 ### P7 — Every HTTP tab renders exactly one of four states.
 `enum TabState<T> { case loading; case loaded(T); case empty; case error(String) }`. Mapping rule (deterministic, C10): a thrown `JarvisError` → `.error(message)`; a decoded body with `ok == false` → `.error(body.error ?? "request failed")`; a decoded body whose list payload is empty → `.empty` with the tab's specified empty copy; otherwise `.loaded`. `JarvisError.unauthorized` (a 401) renders `.error("Token required — set it in the Debug menu")` and does **not** retry (CORE §3 N13 discipline). **Copy (item 5 — named and specified):** Repo empty "Working tree clean." · Edit empty "No self-edit session. Say \"start a self-edit\" or pick a model and a goal." · Memory empty "No facts stored yet." · Runs empty "No agent runs yet." · Loading state is a single centered `ProgressView` with the tab name. **Why enumerate the states:** an unspecified empty/error state is self-audit item 5; the web tabs each have one (`GitPanel.tsx:22 unreachable`, `AgentsTab.tsx:115`, `OutputTab.tsx:56`), and the native tabs must not regress to a blank pane.
@@ -360,8 +387,23 @@ Every surface is a plain SwiftUI view. Glass is applied by exactly one modifier,
 ### P14 — Display surface: `surface == "window"` → the display window; everything else → the Output tab.
 Ported from `App.tsx:238-241`/`displayResults.ts`. The `AppMessageRouter` (§5 step 5) routes each `display` `AppMessage` by `payload.surface` (defaulting nil/unrecognised to `.drawer`, CORE §3 N7 `DisplayPayload.surface` decoder): `.window` → `DisplayWindowStore` (rendered by `DisplayScene`, placed via P11); `.drawer` → `DisplayResultStore` (the Output tab). `DisplayContentView` is one shared renderer (markdown/image/links, mirroring `DisplayContent.tsx`) used by both the Output tab and the display window. **Why one router, one renderer:** the web has exactly one display listener (`App.tsx:217`) and one `DisplayContent` component shared by three consumers; duplicating the surface-split or the renderer is self-audit item 4.
 
-### P15 — Tab identity and voice aliases are preserved exactly.
-The seven tab keys stay `repo|edit|memory|runs|agents|output|transcript` with labels `Repo|Edit|Memory|Runs|Agents|Output|Log` (`SideDrawer.tsx:33-64`). A `ui` app-message with `action == "drawer_tab"` and a `tab` value switches the active tab through the drawer scene's setter (C5, the state owner). **Why exact keys:** `jarvis/bot/ui_control.py`'s `TAB_ALIASES` resolves "developer"/"dev"/"agent" → `agents` server-side *before* sending the `ui` message, so the client only ever receives a real key; changing a key here would silently break "show me the developer tab". This plan changes no key.
+### P15 — Tab identity and voice aliases are preserved exactly; every `UI_ACTIONS` case has a named owner.
+The seven tab keys stay `repo|edit|memory|runs|agents|output|transcript` with labels `Repo|Edit|Memory|Runs|Agents|Output|Log` (`SideDrawer.tsx:33-64`). **Why exact keys:** `jarvis/bot/ui_control.py`'s `TAB_ALIASES` resolves "developer"/"dev"/"agent" → `agents` server-side *before* sending the `ui` message, so the client only ever receives a real key; changing a key here would silently break "show me the developer tab". This plan changes no key.
+
+`jarvis/bot/ui_control.py:25-30` defines eleven `UI_ACTIONS`. Three (`mic_mute`, `wake_on`, `wake_off`) are applied by `MicControlsView` via `subscribe` (P12, §5 step 5) — unchanged from CORE. The other eight are applied by a new `App/UICommandRouter.swift` (§4, §5 step 5), a second `Task { for await m in client.messageStream() { ... } }` consumer that filters on `m.type == "ui"` and `action` not in the three MicControls-owned cases, then calls the exact same setter each target view's own button calls:
+
+| `action` | Owner (setter called) |
+|---|---|
+| `drawer_tab` (requires `tab`) | `DrawerScene`'s active-tab setter (the same one the tab strip's `Button` actions call) |
+| `drawer_open` (optional `tab`; if present, also sets the tab) | `WindowPlacement.popOutDrawer()` if the drawer window isn't open, else no-op |
+| `drawer_close` | closes the drawer window (`dismissWindow(id: "drawer")`) |
+| `drawer_popout` | `WindowPlacement.popOutDrawer()` (same call the toolbar's pop-out button makes) |
+| `drawer_popin` | reverses the pop-out: re-docks the drawer to the console window (the inverse of `popOutDrawer()`) |
+| `display_popout` | `WindowPlacement.openDisplay()` (same call `TopBarView`'s display toggle makes) |
+| `display_close` | `dismissWindow(id: "display")` |
+| `overlay_dismiss` | dismisses the on-stage content panel the console shows (`ConsoleView`'s own overlay-visibility setter) |
+
+A command that changes nothing (e.g. `drawer_close` when the drawer is already closed) is a no-op — `UICommandRouter` does not reply on the client's behalf; the bot's own `ui/noop` TTS message (`ui_control.py:13`) is how "that changed nothing" gets communicated, unchanged from today.
 
 ### P16 — The Log tab is built and wired, but its stream is silent against today's bot; the empty state says so.
 Per CORE correction 6 / R-N6: this bot emits no RTVI transcription messages, so `JarvisClient.transcript` stays empty and the `ConversationStore` never fills. `LogView` is still built (it interleaves `ConversationStore.entries` with `AgentRunStore` run chips, exactly as `Transcript.tsx:37-62` merges conversation and runs) — the **run chips work today** (they come from the live `AppMessage` stream), so the Log is not wholly empty; only the spoken bubbles are absent. The empty/partial state copy is specified: when there are run chips but no bubbles, a one-line footer "Spoken transcript needs a backend change (RTVIObserver) — tracked as R-A1." **Why build it now and flag the dependency (C1, C10):** the tab structure, the run-chip interleave, and the store are all client work with no backend dependency; only the bubble source is missing. Building it against the empty stream (which CORE already unit-tests the decoder for, N7) means the day the backend plan lands `RTVIObserver`, the bubbles appear with **no** native change. Inventing the backend change here is forbidden by C1; it is carried as R-A1 (§10) for the backend plan to schedule — **flagged, not worked around.**
@@ -383,6 +425,7 @@ Every file touched in §5 appears here; nothing here is absent from §5. **Delet
 |---|---|---|
 | `App/MortimerHostApp.swift` | replaces the harness: app-scope `JarvisClient` + three stores + router; `ConsoleScene`/`DisplayScene`/`DrawerScene`; Debug menu (`Clear stored token`, `Show message log`) | 1 |
 | `App/AppMessageRouter.swift` | the ONE `messageStream()` consumer → dispatch to the three stores + display window (P8, P14) | 5 |
+| `App/UICommandRouter.swift` | a second `messageStream()` consumer for the eight non-MicControls `UI_ACTIONS` (P15, review F2) — dispatches to `DrawerScene`'s active-tab setter, `WindowPlacement.openDisplay()`/`popOutDrawer()`, and `dismissWindow`/`ConsoleView`'s overlay setter | 5 |
 | `App/AppTheme.swift` | colour tokens ported from `App.css` `--glass-*`/`--bg` | 4 |
 | `App/Glass.swift` | `.mortimerGlass(_:)` + `GlassRole`; glass-on (T1.0 material) / glass-off (opaque) arms (P10) | 4 |
 | `App/VoiceState.swift` | the derived `VoiceState` enum + derivation (P13) | 4 |
@@ -414,7 +457,8 @@ Every file touched in §5 appears here; nothing here is absent from §5. **Delet
 |---|---|---|
 | `macos/JarvisKit/Tests/JarvisKitTests/AdminResponseDecodeTests.swift` | §7.1 — decode each response struct from a captured fixture | 6-9 |
 | `macos/MortimerHost/Tests/MortimerHostTests/AgentRunStoreTests.swift` | §7.2 — the reducer, ported from the `agentRuns.ts` behaviour | 5 |
-| `macos/MortimerHost/Tests/MortimerHostTests/TabStateTests.swift` | §7.3 — the four-state mapping (P7) | 6 |
+| `macos/MortimerHost/Tests/MortimerHostTests/TabStateTests.swift` | §7.4 — the four-state mapping (P7) | 6 |
+| `macos/MortimerHost/Tests/MortimerHostTests/UICommandRouterTests.swift` | §7.3 — one case per non-MicControls `UI_ACTIONS` entry (review F2) | 5 |
 | `macos/JarvisKit/Tests/JarvisKitTests/fixtures/` | 9 captured JSON bodies (one per read route) | 6-9 |
 
 ## §5 Implementation steps, in order
@@ -429,15 +473,15 @@ Every file touched in §5 appears here; nothing here is absent from §5. **Delet
 
 **Step 4 — Console chrome: `ConsoleView` + `TopBarView` + `MicControlsView` shell (P1, P12).** Lay out topbar / stage / bottombar. `VoiceWaveView`/`OrbFieldView` are placeholders until step 13. `TopBarView`: `ConnectButton` (binds `client.connect/disconnect` + `client.state`), a voice picker (reads `voiceCatalog`/`voiceCurrent` `AppMessage`s, sends `ClientMessage.voiceSet`), a capability chip (reads `.capability`), the drawer toggle, the display toggle (`WindowPlacement.openDisplay`). **Test:** §8 V2 (connect/talk against a live bot).
 
-**Step 5 — The three stores + `AppMessageRouter` + `MicControlsView` behaviour (P8, P12, P14).** Write `AgentRunStore` (reducer ported verbatim from `agentRuns.ts:276-392` — §7.2 pins it), `DisplayResultStore`, `ConversationStore` (subscribes to `client.$transcript`). `AppMessageRouter`: one `Task { for await m in client.messageStream() { dispatch(m) } }` started at app scope, dispatching `agent*`→`AgentRunStore`, `display`→router-by-surface (P14), leaving `voice*`/`ui`/`speakerGate` to their owners. `MicControlsView`: mute/wake/PTT (P12) + apply the three owned `ui` commands via `subscribe`. **Test:** §7.2, §8 V3 (a delegated run shows live in Agents).
+**Step 5 — The three stores + `AppMessageRouter` + `UICommandRouter` + `MicControlsView` behaviour (P8, P12, P14, P15).** Write `AgentRunStore` (reducer ported verbatim from `agentRuns.ts:276-392` — §7.2 pins it), `DisplayResultStore`, `ConversationStore` (subscribes to `client.$transcript`). `AppMessageRouter`: one `Task { for await m in client.messageStream() { dispatch(m) } }` started at app scope, dispatching `agent*`→`AgentRunStore`, `display`→router-by-surface (P14), leaving `voice*`/`ui`/`speakerGate` to their owners. `UICommandRouter`: a second `messageStream()` consumer, app-scope, filtering `type == "ui"`; dispatches the eight non-MicControls actions per P15's table, each through the exact setter its own button calls (review F2). `MicControlsView`: mute/wake/PTT (P12) + apply the three owned `ui` commands (`mic_mute`/`wake_on`/`wake_off`) via `subscribe`. **Test:** §7.2, §7.3 (`UICommandRouter` dispatch table, one case per `UI_ACTIONS` entry), §8 V3 (a delegated run shows live in Agents).
 
-**Step 6 — Repo tab (P2, P6, P7).** Add `GitStatus`/`GitDraft`/`GitActionResult` + methods to `AdminAPI` (§3 P2 verbatim). `RepoViewModel`: poll `gitStatusTyped` every `httpPollSeconds`; render branch/clean/ahead/behind + `changedFiles` list. Commit row: text field → `prepareCommit` → show `GitDraft.summary` + "Confirm commit" → `commit(actionId:)` → re-poll. Push: `preparePush` → "Confirm push" → `push(actionId:)`. `DrawerView` tab strip (P15). **Test:** §7.1 (decode `GitStatus`), §7.3 (states), §8 V4.
+**Step 6 — Repo tab (P2, P6, P7).** Add `GitStatus`/`GitDraft`/`GitActionResult` + methods to `AdminAPI` (§3 P2 verbatim). `RepoViewModel`: poll `gitStatusTyped` every `repoPollSeconds` (15 s, review F5 — not the Edit tab's 3 s); render branch/clean/ahead/behind + `changedFiles` list. Commit row: text field → `prepareCommit` → show `GitDraft.summary` + "Confirm commit" → `commit(actionId:)` → re-poll. Push: `preparePush` → "Confirm push" → `push(actionId:)`. `DrawerView` tab strip (P15). **Test:** §7.1 (decode `GitStatus`), §7.4 (states), §8 V4.
 
 **Step 7 — Edit tab (P3).** Add `SelfEditModel(s)`/`SelfEditStatus`/`SelfEditProposal` + `selfeditValidate`/`selfeditSubmit`/`selfeditRevert`. `EditViewModel`: poll `selfeditStatus`; on `error != nil` show error state; else render active/branch/goal + a proposals list (`path` + collapsible `diff`) + `validatedOk`. Model picker from `selfeditModels`. Buttons: run (`selfeditRun`, existing), validate, submit, revert — each re-polls. **Test:** §7.1 (decode both `SelfEditStatus` shapes), §8 V4.
 
-**Step 8 — Memory tab (P4).** Add the memory/knowledge structs. `MemoryViewModel`: poll `memoryOverview` + `memoryReviewsTyped` + `knowledgeTyped`. Render: fact cards (key/content/tier/audience), the review queue (each with the kind-appropriate resolve actions → `resolveReview`), a per-fact delete (`deleteFact`, with a confirm), and the knowledge readout with `notReachingPrompt` as the loud line (P4). **Test:** §7.1, §8 V4.
+**Step 8 — Memory tab (P4).** Add the memory/knowledge structs. `MemoryViewModel`: poll `memoryOverview` + `memoryReviewsTyped` + `knowledgeTyped` every `memoryPollSeconds` (15 s, review F5). Render: fact cards (key/content/tier/audience), the review queue (each with the kind-appropriate resolve actions → `resolveReview`), a per-fact delete (`deleteFact`, with a confirm), and the knowledge readout with `notReachingPrompt` as the loud line (P4). **Test:** §7.1, §8 V4.
 
-**Step 9 — Runs tab (P5).** Add `RunsList`/`RunSummary`/`RunDetail`/`RunEvent`. `RunsViewModel`: poll `runsTyped`; list rows (agent, task, status colour, latency); tapping a row loads `runTyped(id:)` and shows events (`type`/`tool`/`ok`/`latencyMs`) + the JSONL payload count. Satellite-click filter (P13) pre-selects an agent. **Test:** §7.1 (decode `RunDetail`, incl. `RunEvent.ok` as `Int?`), §8 V4.
+**Step 9 — Runs tab (P5).** Add `RunsList`/`RunSummary`/`RunDetail`/`RunEvent`. `RunsViewModel`: poll `runsTyped` every `runsPollSeconds` (5 s — new live-poll behavior, not web parity; the web's Runs panel has no periodic poll today, review F5); list rows (agent, task, status colour, latency, a model chip showing `model ?? "—"`, and a `toolsOk`/`toolsFailed` readout formatted `"\(ok)/\(failed)"` when both are non-nil, falling back to `toolCount` when either is nil — mirroring the web's exact fallback, review F3); tapping a row loads `runTyped(id:)` and shows events (`type`/`tool`/`ok`/`latencyMs`) + the JSONL payload count. Satellite-click filter (P13) pre-selects an agent. **Test:** §7.1 (decode `RunDetail`, incl. `RunEvent.ok` as `Int?`, and `RunSummary.model`/`toolsOk`/`toolsFailed` as optional), §8 V4.
 
 **Step 10 — Agents tab (P8).** `AgentsView` reads `AgentRunStore.runs` (newest first, `maxAgentRuns`); render the card (name, model chip with fallback/unusable colour, planner chip, task, activity ticker, stages, detail on failure) — the SwiftUI form of `AgentsTab.tsx`. **Test:** §8 V3.
 
@@ -453,12 +497,16 @@ Every file touched in §5 appears here; nothing here is absent from §5. **Delet
 
 | Constant | Default | Meaning | Override |
 |---|---|---|---|
-| `httpPollSeconds` | 3.0 | HTTP tab poll interval (matches web's 3 s, `EditModePanel` council poll) | `UserDefaults` `JARVIS_HTTP_POLL_SECONDS` |
+| `editRunPollSeconds` | 3.0 | Edit tab active-run poll interval (`EditModePanel.tsx:258,430,502`, `setInterval(...,3000)`) | `UserDefaults` `JARVIS_EDIT_POLL_SECONDS` |
+| `repoPollSeconds` | 15.0 | Repo tab poll interval (`GitPanel.tsx:40`, `setInterval(refresh,15000)` — review F5, NOT 3 s) | `UserDefaults` `JARVIS_REPO_POLL_SECONDS` |
+| `memoryPollSeconds` | 15.0 | Memory tab poll interval (`MemoryPanel.tsx:116`, `setInterval(refresh,15000)` — review F5, NOT 3 s) | `UserDefaults` `JARVIS_MEMORY_POLL_SECONDS` |
+| `runsPollSeconds` | 5.0 | Runs tab poll interval — **new behavior, not web parity** (`RunsPanel.tsx` has zero `setInterval` calls today, fetch-once-on-mount only; review F5). Chosen so the native Runs tab live-updates while open, matching the always-live feel of the Agents tab, at a slower cadence than the Edit tab's active-run poll since Runs has no "in progress" urgency signal | `UserDefaults` `JARVIS_RUNS_POLL_SECONDS` |
 | `maxAgentRuns` | 20 | Agents tab run cap (`agentRuns.ts:79`) | compile-time |
 | `maxActivity` | 50 | ticker lines per run (`agentRuns.ts:61`) | compile-time |
 | `maxTools` | 10 | tool chips per run (`agentRuns.ts:54`) | compile-time |
 | `doneFadeSeconds` | 8.0 | non-self-edit success fade (`agentRuns.ts:53`) | compile-time |
-| `maxDisplayResults` | 6 | Output tab cap (`MAX_OPEN_DISPLAY_PANELS`) | compile-time |
+| `maxDisplayResults` | 20 | Output tab cap, i.e. `DisplayResultStore` (`displayResults.ts:61`, `MAX_DISPLAY_RESULTS = 20` — review F4, corrected from the wrong store's constant) | compile-time |
+| `maxDisplayWindowPanels` | 15 | Display window panel cap, i.e. `DisplayWindowStore` (`displayWindow.ts:75`, `MAX_OPEN_DISPLAY_PANELS = 15` — review F4, this is a distinct store from `maxDisplayResults` per P8/P14's `.window` vs `.drawer` split, and previously had no knob at all) | compile-time |
 | `maxConversationEntries` | 200 | Log cap (`conversationFeed.ts:36`) | compile-time |
 | `drawerDefaultWidth` | 400 | drawer width (`SideDrawer.tsx:70`) | `UserDefaults` `JARVIS_DRAWER_WIDTH` |
 | `displaySplitLeftFraction` | 0.60 | two-panel extended-screen split (DP8, CORE §1.4) | compile-time |
@@ -495,7 +543,22 @@ Ports the `agentRuns.ts` behaviour that has no equivalent web test but is load-b
 | `testNonSelfEditReplaces` | two `agentWorking` for the same non-self-edit agent | one card (replace, `agentRuns.ts:258`) |
 | `testDoneSetsOkAndDetail` | `agentWorking`, `agentDone(ok:false,detail:)` | `doneAt` set, `ok == false`, `detail` clamped |
 
-### 7.3 `TabStateTests.swift` (MortimerHost)
+### 7.3 `UICommandRouterTests.swift` (MortimerHost) — review F2
+One test per non-MicControls `UI_ACTIONS` entry (P15's table), each asserting the named setter was called with the right argument and no other setter fired:
+| Test | Input `ui` `AppMessage` | Expected |
+|---|---|---|
+| `testDrawerTabSwitchesActiveTab` | `action: "drawer_tab", tab: "runs"` | `DrawerScene` active tab becomes `"runs"` |
+| `testDrawerOpenOpensAndSetsTab` | `action: "drawer_open", tab: "memory"` | drawer window opens (if closed); active tab becomes `"memory"` |
+| `testDrawerOpenWithNoTabJustOpens` | `action: "drawer_open"` (no `tab`) | drawer window opens; active tab unchanged |
+| `testDrawerCloseDismissesWindow` | `action: "drawer_close"` | `dismissWindow(id: "drawer")` called |
+| `testDrawerPopoutCallsWindowPlacement` | `action: "drawer_popout"` | `WindowPlacement.popOutDrawer()` called |
+| `testDrawerPopinRedocks` | `action: "drawer_popin"` | drawer re-docks to console (inverse of pop-out) |
+| `testDisplayPopoutOpensDisplay` | `action: "display_popout"` | `WindowPlacement.openDisplay()` called |
+| `testDisplayCloseDismissesWindow` | `action: "display_close"` | `dismissWindow(id: "display")` called |
+| `testOverlayDismissClearsPanel` | `action: "overlay_dismiss"` | `ConsoleView`'s overlay-visibility setter set to `false` |
+| `testMicActionsNotDoubleHandled` | `action: "mic_mute"` | `UICommandRouter` does NOT call any setter — `MicControlsView`'s own `subscribe` owns this action exclusively (no double-dispatch) |
+
+### 7.4 `TabStateTests.swift` (MortimerHost)
 | Test | Input | Expected `TabState` |
 |---|---|---|
 | `testThrowMapsToError` | a thrown `JarvisError.http(500,"x")` | `.error` |
@@ -506,6 +569,7 @@ Ports the `agentRuns.ts` behaviour that has no equivalent web test but is load-b
 ## §8 Verification Larry runs on his hardware
 (The sandbox lacks Xcode, a Mac, Keychain, mic, and network to the bot.)
 
+- **V(-1) — confirm auth state before anything else (review F1).** `MORTIMER_NATIVE_CLIENT_APP_PLAN.md` and `MORTIMER_REMOTE_ACCESS_PLAN.md` (T2) both land in wave W1 with **no ordering guarantee between them** (roadmap §5: "T1.1 spike → T1.2 `JarvisKit` → T1.3 macOS app; T2 auth + tunnel" — same row, T2 "runs beside T1"). REMOTE's `JARVIS_AUTH_ENABLED` defaults to `true` the moment its code is running, so every `/api/*` call in V0/V2/V4 below fails with 401 (`{"ok": false, "error": "unauthorized..."}`) unless a token has been minted and stored. Run `curl -s -o /dev/null -w '%{http_code}' localhost:7861/api/git/status` first. If it returns `401`: run REMOTE's token-mint CLI (`python -m jarvis.auth add`, per `MORTIMER_REMOTE_ACCESS_PLAN.md` §5 Step 0) and store the resulting token via `MortimerHost`'s Debug menu (`KeychainStore`, CORE §3) before proceeding to V0. If it returns `200`, REMOTE has not landed yet (or auth is off) and V0–V6 proceed unmodified. **A fresh `MortimerHost` launch showing `.error("Token required — set it in the Debug menu")` (the `testUnauthorizedNoRetry` state, §7.4) on first connect is expected behavior once REMOTE has landed and no token is stored yet — not a defect** — mint and store the token, then retry V2.
 - **V0 — capture fixtures.** With `./scripts/mortimer.sh start` running, `curl -s localhost:7861/api/git/status`, `/api/selfedit/models`, `/api/selfedit/status`, `/api/memory`, `/api/memory/reviews`, `/api/knowledge`, `/api/runs`, and `/api/runs/$(curl -s localhost:7861/api/runs | python3 -c 'import sys,json;print(json.load(sys.stdin)["runs"][0]["run_id"])')` into `macos/JarvisKit/Tests/JarvisKitTests/fixtures/`. Plus a hand-trimmed busy-status fixture (`{"ok":false,"error":"an upgrade run is in progress"}`).
 - **V1 — build + unit tests.** `cd macos/JarvisKit && swift test` and `cd macos/MortimerHost && swift test` both green (§7).
 - **V2 — connect and talk.** Launch `MortimerHost`; the console window shows the wave; connect; hold-to-talk; the bot replies (proves JarvisKit still works under the new views).
@@ -544,7 +608,7 @@ Ports the `agentRuns.ts` behaviour that has no equivalent web test but is load-b
 6. **Initialization timing.** The single `AppMessageRouter` `Task` starts at app scope (step 5), before any tab view exists, so no message is missed while a tab is unmounted (the store is always alive, the view is not). Poll tasks start on tab appear, cancel on disappear (P6).
 7. **Signatures agree; every schema column populated; every value derivable.** Every `agent_runs`/`agent_events` column maps to a `RunSummary`/`RunEvent` field (P5); every `memory`/`knowledge` sub-field maps (P4). The additive `AdminAPI` method signatures (§4, §5) match their P2-P5 request bodies. `VoiceState` is derivable from `state` + `botIsSpeaking` (P13, both published by CORE's `JarvisClient`).
 8. **Judgment removed.** No "use your judgment": the four-state mapping is a deterministic rule (P7); the display-surface split is `payload.surface` with a specified default (P14); T1.0-not-signed and shape-drift are stop-and-report / degrade-to-error branches (§0.4, R-A2).
-9. **Plan drift.** Every file in §5 is in §4's manifest and vice versa; the delete section is deliberately empty (T1.4 owns it). The additive `AdminAPI` structs/methods are declared as INTRODUCES in the header and appear in both §3 and §4. No section says "X exists" that another says "write X".
+9. **Plan drift.** Every file in §5 is in §4's manifest and vice versa; the delete section is deliberately empty (T1.4 owns it). The additive `AdminAPI` structs/methods are declared as INTRODUCES in the header and appear in both §3 and §4. No section says "X exists" that another says "write X". **Re-walked post-revision:** `UICommandRouter.swift` (F2) and `UICommandRouterTests.swift` appear in §4's manifest, are assigned to Step 5, and Step 5's text references them — no orphan. `RunSummary`'s three new fields (F3) are declared once in §3 P5 and consumed once in §5 Step 9's rendering description — no duplicate/conflicting statement of the Runs-tab row layout elsewhere in the plan.
 
 ## §12 Approval checklist
 - [ ] Larry confirms **T1.0 (Liquid Glass design review) has signed off** — this plan's hard precondition (§0.4, §1.0).
