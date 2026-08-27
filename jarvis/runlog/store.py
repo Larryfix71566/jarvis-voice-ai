@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from jarvis.db import get_conn, now_iso
-from jarvis.sensitive import detect_financial  # stdlib-only; no jarvis.bot cycle
+from jarvis.sensitive import detect_financial  # stdlib-only; no bot-package import cycle
 
 logger = logging.getLogger(__name__)
 
