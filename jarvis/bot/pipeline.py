@@ -45,6 +45,7 @@ from jarvis.bot.research_watcher import ResearchWatcher
 from jarvis.bot.progress_watcher import ProgressWatcher, SpeakingStateTracker
 from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.remember_tool import build_remember_tool
+from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.ui_control import build_ui_control_tool
 from jarvis.bot.handoff_tools import (
@@ -137,6 +138,11 @@ class Runtime:
     # actually received — a dropped speaker's words must not reach the
     # conversations table (the memory sweep folds it into memory).
     speaker_gate: Any = None
+    # T4a K3 — per-turn sensitive flag. Runtime OWNS the object's lifetime
+    # (constructed per session, dies with it); the ContextVar in
+    # jarvis/bot/sensitive_turn.py publishes a reference to THIS object and is
+    # the single access path (review F15). Never persisted.
+    sensitive_turn: SensitiveTurn = field(default_factory=SensitiveTurn)
 
 
 def bot_event_log(event: dict) -> None:
@@ -827,6 +833,11 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
     runtime = Runtime(settings=settings, registry=registry,
                       session_id=str(uuid.uuid4()))
     print(f"[session] {runtime.session_id}", flush=True)
+
+    # T4a K3 — publish the session's flag object into the context so
+    # delegated sub-agent tasks (jarvis/runlog/store.py) can read it. Set
+    # once per session; the object is mutated, never replaced.
+    current_sensitive_turn.set(runtime.sensitive_turn)
 
     try:
         catalog = load_voice_catalog()

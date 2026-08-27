@@ -40,6 +40,7 @@ from jarvis.workflows import match_workflow
 from jarvis.prompts import AGENT_DISCIPLINE, SUBAGENT_PROMPTS
 from jarvis.repo_map import REPO_MAP_MAX_CHARS, load_repo_map_suffix
 from jarvis.runlog import RunLogger, get_run_id, run_logger_scope
+from jarvis.bot.sensitive_turn import is_sensitive
 from jarvis.toolresult import classify_tool_result
 
 logger = logging.getLogger(__name__)
@@ -450,6 +451,7 @@ class SubAgent:
             # the OVERRIDE-resolved model when one was requested, never
             # self._model — the run log must record what actually ran.
             model=run_model,
+            sensitive=is_sensitive(),   # T4a K3 snapshot (review F6)
         )
         runlog.start()
         try:

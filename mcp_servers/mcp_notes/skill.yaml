@@ -4,6 +4,16 @@ version: 1.0.0
 class: standard
 tools: [create_note, list_notes, search_notes, get_note, update_note, delete_note, search_sessions]
 requires_env: []
+# T4a K3 (deviation logged during implementation, 2026-08-27): Step 8's
+# financial gate calls jarvis.sensitive.detect_financial, which transitively
+# reads JARVIS_SENSITIVE_GUARD_ENABLED via guard_enabled() — not caught by
+# test_no_server_reads_an_undeclared_var (local-package-only, deliberately
+# does not follow jarvis.* imports, R-H1) but real: without this declaration
+# K2 scoping would silently strip the kill switch from this subprocess only,
+# leaving the guard permanently ON here regardless of the operator's setting
+# (fail-safe, but an inconsistent, undocumented dead knob). Has a code
+# default (enabled) — optional_env, not requires_env.
+optional_env: [JARVIS_SENSITIVE_GUARD_ENABLED]
 requires_keychain: []
 scopes: []
 test: "python3 -m pytest tests/unit/test_mcp_notes_logic.py -q"

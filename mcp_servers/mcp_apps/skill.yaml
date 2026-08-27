@@ -4,7 +4,12 @@ version: 0.1.0
 class: privileged
 tools: [app_create, app_write_file, app_register, app_list, app_read,
         app_build_start, app_build_status, app_build_submit]
-requires_env: [GITHUB_TOKEN]
+# github.py:29 GITHUB_TOKEN, github.py:30 GITHUB_OWNER (both required).
+requires_env: [GITHUB_TOKEN, GITHUB_OWNER]
+# logic.py:33 JARVIS_REGISTRY_REPO (default "jarvis-voice-ai"),
+# logic.py:37 JARVIS_REGISTRY_BRANCH (default "mortimer-dev") — forwarded if
+# present, never required (they have code defaults).
+optional_env: [JARVIS_REGISTRY_REPO, JARVIS_REGISTRY_BRANCH]
 requires_keychain: []
 scopes: []
 test: "python3 -m pytest tests/unit/test_mcp_apps_logic.py -q"

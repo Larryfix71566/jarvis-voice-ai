@@ -14,6 +14,7 @@ import time
 import uuid
 
 from jarvis.agents.supervisor import Orchestrator
+from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.config import bridge_settings_to_env, load_settings
 from jarvis.logging_config import setup_logging
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry
@@ -34,6 +35,11 @@ async def main() -> None:
     settings = load_settings()
     setup_logging(settings.jarvis_log_level)
     bridge_settings_to_env(settings)
+
+    # T4a K3 — the text path has no pipeline; wire the flag here so
+    # Orchestrator.chat's P4/P5 guards (and any delegated RunLogger snapshot)
+    # see a real holder. Set once, before the read loop (review F4).
+    current_sensitive_turn.set(SensitiveTurn())
 
     registry = SkillRegistry(REPO_ROOT / "config" / "mcp_servers.yaml")
     print("Starting skill servers…")

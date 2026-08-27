@@ -30,6 +30,7 @@ from openai import AsyncOpenAI
 
 from jarvis.config import Settings
 from jarvis.db import get_conn, now_iso
+from jarvis.sensitive import detect_financial
 
 logger = logging.getLogger(__name__)
 
@@ -298,10 +299,18 @@ def _is_capability_claim(key: str, value: str) -> bool:
     return any(p.search(value_l) for p in _LIMITATION_PATTERNS)
 
 
+# T4a K3 — the memory gate's financial refusal. This is a LOG/DIAGNOSTIC
+# reason in the style of the _CREDENTIAL_PATTERNS reasons above, not spoken
+# copy: jarvis/bot/remember_tool.py:19-22 (D8) forbids surfacing a scan
+# rejection reason to the LLM, which would otherwise rewrite the content to
+# evade the filter. T4b replaces the refusal with a route to the tier.
+FINANCIAL_REJECTION = "financial detail — not stored (sensitive tier not yet enabled)"
+
+
 def scan_memory_content(text: str) -> str | None:
     """Return a short rejection reason if `text` is unsafe to persist as
-    memory (prompt injection, credential/exfiltration pattern, or invisible
-    Unicode), else None. Pure and total — never raises."""
+    memory (prompt injection, credential/exfiltration pattern, financial
+    detail, or invisible Unicode), else None. Pure and total — never raises."""
     if not text:
         return None
     if any(ch in _DANGEROUS_UNICODE for ch in text):
@@ -309,6 +318,8 @@ def scan_memory_content(text: str) -> str | None:
     for pattern, reason in _CREDENTIAL_PATTERNS:
         if pattern.search(text):
             return reason
+    if detect_financial(text) is not None:
+        return FINANCIAL_REJECTION
     lowered = text.lower()
     for pattern, reason in _INJECTION_PATTERNS:
         if pattern.search(lowered):

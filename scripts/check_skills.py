@@ -6,6 +6,8 @@ Validates:
   - every skill dir has a skill.yaml with the required keys and a valid class
   - manifest tools match the @mcp.tool functions in the skill's server.py
   - manifest requires_env entries are set (environment or .env)
+  - manifest optional_env entries are forwarded if present, never required
+  - manifest requires_env_dynamic sources are recognised (K2, registry._DYNAMIC_SOURCES)
   - optionally (--run-tests): each manifest's test command passes
 
 Exit 0 and prints "SKILLS OK" when clean; exit 1 with a list of errors otherwise.
@@ -52,6 +54,16 @@ def declared_tools(server_py: Path) -> list[str]:
 
 def validate(root: Path, run_tests: bool = False) -> list[str]:
     errors: list[str] = []
+
+    # K2 (MORTIMER_SECURITY_HARDENING_PLAN.md Step 1d): registry._DYNAMIC_SOURCES
+    # is the closed set of recognised requires_env_dynamic sources. Guarded
+    # import — Step 2 of that plan is what actually defines it; until then
+    # this stays None and the requires_env_dynamic check below is a no-op.
+    try:
+        sys.path.insert(0, str(root))
+        from jarvis.skills.registry import _DYNAMIC_SOURCES
+    except (ImportError, AttributeError):
+        _DYNAMIC_SOURCES = None
     agents_path = root / "config" / "agents.yaml"
     agents = yaml.safe_load(agents_path.read_text(encoding="utf-8"))
     referenced = {
@@ -102,6 +114,29 @@ def validate(root: Path, run_tests: bool = False) -> list[str]:
         for var in m["requires_env"]:
             if not env.get(var):
                 errors.append(f"{dirname}: requires_env {var} is not set")
+
+        # optional_env (K2): forwarded to the child if present, never
+        # required — no presence check, just a type sanity check so a typo
+        # (a bare string instead of a list) fails loudly here instead of
+        # silently at spawn time.
+        optional_env = m.get("optional_env", [])
+        if not isinstance(optional_env, list):
+            errors.append(f"{dirname}: optional_env must be a list")
+
+        # requires_env_dynamic (K2, review F16): a variable whose NAME is
+        # chosen at runtime (e.g. mcp-screen's vision API key). The source
+        # naming it must be one registry.py actually knows how to resolve —
+        # an unrecognised source is a hard error HERE, at check time, not a
+        # crash the first time the server spawns. Guarded: registry.py only
+        # gains _DYNAMIC_SOURCES in Step 2 of this plan, so until then this
+        # pass is a no-op rather than a crash.
+        for dyn in m.get("requires_env_dynamic", []):
+            source = dyn.get("source") if isinstance(dyn, dict) else dyn
+            if _DYNAMIC_SOURCES is not None and source not in _DYNAMIC_SOURCES:
+                errors.append(
+                    f"{dirname}: requires_env_dynamic source {source!r} is not "
+                    f"a recognised dynamic source (registry._DYNAMIC_SOURCES)"
+                )
 
         if run_tests:
             proc = subprocess.run(
