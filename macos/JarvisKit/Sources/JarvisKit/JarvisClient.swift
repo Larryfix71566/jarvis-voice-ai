@@ -100,7 +100,15 @@ public final class JarvisClient: ObservableObject {
         }
     }
 
-    @discardableResult
+    /// Deliberately NOT @discardableResult, deviating from plan §5 step
+    /// 7's quoted declaration. The returned JarvisSubscription
+    /// unsubscribes on deinit (review F5), so a caller that ignores the
+    /// result gets a handler that unsubscribes before it ever fires — a
+    /// silent no-op that compiled cleanly and shipped as a bug in this
+    /// package's own test suite until the first real `swift test` run.
+    /// Without the annotation the compiler flags every discarded token
+    /// at the call site; no correct caller is affected (a correct caller
+    /// must store the token for the handler to live at all).
     public func subscribe(_ handler: @escaping @MainActor (AppMessage) -> Void) -> JarvisSubscription {
         let token = UUID()
         handlers[token] = handler

@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
@@ -15,19 +15,28 @@ let package = Package(
     targets: [
         .target(
             name: "JarvisKit",
-            dependencies: [.product(name: "WebRTC", package: "WebRTC")]
-            // Swift 5 language mode (tools 6.0 default). NOT .swiftLanguageMode(.v6):
-            // review F5 — the implementer cannot compile here (§0.3), and strict
-            // concurrency under .v6 would force design decisions this plan does not
-            // contain (a non-isolated deinit calling a @MainActor method; Sendable
-            // on protocols whose conformers hold RTCPeerConnection). The package
-            // builds with concurrency *warnings*, not errors. A later plan that can
-            // compile may adopt .v6 and resolve them; that is not this plan's risk.
+            dependencies: [.product(name: "WebRTC", package: "WebRTC")],
+            // Swift 5 language mode, stated EXPLICITLY. Tools version 6.2 is
+            // required for the .v26 platform literals above, and 6.x defaults
+            // the language mode to .v6 — so this setting is not a no-op, it is
+            // the thing keeping review F5 true.
+            //
+            // Review F5: strict concurrency under .v6 turns three unavoidable
+            // situations into errors the implementer would have to design
+            // around — a non-isolated `deinit` touching @MainActor state; a
+            // `var delegate` requirement on a protocol whose conformer holds
+            // non-Sendable RTCPeerConnection/RTCDataChannel; and passing that
+            // conformer across an actor boundary in connect()/disconnect().
+            // Swift 5 mode reduces all three to warnings, so the declarations
+            // this package was written against compile as written. A later
+            // plan that can compile may adopt .v6 and resolve them properly.
+            swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
             name: "JarvisKitTests",
             dependencies: ["JarvisKit"],
-            resources: [.copy("Fixtures")]
+            resources: [.copy("Fixtures")],
+            swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]
 )

@@ -51,7 +51,11 @@ public enum AudioSession {
 /// Pure threshold + hold-off state machine, deliberately independent of
 /// any WebRTC type so it is unit-testable with a synthetic RMS sequence
 /// (§7.5 testSpeakingHoldOffSuppressesInterWordGaps) without a real
-/// RTCAudioBuffer. `observe` returns whether THIS call flipped the gate.
+/// audio buffer. `observe` returns whether THIS call flipped the gate.
+///
+/// Currently UNDRIVEN — see the note below on why no audio source in
+/// this WebRTC build can feed it. Kept because it is the half that does
+/// not depend on the mechanism.
 final class SpeakingGate {
     private(set) var isSpeaking = false
     private var lastAboveThresholdAt: Date = .distantPast
@@ -75,50 +79,47 @@ final class SpeakingGate {
     }
 }
 
-/// botIsSpeaking — ONE mechanism for both platforms (review F12).
-/// RTCAudioSession is iOS-only and unavailable on macOS (this plan's
-/// primary platform), so instead: register on the remote RTCAudioTrack
-/// and compute RMS over each delivered RTCAudioBuffer. Reports `true`
-/// when RMS exceeds JarvisTuning.speakingLevelThreshold and `false` only
-/// after it has stayed below for JarvisTuning.speakingReleaseMS — a
-/// hold-off longer than inter-word gaps so a bound view does not strobe.
-///
-/// If the renderer API proves unavailable on macOS 26 at build time, the
-/// call site (DirectWebRTCTransport.attachSpeakingDetector) simply never
-/// attaches one and botIsSpeaking degrades to always-false with a logged
-/// "botIsSpeaking_unavailable" — the wake-pause rule already falls back
-/// to "listener runs only while muted" (N10 rule 1), which holds
-/// regardless.
-final class BotSpeakingDetector: NSObject, RTCAudioRenderer {
-    private let onChange: (Bool) -> Void
-    private let gate = SpeakingGate()
-    private let lock = NSLock()
-
-    init(onChange: @escaping (Bool) -> Void) {
-        self.onChange = onChange
-    }
-
-    /// Called on a non-main audio thread for every delivered buffer.
-    func renderSample(_ audioBuffer: RTCAudioBuffer) {
-        let rms = Self.rms(of: audioBuffer)
-        lock.lock()
-        let changed = gate.observe(rms: rms)
-        let speaking = gate.isSpeaking
-        lock.unlock()
-        if changed { onChange(speaking) }
-    }
-
-    private static func rms(of buffer: RTCAudioBuffer) -> Double {
-        guard buffer.channels > 0, buffer.frames > 0 else { return 0 }
-        // First channel is sufficient for a speaking/not-speaking gate —
-        // this bot's remote track is mono.
-        let raw = buffer.rawBuffer(forChannel: 0)
-        var sumSquares: Double = 0
-        let frameCount = Int(buffer.frames)
-        for i in 0..<frameCount {
-            let sample = Double(raw[i])
-            sumSquares += sample * sample
-        }
-        return (sumSquares / Double(frameCount)).squareRoot()
-    }
-}
+// MARK: - botIsSpeaking: DEGRADED on this WebRTC build (plan §5 step 8)
+//
+// The plan's chosen mechanism (review F12) was: register an audio
+// renderer on the remote RTCAudioTrack and compute RMS over each
+// delivered buffer. **That API does not exist in this dependency.**
+// Verified against the resolved framework headers at
+// .build/…/WebRTC.framework/Headers on 2026-08-28:
+//
+//   - RTCAudioTrack.h declares exactly one member, `source`; it inherits
+//     only kind/trackId/isEnabled/readyState from RTCMediaStreamTrack.
+//     There is no addRenderer:/removeRenderer:.
+//   - `grep -rn -i renderer` across every header matches ONLY
+//     RTCVideoRenderer / RTCVideoTrack / RTCMTLNSVideoView. There is no
+//     RTCAudioRenderer and no RTCAudioBuffer anywhere in M120.
+//
+// (Those symbols exist in newer libwebrtc branches, which is where the
+// plan's spec came from — they are not reachable from stasel/WebRTC
+// 120.0.0, the Branch B dependency this package actually resolves.)
+//
+// The plan anticipated exactly this and wrote the degradation itself,
+// so this is the documented path, NOT an improvised substitute (§0.7
+// forbids inventing one):
+//
+//   "if the renderer API proves unavailable on macOS 26, it degrades to
+//    always-false with a logged botIsSpeaking_unavailable, and the
+//    wake-pause falls back to 'listener runs only while muted'
+//    (N10 rule 1), which is already true."
+//
+// So: no detector is attached, `botIsSpeaking` stays false for the whole
+// session, and the transport logs `botIsSpeaking_unavailable` once per
+// connect. What this costs, stated plainly rather than buried:
+//   - MortimerHost's speaking label never lights. Cosmetic.
+//   - N10 rule 4 (pause the wake listener while the bot speaks) cannot
+//     fire. Rule 1 still holds — the listener only runs while connected
+//     AND muted — but the wake tap is not echo-cancelled, so while muted
+//     with the wake word on, the sidecar can score Mortimer's own TTS
+//     and self-trigger. §8 V8 is where that shows up if it is real.
+//   - G1(b) does not depend on botIsSpeaking, so this does not gate it.
+//
+// SpeakingGate below is kept, intact and unit-tested (§7.5), because it
+// is the mechanism-independent half: whatever future source supplies an
+// audio level (a newer WebRTC with the renderer API, or an
+// RTCStatisticsReport `audioLevel` poll — a design decision for T1.3 or
+// its own plan, deliberately not made here), it plugs straight in.

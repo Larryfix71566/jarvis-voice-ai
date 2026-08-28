@@ -33,7 +33,9 @@ extension AppMessage: CustomDebugStringConvertible {
         case .ui(let c): return "ui(action: \(c.action), tab: \(c.tab ?? "-"))"
         case .voiceCatalog(let c): return "voiceCatalog(\(c.voices.count) voices, current: \(c.current ?? "-"))"
         case .voiceCurrent(let v): return "voiceCurrent(\(v))"
-        case .speakerGate(let g): return "speakerGate(verdict: \(g.verdict), score: \(g.score.map(String.init) ?? "nil"))"
+        // String.init is ambiguous against Double? here (many overloads);
+        // the explicit closure picks String(Double) and compiles.
+        case .speakerGate(let g): return "speakerGate(verdict: \(g.verdict), score: \(g.score.map { String($0) } ?? "nil"))"
         case .capability(let agents): return "capability(\(agents.count) agents)"
         case .unknown(let type, _): return "unknown(type: \(type))"
         }

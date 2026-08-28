@@ -241,7 +241,9 @@ final class ChimePlayer {
 
     func play() {
         let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
-        for tone in JarvisTuning.chimeTones {
+        // One player node per tone; the tones themselves are scheduled
+        // in the second loop below, which needs the node/tone pairing.
+        for _ in JarvisTuning.chimeTones {
             let node = AVAudioPlayerNode()
             engine.attach(node)
             engine.connect(node, to: engine.mainMixerNode, format: format)

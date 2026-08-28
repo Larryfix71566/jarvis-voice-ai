@@ -94,8 +94,9 @@ public enum JarvisTuning {
     /// messageStream() buffering (.bufferingNewest, review F9) — a stream
     /// nobody drains drops oldest, not leaks.
     public static let messageStreamBuffer: Int = 200
-    /// Above the noise floor of a silent Opus stream (RMS over
-    /// RTCAudioBuffer, §5 step 8).
+    /// Above the noise floor of a silent Opus stream (RMS, §5 step 8).
+    /// Consumed by SpeakingGate, which is currently undriven — see the
+    /// botIsSpeaking note in AudioSession.swift.
     public static let speakingLevelThreshold: Double = 0.01
     /// Longer than inter-word gaps, shorter than a turn boundary.
     public static let speakingReleaseMS: Int = 400

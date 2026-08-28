@@ -16,6 +16,17 @@ final class UICommandOwnershipTests: XCTestCase {
         return (client, stub)
     }
 
+    /// The last outbound frame, decoded. Fails the test with a clear
+    /// message if no frame was sent at all — the `try?`/`?? Data()`
+    /// version this replaced could only report a confusing nil mismatch.
+    private func lastFrameObject(_ stub: StubTransport) throws -> [String: Any] {
+        let frame = try XCTUnwrap(stub.sentFrames.last, "expected one outbound frame, got none")
+        return try XCTUnwrap(
+            JSONSerialization.jsonObject(with: frame) as? [String: Any],
+            "outbound frame was not a JSON object"
+        )
+    }
+
     /// JarvisClient's transport-delegate conformance hops to @MainActor
     /// via an unstructured Task (review F5). Driving StubTransport
     /// synchronously needs to flush that Task before asserting on the
@@ -47,36 +58,33 @@ final class UICommandOwnershipTests: XCTestCase {
         XCTAssertTrue(stub.sentFrames.isEmpty)     // MicControls.tsx:100-104
     }
 
-    func testWakeOnWhenUnavailableSendsExactNoop() async {
+    func testWakeOnWhenUnavailableSendsExactNoop() async throws {
         let (client, stub) = makeClient()
         await client.connect()
         client.wakeWordAvailable = false
         await deliverUI(client, stub: stub, action: "wake_on")
-        let frame = try? XCTUnwrap(stub.sentFrames.last)
-        let obj = try? JSONSerialization.jsonObject(with: frame ?? Data()) as? [String: Any]
-        XCTAssertEqual(obj??["type"] as? String, "ui/noop")
-        XCTAssertEqual(obj??["reason"] as? String, "The wake word listener isn't available on this machine.")
+        let obj = try lastFrameObject(stub)
+        XCTAssertEqual(obj["type"] as? String, "ui/noop")
+        XCTAssertEqual(obj["reason"] as? String, "The wake word listener isn't available on this machine.")
     }
 
-    func testWakeOnWhenAlreadyOnSendsExactNoop() async {
+    func testWakeOnWhenAlreadyOnSendsExactNoop() async throws {
         let (client, stub) = makeClient()
         await client.connect()
         client.wakeWordAvailable = true
         client.wakeWordOn = true
         await deliverUI(client, stub: stub, action: "wake_on")
-        let frame = try? XCTUnwrap(stub.sentFrames.last)
-        let obj = try? JSONSerialization.jsonObject(with: frame ?? Data()) as? [String: Any]
-        XCTAssertEqual(obj??["reason"] as? String, "The wake word is already on.")
+        let obj = try lastFrameObject(stub)
+        XCTAssertEqual(obj["reason"] as? String, "The wake word is already on.")
     }
 
-    func testWakeOffWhenAlreadyOffSendsExactNoop() async {
+    func testWakeOffWhenAlreadyOffSendsExactNoop() async throws {
         let (client, stub) = makeClient()
         await client.connect()
         client.wakeWordOn = false
         await deliverUI(client, stub: stub, action: "wake_off")
-        let frame = try? XCTUnwrap(stub.sentFrames.last)
-        let obj = try? JSONSerialization.jsonObject(with: frame ?? Data()) as? [String: Any]
-        XCTAssertEqual(obj??["reason"] as? String, "The wake word is already off.")
+        let obj = try lastFrameObject(stub)
+        XCTAssertEqual(obj["reason"] as? String, "The wake word is already off.")
     }
 
     func testUnownedUIActionIsForwardedNotApplied() async {
@@ -84,12 +92,21 @@ final class UICommandOwnershipTests: XCTestCase {
         await client.connect()
         let before = client.micEnabled
         var received: AppMessage?
-        client.subscribe { message in received = message }
+        // The returned token MUST be held for the whole test. Dropping it
+        // deallocates the JarvisSubscription, whose deinit unsubscribes
+        // (review F5) — so a discarded subscription never fires, which is
+        // exactly what testSubscriptionDeinitUnsubscribes asserts on
+        // purpose. `subscribe` is @discardableResult per plan §5 step 7,
+        // so the compiler does NOT warn about this; see the note in that
+        // test about whether that annotation should survive.
+        let subscription = client.subscribe { message in received = message }
         await deliverUI(client, stub: stub, action: "drawer_popout")
-        guard case .ui(let cmd) = received else { return XCTFail("expected forwarded .ui") }
-        XCTAssertEqual(cmd.action, "drawer_popout")
-        XCTAssertEqual(client.micEnabled, before)   // client state unchanged (C5)
-        XCTAssertTrue(stub.sentFrames.isEmpty)      // no outbound frame
+        withExtendedLifetime(subscription) {
+            guard case .ui(let cmd) = received else { return XCTFail("expected forwarded .ui") }
+            XCTAssertEqual(cmd.action, "drawer_popout")
+            XCTAssertEqual(client.micEnabled, before)   // client state unchanged (C5)
+            XCTAssertTrue(stub.sentFrames.isEmpty)      // no outbound frame
+        }
     }
 
     func testSubscribeReturnsWorkingUnsubscribe() async {
@@ -103,6 +120,14 @@ final class UICommandOwnershipTests: XCTestCase {
         XCTAssertEqual(callCount, 1)
     }
 
+    /// F5's deinit-unsubscribe. `client.subscribe { … }` with the result
+    /// ignored unsubscribes instantly and the handler never fires — the
+    /// bug this very test file shipped with until the first real
+    /// `swift test` run caught it. RESOLVED (Larry, 2026-08-28):
+    /// `subscribe` is no longer @discardableResult — a K8 deviation from
+    /// plan §5 step 7's quoted declaration, documented at the
+    /// declaration in JarvisClient.swift — so a discarded token is now a
+    /// compile-time warning at every call site instead of a silent no-op.
     func testSubscriptionDeinitUnsubscribes() async {
         let (client, stub) = makeClient()
         await client.connect()
@@ -218,10 +243,13 @@ final class UICommandOwnershipTests: XCTestCase {
         XCTAssertEqual(firstTab, "t\(extra)")
     }
 
-    /// The hold-off itself lives in SpeakingGate (AudioSession.swift), a
-    /// pure state machine BotSpeakingDetector drives with real RMS values
-    /// computed over RTCAudioBuffer — deliberately factored out so it is
-    /// testable here with a synthetic RMS sequence and no WebRTC type.
+    /// The hold-off itself lives in SpeakingGate (AudioSession.swift),
+    /// deliberately factored out from any WebRTC type so it is testable
+    /// here with a synthetic RMS sequence. NOTE: nothing drives it in
+    /// this build — stasel/WebRTC 120.0.0 has no audio-renderer API, so
+    /// botIsSpeaking is degraded per plan §5 step 8. This test still
+    /// earns its place: it pins the hold-off semantics for whatever
+    /// audio source eventually feeds the gate.
     func testSpeakingHoldOffSuppressesInterWordGaps() {
         let gate = SpeakingGate()
         let t0 = Date()

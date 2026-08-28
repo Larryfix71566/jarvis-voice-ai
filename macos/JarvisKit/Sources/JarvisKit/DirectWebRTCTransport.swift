@@ -66,8 +66,9 @@ final class DirectWebRTCTransport: NSObject, RTVITransport {
     // Outbound queue while the channel is not yet open (step 13).
     private var outboundQueue: [Data] = []
 
-    // botIsSpeaking (step 8), delegated to a small RMS detector.
-    private var speakingDetector: BotSpeakingDetector?
+    // botIsSpeaking (step 8): unavailable on this dependency — see the
+    // extension at the bottom of this file. One log line per session.
+    private var loggedSpeakingUnavailable = false
 
     // debugAudioStats (§5 step 9) support.
     private(set) var sentBytesTotal: Int = 0
@@ -156,7 +157,7 @@ final class DirectWebRTCTransport: NSObject, RTVITransport {
         iceBatchWorkItem = nil
         storedPCID = nil
         outboundQueue.removeAll()
-        speakingDetector = nil
+        loggedSpeakingUnavailable = false
         config = nil
     }
 
@@ -328,7 +329,10 @@ extension DirectWebRTCTransport: RTCPeerConnectionDelegate {
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange stateChanged: RTCSignalingState) {}
 
     func peerConnection(_ peerConnection: RTCPeerConnection, didAdd stream: RTCMediaStream) {
-        attachSpeakingDetector(toFirstAudioTrackIn: stream)
+        // Where the plan attached the botIsSpeaking renderer. Unavailable
+        // on this dependency — see noteSpeakingDetectionUnavailable().
+        guard !stream.audioTracks.isEmpty else { return }
+        queue.async { [weak self] in self?.noteSpeakingDetectionUnavailable() }
     }
 
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove stream: RTCMediaStream) {}
@@ -369,10 +373,11 @@ extension DirectWebRTCTransport: RTCPeerConnectionDelegate {
     }
 
     // Unified-plan remote-track notification — where the bot's audio
-    // track arrives, so botIsSpeaking (step 8) can attach its detector.
+    // track arrives. This is the hook a future botIsSpeaking mechanism
+    // attaches to; nothing to attach on this dependency (step 8).
     func peerConnection(_ peerConnection: RTCPeerConnection, didStartReceivingOn transceiver: RTCRtpTransceiver) {
-        guard let track = transceiver.receiver.track as? RTCAudioTrack else { return }
-        queue.async { [weak self] in self?.attachSpeakingDetector(to: track) }
+        guard transceiver.receiver.track is RTCAudioTrack else { return }
+        queue.async { [weak self] in self?.noteSpeakingDetectionUnavailable() }
     }
 }
 
@@ -409,20 +414,18 @@ extension DirectWebRTCTransport: RTCDataChannelDelegate {
     }
 }
 
-// MARK: - botIsSpeaking (step 8)
+// MARK: - botIsSpeaking (step 8) — DEGRADED on this dependency
 
 extension DirectWebRTCTransport {
-    private func attachSpeakingDetector(toFirstAudioTrackIn stream: RTCMediaStream) {
-        guard let track = stream.audioTracks.first else { return }
-        attachSpeakingDetector(to: track)
-    }
-
-    private func attachSpeakingDetector(to track: RTCAudioTrack) {
-        guard speakingDetector == nil else { return }
-        let detector = BotSpeakingDetector { [weak self] speaking in
-            self?.delegate?.transport(botIsSpeaking: speaking)
-        }
-        track.add(detector)
-        speakingDetector = detector
+    /// The plan's mechanism (review F12) needed an audio-renderer API
+    /// that stasel/WebRTC 120.0.0 does not have — see the long note in
+    /// AudioSession.swift for the header evidence and what it costs.
+    /// This is the plan's own written degradation, not a substitute
+    /// mechanism: nothing is attached, `botIsSpeaking` stays false, and
+    /// we say so once per session rather than failing silently.
+    func noteSpeakingDetectionUnavailable() {
+        guard !loggedSpeakingUnavailable else { return }
+        loggedSpeakingUnavailable = true
+        transportLog.notice("botIsSpeaking_unavailable: no audio renderer API in this WebRTC build; botIsSpeaking stays false for this session")
     }
 }

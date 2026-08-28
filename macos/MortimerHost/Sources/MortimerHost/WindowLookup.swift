@@ -35,6 +35,12 @@ private let windowTitles: [HostWindowKind: String] = [
 /// Finds the live (visible) NSWindow for a given host window kind, or nil
 /// if none is currently open. Logs which matching rule succeeded (or that
 /// none did) at debug level.
+///
+/// @MainActor: NSApp/NSWindow are main-actor-isolated in the macOS 26
+/// SDK, and every caller (ScreenPlacement) is already on the main actor.
+/// The MortimerShell original predates that annotation appearing in the
+/// SDK; without it here, `swift build` emits eight isolation warnings.
+@MainActor
 func findHostWindow(kind: HostWindowKind) -> NSWindow? {
     let windows = NSApp.windows
 
