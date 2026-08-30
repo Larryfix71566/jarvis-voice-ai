@@ -1,51 +1,48 @@
 # MortimerHost
 
-The G1(b) harness — proves `JarvisKit` holds a live voice session against
-the unchanged bot, with barge-in working. Deliberately ugly: one window,
-default system materials, no styling. This is not the T1.3 product app;
-see `macos/README.md` for how the packages under `macos/` relate.
+**As of T1.3 (`MORTIMER_NATIVE_CLIENT_APP_PLAN.md`) this is the real
+native Mortimer app** — the three-window SwiftUI view port over
+`JarvisKit`: the console (voice wave, orb field, mic controls, topbar),
+the display window (`surface == "window"` payloads, parked on a second
+monitor), and the drawer with the seven tabs (Repo, Edit, Memory, Runs,
+Agents, Output, Log). The original G1(b) debug harness view lives on
+under **Debug ▸ Show message log**.
 
-## Two settings Xcode must be told (SPM executables have no automatic
-## Info.plist / entitlements mechanism — `macos/MortimerShell/Package.swift:14-21`
-## documents the same constraint for the existing shell)
+## Xcode settings (unchanged from the harness)
 
-1. Open `Package.swift` in Xcode (`open Package.swift`).
-2. In the MortimerHost target's **Info** tab, add
-   `NSMicrophoneUsageDescription` with the string from
-   `templates/Info.plist.template`.
-3. In the target's **Signing & Capabilities** tab, add the entitlements
-   in `templates/MortimerHost.entitlements.template`:
-   `com.apple.security.device.audio-input` and
-   `com.apple.security.network.client`, both `true`.
+SPM executables have no automatic Info.plist/entitlements mechanism.
+For a debug run straight from Xcode nothing is required — the app runs
+unsandboxed and macOS prompts for the mic on first use. For a bundled
+build, apply `templates/Info.plist.template`
+(`NSMicrophoneUsageDescription`) and
+`templates/MortimerHost.entitlements.template` (audio-input +
+network-client) in the target's Info / Signing & Capabilities tabs.
 
-## Build and run (§8 V4)
+## Build and test
 
 ```
 cd macos/MortimerHost
 swift build
+swift test     # AgentRunStore reducer, UICommandRouter dispatch, TabState mapping
 ```
 
-Then open `Package.swift` in Xcode (for the Info.plist/entitlements
-settings above to take effect) and Run.
+Run from Xcode (`open Package.swift`). Verification is the APP plan's
+§8 V(-1)–V9 — including V0 (capture the decode fixtures into
+`../JarvisKit/Tests/JarvisKitTests/admin-fixtures/`, see the README there)
+and V9, the five-day daily-driver period that gates T1.4's deletion of
+`web/`.
 
-## G1(b) run procedure (§8)
+## Structure
 
-1. `./scripts/mortimer.sh start` — **not** `run_bot.sh`; the latter execs
-   the bot on stdout and never creates `logs/bot.log`. Tail with
-   `./scripts/mortimer.sh logs`.
-2. Make sure no browser tab is open on the console — only one client may
-   be connected (`request_handler.py:147-150` refuses a second POST).
-3. Launch MortimerHost. If the bot has T2/K1 auth enabled, mint a client
-   token and store it via the Debug menu's future token-entry flow, or
-   `KeychainStore.setToken(_:for:)` — see the plan's §8 V4b. Without a
-   token against an auth-enabled bot, Connect correctly ends in
-   `state = .failed("Token required")`; that is not a defect.
-4. Click Connect. `state` should show `connected` within 5 s and you
-   should hear the greeting.
-5. Run the plan's §8 V6–V9 checks (audio-never-stops, the five
-   interruption scenarios, wake word, the routing eval) using this app
-   as the client.
+- `Sources/MortimerHost/App/` — app scenes, theme/glass/tuning, the two
+  message routers (one store feeder, one UI-command dispatcher)
+- `Sources/MortimerHost/Stores/` — AgentRunStore (the agentRuns.ts
+  reducer, ported verbatim), DisplayResultStore, ConversationStore
+- `Sources/MortimerHost/Console|Display|Drawer/` — the views
+- `Sources/MortimerHost/Placement/` — the ported DP8 ScreenPlacement +
+  window lookup (CORE N15), consumed unchanged
 
-The **Debug menu**'s one item, "Clear stored token", calls
-`KeychainStore.setToken(nil, for: client.config.botURL)` — use it to
-isolate a T2 401 to the client half (plan §9's rollback table).
+Rollback: `defaults write <bundle-id> JARVIS_GLASS_ENABLED -bool false`
+makes every glass surface opaque; the web console and MortimerShell are
+untouched by this plan and still run (T1.4 owns their deletion, after
+G1(e)).

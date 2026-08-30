@@ -14,6 +14,17 @@ public final class JarvisClient: ObservableObject {
 
     @Published public private(set) var state: ConnectionState = .offline
     @Published public private(set) var botIsSpeaking: Bool = false
+    /// E1 thinking shimmer (OrbField.tsx:171-172) — LLM inference in
+    /// flight, from the bot's own `bot-llm-started`/`bot-llm-stopped`
+    /// RTVI observer frames (same live-verified channel botIsSpeaking
+    /// rides). Views show "Thinking" only while NOT speaking — speech
+    /// outranks the shimmer (OrbField.tsx:324-334).
+    @Published public private(set) var botIsThinking: Bool = false
+    /// Wake-detection pulse (wakeWord.ts subscribeWake) — increments on
+    /// every wake-word detection so views can replay one-shot effects
+    /// (stage ripple, wave flash). This is the "public wake event" the
+    /// T1.3 wave port's deviation note was waiting on.
+    @Published public private(set) var wakePulse: Int = 0
     // internal(set), not private(set): §7.5's UICommandOwnershipTests set
     // up preconditions (e.g. "wakeWordAvailable = false") by direct field
     // assignment via @testable import, which sees `internal` but not
@@ -21,7 +32,13 @@ public final class JarvisClient: ObservableObject {
     @Published public internal(set) var micEnabled: Bool = true
     @Published public internal(set) var wakeWordOn: Bool = false
     @Published public internal(set) var wakeWordAvailable: Bool = false
-    @Published public private(set) var transcript: [ConversationEntry] = []   // see correction 6
+    /// Spoken conversation, aggregated client-side from the live RTVI
+    /// observer frames (user-transcription finals + the bot-llm-text
+    /// token stream) — see the transcript-aggregation section below.
+    /// CORE correction 6 said this bot emits neither; the 2026-08-30
+    /// live session disproved that, so this now lights up with no
+    /// backend change.
+    @Published public private(set) var transcript: [ConversationEntry] = []
     @Published public private(set) var voices: [Voice] = []
     @Published public private(set) var currentVoice: String = ""
 
@@ -226,6 +243,7 @@ public final class JarvisClient: ObservableObject {
     private func handleWakeEvent() {
         // wakeWord.ts:118 / MicControls.tsx:77-80 — a wake event unmutes.
         setMicEnabled(true)
+        wakePulse += 1
     }
 
     private func handleWakeAvailabilityChange(_ a: WakeAvailability) {
@@ -281,11 +299,119 @@ public final class JarvisClient: ObservableObject {
             currentVoice = voice
         case .ui(let cmd):
             handleUICommand(cmd)
+        case .unknown(let type, let raw):
+            // botIsSpeaking from RTVI observer frames — VERIFIED live
+            // 2026-08-30: this bot emits standard RTVI observer messages
+            // (user-started-speaking, bot-llm-started, bot-interrupted, …
+            // seen in MortimerHost's message log), contradicting CORE
+            // correction 6. The plan's audio-renderer mechanism (F12)
+            // does not exist in stasel/WebRTC M120 (see AudioSession.swift),
+            // so these frames are the ONE available speaking signal — and
+            // a better one: the server's own TTS lifecycle, not an RMS
+            // guess. Falls through harmlessly on a bot that stops
+            // emitting them (botIsSpeaking then stays false, the
+            // documented degradation).
+            switch type {
+            case "bot-started-speaking":
+                setBotSpeaking(true)
+            case "bot-stopped-speaking", "bot-interrupted":
+                setBotSpeaking(false)
+                if type == "bot-interrupted" { finalizePendingAssistantEntry() }
+            // The transcript, fed from the SAME live-verified RTVI
+            // observer stream (2026-08-30's discovery superseding CORE
+            // correction 6): user-transcription final frames and the
+            // bot-llm-text token stream are what client-js's
+            // usePipecatConversation aggregates in the web console, so
+            // aggregating them here gives the Log tab its spoken bubbles
+            // and the stage its live captions with NO backend change
+            // (R-A1 stays untouched — this is a client-side consumer of
+            // frames the bot already emits).
+            case "user-transcription":
+                if let d = raw["data"]?.objectValue,
+                   d["final"]?.boolValue == true,
+                   let text = d["text"]?.stringValue,
+                   !text.trimmingCharacters(in: .whitespaces).isEmpty {
+                    appendTranscript(role: "user", text: text)
+                }
+            case "bot-llm-started":
+                botIsThinking = true
+                beginAssistantEntry()
+            case "bot-llm-text":
+                if let d = raw["data"]?.objectValue,
+                   let chunk = d["text"]?.stringValue {
+                    appendToAssistantEntry(chunk)
+                }
+            case "bot-llm-stopped":
+                botIsThinking = false
+                finalizePendingAssistantEntry()
+            default:
+                break
+            }
         default:
             break
         }
 
         deliver(message)
+    }
+
+    private func setBotSpeaking(_ speaking: Bool) {
+        guard botIsSpeaking != speaking else { return }
+        botIsSpeaking = speaking
+        wakeListener.setPaused(speaking)   // N10 rule 4, re-enabled by this signal
+    }
+
+    // MARK: - Transcript aggregation (client-side, from RTVI observer frames)
+
+    /// Index into `transcript` of the assistant entry currently being
+    /// streamed token-by-token (bot-llm-text), nil when none is open.
+    private var pendingAssistantEntryId: String?
+
+    private func appendTranscript(role: String, text: String) {
+        transcript.append(ConversationEntry(
+            id: UUID().uuidString, role: role,
+            createdAt: Date().timeIntervalSince1970, text: text
+        ))
+        capTranscript()
+    }
+
+    private func beginAssistantEntry() {
+        // A new inference turn — close out any orphaned pending entry
+        // (an interruption whose bot-llm-stopped never arrived).
+        finalizePendingAssistantEntry()
+        let entry = ConversationEntry(
+            id: UUID().uuidString, role: "assistant",
+            createdAt: Date().timeIntervalSince1970, text: ""
+        )
+        pendingAssistantEntryId = entry.id
+        transcript.append(entry)
+        capTranscript()
+    }
+
+    private func appendToAssistantEntry(_ chunk: String) {
+        guard let id = pendingAssistantEntryId,
+              let index = transcript.lastIndex(where: { $0.id == id }) else { return }
+        let old = transcript[index]
+        transcript[index] = ConversationEntry(
+            id: old.id, role: old.role, createdAt: old.createdAt,
+            text: old.text + chunk
+        )
+    }
+
+    private func finalizePendingAssistantEntry() {
+        // An entry that never received a token is removed — an empty
+        // bubble tells the user nothing.
+        if let id = pendingAssistantEntryId,
+           let index = transcript.lastIndex(where: { $0.id == id }),
+           transcript[index].text.trimmingCharacters(in: .whitespaces).isEmpty {
+            transcript.remove(at: index)
+        }
+        pendingAssistantEntryId = nil
+    }
+
+    private func capTranscript() {
+        if transcript.count > JarvisTuning.maxConversationEntries {
+            transcript.removeFirst(transcript.count - JarvisTuning.maxConversationEntries)
+        }
     }
 
     // MARK: - Stats (§5 step 9)
@@ -362,8 +488,7 @@ extension JarvisClient: RTVITransportDelegate {
 
     nonisolated func transport(botIsSpeaking: Bool) {
         Task { @MainActor in
-            self.botIsSpeaking = botIsSpeaking
-            self.wakeListener.setPaused(botIsSpeaking)   // N10 rule 4
+            self.setBotSpeaking(botIsSpeaking)   // N10 rule 4 via one setter
         }
     }
 }

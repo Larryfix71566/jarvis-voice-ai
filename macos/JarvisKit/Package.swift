@@ -35,7 +35,12 @@ let package = Package(
         .testTarget(
             name: "JarvisKitTests",
             dependencies: ["JarvisKit"],
-            resources: [.copy("Fixtures")],
+            resources: [
+                .copy("Fixtures"),        // CORE §7's eleven AppMessage frames
+                .copy("admin-fixtures"),  // APP §8 V0's captured sidecar bodies
+                // (not "fixtures" — APFS is case-insensitive and the two
+                // names collide inside the test bundle)
+            ],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

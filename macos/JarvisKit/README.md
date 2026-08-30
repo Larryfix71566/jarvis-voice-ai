@@ -42,6 +42,22 @@ Both require Xcode / a Swift toolchain, which is not available in either
 of the environments this package was written in. Larry runs both on his
 Mac per the plan's §8.
 
+## T1.3 additions (the F12 deliverable)
+
+`AdminAPI.swift` now also carries the concrete per-tab response structs
+CORE deferred (`GitStatus`, `GitDraft`/`GitActionResult`,
+`SelfEditModels`/`SelfEditStatus`, `MemoryOverview`/`MemoryReviews`/
+`KnowledgeOverview` and their leaves, `RunsList`/`RunSummary`,
+`RunDetail`/`RunEvent`) plus additive methods: typed reads
+(`gitStatusTyped`, `selfeditModelsTyped`/`selfeditStatusTyped`,
+`memoryOverview`/`memoryReviewsTyped`/`knowledgeTyped`,
+`runsTyped`/`runTyped`) and the draft→confirm writes (`prepareCommit`/
+`commit`, `preparePush`/`push`, `selfeditValidate`/`Submit`/`Revert`).
+This is `MORTIMER_NATIVE_CLIENT_APP_PLAN.md`'s F12 deliverable —
+ADDITIVE to K8; CORE's seventeen read routes are unchanged. Decode
+fixtures live in `Tests/JarvisKitTests/admin-fixtures/` (captured per that
+plan's §8 V0, see the README there).
+
 ## What this package deliberately does NOT do
 
 - No client-side VAD, no half-duplex, no muting the outbound track while
