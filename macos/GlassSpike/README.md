@@ -40,8 +40,24 @@ panel.
 A failing S1 does not block G1(b) — it blocks T1.0's design brief, which
 is exactly what the spike is for.
 
+## Results (Larry, 2026-08-30)
+
+All six shots passed as described:
+
+- **S1 — PASS.** Arm 1 (`.glassEffect()` over a transparent `NSWindow`)
+  composites the real desktop: the photo is recognisable through the
+  `.regular` panel. The T1.0 design brief can build on Arm 1; Arm 2
+  remains the known-good fallback.
+- **S2 — PASS.** `.regular` and `.clear` are visibly distinct treatments,
+  both showing the desktop.
+- **S3 — PASS.** All three text sizes readable over the bright/dark
+  boundary without leaning in — **T1.3's type floor is 13 pt.**
+- **S4 — PASS.** One window per display, each filling `visibleFrame`.
+- **S5 — PASS.** Second display unplugged: 60/40 split, full height (DP8).
+- **S6 — PASS.** Hot-plug relocated both windows without a relaunch.
+
 ## Sign-off
 
 **G1(a) passes only when Larry signs this line:**
 
-Signed: ______  Date: ______
+Signed: ___LEF___  Date: ___08/30/26___
