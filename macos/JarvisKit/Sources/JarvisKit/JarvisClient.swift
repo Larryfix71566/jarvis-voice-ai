@@ -63,6 +63,9 @@ public final class JarvisClient: ObservableObject {
     private var handlers: [UUID: @MainActor (AppMessage) -> Void] = [:]
     private var streamContinuations: [UUID: AsyncStream<AppMessage>.Continuation] = [:]
     private var statsTimer: Timer?
+    /// Cumulative outbound-rtp packetsSent at the last 1 Hz tick, so the
+    /// per-second delta V6 watches can be computed.
+    private var lastAudioPacketsSent: Int = 0
 
     public init(config: JarvisConfig = .default()) {
         self.config = config
@@ -152,6 +155,14 @@ public final class JarvisClient: ObservableObject {
             state = .connected
             startStatsTimer()
             updateWakeListenerRunState()
+            // N10 runtime availability probe — enables the wake toggle
+            // when the sidecar is reachable. Gated to the real transport:
+            // under a stub transport (tests) the probe's real socket to
+            // 127.0.0.1:7862 would race the tests' manual
+            // wakeWordAvailable setup.
+            if transport is DirectWebRTCTransport {
+                Task { await wakeListener.probeAvailability() }
+            }
         } catch JarvisError.unauthorized {
             state = .failed("Token required")   // N13 — no retry
         } catch let error as JarvisError {
@@ -167,6 +178,7 @@ public final class JarvisClient: ObservableObject {
         state = .offline
         botIsSpeaking = false
         stopStatsTimer()
+        lastAudioPacketsSent = 0   // fresh session, fresh cumulative counters
         // transcript, voices, currentVoice are NOT cleared (self-audit
         // item 2) — a fresh voice/catalog on the next connect replaces
         // `voices` wholesale, matching VoicePicker.tsx:20-22.
@@ -292,11 +304,22 @@ public final class JarvisClient: ObservableObject {
         statsTimer = nil
     }
 
+    /// §5 step 9 / §8 V6: the counters come from the peer connection's
+    /// own outbound-rtp audio statistics — sentPacketsLastSecond > 0
+    /// continuously through the bot's entire reply is the proof that
+    /// N9's never-withhold-audio obligation holds.
     private func tickStats() {
         guard let direct = transport as? DirectWebRTCTransport else { return }
-        let total = direct.sentBytesTotal
-        debugAudioStats.sentPacketsLastSecond = max(0, total - debugAudioStats.sentBytes)
-        debugAudioStats.sentBytes = total
+        direct.fetchOutboundAudioStats { [weak self] stats in
+            Task { @MainActor in
+                guard let self, let stats else { return }
+                self.debugAudioStats.sentPacketsLastSecond =
+                    max(0, stats.packetsSent - self.lastAudioPacketsSent)
+                self.lastAudioPacketsSent = stats.packetsSent
+                self.debugAudioStats.sentBytes = stats.bytesSent
+                self.debugAudioStats.lastKeepAliveAt = direct.lastKeepAliveDate
+            }
+        }
     }
 
     private static func describe(_ error: JarvisError) -> String {

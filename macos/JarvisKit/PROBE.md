@@ -92,5 +92,20 @@ nothing about this package's build (both W1 and W2 code paths are written
 unconditionally in `WakeWordListener.swift`), it is a runtime record only.
 
 ```
-WAKE_PROBE=
+WAKE_PROBE=101  (2026-08-30 — Branch W1, live wake verified)
 ```
+
+**History.** On 2026-08-28 this read `WAKE_PROBE=000`: the sidecar exited
+at startup because `models/mortimer.onnx` did not exist (the plan's R-N9
+scenario), the connect-time probe reported unreachable, and the host's
+wake toggle stayed disabled — Branch W2 behaving as specified.
+
+On 2026-08-30 Larry trained the model locally
+(`bash scripts/wakeword_gen_samples_mac.sh` → 690 positive / 3036
+negative clips; `python -m jarvis.wakeword.train` → held-out wake mean
+0.953 vs other mean 0.004, suggested threshold 0.50; export required
+`uv pip install onnx onnxscript` first; exported at ONNX opset 18 after
+a non-fatal opset-13 down-conversion failure — the trainer's own
+"sidecar load OK" check passed). With `./scripts/run_wakeword.sh`
+running, the **live W1 test passed**: mic muted, wake toggle on, saying
+"Mortimer" played the two-tone chime and re-enabled the mic.

@@ -46,3 +46,4 @@ macos/**/xcuserdata/
 macos/**/DerivedData/
 macos/**/build/
 macos/**/*.xcuserstate
+_to_delete/

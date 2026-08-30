@@ -86,6 +86,42 @@ final class WakeWordListener {
         onAvailabilityChange?(a)
     }
 
+    /// N10's runtime availability check, run by JarvisClient on connect.
+    /// Without this the host's wake toggle deadlocks: availability was
+    /// only ever determined by start(), which only ran from the toggle,
+    /// which was disabled until availability was true. A ping over a
+    /// short-lived socket answers the question the plan's curl probe
+    /// answers (§3 N10) without user action. Bounded at 3 s, mirroring
+    /// the probe's --max-time.
+    func probeAvailability() async {
+        guard JarvisFlags.wakeWordEnabled else {
+            setAvailability(.unavailable(reason: "disabled by JARVIS_WAKEWORD_ENABLED"))
+            return
+        }
+        #if os(iOS)
+        setAvailability(.unavailable(reason: "wake word is macOS-only in this release"))
+        #else
+        let task = URLSession.shared.webSocketTask(with: config.wakeWordURL)
+        task.resume()
+        let reachable: Bool = await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                await withCheckedContinuation { continuation in
+                    task.sendPing { error in continuation.resume(returning: error == nil) }
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                return false
+            }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+        task.cancel(with: .goingAway, reason: nil)
+        setAvailability(reachable ? .available : .unavailable(reason: "wake sidecar not reachable at \(config.wakeWordURL)"))
+        #endif
+    }
+
     func start() async {
         guard JarvisFlags.wakeWordEnabled else {
             setAvailability(.unavailable(reason: "disabled by JARVIS_WAKEWORD_ENABLED"))

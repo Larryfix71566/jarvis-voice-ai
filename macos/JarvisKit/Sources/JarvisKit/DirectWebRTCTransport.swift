@@ -70,10 +70,11 @@ final class DirectWebRTCTransport: NSObject, RTVITransport {
     // extension at the bottom of this file. One log line per session.
     private var loggedSpeakingUnavailable = false
 
-    // debugAudioStats (§5 step 9) support.
-    private(set) var sentBytesTotal: Int = 0
-    private var sentBytesAtLastTick: Int = 0
-    private(set) var sentPacketsLastSecond: Int = 0
+    // debugAudioStats (§5 step 9): real numbers come from the peer
+    // connection's v2 statistics API — see fetchOutboundAudioStats at
+    // the bottom of this file. (An earlier draft counted data-channel
+    // bytes here, which reads 0 forever during a voice session and
+    // proves nothing about V6.)
 
     // MARK: - RTVITransport
 
@@ -173,7 +174,6 @@ final class DirectWebRTCTransport: NSObject, RTVITransport {
         }
         let buffer = RTCDataBuffer(data: data, isBinary: false)
         dc.sendData(buffer)
-        sentBytesTotal += data.count
     }
 
     func setMicEnabled(_ enabled: Bool) {
@@ -411,6 +411,48 @@ extension DirectWebRTCTransport: RTCDataChannelDelegate {
         if buffer.isBinary { return }
         let data = buffer.data
         queue.async { [weak self] in self?.handleDataChannelMessage(data) }
+    }
+}
+
+// MARK: - Outbound audio statistics (§5 step 9 / §8 V6)
+
+/// Cumulative counters for the outbound audio RTP stream, from the peer
+/// connection's v2 statistics API (RTCStatisticsReport — verified
+/// present in M120's headers). V6's whole point is a counter that keeps
+/// climbing while the bot talks; these are the real packets, not a
+/// proxy.
+struct OutboundAudioStats {
+    let packetsSent: Int
+    let bytesSent: Int
+}
+
+extension DirectWebRTCTransport {
+    /// Completion fires on an arbitrary WebRTC thread with nil when no
+    /// session is live or no outbound audio stream exists yet.
+    func fetchOutboundAudioStats(_ completion: @escaping (OutboundAudioStats?) -> Void) {
+        queue.async { [weak self] in
+            guard let self, let pc = self.pc else { completion(nil); return }
+            pc.statistics { report in
+                var packets = 0
+                var bytes = 0
+                var found = false
+                for stat in report.statistics.values where stat.type == "outbound-rtp" {
+                    let kind = (stat.values["kind"] as? String)
+                        ?? (stat.values["mediaType"] as? String)
+                    guard kind == "audio" else { continue }
+                    found = true
+                    packets += (stat.values["packetsSent"] as? NSNumber)?.intValue ?? 0
+                    bytes += (stat.values["bytesSent"] as? NSNumber)?.intValue ?? 0
+                }
+                completion(found ? OutboundAudioStats(packetsSent: packets, bytesSent: bytes) : nil)
+            }
+        }
+    }
+
+    /// The last successful keep-alive send, for the debug readout; nil
+    /// before the channel first opens.
+    var lastKeepAliveDate: Date? {
+        lastKeepAliveSentAt == .distantPast ? nil : lastKeepAliveSentAt
     }
 }
 
