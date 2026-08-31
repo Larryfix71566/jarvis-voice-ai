@@ -15,6 +15,13 @@ servers:
     args: ["-m", "mcp_servers.mcp_memory.server"]
     env:
       JARVIS_DB_PATH: "${JARVIS_DB_PATH}"
+  - name: mcp-kb
+    command: python
+    args: ["-m", "mcp_servers.mcp_kb.server"]
+    env: {}
+    # KB_BASE_URL has a code-level default (http://127.0.0.1:8484); no env
+    # entry needed here. skill.yaml's requires_env: [KB_BASE_URL] allowlists
+    # it for pass-through if a real override is ever set.
   - name: mcp-reminders
     command: python
     args: ["-m", "mcp_servers.mcp_reminders.server"]

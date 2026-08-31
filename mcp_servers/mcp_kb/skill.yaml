@@ -1,0 +1,21 @@
+# Skill manifest (upgrade plan §3.1)
+name: mcp-kb
+version: 1.0.0
+class: standard
+tools: [kb_search, kb_read, kb_neighbors]
+# kb_write, kb_delete, kb_flush exist in logic.py but are intentionally
+# NOT exposed as MCP tools — see server.py's module docstring. Only the
+# read-oriented tools are voice/model-invokable in W1.
+# KB_BASE_URL has a code-level default (http://127.0.0.1:8484) and does not
+# need to be set for this server to work. It is listed here (not left out
+# of requires_env, per K2/BASE_ENV_KEYS allowlisting) purely so it CAN be
+# overridden later if the vault service ever moves off localhost:8484 —
+# expand_env_vars leaves an unset ${VAR} as a literal placeholder, so if a
+# future override is attempted without this line present, it would silently
+# fail the same way the mcp-repo JARVIS_REPO_ROOT bug did. See
+# config/mcp_servers.yaml's mcp-kb entry.
+requires_env: [KB_BASE_URL]
+requires_keychain: []
+scopes: []
+test: "python3 -m pytest tests/unit/test_mcp_kb_logic.py -q"
+
