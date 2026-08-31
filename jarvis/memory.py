@@ -70,7 +70,7 @@ DEFAULT_TIER = "project"  # unknown/legacy rows land in the middle, never identi
 # global cap is DELETED here: it overlapped with these per-tier caps (the
 # combination is how the panel once showed an unexplainable "261 / 30"),
 # and the per-tier numbers are now the one set of caps that matters.
-MAX_PREFERENCE_FACTS = 15
+MAX_PREFERENCE_FACTS = 30  # raised from 15 (2026-08-31): Larry has >15 real standing preferences; forcing merges below that count destroys information
 MAX_PROJECT_FACTS = 8
 MAX_SUMMARY_CHARS = 600
 MAX_CONTEXT_CHARS = 3000

@@ -415,6 +415,7 @@ async def run_capacity_enforcement(
         merged = 0
         aged_out = 0
         merge_skipped = False
+        merge_skip_reason = "none"
 
         if tier == "system":
             # M4: archive on sight, no merge rung — see docstring.
@@ -427,6 +428,7 @@ async def run_capacity_enforcement(
                 proposal = _best_capacity_cluster(conn, tier)
                 if proposal is None:
                     merge_skipped = True
+                    merge_skip_reason = "no_mergeable_cluster"
                     break
                 if settings is None and client_factory is None:
                     try:
@@ -435,10 +437,16 @@ async def run_capacity_enforcement(
                         settings = load_settings()
                     except Exception:  # noqa: BLE001
                         merge_skipped = True
+                        merge_skip_reason = "settings_load_failed"
+                        logger.warning(
+                            "memory_enforce_settings_load_failed tier=%s",
+                            tier, exc_info=True,
+                        )
                         break
                 rewritten = await _merge_cluster(proposal, settings, client_factory)
                 if not rewritten:
                     merge_skipped = True
+                    merge_skip_reason = "merge_call_failed"
                     break
                 kept_key = proposal.keys[0]
                 upsert_fact(conn, kept_key, rewritten, None)
@@ -450,8 +458,8 @@ async def run_capacity_enforcement(
 
             if merge_skipped:
                 logger.info(
-                    "memory_enforce_merge_skipped tier=%s reason=no_key_model_or_cluster",
-                    tier,
+                    "memory_enforce_merge_skipped tier=%s reason=%s",
+                    tier, merge_skip_reason,
                 )
 
             over = _tier_count(conn, tier) - cap

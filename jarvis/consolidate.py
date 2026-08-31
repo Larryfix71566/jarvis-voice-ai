@@ -97,7 +97,7 @@ class MergeProposal:
         return max(self.contents, key=len)
 
 
-def mixed_content_warning(key: str, content: str) -> str | None:
+def mixed_content_warning(key: str, content: str, tier: str | None = None) -> str | None:
     """Flag a fact whose CONTENT covers a topic its KEY does not.
 
     The worked example: key `user.location`, content "Spartanburg
@@ -110,6 +110,11 @@ def mixed_content_warning(key: str, content: str) -> str | None:
     for topic, markers in _TOPIC_MARKERS.items():
         if topic in k:
             continue  # the key already advertises this topic — fine
+        if tier and topic == tier:
+            continue  # the TIER advertises it: every fact in the
+            # preference tier is allowed to say "prefer"/"never" —
+            # placement is the advertisement (2026-08-31 fix: this
+            # false-positive vetoed 100% of preference-tier merges)
         if any(m in c for m in markers):
             return (
                 f"{key} mentions {topic} ('{next(m for m in markers if m in c)}') "
@@ -186,7 +191,8 @@ def propose_merges(
             warnings = []
             for idx in members:
                 w = mixed_content_warning(
-                    rows[idx].get("key", ""), rows[idx].get("content", "")
+                    rows[idx].get("key", ""), rows[idx].get("content", ""),
+                    tier=tier,
                 )
                 if w:
                     warnings.append(w)
