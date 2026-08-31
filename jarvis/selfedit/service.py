@@ -41,7 +41,7 @@ import urllib.request
 import json
 from pathlib import Path
 
-from jarvis.selfedit.allowlist import Allowlist
+from jarvis.selfedit.allowlist import Allowlist, extract_paths
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,13 @@ DEFAULT_BASE_REF = "origin/main"
 WORKTREES_DIR = Path("data") / "selfedit_worktrees"
 
 MAX_FILE_BYTES = 200_000  # refuse oversized writes
+
+# Tier B gate: import-only, no network, no keys read — pipeline.py and the
+# agent modules resolve their clients at build time, not import time.
+CORE_IMPORT_SMOKE = (
+    "import jarvis.bot.pipeline, jarvis.bot.display, jarvis.agents.base, "
+    "jarvis.agents.delegate, jarvis.agents.supervisor, jarvis.skills.registry"
+)
 
 _MERGE_NOTE = (
     "Review and merge on GitHub — this PR was opened by the Jarvis "
@@ -446,6 +453,32 @@ class SelfEditService:
         ]
         return lines
 
+    def _core_change_block(self) -> list[str]:
+        """Tier B — the PR body flags a change to the product core
+        (MORTIMER_SELFEDIT_TIERS_PLAN.md). The gates prove it imports and
+        passes tests; only a human RUNNING the branch proves voice still
+        works. Same mechanism as the visual/capability blocks: keyed on
+        WHICH paths changed, never on what the agent wrote about them."""
+        core = [p["path"] for p in self.proposals if self.allowlist.is_core(p["path"])]
+        if not core:
+            return []
+        lines = [
+            "",
+            "### ⚠ CORE CHANGE — this PR edits the voice pipeline / agent core",
+            "",
+            "Tier B files changed:",
+        ]
+        for path in core:
+            lines.append(f"- `{path}`")
+        lines += [
+            "",
+            "All validation gates passed (allowlist, backend imports, core "
+            "imports, frontend build, pytest), but none of them can hear "
+            "Mortimer talk. Run this branch — `./scripts/mortimer.sh` from a "
+            "checkout of it — and hold a real conversation before merging.",
+        ]
+        return lines
+
     def _check_path(self, path: str, must_exist: bool = False) -> str:
         if not self.allowlist.is_allowed(path):
             raise SelfEditError(
@@ -469,11 +502,13 @@ class SelfEditService:
         _c, names = self._git("diff", "--name-only", self.base_ref, "--", ".")
         changed = [n for n in names.splitlines() if n.strip()]
         violations = self.allowlist.filter_violations(changed)
+        core_changed = self.allowlist.core_paths(changed)
         checks.append({
             "name": "allowlist",
             "ok": not violations,
-            "output": "all changed files allowed"
-                      if not violations else "forbidden: " + ", ".join(violations),
+            "output": ("all changed files allowed"
+                       if not violations else "forbidden: " + ", ".join(violations))
+                      + (f" · core (Tier B): {', '.join(core_changed)}" if core_changed else ""),
         })
 
         # 2. Backend import smoke.
@@ -483,6 +518,20 @@ class SelfEditService:
         )
         checks.append({"name": "backend_imports", "ok": code == 0,
                        "output": out or "imports ok"})
+
+        # 2b. Tier B (core) — the fifth gate, only when a core path changed
+        # (MORTIMER_SELFEDIT_TIERS_PLAN.md): the voice pipeline and the agent
+        # roster must still IMPORT. A broken pipeline construct is the one
+        # failure the plain `import jarvis` smoke never sees, and it is
+        # exactly what a jarvis/bot or jarvis/agents edit can break.
+        if core_changed:
+            code, out = self._run(
+                ["python", "-c", CORE_IMPORT_SMOKE],
+                cwd=self.tree, timeout=180,
+            )
+            checks.append({"name": "core_imports", "ok": code == 0,
+                           "output": out[-2000:] or "core imports ok",
+                           "paths": core_changed})
 
         # 3. Frontend build.
         web_dir = self.tree / "web"
@@ -541,22 +590,36 @@ class SelfEditService:
         logger.info("selfedit_submit branch=%s pr=%s", self.branch, pr.get("html_url"))
         capability = [p["path"] for p in self.proposals
                       if is_capability_path(p["path"])]
+        core = [p["path"] for p in self.proposals if self.allowlist.is_core(p["path"])]
         result = {
             "ok": True,
             "branch": self.branch,
             "pr_url": pr.get("html_url"),
             "notice": _MERGE_NOTE,
         }
+        if core:
+            # Spoken by the developer when it reports the submit: the human
+            # must HEAR that this PR touches the voice core and needs a
+            # real run before merging.
+            result["core_change"] = True
+            result["core_paths"] = core
+            result["notice"] = (
+                "CORE CHANGE: this PR edits the voice pipeline or agent core ("
+                + ", ".join(core)
+                + ") — run the branch and hold a real conversation before "
+                  "merging. " + _MERGE_NOTE
+            )
         if capability:
             # Spoken by the developer when it reports the submit — the
             # human must HEAR that this PR changes what agents can do, not
-            # just find the block later on GitHub.
+            # just find the block later on GitHub. Prepended so a PR that
+            # is both core and capability announces both.
             result["capability_change"] = True
             result["notice"] = (
                 "CAPABILITY CHANGE: this PR grants or rewires agent tools ("
                 + ", ".join(capability)
                 + ") — review those diffs line by line before merging. "
-                + _MERGE_NOTE
+                + result["notice"]
             )
         # Session is complete: tear down the worktree + local branch. The
         # user's checkout is untouched — there is no `checkout main` here
@@ -578,7 +641,8 @@ class SelfEditService:
         ]
         for p in self.proposals:
             body_lines.append(f"- `{p['path']}` — {p['rationale']}")
-        # Capability block FIRST — it is the louder of the two flags.
+        # Loudest first: core, then capability, then visual.
+        body_lines += self._core_change_block()
         body_lines += self._capability_change_block()
         body_lines += self._visual_change_block()
         body_lines += ["", "---", _MERGE_NOTE]
@@ -624,6 +688,37 @@ class SelfEditService:
         self.proposals = []
         self._validated_ok = False
         return {"ok": True, "reverted_to": tag}
+
+    def preflight(self, goal: str, has_plan: bool) -> dict:
+        """Tier pre-flight for a goal BEFORE it is staged
+        (MORTIMER_SELFEDIT_TIERS_PLAN.md). Classifies the repo paths the
+        goal text names; refuses a Tier-0 (denied) path outright and a
+        Tier-B (core) path with no plan. Best-effort on extraction — a goal
+        that names no files passes through (the planner's own allowlist
+        check still governs every write). The point is to fail at the
+        preview, in one sentence, instead of after confirm + staging + a
+        planner run that discovers the same wall (2026-08-30: three runs)."""
+        paths = extract_paths(goal)
+        tiers = self.allowlist.classify(paths)
+        result: dict = {"ok": True, "paths": paths, "tiers": tiers}
+        if tiers["denied"]:
+            result.update(ok=False, error=(
+                "these files are human-only (Tier 0 — the self-edit loop's own "
+                "machinery, secrets, dependencies or CI) and cannot be self-edited: "
+                + ", ".join(tiers["denied"])
+                + ". Ask Larry to make that change directly, or re-scope the "
+                  "goal to the other files."
+            ))
+            return result
+        if tiers["core"] and not has_plan:
+            result.update(ok=False, error=(
+                "this goal touches the voice/agent core (Tier B: "
+                + ", ".join(tiers["core"])
+                + "). Core edits need a plan document — draft one with "
+                  "plan_start (or point at an existing docs/plans/ file) and "
+                  "pass it as plan_path."
+            ))
+        return result
 
     def describe_boundary(self) -> str:
         """A human-readable statement of what this workspace will and

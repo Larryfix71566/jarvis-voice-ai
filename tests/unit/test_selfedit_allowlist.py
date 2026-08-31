@@ -40,16 +40,22 @@ def test_allowed_paths(allowlist: Allowlist, path: str) -> None:
 
 
 @pytest.mark.parametrize("path", [
-    # the agent may not edit the editor or the safety gate
+    # Tier 0 (MORTIMER_SELFEDIT_TIERS_PLAN.md): files whose corruption the
+    # loop cannot recover from because they ARE the loop.
     "jarvis/selfedit/service.py",
     "jarvis/agents/upgrade_agent.py",
+    "jarvis/agents/workspace.py",
+    "jarvis/admin/server.py",
     ".github/workflows/validate.yml",
     "config/self_edit_allowlist.json",
     "config/upgrade_agent.yaml",
-    # anything whose breakage kills the assistant
-    "jarvis/wakeword/server.py",
-    "jarvis/admin/server.py",
-    "jarvis/bot/main.py",
+    # migrations and the vault stay human-only (CLAUDE.md)
+    "jarvis/db.py",
+    "jarvis/vault.py",
+    # the loop's own processes / the CI gate
+    "scripts/mortimer.sh",
+    "scripts/run_admin.sh",
+    "scripts/check_allowlist.py",
     # dependency changes stay human-driven
     "requirements.txt",
     "requirements-lock.txt",
@@ -61,18 +67,85 @@ def test_allowed_paths(allowlist: Allowlist, path: str) -> None:
     "web/.env.local",
     # human-only docs
     "DEVIATIONS.md",
-    # not on the allow list at all
-    "jarvis/cli.py",
+    # not on any list at all
     "web/index.html",
-    "scripts/run_admin.sh",
+    "Makefile",
     # still denied even though mcp_servers/config opened up (2026-08-21):
     # the agent's own brain, the enable gate for agent skills, and the
     # allowlist itself remain human-only.
     "config/upgrade_models.yaml",
     "config/skills.yaml",
+    # no Swift gate exists, so a self-edit here would be unvalidated
+    "macos/MortimerHost/Package.swift",
 ])
 def test_forbidden_paths(allowlist: Allowlist, path: str) -> None:
     assert not allowlist.is_allowed(path), path
+    assert allowlist.tier(path) in ("denied", "unlisted")
+
+
+@pytest.mark.parametrize("path", [
+    # Tier B — the product core, editable with ceremony (Larry 2026-08-31:
+    # "if we continue to deny everything we want to do self-edit wise then
+    # a self-edit is not useful"). Recoverable by construction: a bad edit
+    # lives on a sandbox branch Mortimer cannot merge.
+    "jarvis/bot/display.py",
+    "jarvis/bot/pipeline.py",
+    "jarvis/agents/base.py",
+    "jarvis/agents/delegate.py",
+    "jarvis/wakeword/server.py",
+    "jarvis/memory.py",
+    "jarvis/cli.py",
+    "scripts/run_bot.sh",
+])
+def test_core_paths_are_allowed_with_ceremony(allowlist: Allowlist, path: str) -> None:
+    assert allowlist.is_allowed(path), path
+    assert allowlist.is_core(path), path
+    assert allowlist.tier(path) == "core"
+
+
+def test_routine_outranks_core_and_deny_outranks_both(allowlist: Allowlist) -> None:
+    # jarvis/prompts.py matches allow AND core (jarvis/**) → routine.
+    assert allowlist.tier("jarvis/prompts.py") == "routine"
+    assert not allowlist.is_core("jarvis/prompts.py")
+    # jarvis/selfedit/** matches core (jarvis/**) AND deny → denied.
+    assert allowlist.tier("jarvis/selfedit/allowlist.py") == "denied"
+
+
+def test_classify_groups_by_tier(allowlist: Allowlist) -> None:
+    groups = allowlist.classify([
+        "web/src/App.tsx", "jarvis/bot/display.py", "jarvis/vault.py", "Makefile",
+    ])
+    assert groups == {
+        "routine": ["web/src/App.tsx"],
+        "core": ["jarvis/bot/display.py"],
+        "denied": ["jarvis/vault.py"],
+        "unlisted": ["Makefile"],
+    }
+
+
+class TestExtractPaths:
+    """The preview pre-flight finds the files a goal NAMES."""
+
+    def test_finds_slashed_paths_and_source_files(self):
+        from jarvis.selfedit.allowlist import extract_paths
+        goal = ("Touch jarvis/bot/display.py (merge per-request results), "
+                "web/src/displayResults.ts, and DisplayContent.tsx; leave README.md.")
+        assert extract_paths(goal) == [
+            "jarvis/bot/display.py", "web/src/displayResults.ts",
+            "DisplayContent.tsx", "README.md",
+        ]
+
+    def test_ignores_versions_urls_and_prose(self):
+        from jarvis.selfedit.allowlist import extract_paths
+        goal = ("Upgrade to pipecat 1.4 per https://docs.pipecat.ai/x/y.html; "
+                "the caption width was 160 → 600. Nothing else.")
+        assert extract_paths(goal) == []
+
+    def test_dedupes_and_strips_punctuation(self):
+        from jarvis.selfedit.allowlist import extract_paths
+        assert extract_paths("edit web/src/App.tsx. Then web/src/App.tsx, again ./docs/a.md.") == [
+            "web/src/App.tsx", "docs/a.md",
+        ]
 
 
 def test_path_traversal_rejected(allowlist: Allowlist) -> None:
@@ -82,9 +155,9 @@ def test_path_traversal_rejected(allowlist: Allowlist) -> None:
 
 def test_filter_violations(allowlist: Allowlist) -> None:
     bad = allowlist.filter_violations([
-        "web/src/App.tsx", "jarvis/wakeword/server.py", "README.md",
+        "web/src/App.tsx", "jarvis/vault.py", "README.md",
     ])
-    assert bad == ["jarvis/wakeword/server.py"]
+    assert bad == ["jarvis/vault.py"]
 
 
 def test_empty_allow_list_rejected() -> None:

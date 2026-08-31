@@ -800,19 +800,32 @@ def selfedit_stage(body: SelfEditStageIn) -> dict:
     goal = (body.goal or "").strip()
     if not goal:
         return {"ok": False, "error": "a goal is required — what should I change?"}
+    plan_path = (body.plan_path or "").strip() or None
+    # MORTIMER_SELFEDIT_TIERS_PLAN.md — tier pre-flight at PREVIEW time: a
+    # goal naming a Tier-0 (human-only) file, or a Tier-B (core) file with
+    # no plan, is refused here in one sentence — before staging, before
+    # confirm, before a planner run rediscovers the same wall (2026-08-30:
+    # three runs, ~2.5 minutes each, all "declined: not on the allowlist").
+    flight = _selfedit_service.preflight(goal, has_plan=bool(plan_path))
+    if not flight["ok"]:
+        return {"ok": False, "error": flight["error"], "tiers": flight["tiers"]}
     staging_id = uuid.uuid4().hex[:12]
     with _staging_lock:
         _prune_expired_stagings()
         _selfedit_stagings[staging_id] = {
             "goal": goal,
             "profile": body.profile,
-            "plan_path": (body.plan_path or "").strip() or None,
+            "plan_path": plan_path,
             "created_at": time.time(),
         }
     return {
         "ok": True,
         "staging_id": staging_id,
         "expires_in_s": SELFEDIT_STAGING_TTL_S,
+        # The tool's spoken preview names core files so the user hears
+        # "this touches the voice core" before saying yes.
+        "tiers": flight["tiers"],
+        "core_change": bool(flight["tiers"]["core"]),
     }
 
 

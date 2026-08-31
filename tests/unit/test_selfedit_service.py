@@ -17,7 +17,10 @@ from jarvis.selfedit.service import SelfEditService
 
 ALLOWLIST = {
     "allow": ["web/src/**", "docs/**"],
-    "deny": ["jarvis/**", ".github/**", "**/.env*"],
+    # Tier B: jarvis/** is editable with ceremony; Tier 0 keeps the loop
+    # itself and the wake word (this fixture's stand-in for "human-only").
+    "core": ["jarvis/**"],
+    "deny": ["jarvis/wakeword.py", "jarvis/selfedit/**", ".github/**", "**/.env*"],
 }
 
 
@@ -39,6 +42,8 @@ def repo(tmp_path: Path) -> Path:
     (work / "web/src/App.tsx").write_text("export default 1;\n")
     (work / "jarvis").mkdir()
     (work / "jarvis/wakeword.py").write_text("# hands off\n")
+    (work / "jarvis/bot").mkdir()
+    (work / "jarvis/bot/display.py").write_text("SURFACE = 'window'\n")
     (work / "config").mkdir()
     (work / "config" / "self_edit_allowlist.json").write_text(json.dumps(ALLOWLIST))
     _git(work, "add", "-A")
@@ -392,3 +397,92 @@ class TestCapabilityChangeFlag:
                           "rationale": "", "diff": ""}]
         block = "\n".join(svc._capability_change_block())
         assert "CAPABILITY CHANGE" in block
+
+
+class TestCoreTier:
+    """MORTIMER_SELFEDIT_TIERS_PLAN.md — Tier B: core paths are editable,
+    with ceremony (extra import gate, CORE CHANGE flag, plan required at
+    preview). Tier 0 stays refused by the same tool that refused it before."""
+
+    def test_core_path_is_editable(self, service: SelfEditService) -> None:
+        service.start_session("consolidate display output")
+        res = service.propose_edit("jarvis/bot/display.py", "SURFACE = 'drawer'\n", "merge")
+        assert res["ok"], res
+        assert "display.py" in res["diff"]
+
+    def test_tier0_path_is_still_refused(self, service: SelfEditService) -> None:
+        service.start_session("rewrite wakeword")
+        res = service.propose_edit("jarvis/wakeword.py", "x = 1\n", "nope")
+        assert not res["ok"] and "allowlist" in res["error"]
+
+    def test_validate_runs_the_core_import_gate_only_for_core_changes(
+        self, service: SelfEditService, monkeypatch
+    ) -> None:
+        calls: list[list[str]] = []
+
+        def fake_run(argv, cwd, timeout):
+            calls.append(list(argv))
+            return 0, "ok"
+        monkeypatch.setattr(service, "_run", fake_run)
+
+        service.start_session("routine only")
+        service.propose_edit("web/src/App.tsx", "export default 5;\n", "ui")
+        res = service.validate()
+        assert "core_imports" not in [c["name"] for c in res["checks"]]
+        service.revert()
+
+        service.start_session("core edit")
+        service.propose_edit("jarvis/bot/display.py", "SURFACE = 'drawer'\n", "merge")
+        res = service.validate()
+        names = [c["name"] for c in res["checks"]]
+        assert "core_imports" in names
+        core_check = next(c for c in res["checks"] if c["name"] == "core_imports")
+        assert core_check["paths"] == ["jarvis/bot/display.py"]
+        # The gate imports the pipeline + agent modules, in the SESSION tree.
+        smoke = [c for c in calls if c[:2] == ["python", "-c"] and "jarvis.bot.pipeline" in c[2]]
+        assert smoke, calls
+
+    def test_pr_body_and_notice_flag_a_core_change(self, service: SelfEditService) -> None:
+        service.start_session("core edit")
+        service.propose_edit("jarvis/bot/display.py", "SURFACE = 'drawer'\n", "merge")
+        block = "\n".join(service._core_change_block())
+        assert "CORE CHANGE" in block
+        assert "jarvis/bot/display.py" in block
+        assert "hold a real conversation" in block
+
+    def test_a_routine_change_gets_no_core_block(self, service: SelfEditService) -> None:
+        service.start_session("ui")
+        service.propose_edit("web/src/App.tsx", "export default 5;\n", "ui")
+        assert service._core_change_block() == []
+
+
+class TestPreflight:
+    """The preview refuses what the planner would only discover after
+    confirm + staging + a run (2026-08-30: three such runs)."""
+
+    def test_tier0_goal_is_refused_naming_the_file(self, service: SelfEditService) -> None:
+        res = service.preflight("rewrite jarvis/wakeword.py to use a new model", has_plan=True)
+        assert res["ok"] is False
+        assert "jarvis/wakeword.py" in res["error"]
+        assert "human-only" in res["error"]
+
+    def test_core_goal_without_plan_is_refused(self, service: SelfEditService) -> None:
+        res = service.preflight("merge results in jarvis/bot/display.py", has_plan=False)
+        assert res["ok"] is False
+        assert "plan" in res["error"]
+        assert res["tiers"]["core"] == ["jarvis/bot/display.py"]
+
+    def test_core_goal_with_plan_passes(self, service: SelfEditService) -> None:
+        res = service.preflight("merge results in jarvis/bot/display.py", has_plan=True)
+        assert res["ok"] is True
+        assert res["tiers"]["core"] == ["jarvis/bot/display.py"]
+
+    def test_routine_goal_passes_without_plan(self, service: SelfEditService) -> None:
+        res = service.preflight("tidy web/src/App.tsx spacing", has_plan=False)
+        assert res["ok"] is True and res["tiers"]["core"] == []
+
+    def test_goal_naming_no_files_passes_through(self, service: SelfEditService) -> None:
+        # Extraction is best-effort; the planner's own allowlist check still
+        # governs every write.
+        res = service.preflight("make the drawer feel more like glass", has_plan=False)
+        assert res["ok"] is True and res["paths"] == []
