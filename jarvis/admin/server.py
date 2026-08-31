@@ -274,6 +274,10 @@ _selfedit_service = SelfEditService()
 
 # Single-run gate: one upgrade job at a time, ever.
 _run_lock = threading.Lock()
+# The UpgradeAgent instance currently driving _run_job (None when idle) —
+# held only so POST /api/selfedit/cancel can reach its cooperative
+# cancel flag (the same reason _appbuild_workspace exists).
+_run_agent_instance: Any = None
 _run_job: dict[str, Any] = {
     "state": "idle",  # idle | running | done | error
     "goal": None,
@@ -481,18 +485,35 @@ def _make_agent(service: SelfEditService, profile: str | None) -> UpgradeAgent:
 
 def _run_agent(goal: str, profile: str | None, plan: str | None = None) -> None:
     """Background thread target: plan edits, then settle the job state."""
+    global _run_agent_instance
     try:
         agent = _make_agent(_selfedit_service, profile)
+        with _run_lock:
+            _run_agent_instance = agent
         result = agent.run(goal, plan=plan)
-        state = "done" if result.get("ok") else "error"
+        if result.get("cancelled"):
+            # A cancelled session is discarded whole — same semantics as
+            # appbuild_cancel (revert), so nothing half-planned lingers on
+            # a sandbox branch waiting for a confirm that never comes.
+            state = "cancelled"
+            if _selfedit_service.branch:
+                _selfedit_service.revert()
+        else:
+            state = "done" if result.get("ok") else "error"
         with _run_lock:
             _run_job.update(
                 state=state,
+                # The summary is what the developer relays and what the Edit
+                # panel shows; logging it too means a declined/failed run's
+                # REASON survives in admin.log instead of only in memory
+                # (2026-08-30: three state=error transitions logged with no
+                # cause anywhere on disk).
                 summary=result.get("summary", ""),
                 finished_at=time.time(),
             )
         # D17 — every self-edit state transition is logged.
-        logger.info("selfedit_state_transition state=%s goal=%r", state, goal)
+        logger.info("selfedit_state_transition state=%s goal=%r summary=%r",
+                    state, goal, (result.get("summary") or "")[:400])
     except Exception as exc:  # planner crash must still settle the job
         logger.exception("upgrade run crashed")
         with _run_lock:
@@ -502,6 +523,9 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None) -> None:
                 finished_at=time.time(),
             )
         logger.info("selfedit_state_transition state=error goal=%r", goal)
+    finally:
+        with _run_lock:
+            _run_agent_instance = None
 
 
 def _busy() -> bool:
@@ -946,10 +970,40 @@ def selfedit_submit() -> dict:
     return result
 
 
+@app.post("/api/selfedit/cancel")
+def selfedit_cancel() -> dict:
+    """Stop a RUNNING planner at its next step and discard the session.
+
+    Closes the 2026-08-22/23 gap where a kimi-k3 planner sat "still
+    running" and selfedit_revert refused while busy — there was no way to
+    stop it short of killing the sidecar. Cooperative: an in-flight
+    completion call finishes (or hits its read timeout) first, then the
+    loop sees the flag, returns cancelled, and _run_agent reverts the
+    session. Idle → nothing to cancel (use revert for an idle-but-active
+    session)."""
+    with _run_lock:
+        running = _run_job["state"] == "running"
+        agent = _run_agent_instance
+    if not running or agent is None:
+        return {"ok": False, "error": "no self-edit run is in progress — "
+                                      "use revert to drop an idle session"}
+    agent.request_cancel()
+    logger.info("selfedit_state_transition state=cancel_requested")
+    return {"ok": True, "cancel_requested": True,
+            "note": "the planner stops at its next step; poll GET /api/selfedit/run "
+                    "for state=cancelled"}
+
+
 @app.post("/api/selfedit/revert")
 def selfedit_revert() -> dict:
+    # A revert while the planner is RUNNING used to be refused outright,
+    # which left no path at all to stop a runaway run (2026-08-22/23). It
+    # now means "stop and discard": request the cooperative cancel and let
+    # _run_agent perform the revert when the loop yields. This is what the
+    # voice path (mcp_selfedit's selfedit_revert tool) reaches, so "cancel
+    # the self-edit" works by voice with no new tool.
     if _busy():
-        return {"ok": False, "error": "an upgrade run is in progress — ask for status instead"}
+        return selfedit_cancel()
     result = _selfedit_service.revert()
     logger.info("selfedit_state_transition state=reverted ok=%s", result.get("ok"))
     return result

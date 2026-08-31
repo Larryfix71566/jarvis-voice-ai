@@ -52,20 +52,59 @@ def service(repo: Path) -> SelfEditService:
     return SelfEditService(repo_root=repo, github_token=None)
 
 
+def _user_branch(service: SelfEditService) -> str:
+    _c, out = service._git("branch", "--show-current", cwd=service.repo_root)
+    return out
+
+
 def test_start_session_creates_sandbox_branch_and_tag(service: SelfEditService) -> None:
     res = service.start_session("Add a status panel")
     assert res["ok"], res
     assert res["branch"].startswith("jarvis/self-edit/")
     assert res["rollback_tag"].startswith("pre-selfedit-")
-    code, out = service._git("branch", "--show-current")
-    assert out == res["branch"]
+    # The session branch is checked out in the WORKTREE, never in the
+    # user's checkout (Larry 2026-08-30: "every time we do a self edit we
+    # break git").
+    assert service.work_root is not None and service.work_root.is_dir()
+    assert str(service.work_root).startswith(str(service.repo_root / "data" / "selfedit_worktrees"))
+    _c, wt_branch = service._git("branch", "--show-current", cwd=service.work_root)
+    assert wt_branch == res["branch"]
+    assert _user_branch(service) == "main"
 
 
-def test_start_session_refuses_dirty_tree(service: SelfEditService) -> None:
+def test_start_session_leaves_a_dirty_user_tree_alone(service: SelfEditService) -> None:
+    """The old service refused a dirty tree and the developer would then
+    'clean it up' for the user (2026-08-30 it deleted a directory). With an
+    isolated worktree the user's uncommitted work is simply not involved."""
     (service.repo_root / "web/src/App.tsx").write_text("dirty\n")
+    (service.repo_root / "scratch.txt").write_text("untracked\n")
     res = service.start_session("anything")
-    assert not res["ok"]
-    assert "not clean" in res["error"]
+    assert res["ok"], res
+    assert (service.repo_root / "web/src/App.tsx").read_text() == "dirty\n"
+    assert (service.repo_root / "scratch.txt").exists()
+    # ...and the worktree starts from origin/main, not from the dirty tree.
+    assert (service.work_root / "web/src/App.tsx").read_text() == "export default 1;\n"
+
+
+def test_session_never_moves_the_user_off_their_branch(service: SelfEditService) -> None:
+    """The regression that lost the native-client tree: a feature branch
+    checked out in the user's tree must survive start, edit, and revert
+    untouched — no checkout, no reset."""
+    _git(service.repo_root, "checkout", "-b", "feat/my-work")
+    (service.repo_root / "web/src/Mine.tsx").write_text("mine\n")
+    _git(service.repo_root, "add", "-A")
+    _git(service.repo_root, "commit", "-m", "my work")
+    res = service.start_session("some goal")
+    assert res["ok"], res
+    assert _user_branch(service) == "feat/my-work"
+    service.propose_edit("web/src/App.tsx", "export default 7;\n", "edit")
+    assert _user_branch(service) == "feat/my-work"
+    # The edit landed in the worktree only.
+    assert (service.repo_root / "web/src/App.tsx").read_text() == "export default 1;\n"
+    assert (service.work_root / "web/src/App.tsx").read_text() == "export default 7;\n"
+    service.revert()
+    assert _user_branch(service) == "feat/my-work"
+    assert (service.repo_root / "web/src/Mine.tsx").exists()
 
 
 def test_propose_edit_allowlisted(service: SelfEditService) -> None:
@@ -101,23 +140,42 @@ def test_validate_catches_off_allowlist_working_tree_changes(
     service: SelfEditService,
 ) -> None:
     service.start_session("sneaky")
-    # Bypass the service and dirty a forbidden file directly.
-    (service.repo_root / "jarvis/wakeword.py").write_text("broken\n")
+    # Bypass the service and dirty a forbidden file directly IN THE
+    # SESSION WORKTREE (the user's tree is not part of the session).
+    (service.work_root / "jarvis/wakeword.py").write_text("broken\n")
     res = service.validate()
     allowlist_check = next(c for c in res["checks"] if c["name"] == "allowlist")
     assert not allowlist_check["ok"]
     assert "jarvis/wakeword.py" in allowlist_check["output"]
 
 
-def test_revert_restores_main_and_cleans_up(service: SelfEditService) -> None:
+def test_revert_removes_worktree_and_branch(service: SelfEditService) -> None:
     service.start_session("temporary")
+    worktree = service.work_root
+    branch = service.branch
     service.propose_edit("web/src/App.tsx", "export default 9;\n", "temp")
     res = service.revert()
     assert res["ok"]
-    _c, branch = service._git("branch", "--show-current")
-    assert branch == "main"
+    assert _user_branch(service) == "main"
     assert (service.repo_root / "web/src/App.tsx").read_text() == "export default 1;\n"
+    assert not worktree.exists()
+    code, _out = service._git("rev-parse", "--verify", branch, cwd=service.repo_root)
+    assert code != 0, "session branch should be deleted"
+    _c, worktrees = service._git("worktree", "list", cwd=service.repo_root)
+    assert "selfedit_worktrees" not in worktrees
     assert service.status()["active"] is False
+    assert service.work_root is None
+
+
+def test_a_second_session_can_start_after_revert(service: SelfEditService) -> None:
+    """Teardown must be complete enough that the same slug can be reused —
+    a leftover worktree registration would make every retry of a goal
+    fail with 'already exists'."""
+    assert service.start_session("same goal")["ok"]
+    service.revert()
+    res = service.start_session("same goal")
+    assert res["ok"], res
+    service.revert()
 
 
 def test_second_session_refused_while_active(service: SelfEditService) -> None:
@@ -133,7 +191,7 @@ def test_validate_runs_pytest_gate_and_passes(service: SelfEditService) -> None:
     build, not just leave backend behavior unverified once those three
     pass."""
     service.start_session("add passing test")
-    tests_dir = service.repo_root / "tests" / "unit"
+    tests_dir = service.work_root / "tests" / "unit"
     tests_dir.mkdir(parents=True)
     (tests_dir / "test_ok.py").write_text("def test_ok():\n    assert True\n")
     res = service.validate()
@@ -143,7 +201,7 @@ def test_validate_runs_pytest_gate_and_passes(service: SelfEditService) -> None:
 
 def test_validate_pytest_gate_fails_on_broken_test(service: SelfEditService) -> None:
     service.start_session("add failing test")
-    tests_dir = service.repo_root / "tests" / "unit"
+    tests_dir = service.work_root / "tests" / "unit"
     tests_dir.mkdir(parents=True)
     (tests_dir / "test_broken.py").write_text("def test_broken():\n    assert False\n")
     res = service.validate()

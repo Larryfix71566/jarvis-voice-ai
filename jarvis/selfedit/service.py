@@ -12,9 +12,22 @@ Locked invariants (plan section 1):
 - A rollback tag pre-selfedit-<ts> is created before anything changes.
 - No force-push, no branch deletion of anything but the session branch,
   no user-supplied branch names.
+- **The user's checkout is never touched** (Larry 2026-08-30: "every time
+  we do a self edit we break git"). A session lives in its OWN git
+  worktree under data/selfedit_worktrees/<slug>/ — `git worktree add`
+  from the shared .git — and every read, edit, validation gate, commit and
+  push happens there. The branch the user has checked out, their working
+  tree, and the code the running bot imported from disk are never
+  involved. Before this, start_session ran `git checkout -b` IN the live
+  tree and submit/revert ended with `git checkout main`: a session yanked
+  the user's feature branch out from under them (2026-08-30 the entire
+  native-client tree vanished mid-build), demanded a clean tree first,
+  left the bot running code that no longer matched disk, and made every
+  other git action taken mid-session land on the sandbox branch.
 
 Git is invoked via subprocess with an argument list (never shell), a fixed
-timeout, and cwd pinned to the repo root — same discipline as mcp_git.logic.
+timeout, and cwd pinned to the repo root or the session worktree — same
+discipline as mcp_git.logic.
 """
 
 from __future__ import annotations
@@ -38,6 +51,10 @@ VALIDATE_PYTEST_TIMEOUT_S = 300
 SESSION_BRANCH_PREFIX = "jarvis/self-edit"
 ROLLBACK_TAG_PREFIX = "pre-selfedit"
 DEFAULT_BASE_REF = "origin/main"
+# Session worktrees live under data/ — already self-edit-denied and
+# gitignored (data/selfedit_worktrees/ joins .gitignore explicitly), the
+# same home AppWorkspace uses for foreign repos (data/app_workspaces/).
+WORKTREES_DIR = Path("data") / "selfedit_worktrees"
 
 MAX_FILE_BYTES = 200_000  # refuse oversized writes
 
@@ -116,24 +133,59 @@ class SelfEditService:
         self.goal: str | None = None
         self.proposals: list[dict] = []
         self._validated_ok = False
+        # The session's isolated worktree (None when no session). Every
+        # file read/write and every git command that concerns the SESSION
+        # runs here; the user's checkout (repo_root) is only ever used for
+        # shared-repo operations (fetch, tag, worktree add/remove, branch
+        # -D) and for verify_appearance's "what is the human running"
+        # question.
+        self.work_root: Path | None = None
+
+    @property
+    def tree(self) -> Path:
+        """Where the session's files live: the worktree while a session is
+        active, else the repo root (read-only uses such as
+        describe_boundary)."""
+        return self.work_root if self.work_root is not None else self.repo_root
 
     # ------------------------------------------------------------- git
 
-    def _git(self, *args: str, timeout: int = GIT_TIMEOUT_S) -> tuple[int, str]:
+    def _git(self, *args: str, timeout: int = GIT_TIMEOUT_S,
+             cwd: Path | None = None) -> tuple[int, str]:
+        """Run git. Default cwd is the session worktree when one is active
+        (so diff/add/commit/push act on the SESSION), else the repo root.
+        Pass cwd=self.repo_root explicitly for shared-repo operations."""
         proc = subprocess.run(
             ["git", *args],
-            cwd=self.repo_root,
+            cwd=cwd if cwd is not None else self.tree,
             capture_output=True,
             text=True,
             timeout=timeout,
         )
         return proc.returncode, (proc.stdout + proc.stderr).strip()
 
-    def _git_ok(self, *args: str, timeout: int = GIT_TIMEOUT_S) -> str:
-        code, out = self._git(*args, timeout=timeout)
+    def _git_ok(self, *args: str, timeout: int = GIT_TIMEOUT_S,
+                cwd: Path | None = None) -> str:
+        code, out = self._git(*args, timeout=timeout, cwd=cwd)
         if code != 0:
             raise SelfEditError(f"git {' '.join(args[:2])} failed: {out}")
         return out
+
+    def _worktree_path(self, branch: str) -> Path:
+        return self.repo_root / WORKTREES_DIR / branch.rsplit("/", 1)[-1]
+
+    def _remove_worktree(self, branch: str | None) -> None:
+        """Best-effort teardown of the session worktree + local branch.
+        Shared-repo operations, so cwd is the repo root. Never touches the
+        user's checkout; never deletes any branch but the session's."""
+        self.work_root = None
+        if branch is None:
+            return
+        path = self._worktree_path(branch)
+        if path.exists():
+            self._git("worktree", "remove", "--force", str(path), cwd=self.repo_root)
+        self._git("worktree", "prune", cwd=self.repo_root)
+        self._git("branch", "-D", branch, cwd=self.repo_root)
 
     def _run(self, argv: list[str], cwd: Path, timeout: int) -> tuple[int, str]:
         try:
@@ -157,28 +209,45 @@ class SelfEditService:
                 "error": f"a self-edit session is already active on {self.branch} — "
                          "submit or revert it first",
             }
+        # NO clean-tree requirement on the user's checkout any more: the
+        # session gets its own worktree, which is clean by construction.
+        # The old check forced the developer to "clean up" the user's tree
+        # first (2026-08-30 it deleted a directory to satisfy it).
         try:
-            _code, porcelain = self._git("status", "--porcelain")
-            if porcelain.strip():
-                raise SelfEditError(
-                    "working tree is not clean — commit or stash before starting "
-                    "a self-edit session"
-                )
-            self._git_ok("fetch", "origin", "main")
+            root = self.repo_root
+            self._git_ok("fetch", "origin", "main", cwd=root)
             ts = time.strftime("%Y%m%d-%H%M%S")
             tag = f"{ROLLBACK_TAG_PREFIX}-{ts}"
+            # Two sessions inside one second (a retry right after a
+            # revert) must not collide on the tag — suffix, never -f.
+            n = 2
+            while self._git("rev-parse", "--verify", "-q", f"refs/tags/{tag}", cwd=root)[0] == 0:
+                tag = f"{ROLLBACK_TAG_PREFIX}-{ts}-{n}"
+                n += 1
             branch = f"{SESSION_BRANCH_PREFIX}/{time.strftime('%Y%m%d')}-{_slugify(goal)}"
-            self._git_ok("tag", tag, self.base_ref)
-            self._git_ok("checkout", "-b", branch, self.base_ref)
+            path = self._worktree_path(branch)
+            # A previous session that crashed mid-way may have left a
+            # registered-but-gone worktree or a stale directory; prune
+            # first so `worktree add` sees a clean slate.
+            self._git("worktree", "prune", cwd=root)
+            if path.exists():
+                raise SelfEditError(
+                    f"a stale session worktree exists at {path} — remove it "
+                    "(git worktree remove --force) before starting a new session"
+                )
+            self._git_ok("tag", tag, self.base_ref, cwd=root)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self._git_ok("worktree", "add", str(path), "-b", branch, self.base_ref, cwd=root)
         except SelfEditError as exc:
             return {"ok": False, "error": str(exc)}
         self.branch = branch
         self.rollback_tag = tag
+        self.work_root = path
         self.goal = goal.strip()
         self.proposals = []
         self._validated_ok = False
-        logger.info("selfedit_session_start branch=%s tag=%s", branch, tag)
-        return {"ok": True, "branch": branch, "rollback_tag": tag}
+        logger.info("selfedit_session_start branch=%s tag=%s worktree=%s", branch, tag, path)
+        return {"ok": True, "branch": branch, "rollback_tag": tag, "worktree": str(path)}
 
     # ----------------------------------------------------------- edits
 
@@ -188,7 +257,7 @@ class SelfEditService:
             rel = self._check_path(path)
         except SelfEditError as exc:
             return {"ok": False, "error": str(exc)}
-        full = self.repo_root / rel
+        full = self.tree / rel
         if not full.is_file():
             return {"ok": False, "error": f"no such file: {rel}"}
         if full.stat().st_size > MAX_FILE_BYTES:
@@ -218,7 +287,7 @@ class SelfEditService:
             return {"ok": False, "error": str(exc)}
         if len(new_content.encode("utf-8")) > MAX_FILE_BYTES:
             return {"ok": False, "error": f"edit too large for {rel}"}
-        full = self.repo_root / rel
+        full = self.tree / rel
         full.parent.mkdir(parents=True, exist_ok=True)
         full.write_text(new_content, encoding="utf-8")
         self._validated_ok = False  # any new edit invalidates prior validation
@@ -259,7 +328,9 @@ class SelfEditService:
                     "error": "this session changed nothing visible "
                              "(no web/src or web/public edits)"}
 
-        code, current = self._git("rev-parse", "--abbrev-ref", "HEAD")
+        # The USER's checkout, explicitly — the session worktree is always
+        # on the session branch and would trivially "match".
+        code, current = self._git("rev-parse", "--abbrev-ref", "HEAD", cwd=self.repo_root)
         current = current.strip() if code == 0 else "<unknown>"
         matched = self.branch is not None and current == self.branch
         if not matched and not branch_override:
@@ -382,7 +453,7 @@ class SelfEditService:
                 "Off-allowlist changes require human development."
             )
         rel = Allowlist._normalize(path)
-        if must_exist and not (self.repo_root / rel).is_file():
+        if must_exist and not (self.tree / rel).is_file():
             raise SelfEditError(f"no such file: {rel}")
         return rel
 
@@ -408,13 +479,13 @@ class SelfEditService:
         # 2. Backend import smoke.
         code, out = self._run(
             ["python", "-c", "import jarvis, jarvis.config, jarvis.cli"],
-            cwd=self.repo_root, timeout=120,
+            cwd=self.tree, timeout=120,
         )
         checks.append({"name": "backend_imports", "ok": code == 0,
                        "output": out or "imports ok"})
 
         # 3. Frontend build.
-        web_dir = self.repo_root / "web"
+        web_dir = self.tree / "web"
         code, out = self._run(["npm", "ci"], cwd=web_dir, timeout=BUILD_TIMEOUT_S)
         if code == 0:
             code, out = self._run(["npm", "run", "build"], cwd=web_dir,
@@ -428,7 +499,7 @@ class SelfEditService:
         # break backend behavior; only the test suite catches that.
         code, out = self._run(
             ["python", "-m", "pytest", "tests/unit", "-q"],
-            cwd=self.repo_root, timeout=VALIDATE_PYTEST_TIMEOUT_S,
+            cwd=self.tree, timeout=VALIDATE_PYTEST_TIMEOUT_S,
         )
         checks.append({"name": "pytest", "ok": code == 0,
                        "output": out[-2000:] or "tests ok"})
@@ -487,10 +558,11 @@ class SelfEditService:
                 + ") — review those diffs line by line before merging. "
                 + _MERGE_NOTE
             )
-        # Session is complete; local checkout returns to main.
+        # Session is complete: tear down the worktree + local branch. The
+        # user's checkout is untouched — there is no `checkout main` here
+        # any more, by design (module docstring).
         branch, tag = self.branch, self.rollback_tag
-        self._git("checkout", "main")
-        self._git("branch", "-D", branch)
+        self._remove_worktree(branch)
         self.branch = None
         self.rollback_tag = None
         self.proposals = []
@@ -534,13 +606,17 @@ class SelfEditService:
     # ---------------------------------------------------------- revert
 
     def revert(self) -> dict:
-        """Drop the session: restore the rollback point, delete the branch."""
+        """Drop the session: remove its worktree and delete its branch.
+
+        There is nothing to "restore" in the user's checkout because the
+        session never touched it — the old `checkout main` + `reset --hard
+        <tag>` is gone (it was what moved the user off their branch). The
+        rollback tag stays as the record of the base the session was cut
+        from."""
         if self.branch is None:
             return {"ok": False, "error": "no active session"}
         branch, tag = self.branch, self.rollback_tag
-        self._git("checkout", "main")
-        self._git("reset", "--hard", tag)
-        self._git("branch", "-D", branch)
+        self._remove_worktree(branch)
         logger.info("selfedit_revert branch=%s tag=%s", branch, tag)
         self.branch = None
         self.rollback_tag = None
@@ -567,6 +643,7 @@ class SelfEditService:
             "active": self.branch is not None,
             "branch": self.branch,
             "rollback_tag": self.rollback_tag,
+            "worktree": str(self.work_root) if self.work_root else None,
             "goal": self.goal,
             "proposals": [
                 {"path": p["path"], "rationale": p["rationale"], "diff": p["diff"]}

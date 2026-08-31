@@ -174,6 +174,12 @@ class TestHistoryManagement:
 class TestPersistence:
     async def test_user_and_assistant_rows_written(self, fresh_db):
         from jarvis.db import get_conn
+        # T4a K3: persistence is gated on the sensitive-turn holder, which is
+        # FAIL-CLOSED when unset (an unwired holder suppresses every row, by
+        # design). The live sites (cli.py, pipeline.py) set it before any
+        # turn; this test must too, exactly as the CLI does.
+        from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
+        current_sensitive_turn.set(SensitiveTurn())
 
         orch, _ = make_orchestrator([("text", "stored reply")])
         await orch.chat("stored question")

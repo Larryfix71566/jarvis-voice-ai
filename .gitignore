@@ -47,3 +47,7 @@ macos/**/DerivedData/
 macos/**/build/
 macos/**/*.xcuserstate
 _to_delete/
+
+# Self-edit session worktrees (jarvis/selfedit/service.py) — never part of the user's checkout
+data/selfedit_worktrees/
+_to_delete_tarballs/

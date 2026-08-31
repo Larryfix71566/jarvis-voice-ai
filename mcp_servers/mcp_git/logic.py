@@ -245,7 +245,23 @@ def push(action_id: int) -> dict:
     row = _load_pending(action_id, "git_push")
     if row is None:
         return {"ok": False, "error": "no pending push with that id (missing, used, or expired)"}
-    code, out = _git("push")
+    # Push the branch the draft was prepared for, by explicit refspec, and
+    # set its upstream. A bare `git push` depends on push.default and on
+    # the branch's configured upstream — a branch cut from main inherits
+    # `origin/main` as upstream, so pushing it bare fails with "the upstream
+    # branch of your current branch does not match the name of your
+    # current branch" (2026-08-23 and 2026-08-30, both live). The draft
+    # recorded which branch it meant; refuse if HEAD has moved since, so a
+    # confirm never pushes a branch the user did not preview.
+    branch = (json.loads(row["draft_payload"]) or {}).get("branch") or ""
+    current = git_status()["branch"]
+    if branch and current != branch:
+        msg = (f"HEAD moved since the draft: it was prepared for branch "
+               f"'{branch}' but '{current}' is checked out now — prepare the push again")
+        _resolve(action_id, "failed", msg)
+        return {"ok": False, "error": msg}
+    target = branch or current
+    code, out = _git("push", "-u", "origin", f"{target}:refs/heads/{target}")
     if code != 0:
         _resolve(action_id, "failed", out)
         return {"ok": False, "error": out}

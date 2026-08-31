@@ -154,6 +154,31 @@ class TestStatusDerivation:
         assert store._TIMEOUT_MESSAGE == TIMEOUT_MESSAGE
 
 
+class TestFinishRedactionBinding:
+    def test_finish_redaction_path_binds_reply(self, db_path, root):
+        """T4a's redaction rebinds `reply` inside finish()'s _do closure.
+        Without `nonlocal reply` that rebinding made `reply` a LOCAL of
+        _do, so the first read raised UnboundLocalError, _safe swallowed
+        it, and EVERY run stayed status='running' with no payload file
+        (2026-08-28 → 08-31, 45 warnings, all of a day's runs orphaned).
+        Both branches must finalize the row: plain and sensitive."""
+        rl = make_logger(db_path, root, run_id="r-plain")
+        rl.start()
+        rl.finish("plain reply")
+        rl2 = make_logger(db_path, root, run_id="r-sensitive", sensitive=True)
+        rl2.start()
+        rl2.finish("card 4111 1111 1111 1111")
+        conn = get_conn(db_path)
+        conn.row_factory = sqlite3.Row
+        rows = {r["run_id"]: r for r in conn.execute(
+            "SELECT run_id, status, reply_preview FROM agent_runs").fetchall()}
+        conn.close()
+        assert rows["r-plain"]["status"] == "ok"
+        assert rows["r-plain"]["reply_preview"] == "plain reply"
+        assert rows["r-sensitive"]["status"] == "ok"
+        assert rows["r-sensitive"]["reply_preview"] == "<sensitive>"
+
+
 class TestIdempotentFinish:
     def test_finish_twice_is_a_noop(self, db_path, root):
         rl = make_logger(db_path, root)

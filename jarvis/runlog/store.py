@@ -349,6 +349,16 @@ class RunLogger:
 
     def finish(self, reply: str) -> None:
         def _do() -> None:
+            # `reply` is rebound below (redaction). Without this declaration
+            # Python makes it a LOCAL of _do, so the first read raises
+            # UnboundLocalError BEFORE anything runs, _safe swallows it, and
+            # the run row stays status='running' forever with no payload
+            # file. That was every run from 2026-08-28 (the first bot
+            # session after the redaction landed) to 2026-08-31 — 45
+            # `runlog_write_failed op=finish` warnings, all of today's runs
+            # orphaned at each restart. Pinned by
+            # test_finish_redaction_path_binds_reply.
+            nonlocal reply
             if self._finished:
                 return
             self._finished = True

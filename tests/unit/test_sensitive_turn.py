@@ -121,10 +121,22 @@ def test_p4_p5_supervisor_does_not_persist_when_armed(holder, tmp_path, monkeypa
     monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "t.db"))
     from jarvis.db import get_conn, run_migrations
     run_migrations()
+    from jarvis.agents import supervisor as sup
     from jarvis.agents.supervisor import Orchestrator
 
+    # The Orchestrator now builds its sub-agents at construction (model
+    # discipline A1 reads settings.openai_model); this test exercises only
+    # _persist, so stub the roster out rather than fabricating a Settings.
+    monkeypatch.setattr(sup, "load_sub_agents", lambda *a, **k: {})
+    from types import SimpleNamespace
+    settings = SimpleNamespace(
+        openai_model="test-model", openai_api_key="test",
+        openai_base_url="http://unused", jarvis_name="Jarvis",
+        jarvis_user_name="Boss", jarvis_timezone="America/New_York",
+        jarvis_units="imperial",
+    )
     orch = Orchestrator(
-        settings=object(), registry=object(), session_id="s1",
+        settings=settings, registry=object(), session_id="s1",
         client_factory=lambda settings: None,
     )
 
@@ -167,8 +179,8 @@ def test_real_frame_sequence_suppresses_assistant_row(holder, tmp_path, monkeypa
 
     async def push_obs(frame):
         await obs.on_push_frame(FramePushed(
-            source=None, frame=frame, direction=FrameDirection.DOWNSTREAM,
-            timestamp=0))
+            source=None, destination=None, frame=frame,
+            direction=FrameDirection.DOWNSTREAM, timestamp=0))
     async def push_log(frame):
         await log.process_frame(frame, FrameDirection.DOWNSTREAM)
 

@@ -75,17 +75,24 @@ class FakeAgent:
     crash = False
     gate: threading.Event | None = None
 
-    def __init__(self, service, profile=None):
-        self.profile = profile
-
     def model_label(self):
         return f"{self.profile or 'kimi-k2'} (fake-model)"
+
+    def __init__(self, service, profile=None):
+        self.profile = profile
+        self._cancel = threading.Event()
+
+    def request_cancel(self):
+        self._cancel.set()
 
     def run(self, goal, plan=None):
         if FakeAgent.gate is not None:
             FakeAgent.gate.wait(timeout=5)
         if FakeAgent.crash:
             raise RuntimeError("boom")
+        if self._cancel.is_set():
+            return {"ok": False, "cancelled": True,
+                    "summary": "cancelled by the user before the next planner step"}
         return {"ok": True, "summary": f"planned {goal!r}"}
 
 
@@ -144,12 +151,47 @@ def test_second_run_refused_while_running_and_writes_gated(registry_file, monkey
     try:
         again = c.post("/api/selfedit/run", json={"goal": "two"}).json()
         assert again["ok"] is False and "already in progress" in again["error"]
-        for ep in ("validate", "submit", "revert"):
+        for ep in ("validate", "submit"):
             blocked = c.post(f"/api/selfedit/{ep}").json()
             assert blocked["ok"] is False and "in progress" in blocked["error"]
     finally:
         gate.set()
     _wait_for_job(c, "done")
+
+
+def test_cancel_stops_a_running_planner_and_settles_cancelled(registry_file, monkeypatch):
+    """2026-08-22/23: a kimi-k3 planner sat 'still running' and nothing could
+    stop it — revert refused while busy, and no cancel existed. Cancel is
+    cooperative (takes effect at the loop's next step) and the job settles
+    as `cancelled`, not `error`."""
+    gate = threading.Event()
+    _install_fake_agent(monkeypatch, gate=gate)
+    c = TestClient(app)
+    assert c.post("/api/selfedit/run", json={"goal": "long one"}).json()["started"]
+    res = c.post("/api/selfedit/cancel").json()
+    assert res["ok"] is True and res["cancel_requested"] is True
+    gate.set()
+    job = _wait_for_job(c, "cancelled")
+    assert "cancelled" in job["summary"]
+
+
+def test_revert_while_running_requests_cancel_instead_of_refusing(registry_file, monkeypatch):
+    """The voice path reaches revert, not cancel — so revert-while-busy
+    must mean 'stop and discard', never 'ask for status instead'."""
+    gate = threading.Event()
+    _install_fake_agent(monkeypatch, gate=gate)
+    c = TestClient(app)
+    assert c.post("/api/selfedit/run", json={"goal": "runaway"}).json()["started"]
+    res = c.post("/api/selfedit/revert").json()
+    assert res["ok"] is True and res["cancel_requested"] is True
+    gate.set()
+    _wait_for_job(c, "cancelled")
+
+
+def test_cancel_when_idle_is_refused(registry_file):
+    c = TestClient(app)
+    res = c.post("/api/selfedit/cancel").json()
+    assert res["ok"] is False and "no self-edit run is in progress" in res["error"]
 
 
 def test_run_unknown_profile_rejected(registry_file):

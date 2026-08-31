@@ -40,6 +40,7 @@ import asyncio
 import json
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -282,6 +283,14 @@ class UpgradeAgent:
         self.service = service
         self.cfg = load_agent_config(config_path, section=config_section)
         self._system_prompt = system_prompt or SYSTEM_PROMPT
+        # Cooperative cancel (Larry 2026-08-30/31: a kimi-k3 planner sat
+        # "still running" for the caption goal and nothing could stop it —
+        # selfedit_revert refuses while busy, and there was no cancel at
+        # all). POST /api/selfedit/cancel sets this; the edit loop checks
+        # it before every planner step. It cannot interrupt a completion
+        # call already in flight (that returns or hits its own read
+        # timeout first), so "cancel" means "stop at the next step".
+        self._cancel = threading.Event()
         # G5 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): the
         # developer-loop (SubAgent) has read docs/REPO_MAP.md into its
         # prompt since the Model Discipline plan; this loop — which does
@@ -564,7 +573,13 @@ class UpgradeAgent:
         # once: iterations_used only increases, and a later council-retry
         # budget extension can't push it back to this value.
         halfway_checkpoint = self.cfg["max_iterations"] // 2
+        cancelled = False
         while iterations_used < iterations_budget:
+            if self._cancel.is_set():
+                cancelled = True
+                summary = ("cancelled by the user before the next planner step; "
+                           "no changes were submitted")
+                break
             iterations_used += 1
             if iterations_used == halfway_checkpoint and not self.service.proposals:
                 messages.append({
@@ -753,7 +768,17 @@ class UpgradeAgent:
             "ok": ok, "summary": summary, "status": self.service.status(),
             "failovers": list(self._failover_notes),
             "final_profile": self.profile_name,
+            "cancelled": cancelled,
         }
+
+    def request_cancel(self) -> None:
+        """Ask the running edit loop to stop at its next step (see
+        __init__). Safe to call from any thread; idempotent."""
+        self._cancel.set()
+
+    @property
+    def cancel_requested(self) -> bool:
+        return self._cancel.is_set()
 
     def _maybe_escalate(self, *, goal: str, trigger: str,
                         context: dict) -> str | None:
