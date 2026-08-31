@@ -64,7 +64,7 @@ DEFAULT_TIER = "project"  # unknown/legacy rows land in the middle, never identi
 # state jarvis.memory_sweep's capacity-enforcement ladder eliminates, not
 # one this renderer papers over by silently dropping. These numbers are
 # sized so a FULL store (every tier at its cap) fits inside
-# MAX_CONTEXT_CHARS: 8ish identity + 15 preference + 8 project facts at the
+# MAX_CONTEXT_CHARS: 8ish identity + 30 preference + 8 project facts at the
 # observed ~90 chars/fact is ~2,800 chars, comfortably under 3,000 — a
 # prompt already ~10KB deep can afford that. The old flat MAX_FACTS = 30
 # global cap is DELETED here: it overlapped with these per-tier caps (the
@@ -73,7 +73,7 @@ DEFAULT_TIER = "project"  # unknown/legacy rows land in the middle, never identi
 MAX_PREFERENCE_FACTS = 30  # raised from 15 (2026-08-31): Larry has >15 real standing preferences; forcing merges below that count destroys information
 MAX_PROJECT_FACTS = 8
 MAX_SUMMARY_CHARS = 600
-MAX_CONTEXT_CHARS = 3000
+MAX_CONTEXT_CHARS = 8000  # raised from 3000 (2026-08-31): sized for the old 15-pref cap; 3000 silently truncated below the per-tier caps. 8000 fits pref 30 + project 8 + identity + summary
 MAX_TRANSCRIPT_ROWS = 60
 MAX_ROW_CHARS = 300
 
