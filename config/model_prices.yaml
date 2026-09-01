@@ -8,17 +8,32 @@
 # string for every row — it's constructed fresh so every rung's key is
 # derivable the same way regardless of which file the call came from.
 #
-# RATES BELOW ARE PLACEHOLDERS (0.0). Fill from each vendor's current
-# pricing page before trusting cost_report.py's dollar figures — token
-# counts are accurate from day one regardless; dollars are not until this
-# is filled in.
+# RATES FILLED 2026-09-01 from vendor pricing pages (see per-entry source
+# notes below). Anthropic rates are from platform.claude.com/docs/en/
+# about-claude/pricing (official, per-model table). Moonshot rates are
+# from platform.kimi.ai's own per-model pricing docs (chat-k3 /
+# chat-k27-code), NOT OpenRouter's markup for the same models — this repo
+# reaches Moonshot directly (moonshot/kimi-* keys), so the direct price is
+# the correct one here. OpenRouter rates are each model's own OpenRouter
+# pricing page; a few of those (flagged inline) are blended
+# across-provider averages with an active promo folded in rather than a
+# single canonical list price — fine for now since computed_cost is only
+# the fallback for OpenRouter rows until reported_cost lands from the
+# puller (see the OpenRouter section below), but re-check before trusting
+# these for anything precise.
 #
 # cache_write_mult / cache_read_mult are multipliers on the INPUT rate.
-# Anthropic-quoted defaults: 1.25 write (5-min TTL; 2.0 for 1h TTL), 0.10
-# read. UNVERIFIED whether these even apply through the OpenAI-compatible
-# endpoint this repo uses (see usage_ledger.py's adapter note) — set
-# JARVIS_DEBUG_USAGE_LEDGER=1 and check a real response's usage object
-# before assuming any cache multiplier is meaningful for these rows.
+# Anthropic confirmed (per-model pricing table): 1.25 write (5-min TTL;
+# 2.0 for 1h TTL), 0.10 read — uniform across Haiku/Opus/Fable, so kept as
+# the default here rather than a special case. Whether these multipliers
+# even apply through the OpenAI-compatible endpoint this repo uses is
+# STILL UNVERIFIED (see usage_ledger.py's adapter note and
+# scripts/test_prompt_caching.py's finding that prompt_tokens_details is
+# null on this deployment's compat endpoint) — filling the rate here
+# answers "what would this cost if caching were active", not "is caching
+# active today". Non-Anthropic providers mostly don't publish a cache
+# write premium (cache write priced same as a normal input token) — set
+# to 1.0 unless a source explicitly says otherwise.
 
 version: "2026-09-01"
 
@@ -26,43 +41,58 @@ models:
   # ---- reached directly, via settings.openai_* (9 rungs default here) ----
   # scheduler, librarian, analyst, systems, supervisor, memory_merge,
   # memory_classify, memory_extraction, kb_digest, procedures_describe
+  # Source: platform.claude.com/docs/en/about-claude/pricing, 2026-09-01.
   anthropic/claude-haiku-4-5:
-    input_per_m: 0.0      # <-- fill from anthropic.com/pricing
-    output_per_m: 0.0     # <-- fill
+    input_per_m: 1.0
+    output_per_m: 5.0
     cache_write_mult: 1.25
     cache_read_mult: 0.10
     history: []
 
   # ---- developer rung (base.py, model_profile: claude-opus) ----
+  # Source: platform.claude.com/docs/en/about-claude/pricing, 2026-09-01.
   anthropic/claude-opus-5:
-    input_per_m: 0.0      # <-- fill
-    output_per_m: 0.0     # <-- fill
+    input_per_m: 5.0
+    output_per_m: 25.0
     cache_write_mult: 1.25
     cache_read_mult: 0.10
     history: []
 
   # ---- present in upgrade_models.yaml (Mythos-class); not currently
   # assigned to any rung in agents.yaml, but a profile exists ----
+  # Source: platform.claude.com/docs/en/about-claude/pricing, 2026-09-01.
+  # Note: this is Claude Fable 5 (not 5.1) — the 5.1 line gets a special
+  # 0.025x cache-hit multiplier per that same table; 5 does not, its
+  # cache read is the standard 0.10x, so no special-case needed here.
   anthropic/claude-fable-5:
-    input_per_m: 0.0      # <-- fill
-    output_per_m: 0.0     # <-- fill
+    input_per_m: 10.0
+    output_per_m: 50.0
     cache_write_mult: 1.25
     cache_read_mult: 0.10
     history: []
 
   # ---- direct Moonshot (council pool + upgrade_models default) ----
+  # Source: platform.kimi.ai/docs/pricing/chat-k3, 2026-09-01 (official,
+  # direct — NOT OpenRouter's marked-up $2.55/$12.75 for the same model).
+  # Cache hit $0.30/M vs cache-miss input $3.00/M -> mult 0.10. No
+  # separate cache-write premium documented; Moonshot's own docs describe
+  # "automatic context caching" without a write surcharge, so left at 1.0
+  # rather than assumed.
   moonshot/kimi-k3:
-    input_per_m: 0.0      # <-- fill from moonshot.ai pricing
-    output_per_m: 0.0
-    cache_write_mult: 1.0   # verify — Moonshot cache pricing not confirmed
-    cache_read_mult: 1.0
+    input_per_m: 3.00
+    output_per_m: 15.00
+    cache_write_mult: 1.0
+    cache_read_mult: 0.10
     history: []
 
+  # Source: platform.kimi.ai/docs/pricing/chat-k27-code, 2026-09-01
+  # (standard kimi-k2.7-code tier, not the -highspeed variant). Cache hit
+  # $0.19/M vs cache-miss input $0.95/M -> mult 0.20.
   moonshot/kimi-k2.7-code:
-    input_per_m: 0.0
-    output_per_m: 0.0
+    input_per_m: 0.95
+    output_per_m: 4.00
     cache_write_mult: 1.0
-    cache_read_mult: 1.0
+    cache_read_mult: 0.20
     history: []
 
   # ---- OpenRouter council pool — model string here is profile["identity"]
@@ -70,66 +100,87 @@ models:
   # OpenRouter's OWN reported cost is ground truth when available (see
   # the puller's enrichment) — these entries are the fallback for
   # computed_cost when reported_cost is still null (before the puller
-  # has enriched that row). ----
+  # has enriched that row). Source for each: that model's own page at
+  # openrouter.ai/<vendor>/<model>, 2026-09-01, standard/default provider
+  # tier (not Flex/Priority/regional variants, which run higher or lower).
   openrouter/openai/gpt-5-mini:
-    input_per_m: 0.0
-    output_per_m: 0.0
+    input_per_m: 0.25
+    output_per_m: 2.0
     cache_write_mult: 1.0
-    cache_read_mult: 1.0
+    cache_read_mult: 0.10
     history: []
 
+  # Listed page price; OpenRouter noted an active 50% promo on top of this
+  # at fetch time — that discount is not baked in here since promos
+  # expire. Re-check if computed_cost looks off for this rung.
   openrouter/google/gemini-3.7-flash:
-    input_per_m: 0.0
-    output_per_m: 0.0
+    input_per_m: 0.75
+    output_per_m: 3.75
     cache_write_mult: 1.0
-    cache_read_mult: 1.0
+    cache_read_mult: 0.10
     history: []
 
+  # OpenRouter's page reports this as a blended average across its 15
+  # providers for this model (~28% off standard), not one vendor's list
+  # price — treat as approximate.
   openrouter/deepseek/deepseek-v3.2:
-    input_per_m: 0.0
-    output_per_m: 0.0
+    input_per_m: 0.2088
+    output_per_m: 0.3096
     cache_write_mult: 1.0
-    cache_read_mult: 1.0
+    cache_read_mult: 0.10
     history: []
 
   openrouter/openai/gpt-5.1:
-    input_per_m: 0.0
-    output_per_m: 0.0
+    input_per_m: 1.25
+    output_per_m: 10.0
     cache_write_mult: 1.0
-    cache_read_mult: 1.0
+    cache_read_mult: 0.10
     history: []
 
+  # OpenRouter's page confirms cache READ at $0.20/M (mult 0.10, matches
+  # direct anthropic/claude-sonnet-5 above) but does not separately
+  # confirm a cache WRITE premium for the OpenRouter-proxied path — kept
+  # at Anthropic's own 1.25 since this is genuinely Anthropic's model
+  # passed through, but flagged per the A5 check note below: still
+  # UNVERIFIED whether OpenRouter's Anthropic passthrough actually
+  # surfaces a distinct cache-write charge the way the direct API does.
   openrouter/anthropic/claude-sonnet-5:
-    input_per_m: 0.0
-    output_per_m: 0.0
+    input_per_m: 2.0
+    output_per_m: 10.0
     cache_write_mult: 1.25   # if Anthropic-via-OpenRouter passthrough works
-    cache_read_mult: 0.10    # — UNVERIFIED, see A5 check in the puller
+    cache_read_mult: 0.10    # — confirmed via OpenRouter's own cache-read price
     history: []
 
   openrouter/x-ai/grok-4.3:
-    input_per_m: 0.0
-    output_per_m: 0.0
+    input_per_m: 1.25
+    output_per_m: 2.50
     cache_write_mult: 1.0
-    cache_read_mult: 1.0
+    cache_read_mult: 0.16
     history: []
 
+  # Azure-hosted rate per OpenRouter's page (the listed provider for this
+  # model there).
   openrouter/openai/gpt-5.1-codex-max:
-    input_per_m: 0.0
-    output_per_m: 0.0
+    input_per_m: 1.25
+    output_per_m: 10.0
     cache_write_mult: 1.0
-    cache_read_mult: 1.0
+    cache_read_mult: 0.10
     history: []
 
   openrouter/x-ai/grok-4.6:
-    input_per_m: 0.0
-    output_per_m: 0.0
+    input_per_m: 2.0
+    output_per_m: 6.0
     cache_write_mult: 1.0
-    cache_read_mult: 1.0
+    cache_read_mult: 0.25
     history: []
 
+  # OpenRouter lists this as "DeepSeek V4 Pro 0423"; standard/DigitalOcean
+  # rate used here (several providers list steeper discounts on the same
+  # page, e.g. StreamLake ~41% off — not used, since those are
+  # provider-specific and this is a fallback estimate, not a live quote).
   openrouter/deepseek/deepseek-v4-pro:
-    input_per_m: 0.0
-    output_per_m: 0.0
+    input_per_m: 0.87
+    output_per_m: 1.74
     cache_write_mult: 1.0
-    cache_read_mult: 1.0
+    cache_read_mult: 0.20
     history: []
