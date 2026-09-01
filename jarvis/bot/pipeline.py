@@ -77,6 +77,7 @@ from jarvis.memory import (
     render_memory_context,
     update_memory_from_session,
 )
+from jarvis.kb_digest import write_session_digest
 from jarvis.prompts import (
     SUPERVISOR_PROMPT,
     HANDOFF_ADDENDUM,
@@ -1160,6 +1161,25 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             except Exception:  # noqa: BLE001 — memory must never break shutdown
                 _logger.exception(
                     "memory_extraction_failed session=%s", runtime.session_id
+                )
+
+            # W1 (2026-08-31): knowledge-base digest, separate layer from
+            # the facts fold-in above. Same never-break-shutdown discipline;
+            # write_session_digest already catches and logs every internal
+            # failure itself (mirrors update_memory_from_session's own
+            # contract), so this wrapper only needs to guard the await.
+            try:
+                await asyncio.wait_for(
+                    write_session_digest(settings, runtime.session_id),
+                    timeout=MEMORY_EXTRACTION_TIMEOUT_S,
+                )
+            except asyncio.TimeoutError:
+                _logger.warning(
+                    "kb_digest_timeout session=%s", runtime.session_id
+                )
+            except Exception:  # noqa: BLE001 — digest must never break shutdown
+                _logger.exception(
+                    "kb_digest_failed session=%s", runtime.session_id
                 )
     finally:
         await registry.stop()

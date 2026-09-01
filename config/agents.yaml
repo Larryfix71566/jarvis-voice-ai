@@ -11,8 +11,8 @@ sub_agents:
     description: "Time, dates, day-of-week and calendar questions in the user's timezone; reminders, alarms, scheduling and planning."
   - name: librarian
     display_name: Librarian
-    mcp_servers: [mcp-notes, mcp-memory, mcp-screen]
-    description: "Long-term memory: store and recall facts, notes, preferences. Also resolves flagged memory conflicts and cleanup items awaiting review: list them, keep one side, rewrite, dismiss, convert to a workflow, or archive as implemented. Archived facts (merged or aged out by capacity enforcement, never deleted) are still searchable with memory_search — use it before telling the user something is forgotten."
+    mcp_servers: [mcp-notes, mcp-memory, mcp-kb, mcp-screen]
+    description: "Long-term memory: store and recall facts, notes, preferences. Also resolves flagged memory conflicts and cleanup items awaiting review: list them, keep one side, rewrite, dismiss, convert to a workflow, or archive as implemented. Archived facts (merged or aged out by capacity enforcement, never deleted) are still searchable with memory_search — use it before telling the user something is forgotten. Also searches a separate knowledge base of longer curated project documents and session digests (kb_search/kb_read/kb_neighbors) — distinct from the keyed facts above; use this when the user asks about something more like a document, decision record, or past session's details rather than a short preference or fact."
   - name: analyst
     display_name: Analyst
     mcp_servers: [mcp-web, mcp-screen]
