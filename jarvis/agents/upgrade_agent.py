@@ -49,6 +49,7 @@ import yaml
 
 from jarvis.repo_map import load_repo_map_suffix
 from jarvis.selfedit.service import SelfEditService
+from jarvis.usage_ledger import record_completion, provider_from_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -466,7 +467,17 @@ class UpgradeAgent:
         attempts = 0
         while True:
             try:
-                return self._client.chat.completions.create(**request)
+                response = self._client.chat.completions.create(**request)
+                try:
+                    record_completion(
+                        rung=f"{self._council_workflow}_executor",
+                        provider=provider_from_base_url(str(self._client.base_url)),
+                        model=self.model,
+                        response=response,
+                    )
+                except Exception:
+                    pass
+                return response
             except Exception as exc:  # noqa: BLE001 — classified immediately below
                 if not self._is_unreachable(exc) or attempts >= MAX_PLANNER_FAILOVERS:
                     raise

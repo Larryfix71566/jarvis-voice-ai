@@ -55,6 +55,7 @@ from jarvis.memory import (
     upsert_fact,
 )
 from jarvis.procedures import _tokens
+from jarvis.usage_ledger import record_completion, provider_from_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -365,6 +366,15 @@ async def _merge_cluster(
                 {"role": "user", "content": MERGE_PROMPT.format(facts=facts_block)},
             ],
         )
+        try:
+            record_completion(
+                rung="memory_merge",
+                provider=provider_from_base_url(str(client.base_url)),
+                model=model,
+                response=response,
+            )
+        except Exception:
+            pass
         text = (response.choices[0].message.content or "").strip()
         return text or None
     except Exception:  # noqa: BLE001 — a failed merge falls through to age-out
@@ -653,6 +663,15 @@ async def _classify_batch(
             {"role": "user", "content": json.dumps(payload)},
         ],
     )
+    try:
+        record_completion(
+            rung="memory_classify",
+            provider=provider_from_base_url(str(client.base_url)),
+            model=settings.openai_model,
+            response=response,
+        )
+    except Exception:
+        pass
     return _parse_classification(response.choices[0].message.content or "")
 
 

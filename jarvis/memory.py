@@ -31,6 +31,7 @@ from openai import AsyncOpenAI
 from jarvis.config import Settings
 from jarvis.db import get_conn, now_iso
 from jarvis.sensitive import detect_financial
+from jarvis.usage_ledger import record_completion, provider_from_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -878,6 +879,16 @@ async def update_memory_from_session(
                 },
             ],
         )
+        try:
+            record_completion(
+                rung="memory_extraction",
+                provider=provider_from_base_url(str(client.base_url)),
+                model=settings.openai_model,
+                response=response,
+                session_id=session_id,
+            )
+        except Exception:
+            pass
         update = _parse_update(response.choices[0].message.content or "")
         if update is None:
             logger.warning("memory_update_unparseable session=%s", session_id)

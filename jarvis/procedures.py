@@ -50,6 +50,7 @@ from openai import AsyncOpenAI
 
 from jarvis.db import get_conn, now_iso
 from jarvis.runlog import get_run
+from jarvis.usage_ledger import record_completion, provider_from_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -365,6 +366,15 @@ async def _describe_procedure(
             {"role": "user", "content": f"Agent: {agent}\nTask: {task}"},
         ],
     )
+    try:
+        record_completion(
+            rung="procedures_describe",
+            provider=provider_from_base_url(str(client.base_url)),
+            model=settings.openai_model,
+            response=response,
+        )
+    except Exception:
+        pass
     return _parse_label_description(response.choices[0].message.content or "")
 
 
