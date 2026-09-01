@@ -8,10 +8,28 @@ sub_agents:
   - name: scheduler
     display_name: Scheduler
     mcp_servers: [mcp-time, mcp-reminders, mcp-screen]
+    # 2026-09-01 — model floor (Larry: "the only agent that can use Haiku is
+    # the voice agent; all other agents should not go below the Sonnet or
+    # equivalent level"; MORTIMER_OPTIMIZATION_PLAN.md Phase 0b item 5).
+    # Supersedes the earlier "Haiku is correct for the conversational
+    # agents" stance. `refuse`, not `warn`: warn falls back to the voice
+    # model, which IS Haiku — the one outcome the floor forbids. Pinned by
+    # tests/unit/test_model_floor.py.
+    model_profile: claude-sonnet-5
+    on_profile_fallback: refuse
     description: "Time, dates, day-of-week and calendar questions in the user's timezone; reminders, alarms, scheduling and planning."
   - name: librarian
     display_name: Librarian
     mcp_servers: [mcp-notes, mcp-memory, mcp-kb, mcp-screen]
+    # 2026-09-01 — model floor (Larry: "the only agent that can use Haiku is
+    # the voice agent; all other agents should not go below the Sonnet or
+    # equivalent level"; MORTIMER_OPTIMIZATION_PLAN.md Phase 0b item 5).
+    # Supersedes the earlier "Haiku is correct for the conversational
+    # agents" stance. `refuse`, not `warn`: warn falls back to the voice
+    # model, which IS Haiku — the one outcome the floor forbids. Pinned by
+    # tests/unit/test_model_floor.py.
+    model_profile: claude-sonnet-5
+    on_profile_fallback: refuse
     description: "Long-term memory: store and recall facts, notes, preferences. Also resolves flagged memory conflicts and cleanup items awaiting review: list them, keep one side, rewrite, dismiss, convert to a workflow, or archive as implemented. Archived facts (merged or aged out by capacity enforcement, never deleted) are still searchable with memory_search — use it before telling the user something is forgotten. Also searches a separate knowledge base of longer curated project documents and session digests (kb_search/kb_read/kb_neighbors) — distinct from the keyed facts above; use this when the user asks about something more like a document, decision record, or past session's details rather than a short preference or fact."
   - name: analyst
     display_name: Analyst
@@ -32,12 +50,30 @@ sub_agents:
     # less wrong rather than fixing the routing.
     timeout_s: 120
     max_iterations: 15
+    # 2026-09-01 — model floor (Larry: "the only agent that can use Haiku is
+    # the voice agent; all other agents should not go below the Sonnet or
+    # equivalent level"; MORTIMER_OPTIMIZATION_PLAN.md Phase 0b item 5).
+    # Supersedes the earlier "Haiku is correct for the conversational
+    # agents" stance. `refuse`, not `warn`: warn falls back to the voice
+    # model, which IS Haiku — the one outcome the floor forbids. Pinned by
+    # tests/unit/test_model_floor.py.
+    model_profile: claude-sonnet-5
+    on_profile_fallback: refuse
     description: "Web research, current events, sports results, weather, the time in other cities, and general lookups."
   - name: systems
     display_name: Systems
     # mcp-screen: visual troubleshooting — see a screen rather than
     # only reading logs (MORTIMER_SHELL_FIX_AND_SCREEN_VISION_PLAN.md V3).
     mcp_servers: [mcp-system, mcp-screen]
+    # 2026-09-01 — model floor (Larry: "the only agent that can use Haiku is
+    # the voice agent; all other agents should not go below the Sonnet or
+    # equivalent level"; MORTIMER_OPTIMIZATION_PLAN.md Phase 0b item 5).
+    # Supersedes the earlier "Haiku is correct for the conversational
+    # agents" stance. `refuse`, not `warn`: warn falls back to the voice
+    # model, which IS Haiku — the one outcome the floor forbids. Pinned by
+    # tests/unit/test_model_floor.py.
+    model_profile: claude-sonnet-5
+    on_profile_fallback: refuse
     description: "Local machine status: CPU, memory, disk, battery, uptime."
   - name: developer
     display_name: Developer

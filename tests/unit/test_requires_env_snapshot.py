@@ -44,6 +44,11 @@ EXPECTED = {
     "mcp-screen":    (["JARVIS_SCREEN_ENABLED", "JARVIS_VISION_PROFILE"],
                       ["JARVIS_SCREEN_RETENTION_HOURS", "JARVIS_UPGRADE_MODELS"],
                       {}),
+    # 2026-09-01 — mcp-kb (librarian's knowledge-base server, commit 3d63f59
+    # wired it into agents.yaml). KB_BASE_URL is required (no code default;
+    # see the skill.yaml comment) so the vault service URL can be overridden
+    # without expand_env_vars leaving a literal "${KB_BASE_URL}".
+    "mcp-kb":        (["KB_BASE_URL"], [], {}),
 }
 
 

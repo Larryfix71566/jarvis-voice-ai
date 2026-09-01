@@ -493,21 +493,42 @@ class TestCapacityHandling:
         project_idx = next(i for i, l in enumerate(lines) if l.startswith("- project."))
         assert user_idx < project_idx
 
-    def test_char_budget_overflow_logs_and_drops_remainder(self, conn, caplog):
-        # Exactly MAX_PREFERENCE_FACTS facts — AT the tier cap, not over it,
-        # so this exercises the char-budget truncation point in isolation
-        # from the tier-cap one. Each line is long enough (~218 chars) that
-        # MAX_PREFERENCE_FACTS of them (~3,270 chars) overflows the 3,000
-        # char budget.
+    def test_char_budget_overflow_logs_and_drops_remainder(self, conn, caplog, monkeypatch):
+        # 2026-09-01 — was hardcoded arithmetic ("MAX_PREFERENCE_FACTS of
+        # them (~3,270 chars) overflows the 3,000 char budget"), pinned to
+        # the OLD MAX_PREFERENCE_FACTS=15 / MAX_CONTEXT_CHARS=3000. The
+        # 2026-08-31 capacity change (15->30 preference facts, 3000->8000
+        # budget, "sized to fit pref 30 + project 8 + identity + summary")
+        # made that arithmetic false: 30 facts at this size total ~6,540
+        # chars against an 8,000 budget, so nothing overflowed, no warning
+        # fired, and caplog.text came back empty — production code was
+        # correct, the test's premise was stale. Fixed the way its own
+        # sibling below already does it (test_summary_dropped_when_no_room_
+        # logs): shrink MAX_CONTEXT_CHARS directly via monkeypatch instead
+        # of re-deriving a fact count/size that overflows whatever the
+        # constants happen to be today — deterministic regardless of any
+        # future capacity retuning.
+        import jarvis.memory as memory_module
+        monkeypatch.setattr(memory_module, "MAX_CONTEXT_CHARS", 500)
+
+        # Exactly MAX_PREFERENCE_FACTS facts — AT the tier cap, not over it
+        # — so a drop can ONLY come from the char budget, never tier_cap;
+        # that isolation is the point of this test versus
+        # test_over_tier_cap_logs_and_drops above.
         long_value = "x" * 190  # near MAX_FACT_CHARS (200)
         for i in range(MAX_PREFERENCE_FACTS):
             upsert_fact(conn, f"user.preference.item{i:02d}", long_value, "s1")
 
         rendered = render_memory_context(conn)
-        assert len(rendered) <= MAX_CONTEXT_CHARS + 100  # some slack for summary line
+        assert len(rendered) <= 500 + 100  # some slack for the summary line
+        lines = [l for l in rendered.split("\n") if l.startswith("- ")]
+        assert 0 < len(lines) < MAX_PREFERENCE_FACTS, (
+            "the shrunk budget must drop SOME but not ALL facts, or this "
+            "test isn't exercising truncation at all"
+        )
         assert "memory_context_facts_dropped" in caplog.text
         assert "reason=char_budget" in caplog.text
-        assert "reason=char_budget" in caplog.text
+        assert "reason=tier_cap" not in caplog.text  # isolation, not a merge
 
     def test_no_drop_logged_when_everything_fits(self, conn, caplog):
         upsert_fact(conn, "user.name", "Larry", "s1")

@@ -1,8 +1,0 @@
-# Extracted from memory fact 'user.preference.model_selection' on conversion (K6.2).
-# REVIEW ME: `when` decides what this matches and `done_when` is
-# what makes it more than a note. Both are drafts.
-name: user-preference-model-selection
-when: "Questions why less capable models (Haiku) are used for research when more capable models (Opus) could be used; wants developer to investigate and prefers capabl"
-steps:
-  - Questions why less capable models (Haiku) are used for research when more capable models (Opus) could be used; wants developer to investigate and prefers capable models for complex tasks
-done_when: []

@@ -112,22 +112,6 @@ app.add_middleware(
 )
 
 
-# MORTIMER_AGENT_TRUST_PLAN.md D17: logs/admin.log was 0 bytes across every
-# rotation. Root cause was uvicorn.run(..., log_level="warning") in main()
-# below suppressing uvicorn's own startup/access logging entirely, with
-# nothing in this module configuring a logger of its own to fill the gap —
-# so the redirect in scripts/mortimer.sh (`>> logs/admin.log 2>&1`) had
-# nothing to capture. This basicConfig call is what actually produces
-# output; it must run before uvicorn.run() so the first log lines (the
-# startup line emitted from main(), below) are not lost to an unconfigured
-# root logger. stream=sys.stdout matches the redirect's expectation that
-# both this process's own logs and any survivng uvicorn output land in the
-# same file.
-logging.basicConfig(
-    level=logging.INFO,
-    stream=sys.stdout,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
 
 
 @app.middleware("http")
@@ -1834,6 +1818,24 @@ def plan_cancel() -> dict:
 
 def main() -> None:
     import uvicorn
+
+    # 2026-09-01 (MORTIMER_OPTIMIZATION_PLAN.md conflict resolution) —
+    # moved D17's basicConfig() here from module level. Any test that
+    # merely imports jarvis.admin.server (nine test_admin_*.py files do,
+    # plus test_classify.py's /api/knowledge tests) used to trigger this
+    # as an import-time side effect, fighting pytest's own root-logger
+    # handler setup — implicated in tests/unit/test_memory.py's
+    # TestCapacityHandling caplog assertions coming back empty when run
+    # after those files. main() is the only caller that actually needs
+    # configured logging (a real uvicorn process); importing this module
+    # for its FastAPI app, endpoints, or helpers must stay side-effect
+    # free. Same config, same D17 reasoning — just scoped to where the
+    # server actually starts instead of where the module is loaded.
+    logging.basicConfig(
+        level=logging.INFO,
+        stream=sys.stdout,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
 
     host, port = "127.0.0.1", 7861
     # D17 — at minimum, log startup with host/port/repo root. Logged via

@@ -1,8 +1,0 @@
-# Extracted from memory fact 'user.preference.model_defaults' on conversion (K6.2).
-# REVIEW ME: `when` decides what this matches and `done_when` is
-# what makes it more than a note. Both are drafts.
-name: user-preference-model-defaults
-when: "All specialist agents (analyst, librarian, scheduler, systems, developer) must use Sonnet or better. Haiku is reserved for Mortimer's own communication response"
-steps:
-  - All specialist agents (analyst, librarian, scheduler, systems, developer) must use Sonnet or better. Haiku is reserved for Mortimer's own communication responses only, for latency. Never delegate rese
-done_when: []

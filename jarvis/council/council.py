@@ -246,7 +246,18 @@ async def _call_profile(
                 }
         return content, usage
 
-    return await asyncio.wait_for(asyncio.to_thread(_sync_call), timeout=timeout_s)
+    # 2026-09-01 (MORTIMER_OPTIMIZATION_PLAN.md Phase 0b) — a profile may
+    # declare `timeout_s` to buy itself MORE time than the caller's floor,
+    # never less: max() keeps COUNCIL_MEMBER_TIMEOUT_S / PLANNING_MEMBER_
+    # TIMEOUT_S as floors and lets an always-on-thinking model (kimi-k3,
+    # round e48cfbe1: four judge timeouts with empty abstain reasons) finish
+    # a real judge workload instead of abstaining by clock.
+    try:
+        profile_timeout = float(profile.get("timeout_s") or 0)
+    except (TypeError, ValueError):
+        profile_timeout = 0.0
+    effective = max(float(timeout_s), profile_timeout)
+    return await asyncio.wait_for(asyncio.to_thread(_sync_call), timeout=effective)
 
 
 def _proposer_user_message(goal: str, context: dict[str, Any], placement: str) -> str:
