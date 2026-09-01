@@ -3,3 +3,4 @@
 vault: ./scripts/run_kb.sh
 bot: ./scripts/wait_for.sh 127.0.0.1 8484 30 vault && ./scripts/run_bot.sh
 # api: ./scripts/wait_for.sh 127.0.0.1 8484 30 vault && ./scripts/run_api.sh
+costs: uvicorn jarvis.costs_api:app --port 8487
