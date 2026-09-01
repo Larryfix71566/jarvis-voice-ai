@@ -8,13 +8,15 @@ import JarvisKit
 @MainActor
 @Observable
 final class DrawerState {
-    /// The seven load-bearing tab keys (SideDrawer.tsx TAB_KEYS) —
+    /// The eight load-bearing tab keys (SideDrawer.tsx TAB_KEYS) —
     /// ui_control.py's TAB_ALIASES resolves server-side, so the client
-    /// only ever receives one of these.
-    static let tabKeys = ["repo", "edit", "memory", "runs", "agents", "output", "transcript"]
+    /// only ever receives one of these. "costs" added 2026-09-01
+    /// (MORTIMER_OPTIMIZATION_PLAN.md Phase 0 step 9) — kept in lockstep
+    /// with jarvis/bot/ui_control.py's UI_TABS in the same commit.
+    static let tabKeys = ["repo", "edit", "memory", "runs", "agents", "output", "transcript", "costs"]
     static let tabLabels: [String: String] = [
         "repo": "Repo", "edit": "Edit", "memory": "Memory", "runs": "Runs",
-        "agents": "Agents", "output": "Output", "transcript": "Log",
+        "agents": "Agents", "output": "Output", "transcript": "Log", "costs": "Costs",
     ]
 
     var activeTab: String = "repo" {

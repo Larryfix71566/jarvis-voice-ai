@@ -2,11 +2,12 @@ import SwiftUI
 import JarvisKit
 
 /// APP plan §3 P15, §5 step 6 — the tab strip + active tab body; the
-/// DrawerScene body and the console's docked drawer share it. The seven
+/// DrawerScene body and the console's docked drawer share it. The eight
 /// keys/labels are load-bearing (SideDrawer.tsx / ui_control.py aliases)
 /// and are owned by DrawerState. View-models are owned HERE (the scene),
 /// not by the tab views — a tab view unmounting on switch must not
-/// restart its poll or lose a half-finished draft (P6).
+/// restart its poll or lose a half-finished draft (P6). "costs" added
+/// 2026-09-01 (MORTIMER_OPTIMIZATION_PLAN.md Phase 0 step 9).
 struct DrawerView: View {
     @EnvironmentObject private var client: JarvisClient
     @Environment(DrawerState.self) private var drawer
@@ -18,6 +19,7 @@ struct DrawerView: View {
     @State private var editModel: EditViewModel?
     @State private var memoryModel: MemoryViewModel?
     @State private var runsModel: RunsViewModel?
+    @State private var costsModel: CostsViewModel?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,6 +39,7 @@ struct DrawerView: View {
         if editModel == nil { editModel = EditViewModel(api: client.admin) }
         if memoryModel == nil { memoryModel = MemoryViewModel(api: client.admin) }
         if runsModel == nil { runsModel = RunsViewModel(api: client.admin) }
+        if costsModel == nil { costsModel = CostsViewModel(api: client.costs) }
     }
 
     /// The tab strip (SideDrawer.tsx:255-292, parity sweep 2026-08-30):
@@ -128,6 +131,8 @@ struct DrawerView: View {
             OutputTab()
         case "transcript":
             LogTab()
+        case "costs":
+            if let costsModel { CostsTab(model: costsModel) }
         default:
             EmptyView()
         }
