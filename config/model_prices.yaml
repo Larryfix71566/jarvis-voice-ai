@@ -71,6 +71,27 @@ models:
     cache_read_mult: 0.10
     history: []
 
+  # ---- direct Anthropic, model-floor tier (agents.yaml model_profile:
+  # claude-sonnet-5 for scheduler/librarian/analyst/systems, added
+  # 2026-09-01 Phase 0b item 5; also upgrade_models.yaml's claude-sonnet-5
+  # profile, provider: anthropic, base_url: api.anthropic.com/v1/, model:
+  # "claude-sonnet-5" bare -> key is exactly this, confirmed by reading
+  # that profile's base_url/provider fields directly rather than assumed.
+  # Found missing here via scripts/cost_report.py's own unmapped-model
+  # flag on a live report (2 calls, model=claude-sonnet-5, $0 counted) —
+  # exactly the QA loop READINESS_CHECKLIST.md step 7 calls for. Same
+  # rates as openrouter/anthropic/claude-sonnet-5 below since it's
+  # genuinely the same model, direct route this time so the cache
+  # multipliers are Anthropic's own confirmed numbers, not a passthrough
+  # question. Source: platform.claude.com/docs/en/about-claude/pricing,
+  # 2026-09-01.
+  anthropic/claude-sonnet-5:
+    input_per_m: 2.0
+    output_per_m: 10.0
+    cache_write_mult: 1.25
+    cache_read_mult: 0.10
+    history: []
+
   # ---- direct Moonshot (council pool + upgrade_models default) ----
   # Source: platform.kimi.ai/docs/pricing/chat-k3, 2026-09-01 (official,
   # direct — NOT OpenRouter's marked-up $2.55/$12.75 for the same model).
