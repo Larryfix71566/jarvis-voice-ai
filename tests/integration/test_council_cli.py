@@ -73,7 +73,7 @@ def cli_env(tmp_path, monkeypatch):
     return {"db_path": db_path}
 
 
-async def _fake_call_profile(profile, system_prompt, user_content, timeout_s):
+async def _fake_call_profile(profile, system_prompt, user_content, timeout_s, rung=None):
     if system_prompt == council_mod.PROPOSER_PROMPT:
         return f"Fixed plan from {profile['model']}: do the correct thing.", None
     return "SCORES:\nProposal A: 8.0 - good\nProposal B: 6.0 - ok\n", None
@@ -191,7 +191,7 @@ def test_agreement_token_line_sums_only_rounds_with_usage(cli_env, monkeypatch, 
     """MORTIMER_LLM_COUNCIL_V2_PLAN.md V9 — the token summary line sums
     only rounds that reported usage, and its denominator is the full
     round set already considered by the report above it."""
-    async def _with_usage(profile, system_prompt, user_content, timeout_s):
+    async def _with_usage(profile, system_prompt, user_content, timeout_s, rung=None):
         if system_prompt == council_mod.PROPOSER_PROMPT:
             return "a plan", {"prompt_tokens": 10, "completion_tokens": 5}
         return (

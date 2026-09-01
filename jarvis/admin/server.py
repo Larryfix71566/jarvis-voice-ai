@@ -423,7 +423,7 @@ def _run_research_job(urls: list[str], focus: str) -> None:
             return
         content, _usage = asyncio.run(council_mod._call_profile(
             profile, RESEARCH_SYSTEM_PROMPT, user_content,
-            council_config.PLANNING_MEMBER_TIMEOUT_S,
+            council_config.PLANNING_MEMBER_TIMEOUT_S, rung="research",
         ))
         with _research_lock:
             _research_job.update(
@@ -642,7 +642,7 @@ def _run_plan_single(
     try:
         content, _usage = asyncio.run(council_mod._call_profile(
             profile, system_prompt, user_content,
-            council_config.PLANNING_MEMBER_TIMEOUT_S,
+            council_config.PLANNING_MEMBER_TIMEOUT_S, rung="planning",
         ))
     except Exception as exc:  # noqa: BLE001 — a crash must still settle the job
         logger.exception("plan single-mode job crashed")

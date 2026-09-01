@@ -29,6 +29,7 @@ from jarvis.council.scoring import council_size_ok, mean_of, parse_scores, selec
 from jarvis.council.types import Proposal, RoundResult, Score
 from jarvis.db import get_conn, now_iso
 from jarvis.prompts import PLAN_AUTHOR_PROMPT, PLAN_REVIEW_PROMPT
+from jarvis.usage_ledger import record_completion, provider_from_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +202,7 @@ text after the SCORES section."""
 
 async def _call_profile(
     profile: dict[str, Any], system_prompt: str, user_content: str,
-    timeout_s: float,
+    timeout_s: float, *, rung: str,
 ) -> tuple[str, dict[str, int] | None]:
     """One OpenAI-compatible chat completion for one registry profile.
     Raises on any failure (missing key, network error, timeout) — callers
@@ -233,6 +234,15 @@ async def _call_profile(
         if temperature is not None:  # None omits the parameter (D-003)
             request["temperature"] = temperature
         response = client.chat.completions.create(**request)
+        try:
+            record_completion(
+                rung=rung,
+                provider=provider_from_base_url(str(client.base_url)),
+                model=profile["model"],
+                response=response,
+            )
+        except Exception:
+            pass
         content = response.choices[0].message.content or ""
         usage_obj = getattr(response, "usage", None)
         usage: dict[str, int] | None = None
@@ -345,7 +355,7 @@ async def _gather_proposals(
     names: list[str], profiles_by_name: dict[str, dict[str, Any]],
     user_content: str, system_prompt: str = PROPOSER_PROMPT,
     usage_by_name: dict[str, dict[str, int] | None] | None = None,
-    *, timeout_s: float = COUNCIL_MEMBER_TIMEOUT_S,
+    *, timeout_s: float = COUNCIL_MEMBER_TIMEOUT_S, rung: str,
 ) -> tuple[list[Proposal], dict[str, int]]:
     """Fan out `system_prompt` (V14: PROPOSER_PROMPT or, for a scope
     round, SCOPE_ADVISOR_PROMPT — `_convene_inner` selects the pair once
@@ -377,7 +387,7 @@ async def _gather_proposals(
         try:
             content, usage = await _call_profile(
                 profiles_by_name[name], system_prompt, user_content,
-                timeout_s,
+                timeout_s, rung=rung,
             )
             return name, content, usage
         except Exception as exc:  # noqa: BLE001 — never raise into convene()
@@ -438,7 +448,7 @@ async def _gather_scores(
     judge_user_content: str, labels: list[str], *, shadow: bool,
     system_prompt: str = JUDGE_PROMPT,
     usage_by_name: dict[str, dict[str, int] | None] | None = None,
-    timeout_s: float = COUNCIL_MEMBER_TIMEOUT_S,
+    timeout_s: float = COUNCIL_MEMBER_TIMEOUT_S, rung: str,
 ) -> tuple[list[Score], dict[str, int]]:
     """Fan out `system_prompt` (V14: JUDGE_PROMPT or, for a scope round,
     SCOPE_JUDGE_PROMPT — selected once by the caller, same rule as
@@ -458,7 +468,7 @@ async def _gather_scores(
         try:
             raw, usage = await _call_profile(
                 profiles_by_name[name], system_prompt, judge_user_content,
-                timeout_s,
+                timeout_s, rung=rung,
             )
             return parse_scores(name, raw, labels), usage
         except Exception as exc:  # noqa: BLE001
@@ -610,6 +620,7 @@ async def _convene_inner(
     proposals, proposer_usage = await _gather_proposals(
         proposer_names, profiles_by_name, proposer_user_content,
         proposer_system_prompt, usage_by_name=proposer_usage_by_name,
+        rung="council",
     )
 
     # MORTIMER_LLM_COUNCIL_V2_PLAN.md V1 — the carried proposal is a real
@@ -657,6 +668,7 @@ async def _convene_inner(
     live_scores, live_usage = await _gather_scores(
         judge_names, profiles_by_name, judge_user_content, labels, shadow=False,
         system_prompt=judge_system_prompt, usage_by_name=judge_usage_by_name,
+        rung="council",
     )
 
     # V9 — the round row's token totals sum only the proposer + live-
@@ -869,6 +881,7 @@ async def _draft_candidates_inner(
         proposer_names, profiles_by_name, proposer_user_content,
         proposer_system_prompt, usage_by_name=proposer_usage_by_name,
         timeout_s=council_config.PLANNING_MEMBER_TIMEOUT_S,
+        rung="planning",
     )
 
     if not proposals:
@@ -907,6 +920,7 @@ async def _draft_candidates_inner(
                 shadow=False, system_prompt=PLAN_JUDGE_PROMPT,
                 usage_by_name=judge_usage_by_name,
                 timeout_s=council_config.PLANNING_MEMBER_TIMEOUT_S,
+                rung="planning",
             )
 
     reported_calls = proposer_usage["reported_calls"] + live_usage["reported_calls"]
@@ -1322,6 +1336,7 @@ async def _shadow_pass(
             shadow_judge_names, profiles_by_name, judge_user_content, labels,
             shadow=True, system_prompt=judge_system_prompt,
             usage_by_name=shadow_usage_by_name,
+            rung="council",
         )
     except Exception:  # noqa: BLE001 — D8.2.1, never degrades the round
         logger.warning("council_shadow_failed round_id=%s", round_id, exc_info=True)

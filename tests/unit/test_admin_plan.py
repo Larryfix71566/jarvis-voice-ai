@@ -63,7 +63,7 @@ FAKE_PROFILE = {"name": "kimi-k2", "model": "kimi-k2-latest", "provider": "moons
 def test_single_mode_happy_path(monkeypatch):
     monkeypatch.setattr(srv, "_resolve_planning_profile", lambda explicit: FAKE_PROFILE)
 
-    async def _fake_call_profile(profile, system_prompt, user_content, timeout_s):
+    async def _fake_call_profile(profile, system_prompt, user_content, timeout_s, rung=None):
         assert system_prompt == srv.PLAN_AUTHOR_PROMPT
         return "# The Plan\n\nDo the thing.", None
 
@@ -97,7 +97,7 @@ def test_single_mode_unknown_profile_fails_fast_synchronously(monkeypatch):
 def test_single_mode_transport_failure_settles_job_as_error(monkeypatch):
     monkeypatch.setattr(srv, "_resolve_planning_profile", lambda explicit: FAKE_PROFILE)
 
-    async def _fake_call_profile(profile, system_prompt, user_content, timeout_s):
+    async def _fake_call_profile(profile, system_prompt, user_content, timeout_s, rung=None):
         raise RuntimeError("simulated network failure")
 
     monkeypatch.setattr(srv.council_mod, "_call_profile", _fake_call_profile)

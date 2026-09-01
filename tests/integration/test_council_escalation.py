@@ -96,7 +96,7 @@ def _fake_call_profile_factory(judge_scores: dict[str, str] | None = None):
     get canned SCORES: text (customizable per judge profile name)."""
     judge_scores = judge_scores or {}
 
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         if system_prompt == council_mod.PROPOSER_PROMPT:
             return f"Fixed plan from {profile['model']}: do the correct thing.", None
         return judge_scores.get(profile["model"], "SCORES:\nProposal A: 8.0 - good\n"), None
@@ -174,7 +174,7 @@ def test_convene_kill_switch_disables_everything(council_env, monkeypatch):
 
 
 def test_convene_no_valid_scores_returns_roundresult_with_no_winner(council_env, monkeypatch):
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         if system_prompt == council_mod.PROPOSER_PROMPT:
             return "a plan", None
         return "I refuse to use the required format.", None
@@ -190,7 +190,7 @@ def test_convene_no_valid_scores_returns_roundresult_with_no_winner(council_env,
 
 
 def test_convene_all_proposers_fail_is_too_small(council_env, monkeypatch):
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         raise RuntimeError("simulated network failure")
 
     monkeypatch.setattr(council_mod, "_call_profile", _fake)
@@ -221,7 +221,7 @@ def test_shadow_judging_writes_shadow_rows_and_never_affects_winner(council_env,
     # returns) don't race the detached-by-default thread.
     monkeypatch.setattr(council_mod, "COUNCIL_SHADOW_INLINE", True)
 
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         if system_prompt == council_mod.PROPOSER_PROMPT:
             return f"Fixed plan from {profile['model']}: do the correct thing.", None
         if profile.get("api_key_env") == "TESTKEY_FRONTIER_2":
@@ -271,7 +271,7 @@ def test_shadow_judging_failure_is_non_fatal(council_env, monkeypatch):
     monkeypatch.setenv("TESTKEY_FRONTIER_2", "x")
     monkeypatch.setattr(council_mod, "COUNCIL_SHADOW_INLINE", True)
 
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         if system_prompt == council_mod.PROPOSER_PROMPT:
             return "a plan", None
         if profile.get("api_key_env") == "TESTKEY_FRONTIER_2":
@@ -294,7 +294,7 @@ def test_shadow_judging_failure_is_non_fatal(council_env, monkeypatch):
 def test_should_shadow_rate_zero_never_shadows_in_convene(council_env, monkeypatch):
     calls = {"judge_calls": 0}
 
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         if system_prompt == council_mod.PROPOSER_PROMPT:
             return "a plan", None
         calls["judge_calls"] += 1
@@ -325,7 +325,7 @@ def test_v7_detached_shadow_returns_before_rows_exist_then_joins(
     monkeypatch.setenv("TESTKEY_FRONTIER_2", "x")
     assert council_mod.COUNCIL_SHADOW_INLINE is False  # the default
 
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         if system_prompt == council_mod.PROPOSER_PROMPT:
             return f"Fixed plan from {profile['model']}: do the correct thing.", None
         return "SCORES:\nProposal A: 8.0 - good\nProposal B: 6.0 - ok\n", None
@@ -370,7 +370,7 @@ def test_v7_detached_shadow_never_affects_winner(council_env, monkeypatch):
     monkeypatch.setattr(council_config_mod, "COUNCIL_SHADOW_RATE", 1.0)
     monkeypatch.setenv("TESTKEY_FRONTIER_2", "x")
 
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         if system_prompt == council_mod.PROPOSER_PROMPT:
             return f"Fixed plan from {profile['model']}: do the correct thing.", None
         if profile.get("api_key_env") == "TESTKEY_FRONTIER_2":
@@ -405,7 +405,7 @@ def test_v7_detached_shadow_never_affects_winner(council_env, monkeypatch):
 def test_v9_usage_reported_totals_correct_in_round_row_and_jsonl(
     council_env, monkeypatch,
 ):
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         if system_prompt == council_mod.PROPOSER_PROMPT:
             return (
                 f"Fixed plan from {profile['model']}: do the correct thing.",
@@ -516,7 +516,7 @@ def test_v2_replay_judge_message_includes_stored_context(council_env, monkeypatc
 
     seen_contents: list[str] = []
 
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         if system_prompt == council_mod.PROPOSER_PROMPT:
             return f"Fixed plan from {profile['model']}: do the correct thing.", None
         seen_contents.append(user_content)
@@ -669,7 +669,7 @@ def test_v4_tiebreak_uses_registry_order_not_shuffled_label_order(
     tiebreak must still resolve to the earliest REGISTRY profile
     (k-economy-1, per REGISTRY_YAML), never to "Proposal A" merely
     because that label happened to win the shuffle."""
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         if system_prompt == council_mod.PROPOSER_PROMPT:
             return f"Fixed plan from {profile['model']}: do the correct thing.", None
         # Perfect tie: both proposals score identically on every axis.

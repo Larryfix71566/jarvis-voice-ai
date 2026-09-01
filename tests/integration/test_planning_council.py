@@ -77,13 +77,13 @@ def council_env(tmp_path, monkeypatch):
     return {"registry_path": registry_path, "db_path": db_path}
 
 
-def _fake_call_profile(profile, system_prompt, user_content, timeout_s):
+def _fake_call_profile(profile, system_prompt, user_content, timeout_s, rung=None):
     if system_prompt == council_mod.PLAN_AUTHOR_PROMPT:
         return f"Plan by {profile['model']}: do the thing.", None
     return "SCORES:\nProposal A: 8.0 - good\nProposal B: 6.0 - ok\nProposal C: 7.0 - fine\nProposal D: 5.0 - meh\n", None
 
 
-async def _fake_call_profile_async(profile, system_prompt, user_content, timeout_s):
+async def _fake_call_profile_async(profile, system_prompt, user_content, timeout_s, rung=None):
     return _fake_call_profile(profile, system_prompt, user_content, timeout_s)
 
 
@@ -150,7 +150,7 @@ def test_draft_candidates_writes_planning_workflow_row(council_env, monkeypatch)
 def test_draft_candidates_judge_false_skips_scoring(council_env, monkeypatch):
     calls = {"judge_calls": 0}
 
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         if system_prompt == council_mod.PLAN_AUTHOR_PROMPT:
             return f"Plan by {profile['model']}.", None
         calls["judge_calls"] += 1
@@ -309,7 +309,7 @@ def test_planning_rounds_excluded_from_compute_agreement(council_env, monkeypatc
 # job (PLAN_REVIEW_PROMPT instead of PLAN_AUTHOR_PROMPT, placement=
 # "review" instead of "doc"). convene() itself is untouched by this.
 
-def _fake_call_profile_review(profile, system_prompt, user_content, timeout_s):
+def _fake_call_profile_review(profile, system_prompt, user_content, timeout_s, rung=None):
     if system_prompt == council_mod.PLAN_REVIEW_PROMPT:
         return f"Review by {profile['model']}: looks fine.", None
     if system_prompt == council_mod.PLAN_AUTHOR_PROMPT:
@@ -317,7 +317,7 @@ def _fake_call_profile_review(profile, system_prompt, user_content, timeout_s):
     return "SCORES:\nProposal A: 8.0 - good\nProposal B: 6.0 - ok\nProposal C: 7.0 - fine\nProposal D: 5.0 - meh\n", None
 
 
-async def _fake_call_profile_review_async(profile, system_prompt, user_content, timeout_s):
+async def _fake_call_profile_review_async(profile, system_prompt, user_content, timeout_s, rung=None):
     return _fake_call_profile_review(profile, system_prompt, user_content, timeout_s)
 
 
@@ -360,7 +360,7 @@ def test_draft_candidates_review_context_injected_into_proposer_message(
     same _proposer_user_message assembly convene() uses."""
     seen: dict[str, str] = {}
 
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         seen[profile["name"]] = user_content
         return _fake_call_profile_review(profile, system_prompt, user_content, timeout_s)
 
@@ -397,7 +397,7 @@ def test_draft_candidates_without_context_still_uses_author_prompt(council_env, 
 def test_convene_never_passes_document_context_unaffected(council_env, monkeypatch):
     """R3 — convene() (the escalation path) never sets context['document'],
     so its message assembly is untouched by the review branch."""
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         assert "DOCUMENT UNDER REVIEW" not in user_content
         if system_prompt == council_mod.PROPOSER_PROMPT:
             return f"corrected approach by {profile['model']}", None
