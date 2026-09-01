@@ -45,6 +45,7 @@ from jarvis.bot.research_watcher import ResearchWatcher
 from jarvis.bot.progress_watcher import ProgressWatcher, SpeakingStateTracker
 from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.remember_tool import build_remember_tool
+from jarvis.bot.costs_tool import build_cost_summary_tool
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.ui_control import build_ui_control_tool
@@ -360,6 +361,7 @@ def build_pipeline(
     )
     set_voice_schema, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
     remember_schema, remember_handler = build_remember_tool(runtime.session_id)
+    cost_summary_schema, cost_summary_handler = build_cost_summary_tool()
 
     # MORTIMER_VOICE_UI_PLAN.md U1/U6 — voice control of the console's UI
     # chrome. Kill switch read here, at the single registration site (same
@@ -535,6 +537,7 @@ def build_pipeline(
     llm.register_function("delegate_task", adapt_to_pipecat(delegate_handler))
     llm.register_function("set_voice", adapt_to_pipecat(set_voice_handler))
     llm.register_function("remember", adapt_to_pipecat(remember_handler))
+    llm.register_function("cost_summary", adapt_to_pipecat(cost_summary_handler))
     if ui_control_enabled:
         llm.register_function("ui_control", adapt_to_pipecat(ui_control_handler))
     if screen_enabled:
@@ -572,6 +575,7 @@ def build_pipeline(
         to_function_schema(delegate_schema),
         to_function_schema(set_voice_schema),
         to_function_schema(remember_schema),
+        to_function_schema(cost_summary_schema),
     ]
     if ui_control_enabled:
         standard_tools.append(to_function_schema(ui_control_schema))

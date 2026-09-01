@@ -60,6 +60,8 @@ public final class JarvisClient: ObservableObject {
     // so an admin request made after a token is stored carries that token —
     // otherwise the lazy snapshot would keep the pre-mint (nil) token.
     public private(set) lazy var admin: AdminAPI = AdminAPI(config: config)
+    // Same pattern, same reason — Phase 0 step 9's costs service.
+    public private(set) lazy var costs: CostsAPI = CostsAPI(config: config)
 
     // internal (not private): §7.5's UICommandOwnershipTests and §7.4's
     // testConnectRereadsTokenFromKeychain inject a stub transport via the
@@ -150,6 +152,7 @@ public final class JarvisClient: ObservableObject {
         // relaunch (review F20).
         config.token = JarvisFlags.authEnabled ? KeychainStore.token(for: config.botURL) : nil
         admin = AdminAPI(config: config)
+        costs = CostsAPI(config: config)
 
         // (2) validate BEFORE any network (review F6/C2).
         do {

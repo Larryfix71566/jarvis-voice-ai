@@ -18,6 +18,11 @@ enum AppTuning {
     /// Runs tab poll — NEW behavior, not web parity (RunsPanel has no
     /// periodic poll today; F5). Live feel at a slower cadence than Edit.
     static var runsPollSeconds: Double { seconds("JARVIS_RUNS_POLL_SECONDS", 5.0) }
+    /// Costs tab poll (MORTIMER_OPTIMIZATION_PLAN.md Phase 0 step 9) — NEW,
+    /// no web parity to match (no such panel exists there). Spend changes
+    /// only as fast as LLM calls happen, so this is deliberately the
+    /// slowest poll in the drawer rather than matching Runs' 5s.
+    static var costsPollSeconds: Double { seconds("JARVIS_COSTS_POLL_SECONDS", 30.0) }
 
     /// agentRuns.ts:79 MAX_AGENT_RUNS
     static let maxAgentRuns = 20

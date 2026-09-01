@@ -6,12 +6,23 @@ public struct JarvisConfig: Sendable, Equatable {
     public var botURL: URL        // default http://127.0.0.1:7860   (JARVIS_BOT_URL)
     public var adminURL: URL      // default http://127.0.0.1:7861   (JARVIS_ADMIN_URL)
     public var wakeWordURL: URL   // default ws://127.0.0.1:7862/ws  (JARVIS_WAKEWORD_URL)
+    // MORTIMER_OPTIMIZATION_PLAN.md Phase 0 step 9 — the costs service
+    // (jarvis/costs_api.py, its own Procfile entry, NOT under the admin
+    // sidecar's /api/* prefix). Same one-base-URL-per-service rule as
+    // the three above.
+    public var costsURL: URL      // default http://127.0.0.1:8487   (JARVIS_COSTS_URL)
     public var token: String?     // nil until T2 mints one
 
-    public init(botURL: URL, adminURL: URL, wakeWordURL: URL, token: String?) {
+    // costsURL defaults so every existing direct-construction call site
+    // (tests, previews) keeps compiling without an update — Phase 0 step
+    // 9 added this field; only .default() needs to actually vary it.
+    public init(botURL: URL, adminURL: URL, wakeWordURL: URL,
+                costsURL: URL = URL(string: "http://127.0.0.1:8487")!,
+                token: String?) {
         self.botURL = botURL
         self.adminURL = adminURL
         self.wakeWordURL = wakeWordURL
+        self.costsURL = costsURL
         self.token = token
     }
 
@@ -28,6 +39,7 @@ public struct JarvisConfig: Sendable, Equatable {
             botURL: bot,
             adminURL: url("JARVIS_ADMIN_URL", "http://127.0.0.1:7861"),
             wakeWordURL: url("JARVIS_WAKEWORD_URL", "ws://127.0.0.1:7862/ws"),
+            costsURL: url("JARVIS_COSTS_URL", "http://127.0.0.1:8487"),
             token: JarvisFlags.authEnabled ? KeychainStore.token(for: bot) : nil
         )
     }
@@ -41,7 +53,7 @@ public struct JarvisConfig: Sendable, Equatable {
     static let loopbackHosts: Set<String> = ["127.0.0.1", "::1", "localhost"]
     public func validate() throws {
         func loopback(_ u: URL) -> Bool { (u.host).map(JarvisConfig.loopbackHosts.contains) ?? false }
-        for u in [botURL, adminURL] where !loopback(u) {
+        for u in [botURL, adminURL, costsURL] where !loopback(u) {
             if token == nil { throw JarvisError.insecureHost(u.absoluteString) }
             if !JarvisFlags.authEnabled { throw JarvisError.insecureHost(u.absoluteString) }
         }
