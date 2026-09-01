@@ -34,6 +34,7 @@ from jarvis.db import get_conn, now_iso
 from jarvis.prompts import SUPERVISOR_PROMPT, render_agent_catalog
 from jarvis.memory import render_memory_context
 from jarvis.bot.sensitive_turn import arm_from_text, is_sensitive
+from jarvis.usage_ledger import record_completion, provider_from_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,22 @@ class Orchestrator:
                 **extra,
                 **self._tools_kwarg(),
             )
+            # 2026-09-01 (MORTIMER_OPTIMIZATION_PLAN.md Phase 0, step 1 of
+            # the readiness checklist — supervisor-only first, before the
+            # other 12 sites). Inside the tool-iteration loop deliberately:
+            # every round is a real billed completion, not just the final
+            # one that breaks the loop. Never raises — cost logging must
+            # never break a live voice turn.
+            try:
+                record_completion(
+                    rung="supervisor",
+                    provider=provider_from_base_url(str(self._client.base_url)),
+                    model=self._settings.openai_model,
+                    response=response,
+                    session_id=self.session_id,
+                )
+            except Exception:
+                pass
             message = response.choices[0].message
             tool_calls = list(getattr(message, "tool_calls", None) or [])
             if not tool_calls:

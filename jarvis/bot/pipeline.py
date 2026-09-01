@@ -31,7 +31,7 @@ from zoneinfo import ZoneInfo
 from pipecat.frames.frames import OutputTransportMessageUrgentFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
-from pipecat.pipeline.task import PipelineTask
+from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.turns.user_start import MinWordsUserTurnStartStrategy
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 
@@ -48,6 +48,7 @@ from jarvis.bot.remember_tool import build_remember_tool
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.ui_control import build_ui_control_tool
+from jarvis.bot.usage_watcher import UsageMetricsObserver
 from jarvis.bot.handoff_tools import (
     build_clear_clipboard_tool,
     build_read_clipboard_tool,
@@ -96,6 +97,7 @@ from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 # plan's draft API (Flux under services.deepgram.flux.stt, ToolsSchema
 # under adapters.schemas, FunctionSchema instead of raw OpenAI dicts,
 # VAD as VADProcessor, interruptions via the turn-start strategy).
+from jarvis.usage_ledger import provider_from_base_url
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -868,6 +870,16 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
                 enabled=settings.jarvis_interruption_notice_enabled,
             ),
             speaking_tracker,
+            # 2026-09-01 (MORTIMER_OPTIMIZATION_PLAN.md Phase 0, step 1):
+            # supervisor-rung cost ledger. See jarvis/bot/usage_watcher.py
+            # for why this is a MetricsFrame observer rather than a patch
+            # on OpenAILLMService/Orchestrator directly.
+            UsageMetricsObserver(
+                rung="supervisor",
+                provider=provider_from_base_url(settings.openai_base_url or ""),
+                session_id=runtime.session_id,
+                default_model=settings.openai_model,
+            ),
         ]
         if os.environ.get("JARVIS_DEBUG_OBSERVER"):
             # Temporary diagnostic: print every function-call frame hop with
@@ -896,7 +908,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
                         )
 
             observers.append(_FnFrameProbe())
-        task = PipelineTask(pipeline, observers=observers)
+        task = PipelineTask(
+            pipeline,
+            # Phase 0 step 1 — required for UsageMetricsObserver above to
+            # ever see a frame; confirmed 2026-09-01 no other consumer in
+            # this repo depended on these being off.
+            params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
+            observers=observers,
+        )
         pusher.bind(task)
 
         client_connected = {"value": False}

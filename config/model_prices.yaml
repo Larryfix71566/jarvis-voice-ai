@@ -1,0 +1,135 @@
+# config/model_prices.yaml — versioned price map for computed native costs.
+#
+# Keyed as "{provider}/{model}" — built by usage_ledger.compute_cost, not
+# by you. provider comes from provider_from_base_url() (base.py/settings
+# sites) or profile["provider"] (council/model_profile sites); model is
+# whatever wire string was actually sent to chat.completions.create.
+# This is deliberately NOT the same as upgrade_models.yaml's `identity`
+# string for every row — it's constructed fresh so every rung's key is
+# derivable the same way regardless of which file the call came from.
+#
+# RATES BELOW ARE PLACEHOLDERS (0.0). Fill from each vendor's current
+# pricing page before trusting cost_report.py's dollar figures — token
+# counts are accurate from day one regardless; dollars are not until this
+# is filled in.
+#
+# cache_write_mult / cache_read_mult are multipliers on the INPUT rate.
+# Anthropic-quoted defaults: 1.25 write (5-min TTL; 2.0 for 1h TTL), 0.10
+# read. UNVERIFIED whether these even apply through the OpenAI-compatible
+# endpoint this repo uses (see usage_ledger.py's adapter note) — set
+# JARVIS_DEBUG_USAGE_LEDGER=1 and check a real response's usage object
+# before assuming any cache multiplier is meaningful for these rows.
+
+version: "2026-09-01"
+
+models:
+  # ---- reached directly, via settings.openai_* (9 rungs default here) ----
+  # scheduler, librarian, analyst, systems, supervisor, memory_merge,
+  # memory_classify, memory_extraction, kb_digest, procedures_describe
+  anthropic/claude-haiku-4-5:
+    input_per_m: 0.0      # <-- fill from anthropic.com/pricing
+    output_per_m: 0.0     # <-- fill
+    cache_write_mult: 1.25
+    cache_read_mult: 0.10
+    history: []
+
+  # ---- developer rung (base.py, model_profile: claude-opus) ----
+  anthropic/claude-opus-5:
+    input_per_m: 0.0      # <-- fill
+    output_per_m: 0.0     # <-- fill
+    cache_write_mult: 1.25
+    cache_read_mult: 0.10
+    history: []
+
+  # ---- present in upgrade_models.yaml (Mythos-class); not currently
+  # assigned to any rung in agents.yaml, but a profile exists ----
+  anthropic/claude-fable-5:
+    input_per_m: 0.0      # <-- fill
+    output_per_m: 0.0     # <-- fill
+    cache_write_mult: 1.25
+    cache_read_mult: 0.10
+    history: []
+
+  # ---- direct Moonshot (council pool + upgrade_models default) ----
+  moonshot/kimi-k3:
+    input_per_m: 0.0      # <-- fill from moonshot.ai pricing
+    output_per_m: 0.0
+    cache_write_mult: 1.0   # verify — Moonshot cache pricing not confirmed
+    cache_read_mult: 1.0
+    history: []
+
+  moonshot/kimi-k2.7-code:
+    input_per_m: 0.0
+    output_per_m: 0.0
+    cache_write_mult: 1.0
+    cache_read_mult: 1.0
+    history: []
+
+  # ---- OpenRouter council pool — model string here is profile["identity"]
+  # (vendor/model), matching what council.py's patch passes as `model`.
+  # OpenRouter's OWN reported cost is ground truth when available (see
+  # the puller's enrichment) — these entries are the fallback for
+  # computed_cost when reported_cost is still null (before the puller
+  # has enriched that row). ----
+  openrouter/openai/gpt-5-mini:
+    input_per_m: 0.0
+    output_per_m: 0.0
+    cache_write_mult: 1.0
+    cache_read_mult: 1.0
+    history: []
+
+  openrouter/google/gemini-3.7-flash:
+    input_per_m: 0.0
+    output_per_m: 0.0
+    cache_write_mult: 1.0
+    cache_read_mult: 1.0
+    history: []
+
+  openrouter/deepseek/deepseek-v3.2:
+    input_per_m: 0.0
+    output_per_m: 0.0
+    cache_write_mult: 1.0
+    cache_read_mult: 1.0
+    history: []
+
+  openrouter/openai/gpt-5.1:
+    input_per_m: 0.0
+    output_per_m: 0.0
+    cache_write_mult: 1.0
+    cache_read_mult: 1.0
+    history: []
+
+  openrouter/anthropic/claude-sonnet-5:
+    input_per_m: 0.0
+    output_per_m: 0.0
+    cache_write_mult: 1.25   # if Anthropic-via-OpenRouter passthrough works
+    cache_read_mult: 0.10    # — UNVERIFIED, see A5 check in the puller
+    history: []
+
+  openrouter/x-ai/grok-4.3:
+    input_per_m: 0.0
+    output_per_m: 0.0
+    cache_write_mult: 1.0
+    cache_read_mult: 1.0
+    history: []
+
+  openrouter/openai/gpt-5.1-codex-max:
+    input_per_m: 0.0
+    output_per_m: 0.0
+    cache_write_mult: 1.0
+    cache_read_mult: 1.0
+    history: []
+
+  openrouter/x-ai/grok-4.6:
+    input_per_m: 0.0
+    output_per_m: 0.0
+    cache_write_mult: 1.0
+    cache_read_mult: 1.0
+    history: []
+
+  openrouter/deepseek/deepseek-v4-pro:
+    input_per_m: 0.0
+    output_per_m: 0.0
+    cache_write_mult: 1.0
+    cache_read_mult: 1.0
+    history: []
