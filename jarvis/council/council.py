@@ -27,7 +27,7 @@ from jarvis.agents.upgrade_agent import available_models, load_model_registry
 from jarvis.council import config as council_config
 from jarvis.council.scoring import council_size_ok, mean_of, parse_scores, select_winner
 from jarvis.council.types import Proposal, RoundResult, Score
-from jarvis import llm_client
+from jarvis import effort, llm_client
 from jarvis.db import get_conn, now_iso
 from jarvis.prompts import PLAN_AUTHOR_PROMPT, PLAN_REVIEW_PROMPT
 from jarvis.usage_ledger import record_completion, provider_from_base_url
@@ -242,11 +242,25 @@ async def _call_profile(
         temperature = profile.get("temperature")
         if temperature is not None:  # None omits the parameter (D-003)
             request["temperature"] = temperature
+        # Phase 1b (effort control) -- profile.get("provider") is the
+        # SAME already-resolved value llm_client.make_sync_client just
+        # used to build `client` above; falls back to deriving it from
+        # the client's own base_url (matching how record_completion's
+        # provider= was already being computed) for a registry entry
+        # that omits provider: explicitly. Reused below for
+        # record_completion too, replacing its own re-derivation.
+        provider = profile.get("provider") or provider_from_base_url(str(client.base_url))
+        extra_body = effort.extra_body_for(
+            rung=rung, provider=provider, explicit=profile.get("effort"),
+            model=profile.get("model"),
+        )
+        if extra_body:
+            request["extra_body"] = extra_body
         response = client.chat.completions.create(**request)
         try:
             record_completion(
                 rung=rung,
-                provider=provider_from_base_url(str(client.base_url)),
+                provider=provider,
                 model=profile["model"],
                 response=response,
             )

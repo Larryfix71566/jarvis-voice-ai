@@ -47,7 +47,7 @@ from typing import Any, Callable
 
 import yaml
 
-from jarvis import llm_client
+from jarvis import effort, llm_client
 from jarvis.repo_map import load_repo_map_suffix
 from jarvis.selfedit.service import SelfEditService
 from jarvis.usage_ledger import record_completion, provider_from_base_url
@@ -332,6 +332,13 @@ class UpgradeAgent:
             if "temperature" in prof:
                 # null means: omit the parameter entirely (D-003)
                 self.cfg["temperature"] = prof["temperature"]
+            # Phase 1b (effort control) -- optional per-profile
+            # output_config.effort override (upgrade_models.yaml); absent
+            # means self.cfg.get("effort") stays None, and
+            # extra_body_for() emits nothing, exactly like an agents.yaml
+            # entry with no `effort:` field.
+            if "effort" in prof:
+                self.cfg["effort"] = prof["effort"]
             self._api_key_env = prof.get("api_key_env", "OPENAI_API_KEY")
         else:
             self._api_key_env = "OPENAI_API_KEY"
@@ -476,12 +483,33 @@ class UpgradeAgent:
         """
         attempts = 0
         while True:
+            # Phase 1b -- recomputed on EVERY iteration, not just once
+            # before the loop: unlike SubAgent._loop (client/model fixed
+            # for the whole run), a failover below can reassign
+            # self._client mid-loop, and output_config.effort must track
+            # whatever profile actually ends up making the request.
+            # `request` itself is never mutated with this -- an ephemeral
+            # copy per attempt, so a failover onto a non-Anthropic profile
+            # drops it cleanly rather than leaving a stale key behind.
+            # getattr(..., "") rather than a bare attribute access: the
+            # record_completion call below already tolerated a test double
+            # with no .base_url (it sat inside a bare try/except Exception
+            # before this Phase 1b change moved the access earlier) -- a
+            # fake client missing base_url now resolves to
+            # provider="unknown" (never "anthropic"), so extra_body_for()
+            # cleanly returns {} instead of the whole call raising.
+            provider = provider_from_base_url(str(getattr(self._client, "base_url", "")))
+            extra_body = effort.extra_body_for(
+                rung=f"{self._council_workflow}_executor", provider=provider,
+                explicit=self.cfg.get("effort"), model=self.model,
+            )
+            call_request = {**request, "extra_body": extra_body} if extra_body else request
             try:
-                response = self._client.chat.completions.create(**request)
+                response = self._client.chat.completions.create(**call_request)
                 try:
                     record_completion(
                         rung=f"{self._council_workflow}_executor",
-                        provider=provider_from_base_url(str(self._client.base_url)),
+                        provider=provider,
                         model=self.model,
                         response=response,
                     )
@@ -521,6 +549,11 @@ class UpgradeAgent:
                 # provided one (or vice versa) must not build the wrong
                 # kind of client on the new profile's base_url.
                 self.cfg["provider"] = nxt.get("provider", self.cfg["provider"])
+                # Phase 1b -- mirrors the provider refresh immediately
+                # above: a failover profile's own effort setting (or its
+                # absence) must replace the old profile's, not linger.
+                if "effort" in nxt:
+                    self.cfg["effort"] = nxt["effort"]
                 self._api_key_env = nxt.get("api_key_env", "OPENAI_API_KEY")
                 self.model = self.cfg["model"]
                 self.base_url = self.cfg["base_url"]

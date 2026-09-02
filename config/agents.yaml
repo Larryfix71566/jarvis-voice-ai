@@ -17,6 +17,14 @@ sub_agents:
     # tests/unit/test_model_floor.py.
     model_profile: claude-sonnet-5
     on_profile_fallback: refuse
+    # 2026-09-02 -- Phase 1b (effort control; MORTIMER_OPTIMIZATION_PLAN.md
+    # Phase 1b task 2 starting value). Only takes effect on the native
+    # Anthropic path (jarvis/effort.py refuses for any other provider, and
+    # for Haiku models regardless of this setting) -- every current profile
+    # here resolves to claude-sonnet-5/claude-opus, both Anthropic-direct,
+    # so it applies today. Override live, one rung at a time, without
+    # touching this file: JARVIS_EFFORT_SCHEDULER=<level>.
+    effort: low
     description: "Time, dates, day-of-week and calendar questions in the user's timezone; reminders, alarms, scheduling and planning."
   - name: librarian
     display_name: Librarian
@@ -30,6 +38,14 @@ sub_agents:
     # tests/unit/test_model_floor.py.
     model_profile: claude-sonnet-5
     on_profile_fallback: refuse
+    # 2026-09-02 -- Phase 1b (effort control; MORTIMER_OPTIMIZATION_PLAN.md
+    # Phase 1b task 2 starting value). Only takes effect on the native
+    # Anthropic path (jarvis/effort.py refuses for any other provider, and
+    # for Haiku models regardless of this setting) -- every current profile
+    # here resolves to claude-sonnet-5/claude-opus, both Anthropic-direct,
+    # so it applies today. Override live, one rung at a time, without
+    # touching this file: JARVIS_EFFORT_LIBRARIAN=<level>.
+    effort: medium
     description: "Long-term memory: store and recall facts, notes, preferences. Also resolves flagged memory conflicts and cleanup items awaiting review: list them, keep one side, rewrite, dismiss, convert to a workflow, or archive as implemented. Archived facts (merged or aged out by capacity enforcement, never deleted) are still searchable with memory_search — use it before telling the user something is forgotten. Also searches a separate knowledge base of longer curated project documents and session digests (kb_search/kb_read/kb_neighbors) — distinct from the keyed facts above; use this when the user asks about something more like a document, decision record, or past session's details rather than a short preference or fact."
   - name: analyst
     display_name: Analyst
@@ -59,6 +75,14 @@ sub_agents:
     # tests/unit/test_model_floor.py.
     model_profile: claude-sonnet-5
     on_profile_fallback: refuse
+    # 2026-09-02 -- Phase 1b (effort control; MORTIMER_OPTIMIZATION_PLAN.md
+    # Phase 1b task 2 starting value). Only takes effect on the native
+    # Anthropic path (jarvis/effort.py refuses for any other provider, and
+    # for Haiku models regardless of this setting) -- every current profile
+    # here resolves to claude-sonnet-5/claude-opus, both Anthropic-direct,
+    # so it applies today. Override live, one rung at a time, without
+    # touching this file: JARVIS_EFFORT_ANALYST=<level>.
+    effort: medium
     description: "Web research, current events, sports results, weather, the time in other cities, and general lookups."
   - name: systems
     display_name: Systems
@@ -74,6 +98,14 @@ sub_agents:
     # tests/unit/test_model_floor.py.
     model_profile: claude-sonnet-5
     on_profile_fallback: refuse
+    # 2026-09-02 -- Phase 1b (effort control; MORTIMER_OPTIMIZATION_PLAN.md
+    # Phase 1b task 2 starting value). Only takes effect on the native
+    # Anthropic path (jarvis/effort.py refuses for any other provider, and
+    # for Haiku models regardless of this setting) -- every current profile
+    # here resolves to claude-sonnet-5/claude-opus, both Anthropic-direct,
+    # so it applies today. Override live, one rung at a time, without
+    # touching this file: JARVIS_EFFORT_SYSTEMS=<level>.
+    effort: low
     description: "Local machine status: CPU, memory, disk, battery, uptime."
   - name: developer
     display_name: Developer

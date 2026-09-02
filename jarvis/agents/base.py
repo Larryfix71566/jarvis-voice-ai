@@ -27,7 +27,7 @@ from typing import Any, Callable
 
 import yaml
 
-from jarvis import llm_client
+from jarvis import effort, llm_client
 from jarvis.agents.upgrade_agent import (
     UnknownModelProfileError,
     load_model_registry,
@@ -174,6 +174,7 @@ class SubAgent:
         model_profile: str | None = None,
         inject_repo_map: bool = False,
         on_profile_fallback: str = "warn",
+        effort: str | None = None,
     ):
         self.name = name
         self.display_name = display_name
@@ -206,6 +207,15 @@ class SubAgent:
         # so `model_unusable` can ask jarvis.keyhealth about it at RUN
         # time. Empty for the voice-model path (settings client).
         self._api_key_env: str = ""
+        # Phase 1b (effort control) -- the STATIC per-rung output_config
+        # .effort level from config/agents.yaml's `effort:` field (or None
+        # if unset, e.g. developer). Passed through unchanged to
+        # jarvis.effort.extra_body_for() at each _loop call site, which is
+        # the ONLY place that decides whether it actually applies (provider
+        # == "anthropic", model isn't Haiku) -- never gated here, so a
+        # future non-Anthropic reassignment of this agent's profile
+        # degrades safely without touching this file.
+        self._effort: str | None = effort
         if client_factory is not None:
             self._client = client_factory(settings)
         elif model_profile:
@@ -575,16 +585,34 @@ class SubAgent:
         drafts_created = 0
         drafts_executed = 0
         exhausted = True  # cleared by the no-more-tool-calls break below
+        # Phase 1b -- client/model are loop-invariant here (F8: locals
+        # resolved once above, never reassigned mid-run), so provider and
+        # extra_body are resolved once too, not recomputed every
+        # iteration. Reused below for record_completion's provider= as
+        # well, replacing its own redundant re-derivation. getattr(...,
+        # "") rather than a bare attribute access: this must stay as safe
+        # against a test double with no .base_url as the record_completion
+        # call two lines below already was (it sat inside a bare
+        # try/except Exception before this Phase 1b change moved the
+        # access earlier) -- a fake client missing base_url now resolves
+        # to provider="unknown" (never "anthropic"), so extra_body_for()
+        # cleanly returns {} instead of the whole call raising.
+        provider = provider_from_base_url(str(getattr(client, "base_url", "")))
+        extra_body = effort.extra_body_for(
+            rung=self.name, provider=provider, explicit=self._effort, model=model,
+        )
+        extra_kwarg = {"extra_body": extra_body} if extra_body else {}
         for _ in range(self._max_iterations):
             response = await client.chat.completions.create(
                 model=model,
                 messages=messages,
                 **tools_kwarg,
+                **extra_kwarg,
             )
             try:
                 record_completion(
                     rung=self.name,
-                    provider=provider_from_base_url(str(client.base_url)),
+                    provider=provider,
                     model=model,
                     response=response,
                     session_id=runlog.run_id,
@@ -841,5 +869,6 @@ def load_sub_agents(
             on_profile_fallback=str(
                 entry.get("on_profile_fallback", "warn")).strip().lower(),
             inject_repo_map=bool(entry.get("inject_repo_map", False)),
+            effort=entry.get("effort"),
         )
     return agents
