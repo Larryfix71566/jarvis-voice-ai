@@ -249,6 +249,11 @@ _CACHED_TOKEN_ALIASES = (
 )
 _CACHE_WRITE_ALIASES = (
     (None, "cache_creation_input_tokens"),
+    ("prompt_tokens_details", "cache_write_tokens"),  # OpenRouter shape, and
+    # what jarvis/anthropic_shim.py's _convert_response() produces directly
+    # (Phase 1, Rev 3.2, landing step (i)) — openai's own
+    # PromptTokensDetails already has this field natively at the pinned
+    # openai==2.53.0, verified 2026-09-01.
 )
 
 
@@ -300,7 +305,14 @@ def record_completion(rung: str,
 
     record_call(
         rung=rung, provider=provider, model=model, session_id=session_id,
-        input_tokens=max(prompt - cached, 0),
+        # Rev 3.2 fix (2026-09-01): subtract cache WRITES too, not only
+        # reads. Before caching went live this was a no-op (cache_write
+        # was always 0). With it live, a cache-write token is part of
+        # `prompt` (OpenAI-inclusive semantics) but is billed at its own
+        # 1.25x/2.0x multiplier by compute_cost()'s cache_write_tokens
+        # argument below -- leaving it in input_tokens double-billed it
+        # at 1.25x AND the full 1.0x input rate.
+        input_tokens=max(prompt - cached - cache_write, 0),
         output_tokens=completion,
         cache_write_tokens=cache_write,
         cache_read_tokens=cached,
