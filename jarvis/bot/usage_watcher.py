@@ -26,20 +26,29 @@ Confirmed against the installed pipecat 1.4.0:
   MetricsFrame/LLMUsageMetricsData consumers anywhere in jarvis/, so
   turning it on is additive, not a behavior change for anything else).
 
-KNOWN GAP: LLMTokenUsage carries prompt_tokens / completion_tokens /
-total_tokens / cache_read_input_tokens / reasoning_tokens — NOT
-cache_write / cache_creation_input_tokens. pipecat's own _process_context
-never reads that field off the raw chunk, so it can never reach this
-observer. The supervisor rung's cache_write_tokens column will always
-read 0 through this path. The other 12 planned call sites (jarvis/agents/
-base.py's SubAgent._loop, memory_sweep.py, council.py, etc.) call
-usage_ledger.record_completion() directly on the raw AsyncOpenAI response
-object and are NOT affected by this gap — full fidelity there, including
-cache_write. Whether Anthropic's OpenAI-compat endpoint populates
-cache_read/cache_write at all for this deployment is a separate, still-
-open question, checked independently (a standalone script hitting the API
-directly) since this observer can only ever see what pipecat itself
-already chose to extract.
+KNOWN GAP — half-closed as of Phase 1 (Rev 3.2) landing step (iii):
+LLMTokenUsage.cache_creation_input_tokens is the discriminator
+on_push_frame now branches on (`is None` vs. a real int — confirmed
+against the installed pipecat 1.4.0's own two LLM services, not assumed).
+Under OpenAILLMService (the compat path — still the default whenever
+JARVIS_ANTHROPIC_NATIVE=0, or for any non-Anthropic base_url),
+BaseOpenAILLMService._process_context never sets that field, so it stays
+None: the OLD behaviour applies unchanged, prompt_tokens is cache-
+INCLUSIVE (subtract reads back out), and cache_write_tokens always
+reports 0 through this path. That half of the gap is real and permanent
+for the compat path — Anthropic's OpenAI-compatibility layer does not
+support prompt caching at all, the reason Phase 1 exists in the first
+place. Under AnthropicLLMService (Path A, wired in landing step (iii)),
+_report_usage_metrics always sets cache_creation_input_tokens to a real
+int (0 or more, never None): prompt_tokens is already uncached-only, no
+subtraction needed, and cache_write rides through with full fidelity —
+no gap. Landing step (iii) also adds a `supervisor_cache_cold` WARNING
+(task 8) when a native-path turn >= 2 reports a zero cache read — the
+one log line that turns a silent miss back into a visible one. The other
+12 planned call sites (jarvis/agents/base.py's SubAgent._loop,
+memory_sweep.py, council.py, etc.) call usage_ledger.record_completion()
+directly on the raw client response object and were never affected by
+this gap either way.
 
 Same BaseObserver/on_push_frame pattern as SpeakingStateTracker (jarvis/
 bot/progress_watcher.py) and InterruptionNotifier (jarvis/bot/
@@ -99,6 +108,10 @@ class UsageMetricsObserver(BaseObserver):
         self._default_model = default_model
         self._seen_ids: set[int] = set()
         self._seen_order: deque[int] = deque()
+        # Phase 1 (Rev 3.2) landing step (iii), task 8's cold-cache
+        # alert -- counts native-Anthropic (Path A) turns only, since
+        # the warning is only meaningful (and only ever fires) there.
+        self._native_turn_count = 0
 
     async def on_push_frame(self, data: FramePushed) -> None:
         if data.direction != FrameDirection.DOWNSTREAM:
@@ -119,14 +132,37 @@ class UsageMetricsObserver(BaseObserver):
             try:
                 tokens = item.value
                 cached = tokens.cache_read_input_tokens or 0
+                if tokens.cache_creation_input_tokens is None:
+                    # OpenAI/compat semantics: prompt_tokens is CACHE-
+                    # INCLUSIVE, so reads must be subtracted back out to
+                    # get the true uncached count. cache_write is never
+                    # reported through this frame path (KNOWN GAP — see
+                    # module docstring; permanent on this path).
+                    input_tokens = max((tokens.prompt_tokens or 0) - cached, 0)
+                    cache_write_tokens = 0
+                else:
+                    # Native Anthropic semantics (Path A, landing step
+                    # (iii)): prompt_tokens is ALREADY uncached-only, so
+                    # no subtraction; cache writes are a real int, no
+                    # longer a gap.
+                    input_tokens = tokens.prompt_tokens or 0
+                    cache_write_tokens = tokens.cache_creation_input_tokens or 0
+                    self._native_turn_count += 1
+                    if self._native_turn_count >= 2 and cached == 0:
+                        # Task 8's alert: turn 1 legitimately has nothing
+                        # to read yet, so it never warns.
+                        logger.warning(
+                            "supervisor_cache_cold turn=%d prompt_tokens=%d",
+                            self._native_turn_count, tokens.prompt_tokens or 0,
+                        )
                 record_call(
                     rung=self._rung,
                     provider=self._provider,
                     model=item.model or self._default_model,
                     session_id=self._session_id,
-                    input_tokens=max((tokens.prompt_tokens or 0) - cached, 0),
+                    input_tokens=input_tokens,
                     output_tokens=tokens.completion_tokens or 0,
-                    cache_write_tokens=0,  # KNOWN GAP — see module docstring
+                    cache_write_tokens=cache_write_tokens,
                     cache_read_tokens=cached,
                 )
             except Exception:  # noqa: BLE001 — cost logging must never

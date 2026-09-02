@@ -5,7 +5,10 @@ Locked processor order (Phase 5):
       -> VADProcessor(SileroVADAnalyzer)          # D-004: VAD is a processor in pipecat 1.4
       -> DeepgramFluxSTTService (flux-general-en) # should_interrupt=False; interruptions come from the turn-start strategy
       -> context_aggregator.user()
-      -> OpenAILLMService
+      -> OpenAILLMService (or GoogleLLMService / AnthropicLLMService --
+         provider-routed off settings.openai_base_url, see the LLM
+         service block below; MORTIMER_OPTIMIZATION_PLAN.md Phase 1 Path
+         A wires AnthropicLLMService with native prompt caching on)
       -> TranscriptLogger
       -> ElevenLabsTTSService (eleven_flash_v2_5)
       -> transport.output()
@@ -35,8 +38,10 @@ from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.turns.user_start import MinWordsUserTurnStartStrategy
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 
+from jarvis import llm_client
 from jarvis.agents.base import load_sub_agents
 from jarvis.agents.delegate import build_delegate_tool
+from jarvis.anthropic_shim import native_base_url
 from jarvis.bot.display import WeatherReportMerger, build_display_payload
 from jarvis.bot.interruption import InterruptionNotifier
 from jarvis.bot.memory_watcher import MemorySweepWatcher
@@ -527,6 +532,41 @@ def build_pipeline(
             model=settings.openai_model,
         )
         _logger.info("supervisor_llm_service service=google model=%s",
+                     settings.openai_model)
+    elif ("api.anthropic.com" in (settings.openai_base_url or "")
+          and llm_client.native_enabled()):
+        # MORTIMER_OPTIMIZATION_PLAN.md Phase 1 (Rev 3.2), Path A, landing
+        # step (iii): pipecat's OWN native AnthropicLLMService -- not
+        # jarvis/anthropic_shim.py, which exists to make Path B's
+        # OpenAI-shaped call sites work against the native Messages API.
+        # This service already speaks the native API directly and expects
+        # a real anthropic.AsyncAnthropic client, a different thing
+        # entirely. Lazy import, same reason the Google branch above is:
+        # a non-Anthropic deployment shouldn't need this import to
+        # succeed at module load time.
+        from anthropic import AsyncAnthropic
+        from pipecat.services.anthropic.llm import AnthropicLLMService
+        # Built explicitly rather than letting AnthropicLLMService's own
+        # `client or AsyncAnthropic(api_key=api_key)` default (no
+        # base_url kwarg on this constructor at all) silently ignore
+        # whatever's configured -- reuses the exact stripped-"/v1" helper
+        # Path B's shim already ships and tests (jarvis/anthropic_shim.py
+        # -- the same /v1/v1/messages doubling bug step (ii) found and
+        # fixed there applies here too), so a future non-default
+        # Anthropic-compatible base_url is honoured on Path A the same
+        # way it already is on Path B, not by accident.
+        llm = AnthropicLLMService(
+            api_key=settings.openai_api_key,
+            client=AsyncAnthropic(
+                api_key=settings.openai_api_key,
+                base_url=native_base_url(settings.openai_base_url),
+            ),
+            settings=AnthropicLLMService.Settings(
+                model=settings.openai_model,
+                enable_prompt_caching=True,
+            ),
+        )
+        _logger.info("supervisor_llm_service service=anthropic model=%s prompt_caching=on",
                      settings.openai_model)
     else:
         llm = OpenAILLMService(

@@ -370,7 +370,7 @@ class _AsyncChatCompletionsShim:
         return _convert_response(msg, model=kwargs["model"])
 
 
-def _native_base_url(base_url: str | None) -> str | None:
+def native_base_url(base_url: str | None) -> str | None:
     """Strip an OpenAI-compat-style trailing `/v1` (with or without a
     trailing slash) from `base_url` before handing it to the native SDK.
 
@@ -401,7 +401,7 @@ def _native_base_url(base_url: str | None) -> str | None:
 class _ChatShimBase:
     """Shared `.chat.completions` / `.base_url` surface. `.base_url` is the
     ORIGINAL plain string passed in (not the native-SDK-adjusted one
-    `_native_base_url` derives, and not an `httpx.URL`) — every existing
+    `native_base_url` derives, and not an `httpx.URL`) — every existing
     caller already does `provider_from_base_url(str(client.base_url))`,
     which only substring-matches "anthropic.com" and works the same
     whether or not a `/v1` suffix is present, and `str()` of a plain
@@ -419,9 +419,9 @@ class AnthropicChatShim(_ChatShimBase):
                  timeout: float | None = None, max_retries: int | None = None) -> None:
         super().__init__(base_url)
         client_kwargs: dict[str, Any] = {"api_key": api_key}
-        native_base_url = _native_base_url(base_url)
-        if native_base_url is not None:
-            client_kwargs["base_url"] = native_base_url
+        resolved_base_url = native_base_url(base_url)
+        if resolved_base_url is not None:
+            client_kwargs["base_url"] = resolved_base_url
         if timeout is not None:
             client_kwargs["timeout"] = timeout
         if max_retries is not None:
@@ -438,9 +438,9 @@ class AsyncAnthropicChatShim(_ChatShimBase):
                  timeout: float | None = None, max_retries: int | None = None) -> None:
         super().__init__(base_url)
         client_kwargs: dict[str, Any] = {"api_key": api_key}
-        native_base_url = _native_base_url(base_url)
-        if native_base_url is not None:
-            client_kwargs["base_url"] = native_base_url
+        resolved_base_url = native_base_url(base_url)
+        if resolved_base_url is not None:
+            client_kwargs["base_url"] = resolved_base_url
         if timeout is not None:
             client_kwargs["timeout"] = timeout
         if max_retries is not None:

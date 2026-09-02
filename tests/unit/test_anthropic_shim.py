@@ -628,7 +628,7 @@ class TestPublicShims:
 
 
 # ---------------------------------------------------------------------------
-# _native_base_url — bug found 2026-09-02: the native anthropic SDK builds
+# native_base_url — bug found 2026-09-02: the native anthropic SDK builds
 # every request path by STRING-CONCATENATING base_url's own path with the
 # resource's literal "/v1/messages" (confirmed against the installed
 # anthropic==0.125.0's _base_client._prepare_url — not urljoin-style
@@ -652,7 +652,7 @@ class TestNativeBaseUrl:
         ("https://my-proxy.example.com/anthropic", "https://my-proxy.example.com/anthropic"),
     ])
     def test_strips_trailing_v1(self, given, expected):
-        assert shim._native_base_url(given) == expected
+        assert shim.native_base_url(given) == expected
 
     def test_shim_base_url_attribute_keeps_the_original_unstripped_string(self):
         # provider_from_base_url(str(client.base_url)) is what every

@@ -59,6 +59,26 @@ class FakeLLM:
         self.functions[name] = handler
 
 
+class FakeAnthropicLLM:
+    """Mirrors AnthropicLLMService's constructor shape for the Path A
+    wiring tests below -- api_key is accepted but unused when a client is
+    given (matches the real service, which does `client or
+    AsyncAnthropic(api_key=api_key)`)."""
+
+    class Settings:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    def __init__(self, api_key, client, settings):
+        self.api_key = api_key
+        self.client = client
+        self.settings = settings
+        self.functions = {}
+
+    def register_function(self, name, handler):
+        self.functions[name] = handler
+
+
 class FakeTTS:
     class Settings:
         def __init__(self, **kwargs):
@@ -143,6 +163,36 @@ def test_pipeline_processor_order_locked(runtime, fakes):
         "TRANSPORT_INPUT", "VAD", "STT", "LLMUserAggregator", "LLM",
         "TRANSCRIPT", "TTS", "TRANSPORT_OUTPUT", "LLMAssistantAggregator",
     ]
+
+
+def test_anthropic_base_url_builds_native_service_with_caching(runtime, fakes, monkeypatch):
+    """Phase 1 (Rev 3.2) landing step (iii), task 6: an Anthropic-direct
+    base_url with native routing on (the default) builds pipecat's own
+    AnthropicLLMService with prompt caching enabled -- not OpenAILLMService.
+    AnthropicLLMService is imported lazily inside its branch (same reason
+    the Google branch above it is), so it's patched at its real module
+    path rather than as a `bp` attribute -- `from pipecat.services.
+    anthropic.llm import X` re-reads that module's attribute fresh every
+    call to build_pipeline() (verified directly against pytest-monkeypatch
+    before relying on it here)."""
+    monkeypatch.setattr("pipecat.services.anthropic.llm.AnthropicLLMService", FakeAnthropicLLM)
+    runtime.settings.openai_base_url = "https://api.anthropic.com/v1/"
+    pipeline, llm, aggregators, pusher = build_pipeline(FakeTransport(), runtime)
+    assert isinstance(llm, FakeAnthropicLLM)
+    assert llm.settings.kwargs["enable_prompt_caching"] is True
+    assert llm.settings.kwargs["model"] == runtime.settings.openai_model
+    # The real anthropic.AsyncAnthropic client, built explicitly with the
+    # OpenAI-compat "/v1" suffix stripped -- the same bug step (ii) found
+    # and fixed in jarvis/anthropic_shim.py, reused here rather than
+    # trusting the service's own base_url-less default.
+    assert str(llm.client.base_url) == "https://api.anthropic.com"
+
+
+def test_anthropic_base_url_with_native_off_stays_on_openai_service(runtime, fakes, monkeypatch):
+    monkeypatch.setenv("JARVIS_ANTHROPIC_NATIVE", "0")
+    runtime.settings.openai_base_url = "https://api.anthropic.com/v1/"
+    pipeline, llm, aggregators, pusher = build_pipeline(FakeTransport(), runtime)
+    assert isinstance(llm, FakeLLM)
 
 
 def test_flux_never_interrupts_on_its_own(runtime, fakes, monkeypatch):
