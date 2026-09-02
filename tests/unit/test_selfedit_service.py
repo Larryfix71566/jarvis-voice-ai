@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -439,7 +440,11 @@ class TestCoreTier:
         core_check = next(c for c in res["checks"] if c["name"] == "core_imports")
         assert core_check["paths"] == ["jarvis/bot/display.py"]
         # The gate imports the pipeline + agent modules, in the SESSION tree.
-        smoke = [c for c in calls if c[:2] == ["python", "-c"] and "jarvis.bot.pipeline" in c[2]]
+        # jarvis/selfedit/service.py 2026-09-02 fix: argv[0] is sys.executable,
+        # not a bare "python" resolved off PATH (this venv has no `python`
+        # binary in some environments -- only `python3` -- and subprocess.run
+        # there does not go through a shell).
+        smoke = [c for c in calls if c[:2] == [sys.executable, "-c"] and "jarvis.bot.pipeline" in c[2]]
         assert smoke, calls
 
     def test_pr_body_and_notice_flag_a_core_change(self, service: SelfEditService) -> None:

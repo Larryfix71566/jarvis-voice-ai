@@ -36,6 +36,7 @@ import logging
 import os
 import re
 import subprocess
+import sys
 import time
 import urllib.request
 import json
@@ -512,8 +513,18 @@ class SelfEditService:
         })
 
         # 2. Backend import smoke.
+        # sys.executable, not a bare "python"/"python3" resolved off PATH
+        # (2026-09-02 fix): this venv is uv-managed and has no `python`
+        # binary at all in some environments (only `python3`), and
+        # subprocess.run here does not go through a shell -- a hardcoded
+        # "python" 127'd with "No such file or directory" the moment PATH
+        # didn't happen to resolve it, silently failing every validate()
+        # call's import/pytest gates. sys.executable is also more correct
+        # on its own terms: it pins the gate to the SAME interpreter (and
+        # therefore the same installed deps) the running bot uses, rather
+        # than whatever "python" happens to mean in the ambient PATH.
         code, out = self._run(
-            ["python", "-c", "import jarvis, jarvis.config, jarvis.cli"],
+            [sys.executable, "-c", "import jarvis, jarvis.config, jarvis.cli"],
             cwd=self.tree, timeout=120,
         )
         checks.append({"name": "backend_imports", "ok": code == 0,
@@ -526,7 +537,7 @@ class SelfEditService:
         # exactly what a jarvis/bot or jarvis/agents edit can break.
         if core_changed:
             code, out = self._run(
-                ["python", "-c", CORE_IMPORT_SMOKE],
+                [sys.executable, "-c", CORE_IMPORT_SMOKE],
                 cwd=self.tree, timeout=180,
             )
             checks.append({"name": "core_imports", "ok": code == 0,
@@ -547,7 +558,7 @@ class SelfEditService:
         # self-edit that imports cleanly and builds the frontend can still
         # break backend behavior; only the test suite catches that.
         code, out = self._run(
-            ["python", "-m", "pytest", "tests/unit", "-q"],
+            [sys.executable, "-m", "pytest", "tests/unit", "-q"],
             cwd=self.tree, timeout=VALIDATE_PYTEST_TIMEOUT_S,
         )
         checks.append({"name": "pytest", "ok": code == 0,
