@@ -625,3 +625,62 @@ class TestPublicShims:
         # what jarvis/agents/base.py's client construction sends today.
         shim.AnthropicChatShim(api_key="sk-test-dummy", timeout=30.0, max_retries=2)
         shim.AsyncAnthropicChatShim(api_key="sk-test-dummy", timeout=30.0, max_retries=2)
+
+
+# ---------------------------------------------------------------------------
+# _native_base_url — bug found 2026-09-02: the native anthropic SDK builds
+# every request path by STRING-CONCATENATING base_url's own path with the
+# resource's literal "/v1/messages" (confirmed against the installed
+# anthropic==0.125.0's _base_client._prepare_url — not urljoin-style
+# replacement). Every base_url this repo actually configures already ends
+# in "/v1/" (the OpenAI-compat convention), so forwarding it unchanged
+# would double up to "/v1/v1/messages" and 404 every request once the
+# shim is wired to a live call site (this landing step).
+# ---------------------------------------------------------------------------
+
+class TestNativeBaseUrl:
+    @pytest.mark.parametrize("given,expected", [
+        ("https://api.anthropic.com/v1/", "https://api.anthropic.com"),
+        ("https://api.anthropic.com/v1", "https://api.anthropic.com"),
+        ("https://api.anthropic.com/", "https://api.anthropic.com"),
+        ("https://api.anthropic.com", "https://api.anthropic.com"),
+        (None, None),
+        ("", None),
+        # A base_url that does NOT end in /v1 passes through unchanged —
+        # only the one OpenAI-compat suffix is stripped, nothing else.
+        ("https://my-proxy.example.com/anthropic/v1/", "https://my-proxy.example.com/anthropic"),
+        ("https://my-proxy.example.com/anthropic", "https://my-proxy.example.com/anthropic"),
+    ])
+    def test_strips_trailing_v1(self, given, expected):
+        assert shim._native_base_url(given) == expected
+
+    def test_shim_base_url_attribute_keeps_the_original_unstripped_string(self):
+        # provider_from_base_url(str(client.base_url)) is what every
+        # existing record_completion() call site does — it must keep
+        # seeing exactly what was passed in, /v1/ and all.
+        client = shim.AnthropicChatShim(api_key="sk-test-dummy", base_url="https://api.anthropic.com/v1/")
+        assert client.base_url == "https://api.anthropic.com/v1/"
+
+    def test_real_sdk_does_not_double_up_v1_when_base_url_has_the_compat_suffix(self):
+        # The rigorous version of the test above: construct the REAL
+        # anthropic.Anthropic client the shim builds internally (not a
+        # reimplementation of its URL logic) and drive its own private
+        # _prepare_url the same way messages.create() does, to prove the
+        # final request path is /v1/messages, never /v1/v1/messages.
+        client = shim.AnthropicChatShim(
+            api_key="sk-test-dummy", base_url="https://api.anthropic.com/v1/",
+        )
+        prepared = client._anthropic._prepare_url("/v1/messages")
+        assert str(prepared) == "https://api.anthropic.com/v1/messages"
+
+    def test_real_sdk_url_unaffected_when_base_url_omitted(self):
+        client = shim.AnthropicChatShim(api_key="sk-test-dummy")
+        prepared = client._anthropic._prepare_url("/v1/messages")
+        assert str(prepared) == "https://api.anthropic.com/v1/messages"
+
+    def test_async_shim_same_url_fix_applies(self):
+        client = shim.AsyncAnthropicChatShim(
+            api_key="sk-test-dummy", base_url="https://api.anthropic.com/v1/",
+        )
+        prepared = client._anthropic._prepare_url("/v1/messages")
+        assert str(prepared) == "https://api.anthropic.com/v1/messages"

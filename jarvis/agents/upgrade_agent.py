@@ -47,6 +47,7 @@ from typing import Any, Callable
 
 import yaml
 
+from jarvis import llm_client
 from jarvis.repo_map import load_repo_map_suffix
 from jarvis.selfedit.service import SelfEditService
 from jarvis.usage_ledger import record_completion, provider_from_base_url
@@ -368,9 +369,10 @@ class UpgradeAgent:
             self._client = client_factory()
         elif not self._key_missing:
             self._client = self._build_client(
-                self._api_key_env, self.cfg["base_url"])
+                self._api_key_env, self.cfg["base_url"], self.cfg.get("provider"))
 
-    def _build_client(self, api_key_env: str, base_url: str | None) -> Any:
+    def _build_client(self, api_key_env: str, base_url: str | None,
+                      provider: str | None = None) -> Any:
         """Construct the planner client with a BOUNDED call timeout.
 
         Before 2026-08-22 this passed no `timeout`, so the openai SDK's
@@ -382,12 +384,20 @@ class UpgradeAgent:
         default of 2 would silently turn a 120s bound into a 360s one, and
         retrying a model that just proved unreachable is strictly worse
         than failing over to one that answers.
-        """
-        from openai import OpenAI
 
-        return OpenAI(
+        `provider` (MORTIMER_OPTIMIZATION_PLAN.md Phase 1, Rev 3.2, landing
+        step (ii), 2026-09-02): optional so every existing caller and test
+        that only ever passed two positional args keeps working — falls
+        back to base_url-detection inside llm_client.make_sync_client
+        itself when omitted. Routes to jarvis/anthropic_shim.py (prompt
+        caching) instead of the plain OpenAI-compat client when the
+        resolved provider is "anthropic" and JARVIS_ANTHROPIC_NATIVE is
+        not "0".
+        """
+        return llm_client.make_sync_client(
             api_key=os.environ[api_key_env],
             base_url=base_url,
+            provider=provider,
             timeout=PLANNER_CALL_TIMEOUT_S,
             max_retries=0,
         )
@@ -502,11 +512,20 @@ class UpgradeAgent:
                 self.cfg["model"] = nxt.get("model", self.cfg["model"])
                 self.cfg["base_url"] = nxt.get("base_url") or self.cfg["base_url"]
                 self.cfg["temperature"] = nxt.get("temperature")
+                # Phase 1 Rev 3.2 fix (2026-09-02): this line's four
+                # siblings above already refresh from `nxt` on every
+                # failover; `provider` was the one field nothing consumed
+                # until now, so it went stale silently. A native-vs-compat
+                # client-construction decision now reads it, and a
+                # failover FROM an Anthropic profile TO a differently-
+                # provided one (or vice versa) must not build the wrong
+                # kind of client on the new profile's base_url.
+                self.cfg["provider"] = nxt.get("provider", self.cfg["provider"])
                 self._api_key_env = nxt.get("api_key_env", "OPENAI_API_KEY")
                 self.model = self.cfg["model"]
                 self.base_url = self.cfg["base_url"]
                 self._client = self._build_client(
-                    self._api_key_env, self.cfg["base_url"])
+                    self._api_key_env, self.cfg["base_url"], self.cfg.get("provider"))
 
                 # The retry must carry the NEW model and its temperature
                 # rule (D-003), not the dead profile's.

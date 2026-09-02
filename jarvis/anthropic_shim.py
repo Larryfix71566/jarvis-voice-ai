@@ -370,11 +370,42 @@ class _AsyncChatCompletionsShim:
         return _convert_response(msg, model=kwargs["model"])
 
 
+def _native_base_url(base_url: str | None) -> str | None:
+    """Strip an OpenAI-compat-style trailing `/v1` (with or without a
+    trailing slash) from `base_url` before handing it to the native SDK.
+
+    Bug found 2026-09-02, before this shim was ever wired to a live call
+    site: `anthropic.Anthropic`/`AsyncAnthropic` build every request path
+    by concatenating `base_url`'s own path with the resource's OWN literal
+    `/v1/messages` (verified against the installed anthropic==0.125.0's
+    `_base_client._prepare_url` -- string concatenation, not `urljoin`
+    replacement). Every `base_url` this repo actually configures already
+    ends in `/v1/` (the OpenAI-compat convention -- `config/upgrade_models
+    .yaml`, `.env`'s `OPENAI_BASE_URL`) -- forwarding that unchanged would
+    concatenate to `/v1/v1/messages` and 404 every request. Stripping the
+    suffix here, once, is what lets the shim accept the exact same
+    `base_url` strings every existing call site already passes without
+    each of them needing to know this native-vs-compat convention
+    mismatch exists. A `base_url` that does NOT end in `/v1` (a bare host,
+    or a proxy prefix with no `/v1`) passes through unchanged -- this only
+    strips the one suffix the native SDK does not expect, never anything
+    else in the path."""
+    if not base_url:
+        return None
+    stripped = base_url.rstrip("/")
+    if stripped.endswith("/v1"):
+        stripped = stripped[: -len("/v1")]
+    return stripped or None
+
+
 class _ChatShimBase:
     """Shared `.chat.completions` / `.base_url` surface. `.base_url` is the
-    plain string passed in, not an `httpx.URL` — every existing caller
-    already does `provider_from_base_url(str(client.base_url))`, and
-    `str()` of a plain string is itself, so no caller needs to change."""
+    ORIGINAL plain string passed in (not the native-SDK-adjusted one
+    `_native_base_url` derives, and not an `httpx.URL`) — every existing
+    caller already does `provider_from_base_url(str(client.base_url))`,
+    which only substring-matches "anthropic.com" and works the same
+    whether or not a `/v1` suffix is present, and `str()` of a plain
+    string is itself, so no caller needs to change."""
 
     def __init__(self, base_url: str | None) -> None:
         self.base_url = base_url or ""
@@ -388,6 +419,9 @@ class AnthropicChatShim(_ChatShimBase):
                  timeout: float | None = None, max_retries: int | None = None) -> None:
         super().__init__(base_url)
         client_kwargs: dict[str, Any] = {"api_key": api_key}
+        native_base_url = _native_base_url(base_url)
+        if native_base_url is not None:
+            client_kwargs["base_url"] = native_base_url
         if timeout is not None:
             client_kwargs["timeout"] = timeout
         if max_retries is not None:
@@ -404,6 +438,9 @@ class AsyncAnthropicChatShim(_ChatShimBase):
                  timeout: float | None = None, max_retries: int | None = None) -> None:
         super().__init__(base_url)
         client_kwargs: dict[str, Any] = {"api_key": api_key}
+        native_base_url = _native_base_url(base_url)
+        if native_base_url is not None:
+            client_kwargs["base_url"] = native_base_url
         if timeout is not None:
             client_kwargs["timeout"] = timeout
         if max_retries is not None:

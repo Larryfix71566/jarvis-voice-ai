@@ -27,6 +27,7 @@ from jarvis.agents.upgrade_agent import available_models, load_model_registry
 from jarvis.council import config as council_config
 from jarvis.council.scoring import council_size_ok, mean_of, parse_scores, select_winner
 from jarvis.council.types import Proposal, RoundResult, Score
+from jarvis import llm_client
 from jarvis.db import get_conn, now_iso
 from jarvis.prompts import PLAN_AUTHOR_PROMPT, PLAN_REVIEW_PROMPT
 from jarvis.usage_ledger import record_completion, provider_from_base_url
@@ -216,13 +217,21 @@ async def _call_profile(
     fabricated)."""
 
     def _sync_call() -> tuple[str, dict[str, int] | None]:
-        from openai import OpenAI
-
         api_key_env = profile.get("api_key_env", "OPENAI_API_KEY")
         api_key = os.environ.get(api_key_env)
         if not api_key:
             raise RuntimeError(f"{api_key_env} is not set")
-        client = OpenAI(api_key=api_key, base_url=profile.get("base_url"))
+        # Phase 1 (MORTIMER_OPTIMIZATION_PLAN.md, Rev 3.2, landing step
+        # (ii), 2026-09-02): llm_client.make_sync_client routes an
+        # Anthropic-direct profile through jarvis/anthropic_shim.py
+        # (prompt caching) instead of the plain OpenAI-compat client,
+        # unless JARVIS_ANTHROPIC_NATIVE=0. Every other provider (incl.
+        # OpenRouter, which gets task 4's cache_control passthrough for
+        # anthropic/* models) is unaffected.
+        client = llm_client.make_sync_client(
+            api_key=api_key, base_url=profile.get("base_url"),
+            provider=profile.get("provider"),
+        )
         request: dict[str, Any] = {
             "model": profile["model"],
             "messages": [

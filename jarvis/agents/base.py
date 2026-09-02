@@ -26,8 +26,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 import yaml
-from openai import AsyncOpenAI
 
+from jarvis import llm_client
 from jarvis.agents.upgrade_agent import (
     UnknownModelProfileError,
     load_model_registry,
@@ -217,8 +217,9 @@ class SubAgent:
                     raise UnknownModelProfileError(
                         f"model profile {model_profile!r} needs {key_env}, which is unset"
                     )
-                self._client = AsyncOpenAI(
-                    api_key=os.environ[key_env], base_url=profile["base_url"]
+                self._client = llm_client.make_async_client(
+                    api_key=os.environ[key_env], base_url=profile["base_url"],
+                    provider=profile.get("provider"),
                 )
                 self._model = profile["model"]
                 self._api_key_env = key_env
@@ -243,12 +244,12 @@ class SubAgent:
                     "subagent_model_profile_fallback agent=%s profile=%s mode=%s",
                     name, model_profile, on_profile_fallback,
                 )
-                self._client = AsyncOpenAI(
-                    api_key=settings.openai_api_key, base_url=settings.openai_base_url
+                self._client = llm_client.make_async_client(
+                    api_key=settings.openai_api_key, base_url=settings.openai_base_url,
                 )
         else:
-            self._client = AsyncOpenAI(
-                api_key=settings.openai_api_key, base_url=settings.openai_base_url
+            self._client = llm_client.make_async_client(
+                api_key=settings.openai_api_key, base_url=settings.openai_base_url,
             )
         self._system_prompt = SUBAGENT_PROMPTS[name].format(
             timezone=settings.jarvis_timezone
@@ -371,8 +372,9 @@ class SubAgent:
                 raise UnknownModelProfileError(
                     f"model profile {profile_name!r} needs {key_env}, which is unset"
                 )
-            client = AsyncOpenAI(
-                api_key=os.environ[key_env], base_url=profile["base_url"]
+            client = llm_client.make_async_client(
+                api_key=os.environ[key_env], base_url=profile["base_url"],
+                provider=profile.get("provider"),
             )
             return client, profile["model"], ""
         except UnknownModelProfileError as exc:
