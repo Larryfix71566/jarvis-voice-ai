@@ -1,4 +1,4 @@
-# Implementation Readiness — Rev 3, 2026-09-01 (conflicts resolved)
+# Implementation Readiness — Rev 3.2, 2026-09-01 (Phase 0 complete; Phase 1 re-planned for the native SDK)
 
 ## Diagnostics COMPLETED (were open gates; now closed)
 - [x] OpenRouter chain verified end-to-end: vault has the key, inject_env
@@ -47,14 +47,20 @@
 3. [ ] usage_ledger.py (Rev 3, WAL) + model_prices.yaml + supervisor
        patch only; one voice turn; confirm a row in data/costs.db AND
        that `PRAGMA journal_mode` reads `wal` — commit
-4. [ ] JARVIS_DEBUG_USAGE_LEDGER=1 session: does the Anthropic-compat
-       path report cache fields? thinking tokens? (decides Phase 1
-       priorities for the priciest rungs)
-5. [ ] Effort gate, ONE session, both halves: (a) test call per provider
-       (scripts/test_effort.py pattern; 400-check); (b) two identical
-       turns with effort toggled — does cache_read_tokens collapse?
-       Record observed/not-observed in the plan. No JARVIS_EFFORT_*
-       broadly until (a) passes
+4. [x] JARVIS_DEBUG_USAGE_LEDGER=1 session: does the Anthropic-compat
+       path report cache fields? thinking tokens? — ANSWERED 2026-09-01
+       (607588b, then Anthropic's compat docs): it cannot. Prompt caching
+       is unsupported through the OpenAI-compatibility layer; the whole
+       Phase 1 section was rewritten (plan Rev 3.2) around the native
+       Messages API.
+5. [~] Effort gate — HALF-ANSWERED by documentation 2026-09-01 (plan
+       Phase 1b, Rev 3.2): shape is `output_config.effort` on the native
+       API only (compat layer ignores `reasoning_effort`); Haiku 4.5 is
+       not a supported model, so the Supervisor never sends it; effort
+       changes DO invalidate the messages cache — static-per-rung is a
+       requirement, and half (b) is moot. Remaining (a): one `analyst`
+       run at `low` through the Path-B shim — no 400, fewer output
+       tokens. Runs after Phase 1 landing step (ii).
 6. [ ] Remaining 12 call-site patches (incl. upgrade_agent.py:469 and
        the council `rung` kwarg threading) + effort wiring — run
        `pytest tests/unit -q` — commit
@@ -64,8 +70,36 @@
        was mislabelled)
 8. [ ] pull_openrouter_activity.py (--raw first run)
 9. [ ] Voice skill (summary_text hook) + SwiftUI card into the interface
-10.[ ] After ~a week: baseline report → fill the plan's savings ledger →
-       Phase 1 caching work begins
+10.[~] After ~a week: baseline report → fill the plan's savings ledger.
+       Larry 2026-09-01: Phase 1 starts NOW instead (spend ≥$10/day); the
+       caching row of the ledger gets a partial "before". Steps 3-9 all
+       DONE 2026-09-01 (55afe06, bc49f4b, 607588b, e83965c, 96a528e,
+       7ab613e, 066a690, 37d2516, cec4aaa, 2636cd5).
+
+## Phase 1 landing order (plan Rev 3.2 §Phase 1 — each its own commit)
+- [ ] (i)  requirements.txt `+anthropic` extra + lock regenerate;
+      jarvis/anthropic_shim.py (rules S1-S9) + tests/unit/test_anthropic_shim.py;
+      usage_ledger.py fixes (input = prompt - reads - writes; OpenRouter
+      cache_write_tokens alias) + test. Nothing live changes yet.
+      Check: `.venv/bin/python3 -c "import anthropic, pipecat.services.anthropic"`;
+      `pytest tests/unit -q`.
+- [ ] (ii) jarvis/llm_client.py factory; base.py:220/246/250,
+      upgrade_agent.py:373-393 (+provider arg, callers :370/:508),
+      council.py:219-225 switched to it; OpenRouter anthropic/* extra_body
+      cache_control; test_subagent.py:717-745 fixture retargeted
+      (openai.AsyncOpenAI + JARVIS_ANTHROPIC_NATIVE=0) + mirror test.
+      Gate: rewritten scripts/test_prompt_caching.py (>4,096-token filler)
+      shows creation>0 then read>0 for claude-sonnet-5 and claude-fable-5;
+      one real analyst/developer run shows cache_read>0 in cost_report.py
+      from iteration 2. Then Phase 1b step 5(a) above.
+- [ ] (iii) pipeline.py Anthropic branch (AnthropicLLMService,
+      enable_prompt_caching=True) + usage_watcher.py native-semantics
+      branch + supervisor_cache_cold WARNING + two wiring tests.
+      Gate: test_prompt_caching.py for claude-haiku-4-5 (creation>0 on
+      turn 1 proves the prefix clears 4,096); a ≥3-turn voice session with
+      JARVIS_DEBUG_USAGE_LEDGER=1 shows cache_read>0 on supervisor rows
+      from turn 2. One normal day of use before calling Phase 1 done.
+      Rollback at any point: JARVIS_ANTHROPIC_NATIVE=0 + restart.
 
 ## Phase 0b item 5 — model floor (Larry 2026-09-01; do right after step 3)
 - [ ] `claude-sonnet-5` direct profile added to upgrade_models.yaml,
@@ -98,7 +132,8 @@
   revisit on retry_validated evidence; one-constant change
 
 ## Verdict
-Ready. Step 1 is a git command; steps 2-3 are the first real commits.
-The two remaining unknowns (compat-layer cache fields, effort key shape
-+ effort↔cache interaction) have cheap gates at steps 4-5 before anything
-depends on them.
+Phase 0 complete and verified live (2026-09-01). Both Rev 3 unknowns are
+closed by documentation, in the direction that forced a redesign: the
+compat layer cannot cache at all, so Phase 1 is a native-SDK migration
+(plan Rev 3.2), landing in the three steps above with a one-variable
+rollback. Ready to start (i).
