@@ -81,6 +81,7 @@ from jarvis.db import run_migrations
 from jarvis.logging_config import setup_logging
 from jarvis.memory import (
     MEMORY_EXTRACTION_TIMEOUT_S,
+    memory_extraction_v2_enabled,
     render_memory_context,
     update_memory_from_session,
 )
@@ -1214,7 +1215,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             # out, or errored.
             try:
                 await asyncio.wait_for(
-                    update_memory_from_session(settings, runtime.session_id),
+                    update_memory_from_session(
+                        settings, runtime.session_id,
+                        # Phase 2 kill switch (MORTIMER_OPTIMIZATION_PLAN.md):
+                        # see jarvis/bot/memory_watcher.py's tick_once for
+                        # why this is computed the same way at both call
+                        # sites instead of defaulting inside the function.
+                        extract_facts_and_observations=not memory_extraction_v2_enabled(),
+                    ),
                     timeout=MEMORY_EXTRACTION_TIMEOUT_S,
                 )
             except asyncio.TimeoutError:

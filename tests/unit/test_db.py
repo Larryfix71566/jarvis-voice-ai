@@ -8,7 +8,7 @@ EXPECTED_TABLES = {
     "migrations", "notes", "reminders", "conversations", "actions", "memories",
     "observations", "conversations_fts", "agent_runs", "agent_events",
     "procedures", "procedures_fts", "council_rounds", "council_scores",
-    "memory_reviews",
+    "memory_reviews", "memory_extraction_cursor", "memory_extraction_pending",
 }
 
 EXPECTED_MIGRATION_IDS = [
@@ -20,6 +20,8 @@ EXPECTED_MIGRATION_IDS = [
     "0013_memory_archive",
     "0014_council_attempted",
     "0015_memory_reviews",
+    "0016_memory_extraction_v2",
+    "0017_memory_extraction_pending",
 ]
 
 

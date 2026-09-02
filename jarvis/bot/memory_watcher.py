@@ -25,7 +25,11 @@ import contextlib
 import logging
 
 from jarvis.config import Settings
-from jarvis.memory import MEMORY_EXTRACTION_TIMEOUT_S, update_memory_from_session
+from jarvis.memory import (
+    MEMORY_EXTRACTION_TIMEOUT_S,
+    memory_extraction_v2_enabled,
+    update_memory_from_session,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +75,15 @@ class MemorySweepWatcher:
         """
         try:
             await asyncio.wait_for(
-                update_memory_from_session(self._settings, self._session_id),
+                update_memory_from_session(
+                    self._settings, self._session_id,
+                    # Phase 2 kill switch (MORTIMER_OPTIMIZATION_PLAN.md):
+                    # when the new per-exchange worker is authoritative,
+                    # this sweep narrows to summary-only so the same
+                    # transcript is never re-derived into facts by two
+                    # independent paths at once.
+                    extract_facts_and_observations=not memory_extraction_v2_enabled(),
+                ),
                 timeout=MEMORY_EXTRACTION_TIMEOUT_S,
             )
         except asyncio.TimeoutError:

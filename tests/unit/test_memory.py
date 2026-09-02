@@ -13,6 +13,7 @@ from jarvis.memory import (
     MAX_PREFERENCE_FACTS,
     _parse_update,
     add_observation,
+    memory_extraction_v2_enabled,
     render_memory_context,
     scan_memory_content,
     set_summary,
@@ -778,3 +779,101 @@ class TestVolatileStateFirewall:
         # ...while the real snapshots still go.
         assert _is_volatile_state("project.x", "19 commits ahead of main")
         assert _is_volatile_state("project.x", "47 uncommitted files")
+
+
+# --- Phase 2 kill switch (MORTIMER_OPTIMIZATION_PLAN.md) -------------------
+
+
+class TestMemoryExtractionV2KillSwitch:
+    def test_enabled_by_default(self, monkeypatch):
+        monkeypatch.delenv("JARVIS_MEMORY_EXTRACTION_V2", raising=False)
+        assert memory_extraction_v2_enabled() is True
+
+    @pytest.mark.parametrize("value", ["false", "False", "FALSE", "0", "no", "off"])
+    def test_falsy_values_disable_it(self, monkeypatch, value):
+        monkeypatch.setenv("JARVIS_MEMORY_EXTRACTION_V2", value)
+        assert memory_extraction_v2_enabled() is False
+
+    @pytest.mark.parametrize("value", ["true", "1", "yes", "on", "garbage"])
+    def test_other_values_leave_it_enabled(self, monkeypatch, value):
+        monkeypatch.setenv("JARVIS_MEMORY_EXTRACTION_V2", value)
+        assert memory_extraction_v2_enabled() is True
+
+
+@pytest.mark.asyncio
+async def test_update_default_still_writes_facts_and_observations(conn):
+    # Backward compatibility: every pre-Phase-2 call site (and every
+    # pre-Phase-2 test of this function) relies on this default staying
+    # True -- extract_facts_and_observations must default to legacy
+    # behavior, not read the kill switch itself.
+    payload = json.dumps(
+        {
+            "facts": [{"key": "user.name", "value": "Larry"}],
+            "observations": [{"key": "user.style.brevity", "value": "short replies"}],
+            "summary": "s",
+        }
+    )
+    _add_turn(conn, "s1", "user", "hi")
+    ok = await update_memory_from_session(
+        _FakeSettings(), "s1", client_factory=_factory(payload)
+    )
+    assert ok is True
+    assert conn.execute(
+        "SELECT content FROM memories WHERE key='user.name'"
+    ).fetchone()["content"] == "Larry"
+    assert conn.execute("SELECT COUNT(*) AS n FROM observations").fetchone()["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_update_with_v2_flag_skips_facts_and_observations_but_keeps_summary(conn):
+    # Even if the model still returned facts/observations (e.g. it ignored
+    # SUMMARY_ONLY_PROMPT's instruction), the FLAG gates the write -- not
+    # just the prompt wording -- so a model that doesn't comply can't
+    # reintroduce the double-write Phase 2 is meant to prevent.
+    payload = json.dumps(
+        {
+            "facts": [{"key": "user.name", "value": "Larry"}],
+            "observations": [{"key": "user.style.brevity", "value": "short replies"}],
+            "summary": "Discussed the Jarvis upgrade plan.",
+        }
+    )
+    _add_turn(conn, "s1", "user", "hi")
+    ok = await update_memory_from_session(
+        _FakeSettings(), "s1", client_factory=_factory(payload),
+        extract_facts_and_observations=False,
+    )
+    assert ok is True
+    assert conn.execute(
+        "SELECT COUNT(*) AS n FROM memories WHERE kind='fact'"
+    ).fetchone()["n"] == 0
+    assert conn.execute("SELECT COUNT(*) AS n FROM observations").fetchone()["n"] == 0
+    assert (
+        conn.execute("SELECT content FROM memories WHERE kind='summary'").fetchone()[
+            "content"
+        ]
+        == "Discussed the Jarvis upgrade plan."
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_with_v2_flag_sends_summary_only_prompt(conn):
+    from jarvis.memory import SUMMARY_ONLY_PROMPT
+
+    sent = {}
+
+    class _CapturingCompletions:
+        async def create(self, **kwargs):
+            sent["system"] = kwargs["messages"][0]["content"]
+            msg = _FakeMessage(json.dumps({"facts": [], "summary": "s"}))
+            return type("R", (), {"choices": [type("C", (), {"message": msg})()]})()
+
+    class _CapturingClient:
+        def __init__(self):
+            self.chat = type("C", (), {"completions": _CapturingCompletions()})()
+
+    _add_turn(conn, "s1", "user", "hi")
+    await update_memory_from_session(
+        _FakeSettings(), "s1", client_factory=lambda _s: _CapturingClient(),
+        extract_facts_and_observations=False,
+    )
+    assert sent["system"] == SUMMARY_ONLY_PROMPT

@@ -599,7 +599,9 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
         def assistant(self):
             return SimpleNamespace()
 
-    async def fake_fold(settings_arg, session_id):
+    async def fake_fold(settings_arg, session_id, **kwargs):
+        # Phase 2 kill switch (MORTIMER_OPTIMIZATION_PLAN.md): pipeline.py
+        # now passes extract_facts_and_observations=... as a kwarg.
         folded.append(session_id)
         return True
 

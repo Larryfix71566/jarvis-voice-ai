@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import sqlite3
 from typing import Any, Callable
@@ -124,6 +125,47 @@ Rules:
   forward anything still relevant and fold in this session's essentials.
 - If the session contains nothing worth remembering, return
   {"facts": [], "observations": [], "summary": "<previous summary unchanged>"}.
+- Output JSON only. No markdown, no commentary."""
+
+
+# MORTIMER_OPTIMIZATION_PLAN.md Phase 2 kill switch. Default ON: the new
+# per-exchange worker (jarvis/memory_extraction_worker.py +
+# jarvis/memory_extraction.py) is authoritative for facts/observations,
+# and this module's own extraction narrows to summary-only (see
+# SUMMARY_ONLY_PROMPT and update_memory_from_session's
+# extract_facts_and_observations parameter below) so the same session
+# transcript is never re-derived into facts by two independent paths at
+# once -- the exact near-duplicate-under-a-different-key mess Phase 2's
+# novelty gate exists to prevent in the first place. Set to a falsy value
+# (false/0/no/off) to roll back to pre-Phase-2 behavior instantly, with
+# zero code change, if the new worker needs to be pulled.
+def memory_extraction_v2_enabled() -> bool:
+    raw = os.environ.get("JARVIS_MEMORY_EXTRACTION_V2", "true").strip().lower()
+    return raw not in ("false", "0", "no", "off")
+
+
+# Summary-only counterpart to EXTRACTION_PROMPT, used by
+# update_memory_from_session when extract_facts_and_observations=False
+# (Phase 2 kill switch ON) -- facts/observations extraction has moved to
+# jarvis/memory_extraction.py's per-exchange path, but a running summary
+# is inherently a whole-session digest, which only this whole-session
+# path can produce. Always outputs an empty facts list (never omitted)
+# so _parse_update's existing shape check (facts must be a list) keeps
+# working unchanged -- one parser for both prompts, not a second one.
+SUMMARY_ONLY_PROMPT = """You maintain a short running summary of an ongoing conversation between a
+personal AI assistant and its user. You are given the previous running
+summary (possibly empty) and the transcript of one conversation session.
+Produce STRICT JSON only:
+
+{"facts": [], "summary": "<rewritten running summary, at most 500 characters>"}
+
+Rules:
+- The summary must stand alone: it replaces the previous summary, so carry
+  forward anything still relevant and fold in this session's essentials.
+- Do not record durable facts here -- that extraction happens elsewhere;
+  "facts" must always be the empty list.
+- If the session contains nothing worth summarizing, return
+  {"facts": [], "summary": "<previous summary unchanged>"}.
 - Output JSON only. No markdown, no commentary."""
 
 
@@ -842,12 +884,25 @@ async def update_memory_from_session(
     settings: Settings,
     session_id: str,
     client_factory: Callable[[Settings], Any] | None = None,
+    extract_facts_and_observations: bool = True,
 ) -> bool:
     """Fold one finished session into long-term memory. Never raises.
 
     Returns True when a parsed update was applied. Skips sessions with no
     user utterances (nothing to learn) and any failure mode (LLM error,
     malformed JSON) leaves memory untouched.
+
+    extract_facts_and_observations (Phase 2 kill switch, default True):
+    every existing call site and every existing test relies on this
+    default to keep behaving exactly as before. The two live call sites
+    (jarvis/bot/memory_watcher.py's MemorySweepWatcher.tick_once and
+    jarvis/bot/pipeline.py's session-teardown fold-in) instead pass
+    `not memory_extraction_v2_enabled()` explicitly, so this function
+    itself never reads the env var -- one place (memory_extraction_v2_
+    enabled) decides the policy, this parameter just carries it in.
+    False switches to SUMMARY_ONLY_PROMPT and skips the upsert_fact/
+    add_observation/promote_observations writes below; the summary
+    still regenerates on the same whole-session cadence as always.
     """
     try:
         with get_conn() as conn:
@@ -866,10 +921,11 @@ async def update_memory_from_session(
                 base_url=settings.openai_base_url,
             )
         )
+        prompt = EXTRACTION_PROMPT if extract_facts_and_observations else SUMMARY_ONLY_PROMPT
         response = await client.chat.completions.create(
             model=settings.openai_model,
             messages=[
-                {"role": "system", "content": EXTRACTION_PROMPT},
+                {"role": "system", "content": prompt},
                 {
                     "role": "user",
                     "content": (
@@ -895,17 +951,20 @@ async def update_memory_from_session(
             return False
 
         with get_conn() as conn:
-            for key, value in update["facts"]:
-                upsert_fact(conn, key, value, session_id)
-            for key, value in update["observations"]:
-                add_observation(conn, key, value, session_id)
-            promoted = promote_observations(conn)
+            promoted: list[str] = []
+            if extract_facts_and_observations:
+                for key, value in update["facts"]:
+                    upsert_fact(conn, key, value, session_id)
+                for key, value in update["observations"]:
+                    add_observation(conn, key, value, session_id)
+                promoted = promote_observations(conn)
             if update["summary"]:
                 set_summary(conn, update["summary"], session_id)
         logger.info(
-            "memory_updated session=%s facts=%d observations=%d promoted=%s",
+            "memory_updated session=%s facts=%d observations=%d promoted=%s "
+            "v2_writes_skipped=%s",
             session_id, len(update["facts"]), len(update["observations"]),
-            promoted,
+            promoted, not extract_facts_and_observations,
         )
         return True
     except Exception:  # noqa: BLE001 — memory must never break the pipeline
