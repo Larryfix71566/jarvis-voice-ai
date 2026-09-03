@@ -214,6 +214,34 @@ def test_flux_never_interrupts_on_its_own(runtime, fakes, monkeypatch):
     assert captured["should_interrupt"] is False
 
 
+def test_memory_context_size_is_logged_at_build(runtime, fakes, caplog):
+    """MORTIMER_OPTIMIZATION_PLAN.md Phase 4 Rev 3.4 Stage A2 — the memory
+    block is the one part of the cached Supervisor prefix that grows on its
+    own, so its size is logged once per pipeline build. Without this, the
+    only way to know how close the prefix sits to Haiku 4.5's 4,096-token
+    cache floor (below which caching silently stops) is to query the store
+    by hand."""
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="jarvis.bot.pipeline"):
+        build_pipeline(FakeTransport(), runtime)
+    line = next(
+        (r for r in caplog.records if r.msg.startswith("memory_context_rendered")),
+        None,
+    )
+    assert line is not None, "no memory_context_rendered log line"
+    rendered = line.getMessage()
+    for field in ("chars=", "approx_tokens=", "facts=",
+                  "dropped_tier_cap=", "dropped_char_budget=", "prompt_chars="):
+        assert field in rendered
+    # prompt_chars is the WHOLE assembled prompt, so it must exceed the
+    # memory half it contains — this is what makes the pair readable
+    # against the cache floor rather than just a number in a log.
+    chars = int(rendered.split("chars=")[1].split()[0])
+    prompt_chars = int(rendered.split("prompt_chars=")[1].split()[0])
+    assert prompt_chars > chars
+
+
 def test_six_functions_registered(runtime, fakes):
     # remember (memory plan D6), ui_control (MORTIMER_VOICE_UI_PLAN.md U1),
     # show_commands/clear_clipboard/read_clipboard (HANDOFF_LOOP H3/H4 —

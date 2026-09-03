@@ -1,6 +1,6 @@
 # Mortimer Optimization Plan — Cost, Memory, and Model Routing
 
-Status: Rev 3.3 — 2026-09-03 (Phase 3 reevaluated against the real ledger and council records; see "Rev 3.3 notes" at the end. Rev 3.2: Phase 1/1b rewritten: caching needs the native Messages API, the OpenAI-compat layer cannot carry it; see "Rev 3.2 resolutions" at the end. Rev 3.1: conflicts resolved + model-floor policy.)
+Status: Rev 3.4 — 2026-09-03 (Phase 4 rewritten: its cost premise died when Phase 1 put the memory block inside the cached prefix — measured, see the Phase 4 section itself. Rev 3.3: Phase 3 reevaluated against the real ledger and council records; see "Rev 3.3 notes" at the end. Rev 3.2: Phase 1/1b rewritten: caching needs the native Messages API, the OpenAI-compat layer cannot carry it; see "Rev 3.2 resolutions" at the end. Rev 3.1: conflicts resolved + model-floor policy.)
 
 **Standing policy (Larry, 2026-09-01) — the model floor:** the ONLY agent that may run Haiku is the voice agent (Supervisor). Every other agent — the five specialists and the planner/executor loop — runs at Sonnet-or-equivalent or above. Cost work on those agents is caching, context slimming, effort, and choosing *among* Sonnet-class-and-up models; it is never dropping below the floor. This overrides the earlier "Haiku is correct for the conversational agents" stance in `config/agents.yaml` and CLAUDE.md, and it is bound in CONFIG plus a test (Phase 0b item 5), not stored as a memory fact — a fact only persuades a model, it cannot bind a tool's behaviour (the same lesson as `jarvis_units`).
 Scope: sub-agents and supervisor. Voice transport (STT/TTS/realtime) explicitly exempt — stays on native provider connections for latency.
@@ -421,24 +421,89 @@ task, not a data task.
   view. Well-bounded, visual, low-risk — a good first task for the
   planner/executor loop itself once Phase 0b + the cost shim land.
 
-## Phase 4 — Context Slimming via Graph Memory
+## Phase 4 — Memory Recall Quality (Rev 3.4 rewrite, 2026-09-03; was "Context Slimming via Graph Memory")
 
-**Goal:** Replace the flat char-budget memory dump (currently 8K chars every turn, full price) with retrieval of only the relevant subgraph. Fixes the near-duplicate blindness structurally.
+**Goal (rewritten):** the Supervisor's persistent memory stays *useful as it grows* — the right fact is reachable when it matters — without moving anything out of the cached prefix and without a store migration. Token reduction is no longer a goal of this phase.
 
-**Design (Graphify pattern, not the package):** entity-anchored store — facts attach to entity nodes with typed edges and provenance tags (stated/inferred). Token-overlap near-dupes ("dark roast" / "dark coffee") become structurally visible as same-node attachments.
+**Why the rewrite (measured 2026-09-03, Larry's real `jarvis.db` + `costs.db`).** Rev 3's Phase 4 rested on "8K chars every turn, full price." Neither half is true any more:
+- The block is rendered ONCE per session (`jarvis/bot/pipeline.py:484`) inside the Supervisor prefix, which Phase 1 caches. Rendered against the live store it is 6,269 chars ≈ 1,570 tokens, 46 lines, under the 8K cap. In the one cached session on record (28 turns, prefix ≈ 7,850 tokens by first-turn `cache_write_tokens`) it cost ≈ $0.002 to write + $0.004 in reads. Rev 3's exit criterion (−50% tokens) is worth ≈ $0.003 per session.
+- Rev 3 task 4 ("keep the volatile memory block AFTER the cache breakpoint") inverts the economics: even a 400-token per-turn retrieval, uncached over 28 turns, is ≈ $0.011 — nearly double the cached block — and it moves the cached prefix toward Haiku's 4,096-token floor (7,850 → ≈ 6,300 without the block; not a breach today, most of the margin gone). **Dropped.**
+- Rev 3's dependency ("the extraction worker's entity field") never existed — nothing in `memory.py`, `memory_extraction.py`, or the schema knows an entity. Task 1 as written would have required extractor-prompt work and a re-extraction of history before anything else.
+- A recall path already exists and Rev 3 did not account for it: `jarvis.memory.search_facts` (MORTIMER_MEMORY_CAPACITY_PLAN.md M6 — LIKE over key+content, live AND archived), surfaced as mcp-memory's `memory_search`, reached from voice by delegating to the librarian, whose `agents.yaml` description already says to search before claiming something is forgotten. Phase 4 is therefore an upgrade to *that* path, not a new one.
+- Sub-agents never receive the memory block. The whole lever is the Supervisor's ~1,570 cached tokens plus the librarian's search quality.
 
-**Tasks**
-1. Migrate memory store to entities + edges + provenance (NetworkX + existing vault-backed storage; refactor of memory.py, no new dependency service).
-2. Context builder v2: traverse from entities in the current utterance (+ always-on core: identity, standing policies) instead of top-N-by-tier truncation. Hard token budget retained as a ceiling, not the selection mechanism.
-3. Phase 2's novelty gate re-pointed at the graph (entity match becomes a node lookup).
-4. Keep the volatile memory block **after** the cache breakpoint (it varies per turn by design).
+What remains true from Rev 3, and is kept: near-duplicate blindness is real (now handled at write time by Phase 2's novelty gate — 345 of 416 facts are archived, that machinery working); the per-tier caps hide facts (25 of 55 preference facts are dropped every session, the least-recently-updated ones); and a hard budget should stay a ceiling, not the selection mechanism.
 
-**Exit criteria:** average memory-context tokens per turn reduced ≥50% vs the 8K-char dump with no observed recall failures over a week of use.
+### Principles (all four are decisions, not suggestions)
 
-**Dependency note:** benefits from Phase 2 being done (clean candidates in, clean graph out), but can start once the extraction worker's entity field is stable.
+- **P1 — nothing after the breakpoint.** Every memory-derived string the Supervisor sees lives inside the session-stable cached prefix. No per-turn injection.
+- **P2 — additive; the graph is derived, never stored.** `memories`/`observations` remain the store of record. The graph is rebuilt from rows on demand and is never a source of truth, so Rev 3's "old store read-only for a week" risk is satisfied by construction and there is no migration of facts.
+- **P3 — measure recall before changing retrieval.** Stage A instruments a recall-failure proxy; Stage B is gated on it. The plan does not expire if the gate never opens.
+- **P4 — the entity spine is the key path.** The extractor already emits lowercase dotted keys (`user.style.execution.direct`, `project.weather.map_provider_backup_plan`; `EXTRACTION_PROMPT`, `memory.py:96`) and `infer_tier` already keys tiers off the same paths. Entities are the path prefixes; no extractor change, no re-extraction. **Decided over Rev 3's "entity field": derive, don't extract.** Content-level `mentions` edges are Stage C, only if Stage B data shows path-only recall misses.
+
+### Stage A — instrument + the cheap wins (no gate; ~half a day)
+
+A1. **Lift the preference cap.** `jarvis/memory.py`: `MAX_PREFERENCE_FACTS = 30 → 60`, `MAX_CONTEXT_CHARS = 8000 → 12000`. `MAX_PROJECT_FACTS` stays 8 — project is the growth tier and is what Stage B's on-demand recall is for. The char-budget raise is load-bearing, not headroom: **measured after implementing A1 against Larry's real store, the block renders 9,818 chars over 71 facts (~138 chars/fact, up from 6,269/46), which the old 8,000 budget would have truncated — silently re-imposing the cap A1 just lifted.** Cached-prefix effect: memory half 1,567 → 2,454 approx tokens, whole prefix ≈ 7,850 → ≈ 8,740, far above Haiku 4.5's 4,096 cache floor; ≈ +$0.0003/session. Both constants' dated comments carry these numbers. `tests/unit/test_memory.py` imports the constants rather than hardcoding them (2026-09-01 change, line ~498) — verify the cap tests still pass unchanged; if any asserts a literal 30 or 8000, update it to the constant, nothing else.
+
+A2. **Prefix-size visibility.** `render_memory_context(conn=None, *, stats: dict | None = None) -> str` — signature-compatible; when a dict is passed it is filled with `{"chars": int, "approx_tokens": int, "facts": int, "dropped_tier_cap": int, "dropped_char_budget": int, "summary_dropped": bool}` from the counts the function already computes for its warnings (`memory.py:441-492`). `pipeline.py:484` passes a dict and logs, once per pipeline build, `memory_context_rendered chars=%d approx_tokens=%d facts=%d dropped_tier_cap=%d dropped_char_budget=%d` at INFO. `jarvis/agents/supervisor.py:99` and `admin/server.py:1322` are unchanged (they pass nothing). Test: `test_memory.py` — stats dict populated; `test_bot_wiring.py` — the log line appears on build.
+
+A3. **Recall-failure proxy — "restated known fact."** When the Phase 2 gate returns `exact_update` or `near_duplicate:<key>` (`memory_extraction.admit_fact_candidate`), the user has just told Mortimer something it already had. Not every restatement is a recall failure, but a rising rate is the only signal that scales, and it is already computed. Migration `0019_memory_recall_events` (`jarvis/db.py`, after 0018):
+```
+CREATE TABLE IF NOT EXISTS memory_recall_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT, source_turn INTEGER,
+  key TEXT NOT NULL,            -- the stored fact that was restated
+  outcome TEXT NOT NULL,        -- 'exact_update' | 'near_duplicate'
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_recall_events_created ON memory_recall_events(created_at);
+```
+Written by `admit_fact_candidate` on those two outcomes only (one INSERT, inside the existing transaction; never for `inserted`/`rejected`; observations are not counted — they are inferred, not restated). `memory.memory_usage()` gains `"restated_7d": int` and `"sessions_7d": int` (distinct `session_id` in `conversations` over the same window) so the admin memory panel (`admin/server.py:1266 memory_overview`) shows the rate without a new endpoint. `tests/unit/test_db.py` EXPECTED_MIGRATION_IDS += `0019_memory_recall_events`; `test_memory_extraction.py`: exact_update and near_duplicate each write one row, inserted/rejected write none.
+
+A4. Nothing else. **Non-goals for Stage A:** no graph, no new tools, no prompt text changes, no extractor changes.
+
+**Stage A exit:** A1–A3 committed; `memory_context_rendered` shows `dropped_tier_cap=0` and `dropped_char_budget=0` on Larry's store (verified in a mirror: 71 facts, 9,818 chars, zero drops); after one week, Supervisor cache-read rate still ≥ 80% of turn-≥2 rows (`cost_report.py`) with the larger prefix; `restated_7d` and `sessions_7d` populated.
+
+**Gate to Stage B — any one, after that week:** (G1) `restated_7d / sessions_7d ≥ 0.1` (one restated known fact per ten sessions — the prefix + librarian are not surfacing what is stored); (G2) live project-tier facts > 3 × `MAX_PROJECT_FACTS` (more than 24 — the cap is hiding most of the tier); (G3) Larry names a recall miss he cares about. Otherwise Stage B waits.
+
+### Stage B — derived graph + graph-ranked recall (only after the gate)
+
+B1. **`jarvis/memory_graph.py` (new).** Pure functions over `sqlite3` rows; `networkx` is already in `requirements-lock.txt` (3.6.1) — verify it imports in the bot venv, do not assume.
+- `build_graph(conn) -> nx.DiGraph`: nodes for every key-path prefix (`user`, `user.style`, `user.style.execution`) typed `entity`, and one `fact` node per `memories` row with `kind='fact'` (archived included) carrying `{key, content, tier, archived, provenance, updated_at, recurrence_count}`; `observations` rows as `fact` nodes with `provenance='inferred'`. Edges: `child_of` (path hierarchy), `has_fact` (entity → its facts), `became` (archived fact → the fact named in `memories.became`, when that key exists). No session edges (noise). Rebuilt per call, no cache; target < 20 ms at 1,000 rows, with a guard: > 5,000 rows → log `memory_graph_too_large` and return an empty graph so callers fall back to LIKE.
+- `seeds_from_text(text: str) -> list[str]`: lowercase tokens minus a small stopword set, matched against entity-node last segments and fact-key segments; returns entity node names, exact path matches first.
+- `neighborhood(graph, seeds, *, depth=2, limit=10) -> list[FactHit]` with `FactHit = {key, content, tier, archived, depth, why}` where `why` is `"path:<entity>"` or `"token:<segment>"`; BFS from seeds over `child_of`/`has_fact`/`became`, ranked by (depth asc, archived asc, recurrence_count desc, updated_at desc), truncated to `limit`.
+
+B2. **Graph-ranked `search_facts`.** Signature unchanged (`search_facts(conn, query, limit)`), LIKE behaviour unchanged and first; then `neighborhood(build_graph(conn), seeds_from_text(query))` is unioned in (LIKE hits first, graph hits not already present after, `MAX_SEARCH_RESULTS` still the ceiling). Every existing `search_facts` test passes untouched; new tests: a query that matches an entity segment returns that entity's sibling facts and its archived predecessors; a query matching nothing returns `[]`; the > 5,000-row guard falls back to LIKE-only. mcp-memory's `memory_search` and the librarian inherit this with zero interface change.
+
+B3. **No new Supervisor tool — decided.** Recall from voice stays "delegate to librarian → `memory_search`". Reason: it exists, it is the plan's own "don't inject what you can look up" surface, and a Supervisor function changes the tool schema and the routing eval's expectations. Downside, accepted: a delegation costs ≈ $0.0035 and 2–4 s versus an in-process call. Revisit (Stage C) only if Stage B shows more than one memory delegation per session on average.
+
+B4. **A one-line index in the prefix** (the only prompt-visible change of the phase, inside `{memory_context}`, so `prompts.py` is untouched): after the project facts, `known topics (searchable via the librarian): project.weather, project.jarvis, project.mortimer.display, … (+N more)` — top-level and second-level entity names with ≥ 1 live fact, registry order, ≤ 300 chars, cached with everything else. Test: line present, ≤ 300 chars, absent when there are no project facts.
+
+B5. **Phase 2 gate, sibling-first.** `memory_extraction._find_fact_match`: candidate order becomes same-parent-path first, then same-tier (today's set), still never cross-tier, `DUPLICATE_THRESHOLD` unchanged — a ranking change, not a set change, so no existing outcome flips; it stops a `project.weather.*` fact matching an unrelated `project.*` fact with similar wording ahead of its own sibling. Test: two overlapping candidates, the sibling wins the match.
+
+B6. **Tests:** `tests/unit/test_memory_graph.py` (build shape, `became` edges, seeds, ranking, guard); additions to `test_memory.py` (B2, B4) and `test_memory_extraction.py` (B5). `test_bot_wiring.py`'s registered-function list is unchanged (no new tool).
+
+**Stage B exit:** `restated_7d / sessions_7d` lower than Stage A's week; `memory_search` p50 < 50 ms in-process on Larry's store; Supervisor prefix size unchanged except the index line; cache-read rate unchanged; full suite green (the six pre-existing order-dependent failures excepted).
+
+### Stage C — not scheduled; each item needs its own evidence
+`mentions` edges via extractor entity emission (an `EXTRACTION_PROMPT` change + re-extraction); a Supervisor-level `recall` function; per-session relevance ordering of the prefix's project facts from the previous session's entities (still cached within a session).
+
+### Non-goals (whole phase)
+Moving any memory content after the cache breakpoint; storing the graph; replacing or migrating `memories`; changing `EXTRACTION_PROMPT`; token-count reduction as an objective; touching sub-agent prompts.
+
+### Divergence triggers (the executor stops and reports; it does not decide)
+- `render_memory_context` cannot take `stats` without breaking a caller (three call sites are listed above; a fourth means this section is stale).
+- Migration id `0019` is already taken.
+- `networkx` does not import in the bot venv.
+- A `test_memory.py` cap test asserts a literal that encodes a documented decision other than the 2026-08-31 15→30 raise.
+- Stage A's week shows the cache-read rate falling with the larger prefix — stop, report, revert A1 by constant; do not "fix" it in the prompt.
+
+### Risks
+The 60-preference prefix and model attention (Larry's concern behind the original cap): measured by A3, reverted by one constant. Haiku cache floor: the prefix grows under this plan, never shrinks. Graph build per `memory_search`: negligible at hundreds of rows; guarded at 5,000. A restatement is not always a recall miss: the proxy is a rate to watch for change, not an absolute.
+
+**Exit criteria (whole phase):** Stage A exit met; Stage B either gated off by a week of data (the phase is then *complete by evidence*, with A1–A3 as its whole deliverable) or built to its exit. Recorded in the Savings Ledger as a quality line, not a cost line.
 
 ---
-
 ## Phase 5 — Batch, Mac mini, Local Endgame
 
 **Goal:** Squeeze the async tail and align with the hosting migration.
@@ -448,6 +513,10 @@ task, not a data task.
 2. Services → launchd agents on the Mac mini; vault injection verified under launchd (shell-rc env vars do not survive — all keys in vault per standing policy).
 3. Local model serving for the rungs the Phase 3 eval showed are small-model-solvable — the Supervisor (intent/dispatch; Larry's stated near-term goal) and background rungs (entity match, possibly extraction). Bill for those → $0. An AGENT moves local only if a local model is demonstrably Sonnet-equivalent on that agent's eval set (plausible for large open-weight models on the Mac mini; not assumed) — the floor applies to local models exactly as to hosted ones.
 4. Re-run the Phase 0 analyzer monthly; costs regress silently otherwise.
+
+**Rev 3.4 note:** Phase 4 no longer contributes a token-reduction line to
+this phase's arithmetic (see its rewrite) — the Supervisor prefix it was
+meant to shrink is cached, and Phase 4 Stage A deliberately grows it.
 
 **Exit criteria:** async rungs on batch or local; monthly cost report trending; total reduction vs Phase 0 baseline reported.
 

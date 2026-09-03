@@ -204,6 +204,26 @@ def _find_fact_match(conn, key: str, value: str):
     return best, False
 
 
+def _record_recall_event(conn, key: str, outcome: str, session_id: str | None,
+                         source_turn: int | None) -> None:
+    """MORTIMER_OPTIMIZATION_PLAN.md Phase 4 Rev 3.4 Stage A3 — one row per
+    RESTATED fact (the user told Mortimer something the store already had).
+    Phase 4 Stage B is gated on this rate; see migration 0019's comment for
+    why a restatement is a proxy rather than proof. Best-effort by design:
+    an instrumentation write must never cost a real memory write, so a
+    failure here is logged and swallowed. Shares the caller's connection
+    and transaction — it is part of the same admission, not a side trip."""
+    try:
+        conn.execute(
+            "INSERT INTO memory_recall_events "
+            "(session_id, source_turn, key, outcome, created_at) "
+            "VALUES (?,?,?,?,?)",
+            (session_id, source_turn, key, outcome, now_iso()),
+        )
+    except Exception:  # noqa: BLE001 — never break an admission over a metric
+        logger.warning("memory_recall_event_write_failed key=%s", key, exc_info=True)
+
+
 def admit_fact_candidate(conn, key: str, value: str, session_id: str | None,
                           source_turn: int | None) -> str:
     """One fact candidate through the novelty gate, then to the store.
@@ -228,6 +248,11 @@ def admit_fact_candidate(conn, key: str, value: str, session_id: str | None,
     if is_exact:
         upsert_fact(conn, key, value, session_id)
         _touch_recurrence(conn, "memories", match["id"], source_turn, bump=True)
+        # Stage A3: the stored fact's key, not the candidate's — for an
+        # exact match they are the same, for a near-duplicate they are not,
+        # and what we want to know is which STORED fact went unrecalled.
+        _record_recall_event(conn, match["key"], "exact_update",
+                             session_id, source_turn)
         return "exact_update"
     if match is not None:
         _touch_recurrence(conn, "memories", match["id"], source_turn, bump=True)
@@ -235,6 +260,8 @@ def admit_fact_candidate(conn, key: str, value: str, session_id: str | None,
             "memory_novelty_gate kind=fact key=%s matched=%s session=%s",
             key, match["key"], session_id,
         )
+        _record_recall_event(conn, match["key"], "near_duplicate",
+                             session_id, source_turn)
         return f"near_duplicate:{match['key']}"
 
     upsert_fact(conn, key, value, session_id)

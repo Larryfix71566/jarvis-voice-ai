@@ -23,6 +23,7 @@ EXPECTED_MIGRATION_IDS = [
     "0016_memory_extraction_v2",
     "0017_memory_extraction_pending",
     "0018_council_retry_outcome",
+    "0019_memory_recall_events",
 ]
 
 

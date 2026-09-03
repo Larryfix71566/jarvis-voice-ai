@@ -408,6 +408,86 @@ class TestScanWiredIntoWritePaths:
 # --- Phase 5c: capacity handling ----------------------------------------
 
 
+class TestRenderStats:
+    """Phase 4 Rev 3.4 Stage A2 — render_memory_context fills an optional
+    `stats` dict so bot/pipeline.py can log the size of the memory half of
+    the cached Supervisor prefix without parsing its own warnings."""
+
+    def test_stats_dict_is_filled(self, conn):
+        upsert_fact(conn, "user.name", "Larry", "s1")
+        upsert_fact(conn, "user.preference.music", "jazz", "s1")
+        stats: dict = {}
+        rendered = render_memory_context(conn, stats=stats)
+        assert stats["chars"] == len(rendered)
+        assert stats["approx_tokens"] == len(rendered) // 4
+        assert stats["facts"] == 2
+        assert stats["dropped_tier_cap"] == 0
+        assert stats["dropped_char_budget"] == 0
+        assert stats["summary_dropped"] is False
+
+    def test_stats_counts_tier_cap_drops(self, conn):
+        from jarvis.memory import MAX_PROJECT_FACTS
+
+        for i in range(MAX_PROJECT_FACTS + 5):
+            upsert_fact(conn, f"project.item{i:02d}", f"detail {i}", "s1")
+        stats: dict = {}
+        render_memory_context(conn, stats=stats)
+        assert stats["dropped_tier_cap"] == 5
+        assert stats["facts"] == MAX_PROJECT_FACTS
+
+    def test_stats_well_formed_on_empty_store(self, conn):
+        """An early return (nothing stored) must still leave every key set,
+        so the caller never has to guard each one."""
+        stats: dict = {}
+        rendered = render_memory_context(conn, stats=stats)
+        assert rendered == EMPTY_CONTEXT
+        assert set(stats) == {
+            "chars", "approx_tokens", "facts",
+            "dropped_tier_cap", "dropped_char_budget", "summary_dropped",
+        }
+        assert stats["facts"] == 0
+
+    def test_stats_is_optional(self, conn):
+        """The three existing call sites pass nothing — that must keep
+        working with no behaviour change."""
+        upsert_fact(conn, "user.name", "Larry", "s1")
+        assert render_memory_context(conn) == render_memory_context(conn, stats={})
+
+
+class TestPreferenceCapRaise:
+    """Phase 4 Rev 3.4 Stage A1 — the 30-fact preference cap was dropping
+    25 of Larry's 55 live preference facts from every session; since Phase 1
+    the block is cached, so the cost of carrying them is ~$0.0003/session."""
+
+    def test_sixty_preference_facts_all_render(self, conn):
+        from jarvis.memory import MAX_PREFERENCE_FACTS
+
+        assert MAX_PREFERENCE_FACTS >= 55  # the measured live count
+        for i in range(55):
+            upsert_fact(conn, f"user.style.pref{i:02d}", f"standing rule {i}", "s1")
+        stats: dict = {}
+        rendered = render_memory_context(conn, stats=stats)
+        assert stats["dropped_tier_cap"] == 0
+        assert stats["dropped_char_budget"] == 0
+        assert len([l for l in rendered.split("\n") if l.startswith("- ")]) == 55
+
+    def test_char_budget_does_not_re_impose_the_cap_a1_lifted(self, conn):
+        """MAX_CONTEXT_CHARS must not silently undo A1. Sized from the real
+        store, not a guess: Larry's rendered block at cap 60 is 9,818 chars
+        over 71 facts (~138 chars/fact, measured 2026-09-03), which the old
+        8,000 budget would have truncated — the raise to 12,000 is what
+        makes the cap raise actually reach the prompt. 60 facts at that
+        observed size must render with zero budget drops."""
+        content = "x" * 120  # ~138 chars/line once the key and "- " prefix land
+        for i in range(60):
+            upsert_fact(conn, f"user.style.pref{i:02d}", content, "s1")
+        stats: dict = {}
+        render_memory_context(conn, stats=stats)
+        assert stats["dropped_tier_cap"] == 0
+        assert stats["dropped_char_budget"] == 0
+        assert stats["facts"] == 60
+
+
 class TestCapacityHandling:
     """render_memory_context has two truncation points (per-tier caps,
     MAX_CONTEXT_CHARS budget) — both must log, and neither may silently

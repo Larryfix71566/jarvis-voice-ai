@@ -473,6 +473,15 @@ def build_pipeline(
          "description": a.description}
         for a in sub_agents.values()
     ])
+    # MORTIMER_OPTIMIZATION_PLAN.md Phase 4 Rev 3.4 Stage A2: the memory
+    # block is the one part of this prompt that grows on its own, and since
+    # Phase 1 the whole prompt is a cached prefix — so its size is now
+    # logged once per pipeline build rather than inferred from the
+    # memory_context_facts_dropped warnings. Two things this makes
+    # answerable without a query: how close the prefix is to Haiku 4.5's
+    # 4,096-token cache floor (below it, caching silently stops), and
+    # whether the Stage A1 cap raise actually cleared the tier-cap drops.
+    memory_stats: dict = {}
     system_prompt = (
         SUPERVISOR_PROMPT.format(
             jarvis_name=settings.jarvis_name,
@@ -481,7 +490,7 @@ def build_pipeline(
             units=settings.jarvis_units,
             agent_catalog=agent_catalog,
             voice_catalog=catalog_summary(catalog),
-            memory_context=render_memory_context(),  # U2.5 persistent memory
+            memory_context=render_memory_context(stats=memory_stats),  # U2.5
         )
         + "\n"
         + VOICE_ADDENDUM
@@ -492,6 +501,22 @@ def build_pipeline(
         # H3/H6 — show_commands is always registered; the clipboard half
         # of the addendum only makes sense when its tools are.
         + ("\n" + HANDOFF_ADDENDUM if clipboard_enabled else "")
+    )
+
+    # Phase 4 Rev 3.4 Stage A2 — see memory_stats above. Logged with the
+    # assembled prompt's own size so the memory half can be read against
+    # the whole cached prefix in one line.
+    # Phase 4 Rev 3.4 Stage A2 — see memory_stats above. Logged with the
+    # assembled prompt's own size so the memory half can be read against
+    # the whole cached prefix in one line.
+    _logger.info(
+        "memory_context_rendered chars=%d approx_tokens=%d facts=%d "
+        "dropped_tier_cap=%d dropped_char_budget=%d summary_dropped=%s "
+        "prompt_chars=%d",
+        memory_stats.get("chars", 0), memory_stats.get("approx_tokens", 0),
+        memory_stats.get("facts", 0), memory_stats.get("dropped_tier_cap", 0),
+        memory_stats.get("dropped_char_budget", 0),
+        memory_stats.get("summary_dropped", False), len(system_prompt),
     )
 
     stt = DeepgramFluxSTTService(

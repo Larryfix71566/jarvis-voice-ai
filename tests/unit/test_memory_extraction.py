@@ -427,3 +427,74 @@ class TestExtractFromExchange:
         assert result["error"] is True
         assert result["facts"] == 0
         assert result["observations"] == 0
+
+
+# --------------- Phase 4 Rev 3.4 Stage A3: the recall-failure proxy
+
+def _events(conn):
+    return [
+        (r["key"], r["outcome"], r["session_id"], r["source_turn"])
+        for r in conn.execute(
+            "SELECT key, outcome, session_id, source_turn "
+            "FROM memory_recall_events ORDER BY id"
+        )
+    ]
+
+
+def test_exact_update_records_a_recall_event(conn):
+    """The user restated a fact the store already had verbatim — the whole
+    signal Phase 4 Stage B is gated on."""
+    assert admit_fact_candidate(conn, "user.name", "Larry", "s1", 1) == "inserted"
+    assert admit_fact_candidate(conn, "user.name", "Larry", "s2", 42) == "exact_update"
+    assert _events(conn) == [("user.name", "exact_update", "s2", 42)]
+
+
+def test_near_duplicate_records_the_STORED_key_not_the_candidate(conn):
+    """What we want to know is which stored fact went unrecalled, so the
+    matched row's key is recorded, not the new candidate's."""
+    assert admit_fact_candidate(
+        conn, "user.preference.coffee", "prefers dark roast coffee", "s1", 1,
+    ) == "inserted"
+    out = admit_fact_candidate(
+        conn, "user.preference.beverage", "prefers dark roast coffee", "s2", 7,
+    )
+    assert out.startswith("near_duplicate:")
+    assert _events(conn) == [
+        ("user.preference.coffee", "near_duplicate", "s2", 7),
+    ]
+
+
+def test_inserted_and_rejected_record_nothing(conn):
+    """A genuinely new fact is not a recall failure; neither is a blocked
+    one. Only restatements count, or the rate means nothing."""
+    assert admit_fact_candidate(conn, "user.name", "Larry", "s1", 1) == "inserted"
+    assert admit_fact_candidate(
+        conn, "user.card", "card number 4111 1111 1111 1111", "s1", 2,
+    ) == "rejected"
+    assert _events(conn) == []
+
+
+def test_observations_are_never_counted(conn):
+    """Observations are inferred, not restated by the user — counting them
+    would inflate the rate with Mortimer's own inferences."""
+    admit_observation_candidate(conn, "user.style.terse", "answers briefly", "s1", 1)
+    admit_observation_candidate(conn, "user.style.terse", "answers briefly", "s1", 2)
+    assert _events(conn) == []
+
+
+def test_memory_usage_reports_the_rate_pair(conn):
+    """memory_usage carries the pair (not the quotient) so the panel cannot
+    make a low-session week look alarming."""
+    from jarvis.memory import memory_usage
+
+    admit_fact_candidate(conn, "user.name", "Larry", "s1", 1)
+    admit_fact_candidate(conn, "user.name", "Larry", "s2", 2)
+    conn.execute(
+        "INSERT INTO conversations (session_id, role, content, created_at) "
+        "VALUES ('s1','user','hi', datetime('now'))"
+    )
+    conn.commit()
+    usage = memory_usage(conn)
+    assert usage["restated_7d"] == 1
+    assert usage["sessions_7d"] == 1
+

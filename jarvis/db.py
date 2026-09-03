@@ -525,6 +525,29 @@ MIGRATION_0018 = """
 ALTER TABLE council_rounds ADD COLUMN retry_outcome TEXT;
 """
 
+# MORTIMER_OPTIMIZATION_PLAN.md Phase 4 Rev 3.4, Stage A3 (2026-09-03).
+# The recall-failure proxy. Phase 2's novelty gate already computes, per
+# extracted fact candidate, whether the user just restated something the
+# store already had (outcome 'exact_update' or 'near_duplicate:<key>') —
+# a signal that was thrown away. Not every restatement is a recall miss
+# (people repeat themselves), but the RATE per session is the only signal
+# available that scales without a human labelling anything, and Phase 4's
+# Stage B is gated on it rather than on the assumption that recall is bad.
+# One row per restated fact; 'inserted' and 'rejected' write nothing, and
+# observations are never counted (they are inferred, not restated).
+MIGRATION_0019 = """
+CREATE TABLE IF NOT EXISTS memory_recall_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT,
+  source_turn INTEGER,
+  key TEXT NOT NULL,
+  outcome TEXT NOT NULL,             -- 'exact_update' | 'near_duplicate'
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_recall_events_created
+  ON memory_recall_events(created_at);
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
@@ -545,6 +568,7 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0016_memory_extraction_v2", MIGRATION_0016),
     ("0017_memory_extraction_pending", MIGRATION_0017),
     ("0018_council_retry_outcome", MIGRATION_0018),
+    ("0019_memory_recall_events", MIGRATION_0019),
 ]
 
 
