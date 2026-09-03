@@ -1327,6 +1327,214 @@ def list_rounds(
         conn.close()
 
 
+# ------------------------------------------------------- roster (D10/UI)
+# MORTIMER_OPTIMIZATION_PLAN.md "Interface Task — Council Roster on the
+# Agent Card". One assembled view of a round: who proposed, what each
+# scored, which judges abstained AND WHY, and whether the pool silently
+# degraded. Assembled HERE rather than in the SwiftUI view for the same
+# reason get_round/list_rounds live here — one implementation, so the
+# sidecar, a CLI reader and the app can never disagree — and because a
+# rule assembled in Swift is a rule this repo's test suite cannot pin.
+
+def _judge_entries(rows: list[dict], proposer_profiles: set[str]) -> list[dict]:
+    """One entry per judge in `rows`, in profile order. Shared by the live
+    lineup and the shadow lineup so the two can never be summarised by
+    two different rules."""
+    entries: list[dict] = []
+    for profile in dict.fromkeys((s.get("judge_profile") or "") for s in rows):
+        mine = [s for s in rows if (s.get("judge_profile") or "") == profile]
+        abstained = [s for s in mine if s.get("score") is None]
+        entries.append({
+            "profile": profile,
+            "tier": next((s.get("judge_tier") for s in mine if s.get("judge_tier")), None),
+            "scored": len(mine) - len(abstained),
+            "abstained": len(abstained),
+            "abstain_reasons": list(dict.fromkeys(
+                (s.get("abstain_reason") or "").strip()
+                for s in abstained
+                if (s.get("abstain_reason") or "").strip()
+            )),
+            "all_abstained": bool(mine) and len(abstained) == len(mine),
+            "also_proposed": profile in proposer_profiles,
+        })
+    entries.sort(key=lambda j: j["profile"])
+    return entries
+
+
+def build_roster(round_row: dict, score_rows: list[dict]) -> dict:
+    """Assemble one round's roster from its `council_rounds` row and its
+    `council_scores` rows (exactly what `get_round()` returns).
+
+    Pure: no I/O, no network, same contract as scoring.py. Every field is
+    read with `.get`, because the UI must render rounds written before
+    any later migration as readily as today's — a round from before 0018
+    simply has no `retry_outcome`.
+
+    LIVE scores only decide numbers (V7: the shadow pass never merged
+    into the result either); shadow judges are named separately so a
+    shadow lineup is visible without being mistaken for one that voted.
+    """
+    live = [s for s in score_rows if not s.get("shadow")]
+    shadow_rows = [s for s in score_rows if s.get("shadow")]
+
+    # The proposals themselves come from the score rows — the
+    # council_rounds row records only counts and the winner.
+    label_to_profile: dict[str, str] = {}
+    for s in live:
+        label = s.get("proposal_label") or ""
+        if label and label not in label_to_profile:
+            label_to_profile[label] = s.get("proposal_profile") or ""
+
+    proposer_profiles = {p for p in label_to_profile.values() if p}
+    # D5's defensive filter, applied for exactly the reason
+    # select_winner applies it: a judge that also proposed never counts
+    # toward a mean, so the mean rendered here is the mean that actually
+    # chose the winner. Such a judge is still LISTED below (flagged) —
+    # hiding it would hide the construction bug it represents.
+    usable = [s for s in live if s.get("judge_profile") not in proposer_profiles]
+    usable_scores = [
+        Score(
+            judge_profile=s.get("judge_profile") or "",
+            proposal_label=s.get("proposal_label") or "",
+            value=s.get("score"),
+            abstain_reason=s.get("abstain_reason"),
+        )
+        for s in usable
+    ]
+
+    winner_label = round_row.get("winner_label") or ""
+    proposers: list[dict] = []
+    for label, profile in label_to_profile.items():
+        rows = [s for s in usable if (s.get("proposal_label") or "") == label]
+        proposers.append({
+            "label": label,
+            "profile": profile,
+            "mean": mean_of(label, usable_scores),
+            "scored_by": sum(1 for s in rows if s.get("score") is not None),
+            "abstained_by": sum(1 for s in rows if s.get("score") is None),
+            "is_winner": bool(winner_label) and label == winner_label,
+        })
+    # Best first, unscored last, ties broken by label so the order is
+    # deterministic for a test and stable for a reader.
+    proposers.sort(key=lambda p: (p["mean"] is None, -(p["mean"] or 0.0), p["label"]))
+
+    judges = _judge_entries(live, proposer_profiles)
+    # V7's shadow pass judges, assembled the SAME way rather than merely
+    # named. A shadow judge that fails degrades the agreement data
+    # (agreement.py reads exactly these rows) just as silently as a live
+    # one degrades a decision — and on 2026-09-03 two of them had been
+    # failing 100% on `temperature is deprecated for this model` with
+    # nothing anywhere to say so.
+    shadow_judges = _judge_entries(shadow_rows, proposer_profiles)
+
+    # The point of the card (plan: "silent pool degradation is the same
+    # failure class the launcher work fixed for services"). Every reason
+    # is a fact from the row or the scores, never an inference.
+    degraded_reasons: list[str] = []
+    for judge in judges:
+        if judge["all_abstained"]:
+            detail = judge["abstain_reasons"][0] if judge["abstain_reasons"] else "no reason recorded"
+            degraded_reasons.append(
+                f"judge {judge['profile']} abstained on every proposal — {detail}"
+            )
+        if judge["also_proposed"]:
+            degraded_reasons.append(
+                f"judge {judge['profile']} also proposed — its scores were not counted"
+            )
+    for judge in shadow_judges:
+        if judge["all_abstained"]:
+            detail = judge["abstain_reasons"][0] if judge["abstain_reasons"] else "no reason recorded"
+            degraded_reasons.append(
+                f"shadow judge {judge['profile']} abstained on every proposal — {detail}"
+            )
+    attempted_p, count_p = round_row.get("proposers_attempted"), round_row.get("proposer_count") or 0
+    if attempted_p is not None and attempted_p > count_p:
+        degraded_reasons.append(
+            f"{attempted_p - count_p} of {attempted_p} proposers returned nothing"
+        )
+    attempted_j, count_j = round_row.get("judges_attempted"), round_row.get("judge_count") or 0
+    if attempted_j is not None and attempted_j > count_j:
+        degraded_reasons.append(
+            f"{attempted_j - count_j} of {attempted_j} judges returned nothing"
+        )
+    status = round_row.get("status") or ""
+    if status and status != "ok":
+        degraded_reasons.append(f"round status: {status}")
+
+    prompt_tokens = round_row.get("prompt_tokens") or 0
+    completion_tokens = round_row.get("completion_tokens") or 0
+    return {
+        "round_id": round_row.get("round_id") or "",
+        "run_id": round_row.get("run_id"),
+        "workflow": round_row.get("workflow") or "",
+        "placement": round_row.get("placement") or "",
+        "trigger": round_row.get("trigger") or "",
+        "tier": round_row.get("tier"),
+        "status": status,
+        "goal": round_row.get("goal") or "",
+        "started_at": round_row.get("started_at") or "",
+        "ended_at": round_row.get("ended_at"),
+        "latency_ms": round_row.get("latency_ms"),
+        # The primary chip's value — the plan's model-discipline rule:
+        # the chip names what actually proceeded.
+        "winner_profile": round_row.get("winner_profile"),
+        "winner_label": round_row.get("winner_label"),
+        "winner_mean": round_row.get("winner_mean"),
+        "select_reason": round_row.get("select_reason"),
+        # Rev 3.3's column (migration 0018). Absent on older rows and on
+        # a database that has not migrated yet — hence .get, not [].
+        "retry_outcome": round_row.get("retry_outcome"),
+        "proposers": proposers,
+        "judges": judges,
+        "shadow_judges": shadow_judges,
+        "abstentions": sum(1 for s in live if s.get("score") is None),
+        "tokens": {
+            "prompt": prompt_tokens,
+            "completion": completion_tokens,
+            "total": prompt_tokens + completion_tokens,
+        },
+        "degraded": bool(degraded_reasons),
+        "degraded_reasons": degraded_reasons,
+    }
+
+
+def get_round_roster(round_id: str) -> dict | None:
+    """`build_roster` over one round; None when the round is unknown."""
+    detail = get_round(round_id)
+    if detail is None:
+        return None
+    return build_roster(detail["round"], detail["scores"])
+
+
+def list_round_rosters(
+    workflow: str | None = None, status: str | None = None,
+    since: str | None = None, limit: int = 20,
+) -> list[dict]:
+    """Recent rounds as assembled rosters, newest first — the read the
+    Agents surface makes. Scores for every round in the page are fetched
+    in ONE query rather than one per round: the card is polled, and an
+    N+1 behind a poll is how a read-only panel starts costing something."""
+    rounds = list_rounds(workflow=workflow, status=status, since=since, limit=limit)
+    if not rounds:
+        return []
+    ids = [r["round_id"] for r in rounds]
+    conn = get_conn()
+    try:
+        placeholders = ",".join("?" * len(ids))
+        rows = conn.execute(
+            f"SELECT * FROM council_scores WHERE round_id IN ({placeholders}) "
+            "ORDER BY id",
+            ids,
+        ).fetchall()
+    finally:
+        conn.close()
+    by_round: dict[str, list[dict]] = {rid: [] for rid in ids}
+    for row in rows:
+        record = dict(row)
+        by_round.setdefault(record["round_id"], []).append(record)
+    return [build_roster(r, by_round.get(r["round_id"], [])) for r in rounds]
+
+
 def _payload_path(round_id: str, started_at: str) -> Path:
     """The one place a round's JSONL path is computed from (round_id,
     started_at) — shared by `_write_payload` (initial write) and V7's

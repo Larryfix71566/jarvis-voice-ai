@@ -23,6 +23,12 @@ enum AppTuning {
     /// only as fast as LLM calls happen, so this is deliberately the
     /// slowest poll in the drawer rather than matching Runs' 5s.
     static var costsPollSeconds: Double { seconds("JARVIS_COSTS_POLL_SECONDS", 30.0) }
+    /// Council roster poll, under the Agents tab (MORTIMER_OPTIMIZATION_
+    /// PLAN.md's Interface Task) — NEW, no web parity. A council round
+    /// takes minutes and only five have ever run to completion, so this
+    /// is the slowest poll in the drawer: the panel is a record to read,
+    /// not a live meter.
+    static var councilPollSeconds: Double { seconds("JARVIS_COUNCIL_POLL_SECONDS", 60.0) }
 
     /// agentRuns.ts:79 MAX_AGENT_RUNS
     static let maxAgentRuns = 20

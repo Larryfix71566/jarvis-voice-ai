@@ -20,6 +20,8 @@ struct DrawerView: View {
     @State private var memoryModel: MemoryViewModel?
     @State private var runsModel: RunsViewModel?
     @State private var costsModel: CostsViewModel?
+    /// Interface Task — the council roster under the Agents tab's runs.
+    @State private var councilModel: CouncilViewModel?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,6 +42,7 @@ struct DrawerView: View {
         if memoryModel == nil { memoryModel = MemoryViewModel(api: client.admin) }
         if runsModel == nil { runsModel = RunsViewModel(api: client.admin) }
         if costsModel == nil { costsModel = CostsViewModel(api: client.costs) }
+        if councilModel == nil { councilModel = CouncilViewModel(api: client.admin) }
     }
 
     /// The tab strip (SideDrawer.tsx:255-292, parity sweep 2026-08-30):
@@ -126,7 +129,7 @@ struct DrawerView: View {
         case "runs":
             if let runsModel { RunsTab(model: runsModel) }
         case "agents":
-            AgentsTab()
+            AgentsTab(council: councilModel)
         case "output":
             OutputTab()
         case "transcript":

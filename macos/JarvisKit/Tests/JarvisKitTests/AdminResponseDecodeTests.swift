@@ -121,4 +121,45 @@ final class AdminResponseDecodeTests: XCTestCase {
         XCTAssertNil(run.latencyMs)
         XCTAssertNil(run.model)
     }
+
+    // MARK: Council roster (Interface Task)
+
+    func testDecodeCouncilRoster() throws {
+        let list = try JSONDecoder().decode(
+            CouncilRosterList.self, from: fixture("council_roster")
+        )
+        XCTAssertTrue(list.ok)
+        guard let round = list.rounds.first else { return }  // an empty DB is legal
+        XCTAssertFalse(round.roundId.isEmpty)
+        XCTAssertEqual(round.tokens.total, round.tokens.prompt + round.tokens.completion)
+        // A degraded round must carry the reason text, never a bare flag —
+        // the reason IS the feature (a dead judge's error string).
+        if round.degraded { XCTAssertFalse(round.degradedReasons.isEmpty) }
+        XCTAssertLessThanOrEqual(round.proposers.filter(\.isWinner).count, 1)
+        for judge in round.judges where judge.allAbstained {
+            XCTAssertEqual(judge.scored, 0)
+        }
+    }
+
+    func testDecodeCouncilRosterOlderRoundMissingFields() throws {
+        // A round recorded before migration 0018 (no retry_outcome) and
+        // before it had any scores — the shape most of the real history
+        // is in. decodeIfPresent+default: no throw, no fabricated data.
+        let json = """
+        {"ok": true, "rounds": [
+          {"round_id":"r-old","workflow":"selfedit","placement":"planner",
+           "status":"too_small","started_at":"2026-08-17T17:22:27+00:00",
+           "degraded":true,"degraded_reasons":["round status: too_small"]}
+        ]}
+        """
+        let list = try JSONDecoder().decode(CouncilRosterList.self, from: Data(json.utf8))
+        let round = try XCTUnwrap(list.rounds.first)
+        XCTAssertNil(round.retryOutcome)
+        XCTAssertNil(round.winnerProfile)
+        XCTAssertEqual(round.proposers, [])
+        XCTAssertEqual(round.judges, [])
+        XCTAssertEqual(round.shadowJudges, [])
+        XCTAssertEqual(round.tokens.total, 0)
+        XCTAssertEqual(round.degradedReasons, ["round status: too_small"])
+    }
 }

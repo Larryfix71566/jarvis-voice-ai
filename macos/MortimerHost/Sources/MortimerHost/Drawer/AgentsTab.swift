@@ -5,8 +5,18 @@ import JarvisKit
 /// from AgentRunStore (the message stream), newest last per the store's
 /// oldest-first order, rendered newest-first here. Registers NO stream
 /// consumer — it only reads its store (the single-listener rule).
+///
+/// Below the live runs, MORTIMER_OPTIMIZATION_PLAN.md's Interface Task
+/// adds the council roster (CouncilRosterView.swift). That section is
+/// HTTP-polled rather than stream-fed, which does not breach the
+/// single-listener rule — it registers no stream consumer either — and
+/// its view-model is owned by DrawerView like every other polling tab's
+/// (P6: a tab view unmounting on switch must not restart its poll).
 struct AgentsTab: View {
     @Environment(AgentRunStore.self) private var agentRuns
+    /// Optional so the live runs still render during the one frame
+    /// before DrawerView's buildModelsOnce has run.
+    let council: CouncilViewModel?
 
     var body: some View {
         ScrollView {
@@ -18,6 +28,10 @@ struct AgentsTab: View {
                     ForEach(agentRuns.runs.reversed()) { run in
                         card(run)
                     }
+                }
+                if let council {
+                    Divider().overlay(AppTheme.hairline).padding(.vertical, 2)
+                    CouncilRosterSection(model: council)
                 }
             }
             .padding(12)

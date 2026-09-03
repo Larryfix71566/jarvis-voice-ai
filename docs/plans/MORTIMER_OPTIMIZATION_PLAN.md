@@ -1,6 +1,6 @@
 # Mortimer Optimization Plan — Cost, Memory, and Model Routing
 
-Status: Rev 3.4 — 2026-09-03 (Phase 4 rewritten: its cost premise died when Phase 1 put the memory block inside the cached prefix — measured, see the Phase 4 section itself. Rev 3.3: Phase 3 reevaluated against the real ledger and council records; see "Rev 3.3 notes" at the end. Rev 3.2: Phase 1/1b rewritten: caching needs the native Messages API, the OpenAI-compat layer cannot carry it; see "Rev 3.2 resolutions" at the end. Rev 3.1: conflicts resolved + model-floor policy.)
+Status: Rev 3.5 — 2026-09-03 (Interface Task: the council roster's premise corrected — `council_rounds.run_id` is NULL on all 35 rounds and nothing can populate it today, so the roster ships as its own section rather than a card attachment; Stage A landed, see that section. Rev 3.4: Phase 4 rewritten: its cost premise died when Phase 1 put the memory block inside the cached prefix — measured, see the Phase 4 section itself. Rev 3.3: Phase 3 reevaluated against the real ledger and council records; see "Rev 3.3 notes" at the end. Rev 3.2: Phase 1/1b rewritten: caching needs the native Messages API, the OpenAI-compat layer cannot carry it; see "Rev 3.2 resolutions" at the end. Rev 3.1: conflicts resolved + model-floor policy.)
 
 **Standing policy (Larry, 2026-09-01) — the model floor:** the ONLY agent that may run Haiku is the voice agent (Supervisor). Every other agent — the five specialists and the planner/executor loop — runs at Sonnet-or-equivalent or above. Cost work on those agents is caching, context slimming, effort, and choosing *among* Sonnet-class-and-up models; it is never dropping below the floor. This overrides the earlier "Haiku is correct for the conversational agents" stance in `config/agents.yaml` and CLAUDE.md, and it is bound in CONFIG plus a test (Phase 0b item 5), not stored as a memory fact — a fact only persuades a model, it cannot bind a tool's behaviour (the same lesson as `jarvis_units`).
 Scope: sub-agents and supervisor. Voice transport (STT/TTS/realtime) explicitly exempt — stays on native provider connections for latency.
@@ -401,10 +401,10 @@ Supervisor (Phase 5 local) and the background maintenance rungs.
 
 ## Interface Task (parallel track, any time after Phase 0b) — Council Roster on the Agent Card
 
-Decided 2026-09-01. Every council round record already carries proposer
-profiles, judge profiles, per-judge scores, abstain reasons, winner, mean,
-and token totals (`get_round()` returns all of it) — this is a surfacing
-task, not a data task.
+Decided 2026-09-01. **Stage A delivered 2026-09-03 (Rev 3.5).** Every
+council round record already carries proposer profiles, judge profiles,
+per-judge scores, abstain reasons, winner, mean, and token totals
+(`get_round()` returns all of it).
 
 - Primary chip stays the WINNER's resolved profile (preserves the
   model-discipline rule: the chip names what actually proceeds).
@@ -420,6 +420,92 @@ task, not a data task.
   the existing admin API if rounds are exposed there) + one SwiftUI
   view. Well-bounded, visual, low-risk — a good first task for the
   planner/executor loop itself once Phase 0b + the cost shim land.
+
+### Rev 3.5 correction — "a surfacing task, not a data task" was half right
+
+The round CONTENT needed nothing new; the round's ATTACHMENT to a card
+does not exist. Checked against the live database and code, 2026-09-03:
+
+1. `council_rounds.run_id` is a real column and is **NULL on all 35
+   rounds ever recorded**. `convene()` takes `run_id` and no caller ever
+   passes one; `draft_candidates`' three write sites pass `run_id=None`
+   literally.
+2. There is nothing to pass. `get_run_id()` is a ContextVar entered in
+   exactly one place — `jarvis/agents/base.py`'s `run_logger_scope`, for
+   the five specialists. `UpgradeAgent`, the ONLY caller that convenes a
+   council, is constructed by the admin sidecar (`server.py:_make_agent`)
+   and never enters that scope, so `get_run_id()` is None throughout it.
+3. The agent cards that DO carry a `run_id` are the bot's sub-agent
+   runs, which reach the council only across an HTTP hop
+   (`mcp_selfedit` → `POST /api/selfedit/run` → `_run_agent`) that no
+   ContextVar crosses.
+
+So "the roster on the agent card" had no join key, and building it as
+specified would have meant guessing an attachment (nearest-in-time, same
+workflow) that would be wrong exactly when a session convened twice.
+
+**Decision: surface the roster as its own section under the Agents tab's
+live runs, newest-first, and do NOT thread a run_id yet.** The plan's
+own justification for this task is diagnostic ("silent pool degradation
+… would have surfaced the timeout bug at a glance"), and that value is
+in seeing the abstentions at all, not in which card they hang under —
+historically more so, since the bug you want to catch is in *last
+night's* round. Card adjacency is a real improvement, but it costs a
+`run_id` threaded through the MCP wire format, `SelfEditRunIn`, the
+one-at-a-time job slot and `UpgradeAgent`'s constructor, and it cannot
+be verified without a live self-edit run.
+
+### Stage A — what landed
+
+- `jarvis/council/council.py`: `build_roster` (pure, over a
+  `council_rounds` row + its `council_scores` rows), plus
+  `get_round_roster` / `list_round_rosters`. Means come from
+  `scoring.mean_of` over LIVE scores with D5's judge-that-also-proposed
+  filter applied — the same function and the same filter `select_winner`
+  used, so the roster can never render a mean that disagrees with the
+  winner chip above it. `list_round_rosters` fetches every round's
+  scores in ONE query: the panel polls, and an N+1 behind a poll is how
+  a read-only view starts costing something.
+- `GET /api/council/roster` — same filters as `/api/council/rounds`,
+  default 20, clamped to 50 (that list allows 200; a roster entry is
+  much larger and this one is polled).
+- `macos/JarvisKit`: `CouncilRoster`/`CouncilProposer`/`CouncilJudge`/
+  `CouncilTokens`/`CouncilRosterList` + `councilRosterTyped()`, decoded
+  leniently like `RunSummary` because most recorded rounds predate later
+  migrations.
+- `macos/MortimerHost`: `CouncilRosterView.swift` (`CouncilViewModel` +
+  the section), owned by `DrawerView` like every other polling
+  view-model (P6), rendered by `AgentsTab` under the live runs.
+  `AppTuning.councilPollSeconds` = 60 — the slowest poll in the drawer.
+- Tests: `tests/unit/test_council_roster.py` (14) +
+  `tests/unit/test_admin_council.py` (4 new). The primary fixture is
+  round `e48cfbe1`'s REAL shape, read out of `data/jarvis.db`, not
+  invented. Ten mutation checks confirm none of it is vacuous.
+
+### What Stage A found the moment it ran on real data
+
+Of 35 recorded rounds, 5 ran to completion; 3 of those 5 were degraded
+and nothing had ever said so:
+
+- `kimi-k3` abstained on EVERY proposal in 3 separate rounds —
+  `judge call failed:` with an empty error string. One of four live
+  judges, dead, silently, across two weeks.
+- `claude-opus` and `claude-fable-5` — both Anthropic shadow judges —
+  abstained on **every shadow score ever recorded**, all of them
+  `400 … '`temperature` is deprecated for this model.'` The shadow pass
+  is what `agreement.py` reads, so the agreement data has been computed
+  with both Anthropic judges absent. This is a live config bug, not
+  history: it wants a fix in the judge call path, tracked separately.
+
+### Stage B (not built) — card adjacency, if it earns it
+
+Thread a run_id: bot sub-agent → `mcp_selfedit` payload →
+`SelfEditRunIn` → `_run_agent` → `UpgradeAgent(run_id=)` →
+`convene(run_id=)`. Then a selfedit-shaped agent card (exempt from the
+8s fade, so it persists) can show its own round inline. Gate: Stage A's
+section is in use and Larry says the missing adjacency actually costs
+him something. Until then the run_id column stays NULL and the roster
+stays a section — an honest list beats a guessed attachment.
 
 ## Phase 4 — Memory Recall Quality (Rev 3.4 rewrite, 2026-09-03; was "Context Slimming via Graph Memory")
 

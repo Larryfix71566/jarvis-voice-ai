@@ -14,6 +14,7 @@ curl -s localhost:7861/api/memory            > $F/memory.json
 curl -s localhost:7861/api/memory/reviews    > $F/memory_reviews.json
 curl -s localhost:7861/api/knowledge         > $F/knowledge.json
 curl -s localhost:7861/api/runs              > $F/runs.json
+curl -s localhost:7861/api/council/roster    > $F/council_roster.json
 curl -s localhost:7861/api/runs/$(curl -s localhost:7861/api/runs | python3 -c 'import sys,json;print(json.load(sys.stdin)["runs"][0]["run_id"])') > $F/run_detail.json
 ```
 

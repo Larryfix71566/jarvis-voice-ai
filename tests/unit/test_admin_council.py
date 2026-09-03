@@ -240,6 +240,74 @@ def test_rounds_list(_db):
     assert {r["round_id"] for r in filtered["rounds"]} == {"round-2"}
 
 
+# -------------------------------------------------------------------- roster
+# MORTIMER_OPTIMIZATION_PLAN.md's Interface Task. build_roster's own rules
+# are pinned in tests/unit/test_council_roster.py against the real round's
+# shape; these cover only what the ENDPOINT adds — filters, the clamp, and
+# that the assembled shape survives the round trip.
+
+
+def test_roster_assembles_each_round(_db):
+    _insert_round(_db, "round-r1")
+    c = TestClient(app)
+    res = c.get("/api/council/roster").json()
+    assert res["ok"] is True
+    roster = next(r for r in res["rounds"] if r["round_id"] == "round-r1")
+    # _insert_round writes one live score: kimi-k3 scoring kimi-k2 7.5.
+    assert [p["profile"] for p in roster["proposers"]] == ["kimi-k2"]
+    assert roster["proposers"][0]["mean"] == 7.5
+    assert [j["profile"] for j in roster["judges"]] == ["kimi-k3"]
+    assert roster["degraded"] is False
+
+
+def test_roster_takes_the_same_filters_as_the_rounds_list(_db):
+    _insert_round(_db, "round-r1")
+    _insert_round(_db, "round-r2", workflow="apps")
+    c = TestClient(app)
+    filtered = c.get("/api/council/roster", params={"workflow": "apps"}).json()
+    assert {r["round_id"] for r in filtered["rounds"]} == {"round-r2"}
+
+    by_status = c.get("/api/council/roster", params={"status": "ok"}).json()
+    assert {r["round_id"] for r in by_status["rounds"]} == {"round-r1", "round-r2"}
+
+
+def _insert_bare_rounds(db_path, count):
+    """`count` scoreless rounds in one connection — enough to prove the
+    ceiling clamp, which needs more rounds than the ceiling."""
+    conn = get_conn(db_path)
+    try:
+        conn.executemany(
+            "INSERT INTO council_rounds (round_id, workflow, placement, "
+            "trigger, tier, goal, proposer_count, judge_count, status, "
+            "started_at) VALUES (?, 'selfedit', 'planner', 'manual', 1, 'g', "
+            "2, 1, 'ok', '2026-01-01T00:00:00+00:00')",
+            [(f"bulk-{i:03d}",) for i in range(count)],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_roster_limit_is_clamped_tighter_than_the_rounds_list(_db):
+    """Each roster entry is much larger than a rounds row and the panel
+    polls it, so this endpoint's ceiling is 50 where /rounds allows 200."""
+    _insert_bare_rounds(_db, 60)
+    c = TestClient(app)
+    assert len(c.get("/api/council/roster", params={"limit": 2}).json()["rounds"]) == 2
+    # Above the ceiling clamps DOWN to 50 — /api/council/rounds would
+    # have returned all 60 for the same query.
+    assert len(c.get("/api/council/roster", params={"limit": 9999}).json()["rounds"]) == 50
+    assert len(c.get("/api/council/rounds", params={"limit": 9999}).json()["rounds"]) == 60
+    # Non-positive clamps UP to 1 rather than erroring or returning none.
+    assert len(c.get("/api/council/roster", params={"limit": 0}).json()["rounds"]) == 1
+
+
+def test_roster_of_an_empty_database_is_an_empty_list(_db):
+    c = TestClient(app)
+    res = c.get("/api/council/roster").json()
+    assert res == {"ok": True, "rounds": []}
+
+
 # -------------------------------------------------------------------- reject
 
 

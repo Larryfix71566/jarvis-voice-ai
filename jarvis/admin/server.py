@@ -1658,6 +1658,27 @@ def council_rounds_list(
     }
 
 
+@app.get("/api/council/roster")
+def council_roster(
+    workflow: str = "", status: str = "", since: str = "", limit: int = 20,
+) -> dict:
+    """MORTIMER_OPTIMIZATION_PLAN.md's Interface Task — the Agents
+    surface's read. Same filters as /api/council/rounds, but each round
+    arrives assembled (proposers with means, judges with their abstain
+    reasons, a degradation verdict) so the view renders rather than
+    computes. A lower default and a tighter clamp than the rounds list:
+    this one is polled and each entry is much larger."""
+    run_migrations()
+    clamped_limit = max(1, min(50, limit))
+    return {
+        "ok": True,
+        "rounds": council_mod.list_round_rosters(
+            workflow=workflow or None, status=status or None,
+            since=parse_since(since or None), limit=clamped_limit,
+        ),
+    }
+
+
 # ------------------------------------------------------- planning pathway
 # MORTIMER_PLANNING_PATHWAY_PLAN.md P7. Thin pass-throughs over
 # jarvis.council.council (draft_candidates/record_user_choice) and

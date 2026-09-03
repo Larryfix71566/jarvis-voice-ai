@@ -617,6 +617,152 @@ public struct RunDetail: Codable, Sendable {
     }
 }
 
+// MARK: - Council roster (GET /api/council/roster)
+// MORTIMER_OPTIMIZATION_PLAN.md "Interface Task — Council Roster on the
+// Agent Card". The sidecar ASSEMBLES the roster
+// (jarvis/council/council.py `build_roster`, pinned by
+// tests/unit/test_council_roster.py) so these types decode a finished
+// shape rather than recomputing a mean the round already decided by — a
+// rule implemented twice is a rule that eventually disagrees with
+// itself, and only one of the two copies would be in the Python suite.
+// Every field decodes leniently for the same reason RunSummary's do:
+// rounds recorded months ago predate later migrations.
+
+public struct CouncilProposer: Codable, Sendable, Equatable {
+    public let label: String            // "Proposal A"
+    public let profile: String
+    public let mean: Double?            // nil when no judge scored it
+    public let scoredBy: Int
+    public let abstainedBy: Int
+    public let isWinner: Bool
+    enum CodingKeys: String, CodingKey {
+        case label, profile, mean
+        case scoredBy = "scored_by", abstainedBy = "abstained_by", isWinner = "is_winner"
+    }
+    public init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        label = try c.decodeIfPresent(String.self, forKey: .label) ?? ""
+        profile = try c.decodeIfPresent(String.self, forKey: .profile) ?? ""
+        mean = try c.decodeIfPresent(Double.self, forKey: .mean)
+        scoredBy = try c.decodeIfPresent(Int.self, forKey: .scoredBy) ?? 0
+        abstainedBy = try c.decodeIfPresent(Int.self, forKey: .abstainedBy) ?? 0
+        isWinner = try c.decodeIfPresent(Bool.self, forKey: .isWinner) ?? false
+    }
+}
+
+public struct CouncilJudge: Codable, Sendable, Equatable {
+    public let profile: String
+    public let tier: String?
+    public let scored: Int
+    public let abstained: Int
+    public let abstainReasons: [String]
+    public let allAbstained: Bool
+    public let alsoProposed: Bool
+    enum CodingKeys: String, CodingKey {
+        case profile, tier, scored, abstained
+        case abstainReasons = "abstain_reasons"
+        case allAbstained = "all_abstained", alsoProposed = "also_proposed"
+    }
+    public init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        profile = try c.decodeIfPresent(String.self, forKey: .profile) ?? ""
+        tier = try c.decodeIfPresent(String.self, forKey: .tier)
+        scored = try c.decodeIfPresent(Int.self, forKey: .scored) ?? 0
+        abstained = try c.decodeIfPresent(Int.self, forKey: .abstained) ?? 0
+        abstainReasons = try c.decodeIfPresent([String].self, forKey: .abstainReasons) ?? []
+        allAbstained = try c.decodeIfPresent(Bool.self, forKey: .allAbstained) ?? false
+        alsoProposed = try c.decodeIfPresent(Bool.self, forKey: .alsoProposed) ?? false
+    }
+}
+
+public struct CouncilTokens: Codable, Sendable, Equatable {
+    public let prompt: Int
+    public let completion: Int
+    public let total: Int
+    enum CodingKeys: String, CodingKey { case prompt, completion, total }
+    public init(prompt: Int = 0, completion: Int = 0, total: Int = 0) {
+        self.prompt = prompt
+        self.completion = completion
+        self.total = total
+    }
+    public init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        prompt = try c.decodeIfPresent(Int.self, forKey: .prompt) ?? 0
+        completion = try c.decodeIfPresent(Int.self, forKey: .completion) ?? 0
+        total = try c.decodeIfPresent(Int.self, forKey: .total) ?? 0
+    }
+}
+
+public struct CouncilRoster: Codable, Sendable, Equatable, Identifiable {
+    public var id: String { roundId }
+    public let roundId: String
+    public let workflow: String
+    public let placement: String        // planner | scope | ...
+    public let trigger: String
+    public let tier: Int?
+    public let status: String           // ok | too_small | ...
+    public let goal: String
+    public let startedAt: String
+    public let latencyMs: Int?
+    /// The primary chip's value — what actually proceeded.
+    public let winnerProfile: String?
+    public let winnerLabel: String?
+    public let winnerMean: Double?
+    public let selectReason: String?
+    public let retryOutcome: String?    // migration 0018; nil on older rounds
+    public let proposers: [CouncilProposer]
+    public let judges: [CouncilJudge]
+    public let shadowJudges: [CouncilJudge]
+    public let abstentions: Int
+    public let tokens: CouncilTokens
+    public let degraded: Bool
+    public let degradedReasons: [String]
+    enum CodingKeys: String, CodingKey {
+        case workflow, placement, trigger, tier, status, goal, proposers, judges
+        case abstentions, tokens, degraded
+        case roundId = "round_id", startedAt = "started_at", latencyMs = "latency_ms"
+        case winnerProfile = "winner_profile", winnerLabel = "winner_label"
+        case winnerMean = "winner_mean", selectReason = "select_reason"
+        case retryOutcome = "retry_outcome", shadowJudges = "shadow_judges"
+        case degradedReasons = "degraded_reasons"
+    }
+    public init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        roundId = try c.decodeIfPresent(String.self, forKey: .roundId) ?? ""
+        workflow = try c.decodeIfPresent(String.self, forKey: .workflow) ?? ""
+        placement = try c.decodeIfPresent(String.self, forKey: .placement) ?? ""
+        trigger = try c.decodeIfPresent(String.self, forKey: .trigger) ?? ""
+        tier = try c.decodeIfPresent(Int.self, forKey: .tier)
+        status = try c.decodeIfPresent(String.self, forKey: .status) ?? ""
+        goal = try c.decodeIfPresent(String.self, forKey: .goal) ?? ""
+        startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt) ?? ""
+        latencyMs = try c.decodeIfPresent(Int.self, forKey: .latencyMs)
+        winnerProfile = try c.decodeIfPresent(String.self, forKey: .winnerProfile)
+        winnerLabel = try c.decodeIfPresent(String.self, forKey: .winnerLabel)
+        winnerMean = try c.decodeIfPresent(Double.self, forKey: .winnerMean)
+        selectReason = try c.decodeIfPresent(String.self, forKey: .selectReason)
+        retryOutcome = try c.decodeIfPresent(String.self, forKey: .retryOutcome)
+        proposers = try c.decodeIfPresent([CouncilProposer].self, forKey: .proposers) ?? []
+        judges = try c.decodeIfPresent([CouncilJudge].self, forKey: .judges) ?? []
+        shadowJudges = try c.decodeIfPresent([CouncilJudge].self, forKey: .shadowJudges) ?? []
+        abstentions = try c.decodeIfPresent(Int.self, forKey: .abstentions) ?? 0
+        tokens = try c.decodeIfPresent(CouncilTokens.self, forKey: .tokens) ?? CouncilTokens()
+        degraded = try c.decodeIfPresent(Bool.self, forKey: .degraded) ?? false
+        degradedReasons = try c.decodeIfPresent([String].self, forKey: .degradedReasons) ?? []
+    }
+}
+
+public struct CouncilRosterList: Codable, Sendable, Equatable {
+    public let ok: Bool
+    public let rounds: [CouncilRoster]
+    enum CodingKeys: String, CodingKey { case ok, rounds }
+    public init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        ok = try c.decodeIfPresent(Bool.self, forKey: .ok) ?? false
+        rounds = try c.decodeIfPresent([CouncilRoster].self, forKey: .rounds) ?? []
+    }
+}
+
 // MARK: The additive methods (typed reads + draft→confirm writes)
 
 public extension AdminAPI {
@@ -669,6 +815,14 @@ public extension AdminAPI {
     // the system-vitals readout (SystemVitals.tsx deliberately rides the
     // same poll rather than adding a second data source).
     func ambientTyped() async throws -> AmbientResponse { try await getDecoded("api/ambient") }
+
+    // Council roster (Interface Task). No query params on purpose: the
+    // sidecar's own default (20, clamped to 50) is the page this panel
+    // wants, and the untyped councilRounds() above stays as it is for
+    // callers that want raw rows.
+    func councilRosterTyped() async throws -> CouncilRosterList {
+        try await getDecoded("api/council/roster")
+    }
 }
 
 // MARK: - Ambient (GET /api/ambient — AmbientStrip.tsx / SystemVitals.tsx)
