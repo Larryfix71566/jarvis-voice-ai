@@ -84,9 +84,13 @@ class FakeTTS:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
-    def __init__(self, api_key, settings):
+    def __init__(self, api_key, settings, text_filters=None):
         self.api_key = api_key
         self.settings = settings
+        # S9: the real ElevenLabsTTSService takes text_filters (a
+        # TTSService kwarg); the fake must accept it or every pipeline
+        # build in this file raises TypeError.
+        self.text_filters = list(text_filters or [])
 
 
 class FakePipeline:
@@ -355,6 +359,32 @@ def test_tts_settings_from_voices_yaml(runtime, fakes):
     assert kw["similarity_boost"] == 0.75
     assert kw["voice"]  # default voice id from voices.yaml
     assert tts.api_key == "el"
+
+
+def test_tts_has_markdown_filter(runtime, fakes):
+    """MORTIMER_SESSION_MISSES_PLAN.md S9 — the binding half of "no
+    markdown in speech": VOICE_ADDENDUM asks, this filter enforces."""
+    from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
+
+    pipeline, _, _, _ = build_pipeline(FakeTransport(), runtime)
+    tts = next(p for p in pipeline.processors if isinstance(p, FakeTTS))
+    assert any(isinstance(f, MarkdownTextFilter) for f in tts.text_filters)
+
+
+@pytest.mark.asyncio
+async def test_markdown_filter_strips_the_emphasis_that_reached_elevenlabs():
+    """The exact string from logs/bot.log 2026-09-03 13:44:49, and the
+    prose that must survive it unchanged. Runs the REAL filter from the
+    deployment venv, so a pipecat behaviour change fails here."""
+    from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
+
+    f = MarkdownTextFilter()
+    spoken = await f.filter(
+        "**Scheduler** handles time, dates, reminders, and calendar planning."
+    )
+    assert spoken == "Scheduler handles time, dates, reminders, and calendar planning."
+    untouched = "It's 93 degrees — high 96, tonight 73. BMW's 1994 plant near Greer."
+    assert await f.filter(untouched) == untouched
 
 
 def test_stt_model_is_flux(runtime, fakes):

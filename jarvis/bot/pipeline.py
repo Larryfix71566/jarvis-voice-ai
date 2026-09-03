@@ -124,6 +124,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
+from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
 
 _logger = logging.getLogger(__name__)
 
@@ -628,6 +629,16 @@ def build_pipeline(
             stability=0.5,
             similarity_boost=0.75,
         ),
+        # MORTIMER_SESSION_MISSES_PLAN.md S9 — VOICE_ADDENDUM has forbidden
+        # markdown since it was written, and on 2026-09-03 Haiku spoke
+        # "**Scheduler**", "**Librarian**" … at ElevenLabs anyway. Emphasis
+        # and backticks are stripped HERE, in code, where a prompt cannot
+        # be ignored. Verified against the deployment venv's pipecat 1.4.0:
+        # the filter leaves prose, em-dashes, digits and quotes untouched
+        # and does NOT strip "#"/"- "/"1. " list markers — those stay
+        # VOICE_ADDENDUM's job. Default InputParams (code blocks and
+        # tables are kept, not dropped).
+        text_filters=[MarkdownTextFilter()],
     )
 
     def to_function_schema(schema: dict) -> FunctionSchema:
