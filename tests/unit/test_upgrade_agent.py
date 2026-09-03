@@ -520,7 +520,7 @@ def test_escalation_injects_council_brief_and_retries(
 
     client = ScriptedClient([
         _msg(tool_calls=[_tool_call("session_validate", {}, "v1")]),  # fails, repairs=1
-        _msg(tool_calls=[_tool_call("session_validate", {}, "v2")]),  # fails, repairs=2>1 -> escalate tier1
+        _msg(tool_calls=[_tool_call("session_validate", {}, "v2")]),  # fails, repairs=2>1 -> escalate (tier2, Phase 3)
         _msg(tool_calls=[_tool_call("session_validate", {}, "v3")]),  # the retry: succeeds
         _msg(content="submitted after council-guided retry"),
     ])
@@ -528,7 +528,10 @@ def test_escalation_injects_council_brief_and_retries(
     result = agent.run("validate me")
 
     assert result["ok"] is True  # session ended normally after the retry
-    assert tiers_seen == [1]     # exactly one escalation, at tier 1
+    # MORTIMER_OPTIMIZATION_PLAN.md Phase 3: COUNCIL_PLANNER_START_TIER=2
+    # means the first (and, per the tier ladder, only reachable) planner
+    # escalation is at tier 2, not tier 1.
+    assert tiers_seen == [2]
     assert agent._escalations_used == 1
 
     # The council's winning content was injected as a system message
@@ -539,7 +542,7 @@ def test_escalation_injects_council_brief_and_retries(
         for m in third_call_messages
     )
     # D8.1 — the retry's own validate result (v3, ok=True) was written back.
-    assert recorded == [("round-tier1", True)]
+    assert recorded == [("round-tier2", True)]
 
 
 def test_escalation_council_unavailable_falls_through_unchanged(
@@ -558,9 +561,20 @@ def test_escalation_council_unavailable_falls_through_unchanged(
     assert agent._escalations_used == 1  # the attempt still counted
 
 
-def test_escalation_uses_tier1_then_tier2_never_repeats(
+def test_escalation_uses_tier2_then_tier3_never_repeats(
     service: SelfEditService, monkeypatch,
 ) -> None:
+    """Structural property: across the two escalation ATTEMPTS
+    COUNCIL_MAX_ESCALATIONS allows, the tier computed strictly ascends
+    and never repeats. This uses the lenient `_fake_convene_factory`
+    (accepts any tier), so it proves _maybe_escalate's own arithmetic —
+    tier=2 then tier=3 under Phase 3's COUNCIL_PLANNER_START_TIER=2 —
+    not what a REAL convene() does with a tier the ladder doesn't define.
+    See test_second_escalation_has_no_real_tier_and_falls_through below
+    for that: in production, tier=3 doesn't exist in TIER_MEMBERS and the
+    2nd attempt fails, which is the intended Phase 3 behavior (effectively
+    one real escalation per session) — this test's fake just doesn't know
+    that, so it still "succeeds" at tier 3 here."""
     tiers_seen: list[int] = []
     monkeypatch.setattr(council_mod, "convene", _fake_convene_factory(tiers_seen))
     monkeypatch.setattr(
@@ -569,8 +583,8 @@ def test_escalation_uses_tier1_then_tier2_never_repeats(
     # The forbidden file stays dirty throughout, so every validate call
     # fails and each escalation gets its own fresh one-repair budget
     # (D2.1: `repairs_used = 0` on retry) before the next one triggers:
-    # v1 fail(repairs=1) -> v2 fail(repairs=2>1, escalate tier1, reset)
-    # -> v3 fail(repairs=1) -> v4 fail(repairs=2>1, escalate tier2, reset)
+    # v1 fail(repairs=1) -> v2 fail(repairs=2>1, escalate tier2, reset)
+    # -> v3 fail(repairs=1) -> v4 fail(repairs=2>1, escalate tier3, reset)
     # -> v5 fail(repairs=1) -> v6 fail(repairs=2>1, no 3rd escalation:
     # COUNCIL_MAX_ESCALATIONS=2 already used) -> session ends.
     client = ScriptedClient([
@@ -581,17 +595,81 @@ def test_escalation_uses_tier1_then_tier2_never_repeats(
     _dirty_forbidden_file(service)
     result = agent.run("validate me")
     assert not result["ok"]
-    assert tiers_seen == [1, 2]
+    assert tiers_seen == [2, 3]
     assert agent._escalations_used == 2
     assert "validation failed twice" in result["summary"]
 
 
-def test_v1_second_escalation_carries_first_winner_forward(
+def test_second_escalation_has_no_real_tier_and_falls_through(
     service: SelfEditService, monkeypatch,
 ) -> None:
-    """MORTIMER_LLM_COUNCIL_V2_PLAN.md V1 — the tier-2 convene call
-    receives context["carry_forward"] with the tier-1 winner's
-    (profile, content)."""
+    """MORTIMER_OPTIMIZATION_PLAN.md Phase 3's stated consequence, proven
+    against a fake that (unlike _fake_convene_factory) actually enforces
+    tier validity the way the real convene()/resolve_members() do: tier=3
+    has no entry in TIER_MEMBERS, so a would-be second placement="planner"
+    escalation raises, _maybe_escalate's broad except catches it, and the
+    session ends exactly as it does when the council is simply
+    unavailable — a planner escalation is capped to ONE real attempt per
+    session with COUNCIL_PLANNER_START_TIER=2 and today's 2-tier ladder."""
+    from jarvis.council.config import TIER_MEMBERS
+
+    tiers_seen: list[int] = []
+
+    async def _fake_convene_tier_validating(
+        *, workflow, placement, trigger, goal, tier, context, run_id=None,
+    ):
+        tiers_seen.append(tier)
+        if tier not in TIER_MEMBERS:
+            raise KeyError(tier)  # mirrors the real tier_members() lookup
+        winner = Proposal(
+            label="Proposal A", profile="kimi-k2",
+            content=f"do the right thing (tier {tier})",
+        )
+        return RoundResult(
+            round_id=f"round-tier{tier}", winner=winner, winner_mean=8.0,
+            select_reason="highest mean score (8.0)", proposals=[winner],
+            scores=[], abstentions=0, tier=tier,
+        )
+
+    monkeypatch.setattr(council_mod, "convene", _fake_convene_tier_validating)
+    monkeypatch.setattr(
+        council_mod, "record_retry_validated", lambda *a, **k: None,
+    )
+    client = ScriptedClient([
+        _msg(tool_calls=[_tool_call("session_validate", {}, f"v{i}")])
+        for i in range(1, 7)
+    ])
+    agent = _agent(service, client)
+    _dirty_forbidden_file(service)
+    result = agent.run("validate me")
+    assert not result["ok"]
+    assert tiers_seen == [2, 3]          # both attempts were made ...
+    assert agent._escalations_used == 2  # ... and both counted ...
+    assert "validation failed twice" in result["summary"]  # ... but only
+    # the first (tier 2) ever produced a usable brief; the second fell
+    # through with no council content, same ending as no council at all.
+
+
+def test_v1_carry_forward_wiring_still_correct_though_dormant_at_tier2_start(
+    service: SelfEditService, monkeypatch,
+) -> None:
+    """MORTIMER_LLM_COUNCIL_V2_PLAN.md V1 — the `tier >= 2` convene call
+    receives context["carry_forward"] with the PREVIOUS winner's
+    (profile, content). This still needs a live test: the wiring exists
+    in code (`_maybe_escalate`'s `if tier >= 2 and self._last_council_
+    winner is not None`) and should keep working if the tier ladder is
+    ever extended.
+
+    NOTE — Phase 3 (MORTIMER_OPTIMIZATION_PLAN.md), read before touching
+    this: with COUNCIL_PLANNER_START_TIER=2 and today's 2-tier ladder, a
+    REAL second placement="planner" escalation always fails (tier 3 has
+    no TIER_MEMBERS entry — see test_second_escalation_has_no_real_tier_
+    and_falls_through). This test uses the LENIENT `_fake_convene_factory`
+    (accepts any tier, unlike a real convene()) specifically so the
+    carry-forward code path itself can still be exercised and proven
+    correct, even though in production it is currently dormant on this
+    call site — ready the moment the ladder grows a real tier 3, not
+    dead code to delete."""
     tiers_seen: list[int] = []
     contexts_seen: list[dict] = []
     monkeypatch.setattr(
@@ -609,10 +687,10 @@ def test_v1_second_escalation_carries_first_winner_forward(
     _dirty_forbidden_file(service)
     agent.run("validate me")
 
-    assert tiers_seen == [1, 2]
-    assert "carry_forward" not in contexts_seen[0]  # tier 1: nothing to carry yet
+    assert tiers_seen == [2, 3]
+    assert "carry_forward" not in contexts_seen[0]  # tier 2 (first): nothing to carry yet
     assert contexts_seen[1]["carry_forward"] == {
-        "profile": "kimi-k2", "content": "do the right thing (tier 1)",
+        "profile": "kimi-k2", "content": "do the right thing (tier 2)",
     }
 
 
@@ -647,7 +725,7 @@ def test_v10_escalation_grants_extra_iterations_not_starved(
 
     client = ScriptedClient([
         _msg(tool_calls=[_tool_call("session_validate", {}, "v1")]),  # iter1: fails, repairs=1
-        _msg(tool_calls=[_tool_call("session_validate", {}, "v2")]),  # iter2: fails, repairs=2>1 -> escalate tier1
+        _msg(tool_calls=[_tool_call("session_validate", {}, "v2")]),  # iter2: fails, repairs=2>1 -> escalate (tier2, Phase 3)
         _msg(tool_calls=[_tool_call("session_validate", {}, "v3")]),  # iter3 (needs V10 budget): retry succeeds
         _msg(content="submitted after council-guided retry"),          # iter4 (needs V10 budget)
     ])
@@ -656,7 +734,8 @@ def test_v10_escalation_grants_extra_iterations_not_starved(
 
     result = agent.run("validate me")
 
-    assert tiers_seen == [1]
+    # Phase 3: COUNCIL_PLANNER_START_TIER=2 -- the escalation is at tier 2.
+    assert tiers_seen == [2]
     assert result["ok"] is True  # would be False (iteration limit) without V10
     assert client.calls == 4
 
@@ -851,5 +930,36 @@ def test_no_plan_kwarg_omits_plan_system_message(service: SelfEditService) -> No
     first_call_messages = client.received[0]["messages"]
     assert not any(
         "pre-written implementation plan" in (m.get("content") or "")
+        for m in first_call_messages
+    )
+
+
+def test_plan_kwarg_includes_divergence_rule(service: SelfEditService) -> None:
+    """MORTIMER_OPTIMIZATION_PLAN.md Phase 3 — the divergence rule rides
+    in the SAME system message as the plan text, ahead of it."""
+    client = ScriptedClient([_msg(content="done")])
+    agent = _agent(service, client)
+    agent.run("do the thing", plan="# The Plan\n\nStep one, step two.")
+    first_call_messages = client.received[0]["messages"]
+    plan_messages = [
+        m for m in first_call_messages
+        if m["role"] == "system" and "Step one, step two" in m["content"]
+    ]
+    assert len(plan_messages) == 1
+    content = plan_messages[0]["content"]
+    assert "stop and report the divergence" in content
+    # The rule precedes the plan text in the same message, not a second one.
+    assert content.index("stop and report the divergence") < content.index("Step one, step two")
+
+
+def test_no_plan_kwarg_omits_divergence_rule_too(service: SelfEditService) -> None:
+    """No plan -> no spec to diverge from -> the rule text never appears
+    at all, matching test_no_plan_kwarg_omits_plan_system_message."""
+    client = ScriptedClient([_msg(content="done")])
+    agent = _agent(service, client)
+    agent.run("do the thing")
+    first_call_messages = client.received[0]["messages"]
+    assert not any(
+        "stop and report the divergence" in (m.get("content") or "")
         for m in first_call_messages
     )

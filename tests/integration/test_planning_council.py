@@ -87,13 +87,34 @@ async def _fake_call_profile_async(profile, system_prompt, user_content, timeout
     return _fake_call_profile(profile, system_prompt, user_content, timeout_s)
 
 
-def test_draft_candidates_fans_out_full_registry_not_just_tier1(council_env, monkeypatch):
-    """P7 — proposer set = the FULL registry's key-present profiles by
-    default, unlike convene()'s tier-1-only fan-out."""
+def test_draft_candidates_default_narrows_to_frontier_tier(council_env, monkeypatch):
+    """MORTIMER_OPTIMIZATION_PLAN.md Phase 3 (2026-09-01) — superseded the
+    original P7 default (FULL key-present registry, every spoken
+    plan_start request bought a 13-drafts fan-out). No explicit `members`
+    now resolves only PLANNING_DEFAULT_PROPOSER_TIERS (frontier);
+    council_env's fixture registry has exactly one frontier profile."""
     monkeypatch.setattr(council_mod, "_call_profile", _fake_call_profile_async)
     result = asyncio.run(council_mod.draft_candidates("write a plan for X"))
     assert result is not None
-    assert len(result.proposals) == 4  # economy-1, economy-2, mid-1, frontier-1
+    assert len(result.proposals) == 1
+    assert {p.profile for p in result.proposals} == {"k-frontier-1"}
+
+
+def test_draft_candidates_explicit_members_can_still_widen_beyond_frontier(
+    council_env, monkeypatch,
+):
+    """The Phase 3 narrowing applies only to the no-selection DEFAULT —
+    an explicit `members["proposers"]` (the console picker, D9) can still
+    fan out to the full registry exactly as before."""
+    monkeypatch.setattr(council_mod, "_call_profile", _fake_call_profile_async)
+    result = asyncio.run(council_mod.draft_candidates(
+        "write a plan for X",
+        members={"proposers": [
+            "k-economy-1", "k-economy-2", "k-mid-1", "k-frontier-1",
+        ]},
+    ))
+    assert result is not None
+    assert len(result.proposals) == 4
     assert {p.profile for p in result.proposals} == {
         "k-economy-1", "k-economy-2", "k-mid-1", "k-frontier-1",
     }
@@ -116,16 +137,22 @@ def test_draft_candidates_never_selects_a_winner(council_env, monkeypatch):
     assert {s.judge_profile for s in result.scores} == {"k-frontier-1"}
 
 
-def test_draft_candidates_default_full_registry_proposing_leaves_no_judges(
+def test_draft_candidates_default_frontier_only_leaves_the_rest_as_judges(
     council_env, monkeypatch,
 ):
-    """With every profile proposing (the default), the disjoint-proposer/
-    judge invariant (shared with convene()) leaves nobody eligible to
-    judge — advisory scoring is then simply empty, not an error."""
+    """MORTIMER_OPTIMIZATION_PLAN.md Phase 3 side effect, worth pinning:
+    before, the default (full registry proposing) left the disjoint-
+    proposer/judge invariant with nobody eligible to judge, so advisory
+    scoring was always empty. Now that the default proposer set narrows
+    to frontier only, the rest of the key-present registry (economy-1,
+    economy-2, mid-1 in this fixture) is eligible to judge — advisory
+    scoring actually has something to do by default now."""
     monkeypatch.setattr(council_mod, "_call_profile", _fake_call_profile_async)
     result = asyncio.run(council_mod.draft_candidates("write a plan for X"))
     assert result is not None
-    assert result.scores == []
+    assert {s.judge_profile for s in result.scores} == {
+        "k-economy-1", "k-economy-2", "k-mid-1",
+    }
 
 
 def test_draft_candidates_writes_planning_workflow_row(council_env, monkeypatch):

@@ -119,6 +119,28 @@ new file contents for each file you change, then validate, then submit.
 Reply to the user with a concise summary of what you changed (or why you
 declined), in plain language."""
 
+# MORTIMER_OPTIMIZATION_PLAN.md Phase 3 — "the executor's escalation rule
+# is load-bearing." Injected by run() only alongside a supplied `plan`
+# (P7's plan-adoption kwarg): the invariant a plan gives the executor is
+# NOT "this spec is complete" (no spec is) — it is that every
+# irreversible or architectural decision already got made IN the plan.
+# When what the executor actually finds diverges from what the plan
+# describes, the correct move is to stop and report the divergence, not
+# bridge the gap with its own architectural judgment — that decision
+# belongs in a plan revision (a human, or the planning pathway), not a
+# silent edit. An unplanned single-file self-edit has no spec to diverge
+# from, so this text is meaningless noise there and stays out.
+PLAN_DIVERGENCE_RULE = (
+    "A pre-written plan may not perfectly match what you actually find in "
+    "the repository. That is expected. What is NOT allowed is bridging a "
+    "real divergence yourself: if the plan's design assumptions do not "
+    "hold, or an irreversible/architectural decision the plan should have "
+    "made was left for you, stop and report the divergence in your "
+    "summary instead of deciding it on your own. The plan is where "
+    "architectural decisions live; your job is executing it, not "
+    "revising it."
+)
+
 TOOL_SPECS: list[dict] = [
     {
         "type": "function",
@@ -583,6 +605,8 @@ class UpgradeAgent:
         edit loop's first completion call. Same injection SHAPE as the
         mid-run council escalation brief below (a system message wrapping
         the plan text), just at session start instead of after a failure.
+        PLAN_DIVERGENCE_RULE (Phase 3) rides in the same message, ahead
+        of the plan text — see that constant's comment.
         """
         if self._key_missing:
             return {
@@ -618,6 +642,7 @@ class UpgradeAgent:
             messages.append({
                 "role": "system",
                 "content": (
+                    PLAN_DIVERGENCE_RULE + "\n\n"
                     "A pre-written implementation plan for this goal "
                     "follows. Follow it.\n\n" + plan
                 ),
@@ -864,11 +889,20 @@ class UpgradeAgent:
         inside the method, not at module load time — avoids a circular
         import.
         """
-        from jarvis.council.config import COUNCIL_MAX_ESCALATIONS
+        from jarvis.council.config import (
+            COUNCIL_MAX_ESCALATIONS, COUNCIL_PLANNER_START_TIER,
+        )
 
         if self._escalations_used >= COUNCIL_MAX_ESCALATIONS:
             return None
-        tier = self._escalations_used + 1          # 1st -> tier 1, 2nd -> tier 2
+        # MORTIMER_OPTIMIZATION_PLAN.md Phase 3: this placement="planner"
+        # escalation starts at COUNCIL_PLANNER_START_TIER (2), not tier 1 —
+        # see council/config.py's comment on that constant for why (in
+        # short: with only tiers 1-2 defined, this caps a session to one
+        # real escalation attempt; a would-be 2nd attempt computes tier=3,
+        # which resolve_members() rejects, and falls through below exactly
+        # like "council unavailable").
+        tier = self._escalations_used + COUNCIL_PLANNER_START_TIER
         self._escalations_used += 1
         # MORTIMER_LLM_COUNCIL_V2_PLAN.md V1 — carry the previous tier's
         # winning proposal into tier >= 2 as an additional candidate.

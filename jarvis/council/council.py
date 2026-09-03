@@ -881,14 +881,28 @@ async def _draft_candidates_inner(
             key=lambda n: registry_order.index(n) if n in registry_order else len(registry_order),
         )
 
-    # V2-P7: proposer set = the FULL registry's key-present profiles by
-    # default, NOT tier-1 only (unlike convene(), which always resolves
-    # through the escalation tier ladder) — the user is paying deliberate
-    # attention here, per Larry's 2026-08-17 clarification.
-    proposer_names = [m["name"] for m in available_models() if m["key_present"]]
+    # V2-P7 (2026-08-17): proposer set = the FULL registry's key-present
+    # profiles when the caller explicitly picks proposers — narrower than
+    # that is never forced on an explicit selection (the console picker
+    # can widen past the default freely). MORTIMER_OPTIMIZATION_PLAN.md
+    # Phase 3 (2026-09-01) narrowed the NO-SELECTION DEFAULT specifically:
+    # the voice `plan_start` path never passes `members`, so it was
+    # fanning out to the full registry (13 drafts) on every spoken plan
+    # request. Default now resolves only PLANNING_DEFAULT_PROPOSER_TIERS
+    # (frontier) — still NOT the tier-1-only ladder convene() uses, this
+    # pathway remains outside the escalation tiers entirely, just a
+    # narrower unforced-default tier list.
+    all_key_present = [m for m in available_models() if m["key_present"]]
     picked_proposers = (members or {}).get("proposers") or []
     if picked_proposers:
-        proposer_names = [n for n in proposer_names if n in picked_proposers]
+        proposer_names = [
+            m["name"] for m in all_key_present if m["name"] in picked_proposers
+        ]
+    else:
+        proposer_names = [
+            m["name"] for m in all_key_present
+            if m.get("tier") in council_config.PLANNING_DEFAULT_PROPOSER_TIERS
+        ]
     proposer_names = _sort_by_registry(proposer_names)
 
     if not proposer_names:
