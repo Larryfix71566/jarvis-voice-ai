@@ -26,6 +26,25 @@ if os.environ.get("RUN_LIVE") != "1":
         os.path.join(tempfile.mkdtemp(prefix="mortimer-test-"), "no.vault"),
     )
 
+# Test isolation for the cost ledger (MORTIMER_OPTIMIZATION_PLAN.md Phase 0;
+# found 2026-09-03 while reevaluating Phase 3). jarvis.usage_ledger.DB_PATH
+# — and the same line in jarvis/costs_api.py, scripts/cost_report.py and
+# scripts/pull_openrouter_activity.py — resolves JARVIS_COSTS_DB at IMPORT
+# time, anchored to the repo root on purpose (two writer processes, Phase
+# 0b item 6). A fixture is therefore too late here for exactly the vault's
+# reason above, and without this every pytest run that drives
+# record_completion (the ScriptedClient loops in test_upgrade_agent.py,
+# the fake sub-agent clients in test_subagent.py, ...) wrote zero-token
+# rows into the REAL data/costs.db: 447 of the ledger's first 535 rows
+# were test writes before this landed, and cost_report.py counted them as
+# executor calls. Same RUN_LIVE exemption as the vault: live tests spend
+# real money and belong in the real ledger.
+if os.environ.get("RUN_LIVE") != "1":
+    os.environ.setdefault(
+        "JARVIS_COSTS_DB",
+        os.path.join(tempfile.mkdtemp(prefix="mortimer-test-"), "costs.db"),
+    )
+
 from jarvis.db import run_migrations
 
 
