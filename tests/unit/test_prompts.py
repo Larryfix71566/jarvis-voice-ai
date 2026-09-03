@@ -409,3 +409,37 @@ class TestDeveloperSections:
         from jarvis.prompts import select_developer_sections as sel
         assert "self_development" in sel(
             "investigate why the run failed and fix the bug behind it")
+
+
+# ------------------------------------------------ S11: attribution rules
+# MORTIMER_SESSION_MISSES_PLAN.md S11. Both are prompt-only and Haiku-
+# fragile by nature (the plan says so); these pin the TEXT so a later
+# prompt edit cannot silently drop them, which is the only guarantee a
+# prompt rule can carry.
+
+
+def test_golden_rule_4_forbids_naming_a_specialist():
+    """2026-09-03 13:46:22: "The analyst's result didn't include it" — two
+    turns after the prompt told it delegation IS its own work."""
+    from jarvis.prompts import GOLDEN_RULES
+
+    assert "Never name a specialist to the user" in GOLDEN_RULES
+    # It must ride in the Supervisor's prompt, not just the constant.
+    assert "Never name a specialist to the user" in SUPERVISOR_PROMPT
+
+
+def test_supervisor_prompt_re_delegates_for_a_missing_detail():
+    """Same turn: it reported the humidity missing instead of asking for
+    it. Rule 1's "say exactly that" is scoped to after a fresh attempt."""
+    assert "delegate again for that detail before saying it was missing" in SUPERVISOR_PROMPT
+
+
+def test_the_new_rules_survive_formatting():
+    rendered = SUPERVISOR_PROMPT.format(
+        jarvis_name="Jarvis", user_name="Boss", timezone="America/New_York",
+        units="imperial", agent_catalog="- analyst (Analyst): research",
+        voice_catalog="- rachel: Rachel", memory_context="- user.name: Larry",
+    )
+    assert "Never name a specialist to the user" in rendered
+    assert "delegate again for that detail before saying it was missing" in rendered
+    assert "{" not in rendered

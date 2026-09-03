@@ -240,6 +240,24 @@ Also: `pytest tests/unit -q` fully green; `cd web && npm run build` clean
 
 ## 6. Effectiveness protocol (Larry runs; results appended HERE)
 
+0. **Offline, on the captures already on disk** (added
+   MORTIMER_SESSION_MISSES_PLAN.md S10, 2026-09-03 — this step did not
+   exist when the protocol was written, and without it steps 1–3 could
+   never say whether Gate v2's F1 windowing fixed what turned the gate
+   off in the first place):
+   `python -m jarvis.speaker verify --windowed data/speaker_captures/*.wav`
+   Those 20 WAVs are live-mic turns from the 2026-08-22 session — the
+   same session whose 7–12 s TV-mixed turns scored 0.29–0.34 whole-buffer
+   and were dropped. `--windowed` prints both numbers per file: `whole=`
+   (the pre-F1 metric `verify` has always used) and `best_window=` (what
+   the live gate actually compares against the threshold). Listen to any
+   file whose two verdicts disagree and label it — you, TV, or another
+   person.
+   **Acceptance to proceed to step 3:** every file that is you has
+   `best_window ≥ 0.40`; every TV/other-person file has
+   `best_window < 0.40`. Anything else → append the numbers here and
+   STOP. Threshold tuning is a decision, not an improvisation (same rule
+   as the Acceptance line below).
 1. Enroll: record 3 WAVs of ~20 s natural speech (QuickTime → File →
    New Audio Recording; convert if needed:
    `afconvert in.m4a out.wav -d LEI16 -f WAVE`). Run
@@ -256,6 +274,12 @@ Also: `pytest tests/unit -q` fully green; `cd web && npm run build` clean
      `speaker_gate_dropped` lines and NO Mortimer responses to it.
    - Say 5 one-word confirmations ("yes", "confirm") → all must land
      (the < 1.0 s bypass).
+   - Have another person speak normally about 2 m from the mic for one
+     minute → expect `speaker_gate_dropped` lines and no Mortimer
+     responses to them (added S10: the 2026-09-03 session answered a
+     side conversation and one of those utterances cancelled a live
+     delegation — a second human voice, not a TV, is the case that
+     actually occurred).
 4. NS: with `JARVIS_NS_ENABLED=true`, `[ns]` RTF from logs, and a
    subjective before/after on transcript quality in a noisy room.
 - **Acceptance:** ≥ 8/10 TV utterances dropped, 0/10 of Larry's dropped,

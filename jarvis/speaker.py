@@ -116,6 +116,42 @@ def cosine(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / denom)
 
 
+def windowed_score(
+    pcm16: bytes, sample_rate: int, encoder: "Encoder", profile: np.ndarray,
+) -> tuple[float | None, float | None]:
+    """(whole_buffer_score, best_window_score) for one utterance, using the
+    SAME slicing the live gate uses — jarvis.bot.speaker_gate._window_slices
+    (Gate v2 F1's sliding sub-windows plus the whole buffer, max-over-all).
+
+    MORTIMER_SESSION_MISSES_PLAN.md S10: `verify` has always scored the
+    whole file, which is the PRE-v2 metric. The gate has been off since
+    2026-08-22 because, before F1, whole-buffer scoring dragged Larry's own
+    TV-mixed turns to 0.29-0.34 against a 0.40 threshold. Nothing offline
+    could show whether F1 fixed that, so the effectiveness protocol could
+    never be run on the captures that exposed it. This function is that
+    missing view: the same numbers the live gate would compute, on a WAV.
+
+    Returns (None, None) when no slice could be embedded. Never raises —
+    `Encoder.embed` already returns None on any failure.
+
+    The import is local on purpose: jarvis.bot.speaker_gate imports THIS
+    module at load time, so a module-level import here would be circular.
+    """
+    from jarvis.bot.speaker_gate import _window_slices
+
+    slices = _window_slices(len(pcm16), sample_rate)
+    scores: list[float] = []
+    for window in slices:
+        embedding = encoder.embed(pcm16[window], sample_rate)
+        if embedding is not None:
+            scores.append(cosine(embedding, profile))
+    if not scores:
+        return None, None
+    # _window_slices puts the WHOLE buffer last (its own docstring), so the
+    # final score is the pre-F1 number and the max is what the gate uses.
+    return scores[-1], max(scores)
+
+
 def load_profile(path: Path = PROFILE_NPY) -> np.ndarray | None:
     """None on any failure (missing file, corrupt array) — logged once,
     never raised. A missing profile means the gate stays inert (L5)."""
@@ -295,7 +331,27 @@ def _cmd_enroll(wav_paths: list[str]) -> int:
     return 0
 
 
-def _cmd_verify(wav_path: str) -> int:
+def _read_wav_mono16(wav_path: str) -> tuple[bytes, int] | None:
+    """(pcm16 bytes, sample_rate) for a 16-bit mono WAV, else None with a
+    printed reason. stdlib `wave` on purpose: the windowed path slices raw
+    PCM by byte offset exactly as the live gate does, and soundfile would
+    hand back a decoded array that then has to be re-packed."""
+    import wave
+
+    try:
+        with wave.open(wav_path, "rb") as handle:
+            if handle.getsampwidth() != 2 or handle.getnchannels() != 1:
+                print(f"{Path(wav_path).name}  skipped: need 16-bit mono "
+                      f"(got {handle.getsampwidth() * 8}-bit, "
+                      f"{handle.getnchannels()} channel(s))")
+                return None
+            return handle.readframes(handle.getnframes()), handle.getframerate()
+    except Exception as exc:  # noqa: BLE001 — a CLI reports, never traces
+        print(f"{Path(wav_path).name}  skipped: {type(exc).__name__}: {exc}")
+        return None
+
+
+def _cmd_verify(wav_paths: list[str], windowed: bool = False) -> int:
     profile = load_profile()
     if profile is None:
         print("No profile enrolled yet — run `enroll` first.")
@@ -307,13 +363,38 @@ def _cmd_verify(wav_path: str) -> int:
         print("Could not load/download the speaker model — check network "
               "and that speechbrain is installed.")
         return 1
-    emb = encoder.embed_file(Path(wav_path))
-    if emb is None:
-        print(f"Failed to embed {wav_path}.")
-        return 1
-    score = cosine(emb, profile)
-    v = verdict(score, MIN_VERIFY_SECS + 1.0, True)  # treat as a full utterance
-    print(f"score={score:.4f} threshold={threshold():.2f} verdict={v}")
+
+    if not windowed:
+        # Unchanged single-file behaviour (whole-buffer score).
+        wav_path = wav_paths[0]
+        emb = encoder.embed_file(Path(wav_path))
+        if emb is None:
+            print(f"Failed to embed {wav_path}.")
+            return 1
+        score = cosine(emb, profile)
+        v = verdict(score, MIN_VERIFY_SECS + 1.0, True)  # a full utterance
+        print(f"score={score:.4f} threshold={threshold():.2f} verdict={v}")
+        return 0
+
+    # S10 — the live gate's own metric, offline, over any number of files.
+    bests: list[float] = []
+    for wav_path in wav_paths:
+        read = _read_wav_mono16(wav_path)
+        if read is None:
+            continue
+        pcm16, sample_rate = read
+        whole, best = windowed_score(pcm16, sample_rate, encoder, profile)
+        if whole is None or best is None:
+            print(f"{Path(wav_path).name}  failed to embed")
+            continue
+        secs = len(pcm16) / float(2 * sample_rate)
+        v = verdict(best, secs, True)
+        bests.append(best)
+        print(f"{Path(wav_path).name}  whole={whole:.3f}  "
+              f"best_window={best:.3f}  secs={secs:.1f}  verdict={v}")
+    if bests:
+        print(f"min best_window={min(bests):.3f}  max best_window="
+              f"{max(bests):.3f}  threshold={threshold():.2f}")
     return 0
 
 
@@ -333,16 +414,21 @@ def _cmd_status() -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if not argv:
-        print("usage: python -m jarvis.speaker enroll <wav...> | verify <wav> | status")
+        print("usage: python -m jarvis.speaker enroll <wav...> | "
+              "verify [--windowed] <wav...> | status")
         return 2
     cmd, rest = argv[0], argv[1:]
     if cmd == "enroll":
         return _cmd_enroll(rest)
     if cmd == "verify":
-        if not rest:
-            print("usage: python -m jarvis.speaker verify <wav>")
+        # S10: --windowed scores with the live gate's sliding windows over
+        # any number of files; without it, the original whole-file report.
+        windowed = "--windowed" in rest
+        paths = [a for a in rest if not a.startswith("--")]
+        if not paths:
+            print("usage: python -m jarvis.speaker verify [--windowed] <wav...>")
             return 2
-        return _cmd_verify(rest[0])
+        return _cmd_verify(paths, windowed=windowed)
     if cmd == "status":
         return _cmd_status()
     print(f"unknown command: {cmd}")
