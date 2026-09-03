@@ -78,7 +78,10 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     cache_read_tokens INTEGER NOT NULL DEFAULT 0,
     reported_cost REAL,               -- provider-reported USD (OpenRouter); NULL for native
     computed_cost REAL,               -- from price map; NULL if model missing from map
-    gen_id TEXT                       -- OpenRouter generation id, for later enrichment
+    gen_id TEXT,                      -- OpenRouter generation id, for later enrichment
+    plan_state TEXT                   -- executor rungs only: 'planned' | 'planless'
+                                      -- (MORTIMER_OPTIMIZATION_PLAN.md Phase 3
+                                      -- Rev 3.3); NULL on every other rung
 );
 CREATE INDEX IF NOT EXISTS idx_calls_month ON llm_calls (month);
 CREATE INDEX IF NOT EXISTS idx_calls_rung ON llm_calls (month, rung);
@@ -155,6 +158,15 @@ def _conn() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
     conn.executescript(_SCHEMA)
+    # Phase 3 Rev 3.3 (2026-09-03): plan_state was added after the ledger
+    # first shipped. CREATE TABLE IF NOT EXISTS above covers a fresh file
+    # only, so an existing costs.db gets the column here — one PRAGMA and,
+    # once per database, one ALTER. Same idempotent shape as jarvis/db.py's
+    # migrations, kept inline because this module deliberately owns its
+    # own schema (two writer processes, no migration runner in the sidecar).
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(llm_calls)")}
+    if "plan_state" not in cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN plan_state TEXT")
     return conn
 
 
@@ -168,9 +180,19 @@ def record_call(rung: str,
                 reported_cost: Optional[float] = None,
                 gen_id: Optional[str] = None,
                 session_id: Optional[str] = None,
-                ts: Optional[datetime] = None) -> None:
+                ts: Optional[datetime] = None,
+                plan_state: Optional[str] = None) -> None:
     """Write one call to the ledger. Never raises — cost logging must not
-    take down the pipeline. Failures go to stderr."""
+    take down the pipeline. Failures go to stderr.
+
+    plan_state (Phase 3 Rev 3.3): executor rungs pass 'planned' (the
+    session was given a plan — plan_adopt / POST /api/selfedit/run's
+    `plan`) or 'planless' (a bare goal). Every other rung leaves it None.
+    It exists so the week of data Phase 3 waits on can answer the one
+    question the planner/executor split's safety argument rests on —
+    agent_events showed ~85% of executor sessions run with no plan at all
+    — by splitting executor spend and, joined to council_rounds by time,
+    escalation rate, along that line."""
     try:
         if rung not in RUNGS:
             # Unknown rung: still record (never lose a row over a label),
@@ -186,11 +208,13 @@ def record_call(rung: str,
             conn.execute(
                 "INSERT INTO llm_calls (ts, month, session_id, rung, provider,"
                 " model, input_tokens, output_tokens, cache_write_tokens,"
-                " cache_read_tokens, reported_cost, computed_cost, gen_id)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " cache_read_tokens, reported_cost, computed_cost, gen_id,"
+                " plan_state)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (ts.isoformat(), month, session_id, rung, provider, model,
                  input_tokens, output_tokens, cache_write_tokens,
-                 cache_read_tokens, reported_cost, computed, gen_id),
+                 cache_read_tokens, reported_cost, computed, gen_id,
+                 plan_state),
             )
     except Exception as exc:  # pragma: no cover
         import sys
@@ -280,7 +304,8 @@ def record_completion(rung: str,
                       response: Any,
                       session_id: Optional[str] = None,
                       gen_id: Optional[str] = None,
-                      reported_cost: Optional[float] = None) -> None:
+                      reported_cost: Optional[float] = None,
+                      plan_state: Optional[str] = None) -> None:
     """The one adapter for every call site in this repo — all are
     chat.completions.create via AsyncOpenAI regardless of upstream vendor.
 
@@ -318,4 +343,5 @@ def record_completion(rung: str,
         cache_read_tokens=cached,
         reported_cost=reported_cost,
         gen_id=gen_id or _get(response, "id"),
+        plan_state=plan_state,
     )

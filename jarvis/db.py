@@ -511,6 +511,20 @@ CREATE TABLE IF NOT EXISTS memory_extraction_pending (
 );
 """
 
+# MORTIMER_OPTIMIZATION_PLAN.md Phase 3 Rev 3.3 (2026-09-03). D8.1's
+# retry_validated (1|0|NULL) was NULL on every council round ever recorded
+# — including the one real planner round (e48cfbe1, 2026-09-01) — because
+# it is only written when the post-council retry reaches a session_validate
+# call, and nothing wrote anything when the retry never got there (prose
+# reply, iteration cap, time limit, cancel, decline). NULL therefore could
+# not distinguish "council brief was abandoned" from "not yet". This column
+# makes the outcome explicit at session end; retry_validated keeps its
+# meaning and its readers (compute_agreement etc.) untouched. Vocabulary is
+# documented on jarvis.council.council.record_retry_outcome.
+MIGRATION_0018 = """
+ALTER TABLE council_rounds ADD COLUMN retry_outcome TEXT;
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
@@ -530,6 +544,7 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0015_memory_reviews", MIGRATION_0015),
     ("0016_memory_extraction_v2", MIGRATION_0016),
     ("0017_memory_extraction_pending", MIGRATION_0017),
+    ("0018_council_retry_outcome", MIGRATION_0018),
 ]
 
 

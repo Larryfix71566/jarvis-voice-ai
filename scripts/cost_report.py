@@ -94,6 +94,21 @@ def main() -> None:
     rungs = q(conn, f"SELECT rung, COUNT(*), COALESCE(SUM({eff}),0) {base}"
                     " GROUP BY rung ORDER BY 3 DESC", (month,))
 
+    # MORTIMER_OPTIMIZATION_PLAN.md Phase 3 Rev 3.3 (2026-09-03): executor
+    # rows split by plan_state ('planned' | 'planless' | 'untagged' for rows
+    # older than the column). This is the split the planner/executor
+    # safety argument needs — agent_events showed ~85% of executor sessions
+    # run with no plan. The column is added lazily by usage_ledger._conn(),
+    # so a ledger no writer has touched since that landed may not have it
+    # yet; skip the section rather than fail the whole report.
+    has_plan_state = any(
+        r[1] == "plan_state" for r in q(conn, "PRAGMA table_info(llm_calls)")
+    )
+    plan_split = q(conn, f"""
+        SELECT rung, COALESCE(plan_state, 'untagged'), COUNT(*), COALESCE(SUM({eff}),0)
+        {base} AND rung IN ('selfedit_executor', 'appbuild_executor')
+        GROUP BY 1, 2 ORDER BY 1, 2""", (month,)) if has_plan_state else []
+
     cache = q(conn, f"""
         SELECT provider,
                SUM(CASE WHEN cache_read_tokens > 0 THEN 1 ELSE 0 END),
@@ -127,6 +142,10 @@ def main() -> None:
         "unpriced_calls": {"count": unpriced[0], "models": unpriced[1]},
         "tokens": {"input_uncached": tin, "output": tout, "cache_read": tcache_r},
         "per_rung": [{"rung": r, "calls": c, "cost": round(v, 4)} for r, c, v in rungs],
+        "executor_by_plan_state": [
+            {"rung": r, "plan_state": p, "calls": c, "cost": round(v, 4)}
+            for r, p, c, v in plan_split
+        ],
         "per_bucket": {k: round(v, 4) for k, v in sorted(by_bucket.items(), key=lambda kv: -kv[1])},
         "per_model": [
             {"model": m, "in": i, "out": o, "cache_w": cw, "cache_r": cr,
@@ -166,6 +185,10 @@ def main() -> None:
     for r, c, v in rungs:
         pct = (v / total * 100) if total else 0
         print(f"  {r:<14} {c:>6} calls  ${v:>8.2f}  {pct:5.1f}%")
+    if plan_split:
+        print("\nexecutor by plan_state (Phase 3 Rev 3.3):")
+        for r, p, c, v in plan_split:
+            print(f"  {r:<18} {p:<9} {c:>6} calls  ${v:>8.2f}")
     print("\nby bucket:")
     for k, v in sorted(by_bucket.items(), key=lambda kv: -kv[1]):
         pct = (v / total * 100) if total else 0

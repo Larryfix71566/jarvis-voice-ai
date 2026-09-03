@@ -488,6 +488,17 @@ async def _fake_convene_unavailable(**_kwargs):
     return None
 
 
+def _outcome_recorder(monkeypatch) -> list[tuple[str, str]]:
+    """Phase 3 Rev 3.3 — capture record_retry_outcome calls (the session-
+    exit write for a council brief whose retry never validated)."""
+    outcomes: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        council_mod, "record_retry_outcome",
+        lambda round_id, outcome: outcomes.append((round_id, outcome)),
+    )
+    return outcomes
+
+
 def test_escalation_injects_council_brief_and_retries(
     service: SelfEditService, monkeypatch,
 ) -> None:
@@ -498,6 +509,7 @@ def test_escalation_injects_council_brief_and_retries(
         council_mod, "record_retry_validated",
         lambda round_id, validated: recorded.append((round_id, validated)),
     )
+    outcomes = _outcome_recorder(monkeypatch)
     service.start_session("doomed")
     (service.repo_root / "jarvis").mkdir(exist_ok=True)
     (service.repo_root / "jarvis/x.py").write_text("bad\n")
@@ -543,6 +555,10 @@ def test_escalation_injects_council_brief_and_retries(
     )
     # D8.1 — the retry's own validate result (v3, ok=True) was written back.
     assert recorded == [("round-tier2", True)]
+    # Rev 3.3 — the validate cleared the pending round, so the session-exit
+    # closer had nothing to record (record_retry_validated fills
+    # retry_outcome itself; no double write).
+    assert outcomes == []
 
 
 def test_escalation_council_unavailable_falls_through_unchanged(
@@ -758,6 +774,104 @@ def test_v10_no_escalation_iteration_cap_unchanged(service: SelfEditService) -> 
     assert client.calls == agent.cfg["max_iterations"]
 
 
+# ------------------------- Phase 3 Rev 3.3: retry_outcome at session exit
+
+def test_escalation_then_prose_end_records_no_retry_outcome(
+    service: SelfEditService, monkeypatch,
+) -> None:
+    """The exact hole behind retry_validated being NULL on every real round
+    (MORTIMER_OPTIMIZATION_PLAN.md Phase 3 Rev 3.3): the council brief is
+    injected, the executor answers in prose instead of validating again,
+    the session ends ok=True — and before this nothing was written at all.
+    Now the round is closed as no_retry:prose_end at session exit, and
+    record_retry_validated is (correctly) never called."""
+    tiers_seen: list[int] = []
+    monkeypatch.setattr(council_mod, "convene", _fake_convene_factory(tiers_seen))
+    recorded: list[tuple[str, bool]] = []
+    monkeypatch.setattr(
+        council_mod, "record_retry_validated",
+        lambda round_id, validated: recorded.append((round_id, validated)),
+    )
+    outcomes = _outcome_recorder(monkeypatch)
+    client = ScriptedClient([
+        _msg(tool_calls=[_tool_call("session_validate", {}, "v1")]),
+        _msg(tool_calls=[_tool_call("session_validate", {}, "v2")]),  # escalates
+        _msg(content="I think that is as far as I can take this one."),
+    ])
+    agent = _agent(service, client)
+    _dirty_forbidden_file(service)
+    result = agent.run("validate me")
+    assert result["ok"] is True  # a prose reply is a "normal" end of session
+    assert tiers_seen == [2]
+    assert recorded == []
+    assert outcomes == [("round-tier2", "no_retry:prose_end")]
+    assert agent._pending_council_round_id is None
+
+
+def test_escalation_then_iteration_limit_records_no_retry_outcome(
+    service: SelfEditService, monkeypatch,
+) -> None:
+    tiers_seen: list[int] = []
+    monkeypatch.setattr(council_mod, "convene", _fake_convene_factory(tiers_seen))
+    monkeypatch.setattr(council_mod, "record_retry_validated", lambda *a, **k: None)
+    outcomes = _outcome_recorder(monkeypatch)
+    # max_iterations=2 -> the escalation at iteration 2 grants +4 (V10);
+    # four file_reads then exhaust that budget without validating again.
+    client = ScriptedClient(
+        [_msg(tool_calls=[_tool_call("session_validate", {}, "v1")]),
+         _msg(tool_calls=[_tool_call("session_validate", {}, "v2")])]
+        + [_msg(tool_calls=[_tool_call("file_read", {"path": "web/src/App.tsx"}, f"r{i}")])
+           for i in range(4)]
+    )
+    agent = _agent(service, client)
+    agent.cfg["max_iterations"] = 2
+    _dirty_forbidden_file(service)
+    result = agent.run("validate me")
+    assert not result["ok"]
+    assert "iteration" in result["summary"]
+    assert outcomes == [("round-tier2", "no_retry:iteration_limit")]
+
+
+def test_escalation_then_cancel_records_no_retry_outcome(
+    service: SelfEditService, monkeypatch,
+) -> None:
+    tiers_seen: list[int] = []
+    holder: dict = {}
+    base = _fake_convene_factory(tiers_seen)
+
+    async def _convene_then_cancel(**kw):
+        res = await base(**kw)
+        holder["agent"].request_cancel()  # the cancel lands while the council is out
+        return res
+
+    monkeypatch.setattr(council_mod, "convene", _convene_then_cancel)
+    monkeypatch.setattr(council_mod, "record_retry_validated", lambda *a, **k: None)
+    outcomes = _outcome_recorder(monkeypatch)
+    client = ScriptedClient([
+        _msg(tool_calls=[_tool_call("session_validate", {}, "v1")]),
+        _msg(tool_calls=[_tool_call("session_validate", {}, "v2")]),
+        _msg(content="never requested"),
+    ])
+    agent = _agent(service, client)
+    holder["agent"] = agent
+    _dirty_forbidden_file(service)
+    result = agent.run("validate me")
+    assert result["cancelled"] is True
+    assert client.calls == 2  # the loop stopped before asking for a 3rd step
+    assert outcomes == [("round-tier2", "no_retry:cancelled")]
+
+
+def test_no_escalation_never_records_an_outcome(service: SelfEditService, monkeypatch) -> None:
+    """Regression guard: a session with no council brief has nothing to
+    close — the exit closer must be a no-op, not a spurious write."""
+    outcomes = _outcome_recorder(monkeypatch)
+    client = ScriptedClient([_msg(content="done")])
+    agent = _agent(service, client)
+    result = agent.run("do the thing")
+    assert result["ok"]
+    assert outcomes == []
+
+
 # ----------------------------------------------------- V14 scope council
 
 def _fake_scope_convene_factory(calls_seen: list[dict], winner_content: str = "narrow the goal"):
@@ -950,6 +1064,26 @@ def test_plan_kwarg_includes_divergence_rule(service: SelfEditService) -> None:
     assert "stop and report the divergence" in content
     # The rule precedes the plan text in the same message, not a second one.
     assert content.index("stop and report the divergence") < content.index("Step one, step two")
+
+
+def test_executor_ledger_rows_carry_plan_state(service: SelfEditService, monkeypatch) -> None:
+    """Phase 3 Rev 3.3 — every executor completion is ledgered with
+    plan_state='planned' when run() got a plan and 'planless' otherwise,
+    so the ~85%-planless finding (agent_events, 2026-09-03) becomes a
+    spend/escalation split in the ledger instead of a one-off query."""
+    import jarvis.agents.upgrade_agent as ua_mod
+    seen: list[dict] = []
+    monkeypatch.setattr(ua_mod, "record_completion", lambda **kw: seen.append(kw))
+
+    agent = _agent(service, ScriptedClient([_msg(content="done")]))
+    agent.run("do the thing", plan="# The Plan\n\nStep one.")
+    assert [c["plan_state"] for c in seen] == ["planned"]
+    assert seen[0]["rung"] == "selfedit_executor"
+
+    seen.clear()
+    agent = _agent(service, ScriptedClient([_msg(content="done")]))
+    agent.run("do the thing")
+    assert [c["plan_state"] for c in seen] == ["planless"]
 
 
 def test_no_plan_kwarg_omits_divergence_rule_too(service: SelfEditService) -> None:

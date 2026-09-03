@@ -698,9 +698,36 @@ def test_record_retry_validated_updates_row(council_env, monkeypatch):
     conn = get_conn(council_env["db_path"])
     try:
         row = conn.execute(
-            "SELECT retry_validated FROM council_rounds WHERE round_id = ?",
+            "SELECT retry_validated, retry_outcome FROM council_rounds WHERE round_id = ?",
             (result.round_id,),
         ).fetchone()
         assert row["retry_validated"] == 1
+        # Phase 3 Rev 3.3 — the same write fills the explicit outcome column.
+        assert row["retry_outcome"] == "validated_ok"
+    finally:
+        conn.close()
+
+
+def test_record_retry_outcome_updates_row(council_env, monkeypatch):
+    """Phase 3 Rev 3.3 — the no-retry half of the vocabulary: a brief that
+    never reached session_validate is closed explicitly at session exit
+    instead of leaving retry_validated NULL and nothing else."""
+    monkeypatch.setattr(
+        council_mod, "_call_profile", _fake_call_profile_factory(),
+    )
+    result = asyncio.run(council_mod.convene(
+        workflow="selfedit", placement="planner", trigger="E1",
+        goal="fix", tier=1, context={},
+    ))
+    assert result is not None and result.winner is not None
+    council_mod.record_retry_outcome(result.round_id, "no_retry:prose_end")
+    conn = get_conn(council_env["db_path"])
+    try:
+        row = conn.execute(
+            "SELECT retry_validated, retry_outcome FROM council_rounds WHERE round_id = ?",
+            (result.round_id,),
+        ).fetchone()
+        assert row["retry_validated"] is None  # untouched: no validate happened
+        assert row["retry_outcome"] == "no_retry:prose_end"
     finally:
         conn.close()

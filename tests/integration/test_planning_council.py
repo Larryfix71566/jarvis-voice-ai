@@ -137,18 +137,34 @@ def test_draft_candidates_never_selects_a_winner(council_env, monkeypatch):
     assert {s.judge_profile for s in result.scores} == {"k-frontier-1"}
 
 
-def test_draft_candidates_default_frontier_only_leaves_the_rest_as_judges(
+def test_draft_candidates_default_judges_capped_and_mid_first(
     council_env, monkeypatch,
 ):
-    """MORTIMER_OPTIMIZATION_PLAN.md Phase 3 side effect, worth pinning:
-    before, the default (full registry proposing) left the disjoint-
-    proposer/judge invariant with nobody eligible to judge, so advisory
-    scoring was always empty. Now that the default proposer set narrows
-    to frontier only, the rest of the key-present registry (economy-1,
-    economy-2, mid-1 in this fixture) is eligible to judge — advisory
-    scoring actually has something to do by default now."""
+    """MORTIMER_OPTIMIZATION_PLAN.md Phase 3 Rev 3.3 (2026-09-03). Narrowing
+    the default proposers to frontier (above) left every other key-present
+    profile eligible to judge — with the real 13-profile registry that is
+    ~10 advisory-only judge calls per spoken plan request, a cost INCREASE
+    the Phase 3 change was not supposed to buy. The no-selection default is
+    now capped at PLANNING_DEFAULT_JUDGE_LIMIT (2) and drawn in
+    PLANNING_DEFAULT_JUDGE_TIERS order (mid, frontier, economy): in this
+    fixture that is k-mid-1, then — no frontier profile is left, the only
+    one is proposing — k-economy-1 (registry order within economy).
+    k-economy-2 is eligible but over the cap."""
     monkeypatch.setattr(council_mod, "_call_profile", _fake_call_profile_async)
     result = asyncio.run(council_mod.draft_candidates("write a plan for X"))
+    assert result is not None
+    assert {s.judge_profile for s in result.scores} == {"k-mid-1", "k-economy-1"}
+
+
+def test_draft_candidates_explicit_judges_are_not_capped(council_env, monkeypatch):
+    """The cap applies to the no-selection DEFAULT only — an explicit
+    members["judges"] (the console picker) can still seat every eligible
+    profile, exactly as an explicit proposer list can widen past frontier."""
+    monkeypatch.setattr(council_mod, "_call_profile", _fake_call_profile_async)
+    result = asyncio.run(council_mod.draft_candidates(
+        "write a plan for X",
+        members={"judges": ["k-economy-1", "k-economy-2", "k-mid-1"]},
+    ))
     assert result is not None
     assert {s.judge_profile for s in result.scores} == {
         "k-economy-1", "k-economy-2", "k-mid-1",

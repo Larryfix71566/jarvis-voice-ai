@@ -175,3 +175,78 @@ class TestCacheWriteAliases:
     def test_alias_tuple_has_both_shapes(self):
         assert (None, "cache_creation_input_tokens") in usage_ledger._CACHE_WRITE_ALIASES
         assert ("prompt_tokens_details", "cache_write_tokens") in usage_ledger._CACHE_WRITE_ALIASES
+
+
+# ------------------------- Phase 3 Rev 3.3: plan_state on executor rows
+
+class TestPlanState:
+    def test_record_completion_passes_plan_state_through(self, captured_calls):
+        usage_ledger.record_completion(
+            rung="selfedit_executor", provider="anthropic", model="claude-sonnet-5",
+            response=_response({"prompt_tokens": 10, "completion_tokens": 1}),
+            plan_state="planned",
+        )
+        assert captured_calls[0]["plan_state"] == "planned"
+
+    def test_record_completion_default_plan_state_is_none(self, captured_calls):
+        usage_ledger.record_completion(
+            rung="supervisor", provider="anthropic", model="claude-haiku-4-5",
+            response=_response({"prompt_tokens": 10, "completion_tokens": 1}),
+        )
+        assert captured_calls[0]["plan_state"] is None
+
+    def test_plan_state_round_trips_through_sqlite(self, tmp_path, monkeypatch):
+        """The real write path, against a fresh temp ledger."""
+        monkeypatch.setattr(usage_ledger, "DB_PATH", tmp_path / "costs.db")
+        usage_ledger.record_call(
+            rung="selfedit_executor", provider="anthropic", model="claude-sonnet-5",
+            input_tokens=5, output_tokens=1, plan_state="planless",
+        )
+        usage_ledger.record_call(
+            rung="supervisor", provider="anthropic", model="claude-haiku-4-5",
+            input_tokens=5, output_tokens=1,
+        )
+        conn = usage_ledger._conn()
+        try:
+            rows = conn.execute(
+                "SELECT rung, plan_state FROM llm_calls ORDER BY id"
+            ).fetchall()
+        finally:
+            conn.close()
+        assert rows == [("selfedit_executor", "planless"), ("supervisor", None)]
+
+    def test_existing_ledger_without_the_column_is_upgraded_in_place(
+        self, tmp_path, monkeypatch,
+    ):
+        """Larry's data/costs.db predates plan_state. CREATE TABLE IF NOT
+        EXISTS does nothing for an existing file, so _conn() must add the
+        column itself — once — and keep every existing row intact."""
+        import sqlite3
+        db = tmp_path / "old.db"
+        old_schema = usage_ledger._SCHEMA.replace(
+            "    gen_id TEXT,                      -- OpenRouter generation id, for later enrichment\n"
+            "    plan_state TEXT                   -- executor rungs only: 'planned' | 'planless'\n"
+            "                                      -- (MORTIMER_OPTIMIZATION_PLAN.md Phase 3\n"
+            "                                      -- Rev 3.3); NULL on every other rung\n",
+            "    gen_id TEXT\n",
+        )
+        assert "plan_state" not in old_schema  # the replace above actually removed it
+        legacy = sqlite3.connect(db)
+        legacy.executescript(old_schema)
+        legacy.execute(
+            "INSERT INTO llm_calls (ts, month, rung, provider, model) "
+            "VALUES ('2026-09-01T00:00:00+00:00', '2026-09', 'supervisor', 'anthropic', 'm')"
+        )
+        legacy.commit(); legacy.close()
+
+        monkeypatch.setattr(usage_ledger, "DB_PATH", db)
+        conn = usage_ledger._conn()   # first connect: adds the column
+        conn.close()
+        conn = usage_ledger._conn()   # second connect: must be a no-op, not a failure
+        try:
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(llm_calls)")}
+            assert "plan_state" in cols
+            assert conn.execute("SELECT COUNT(*) FROM llm_calls").fetchone()[0] == 1
+            assert conn.execute("SELECT plan_state FROM llm_calls").fetchone()[0] is None
+        finally:
+            conn.close()

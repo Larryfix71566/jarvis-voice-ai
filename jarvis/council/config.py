@@ -134,6 +134,31 @@ COUNCIL_PLANNER_START_TIER = 2
 # only the no-selection DEFAULT narrows.
 PLANNING_DEFAULT_PROPOSER_TIERS: list[str] = ["frontier"]
 
+# ⚙ TUNING KNOB — MORTIMER_OPTIMIZATION_PLAN.md Phase 3, Rev 3.3 (2026-09-03).
+# draft_candidates' default JUDGE set (no explicit `members["judges"]`) is
+# capped at this many profiles. Before this the default judge pool was
+# "every key-present profile not proposing", uncapped — harmless while the
+# default proposer set was the whole registry (nobody was left to judge),
+# but the Phase 3 narrowing to frontier-only proposers silently turned the
+# ~10 remaining profiles into ~10 judge calls per spoken plan request, each
+# carrying every frontier draft as input: MORE planning-rung spend, not
+# less, for scores that are advisory-only in this pathway (the user picks
+# the winner via record_user_choice). Two is COUNCIL_JUDGE_TARGET's value on
+# purpose ("a second opinion, not a panel"), kept as its own constant so
+# the planning pathway can diverge from the escalation ladder without
+# touching V8. An explicit members["judges"] selection is NOT capped.
+PLANNING_DEFAULT_JUDGE_LIMIT = 2
+
+# Which tiers that capped default draws from, in preference order. Mid-tier
+# judges scoring frontier drafts is the plan's own "third-lineage judge via
+# the V8 backfill (or-gpt-5.1, mid)" shape; a frontier profile that is not
+# proposing is the next best; economy last — a flash model scoring fable/
+# deepseek drafts is mostly noise, but still better than no advisory score
+# when that is all that has a key. Within a tier, registry order. Profiles
+# with no `tier:` never judge by default (they never propose by default
+# either, per PLANNING_DEFAULT_PROPOSER_TIERS).
+PLANNING_DEFAULT_JUDGE_TIERS: list[str] = ["mid", "frontier", "economy"]
+
 # Ascending cost, used only by the degenerate-tier fallback below.
 _TIER_ORDER = ["economy", "mid", "frontier"]
 

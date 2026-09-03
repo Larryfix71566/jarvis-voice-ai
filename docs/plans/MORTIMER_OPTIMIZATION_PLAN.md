@@ -1,6 +1,6 @@
 # Mortimer Optimization Plan — Cost, Memory, and Model Routing
 
-Status: Rev 3.2 — 2026-09-01 (Phase 1/1b rewritten: caching needs the native Messages API, the OpenAI-compat layer cannot carry it; see "Rev 3.2 resolutions" at the end. Rev 3.1: conflicts resolved + model-floor policy.)
+Status: Rev 3.3 — 2026-09-03 (Phase 3 reevaluated against the real ledger and council records; see "Rev 3.3 notes" at the end. Rev 3.2: Phase 1/1b rewritten: caching needs the native Messages API, the OpenAI-compat layer cannot carry it; see "Rev 3.2 resolutions" at the end. Rev 3.1: conflicts resolved + model-floor policy.)
 
 **Standing policy (Larry, 2026-09-01) — the model floor:** the ONLY agent that may run Haiku is the voice agent (Supervisor). Every other agent — the five specialists and the planner/executor loop — runs at Sonnet-or-equivalent or above. Cost work on those agents is caching, context slimming, effort, and choosing *among* Sonnet-class-and-up models; it is never dropping below the floor. This overrides the earlier "Haiku is correct for the conversational agents" stance in `config/agents.yaml` and CLAUDE.md, and it is bound in CONFIG plus a test (Phase 0b item 5), not stored as a memory fact — a fact only persuades a model, it cannot bind a tool's behaviour (the same lesson as `jarvis_units`).
 Scope: sub-agents and supervisor. Voice transport (STT/TTS/realtime) explicitly exempt — stays on native provider connections for latency.
@@ -310,8 +310,14 @@ Consequences that fall out of the table:
   passes no `members` (today it fans out to *all 13* key-present
   profiles — the voice `plan_start` path never passes `members`, so every
   spoken plan request currently buys 13 drafts; the console picker can
-  still widen it explicitly); judges stay "whatever usable profiles are
-  not proposing", unchanged. (2) `UpgradeAgent._maybe_escalate` starts
+  still widen it explicitly); judges — **Rev 3.3 correction** — are
+  "whatever usable profiles are not proposing" **capped at
+  `PLANNING_DEFAULT_JUDGE_LIMIT = 2`, drawn mid → frontier → economy**
+  (`PLANNING_DEFAULT_JUDGE_TIERS`). Rev 3 said "unchanged", which was
+  true only because the full-registry default left nobody to judge;
+  narrowing proposers to frontier silently made the other ~10 profiles
+  judges — ~10 advisory-only judge calls per spoken plan request, a cost
+  INCREASE. An explicit `members["judges"]` is not capped. (2) `UpgradeAgent._maybe_escalate` starts
   `placement="planner"` rounds at **tier 2** (`COUNCIL_PLANNER_START_TIER
   = 2` in `council/config.py`; scope rounds stay tier 1). With
   `COUNCIL_MAX_ESCALATIONS = 2` and the "tiers strictly ascending, never
@@ -369,7 +375,10 @@ Consequences that fall out of the table:
   under-specified plans (a planner-prompt problem), which looks
   identical to executor incapability unless measured. Two ground truths,
   both already recorded: `retry_validated` per round (did a high-scoring
-  plan actually execute clean) and the ledger's `selfedit_executor` /
+  plan actually execute clean) — **Rev 3.3: it was NULL on every round
+  ever recorded, because nothing wrote it when the retry never reached
+  `session_validate`; `council_rounds.retry_outcome` (migration 0018)
+  now records why at session exit, see notes** — and the ledger's `selfedit_executor` /
   `appbuild_executor` rows per run (how much executor spend a plan
   consumed before it landed or died).
 
@@ -386,7 +395,7 @@ Supervisor (Phase 5 local) and the background maintenance rungs.
    - Frontier calls needing neither → OpenRouter BYOK or native; default OpenRouter for failover, native key stays in vault as escape hatch.
 5. Priors to test, not trust: intent/entity-matching solved by 1–8B class (Supervisor-local and background rungs only — never an agent); extraction is mid-tier; developer agent stays frontier for planning, Sonnet for execution; council placed by eval within its tier rules.
 
-**Exit criteria:** every rung has an eval-backed model assignment in agents.yaml, none below the floor for an agent (`test_model_floor.py` green); measured agent spend reduction vs baseline coming from caching/effort/context, not tier; zero quality regressions on eval sets.
+**Exit criteria (reworded Rev 3.3 — the original said "in agents.yaml", which only holds the five specialists; the planner, executor, council and background rungs live elsewhere, so the criterion as written could never be met for half the rungs):** every rung has an eval-backed model assignment **in config — `agents.yaml` for the five specialists, `upgrade_models.yaml` + `JARVIS_UPGRADE_PROFILE`/`JARVIS_APPBUILD_PROFILE`/`JARVIS_PLANNING_PROFILE` for planner/executor/planning, `council/config.py` tier tables for the council, and the Supervisor/background settings for the rest — with the file named per rung in the Savings Ledger**, none below the floor for an agent (`test_model_floor.py` green); measured agent spend reduction vs baseline coming from caching/effort/context, not tier; zero quality regressions on eval sets. **Prerequisite (Rev 3.3): a representative week in a clean ledger** — see notes; the 2026-09-01..03 window had zero real planner/executor/council rows.
 
 ---
 
@@ -602,3 +611,64 @@ Not changed, deliberately: Phase 0/0b (complete), Phase 2–5, the Interface
 Task, the model floor, and Phase 3's planner/executor table — the executor
 simply inherits Path B caching because it builds its client through the
 same factory.
+
+## Rev 3.3 notes (2026-09-03) — Phase 3 reevaluated against the real ledger and council records
+
+What the data said, after the planner/executor split landed (7e2503f):
+
+1. **The ledger was 84% test pollution.** 447 of 535 `data/costs.db` rows
+   were pytest writes (`usage_ledger.DB_PATH` is an import-time constant
+   and tests never overrode it). Fixed in `tests/conftest.py` (module-level
+   `JARVIS_COSTS_DB` setdefault, same pattern as the vault) and purged
+   (backup `data/costs.db.pre-purge-2026-09-03.bak`). 88 real rows remain,
+   two days, $0.25 — and **zero** real `planning`/`council`/`selfedit_
+   executor`/`appbuild_executor` rows. Phase 3 shipped against rungs the
+   only measurement never saw. Phase 3's exit criteria now name a clean,
+   representative week as a prerequisite; Phase 0's "one week" gate was
+   skipped for 2 and 3 and should not be again for 4 and 5.
+2. **`retry_validated` was NULL on all 16 planner rounds** — 15 were
+   `too_small` (2026-08-16/17, before the OpenRouter chain worked); the
+   one real round (e48cfbe1, 2026-09-01, won by `or-gemini-flash` at
+   tier 1) was triggered by `pytest: timed out after 300s` — allowlist,
+   imports and the frontend build all passed, so the council convened on
+   a gate timeout, not a code defect, and its judges disagreed on what
+   the "bug" was. Nothing recorded what happened after the brief.
+   Migration 0018 adds `council_rounds.retry_outcome`;
+   `record_retry_validated` fills it (`validated_ok`/`validated_failed`)
+   and `UpgradeAgent._close_pending_round` writes `no_retry:<reason>`
+   (prose_end / iteration_limit / time_limit / cancelled / declined /
+   unfinished) at every session exit. `COUNCIL_PLANNER_START_TIER = 2`
+   stays — it is a coherent design bet — but it currently rests on n=1
+   pointing the other way, and a tier-2 round is a ~7-proposer
+   frontier+mid fan-out, not "a frontier council"; revisit with
+   `retry_outcome` data, not before.
+3. **Judge cap** — item 2 above; `PLANNING_DEFAULT_JUDGE_LIMIT` /
+   `PLANNING_DEFAULT_JUDGE_TIERS` in `council/config.py`.
+4. **The executor runs planless ~85% of the time** (`agent_events`:
+   `selfedit_start` 101 vs `plan_adopt` 15). The split's safety argument
+   ("the spec already did the thinking") covers ~1 executor run in 7; the
+   rest were down-tiered fable-5 → sonnet-5 with no plan. Ledger rows on
+   the executor rungs now carry `plan_state` ('planned'|'planless') so
+   the week of data can split executor spend and escalation rate along
+   that line. Not decided: whether to enforce plan-first for multi-file
+   work in the developer prompt (the plan already claims it is the rule;
+   the data says it is not followed), or to route planless sessions back
+   to `default`. Larry's call.
+5. **Phase 1's live-voice gate is met by ledger evidence**: 27/32
+   `supervisor` rows show cache reads (84% > 80%), 292K read vs 13K
+   written; `librarian` (Path B) caches too. Phase 1 closed.
+6. **Open reconciliation**: the ≥$10/day figure from 2026-09-01 vs the
+   ledger's ~$0.12/day since. Caching cannot explain 40×; either August's
+   spend was developer/council-heavy days the ledger never saw, or voice
+   transport (Deepgram/ElevenLabs — out of this plan's scope) dominates.
+   Compare provider consoles for Sept 1–3 against $0.25 before investing
+   further in LLM-token levers.
+7. **What Phase 3's remaining work actually is under the floor:** the
+   four specialists are already at the floor (nothing below to test); the
+   one live agent comparison is developer SubAgent opus → sonnet; the
+   background rungs are already on Haiku, so their eval sets are Phase 5
+   prep — except `memory_extraction`, which may need to go UP (over-
+   admission risk) and whose data only started accumulating with Phase 2;
+   the Supervisor already has `tests/evals/routing_eval.py` (68 cases,
+   candidate-model swap via `EVAL_MODEL`/`EVAL_BASE_URL`/`EVAL_KEY_ENV`).
+

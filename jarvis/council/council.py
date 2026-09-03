@@ -942,13 +942,33 @@ async def _draft_candidates_inner(
     judge_usage_by_name: dict[str, dict[str, int] | None] = {}
     live_usage = _empty_usage_totals()
     if judge:
-        judge_names = [
-            m["name"] for m in available_models()
-            if m["key_present"] and m["name"] not in {p.profile for p in proposals}
+        proposing = {p.profile for p in proposals}
+        eligible = [
+            m for m in available_models()
+            if m["key_present"] and m["name"] not in proposing
         ]
         picked_judges = (members or {}).get("judges") or []
         if picked_judges:
-            judge_names = [n for n in judge_names if n in picked_judges]
+            # An explicit selection is never capped — same rule as proposers.
+            judge_names = [m["name"] for m in eligible if m["name"] in picked_judges]
+        else:
+            # MORTIMER_OPTIMIZATION_PLAN.md Phase 3 Rev 3.3 (2026-09-03): the
+            # no-selection default is capped and tier-preferred — see
+            # PLANNING_DEFAULT_JUDGE_LIMIT / _TIERS in council/config.py for
+            # why (short version: narrowing the default PROPOSERS to
+            # frontier made every other key-present profile a judge, ~10
+            # advisory-only judge calls per spoken plan request).
+            limit = council_config.PLANNING_DEFAULT_JUDGE_LIMIT
+            judge_names = []
+            for tier in council_config.PLANNING_DEFAULT_JUDGE_TIERS:
+                for name in _sort_by_registry(
+                    [m["name"] for m in eligible if m.get("tier") == tier]
+                ):
+                    if len(judge_names) >= limit:
+                        break
+                    judge_names.append(name)
+                if len(judge_names) >= limit:
+                    break
         judge_names = _sort_by_registry(judge_names)
         if judge_names:
             judge_user_content = _judge_user_message(goal, context, proposals, "doc")
@@ -1180,13 +1200,19 @@ def record_retry_validated(round_id: str, validated: bool) -> None:
     """D8.1 — write back whether the single post-council retry passed
     validation. This is the only way to answer "is the council earning
     its cost" from data instead of assertion. Best-effort: a write
-    failure here must never raise into the agent loop."""
+    failure here must never raise into the agent loop.
+
+    Phase 3 Rev 3.3: also fills `retry_outcome` ('validated_ok' /
+    'validated_failed') so that column is complete on its own — see
+    record_retry_outcome for the no-retry half of the vocabulary."""
+    outcome = "validated_ok" if validated else "validated_failed"
     try:
         conn = get_conn()
         try:
             conn.execute(
-                "UPDATE council_rounds SET retry_validated = ? WHERE round_id = ?",
-                (1 if validated else 0, round_id),
+                "UPDATE council_rounds SET retry_validated = ?, retry_outcome = ? "
+                "WHERE round_id = ?",
+                (1 if validated else 0, outcome, round_id),
             )
             conn.commit()
         finally:
@@ -1194,6 +1220,55 @@ def record_retry_validated(round_id: str, validated: bool) -> None:
     except Exception:  # noqa: BLE001
         logger.warning(
             "council_record_retry_validated_failed round_id=%s", round_id,
+            exc_info=True,
+        )
+
+
+# MORTIMER_OPTIMIZATION_PLAN.md Phase 3 Rev 3.3 (2026-09-03). The closed
+# vocabulary for council_rounds.retry_outcome. Strings, not an enum, for the
+# same reason memory_extraction's outcomes are strings (tests and reports
+# assert on them without a second thing to keep in sync):
+#   validated_ok / validated_failed  — the retry reached session_validate
+#                                       (written by record_retry_validated)
+#   no_retry:prose_end               — the executor answered in prose after
+#                                       the brief instead of validating
+#   no_retry:iteration_limit         — budget (incl. the V10 grant) ran out
+#   no_retry:time_limit              — max_session_minutes hit first
+#   no_retry:cancelled               — POST /api/selfedit/cancel
+#   no_retry:declined                — session_decline after the brief
+#   no_retry:unfinished              — any other exit with a brief pending
+# NULL after a session has ended means the process died mid-run (the only
+# path that writes nothing), which is itself a signal.
+RETRY_OUTCOMES = (
+    "validated_ok", "validated_failed",
+    "no_retry:prose_end", "no_retry:iteration_limit", "no_retry:time_limit",
+    "no_retry:cancelled", "no_retry:declined", "no_retry:unfinished",
+)
+
+
+def record_retry_outcome(round_id: str, outcome: str) -> None:
+    """Write `retry_outcome` for a round whose post-council retry never
+    reached session_validate — UpgradeAgent calls this from every session
+    exit that still has a brief pending (see _close_pending_round). Same
+    best-effort contract as record_retry_validated. `outcome` should be one
+    of RETRY_OUTCOMES; an unknown string is stored as-is (a report will
+    show it, which beats dropping it) and logged."""
+    if outcome not in RETRY_OUTCOMES:
+        logger.warning("council_retry_outcome_unknown round_id=%s outcome=%s",
+                       round_id, outcome)
+    try:
+        conn = get_conn()
+        try:
+            conn.execute(
+                "UPDATE council_rounds SET retry_outcome = ? WHERE round_id = ?",
+                (outcome, round_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "council_record_retry_outcome_failed round_id=%s", round_id,
             exc_info=True,
         )
 

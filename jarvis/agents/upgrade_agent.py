@@ -383,6 +383,10 @@ class UpgradeAgent:
         # V14 — at most one scope-advisor council per run (E2); reset in
         # run(), same lifecycle as the escalation counters above.
         self._scope_council_used: bool = False
+        # Phase 3 Rev 3.3 — 'planned' | 'planless' for this session's
+        # ledger rows (usage_ledger.record_call's plan_state); set at the
+        # top of run() from whether a `plan` was supplied.
+        self._plan_state: str | None = None
 
         # Defer client construction when the key is absent: run() fails fast
         # with a clear summary instead of the SDK raising at construction.
@@ -534,6 +538,7 @@ class UpgradeAgent:
                         provider=provider,
                         model=self.model,
                         response=response,
+                        plan_state=self._plan_state,
                     )
                 except Exception:
                     pass
@@ -626,6 +631,7 @@ class UpgradeAgent:
         self._scope_council_used = False  # V14 — clean slate per session
         self._failed_profiles = set()     # failover — clean slate per session
         self._failover_notes = []
+        self._plan_state = "planned" if plan else "planless"  # Rev 3.3 ledger tag
 
         started = time.monotonic()
         if not self.service.branch:
@@ -671,9 +677,15 @@ class UpgradeAgent:
         # budget extension can't push it back to this value.
         halfway_checkpoint = self.cfg["max_iterations"] // 2
         cancelled = False
+        # Phase 3 Rev 3.3 — why the loop stopped, for _close_pending_round
+        # (only consulted when a council brief was injected and its retry
+        # never reached session_validate). Falls through as
+        # "iteration_limit" when the `while` condition itself ends the loop.
+        end_reason = "iteration_limit"
         while iterations_used < iterations_budget:
             if self._cancel.is_set():
                 cancelled = True
+                end_reason = "cancelled"
                 summary = ("cancelled by the user before the next planner step; "
                            "no changes were submitted")
                 break
@@ -691,6 +703,7 @@ class UpgradeAgent:
                     ),
                 })
             if time.monotonic() - started > self.cfg["max_session_minutes"] * 60:
+                end_reason = "time_limit"
                 summary = "session time limit reached; no changes were submitted"
                 break
             request: dict[str, Any] = {
@@ -706,6 +719,7 @@ class UpgradeAgent:
             if not tool_calls:
                 summary = message.content or ""
                 ok = True
+                end_reason = "prose_end"
                 break
             messages.append(_assistant_message(message))
             for tc in tool_calls:
@@ -737,6 +751,7 @@ class UpgradeAgent:
                         )
                     if scope_brief:
                         reason = reason + "\n\n[Council scope advice]\n" + scope_brief
+                    self._close_pending_round("declined")
                     self._emit(on_event, {"type": "agent_done", "ok": False,
                                           "declined": True})
                     return {"ok": False, "declined": True, "summary": reason,
@@ -780,6 +795,7 @@ class UpgradeAgent:
                             })
                             summary = ("validation failed twice; session ended without "
                                        "submitting. " + json.dumps(result.get("checks")))
+                            self._close_pending_round("unfinished")
                             self._emit(on_event, {"type": "agent_done", "ok": False})
                             return {"ok": False, "summary": summary,
                                     "status": self.service.status()}
@@ -860,6 +876,7 @@ class UpgradeAgent:
         if self._failover_notes:
             summary = (summary or "") + " [" + "; ".join(self._failover_notes) + "]"
 
+        self._close_pending_round(end_reason)
         self._emit(on_event, {"type": "agent_done", "ok": ok})
         return {
             "ok": ok, "summary": summary, "status": self.service.status(),
@@ -876,6 +893,33 @@ class UpgradeAgent:
     @property
     def cancel_requested(self) -> bool:
         return self._cancel.is_set()
+
+    def _close_pending_round(self, reason: str) -> None:
+        """MORTIMER_OPTIMIZATION_PLAN.md Phase 3 Rev 3.3 (2026-09-03). Called
+        from every session exit. If a council brief was injected this
+        session and its retry never reached session_validate (which is the
+        only place _pending_council_round_id is otherwise cleared), record
+        WHY as council_rounds.retry_outcome = "no_retry:<reason>" and say so
+        at WARNING — before this, that case wrote nothing, and
+        retry_validated stayed NULL on every round ever recorded, so "is
+        the council earning its cost" had no data behind it at all.
+        Never raises (D13); lazy import for the usual circular-import
+        reason."""
+        round_id = self._pending_council_round_id
+        if round_id is None:
+            return
+        self._pending_council_round_id = None
+        logger.warning(
+            "council_retry_never_validated round_id=%s reason=%s", round_id, reason,
+        )
+        try:
+            from jarvis.council.council import record_retry_outcome
+            record_retry_outcome(round_id, f"no_retry:{reason}")
+        except Exception:  # noqa: BLE001 — never break the agent loop
+            logger.warning(
+                "council_record_retry_outcome_call_failed round_id=%s",
+                round_id, exc_info=True,
+            )
 
     def _maybe_escalate(self, *, goal: str, trigger: str,
                         context: dict) -> str | None:

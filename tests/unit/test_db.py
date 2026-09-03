@@ -22,6 +22,7 @@ EXPECTED_MIGRATION_IDS = [
     "0015_memory_reviews",
     "0016_memory_extraction_v2",
     "0017_memory_extraction_pending",
+    "0018_council_retry_outcome",
 ]
 
 
