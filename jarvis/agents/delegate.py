@@ -497,9 +497,10 @@ def build_delegate_tool(
                 note = (
                     f"[system] Background update: the {agent.display_name} "
                     "task delegated earlier finished after the conversation "
-                    f"moved on. Result: {outcome}\nRelay this to the user in "
-                    "one or two short sentences. If it prepared an action "
-                    "that needs their confirmation, say so."
+                    f"moved on. Result: {outcome}\nRelay this to the user once, "
+                    "in one or two short sentences, and do not repeat it in "
+                    "later turns. If it prepared an action that needs their "
+                    "confirmation, say so."
                 )
                 _spawn_background(fn(note))
 

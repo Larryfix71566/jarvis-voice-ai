@@ -45,6 +45,7 @@ from jarvis.agents.delegate import build_delegate_tool
 from jarvis.anthropic_shim import native_base_url
 from jarvis.bot.display import WeatherReportMerger, build_display_payload
 from jarvis.bot.interruption import InterruptionNotifier
+from jarvis.bot.late_result import LateResultNeutralizer
 from jarvis.bot.memory_watcher import MemorySweepWatcher
 from jarvis.bot.plan_watcher import PlanWatcher
 from jarvis.bot.research_watcher import ResearchWatcher
@@ -938,6 +939,13 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
         # InterruptionNotifier already uses (BotStartedSpeakingFrame/
         # BotStoppedSpeakingFrame are born downstream of the TTS service).
         speaking_tracker = SpeakingStateTracker()
+        # MORTIMER_SESSION_MISSES_PLAN.md S6-S8 — rewrites a barge-in
+        # late-result note in place once relayed (see late_result.py).
+        # Constructed here so inject_late_result below can arm it; the
+        # settings flag is the kill switch.
+        late_neutralizer = LateResultNeutralizer(
+            enabled=settings.jarvis_late_result_neutralize_enabled,
+        )
         observers = [
             TranscriptObserver(runtime.session_id, only_from=runtime.speaker_gate),
             InterruptionNotifier(
@@ -960,6 +968,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
                 tts_provider="elevenlabs",
                 tts_default_model="eleven_flash_v2_5",
             ),
+            late_neutralizer,
         ]
         if os.environ.get("JARVIS_DEBUG_OBSERVER"):
             # Temporary diagnostic: print every function-call frame hop with
@@ -1073,12 +1082,23 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             aggregators.user().add_messages([{"role": "user", "content": text}])
             await aggregators.user().push_context_frame()
 
+        async def inject_late_result(text: str) -> None:
+            # MORTIMER_SESSION_MISSES_PLAN.md S6: same channel as
+            # inject_context, but the note is registered with the
+            # neutralizer so its imperative dies with the relay turn. The
+            # dict handed to add_messages is the one the neutralizer later
+            # rewrites — pipecat's LLMContext keeps the caller's objects.
+            message = {"role": "user", "content": text}
+            late_neutralizer.arm(message)
+            aggregators.user().add_messages([message])
+            await aggregators.user().push_context_frame()
+
         # Barge-in survival — install the late-delivery hook the delegate
         # tool uses for results whose voice turn was cancelled. Same
-        # inject_context channel the reminders watcher speaks through: the
-        # result arrives as a context note and Mortimer reports it on its
-        # own initiative, exactly like a due reminder.
-        runtime.late_delivery["fn"] = inject_context
+        # context channel the reminders watcher speaks through: the result
+        # arrives as a context note and Mortimer reports it on its own
+        # initiative, exactly like a due reminder — once (S6-S8).
+        runtime.late_delivery["fn"] = inject_late_result
 
         watcher = RemindersWatcher(
             runtime.registry,

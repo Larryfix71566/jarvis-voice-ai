@@ -564,6 +564,7 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
         jarvis_user_name="Boss", jarvis_timezone="America/New_York",
         jarvis_units="imperial",
         jarvis_interruption_notice_enabled=True,
+        jarvis_late_result_neutralize_enabled=True,
         jarvis_memory_sweep_interval_s=300.0,
     )
     cancelled, folded, watcher_stopped, registry_stopped = [], [], [], []
@@ -693,6 +694,7 @@ async def test_stt_row_written_at_teardown(monkeypatch, tmp_path):
         jarvis_user_name="Boss", jarvis_timezone="America/New_York",
         jarvis_units="imperial",
         jarvis_interruption_notice_enabled=True,
+        jarvis_late_result_neutralize_enabled=True,
         jarvis_memory_sweep_interval_s=300.0,
     )
     recorded: list[dict] = []
@@ -796,3 +798,138 @@ async def test_stt_row_written_at_teardown(monkeypatch, tmp_path):
     assert row["session_id"]
     # No token kwargs on a voice row.
     assert "input_tokens" not in row
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("flag", [True, False])
+async def test_late_result_hook_arms_the_neutralizer(monkeypatch, tmp_path, flag):
+    """MORTIMER_SESSION_MISSES_PLAN.md S6 — run_session installs
+    inject_late_result as the barge-in late-delivery hook: the note it
+    appends to the user aggregator is the SAME dict the LateResultNeutralizer
+    (in the task's observers) holds, so the observer's in-place rewrite is
+    what the aggregator serves next. Same disconnect scaffold as above."""
+    from jarvis.bot.late_result import LateResultNeutralizer
+
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "session.db"))
+    settings = SimpleNamespace(
+        deepgram_api_key="dg", openai_api_key="sk", openai_base_url="http://llm",
+        openai_model="m", elevenlabs_api_key="el", jarvis_name="Jarvis",
+        jarvis_user_name="Boss", jarvis_timezone="America/New_York",
+        jarvis_units="imperial",
+        jarvis_interruption_notice_enabled=True,
+        jarvis_late_result_neutralize_enabled=flag,   # the kill switch, both ways
+        jarvis_memory_sweep_interval_s=300.0,
+    )
+    captured: dict = {}
+
+    class FakeTask:
+        def __init__(self, pipeline, observers=None, params=None):
+            captured["observers"] = list(observers or [])
+            self._ended = asyncio.Event()
+
+        async def cancel(self):
+            self._ended.set()
+
+        async def wait_ended(self):
+            await self._ended.wait()
+
+    class FakeRunner:
+        async def run(self, task):
+            await task.wait_ended()
+
+    class FakeQuiet:
+        def __init__(self, *a, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        async def stop(self):
+            pass
+
+    class FakeRegistry(FakeQuiet):
+        async def start(self):
+            pass
+
+    class FakeUserAggregator:
+        def __init__(self):
+            self.messages: list[dict] = []
+
+        def add_messages(self, messages):
+            self.messages.extend(messages)     # keeps the caller's objects, like pipecat
+
+        async def push_context_frame(self, *a, **kw):
+            pass
+
+    user_agg = FakeUserAggregator()
+
+    class FakeAggregators:
+        def user(self):
+            return user_agg
+
+        def assistant(self):
+            return SimpleNamespace()
+
+    class FakePusher:
+        def bind(self, task):
+            pass
+
+    async def fake_fold(settings_arg, session_id, **kwargs):
+        return True
+
+    async def fake_digest(settings_arg, session_id):
+        return False
+
+    def fake_build_pipeline(transport, runtime):
+        captured["runtime"] = runtime
+        return FakePipeline([]), FakeLLM("k", "u", "m"), FakeAggregators(), FakePusher()
+
+    monkeypatch.setattr(bp, "load_settings", lambda: settings)
+    monkeypatch.setattr(bp, "bridge_settings_to_env", lambda s: None)
+    monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    monkeypatch.setattr(
+        bp, "load_voice_catalog",
+        lambda: {"default": "rachel",
+                 "voices": [{"id": "rachel", "label": "Rachel",
+                             "elevenlabs_voice_id": "vid"}]},
+    )
+    monkeypatch.setattr(bp, "build_pipeline", fake_build_pipeline)
+    monkeypatch.setattr(bp, "PipelineTask", FakeTask)
+    monkeypatch.setattr(bp, "PipelineRunner", FakeRunner)
+    monkeypatch.setattr(bp, "RemindersWatcher", FakeQuiet)
+    monkeypatch.setattr(bp, "MemorySweepWatcher", FakeQuiet)
+    monkeypatch.setattr(bp, "update_memory_from_session", fake_fold)
+    monkeypatch.setattr(bp, "write_session_digest", fake_digest)
+    monkeypatch.setattr(bp, "record_call", lambda **kw: None)
+
+    transport = HandlerCapturingTransport()
+    note = "[system] Background update: … Relay this to the user once …"
+
+    async def drive():
+        for _ in range(500):
+            if "on_client_disconnected" in transport.handlers and "runtime" in captured:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            raise AssertionError("run_session never installed its handlers")
+        fn = captured["runtime"].late_delivery["fn"]
+        assert fn.__name__ == "inject_late_result"
+        await fn(note)
+        await transport.handlers["on_client_disconnected"](transport, None)
+
+    await asyncio.wait_for(asyncio.gather(bp.run_session(transport), drive()), timeout=10)
+
+    neutralizers = [o for o in captured["observers"] if isinstance(o, LateResultNeutralizer)]
+    assert len(neutralizers) == 1, "exactly one LateResultNeutralizer in the task's observers"
+    assert neutralizers[0].enabled is flag
+    assert user_agg.messages[-1] == {"role": "user", "content": note}
+    if flag:
+        assert neutralizers[0].pending_count == 1
+        # The held note is the very object the aggregator has (in-place rewrite works).
+        assert neutralizers[0]._pending[0] is user_agg.messages[-1]
+    else:
+        # Disabled: the note still reaches the aggregator (pre-plan behaviour
+        # exactly), and nothing is held to rewrite.
+        assert neutralizers[0].pending_count == 0

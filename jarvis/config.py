@@ -97,6 +97,12 @@ class Settings(BaseSettings):
     # to the Supervisor when the user genuinely barges in on a reply.
     jarvis_interruption_notice_enabled: bool = True
 
+    # MORTIMER_SESSION_MISSES_PLAN.md S6-S8 — rewrite a barge-in late-result
+    # note in place once it has been relayed, so its "Relay this to the
+    # user" imperative cannot be obeyed a second time on the next turn.
+    # False restores the exact pre-plan behaviour (jarvis/bot/late_result.py).
+    jarvis_late_result_neutralize_enabled: bool = True
+
     # Parallel delegation (plan Phase 4) — pipecat dispatches multiple
     # delegate_task calls from one assistant turn concurrently by default
     # (LLMService run_in_parallel=True); this bounds how many of OUR
