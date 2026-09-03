@@ -677,3 +677,122 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
     assert watcher_stopped, "RemindersWatcher was not stopped (leaks per connection)"
     assert memory_watcher_stopped, "MemorySweepWatcher was not stopped (leaks per connection)"
     assert registry_stopped, "skill registry was not stopped"
+
+
+@pytest.mark.asyncio
+async def test_stt_row_written_at_teardown(monkeypatch, tmp_path):
+    """MORTIMER_SESSION_MISSES_PLAN.md S3 — Deepgram Flux emits no usage
+    metric, so run_session's teardown bills the session's wall-clock as one
+    `stt` ledger row (unit 'seconds'). Same disconnect scaffold as
+    test_client_disconnect_ends_task_and_folds_memory; record_call is
+    captured rather than written so the assertion is on the row's shape."""
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "session.db"))
+    settings = SimpleNamespace(
+        deepgram_api_key="dg", openai_api_key="sk", openai_base_url="http://llm",
+        openai_model="m", elevenlabs_api_key="el", jarvis_name="Jarvis",
+        jarvis_user_name="Boss", jarvis_timezone="America/New_York",
+        jarvis_units="imperial",
+        jarvis_interruption_notice_enabled=True,
+        jarvis_memory_sweep_interval_s=300.0,
+    )
+    recorded: list[dict] = []
+
+    class FakeTask:
+        def __init__(self, pipeline, observers=None, params=None):
+            self._ended = asyncio.Event()
+
+        async def cancel(self):
+            self._ended.set()
+
+        async def wait_ended(self):
+            await self._ended.wait()
+
+    class FakeRunner:
+        async def run(self, task):
+            await task.wait_ended()
+
+    class FakeQuiet:
+        def __init__(self, *a, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        async def start_async(self):
+            pass
+
+        async def stop(self):
+            pass
+
+    class FakeRegistry(FakeQuiet):
+        async def start(self):
+            pass
+
+    class FakeAggregators:
+        def user(self):
+            return SimpleNamespace()
+
+        def assistant(self):
+            return SimpleNamespace()
+
+    class FakePusher:
+        def bind(self, task):
+            pass
+
+    async def fake_fold(settings_arg, session_id, **kwargs):
+        return True
+
+    async def fake_digest(settings_arg, session_id):
+        return False
+
+    monkeypatch.setattr(bp, "load_settings", lambda: settings)
+    monkeypatch.setattr(bp, "bridge_settings_to_env", lambda s: None)
+    monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    monkeypatch.setattr(
+        bp, "load_voice_catalog",
+        lambda: {"default": "rachel",
+                 "voices": [{"id": "rachel", "label": "Rachel",
+                             "elevenlabs_voice_id": "vid"}]},
+    )
+    monkeypatch.setattr(
+        bp, "build_pipeline",
+        lambda transport, runtime: (
+            FakePipeline([]), FakeLLM("k", "u", "m"), FakeAggregators(), FakePusher()
+        ),
+    )
+    monkeypatch.setattr(bp, "PipelineTask", FakeTask)
+    monkeypatch.setattr(bp, "PipelineRunner", FakeRunner)
+    monkeypatch.setattr(bp, "RemindersWatcher", FakeQuiet)
+    monkeypatch.setattr(bp, "MemorySweepWatcher", FakeQuiet)
+    monkeypatch.setattr(bp, "update_memory_from_session", fake_fold)
+    monkeypatch.setattr(bp, "write_session_digest", fake_digest)
+    monkeypatch.setattr(bp, "record_call", lambda **kw: recorded.append(kw))
+
+    transport = HandlerCapturingTransport()
+
+    async def fire_disconnect():
+        for _ in range(500):
+            if "on_client_disconnected" in transport.handlers:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            raise AssertionError("on_client_disconnected was never registered")
+        await asyncio.sleep(0.05)   # a measurable session, so quantity > 0
+        await transport.handlers["on_client_disconnected"](transport, None)
+
+    await asyncio.wait_for(
+        asyncio.gather(bp.run_session(transport), fire_disconnect()), timeout=10
+    )
+
+    stt = [r for r in recorded if r.get("rung") == "stt"]
+    assert len(stt) == 1, recorded
+    row = stt[0]
+    assert row["provider"] == "deepgram"
+    assert row["model"] == "flux-general-en"
+    assert row["unit"] == "seconds"
+    assert row["quantity"] > 0
+    assert row["session_id"]
+    # No token kwargs on a voice row.
+    assert "input_tokens" not in row

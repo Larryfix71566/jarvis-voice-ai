@@ -223,14 +223,8 @@ class TestPlanState:
         column itself — once — and keep every existing row intact."""
         import sqlite3
         db = tmp_path / "old.db"
-        old_schema = usage_ledger._SCHEMA.replace(
-            "    gen_id TEXT,                      -- OpenRouter generation id, for later enrichment\n"
-            "    plan_state TEXT                   -- executor rungs only: 'planned' | 'planless'\n"
-            "                                      -- (MORTIMER_OPTIMIZATION_PLAN.md Phase 3\n"
-            "                                      -- Rev 3.3); NULL on every other rung\n",
-            "    gen_id TEXT\n",
-        )
-        assert "plan_state" not in old_schema  # the replace above actually removed it
+        old_schema = _schema_without(("plan_state", "quantity", "unit"))
+        assert "plan_state" not in old_schema  # the helper actually removed it
         legacy = sqlite3.connect(db)
         legacy.executescript(old_schema)
         legacy.execute(
@@ -250,3 +244,137 @@ class TestPlanState:
             assert conn.execute("SELECT plan_state FROM llm_calls").fetchone()[0] is None
         finally:
             conn.close()
+
+
+def _schema_without(columns: tuple[str, ...]) -> str:
+    """usage_ledger._SCHEMA with the named trailing columns removed — the
+    shape of a ledger file written before those columns existed. Rebuilds
+    the CREATE TABLE from its column lines so the test does not depend on
+    the exact comment text of the current schema."""
+    lines = usage_ledger._SCHEMA.splitlines()
+    out: list[str] = []
+    skipping = False
+    for line in lines:
+        stripped = line.strip()
+        name = stripped.split(" ")[0] if stripped else ""
+        if name in columns:
+            skipping = True   # drop this column line and its continuation comments
+            continue
+        if skipping and stripped.startswith("--"):
+            continue
+        skipping = False
+        out.append(line)
+    # Whatever column now ends the list must lose its trailing comma. Walk
+    # back from ");" over continuation comments to the last column line.
+    close = next(i for i, line in enumerate(out) if line.strip() == ");")
+    i = close - 1
+    while out[i].strip().startswith("--"):
+        i -= 1
+    head, _, comment = out[i].partition("--")
+    head = head.rstrip()
+    if head.endswith(","):
+        head = head[:-1]
+    out[i] = head + ("  --" + comment if comment else "")
+    return "\n".join(out)
+
+
+class TestVoiceTransportRows:
+    """MORTIMER_SESSION_MISSES_PLAN.md S1/S4 — tts/stt rows carry
+    quantity/unit, zero tokens, and are priced per natural unit."""
+
+    @pytest.fixture
+    def voice_prices(self, monkeypatch):
+        monkeypatch.setattr(usage_ledger, "_price_map_cache", {"models": {
+            "elevenlabs/eleven_flash_v2_5": {"unit": "chars", "usd_per_1k_chars": 0.10},
+            "deepgram/flux-general-en": {"unit": "seconds", "usd_per_minute": 0.0077},
+            "anthropic/claude-haiku-4-5": {"input_per_m": 1.0, "output_per_m": 5.0},
+        }})
+
+    def test_voice_row_prices_chars_per_1k(self, tmp_path, monkeypatch, voice_prices):
+        monkeypatch.setattr(usage_ledger, "DB_PATH", tmp_path / "costs.db")
+        usage_ledger.record_call(
+            rung="tts", provider="elevenlabs", model="eleven_flash_v2_5",
+            session_id="s1", quantity=2409, unit="chars",
+        )
+        conn = usage_ledger._conn()
+        try:
+            row = conn.execute(
+                "SELECT quantity, unit, input_tokens, output_tokens, "
+                "cache_write_tokens, cache_read_tokens, computed_cost FROM llm_calls"
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row[0] == 2409.0 and row[1] == "chars"
+        assert row[2:6] == (0, 0, 0, 0)
+        assert row[6] == pytest.approx(0.2409)
+
+    def test_voice_row_prices_seconds_per_minute(self, tmp_path, monkeypatch, voice_prices):
+        monkeypatch.setattr(usage_ledger, "DB_PATH", tmp_path / "costs.db")
+        usage_ledger.record_call(
+            rung="stt", provider="deepgram", model="flux-general-en",
+            quantity=165, unit="seconds",
+        )
+        conn = usage_ledger._conn()
+        try:
+            cost, = conn.execute("SELECT computed_cost FROM llm_calls").fetchone()
+        finally:
+            conn.close()
+        assert cost == pytest.approx(165 / 60 * 0.0077)
+
+    def test_voice_row_with_token_only_entry_is_unpriced(self, voice_prices):
+        # A mapped model whose entry has no unit price: unpriced, never free
+        # (and never the token arithmetic — that would price 2,409 "input
+        # tokens" of speech at Haiku's rate).
+        assert usage_ledger.compute_cost(
+            "anthropic", "claude-haiku-4-5", 0, 0, quantity=2409, unit="chars",
+        ) is None
+
+    def test_voice_row_with_wrong_unit_is_unpriced(self, voice_prices):
+        # unit/price mismatch (seconds against a per-1K-chars entry) is a
+        # caller bug that must surface as a gap, not a number.
+        assert usage_ledger.compute_cost(
+            "elevenlabs", "eleven_flash_v2_5", 0, 0, quantity=60, unit="seconds",
+        ) is None
+
+    def test_token_rows_have_null_quantity_and_unit(self, tmp_path, monkeypatch, voice_prices):
+        monkeypatch.setattr(usage_ledger, "DB_PATH", tmp_path / "costs.db")
+        usage_ledger.record_call(
+            rung="supervisor", provider="anthropic", model="claude-haiku-4-5",
+            input_tokens=6, output_tokens=24, cache_write_tokens=8500,
+        )
+        conn = usage_ledger._conn()
+        try:
+            row = conn.execute("SELECT quantity, unit, computed_cost FROM llm_calls").fetchone()
+        finally:
+            conn.close()
+        assert row[0] is None and row[1] is None
+        assert row[2] == pytest.approx(6 * 1e-6 + 8500 * 1e-6 * 1.25 + 24 * 5e-6)
+
+    def test_conn_adds_quantity_and_unit_columns_in_place(self, tmp_path, monkeypatch):
+        """A ledger written by the Rev 3.3 code has plan_state but neither
+        voice column; _conn() must add both, once, keeping existing rows."""
+        import sqlite3
+        db = tmp_path / "rev33.db"
+        legacy = sqlite3.connect(db)
+        legacy.executescript(_schema_without(("quantity", "unit")))
+        legacy.execute(
+            "INSERT INTO llm_calls (ts, month, rung, provider, model, plan_state) "
+            "VALUES ('2026-09-03T00:00:00+00:00', '2026-09', 'selfedit_executor', "
+            "'anthropic', 'm', 'planless')"
+        )
+        legacy.commit(); legacy.close()
+
+        monkeypatch.setattr(usage_ledger, "DB_PATH", db)
+        usage_ledger._conn().close()   # adds the columns
+        conn = usage_ledger._conn()    # idempotent
+        try:
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(llm_calls)")}
+            assert {"quantity", "unit", "plan_state"} <= cols
+            assert conn.execute(
+                "SELECT plan_state, quantity, unit FROM llm_calls"
+            ).fetchone() == ("planless", None, None)
+        finally:
+            conn.close()
+
+    def test_tts_and_stt_are_known_rungs(self):
+        assert "tts" in usage_ledger.RUNGS and "stt" in usage_ledger.RUNGS

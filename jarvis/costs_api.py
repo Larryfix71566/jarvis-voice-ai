@@ -42,6 +42,10 @@ BUDGET = float(os.environ.get("JARVIS_MONTHLY_BUDGET_USD", "0") or 0)
 
 router = APIRouter(prefix="/costs", tags=["costs"])
 EFF = "COALESCE(reported_cost, computed_cost)"
+# MORTIMER_SESSION_MISSES_PLAN.md S1 — the voice transport rungs
+# (jarvis.usage_ledger.RUNGS' tts/stt), the "voice" bucket of
+# scripts/cost_report.py.
+VOICE_RUNGS = frozenset({"tts", "stt"})
 
 
 def _conn() -> sqlite3.Connection:
@@ -59,7 +63,8 @@ def _summary(month: str) -> dict:
         return {"month": month, "calls": 0, "total_usd": 0.0,
                 "projected_usd": 0.0, "by_rung": [], "by_provider": [],
                 "budget_usd": BUDGET, "budget_used_pct": 0.0,
-                "unpriced_calls": 0}
+                "unpriced_calls": 0,
+                "voice_usd": 0.0, "llm_usd": 0.0}
     with _conn() as conn:
         total, calls = conn.execute(
             f"SELECT COALESCE(SUM({EFF}),0), COUNT(*) FROM llm_calls"
@@ -81,6 +86,11 @@ def _summary(month: str) -> dict:
     year, mon = map(int, month.split("-"))
     dim = calendar.monthrange(year, mon)[1]
     projected = (total / days_elapsed) * dim if total else 0.0
+    # MORTIMER_SESSION_MISSES_PLAN.md S5 — the LLM-vs-voice split. The tts
+    # and stt rungs already appear in by_rung by construction; these two
+    # keys exist so a reader (the spoken summary, the Costs tab later) can
+    # say how much of the total was transport without re-deriving it.
+    voice = sum(v for r, v in rungs if r in VOICE_RUNGS)
     return {
         "month": month,
         "calls": calls,
@@ -91,6 +101,8 @@ def _summary(month: str) -> dict:
         "budget_usd": BUDGET,
         "budget_used_pct": round(total / BUDGET * 100, 1) if BUDGET else 0.0,
         "unpriced_calls": unpriced,
+        "voice_usd": round(voice, 2),
+        "llm_usd": round(total - voice, 2),
     }
 
 
@@ -102,6 +114,11 @@ def summary_text(month: str | None = None) -> str:
     parts = [f"So far this month we've spent {s['total_usd']:.2f} dollars"
              f" across {s['calls']} model calls,"
              f" projecting to about {s['projected_usd']:.0f} by month end."]
+    if s.get("voice_usd", 0.0) > 0:
+        # S5: the transport share, spoken — the number the LLM-only ledger
+        # hid for the whole of Phases 0-4.
+        parts.append(f"About {s['voice_usd']:.2f} dollars of that was voice"
+                     " — text to speech and transcription.")
     if s["by_rung"]:
         top = s["by_rung"][0]
         parts.append(f"The biggest line is {top['rung']} at {top['usd']:.2f}.")

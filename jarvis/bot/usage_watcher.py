@@ -64,7 +64,7 @@ import logging
 from collections import deque
 
 from pipecat.frames.frames import MetricsFrame
-from pipecat.metrics.metrics import LLMUsageMetricsData
+from pipecat.metrics.metrics import LLMUsageMetricsData, TTSUsageMetricsData
 from pipecat.observers.base_observer import BaseObserver, FramePushed
 from pipecat.processors.frame_processor import FrameDirection
 
@@ -100,12 +100,20 @@ class UsageMetricsObserver(BaseObserver):
         provider: str,
         session_id: str,
         default_model: str = "unknown",
+        tts_provider: str = "elevenlabs",
+        tts_default_model: str = "eleven_flash_v2_5",
     ) -> None:
         super().__init__()
         self._rung = rung
         self._provider = provider
         self._session_id = session_id
         self._default_model = default_model
+        # MORTIMER_SESSION_MISSES_PLAN.md S2 — the TTS service's usage
+        # frames ride the same MetricsFrame channel; these name the row
+        # they become. pipeline.py passes both explicitly (the literals it
+        # also hands the TTS service itself).
+        self._tts_provider = tts_provider
+        self._tts_default_model = tts_default_model
         self._seen_ids: set[int] = set()
         self._seen_order: deque[int] = deque()
         # Phase 1 (Rev 3.2) landing step (iii), task 8's cold-cache
@@ -127,6 +135,23 @@ class UsageMetricsObserver(BaseObserver):
         if len(self._seen_order) > self._DEDUP_WINDOW:
             self._seen_ids.discard(self._seen_order.popleft())
         for item in frame.data:
+            if isinstance(item, TTSUsageMetricsData):
+                # MORTIMER_SESSION_MISSES_PLAN.md S2 — one ledger row per TTS
+                # submission; value is len(text) of exactly what was sent
+                # (pipecat frame_processor_metrics.py:187-188), which is
+                # what ElevenLabs bills. Dedup by frame id above applies.
+                try:
+                    record_call(
+                        rung="tts",
+                        provider=self._tts_provider,
+                        model=item.model or self._tts_default_model,
+                        session_id=self._session_id,
+                        quantity=float(item.value or 0),
+                        unit="chars",
+                    )
+                except Exception:  # noqa: BLE001 — same discipline as below
+                    logger.warning("usage_watcher tts record_call failed", exc_info=True)
+                continue
             if not isinstance(item, LLMUsageMetricsData):
                 continue
             try:

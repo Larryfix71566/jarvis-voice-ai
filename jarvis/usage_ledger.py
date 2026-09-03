@@ -28,6 +28,9 @@ Rev 3 (2026-09-01, conflict resolution):
                      AppBuildAgent edit loop — the sidecar's own
                      completion calls, previously left UNPATCHED)
     other          : research (site-comparison writer)
+    voice          : tts, stt (MORTIMER_SESSION_MISSES_PLAN.md S1 — the
+                     transport rungs; rows carry quantity/unit, zero
+                     tokens, and are priced per natural unit)
 """
 
 from __future__ import annotations
@@ -51,6 +54,7 @@ RUNGS = frozenset({
     "planning", "council",
     "selfedit_executor", "appbuild_executor",
     "research",
+    "tts", "stt",  # MORTIMER_SESSION_MISSES_PLAN.md S1 — voice transport
 })
 
 # Rev 3 (2026-09-01): anchored to the repo root from this module's own
@@ -79,9 +83,12 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     reported_cost REAL,               -- provider-reported USD (OpenRouter); NULL for native
     computed_cost REAL,               -- from price map; NULL if model missing from map
     gen_id TEXT,                      -- OpenRouter generation id, for later enrichment
-    plan_state TEXT                   -- executor rungs only: 'planned' | 'planless'
+    plan_state TEXT,                  -- executor rungs only: 'planned' | 'planless'
                                       -- (MORTIMER_OPTIMIZATION_PLAN.md Phase 3
                                       -- Rev 3.3); NULL on every other rung
+    quantity REAL,                    -- voice rungs only (MORTIMER_SESSION_MISSES_PLAN.md S1):
+                                      -- characters (tts) or seconds (stt); NULL on token rows
+    unit TEXT                         -- 'chars' | 'seconds'; NULL on token rows
 );
 CREATE INDEX IF NOT EXISTS idx_calls_month ON llm_calls (month);
 CREATE INDEX IF NOT EXISTS idx_calls_rung ON llm_calls (month, rung);
@@ -112,7 +119,9 @@ def compute_cost(provider: str,
                  input_tokens: int,
                  output_tokens: int,
                  cache_write_tokens: int = 0,
-                 cache_read_tokens: int = 0) -> Optional[float]:
+                 cache_read_tokens: int = 0,
+                 quantity: Optional[float] = None,
+                 unit: Optional[str] = None) -> Optional[float]:
     """USD cost from the price map. Returns None (not 0) when the model is
     unmapped — an unmapped model must show up as a gap in reports, never as
     free. input_tokens here means UNCACHED input (see adapters).
@@ -124,10 +133,24 @@ def compute_cost(provider: str,
     available. Keying by bare model alone would let the same model reached
     two different ways collide under one price row with only one of the
     two actual rates. provider comes from provider_from_base_url() or
-    profile["provider"] — either way it's the real route, not a filename."""
+    profile["provider"] — either way it's the real route, not a filename.
+
+    Voice transport (MORTIMER_SESSION_MISSES_PLAN.md S4): when `quantity`
+    is given the row is a tts/stt row and is priced per NATURAL unit from
+    the entry's `usd_per_1k_chars` (unit 'chars') or `usd_per_minute`
+    (unit 'seconds') — the units vendor pages quote, so nobody types a
+    per-second decimal wrong by a factor of 60. Token arithmetic is
+    skipped entirely for such rows. A mapped model whose entry lacks the
+    matching unit price returns None: unpriced, never free."""
     key = f"{provider}/{model}"
     entry = load_price_map().get("models", {}).get(key)
     if not entry:
+        return None
+    if quantity is not None:
+        if unit == "chars" and "usd_per_1k_chars" in entry:
+            return quantity / 1000.0 * float(entry["usd_per_1k_chars"])
+        if unit == "seconds" and "usd_per_minute" in entry:
+            return quantity / 60.0 * float(entry["usd_per_minute"])
         return None
     in_rate = entry.get("input_per_m", 0.0) / 1_000_000
     out_rate = entry.get("output_per_m", 0.0) / 1_000_000
@@ -167,6 +190,11 @@ def _conn() -> sqlite3.Connection:
     cols = {row[1] for row in conn.execute("PRAGMA table_info(llm_calls)")}
     if "plan_state" not in cols:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN plan_state TEXT")
+    # MORTIMER_SESSION_MISSES_PLAN.md S1 (2026-09-03) — voice transport rows.
+    if "quantity" not in cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN quantity REAL")
+    if "unit" not in cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN unit TEXT")
     return conn
 
 
@@ -181,7 +209,9 @@ def record_call(rung: str,
                 gen_id: Optional[str] = None,
                 session_id: Optional[str] = None,
                 ts: Optional[datetime] = None,
-                plan_state: Optional[str] = None) -> None:
+                plan_state: Optional[str] = None,
+                quantity: Optional[float] = None,
+                unit: Optional[str] = None) -> None:
     """Write one call to the ledger. Never raises — cost logging must not
     take down the pipeline. Failures go to stderr.
 
@@ -192,7 +222,12 @@ def record_call(rung: str,
     question the planner/executor split's safety argument rests on —
     agent_events showed ~85% of executor sessions run with no plan at all
     — by splitting executor spend and, joined to council_rounds by time,
-    escalation rate, along that line."""
+    escalation rate, along that line.
+
+    quantity/unit (MORTIMER_SESSION_MISSES_PLAN.md S1): the voice rungs
+    (tts: characters, unit 'chars'; stt: seconds, unit 'seconds') pass
+    these and leave every token count 0; every token rung leaves them
+    None. compute_cost prices by whichever is present."""
     try:
         if rung not in RUNGS:
             # Unknown rung: still record (never lose a row over a label),
@@ -203,18 +238,19 @@ def record_call(rung: str,
         ts = ts or datetime.now(timezone.utc)
         month = ts.strftime("%Y-%m")
         computed = compute_cost(provider, model, input_tokens, output_tokens,
-                                cache_write_tokens, cache_read_tokens)
+                                cache_write_tokens, cache_read_tokens,
+                                quantity=quantity, unit=unit)
         with _lock, _conn() as conn:
             conn.execute(
                 "INSERT INTO llm_calls (ts, month, session_id, rung, provider,"
                 " model, input_tokens, output_tokens, cache_write_tokens,"
                 " cache_read_tokens, reported_cost, computed_cost, gen_id,"
-                " plan_state)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " plan_state, quantity, unit)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (ts.isoformat(), month, session_id, rung, provider, model,
                  input_tokens, output_tokens, cache_write_tokens,
                  cache_read_tokens, reported_cost, computed, gen_id,
-                 plan_state),
+                 plan_state, quantity, unit),
             )
     except Exception as exc:  # pragma: no cover
         import sys

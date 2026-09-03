@@ -1,6 +1,6 @@
 # Mortimer — Session Misses (voice transport in the ledger, late-result repeat, TTS markup, speaker gate, attribution)
 
-**Status:** DRAFT for Larry's approval, 2026-09-03.
+**Status:** APPROVED 2026-09-03 (Larry: *"let's begin implementation"*). **S1–S5 (Steps 1–4, the ledger) IMPLEMENTED 2026-09-03** — see the commit "Session Misses S1–S5"; one deliberate deviation recorded there: `scripts/cost_report.py` gained a `build_report(conn, month) -> dict` factored out of `main()` so §7's `test_cost_report.py` can assert on the dict rather than on stdout (main() renders exactly that dict; output unchanged apart from the new voice section). S6–S11 pending, in §0 order.
 **Author / origin:** Claude (Fable 5.1). Larry, after the 13:44–13:47
 session review: *"create an implementation plan for the misses from the
 recent conversation."* Five misses were found in that session's logs

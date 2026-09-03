@@ -53,6 +53,9 @@ BUCKETS = {
     "planner":    {"planning", "council"},
     "executor":   {"selfedit_executor", "appbuild_executor"},
     "research":   {"research"},
+    # MORTIMER_SESSION_MISSES_PLAN.md S1 — voice transport (rows carry
+    # quantity/unit, zero tokens; priced per natural unit).
+    "voice":      {"tts", "stt"},
 }
 
 
@@ -67,15 +70,11 @@ def q(conn, sql, args=()):
     return conn.execute(sql, args).fetchall()
 
 
-def main() -> None:
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    month = args[0] if args else datetime.now(timezone.utc).strftime("%Y-%m")
-    as_json = "--json" in sys.argv
-
-    if not DB_PATH.exists():
-        sys.exit(f"No ledger at {DB_PATH}")
-    conn = sqlite3.connect(DB_PATH)
-
+def build_report(conn: sqlite3.Connection, month: str) -> dict:
+    """The report as a dict — every number the text rendering prints.
+    Factored out of main() for MORTIMER_SESSION_MISSES_PLAN.md S1 so the
+    voice split can be pinned by a test (tests/unit/test_cost_report.py)
+    instead of eyeballed in stdout; main() renders exactly this dict."""
     eff = "COALESCE(reported_cost, computed_cost)"
     base = f"FROM llm_calls WHERE month = ?"
 
@@ -134,6 +133,26 @@ def main() -> None:
     tout = sum(r[2] for r in io)
     tcache_r = sum(r[4] for r in io)
 
+    # MORTIMER_SESSION_MISSES_PLAN.md S1 — voice transport. quantity/unit
+    # are added lazily by usage_ledger._conn() (same as plan_state above),
+    # so a ledger no writer has touched since may lack them; fall back to
+    # zeros rather than fail the report.
+    has_quantity = any(
+        r[1] == "quantity" for r in q(conn, "PRAGMA table_info(llm_calls)")
+    )
+    if has_quantity:
+        tts_rows, tts_chars, tts_usd = q(conn, f"""
+            SELECT COUNT(*), COALESCE(SUM(quantity),0), COALESCE(SUM({eff}),0)
+            {base} AND rung = 'tts'""", (month,))[0]
+        stt_rows, stt_seconds, stt_usd = q(conn, f"""
+            SELECT COUNT(*), COALESCE(SUM(quantity),0), COALESCE(SUM({eff}),0)
+            {base} AND rung = 'stt'""", (month,))[0]
+    else:
+        tts_rows = tts_chars = tts_usd = 0
+        stt_rows = stt_seconds = stt_usd = 0
+    voice_usd = by_bucket.get("voice", 0.0)
+    llm_usd = total - voice_usd
+
     report = {
         "month": month,
         "calls": n_calls,
@@ -155,6 +174,13 @@ def main() -> None:
             {"provider": p, "with_cache_reads": h, "calls": t} for p, h, t in cache
         ],
         "daily": [{"day": d, "cost": round(v, 4)} for d, v in days],
+        "voice": {
+            "tts_rows": tts_rows, "tts_chars": tts_chars, "tts_usd": round(tts_usd, 4),
+            "stt_rows": stt_rows, "stt_seconds": round(stt_seconds, 1),
+            "stt_usd": round(stt_usd, 4),
+        },
+        "voice_usd": round(voice_usd, 4),
+        "llm_usd": round(llm_usd, 4),
         "assumption_verdicts": {},
     }
 
@@ -170,35 +196,60 @@ def main() -> None:
     for p, h, t in cache:
         if p == "openrouter" and t >= 10:
             report["assumption_verdicts"]["A5_routed_cache_working"] = h > 0
+    return report
+
+
+def main() -> None:
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    month = args[0] if args else datetime.now(timezone.utc).strftime("%Y-%m")
+    as_json = "--json" in sys.argv
+
+    if not DB_PATH.exists():
+        sys.exit(f"No ledger at {DB_PATH}")
+    conn = sqlite3.connect(DB_PATH)
+    report = build_report(conn, month)
 
     if as_json:
         print(json.dumps(report, indent=2))
         return
 
+    total = report["total_cost_usd"]
+    unpriced = report["unpriced_calls"]
+    tokens = report["tokens"]
     print(f"=== Mortimer cost report — {month} ===")
-    print(f"calls: {n_calls}   total: ${total:.2f}   projected month-end: ${projected:.2f}")
-    if unpriced[0]:
-        print(f"!! {unpriced[0]} calls have NO cost (unmapped models: {unpriced[1]})"
+    print(f"calls: {report['calls']}   total: ${total:.2f}"
+          f"   projected month-end: ${report['projected_month_end_usd']:.2f}")
+    if unpriced["count"]:
+        print(f"!! {unpriced['count']} calls have NO cost (unmapped models: {unpriced['models']})"
               f" — fill config/model_prices.yaml")
-    print(f"tokens: in(uncached)={tin:,}  cache_read={tcache_r:,}  out={tout:,}")
+    print(f"tokens: in(uncached)={tokens['input_uncached']:,}"
+          f"  cache_read={tokens['cache_read']:,}  out={tokens['output']:,}")
     print("\nby rung:")
-    for r, c, v in rungs:
-        pct = (v / total * 100) if total else 0
-        print(f"  {r:<14} {c:>6} calls  ${v:>8.2f}  {pct:5.1f}%")
-    if plan_split:
+    for row in report["per_rung"]:
+        pct = (row["cost"] / total * 100) if total else 0
+        print(f"  {row['rung']:<14} {row['calls']:>6} calls  ${row['cost']:>8.2f}  {pct:5.1f}%")
+    if report["executor_by_plan_state"]:
         print("\nexecutor by plan_state (Phase 3 Rev 3.3):")
-        for r, p, c, v in plan_split:
-            print(f"  {r:<18} {p:<9} {c:>6} calls  ${v:>8.2f}")
+        for row in report["executor_by_plan_state"]:
+            print(f"  {row['rung']:<18} {row['plan_state']:<9} {row['calls']:>6} calls  ${row['cost']:>8.2f}")
     print("\nby bucket:")
-    for k, v in sorted(by_bucket.items(), key=lambda kv: -kv[1]):
+    for k, v in report["per_bucket"].items():
         pct = (v / total * 100) if total else 0
         print(f"  {k:<14} ${v:>8.2f}  {pct:5.1f}%")
+    # MORTIMER_SESSION_MISSES_PLAN.md S1 — the split the LLM-only ledger hid.
+    voice = report["voice"]
+    voice_pct = (report["voice_usd"] / total * 100) if total else 0
+    print("\nvoice transport (MORTIMER_SESSION_MISSES_PLAN.md):")
+    print(f"  tts: {voice['tts_rows']} rows, {int(voice['tts_chars']):,} chars, ${voice['tts_usd']:.4f}")
+    print(f"  stt: {voice['stt_rows']} rows, {voice['stt_seconds'] / 60:.1f} min, ${voice['stt_usd']:.4f}")
+    print(f"  llm ${report['llm_usd']:.4f} vs voice ${report['voice_usd']:.4f}"
+          f"  (voice share {voice_pct:.0f}%)")
     print("\nby model:")
-    for m, i, o, cw, cr, v in io:
-        print(f"  {m:<44} ${v:>8.2f}  cache_r={cr:,}")
+    for row in report["per_model"]:
+        print(f"  {row['model']:<44} ${row['cost']:>8.2f}  cache_r={row['cache_r']:,}")
     print("\ncache reads by provider:")
-    for p, h, t in cache:
-        print(f"  {p:<12} {h}/{t} calls had cache reads")
+    for row in report["cache_hit_calls_by_provider"]:
+        print(f"  {row['provider']:<12} {row['with_cache_reads']}/{row['calls']} calls had cache reads")
     print("\nverdicts:", json.dumps(report["assumption_verdicts"]))
 
 

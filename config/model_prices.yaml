@@ -205,3 +205,29 @@ models:
     cache_write_mult: 1.0
     cache_read_mult: 0.20
     history: []
+
+  # ---- voice transport (MORTIMER_SESSION_MISSES_PLAN.md S4/S5) ----
+  # Priced per natural unit; usage_ledger.compute_cost converts. These rows
+  # carry quantity/unit and zero tokens (rungs tts / stt). The model
+  # strings are the literals jarvis/bot/pipeline.py passes to the TTS and
+  # STT services.
+  #
+  # ElevenLabs bills CREDITS; eleven_flash_v2_5 costs 0.5 credit per
+  # character (elevenlabs.io/pricing, texttolab.com/blog/elevenlabs-pricing,
+  # 2026-09-03), so USD per 1K CHARACTERS is half the plan's USD per 1K
+  # credits. Base rates by tier, per 1K chars: Starter 0.085, Creator 0.11,
+  # Pro 0.10, Scale/Business 0.085. Overage per 1K chars: Creator 0.15,
+  # Pro 0.12, Scale 0.09, Business 0.06. SET FROM YOUR TIER (plan §8 step
+  # 1: GET /v1/user/subscription reports it); shipped at Pro base.
+  elevenlabs/eleven_flash_v2_5:
+    unit: chars
+    usd_per_1k_chars: 0.10
+    history: []
+
+  # Deepgram Flux streaming, pay-as-you-go list (deepgram.com/pricing,
+  # 2026-09-03): $0.0077/min regular; a $0.0065/min promotion was showing
+  # that day. Growth tier $0.0065 regular. Shipped at the regular PAYG rate.
+  deepgram/flux-general-en:
+    unit: seconds
+    usd_per_minute: 0.0077
+    history: []

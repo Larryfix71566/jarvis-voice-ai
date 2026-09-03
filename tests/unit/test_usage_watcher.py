@@ -155,3 +155,81 @@ class TestDedupStillHolds:
         await observer.on_push_frame(frame)
         await observer.on_push_frame(frame)  # same frame object, second hop
         assert len(calls) == 1
+
+
+# ---------------------------------------------------------------- S2: TTS rows
+# MORTIMER_SESSION_MISSES_PLAN.md S2 — pipecat's TTS services push
+# TTSUsageMetricsData(value=len(text)) on the same MetricsFrame channel;
+# each becomes one ledger row on the `tts` rung with quantity/unit.
+
+from pipecat.metrics.metrics import TTSUsageMetricsData  # noqa: E402
+
+
+def _tts_pushed(chars: int, model: str | None = "eleven_flash_v2_5") -> FramePushed:
+    frame = MetricsFrame(data=[TTSUsageMetricsData(processor="tts", model=model, value=chars)])
+    return FramePushed(source=None, destination=None, frame=frame,
+                       direction=FrameDirection.DOWNSTREAM, timestamp=0)
+
+
+class TestTTSUsageRows:
+    @pytest.mark.asyncio
+    async def test_tts_usage_frame_writes_a_chars_row(self, observer, calls):
+        pushed = _tts_pushed(125)
+        await observer.on_push_frame(pushed)
+        assert len(calls) == 1
+        row = calls[0]
+        assert row["rung"] == "tts"
+        assert row["provider"] == "elevenlabs"
+        assert row["model"] == "eleven_flash_v2_5"
+        assert row["session_id"] == "s1"
+        assert row["quantity"] == 125.0 and row["unit"] == "chars"
+        # No token fields on a voice row — the ledger defaults them to 0.
+        assert "input_tokens" not in row and "output_tokens" not in row
+
+    @pytest.mark.asyncio
+    async def test_tts_frame_is_deduplicated_across_hops(self, observer, calls):
+        pushed = _tts_pushed(50)
+        await observer.on_push_frame(pushed)
+        await observer.on_push_frame(pushed)   # same frame object, later hop
+        assert len(calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_tts_row_uses_default_model_when_frame_has_none(self, calls):
+        obs = UsageMetricsObserver(rung="supervisor", provider="anthropic", session_id="s1",
+                                   tts_default_model="eleven_turbo_v2_5")
+        pushed = _tts_pushed(10, model=None)
+        await obs.on_push_frame(pushed)
+        assert calls[0]["model"] == "eleven_turbo_v2_5"
+
+    @pytest.mark.asyncio
+    async def test_tts_provider_is_a_constructor_kwarg(self, calls):
+        obs = UsageMetricsObserver(rung="supervisor", provider="anthropic", session_id="s1",
+                                   tts_provider="cartesia")
+        pushed = _tts_pushed(10)
+        await obs.on_push_frame(pushed)
+        assert calls[0]["provider"] == "cartesia"
+
+    @pytest.mark.asyncio
+    async def test_llm_frames_still_recorded_alongside_tts(self, observer, calls):
+        usage = LLMTokenUsage(prompt_tokens=6, completion_tokens=24, total_tokens=30,
+                               cache_creation_input_tokens=8500, cache_read_input_tokens=0)
+        frame = MetricsFrame(data=[
+            LLMUsageMetricsData(processor="llm", model="claude-haiku-4-5", value=usage),
+            TTSUsageMetricsData(processor="tts", model="eleven_flash_v2_5", value=13),
+        ])
+        pushed = FramePushed(source=None, destination=None, frame=frame,
+                             direction=FrameDirection.DOWNSTREAM, timestamp=0)
+        await observer.on_push_frame(pushed)
+        rungs = sorted(c["rung"] for c in calls)
+        assert rungs == ["supervisor", "tts"]
+        llm = next(c for c in calls if c["rung"] == "supervisor")
+        assert llm["cache_write_tokens"] == 8500 and llm["output_tokens"] == 24
+
+    @pytest.mark.asyncio
+    async def test_tts_record_failure_never_raises(self, observer, monkeypatch, caplog):
+        def boom(**kwargs):
+            raise RuntimeError("ledger down")
+        monkeypatch.setattr(usage_watcher, "record_call", boom)
+        with caplog.at_level(logging.WARNING, logger="jarvis.bot.usage_watcher"):
+            await observer.on_push_frame(_tts_pushed(5))
+        assert "tts record_call failed" in caplog.text

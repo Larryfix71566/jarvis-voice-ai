@@ -25,6 +25,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -104,7 +105,7 @@ from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 # plan's draft API (Flux under services.deepgram.flux.stt, ToolsSchema
 # under adapters.schemas, FunctionSchema instead of raw OpenAI dicts,
 # VAD as VADProcessor, interruptions via the turn-start strategy).
-from jarvis.usage_ledger import provider_from_base_url
+from jarvis.usage_ledger import provider_from_base_url, record_call
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -815,6 +816,10 @@ async def send_app_message(transport: Any, message: dict) -> None:
 
 async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
     """Build per-connection resources and run the pipeline to completion."""
+    # MORTIMER_SESSION_MISSES_PLAN.md S3 — Deepgram Flux streams for the
+    # whole connection and emits no usage metric, so the session's
+    # wall-clock is what the teardown below bills as streamed audio.
+    session_started = time.monotonic()
     settings = load_settings()
     bridge_settings_to_env(settings)
     run_migrations()
@@ -949,6 +954,11 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
                 provider=provider_from_base_url(settings.openai_base_url or ""),
                 session_id=runtime.session_id,
                 default_model=settings.openai_model,
+                # S2 — the same literals the TTS service is built with
+                # (ElevenLabsTTSService(...) above); one place would be
+                # better, but the TTS model string is inline there today.
+                tts_provider="elevenlabs",
+                tts_default_model="eleven_flash_v2_5",
             ),
         ]
         if os.environ.get("JARVIS_DEBUG_OBSERVER"):
@@ -1276,6 +1286,24 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             except Exception:  # noqa: BLE001 — digest must never break shutdown
                 _logger.exception(
                     "kb_digest_failed session=%s", runtime.session_id
+                )
+            # MORTIMER_SESSION_MISSES_PLAN.md S3 — Deepgram Flux streams for
+            # the whole connection and emits no usage metric; bill the
+            # session's wall-clock as streamed audio. Never raises
+            # (record_call catches internally); never delays shutdown.
+            try:
+                record_call(
+                    rung="stt",
+                    provider="deepgram",
+                    model="flux-general-en",
+                    session_id=runtime.session_id,
+                    quantity=max(0.0, time.monotonic() - session_started),
+                    unit="seconds",
+                )
+            except Exception:  # noqa: BLE001
+                _logger.warning(
+                    "stt_ledger_row_failed session=%s", runtime.session_id,
+                    exc_info=True,
                 )
     finally:
         await registry.stop()
