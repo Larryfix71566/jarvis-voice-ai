@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
-# One command to start (or restart) the whole Mortimer stack.
+# One command to start (or restart) the whole Mortimer stack: vault, bot,
+# the Phase 2 memory-extraction worker, admin, web, and the costs API.
 #
 # Usage:
-#   ./scripts/mortimer.sh         start or restart everything (bot + admin + web)
+#   ./scripts/mortimer.sh         start or restart everything
 #   ./scripts/mortimer.sh stop    stop everything
 #   ./scripts/mortimer.sh logs    tail all component logs
+#
+# This replaces scripts/start_jarvis.sh (removed 2026-09-02) as the single
+# canonical launcher -- that script drove the Procfile through overmind/
+# hivemind; this one hand-launches each process itself instead, so it can
+# do proper log rotation and a real stop-then-start restart (overmind's
+# own restart semantics don't rotate logs the way this repo wants). The
+# Procfile is kept only as a process inventory / reference -- nothing
+# executes it anymore; keep it in sync with this file by hand.
 #
 # Components run in the background (nohup, survives terminal close) and
 # append to logs/*.log. Idempotent: always safe to re-run; existing
 # processes are stopped first, so this doubles as "restart".
 #
 # Log rotation (run-logging plan D11/§5.9): each restart used to truncate
-# logs/*.log via `>`, destroying the previous session's diagnostics —
+# logs/*.log via `>`, destroying the previous session's diagnostics --
 # most of Mortimer's runtime output (TURN, [AGENT], [session], USER:/BOT:
 # lines) is print()-to-stdout, which a Python logging.FileHandler never
 # sees, so rotation has to happen here, shell-side. Before each start,
@@ -22,16 +31,21 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 BOT_PORT="${JARVIS_BOT_PORT:-7860}"
+VAULT_PORT=8484
 ADMIN_PORT=7861
 WEB_PORT=5173
+COSTS_PORT=8487
 LOG_GENERATIONS=5
 
 cmd="${1:-start}"
 
 stop_all() {
-  pkill -f "jarvis.bot.bot"        2>/dev/null
-  pkill -f "jarvis.admin.server"   2>/dev/null
-  pkill -f "vite"                  2>/dev/null
+  pkill -f "mortimer-vault serve"            2>/dev/null
+  pkill -f "jarvis.bot.bot"                  2>/dev/null
+  pkill -f "jarvis.memory_extraction_worker" 2>/dev/null
+  pkill -f "jarvis.admin.server"             2>/dev/null
+  pkill -f "vite"                            2>/dev/null
+  pkill -f "jarvis.costs_api"                2>/dev/null
   sleep 1
   return 0
 }
@@ -54,7 +68,7 @@ case "$cmd" in
     exit 0
     ;;
   logs)
-    exec tail -f logs/bot.log logs/admin.log logs/web.log
+    exec tail -f logs/vault.log logs/bot.log logs/extractor.log logs/admin.log logs/web.log logs/costs.log
     ;;
   start)
     ;;
@@ -79,28 +93,44 @@ echo "Restarting Mortimer..."
 stop_all
 
 mkdir -p logs
+rotate_log vault
 rotate_log bot
+rotate_log extractor
 rotate_log admin
 rotate_log web
-nohup ./scripts/run_bot.sh   >> logs/bot.log   2>&1 &
+rotate_log costs
+
+nohup ./scripts/run_kb.sh >> logs/vault.log 2>&1 &
+VAULT_PID=$!
+nohup bash -c "./scripts/wait_for.sh 127.0.0.1 ${VAULT_PORT} 30 vault && exec ./scripts/run_bot.sh" >> logs/bot.log 2>&1 &
 BOT_PID=$!
+nohup ./scripts/run_memory_extractor.sh >> logs/extractor.log 2>&1 &
+EXTRACTOR_PID=$!
 nohup ./scripts/run_admin.sh >> logs/admin.log 2>&1 &
 ADMIN_PID=$!
-nohup ./scripts/run_web.sh   >> logs/web.log   2>&1 &
+nohup ./scripts/run_web.sh >> logs/web.log 2>&1 &
 WEB_PID=$!
+nohup ./scripts/run_costs.sh >> logs/costs.log 2>&1 &
+COSTS_PID=$!
 
-# Give the components a moment, then report health (best-effort).
-sleep 4
-check() {  # name pid url
+# Give the components a moment, then report health (best-effort). Bot
+# waits on vault internally (up to 30s) before it actually launches, so
+# this is a liveness check, not a readiness probe -- a bot that's still
+# inside its own wait_for will still show "running".
+sleep 6
+check() {  # name pid label
   if kill -0 "$2" 2>/dev/null; then
     echo "  $1: running (pid $2) — $3"
   else
     echo "  $1: FAILED to start — see logs/$1.log" >&2
   fi
 }
-check bot   "$BOT_PID"   "http://localhost:$BOT_PORT"
-check admin "$ADMIN_PID" "http://localhost:$ADMIN_PORT/api/health"
-check web   "$WEB_PID"   "http://localhost:$WEB_PORT"
+check vault     "$VAULT_PID"     "tcp 127.0.0.1:$VAULT_PORT"
+check bot       "$BOT_PID"       "http://localhost:$BOT_PORT (waits on vault)"
+check extractor "$EXTRACTOR_PID" "background worker, no port"
+check admin     "$ADMIN_PID"     "http://localhost:$ADMIN_PORT/api/health"
+check web       "$WEB_PID"       "http://localhost:$WEB_PORT"
+check costs     "$COSTS_PID"     "http://localhost:$COSTS_PORT"
 
 echo
 echo "Open http://localhost:$WEB_PORT and click Connect."
