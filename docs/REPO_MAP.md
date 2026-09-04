@@ -14,7 +14,9 @@ current branch.
   council, run log, self-edit service. See below.
 - `mcp_servers/` — MCP skill servers, one directory per server, each
   with `logic.py` (pure, testable) + `server.py` (FastMCP wiring) +
-  `skill.yaml` (manifest).
+  `skill.yaml` (manifest). Includes `mcp_kb/` — read-only tools
+  (`kb_search`/`kb_read`/`kb_neighbors`) over the knowledge-base
+  service; writes go through `jarvis/kb_digest.py` directly, not MCP.
 - `web/` — the React/Vite console (frontend). See below.
 - `config/` — YAML/JSON routing and model config (agents, MCP servers,
   voices, self-edit allowlist, upgrade models/agent bounds). Check here
@@ -25,7 +27,9 @@ current branch.
   registry, bot wiring), `evals/` (live routing eval), `acceptance/`
   (manual checklists, not run by pytest).
 - `scripts/` — run/setup/check scripts (`mortimer.sh`, `run_bot.sh`,
-  `run_admin.sh`, `run_web.sh`, `init_db.py`, `check_env.py`, etc.).
+  `run_admin.sh`, `run_web.sh`, `init_db.py`, `check_env.py`, etc.),
+  plus `cost_report.py` (prints the cost-ledger summary) and
+  `pull_openrouter_activity.py` (pulls OpenRouter usage into it).
 - `data/` — gitignored: `jarvis.db` (SQLite), `secrets.vault`,
   `app_workspaces/` (cloned app repos, self-edit-denied).
 - `logs/` — gitignored: per-run JSONL payloads under `agents/<date>/`,
@@ -58,6 +62,30 @@ current branch.
 - `jarvis/db.py` — SQLite schema + migrations (human-only, never
   self-edited).
 - `jarvis/vault.py` — encrypted credential store (CLI-only).
+- `jarvis/usage_ledger.py` — per-call LLM usage ledger, its own
+  `costs.db` (`llm_calls`) (MORTIMER_OPTIMIZATION_PLAN.md Phase 0).
+- `jarvis/costs_api.py` — HTTP surface over the cost ledger for the
+  admin sidecar (`GET /costs/summary`).
+- `jarvis/memory_extraction.py` — Phase 2 per-exchange candidate
+  extraction + novelty gate ("Extraction Gate").
+- `jarvis/memory_extraction_worker.py` — standalone async post-turn
+  extraction service (own Procfile entry).
+- `jarvis/kb_digest.py` — session-end digester feeding the knowledge-
+  base service (mcp-kb / mortimer-vault).
+- `jarvis/effort.py` — `output_config.effort` control for native-
+  Anthropic (Path B) call sites.
+- `jarvis/anthropic_shim.py` — OpenAI-shaped client shim over
+  Anthropic's native Messages API (Path B).
+- `jarvis/sensitive.py` — financial-detail detection for the
+  sensitive-turn guard (T4a, contract K3), stdlib only.
+- `jarvis/bot/sensitive_turn.py` — the per-turn sensitive ContextVar
+  flag; `is_sensitive()` is FAIL-CLOSED when unset (T4a).
+- `jarvis/bot/usage_watcher.py` — pipeline observer hooking LLM calls
+  into the cost ledger (Phase 0).
+- `jarvis/bot/late_result.py` — strips a late/orphaned delegation's
+  internal "relay this to the user" wrapper text before speaking it.
+- `jarvis/bot/costs_tool.py` — the `cost_summary` direct Supervisor
+  tool (registered unconditionally, no kill switch).
 - `jarvis/procedures.py` — learned task-shape hints injected per run.
 - `jarvis/toolresult.py` — the one tool-success/failure classifier,
   shared by the registry and the sub-agent loop.

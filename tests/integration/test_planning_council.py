@@ -77,23 +77,44 @@ def council_env(tmp_path, monkeypatch):
     return {"registry_path": registry_path, "db_path": db_path}
 
 
-def _fake_call_profile(profile, system_prompt, user_content, timeout_s):
+def _fake_call_profile(profile, system_prompt, user_content, timeout_s, rung=None):
     if system_prompt == council_mod.PLAN_AUTHOR_PROMPT:
         return f"Plan by {profile['model']}: do the thing.", None
     return "SCORES:\nProposal A: 8.0 - good\nProposal B: 6.0 - ok\nProposal C: 7.0 - fine\nProposal D: 5.0 - meh\n", None
 
 
-async def _fake_call_profile_async(profile, system_prompt, user_content, timeout_s):
+async def _fake_call_profile_async(profile, system_prompt, user_content, timeout_s, rung=None):
     return _fake_call_profile(profile, system_prompt, user_content, timeout_s)
 
 
-def test_draft_candidates_fans_out_full_registry_not_just_tier1(council_env, monkeypatch):
-    """P7 — proposer set = the FULL registry's key-present profiles by
-    default, unlike convene()'s tier-1-only fan-out."""
+def test_draft_candidates_default_narrows_to_frontier_tier(council_env, monkeypatch):
+    """MORTIMER_OPTIMIZATION_PLAN.md Phase 3 (2026-09-01) — superseded the
+    original P7 default (FULL key-present registry, every spoken
+    plan_start request bought a 13-drafts fan-out). No explicit `members`
+    now resolves only PLANNING_DEFAULT_PROPOSER_TIERS (frontier);
+    council_env's fixture registry has exactly one frontier profile."""
     monkeypatch.setattr(council_mod, "_call_profile", _fake_call_profile_async)
     result = asyncio.run(council_mod.draft_candidates("write a plan for X"))
     assert result is not None
-    assert len(result.proposals) == 4  # economy-1, economy-2, mid-1, frontier-1
+    assert len(result.proposals) == 1
+    assert {p.profile for p in result.proposals} == {"k-frontier-1"}
+
+
+def test_draft_candidates_explicit_members_can_still_widen_beyond_frontier(
+    council_env, monkeypatch,
+):
+    """The Phase 3 narrowing applies only to the no-selection DEFAULT —
+    an explicit `members["proposers"]` (the console picker, D9) can still
+    fan out to the full registry exactly as before."""
+    monkeypatch.setattr(council_mod, "_call_profile", _fake_call_profile_async)
+    result = asyncio.run(council_mod.draft_candidates(
+        "write a plan for X",
+        members={"proposers": [
+            "k-economy-1", "k-economy-2", "k-mid-1", "k-frontier-1",
+        ]},
+    ))
+    assert result is not None
+    assert len(result.proposals) == 4
     assert {p.profile for p in result.proposals} == {
         "k-economy-1", "k-economy-2", "k-mid-1", "k-frontier-1",
     }
@@ -116,16 +137,38 @@ def test_draft_candidates_never_selects_a_winner(council_env, monkeypatch):
     assert {s.judge_profile for s in result.scores} == {"k-frontier-1"}
 
 
-def test_draft_candidates_default_full_registry_proposing_leaves_no_judges(
+def test_draft_candidates_default_judges_capped_and_mid_first(
     council_env, monkeypatch,
 ):
-    """With every profile proposing (the default), the disjoint-proposer/
-    judge invariant (shared with convene()) leaves nobody eligible to
-    judge — advisory scoring is then simply empty, not an error."""
+    """MORTIMER_OPTIMIZATION_PLAN.md Phase 3 Rev 3.3 (2026-09-03). Narrowing
+    the default proposers to frontier (above) left every other key-present
+    profile eligible to judge — with the real 13-profile registry that is
+    ~10 advisory-only judge calls per spoken plan request, a cost INCREASE
+    the Phase 3 change was not supposed to buy. The no-selection default is
+    now capped at PLANNING_DEFAULT_JUDGE_LIMIT (2) and drawn in
+    PLANNING_DEFAULT_JUDGE_TIERS order (mid, frontier, economy): in this
+    fixture that is k-mid-1, then — no frontier profile is left, the only
+    one is proposing — k-economy-1 (registry order within economy).
+    k-economy-2 is eligible but over the cap."""
     monkeypatch.setattr(council_mod, "_call_profile", _fake_call_profile_async)
     result = asyncio.run(council_mod.draft_candidates("write a plan for X"))
     assert result is not None
-    assert result.scores == []
+    assert {s.judge_profile for s in result.scores} == {"k-mid-1", "k-economy-1"}
+
+
+def test_draft_candidates_explicit_judges_are_not_capped(council_env, monkeypatch):
+    """The cap applies to the no-selection DEFAULT only — an explicit
+    members["judges"] (the console picker) can still seat every eligible
+    profile, exactly as an explicit proposer list can widen past frontier."""
+    monkeypatch.setattr(council_mod, "_call_profile", _fake_call_profile_async)
+    result = asyncio.run(council_mod.draft_candidates(
+        "write a plan for X",
+        members={"judges": ["k-economy-1", "k-economy-2", "k-mid-1"]},
+    ))
+    assert result is not None
+    assert {s.judge_profile for s in result.scores} == {
+        "k-economy-1", "k-economy-2", "k-mid-1",
+    }
 
 
 def test_draft_candidates_writes_planning_workflow_row(council_env, monkeypatch):
@@ -150,7 +193,7 @@ def test_draft_candidates_writes_planning_workflow_row(council_env, monkeypatch)
 def test_draft_candidates_judge_false_skips_scoring(council_env, monkeypatch):
     calls = {"judge_calls": 0}
 
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         if system_prompt == council_mod.PLAN_AUTHOR_PROMPT:
             return f"Plan by {profile['model']}.", None
         calls["judge_calls"] += 1
@@ -309,7 +352,7 @@ def test_planning_rounds_excluded_from_compute_agreement(council_env, monkeypatc
 # job (PLAN_REVIEW_PROMPT instead of PLAN_AUTHOR_PROMPT, placement=
 # "review" instead of "doc"). convene() itself is untouched by this.
 
-def _fake_call_profile_review(profile, system_prompt, user_content, timeout_s):
+def _fake_call_profile_review(profile, system_prompt, user_content, timeout_s, rung=None):
     if system_prompt == council_mod.PLAN_REVIEW_PROMPT:
         return f"Review by {profile['model']}: looks fine.", None
     if system_prompt == council_mod.PLAN_AUTHOR_PROMPT:
@@ -317,7 +360,7 @@ def _fake_call_profile_review(profile, system_prompt, user_content, timeout_s):
     return "SCORES:\nProposal A: 8.0 - good\nProposal B: 6.0 - ok\nProposal C: 7.0 - fine\nProposal D: 5.0 - meh\n", None
 
 
-async def _fake_call_profile_review_async(profile, system_prompt, user_content, timeout_s):
+async def _fake_call_profile_review_async(profile, system_prompt, user_content, timeout_s, rung=None):
     return _fake_call_profile_review(profile, system_prompt, user_content, timeout_s)
 
 
@@ -360,7 +403,7 @@ def test_draft_candidates_review_context_injected_into_proposer_message(
     same _proposer_user_message assembly convene() uses."""
     seen: dict[str, str] = {}
 
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         seen[profile["name"]] = user_content
         return _fake_call_profile_review(profile, system_prompt, user_content, timeout_s)
 
@@ -397,7 +440,7 @@ def test_draft_candidates_without_context_still_uses_author_prompt(council_env, 
 def test_convene_never_passes_document_context_unaffected(council_env, monkeypatch):
     """R3 — convene() (the escalation path) never sets context['document'],
     so its message assembly is untouched by the review branch."""
-    async def _fake(profile, system_prompt, user_content, timeout_s):
+    async def _fake(profile, system_prompt, user_content, timeout_s, rung=None):
         assert "DOCUMENT UNDER REVIEW" not in user_content
         if system_prompt == council_mod.PROPOSER_PROMPT:
             return f"corrected approach by {profile['model']}", None

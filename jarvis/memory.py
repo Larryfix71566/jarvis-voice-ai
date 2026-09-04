@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import sqlite3
 from typing import Any, Callable
@@ -30,6 +31,8 @@ from openai import AsyncOpenAI
 
 from jarvis.config import Settings
 from jarvis.db import get_conn, now_iso
+from jarvis.sensitive import detect_financial
+from jarvis.usage_ledger import record_completion, provider_from_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -63,16 +66,43 @@ DEFAULT_TIER = "project"  # unknown/legacy rows land in the middle, never identi
 # state jarvis.memory_sweep's capacity-enforcement ladder eliminates, not
 # one this renderer papers over by silently dropping. These numbers are
 # sized so a FULL store (every tier at its cap) fits inside
-# MAX_CONTEXT_CHARS: 8ish identity + 15 preference + 8 project facts at the
+# MAX_CONTEXT_CHARS: 8ish identity + 30 preference + 8 project facts at the
 # observed ~90 chars/fact is ~2,800 chars, comfortably under 3,000 — a
 # prompt already ~10KB deep can afford that. The old flat MAX_FACTS = 30
 # global cap is DELETED here: it overlapped with these per-tier caps (the
 # combination is how the panel once showed an unexplainable "261 / 30"),
 # and the per-tier numbers are now the one set of caps that matters.
-MAX_PREFERENCE_FACTS = 15
+# MAX_PREFERENCE_FACTS: 15 -> 30 (2026-08-31, Larry has >15 real standing
+# preferences) -> 60 (2026-09-03, MORTIMER_OPTIMIZATION_PLAN.md Phase 4
+# Rev 3.4 Stage A). The 30 cap was dropping 25 of 55 live preference facts
+# from EVERY session — measured against Larry's real store — and the ones
+# it dropped were his least-recently-UPDATED working-style preferences
+# (user.style.status, user.style.approval, user.style.verification, ...),
+# i.e. exactly the standing instructions that are stable BECAUSE they never
+# need restating. The cap was originally a token-cost defence; since Phase 1
+# the whole block sits inside the Supervisor's cached prefix and is rendered
+# once per session, so the true cost of the 25 restored facts is ~700 cached
+# tokens ~= $0.0003/session. What remains is a model-attention argument,
+# which is a guess in both directions — so it is now instrumented instead of
+# assumed (Stage A3's restated-fact rate) and revertible by this constant.
+MAX_PREFERENCE_FACTS = 60
+# Deliberately NOT raised: project is the growth tier (it accumulates a fact
+# per active piece of work), and on-demand recall via the librarian's
+# memory_search is what Phase 4 Stage B is for. Raising this one is how the
+# prefix grows without bound.
 MAX_PROJECT_FACTS = 8
 MAX_SUMMARY_CHARS = 600
-MAX_CONTEXT_CHARS = 3000
+# 3000 -> 8000 (2026-08-31) -> 12000 (2026-09-03, Phase 4 Rev 3.4 Stage A).
+# Load-bearing, not headroom-for-its-own-sake: measured against Larry's
+# real store, raising MAX_PREFERENCE_FACTS alone renders 9,818 chars over
+# 71 facts (~138 chars/fact) — the old 8,000 budget would have truncated
+# it and silently re-imposed the cap A1 just lifted. Effect on the cached
+# Supervisor prefix: memory block 6,269 -> 9,818 chars (1,567 -> 2,454
+# approx tokens), whole prefix ~7,850 -> ~8,740 tokens, still far above
+# Haiku 4.5's 4,096-token cache floor. Note the direction: this phase only
+# ever GROWS the prefix, so the floor cannot be crossed from above — the
+# risk it does carry is prompt-attention, which Stage A3 measures.
+MAX_CONTEXT_CHARS = 12000
 MAX_TRANSCRIPT_ROWS = 60
 MAX_ROW_CHARS = 300
 
@@ -122,6 +152,47 @@ Rules:
   forward anything still relevant and fold in this session's essentials.
 - If the session contains nothing worth remembering, return
   {"facts": [], "observations": [], "summary": "<previous summary unchanged>"}.
+- Output JSON only. No markdown, no commentary."""
+
+
+# MORTIMER_OPTIMIZATION_PLAN.md Phase 2 kill switch. Default ON: the new
+# per-exchange worker (jarvis/memory_extraction_worker.py +
+# jarvis/memory_extraction.py) is authoritative for facts/observations,
+# and this module's own extraction narrows to summary-only (see
+# SUMMARY_ONLY_PROMPT and update_memory_from_session's
+# extract_facts_and_observations parameter below) so the same session
+# transcript is never re-derived into facts by two independent paths at
+# once -- the exact near-duplicate-under-a-different-key mess Phase 2's
+# novelty gate exists to prevent in the first place. Set to a falsy value
+# (false/0/no/off) to roll back to pre-Phase-2 behavior instantly, with
+# zero code change, if the new worker needs to be pulled.
+def memory_extraction_v2_enabled() -> bool:
+    raw = os.environ.get("JARVIS_MEMORY_EXTRACTION_V2", "true").strip().lower()
+    return raw not in ("false", "0", "no", "off")
+
+
+# Summary-only counterpart to EXTRACTION_PROMPT, used by
+# update_memory_from_session when extract_facts_and_observations=False
+# (Phase 2 kill switch ON) -- facts/observations extraction has moved to
+# jarvis/memory_extraction.py's per-exchange path, but a running summary
+# is inherently a whole-session digest, which only this whole-session
+# path can produce. Always outputs an empty facts list (never omitted)
+# so _parse_update's existing shape check (facts must be a list) keeps
+# working unchanged -- one parser for both prompts, not a second one.
+SUMMARY_ONLY_PROMPT = """You maintain a short running summary of an ongoing conversation between a
+personal AI assistant and its user. You are given the previous running
+summary (possibly empty) and the transcript of one conversation session.
+Produce STRICT JSON only:
+
+{"facts": [], "summary": "<rewritten running summary, at most 500 characters>"}
+
+Rules:
+- The summary must stand alone: it replaces the previous summary, so carry
+  forward anything still relevant and fold in this session's essentials.
+- Do not record durable facts here -- that extraction happens elsewhere;
+  "facts" must always be the empty list.
+- If the session contains nothing worth summarizing, return
+  {"facts": [], "summary": "<previous summary unchanged>"}.
 - Output JSON only. No markdown, no commentary."""
 
 
@@ -298,10 +369,18 @@ def _is_capability_claim(key: str, value: str) -> bool:
     return any(p.search(value_l) for p in _LIMITATION_PATTERNS)
 
 
+# T4a K3 — the memory gate's financial refusal. This is a LOG/DIAGNOSTIC
+# reason in the style of the _CREDENTIAL_PATTERNS reasons above, not spoken
+# copy: jarvis/bot/remember_tool.py:19-22 (D8) forbids surfacing a scan
+# rejection reason to the LLM, which would otherwise rewrite the content to
+# evade the filter. T4b replaces the refusal with a route to the tier.
+FINANCIAL_REJECTION = "financial detail — not stored (sensitive tier not yet enabled)"
+
+
 def scan_memory_content(text: str) -> str | None:
     """Return a short rejection reason if `text` is unsafe to persist as
-    memory (prompt injection, credential/exfiltration pattern, or invisible
-    Unicode), else None. Pure and total — never raises."""
+    memory (prompt injection, credential/exfiltration pattern, financial
+    detail, or invisible Unicode), else None. Pure and total — never raises."""
     if not text:
         return None
     if any(ch in _DANGEROUS_UNICODE for ch in text):
@@ -309,6 +388,8 @@ def scan_memory_content(text: str) -> str | None:
     for pattern, reason in _CREDENTIAL_PATTERNS:
         if pattern.search(text):
             return reason
+    if detect_financial(text) is not None:
+        return FINANCIAL_REJECTION
     lowered = text.lower()
     for pattern, reason in _INJECTION_PATTERNS:
         if pattern.search(lowered):
@@ -316,8 +397,20 @@ def scan_memory_content(text: str) -> str | None:
     return None
 
 
-def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
+def render_memory_context(
+    conn: sqlite3.Connection | None = None, *, stats: dict | None = None,
+) -> str:
     """Build the memory block for the Supervisor system prompt.
+
+    `stats` (Phase 4 Rev 3.4 Stage A2): an optional dict, filled in place
+    with what this render actually produced —
+    {"chars", "approx_tokens", "facts", "dropped_tier_cap",
+     "dropped_char_budget", "summary_dropped"} — from counts the function
+    already computes for its warnings below. Keyword-only and optional so
+    the three existing call sites (bot/pipeline.py, agents/supervisor.py,
+    admin/server.py) are unaffected; pipeline.py passes one and logs it, so
+    the size of the cached prefix's memory half is visible against Haiku's
+    4,096-token cache floor without reading warnings out of a log.
 
     Facts first (most actionable), then the running summary, total size
     capped at MAX_CONTEXT_CHARS. Returns EMPTY_CONTEXT when nothing is
@@ -337,6 +430,15 @@ def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
     """
     own_connection = conn is None
     conn = conn or get_conn()
+    if stats is not None:
+        # Populated up front so an early return (read failure / empty store)
+        # still leaves the caller with a well-formed dict rather than a
+        # half-filled one it has to guard every key of.
+        stats.update({
+            "chars": len(EMPTY_CONTEXT), "approx_tokens": len(EMPTY_CONTEXT) // 4,
+            "facts": 0, "dropped_tier_cap": 0, "dropped_char_budget": 0,
+            "summary_dropped": False,
+        })
     try:
         # K1: order by tier rank first, then recency within the tier.
         # COALESCE covers pre-0012 rows and anything written before the
@@ -409,6 +511,8 @@ def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
             "memory_context_facts_dropped reason=tier_cap count=%d keys=%s",
             len(tier_dropped), tier_dropped[:10],
         )
+    if stats is not None:
+        stats["dropped_tier_cap"] = len(tier_dropped)
 
     lines: list[str] = []
     budget_dropped: list[str] = []
@@ -428,6 +532,9 @@ def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
             "memory_context_facts_dropped reason=char_budget count=%d keys=%s",
             len(budget_dropped), budget_dropped[:10],
         )
+    if stats is not None:
+        stats["dropped_char_budget"] = len(budget_dropped)
+        stats["facts"] = len(lines)
 
     if summary_row is not None:
         summary = summary_row["content"][:MAX_SUMMARY_CHARS]
@@ -436,7 +543,15 @@ def render_memory_context(conn: sqlite3.Connection | None = None) -> str:
             lines.append(f"Previously discussed: {summary[:remaining]}")
         else:
             logger.warning("memory_context_summary_dropped reason=char_budget")
-    return "\n".join(lines) if lines else EMPTY_CONTEXT
+            if stats is not None:
+                stats["summary_dropped"] = True
+    rendered = "\n".join(lines) if lines else EMPTY_CONTEXT
+    if stats is not None:
+        stats["chars"] = len(rendered)
+        # //4 is the same rough chars-per-token rule the plan's own prefix
+        # estimates use; this is a watch number, never a billing number.
+        stats["approx_tokens"] = len(rendered) // 4
+    return rendered
 
 
 def archive_fact(conn, key: str, became: str) -> bool:
@@ -747,6 +862,25 @@ def memory_usage(conn: sqlite3.Connection | None = None) -> dict:
             "WHERE kind = 'fact' AND archived_at IS NULL GROUP BY 1",
             (DEFAULT_TIER,),
         ).fetchall()
+        # MORTIMER_OPTIMIZATION_PLAN.md Phase 4 Rev 3.4 Stage A3 — the
+        # recall-failure proxy, as a RATE the memory panel can show:
+        # restated known facts per session over the last 7 days. Both
+        # halves are windowed the same way so the ratio means something;
+        # sessions come from `conversations` because that is what counts a
+        # session whether or not it produced any memory write at all.
+        # Tolerant of a pre-0019 database (the table is created by the
+        # migration, which the panel's process may not have run yet).
+        try:
+            restated_7d = conn.execute(
+                "SELECT COUNT(*) FROM memory_recall_events "
+                "WHERE created_at >= datetime('now', '-7 days')"
+            ).fetchone()[0]
+            sessions_7d = conn.execute(
+                "SELECT COUNT(DISTINCT session_id) FROM conversations "
+                "WHERE created_at >= datetime('now', '-7 days')"
+            ).fetchone()[0]
+        except Exception:  # noqa: BLE001 — a readout must not break the panel
+            restated_7d, sessions_7d = 0, 0
     finally:
         if own_connection:
             conn.close()
@@ -762,6 +896,11 @@ def memory_usage(conn: sqlite3.Connection | None = None) -> dict:
         "caps": caps,
         "max_context_chars": MAX_CONTEXT_CHARS,
         "over_capacity": over_capacity,
+        # Stage A3. The gate for Phase 4 Stage B is restated_7d/sessions_7d
+        # >= 0.1; the raw pair is reported rather than the quotient so a
+        # low-session week cannot make the ratio look alarming on its own.
+        "restated_7d": restated_7d,
+        "sessions_7d": sessions_7d,
     }
 
 
@@ -830,12 +969,25 @@ async def update_memory_from_session(
     settings: Settings,
     session_id: str,
     client_factory: Callable[[Settings], Any] | None = None,
+    extract_facts_and_observations: bool = True,
 ) -> bool:
     """Fold one finished session into long-term memory. Never raises.
 
     Returns True when a parsed update was applied. Skips sessions with no
     user utterances (nothing to learn) and any failure mode (LLM error,
     malformed JSON) leaves memory untouched.
+
+    extract_facts_and_observations (Phase 2 kill switch, default True):
+    every existing call site and every existing test relies on this
+    default to keep behaving exactly as before. The two live call sites
+    (jarvis/bot/memory_watcher.py's MemorySweepWatcher.tick_once and
+    jarvis/bot/pipeline.py's session-teardown fold-in) instead pass
+    `not memory_extraction_v2_enabled()` explicitly, so this function
+    itself never reads the env var -- one place (memory_extraction_v2_
+    enabled) decides the policy, this parameter just carries it in.
+    False switches to SUMMARY_ONLY_PROMPT and skips the upsert_fact/
+    add_observation/promote_observations writes below; the summary
+    still regenerates on the same whole-session cadence as always.
     """
     try:
         with get_conn() as conn:
@@ -854,10 +1006,11 @@ async def update_memory_from_session(
                 base_url=settings.openai_base_url,
             )
         )
+        prompt = EXTRACTION_PROMPT if extract_facts_and_observations else SUMMARY_ONLY_PROMPT
         response = await client.chat.completions.create(
             model=settings.openai_model,
             messages=[
-                {"role": "system", "content": EXTRACTION_PROMPT},
+                {"role": "system", "content": prompt},
                 {
                     "role": "user",
                     "content": (
@@ -867,23 +1020,36 @@ async def update_memory_from_session(
                 },
             ],
         )
+        try:
+            record_completion(
+                rung="memory_extraction",
+                provider=provider_from_base_url(str(client.base_url)),
+                model=settings.openai_model,
+                response=response,
+                session_id=session_id,
+            )
+        except Exception:
+            pass
         update = _parse_update(response.choices[0].message.content or "")
         if update is None:
             logger.warning("memory_update_unparseable session=%s", session_id)
             return False
 
         with get_conn() as conn:
-            for key, value in update["facts"]:
-                upsert_fact(conn, key, value, session_id)
-            for key, value in update["observations"]:
-                add_observation(conn, key, value, session_id)
-            promoted = promote_observations(conn)
+            promoted: list[str] = []
+            if extract_facts_and_observations:
+                for key, value in update["facts"]:
+                    upsert_fact(conn, key, value, session_id)
+                for key, value in update["observations"]:
+                    add_observation(conn, key, value, session_id)
+                promoted = promote_observations(conn)
             if update["summary"]:
                 set_summary(conn, update["summary"], session_id)
         logger.info(
-            "memory_updated session=%s facts=%d observations=%d promoted=%s",
+            "memory_updated session=%s facts=%d observations=%d promoted=%s "
+            "v2_writes_skipped=%s",
             session_id, len(update["facts"]), len(update["observations"]),
-            promoted,
+            promoted, not extract_facts_and_observations,
         )
         return True
     except Exception:  # noqa: BLE001 — memory must never break the pipeline

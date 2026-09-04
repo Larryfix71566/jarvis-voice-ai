@@ -515,7 +515,12 @@ class _FakeTTS:
         def __init__(self, **kwargs):
             pass
 
-    def __init__(self, api_key, settings):
+    def __init__(self, api_key, settings, text_filters=None):
+        # MORTIMER_SESSION_MISSES_PLAN.md S9: the real ElevenLabsTTSService
+        # is now built with text_filters=[MarkdownTextFilter()]; this fake
+        # (the second TTS fake in the suite, alongside
+        # tests/integration/test_bot_wiring.py's) must accept the kwarg or
+        # every build_pipeline call in this file raises TypeError.
         pass
 
 

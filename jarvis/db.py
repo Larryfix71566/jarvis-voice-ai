@@ -432,6 +432,122 @@ CREATE TABLE IF NOT EXISTS memory_reviews (
 ALTER TABLE memories ADD COLUMN audience TEXT;
 """
 
+# MORTIMER_OPTIMIZATION_PLAN.md Phase 2 (extraction gate) — the new
+# per-exchange worker (jarvis/memory_extraction_worker.py) needs a
+# cross-process watermark (it is a separate process from the bot, unlike
+# today's in-process MemorySweepWatcher) and both memories/observations
+# need somewhere to record "we've seen this again" so the novelty gate
+# can bump an existing row instead of writing a near-duplicate sibling —
+# see jarvis/memory_extraction.py's module docstring for the full design.
+#
+# recurrence_count/last_seen_at/provenance added to BOTH tables (not just
+# observations) because the novelty gate runs before either an immediate
+# fact admission or a staged observation insert — a re-stated fact is
+# exactly as much "we already know this" as a re-observed tendency.
+# provenance defaults differ by table: memories rows (facts) default
+# 'stated' (today's fact-admission path is reserved for explicit/durable
+# statements per EXTRACTION_PROMPT's existing rules); observations
+# default 'inferred' (that is the whole point of the staging tier).
+# last_seen_at backfills from the best existing timestamp so no row is
+# left NULL for the novelty gate's ORDER BY to trip on.
+MIGRATION_0016 = """
+ALTER TABLE memories ADD COLUMN recurrence_count INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE memories ADD COLUMN last_seen_at TEXT;
+ALTER TABLE memories ADD COLUMN provenance TEXT NOT NULL DEFAULT 'stated';
+ALTER TABLE memories ADD COLUMN source_turn INTEGER;
+UPDATE memories SET last_seen_at = COALESCE(updated_at, created_at)
+  WHERE last_seen_at IS NULL;
+
+ALTER TABLE observations ADD COLUMN recurrence_count INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE observations ADD COLUMN last_seen_at TEXT;
+ALTER TABLE observations ADD COLUMN provenance TEXT NOT NULL DEFAULT 'inferred';
+ALTER TABLE observations ADD COLUMN source_turn INTEGER;
+UPDATE observations SET last_seen_at = created_at WHERE last_seen_at IS NULL;
+
+-- Single-row cursor: the worker is a separate process from the bot (and
+-- from the admin sidecar), so "where did I leave off" must live in the
+-- WAL-mode db, not in that process's memory. id=1 CHECK enforces the
+-- exactly-one-row invariant at the schema level, matching set_summary's
+-- "exactly one row" convention for the summary kind.
+CREATE TABLE IF NOT EXISTS memory_extraction_cursor (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  last_processed_conversation_id INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL
+);
+INSERT OR IGNORE INTO memory_extraction_cursor
+  (id, last_processed_conversation_id, updated_at)
+  VALUES (1, 0, '1970-01-01T00:00:00+00:00');
+"""
+
+# MORTIMER_OPTIMIZATION_PLAN.md Phase 2, continued — a single global
+# cursor (migration 0016) cannot express "session X has an unresolved
+# trailing user turn" without one of two bad outcomes: block every OTHER
+# session's advancement behind it (one busy or stuck session stalls
+# extraction for the whole system), or advance past it and lose the
+# pairing forever. Worse, jarvis/bot/transcript_log.py's P2/P6 privacy
+# gate deliberately never persists a sensitive assistant reply at all —
+# so a dangling user row with NO reply ever coming is not a rare timing
+# glitch, it is designed, expected behavior of this codebase. A cursor
+# that blocks on "wait for the reply" would stall permanently the first
+# time that gate fires.
+#
+# memory_extraction_pending fixes this by tracking the one open user turn
+# per session OUTSIDE the global cursor: the cursor advances unconditionally
+# every poll, and jarvis/memory_extraction_worker.py consults this table
+# (not in-process memory, so it survives a worker restart too) to recover
+# pairing state across polls. A row here older than the worker's orphan
+# timeout is simply dropped — the pairing is given up on, not extracted,
+# which matches the pipeline's own privacy intent: if the assistant side
+# was never safe to persist, extracting from the lone user question isn't
+# either. One row per session (PRIMARY KEY) — a newer user turn overwrites
+# an older unresolved one rather than queuing both, since only the most
+# recent user utterance is ever the trigger for the next reply.
+MIGRATION_0017 = """
+CREATE TABLE IF NOT EXISTS memory_extraction_pending (
+  session_id TEXT PRIMARY KEY,
+  user_content TEXT NOT NULL,
+  user_turn_id INTEGER NOT NULL,
+  first_seen_at TEXT NOT NULL
+);
+"""
+
+# MORTIMER_OPTIMIZATION_PLAN.md Phase 3 Rev 3.3 (2026-09-03). D8.1's
+# retry_validated (1|0|NULL) was NULL on every council round ever recorded
+# — including the one real planner round (e48cfbe1, 2026-09-01) — because
+# it is only written when the post-council retry reaches a session_validate
+# call, and nothing wrote anything when the retry never got there (prose
+# reply, iteration cap, time limit, cancel, decline). NULL therefore could
+# not distinguish "council brief was abandoned" from "not yet". This column
+# makes the outcome explicit at session end; retry_validated keeps its
+# meaning and its readers (compute_agreement etc.) untouched. Vocabulary is
+# documented on jarvis.council.council.record_retry_outcome.
+MIGRATION_0018 = """
+ALTER TABLE council_rounds ADD COLUMN retry_outcome TEXT;
+"""
+
+# MORTIMER_OPTIMIZATION_PLAN.md Phase 4 Rev 3.4, Stage A3 (2026-09-03).
+# The recall-failure proxy. Phase 2's novelty gate already computes, per
+# extracted fact candidate, whether the user just restated something the
+# store already had (outcome 'exact_update' or 'near_duplicate:<key>') —
+# a signal that was thrown away. Not every restatement is a recall miss
+# (people repeat themselves), but the RATE per session is the only signal
+# available that scales without a human labelling anything, and Phase 4's
+# Stage B is gated on it rather than on the assumption that recall is bad.
+# One row per restated fact; 'inserted' and 'rejected' write nothing, and
+# observations are never counted (they are inferred, not restated).
+MIGRATION_0019 = """
+CREATE TABLE IF NOT EXISTS memory_recall_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT,
+  source_turn INTEGER,
+  key TEXT NOT NULL,
+  outcome TEXT NOT NULL,             -- 'exact_update' | 'near_duplicate'
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_recall_events_created
+  ON memory_recall_events(created_at);
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
@@ -449,6 +565,10 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0013_memory_archive", MIGRATION_0013),
     ("0014_council_attempted", MIGRATION_0014),
     ("0015_memory_reviews", MIGRATION_0015),
+    ("0016_memory_extraction_v2", MIGRATION_0016),
+    ("0017_memory_extraction_pending", MIGRATION_0017),
+    ("0018_council_retry_outcome", MIGRATION_0018),
+    ("0019_memory_recall_events", MIGRATION_0019),
 ]
 
 

@@ -10,6 +10,10 @@ from __future__ import annotations
 import sqlite3
 
 from jarvis.db import get_conn, now_iso
+# T4a K3 (review F14): jarvis.memory is not otherwise imported by this
+# subprocess (it pulls in openai.AsyncOpenAI at import time), so this goes
+# straight to jarvis.sensitive, which is stdlib-only (plan §0.5).
+from jarvis.sensitive import detect_financial
 
 
 def _row_to_note(row: sqlite3.Row) -> dict:
@@ -30,6 +34,14 @@ def create_note(title: str, body: str, tags: str = "") -> dict:
         return {"error": "A note needs a title."}
     if not body:
         return {"error": "A note needs a body."}
+    if detect_financial(title) is not None or detect_financial(body) is not None:
+        # T4a K3 (review F14) — a note that failed to save MUST report
+        # failure (unlike the memory gate, which confirms cheerfully — a
+        # note is an explicit user request to store something). The
+        # refusal names the CATEGORY only, never the content, and is a
+        # FIXED string. T4b routes this to the encrypted tier instead of
+        # refusing.
+        return {"error": "not saved: financial detail (sensitive tier not yet enabled)"}
     now = now_iso()
     with get_conn() as conn:
         cur = conn.execute(
@@ -88,6 +100,11 @@ def update_note(
 ) -> dict:
     if title is None and body is None and tags is None:
         return {"error": "Nothing to update — provide title, body or tags."}
+    if (title is not None and detect_financial(title) is not None) or (
+        body is not None and detect_financial(body) is not None
+    ):
+        # T4a K3 (review F14), same gate as create_note above.
+        return {"error": "not saved: financial detail (sensitive tier not yet enabled)"}
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
         if row is None:

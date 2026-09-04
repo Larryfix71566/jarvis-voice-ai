@@ -32,6 +32,7 @@ UI_ACTIONS = frozenset({
 
 UI_TABS = frozenset({
     "repo", "edit", "memory", "runs", "agents", "output", "transcript",
+    "costs",
 })
 
 # Actions for which a tab argument is meaningful. drawer_tab REQUIRES it;
@@ -54,7 +55,8 @@ UI_CONTROL_SCHEMA = {
             "Control the console interface. Call when the user asks to "
             "open/close/show/hide a UI element by voice. Actions: "
             "drawer_open (optional tab) — the right-side tabbed panel "
-            "holding Repo/Edit/Memory/Runs/Developer/Output/Transcript; "
+            "holding Repo/Edit/Memory/Runs/Developer/Output/Transcript/"
+            "Costs; "
             "users may call it the drawer, side panel, sidebar, or "
             "sidecar — drawer_close, drawer_tab (requires tab; the "
             "transcript tab is the conversation log), drawer_popout (send "

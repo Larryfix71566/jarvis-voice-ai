@@ -1,0 +1,11 @@
+{
+  "id": "msg-9",
+  "label": "rtvi-ai",
+  "type": "server-message",
+  "data": {
+    "type": "speaker_gate",
+    "verdict": "dropped",
+    "score": 0.42,
+    "near_threshold": true
+  }
+}

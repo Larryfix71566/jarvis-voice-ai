@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from jarvis.db import get_conn, now_iso
+from jarvis.sensitive import detect_financial  # stdlib-only; no bot-package import cycle
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,13 @@ RUN_ORPHAN_AFTER_S = 900
 RUNLOG_DIR = Path("logs/agents")
 
 _DROPPED = "<dropped: run payload cap exceeded>"
+
+# T4a K3 — replaces a payload value on a sensitive turn. A STRING, and
+# deliberately shaped like the _DROPPED sentinel above, so every reader
+# (mcp_runlog/logic.py, the Runs drawer tab, tests) still finds every key
+# present with the type it expects. K3: "run-log payloads reduced to tool
+# names" — the tool name, seq, ok and latency are always kept.
+SENSITIVE_SENTINEL = "<sensitive>"
 
 # Must exactly match jarvis.agents.base.TIMEOUT_MESSAGE. Duplicated here
 # (rather than imported) because jarvis.agents.base imports jarvis.runlog
@@ -100,6 +108,7 @@ class RunLogger:
         db_path: str | Path | None = None,
         root: Path | None = None,
         model: str | None = None,
+        sensitive: bool = False,
     ) -> None:
         self.run_id = run_id
         self.agent = agent
@@ -113,6 +122,10 @@ class RunLogger:
         # one (never re-derived or defaulted here; the caller is the only
         # place that has settings in hand).
         self.model = model
+        # T4a K3 (plan D-H7). Snapshotted at construction because a delegation
+        # runs in a DETACHED task that outlives the turn — reading the live
+        # flag at write time would see it cleared (review F6).
+        self._sensitive = sensitive
 
         self._db_path = db_path
         self._root = root if root is not None else Path(".")
@@ -138,6 +151,14 @@ class RunLogger:
         seq = self._seq
         self._seq += 1
         return seq
+
+    def _redact(self, value: str) -> bool:
+        if self._sensitive:
+            return True
+        try:
+            return detect_financial(value) is not None
+        except Exception:  # noqa: BLE001 — logging must never break the run
+            return False
 
     def _trip_cap(self, added_bytes: int) -> bool:
         """Update byte/event counters; return True the first moment
@@ -237,6 +258,9 @@ class RunLogger:
             self._started_at = now_iso()
             date = self._started_at[:10]
             self.payload_path = RUNLOG_DIR / date / f"{self.run_id}.jsonl"
+            # T4a K3 (P12, review F5) — task is known at construction, so the
+            # snapshot alone suffices.
+            task = SENSITIVE_SENTINEL if self._redact(self.task) else self.task
             self._buffer.append({
                 "type": "run_start",
                 "seq": self._next_seq(),
@@ -244,7 +268,7 @@ class RunLogger:
                 "agent": self.agent,
                 "display_name": self.display_name,
                 "session_id": self.session_id,
-                "task": self.task,
+                "task": task,
                 "started_at": self._started_at,
             })
             self._execute(
@@ -252,7 +276,7 @@ class RunLogger:
                 "display_name, task, status, started_at, tool_count, model) "
                 "VALUES (?, ?, ?, ?, ?, 'running', ?, 0, ?)",
                 (self.run_id, self.session_id, self.agent, self.display_name,
-                 self.task, self._started_at, self.model),
+                 task, self._started_at, self.model),
             )
         self._safe("start", _do)
 
@@ -261,9 +285,13 @@ class RunLogger:
             self._tool_count += 1
             seq = self._next_seq()
             args_json = json.dumps(arguments, default=str)
+            redact = self._redact(args_json)
+            stored_args = SENSITIVE_SENTINEL if redact else arguments
+            args_json = SENSITIVE_SENTINEL if redact else args_json
             self._append(
                 {"type": "tool_call", "seq": seq, "tool": tool, "at": now_iso()},
-                payload_key="arguments", payload_value=arguments, size_str=args_json,
+                payload_key="arguments", payload_value=stored_args,
+                size_str=args_json,
             )
             self._execute(
                 "INSERT INTO agent_events (run_id, seq, type, tool, "
@@ -282,17 +310,18 @@ class RunLogger:
             else:
                 self._tools_failed += 1
             seq = self._next_seq()
+            stored = SENSITIVE_SENTINEL if self._redact(result) else result
             self._append(
                 {"type": "tool_result", "seq": seq, "tool": tool, "ok": bool(ok),
                  "latency_ms": latency_ms, "at": now_iso()},
-                payload_key="result", payload_value=result, size_str=result,
+                payload_key="result", payload_value=stored, size_str=stored,
             )
             self._execute(
                 "INSERT INTO agent_events (run_id, seq, type, tool, ok, "
                 "latency_ms, result_preview, created_at) "
                 "VALUES (?, ?, 'tool_result', ?, ?, ?, ?, ?)",
                 (self.run_id, seq, tool, 1 if ok else 0, latency_ms,
-                 _truncate(result), now_iso()),
+                 _truncate(stored), now_iso()),
             )
         self._safe("tool_result", _do)
 
@@ -302,9 +331,11 @@ class RunLogger:
     ) -> None:
         def _do() -> None:
             seq = self._next_seq()
+            err = (SENSITIVE_SENTINEL
+                   if (error is not None and self._redact(error)) else error)
             self._buffer.append({
                 "type": "mcp_call", "seq": seq, "tool": tool, "server": server,
-                "ok": bool(ok), "latency_ms": latency_ms, "error": error,
+                "ok": bool(ok), "latency_ms": latency_ms, "error": err,
                 "at": now_iso(),
             })
             self._execute(
@@ -318,6 +349,16 @@ class RunLogger:
 
     def finish(self, reply: str) -> None:
         def _do() -> None:
+            # `reply` is rebound below (redaction). Without this declaration
+            # Python makes it a LOCAL of _do, so the first read raises
+            # UnboundLocalError BEFORE anything runs, _safe swallows it, and
+            # the run row stays status='running' forever with no payload
+            # file. That was every run from 2026-08-28 (the first bot
+            # session after the redaction landed) to 2026-08-31 — 45
+            # `runlog_write_failed op=finish` warnings, all of today's runs
+            # orphaned at each restart. Pinned by
+            # test_finish_redaction_path_binds_reply.
+            nonlocal reply
             if self._finished:
                 return
             self._finished = True
@@ -326,6 +367,11 @@ class RunLogger:
             latency_ms = self._elapsed_ms(ended_at)
             error = _truncate(reply) if status != "ok" else None
             reply_preview = _truncate(reply)
+            if self._redact(reply):
+                reply = SENSITIVE_SENTINEL
+                reply_preview = SENSITIVE_SENTINEL
+                if error is not None:
+                    error = SENSITIVE_SENTINEL
             seq = self._next_seq()
             self._append(
                 {"type": "run_end", "seq": seq, "status": status,

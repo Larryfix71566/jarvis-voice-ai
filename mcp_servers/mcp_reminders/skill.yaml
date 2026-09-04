@@ -4,6 +4,11 @@ version: 1.0.0
 class: standard
 tools: [set_reminder, list_reminders, complete_reminder, cancel_reminder, get_due_reminders]
 requires_env: []
+# T4a K3 (deviation logged during implementation, 2026-08-27): same gap as
+# mcp-notes' skill.yaml — Step 8's financial gate transitively reads
+# JARVIS_SENSITIVE_GUARD_ENABLED; declared here so K2 scoping still forwards
+# the operator's override to this subprocess. Has a code default (enabled).
+optional_env: [JARVIS_SENSITIVE_GUARD_ENABLED]
 requires_keychain: []
 scopes: []
 test: "python3 -m pytest tests/unit/test_mcp_reminders_logic.py -q"

@@ -148,7 +148,7 @@ async def _do_replay(round_id: str, judge_tier_name: str, *, dry_run: bool) -> i
     # of scope for this plan.
     replay_scores, _replay_usage = await council_mod._gather_scores(
         replay_judge_names, profiles_by_name, judge_user_content, labels,
-        shadow=True,
+        shadow=True, rung="council",
     )
 
     live_winner, live_reason = select_winner(proposals, live_scores, registry_order)

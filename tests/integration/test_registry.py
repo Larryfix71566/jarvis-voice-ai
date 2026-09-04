@@ -9,8 +9,8 @@ import yaml
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 
 ALL_SERVERS = [
-    "mcp-time", "mcp-notes", "mcp-memory", "mcp-reminders", "mcp-web",
-    "mcp-system", "mcp-git", "mcp-apps", "mcp-repo", "mcp-runlog",
+    "mcp-time", "mcp-notes", "mcp-memory", "mcp-kb", "mcp-reminders",
+    "mcp-web", "mcp-system", "mcp-git", "mcp-apps", "mcp-repo", "mcp-runlog",
     "mcp-selfedit", "mcp-screen",
 ]
 # time 4, notes 7, reminders 5, web 3, system 2, git 8, apps 5, repo 5,
@@ -19,12 +19,17 @@ ALL_SERVERS = [
 # count was not, and the mismatch only surfaced once the branch merged
 # alongside a main that still carried the old number. repo (5) added by
 # MORTIMER_AGENT_TRUST_PLAN.md D10-D12: repo_read_file, repo_list_files,
-# repo_search, repo_write_file, repo_commit_write.
-TOTAL_TOOLS = 64  # ...+2 (2026-08-21: mcp-memory's memory_review_list/_resolve)
+# repo_search, repo_write_file, repo_commit_write. mcp-kb (3) — the
+# knowledge-base service's read-oriented tools (kb_search, kb_read,
+# kb_neighbors; kb_write/kb_delete/kb_flush are logic.py-only, called
+# directly by jarvis/kb_digest.py, never exposed as MCP tools) — shipped
+# without this list or TOTAL_TOOLS being updated (gap-closure plan GC1).
+TOTAL_TOOLS = 67  # ...+2 (2026-08-21: mcp-memory's memory_review_list/_resolve)
                   # ...+1 (B2: mcp-selfedit's selfedit_verify_appearance)
                   # ...+1 (M6, MORTIMER_MEMORY_CAPACITY_PLAN.md: mcp-memory's memory_search)
                   # ...+3 (MORTIMER_SITE_RESEARCH_AND_COMPARISON_PLAN.md R1:
                   #   mcp-web's research_compare_start/research_status/research_save)
+                  # ...+3 (mcp-kb: kb_search/kb_read/kb_neighbors, gap-closure plan GC1)
 
 
 @pytest.fixture

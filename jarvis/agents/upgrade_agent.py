@@ -40,14 +40,17 @@ import asyncio
 import json
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable
 
 import yaml
 
+from jarvis import effort, llm_client
 from jarvis.repo_map import load_repo_map_suffix
 from jarvis.selfedit.service import SelfEditService
+from jarvis.usage_ledger import record_completion, provider_from_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -87,11 +90,20 @@ Jarvis interface by proposing code edits, under these NON-NEGOTIABLE rules:
 
 1. `main` changes only via a human merging a pull request on GitHub. You can
    only open PRs. You can never merge, force-push, or touch main.
-2. You may only read and edit files on the self-edit allowlist (UI sources
-   under web/src, web/public, non-secret config, jarvis/prompts.py,
-   jarvis/skills, docs). If the user's goal requires anything else — wake
-   word, agents, admin, CI, dependencies, the self-edit machinery itself —
-   decline that part and say it requires human development.
+2. You may only read and edit files on the self-edit allowlist. Routine
+   (Tier A): UI sources under web/src and web/public, non-secret config,
+   jarvis/prompts.py, jarvis/skills, jarvis/services, mcp_servers, tests,
+   docs. Core (Tier B): the rest of jarvis/ — the voice pipeline
+   (jarvis/bot), the agents (jarvis/agents), memory, wake word, scripts —
+   is EDITABLE too, with ceremony: a core edit runs an extra import gate
+   and its PR is flagged CORE CHANGE for a human run before merge. Do not
+   decline a core goal because it is "not UI" — do it, carefully, in
+   small self-contained edits. Human-only (Tier 0), decline that part:
+   the self-edit machinery itself (jarvis/selfedit, jarvis/admin,
+   upgrade_agent.py), the allowlist and model registry, jarvis/db.py
+   migrations, the vault and .env, CI, dependency manifests, macos/.
+   A file_read/edit_propose on a Tier-0 path is refused by the tool — if
+   that happens, decline that part with the path named.
 3. Your only tools are file_read, edit_propose, session_validate,
    session_submit. There is no shell and no git tool.
 4. Propose edits with edit_propose, then call session_validate, and only if
@@ -106,6 +118,28 @@ Work style: first read the files relevant to the goal, then propose complete
 new file contents for each file you change, then validate, then submit.
 Reply to the user with a concise summary of what you changed (or why you
 declined), in plain language."""
+
+# MORTIMER_OPTIMIZATION_PLAN.md Phase 3 — "the executor's escalation rule
+# is load-bearing." Injected by run() only alongside a supplied `plan`
+# (P7's plan-adoption kwarg): the invariant a plan gives the executor is
+# NOT "this spec is complete" (no spec is) — it is that every
+# irreversible or architectural decision already got made IN the plan.
+# When what the executor actually finds diverges from what the plan
+# describes, the correct move is to stop and report the divergence, not
+# bridge the gap with its own architectural judgment — that decision
+# belongs in a plan revision (a human, or the planning pathway), not a
+# silent edit. An unplanned single-file self-edit has no spec to diverge
+# from, so this text is meaningless noise there and stays out.
+PLAN_DIVERGENCE_RULE = (
+    "A pre-written plan may not perfectly match what you actually find in "
+    "the repository. That is expected. What is NOT allowed is bridging a "
+    "real divergence yourself: if the plan's design assumptions do not "
+    "hold, or an irreversible/architectural decision the plan should have "
+    "made was left for you, stop and report the divergence in your "
+    "summary instead of deciding it on your own. The plan is where "
+    "architectural decisions live; your job is executing it, not "
+    "revising it."
+)
 
 TOOL_SPECS: list[dict] = [
     {
@@ -282,6 +316,14 @@ class UpgradeAgent:
         self.service = service
         self.cfg = load_agent_config(config_path, section=config_section)
         self._system_prompt = system_prompt or SYSTEM_PROMPT
+        # Cooperative cancel (Larry 2026-08-30/31: a kimi-k3 planner sat
+        # "still running" for the caption goal and nothing could stop it —
+        # selfedit_revert refuses while busy, and there was no cancel at
+        # all). POST /api/selfedit/cancel sets this; the edit loop checks
+        # it before every planner step. It cannot interrupt a completion
+        # call already in flight (that returns or hits its own read
+        # timeout first), so "cancel" means "stop at the next step".
+        self._cancel = threading.Event()
         # G5 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): the
         # developer-loop (SubAgent) has read docs/REPO_MAP.md into its
         # prompt since the Model Discipline plan; this loop — which does
@@ -312,6 +354,13 @@ class UpgradeAgent:
             if "temperature" in prof:
                 # null means: omit the parameter entirely (D-003)
                 self.cfg["temperature"] = prof["temperature"]
+            # Phase 1b (effort control) -- optional per-profile
+            # output_config.effort override (upgrade_models.yaml); absent
+            # means self.cfg.get("effort") stays None, and
+            # extra_body_for() emits nothing, exactly like an agents.yaml
+            # entry with no `effort:` field.
+            if "effort" in prof:
+                self.cfg["effort"] = prof["effort"]
             self._api_key_env = prof.get("api_key_env", "OPENAI_API_KEY")
         else:
             self._api_key_env = "OPENAI_API_KEY"
@@ -334,6 +383,10 @@ class UpgradeAgent:
         # V14 — at most one scope-advisor council per run (E2); reset in
         # run(), same lifecycle as the escalation counters above.
         self._scope_council_used: bool = False
+        # Phase 3 Rev 3.3 — 'planned' | 'planless' for this session's
+        # ledger rows (usage_ledger.record_call's plan_state); set at the
+        # top of run() from whether a `plan` was supplied.
+        self._plan_state: str | None = None
 
         # Defer client construction when the key is absent: run() fails fast
         # with a clear summary instead of the SDK raising at construction.
@@ -349,9 +402,10 @@ class UpgradeAgent:
             self._client = client_factory()
         elif not self._key_missing:
             self._client = self._build_client(
-                self._api_key_env, self.cfg["base_url"])
+                self._api_key_env, self.cfg["base_url"], self.cfg.get("provider"))
 
-    def _build_client(self, api_key_env: str, base_url: str | None) -> Any:
+    def _build_client(self, api_key_env: str, base_url: str | None,
+                      provider: str | None = None) -> Any:
         """Construct the planner client with a BOUNDED call timeout.
 
         Before 2026-08-22 this passed no `timeout`, so the openai SDK's
@@ -363,12 +417,20 @@ class UpgradeAgent:
         default of 2 would silently turn a 120s bound into a 360s one, and
         retrying a model that just proved unreachable is strictly worse
         than failing over to one that answers.
-        """
-        from openai import OpenAI
 
-        return OpenAI(
+        `provider` (MORTIMER_OPTIMIZATION_PLAN.md Phase 1, Rev 3.2, landing
+        step (ii), 2026-09-02): optional so every existing caller and test
+        that only ever passed two positional args keeps working — falls
+        back to base_url-detection inside llm_client.make_sync_client
+        itself when omitted. Routes to jarvis/anthropic_shim.py (prompt
+        caching) instead of the plain OpenAI-compat client when the
+        resolved provider is "anthropic" and JARVIS_ANTHROPIC_NATIVE is
+        not "0".
+        """
+        return llm_client.make_sync_client(
             api_key=os.environ[api_key_env],
             base_url=base_url,
+            provider=provider,
             timeout=PLANNER_CALL_TIMEOUT_S,
             max_retries=0,
         )
@@ -447,8 +509,40 @@ class UpgradeAgent:
         """
         attempts = 0
         while True:
+            # Phase 1b -- recomputed on EVERY iteration, not just once
+            # before the loop: unlike SubAgent._loop (client/model fixed
+            # for the whole run), a failover below can reassign
+            # self._client mid-loop, and output_config.effort must track
+            # whatever profile actually ends up making the request.
+            # `request` itself is never mutated with this -- an ephemeral
+            # copy per attempt, so a failover onto a non-Anthropic profile
+            # drops it cleanly rather than leaving a stale key behind.
+            # getattr(..., "") rather than a bare attribute access: the
+            # record_completion call below already tolerated a test double
+            # with no .base_url (it sat inside a bare try/except Exception
+            # before this Phase 1b change moved the access earlier) -- a
+            # fake client missing base_url now resolves to
+            # provider="unknown" (never "anthropic"), so extra_body_for()
+            # cleanly returns {} instead of the whole call raising.
+            provider = provider_from_base_url(str(getattr(self._client, "base_url", "")))
+            extra_body = effort.extra_body_for(
+                rung=f"{self._council_workflow}_executor", provider=provider,
+                explicit=self.cfg.get("effort"), model=self.model,
+            )
+            call_request = {**request, "extra_body": extra_body} if extra_body else request
             try:
-                return self._client.chat.completions.create(**request)
+                response = self._client.chat.completions.create(**call_request)
+                try:
+                    record_completion(
+                        rung=f"{self._council_workflow}_executor",
+                        provider=provider,
+                        model=self.model,
+                        response=response,
+                        plan_state=self._plan_state,
+                    )
+                except Exception:
+                    pass
+                return response
             except Exception as exc:  # noqa: BLE001 — classified immediately below
                 if not self._is_unreachable(exc) or attempts >= MAX_PLANNER_FAILOVERS:
                     raise
@@ -473,11 +567,25 @@ class UpgradeAgent:
                 self.cfg["model"] = nxt.get("model", self.cfg["model"])
                 self.cfg["base_url"] = nxt.get("base_url") or self.cfg["base_url"]
                 self.cfg["temperature"] = nxt.get("temperature")
+                # Phase 1 Rev 3.2 fix (2026-09-02): this line's four
+                # siblings above already refresh from `nxt` on every
+                # failover; `provider` was the one field nothing consumed
+                # until now, so it went stale silently. A native-vs-compat
+                # client-construction decision now reads it, and a
+                # failover FROM an Anthropic profile TO a differently-
+                # provided one (or vice versa) must not build the wrong
+                # kind of client on the new profile's base_url.
+                self.cfg["provider"] = nxt.get("provider", self.cfg["provider"])
+                # Phase 1b -- mirrors the provider refresh immediately
+                # above: a failover profile's own effort setting (or its
+                # absence) must replace the old profile's, not linger.
+                if "effort" in nxt:
+                    self.cfg["effort"] = nxt["effort"]
                 self._api_key_env = nxt.get("api_key_env", "OPENAI_API_KEY")
                 self.model = self.cfg["model"]
                 self.base_url = self.cfg["base_url"]
                 self._client = self._build_client(
-                    self._api_key_env, self.cfg["base_url"])
+                    self._api_key_env, self.cfg["base_url"], self.cfg.get("provider"))
 
                 # The retry must carry the NEW model and its temperature
                 # rule (D-003), not the dead profile's.
@@ -502,6 +610,8 @@ class UpgradeAgent:
         edit loop's first completion call. Same injection SHAPE as the
         mid-run council escalation brief below (a system message wrapping
         the plan text), just at session start instead of after a failure.
+        PLAN_DIVERGENCE_RULE (Phase 3) rides in the same message, ahead
+        of the plan text — see that constant's comment.
         """
         if self._key_missing:
             return {
@@ -521,6 +631,7 @@ class UpgradeAgent:
         self._scope_council_used = False  # V14 — clean slate per session
         self._failed_profiles = set()     # failover — clean slate per session
         self._failover_notes = []
+        self._plan_state = "planned" if plan else "planless"  # Rev 3.3 ledger tag
 
         started = time.monotonic()
         if not self.service.branch:
@@ -537,6 +648,7 @@ class UpgradeAgent:
             messages.append({
                 "role": "system",
                 "content": (
+                    PLAN_DIVERGENCE_RULE + "\n\n"
                     "A pre-written implementation plan for this goal "
                     "follows. Follow it.\n\n" + plan
                 ),
@@ -564,7 +676,19 @@ class UpgradeAgent:
         # once: iterations_used only increases, and a later council-retry
         # budget extension can't push it back to this value.
         halfway_checkpoint = self.cfg["max_iterations"] // 2
+        cancelled = False
+        # Phase 3 Rev 3.3 — why the loop stopped, for _close_pending_round
+        # (only consulted when a council brief was injected and its retry
+        # never reached session_validate). Falls through as
+        # "iteration_limit" when the `while` condition itself ends the loop.
+        end_reason = "iteration_limit"
         while iterations_used < iterations_budget:
+            if self._cancel.is_set():
+                cancelled = True
+                end_reason = "cancelled"
+                summary = ("cancelled by the user before the next planner step; "
+                           "no changes were submitted")
+                break
             iterations_used += 1
             if iterations_used == halfway_checkpoint and not self.service.proposals:
                 messages.append({
@@ -579,6 +703,7 @@ class UpgradeAgent:
                     ),
                 })
             if time.monotonic() - started > self.cfg["max_session_minutes"] * 60:
+                end_reason = "time_limit"
                 summary = "session time limit reached; no changes were submitted"
                 break
             request: dict[str, Any] = {
@@ -594,6 +719,7 @@ class UpgradeAgent:
             if not tool_calls:
                 summary = message.content or ""
                 ok = True
+                end_reason = "prose_end"
                 break
             messages.append(_assistant_message(message))
             for tc in tool_calls:
@@ -625,6 +751,7 @@ class UpgradeAgent:
                         )
                     if scope_brief:
                         reason = reason + "\n\n[Council scope advice]\n" + scope_brief
+                    self._close_pending_round("declined")
                     self._emit(on_event, {"type": "agent_done", "ok": False,
                                           "declined": True})
                     return {"ok": False, "declined": True, "summary": reason,
@@ -668,6 +795,7 @@ class UpgradeAgent:
                             })
                             summary = ("validation failed twice; session ended without "
                                        "submitting. " + json.dumps(result.get("checks")))
+                            self._close_pending_round("unfinished")
                             self._emit(on_event, {"type": "agent_done", "ok": False})
                             return {"ok": False, "summary": summary,
                                     "status": self.service.status()}
@@ -748,12 +876,50 @@ class UpgradeAgent:
         if self._failover_notes:
             summary = (summary or "") + " [" + "; ".join(self._failover_notes) + "]"
 
+        self._close_pending_round(end_reason)
         self._emit(on_event, {"type": "agent_done", "ok": ok})
         return {
             "ok": ok, "summary": summary, "status": self.service.status(),
             "failovers": list(self._failover_notes),
             "final_profile": self.profile_name,
+            "cancelled": cancelled,
         }
+
+    def request_cancel(self) -> None:
+        """Ask the running edit loop to stop at its next step (see
+        __init__). Safe to call from any thread; idempotent."""
+        self._cancel.set()
+
+    @property
+    def cancel_requested(self) -> bool:
+        return self._cancel.is_set()
+
+    def _close_pending_round(self, reason: str) -> None:
+        """MORTIMER_OPTIMIZATION_PLAN.md Phase 3 Rev 3.3 (2026-09-03). Called
+        from every session exit. If a council brief was injected this
+        session and its retry never reached session_validate (which is the
+        only place _pending_council_round_id is otherwise cleared), record
+        WHY as council_rounds.retry_outcome = "no_retry:<reason>" and say so
+        at WARNING — before this, that case wrote nothing, and
+        retry_validated stayed NULL on every round ever recorded, so "is
+        the council earning its cost" had no data behind it at all.
+        Never raises (D13); lazy import for the usual circular-import
+        reason."""
+        round_id = self._pending_council_round_id
+        if round_id is None:
+            return
+        self._pending_council_round_id = None
+        logger.warning(
+            "council_retry_never_validated round_id=%s reason=%s", round_id, reason,
+        )
+        try:
+            from jarvis.council.council import record_retry_outcome
+            record_retry_outcome(round_id, f"no_retry:{reason}")
+        except Exception:  # noqa: BLE001 — never break the agent loop
+            logger.warning(
+                "council_record_retry_outcome_call_failed round_id=%s",
+                round_id, exc_info=True,
+            )
 
     def _maybe_escalate(self, *, goal: str, trigger: str,
                         context: dict) -> str | None:
@@ -767,11 +933,20 @@ class UpgradeAgent:
         inside the method, not at module load time — avoids a circular
         import.
         """
-        from jarvis.council.config import COUNCIL_MAX_ESCALATIONS
+        from jarvis.council.config import (
+            COUNCIL_MAX_ESCALATIONS, COUNCIL_PLANNER_START_TIER,
+        )
 
         if self._escalations_used >= COUNCIL_MAX_ESCALATIONS:
             return None
-        tier = self._escalations_used + 1          # 1st -> tier 1, 2nd -> tier 2
+        # MORTIMER_OPTIMIZATION_PLAN.md Phase 3: this placement="planner"
+        # escalation starts at COUNCIL_PLANNER_START_TIER (2), not tier 1 —
+        # see council/config.py's comment on that constant for why (in
+        # short: with only tiers 1-2 defined, this caps a session to one
+        # real escalation attempt; a would-be 2nd attempt computes tier=3,
+        # which resolve_members() rejects, and falls through below exactly
+        # like "council unavailable").
+        tier = self._escalations_used + COUNCIL_PLANNER_START_TIER
         self._escalations_used += 1
         # MORTIMER_LLM_COUNCIL_V2_PLAN.md V1 — carry the previous tier's
         # winning proposal into tier >= 2 as an additional candidate.

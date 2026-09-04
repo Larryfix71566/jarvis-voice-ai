@@ -31,7 +31,10 @@ def test_weathergov_module_is_the_only_implementation():
     for path in REPO_ROOT.rglob("*.py"):
         if path == REPO_ROOT / "jarvis" / "weathergov.py":
             continue
-        if "/.venv/" in str(path) or "/tests/" in str(path):
+        # data/ holds self-edit worktrees and app-build clones — full
+        # copies of this repo that legitimately contain weathergov.py.
+        # They are gitignored scratch, not a second implementation.
+        if any(seg in str(path) for seg in ("/.venv/", "/tests/", "/data/")):
             continue
         try:
             text = path.read_text(encoding="utf-8")

@@ -1,0 +1,17 @@
+{
+  "id": "msg-5",
+  "label": "rtvi-ai",
+  "type": "server-message",
+  "data": {
+    "type": "display",
+    "display": {
+      "kind": "markdown",
+      "title": "Weather",
+      "body": "It is sunny.",
+      "surface": "window",
+      "tool": "weather_report",
+      "agent": "analyst",
+      "ts": 1756200000
+    }
+  }
+}

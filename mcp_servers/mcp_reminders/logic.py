@@ -17,6 +17,10 @@ from zoneinfo import ZoneInfo
 from dateutil import parser as date_parser
 
 from jarvis.db import get_conn, now_iso
+# T4a K3 (review F14): jarvis.memory is not otherwise imported by this
+# subprocess (it pulls in openai.AsyncOpenAI at import time), so this goes
+# straight to jarvis.sensitive, which is stdlib-only (plan §0.5).
+from jarvis.sensitive import detect_financial
 
 _WEEKDAYS = (
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
@@ -170,6 +174,9 @@ def set_reminder(message: str, due_expression: str) -> dict:
     message = (message or "").strip()
     if not message:
         return {"error": "A reminder needs a message."}
+    if detect_financial(message) is not None:
+        # T4a K3 (review F14), same gate/refusal shape as mcp_notes.
+        return {"error": "not saved: financial detail (sensitive tier not yet enabled)"}
     resolved = _resolve_date_expression(due_expression)
     if "error" in resolved:
         return resolved

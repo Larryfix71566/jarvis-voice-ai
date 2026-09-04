@@ -1,0 +1,8 @@
+# Extracted from memory fact 'user.interface.analyst_visibility' on conversion (K6.2).
+# REVIEW ME: `when` decides what this matches and `done_when` is
+# what makes it more than a note. Both are drafts.
+name: user-interface-analyst-visibility
+when: "Analyst agent must appear in sidecar agents panel"
+steps:
+  - Analyst agent must appear in sidecar agents panel
+done_when: []

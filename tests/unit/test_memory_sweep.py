@@ -12,6 +12,7 @@ from jarvis.memory import (
     MAX_CONTEXT_CHARS,
     MAX_PREFERENCE_FACTS,
     MAX_PROJECT_FACTS,
+    add_observation,
     archive_fact,
     render_memory_context,
     search_facts,
@@ -19,6 +20,7 @@ from jarvis.memory import (
 )
 from jarvis.memory_sweep import (
     CAPACITY_CAPS,
+    STAGING_EXPIRY_DAYS,
     SWEEP_MAX_ARCHIVES,
     _apply_classification,
     _parse_classification,
@@ -29,6 +31,7 @@ from jarvis.memory_sweep import (
     resolve_review,
     run_auto_consolidation,
     run_capacity_enforcement,
+    run_staging_expiry,
     run_sweep,
     run_stale_sweep,
 )
@@ -144,6 +147,104 @@ def test_system_stale_never_touches_other_tiers(conn):
         "SELECT archived_at FROM memories WHERE key='user.preference.old'"
     ).fetchone()
     assert pref["archived_at"] is None
+
+
+# --- Phase 2 task 4: staging expiry (MORTIMER_OPTIMIZATION_PLAN.md) -------
+
+
+def _observation(conn, key, content, last_seen_at, session_id="s1"):
+    conn.execute(
+        "INSERT INTO observations (key, content, source_session_id, created_at, "
+        "last_seen_at) VALUES (?, ?, ?, ?, ?)",
+        (key, content, session_id, last_seen_at, last_seen_at),
+    )
+
+
+def test_unpromoted_stale_observation_expires(conn):
+    _observation(conn, "user.style.emoji", "uses emoji rarely", "2020-01-01T00:00:00+00:00")
+    conn.commit()
+    expired = run_staging_expiry(conn, expiry_days=STAGING_EXPIRY_DAYS)
+    assert expired == ["user.style.emoji"]
+    assert conn.execute(
+        "SELECT COUNT(*) AS n FROM observations WHERE key='user.style.emoji'"
+    ).fetchone()["n"] == 0
+
+
+def test_fresh_observation_survives(conn):
+    _observation(conn, "user.style.emoji", "uses emoji rarely", now_iso())
+    conn.commit()
+    expired = run_staging_expiry(conn, expiry_days=STAGING_EXPIRY_DAYS)
+    assert expired == []
+    assert conn.execute(
+        "SELECT COUNT(*) AS n FROM observations WHERE key='user.style.emoji'"
+    ).fetchone()["n"] == 1
+
+
+def test_promoted_key_is_left_alone_even_if_stale(conn):
+    # A key that already promoted to a fact -- its leftover raw evidence
+    # rows are harmless and deliberately out of scope for this sweep (see
+    # run_staging_expiry's docstring).
+    _fact(conn, "user.style.emoji", "uses emoji rarely", "preference")
+    _observation(conn, "user.style.emoji", "uses emoji rarely", "2020-01-01T00:00:00+00:00")
+    conn.commit()
+    expired = run_staging_expiry(conn, expiry_days=STAGING_EXPIRY_DAYS)
+    assert expired == []
+    assert conn.execute(
+        "SELECT COUNT(*) AS n FROM observations WHERE key='user.style.emoji'"
+    ).fetchone()["n"] == 1
+
+
+def test_null_last_seen_at_falls_back_to_created_at(conn):
+    # jarvis.memory.add_observation (the pre-Phase-2 write path) never
+    # sets last_seen_at -- the sweep must still expire these via
+    # COALESCE(last_seen_at, created_at), not silently keep them forever.
+    add_observation(conn, "user.style.terse", "keeps replies short", "s1")
+    conn.execute(
+        "UPDATE observations SET created_at = '2020-01-01T00:00:00+00:00' "
+        "WHERE key = 'user.style.terse'"
+    )
+    conn.commit()
+    row = conn.execute(
+        "SELECT last_seen_at FROM observations WHERE key='user.style.terse'"
+    ).fetchone()
+    assert row["last_seen_at"] is None  # confirms the gap this test targets
+
+    expired = run_staging_expiry(conn, expiry_days=STAGING_EXPIRY_DAYS)
+    assert expired == ["user.style.terse"]
+
+
+def test_only_stale_rows_of_a_key_are_removed(conn):
+    _observation(conn, "user.style.emoji", "old mention", "2020-01-01T00:00:00+00:00")
+    _observation(conn, "user.style.emoji", "recent mention", now_iso())
+    conn.commit()
+    expired = run_staging_expiry(conn, expiry_days=STAGING_EXPIRY_DAYS)
+    assert expired == ["user.style.emoji"]
+    remaining = conn.execute(
+        "SELECT content FROM observations WHERE key='user.style.emoji'"
+    ).fetchall()
+    assert [r["content"] for r in remaining] == ["recent mention"]
+
+
+@pytest.mark.asyncio
+async def test_run_sweep_reports_staging_expired(conn, monkeypatch, tmp_path):
+    db_path = tmp_path / "sweep2.db"
+    monkeypatch.setenv("JARVIS_DB_PATH", str(db_path))
+    real_conn = get_conn(db_path)
+    run_migrations(real_conn)
+    _observation(real_conn, "user.style.old", "stale tendency", "2020-01-01T00:00:00+00:00")
+    real_conn.commit()
+    real_conn.close()
+
+    class _FakeSettings:
+        openai_api_key = "k"
+        openai_base_url = "http://unused"
+        openai_model = "fake-model"
+
+    payload = json.dumps({"pairs": [], "audiences": []})
+    result = await run_sweep(
+        db_path=str(db_path), settings=_FakeSettings(), client_factory=_factory(payload),
+    )
+    assert result["staging_expired"] == 1
 
 
 # --- A2/A5: classification parsing (pure) ---------------------------------

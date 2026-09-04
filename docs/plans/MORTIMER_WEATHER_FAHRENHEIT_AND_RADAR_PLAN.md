@@ -1,7 +1,7 @@
 # Mortimer — Weather in Fahrenheit + Radar as Standard
 
 **Author:** Claude Opus 5 (Cowork session), 2026-08-22
-**Status:** awaiting implementation
+**Status:** IMPLEMENTED 2026-08-22 (W1–W8, see CLAUDE.md).
 **Origin:** Larry, 2026-08-22 — *"we currently have a weather display that is
 incomplete … 1) it displays weather temps in C instead of F which is the
 standard for where I am. 2) it lacks a current weather radar display for the

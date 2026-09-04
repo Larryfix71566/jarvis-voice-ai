@@ -5,7 +5,10 @@ Locked processor order (Phase 5):
       -> VADProcessor(SileroVADAnalyzer)          # D-004: VAD is a processor in pipecat 1.4
       -> DeepgramFluxSTTService (flux-general-en) # should_interrupt=False; interruptions come from the turn-start strategy
       -> context_aggregator.user()
-      -> OpenAILLMService
+      -> OpenAILLMService (or GoogleLLMService / AnthropicLLMService --
+         provider-routed off settings.openai_base_url, see the LLM
+         service block below; MORTIMER_OPTIMIZATION_PLAN.md Phase 1 Path
+         A wires AnthropicLLMService with native prompt caching on)
       -> TranscriptLogger
       -> ElevenLabsTTSService (eleven_flash_v2_5)
       -> transport.output()
@@ -22,6 +25,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -31,22 +35,28 @@ from zoneinfo import ZoneInfo
 from pipecat.frames.frames import OutputTransportMessageUrgentFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
-from pipecat.pipeline.task import PipelineTask
+from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.turns.user_start import MinWordsUserTurnStartStrategy
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 
+from jarvis import llm_client
 from jarvis.agents.base import load_sub_agents
 from jarvis.agents.delegate import build_delegate_tool
+from jarvis.anthropic_shim import native_base_url
 from jarvis.bot.display import WeatherReportMerger, build_display_payload
 from jarvis.bot.interruption import InterruptionNotifier
+from jarvis.bot.late_result import LateResultNeutralizer
 from jarvis.bot.memory_watcher import MemorySweepWatcher
 from jarvis.bot.plan_watcher import PlanWatcher
 from jarvis.bot.research_watcher import ResearchWatcher
 from jarvis.bot.progress_watcher import ProgressWatcher, SpeakingStateTracker
 from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.remember_tool import build_remember_tool
+from jarvis.bot.costs_tool import build_cost_summary_tool
+from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.ui_control import build_ui_control_tool
+from jarvis.bot.usage_watcher import UsageMetricsObserver
 from jarvis.bot.handoff_tools import (
     build_clear_clipboard_tool,
     build_read_clipboard_tool,
@@ -73,9 +83,11 @@ from jarvis.db import run_migrations
 from jarvis.logging_config import setup_logging
 from jarvis.memory import (
     MEMORY_EXTRACTION_TIMEOUT_S,
+    memory_extraction_v2_enabled,
     render_memory_context,
     update_memory_from_session,
 )
+from jarvis.kb_digest import write_session_digest
 from jarvis.prompts import (
     SUPERVISOR_PROMPT,
     HANDOFF_ADDENDUM,
@@ -94,6 +106,7 @@ from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 # plan's draft API (Flux under services.deepgram.flux.stt, ToolsSchema
 # under adapters.schemas, FunctionSchema instead of raw OpenAI dicts,
 # VAD as VADProcessor, interruptions via the turn-start strategy).
+from jarvis.usage_ledger import provider_from_base_url, record_call
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -111,6 +124,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
+from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
 
 _logger = logging.getLogger(__name__)
 
@@ -137,6 +151,11 @@ class Runtime:
     # actually received — a dropped speaker's words must not reach the
     # conversations table (the memory sweep folds it into memory).
     speaker_gate: Any = None
+    # T4a K3 — per-turn sensitive flag. Runtime OWNS the object's lifetime
+    # (constructed per session, dies with it); the ContextVar in
+    # jarvis/bot/sensitive_turn.py publishes a reference to THIS object and is
+    # the single access path (review F15). Never persisted.
+    sensitive_turn: SensitiveTurn = field(default_factory=SensitiveTurn)
 
 
 def bot_event_log(event: dict) -> None:
@@ -351,6 +370,7 @@ def build_pipeline(
     )
     set_voice_schema, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
     remember_schema, remember_handler = build_remember_tool(runtime.session_id)
+    cost_summary_schema, cost_summary_handler = build_cost_summary_tool()
 
     # MORTIMER_VOICE_UI_PLAN.md U1/U6 — voice control of the console's UI
     # chrome. Kill switch read here, at the single registration site (same
@@ -456,6 +476,15 @@ def build_pipeline(
          "description": a.description}
         for a in sub_agents.values()
     ])
+    # MORTIMER_OPTIMIZATION_PLAN.md Phase 4 Rev 3.4 Stage A2: the memory
+    # block is the one part of this prompt that grows on its own, and since
+    # Phase 1 the whole prompt is a cached prefix — so its size is now
+    # logged once per pipeline build rather than inferred from the
+    # memory_context_facts_dropped warnings. Two things this makes
+    # answerable without a query: how close the prefix is to Haiku 4.5's
+    # 4,096-token cache floor (below it, caching silently stops), and
+    # whether the Stage A1 cap raise actually cleared the tier-cap drops.
+    memory_stats: dict = {}
     system_prompt = (
         SUPERVISOR_PROMPT.format(
             jarvis_name=settings.jarvis_name,
@@ -464,7 +493,7 @@ def build_pipeline(
             units=settings.jarvis_units,
             agent_catalog=agent_catalog,
             voice_catalog=catalog_summary(catalog),
-            memory_context=render_memory_context(),  # U2.5 persistent memory
+            memory_context=render_memory_context(stats=memory_stats),  # U2.5
         )
         + "\n"
         + VOICE_ADDENDUM
@@ -475,6 +504,22 @@ def build_pipeline(
         # H3/H6 — show_commands is always registered; the clipboard half
         # of the addendum only makes sense when its tools are.
         + ("\n" + HANDOFF_ADDENDUM if clipboard_enabled else "")
+    )
+
+    # Phase 4 Rev 3.4 Stage A2 — see memory_stats above. Logged with the
+    # assembled prompt's own size so the memory half can be read against
+    # the whole cached prefix in one line.
+    # Phase 4 Rev 3.4 Stage A2 — see memory_stats above. Logged with the
+    # assembled prompt's own size so the memory half can be read against
+    # the whole cached prefix in one line.
+    _logger.info(
+        "memory_context_rendered chars=%d approx_tokens=%d facts=%d "
+        "dropped_tier_cap=%d dropped_char_budget=%d summary_dropped=%s "
+        "prompt_chars=%d",
+        memory_stats.get("chars", 0), memory_stats.get("approx_tokens", 0),
+        memory_stats.get("facts", 0), memory_stats.get("dropped_tier_cap", 0),
+        memory_stats.get("dropped_char_budget", 0),
+        memory_stats.get("summary_dropped", False), len(system_prompt),
     )
 
     stt = DeepgramFluxSTTService(
@@ -517,6 +562,41 @@ def build_pipeline(
         )
         _logger.info("supervisor_llm_service service=google model=%s",
                      settings.openai_model)
+    elif ("api.anthropic.com" in (settings.openai_base_url or "")
+          and llm_client.native_enabled()):
+        # MORTIMER_OPTIMIZATION_PLAN.md Phase 1 (Rev 3.2), Path A, landing
+        # step (iii): pipecat's OWN native AnthropicLLMService -- not
+        # jarvis/anthropic_shim.py, which exists to make Path B's
+        # OpenAI-shaped call sites work against the native Messages API.
+        # This service already speaks the native API directly and expects
+        # a real anthropic.AsyncAnthropic client, a different thing
+        # entirely. Lazy import, same reason the Google branch above is:
+        # a non-Anthropic deployment shouldn't need this import to
+        # succeed at module load time.
+        from anthropic import AsyncAnthropic
+        from pipecat.services.anthropic.llm import AnthropicLLMService
+        # Built explicitly rather than letting AnthropicLLMService's own
+        # `client or AsyncAnthropic(api_key=api_key)` default (no
+        # base_url kwarg on this constructor at all) silently ignore
+        # whatever's configured -- reuses the exact stripped-"/v1" helper
+        # Path B's shim already ships and tests (jarvis/anthropic_shim.py
+        # -- the same /v1/v1/messages doubling bug step (ii) found and
+        # fixed there applies here too), so a future non-default
+        # Anthropic-compatible base_url is honoured on Path A the same
+        # way it already is on Path B, not by accident.
+        llm = AnthropicLLMService(
+            api_key=settings.openai_api_key,
+            client=AsyncAnthropic(
+                api_key=settings.openai_api_key,
+                base_url=native_base_url(settings.openai_base_url),
+            ),
+            settings=AnthropicLLMService.Settings(
+                model=settings.openai_model,
+                enable_prompt_caching=True,
+            ),
+        )
+        _logger.info("supervisor_llm_service service=anthropic model=%s prompt_caching=on",
+                     settings.openai_model)
     else:
         llm = OpenAILLMService(
             api_key=settings.openai_api_key,
@@ -526,6 +606,7 @@ def build_pipeline(
     llm.register_function("delegate_task", adapt_to_pipecat(delegate_handler))
     llm.register_function("set_voice", adapt_to_pipecat(set_voice_handler))
     llm.register_function("remember", adapt_to_pipecat(remember_handler))
+    llm.register_function("cost_summary", adapt_to_pipecat(cost_summary_handler))
     if ui_control_enabled:
         llm.register_function("ui_control", adapt_to_pipecat(ui_control_handler))
     if screen_enabled:
@@ -548,6 +629,16 @@ def build_pipeline(
             stability=0.5,
             similarity_boost=0.75,
         ),
+        # MORTIMER_SESSION_MISSES_PLAN.md S9 — VOICE_ADDENDUM has forbidden
+        # markdown since it was written, and on 2026-09-03 Haiku spoke
+        # "**Scheduler**", "**Librarian**" … at ElevenLabs anyway. Emphasis
+        # and backticks are stripped HERE, in code, where a prompt cannot
+        # be ignored. Verified against the deployment venv's pipecat 1.4.0:
+        # the filter leaves prose, em-dashes, digits and quotes untouched
+        # and does NOT strip "#"/"- "/"1. " list markers — those stay
+        # VOICE_ADDENDUM's job. Default InputParams (code blocks and
+        # tables are kept, not dropped).
+        text_filters=[MarkdownTextFilter()],
     )
 
     def to_function_schema(schema: dict) -> FunctionSchema:
@@ -563,6 +654,7 @@ def build_pipeline(
         to_function_schema(delegate_schema),
         to_function_schema(set_voice_schema),
         to_function_schema(remember_schema),
+        to_function_schema(cost_summary_schema),
     ]
     if ui_control_enabled:
         standard_tools.append(to_function_schema(ui_control_schema))
@@ -736,6 +828,10 @@ async def send_app_message(transport: Any, message: dict) -> None:
 
 async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
     """Build per-connection resources and run the pipeline to completion."""
+    # MORTIMER_SESSION_MISSES_PLAN.md S3 — Deepgram Flux streams for the
+    # whole connection and emits no usage metric, so the session's
+    # wall-clock is what the teardown below bills as streamed audio.
+    session_started = time.monotonic()
     settings = load_settings()
     bridge_settings_to_env(settings)
     run_migrations()
@@ -828,6 +924,11 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
                       session_id=str(uuid.uuid4()))
     print(f"[session] {runtime.session_id}", flush=True)
 
+    # T4a K3 — publish the session's flag object into the context so
+    # delegated sub-agent tasks (jarvis/runlog/store.py) can read it. Set
+    # once per session; the object is mutated, never replaced.
+    current_sensitive_turn.set(runtime.sensitive_turn)
+
     try:
         catalog = load_voice_catalog()
         pipeline, _llm, aggregators, pusher = build_pipeline(transport, runtime)
@@ -849,6 +950,13 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
         # InterruptionNotifier already uses (BotStartedSpeakingFrame/
         # BotStoppedSpeakingFrame are born downstream of the TTS service).
         speaking_tracker = SpeakingStateTracker()
+        # MORTIMER_SESSION_MISSES_PLAN.md S6-S8 — rewrites a barge-in
+        # late-result note in place once relayed (see late_result.py).
+        # Constructed here so inject_late_result below can arm it; the
+        # settings flag is the kill switch.
+        late_neutralizer = LateResultNeutralizer(
+            enabled=settings.jarvis_late_result_neutralize_enabled,
+        )
         observers = [
             TranscriptObserver(runtime.session_id, only_from=runtime.speaker_gate),
             InterruptionNotifier(
@@ -856,6 +964,22 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
                 enabled=settings.jarvis_interruption_notice_enabled,
             ),
             speaking_tracker,
+            # 2026-09-01 (MORTIMER_OPTIMIZATION_PLAN.md Phase 0, step 1):
+            # supervisor-rung cost ledger. See jarvis/bot/usage_watcher.py
+            # for why this is a MetricsFrame observer rather than a patch
+            # on OpenAILLMService/Orchestrator directly.
+            UsageMetricsObserver(
+                rung="supervisor",
+                provider=provider_from_base_url(settings.openai_base_url or ""),
+                session_id=runtime.session_id,
+                default_model=settings.openai_model,
+                # S2 — the same literals the TTS service is built with
+                # (ElevenLabsTTSService(...) above); one place would be
+                # better, but the TTS model string is inline there today.
+                tts_provider="elevenlabs",
+                tts_default_model="eleven_flash_v2_5",
+            ),
+            late_neutralizer,
         ]
         if os.environ.get("JARVIS_DEBUG_OBSERVER"):
             # Temporary diagnostic: print every function-call frame hop with
@@ -884,7 +1008,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
                         )
 
             observers.append(_FnFrameProbe())
-        task = PipelineTask(pipeline, observers=observers)
+        task = PipelineTask(
+            pipeline,
+            # Phase 0 step 1 — required for UsageMetricsObserver above to
+            # ever see a frame; confirmed 2026-09-01 no other consumer in
+            # this repo depended on these being off.
+            params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
+            observers=observers,
+        )
         pusher.bind(task)
 
         client_connected = {"value": False}
@@ -962,12 +1093,23 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             aggregators.user().add_messages([{"role": "user", "content": text}])
             await aggregators.user().push_context_frame()
 
+        async def inject_late_result(text: str) -> None:
+            # MORTIMER_SESSION_MISSES_PLAN.md S6: same channel as
+            # inject_context, but the note is registered with the
+            # neutralizer so its imperative dies with the relay turn. The
+            # dict handed to add_messages is the one the neutralizer later
+            # rewrites — pipecat's LLMContext keeps the caller's objects.
+            message = {"role": "user", "content": text}
+            late_neutralizer.arm(message)
+            aggregators.user().add_messages([message])
+            await aggregators.user().push_context_frame()
+
         # Barge-in survival — install the late-delivery hook the delegate
         # tool uses for results whose voice turn was cancelled. Same
-        # inject_context channel the reminders watcher speaks through: the
-        # result arrives as a context note and Mortimer reports it on its
-        # own initiative, exactly like a due reminder.
-        runtime.late_delivery["fn"] = inject_context
+        # context channel the reminders watcher speaks through: the result
+        # arrives as a context note and Mortimer reports it on its own
+        # initiative, exactly like a due reminder — once (S6-S8).
+        runtime.late_delivery["fn"] = inject_late_result
 
         watcher = RemindersWatcher(
             runtime.registry,
@@ -1139,7 +1281,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             # out, or errored.
             try:
                 await asyncio.wait_for(
-                    update_memory_from_session(settings, runtime.session_id),
+                    update_memory_from_session(
+                        settings, runtime.session_id,
+                        # Phase 2 kill switch (MORTIMER_OPTIMIZATION_PLAN.md):
+                        # see jarvis/bot/memory_watcher.py's tick_once for
+                        # why this is computed the same way at both call
+                        # sites instead of defaulting inside the function.
+                        extract_facts_and_observations=not memory_extraction_v2_enabled(),
+                    ),
                     timeout=MEMORY_EXTRACTION_TIMEOUT_S,
                 )
             except asyncio.TimeoutError:
@@ -1149,6 +1298,43 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             except Exception:  # noqa: BLE001 — memory must never break shutdown
                 _logger.exception(
                     "memory_extraction_failed session=%s", runtime.session_id
+                )
+
+            # W1 (2026-08-31): knowledge-base digest, separate layer from
+            # the facts fold-in above. Same never-break-shutdown discipline;
+            # write_session_digest already catches and logs every internal
+            # failure itself (mirrors update_memory_from_session's own
+            # contract), so this wrapper only needs to guard the await.
+            try:
+                await asyncio.wait_for(
+                    write_session_digest(settings, runtime.session_id),
+                    timeout=MEMORY_EXTRACTION_TIMEOUT_S,
+                )
+            except asyncio.TimeoutError:
+                _logger.warning(
+                    "kb_digest_timeout session=%s", runtime.session_id
+                )
+            except Exception:  # noqa: BLE001 — digest must never break shutdown
+                _logger.exception(
+                    "kb_digest_failed session=%s", runtime.session_id
+                )
+            # MORTIMER_SESSION_MISSES_PLAN.md S3 — Deepgram Flux streams for
+            # the whole connection and emits no usage metric; bill the
+            # session's wall-clock as streamed audio. Never raises
+            # (record_call catches internally); never delays shutdown.
+            try:
+                record_call(
+                    rung="stt",
+                    provider="deepgram",
+                    model="flux-general-en",
+                    session_id=runtime.session_id,
+                    quantity=max(0.0, time.monotonic() - session_started),
+                    unit="seconds",
+                )
+            except Exception:  # noqa: BLE001
+                _logger.warning(
+                    "stt_ledger_row_failed session=%s", runtime.session_id,
+                    exc_info=True,
                 )
     finally:
         await registry.stop()

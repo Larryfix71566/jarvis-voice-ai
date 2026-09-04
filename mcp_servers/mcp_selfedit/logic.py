@@ -156,18 +156,27 @@ def selfedit_start(
             return stage_resp
         sid = stage_resp.get("staging_id", "")
         seeded = f", seeded with the plan at {plan_path}" if plan_path else ""
+        # Tier B (MORTIMER_SELFEDIT_TIERS_PLAN.md): the preview SAYS a goal
+        # touches the voice/agent core, so the user hears it before yes.
+        core_paths = (stage_resp.get("tiers") or {}).get("core") or []
+        core_note = (
+            f" This touches the voice/agent core ({', '.join(core_paths)}) — "
+            f"the PR will be flagged CORE CHANGE and needs a real run before merging."
+            if core_paths else ""
+        )
         return {
             "ok": True,
             "needs_confirmation": True,
             "summary": (
                 f"Ready to plan this edit with {chosen or 'the default planner'}{seeded}: "
-                f"“{goal}”. Planning runs in the background and can take several "
+                f"“{goal}”.{core_note} Planning runs in the background and can take several "
                 f"minutes; I can check progress anytime. Say yes to start "
                 f"(staging_id {sid})."
             ),
             "goal": goal,
             "profile": chosen,
             "staging_id": sid,
+            "core_change": bool(core_paths),
         }
 
     # Deprecated fallback: confirm=true with no staging_id, goal restated.

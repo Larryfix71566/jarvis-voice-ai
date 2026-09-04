@@ -75,17 +75,24 @@ class FakeAgent:
     crash = False
     gate: threading.Event | None = None
 
-    def __init__(self, service, profile=None):
-        self.profile = profile
-
     def model_label(self):
         return f"{self.profile or 'kimi-k2'} (fake-model)"
+
+    def __init__(self, service, profile=None):
+        self.profile = profile
+        self._cancel = threading.Event()
+
+    def request_cancel(self):
+        self._cancel.set()
 
     def run(self, goal, plan=None):
         if FakeAgent.gate is not None:
             FakeAgent.gate.wait(timeout=5)
         if FakeAgent.crash:
             raise RuntimeError("boom")
+        if self._cancel.is_set():
+            return {"ok": False, "cancelled": True,
+                    "summary": "cancelled by the user before the next planner step"}
         return {"ok": True, "summary": f"planned {goal!r}"}
 
 
@@ -144,12 +151,47 @@ def test_second_run_refused_while_running_and_writes_gated(registry_file, monkey
     try:
         again = c.post("/api/selfedit/run", json={"goal": "two"}).json()
         assert again["ok"] is False and "already in progress" in again["error"]
-        for ep in ("validate", "submit", "revert"):
+        for ep in ("validate", "submit"):
             blocked = c.post(f"/api/selfedit/{ep}").json()
             assert blocked["ok"] is False and "in progress" in blocked["error"]
     finally:
         gate.set()
     _wait_for_job(c, "done")
+
+
+def test_cancel_stops_a_running_planner_and_settles_cancelled(registry_file, monkeypatch):
+    """2026-08-22/23: a kimi-k3 planner sat 'still running' and nothing could
+    stop it — revert refused while busy, and no cancel existed. Cancel is
+    cooperative (takes effect at the loop's next step) and the job settles
+    as `cancelled`, not `error`."""
+    gate = threading.Event()
+    _install_fake_agent(monkeypatch, gate=gate)
+    c = TestClient(app)
+    assert c.post("/api/selfedit/run", json={"goal": "long one"}).json()["started"]
+    res = c.post("/api/selfedit/cancel").json()
+    assert res["ok"] is True and res["cancel_requested"] is True
+    gate.set()
+    job = _wait_for_job(c, "cancelled")
+    assert "cancelled" in job["summary"]
+
+
+def test_revert_while_running_requests_cancel_instead_of_refusing(registry_file, monkeypatch):
+    """The voice path reaches revert, not cancel — so revert-while-busy
+    must mean 'stop and discard', never 'ask for status instead'."""
+    gate = threading.Event()
+    _install_fake_agent(monkeypatch, gate=gate)
+    c = TestClient(app)
+    assert c.post("/api/selfedit/run", json={"goal": "runaway"}).json()["started"]
+    res = c.post("/api/selfedit/revert").json()
+    assert res["ok"] is True and res["cancel_requested"] is True
+    gate.set()
+    _wait_for_job(c, "cancelled")
+
+
+def test_cancel_when_idle_is_refused(registry_file):
+    c = TestClient(app)
+    res = c.post("/api/selfedit/cancel").json()
+    assert res["ok"] is False and "no self-edit run is in progress" in res["error"]
 
 
 def test_run_unknown_profile_rejected(registry_file):
@@ -390,3 +432,57 @@ def test_run_status_omits_expired_staging(registry_file):
         srv._selfedit_stagings[sid]["created_at"] -= srv.SELFEDIT_STAGING_TTL_S + 1
     body = c.get("/api/selfedit/run").json()
     assert sid not in [s["staging_id"] for s in body["stagings"]]
+
+
+# ------------------------------------------------------------ tier preflight
+
+
+def _preflight_service(monkeypatch, tmp_path):
+    """A SelfEditService over a scratch allowlist with a core tier, so the
+    stage endpoint's pre-flight has real tiers to classify against."""
+    import json
+    from jarvis.selfedit.service import SelfEditService
+    al = tmp_path / "allow.json"
+    al.write_text(json.dumps({
+        "allow": ["web/src/**"], "core": ["jarvis/**"],
+        "deny": ["jarvis/vault.py"],
+    }))
+    svc = SelfEditService(repo_root=tmp_path, allowlist_path=al, github_token=None)
+    monkeypatch.setattr(srv, "_selfedit_service", svc)
+    return svc
+
+
+def test_stage_refuses_a_tier0_goal_before_staging(registry_file, monkeypatch, tmp_path):
+    _preflight_service(monkeypatch, tmp_path)
+    c = TestClient(app)
+    res = c.post("/api/selfedit/stage", json={"goal": "rotate keys in jarvis/vault.py"}).json()
+    assert res["ok"] is False
+    assert "jarvis/vault.py" in res["error"] and "human-only" in res["error"]
+    assert c.get("/api/selfedit/run").json()["stagings"] == []
+
+
+def test_stage_refuses_a_core_goal_without_a_plan(registry_file, monkeypatch, tmp_path):
+    _preflight_service(monkeypatch, tmp_path)
+    c = TestClient(app)
+    res = c.post("/api/selfedit/stage",
+                 json={"goal": "consolidate output in jarvis/bot/display.py"}).json()
+    assert res["ok"] is False and "plan" in res["error"]
+    assert res["tiers"]["core"] == ["jarvis/bot/display.py"]
+
+
+def test_stage_accepts_a_core_goal_with_a_plan_and_flags_it(registry_file, monkeypatch, tmp_path):
+    _preflight_service(monkeypatch, tmp_path)
+    c = TestClient(app)
+    res = c.post("/api/selfedit/stage", json={
+        "goal": "consolidate output in jarvis/bot/display.py",
+        "plan_path": "docs/plans/CONSOLIDATED_DISPLAY.md",
+    }).json()
+    assert res["ok"] is True and res["core_change"] is True
+    assert res["tiers"]["core"] == ["jarvis/bot/display.py"]
+
+
+def test_stage_routine_goal_unchanged(registry_file, monkeypatch, tmp_path):
+    _preflight_service(monkeypatch, tmp_path)
+    c = TestClient(app)
+    res = c.post("/api/selfedit/stage", json={"goal": "tidy web/src/App.tsx"}).json()
+    assert res["ok"] is True and res["core_change"] is False

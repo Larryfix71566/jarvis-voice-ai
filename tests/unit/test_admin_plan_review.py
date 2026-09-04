@@ -70,7 +70,7 @@ def test_review_single_mode_reads_document_and_builds_context(monkeypatch):
 
     monkeypatch.setattr(srv.repo_logic, "repo_read_file", _fake_read_file)
 
-    async def _fake_call_profile(profile, system_prompt, user_content, timeout_s):
+    async def _fake_call_profile(profile, system_prompt, user_content, timeout_s, rung=None):
         assert system_prompt == srv.PLAN_REVIEW_PROMPT
         assert "DOCUMENT UNDER REVIEW (docs/plans/x.md):" in user_content
         assert "PLAN BODY" in user_content
@@ -101,7 +101,7 @@ def test_review_single_mode_truncates_over_max_chars(monkeypatch):
 
     seen = {}
 
-    async def _fake_call_profile(profile, system_prompt, user_content, timeout_s):
+    async def _fake_call_profile(profile, system_prompt, user_content, timeout_s, rung=None):
         seen["user_content"] = user_content
         return "# Review", None
 

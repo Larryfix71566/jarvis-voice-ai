@@ -29,15 +29,20 @@ from typing import Any
 
 from pipecat.frames.frames import (
     Frame,
+    InterruptionFrame,
     LLMFullResponseEndFrame,
     LLMTextFrame,
     OutputAudioRawFrame,
     TranscriptionFrame,
+    UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
 )
 from pipecat.observers.base_observer import BaseObserver, FramePushed
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
+from jarvis.bot.sensitive_turn import (
+    arm_from_text, current_sensitive_turn, is_sensitive, redacted,
+)
 from jarvis.db import get_conn, now_iso
 
 #: Log prefix for assistant turns. scripts/spoken_acceptance.py parses this
@@ -53,6 +58,14 @@ class TranscriptLogger(FrameProcessor):
         self._assistant_buffer: list[str] = []
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        if isinstance(frame, InterruptionFrame):
+            # Barge-in: drop the half-built reply so it is never flushed, and
+            # clear the flag (plan D-H4). Do this BEFORE super()/push.
+            self._assistant_buffer = []
+            holder = current_sensitive_turn.get()
+            if holder is not None:
+                holder.clear()
+
         await super().process_frame(frame, direction)
 
         if isinstance(frame, UserStoppedSpeakingFrame):
@@ -65,8 +78,16 @@ class TranscriptLogger(FrameProcessor):
             text = "".join(self._assistant_buffer).strip()
             self._assistant_buffer = []
             if text:
-                print(f"[{_ts()}] {ASSISTANT_LOG_PREFIX} {text}", flush=True)
-                self._persist("assistant", text)
+                # P2/P7 (plan D-H6, review F2): the reply itself may be the
+                # only place the value appears ("what's my balance?" ->
+                # "$2,431.18"). Scan it before printing/persisting.
+                arm_from_text(text)
+                if is_sensitive():
+                    print(f"[{_ts()}] {ASSISTANT_LOG_PREFIX} "
+                          f"{redacted(text)}", flush=True)
+                else:
+                    print(f"[{_ts()}] {ASSISTANT_LOG_PREFIX} {text}", flush=True)
+                    self._persist("assistant", text)
             self._log_turn("llm_done")
 
         await self.push_frame(frame, direction)
@@ -106,15 +127,33 @@ class TranscriptObserver(BaseObserver):
         self._only_from = only_from
         self._turn_start: float | None = None
         self._audio_logged_for_turn = False
+        self._user_buffer: list[str] = []
 
     async def on_push_frame(self, data: FramePushed) -> None:
         frame = data.frame
         if data.direction != FrameDirection.DOWNSTREAM:
             return
 
+        if isinstance(frame, UserStartedSpeakingFrame):
+            holder = current_sensitive_turn.get()
+            if holder is not None:
+                holder.clear()
+            self._user_buffer = []
+            return
+
         if isinstance(frame, UserStoppedSpeakingFrame):
             self._turn_start = time.perf_counter()
             self._audio_logged_for_turn = False
+            text = " ".join(self._user_buffer).strip()
+            self._user_buffer = []
+            if text:
+                arm_from_text(text)          # arm on the FULL turn text
+                if is_sensitive():
+                    # P6 (plan D-H6): no content to bot.log, no conversations row
+                    print(f"[{_ts()}] USER: {redacted(text)}", flush=True)
+                else:
+                    print(f"[{_ts()}] USER: {text}", flush=True)
+                    _persist(self._session_id, "user", text)  # P1
             return
 
         if isinstance(frame, OutputAudioRawFrame):
@@ -139,11 +178,19 @@ class TranscriptObserver(BaseObserver):
         text = frame.text.strip()
         if not text:
             return
-        print(f"[{_ts()}] USER: {text}", flush=True)
-        _persist(self._session_id, "user", text)
+        # review F13: accumulate; detection and emit happen once at turn close
+        # (6c). Arm incrementally too, so a single-segment turn is armed as
+        # early as possible; arm_from_text is idempotent and total.
+        self._user_buffer.append(text)
+        arm_from_text(" ".join(self._user_buffer))
 
 
 def _persist(session_id: str, role: str, content: str) -> None:
+    # P3 (plan D-H6) — defence in depth. P1/P2 already avoid calling this on a
+    # sensitive turn; this makes a future caller that forgets harmless. Note
+    # is_sensitive() is fail-closed, so an unwired context suppresses here too.
+    if is_sensitive():
+        return
     try:
         with get_conn() as conn:
             conn.execute(

@@ -106,6 +106,37 @@ def test_push_flow(repo):
     assert logic.git_status()["ahead"] == 0
 
 
+def test_push_uses_explicit_refspec_so_upstream_mismatch_cannot_fail_it(repo):
+    """2026-08-23 / 2026-08-30 (live): a branch cut from main inherits
+    origin/main as upstream, and a bare `git push` then refuses with 'the
+    upstream branch of your current branch does not match the name of your
+    current branch'. The push must name its branch."""
+    git(repo, "checkout", "-b", "feature/x", "--track", "origin/main")
+    (repo / "b.txt").write_text("b\n")
+    d = logic.prepare_commit("feature commit")
+    logic.commit(d["action_id"])
+    draft = logic.prepare_push()
+    assert draft["ok"] is True
+    res = logic.push(draft["action_id"])
+    assert res["ok"] is True, res
+    remote_heads = git(repo, "ls-remote", "--heads", "origin", "feature/x")
+    assert "refs/heads/feature/x" in remote_heads
+    assert git(repo, "rev-parse", "--abbrev-ref", "@{upstream}") == "origin/feature/x"
+
+
+def test_push_refuses_if_head_moved_since_the_draft(repo):
+    """A confirm must never push a branch the user did not preview."""
+    (repo / "a.txt").write_text("two\n")
+    d = logic.prepare_commit("c2")
+    logic.commit(d["action_id"])
+    draft = logic.prepare_push()
+    git(repo, "checkout", "-b", "elsewhere")
+    res = logic.push(draft["action_id"])
+    assert res["ok"] is False
+    assert "HEAD moved" in res["error"]
+    assert "main" in res["error"] and "elsewhere" in res["error"]
+
+
 def test_stale_lock_reported_precisely_not_auto_deleted(repo):
     """MORTIMER_AGENT_TRUST_PLAN.md D15: a held index.lock must produce the
     precise path/age/remove-command message, and the file itself must be

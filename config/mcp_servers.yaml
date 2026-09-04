@@ -15,6 +15,13 @@ servers:
     args: ["-m", "mcp_servers.mcp_memory.server"]
     env:
       JARVIS_DB_PATH: "${JARVIS_DB_PATH}"
+  - name: mcp-kb
+    command: python
+    args: ["-m", "mcp_servers.mcp_kb.server"]
+    env: {}
+    # KB_BASE_URL has a code-level default (http://127.0.0.1:8484); no env
+    # entry needed here. skill.yaml's requires_env: [KB_BASE_URL] allowlists
+    # it for pass-through if a real override is ever set.
   - name: mcp-reminders
     command: python
     args: ["-m", "mcp_servers.mcp_reminders.server"]
@@ -44,9 +51,11 @@ servers:
   - name: mcp-repo
     command: python
     args: ["-m", "mcp_servers.mcp_repo.server"]
-    # No env entry (MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md F2): the child
-    # inherits the full parent environment, so an exported
-    # JARVIS_REPO_ROOT still reaches it. The previous
+    # No env entry (MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md F2): the child's
+    # environment is built by SkillRegistry from BASE_ENV_KEYS + this
+    # server's skill.yaml requires_env (MORTIMER_SECURITY_HARDENING_PLAN.md
+    # K2); no env: entry is needed here — mcp-repo's skill.yaml declares
+    # JARVIS_REPO_ROOT, so it still reaches the child. The previous
     # `JARVIS_REPO_ROOT: "${JARVIS_REPO_ROOT}"` line handed the server a
     # LITERAL "${JARVIS_REPO_ROOT}" when the variable was unset
     # (expand_env_vars leaves unknown vars as-is by design), making every
@@ -55,9 +64,12 @@ servers:
   - name: mcp-runlog
     command: python
     args: ["-m", "mcp_servers.mcp_runlog.server"]
-    # No env entry, same rule as mcp-repo above: the child inherits the
-    # full parent environment, and JARVIS_DB_PATH (if set) reaches it
-    # that way — this server is read-only, so no other env is needed.
+    # No env entry, same rule as mcp-repo above: the child's environment
+    # is built by SkillRegistry from BASE_ENV_KEYS + this server's
+    # skill.yaml requires_env (MORTIMER_SECURITY_HARDENING_PLAN.md K2); no
+    # env: entry is needed here — JARVIS_DB_PATH is in BASE_ENV_KEYS, so it
+    # still reaches the child that way — this server is read-only, so no
+    # other env is needed.
     env: {}
   - name: mcp-selfedit
     command: python
@@ -66,10 +78,14 @@ servers:
   - name: mcp-screen
     command: python
     args: ["-m", "mcp_servers.mcp_screen.server"]
-    # No env entry, same rule as mcp-repo/mcp-runlog above: the child
-    # inherits the full parent environment, so JARVIS_SCREEN_ENABLED and
-    # JARVIS_VISION_PROFILE (plus whichever vision profile's API key)
-    # reach it without an explicit allowlist here — and an explicit list
-    # would be actively wrong, since which key is needed depends on
-    # which profile config/upgrade_models.yaml resolves to.
+    # No env entry, same rule as mcp-repo/mcp-runlog above: the child's
+    # environment is built by SkillRegistry from BASE_ENV_KEYS + this
+    # server's skill.yaml requires_env (MORTIMER_SECURITY_HARDENING_PLAN.md
+    # K2); no env: entry is needed here — mcp-screen's skill.yaml declares
+    # JARVIS_SCREEN_ENABLED and JARVIS_VISION_PROFILE, and its
+    # requires_env_dynamic resolves the vision profile's API key by name at
+    # spawn time, so all three still reach the child without a static
+    # allowlist here — a static list would be actively wrong, since which
+    # key is needed depends on which profile config/upgrade_models.yaml
+    # resolves to.
     env: {}

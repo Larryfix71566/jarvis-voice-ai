@@ -9,15 +9,19 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
-from jarvis.selfedit.service import SelfEditService
+from jarvis.selfedit.service import VALIDATE_PYTEST_TIMEOUT_S, SelfEditService
 
 ALLOWLIST = {
     "allow": ["web/src/**", "docs/**"],
-    "deny": ["jarvis/**", ".github/**", "**/.env*"],
+    # Tier B: jarvis/** is editable with ceremony; Tier 0 keeps the loop
+    # itself and the wake word (this fixture's stand-in for "human-only").
+    "core": ["jarvis/**"],
+    "deny": ["jarvis/wakeword.py", "jarvis/selfedit/**", ".github/**", "**/.env*"],
 }
 
 
@@ -39,6 +43,8 @@ def repo(tmp_path: Path) -> Path:
     (work / "web/src/App.tsx").write_text("export default 1;\n")
     (work / "jarvis").mkdir()
     (work / "jarvis/wakeword.py").write_text("# hands off\n")
+    (work / "jarvis/bot").mkdir()
+    (work / "jarvis/bot/display.py").write_text("SURFACE = 'window'\n")
     (work / "config").mkdir()
     (work / "config" / "self_edit_allowlist.json").write_text(json.dumps(ALLOWLIST))
     _git(work, "add", "-A")
@@ -52,20 +58,59 @@ def service(repo: Path) -> SelfEditService:
     return SelfEditService(repo_root=repo, github_token=None)
 
 
+def _user_branch(service: SelfEditService) -> str:
+    _c, out = service._git("branch", "--show-current", cwd=service.repo_root)
+    return out
+
+
 def test_start_session_creates_sandbox_branch_and_tag(service: SelfEditService) -> None:
     res = service.start_session("Add a status panel")
     assert res["ok"], res
     assert res["branch"].startswith("jarvis/self-edit/")
     assert res["rollback_tag"].startswith("pre-selfedit-")
-    code, out = service._git("branch", "--show-current")
-    assert out == res["branch"]
+    # The session branch is checked out in the WORKTREE, never in the
+    # user's checkout (Larry 2026-08-30: "every time we do a self edit we
+    # break git").
+    assert service.work_root is not None and service.work_root.is_dir()
+    assert str(service.work_root).startswith(str(service.repo_root / "data" / "selfedit_worktrees"))
+    _c, wt_branch = service._git("branch", "--show-current", cwd=service.work_root)
+    assert wt_branch == res["branch"]
+    assert _user_branch(service) == "main"
 
 
-def test_start_session_refuses_dirty_tree(service: SelfEditService) -> None:
+def test_start_session_leaves_a_dirty_user_tree_alone(service: SelfEditService) -> None:
+    """The old service refused a dirty tree and the developer would then
+    'clean it up' for the user (2026-08-30 it deleted a directory). With an
+    isolated worktree the user's uncommitted work is simply not involved."""
     (service.repo_root / "web/src/App.tsx").write_text("dirty\n")
+    (service.repo_root / "scratch.txt").write_text("untracked\n")
     res = service.start_session("anything")
-    assert not res["ok"]
-    assert "not clean" in res["error"]
+    assert res["ok"], res
+    assert (service.repo_root / "web/src/App.tsx").read_text() == "dirty\n"
+    assert (service.repo_root / "scratch.txt").exists()
+    # ...and the worktree starts from origin/main, not from the dirty tree.
+    assert (service.work_root / "web/src/App.tsx").read_text() == "export default 1;\n"
+
+
+def test_session_never_moves_the_user_off_their_branch(service: SelfEditService) -> None:
+    """The regression that lost the native-client tree: a feature branch
+    checked out in the user's tree must survive start, edit, and revert
+    untouched — no checkout, no reset."""
+    _git(service.repo_root, "checkout", "-b", "feat/my-work")
+    (service.repo_root / "web/src/Mine.tsx").write_text("mine\n")
+    _git(service.repo_root, "add", "-A")
+    _git(service.repo_root, "commit", "-m", "my work")
+    res = service.start_session("some goal")
+    assert res["ok"], res
+    assert _user_branch(service) == "feat/my-work"
+    service.propose_edit("web/src/App.tsx", "export default 7;\n", "edit")
+    assert _user_branch(service) == "feat/my-work"
+    # The edit landed in the worktree only.
+    assert (service.repo_root / "web/src/App.tsx").read_text() == "export default 1;\n"
+    assert (service.work_root / "web/src/App.tsx").read_text() == "export default 7;\n"
+    service.revert()
+    assert _user_branch(service) == "feat/my-work"
+    assert (service.repo_root / "web/src/Mine.tsx").exists()
 
 
 def test_propose_edit_allowlisted(service: SelfEditService) -> None:
@@ -101,23 +146,42 @@ def test_validate_catches_off_allowlist_working_tree_changes(
     service: SelfEditService,
 ) -> None:
     service.start_session("sneaky")
-    # Bypass the service and dirty a forbidden file directly.
-    (service.repo_root / "jarvis/wakeword.py").write_text("broken\n")
+    # Bypass the service and dirty a forbidden file directly IN THE
+    # SESSION WORKTREE (the user's tree is not part of the session).
+    (service.work_root / "jarvis/wakeword.py").write_text("broken\n")
     res = service.validate()
     allowlist_check = next(c for c in res["checks"] if c["name"] == "allowlist")
     assert not allowlist_check["ok"]
     assert "jarvis/wakeword.py" in allowlist_check["output"]
 
 
-def test_revert_restores_main_and_cleans_up(service: SelfEditService) -> None:
+def test_revert_removes_worktree_and_branch(service: SelfEditService) -> None:
     service.start_session("temporary")
+    worktree = service.work_root
+    branch = service.branch
     service.propose_edit("web/src/App.tsx", "export default 9;\n", "temp")
     res = service.revert()
     assert res["ok"]
-    _c, branch = service._git("branch", "--show-current")
-    assert branch == "main"
+    assert _user_branch(service) == "main"
     assert (service.repo_root / "web/src/App.tsx").read_text() == "export default 1;\n"
+    assert not worktree.exists()
+    code, _out = service._git("rev-parse", "--verify", branch, cwd=service.repo_root)
+    assert code != 0, "session branch should be deleted"
+    _c, worktrees = service._git("worktree", "list", cwd=service.repo_root)
+    assert "selfedit_worktrees" not in worktrees
     assert service.status()["active"] is False
+    assert service.work_root is None
+
+
+def test_a_second_session_can_start_after_revert(service: SelfEditService) -> None:
+    """Teardown must be complete enough that the same slug can be reused —
+    a leftover worktree registration would make every retry of a goal
+    fail with 'already exists'."""
+    assert service.start_session("same goal")["ok"]
+    service.revert()
+    res = service.start_session("same goal")
+    assert res["ok"], res
+    service.revert()
 
 
 def test_second_session_refused_while_active(service: SelfEditService) -> None:
@@ -133,7 +197,7 @@ def test_validate_runs_pytest_gate_and_passes(service: SelfEditService) -> None:
     build, not just leave backend behavior unverified once those three
     pass."""
     service.start_session("add passing test")
-    tests_dir = service.repo_root / "tests" / "unit"
+    tests_dir = service.work_root / "tests" / "unit"
     tests_dir.mkdir(parents=True)
     (tests_dir / "test_ok.py").write_text("def test_ok():\n    assert True\n")
     res = service.validate()
@@ -143,13 +207,22 @@ def test_validate_runs_pytest_gate_and_passes(service: SelfEditService) -> None:
 
 def test_validate_pytest_gate_fails_on_broken_test(service: SelfEditService) -> None:
     service.start_session("add failing test")
-    tests_dir = service.repo_root / "tests" / "unit"
+    tests_dir = service.work_root / "tests" / "unit"
     tests_dir.mkdir(parents=True)
     (tests_dir / "test_broken.py").write_text("def test_broken():\n    assert False\n")
     res = service.validate()
     pytest_check = next(c for c in res["checks"] if c["name"] == "pytest")
     assert not pytest_check["ok"]
     assert res["ok"] is False
+
+
+def test_pytest_gate_timeout_is_900() -> None:
+    """GC1b (gap-closure plan, 2026-09-04): 2,150+ tests; the self-edit run
+    that convened council round e48cfbe1 timed out at the old 300 s ("pytest:
+    timed out after 300s"). CI runs the same `pytest tests/unit` command with
+    no timeout, so the gate and CI must not disagree about what passing
+    means -- the fix is headroom, never a faster subset."""
+    assert VALIDATE_PYTEST_TIMEOUT_S == 900
 
 
 class TestVisualVerification:
@@ -334,3 +407,96 @@ class TestCapabilityChangeFlag:
                           "rationale": "", "diff": ""}]
         block = "\n".join(svc._capability_change_block())
         assert "CAPABILITY CHANGE" in block
+
+
+class TestCoreTier:
+    """MORTIMER_SELFEDIT_TIERS_PLAN.md — Tier B: core paths are editable,
+    with ceremony (extra import gate, CORE CHANGE flag, plan required at
+    preview). Tier 0 stays refused by the same tool that refused it before."""
+
+    def test_core_path_is_editable(self, service: SelfEditService) -> None:
+        service.start_session("consolidate display output")
+        res = service.propose_edit("jarvis/bot/display.py", "SURFACE = 'drawer'\n", "merge")
+        assert res["ok"], res
+        assert "display.py" in res["diff"]
+
+    def test_tier0_path_is_still_refused(self, service: SelfEditService) -> None:
+        service.start_session("rewrite wakeword")
+        res = service.propose_edit("jarvis/wakeword.py", "x = 1\n", "nope")
+        assert not res["ok"] and "allowlist" in res["error"]
+
+    def test_validate_runs_the_core_import_gate_only_for_core_changes(
+        self, service: SelfEditService, monkeypatch
+    ) -> None:
+        calls: list[list[str]] = []
+
+        def fake_run(argv, cwd, timeout):
+            calls.append(list(argv))
+            return 0, "ok"
+        monkeypatch.setattr(service, "_run", fake_run)
+
+        service.start_session("routine only")
+        service.propose_edit("web/src/App.tsx", "export default 5;\n", "ui")
+        res = service.validate()
+        assert "core_imports" not in [c["name"] for c in res["checks"]]
+        service.revert()
+
+        service.start_session("core edit")
+        service.propose_edit("jarvis/bot/display.py", "SURFACE = 'drawer'\n", "merge")
+        res = service.validate()
+        names = [c["name"] for c in res["checks"]]
+        assert "core_imports" in names
+        core_check = next(c for c in res["checks"] if c["name"] == "core_imports")
+        assert core_check["paths"] == ["jarvis/bot/display.py"]
+        # The gate imports the pipeline + agent modules, in the SESSION tree.
+        # jarvis/selfedit/service.py 2026-09-02 fix: argv[0] is sys.executable,
+        # not a bare "python" resolved off PATH (this venv has no `python`
+        # binary in some environments -- only `python3` -- and subprocess.run
+        # there does not go through a shell).
+        smoke = [c for c in calls if c[:2] == [sys.executable, "-c"] and "jarvis.bot.pipeline" in c[2]]
+        assert smoke, calls
+
+    def test_pr_body_and_notice_flag_a_core_change(self, service: SelfEditService) -> None:
+        service.start_session("core edit")
+        service.propose_edit("jarvis/bot/display.py", "SURFACE = 'drawer'\n", "merge")
+        block = "\n".join(service._core_change_block())
+        assert "CORE CHANGE" in block
+        assert "jarvis/bot/display.py" in block
+        assert "hold a real conversation" in block
+
+    def test_a_routine_change_gets_no_core_block(self, service: SelfEditService) -> None:
+        service.start_session("ui")
+        service.propose_edit("web/src/App.tsx", "export default 5;\n", "ui")
+        assert service._core_change_block() == []
+
+
+class TestPreflight:
+    """The preview refuses what the planner would only discover after
+    confirm + staging + a run (2026-08-30: three such runs)."""
+
+    def test_tier0_goal_is_refused_naming_the_file(self, service: SelfEditService) -> None:
+        res = service.preflight("rewrite jarvis/wakeword.py to use a new model", has_plan=True)
+        assert res["ok"] is False
+        assert "jarvis/wakeword.py" in res["error"]
+        assert "human-only" in res["error"]
+
+    def test_core_goal_without_plan_is_refused(self, service: SelfEditService) -> None:
+        res = service.preflight("merge results in jarvis/bot/display.py", has_plan=False)
+        assert res["ok"] is False
+        assert "plan" in res["error"]
+        assert res["tiers"]["core"] == ["jarvis/bot/display.py"]
+
+    def test_core_goal_with_plan_passes(self, service: SelfEditService) -> None:
+        res = service.preflight("merge results in jarvis/bot/display.py", has_plan=True)
+        assert res["ok"] is True
+        assert res["tiers"]["core"] == ["jarvis/bot/display.py"]
+
+    def test_routine_goal_passes_without_plan(self, service: SelfEditService) -> None:
+        res = service.preflight("tidy web/src/App.tsx spacing", has_plan=False)
+        assert res["ok"] is True and res["tiers"]["core"] == []
+
+    def test_goal_naming_no_files_passes_through(self, service: SelfEditService) -> None:
+        # Extraction is best-effort; the planner's own allowlist check still
+        # governs every write.
+        res = service.preflight("make the drawer feel more like glass", has_plan=False)
+        assert res["ok"] is True and res["paths"] == []

@@ -76,8 +76,11 @@ COUNCIL_ABSTENTION_CEILING = 0.15
 COUNCIL_DISCRIMINATION_FLOOR = 0.5
 
 # D4 — the tier ladder. tier = escalations_used + 1, computed in exactly
-# one place: UpgradeAgent._maybe_escalate (D2.1). No other code derives a
-# tier; this module only resolves what a given tier NUMBER means.
+# one place: UpgradeAgent._maybe_escalate (D2.1) — EXCEPT for
+# placement="planner" escalations specifically, which add
+# COUNCIL_PLANNER_START_TIER instead of 1 (see below). No other code
+# derives a tier; this module only resolves what a given tier NUMBER
+# means.
 #
 # Deviation from the plan's original D4 table, resolved with Larry
 # 2026-08-16: the plan as written had tier 2 judges = "mid", but tier 2
@@ -92,6 +95,69 @@ TIER_MEMBERS: dict[int, dict[str, list[str]]] = {
     1: {"proposers": ["economy"], "judges": ["mid"]},
     2: {"proposers": ["frontier", "mid"], "judges": ["frontier"]},
 }
+
+# ⚙ TUNING KNOB — MORTIMER_OPTIMIZATION_PLAN.md Phase 3. UpgradeAgent
+# ._maybe_escalate's placement="planner" round (E1: a self-edit's own
+# validation failed twice, asking a council for help) starts its FIRST
+# escalation at this tier instead of tier 1 — i.e.
+# tier = escalations_used + COUNCIL_PLANNER_START_TIER, for that one call
+# site only. placement="scope" (_maybe_scope_council, E2) is untouched:
+# it always convenes at tier 1, deliberately, per V14.
+#
+# Consequence, stated directly because it is easy to miss: with
+# COUNCIL_MAX_ESCALATIONS=2 and TIER_MEMBERS only defining tiers 1-2, a
+# SECOND placement="planner" escalation in the same session computes
+# tier=3, which does not exist — resolve_members() raises, caught by
+# _maybe_escalate's broad except, and the session ends exactly as it does
+# when the council is unavailable. Starting at the top of the ladder
+# therefore caps this escalation to ONE real attempt per session, not
+# two. That is the intended trade (Larry 2026-09-01, Phase 3 design): a
+# frontier council that already failed once is not fixed by reconvening
+# the same frontier council; the second failure should end in a human
+# re-plan, not a second identical round. If usage data says otherwise,
+# this is a one-constant change (extend TIER_MEMBERS with a tier 3, or
+# lower this back to 1).
+COUNCIL_PLANNER_START_TIER = 2
+
+# ⚙ TUNING KNOB — MORTIMER_OPTIMIZATION_PLAN.md Phase 3. jarvis.council.
+# council.draft_candidates' default proposer set (used only when the
+# caller passes no explicit `members`) is narrowed to profiles whose
+# registry `tier:` is in this list. Before this, the default was the
+# FULL key-present registry (Larry 2026-08-17, "the user is paying
+# deliberate attention here" — true for the planning pathway's own
+# human-reviewed record_user_choice flow, but the voice `plan_start`
+# path never passes `members` either, so every SPOKEN plan request was
+# buying a full-registry fan-out — 13 drafts, per the optimization
+# audit). An explicit `members["proposers"]` selection (the console
+# picker, or any future caller) is NOT restricted by this list — it can
+# still widen past frontier to the full registry, exactly as before;
+# only the no-selection DEFAULT narrows.
+PLANNING_DEFAULT_PROPOSER_TIERS: list[str] = ["frontier"]
+
+# ⚙ TUNING KNOB — MORTIMER_OPTIMIZATION_PLAN.md Phase 3, Rev 3.3 (2026-09-03).
+# draft_candidates' default JUDGE set (no explicit `members["judges"]`) is
+# capped at this many profiles. Before this the default judge pool was
+# "every key-present profile not proposing", uncapped — harmless while the
+# default proposer set was the whole registry (nobody was left to judge),
+# but the Phase 3 narrowing to frontier-only proposers silently turned the
+# ~10 remaining profiles into ~10 judge calls per spoken plan request, each
+# carrying every frontier draft as input: MORE planning-rung spend, not
+# less, for scores that are advisory-only in this pathway (the user picks
+# the winner via record_user_choice). Two is COUNCIL_JUDGE_TARGET's value on
+# purpose ("a second opinion, not a panel"), kept as its own constant so
+# the planning pathway can diverge from the escalation ladder without
+# touching V8. An explicit members["judges"] selection is NOT capped.
+PLANNING_DEFAULT_JUDGE_LIMIT = 2
+
+# Which tiers that capped default draws from, in preference order. Mid-tier
+# judges scoring frontier drafts is the plan's own "third-lineage judge via
+# the V8 backfill (or-gpt-5.1, mid)" shape; a frontier profile that is not
+# proposing is the next best; economy last — a flash model scoring fable/
+# deepseek drafts is mostly noise, but still better than no advisory score
+# when that is all that has a key. Within a tier, registry order. Profiles
+# with no `tier:` never judge by default (they never propose by default
+# either, per PLANNING_DEFAULT_PROPOSER_TIERS).
+PLANNING_DEFAULT_JUDGE_TIERS: list[str] = ["mid", "frontier", "economy"]
 
 # Ascending cost, used only by the degenerate-tier fallback below.
 _TIER_ORDER = ["economy", "mid", "frontier"]

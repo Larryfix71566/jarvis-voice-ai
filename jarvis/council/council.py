@@ -27,8 +27,10 @@ from jarvis.agents.upgrade_agent import available_models, load_model_registry
 from jarvis.council import config as council_config
 from jarvis.council.scoring import council_size_ok, mean_of, parse_scores, select_winner
 from jarvis.council.types import Proposal, RoundResult, Score
+from jarvis import effort, llm_client
 from jarvis.db import get_conn, now_iso
 from jarvis.prompts import PLAN_AUTHOR_PROMPT, PLAN_REVIEW_PROMPT
+from jarvis.usage_ledger import record_completion, provider_from_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +203,7 @@ text after the SCORES section."""
 
 async def _call_profile(
     profile: dict[str, Any], system_prompt: str, user_content: str,
-    timeout_s: float,
+    timeout_s: float, *, rung: str,
 ) -> tuple[str, dict[str, int] | None]:
     """One OpenAI-compatible chat completion for one registry profile.
     Raises on any failure (missing key, network error, timeout) — callers
@@ -215,13 +217,21 @@ async def _call_profile(
     fabricated)."""
 
     def _sync_call() -> tuple[str, dict[str, int] | None]:
-        from openai import OpenAI
-
         api_key_env = profile.get("api_key_env", "OPENAI_API_KEY")
         api_key = os.environ.get(api_key_env)
         if not api_key:
             raise RuntimeError(f"{api_key_env} is not set")
-        client = OpenAI(api_key=api_key, base_url=profile.get("base_url"))
+        # Phase 1 (MORTIMER_OPTIMIZATION_PLAN.md, Rev 3.2, landing step
+        # (ii), 2026-09-02): llm_client.make_sync_client routes an
+        # Anthropic-direct profile through jarvis/anthropic_shim.py
+        # (prompt caching) instead of the plain OpenAI-compat client,
+        # unless JARVIS_ANTHROPIC_NATIVE=0. Every other provider (incl.
+        # OpenRouter, which gets task 4's cache_control passthrough for
+        # anthropic/* models) is unaffected.
+        client = llm_client.make_sync_client(
+            api_key=api_key, base_url=profile.get("base_url"),
+            provider=profile.get("provider"),
+        )
         request: dict[str, Any] = {
             "model": profile["model"],
             "messages": [
@@ -232,7 +242,30 @@ async def _call_profile(
         temperature = profile.get("temperature")
         if temperature is not None:  # None omits the parameter (D-003)
             request["temperature"] = temperature
+        # Phase 1b (effort control) -- profile.get("provider") is the
+        # SAME already-resolved value llm_client.make_sync_client just
+        # used to build `client` above; falls back to deriving it from
+        # the client's own base_url (matching how record_completion's
+        # provider= was already being computed) for a registry entry
+        # that omits provider: explicitly. Reused below for
+        # record_completion too, replacing its own re-derivation.
+        provider = profile.get("provider") or provider_from_base_url(str(client.base_url))
+        extra_body = effort.extra_body_for(
+            rung=rung, provider=provider, explicit=profile.get("effort"),
+            model=profile.get("model"),
+        )
+        if extra_body:
+            request["extra_body"] = extra_body
         response = client.chat.completions.create(**request)
+        try:
+            record_completion(
+                rung=rung,
+                provider=provider,
+                model=profile["model"],
+                response=response,
+            )
+        except Exception:
+            pass
         content = response.choices[0].message.content or ""
         usage_obj = getattr(response, "usage", None)
         usage: dict[str, int] | None = None
@@ -246,7 +279,18 @@ async def _call_profile(
                 }
         return content, usage
 
-    return await asyncio.wait_for(asyncio.to_thread(_sync_call), timeout=timeout_s)
+    # 2026-09-01 (MORTIMER_OPTIMIZATION_PLAN.md Phase 0b) — a profile may
+    # declare `timeout_s` to buy itself MORE time than the caller's floor,
+    # never less: max() keeps COUNCIL_MEMBER_TIMEOUT_S / PLANNING_MEMBER_
+    # TIMEOUT_S as floors and lets an always-on-thinking model (kimi-k3,
+    # round e48cfbe1: four judge timeouts with empty abstain reasons) finish
+    # a real judge workload instead of abstaining by clock.
+    try:
+        profile_timeout = float(profile.get("timeout_s") or 0)
+    except (TypeError, ValueError):
+        profile_timeout = 0.0
+    effective = max(float(timeout_s), profile_timeout)
+    return await asyncio.wait_for(asyncio.to_thread(_sync_call), timeout=effective)
 
 
 def _proposer_user_message(goal: str, context: dict[str, Any], placement: str) -> str:
@@ -334,7 +378,7 @@ async def _gather_proposals(
     names: list[str], profiles_by_name: dict[str, dict[str, Any]],
     user_content: str, system_prompt: str = PROPOSER_PROMPT,
     usage_by_name: dict[str, dict[str, int] | None] | None = None,
-    *, timeout_s: float = COUNCIL_MEMBER_TIMEOUT_S,
+    *, timeout_s: float = COUNCIL_MEMBER_TIMEOUT_S, rung: str,
 ) -> tuple[list[Proposal], dict[str, int]]:
     """Fan out `system_prompt` (V14: PROPOSER_PROMPT or, for a scope
     round, SCOPE_ADVISOR_PROMPT — `_convene_inner` selects the pair once
@@ -366,7 +410,7 @@ async def _gather_proposals(
         try:
             content, usage = await _call_profile(
                 profiles_by_name[name], system_prompt, user_content,
-                timeout_s,
+                timeout_s, rung=rung,
             )
             return name, content, usage
         except Exception as exc:  # noqa: BLE001 — never raise into convene()
@@ -427,7 +471,7 @@ async def _gather_scores(
     judge_user_content: str, labels: list[str], *, shadow: bool,
     system_prompt: str = JUDGE_PROMPT,
     usage_by_name: dict[str, dict[str, int] | None] | None = None,
-    timeout_s: float = COUNCIL_MEMBER_TIMEOUT_S,
+    timeout_s: float = COUNCIL_MEMBER_TIMEOUT_S, rung: str,
 ) -> tuple[list[Score], dict[str, int]]:
     """Fan out `system_prompt` (V14: JUDGE_PROMPT or, for a scope round,
     SCOPE_JUDGE_PROMPT — selected once by the caller, same rule as
@@ -447,7 +491,7 @@ async def _gather_scores(
         try:
             raw, usage = await _call_profile(
                 profiles_by_name[name], system_prompt, judge_user_content,
-                timeout_s,
+                timeout_s, rung=rung,
             )
             return parse_scores(name, raw, labels), usage
         except Exception as exc:  # noqa: BLE001
@@ -599,6 +643,7 @@ async def _convene_inner(
     proposals, proposer_usage = await _gather_proposals(
         proposer_names, profiles_by_name, proposer_user_content,
         proposer_system_prompt, usage_by_name=proposer_usage_by_name,
+        rung="council",
     )
 
     # MORTIMER_LLM_COUNCIL_V2_PLAN.md V1 — the carried proposal is a real
@@ -646,6 +691,7 @@ async def _convene_inner(
     live_scores, live_usage = await _gather_scores(
         judge_names, profiles_by_name, judge_user_content, labels, shadow=False,
         system_prompt=judge_system_prompt, usage_by_name=judge_usage_by_name,
+        rung="council",
     )
 
     # V9 — the round row's token totals sum only the proposer + live-
@@ -835,14 +881,28 @@ async def _draft_candidates_inner(
             key=lambda n: registry_order.index(n) if n in registry_order else len(registry_order),
         )
 
-    # V2-P7: proposer set = the FULL registry's key-present profiles by
-    # default, NOT tier-1 only (unlike convene(), which always resolves
-    # through the escalation tier ladder) — the user is paying deliberate
-    # attention here, per Larry's 2026-08-17 clarification.
-    proposer_names = [m["name"] for m in available_models() if m["key_present"]]
+    # V2-P7 (2026-08-17): proposer set = the FULL registry's key-present
+    # profiles when the caller explicitly picks proposers — narrower than
+    # that is never forced on an explicit selection (the console picker
+    # can widen past the default freely). MORTIMER_OPTIMIZATION_PLAN.md
+    # Phase 3 (2026-09-01) narrowed the NO-SELECTION DEFAULT specifically:
+    # the voice `plan_start` path never passes `members`, so it was
+    # fanning out to the full registry (13 drafts) on every spoken plan
+    # request. Default now resolves only PLANNING_DEFAULT_PROPOSER_TIERS
+    # (frontier) — still NOT the tier-1-only ladder convene() uses, this
+    # pathway remains outside the escalation tiers entirely, just a
+    # narrower unforced-default tier list.
+    all_key_present = [m for m in available_models() if m["key_present"]]
     picked_proposers = (members or {}).get("proposers") or []
     if picked_proposers:
-        proposer_names = [n for n in proposer_names if n in picked_proposers]
+        proposer_names = [
+            m["name"] for m in all_key_present if m["name"] in picked_proposers
+        ]
+    else:
+        proposer_names = [
+            m["name"] for m in all_key_present
+            if m.get("tier") in council_config.PLANNING_DEFAULT_PROPOSER_TIERS
+        ]
     proposer_names = _sort_by_registry(proposer_names)
 
     if not proposer_names:
@@ -858,6 +918,7 @@ async def _draft_candidates_inner(
         proposer_names, profiles_by_name, proposer_user_content,
         proposer_system_prompt, usage_by_name=proposer_usage_by_name,
         timeout_s=council_config.PLANNING_MEMBER_TIMEOUT_S,
+        rung="planning",
     )
 
     if not proposals:
@@ -881,13 +942,33 @@ async def _draft_candidates_inner(
     judge_usage_by_name: dict[str, dict[str, int] | None] = {}
     live_usage = _empty_usage_totals()
     if judge:
-        judge_names = [
-            m["name"] for m in available_models()
-            if m["key_present"] and m["name"] not in {p.profile for p in proposals}
+        proposing = {p.profile for p in proposals}
+        eligible = [
+            m for m in available_models()
+            if m["key_present"] and m["name"] not in proposing
         ]
         picked_judges = (members or {}).get("judges") or []
         if picked_judges:
-            judge_names = [n for n in judge_names if n in picked_judges]
+            # An explicit selection is never capped — same rule as proposers.
+            judge_names = [m["name"] for m in eligible if m["name"] in picked_judges]
+        else:
+            # MORTIMER_OPTIMIZATION_PLAN.md Phase 3 Rev 3.3 (2026-09-03): the
+            # no-selection default is capped and tier-preferred — see
+            # PLANNING_DEFAULT_JUDGE_LIMIT / _TIERS in council/config.py for
+            # why (short version: narrowing the default PROPOSERS to
+            # frontier made every other key-present profile a judge, ~10
+            # advisory-only judge calls per spoken plan request).
+            limit = council_config.PLANNING_DEFAULT_JUDGE_LIMIT
+            judge_names = []
+            for tier in council_config.PLANNING_DEFAULT_JUDGE_TIERS:
+                for name in _sort_by_registry(
+                    [m["name"] for m in eligible if m.get("tier") == tier]
+                ):
+                    if len(judge_names) >= limit:
+                        break
+                    judge_names.append(name)
+                if len(judge_names) >= limit:
+                    break
         judge_names = _sort_by_registry(judge_names)
         if judge_names:
             judge_user_content = _judge_user_message(goal, context, proposals, "doc")
@@ -896,6 +977,7 @@ async def _draft_candidates_inner(
                 shadow=False, system_prompt=PLAN_JUDGE_PROMPT,
                 usage_by_name=judge_usage_by_name,
                 timeout_s=council_config.PLANNING_MEMBER_TIMEOUT_S,
+                rung="planning",
             )
 
     reported_calls = proposer_usage["reported_calls"] + live_usage["reported_calls"]
@@ -1118,13 +1200,19 @@ def record_retry_validated(round_id: str, validated: bool) -> None:
     """D8.1 — write back whether the single post-council retry passed
     validation. This is the only way to answer "is the council earning
     its cost" from data instead of assertion. Best-effort: a write
-    failure here must never raise into the agent loop."""
+    failure here must never raise into the agent loop.
+
+    Phase 3 Rev 3.3: also fills `retry_outcome` ('validated_ok' /
+    'validated_failed') so that column is complete on its own — see
+    record_retry_outcome for the no-retry half of the vocabulary."""
+    outcome = "validated_ok" if validated else "validated_failed"
     try:
         conn = get_conn()
         try:
             conn.execute(
-                "UPDATE council_rounds SET retry_validated = ? WHERE round_id = ?",
-                (1 if validated else 0, round_id),
+                "UPDATE council_rounds SET retry_validated = ?, retry_outcome = ? "
+                "WHERE round_id = ?",
+                (1 if validated else 0, outcome, round_id),
             )
             conn.commit()
         finally:
@@ -1132,6 +1220,55 @@ def record_retry_validated(round_id: str, validated: bool) -> None:
     except Exception:  # noqa: BLE001
         logger.warning(
             "council_record_retry_validated_failed round_id=%s", round_id,
+            exc_info=True,
+        )
+
+
+# MORTIMER_OPTIMIZATION_PLAN.md Phase 3 Rev 3.3 (2026-09-03). The closed
+# vocabulary for council_rounds.retry_outcome. Strings, not an enum, for the
+# same reason memory_extraction's outcomes are strings (tests and reports
+# assert on them without a second thing to keep in sync):
+#   validated_ok / validated_failed  — the retry reached session_validate
+#                                       (written by record_retry_validated)
+#   no_retry:prose_end               — the executor answered in prose after
+#                                       the brief instead of validating
+#   no_retry:iteration_limit         — budget (incl. the V10 grant) ran out
+#   no_retry:time_limit              — max_session_minutes hit first
+#   no_retry:cancelled               — POST /api/selfedit/cancel
+#   no_retry:declined                — session_decline after the brief
+#   no_retry:unfinished              — any other exit with a brief pending
+# NULL after a session has ended means the process died mid-run (the only
+# path that writes nothing), which is itself a signal.
+RETRY_OUTCOMES = (
+    "validated_ok", "validated_failed",
+    "no_retry:prose_end", "no_retry:iteration_limit", "no_retry:time_limit",
+    "no_retry:cancelled", "no_retry:declined", "no_retry:unfinished",
+)
+
+
+def record_retry_outcome(round_id: str, outcome: str) -> None:
+    """Write `retry_outcome` for a round whose post-council retry never
+    reached session_validate — UpgradeAgent calls this from every session
+    exit that still has a brief pending (see _close_pending_round). Same
+    best-effort contract as record_retry_validated. `outcome` should be one
+    of RETRY_OUTCOMES; an unknown string is stored as-is (a report will
+    show it, which beats dropping it) and logged."""
+    if outcome not in RETRY_OUTCOMES:
+        logger.warning("council_retry_outcome_unknown round_id=%s outcome=%s",
+                       round_id, outcome)
+    try:
+        conn = get_conn()
+        try:
+            conn.execute(
+                "UPDATE council_rounds SET retry_outcome = ? WHERE round_id = ?",
+                (outcome, round_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "council_record_retry_outcome_failed round_id=%s", round_id,
             exc_info=True,
         )
 
@@ -1188,6 +1325,214 @@ def list_rounds(
         return [dict(r) for r in rows]
     finally:
         conn.close()
+
+
+# ------------------------------------------------------- roster (D10/UI)
+# MORTIMER_OPTIMIZATION_PLAN.md "Interface Task — Council Roster on the
+# Agent Card". One assembled view of a round: who proposed, what each
+# scored, which judges abstained AND WHY, and whether the pool silently
+# degraded. Assembled HERE rather than in the SwiftUI view for the same
+# reason get_round/list_rounds live here — one implementation, so the
+# sidecar, a CLI reader and the app can never disagree — and because a
+# rule assembled in Swift is a rule this repo's test suite cannot pin.
+
+def _judge_entries(rows: list[dict], proposer_profiles: set[str]) -> list[dict]:
+    """One entry per judge in `rows`, in profile order. Shared by the live
+    lineup and the shadow lineup so the two can never be summarised by
+    two different rules."""
+    entries: list[dict] = []
+    for profile in dict.fromkeys((s.get("judge_profile") or "") for s in rows):
+        mine = [s for s in rows if (s.get("judge_profile") or "") == profile]
+        abstained = [s for s in mine if s.get("score") is None]
+        entries.append({
+            "profile": profile,
+            "tier": next((s.get("judge_tier") for s in mine if s.get("judge_tier")), None),
+            "scored": len(mine) - len(abstained),
+            "abstained": len(abstained),
+            "abstain_reasons": list(dict.fromkeys(
+                (s.get("abstain_reason") or "").strip()
+                for s in abstained
+                if (s.get("abstain_reason") or "").strip()
+            )),
+            "all_abstained": bool(mine) and len(abstained) == len(mine),
+            "also_proposed": profile in proposer_profiles,
+        })
+    entries.sort(key=lambda j: j["profile"])
+    return entries
+
+
+def build_roster(round_row: dict, score_rows: list[dict]) -> dict:
+    """Assemble one round's roster from its `council_rounds` row and its
+    `council_scores` rows (exactly what `get_round()` returns).
+
+    Pure: no I/O, no network, same contract as scoring.py. Every field is
+    read with `.get`, because the UI must render rounds written before
+    any later migration as readily as today's — a round from before 0018
+    simply has no `retry_outcome`.
+
+    LIVE scores only decide numbers (V7: the shadow pass never merged
+    into the result either); shadow judges are named separately so a
+    shadow lineup is visible without being mistaken for one that voted.
+    """
+    live = [s for s in score_rows if not s.get("shadow")]
+    shadow_rows = [s for s in score_rows if s.get("shadow")]
+
+    # The proposals themselves come from the score rows — the
+    # council_rounds row records only counts and the winner.
+    label_to_profile: dict[str, str] = {}
+    for s in live:
+        label = s.get("proposal_label") or ""
+        if label and label not in label_to_profile:
+            label_to_profile[label] = s.get("proposal_profile") or ""
+
+    proposer_profiles = {p for p in label_to_profile.values() if p}
+    # D5's defensive filter, applied for exactly the reason
+    # select_winner applies it: a judge that also proposed never counts
+    # toward a mean, so the mean rendered here is the mean that actually
+    # chose the winner. Such a judge is still LISTED below (flagged) —
+    # hiding it would hide the construction bug it represents.
+    usable = [s for s in live if s.get("judge_profile") not in proposer_profiles]
+    usable_scores = [
+        Score(
+            judge_profile=s.get("judge_profile") or "",
+            proposal_label=s.get("proposal_label") or "",
+            value=s.get("score"),
+            abstain_reason=s.get("abstain_reason"),
+        )
+        for s in usable
+    ]
+
+    winner_label = round_row.get("winner_label") or ""
+    proposers: list[dict] = []
+    for label, profile in label_to_profile.items():
+        rows = [s for s in usable if (s.get("proposal_label") or "") == label]
+        proposers.append({
+            "label": label,
+            "profile": profile,
+            "mean": mean_of(label, usable_scores),
+            "scored_by": sum(1 for s in rows if s.get("score") is not None),
+            "abstained_by": sum(1 for s in rows if s.get("score") is None),
+            "is_winner": bool(winner_label) and label == winner_label,
+        })
+    # Best first, unscored last, ties broken by label so the order is
+    # deterministic for a test and stable for a reader.
+    proposers.sort(key=lambda p: (p["mean"] is None, -(p["mean"] or 0.0), p["label"]))
+
+    judges = _judge_entries(live, proposer_profiles)
+    # V7's shadow pass judges, assembled the SAME way rather than merely
+    # named. A shadow judge that fails degrades the agreement data
+    # (agreement.py reads exactly these rows) just as silently as a live
+    # one degrades a decision — and on 2026-09-03 two of them had been
+    # failing 100% on `temperature is deprecated for this model` with
+    # nothing anywhere to say so.
+    shadow_judges = _judge_entries(shadow_rows, proposer_profiles)
+
+    # The point of the card (plan: "silent pool degradation is the same
+    # failure class the launcher work fixed for services"). Every reason
+    # is a fact from the row or the scores, never an inference.
+    degraded_reasons: list[str] = []
+    for judge in judges:
+        if judge["all_abstained"]:
+            detail = judge["abstain_reasons"][0] if judge["abstain_reasons"] else "no reason recorded"
+            degraded_reasons.append(
+                f"judge {judge['profile']} abstained on every proposal — {detail}"
+            )
+        if judge["also_proposed"]:
+            degraded_reasons.append(
+                f"judge {judge['profile']} also proposed — its scores were not counted"
+            )
+    for judge in shadow_judges:
+        if judge["all_abstained"]:
+            detail = judge["abstain_reasons"][0] if judge["abstain_reasons"] else "no reason recorded"
+            degraded_reasons.append(
+                f"shadow judge {judge['profile']} abstained on every proposal — {detail}"
+            )
+    attempted_p, count_p = round_row.get("proposers_attempted"), round_row.get("proposer_count") or 0
+    if attempted_p is not None and attempted_p > count_p:
+        degraded_reasons.append(
+            f"{attempted_p - count_p} of {attempted_p} proposers returned nothing"
+        )
+    attempted_j, count_j = round_row.get("judges_attempted"), round_row.get("judge_count") or 0
+    if attempted_j is not None and attempted_j > count_j:
+        degraded_reasons.append(
+            f"{attempted_j - count_j} of {attempted_j} judges returned nothing"
+        )
+    status = round_row.get("status") or ""
+    if status and status != "ok":
+        degraded_reasons.append(f"round status: {status}")
+
+    prompt_tokens = round_row.get("prompt_tokens") or 0
+    completion_tokens = round_row.get("completion_tokens") or 0
+    return {
+        "round_id": round_row.get("round_id") or "",
+        "run_id": round_row.get("run_id"),
+        "workflow": round_row.get("workflow") or "",
+        "placement": round_row.get("placement") or "",
+        "trigger": round_row.get("trigger") or "",
+        "tier": round_row.get("tier"),
+        "status": status,
+        "goal": round_row.get("goal") or "",
+        "started_at": round_row.get("started_at") or "",
+        "ended_at": round_row.get("ended_at"),
+        "latency_ms": round_row.get("latency_ms"),
+        # The primary chip's value — the plan's model-discipline rule:
+        # the chip names what actually proceeded.
+        "winner_profile": round_row.get("winner_profile"),
+        "winner_label": round_row.get("winner_label"),
+        "winner_mean": round_row.get("winner_mean"),
+        "select_reason": round_row.get("select_reason"),
+        # Rev 3.3's column (migration 0018). Absent on older rows and on
+        # a database that has not migrated yet — hence .get, not [].
+        "retry_outcome": round_row.get("retry_outcome"),
+        "proposers": proposers,
+        "judges": judges,
+        "shadow_judges": shadow_judges,
+        "abstentions": sum(1 for s in live if s.get("score") is None),
+        "tokens": {
+            "prompt": prompt_tokens,
+            "completion": completion_tokens,
+            "total": prompt_tokens + completion_tokens,
+        },
+        "degraded": bool(degraded_reasons),
+        "degraded_reasons": degraded_reasons,
+    }
+
+
+def get_round_roster(round_id: str) -> dict | None:
+    """`build_roster` over one round; None when the round is unknown."""
+    detail = get_round(round_id)
+    if detail is None:
+        return None
+    return build_roster(detail["round"], detail["scores"])
+
+
+def list_round_rosters(
+    workflow: str | None = None, status: str | None = None,
+    since: str | None = None, limit: int = 20,
+) -> list[dict]:
+    """Recent rounds as assembled rosters, newest first — the read the
+    Agents surface makes. Scores for every round in the page are fetched
+    in ONE query rather than one per round: the card is polled, and an
+    N+1 behind a poll is how a read-only panel starts costing something."""
+    rounds = list_rounds(workflow=workflow, status=status, since=since, limit=limit)
+    if not rounds:
+        return []
+    ids = [r["round_id"] for r in rounds]
+    conn = get_conn()
+    try:
+        placeholders = ",".join("?" * len(ids))
+        rows = conn.execute(
+            f"SELECT * FROM council_scores WHERE round_id IN ({placeholders}) "
+            "ORDER BY id",
+            ids,
+        ).fetchall()
+    finally:
+        conn.close()
+    by_round: dict[str, list[dict]] = {rid: [] for rid in ids}
+    for row in rows:
+        record = dict(row)
+        by_round.setdefault(record["round_id"], []).append(record)
+    return [build_roster(r, by_round.get(r["round_id"], [])) for r in rounds]
 
 
 def _payload_path(round_id: str, started_at: str) -> Path:
@@ -1311,6 +1656,7 @@ async def _shadow_pass(
             shadow_judge_names, profiles_by_name, judge_user_content, labels,
             shadow=True, system_prompt=judge_system_prompt,
             usage_by_name=shadow_usage_by_name,
+            rung="council",
         )
     except Exception:  # noqa: BLE001 — D8.2.1, never degrades the round
         logger.warning("council_shadow_failed round_id=%s", round_id, exc_info=True)

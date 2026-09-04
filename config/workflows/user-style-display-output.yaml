@@ -1,0 +1,8 @@
+# Extracted from memory fact 'user.style.display_output' on conversion (K6.2).
+# REVIEW ME: `when` decides what this matches and `done_when` is
+# what makes it more than a note. Both are drafts.
+name: user-style-display-output
+when: "One display window per specialist per request with summarized HTML output, CSS-formatted for readability and adjustability"
+steps:
+  - One display window per specialist per request with summarized HTML output, CSS-formatted for readability and adjustability
+done_when: []

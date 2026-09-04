@@ -47,7 +47,17 @@
 # model directly, do not add it. Pick a different one — the whole value of a
 # second route is a model you did not already have.
 
-default: kimi-k3
+# 2026-09-01 — kimi-k3 retired as the registry default
+# (MORTIMER_OPTIMIZATION_PLAN.md Phase 0b): its always-on thinking made the
+# default brain the slowest thinker in the registry (see the timeout_s note
+# on its profile), and frontier-for-planning is now standing policy. This
+# key is the final fallback for FOUR paths — the UpgradeAgent/AppBuildAgent
+# edit loop, the planning pathway, the site-research writer and the Edit
+# panel picker — so it is set to planning quality; the EXECUTOR tier is
+# selected by JARVIS_UPGRADE_PROFILE / JARVIS_APPBUILD_PROFILE (Phase 3),
+# never by pointing this at a cheaper model. K3 stays in the registry and
+# the council pool.
+default: claude-fable-5
 
 profiles:
   # ---- DIRECT PROVIDER PROFILES -------------------------------------
@@ -58,7 +68,7 @@ profiles:
   # differing tool fidelity.
 
   - name: kimi-k3
-    label: "Kimi K3 — flagship, 1M context, always-on thinking (default)"
+    label: "Kimi K3 — flagship, 1M context, always-on thinking"
     provider: moonshot
     model: kimi-k3
     identity: moonshotai/kimi-k3
@@ -66,6 +76,16 @@ profiles:
     api_key_env: MOONSHOT_API_KEY
     temperature: null
     tier: mid
+    # 2026-09-01 — K3 is always-on thinking: probed 39 completion tokens to
+    # answer "OK", 36s on a 2.3K-token judge task; real judge workloads
+    # (8-15K tokens) project to 90-180s+ against COUNCIL_MEMBER_TIMEOUT_S
+    # (120s). Round e48cfbe1: all four K3 judge calls timed out
+    # (asyncio.TimeoutError stringifies empty, hence the blank abstain
+    # reasons). Per-profile rope honoured by council._call_profile as
+    # max(caller floor, this) — a profile can buy MORE time, never less, and
+    # other members do not inflate every round's wall time. Accepted trade:
+    # an escalation round with K3 judging can run ~4 min.
+    timeout_s: 240
 
   - name: kimi-k2
     label: "Kimi K2.7 Code — coding-tuned K2 family, 256K context"
@@ -108,6 +128,26 @@ profiles:
     temperature: null
     tier: frontier
     vision: true
+
+  - name: claude-sonnet-5
+    label: "Claude Sonnet 5 — direct Anthropic; the agent floor / executor tier"
+    provider: anthropic
+    model: claude-sonnet-5
+    identity: anthropic/claude-sonnet-5
+    base_url: https://api.anthropic.com/v1/
+    api_key_env: ANTHROPIC_API_KEY
+    # D-003, same family as claude-opus/claude-fable-5 above: omit
+    # temperature rather than risk the 400.
+    temperature: null
+    tier: mid
+    # 2026-09-01 (MORTIMER_OPTIMIZATION_PLAN.md Phase 0b item 5) — REPLACES
+    # or-sonnet-5: same identity, same tier, only the route changes, so the
+    # council's mid judge pool is exactly as deep as before (no backfill).
+    # Registry rule honoured: a model reachable directly does not keep an
+    # OpenRouter route. This is the model-floor profile — every agent other
+    # than the voice Supervisor runs here or above (Larry 2026-09-01) — and
+    # the Phase 3 executor tier (JARVIS_UPGRADE_PROFILE / JARVIS_APPBUILD_
+    # PROFILE point here once the baseline is taken).
 
   # ---- OPENROUTER PROFILES ------------------------------------------
   # Larry 2026-08-19. One key, many vendors. Added for the COUNCIL and
@@ -166,16 +206,6 @@ profiles:
     provider: openrouter
     model: openai/gpt-5.1
     identity: openai/gpt-5.1
-    base_url: https://openrouter.ai/api/v1
-    api_key_env: OPENROUTER_API_KEY
-    temperature: null
-    tier: mid
-
-  - name: or-sonnet-5
-    label: "Claude Sonnet 5 (OpenRouter) — mid-tier judge, 1M"
-    provider: openrouter
-    model: anthropic/claude-sonnet-5
-    identity: anthropic/claude-sonnet-5
     base_url: https://openrouter.ai/api/v1
     api_key_env: OPENROUTER_API_KEY
     temperature: null

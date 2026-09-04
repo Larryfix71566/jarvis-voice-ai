@@ -1,0 +1,8 @@
+# Extracted from memory fact 'user.task.website_comparison' on conversion (K6.2).
+# REVIEW ME: `when` decides what this matches and `done_when` is
+# what makes it more than a note. Both are drafts.
+name: user-task-website-comparison
+when: "comparing three websites for features and implementation recommendation; session ongoing"
+steps:
+  - comparing three websites for features and implementation recommendation; session ongoing
+done_when: []

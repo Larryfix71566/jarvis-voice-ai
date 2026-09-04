@@ -55,6 +55,7 @@ from jarvis.memory import (
     upsert_fact,
 )
 from jarvis.procedures import _tokens
+from jarvis.usage_ledger import record_completion, provider_from_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,15 @@ AUDIENCE_BATCH_CAP = 30
 # system-tier facts not updated in this many days are re-derivable state
 # that has aged out (A4). preference/project/identity never auto-stale.
 SWEEP_SYSTEM_STALE_DAYS = 45
+
+# MORTIMER_OPTIMIZATION_PLAN.md Phase 2 task 4, "expire unrepeated after N
+# days" — an UNPROMOTED observation (jarvis.memory.promote_observations
+# never found enough distinct-session evidence for it) whose last_seen_at
+# is this many days old is given up on. [guessing] Deliberately shorter
+# than SWEEP_SYSTEM_STALE_DAYS's 45: a staging row is an unconfirmed
+# candidate, not a settled fact — losing one that never repeated costs
+# nothing a future mention can't just re-create.
+STAGING_EXPIRY_DAYS = 14
 
 # Contradiction detection only makes sense within these tiers — a
 # preference and a project fact sharing words are not in tension just
@@ -365,6 +375,15 @@ async def _merge_cluster(
                 {"role": "user", "content": MERGE_PROMPT.format(facts=facts_block)},
             ],
         )
+        try:
+            record_completion(
+                rung="memory_merge",
+                provider=provider_from_base_url(str(client.base_url)),
+                model=model,
+                response=response,
+            )
+        except Exception:
+            pass
         text = (response.choices[0].message.content or "").strip()
         return text or None
     except Exception:  # noqa: BLE001 — a failed merge falls through to age-out
@@ -415,6 +434,7 @@ async def run_capacity_enforcement(
         merged = 0
         aged_out = 0
         merge_skipped = False
+        merge_skip_reason = "none"
 
         if tier == "system":
             # M4: archive on sight, no merge rung — see docstring.
@@ -427,6 +447,7 @@ async def run_capacity_enforcement(
                 proposal = _best_capacity_cluster(conn, tier)
                 if proposal is None:
                     merge_skipped = True
+                    merge_skip_reason = "no_mergeable_cluster"
                     break
                 if settings is None and client_factory is None:
                     try:
@@ -435,10 +456,16 @@ async def run_capacity_enforcement(
                         settings = load_settings()
                     except Exception:  # noqa: BLE001
                         merge_skipped = True
+                        merge_skip_reason = "settings_load_failed"
+                        logger.warning(
+                            "memory_enforce_settings_load_failed tier=%s",
+                            tier, exc_info=True,
+                        )
                         break
                 rewritten = await _merge_cluster(proposal, settings, client_factory)
                 if not rewritten:
                     merge_skipped = True
+                    merge_skip_reason = "merge_call_failed"
                     break
                 kept_key = proposal.keys[0]
                 upsert_fact(conn, kept_key, rewritten, None)
@@ -450,8 +477,8 @@ async def run_capacity_enforcement(
 
             if merge_skipped:
                 logger.info(
-                    "memory_enforce_merge_skipped tier=%s reason=no_key_model_or_cluster",
-                    tier,
+                    "memory_enforce_merge_skipped tier=%s reason=%s",
+                    tier, merge_skip_reason,
                 )
 
             over = _tier_count(conn, tier) - cap
@@ -522,6 +549,58 @@ def run_stale_sweep(conn, stale_days: int = SWEEP_SYSTEM_STALE_DAYS) -> list[str
         if archive_fact(conn, r["key"], "auto-stale:aged-out"):
             archived.append(r["key"])
     return archived
+
+
+def run_staging_expiry(conn, expiry_days: int = STAGING_EXPIRY_DAYS) -> list[str]:
+    """MORTIMER_OPTIMIZATION_PLAN.md Phase 2 task 4, "expire unrepeated
+    after N days". Deletes observation rows for a key that has (a) gone
+    stale (its most recent mention older than expiry_days) and (b) never
+    accumulated enough distinct-session evidence to promote — no fact
+    exists yet for that key (jarvis.memory.promote_observations' own
+    "does a fact already exist" check, mirrored here).
+
+    Deliberately scoped to UNPROMOTED keys only, matching the plan's
+    "unrepeated" wording: once a key promotes, its remaining raw
+    observation rows are bounded (at most a few, from before promotion)
+    and harmless — cleaning those up too is a reasonable future addition,
+    not something this pass attempts.
+
+    Plain DELETE, not archive-with-a-`became`-marker like run_stale_sweep's
+    facts: observations were never covered by jarvis.memory's archive
+    discipline (migration 0013 added archived_at/became to `memories`
+    only) — they are raw staging evidence, disposable by design once cold.
+
+    COALESCE(last_seen_at, created_at): jarvis.memory.add_observation
+    (the pre-Phase-2 write path, still live when JARVIS_MEMORY_EXTRACTION_V2
+    is off) does not set last_seen_at — only jarvis.memory_extraction's
+    novelty-gated insert does. Falling back to created_at keeps this sweep
+    correct for observations written either way, rather than silently
+    never expiring rows the old path wrote.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=expiry_days)).isoformat()
+    stale_keys = conn.execute(
+        "SELECT DISTINCT key FROM observations "
+        "WHERE COALESCE(last_seen_at, created_at) < ?",
+        (cutoff,),
+    ).fetchall()
+    expired: list[str] = []
+    for row in stale_keys:
+        key = row["key"]
+        has_fact = conn.execute(
+            "SELECT 1 FROM memories WHERE kind = 'fact' AND key = ?", (key,)
+        ).fetchone()
+        if has_fact is not None:
+            continue  # already promoted -- its evidence rows are harmless
+        cur = conn.execute(
+            "DELETE FROM observations WHERE key = ? "
+            "AND COALESCE(last_seen_at, created_at) < ?",
+            (key, cutoff),
+        )
+        if cur.rowcount:
+            expired.append(key)
+    if expired:
+        logger.info("memory_staging_expiry expired=%s", expired)
+    return expired
 
 
 # --------------------------------------------------------------------- #
@@ -645,6 +724,15 @@ async def _classify_batch(
             {"role": "user", "content": json.dumps(payload)},
         ],
     )
+    try:
+        record_completion(
+            rung="memory_classify",
+            provider=provider_from_base_url(str(client.base_url)),
+            model=settings.openai_model,
+            response=response,
+        )
+    except Exception:
+        pass
     return _parse_classification(response.choices[0].message.content or "")
 
 
@@ -847,7 +935,7 @@ async def run_sweep(
 
     summary = {
         "archived": 0, "queued": 0, "contradictions": 0, "stale_archived": 0,
-        "capacity_enforced": 0,
+        "capacity_enforced": 0, "staging_expired": 0,
     }
     try:
         conn = get_conn(db_path)
@@ -890,6 +978,9 @@ async def run_sweep(
             stale = run_stale_sweep(conn)
             summary["stale_archived"] = len(stale)
 
+            expired = run_staging_expiry(conn)
+            summary["staging_expired"] = len(expired)
+
             conn.commit()
         finally:
             conn.close()
@@ -899,9 +990,10 @@ async def run_sweep(
 
     logger.info(
         "memory_sweep archived=%d queued=%d contradictions=%d "
-        "stale_archived=%d capacity_enforced=%d",
+        "stale_archived=%d capacity_enforced=%d staging_expired=%d",
         summary["archived"], summary["queued"], summary["contradictions"],
         summary["stale_archived"], summary["capacity_enforced"],
+        summary["staging_expired"],
     )
     return summary
 

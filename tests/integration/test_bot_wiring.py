@@ -59,14 +59,38 @@ class FakeLLM:
         self.functions[name] = handler
 
 
+class FakeAnthropicLLM:
+    """Mirrors AnthropicLLMService's constructor shape for the Path A
+    wiring tests below -- api_key is accepted but unused when a client is
+    given (matches the real service, which does `client or
+    AsyncAnthropic(api_key=api_key)`)."""
+
+    class Settings:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    def __init__(self, api_key, client, settings):
+        self.api_key = api_key
+        self.client = client
+        self.settings = settings
+        self.functions = {}
+
+    def register_function(self, name, handler):
+        self.functions[name] = handler
+
+
 class FakeTTS:
     class Settings:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
-    def __init__(self, api_key, settings):
+    def __init__(self, api_key, settings, text_filters=None):
         self.api_key = api_key
         self.settings = settings
+        # S9: the real ElevenLabsTTSService takes text_filters (a
+        # TTSService kwarg); the fake must accept it or every pipeline
+        # build in this file raises TypeError.
+        self.text_filters = list(text_filters or [])
 
 
 class FakePipeline:
@@ -145,6 +169,36 @@ def test_pipeline_processor_order_locked(runtime, fakes):
     ]
 
 
+def test_anthropic_base_url_builds_native_service_with_caching(runtime, fakes, monkeypatch):
+    """Phase 1 (Rev 3.2) landing step (iii), task 6: an Anthropic-direct
+    base_url with native routing on (the default) builds pipecat's own
+    AnthropicLLMService with prompt caching enabled -- not OpenAILLMService.
+    AnthropicLLMService is imported lazily inside its branch (same reason
+    the Google branch above it is), so it's patched at its real module
+    path rather than as a `bp` attribute -- `from pipecat.services.
+    anthropic.llm import X` re-reads that module's attribute fresh every
+    call to build_pipeline() (verified directly against pytest-monkeypatch
+    before relying on it here)."""
+    monkeypatch.setattr("pipecat.services.anthropic.llm.AnthropicLLMService", FakeAnthropicLLM)
+    runtime.settings.openai_base_url = "https://api.anthropic.com/v1/"
+    pipeline, llm, aggregators, pusher = build_pipeline(FakeTransport(), runtime)
+    assert isinstance(llm, FakeAnthropicLLM)
+    assert llm.settings.kwargs["enable_prompt_caching"] is True
+    assert llm.settings.kwargs["model"] == runtime.settings.openai_model
+    # The real anthropic.AsyncAnthropic client, built explicitly with the
+    # OpenAI-compat "/v1" suffix stripped -- the same bug step (ii) found
+    # and fixed in jarvis/anthropic_shim.py, reused here rather than
+    # trusting the service's own base_url-less default.
+    assert str(llm.client.base_url) == "https://api.anthropic.com"
+
+
+def test_anthropic_base_url_with_native_off_stays_on_openai_service(runtime, fakes, monkeypatch):
+    monkeypatch.setenv("JARVIS_ANTHROPIC_NATIVE", "0")
+    runtime.settings.openai_base_url = "https://api.anthropic.com/v1/"
+    pipeline, llm, aggregators, pusher = build_pipeline(FakeTransport(), runtime)
+    assert isinstance(llm, FakeLLM)
+
+
 def test_flux_never_interrupts_on_its_own(runtime, fakes, monkeypatch):
     """2026-08-22: should_interrupt must stay False. True made Flux
     broadcast an interruption on every VAD-level StartOfTurn — before any
@@ -164,13 +218,41 @@ def test_flux_never_interrupts_on_its_own(runtime, fakes, monkeypatch):
     assert captured["should_interrupt"] is False
 
 
+def test_memory_context_size_is_logged_at_build(runtime, fakes, caplog):
+    """MORTIMER_OPTIMIZATION_PLAN.md Phase 4 Rev 3.4 Stage A2 — the memory
+    block is the one part of the cached Supervisor prefix that grows on its
+    own, so its size is logged once per pipeline build. Without this, the
+    only way to know how close the prefix sits to Haiku 4.5's 4,096-token
+    cache floor (below which caching silently stops) is to query the store
+    by hand."""
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="jarvis.bot.pipeline"):
+        build_pipeline(FakeTransport(), runtime)
+    line = next(
+        (r for r in caplog.records if r.msg.startswith("memory_context_rendered")),
+        None,
+    )
+    assert line is not None, "no memory_context_rendered log line"
+    rendered = line.getMessage()
+    for field in ("chars=", "approx_tokens=", "facts=",
+                  "dropped_tier_cap=", "dropped_char_budget=", "prompt_chars="):
+        assert field in rendered
+    # prompt_chars is the WHOLE assembled prompt, so it must exceed the
+    # memory half it contains — this is what makes the pair readable
+    # against the cache floor rather than just a number in a log.
+    chars = int(rendered.split("chars=")[1].split()[0])
+    prompt_chars = int(rendered.split("prompt_chars=")[1].split()[0])
+    assert prompt_chars > chars
+
+
 def test_six_functions_registered(runtime, fakes):
     # remember (memory plan D6), ui_control (MORTIMER_VOICE_UI_PLAN.md U1),
     # show_commands/clear_clipboard/read_clipboard (HANDOFF_LOOP H3/H4 —
     # the handoff loop: show a command, Larry runs it, read the output back)
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "delegate_task", "list_screens", "read_clipboard",
+        "clear_clipboard", "cost_summary", "delegate_task", "list_screens", "read_clipboard",
         "remember", "set_voice", "show_commands", "ui_control", "view_screen",
     ]
     assert llm.kwargs == {"api_key": "sk", "base_url": "http://llm", "model": "m"}
@@ -183,7 +265,7 @@ def test_ui_control_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
     monkeypatch.setenv("JARVIS_UI_CONTROL_ENABLED", "false")
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "delegate_task", "list_screens", "read_clipboard",
+        "clear_clipboard", "cost_summary", "delegate_task", "list_screens", "read_clipboard",
         "remember", "set_voice", "show_commands", "view_screen",
     ]
 
@@ -194,7 +276,7 @@ def test_screen_vision_kill_switch_unregisters_tools(runtime, fakes, monkeypatch
     monkeypatch.setenv("JARVIS_SCREEN_ENABLED", "false")
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "delegate_task", "read_clipboard", "remember",
+        "clear_clipboard", "cost_summary", "delegate_task", "read_clipboard", "remember",
         "set_voice", "show_commands", "ui_control",
     ]
 
@@ -277,6 +359,32 @@ def test_tts_settings_from_voices_yaml(runtime, fakes):
     assert kw["similarity_boost"] == 0.75
     assert kw["voice"]  # default voice id from voices.yaml
     assert tts.api_key == "el"
+
+
+def test_tts_has_markdown_filter(runtime, fakes):
+    """MORTIMER_SESSION_MISSES_PLAN.md S9 — the binding half of "no
+    markdown in speech": VOICE_ADDENDUM asks, this filter enforces."""
+    from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
+
+    pipeline, _, _, _ = build_pipeline(FakeTransport(), runtime)
+    tts = next(p for p in pipeline.processors if isinstance(p, FakeTTS))
+    assert any(isinstance(f, MarkdownTextFilter) for f in tts.text_filters)
+
+
+@pytest.mark.asyncio
+async def test_markdown_filter_strips_the_emphasis_that_reached_elevenlabs():
+    """The exact string from logs/bot.log 2026-09-03 13:44:49, and the
+    prose that must survive it unchanged. Runs the REAL filter from the
+    deployment venv, so a pipecat behaviour change fails here."""
+    from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
+
+    f = MarkdownTextFilter()
+    spoken = await f.filter(
+        "**Scheduler** handles time, dates, reminders, and calendar planning."
+    )
+    assert spoken == "Scheduler handles time, dates, reminders, and calendar planning."
+    untouched = "It's 93 degrees — high 96, tonight 73. BMW's 1994 plant near Greer."
+    assert await f.filter(untouched) == untouched
 
 
 def test_stt_model_is_flux(runtime, fakes):
@@ -382,39 +490,62 @@ def test_wrap_rtvi_envelope():
 async def test_transcript_logger_writes_both_roles(fresh_db):
     """User rows come from TranscriptObserver (D-007: the 1.4 user aggregator
     consumes TranscriptionFrame, so the processor never sees it); assistant
-    rows still come from the TranscriptLogger processor."""
-    from pipecat.frames.frames import LLMFullResponseEndFrame, LLMTextFrame, TranscriptionFrame
+    rows still come from the TranscriptLogger processor.
+
+    T4a K3 (gap-closure plan GC1): persistence is gated on the sensitive-turn
+    holder, which is FAIL-CLOSED when unset (jarvis/bot/sensitive_turn.py).
+    The live sites (cli.py, pipeline.py) set it before any turn; this test
+    must too, exactly as test_orchestrator.py's
+    test_user_and_assistant_rows_written already does for the orchestrator
+    path. Reset via token so the ambient context doesn't leak into whatever
+    test runs next in this process."""
+    from pipecat.frames.frames import (
+        LLMFullResponseEndFrame, LLMTextFrame, TranscriptionFrame,
+        UserStoppedSpeakingFrame,
+    )
     from pipecat.observers.base_observer import FramePushed
     from pipecat.processors.frame_processor import FrameDirection
 
+    from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
     from jarvis.bot.transcript_log import TranscriptObserver
 
-    observer = TranscriptObserver(session_id="s1")
-    await observer.on_push_frame(FramePushed(
-        source=None, destination=None,
-        frame=TranscriptionFrame(
-            text="hello jarvis", finalized=True, user_id="u", timestamp="t"),
-        direction=FrameDirection.DOWNSTREAM, timestamp=0))
+    token = current_sensitive_turn.set(SensitiveTurn())
+    try:
+        observer = TranscriptObserver(session_id="s1")
+        await observer.on_push_frame(FramePushed(
+            source=None, destination=None,
+            frame=TranscriptionFrame(
+                text="hello jarvis", finalized=True, user_id="u", timestamp="t"),
+            direction=FrameDirection.DOWNSTREAM, timestamp=0))
+        # D-007/review F13: the user side is buffered and only flushed (armed,
+        # printed, persisted) at turn close, so a UserStoppedSpeakingFrame is
+        # required after the transcription for the row to land.
+        await observer.on_push_frame(FramePushed(
+            source=None, destination=None,
+            frame=UserStoppedSpeakingFrame(),
+            direction=FrameDirection.DOWNSTREAM, timestamp=0))
 
-    logger = TranscriptLogger(session_id="s1")
+        logger = TranscriptLogger(session_id="s1")
 
-    async def noop(frame, direction):
-        pass
-    logger.push_frame = noop  # detach from pipeline plumbing
+        async def noop(frame, direction):
+            pass
+        logger.push_frame = noop  # detach from pipeline plumbing
 
-    await logger.process_frame(LLMTextFrame(text="Good "), None)
-    await logger.process_frame(LLMTextFrame(text="afternoon."), None)
-    await logger.process_frame(LLMFullResponseEndFrame(), None)
+        await logger.process_frame(LLMTextFrame(text="Good "), None)
+        await logger.process_frame(LLMTextFrame(text="afternoon."), None)
+        await logger.process_frame(LLMFullResponseEndFrame(), None)
 
-    from jarvis.db import get_conn
-    with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT role, content FROM conversations WHERE session_id='s1' ORDER BY id"
-        ).fetchall()
-    assert [(r["role"], r["content"]) for r in rows] == [
-        ("user", "hello jarvis"),
-        ("assistant", "Good afternoon."),
-    ]
+        from jarvis.db import get_conn
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT role, content FROM conversations WHERE session_id='s1' ORDER BY id"
+            ).fetchall()
+        assert [(r["role"], r["content"]) for r in rows] == [
+            ("user", "hello jarvis"),
+            ("assistant", "Good afternoon."),
+        ]
+    finally:
+        current_sensitive_turn.reset(token)
 
 
 async def test_observer_logs_first_audio_latency(capsys):
@@ -486,6 +617,7 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
         jarvis_user_name="Boss", jarvis_timezone="America/New_York",
         jarvis_units="imperial",
         jarvis_interruption_notice_enabled=True,
+        jarvis_late_result_neutralize_enabled=True,
         jarvis_memory_sweep_interval_s=300.0,
     )
     cancelled, folded, watcher_stopped, registry_stopped = [], [], [], []
@@ -549,7 +681,9 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
         def assistant(self):
             return SimpleNamespace()
 
-    async def fake_fold(settings_arg, session_id):
+    async def fake_fold(settings_arg, session_id, **kwargs):
+        # Phase 2 kill switch (MORTIMER_OPTIMIZATION_PLAN.md): pipeline.py
+        # now passes extract_facts_and_observations=... as a kwarg.
         folded.append(session_id)
         return True
 
@@ -597,3 +731,258 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
     assert watcher_stopped, "RemindersWatcher was not stopped (leaks per connection)"
     assert memory_watcher_stopped, "MemorySweepWatcher was not stopped (leaks per connection)"
     assert registry_stopped, "skill registry was not stopped"
+
+
+@pytest.mark.asyncio
+async def test_stt_row_written_at_teardown(monkeypatch, tmp_path):
+    """MORTIMER_SESSION_MISSES_PLAN.md S3 — Deepgram Flux emits no usage
+    metric, so run_session's teardown bills the session's wall-clock as one
+    `stt` ledger row (unit 'seconds'). Same disconnect scaffold as
+    test_client_disconnect_ends_task_and_folds_memory; record_call is
+    captured rather than written so the assertion is on the row's shape."""
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "session.db"))
+    settings = SimpleNamespace(
+        deepgram_api_key="dg", openai_api_key="sk", openai_base_url="http://llm",
+        openai_model="m", elevenlabs_api_key="el", jarvis_name="Jarvis",
+        jarvis_user_name="Boss", jarvis_timezone="America/New_York",
+        jarvis_units="imperial",
+        jarvis_interruption_notice_enabled=True,
+        jarvis_late_result_neutralize_enabled=True,
+        jarvis_memory_sweep_interval_s=300.0,
+    )
+    recorded: list[dict] = []
+
+    class FakeTask:
+        def __init__(self, pipeline, observers=None, params=None):
+            self._ended = asyncio.Event()
+
+        async def cancel(self):
+            self._ended.set()
+
+        async def wait_ended(self):
+            await self._ended.wait()
+
+    class FakeRunner:
+        async def run(self, task):
+            await task.wait_ended()
+
+    class FakeQuiet:
+        def __init__(self, *a, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        async def start_async(self):
+            pass
+
+        async def stop(self):
+            pass
+
+    class FakeRegistry(FakeQuiet):
+        async def start(self):
+            pass
+
+    class FakeAggregators:
+        def user(self):
+            return SimpleNamespace()
+
+        def assistant(self):
+            return SimpleNamespace()
+
+    class FakePusher:
+        def bind(self, task):
+            pass
+
+    async def fake_fold(settings_arg, session_id, **kwargs):
+        return True
+
+    async def fake_digest(settings_arg, session_id):
+        return False
+
+    monkeypatch.setattr(bp, "load_settings", lambda: settings)
+    monkeypatch.setattr(bp, "bridge_settings_to_env", lambda s: None)
+    monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    monkeypatch.setattr(
+        bp, "load_voice_catalog",
+        lambda: {"default": "rachel",
+                 "voices": [{"id": "rachel", "label": "Rachel",
+                             "elevenlabs_voice_id": "vid"}]},
+    )
+    monkeypatch.setattr(
+        bp, "build_pipeline",
+        lambda transport, runtime: (
+            FakePipeline([]), FakeLLM("k", "u", "m"), FakeAggregators(), FakePusher()
+        ),
+    )
+    monkeypatch.setattr(bp, "PipelineTask", FakeTask)
+    monkeypatch.setattr(bp, "PipelineRunner", FakeRunner)
+    monkeypatch.setattr(bp, "RemindersWatcher", FakeQuiet)
+    monkeypatch.setattr(bp, "MemorySweepWatcher", FakeQuiet)
+    monkeypatch.setattr(bp, "update_memory_from_session", fake_fold)
+    monkeypatch.setattr(bp, "write_session_digest", fake_digest)
+    monkeypatch.setattr(bp, "record_call", lambda **kw: recorded.append(kw))
+
+    transport = HandlerCapturingTransport()
+
+    async def fire_disconnect():
+        for _ in range(500):
+            if "on_client_disconnected" in transport.handlers:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            raise AssertionError("on_client_disconnected was never registered")
+        await asyncio.sleep(0.05)   # a measurable session, so quantity > 0
+        await transport.handlers["on_client_disconnected"](transport, None)
+
+    await asyncio.wait_for(
+        asyncio.gather(bp.run_session(transport), fire_disconnect()), timeout=10
+    )
+
+    stt = [r for r in recorded if r.get("rung") == "stt"]
+    assert len(stt) == 1, recorded
+    row = stt[0]
+    assert row["provider"] == "deepgram"
+    assert row["model"] == "flux-general-en"
+    assert row["unit"] == "seconds"
+    assert row["quantity"] > 0
+    assert row["session_id"]
+    # No token kwargs on a voice row.
+    assert "input_tokens" not in row
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("flag", [True, False])
+async def test_late_result_hook_arms_the_neutralizer(monkeypatch, tmp_path, flag):
+    """MORTIMER_SESSION_MISSES_PLAN.md S6 — run_session installs
+    inject_late_result as the barge-in late-delivery hook: the note it
+    appends to the user aggregator is the SAME dict the LateResultNeutralizer
+    (in the task's observers) holds, so the observer's in-place rewrite is
+    what the aggregator serves next. Same disconnect scaffold as above."""
+    from jarvis.bot.late_result import LateResultNeutralizer
+
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "session.db"))
+    settings = SimpleNamespace(
+        deepgram_api_key="dg", openai_api_key="sk", openai_base_url="http://llm",
+        openai_model="m", elevenlabs_api_key="el", jarvis_name="Jarvis",
+        jarvis_user_name="Boss", jarvis_timezone="America/New_York",
+        jarvis_units="imperial",
+        jarvis_interruption_notice_enabled=True,
+        jarvis_late_result_neutralize_enabled=flag,   # the kill switch, both ways
+        jarvis_memory_sweep_interval_s=300.0,
+    )
+    captured: dict = {}
+
+    class FakeTask:
+        def __init__(self, pipeline, observers=None, params=None):
+            captured["observers"] = list(observers or [])
+            self._ended = asyncio.Event()
+
+        async def cancel(self):
+            self._ended.set()
+
+        async def wait_ended(self):
+            await self._ended.wait()
+
+    class FakeRunner:
+        async def run(self, task):
+            await task.wait_ended()
+
+    class FakeQuiet:
+        def __init__(self, *a, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        async def stop(self):
+            pass
+
+    class FakeRegistry(FakeQuiet):
+        async def start(self):
+            pass
+
+    class FakeUserAggregator:
+        def __init__(self):
+            self.messages: list[dict] = []
+
+        def add_messages(self, messages):
+            self.messages.extend(messages)     # keeps the caller's objects, like pipecat
+
+        async def push_context_frame(self, *a, **kw):
+            pass
+
+    user_agg = FakeUserAggregator()
+
+    class FakeAggregators:
+        def user(self):
+            return user_agg
+
+        def assistant(self):
+            return SimpleNamespace()
+
+    class FakePusher:
+        def bind(self, task):
+            pass
+
+    async def fake_fold(settings_arg, session_id, **kwargs):
+        return True
+
+    async def fake_digest(settings_arg, session_id):
+        return False
+
+    def fake_build_pipeline(transport, runtime):
+        captured["runtime"] = runtime
+        return FakePipeline([]), FakeLLM("k", "u", "m"), FakeAggregators(), FakePusher()
+
+    monkeypatch.setattr(bp, "load_settings", lambda: settings)
+    monkeypatch.setattr(bp, "bridge_settings_to_env", lambda s: None)
+    monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    monkeypatch.setattr(
+        bp, "load_voice_catalog",
+        lambda: {"default": "rachel",
+                 "voices": [{"id": "rachel", "label": "Rachel",
+                             "elevenlabs_voice_id": "vid"}]},
+    )
+    monkeypatch.setattr(bp, "build_pipeline", fake_build_pipeline)
+    monkeypatch.setattr(bp, "PipelineTask", FakeTask)
+    monkeypatch.setattr(bp, "PipelineRunner", FakeRunner)
+    monkeypatch.setattr(bp, "RemindersWatcher", FakeQuiet)
+    monkeypatch.setattr(bp, "MemorySweepWatcher", FakeQuiet)
+    monkeypatch.setattr(bp, "update_memory_from_session", fake_fold)
+    monkeypatch.setattr(bp, "write_session_digest", fake_digest)
+    monkeypatch.setattr(bp, "record_call", lambda **kw: None)
+
+    transport = HandlerCapturingTransport()
+    note = "[system] Background update: … Relay this to the user once …"
+
+    async def drive():
+        for _ in range(500):
+            if "on_client_disconnected" in transport.handlers and "runtime" in captured:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            raise AssertionError("run_session never installed its handlers")
+        fn = captured["runtime"].late_delivery["fn"]
+        assert fn.__name__ == "inject_late_result"
+        await fn(note)
+        await transport.handlers["on_client_disconnected"](transport, None)
+
+    await asyncio.wait_for(asyncio.gather(bp.run_session(transport), drive()), timeout=10)
+
+    neutralizers = [o for o in captured["observers"] if isinstance(o, LateResultNeutralizer)]
+    assert len(neutralizers) == 1, "exactly one LateResultNeutralizer in the task's observers"
+    assert neutralizers[0].enabled is flag
+    assert user_agg.messages[-1] == {"role": "user", "content": note}
+    if flag:
+        assert neutralizers[0].pending_count == 1
+        # The held note is the very object the aggregator has (in-place rewrite works).
+        assert neutralizers[0]._pending[0] is user_agg.messages[-1]
+    else:
+        # Disabled: the note still reaches the aggregator (pre-plan behaviour
+        # exactly), and nothing is held to rewrite.
+        assert neutralizers[0].pending_count == 0

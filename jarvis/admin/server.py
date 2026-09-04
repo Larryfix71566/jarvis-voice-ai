@@ -112,22 +112,6 @@ app.add_middleware(
 )
 
 
-# MORTIMER_AGENT_TRUST_PLAN.md D17: logs/admin.log was 0 bytes across every
-# rotation. Root cause was uvicorn.run(..., log_level="warning") in main()
-# below suppressing uvicorn's own startup/access logging entirely, with
-# nothing in this module configuring a logger of its own to fill the gap —
-# so the redirect in scripts/mortimer.sh (`>> logs/admin.log 2>&1`) had
-# nothing to capture. This basicConfig call is what actually produces
-# output; it must run before uvicorn.run() so the first log lines (the
-# startup line emitted from main(), below) are not lost to an unconfigured
-# root logger. stream=sys.stdout matches the redirect's expectation that
-# both this process's own logs and any survivng uvicorn output land in the
-# same file.
-logging.basicConfig(
-    level=logging.INFO,
-    stream=sys.stdout,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
 
 
 @app.middleware("http")
@@ -274,6 +258,10 @@ _selfedit_service = SelfEditService()
 
 # Single-run gate: one upgrade job at a time, ever.
 _run_lock = threading.Lock()
+# The UpgradeAgent instance currently driving _run_job (None when idle) —
+# held only so POST /api/selfedit/cancel can reach its cooperative
+# cancel flag (the same reason _appbuild_workspace exists).
+_run_agent_instance: Any = None
 _run_job: dict[str, Any] = {
     "state": "idle",  # idle | running | done | error
     "goal": None,
@@ -435,7 +423,7 @@ def _run_research_job(urls: list[str], focus: str) -> None:
             return
         content, _usage = asyncio.run(council_mod._call_profile(
             profile, RESEARCH_SYSTEM_PROMPT, user_content,
-            council_config.PLANNING_MEMBER_TIMEOUT_S,
+            council_config.PLANNING_MEMBER_TIMEOUT_S, rung="research",
         ))
         with _research_lock:
             _research_job.update(
@@ -481,18 +469,35 @@ def _make_agent(service: SelfEditService, profile: str | None) -> UpgradeAgent:
 
 def _run_agent(goal: str, profile: str | None, plan: str | None = None) -> None:
     """Background thread target: plan edits, then settle the job state."""
+    global _run_agent_instance
     try:
         agent = _make_agent(_selfedit_service, profile)
+        with _run_lock:
+            _run_agent_instance = agent
         result = agent.run(goal, plan=plan)
-        state = "done" if result.get("ok") else "error"
+        if result.get("cancelled"):
+            # A cancelled session is discarded whole — same semantics as
+            # appbuild_cancel (revert), so nothing half-planned lingers on
+            # a sandbox branch waiting for a confirm that never comes.
+            state = "cancelled"
+            if _selfedit_service.branch:
+                _selfedit_service.revert()
+        else:
+            state = "done" if result.get("ok") else "error"
         with _run_lock:
             _run_job.update(
                 state=state,
+                # The summary is what the developer relays and what the Edit
+                # panel shows; logging it too means a declined/failed run's
+                # REASON survives in admin.log instead of only in memory
+                # (2026-08-30: three state=error transitions logged with no
+                # cause anywhere on disk).
                 summary=result.get("summary", ""),
                 finished_at=time.time(),
             )
         # D17 — every self-edit state transition is logged.
-        logger.info("selfedit_state_transition state=%s goal=%r", state, goal)
+        logger.info("selfedit_state_transition state=%s goal=%r summary=%r",
+                    state, goal, (result.get("summary") or "")[:400])
     except Exception as exc:  # planner crash must still settle the job
         logger.exception("upgrade run crashed")
         with _run_lock:
@@ -502,6 +507,9 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None) -> None:
                 finished_at=time.time(),
             )
         logger.info("selfedit_state_transition state=error goal=%r", goal)
+    finally:
+        with _run_lock:
+            _run_agent_instance = None
 
 
 def _busy() -> bool:
@@ -634,7 +642,7 @@ def _run_plan_single(
     try:
         content, _usage = asyncio.run(council_mod._call_profile(
             profile, system_prompt, user_content,
-            council_config.PLANNING_MEMBER_TIMEOUT_S,
+            council_config.PLANNING_MEMBER_TIMEOUT_S, rung="planning",
         ))
     except Exception as exc:  # noqa: BLE001 — a crash must still settle the job
         logger.exception("plan single-mode job crashed")
@@ -776,19 +784,32 @@ def selfedit_stage(body: SelfEditStageIn) -> dict:
     goal = (body.goal or "").strip()
     if not goal:
         return {"ok": False, "error": "a goal is required — what should I change?"}
+    plan_path = (body.plan_path or "").strip() or None
+    # MORTIMER_SELFEDIT_TIERS_PLAN.md — tier pre-flight at PREVIEW time: a
+    # goal naming a Tier-0 (human-only) file, or a Tier-B (core) file with
+    # no plan, is refused here in one sentence — before staging, before
+    # confirm, before a planner run rediscovers the same wall (2026-08-30:
+    # three runs, ~2.5 minutes each, all "declined: not on the allowlist").
+    flight = _selfedit_service.preflight(goal, has_plan=bool(plan_path))
+    if not flight["ok"]:
+        return {"ok": False, "error": flight["error"], "tiers": flight["tiers"]}
     staging_id = uuid.uuid4().hex[:12]
     with _staging_lock:
         _prune_expired_stagings()
         _selfedit_stagings[staging_id] = {
             "goal": goal,
             "profile": body.profile,
-            "plan_path": (body.plan_path or "").strip() or None,
+            "plan_path": plan_path,
             "created_at": time.time(),
         }
     return {
         "ok": True,
         "staging_id": staging_id,
         "expires_in_s": SELFEDIT_STAGING_TTL_S,
+        # The tool's spoken preview names core files so the user hears
+        # "this touches the voice core" before saying yes.
+        "tiers": flight["tiers"],
+        "core_change": bool(flight["tiers"]["core"]),
     }
 
 
@@ -946,10 +967,40 @@ def selfedit_submit() -> dict:
     return result
 
 
+@app.post("/api/selfedit/cancel")
+def selfedit_cancel() -> dict:
+    """Stop a RUNNING planner at its next step and discard the session.
+
+    Closes the 2026-08-22/23 gap where a kimi-k3 planner sat "still
+    running" and selfedit_revert refused while busy — there was no way to
+    stop it short of killing the sidecar. Cooperative: an in-flight
+    completion call finishes (or hits its read timeout) first, then the
+    loop sees the flag, returns cancelled, and _run_agent reverts the
+    session. Idle → nothing to cancel (use revert for an idle-but-active
+    session)."""
+    with _run_lock:
+        running = _run_job["state"] == "running"
+        agent = _run_agent_instance
+    if not running or agent is None:
+        return {"ok": False, "error": "no self-edit run is in progress — "
+                                      "use revert to drop an idle session"}
+    agent.request_cancel()
+    logger.info("selfedit_state_transition state=cancel_requested")
+    return {"ok": True, "cancel_requested": True,
+            "note": "the planner stops at its next step; poll GET /api/selfedit/run "
+                    "for state=cancelled"}
+
+
 @app.post("/api/selfedit/revert")
 def selfedit_revert() -> dict:
+    # A revert while the planner is RUNNING used to be refused outright,
+    # which left no path at all to stop a runaway run (2026-08-22/23). It
+    # now means "stop and discard": request the cooperative cancel and let
+    # _run_agent perform the revert when the loop yields. This is what the
+    # voice path (mcp_selfedit's selfedit_revert tool) reaches, so "cancel
+    # the self-edit" works by voice with no new tool.
     if _busy():
-        return {"ok": False, "error": "an upgrade run is in progress — ask for status instead"}
+        return selfedit_cancel()
     result = _selfedit_service.revert()
     logger.info("selfedit_state_transition state=reverted ok=%s", result.get("ok"))
     return result
@@ -1607,6 +1658,27 @@ def council_rounds_list(
     }
 
 
+@app.get("/api/council/roster")
+def council_roster(
+    workflow: str = "", status: str = "", since: str = "", limit: int = 20,
+) -> dict:
+    """MORTIMER_OPTIMIZATION_PLAN.md's Interface Task — the Agents
+    surface's read. Same filters as /api/council/rounds, but each round
+    arrives assembled (proposers with means, judges with their abstain
+    reasons, a degradation verdict) so the view renders rather than
+    computes. A lower default and a tighter clamp than the rounds list:
+    this one is polled and each entry is much larger."""
+    run_migrations()
+    clamped_limit = max(1, min(50, limit))
+    return {
+        "ok": True,
+        "rounds": council_mod.list_round_rosters(
+            workflow=workflow or None, status=status or None,
+            since=parse_since(since or None), limit=clamped_limit,
+        ),
+    }
+
+
 # ------------------------------------------------------- planning pathway
 # MORTIMER_PLANNING_PATHWAY_PLAN.md P7. Thin pass-throughs over
 # jarvis.council.council (draft_candidates/record_user_choice) and
@@ -1767,6 +1839,24 @@ def plan_cancel() -> dict:
 
 def main() -> None:
     import uvicorn
+
+    # 2026-09-01 (MORTIMER_OPTIMIZATION_PLAN.md conflict resolution) —
+    # moved D17's basicConfig() here from module level. Any test that
+    # merely imports jarvis.admin.server (nine test_admin_*.py files do,
+    # plus test_classify.py's /api/knowledge tests) used to trigger this
+    # as an import-time side effect, fighting pytest's own root-logger
+    # handler setup — implicated in tests/unit/test_memory.py's
+    # TestCapacityHandling caplog assertions coming back empty when run
+    # after those files. main() is the only caller that actually needs
+    # configured logging (a real uvicorn process); importing this module
+    # for its FastAPI app, endpoints, or helpers must stay side-effect
+    # free. Same config, same D17 reasoning — just scoped to where the
+    # server actually starts instead of where the module is loaded.
+    logging.basicConfig(
+        level=logging.INFO,
+        stream=sys.stdout,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
 
     host, port = "127.0.0.1", 7861
     # D17 — at minimum, log startup with host/port/repo root. Logged via

@@ -1,0 +1,12 @@
+{
+  "id": "msg-7",
+  "label": "rtvi-ai",
+  "type": "server-message",
+  "data": {
+    "type": "voice/catalog",
+    "voices": [
+      {"id": "jarvis", "elevenlabs_voice_id": "abc", "label": "Jarvis"}
+    ],
+    "current": "jarvis"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": "msg-11",
+  "label": "rtvi-ai",
+  "type": "server-message",
+  "data": {
+    "type": "weather_alert",
+    "severity": "high"
+  }
+}

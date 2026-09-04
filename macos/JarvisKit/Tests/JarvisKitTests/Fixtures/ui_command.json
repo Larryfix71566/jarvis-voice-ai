@@ -1,0 +1,10 @@
+{
+  "id": "msg-6",
+  "label": "rtvi-ai",
+  "type": "server-message",
+  "data": {
+    "type": "ui",
+    "action": "drawer_tab",
+    "tab": "agents"
+  }
+}

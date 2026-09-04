@@ -36,7 +36,7 @@ def _reset_research_job(monkeypatch):
     })
     monkeypatch.setattr(srv, "resolve_profile", lambda registry, name: FAKE_PROFILE)
 
-    async def _fake_call_profile(profile, system_prompt, user_content, timeout_s):
+    async def _fake_call_profile(profile, system_prompt, user_content, timeout_s, rung=None):
         return "# Comparison\n\nSite A beats Site B on X.", None
 
     monkeypatch.setattr(srv.council_mod, "_call_profile", _fake_call_profile)
@@ -103,7 +103,7 @@ def test_comparison_call_never_ships_an_empty_system_prompt(monkeypatch):
     monkeypatch.setattr(srv.research_crawl, "crawl_site", _fake_crawl())
     seen = {}
 
-    async def _capturing_call_profile(profile, system_prompt, user_content, timeout_s):
+    async def _capturing_call_profile(profile, system_prompt, user_content, timeout_s, rung=None):
         seen["system_prompt"] = system_prompt
         return "# Comparison\n\nSite A beats Site B on X.", None
 

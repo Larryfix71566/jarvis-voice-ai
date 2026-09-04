@@ -736,6 +736,10 @@ class TestBargeInSurvival:
         assert len(delivered) == 1
         assert "done late" in delivered[0]
         assert "Background update" in delivered[0]
+        # MORTIMER_SESSION_MISSES_PLAN.md S6 (belt-and-suspenders to the
+        # LateResultNeutralizer): the note asks for ONE relay, explicitly.
+        assert "Relay this to the user once" in delivered[0]
+        assert "do not repeat it in later turns" in delivered[0]
 
     async def test_normal_completion_never_uses_late_delivery(self):
         agent = SlowFakeSubAgent("developer", delay=0.01, result="done now")

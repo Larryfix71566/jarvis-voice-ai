@@ -3,8 +3,11 @@ name: mcp-web
 version: 1.0.0
 class: standard
 tools: [web_search, get_weather, get_weather_radar, research_compare_start, research_status, research_save]
-requires_env: 
+requires_env:
   - TAVILY_API_KEY
+  # mcp_web/logic.py:71 reads this to choose imperial vs metric for
+  # get_weather. Bridged from Settings by jarvis/config.py:265.
+  - JARVIS_UNITS
 requires_keychain: []
 scopes: []
 test: "python3 -m pytest tests/unit/test_mcp_web_logic.py -q"

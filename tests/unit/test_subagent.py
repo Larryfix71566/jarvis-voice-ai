@@ -716,11 +716,29 @@ class TestRuntimeModelOverride:
 
     def _agent_with_fake_override_client(self, tmp_path, monkeypatch, script):
         """Builds an agent whose DEFAULT client is the normal FakeLLM test
-        seam (client_factory), while base.AsyncOpenAI — used ONLY by
-        resolve_model_profile's override path — is monkeypatched so an
-        override run never touches the real network."""
+        seam (client_factory), while the client resolve_model_profile's
+        override path builds is faked out so an override run never
+        touches the real network.
+
+        Phase 1 (MORTIMER_OPTIMIZATION_PLAN.md, Rev 3.2, landing step
+        (ii), 2026-09-02): the override path now goes through
+        jarvis.llm_client.make_async_client, which — for this fixture's
+        "fable" profile (provider: anthropic) — builds a real
+        AsyncAnthropicChatShim when native routing is on. That's exactly
+        right in production (it's the whole point of this landing step),
+        but it means this fixture's FakeAsyncOpenAI is reached only with
+        native routing forced OFF; see
+        test_override_builds_native_shim_when_anthropic_native_enabled
+        below for the native-on case, which asserts the shim type
+        directly instead of faking the transport. `openai.AsyncOpenAI` is
+        patched (module attribute, looked up at call time inside
+        llm_client.py) rather than `base_module.AsyncOpenAI`, which no
+        longer exists — base.py imports llm_client now, not AsyncOpenAI
+        directly.
+        """
         self._registry_file(tmp_path, monkeypatch)
-        import jarvis.agents.base as base_module
+        monkeypatch.setenv("JARVIS_ANTHROPIC_NATIVE", "0")
+        import openai
 
         default_fake = FakeLLM([("text", "default reply")])
         constructed: dict = {}
@@ -731,7 +749,7 @@ class TestRuntimeModelOverride:
                 constructed["base_url"] = base_url
                 self.chat = SimpleNamespace(completions=FakeCompletions(script))
 
-        monkeypatch.setattr(base_module, "AsyncOpenAI", FakeAsyncOpenAI)
+        monkeypatch.setattr(openai, "AsyncOpenAI", FakeAsyncOpenAI)
 
         agent = SubAgent(
             name="developer", display_name="Developer", description="d",
@@ -748,6 +766,30 @@ class TestRuntimeModelOverride:
         assert reply == "override reply"
         assert constructed["api_key"] == "test-key"
         assert constructed["base_url"] == "https://api.anthropic.com/v1/"
+
+    async def test_override_builds_native_shim_when_anthropic_native_enabled(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """Phase 1 (Rev 3.2, landing step (ii)) mirror of the test above:
+        with JARVIS_ANTHROPIC_NATIVE left at its default (unset — on), the
+        SAME "fable" (provider: anthropic) override profile must resolve
+        to the real prompt-caching shim, not the OpenAI-compat client.
+        No network call is made — constructing AsyncAnthropicChatShim
+        never touches the network, only .create() would."""
+        self._registry_file(tmp_path, monkeypatch)
+        monkeypatch.delenv("JARVIS_ANTHROPIC_NATIVE", raising=False)
+        from jarvis.anthropic_shim import AsyncAnthropicChatShim
+
+        default_fake = FakeLLM([("text", "default reply")])
+        agent = SubAgent(
+            name="developer", display_name="Developer", description="d",
+            mcp_servers=["mcp-repo"], settings=make_settings(),
+            registry=FakeRegistry(), client_factory=lambda s: default_fake,
+        )
+        client, model, refused_reason = agent.resolve_model_profile("fable")
+        assert refused_reason == ""
+        assert model == "claude-fable-5"
+        assert isinstance(client, AsyncAnthropicChatShim)
 
     async def test_override_failure_refuses_never_falls_back(self, tmp_path, monkeypatch):
         self._registry_file(tmp_path, monkeypatch, key_present=False)
