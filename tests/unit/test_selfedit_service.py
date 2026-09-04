@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from jarvis.selfedit.service import SelfEditService
+from jarvis.selfedit.service import VALIDATE_PYTEST_TIMEOUT_S, SelfEditService
 
 ALLOWLIST = {
     "allow": ["web/src/**", "docs/**"],
@@ -214,6 +214,15 @@ def test_validate_pytest_gate_fails_on_broken_test(service: SelfEditService) -> 
     pytest_check = next(c for c in res["checks"] if c["name"] == "pytest")
     assert not pytest_check["ok"]
     assert res["ok"] is False
+
+
+def test_pytest_gate_timeout_is_900() -> None:
+    """GC1b (gap-closure plan, 2026-09-04): 2,150+ tests; the self-edit run
+    that convened council round e48cfbe1 timed out at the old 300 s ("pytest:
+    timed out after 300s"). CI runs the same `pytest tests/unit` command with
+    no timeout, so the gate and CI must not disagree about what passing
+    means -- the fix is headroom, never a faster subset."""
+    assert VALIDATE_PYTEST_TIMEOUT_S == 900
 
 
 class TestVisualVerification:

@@ -41,11 +41,9 @@ first lever to pull.
 
 ## Other standing deferrals (pointers)
 
-- **Native macOS shell (Electron-first wrapper, never a rewrite):**
-  discussion 2026-08-16 — web app stays the editable surface inside a
-  deny-listed shell; self-edits never require re-signing. Triggers:
-  hands-free-from-login wanted as the daily mode, the over-desktop HUD
-  becomes a real next feature, or weekly multi-monitor friction.
+- **Native macOS client:** SUPERSEDED 2026-08-25 by the full-Swift
+  decision (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` T1,
+  `docs/plans/MORTIMER_NATIVE_CLIENT_CORE_PLAN.md`).
 - **Voice UI deferrals:** local fast-path grammar, Window Management
   API auto-detect, named multi-windows, voice help tour, auto-hide
   chrome, speech-reactive overlay opacity — MORTIMER_VOICE_UI_PLAN.md

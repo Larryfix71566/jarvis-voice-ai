@@ -1,6 +1,6 @@
 # Mortimer — Gate v2 (windowed scoring, honest drops) + Named-Model Delegation
 
-**Status: DRAFT — awaiting Larry's approval.**
+**Status:** APPROVED and IMPLEMENTED 2026-08-22 (F1–F11); §6 effectiveness protocol still unrun — gate off.
 Author: Claude (Fable), 2026-08-22. Requested by Larry after the 15:00
 live session review: *"many responses not what I would expect and many
 requests just ignored"* → six gaps found → *"ok create the implementation

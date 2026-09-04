@@ -1,6 +1,6 @@
 # Mortimer / Jarvis platform roadmap — native client, remote access, Mac mini hosting, security, mail & calendar, developer tooling
 
-**Status:** DRAFT for Larry's approval, 2026-08-26.
+**Status:** APPROVED by Larry 2026-08-26 (was DRAFT); track plans written 2026-08-26/27.
 
 **What this document is.** A *sequencing* document, not an implementation
 plan. It fixes the order in which six tracks of work happen, the gates

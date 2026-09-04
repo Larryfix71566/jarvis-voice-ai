@@ -20,6 +20,7 @@ from types import SimpleNamespace
 import pytest
 
 from jarvis.agents.base import SubAgent
+from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.db import get_conn, run_migrations
 from jarvis.procedures import PROCEDURE_PROMOTE_AFTER, learn_from_run
 
@@ -84,8 +85,27 @@ def stub_settings_for_learning(monkeypatch):
     )
 
 
+@pytest.fixture()
+def unarmed_turn():
+    """T4a K3 (gap-closure plan GC1): jarvis.bot.sensitive_turn.is_sensitive()
+    is FAIL-CLOSED when the ContextVar is unset (jarvis/bot/sensitive_turn.py)
+    — production wires it in run_session/cli.main before any turn. Without
+    this, SubAgent.run's RunLogger snapshots sensitive=True (base.py:467) and
+    stores runlog.store.SENSITIVE_SENTINEL ("<sensitive>") as the run's task
+    instead of the real text, so every run here tokenized to the single word
+    "sensitive" and learn_from_run's FTS candidate lookup (over label and
+    description, never task_tokens) could never find the weather-labeled
+    candidate it just created — three runs produced three separate
+    never-promoted candidates instead of one reinforced three times. Reset
+    via token so the ambient context doesn't leak into whatever test runs
+    next in this process."""
+    token = current_sensitive_turn.set(SensitiveTurn())
+    yield
+    current_sensitive_turn.reset(token)
+
+
 async def test_procedure_promoted_after_three_successes_then_injected_as_hint(
-    db, stub_settings_for_learning,
+    db, stub_settings_for_learning, unarmed_turn,
 ):
     describe_payload = json.dumps({"label": LABEL, "description": DESCRIPTION})
 
@@ -118,7 +138,7 @@ async def test_procedure_promoted_after_three_successes_then_injected_as_hint(
     assert hint["content"] == f"A similar task has succeeded before: {DESCRIPTION}"
 
 
-async def test_unrelated_task_never_gets_a_hint(db, stub_settings_for_learning):
+async def test_unrelated_task_never_gets_a_hint(db, stub_settings_for_learning, unarmed_turn):
     describe_payload = json.dumps({"label": LABEL, "description": DESCRIPTION})
     for i in range(1, PROCEDURE_PROMOTE_AFTER + 1):
         agent, _ = make_agent()

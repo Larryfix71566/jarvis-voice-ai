@@ -1,7 +1,7 @@
 # Mortimer — Session-Gap Fixes + Self-Edit Convergence
 
 **Author:** Claude Opus 5 (Cowork session), 2026-08-22
-**Status:** awaiting implementation
+**Status:** IMPLEMENTED 2026-08-22 (G1–G12).
 **Origin:** review of the 2026-08-22 16:38–17:13 live session (bot.log,
 admin.log, run log, git history) after Larry: *"review the recent session
 logs and provide an update on gaps for requested upgrades and gaps causing

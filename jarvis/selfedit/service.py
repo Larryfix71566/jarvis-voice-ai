@@ -48,7 +48,9 @@ logger = logging.getLogger(__name__)
 
 GIT_TIMEOUT_S = 60
 BUILD_TIMEOUT_S = 600
-VALIDATE_PYTEST_TIMEOUT_S = 300
+VALIDATE_PYTEST_TIMEOUT_S = 900  # 2026-09-04: 2,150+ tests; the self-edit
+# run that convened council round e48cfbe1 timed out here at 300 s
+# (gap-closure plan GC1b). CI runs the same command with no timeout.
 SESSION_BRANCH_PREFIX = "jarvis/self-edit"
 ROLLBACK_TAG_PREFIX = "pre-selfedit"
 DEFAULT_BASE_REF = "origin/main"

@@ -1,6 +1,6 @@
 # Mortimer — Resume Brief: crash and interruption recovery
 
-**Status: AWAITING APPROVAL — no code written**
+**Status:** SUPERSEDED 2026-08-21 by the reliability overhaul (barge-in survival, CLAUDE.md).
 Author: Claude, 2026-08-20. Requested by Larry (*"how do we recover from a
 crash and continue with what we were working on elegantly?"*).
 

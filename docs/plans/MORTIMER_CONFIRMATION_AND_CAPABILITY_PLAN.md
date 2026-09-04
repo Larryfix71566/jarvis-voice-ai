@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-18
 **Branch:** feat/plan-review-and-docs
-**Status:** awaiting approval (§8)
+**Status:** IMPLEMENTED (acceptance checklist in tests/acceptance/).
 
 ---
 

@@ -1,6 +1,6 @@
 # Mortimer — Voice Isolation Tiers 1+2: Noise Suppression + Speaker Gate
 
-**Status: APPROVED by Larry 2026-08-21 — ready for implementation.**
+**Status:** IMPLEMENTED 2026-08-21/22; Tier 2 gate OFF pending §6.
 Author: Claude (Fable), 2026-08-21. Requested by Larry: *"clean up other
 voices. do we employ some type of user identification so that unknown
 voices are ignored? … let's implement tier 1 and 2 and then test

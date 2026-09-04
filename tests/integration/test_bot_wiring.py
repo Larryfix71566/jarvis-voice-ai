@@ -252,7 +252,7 @@ def test_six_functions_registered(runtime, fakes):
     # the handoff loop: show a command, Larry runs it, read the output back)
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "delegate_task", "list_screens", "read_clipboard",
+        "clear_clipboard", "cost_summary", "delegate_task", "list_screens", "read_clipboard",
         "remember", "set_voice", "show_commands", "ui_control", "view_screen",
     ]
     assert llm.kwargs == {"api_key": "sk", "base_url": "http://llm", "model": "m"}
@@ -265,7 +265,7 @@ def test_ui_control_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
     monkeypatch.setenv("JARVIS_UI_CONTROL_ENABLED", "false")
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "delegate_task", "list_screens", "read_clipboard",
+        "clear_clipboard", "cost_summary", "delegate_task", "list_screens", "read_clipboard",
         "remember", "set_voice", "show_commands", "view_screen",
     ]
 
@@ -276,7 +276,7 @@ def test_screen_vision_kill_switch_unregisters_tools(runtime, fakes, monkeypatch
     monkeypatch.setenv("JARVIS_SCREEN_ENABLED", "false")
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "delegate_task", "read_clipboard", "remember",
+        "clear_clipboard", "cost_summary", "delegate_task", "read_clipboard", "remember",
         "set_voice", "show_commands", "ui_control",
     ]
 
@@ -490,39 +490,62 @@ def test_wrap_rtvi_envelope():
 async def test_transcript_logger_writes_both_roles(fresh_db):
     """User rows come from TranscriptObserver (D-007: the 1.4 user aggregator
     consumes TranscriptionFrame, so the processor never sees it); assistant
-    rows still come from the TranscriptLogger processor."""
-    from pipecat.frames.frames import LLMFullResponseEndFrame, LLMTextFrame, TranscriptionFrame
+    rows still come from the TranscriptLogger processor.
+
+    T4a K3 (gap-closure plan GC1): persistence is gated on the sensitive-turn
+    holder, which is FAIL-CLOSED when unset (jarvis/bot/sensitive_turn.py).
+    The live sites (cli.py, pipeline.py) set it before any turn; this test
+    must too, exactly as test_orchestrator.py's
+    test_user_and_assistant_rows_written already does for the orchestrator
+    path. Reset via token so the ambient context doesn't leak into whatever
+    test runs next in this process."""
+    from pipecat.frames.frames import (
+        LLMFullResponseEndFrame, LLMTextFrame, TranscriptionFrame,
+        UserStoppedSpeakingFrame,
+    )
     from pipecat.observers.base_observer import FramePushed
     from pipecat.processors.frame_processor import FrameDirection
 
+    from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
     from jarvis.bot.transcript_log import TranscriptObserver
 
-    observer = TranscriptObserver(session_id="s1")
-    await observer.on_push_frame(FramePushed(
-        source=None, destination=None,
-        frame=TranscriptionFrame(
-            text="hello jarvis", finalized=True, user_id="u", timestamp="t"),
-        direction=FrameDirection.DOWNSTREAM, timestamp=0))
+    token = current_sensitive_turn.set(SensitiveTurn())
+    try:
+        observer = TranscriptObserver(session_id="s1")
+        await observer.on_push_frame(FramePushed(
+            source=None, destination=None,
+            frame=TranscriptionFrame(
+                text="hello jarvis", finalized=True, user_id="u", timestamp="t"),
+            direction=FrameDirection.DOWNSTREAM, timestamp=0))
+        # D-007/review F13: the user side is buffered and only flushed (armed,
+        # printed, persisted) at turn close, so a UserStoppedSpeakingFrame is
+        # required after the transcription for the row to land.
+        await observer.on_push_frame(FramePushed(
+            source=None, destination=None,
+            frame=UserStoppedSpeakingFrame(),
+            direction=FrameDirection.DOWNSTREAM, timestamp=0))
 
-    logger = TranscriptLogger(session_id="s1")
+        logger = TranscriptLogger(session_id="s1")
 
-    async def noop(frame, direction):
-        pass
-    logger.push_frame = noop  # detach from pipeline plumbing
+        async def noop(frame, direction):
+            pass
+        logger.push_frame = noop  # detach from pipeline plumbing
 
-    await logger.process_frame(LLMTextFrame(text="Good "), None)
-    await logger.process_frame(LLMTextFrame(text="afternoon."), None)
-    await logger.process_frame(LLMFullResponseEndFrame(), None)
+        await logger.process_frame(LLMTextFrame(text="Good "), None)
+        await logger.process_frame(LLMTextFrame(text="afternoon."), None)
+        await logger.process_frame(LLMFullResponseEndFrame(), None)
 
-    from jarvis.db import get_conn
-    with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT role, content FROM conversations WHERE session_id='s1' ORDER BY id"
-        ).fetchall()
-    assert [(r["role"], r["content"]) for r in rows] == [
-        ("user", "hello jarvis"),
-        ("assistant", "Good afternoon."),
-    ]
+        from jarvis.db import get_conn
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT role, content FROM conversations WHERE session_id='s1' ORDER BY id"
+            ).fetchall()
+        assert [(r["role"], r["content"]) for r in rows] == [
+            ("user", "hello jarvis"),
+            ("assistant", "Good afternoon."),
+        ]
+    finally:
+        current_sensitive_turn.reset(token)
 
 
 async def test_observer_logs_first_audio_latency(capsys):
