@@ -33,6 +33,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from pipecat.frames.frames import OutputTransportMessageUrgentFrame
+
+from jarvis.bot.keyhealth_notice import KeyHealthNotice
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -156,6 +158,12 @@ class Runtime:
     # jarvis/bot/sensitive_turn.py publishes a reference to THIS object and is
     # the single access path (review F15). Never persisted.
     sensitive_turn: SensitiveTurn = field(default_factory=SensitiveTurn)
+    # GC5 (gap-closure plan, 2026-09-04) -- sub_agents is a local of
+    # build_pipeline and not otherwise reachable from run_session, where
+    # KeyHealthNotice is constructed; keyhealth_notice is stashed here so
+    # the same finally block that stops the other watchers can stop it too.
+    sub_agents: dict = field(default_factory=dict)
+    keyhealth_notice: Any = None
 
 
 def bot_event_log(event: dict) -> None:
@@ -357,6 +365,7 @@ def build_pipeline(
         v for v in catalog["voices"] if v["id"] == catalog["default"])
 
     sub_agents = load_sub_agents(settings, runtime.registry)
+    runtime.sub_agents = sub_agents
     delegate_schema, delegate_handler = build_delegate_tool(
         sub_agents,
         on_event=make_agent_event_handler(transport),
@@ -1118,6 +1127,20 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
         )
         watcher.start()
 
+        # GC5 (gap-closure plan, 2026-09-04) -- degraded-mode notice, read
+        # exactly where JARVIS_PROGRESS_UPDATES_ENABLED is read below.
+        # Default true; runtime.keyhealth_notice stays None when off, so
+        # the finally block's guard skips it cleanly.
+        if os.environ.get("JARVIS_KEYHEALTH_NOTICE_ENABLED", "").strip().lower() not in (
+            "false", "0", "no",
+        ):
+            runtime.keyhealth_notice = KeyHealthNotice(
+                inject=inject_context,
+                agents=list(runtime.sub_agents.values()),
+                is_connected=lambda: client_connected["value"],
+            )
+            runtime.keyhealth_notice.start()
+
         # Reliable-memory plan D2: periodic mid-session fold-in, so an
         # unclean disconnect loses at most one sweep interval instead of
         # everything discussed. The end-of-session call below remains — it
@@ -1263,6 +1286,8 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
         finally:
             await watcher.stop()
             await memory_watcher.stop()
+            if runtime.keyhealth_notice is not None:
+                await runtime.keyhealth_notice.stop()
             if plan_watcher is not None:
                 await plan_watcher.stop()
             if research_watcher is not None:

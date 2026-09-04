@@ -13,3 +13,4 @@ bot: ./scripts/wait_for.sh 127.0.0.1 8484 30 vault && ./scripts/run_bot.sh
 # the LLM API, not vault.
 memory_extractor: ./scripts/run_memory_extractor.sh
 costs: ./scripts/run_costs.sh
+# web: (frozen 2026-09-04 -- run_web.sh by hand only; MortimerHost is the daily driver, see CLAUDE.md and web/README.md)

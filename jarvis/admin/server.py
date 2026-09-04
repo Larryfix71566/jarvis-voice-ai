@@ -74,6 +74,7 @@ from jarvis.agents.upgrade_agent import (
     resolve_profile,
 )
 from jarvis.agents.workspace import AppWorkspace
+from jarvis.admin.reminder_notifier import ReminderNotifier
 from jarvis import memory as memory_module
 from jarvis.council import config as council_config
 from jarvis.council import council as council_mod
@@ -255,6 +256,18 @@ def _prune_expired_stagings() -> None:
 
 # Single self-edit session for the sidecar process (plan §3: one at a time).
 _selfedit_service = SelfEditService()
+
+# GC9 (gap-closure plan, 2026-09-04): the persistent reminder notifier --
+# started here because the sidecar is the one always-on process that
+# already talks to the reminders table (see /api/ambient below). Only
+# ever sets notified_at, never delivered -- the bot's own RemindersWatcher
+# semantics are untouched. Same four falsy spellings as
+# jarvis/skills/registry.py's env_scoping_enabled().
+_reminder_notifier = ReminderNotifier()
+if os.environ.get("JARVIS_REMINDER_NOTIFICATIONS_ENABLED", "").strip().lower() not in (
+    "0", "false", "no", "off",
+):
+    _reminder_notifier.start()
 
 # Single-run gate: one upgrade job at a time, ever.
 _run_lock = threading.Lock()

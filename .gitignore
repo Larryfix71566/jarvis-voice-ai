@@ -19,6 +19,7 @@
 data/*.db
 data/*.db-*
 data/*.bak*
+data/backups/     # GC7: nightly sqlite backups (scripts/backup_db.py)
 __pycache__/
 *.pyc
 .venv/
@@ -51,3 +52,7 @@ _to_delete/
 # Self-edit session worktrees (jarvis/selfedit/service.py) — never part of the user's checkout
 data/selfedit_worktrees/
 _to_delete_tarballs/
+
+# GC10 (gap-closure plan, 2026-09-04) hygiene
+*.wav                 # speaker/eval captures live under data/; a WAV at the root is a stray
+web/dist_verify*/

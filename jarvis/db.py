@@ -548,6 +548,33 @@ CREATE INDEX IF NOT EXISTS idx_recall_events_created
   ON memory_recall_events(created_at);
 """
 
+MIGRATION_0020_user_id = """
+BEGIN;
+ALTER TABLE notes ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE reminders ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE conversations ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE actions ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE memories ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE observations ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE agent_runs ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE agent_events ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE procedures ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE council_rounds ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE council_scores ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE memory_reviews ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE memory_extraction_cursor ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE memory_extraction_pending ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE memory_recall_events ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';
+DROP INDEX IF EXISTS idx_memories_fact_key;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_fact_key
+  ON memories(user_id, key) WHERE kind = 'fact';
+COMMIT;
+"""
+
+MIGRATION_0021_reminders_notified = """
+ALTER TABLE reminders ADD COLUMN notified_at TEXT;
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
@@ -569,6 +596,8 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0017_memory_extraction_pending", MIGRATION_0017),
     ("0018_council_retry_outcome", MIGRATION_0018),
     ("0019_memory_recall_events", MIGRATION_0019),
+    ("0020_user_id", MIGRATION_0020_user_id),  # GC8 (gap-closure plan, 2026-09-04)
+    ("0021_reminders_notified", MIGRATION_0021_reminders_notified),  # GC9
 ]
 
 

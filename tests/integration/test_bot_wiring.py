@@ -734,6 +734,151 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "env_value, expect_constructed",
+    [("false", False), (None, True)],
+    ids=["switch_off", "switch_default_on"],
+)
+async def test_keyhealth_notice_kill_switch(monkeypatch, tmp_path, env_value, expect_constructed):
+    """GC5 (gap-closure plan, 2026-09-04): JARVIS_KEYHEALTH_NOTICE_ENABLED
+    gates construction of KeyHealthNotice exactly where
+    JARVIS_PROGRESS_UPDATES_ENABLED is read. Same disconnect scaffold as
+    test_client_disconnect_ends_task_and_folds_memory above."""
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "session.db"))
+    if env_value is None:
+        monkeypatch.delenv("JARVIS_KEYHEALTH_NOTICE_ENABLED", raising=False)
+    else:
+        monkeypatch.setenv("JARVIS_KEYHEALTH_NOTICE_ENABLED", env_value)
+
+    settings = SimpleNamespace(
+        deepgram_api_key="dg", openai_api_key="sk", openai_base_url="http://llm",
+        openai_model="m", elevenlabs_api_key="el", jarvis_name="Jarvis",
+        jarvis_user_name="Boss", jarvis_timezone="America/New_York",
+        jarvis_units="imperial",
+        jarvis_interruption_notice_enabled=True,
+        jarvis_late_result_neutralize_enabled=True,
+        jarvis_memory_sweep_interval_s=300.0,
+    )
+    cancelled, folded, constructed = [], [], []
+
+    class FakeTask:
+        def __init__(self, pipeline, observers=None, params=None):
+            self._ended = asyncio.Event()
+
+        async def cancel(self):
+            cancelled.append(True)
+            self._ended.set()
+
+        async def wait_ended(self):
+            await self._ended.wait()
+
+    class FakeRunner:
+        async def run(self, task):
+            await task.wait_ended()
+
+    class FakeWatcher:
+        def __init__(self, *a, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        async def stop(self):
+            pass
+
+    class FakeMemoryWatcher:
+        def __init__(self, *a, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        async def stop(self):
+            pass
+
+    class FakeKeyHealthNotice:
+        def __init__(self, *a, **kw):
+            constructed.append(True)
+
+        def start(self):
+            pass
+
+        async def stop(self):
+            pass
+
+    class FakeRegistry:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def start(self):
+            pass
+
+        async def stop(self):
+            pass
+
+    class FakePusher:
+        def bind(self, task):
+            pass
+
+    class FakeAggregators:
+        def user(self):
+            return SimpleNamespace()
+
+        def assistant(self):
+            return SimpleNamespace()
+
+    async def fake_fold(settings_arg, session_id, **kwargs):
+        folded.append(session_id)
+        return True
+
+    monkeypatch.setattr(bp, "load_settings", lambda: settings)
+    monkeypatch.setattr(bp, "bridge_settings_to_env", lambda s: None)
+    monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    monkeypatch.setattr(
+        bp, "load_voice_catalog",
+        lambda: {"default": "rachel",
+                 "voices": [{"id": "rachel", "label": "Rachel",
+                             "elevenlabs_voice_id": "vid"}]},
+    )
+    monkeypatch.setattr(
+        bp, "build_pipeline",
+        lambda transport, runtime: (
+            FakePipeline([]), FakeLLM("k", "u", "m"), FakeAggregators(), FakePusher()
+        ),
+    )
+    monkeypatch.setattr(bp, "PipelineTask", FakeTask)
+    monkeypatch.setattr(bp, "PipelineRunner", FakeRunner)
+    monkeypatch.setattr(bp, "RemindersWatcher", FakeWatcher)
+    monkeypatch.setattr(bp, "MemorySweepWatcher", FakeMemoryWatcher)
+    monkeypatch.setattr(bp, "KeyHealthNotice", FakeKeyHealthNotice)
+    monkeypatch.setattr(bp, "update_memory_from_session", fake_fold)
+
+    transport = HandlerCapturingTransport()
+
+    async def fire_disconnect():
+        for _ in range(500):
+            if "on_client_disconnected" in transport.handlers:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            raise AssertionError("on_client_disconnected was never registered")
+        await transport.handlers["on_client_disconnected"](transport, None)
+
+    await asyncio.wait_for(
+        asyncio.gather(bp.run_session(transport), fire_disconnect()), timeout=10
+    )
+
+    assert cancelled == [True]
+    assert folded
+    if expect_constructed:
+        assert constructed == [True], "KeyHealthNotice must be constructed when the switch is on"
+    else:
+        assert constructed == [], "KeyHealthNotice must not be constructed when the switch is off"
+
+
+@pytest.mark.asyncio
 async def test_stt_row_written_at_teardown(monkeypatch, tmp_path):
     """MORTIMER_SESSION_MISSES_PLAN.md S3 — Deepgram Flux emits no usage
     metric, so run_session's teardown bills the session's wall-clock as one

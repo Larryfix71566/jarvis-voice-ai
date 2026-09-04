@@ -492,7 +492,7 @@ class TestPreflight:
         assert res["tiers"]["core"] == ["jarvis/bot/display.py"]
 
     def test_routine_goal_passes_without_plan(self, service: SelfEditService) -> None:
-        res = service.preflight("tidy web/src/App.tsx spacing", has_plan=False)
+        res = service.preflight("tidy docs/README.md spacing", has_plan=False)  # GC4: web/ frozen
         assert res["ok"] is True and res["tiers"]["core"] == []
 
     def test_goal_naming_no_files_passes_through(self, service: SelfEditService) -> None:

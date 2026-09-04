@@ -414,7 +414,12 @@ async def _gather_proposals(
             )
             return name, content, usage
         except Exception as exc:  # noqa: BLE001 — never raise into convene()
-            logger.warning("council_proposer_failed profile=%s error=%s", name, exc)
+            # GC6(a): same fix as the judge branch above -- the exception TYPE
+            # must survive even when str(exc) is empty.
+            logger.warning(
+                "council_proposer_failed profile=%s error=%s: %s",
+                name, type(exc).__name__, exc,
+            )
             return name, None, None
 
     results = await asyncio.gather(*(_one(n) for n in names))
@@ -501,7 +506,12 @@ async def _gather_scores(
             )
             return [
                 Score(judge_profile=name, proposal_label=lbl, value=None,
-                     abstain_reason=f"judge call failed: {exc}")
+                     # GC6(a) (gap-closure plan, 2026-09-04): str(exc) is
+                     # empty for asyncio.TimeoutError(), which hid a dead
+                     # judge for two weeks (kimi-k3, three rounds,
+                     # abstain_reason == "judge call failed: "). The
+                     # exception TYPE can no longer disappear.
+                     abstain_reason=f"judge call failed: {type(exc).__name__}: {exc}")
                 for lbl in labels
             ], None
 

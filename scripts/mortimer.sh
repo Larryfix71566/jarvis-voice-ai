@@ -63,6 +63,7 @@ rotate_log() {  # name (e.g. "bot" -> logs/bot.log)
 
 case "$cmd" in
   stop)
+    if launchctl print "gui/$(id -u)/com.mortimer.bot" >/dev/null 2>&1; then echo "Mortimer is under launchd — use: python scripts/launchd_gen.py --status | --uninstall, or launchctl kickstart -k gui/$(id -u)/com.mortimer.bot"; exit 3; fi
     stop_all
     echo "Mortimer stopped."
     exit 0
@@ -77,6 +78,8 @@ case "$cmd" in
     exit 2
     ;;
 esac
+
+if launchctl print "gui/$(id -u)/com.mortimer.bot" >/dev/null 2>&1; then echo "Mortimer is under launchd — use: python scripts/launchd_gen.py --status | --uninstall, or launchctl kickstart -k gui/$(id -u)/com.mortimer.bot"; exit 3; fi
 
 if [ ! -x .venv/bin/python ]; then
   echo "no virtualenv found at .venv — create it first:" >&2
@@ -97,7 +100,6 @@ rotate_log vault
 rotate_log bot
 rotate_log extractor
 rotate_log admin
-rotate_log web
 rotate_log costs
 
 nohup ./scripts/run_kb.sh >> logs/vault.log 2>&1 &
@@ -108,8 +110,6 @@ nohup ./scripts/run_memory_extractor.sh >> logs/extractor.log 2>&1 &
 EXTRACTOR_PID=$!
 nohup ./scripts/run_admin.sh >> logs/admin.log 2>&1 &
 ADMIN_PID=$!
-nohup ./scripts/run_web.sh >> logs/web.log 2>&1 &
-WEB_PID=$!
 nohup ./scripts/run_costs.sh >> logs/costs.log 2>&1 &
 COSTS_PID=$!
 
@@ -129,11 +129,10 @@ check vault     "$VAULT_PID"     "tcp 127.0.0.1:$VAULT_PORT"
 check bot       "$BOT_PID"       "http://localhost:$BOT_PORT (waits on vault)"
 check extractor "$EXTRACTOR_PID" "background worker, no port"
 check admin     "$ADMIN_PID"     "http://localhost:$ADMIN_PORT/api/health"
-check web       "$WEB_PID"       "http://localhost:$WEB_PORT"
 check costs     "$COSTS_PID"     "http://localhost:$COSTS_PORT"
 
 echo
-echo "Open http://localhost:$WEB_PORT and click Connect."
+echo "Open MortimerHost (macos/MortimerHost, swift run or Xcode). Web console fallback: ./scripts/run_web.sh"
 echo "Logs:  ./scripts/mortimer.sh logs   (or: tail -f logs/bot.log)"
 echo "       previous sessions: logs/<name>.log.1 .. .${LOG_GENERATIONS}"
 echo "Stop:  ./scripts/mortimer.sh stop"

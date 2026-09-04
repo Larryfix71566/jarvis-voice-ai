@@ -81,6 +81,10 @@ class Settings(BaseSettings):
     jarvis_timezone: str = "America/New_York"
     jarvis_user_name: str = "Boss"
     jarvis_name: str = "Mortimer"
+    # GC8 (gap-closure plan, 2026-09-04, contract GC-T) -- column-only
+    # tenant identity; jarvis.tenant.current_user_id() is the one reader
+    # of JARVIS_USER_ID. Nothing filters by this yet.
+    jarvis_user_id: str = "local"
 
     # W3 (MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md) — a durable,
     # locale-derived display setting, the same kind of thing as
@@ -271,6 +275,12 @@ def bridge_settings_to_env(settings=None) -> None:
         os.environ.setdefault(
             "JARVIS_UNITS", getattr(settings, "jarvis_units", "imperial")
         )
+        # GC8 -- same bridge as JARVIS_UNITS above; MCP children do NOT see
+        # this (K2 forwards only BASE_ENV_KEYS plus declared optional_env,
+        # and no server declares it yet). Only the bot process needs it.
+        os.environ.setdefault(
+            "JARVIS_USER_ID", getattr(settings, "jarvis_user_id", "local")
+        )
         if getattr(settings, "tavily_api_key", None):
             os.environ.setdefault("TAVILY_API_KEY", settings.tavily_api_key)
         return
@@ -286,7 +296,7 @@ def bridge_settings_to_env(settings=None) -> None:
     for name, value in _dotenv_values().items():
         if name in (
             "JARVIS_DB_PATH", "JARVIS_TIMEZONE", "TAVILY_API_KEY",
-            "JARVIS_UNITS",
+            "JARVIS_UNITS", "JARVIS_USER_ID",
         ):
             if value:
                 os.environ.setdefault(name, value)

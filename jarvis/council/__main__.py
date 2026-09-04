@@ -227,6 +227,10 @@ def _do_agreement(since: str | None) -> int:
     print(f"single-proposer rounds {report.single_proposer_rounds}"
           + ("   <- a council of one; its winner is not evidence"
              if report.single_proposer_rounds else ""))
+    # GC6(b) (gap-closure plan, 2026-09-04) -- a --replay run's fresh
+    # shadow=1 rows supersede a failed original (e.g. the temperature-400
+    # rows in round d6e0059b); this is how many the report dropped.
+    print(f"superseded shadow rows: {report.superseded_shadow_rows}")
     print(f"decision               {report.branch}")
     print(f"recommend promote      {report.recommend_promote}")
     # V9 — this finally lets v1 §9's "observed cost per escalated

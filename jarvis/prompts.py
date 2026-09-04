@@ -115,6 +115,24 @@ DROP_NOTICE = (
     "it — do not guess at what it said."
 )
 
+# GC5 (gap-closure plan, 2026-09-04) — Single-key blast radius: one
+# ANTHROPIC_API_KEY carries voice, five specialists, developer, planner
+# default, vision and extraction. jarvis.keyhealth already reddens the
+# Agents tab chip when a credential is refused, but the chip is only seen
+# when the drawer is open -- a voice user's only reliable surface is a
+# spoken sentence. jarvis/bot/keyhealth_notice.py speaks these once per
+# connection (and once more on recovery); same silent-append channel as
+# the interruption notices and DROP_NOTICE above.
+KEYHEALTH_TEMPLATE = (
+    "[system] These specialists cannot run right now — the provider "
+    "refused their API credential ({detail}): {agents}. Tell the user "
+    "once, briefly, and do not delegate to them until told otherwise."
+)
+KEYHEALTH_RECOVERED_TEMPLATE = (
+    "[system] Specialist credentials are working again. Tell the user "
+    "briefly."
+)
+
 # AGENT_DISCIPLINE — the ONE rule block appended to every sub-agent
 # prompt (Larry 2026-08-18: "consolidate to less than 15% of the agent's
 # prompt").

@@ -88,7 +88,8 @@ CREATE TABLE IF NOT EXISTS llm_calls (
                                       -- Rev 3.3); NULL on every other rung
     quantity REAL,                    -- voice rungs only (MORTIMER_SESSION_MISSES_PLAN.md S1):
                                       -- characters (tts) or seconds (stt); NULL on token rows
-    unit TEXT                         -- 'chars' | 'seconds'; NULL on token rows
+    unit TEXT,                        -- 'chars' | 'seconds'; NULL on token rows
+    user_id TEXT NOT NULL DEFAULT 'local'  -- GC8 (gap-closure plan, 2026-09-04); column only
 );
 CREATE INDEX IF NOT EXISTS idx_calls_month ON llm_calls (month);
 CREATE INDEX IF NOT EXISTS idx_calls_rung ON llm_calls (month, rung);
@@ -195,6 +196,10 @@ def _conn() -> sqlite3.Connection:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN quantity REAL")
     if "unit" not in cols:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN unit TEXT")
+    # GC8 (gap-closure plan, 2026-09-04) -- same in-place-ALTER pattern as
+    # the columns above; costs.db has no migration runner of its own.
+    if "user_id" not in cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local'")
     return conn
 
 

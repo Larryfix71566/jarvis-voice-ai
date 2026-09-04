@@ -236,6 +236,44 @@ def cancel_reminder(reminder_id: int) -> dict:
     return _transition(reminder_id, "pending", "cancelled", "cancelled")
 
 
+def peek_due_reminders(grace_s: float) -> dict:
+    """GC9 (gap-closure plan, 2026-09-04): sidecar-side read, NOT a tool
+    (no server.py/skill.yaml/TOTAL_TOOLS change) -- unlike get_due_reminders
+    below, this does not mark anything delivered. Rows already spoken by a
+    connected bot (delivered=1) or already notified (notified_at set) are
+    excluded; `grace_s` is what keeps this from racing a connected bot's
+    own 30s watcher poll for the same row."""
+    now = (_now() - timedelta(seconds=grace_s)).isoformat()
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, message, due_at FROM reminders WHERE status = 'pending' "
+            "AND due_at <= ? AND delivered = 0 AND notified_at IS NULL "
+            "ORDER BY due_at ASC",
+            (now,),
+        ).fetchall()
+    return {
+        "reminders": [
+            {"id": row["id"], "message": row["message"], "due_at": row["due_at"]}
+            for row in rows
+        ]
+    }
+
+
+def mark_notified(ids: list[int]) -> dict:
+    """GC9: sets notified_at only -- delivered stays untouched, so a
+    connected bot still speaks the reminder on its next connect (the
+    watcher docstring's promise holds)."""
+    if not ids:
+        return {"marked": 0}
+    with get_conn() as conn:
+        conn.execute(
+            f"UPDATE reminders SET notified_at = ? WHERE id IN "
+            f"({','.join('?' * len(ids))})",
+            [now_iso(), *ids],
+        )
+    return {"marked": len(ids)}
+
+
 def get_due_reminders() -> dict:
     """Atomically fetch due, undelivered reminders and mark them delivered."""
     now = _now().isoformat()

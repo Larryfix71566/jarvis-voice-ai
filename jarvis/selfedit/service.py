@@ -714,6 +714,17 @@ class SelfEditService:
         paths = extract_paths(goal)
         tiers = self.allowlist.classify(paths)
         result: dict = {"ok": True, "paths": paths, "tiers": tiers}
+        # GC4 (gap-closure plan, 2026-09-04): web/ is frozen -- interface work
+        # goes to macos/MortimerHost now. `paths and` keeps a goal naming no
+        # files passing through (test_goal_naming_no_files_passes_through);
+        # `result` still carries `tiers` because jarvis/admin/server.py:795
+        # reads flight["tiers"] on refusal.
+        if paths and all(p == "web" or p.startswith("web/") for p in paths):
+            result.update(ok=False, error=(
+                "web/ is frozen (2026-09-04): interface work goes to "
+                "macos/MortimerHost, which is a human PR."
+            ))
+            return result
         if tiers["denied"]:
             result.update(ok=False, error=(
                 "these files are human-only (Tier 0 — the self-edit loop's own "
