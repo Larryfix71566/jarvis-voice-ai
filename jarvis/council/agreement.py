@@ -59,6 +59,12 @@ class AgreementReport:
     # and are excluded rather than assumed complete.
     short_handed_rounds: int = 0
     single_proposer_rounds: int = 0
+    # GC6(b) (gap-closure plan, 2026-09-04): rows dropped by the
+    # newest-shadow-row supersession below (a --replay writes fresh
+    # shadow=1 rows for a judge; the newest supersedes a failed original
+    # by construction, e.g. round d6e0059b's Anthropic-judge 400s on
+    # `temperature`, fixed in config but never re-run until --replay).
+    superseded_shadow_rows: int = 0
 
 
 def _spearman(a: list[float], b: list[float]) -> float | None:
@@ -202,6 +208,22 @@ def compute_agreement(
     planning_round_ids = {r["round_id"] for r in round_rows if r.get("workflow") == "planning"}
     score_rows = [r for r in score_rows if r["round_id"] not in planning_round_ids]
 
+    # GC6(b) -- BEFORE any metric below reads score_rows: a --replay run
+    # writes fresh shadow=1 rows for a judge that failed on an earlier
+    # round (e.g. the 400-on-temperature rows in d6e0059b, shadow=1).
+    # Among rows sharing (round_id, judge_profile, proposal_label,
+    # shadow), keep only the newest by created_at -- the newest
+    # supersedes the failed original by construction. A dedup inside
+    # _rows_for_round alone would leave the poisoned abstentions counted
+    # by _abstention_rate_by_tier/_discrimination_by_tier below, which
+    # read the raw rows directly.
+    before = len(score_rows)
+    keep: dict[tuple, dict] = {}
+    for r in sorted(score_rows, key=lambda r: r["created_at"] or ""):
+        keep[(r["round_id"], r["judge_profile"], r["proposal_label"], int(r.get("shadow", 0) or 0))] = r
+    score_rows = list(keep.values())
+    superseded = before - len(score_rows)
+
     round_ids_with_shadow = sorted({
         r["round_id"] for r in score_rows if int(r.get("shadow", 0) or 0) == 1
     })
@@ -288,6 +310,7 @@ def compute_agreement(
         recommend_promote=recommend_promote,
         short_handed_rounds=_count_short_handed(round_rows),
         single_proposer_rounds=_count_single_proposer(round_rows),
+        superseded_shadow_rows=superseded,
     )
 
 

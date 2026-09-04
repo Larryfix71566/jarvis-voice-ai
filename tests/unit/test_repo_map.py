@@ -46,10 +46,10 @@ def test_repo_map_under_cap_and_names_phase_modules():
     docs/REPO_MAP.md silent about jarvis/usage_ledger.py, costs_api.py,
     memory_extraction*, kb_digest.py, effort.py, anthropic_shim.py,
     sensitive*, bot/usage_watcher.py, bot/late_result.py, bot/costs_tool.py,
-    and mcp_servers/mcp_kb — real, currently-undocumented modules, not
-    something owned by a later phase of this plan (jarvis/tenant.py,
-    scripts/backup_db.py, scripts/launchd_gen.py are GC7/GC8, Phase B, and
-    deliberately not asserted here until they exist). This is the actual
+    and mcp_servers/mcp_kb — real, currently-undocumented modules. GC2
+    deliberately deferred jarvis/tenant.py, scripts/backup_db.py, and
+    scripts/launchd_gen.py until Phase B (GC7/GC8) landed them; they now
+    exist, so this test asserts them too. This is the actual
     docs/REPO_MAP.md file in the tree, not a fixture — regenerated from the
     tree, not from memory (§0 binding constraint 10)."""
     from pathlib import Path
@@ -64,5 +64,6 @@ def test_repo_map_under_cap_and_names_phase_modules():
         "memory_extraction_worker", "kb_digest", "effort", "anthropic_shim",
         "sensitive", "bot/sensitive_turn.py", "bot/usage_watcher.py",
         "bot/late_result.py", "bot/costs_tool.py", "mcp_kb",
+        "jarvis/tenant.py", "backup_db.py", "launchd_gen.py",
     ):
         assert name in suffix, name

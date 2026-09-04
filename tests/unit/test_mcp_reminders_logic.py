@@ -1,7 +1,7 @@
 """Unit tests for mcp_servers/mcp_reminders/logic.py (plan Phase 1 Tests)."""
 
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -120,6 +120,45 @@ class TestGetDueReminders:
     def test_already_delivered_not_returned(self, fresh_db):
         self._insert_due("old", "2026-08-04T14:00:00-04:00", delivered=1)
         assert logic.get_due_reminders()["reminders"] == []
+
+
+class TestPeekDueRemindersAndMarkNotified:
+    """GC9 (gap-closure plan, 2026-09-04): plain functions, not tools --
+    peek_due_reminders never sets delivered (only get_due_reminders does),
+    and mark_notified never touches delivered either."""
+
+    def _insert(self, message, due_at, *, delivered=0, notified_at=None):
+        from jarvis.db import get_conn, now_iso
+        with get_conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO reminders (message, due_at, status, delivered, "
+                "notified_at, created_at) VALUES (?, ?, 'pending', ?, ?, ?)",
+                (message, due_at, delivered, notified_at, now_iso()),
+            )
+            return cur.lastrowid
+
+    def test_peek_excludes_delivered_notified_and_inside_grace(self, fresh_db):
+        overdue = (FIXED_NOW - timedelta(minutes=2)).isoformat()
+        inside_grace = (FIXED_NOW - timedelta(seconds=10)).isoformat()
+
+        self._insert("due and unspoken", overdue)
+        self._insert("just barely due", inside_grace)
+        self._insert("delivered already", overdue, delivered=1)
+        self._insert("notified already", overdue, notified_at="2026-08-04T14:00:00-04:00")
+
+        result = logic.peek_due_reminders(grace_s=60.0)
+
+        assert [r["message"] for r in result["reminders"]] == ["due and unspoken"]
+
+    def test_mark_notified_leaves_delivered_untouched(self, fresh_db):
+        rid = self._insert("call mom", (FIXED_NOW - timedelta(minutes=2)).isoformat())
+
+        result = logic.mark_notified([rid])
+
+        assert result == {"marked": 1}
+        row = _due_at_of(rid)
+        assert row["notified_at"] is not None
+        assert row["delivered"] == 0
 
 
 class TestCopiedDateLogic:

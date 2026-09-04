@@ -376,5 +376,30 @@ class TestVoiceTransportRows:
         finally:
             conn.close()
 
+    def test_llm_calls_gains_user_id(self, tmp_path, monkeypatch):
+        """GC8 (gap-closure plan, 2026-09-04): an existing costs.db predates
+        user_id -- same in-place-ALTER pattern as plan_state/quantity/unit
+        above -- _conn() must add it once and keep every existing row and
+        its DEFAULT intact."""
+        import sqlite3
+        db = tmp_path / "pre_gc8.db"
+        legacy = sqlite3.connect(db)
+        legacy.executescript(_schema_without(("user_id",)))
+        legacy.execute(
+            "INSERT INTO llm_calls (ts, month, rung, provider, model) "
+            "VALUES ('2026-09-04T00:00:00+00:00', '2026-09', 'supervisor', 'anthropic', 'm')"
+        )
+        legacy.commit(); legacy.close()
+
+        monkeypatch.setattr(usage_ledger, "DB_PATH", db)
+        usage_ledger._conn().close()   # adds the column
+        conn = usage_ledger._conn()    # idempotent
+        try:
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(llm_calls)")}
+            assert "user_id" in cols
+            assert conn.execute("SELECT user_id FROM llm_calls").fetchone()[0] == "local"
+        finally:
+            conn.close()
+
     def test_tts_and_stt_are_known_rungs(self):
         assert "tts" in usage_ledger.RUNGS and "stt" in usage_ledger.RUNGS

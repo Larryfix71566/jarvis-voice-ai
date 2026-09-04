@@ -671,7 +671,7 @@ def upsert_fact(
     conn.execute(
         "INSERT INTO memories (kind, key, content, source_session_id, "
         "created_at, updated_at, tier) VALUES ('fact', ?, ?, ?, ?, ?, ?) "
-        "ON CONFLICT(key) WHERE kind = 'fact' "
+        "ON CONFLICT(user_id, key) WHERE kind = 'fact' "  # GC8: tenant column contract
         "DO UPDATE SET content = excluded.content, "
         "source_session_id = excluded.source_session_id, "
         "updated_at = excluded.updated_at, "

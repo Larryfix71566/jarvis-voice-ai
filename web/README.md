@@ -1,3 +1,7 @@
+**FROZEN 2026-09-04.** No new features; MortimerHost is the daily driver (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` G1(e) clock starts at this commit). Deleted by T1.4.
+
+---
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.

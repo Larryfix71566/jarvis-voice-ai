@@ -472,6 +472,10 @@ Waves; tracks inside a wave run in parallel.
   it rebuilds `macos/MortimerHost` (from NATIVE core), not the T1.3 app.
   `GlassSpike` is a throwaway spike and is out of scope for the rebuild path.
 
+- **2026-09-04:** gap-closure plan (`docs/plans/MORTIMER_GAP_CLOSURE_PLAN.md`)
+  lands before W1; G1(e)'s five-day web-retirement clock starts at the web
+  freeze commit (GC4).
+
 Critical path: T2 → T3.1 → G3 → T4b. The Swift migration is *not* on the
 critical path for the financial piece except as the key holder, which is
 why W1 runs it in parallel rather than first.

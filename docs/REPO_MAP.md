@@ -28,8 +28,12 @@ current branch.
   (manual checklists, not run by pytest).
 - `scripts/` — run/setup/check scripts (`mortimer.sh`, `run_bot.sh`,
   `run_admin.sh`, `run_web.sh`, `init_db.py`, `check_env.py`, etc.),
-  plus `cost_report.py` (prints the cost-ledger summary) and
-  `pull_openrouter_activity.py` (pulls OpenRouter usage into it).
+  plus `cost_report.py` (prints the cost-ledger summary),
+  `pull_openrouter_activity.py` (pulls OpenRouter usage into it),
+  `backup_db.py` (stdlib SQLite `.backup()` snapshots of `jarvis.db` /
+  `costs.db`, 14-day retention), and `launchd_gen.py` (renders/
+  installs/uninstalls the launchd plists that supervise the bot/admin/
+  reminder-notifier processes).
 - `data/` — gitignored: `jarvis.db` (SQLite), `secrets.vault`,
   `app_workspaces/` (cloned app repos, self-edit-denied).
 - `logs/` — gitignored: per-run JSONL payloads under `agents/<date>/`,
@@ -61,6 +65,9 @@ current branch.
 - `jarvis/prompts.py` — single source of truth for every system prompt.
 - `jarvis/db.py` — SQLite schema + migrations (human-only, never
   self-edited).
+- `jarvis/tenant.py` — `current_user_id()`: reads `JARVIS_USER_ID`,
+  defaults to `"local"` (GC8 — column added everywhere, nothing filters
+  reads/writes by it yet).
 - `jarvis/vault.py` — encrypted credential store (CLI-only).
 - `jarvis/usage_ledger.py` — per-call LLM usage ledger, its own
   `costs.db` (`llm_calls`) (MORTIMER_OPTIMIZATION_PLAN.md Phase 0).

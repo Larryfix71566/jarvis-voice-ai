@@ -12,14 +12,19 @@ from jarvis.council.agreement import _spearman, compute_agreement
 
 def _score_row(
     round_id, judge_profile, judge_tier, proposal_label, proposal_profile,
-    score, *, shadow=0, abstain_reason=None, justification="",
+    score, *, shadow=0, abstain_reason=None, justification="", created_at="",
 ):
+    # GC6(b) (gap-closure plan, 2026-09-04): compute_agreement's
+    # newest-shadow-row supersession sorts on created_at -- default "" so
+    # every pre-existing call site here (none of which cares about
+    # supersession) keeps sorting as a stable no-op, same order as before
+    # the column was read.
     return {
         "round_id": round_id, "judge_profile": judge_profile,
         "judge_tier": judge_tier, "shadow": shadow,
         "proposal_label": proposal_label, "proposal_profile": proposal_profile,
         "score": score, "abstain_reason": abstain_reason,
-        "justification": justification,
+        "justification": justification, "created_at": created_at,
     }
 
 
@@ -289,3 +294,39 @@ class TestShortHandedVisibility:
         assert _count_single_proposer([
             {"proposer_count": 1}, {"proposer_count": 3}, {"proposer_count": 1},
         ]) == 2
+
+
+# --------------------------------------------------------- GC6(b) supersession
+
+def test_newest_shadow_row_supersedes_older_for_same_judge_and_label():
+    """GC6(b) (gap-closure plan, 2026-09-04): a --replay run writes fresh
+    shadow=1 rows for a judge that failed on the original round (e.g.
+    d6e0059b's Anthropic judges 400ing on `temperature`). The newest row
+    by created_at supersedes the older failed one BEFORE any metric reads
+    score_rows, so the poisoned abstention is never counted."""
+    rows = [
+        _score_row("r1", "claude-frontier", "frontier", "A", "p1", None,
+                   shadow=1, created_at="2026-08-23T00:00:00Z"),
+        _score_row("r1", "claude-frontier", "frontier", "A", "p1", 7.0,
+                   shadow=1, created_at="2026-08-24T00:00:00Z"),
+    ]
+
+    report = compute_agreement(rows, [_round_row("r1")])
+
+    assert report.abstention_rate_by_tier["frontier"] == 0.0
+    assert report.superseded_shadow_rows == 1
+
+
+def test_superseded_count_reported():
+    """Rows that don't collide on (round_id, judge_profile, proposal_label,
+    shadow) are never counted as superseded."""
+    rows = [
+        _score_row("r1", "claude-frontier", "frontier", "A", "p1", 5.0,
+                   shadow=1, created_at="2026-08-23T00:00:00Z"),
+        _score_row("r1", "claude-frontier", "frontier", "B", "p2", 6.0,
+                   shadow=1, created_at="2026-08-23T00:00:00Z"),
+    ]
+
+    report = compute_agreement(rows, [_round_row("r1")])
+
+    assert report.superseded_shadow_rows == 0

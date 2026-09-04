@@ -2,7 +2,9 @@
 
 import sqlite3
 
-from jarvis.db import get_conn, now_iso, run_migrations
+import pytest
+
+from jarvis.db import MIGRATION_0020_user_id, MIGRATIONS, get_conn, now_iso, run_migrations
 
 EXPECTED_TABLES = {
     "migrations", "notes", "reminders", "conversations", "actions", "memories",
@@ -24,6 +26,8 @@ EXPECTED_MIGRATION_IDS = [
     "0017_memory_extraction_pending",
     "0018_council_retry_outcome",
     "0019_memory_recall_events",
+    "0020_user_id",
+    "0021_reminders_notified",
 ]
 
 
@@ -259,3 +263,92 @@ def test_now_iso_is_utc_isoformat():
     stamp = now_iso()
     assert stamp.endswith("+00:00")
     assert "T" in stamp
+
+
+def test_migration_0020_user_id_everywhere(tmp_path):
+    """GC8 (gap-closure plan, 2026-09-04): every table except migrations,
+    sqlite_* and *_fts* gains user_id TEXT NOT NULL DEFAULT 'local'. Same
+    exclusions as tests/unit/test_tenant_columns.py's generic walk; this one
+    additionally pins the 15-table list the migration names explicitly."""
+    expected_tables = {
+        "notes", "reminders", "conversations", "actions", "memories",
+        "observations", "agent_runs", "agent_events", "procedures",
+        "council_rounds", "council_scores", "memory_reviews",
+        "memory_extraction_cursor", "memory_extraction_pending",
+        "memory_recall_events",
+    }
+    conn = get_conn(tmp_path / "0020.db")
+    run_migrations(conn)
+    try:
+        for name in expected_tables:
+            cols = {row["name"]: row for row in conn.execute(f"PRAGMA table_info({name})")}
+            assert "user_id" in cols, f"{name} missing user_id"
+            assert cols["user_id"]["notnull"] == 1
+            assert cols["user_id"]["dflt_value"] == "'local'"
+        idx = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='index' AND name='idx_memories_fact_key'"
+        ).fetchone()
+        assert idx is not None and "user_id" in idx["sql"]
+    finally:
+        conn.close()
+
+
+def test_migration_0020_is_atomic(tmp_path, monkeypatch):
+    """GC8: MIGRATION_0020_user_id is wrapped in BEGIN/COMMIT because
+    run_migrations records the id only after executescript succeeds
+    (:609-614 at plan-writing time) -- without the transaction a mid-script
+    ALTER failure would leave earlier columns added and 0020 unrecorded,
+    and every later boot would die on "duplicate column name". This
+    monkeypatches a bogus ALTER into the middle of the script and confirms
+    NOTHING from it landed, not even the columns added before the failure."""
+    import jarvis.db as db
+
+    db_path = tmp_path / "atomic.db"
+    monkeypatch.setenv("JARVIS_DB_PATH", str(db_path))
+
+    pre_0020 = [(mid, sql) for mid, sql in MIGRATIONS if mid != "0020_user_id"]
+    monkeypatch.setattr(db, "MIGRATIONS", pre_0020)
+    run_migrations()
+
+    bogus_sql = MIGRATION_0020_user_id.replace(
+        "ALTER TABLE council_scores ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';",
+        "ALTER TABLE this_table_does_not_exist ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local';",
+        1,
+    )
+    assert bogus_sql != MIGRATION_0020_user_id, "replacement target not found in migration SQL"
+    monkeypatch.setattr(db, "MIGRATIONS", pre_0020 + [("0020_user_id", bogus_sql)])
+
+    with pytest.raises(sqlite3.OperationalError):
+        run_migrations()
+
+    conn = get_conn(db_path)
+    try:
+        applied = {row["id"] for row in conn.execute("SELECT id FROM migrations")}
+        assert "0020_user_id" not in applied
+        # "notes" is ALTERed before "council_scores" in the script -- if the
+        # transaction rolled back correctly, even this earlier ALTER is gone.
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(notes)")}
+        assert "user_id" not in cols
+    finally:
+        conn.close()
+
+
+def test_migration_0021_notified_at(tmp_path):
+    """GC9 (gap-closure plan, 2026-09-04): reminders.notified_at exists,
+    nullable, and is NULL for a freshly-migrated table."""
+    conn = get_conn(tmp_path / "0021.db")
+    run_migrations(conn)
+    try:
+        cols = {row["name"]: row for row in conn.execute("PRAGMA table_info(reminders)")}
+        assert "notified_at" in cols
+        assert cols["notified_at"]["notnull"] == 0
+        cur = conn.execute(
+            "INSERT INTO reminders (message, due_at, status, delivered, created_at) "
+            "VALUES ('x', '2026-01-01T00:00:00Z', 'pending', 0, '2026-01-01T00:00:00Z')"
+        )
+        row = conn.execute(
+            "SELECT notified_at FROM reminders WHERE id = ?", (cur.lastrowid,)
+        ).fetchone()
+        assert row["notified_at"] is None
+    finally:
+        conn.close()

@@ -484,5 +484,5 @@ def test_stage_accepts_a_core_goal_with_a_plan_and_flags_it(registry_file, monke
 def test_stage_routine_goal_unchanged(registry_file, monkeypatch, tmp_path):
     _preflight_service(monkeypatch, tmp_path)
     c = TestClient(app)
-    res = c.post("/api/selfedit/stage", json={"goal": "tidy web/src/App.tsx"}).json()
+    res = c.post("/api/selfedit/stage", json={"goal": "tidy docs/README.md"}).json()  # GC4: web/ frozen
     assert res["ok"] is True and res["core_change"] is False

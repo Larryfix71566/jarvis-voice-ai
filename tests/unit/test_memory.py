@@ -82,6 +82,22 @@ def test_upsert_fact_replaces_by_key(conn):
     assert rows[0]["content"] == "Lawrence"
 
 
+def test_upsert_fact_conflict_still_updates_with_default_user(conn):
+    """GC8 (gap-closure plan, 2026-09-04): idx_memories_fact_key's conflict
+    target moved from (key) to (user_id, key) so a future per-tenant filter
+    has something to key off of. upsert_fact never sets user_id itself, so
+    both inserts get the column's DEFAULT 'local' -- the conflict must still
+    resolve to one row, updated, exactly as before the column existed."""
+    upsert_fact(conn, "user.name", "Larry", "s1")
+    upsert_fact(conn, "user.name", "Lawrence", "s2")
+    rows = conn.execute(
+        "SELECT content, user_id FROM memories WHERE key = 'user.name'"
+    ).fetchall()
+    assert len(rows) == 1
+    assert rows[0]["content"] == "Lawrence"
+    assert rows[0]["user_id"] == "local"
+
+
 def test_set_summary_keeps_single_row(conn):
     set_summary(conn, "first", "s1")
     set_summary(conn, "second", "s2")
