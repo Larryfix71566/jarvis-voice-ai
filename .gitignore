@@ -19,7 +19,8 @@
 data/*.db
 data/*.db-*
 data/*.bak*
-data/backups/     # GC7: nightly sqlite backups (scripts/backup_db.py)
+# GC7: nightly sqlite backups (scripts/backup_db.py)
+data/backups/
 __pycache__/
 *.pyc
 .venv/
@@ -54,7 +55,8 @@ data/selfedit_worktrees/
 _to_delete_tarballs/
 
 # GC10 (gap-closure plan, 2026-09-04) hygiene
-*.wav                 # speaker/eval captures live under data/; a WAV at the root is a stray
+# speaker/eval captures live under data/; a WAV at the root is a stray
+*.wav
 web/dist_verify*/
 
 # stray verification renders dropped at the repo root (seam.png, delib.png)
