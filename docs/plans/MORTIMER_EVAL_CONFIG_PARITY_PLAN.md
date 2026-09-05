@@ -94,10 +94,26 @@ the two cannot drift apart again.
 A and B are provable no-ops. They were the de-risking step and both are
 verified; C onward changes behaviour.
 
-**C. Teach the Orchestrator more than one tool.** `_tools_kwarg` takes an
-optional extra-schema list; `_execute_tool` consults an optional handler
-map before falling through to its current message. Both default empty, so
-`cli.py` and the three existing test modules are unaffected.
+**C. Teach the Orchestrator more than one tool. — DONE.** `extra_tools`
+takes `(schema, handler)` PAIRS rather than a schema list plus a separate
+handler map, so a caller cannot show the model a tool it cannot answer.
+Three things are refused rather than accepted quietly: shadowing
+`delegate_task` (a routing eval would score the shadow and report it as a
+delegation), a duplicate tool name, and passing extras in direct mode
+(accepting and ignoring them would leave the caller believing the model
+saw tools it never received). Sync and async handlers both work — every
+production handler is async, eval stubs are simpler sync.
+
+It also closes half of item E: `_execute_tool` now emits
+`{"type": "supervisor_tool", "tool": ...}` for every tool it runs, and a
+raising observer is caught rather than allowed to break the turn. Note
+this is the **Orchestrator** half only. Production does not use this class,
+so `pipeline.py` still observes nothing when the Supervisor calls a direct
+tool; item E remains open for that path.
+
+Empty extras is the default and reproduces the old behaviour, pinned by
+the pre-existing `test_only_delegate_tool_is_offered`; nine new tests in
+`TestExtraTools` cover the opt-in.
 
 **D. Point the eval at the production configuration.** Build the prompt
 and schemas from A and B, bind stubs that record the tool name and return
