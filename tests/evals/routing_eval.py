@@ -29,6 +29,92 @@ sys.path.insert(0, str(REPO_ROOT))
 CASES_PATH = Path(__file__).resolve().parent / "cases.yaml"
 ACCURACY_THRESHOLD = 0.90
 
+# 2026-09-05 — a single aggregate over uneven category sizes hides the
+# weakest category until it is the only thing left. The five smallest
+# categories here total 25 cases; `developer` alone is 22 and `none` is 23,
+# so a category can rot for a long time while the aggregate still clears
+# 90%.
+#
+# DELIBERATELY EMPTY. A floor is a claim about what the eval currently
+# scores per category, and no run recording that breakdown exists yet —
+# this change is what produces the first one. Populate from an observed
+# run, not from an estimate: a floor set above the real number turns the
+# gate red on arrival and a floor set below it ratchets nothing. With no
+# entries, gating is byte-for-byte what it was before this change.
+CATEGORY_FLOORS: dict[str, float] = {}
+
+
+def _category_of(expect: set[str]) -> str:
+    """Bucket a case by what it expects, for per-category scoring.
+
+    Multi-agent cases collapse into one "multi" bucket rather than each
+    combination becoming its own: cases.yaml has four of them, one per
+    combination, and a floor over a single case can only ever be 0% or
+    100%.
+    """
+    if expect == {"none"}:
+        return "none"
+    if len(expect) > 1:
+        return "multi"
+    return next(iter(expect))
+
+
+def summarize_categories(
+    results: list[tuple[str, bool]],
+) -> dict[str, tuple[int, int]]:
+    """{category: (correct, total)}. Totals sum to len(results)."""
+    summary: dict[str, tuple[int, int]] = {}
+    for category, ok in results:
+        correct, total = summary.get(category, (0, 0))
+        summary[category] = (correct + bool(ok), total + 1)
+    return summary
+
+
+def format_category_report(
+    summary: dict[str, tuple[int, int]],
+    floors: dict[str, float] | None = None,
+) -> str:
+    floors = CATEGORY_FLOORS if floors is None else floors
+    lines = ["per-category:"]
+    for category in sorted(summary, key=lambda c: (-summary[c][1], c)):
+        correct, total = summary[category]
+        rate = correct / total if total else 0.0
+        floor = floors.get(category)
+        mark = ""
+        if floor is not None and rate < floor:
+            mark = f"   BELOW FLOOR {floor:.0%}"
+        lines.append(f"  {category:<12} {correct:>3}/{total:<3} {rate:>4.0%}{mark}")
+    return "\n".join(lines)
+
+
+def gate_failures(
+    accuracy: float,
+    summary: dict[str, tuple[int, int]],
+    threshold: float = ACCURACY_THRESHOLD,
+    floors: dict[str, float] | None = None,
+) -> list[str]:
+    """Every reason the gate should fail. Empty list means pass."""
+    floors = CATEGORY_FLOORS if floors is None else floors
+    failures: list[str] = []
+    if accuracy < threshold:
+        failures.append(
+            f"aggregate {accuracy:.0%} below threshold {threshold:.0%}"
+        )
+    for category, floor in sorted(floors.items()):
+        if category not in summary:
+            # A floor naming a category no cases produce is a stale floor,
+            # and silently passing it would let a renamed agent disable its
+            # own gate.
+            failures.append(f"{category}: floor set but no cases scored")
+            continue
+        correct, total = summary[category]
+        rate = correct / total if total else 0.0
+        if rate < floor:
+            failures.append(
+                f"{category} {correct}/{total} = {rate:.0%} below floor {floor:.0%}"
+            )
+    return failures
+
 
 REPLY_PREVIEW_CHARS = 400
 
@@ -90,7 +176,7 @@ def _apply_candidate_overrides() -> None:
                   f"the eval will run on the DEFAULT key, not the candidate's")
 
 
-async def run_eval() -> float:
+async def run_eval() -> tuple[float, dict[str, tuple[int, int]]]:
     # Isolate eval side effects (notes/reminders/conversations) in a temp db
     # BEFORE importing jarvis modules that read JARVIS_DB_PATH.
     os.environ["JARVIS_DB_PATH"] = str(
@@ -118,6 +204,7 @@ async def run_eval() -> float:
 
     cases = yaml.safe_load(CASES_PATH.read_text(encoding="utf-8"))
     correct = 0
+    results: list[tuple[str, bool]] = []
     try:
         for i, case in enumerate(cases, 1):
             expected = _normalize(case["expect"])
@@ -145,11 +232,17 @@ async def run_eval() -> float:
                 reply = await orch.chat(case["input"])
             except Exception as exc:  # noqa: BLE001 — record as wrong, continue
                 print(f"[{i:2d}/{len(cases)}] ERROR  {case['input']!r}: {exc}")
+                # Counted as a failure in its category, not dropped: the
+                # aggregate already counts it (len(cases) is the
+                # denominator), so dropping it here would make the category
+                # totals disagree with the aggregate.
+                results.append((_category_of(expected), False))
                 continue
 
             actual = set(delegated)
             ok = actual == expected if expected != {"none"} else not actual
             correct += ok
+            results.append((_category_of(expected), bool(ok)))
             mark = "ok " if ok else "MISS"
             print(f"[{i:2d}/{len(cases)}] {mark} expect={sorted(expected)} "
                   f"got={sorted(actual)}  {case['input']!r}")
@@ -159,17 +252,22 @@ async def run_eval() -> float:
         await registry.stop()
 
     accuracy = correct / len(cases)
+    summary = summarize_categories(results)
     print(f"\nRouting accuracy: {correct}/{len(cases)} = {accuracy:.0%} "
           f"(threshold {ACCURACY_THRESHOLD:.0%})")
-    return accuracy
+    print(format_category_report(summary))
+    return accuracy, summary
 
 
 def main() -> int:
     if os.environ.get("RUN_LIVE") != "1":
         print("routing_eval makes real LLM calls; re-run with RUN_LIVE=1")
         return 2
-    accuracy = asyncio.run(run_eval())
-    return 0 if accuracy >= ACCURACY_THRESHOLD else 1
+    accuracy, summary = asyncio.run(run_eval())
+    failures = gate_failures(accuracy, summary)
+    for reason in failures:
+        print(f"GATE FAIL: {reason}")
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
