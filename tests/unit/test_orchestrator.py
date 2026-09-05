@@ -397,3 +397,65 @@ class TestExtraTools:
             make_orchestrator([("text", "ok")], mode="direct",
                               extra_tools=[(self._schema("ui_control"),
                                             lambda a: "ok")])
+
+
+class TestPromptConfiguration:
+    """MORTIMER_EVAL_CONFIG_PARITY_PLAN.md item D.
+
+    The Orchestrator built SUPERVISOR_PROMPT with none of the four addenda
+    production ships, so the routing eval scored a prompt Mortimer never
+    reads. These cover the opt-in; the defaults are unchanged and every
+    other test in this file is the pin for that.
+    """
+
+    async def test_by_default_no_addendum_reaches_the_prompt(self, fresh_db):
+        from jarvis.prompts import (
+            HANDOFF_ADDENDUM, SCREEN_VISION_ADDENDUM, UI_CONTROL_ADDENDUM,
+            VOICE_ADDENDUM,
+        )
+        orch, completions = make_delegating([("text", "ok")])
+        await orch.chat("hi")
+        system = completions.requests[0]["messages"][0]["content"]
+        for addendum in (VOICE_ADDENDUM, UI_CONTROL_ADDENDUM,
+                         SCREEN_VISION_ADDENDUM, HANDOFF_ADDENDUM):
+            assert addendum not in system
+
+    async def test_the_production_flags_put_all_four_addenda_in(self, fresh_db):
+        from jarvis.prompts import (
+            HANDOFF_ADDENDUM, SCREEN_VISION_ADDENDUM, UI_CONTROL_ADDENDUM,
+            VOICE_ADDENDUM,
+        )
+        orch, completions = make_delegating(
+            [("text", "ok")],
+            voice=True, ui_control=True, screen=True, clipboard=True,
+        )
+        await orch.chat("hi")
+        system = completions.requests[0]["messages"][0]["content"]
+        for addendum in (VOICE_ADDENDUM, UI_CONTROL_ADDENDUM,
+                         SCREEN_VISION_ADDENDUM, HANDOFF_ADDENDUM):
+            assert addendum in system
+
+    async def test_one_flag_brings_only_its_own_addendum(self, fresh_db):
+        from jarvis.prompts import UI_CONTROL_ADDENDUM, VOICE_ADDENDUM
+        orch, completions = make_delegating([("text", "ok")], voice=True)
+        await orch.chat("hi")
+        system = completions.requests[0]["messages"][0]["content"]
+        assert VOICE_ADDENDUM in system
+        assert UI_CONTROL_ADDENDUM not in system
+
+    async def test_the_voice_catalog_defaults_to_the_placeholder(self, fresh_db):
+        orch, completions = make_delegating([("text", "ok")])
+        await orch.chat("hi")
+        assert "(none configured yet)" in \
+            completions.requests[0]["messages"][0]["content"]
+
+    async def test_a_supplied_voice_catalog_replaces_the_placeholder(
+            self, fresh_db):
+        # Production interpolates a real catalog here; the placeholder is
+        # one more way the eval's prompt differed from the shipped one.
+        orch, completions = make_delegating(
+            [("text", "ok")], voice_catalog="- rachel: Rachel")
+        await orch.chat("hi")
+        system = completions.requests[0]["messages"][0]["content"]
+        assert "- rachel: Rachel" in system
+        assert "(none configured yet)" not in system

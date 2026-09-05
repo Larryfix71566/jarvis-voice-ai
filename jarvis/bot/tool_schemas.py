@@ -40,7 +40,7 @@ from jarvis.bot.voice_switch import SET_VOICE_SCHEMA
 
 
 def supervisor_tool_schemas(
-    delegate_schema: dict,
+    delegate_schema: dict | None,
     *,
     ui_control: bool = False,
     screen: bool = False,
@@ -50,14 +50,17 @@ def supervisor_tool_schemas(
 
     `delegate_schema` is passed in rather than imported: it is built from
     the live sub-agent roster (the `agent_name` enum), so it is the one
-    entry that cannot be a constant.
+    entry that cannot be a constant. Pass None to get the menu WITHOUT it —
+    for a caller that already owns its own delegate schema and would
+    otherwise end up showing the model two of them. The rest of the order
+    is unchanged either way.
 
     The flags are the same kill switches that decide registration, so a
     caller cannot show the model a tool it did not register — or register
     one it did not describe in the prompt.
     """
     schemas: list[dict] = [
-        delegate_schema,
+        *( [delegate_schema] if delegate_schema is not None else [] ),
         SET_VOICE_SCHEMA,
         REMEMBER_SCHEMA,
         COST_SUMMARY_SCHEMA,

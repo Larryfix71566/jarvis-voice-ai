@@ -110,3 +110,25 @@ def test_the_menu_holds_the_object_the_factory_returns():
     schema, _handler = build_cost_summary_tool()
     assert schema is COST_SUMMARY_SCHEMA
     assert supervisor_tool_schemas(DELEGATE)[3] is COST_SUMMARY_SCHEMA
+
+
+def test_the_menu_can_omit_delegate_task_for_a_caller_that_owns_it():
+    # The Orchestrator builds its own delegate schema from the live
+    # sub-agent roster; handing it a second one would show the model two.
+    names = [s["function"]["name"]
+             for s in supervisor_tool_schemas(
+                 None, ui_control=True, screen=True, clipboard=True)]
+    assert "delegate_task" not in names
+    assert names == [
+        "set_voice", "remember", "cost_summary", "ui_control",
+        "view_screen", "list_screens", "show_commands",
+        "clear_clipboard", "read_clipboard",
+    ]
+
+
+def test_omitting_delegate_task_changes_nothing_else_about_the_order():
+    with_it = supervisor_tool_schemas(DELEGATE, ui_control=True, screen=True,
+                                      clipboard=True)
+    without = supervisor_tool_schemas(None, ui_control=True, screen=True,
+                                      clipboard=True)
+    assert without == with_it[1:]

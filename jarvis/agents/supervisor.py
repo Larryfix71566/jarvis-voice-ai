@@ -58,6 +58,11 @@ class Orchestrator:
         agents_config: str | Path | None = None,
         on_event: Callable[[dict], None] | None = None,
         extra_tools: Sequence[tuple[dict, Callable[[dict], Any]]] | None = None,
+        voice_catalog: str | None = None,
+        voice: bool = False,
+        ui_control: bool = False,
+        screen: bool = False,
+        clipboard: bool = False,
     ):
         self._settings = settings
         self._registry = registry
@@ -116,20 +121,25 @@ class Orchestrator:
             self._delegate_handler = None
             # Phase 2 direct mode (plan step 2.3 / Appendix A.4).
             agent_catalog = "(none yet — call tools directly)"
-        # Every addendum flag defaults False, so this is the bare
-        # SUPERVISOR_PROMPT this line has always produced — byte for byte.
-        # The flags exist so the eval that drives this class can request
-        # the configuration production actually ships
-        # (MORTIMER_EVAL_CONFIG_PARITY_PLAN.md item A); today no caller
-        # sets one.
+        # Defaults reproduce the bare SUPERVISOR_PROMPT this line has
+        # always produced, byte for byte. The flags exist so the routing
+        # eval can ask for the configuration production actually ships
+        # (MORTIMER_EVAL_CONFIG_PARITY_PLAN.md item D) instead of scoring a
+        # prompt carrying none of the four addenda. cli.py passes nothing
+        # and is unaffected.
         self._system_prompt = build_supervisor_prompt(
             jarvis_name=settings.jarvis_name,
             user_name=settings.jarvis_user_name,
             timezone=settings.jarvis_timezone,
             units=settings.jarvis_units,
             agent_catalog=agent_catalog,
-            voice_catalog="(none configured yet)",
+            voice_catalog=(voice_catalog if voice_catalog is not None
+                           else "(none configured yet)"),
             memory_context=render_memory_context(),  # U2.5 persistent memory
+            voice=voice,
+            ui_control=ui_control,
+            screen=screen,
+            clipboard=clipboard,
         )
         self._history: list[dict] = []
 
