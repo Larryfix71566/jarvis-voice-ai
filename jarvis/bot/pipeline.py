@@ -43,7 +43,7 @@ from pipecat.turns.user_turn_strategies import UserTurnStrategies
 
 from jarvis import llm_client
 from jarvis.agents.base import load_sub_agents
-from jarvis.agents.delegate import build_delegate_tool
+from jarvis.agents.delegate import build_delegate_tool, foreground_delegation_count
 from jarvis.anthropic_shim import native_base_url
 from jarvis.bot.display import WeatherReportMerger, build_display_payload
 from jarvis.bot.interruption import InterruptionNotifier
@@ -1111,6 +1111,20 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             message = {"role": "user", "content": text}
             late_neutralizer.arm(message)
             aggregators.user().add_messages([message])
+            # 2026-09-05 — do NOT force a turn while a tool call is still
+            # outstanding. Pushing a context frame mid-delegation makes the
+            # model answer with a hole where the pending result belongs, and
+            # on 09-05 it re-issued a librarian store it had announced 0.8 s
+            # earlier: one request, two delegate_task calls, notes #22 and
+            # #23. The message is already in the context, so the generation
+            # that the in-flight call's own completion triggers carries it —
+            # later, but exactly once.
+            if foreground_delegation_count():
+                _logger.info(
+                    "late_result_deferred_inflight delegations=%d",
+                    foreground_delegation_count(),
+                )
+                return
             await aggregators.user().push_context_frame()
 
         # Barge-in survival — install the late-delivery hook the delegate

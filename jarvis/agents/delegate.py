@@ -117,6 +117,31 @@ FINDINGS_MAX_CHARS = 8000
 # add_done_callback discards each task's own reference once it completes.
 _background_tasks: set[asyncio.Task] = set()
 
+# 2026-09-05 — run_ids whose VOICE TURN is still awaiting a delegation.
+# Distinct from _background_tasks above: that set keeps detached work alive,
+# this one answers "is the assistant mid-tool-call right now?".
+#
+# Why it exists: inject_late_result (jarvis/bot/pipeline.py) used to call
+# push_context_frame() unconditionally when an orphaned delegation finally
+# landed. On 2026-09-05 that re-ran the model 0.8 s after a librarian
+# delegate_task was issued and ~4.8 s before its result arrived, so the model
+# saw its own "Storing that now" with no result and re-issued the store —
+# one user request, two delegations, two notes (#22 and #23). Forcing a turn
+# while a tool call is outstanding is the bug; the note can ride along with
+# the generation that call's own completion triggers.
+_foreground_delegations: set[str] = set()
+
+
+def foreground_delegation_count() -> int:
+    """How many delegations the current voice turn is still awaiting.
+
+    Zero means nothing is in flight and it is safe to force a generation
+    (that is the normal case for a reminder or a late result). Non-zero
+    means a tool call is outstanding and a pushed context frame would make
+    the model answer with a hole where the result belongs.
+    """
+    return len(_foreground_delegations)
+
 
 def _spawn_background(coro) -> None:
     task = asyncio.create_task(coro)
@@ -470,6 +495,11 @@ def build_delegate_tool(
         run_task = asyncio.create_task(_execute())
         _background_tasks.add(run_task)
         run_task.add_done_callback(_background_tasks.discard)
+        # The voice turn is now awaiting this call; see
+        # foreground_delegation_count(). The finally below clears it on every
+        # exit path INCLUDING the barge-in cancellation, because once the
+        # await is cancelled the turn is no longer waiting on it.
+        _foreground_delegations.add(run_id)
         try:
             return await asyncio.shield(run_task)
         except asyncio.CancelledError:
@@ -509,5 +539,7 @@ def build_delegate_tool(
             else:
                 run_task.add_done_callback(_deliver)
             raise
+        finally:
+            _foreground_delegations.discard(run_id)
 
     return schema, handler
