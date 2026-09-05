@@ -16,11 +16,15 @@ import pytest
 from tests.evals.routing_eval import (
     ACCURACY_THRESHOLD,
     CATEGORY_FLOORS,
+    CATEGORY_FLOORS_PROFILE,
+    DEFAULT_PROFILE,
+    PROFILES,
     REPLY_PREVIEW_CHARS,
     _category_of,
     _one_line,
     format_category_report,
     gate_failures,
+    resolve_profile,
     summarize_categories,
 )
 
@@ -141,3 +145,76 @@ def test_the_report_orders_by_size_then_name_and_marks_a_breach():
     assert names == ["none", "developer", "analyst", "systems"]
     assert "BELOW FLOOR 80%" in [ln for ln in lines if "developer" in ln][0]
     assert "BELOW FLOOR" not in [ln for ln in lines if "none" in ln][0]
+
+
+# --- eval profiles (2026-09-05, EVAL_CONFIG_PARITY item D) --------------
+#
+# Larry's call: parameterized, defaulting to parity, and the configuration
+# printed with every result. The failure these guard against is a number
+# being attributed to the wrong configuration — which is the whole reason
+# 63/70 was believed to describe production for as long as it was.
+
+
+def test_the_default_profile_is_parity_with_production():
+    assert DEFAULT_PROFILE == "parity"
+    name, addenda, tools = resolve_profile(None)
+    assert name == "parity"
+    assert all(addenda.values())
+    assert tools is True
+
+
+def test_the_delegate_only_profile_reproduces_the_old_harness():
+    _, addenda, tools = resolve_profile("delegate-only")
+    assert not any(addenda.values())
+    assert tools is False
+
+
+def test_a_blank_profile_falls_back_to_the_default():
+    assert resolve_profile("")[0] == DEFAULT_PROFILE
+    assert resolve_profile("   ")[0] == DEFAULT_PROFILE
+
+
+def test_an_unknown_profile_is_fatal_rather_than_defaulted():
+    # A typo that silently ran parity would credit one configuration's
+    # number to another — the exact confusion this plan exists to end.
+    with pytest.raises(SystemExit, match="unknown EVAL_PROFILE"):
+        resolve_profile("paraty")
+
+
+def test_addenda_and_tools_are_independent_switches():
+    # Four tools ship even with every kill switch off, so "no addenda" and
+    # "no tools" are different states and must not be folded together.
+    for profile in PROFILES.values():
+        assert set(profile) == {"addenda", "tools"}
+        assert set(profile["addenda"]) == {
+            "voice", "ui_control", "screen", "clipboard"}
+
+
+def test_resolve_profile_hands_back_a_copy_not_the_table():
+    # A caller mutating its flags must not rewrite the profile table for
+    # every later run in the same process.
+    _, addenda, _ = resolve_profile("parity")
+    addenda["voice"] = False
+    assert PROFILES["parity"]["addenda"]["voice"] is True
+
+
+def test_floors_are_skipped_under_a_profile_they_were_not_measured_under():
+    # A floor is a claim about a number, and a number from one config says
+    # nothing about another. Skipping beats failing against a baseline that
+    # never applied.
+    summary = summarize_categories([("developer", False)] * 7 +
+                                   [("developer", True)] * 15)
+    foreign = "delegate-only" if CATEGORY_FLOORS_PROFILE != "delegate-only" \
+        else "parity"
+    assert gate_failures(1.0, summary, floors={"developer": 0.99},
+                         profile=foreign) == []
+    breached = gate_failures(1.0, summary, floors={"developer": 0.99},
+                             profile=CATEGORY_FLOORS_PROFILE)
+    assert len(breached) == 1 and "developer" in breached[0]
+
+
+def test_the_aggregate_threshold_still_applies_under_a_foreign_profile():
+    # Only the per-category floors are configuration-specific.
+    summary = summarize_categories([("developer", False)] * 10)
+    assert gate_failures(0.10, summary, floors={"developer": 0.99},
+                         profile="delegate-only")

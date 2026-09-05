@@ -115,13 +115,32 @@ Empty extras is the default and reproduces the old behaviour, pinned by
 the pre-existing `test_only_delegate_tool_is_offered`; nine new tests in
 `TestExtraTools` cover the opt-in.
 
-**D. Point the eval at the production configuration.** Build the prompt
-and schemas from A and B, bind stubs that record the tool name and return
-a fixed result, print the chosen tool on every case. This is simultaneously
-the observability the eval has always lacked: the stub *is* the probe.
+**D. Point the eval at the production configuration. — DONE.**
+`EVAL_PROFILE` selects a named profile; `parity` is the default and is
+what ships with no kill switch set. An unknown name is fatal rather than
+silently defaulted, because a typo that quietly ran `parity` would credit
+one configuration's number to another — the exact confusion this plan
+exists to end. Every run prints its profile, tool count and addenda above
+the result, so a number can never be read without its configuration.
 
-**E. Production observability.** Emit the direct tool name in
-`adapt_to_pipecat`. Independent of A–D and worth landing on its own.
+A profile carries `addenda` and `tools` as SEPARATE switches. Four tools
+ship even with every kill switch off, so "no addenda" and "no tools" are
+different states; folding them together would make `delegate-only`
+inexpressible the moment any flag was on.
+
+Stubs answer `"ok"` and the tool sequence is printed under every miss,
+sourced from the `supervisor_tool` events item C added rather than from
+stub bookkeeping. `CATEGORY_FLOORS` is now scoped by
+`CATEGORY_FLOORS_PROFILE`: floors measured under one profile are skipped,
+loudly, when another runs. The aggregate threshold still applies.
+
+**E. Production observability. — HALF DONE, and the remaining half is the
+one that matters for the shipped product.** Item C made the Orchestrator
+emit `supervisor_tool`, which is what the eval reads. Production does not
+use that class: `pipeline.py` registers its handlers through
+`adapt_to_pipecat` (`pipeline.py:472`, used at `615–632`) and still
+observes nothing when the Supervisor calls a direct tool instead of
+delegating. One emit there closes it.
 
 **F. Re-baseline and set floors.** Run `RUN_LIVE=1` under the declared
 configuration, record the per-category table, populate `CATEGORY_FLOORS`
