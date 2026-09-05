@@ -83,7 +83,13 @@ def test_scored_edges_carry_score_shadow_tier_and_abstain(conn):
         assert e.attrs["abstain_reason"]
 
 
-def test_superseded_scored_edge_is_flagged(conn):
+def test_a_superseded_row_yields_ONE_edge_carrying_the_count(conn):
+    """2026-09-05. This previously asserted TWO edges for one (judge, proposal)
+    pair — one kept, one flagged superseded. They shared endpoints, and since
+    add_edge appends without dedup the renderer painted the faded one over the
+    solid one: composited ~0.835 alpha, i.e. BOLDER than a normal edge, the
+    inverse of the intent. The relationship is drawn once now, and how many
+    rows it replaced rides along as `superseded_count`."""
     rows = _seed_real_round(conn)
     extra_old = _score_row("or-gpt-5.1", "Proposal A", "or-gemini-flash", 5.0,
                             shadow=1, tier="mid")
@@ -98,12 +104,18 @@ def test_superseded_scored_edge_is_flagged(conn):
     rid = REAL_ROUND["round_id"]
     shadow_edges = [e for e in g.edges if e.type == "scored" and e.src == "profile:or-gpt-5.1"
                     and e.dst == f"proposal:{rid}/Proposal A" and e.attrs["shadow"] == 1]
-    assert len(shadow_edges) == 2
-    superseded = [e for e in shadow_edges if e.attrs["superseded"]]
-    kept = [e for e in shadow_edges if not e.attrs["superseded"]]
-    assert len(superseded) == 1 and len(kept) == 1
-    assert superseded[0].attrs["score"] == 5.0
-    assert kept[0].attrs["score"] == 6.0
+    assert len(shadow_edges) == 1, "one relationship, one edge"
+    edge = shadow_edges[0]
+    assert edge.attrs["score"] == 6.0, "the newest row wins"
+    assert edge.attrs["superseded"] is False
+    assert edge.attrs["superseded_count"] == 1
+
+
+def test_an_unsuperseded_edge_reports_a_zero_count(conn):
+    _seed_real_round(conn)
+    g = build_deliberation_graph(conn, since=None)
+    k3_edges = [e for e in g.edges if e.type == "scored" and e.src == "profile:kimi-k3"]
+    assert k3_edges and all(e.attrs["superseded_count"] == 0 for e in k3_edges)
 
 
 def test_won_and_in_round_edges(conn):

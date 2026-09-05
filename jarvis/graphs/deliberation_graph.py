@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections import Counter
 
 from jarvis.graphs import config as gcfg
 from jarvis.graphs.model import Edge, Graph, Node, preview, typed_lookup, unique_prefix_match
@@ -69,16 +70,34 @@ def build_deliberation_graph(conn: sqlite3.Connection, *, since: str | None) -> 
             g.add_edge(Edge(pid, round_id, "in_round", {}))
             if p.get("is_winner"):
                 g.add_edge(Edge(pid, round_id, "won", {}))
+        # ONE edge per (judge, proposal) — the kept row. 2026-09-05: this used
+        # to emit an edge for the dropped row TOO, and since Graph.add_edge
+        # appends without dedup (model.py) both landed on identical endpoints.
+        # render.py then painted the faded one (FADED_ALPHA 0.45) over the
+        # normal one (EDGE_ALPHA 0.70); composited that is ~0.835, so a
+        # superseded edge came out BOLDER than an unsuperseded one — the exact
+        # inverse of the intent, and invisible as a distinction. A replaced
+        # score and its replacement are the same relationship, so the picture
+        # draws it once. How many rows it replaced rides along as
+        # `superseded_count` for anyone reading the JSON; `--agreement` already
+        # reports the total separately, and summary_line already excluded
+        # superseded edges from the judge and abstention counts.
         kept, dropped = supersede_score_rows(srows)
-        for s, superseded in [(s, False) for s in kept] + [(s, True) for s in dropped]:
+        superseded_by = Counter(
+            (str(s.get("judge_profile") or ""), s.get("proposal_label") or "")
+            for s in dropped
+        )
+        for s in kept:
             pid = f"proposal:{rid}/{s.get('proposal_label') or ''}"
             if pid not in g.nodes:                          # shadow-only label: skipped, never dangling
                 continue
+            key = (str(s.get("judge_profile") or ""), s.get("proposal_label") or "")
             g.add_edge(Edge(_profile(str(s.get("judge_profile") or "")), pid, "scored", {
                 "score": s.get("score"), "shadow": int(s.get("shadow") or 0),
                 "judge_tier": s.get("judge_tier"),
                 "abstain_reason": preview(s.get("abstain_reason"), max_chars) or None,
-                "superseded": superseded,
+                "superseded": False,
+                "superseded_count": superseded_by.get(key, 0),
             }))
         if rd.get("run_id"):
             run_id = str(rd["run_id"])
