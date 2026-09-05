@@ -61,3 +61,6 @@ web/dist_verify*/
 
 # stray verification renders dropped at the repo root (seam.png, delib.png)
 /*.png
+
+# Claude desktop drops downloaded files here
+Claude outputs/
