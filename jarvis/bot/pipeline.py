@@ -91,11 +91,7 @@ from jarvis.memory import (
 )
 from jarvis.kb_digest import write_session_digest
 from jarvis.prompts import (
-    SUPERVISOR_PROMPT,
-    HANDOFF_ADDENDUM,
-    SCREEN_VISION_ADDENDUM,
-    UI_CONTROL_ADDENDUM,
-    VOICE_ADDENDUM,
+    build_supervisor_prompt,
     render_agent_catalog,
 )
 from jarvis.council import prune as prune_council
@@ -494,25 +490,22 @@ def build_pipeline(
     # 4,096-token cache floor (below it, caching silently stops), and
     # whether the Stage A1 cap raise actually cleared the tier-cap drops.
     memory_stats: dict = {}
-    system_prompt = (
-        SUPERVISOR_PROMPT.format(
-            jarvis_name=settings.jarvis_name,
-            user_name=settings.jarvis_user_name,
-            timezone=settings.jarvis_timezone,
-            units=settings.jarvis_units,
-            agent_catalog=agent_catalog,
-            voice_catalog=catalog_summary(catalog),
-            memory_context=render_memory_context(stats=memory_stats),  # U2.5
-        )
-        + "\n"
-        + VOICE_ADDENDUM
+    system_prompt = build_supervisor_prompt(
+        jarvis_name=settings.jarvis_name,
+        user_name=settings.jarvis_user_name,
+        timezone=settings.jarvis_timezone,
+        units=settings.jarvis_units,
+        agent_catalog=agent_catalog,
+        voice_catalog=catalog_summary(catalog),
+        memory_context=render_memory_context(stats=memory_stats),  # U2.5
+        voice=True,
         # U5/U6: the addendum ships only when the tool does — a prompt
         # describing an unregistered tool would invite hallucinated calls.
-        + ("\n" + UI_CONTROL_ADDENDUM if ui_control_enabled else "")
-        + ("\n" + SCREEN_VISION_ADDENDUM if screen_enabled else "")
+        ui_control=ui_control_enabled,
+        screen=screen_enabled,
         # H3/H6 — show_commands is always registered; the clipboard half
         # of the addendum only makes sense when its tools are.
-        + ("\n" + HANDOFF_ADDENDUM if clipboard_enabled else "")
+        clipboard=clipboard_enabled,
     )
 
     # Phase 4 Rev 3.4 Stage A2 — see memory_stats above. Logged with the

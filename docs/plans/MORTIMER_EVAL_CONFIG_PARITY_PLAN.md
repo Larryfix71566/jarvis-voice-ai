@@ -1,6 +1,7 @@
 # Eval / production configuration parity
 
-Status: **SCOPE — not approved, no code written.** Drafted 2026-09-05.
+Status: **IN PROGRESS.** Drafted 2026-09-05; both open questions decided
+by Larry the same day; item A landed.
 
 ## The problem
 
@@ -66,9 +67,16 @@ a third time.
 
 ## Work items, in order
 
-**A. Extract prompt assembly.** Move `pipeline.py:497–515` behind
-`build_supervisor_prompt`. Pin with a test asserting the assembled prompt
-is byte-identical to today's for the same flags. Pure refactor.
+**A. Extract prompt assembly. — DONE.** `build_supervisor_prompt` now
+lives in `jarvis/prompts.py`, beside the strings it assembles, which is
+where this module's own docstring always claimed the single source of
+truth was. Both callers use it: `pipeline.py` passes `voice=True` plus its
+three kill switches, `supervisor.py` passes nothing and every flag
+defaults `False`, reproducing its bare prompt. Verified byte-identical
+across all sixteen flag combinations, and pinned by eight tests in
+`tests/unit/test_prompts.py` — including the old `pipeline.py` expression
+transcribed literally, so addendum order or the `"\n"` separator drifting
+fails the suite.
 
 **B. Extract tool-schema assembly.** Same treatment for
 `pipeline.py:662–676`, same byte-identical pinning test. Pure refactor.
@@ -93,15 +101,22 @@ the observability the eval has always lacked: the stub *is* the probe.
 configuration, record the per-category table, populate `CATEGORY_FLOORS`
 from that observed run.
 
-## Open questions — these need Larry's call, not mine
+## Decisions (Larry, 2026-09-05)
 
-1. **Which flag configuration is canonical for the eval?** Default-on
-   matches production default, but the eval should print the configuration
-   it ran under so a number is never orphaned from its config.
-2. **What should the stub handlers return?** A stub answering `"ok"` to
-   `ui_control` continues the conversation differently than production
-   would. For single-turn routing cases this likely does not matter, but it
-   is an assumption, not a finding.
+1. **Configuration: parameterized, defaulting to parity.** One profile
+   selector chooses a named configuration; the default is production
+   default — `VOICE` + `UI_CONTROL` + `SCREEN_VISION` + `HANDOFF` addenda
+   and all ten tools. The configuration is printed above every result, so
+   a number can never be read without the config that produced it. The
+   selector costs nothing over a fixed choice because A and B take flags
+   explicitly anyway, and it is what makes "does this addendum cost
+   routing accuracy?" answerable by toggling rather than editing.
+2. **Stubs return a neutral `"ok"`, and every tool call is logged.**
+   Scoring stays on the delegation set. The diagnostic signal is that the
+   model reached for `ui_control` at all, which the log captures whatever
+   the stub returns — so the stub's content does not have to be
+   production-faithful to be useful, and we are not inventing plausible
+   tool results.
 *(A third question — whether `set_voice`'s schema embeds the voice catalog
 — was checked rather than left open. It does not: `build_set_voice_tool`
 returns the module-level `SET_VOICE_SCHEMA` and uses the catalog only

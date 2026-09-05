@@ -475,6 +475,61 @@ HANDOFF_ADDENDUM = """Handing work back to Larry: when a specialist's reply cont
 When Larry gives you that output, delegate again with continuation set to true and the output included in the task, plus findings_path if the specialist gave you one. That is a continuation, not a retry, and the specialist resumes with its budget reset rather than starting over. If a specialist asked for something, do not answer for it and do not drop the thread — relay the request, then relay the answer back."""
 
 
+# 2026-09-05 (MORTIMER_EVAL_CONFIG_PARITY_PLAN.md item A) — this module's
+# docstring calls itself the single source of truth for prompts, but the
+# ASSEMBLY lived in jarvis/bot/pipeline.py while jarvis/agents/supervisor.py
+# formatted SUPERVISOR_PROMPT bare. Two assemblies, and they had already
+# drifted: the eval that drives Orchestrator was measuring a prompt with
+# none of the four addenda production ships, so its routing number
+# described a configuration that is never deployed. One function, both
+# callers.
+#
+# Every flag defaults False, so calling this with only the format
+# arguments reproduces supervisor.py's bare prompt byte for byte. The
+# concatenation order (base, voice, ui_control, screen, clipboard) and the
+# single "\n" separator are load-bearing: they reproduce pipeline.py's
+# expression exactly, and tests/unit/test_prompts.py pins that.
+def build_supervisor_prompt(
+    *,
+    jarvis_name: str,
+    user_name: str,
+    timezone: str,
+    units: str,
+    agent_catalog: str,
+    voice_catalog: str,
+    memory_context: str,
+    voice: bool = False,
+    ui_control: bool = False,
+    screen: bool = False,
+    clipboard: bool = False,
+) -> str:
+    """Assemble the Supervisor system prompt for one configuration.
+
+    An addendum ships only when its tool does — a prompt describing an
+    unregistered tool invites hallucinated calls (U5/U6). Callers pass the
+    same booleans they use to decide registration, so the prompt and the
+    tool list cannot disagree.
+    """
+    prompt = SUPERVISOR_PROMPT.format(
+        jarvis_name=jarvis_name,
+        user_name=user_name,
+        timezone=timezone,
+        units=units,
+        agent_catalog=agent_catalog,
+        voice_catalog=voice_catalog,
+        memory_context=memory_context,
+    )
+    for enabled, addendum in (
+        (voice, VOICE_ADDENDUM),
+        (ui_control, UI_CONTROL_ADDENDUM),
+        (screen, SCREEN_VISION_ADDENDUM),
+        (clipboard, HANDOFF_ADDENDUM),
+    ):
+        if enabled:
+            prompt += "\n" + addendum
+    return prompt
+
+
 def render_agent_catalog(agents: list[dict]) -> str:
     """Appendix A.4: '- {name} ({display_name}): {description}' per line."""
     return "\n".join(

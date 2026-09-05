@@ -3,9 +3,13 @@
 import pytest
 
 from jarvis.prompts import (
+    HANDOFF_ADDENDUM,
+    SCREEN_VISION_ADDENDUM,
     SUBAGENT_PROMPTS,
     SUPERVISOR_PROMPT,
+    UI_CONTROL_ADDENDUM,
     VOICE_ADDENDUM,
+    build_supervisor_prompt,
     render_agent_catalog,
     render_voice_catalog,
 )
@@ -445,3 +449,82 @@ def test_the_new_rules_survive_formatting():
     assert "Never name a specialist to the user" in rendered
     assert "delegate again for that detail before saying it was missing" in rendered
     assert "{" not in rendered
+
+
+# --- build_supervisor_prompt (2026-09-05, EVAL_CONFIG_PARITY item A) ----
+#
+# The assembly used to exist twice: jarvis/bot/pipeline.py concatenated
+# four addenda onto SUPERVISOR_PROMPT, and jarvis/agents/supervisor.py
+# formatted it bare. They had drifted, and the routing eval — which drives
+# Orchestrator — was scoring a prompt with none of the addenda production
+# ships. These tests exist to prove the extraction changed NOTHING, which
+# is the only reason it is safe to land before the behavioural work.
+
+_FMT = dict(
+    jarvis_name="Mortimer",
+    user_name="Larry",
+    timezone="America/New_York",
+    units="imperial",
+    agent_catalog="- scheduler (Scheduler): time stuff",
+    voice_catalog="- rachel: Rachel",
+    memory_context="(none yet)",
+)
+
+
+def test_a_bare_call_is_the_prompt_supervisor_py_has_always_built():
+    # Pins jarvis/agents/supervisor.py:92 as a no-op.
+    assert build_supervisor_prompt(**_FMT) == SUPERVISOR_PROMPT.format(**_FMT)
+
+
+def test_the_default_production_call_matches_the_expression_it_replaced():
+    # Pins jarvis/bot/pipeline.py as a no-op. The right-hand side is the
+    # old expression transcribed literally, addendum order and single "\n"
+    # separator included; if either drifts this fails.
+    expected = (
+        SUPERVISOR_PROMPT.format(**_FMT)
+        + "\n"
+        + VOICE_ADDENDUM
+        + ("\n" + UI_CONTROL_ADDENDUM)
+        + ("\n" + SCREEN_VISION_ADDENDUM)
+        + ("\n" + HANDOFF_ADDENDUM)
+    )
+    assert build_supervisor_prompt(
+        **_FMT, voice=True, ui_control=True, screen=True, clipboard=True
+    ) == expected
+
+
+@pytest.mark.parametrize(
+    "flag,addendum",
+    [
+        ("voice", VOICE_ADDENDUM),
+        ("ui_control", UI_CONTROL_ADDENDUM),
+        ("screen", SCREEN_VISION_ADDENDUM),
+        ("clipboard", HANDOFF_ADDENDUM),
+    ],
+)
+def test_each_flag_appends_exactly_its_own_addendum(flag, addendum):
+    base = build_supervisor_prompt(**_FMT)
+    got = build_supervisor_prompt(**_FMT, **{flag: True})
+    assert got == base + "\n" + addendum
+
+
+def test_a_disabled_addendum_leaves_no_trace_in_the_prompt():
+    # U5/U6: a prompt describing an unregistered tool invites hallucinated
+    # calls, so "off" must mean absent, not merely unmentioned elsewhere.
+    off = build_supervisor_prompt(**_FMT, voice=True)
+    assert UI_CONTROL_ADDENDUM not in off
+    assert SCREEN_VISION_ADDENDUM not in off
+    assert HANDOFF_ADDENDUM not in off
+
+
+def test_addenda_keep_the_order_pipeline_py_used():
+    full = build_supervisor_prompt(
+        **_FMT, voice=True, ui_control=True, screen=True, clipboard=True
+    )
+    positions = [
+        full.index(VOICE_ADDENDUM),
+        full.index(UI_CONTROL_ADDENDUM),
+        full.index(SCREEN_VISION_ADDENDUM),
+        full.index(HANDOFF_ADDENDUM),
+    ]
+    assert positions == sorted(positions)

@@ -31,7 +31,7 @@ from jarvis.agents.base import SubAgent, load_sub_agents
 from jarvis.agents.base import _assistant_message as _base_assistant_message
 from jarvis.agents.delegate import build_delegate_tool
 from jarvis.db import get_conn, now_iso
-from jarvis.prompts import SUPERVISOR_PROMPT, render_agent_catalog
+from jarvis.prompts import build_supervisor_prompt, render_agent_catalog
 from jarvis.memory import render_memory_context
 from jarvis.bot.sensitive_turn import arm_from_text, is_sensitive
 from jarvis.usage_ledger import record_completion, provider_from_base_url
@@ -89,7 +89,13 @@ class Orchestrator:
             self._delegate_handler = None
             # Phase 2 direct mode (plan step 2.3 / Appendix A.4).
             agent_catalog = "(none yet — call tools directly)"
-        self._system_prompt = SUPERVISOR_PROMPT.format(
+        # Every addendum flag defaults False, so this is the bare
+        # SUPERVISOR_PROMPT this line has always produced — byte for byte.
+        # The flags exist so the eval that drives this class can request
+        # the configuration production actually ships
+        # (MORTIMER_EVAL_CONFIG_PARITY_PLAN.md item A); today no caller
+        # sets one.
+        self._system_prompt = build_supervisor_prompt(
             jarvis_name=settings.jarvis_name,
             user_name=settings.jarvis_user_name,
             timezone=settings.jarvis_timezone,
