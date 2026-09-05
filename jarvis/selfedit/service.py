@@ -47,7 +47,6 @@ from jarvis.selfedit.allowlist import Allowlist, extract_paths
 logger = logging.getLogger(__name__)
 
 GIT_TIMEOUT_S = 60
-BUILD_TIMEOUT_S = 600
 VALIDATE_PYTEST_TIMEOUT_S = 900  # 2026-09-04: 2,150+ tests; the self-edit
 # run that convened council round e48cfbe1 timed out here at 300 s
 # (gap-closure plan GC1b). CI runs the same command with no timeout.
@@ -546,19 +545,18 @@ class SelfEditService:
                            "output": out[-2000:] or "core imports ok",
                            "paths": core_changed})
 
-        # 3. Frontend build.
-        web_dir = self.tree / "web"
-        code, out = self._run(["npm", "ci"], cwd=web_dir, timeout=BUILD_TIMEOUT_S)
-        if code == 0:
-            code, out = self._run(["npm", "run", "build"], cwd=web_dir,
-                                  timeout=BUILD_TIMEOUT_S)
-        checks.append({"name": "frontend_build", "ok": code == 0,
-                       "output": out[-2000:] or "build ok"})
-
-        # 4. Backend unit tests (C2, MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md).
+        # 3. Backend unit tests (C2, MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md).
         # CI's own pytest step is a hard gate now for the same reason — a
-        # self-edit that imports cleanly and builds the frontend can still
-        # break backend behavior; only the test suite catches that.
+        # self-edit that imports cleanly can still break backend behavior;
+        # only the test suite catches that.
+        #
+        # There is no frontend build step any more (removed 2026-09-05). web/
+        # is frozen and no goal can reach it, so building it validated nothing
+        # while costing up to 600 s twice per run in a fresh worktree
+        # with no node_modules — and an npm failure for ANY environmental
+        # reason (registry blip, node drift, yanked transitive dep) failed
+        # validation, exhausted the single auto-repair, and convened an E1
+        # council over a component nobody runs.
         code, out = self._run(
             [sys.executable, "-m", "pytest", "tests/unit", "-q"],
             cwd=self.tree, timeout=VALIDATE_PYTEST_TIMEOUT_S,
@@ -714,12 +712,17 @@ class SelfEditService:
         paths = extract_paths(goal)
         tiers = self.allowlist.classify(paths)
         result: dict = {"ok": True, "paths": paths, "tiers": tiers}
-        # GC4 (gap-closure plan, 2026-09-04): web/ is frozen -- interface work
-        # goes to macos/MortimerHost now. `paths and` keeps a goal naming no
-        # files passing through (test_goal_naming_no_files_passes_through);
-        # `result` still carries `tiers` because jarvis/admin/server.py:795
-        # reads flight["tiers"] on refusal.
-        if paths and all(p == "web" or p.startswith("web/") for p in paths):
+        # GC4 (gap-closure plan, 2026-09-04), WIDENED 2026-09-05: web/ is
+        # frozen -- interface work goes to macos/MortimerHost now. Originally
+        # this refused only a goal whose paths were ALL under web/, so a mixed
+        # goal could still edit the deprecated client by naming one other file.
+        # "Frozen except when bundled with other changes" is not frozen, and it
+        # was the only reason validation still had to build web/ at all.
+        # `any` over an empty list is False, so a goal naming no files still
+        # passes through (test_goal_naming_no_files_passes_through); `result`
+        # still carries `tiers` because jarvis/admin/server.py:795 reads
+        # flight["tiers"] on refusal.
+        if any(p == "web" or p.startswith("web/") for p in paths):
             result.update(ok=False, error=(
                 "web/ is frozen (2026-09-04): interface work goes to "
                 "macos/MortimerHost, which is a human PR."
