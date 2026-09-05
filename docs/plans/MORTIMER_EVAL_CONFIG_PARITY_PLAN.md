@@ -134,13 +134,19 @@ stub bookkeeping. `CATEGORY_FLOORS` is now scoped by
 `CATEGORY_FLOORS_PROFILE`: floors measured under one profile are skipped,
 loudly, when another runs. The aggregate threshold still applies.
 
-**E. Production observability. — HALF DONE, and the remaining half is the
-one that matters for the shipped product.** Item C made the Orchestrator
-emit `supervisor_tool`, which is what the eval reads. Production does not
-use that class: `pipeline.py` registers its handlers through
-`adapt_to_pipecat` (`pipeline.py:472`, used at `615–632`) and still
-observes nothing when the Supervisor calls a direct tool instead of
-delegating. One emit there closes it.
+**E. Production observability. — DONE, both halves.** Item C made the
+Orchestrator emit `supervisor_tool`, which is what the eval reads. For the
+shipped path, `adapt_to_pipecat` moved from a closure inside
+`build_pipeline` to module scope, gained the tool's name, and logs
+`supervisor_tool tool=<name>` before dispatch — before, so a tool that
+raises is still in the log, which is the case most worth having. Lifting
+it out of the closure is also what made it testable at all; that behaviour
+had no test because it could not be imported.
+
+`register_supervisor_tool` replaces the ten
+`llm.register_function(name, adapt_to_pipecat(handler))` lines so the name
+is written once. Passing it twice invites a handler registered under the
+wrong spelling, which fails only at call time and only in production.
 
 **F. Re-baseline and set floors.** Run `RUN_LIVE=1` under the declared
 configuration, record the per-category table, populate `CATEGORY_FLOORS`

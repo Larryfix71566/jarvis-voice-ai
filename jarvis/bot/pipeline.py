@@ -163,6 +163,38 @@ class Runtime:
     keyhealth_notice: Any = None
 
 
+def adapt_to_pipecat(name: str, dict_handler):
+    """Adapt a jarvis tool handler to pipecat's calling convention.
+
+    D-009: pipecat 1.4 register_function handlers receive one
+    FunctionCallParams object and deliver results via
+    params.result_callback(...); jarvis function handlers keep the locked
+    (arguments dict) -> confirmation str contract used by the Supervisor.
+
+    2026-09-05 (MORTIMER_EVAL_CONFIG_PARITY_PLAN.md item E) — `name` is new,
+    and the log line with it. Nothing anywhere recorded the Supervisor
+    calling a DIRECT tool: agent_tool belongs to the sub-agents
+    (jarvis/agents/base.py) and so never fires on a turn that delegated
+    nothing, which is exactly the turn worth seeing. A turn that reached
+    for ui_control instead of delegating was indistinguishable in the logs
+    from a turn that simply answered.
+    """
+
+    async def wrapper(params):
+        _logger.info("supervisor_tool tool=%s", name)
+        result = await dict_handler(params.arguments)
+        await params.result_callback(result)
+
+    return wrapper
+
+
+def register_supervisor_tool(llm, name: str, dict_handler) -> None:
+    """Register one direct Supervisor tool under a single spelling of its
+    name — passing it twice invites a handler registered under the wrong
+    one, which fails only at call time and only in production."""
+    llm.register_function(name, adapt_to_pipecat(name, dict_handler))
+
+
 def bot_event_log(event: dict) -> None:
     """stdout agent-activity feed (Phase 4; UI feed arrives in Phase 6)."""
     if event.get("type") == "delegate_start":
@@ -466,17 +498,6 @@ def build_pipeline(
         _emit_display,
     )
 
-    def adapt_to_pipecat(dict_handler):
-        """D-009: pipecat 1.4 register_function handlers receive one
-        FunctionCallParams object and deliver results via
-        params.result_callback(...); jarvis function handlers keep the locked
-        (arguments dict) -> confirmation str contract used by the Supervisor."""
-
-        async def wrapper(params):
-            result = await dict_handler(params.arguments)
-            await params.result_callback(result)
-
-        return wrapper
     agent_catalog = render_agent_catalog([
         {"name": a.name, "display_name": a.display_name,
          "description": a.description}
@@ -606,24 +627,22 @@ def build_pipeline(
             base_url=settings.openai_base_url,
             model=settings.openai_model,
         )
-    llm.register_function("delegate_task", adapt_to_pipecat(delegate_handler))
-    llm.register_function("set_voice", adapt_to_pipecat(set_voice_handler))
-    llm.register_function("remember", adapt_to_pipecat(remember_handler))
-    llm.register_function("cost_summary", adapt_to_pipecat(cost_summary_handler))
+    register_supervisor_tool(llm, "delegate_task", delegate_handler)
+    register_supervisor_tool(llm, "set_voice", set_voice_handler)
+    register_supervisor_tool(llm, "remember", remember_handler)
+    register_supervisor_tool(llm, "cost_summary", cost_summary_handler)
     if ui_control_enabled:
-        llm.register_function("ui_control", adapt_to_pipecat(ui_control_handler))
+        register_supervisor_tool(llm, "ui_control", ui_control_handler)
     if screen_enabled:
-        llm.register_function("view_screen", adapt_to_pipecat(view_screen_handler))
-        llm.register_function("list_screens", adapt_to_pipecat(list_screens_handler))
+        register_supervisor_tool(llm, "view_screen", view_screen_handler)
+        register_supervisor_tool(llm, "list_screens", list_screens_handler)
     # H3 — show_commands is registered regardless of the clipboard switch:
     # putting a command on screen instead of speaking it is useful even
     # when the return channel is off. Only the clipboard pair is gated.
-    llm.register_function("show_commands", adapt_to_pipecat(show_commands_handler))
+    register_supervisor_tool(llm, "show_commands", show_commands_handler)
     if clipboard_enabled:
-        llm.register_function(
-            "clear_clipboard", adapt_to_pipecat(clear_clipboard_handler))
-        llm.register_function(
-            "read_clipboard", adapt_to_pipecat(read_clipboard_handler))
+        register_supervisor_tool(llm, "clear_clipboard", clear_clipboard_handler)
+        register_supervisor_tool(llm, "read_clipboard", read_clipboard_handler)
     tts = ElevenLabsTTSService(
         api_key=settings.elevenlabs_api_key,
         settings=ElevenLabsTTSSettings(
