@@ -78,11 +78,21 @@ across all sixteen flag combinations, and pinned by eight tests in
 transcribed literally, so addendum order or the `"\n"` separator drifting
 fails the suite.
 
-**B. Extract tool-schema assembly.** Same treatment for
-`pipeline.py:662–676`, same byte-identical pinning test. Pure refactor.
+**B. Extract tool-schema assembly. — DONE.** `supervisor_tool_schemas`
+lives in `jarvis/bot/tool_schemas.py`. Every direct-tool schema turned out
+to be a module-level constant its `build_*_tool` factory returns
+unchanged, so the menu separates cleanly from the handlers — which is what
+makes an offline caller possible at all, since handlers need a live
+transport while routing depends only on what the model can see.
+`pipeline.py` now maps `to_function_schema` over the shared menu and its
+nine schema locals are gone. Verified identical to the old literal list
+across all eight switch combinations; nine tests in
+`tests/unit/test_tool_schemas.py` pin the order, the contents at every
+combination, and that a menu entry IS the object its factory returns, so
+the two cannot drift apart again.
 
-A and B are provable no-ops. They are the de-risking step and should land
-and be verified before anything below.
+A and B are provable no-ops. They were the de-risking step and both are
+verified; C onward changes behaviour.
 
 **C. Teach the Orchestrator more than one tool.** `_tools_kwarg` takes an
 optional extra-schema list; `_execute_tool` consults an optional handler

@@ -58,6 +58,7 @@ from jarvis.bot.costs_tool import build_cost_summary_tool
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.ui_control import build_ui_control_tool
+from jarvis.bot.tool_schemas import supervisor_tool_schemas
 from jarvis.bot.usage_watcher import UsageMetricsObserver
 from jarvis.bot.handoff_tools import (
     build_clear_clipboard_tool,
@@ -373,9 +374,9 @@ def build_pipeline(
         # result into the conversation.
         late_delivery=runtime.late_delivery,
     )
-    set_voice_schema, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
-    remember_schema, remember_handler = build_remember_tool(runtime.session_id)
-    cost_summary_schema, cost_summary_handler = build_cost_summary_tool()
+    _, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
+    _, remember_handler = build_remember_tool(runtime.session_id)
+    _, cost_summary_handler = build_cost_summary_tool()
 
     # MORTIMER_VOICE_UI_PLAN.md U1/U6 — voice control of the console's UI
     # chrome. Kill switch read here, at the single registration site (same
@@ -391,13 +392,13 @@ def build_pipeline(
     screen_enabled = os.environ.get(
         "JARVIS_SCREEN_ENABLED", ""
     ).strip().lower() not in ("false", "0", "no")
-    view_screen_schema, view_screen_handler = build_view_screen_tool()
-    list_screens_schema, list_screens_handler = build_list_screens_tool()
+    _, view_screen_handler = build_view_screen_tool()
+    _, list_screens_handler = build_list_screens_tool()
 
     async def _send_ui_message(message: dict) -> None:
         await send_app_message(transport, message)
 
-    ui_control_schema, ui_control_handler = build_ui_control_tool(_send_ui_message)
+    _, ui_control_handler = build_ui_control_tool(_send_ui_message)
 
     # MORTIMER_HANDOFF_LOOP_PLAN.md H3/H4/H6 — the handoff loop: show a
     # command in the display window, let Larry run it, read the output back
@@ -452,14 +453,14 @@ def build_pipeline(
                     "error": "The admin sidecar isn't running, so I can't reach "
                              "the clipboard. Start it with ./scripts/mortimer.sh start."}
 
-    show_commands_schema, show_commands_handler = build_show_commands_tool(
+    _, show_commands_handler = build_show_commands_tool(
         _emit_display,
         lambda: _clipboard_call("/api/clipboard/clear", post=True),
     )
-    clear_clipboard_schema, clear_clipboard_handler = build_clear_clipboard_tool(
+    _, clear_clipboard_handler = build_clear_clipboard_tool(
         lambda: _clipboard_call("/api/clipboard/clear", post=True),
     )
-    read_clipboard_schema, read_clipboard_handler = build_read_clipboard_tool(
+    _, read_clipboard_handler = build_read_clipboard_tool(
         lambda: _clipboard_call("/api/clipboard"),
         _inject_silent_clipboard,
         _emit_display,
@@ -652,21 +653,19 @@ def build_pipeline(
             required=fn["parameters"]["required"],
         )
 
+    # The menu itself lives in jarvis/bot/tool_schemas.py so an offline
+    # caller can ask for this exact configuration (EVAL_CONFIG_PARITY item
+    # B). Same kill switches that decide registration below, so the model
+    # can never see a tool that was not registered.
     standard_tools = [
-        to_function_schema(delegate_schema),
-        to_function_schema(set_voice_schema),
-        to_function_schema(remember_schema),
-        to_function_schema(cost_summary_schema),
+        to_function_schema(schema)
+        for schema in supervisor_tool_schemas(
+            delegate_schema,
+            ui_control=ui_control_enabled,
+            screen=screen_enabled,
+            clipboard=clipboard_enabled,
+        )
     ]
-    if ui_control_enabled:
-        standard_tools.append(to_function_schema(ui_control_schema))
-    if screen_enabled:
-        standard_tools.append(to_function_schema(view_screen_schema))
-        standard_tools.append(to_function_schema(list_screens_schema))
-    standard_tools.append(to_function_schema(show_commands_schema))
-    if clipboard_enabled:
-        standard_tools.append(to_function_schema(clear_clipboard_schema))
-        standard_tools.append(to_function_schema(read_clipboard_schema))
     context = LLMContext(
         messages=[{"role": "system", "content": system_prompt}],
         tools=ToolsSchema(standard_tools=standard_tools),
