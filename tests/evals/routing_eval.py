@@ -30,6 +30,23 @@ CASES_PATH = Path(__file__).resolve().parent / "cases.yaml"
 ACCURACY_THRESHOLD = 0.90
 
 
+REPLY_PREVIEW_CHARS = 400
+
+
+def _one_line(text: str | None) -> str:
+    """Collapse a reply to a single printable line for the miss report.
+
+    Rule 5 caps replies at 40 words, so 400 characters truncates almost
+    nothing; the cap exists so a runaway reply cannot bury the summary.
+    """
+    flat = " ".join((text or "").split())
+    if not flat:
+        return "(empty reply)"
+    if len(flat) <= REPLY_PREVIEW_CHARS:
+        return flat
+    return flat[:REPLY_PREVIEW_CHARS] + "…"
+
+
 def _normalize(expect) -> set[str]:
     if isinstance(expect, list):
         return set(expect)
@@ -113,7 +130,19 @@ async def run_eval() -> float:
             orch = Orchestrator(settings, registry, str(uuid.uuid4()),
                                 on_event=on_event)
             try:
-                await orch.chat(case["input"])
+                # 2026-09-05 — the reply was previously discarded. A miss
+                # printed only got=[], which says the model did not delegate
+                # but not what it did instead, so every diagnosis of a miss
+                # was a guess about text that had already been generated and
+                # thrown away. Note what this does NOT capture: the
+                # Orchestrator emits no event for its own tool calls
+                # (on_event reaches only build_delegate_tool,
+                # supervisor.py:79), so a turn that called some other tool
+                # instead of delegating is invisible here. In this harness
+                # that costs nothing -- delegate_task is the only tool the
+                # Orchestrator exposes (supervisor.py:196) -- but it will
+                # matter the moment the eval runs the production tool set.
+                reply = await orch.chat(case["input"])
             except Exception as exc:  # noqa: BLE001 — record as wrong, continue
                 print(f"[{i:2d}/{len(cases)}] ERROR  {case['input']!r}: {exc}")
                 continue
@@ -124,6 +153,8 @@ async def run_eval() -> float:
             mark = "ok " if ok else "MISS"
             print(f"[{i:2d}/{len(cases)}] {mark} expect={sorted(expected)} "
                   f"got={sorted(actual)}  {case['input']!r}")
+            if not ok:
+                print(f"{'':>9}said: {_one_line(reply)}")
     finally:
         await registry.stop()
 
