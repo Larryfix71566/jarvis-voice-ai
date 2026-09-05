@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 from jarvis.db import get_conn, run_migrations
+from jarvis import graphs
 from jarvis.memory import search_facts
 from jarvis.memory_sweep import list_open_reviews, resolve_review
 
@@ -85,3 +86,20 @@ def memory_search(query: str, limit: int = 10) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 — a tool returns, never raises
         return {"ok": False, "error": f"could not search memory: {exc}"}
     return {"ok": True, "query": query, "count": len(results), "results": results}
+
+
+def memory_graph_view(focus: str = "", depth: int = 2, edge_types: str = "") -> dict[str, Any]:
+    """GL12 (MORTIMER_GRAPH_LAYER_PLAN.md) — thin over jarvis.graphs.build; the JSON
+    nodes/edges are NOT returned to the model, only the picture URL and one sentence."""
+    try:
+        run_migrations()
+        conn = get_conn()
+        try:
+            result = graphs.build("memory", conn, focus=focus, depth=depth, edge_types=edge_types)
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001 — a tool returns, never raises
+        return {"ok": False, "error": f"could not build the memory graph: {exc}"}
+    if not result.get("ok"):
+        return result
+    return graphs.tool_result(result)

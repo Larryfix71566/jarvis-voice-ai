@@ -54,6 +54,24 @@ public final class JarvisClient: ObservableObject {
     }
     @Published public private(set) var debugAudioStats = DebugAudioStats()
 
+    #if os(macOS)
+    /// 2026-09-05 — set when macOS's default output device changes while
+    /// a session is live (AirPods connecting): this WebRTC build's playout
+    /// stays on the device it opened, so the app surfaces a Reconnect
+    /// (see AudioOutputMonitor). Cleared on the next successful connect.
+    /// With JarvisFlags.followAudioOutput the client reconnects itself.
+    @Published public private(set) var audioOutputChange: AudioOutputChange?
+    private lazy var audioOutputMonitor = AudioOutputMonitor { [weak self] previous, next in
+        self?.handleAudioOutputChange(from: previous, to: next)
+    }
+    /// 2026-09-05 — set when connect() repointed the default INPUT to a
+    /// rate-matching mic so the AirPods 24 kHz mic can't slow playout
+    /// (JarvisFlags.matchInputRate; see AudioInputCoordinator). Informational
+    /// — the fix already happened. Cleared on the next connect.
+    @Published public private(set) var audioInputChange: AudioInputChange?
+    private let audioInputCoordinator = AudioInputCoordinator()
+    #endif
+
     public private(set) var config: JarvisConfig   // re-read on connect(), F20
     // AdminAPI is a struct holding a JarvisConfig (N14, §5 step 4). The F20
     // token re-read in connect() ALSO reassigns `admin = AdminAPI(config: config)`
@@ -168,6 +186,19 @@ public final class JarvisClient: ObservableObject {
         // (3)
         state = .connecting
 
+        #if os(macOS)
+        // BEFORE the transport connects: WebRTC's ADM reads the system
+        // default input device at init, so this is the one moment we can
+        // steer it. If that mic's rate doesn't match the output's (the
+        // AirPods 24 kHz-mic / 48 kHz-speaker split), repoint the default
+        // input at the built-in 48 kHz mic so the duplex unit is clean.
+        // Restored in disconnect(). AirPods stay the output device.
+        audioInputChange = nil
+        if JarvisFlags.matchInputRate {
+            audioInputChange = audioInputCoordinator.matchInputToOutputIfNeeded()
+        }
+        #endif
+
         // (4)/(5) — the transport itself calls disconnect() first if it
         // already holds a live pc (step 5 lifetime, F3).
         do {
@@ -175,6 +206,12 @@ public final class JarvisClient: ObservableObject {
             state = .connected
             startStatsTimer()
             updateWakeListenerRunState()
+            #if os(macOS)
+            // Playout was just initialised against the CURRENT default
+            // output device — a fresh baseline for the monitor.
+            audioOutputChange = nil
+            audioOutputMonitor.start()
+            #endif
             // N10 runtime availability probe — enables the wake toggle
             // when the sidecar is reachable. Gated to the real transport:
             // under a stub transport (tests) the probe's real socket to
@@ -193,6 +230,12 @@ public final class JarvisClient: ObservableObject {
     }
 
     public func disconnect() async {
+        #if os(macOS)
+        audioOutputMonitor.stop()
+        // Give the user's original mic back — the rate-match is only for the
+        // duration of a session (AudioInputCoordinator).
+        audioInputCoordinator.restore()
+        #endif
         await wakeListener.stop()
         await transport.disconnect()
         state = .offline
@@ -203,6 +246,28 @@ public final class JarvisClient: ObservableObject {
         // item 2) — a fresh voice/catalog on the next connect replaces
         // `voices` wholesale, matching VoicePicker.tsx:20-22.
     }
+
+    /// disconnect() then connect() — the ONE way this build can move the
+    /// bot's voice to a new default output device (AudioOutputMonitor),
+    /// and what the app's "Reconnect" notice action calls. A new peer
+    /// connection is a new bot session; callers own that trade.
+    public func reconnect() async {
+        await disconnect()
+        await connect()
+    }
+
+    #if os(macOS)
+    private func handleAudioOutputChange(from previous: AudioOutputMonitor.Device?,
+                                         to next: AudioOutputMonitor.Device?) {
+        guard case .connected = state else { return }
+        let change = AudioOutputChange(from: previous?.name, to: next?.name ?? "no output device")
+        audioOutputChange = change
+        clientLog.notice("audio_output_changed from=\(previous?.name ?? "none", privacy: .public) to=\(next?.name ?? "none", privacy: .public) follow=\(JarvisFlags.followAudioOutput)")
+        if JarvisFlags.followAudioOutput {
+            Task { await self.reconnect() }
+        }
+    }
+    #endif
 
     // MARK: - Outbound
 

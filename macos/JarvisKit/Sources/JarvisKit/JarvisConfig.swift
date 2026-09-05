@@ -77,6 +77,25 @@ public enum JarvisFlags {
     /// off must never fail open onto a remote host in the clear.
     public static var authEnabled: Bool { on("JARVIS_CLIENT_AUTH_ENABLED") }
     public static var glassEnabled: Bool { on("JARVIS_GLASS_ENABLED") }
+    /// 2026-09-05 — auto-reconnect the session when the default output
+    /// device changes (AirPods), so the bot's voice follows it. OPT-IN,
+    /// unlike the three above (absent key == off): the plain WebRTC build
+    /// can only follow a device by opening a new peer connection, and a
+    /// new connection is a new bot session — the conversation context
+    /// resets. Off, the app shows a notice with a Reconnect action instead
+    /// (`defaults write <bundle-id> JARVIS_FOLLOW_AUDIO_OUTPUT -bool true`).
+    public static var followAudioOutput: Bool {
+        UserDefaults.standard.bool(forKey: "JARVIS_FOLLOW_AUDIO_OUTPUT")
+    }
+    /// 2026-09-05 — before connecting, repoint the system default INPUT to a
+    /// device whose sample rate matches the output (the built-in 48 kHz mic)
+    /// when they mismatch, so WebRTC's duplex audio unit runs at one rate.
+    /// This is the AirPods slow-voice fix (their 24 kHz mic vs 48 kHz
+    /// speaker). ON by default — a mismatch produces unusable audio, so the
+    /// safe default is to correct it; the input is restored on disconnect.
+    /// `defaults write com.mortimer.host JARVIS_MATCH_INPUT_RATE -bool false`
+    /// to keep whatever mic is selected (and accept the slowdown).
+    public static var matchInputRate: Bool { on("JARVIS_MATCH_INPUT_RATE") }
 }
 
 /// §6 — one home for every numeric constant in the package. Nothing else

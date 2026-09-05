@@ -3,6 +3,10 @@
 with `review_path` set, synchronous read-and-refuse, and the review
 adopt-footer/default-path behavior. Same TestClient + polling pattern as
 tests/unit/test_admin_plan.py.
+
+# implementer: see test_admin_plan.py's matching note — GL9 (step 11c)
+# added run_id to _run_plan_council's draft_candidates call; this file's
+# _fake_draft_candidates stand-in needs the same accept-and-ignore kwarg.
 """
 
 from __future__ import annotations
@@ -171,7 +175,8 @@ def test_review_council_mode_context_passed_to_draft_candidates(monkeypatch):
     )
     seen = {}
 
-    async def _fake_draft_candidates(goal, *, members=None, judge=True, context=None):
+    async def _fake_draft_candidates(goal, *, members=None, judge=True, context=None,
+                                      run_id=None):
         seen["context"] = context
         from jarvis.council.types import Proposal, RoundResult
         return RoundResult(

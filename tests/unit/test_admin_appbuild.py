@@ -173,7 +173,7 @@ def test_appbuild_does_not_block_selfedit_and_vice_versa(registry_file, monkeypa
             return {"ok": True, "summary": "planned it"}
 
     monkeypatch.setattr(
-        srv, "_make_agent", lambda service, profile: FakeSelfEditAgent(service, profile),
+        srv, "_make_agent", lambda service, profile, run_id=None: FakeSelfEditAgent(service, profile),
     )
     c = TestClient(app)
     try:

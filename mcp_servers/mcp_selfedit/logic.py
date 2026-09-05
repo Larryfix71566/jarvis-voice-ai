@@ -68,6 +68,7 @@ def selfedit_start(
     confirm: bool = False,
     plan_path: str = "",
     staging_id: str = "",
+    run_id: str = "",
 ) -> dict[str, Any]:
     """Two-phase start of an upgrade run (preview, then confirm).
 
@@ -150,7 +151,8 @@ def selfedit_start(
         # what the confirm=true call must pass back.
         stage_resp = _call(lambda: client.post(
             "/api/selfedit/stage",
-            json={"goal": goal, "profile": chosen, "plan_path": plan_path or None},
+            json={"goal": goal, "profile": chosen, "plan_path": plan_path or None,
+                  "run_id": run_id or None},
         ))
         if not stage_resp.get("ok"):
             return stage_resp
@@ -180,7 +182,7 @@ def selfedit_start(
         }
 
     # Deprecated fallback: confirm=true with no staging_id, goal restated.
-    payload: dict[str, Any] = {"goal": goal, "profile": chosen}
+    payload: dict[str, Any] = {"goal": goal, "profile": chosen, "run_id": run_id or None}
     if plan_path:
         payload["plan_path"] = plan_path
     run_resp = _call(lambda: client.post("/api/selfedit/run", json=payload))
@@ -382,7 +384,7 @@ def selfedit_submit(client, confirm: bool = False) -> dict[str, Any]:
 
 def plan_start(
     client, goal: str, mode: str = "single", profile: str | None = None,
-    confirm: bool = False, review_path: str = "",
+    confirm: bool = False, review_path: str = "", run_id: str = "",
 ) -> dict[str, Any]:
     """Two-phase start of a planning job. `mode` is 'single' (one named
     model authors the plan) or 'council' (every usable model drafts a
@@ -437,7 +439,7 @@ def plan_start(
     resp = _call(lambda: client.post(
         "/api/plan/start", json={
             "goal": goal, "mode": mode, "profile": profile,
-            "review_path": review_path,
+            "review_path": review_path, "run_id": run_id or None,
         },
     ))
     if not resp.get("ok"):

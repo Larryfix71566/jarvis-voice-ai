@@ -58,10 +58,11 @@ import sys
 import threading
 import time
 import uuid
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -79,6 +80,8 @@ from jarvis import memory as memory_module
 from jarvis.council import config as council_config
 from jarvis.council import council as council_mod
 from jarvis.db import get_conn, now_iso, run_migrations
+from jarvis import graphs
+from jarvis.graphs import config as gcfg, render
 from jarvis.prompts import (
     PLAN_AUTHOR_PROMPT,
     PLAN_REVIEW_PROMPT,
@@ -153,6 +156,9 @@ class GoalIn(BaseModel):
     # record from POST /api/selfedit/stage; `goal` may be empty in that
     # case (it's optional above specifically to allow this).
     staging_id: str | None = None
+    # MORTIMER_GRAPH_LAYER_PLAN.md GL9 — the delegating run (bare-form only;
+    # the staged path reads it from the staging record). "" is normalised to None.
+    run_id: str | None = None
 
 
 class SelfEditStageIn(BaseModel):
@@ -160,6 +166,7 @@ class SelfEditStageIn(BaseModel):
     goal: str
     profile: str | None = None
     plan_path: str | None = None
+    run_id: str | None = None      # GL9
 
 
 class ConveneIn(BaseModel):
@@ -186,6 +193,7 @@ class PlanStartIn(BaseModel):
     # REVIEW of the repo document at this path instead of authoring a new
     # plan; empty (default) is today's authoring behavior, unchanged.
     review_path: str = ""
+    run_id: str | None = None      # GL9
 
 
 class PlanChooseIn(BaseModel):
@@ -475,16 +483,18 @@ def _site_summary(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _make_agent(service: SelfEditService, profile: str | None) -> UpgradeAgent:
-    """Construct the planner (seam for tests)."""
-    return UpgradeAgent(service, profile=profile)
+def _make_agent(service: SelfEditService, profile: str | None,
+                run_id: str | None = None) -> UpgradeAgent:
+    """Construct the planner (seam for tests). run_id: GL9 (contract G2)."""
+    return UpgradeAgent(service, profile=profile, run_id=run_id)
 
 
-def _run_agent(goal: str, profile: str | None, plan: str | None = None) -> None:
+def _run_agent(goal: str, profile: str | None, plan: str | None = None,
+               run_id: str | None = None) -> None:
     """Background thread target: plan edits, then settle the job state."""
     global _run_agent_instance
     try:
-        agent = _make_agent(_selfedit_service, profile)
+        agent = _make_agent(_selfedit_service, profile, run_id)
         with _run_lock:
             _run_agent_instance = agent
         result = agent.run(goal, plan=plan)
@@ -675,10 +685,11 @@ def _run_plan_single(
 
 def _run_plan_council(
     goal: str, members: dict[str, list[str]] | None, context: dict[str, Any],
+    run_id: str | None = None,
 ) -> None:
     try:
         result = asyncio.run(council_mod.draft_candidates(
-            goal, members=members, judge=True, context=context,
+            goal, members=members, judge=True, context=context, run_id=run_id,
         ))
     except Exception as exc:  # noqa: BLE001
         logger.exception("plan council-mode job crashed")
@@ -813,6 +824,7 @@ def selfedit_stage(body: SelfEditStageIn) -> dict:
             "goal": goal,
             "profile": body.profile,
             "plan_path": plan_path,
+            "run_id": (body.run_id or "").strip() or None,   # GL9
             "created_at": time.time(),
         }
     return {
@@ -853,6 +865,7 @@ def selfedit_run(body: GoalIn) -> dict:
         goal = rec["goal"]
         profile = rec["profile"]
         plan_path = rec["plan_path"] or ""
+        run_id = rec.get("run_id")
     else:
         goal = (body.goal or "").strip()
         if not goal:
@@ -863,6 +876,7 @@ def selfedit_run(body: GoalIn) -> dict:
         )
         profile = body.profile
         plan_path = (body.plan_path or "").strip()
+        run_id = (body.run_id or "").strip() or None
 
     plan = body.plan
     if plan is None and plan_path:
@@ -890,7 +904,7 @@ def selfedit_run(body: GoalIn) -> dict:
         try:
             # Construct now so an unknown profile fails fast, synchronously,
             # before we report the run as started.
-            agent = _make_agent(_selfedit_service, profile)
+            agent = _make_agent(_selfedit_service, profile, run_id)
         except UnknownModelProfileError as exc:
             return {"ok": False, "error": str(exc)}
         _run_job.update(
@@ -904,7 +918,7 @@ def selfedit_run(body: GoalIn) -> dict:
     # D17 — every self-edit state transition is logged.
     logger.info("selfedit_state_transition state=running goal=%r", goal)
     threading.Thread(
-        target=_run_agent, args=(goal, profile, plan), daemon=True,
+        target=_run_agent, args=(goal, profile, plan, run_id), daemon=True,
     ).start()
     return {"ok": True, "started": True, "profile": agent.model_label()}
 
@@ -1671,6 +1685,41 @@ def council_rounds_list(
     }
 
 
+# ---- MORTIMER_GRAPH_LAYER_PLAN.md GL11 — read-only graph views. Every edge is
+# derived in jarvis/graphs; these endpoints only call build() and render.
+@app.get("/api/graph/{name}")
+def graph_json(name: str, focus: str = "", depth: int | None = None,
+               edge_types: str = "", since: str = "") -> dict:
+    run_migrations()
+    with closing(get_conn()) as conn:
+        return graphs.build(name, conn, focus=focus, depth=depth,
+                            edge_types=edge_types, since=since or None)
+
+
+@app.get("/api/graph/{name}/image.{fmt}")
+def graph_image(name: str, fmt: str, focus: str = "", depth: int | None = None,
+                edge_types: str = "", since: str = "", w: int = 0, h: int = 0):
+    if fmt not in ("png", "svg"):
+        return Response(status_code=404)
+    width = gcfg.GRAPH_IMAGE_W if w <= 0 else max(gcfg.GRAPH_IMAGE_MIN_PX, min(gcfg.GRAPH_IMAGE_MAX_PX, w))
+    height = gcfg.GRAPH_IMAGE_H if h <= 0 else max(gcfg.GRAPH_IMAGE_MIN_PX, min(gcfg.GRAPH_IMAGE_MAX_PX, h))
+    run_migrations()
+    with closing(get_conn()) as conn:
+        result = graphs.build(name, conn, focus=focus, depth=depth, edge_types=edge_types,
+                              since=since or None)
+    media = "image/png" if fmt == "png" else "image/svg+xml"
+    if not result.get("ok"):
+        # GL11: never a 4xx for a graph error — an <img>/AsyncImage shows nothing for one.
+        body = (render.error_image_png(result["error"], width, height) if fmt == "png"
+                else render.error_image_svg(result["error"], width, height))
+        return Response(content=body, media_type=media)
+    graph = graphs.from_json(result)
+    pos = render.layout(graph, result["focus"], width, height)
+    body = (render.to_png(graph, pos, width, height, focus=result["focus"]) if fmt == "png"
+            else render.to_svg(graph, pos, width, height, focus=result["focus"]))
+    return Response(content=body, media_type=media)
+
+
 @app.get("/api/council/roster")
 def council_roster(
     workflow: str = "", status: str = "", since: str = "", limit: int = 20,
@@ -1756,7 +1805,8 @@ def plan_start(body: PlanStartIn) -> dict:
         ).start()
     else:
         threading.Thread(
-            target=_run_plan_council, args=(goal, body.members, context), daemon=True,
+            target=_run_plan_council,
+            args=(goal, body.members, context, (body.run_id or "").strip() or None), daemon=True,
         ).start()
     return {"ok": True, "started": True}
 

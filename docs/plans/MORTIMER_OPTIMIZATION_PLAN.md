@@ -507,6 +507,8 @@ section is in use and Larry says the missing adjacency actually costs
 him something. Until then the run_id column stays NULL and the roster
 stays a section — an honest list beats a guessed attachment.
 
+*2026-09-04:* the run_id threading above is done by MORTIMER_GRAPH_LAYER_PLAN.md GL9 (contract G2; the sidecar model is `GoalIn`, not `SelfEditRunIn`). What remains here is the card UI only.
+
 ## Phase 4 — Memory Recall Quality (Rev 3.4 rewrite, 2026-09-03; was "Context Slimming via Graph Memory")
 
 **Goal (rewritten):** the Supervisor's persistent memory stays *useful as it grows* — the right fact is reachable when it matters — without moving anything out of the cached prefix and without a store migration. Token reduction is no longer a goal of this phase.
@@ -558,6 +560,8 @@ B1. **`jarvis/memory_graph.py` (new).** Pure functions over `sqlite3` rows; `net
 - `build_graph(conn) -> nx.DiGraph`: nodes for every key-path prefix (`user`, `user.style`, `user.style.execution`) typed `entity`, and one `fact` node per `memories` row with `kind='fact'` (archived included) carrying `{key, content, tier, archived, provenance, updated_at, recurrence_count}`; `observations` rows as `fact` nodes with `provenance='inferred'`. Edges: `child_of` (path hierarchy), `has_fact` (entity → its facts), `became` (archived fact → the fact named in `memories.became`, when that key exists). No session edges (noise). Rebuilt per call, no cache; target < 20 ms at 1,000 rows, with a guard: > 5,000 rows → log `memory_graph_too_large` and return an empty graph so callers fall back to LIKE.
 - `seeds_from_text(text: str) -> list[str]`: lowercase tokens minus a small stopword set, matched against entity-node last segments and fact-key segments; returns entity node names, exact path matches first.
 - `neighborhood(graph, seeds, *, depth=2, limit=10) -> list[FactHit]` with `FactHit = {key, content, tier, archived, depth, why}` where `why` is `"path:<entity>"` or `"token:<segment>"`; BFS from seeds over `child_of`/`has_fact`/`became`, ranked by (depth asc, archived asc, recurrence_count desc, updated_at desc), truncated to `limit`.
+
+*2026-09-04:* B1 is superseded by MORTIMER_GRAPH_LAYER_PLAN.md GL7 *memory* (`jarvis/graphs/memory_graph.py`): `entity` nodes are `prefix:`, `has_fact` is `child_of` read the other way, `became` is identical, and `observations` rows are deliberately NOT included. B2's `neighborhood()`/`seeds_from_text()` are built over `jarvis.graphs.model.Graph`; Stage B's remaining scope is the `search_facts` ranking change only.
 
 B2. **Graph-ranked `search_facts`.** Signature unchanged (`search_facts(conn, query, limit)`), LIKE behaviour unchanged and first; then `neighborhood(build_graph(conn), seeds_from_text(query))` is unioned in (LIKE hits first, graph hits not already present after, `MAX_SEARCH_RESULTS` still the ceiling). Every existing `search_facts` test passes untouched; new tests: a query that matches an entity segment returns that entity's sibling facts and its archived predecessors; a query matching nothing returns `[]`; the > 5,000-row guard falls back to LIKE-only. mcp-memory's `memory_search` and the librarian inherit this with zero interface change.
 

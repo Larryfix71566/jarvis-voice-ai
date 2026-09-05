@@ -116,3 +116,19 @@ class TestCouncilList:
         assert result["rounds"][0]["round_id"] == "round-1"
         assert result["rounds"][0]["workflow"] == "planning"
         assert result["rounds"][0]["winner_profile"] == "kimi-k3"
+
+
+class TestGraphView:
+    """MORTIMER_GRAPH_LAYER_PLAN.md GL12 — thin over jarvis.graphs.build."""
+
+    def test_graph_view_rejects_memory_name(self):
+        result = logic.graph_view("memory")
+        assert result["ok"] is False
+        assert "memory is the librarian" in result["error"]
+
+    def test_graph_view_execution_needs_focus(self):
+        from jarvis.graphs import EXECUTION_NEEDS_FOCUS
+
+        result = logic.graph_view("execution")
+        assert result["ok"] is False
+        assert result["error"] == EXECUTION_NEEDS_FOCUS

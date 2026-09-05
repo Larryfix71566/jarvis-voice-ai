@@ -28,9 +28,17 @@ final class DisplayWindowStore {
     /// web's hasLivePopup poll). The topbar's ⧉ Display active state and
     /// ↩︎ pop-in button read this.
     var isWindowOpen = false
+    /// The area the panels are stacked in, in points: the display window's
+    /// content when it is open, the console stage otherwise (each sets it
+    /// from its own geometry). `fit(id:)` fills it. Zero until measured.
+    var viewportSize: CGSize = .zero
 
     private static let cascadeStep: CGFloat = 28
     private static let defaultSize = CGSize(width: 520, height: 400)
+    /// Minimum panel size — the ONLY limit on a panel; there is no maximum
+    /// (2026-09-05, "sizable without limitation"). A panel larger than the
+    /// viewport is simply clipped by it; grow the window.
+    static let minPanelSize = CGSize(width: 280, height: 200)
 
     func apply(_ payload: DisplayPayload) {
         seq += 1
@@ -54,7 +62,30 @@ final class DisplayWindowStore {
 
     func resize(id: Int, to size: CGSize) {
         guard let i = panels.firstIndex(where: { $0.id == id }) else { return }
-        panels[i].size = CGSize(width: max(280, size.width), height: max(200, size.height))
+        panels[i].size = Self.clamped(size)
+    }
+
+    /// Double-click on a panel's title bar: fill the viewport (minus the
+    /// panel inset on every side) and drop the cascade offset. A no-op
+    /// until the viewport has been measured.
+    func fit(id: Int) {
+        guard let i = panels.firstIndex(where: { $0.id == id }),
+              let size = Self.fittedSize(viewport: viewportSize) else { return }
+        panels[i].offset = .zero
+        panels[i].size = size
+    }
+
+    /// Pure: the panel size that fills `viewport` with the standard inset,
+    /// or nil when the viewport is unmeasured/too small to be meaningful.
+    static func fittedSize(viewport: CGSize, inset: CGFloat = CGFloat(AppTuning.displayPanelInset)) -> CGSize? {
+        let inner = CGSize(width: viewport.width - inset * 2, height: viewport.height - inset * 2)
+        guard inner.width >= minPanelSize.width, inner.height >= minPanelSize.height else { return nil }
+        return inner
+    }
+
+    static func clamped(_ size: CGSize) -> CGSize {
+        CGSize(width: max(minPanelSize.width, size.width),
+               height: max(minPanelSize.height, size.height))
     }
 
     func close(id: Int) {

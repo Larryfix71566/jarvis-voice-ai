@@ -128,6 +128,57 @@ struct OrbFieldView: View {
                         .transition(.opacity)
                         .allowsHitTesting(false)
                 }
+
+                // 2026-09-05 — the default output device moved (AirPods)
+                // and the bot's voice did not follow (AudioOutputMonitor).
+                // Same chip idiom, but interactive and persistent: it
+                // carries the one fix this WebRTC build allows.
+                if let notice = notices.audioOutputNotice {
+                    HStack(spacing: 10) {
+                        Text(notice)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(AppTheme.attn)
+                            .lineLimit(1)
+                        Button("Reconnect") {
+                            notices.clearAudioOutputNotice()
+                            Task { await client.reconnect() }
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(AppTheme.accent)
+                        .help("Open a new session so Mortimer's voice plays on the new output device")
+                        Button {
+                            notices.clearAudioOutputNotice()
+                        } label: {
+                            Text("×").font(.system(size: 13, design: .monospaced))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(AppTheme.textDim)
+                        .help("Keep the current session")
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .mortimerGlass(.chip)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, geo.size.height * 0.08 + 96)
+                    .transition(.opacity)
+                }
+
+                // 2026-09-05 — the input got repointed to a rate-matching
+                // mic at connect (AirPods 24 kHz-mic fix). Informational,
+                // auto-fading; the correction already happened.
+                if let notice = notices.audioInputNotice {
+                    Text(notice)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(AppTheme.textDim)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .mortimerGlass(.chip)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        .padding(.bottom, geo.size.height * 0.08 + 60)
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
+                }
             }
         }
         .onChange(of: voiceState) { _, next in

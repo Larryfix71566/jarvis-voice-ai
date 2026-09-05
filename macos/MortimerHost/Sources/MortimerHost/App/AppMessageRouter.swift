@@ -18,6 +18,8 @@ final class AppMessageRouter {
     private var task: Task<Void, Never>?
     private var transcriptSink: AnyCancellable?
     private var stateSink: AnyCancellable?
+    private var audioOutputSink: AnyCancellable?
+    private var audioInputSink: AnyCancellable?
     private var lastState: JarvisClient.ConnectionState = .offline
 
     func start(
@@ -48,8 +50,31 @@ final class AppMessageRouter {
                 self.lastState = next
                 if case .connecting = prev, case .connected = next { Sounds.play(.boot) }
                 if case .failed = next { Sounds.play(.fail) }
+                // A reconnect (ours or the user's) makes the audio-output
+                // notice moot — playout re-opens on the current device.
+                if case .connecting = next { notices?.clearAudioOutputNotice() }
             }
         }
+        #if os(macOS)
+        // 2026-09-05 — default output device changed under a live session
+        // (AirPods). JarvisClient only publishes; the chip with the
+        // Reconnect action is OrbFieldView's.
+        audioOutputSink = client.$audioOutputChange.sink { change in
+            Task { @MainActor in
+                guard let change else { return }
+                Sounds.play(.tick)
+                notices?.showAudioOutputNotice(change.noticeText)
+            }
+        }
+        // 2026-09-05 — connect() repointed the default input to a
+        // rate-matching mic (AirPods 24 kHz-mic fix). Informational chip.
+        audioInputSink = client.$audioInputChange.sink { change in
+            Task { @MainActor in
+                guard let change else { return }
+                notices?.showAudioInputNotice(change.noticeText)
+            }
+        }
+        #endif
         task = Task {
             for await message in client.messageStream() {
                 switch message {
@@ -95,5 +120,7 @@ final class AppMessageRouter {
         task = nil
         transcriptSink = nil
         stateSink = nil
+        audioOutputSink = nil
+        audioInputSink = nil
     }
 }

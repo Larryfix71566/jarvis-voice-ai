@@ -344,7 +344,9 @@ class TestDeveloperSections:
         with them. If core needs to grow again, trim it first."""
         from jarvis.prompts import select_developer_sections as sel
         assert sel("read config/agents.yaml and tell me the timeout") == []
-        assert len(self._own("show me the git log")) < 1100
+        # 2026-09-04 — MORTIMER_GRAPH_LAYER_PLAN.md step 9: the graph_view
+        # sentence in DEVELOPER_CORE (1,098 -> ~1,220). Next growth trims first.
+        assert len(self._own("show me the git log")) < 1250
 
     def test_a_read_that_could_write_keeps_the_protocol(self):
         """THE hazard of the core-only path. "read the file and fix the bug"

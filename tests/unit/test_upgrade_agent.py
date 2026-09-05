@@ -488,6 +488,27 @@ async def _fake_convene_unavailable(**_kwargs):
     return None
 
 
+# ------------------------------------------------------------- GL9 (run_id)
+# MORTIMER_GRAPH_LAYER_PLAN.md GL9 (contract G2, step 11b) — the delegating
+# sub-agent run's id must reach convene() so its round gets tagged.
+
+
+def test_convene_receives_run_id(service: SelfEditService, monkeypatch) -> None:
+    captured: dict = {}
+
+    async def _fake_convene(**kwargs):
+        captured.update(kwargs)
+        return None
+
+    monkeypatch.setattr(council_mod, "convene", _fake_convene)
+    agent = UpgradeAgent(
+        service, config_path=service.repo_root / "config/upgrade_agent.yaml",
+        run_id="r9",
+    )
+    agent._maybe_escalate(goal="g", trigger="E1", context={})
+    assert captured["run_id"] == "r9"
+
+
 def _outcome_recorder(monkeypatch) -> list[tuple[str, str]]:
     """Phase 3 Rev 3.3 — capture record_retry_outcome calls (the session-
     exit write for a council brief whose retry never validated)."""

@@ -3,7 +3,7 @@
 # 12 voice UI control (MORTIMER_VOICE_UI_PLAN.md U8, extended by
 # MORTIMER_DRAWER_POPOUT_PLAN.md DP6), 2 screen vision, 10 terse-imperative/
 # status-ask (MORTIMER_VOICE_MODEL_BENCH_PLAN.md §4, 2026-08-20),
-# 3 troubleshooting->developer (2026-08-20) = 68 total.
+# 3 troubleshooting->developer (2026-08-20), 2 graph views (MORTIMER_GRAPH_LAYER_PLAN.md, 2026-09-04) = 70 total.
 # expect: scheduler | librarian | analyst | systems | developer | none | [agent, agent]
 
 # --- scheduler (5) ---
@@ -128,3 +128,7 @@
 - {input: "why did that search fail", expect: developer}
 - {input: "what did the analyst actually search for", expect: developer}
 - {input: "you said there were no games today, look into why you missed them", expect: developer}
+
+# --- graph views -> owning specialist (2) (MORTIMER_GRAPH_LAYER_PLAN.md GL12/GL16) ---
+- {input: "show me how my memories about temperature connect", expect: librarian}
+- {input: "draw the council graph for the last self-edit", expect: developer}

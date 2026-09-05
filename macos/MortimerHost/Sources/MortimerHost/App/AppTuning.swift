@@ -51,8 +51,31 @@ enum AppTuning {
     /// SideDrawer.tsx drawerMaxWidthPx() = min(720, 60vw)
     static let drawerMaxWidthCap: Double = 720
     static let drawerMaxWidthFraction: Double = 0.6
+    /// 2026-09-05 (drawer-handle fix): the docked drawer's resize grip IS
+    /// the gap between the stage and the drawer's glass edge — DrawerView
+    /// drops its leading padding when docked so the grip sits on the
+    /// panel edge, not 8pt into the background. 10pt is the hit target;
+    /// the visible hairline lives on its trailing edge.
+    static let drawerHandleWidth: Double = 10
     /// DP8 two-panel extended-screen split (CORE §1.4)
     static let displaySplitLeftFraction = 0.60
+
+    // --- display panels (2026-09-05, "graph window sizable without limitation") ---
+    /// SingleDisplayPanel's outer inset inside the display window / stage
+    /// (was a literal 20 in DisplayWindowView).
+    static let displayPanelInset: Double = 20
+    /// The corner resize grip's hit target (the SF symbol alone was ~10pt).
+    static let displayPanelGripSize: Double = 22
+    /// A graph image is re-requested from the sidecar at the panel's new
+    /// pixel size this long after the size stops changing — one render
+    /// per resize, not one per mouse event (each render is a networkx
+    /// layout + Pillow encode on the Python side).
+    static let graphImageReloadDebounceSeconds: Double = 0.3
+    /// Mirror of jarvis/graphs/config.py GRAPH_IMAGE_MIN_PX / MAX_PX — the
+    /// sidecar clamps too; this just avoids asking for a size it will
+    /// refuse or shrink.
+    static let graphImageMinPx = 400
+    static let graphImageMaxPx = 3000
 
     // --- parity sweep 2026-08-30 -----------------------------------------
     /// OrbField.tsx MIN_WORKING_MS — a satellite's working glow holds at

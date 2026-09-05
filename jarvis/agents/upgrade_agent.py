@@ -312,8 +312,13 @@ class UpgradeAgent:
         config_section: str | None = None,
         system_prompt: str | None = None,
         council_workflow: str = "selfedit",
+        run_id: str | None = None,
     ):
         self.service = service
+        # MORTIMER_GRAPH_LAYER_PLAN.md GL9 (contract G2): the delegating sub-agent
+        # run, threaded from SkillRegistry.call() through the sidecar; None for a
+        # console-initiated run. Every convene() below passes it through.
+        self._run_id = run_id
         self.cfg = load_agent_config(config_path, section=config_section)
         self._system_prompt = system_prompt or SYSTEM_PROMPT
         # Cooperative cancel (Larry 2026-08-30/31: a kimi-k3 planner sat
@@ -960,7 +965,7 @@ class UpgradeAgent:
             from jarvis.council.council import convene
             result = asyncio.run(convene(
                 workflow=self._council_workflow, placement="planner", trigger=trigger,
-                goal=goal, tier=tier, context=context,
+                goal=goal, tier=tier, context=context, run_id=self._run_id,
             ))
         except Exception:                           # noqa: BLE001
             logger.warning("council_escalation_failed", exc_info=True)
@@ -992,7 +997,7 @@ class UpgradeAgent:
             result = asyncio.run(convene(
                 workflow=self._council_workflow, placement="scope", trigger="E2",
                 goal=goal, tier=1,
-                context={"reason": reason, "allowlist": allowlist},
+                context={"reason": reason, "allowlist": allowlist}, run_id=self._run_id,
             ))
         except Exception:                           # noqa: BLE001
             logger.warning("council_scope_council_failed", exc_info=True)
@@ -1082,6 +1087,7 @@ class AppBuildAgent(UpgradeAgent):
         registry_path: str | os.PathLike[str] | None = None,
         profile: str | None = None,
         client_factory: Callable[[], Any] | None = None,
+        run_id: str | None = None,
     ):
         # Selection order mirrors resolve_profile's own: explicit >
         # env > registry default. resolve_profile only checks
@@ -1092,7 +1098,7 @@ class AppBuildAgent(UpgradeAgent):
             workspace, config_path=config_path, registry_path=registry_path,
             profile=profile, client_factory=client_factory,
             config_section="app_build", system_prompt=APP_BUILD_SYSTEM_PROMPT,
-            council_workflow="appbuild",
+            council_workflow="appbuild", run_id=run_id,
         )
 
 

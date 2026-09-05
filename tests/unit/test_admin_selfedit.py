@@ -99,7 +99,7 @@ class FakeAgent:
 def _install_fake_agent(monkeypatch, crash=False, gate=None):
     FakeAgent.crash = crash
     FakeAgent.gate = gate
-    monkeypatch.setattr(srv, "_make_agent", lambda service, profile: FakeAgent(service, profile))
+    monkeypatch.setattr(srv, "_make_agent", lambda service, profile, run_id=None: FakeAgent(service, profile))
 
 
 def _wait_for_job(client, state, timeout=5.0):
@@ -228,7 +228,7 @@ def test_run_plan_path_read_and_seeded(registry_file, monkeypatch):
             return {"ok": True, "summary": "done"}
 
     monkeypatch.setattr(
-        srv, "_make_agent", lambda service, profile: PlanCapturingAgent(service, profile)
+        srv, "_make_agent", lambda service, profile, run_id=None: PlanCapturingAgent(service, profile)
     )
     monkeypatch.setattr(
         srv.repo_logic, "repo_read_file",
@@ -270,7 +270,7 @@ def test_run_explicit_plan_beats_plan_path(registry_file, monkeypatch):
         raise AssertionError("plan_path was read despite explicit plan")
 
     monkeypatch.setattr(
-        srv, "_make_agent", lambda service, profile: PlanCapturingAgent(service, profile)
+        srv, "_make_agent", lambda service, profile, run_id=None: PlanCapturingAgent(service, profile)
     )
     monkeypatch.setattr(srv.repo_logic, "repo_read_file", _explode)
     c = TestClient(app)
@@ -322,7 +322,7 @@ def test_run_with_staging_id_replays_staged_goal(registry_file, monkeypatch):
             return {"ok": True, "summary": "done"}
 
     monkeypatch.setattr(
-        srv, "_make_agent", lambda service, profile: CapturingAgent(service, profile)
+        srv, "_make_agent", lambda service, profile, run_id=None: CapturingAgent(service, profile)
     )
     c = TestClient(app)
     stage = c.post("/api/selfedit/stage", json={
@@ -335,6 +335,48 @@ def test_run_with_staging_id_replays_staged_goal(registry_file, monkeypatch):
     assert res["profile"] == "claude-opus (fake-model)"
     _wait_for_job(c, "done")
     assert seen["goal"] == "add a clock panel"
+
+
+def test_staging_carries_run_id_to_agent(registry_file, monkeypatch):
+    """MORTIMER_GRAPH_LAYER_PLAN.md GL9 (contract G2, step 11c): the staged
+    run_id reaches _make_agent — the staged record is the source of truth,
+    same discipline as the goal/profile it already replays."""
+    seen = {}
+
+    def _spy(service, profile, run_id=None):
+        seen["run_id"] = run_id
+        return FakeAgent(service, profile)
+
+    monkeypatch.setattr(srv, "_make_agent", _spy)
+    c = TestClient(app)
+    stage = c.post("/api/selfedit/stage", json={
+        "goal": "add a clock panel", "run_id": "r9",
+    }).json()
+    sid = stage["staging_id"]
+
+    res = c.post("/api/selfedit/run", json={"staging_id": sid}).json()
+    assert res["ok"] and res["started"]
+    _wait_for_job(c, "done")
+    assert seen["run_id"] == "r9"
+
+
+def test_bare_run_empty_run_id_is_none(registry_file, monkeypatch):
+    """GL9: the bare {goal, ...} confirm=true form normalises an empty
+    run_id to None, never the empty string, reaching _make_agent."""
+    seen = {}
+
+    def _spy(service, profile, run_id=None):
+        seen["run_id"] = run_id
+        return FakeAgent(service, profile)
+
+    monkeypatch.setattr(srv, "_make_agent", _spy)
+    c = TestClient(app)
+    res = c.post(
+        "/api/selfedit/run", json={"goal": "add a clock", "run_id": ""},
+    ).json()
+    assert res["ok"] and res["started"]
+    _wait_for_job(c, "done")
+    assert seen["run_id"] is None
 
 
 def test_run_with_staging_id_consumes_it_once(registry_file, monkeypatch):

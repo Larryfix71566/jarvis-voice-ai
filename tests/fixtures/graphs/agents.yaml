@@ -1,0 +1,6 @@
+sub_agents:
+  - name: scheduler
+  - name: librarian
+  - name: analyst
+  - name: systems
+  - name: developer

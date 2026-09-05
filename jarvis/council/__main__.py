@@ -261,9 +261,28 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _load_credentials() -> None:
+    """2026-09-05 — `--replay` calls real judge models, and a profile is
+    only eligible when `os.environ[key_env]` is set (`upgrade_agent.py:293`
+    `key_present`). Nothing else in this CLI's import chain loads them:
+    the API keys live in the vault, not `.env`, so a bare
+    `python -m jarvis.council --replay ... --judges frontier` saw zero
+    usable profiles at every tier and exited "no usable profile for tier
+    'frontier'" — which is why gap-closure §8.7 could never be run and
+    round d6e0059b's poisoned shadow rows were never repairable by the
+    CLI that GC6(b) was built around. `--agreement` is unaffected (pure
+    DB reads) and stays working if this fails."""
+    try:
+        from jarvis.config import load_settings
+        load_settings()
+    except Exception as exc:  # noqa: BLE001 — .env-only setups still work
+        print(f"credential load skipped ({type(exc).__name__}: {exc})", file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.replay:
+        _load_credentials()
         if not args.judges:
             print("--replay requires --judges <economy|mid|frontier>", file=sys.stderr)
             return 2

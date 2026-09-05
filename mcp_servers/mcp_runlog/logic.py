@@ -14,7 +14,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from jarvis import graphs
 from jarvis.council import council as council_mod
+from jarvis.db import get_conn, run_migrations
 from jarvis.runlog import store as runlog_store
 
 # Caps mirror the admin sidecar's own clamps (jarvis/admin/server.py) —
@@ -159,3 +161,25 @@ def council_list(limit: int = 10) -> dict[str, Any]:
             for r in rounds
         ],
     }
+
+
+GRAPH_VIEW_NAMES = ("execution", "deliberation", "capability")
+
+
+def graph_view(graph: str, focus: str = "", depth: int = 2, since: str = "7d") -> dict[str, Any]:
+    """GL12 (MORTIMER_GRAPH_LAYER_PLAN.md) — thin over jarvis.graphs.build."""
+    if graph not in GRAPH_VIEW_NAMES:
+        return {"ok": False, "error": "graph must be one of execution, deliberation, capability "
+                                      "(memory is the librarian's)"}
+    try:
+        run_migrations()
+        conn = get_conn()
+        try:
+            result = graphs.build(graph, conn, focus=focus, depth=depth, since=since or None)
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"could not build the {graph} graph: {exc}"}
+    if not result.get("ok"):
+        return result
+    return graphs.tool_result(result, since=since or None)

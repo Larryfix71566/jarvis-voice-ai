@@ -55,6 +55,10 @@ DISPLAY_TOOLS = {
     # pushes a finished site comparison through this SAME display pipeline
     # rather than opening a second display code path.
     "research_report",
+    # MORTIMER_GRAPH_LAYER_PLAN.md GL12 — the two graph tools render a PNG the
+    # sidecar serves; the spoken part is the tool's one-sentence summary.
+    "memory_graph_view",
+    "graph_view",
 }
 
 # Which surface a tool's result belongs on (side-drawer plan D36).
@@ -88,6 +92,8 @@ DISPLAY_SURFACE: dict[str, str] = {
     # second screen while they read it (Larry's choice: display now,
     # save on request).
     "research_report": "window",
+    "memory_graph_view": "window",
+    "graph_view": "window",
 }
 DEFAULT_DISPLAY_SURFACE = "drawer"
 
@@ -425,6 +431,18 @@ def _fmt_research_report(args: dict, data: dict) -> tuple | None:
     return ("markdown", title, "\n\n".join(parts), [], [])
 
 
+def _fmt_graph_view(args: dict, data: dict) -> tuple | None:
+    """GL12 — an image card whose only body is the summary sentence (+ a truncation line)."""
+    url = data.get("image_url")
+    if not isinstance(url, str) or not url:
+        return None
+    title = f"{str(data.get('graph') or 'graph').capitalize()} graph — {data.get('focus') or 'whole graph'}"
+    body = str(data.get("summary") or "")
+    if data.get("truncated"):
+        body += f"\nTruncated: {data.get('truncated_reason') or 'guard'}."
+    return ("image", title, body, [url], [])
+
+
 _FORMATTERS = {
     "web_search": _fmt_web_search,
     "get_weather": _fmt_get_weather,
@@ -441,6 +459,8 @@ _FORMATTERS = {
     "plan_ready": _fmt_plan_ready,
     "weather_report": _fmt_weather_report,
     "research_report": _fmt_research_report,
+    "memory_graph_view": _fmt_graph_view,
+    "graph_view": _fmt_graph_view,
 }
 
 

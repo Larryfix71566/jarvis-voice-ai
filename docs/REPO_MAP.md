@@ -58,6 +58,10 @@ current branch.
   `agreement.py` (judge-quality reporting).
 - `jarvis/runlog/` — `store.py` (RunLogger + read helpers), `cli.py`
   (`python -m jarvis.runlog`).
+- `jarvis/graphs/` — derived, read-only relationship graphs (memory /
+  capability / execution / deliberation) + PNG/SVG renderer; served by the
+  sidecar's `/api/graph/*` and two voice tools (`memory_graph_view`,
+  `graph_view`). One implementation: nothing else derives an edge.
 - `jarvis/selfedit/service.py` — the self-edit sandbox: branch, allow-
   list check, validation gate, PR.
 - `jarvis/skills/registry.py` — spawns MCP servers as subprocesses,

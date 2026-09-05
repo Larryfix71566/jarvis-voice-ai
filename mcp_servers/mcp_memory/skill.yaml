@@ -2,8 +2,12 @@
 name: mcp-memory
 version: 1.0.0
 class: standard
-tools: [memory_review_list, memory_review_resolve, memory_search]
+tools: [memory_review_list, memory_review_resolve, memory_search, memory_graph_view]
 requires_env: []
+# MORTIMER_GRAPH_LAYER_PLAN.md GL12/GL15 (2026-09-04): K2 scoping forwards only
+# declared names, so the graph kill switch and knobs must be listed to reach
+# this child. All four have code defaults (jarvis/graphs/config.py).
+optional_env: [JARVIS_GRAPHS_ENABLED, JARVIS_GRAPH_DEPTH, JARVIS_GRAPH_MAX_NODES, JARVIS_GRAPH_SINCE]
 requires_keychain: []
 scopes: []
 test: "python3 -m pytest tests/unit/test_mcp_memory_logic.py -q"

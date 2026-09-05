@@ -25,7 +25,7 @@ def _get_client():
 @mcp.tool()
 def selfedit_start(
     goal: str = "", profile: str = "", confirm: bool = False, plan_path: str = "",
-    staging_id: str = "",
+    staging_id: str = "", run_id: str = "",
 ) -> dict:
     """Start a self-development run for GOAL (a change to Mortimer itself).
 
@@ -41,11 +41,12 @@ def selfedit_start(
     Staging expires after 10 minutes; if confirm=true reports the staging
     is gone, call selfedit_start again to preview a fresh one. The run
     itself is asynchronous: it plans in the background for several
-    minutes; use selfedit_status to check progress.
+    minutes; use selfedit_status to check progress. `run_id` is filled in
+    by the system; leave it empty.
     """
     return logic.selfedit_start(
         _get_client(), goal, profile or None, confirm,
-        plan_path=plan_path, staging_id=staging_id,
+        plan_path=plan_path, staging_id=staging_id, run_id=run_id,
     )
 
 
@@ -108,7 +109,7 @@ def selfedit_revert(confirm: bool = False) -> dict:
 @mcp.tool()
 def plan_start(
     goal: str, mode: str = "single", profile: str = "", confirm: bool = False,
-    review_path: str = "",
+    review_path: str = "", run_id: str = "",
 ) -> dict:
     """Start drafting an implementation plan, specification, or design
     document for GOAL — use this instead of writing the document yourself
@@ -126,10 +127,11 @@ def plan_start(
 
     REVIEW_PATH, when set, reviews that existing repo document instead of
     authoring a new plan — use this whenever the user asks to have a
-    plan, spec, or document reviewed, critiqued, or checked by a model."""
+    plan, spec, or document reviewed, critiqued, or checked by a model.
+    `run_id` is filled in by the system; leave it empty."""
     return logic.plan_start(
         _get_client(), goal, mode or "single", profile or None, confirm,
-        review_path or "",
+        review_path or "", run_id=run_id,
     )
 
 

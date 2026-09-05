@@ -31,7 +31,14 @@ struct DrawerView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .mortimerGlass(.drawer)
-        .padding(8)
+        // Docked: no leading inset — ConsoleView's resize grip
+        // (AppTuning.drawerHandleWidth) IS the gap, so the grip sits on
+        // the glass edge instead of 8pt into the background (2026-09-05).
+        // Popped out into its own window: the full 8pt all round, as before.
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+        .padding(.trailing, 8)
+        .padding(.leading, drawer.isPoppedOut ? 8 : 0)
         .foregroundStyle(AppTheme.text)
         .onAppear(perform: buildModelsOnce)
     }

@@ -389,3 +389,29 @@ class TestRepoRead:
 
     def test_surface_is_window(self):
         assert DISPLAY_SURFACE["repo_read_file"] == "window"
+
+
+class TestGraphView:
+    """MORTIMER_GRAPH_LAYER_PLAN.md GL12 — one image card, shared by both
+    memory_graph_view (librarian) and graph_view (developer)."""
+
+    def test_graph_view_payload_is_image_window(self):
+        url = "http://127.0.0.1:7861/api/graph/memory/image.png?focus=fact%3Auser.style.a"
+        data = {"ok": True, "graph": "memory", "focus": "fact:user.style.a",
+                "image_url": url, "summary": "2 memories within 2 of a.", "truncated": False}
+        p = build("memory_graph_view", data)
+        assert p["kind"] == "image"
+        assert p["surface"] == "window"
+        assert p["images"] == [url]
+        assert p["title"] == "Memory graph — fact:user.style.a"
+
+    def test_graph_view_truncated_line(self):
+        url = "http://127.0.0.1:7861/api/graph/execution/image.png?focus=run%3Ar1"
+        data = {"ok": True, "graph": "execution", "focus": "run:r1", "image_url": url,
+                "summary": "1 runs within 1 of r1.", "truncated": True,
+                "truncated_reason": "run cap"}
+        p = build("graph_view", data)
+        assert "Truncated: run cap." in p["body"]
+
+    def test_graph_view_ok_false_returns_none(self):
+        assert build("memory_graph_view", {"ok": False, "error": "no node matches 'zzz'"}) is None

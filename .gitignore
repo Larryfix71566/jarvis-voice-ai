@@ -56,3 +56,6 @@ _to_delete_tarballs/
 # GC10 (gap-closure plan, 2026-09-04) hygiene
 *.wav                 # speaker/eval captures live under data/; a WAV at the root is a stray
 web/dist_verify*/
+
+# stray verification renders dropped at the repo root (seam.png, delib.png)
+/*.png

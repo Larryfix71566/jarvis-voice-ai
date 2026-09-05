@@ -33,6 +33,35 @@ def _module_path(dotted: str) -> Path | None:
     return p if p.exists() else None
 
 
+# K2 review gap (MORTIMER_GRAPH_LAYER_PLAN.md GL9/GL15, 2026-09-05): two
+# independent reasons _read_transitive cannot see these four names for
+# mcp_memory/mcp_runlog, confirmed by hand rather than by the analyzer.
+# (1) `from jarvis import graphs` names the PACKAGE jarvis.graphs
+# (jarvis/graphs/__init__.py); _module_path only ever builds "<dotted>.py"
+# and never "<dotted>/__init__.py", so it can't resolve a package import at
+# all — jarvis/graphs/config.py, where three of these four are actually
+# read, is never even opened. (2) Independently of (1), config.py reads
+# them through its own _int_env(name, default)/_str_env(name, default)
+# helpers, where `name` is a lowercase parameter — not a literal string or
+# an ALL-CAPS module constant passed directly to os.environ.get(...), the
+# one shape _ENV_CALL's regex recognizes. Fixing (1) alone would still miss
+# them. Hand-confirmed: jarvis/graphs/config.py's
+# _int_env("JARVIS_GRAPH_DEPTH", ...) and
+# _int_env("JARVIS_GRAPH_MAX_NODES", ...) and
+# _str_env("JARVIS_GRAPH_SINCE", ...); jarvis/graphs/__init__.py's
+# graphs_enabled() reads JARVIS_GRAPHS_ENABLED as a literal os.environ.get
+# call (a shape the regex WOULD see, but never reaches, since (1) already
+# stops _read_transitive from opening any file in the package).
+_KNOWN_INDIRECT_TRANSITIVE_READS: dict[str, set[str]] = {
+    # keyed by directory name under mcp_servers/ (this file's `pkg`), not the
+    # hyphenated server name skill.yaml/EXPECTED use elsewhere in the repo.
+    "mcp_memory": {"JARVIS_GRAPHS_ENABLED", "JARVIS_GRAPH_DEPTH",
+                   "JARVIS_GRAPH_MAX_NODES", "JARVIS_GRAPH_SINCE"},
+    "mcp_runlog": {"JARVIS_GRAPHS_ENABLED", "JARVIS_GRAPH_DEPTH",
+                   "JARVIS_GRAPH_MAX_NODES", "JARVIS_GRAPH_SINCE"},
+}
+
+
 def _reads_of(src: str) -> set[str]:
     """Env names read in one source string, resolving module-level
     NAME = "ENV_VAR" constants (review F8, the repo's dominant style)."""
@@ -91,8 +120,10 @@ def test_every_declared_var_is_actually_read(pkg):
     """The inverse: a declaration nothing reads is a grant nobody needs. A read
     may be transitive (mcp-screen's JARVIS_UPGRADE_MODELS is read through
     jarvis.agents.upgrade_agent), so this confirms against the OVER-approximating
-    transitive set."""
-    read = _read_transitive(pkg)
+    transitive set — plus _KNOWN_INDIRECT_TRANSITIVE_READS for the handful of
+    hand-confirmed reads _read_transitive structurally cannot see (see that
+    dict's comment)."""
+    read = _read_transitive(pkg) | _KNOWN_INDIRECT_TRANSITIVE_READS.get(pkg, set())
     for name in _declared(pkg):
         assert name in read, f"{pkg} declares {name} but nothing (resolved) reads it"
 

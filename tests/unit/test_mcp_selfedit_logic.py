@@ -92,7 +92,8 @@ def test_start_preview_starts_nothing():
     # never starts a run — the invariant is "doesn't start", not "no POST".
     assert c.posts == [
         ("/api/selfedit/stage",
-         {"goal": "add a clock panel", "profile": "kimi-k2", "plan_path": None}),
+         {"goal": "add a clock panel", "profile": "kimi-k2", "plan_path": None,
+          "run_id": None}),
     ]
 
 
@@ -100,8 +101,22 @@ def test_start_honors_spoken_profile():
     c = _client()
     r = logic.selfedit_start(c, "add a clock", profile="claude-opus", confirm=True)
     assert r["ok"] and r["started"]
-    assert c.posts == [("/api/selfedit/run", {"goal": "add a clock", "profile": "claude-opus"})]
+    assert c.posts == [("/api/selfedit/run", {"goal": "add a clock", "profile": "claude-opus",
+                                               "run_id": None})]
     assert "several minutes" in r["summary"]
+
+
+def test_selfedit_start_forwards_run_id():
+    """MORTIMER_GRAPH_LAYER_PLAN.md GL9 (contract G2, step 11d) — run_id is
+    filled in by the system (SkillRegistry.call()'s injection), never
+    spoken by the model; this pins that it reaches the stage POST."""
+    c = _client()
+    logic.selfedit_start(c, "add a clock panel", run_id="r9")
+    assert c.posts == [
+        ("/api/selfedit/stage",
+         {"goal": "add a clock panel", "profile": "kimi-k2", "plan_path": None,
+          "run_id": "r9"}),
+    ]
 
 
 def test_start_unknown_profile_names_available():
@@ -120,7 +135,8 @@ def test_start_confirm_posts_goal_and_profile():
     c = _client()
     r = logic.selfedit_start(c, "dark theme", confirm=True)
     assert r["started"]
-    assert c.posts == [("/api/selfedit/run", {"goal": "dark theme", "profile": "kimi-k2"})]
+    assert c.posts == [("/api/selfedit/run", {"goal": "dark theme", "profile": "kimi-k2",
+                                               "run_id": None})]
 
 
 def test_start_env_profile_beats_registry_default(monkeypatch):
@@ -134,7 +150,8 @@ def test_start_explicit_profile_beats_env(monkeypatch):
     monkeypatch.setenv("JARVIS_UPGRADE_PROFILE", "claude-opus")
     c = _client()
     logic.selfedit_start(c, "add a clock", profile="kimi-k2", confirm=True)
-    assert c.posts == [("/api/selfedit/run", {"goal": "add a clock", "profile": "kimi-k2"})]
+    assert c.posts == [("/api/selfedit/run", {"goal": "add a clock", "profile": "kimi-k2",
+                                               "run_id": None})]
 
 
 def test_start_env_profile_missing_key_names_env_profile(monkeypatch):
@@ -157,6 +174,7 @@ def test_start_plan_path_in_preview_summary():
             "goal": "implement geolocation phase 1",
             "profile": "kimi-k2",
             "plan_path": "docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md",
+            "run_id": None,
         }),
     ]
 
@@ -172,13 +190,15 @@ def test_start_confirm_posts_plan_path():
         "goal": "implement geolocation phase 1",
         "profile": "kimi-k2",
         "plan_path": "docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md",
+        "run_id": None,
     })]
 
 
 def test_start_empty_plan_path_omitted_from_post():
     c = _client()
     logic.selfedit_start(c, "dark theme", confirm=True, plan_path="  ")
-    assert c.posts == [("/api/selfedit/run", {"goal": "dark theme", "profile": "kimi-k2"})]
+    assert c.posts == [("/api/selfedit/run", {"goal": "dark theme", "profile": "kimi-k2",
+                                               "run_id": None})]
 
 
 # ── selfedit_start: G2 staged confirm flow ──────────────────────────────────
@@ -410,7 +430,17 @@ def test_plan_start_council_confirm_posts_and_summarizes(monkeypatch):
     assert r["started"] is True
     assert c.posts[0] == ("/api/plan/start", {
         "goal": "write a spec", "mode": "council", "profile": None,
-        "review_path": "",
+        "review_path": "", "run_id": None,
+    })
+
+
+def test_plan_start_forwards_run_id():
+    """GL9 (contract G2, step 11d) — run_id reaches the /api/plan/start POST."""
+    c = _client({("POST", "/api/plan/start"): {"ok": True, "started": True}})
+    logic.plan_start(c, "write a spec", mode="single", confirm=True, run_id="r9")
+    assert c.posts[0] == ("/api/plan/start", {
+        "goal": "write a spec", "mode": "single", "profile": None,
+        "review_path": "", "run_id": "r9",
     })
 
 
@@ -512,7 +542,7 @@ def test_plan_start_review_path_passed_through_on_confirm():
     assert r["ok"] is True
     assert c.posts[0] == ("/api/plan/start", {
         "goal": "review the geolocation plan", "mode": "single", "profile": None,
-        "review_path": "docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md",
+        "review_path": "docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md", "run_id": None,
     })
     assert "started the review" in r["summary"].lower()
 
