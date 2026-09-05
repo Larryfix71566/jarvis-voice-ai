@@ -45,3 +45,33 @@ def test_every_service_plist_parses_with_plistlib():
         xml = launchd_gen.render(svc, Path("/repo"))
         parsed = plistlib.loads(xml.encode("utf-8"))
         assert parsed["Label"] == f"com.mortimer.{svc}"
+
+
+def test_backup_job_uses_system_python_not_the_venv():
+    """2026-09-05 — the backup job has no interpreter fallback, so it must not
+    depend on uv's managed interpreter store, which uv may relocate on a python
+    upgrade. A silently-dead nightly backup is the worst failure mode here."""
+    xml = launchd_gen.render("backup", Path("/repo"))
+    assert "<string>/usr/bin/python3</string>" in xml
+    assert ".venv/bin/python" not in xml
+
+
+def test_backup_db_uses_only_stdlib():
+    """What makes /usr/bin/python3 safe above. If someone adds a third-party
+    import to backup_db.py, the nightly job would break under system python —
+    fail here instead, where the reason is obvious."""
+    import ast as _ast
+    import sys as _sys
+
+    src = (Path(__file__).resolve().parents[2] / "scripts" / "backup_db.py").read_text()
+    roots = set()
+    for node in _ast.walk(_ast.parse(src)):
+        if isinstance(node, _ast.Import):
+            roots.update(a.name.split(".")[0] for a in node.names)
+        elif isinstance(node, _ast.ImportFrom) and node.level == 0 and node.module:
+            roots.add(node.module.split(".")[0])
+    non_stdlib = sorted(roots - _sys.stdlib_module_names - {"__future__"})
+    assert not non_stdlib, (
+        f"backup_db.py imports non-stdlib {non_stdlib}; either vendor it or "
+        f"point the launchd backup job back at an interpreter that has it"
+    )
