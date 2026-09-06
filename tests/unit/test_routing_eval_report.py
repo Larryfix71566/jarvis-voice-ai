@@ -26,6 +26,7 @@ from tests.evals.routing_eval import (
     _category_of,
     _one_line,
     format_category_report,
+    case_is_correct,
     gate_failures,
     isolate_selfedit_service,
     resolve_profile,
@@ -269,3 +270,51 @@ def test_only_an_exact_1_opts_out(monkeypatch):
 def test_the_sandbox_target_is_not_the_live_sidecar():
     assert SANDBOX_ADMIN_URL != LIVE_ADMIN_URL
     assert "7861" not in SANDBOX_ADMIN_URL
+
+
+# --- or_tool: two mechanisms, one destination (2026-09-05) --------------
+#
+# Cases 6 and 10 expected a librarian delegation and got the direct
+# `remember` tool, twice over. Both land in the same place — remember calls
+# upsert_fact (jarvis/memory.py:652) and mcp_memory reads the same module
+# via search_facts — which is why case 8 ("when does my passport expire")
+# passes while those two failed. The cases asserted a distinction the
+# storage layer does not make, against a prompt that draws the line the
+# other way. or_tool accepts both WITHOUT excusing a turn that did nothing.
+
+
+def test_a_matching_delegation_is_correct():
+    assert case_is_correct({"librarian"}, {"librarian"})
+
+
+def test_expecting_none_means_no_delegation_happened():
+    assert case_is_correct({"none"}, set())
+    assert not case_is_correct({"none"}, {"librarian"})
+
+
+def test_the_alternative_tool_counts_when_it_was_actually_called():
+    assert case_is_correct({"librarian"}, set(), "remember", ["remember"])
+
+
+def test_doing_nothing_at_all_still_fails():
+    # The whole risk of or_tool: it must not turn "answered from thin air"
+    # into a pass. #25 asserted the app registry was empty with tools:
+    # (none) — that has to keep failing.
+    assert not case_is_correct({"librarian"}, set(), "remember", [])
+    assert not case_is_correct({"librarian"}, set(), "remember", None)
+
+
+def test_the_alternative_tool_does_not_excuse_the_wrong_specialist():
+    # Calling remember AND delegating to scheduler is not a pass.
+    assert not case_is_correct({"librarian"}, {"scheduler"}, "remember",
+                               ["remember"])
+
+
+def test_without_an_alternative_a_missing_delegation_fails():
+    assert not case_is_correct({"librarian"}, set())
+    assert not case_is_correct({"librarian"}, set(), None, ["remember"])
+
+
+def test_a_multi_agent_case_needs_every_expected_agent():
+    assert case_is_correct({"analyst", "scheduler"}, {"analyst", "scheduler"})
+    assert not case_is_correct({"analyst", "scheduler"}, {"analyst"})

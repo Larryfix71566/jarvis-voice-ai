@@ -14,11 +14,21 @@
 - {input: "wake me up at 6:30 tomorrow morning", expect: scheduler}
 
 # --- librarian (5) ---
-- {input: "remember that my passport expires in March", expect: librarian}
+# 2026-09-05 — `or_tool` accepts the direct `remember` tool as well as a
+# librarian delegation. Both land in the same place: remember calls
+# upsert_fact (jarvis/memory.py:652) and mcp_memory reads the same module
+# via search_facts, so a fact stored either way is retrievable either way
+# — which is why case 8 ("when does my passport expire") passes while
+# these two failed. The cases asserted a distinction the storage layer
+# does not make, and the prompt draws the line the OTHER way ("call
+# remember immediately" on a durable statement), so as written the eval
+# penalised the model for obeying an instruction. Doing nothing at all
+# still fails: or_tool requires that tool to have actually been called.
+- {input: "remember that my passport expires in March", expect: librarian, or_tool: remember}
 - {input: "save a note that the project wifi password is blueplanet42", expect: librarian}
 - {input: "when does my passport expire", expect: librarian}
 - {input: "what did I save about the wifi", expect: librarian}
-- {input: "store this: my dentist is Dr. Patel on Main Street", expect: librarian}
+- {input: "store this: my dentist is Dr. Patel on Main Street", expect: librarian, or_tool: remember}
 
 # --- analyst (5) ---
 - {input: "what's the weather in Berlin", expect: analyst}

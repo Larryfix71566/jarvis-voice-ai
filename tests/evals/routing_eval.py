@@ -230,6 +230,29 @@ def _one_line(text: str | None) -> str:
     return flat[:REPLY_PREVIEW_CHARS] + "…"
 
 
+def case_is_correct(
+    expected: set[str],
+    actual: set[str],
+    or_tool: str | None = None,
+    tools_called: list[str] | None = None,
+) -> bool:
+    """Did this case route correctly?
+
+    `or_tool` names a DIRECT tool that is an equally correct answer — for
+    a case where two mechanisms reach the same place, so insisting on the
+    delegation measures a distinction the system does not make. It is not
+    a way to excuse a miss: the tool must actually have been called, so a
+    turn that did nothing still fails.
+    """
+    if expected == {"none"}:
+        return not actual
+    if actual == expected:
+        return True
+    if or_tool and not actual and or_tool in (tools_called or ()):
+        return True
+    return False
+
+
 def _normalize(expect) -> set[str]:
     if isinstance(expect, list):
         return set(expect)
@@ -372,7 +395,8 @@ async def run_eval() -> tuple[float, dict[str, tuple[int, int]]]:
                 continue
 
             actual = set(delegated)
-            ok = actual == expected if expected != {"none"} else not actual
+            ok = case_is_correct(expected, actual,
+                                 case.get("or_tool"), tools_called)
             correct += ok
             results.append((_category_of(expected), bool(ok)))
             mark = "ok " if ok else "MISS"
