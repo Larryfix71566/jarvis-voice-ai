@@ -16,14 +16,18 @@ import pytest
 from tests.evals.routing_eval import (
     ACCURACY_THRESHOLD,
     CATEGORY_FLOORS,
+    ALLOW_LIVE_SELFEDIT_ENV,
     CATEGORY_FLOORS_PROFILE,
     DEFAULT_PROFILE,
+    LIVE_ADMIN_URL,
     PROFILES,
+    SANDBOX_ADMIN_URL,
     REPLY_PREVIEW_CHARS,
     _category_of,
     _one_line,
     format_category_report,
     gate_failures,
+    isolate_selfedit_service,
     resolve_profile,
     summarize_categories,
 )
@@ -218,3 +222,50 @@ def test_the_aggregate_threshold_still_applies_under_a_foreign_profile():
     summary = summarize_categories([("developer", False)] * 10)
     assert gate_failures(0.10, summary, floors={"developer": 0.99},
                          profile="delegate-only")
+
+
+# --- self-edit sidecar isolation (2026-09-05) ---------------------------
+#
+# The first parity run staged, started and cancelled REAL self-edits on
+# 127.0.0.1:7861. The temp-db isolation never covered that: the sidecar is
+# a separate process reached over HTTP, not a table. These pin the guard,
+# and above all that it is opt-OUT — forgetting the flag must cost a
+# degraded sub-agent, never a self-edit on the machine running the eval.
+
+import os
+
+
+def test_the_sidecar_is_sandboxed_by_default(monkeypatch):
+    monkeypatch.delenv(ALLOW_LIVE_SELFEDIT_ENV, raising=False)
+    monkeypatch.setenv("JARVIS_ADMIN_URL", LIVE_ADMIN_URL)
+    assert isolate_selfedit_service() == SANDBOX_ADMIN_URL
+    assert os.environ["JARVIS_ADMIN_URL"] == SANDBOX_ADMIN_URL
+
+
+def test_an_unset_admin_url_is_still_sandboxed(monkeypatch):
+    # The dangerous case: nothing set, so mcp_selfedit would fall back to
+    # its DEFAULT_ADMIN_URL and find the real sidecar.
+    monkeypatch.delenv(ALLOW_LIVE_SELFEDIT_ENV, raising=False)
+    monkeypatch.delenv("JARVIS_ADMIN_URL", raising=False)
+    assert isolate_selfedit_service() == SANDBOX_ADMIN_URL
+    assert os.environ["JARVIS_ADMIN_URL"] == SANDBOX_ADMIN_URL
+
+
+def test_the_guard_is_opt_out_not_opt_in(monkeypatch):
+    monkeypatch.setenv(ALLOW_LIVE_SELFEDIT_ENV, "1")
+    monkeypatch.setenv("JARVIS_ADMIN_URL", LIVE_ADMIN_URL)
+    assert isolate_selfedit_service() == LIVE_ADMIN_URL
+    assert os.environ["JARVIS_ADMIN_URL"] == LIVE_ADMIN_URL
+
+
+def test_only_an_exact_1_opts_out(monkeypatch):
+    # "true", "yes" and a stray space must not disarm the guard by accident.
+    for value in ("true", "yes", "0", "", " 1", "1 "):
+        monkeypatch.setenv(ALLOW_LIVE_SELFEDIT_ENV, value)
+        monkeypatch.setenv("JARVIS_ADMIN_URL", LIVE_ADMIN_URL)
+        assert isolate_selfedit_service() == SANDBOX_ADMIN_URL, value
+
+
+def test_the_sandbox_target_is_not_the_live_sidecar():
+    assert SANDBOX_ADMIN_URL != LIVE_ADMIN_URL
+    assert "7861" not in SANDBOX_ADMIN_URL

@@ -76,6 +76,46 @@ DEFAULT_PROFILE = "parity"
 # rather than failing a gate against a baseline that never applied to it.
 CATEGORY_FLOORS_PROFILE = DEFAULT_PROFILE
 
+# 2026-09-05 — the first parity run staged, started and cancelled REAL
+# self-edits: case 26 POSTed /api/selfedit/stage and /api/selfedit/run on
+# 127.0.0.1:7861 and case 62 asked to cancel a build. The temp-db
+# isolation above never covered this, because the sidecar is a separate
+# process reached over HTTP, not a table. Under the old delegate-only
+# harness case 26 did not delegate at all, so parity is what turned a
+# latent hazard into a live one.
+#
+# Nothing listens on port 1: AdminClient's connection is refused
+# immediately and mcp_selfedit answers with its own OFFLINE_ERROR, which
+# is a state the tool already handles and the prompt already has rules
+# for. JARVIS_ADMIN_URL is in registry.BASE_ENV_KEYS, so setting it here
+# reaches every MCP child.
+#
+# Routing is unaffected in principle: it is scored on delegate_start,
+# which fires before the sub-agent runs a single tool. What CAN move is a
+# case where a failing tool provokes a second delegation — the per-case
+# got= line will show that if it happens.
+SANDBOX_ADMIN_URL = "http://127.0.0.1:1"
+LIVE_ADMIN_URL = "http://127.0.0.1:7861"
+ALLOW_LIVE_SELFEDIT_ENV = "EVAL_ALLOW_LIVE_SELFEDIT"
+
+
+def isolate_selfedit_service() -> str:
+    """Point the self-edit sidecar at nothing. Returns the URL now in force.
+
+    Opt out with EVAL_ALLOW_LIVE_SELFEDIT=1 — deliberately an opt-OUT, so
+    that forgetting costs a degraded developer sub-agent rather than a real
+    self-edit on the machine running the eval.
+    """
+    if os.environ.get(ALLOW_LIVE_SELFEDIT_ENV) == "1":
+        live = os.environ.get("JARVIS_ADMIN_URL") or LIVE_ADMIN_URL
+        print(f"self-edit sidecar: LIVE at {live} — this run can stage, "
+              f"start and cancel real self-edits")
+        return live
+    os.environ["JARVIS_ADMIN_URL"] = SANDBOX_ADMIN_URL
+    print(f"self-edit sidecar: sandboxed to {SANDBOX_ADMIN_URL} "
+          f"(set {ALLOW_LIVE_SELFEDIT_ENV}=1 to drive the real one)")
+    return SANDBOX_ADMIN_URL
+
 
 def resolve_profile(name: str | None) -> tuple[str, dict[str, bool], bool]:
     """Name -> (name, addenda flags, show-tools). An unknown name is fatal,
@@ -239,6 +279,8 @@ async def run_eval() -> tuple[float, dict[str, tuple[int, int]]]:
     os.environ["JARVIS_DB_PATH"] = str(
         Path(tempfile.mkdtemp(prefix="jarvis-eval-")) / "eval.db"
     )
+    # Before the registry starts, so every MCP child inherits it.
+    isolate_selfedit_service()
     _apply_candidate_overrides()
 
     from jarvis.agents.supervisor import Orchestrator

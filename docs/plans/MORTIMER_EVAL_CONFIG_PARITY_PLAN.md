@@ -1,7 +1,7 @@
 # Eval / production configuration parity
 
-Status: **IN PROGRESS.** Drafted 2026-09-05; both open questions decided
-by Larry the same day; item A landed.
+Status: **A–E DONE. F: first parity run recorded 2026-09-05; floors
+still unset pending a second run.**
 
 ## The problem
 
@@ -148,9 +148,55 @@ had no test because it could not be imported.
 is written once. Passing it twice invites a handler registered under the
 wrong spelling, which fails only at call time and only in production.
 
-**F. Re-baseline and set floors.** Run `RUN_LIVE=1` under the declared
-configuration, record the per-category table, populate `CATEGORY_FLOORS`
-from that observed run.
+**F. Re-baseline and set floors. — FIRST RUN DONE 2026-09-05; floors still
+unset.** `RUN_LIVE=1`, profile `parity`, model `claude-haiku-4-5`.
+
+    Routing accuracy: 63/70 = 90%
+      none        23/23  100%     analyst    5/5  100%
+      developer   17/22   77%     scheduler  5/5  100%
+      librarian    4/6    67%     systems    5/5  100%
+                                  multi      4/4  100%
+
+The aggregate did not move. The composition did, completely.
+
+**Three of the seven old misses now pass**: #26 (darker theme), #30
+(Claude's frontier model) and #59 (build status) all delegate correctly
+under parity. Every explanation previously offered for those three was
+wrong, not merely unproven — they were artifacts of the one-tool harness.
+
+**Two new misses are competing-tool confusion**, which the old eval was
+structurally incapable of observing: #6 and #10 both expect `librarian`
+and both called the direct `remember` tool instead (#10 called it twice).
+Whether the model or the case is wrong is a spec question — the prompt
+does say to call `remember` immediately on a durable statement — and it
+decides everything about `librarian` at 4/6.
+
+**Two developer misses are worse than routing misses.** #25 asserted the
+app registry is empty and #28 asserted no self-edit was running, both
+having called no tool at all. Each case gets a fresh Orchestrator, so
+their claims about *conversation* history are true; what they invented is
+durable SYSTEM state, which lives outside the conversation and can only be
+known by asking. Golden Rule 1 covers this in principle and did not fire.
+#25 also named the developer specialist to the user, which Rule 4 forbids
+and Rule 10's own example licenses — contradiction 1, observed live.
+
+**#56, #66 and #68 asked a clarifying question instead of delegating**,
+which is Rule 4 doing exactly what it says against Rule 8's "always
+delegated to developer". A sixth contradiction, and the first evidenced by
+a run rather than by reading.
+
+**Floors remain unset deliberately: this is n=1.** The pre-parity misses
+were byte-identical across two runs, but that was a different
+configuration and the property does not transfer.
+
+**The run mutated the machine.** Case 26 POSTed `/api/selfedit/stage` and
+`/api/selfedit/run`; case 62 asked to cancel a build. The temp-db
+isolation never covered the sidecar — a separate process reached over
+HTTP. `isolate_selfedit_service()` now points `JARVIS_ADMIN_URL` at
+`127.0.0.1:1` before the registry starts, so children inherit it and the
+tool returns its own OFFLINE_ERROR. Opt-OUT via
+`EVAL_ALLOW_LIVE_SELFEDIT=1`, so forgetting costs a degraded sub-agent
+rather than a real self-edit.
 
 ## Decisions (Larry, 2026-09-05)
 
