@@ -22,6 +22,7 @@ def test_supervisor_prompt_formats_all_placeholders():
         timezone="America/New_York",
         units="imperial",
         agent_catalog="- scheduler (Scheduler): time stuff",
+        model_catalog="- claude-opus (say \"Opus\"): anthropic, tier frontier",
         voice_catalog="- rachel: Rachel (calm)",
         memory_context="- user.name: Larry",
     )
@@ -43,11 +44,13 @@ def test_supervisor_prompt_carries_units():
     with pytest.raises(KeyError):
         SUPERVISOR_PROMPT.format(
             jarvis_name="Jarvis", user_name="Boss", timezone="America/New_York",
-            agent_catalog="", voice_catalog="", memory_context="",
+            agent_catalog="", model_catalog="", voice_catalog="",
+            memory_context="",
         )  # units= omitted on purpose
     rendered = SUPERVISOR_PROMPT.format(
         jarvis_name="Jarvis", user_name="Boss", timezone="America/New_York",
-        units="metric", agent_catalog="", voice_catalog="", memory_context="",
+        units="metric", agent_catalog="", model_catalog="",
+        voice_catalog="", memory_context="",
     )
     assert "metric" in rendered
     assert "never re-convert" in rendered.lower()
@@ -444,6 +447,7 @@ def test_the_new_rules_survive_formatting():
     rendered = SUPERVISOR_PROMPT.format(
         jarvis_name="Jarvis", user_name="Boss", timezone="America/New_York",
         units="imperial", agent_catalog="- analyst (Analyst): research",
+        model_catalog='- claude-opus (say "Opus"): anthropic, tier frontier',
         voice_catalog="- rachel: Rachel", memory_context="- user.name: Larry",
     )
     assert "Never name a specialist to the user" in rendered
@@ -466,6 +470,7 @@ _FMT = dict(
     timezone="America/New_York",
     units="imperial",
     agent_catalog="- scheduler (Scheduler): time stuff",
+    model_catalog='- claude-opus (say "Opus"): anthropic, tier frontier',
     voice_catalog="- rachel: Rachel",
     memory_context="(none yet)",
 )
@@ -528,3 +533,76 @@ def test_addenda_keep_the_order_pipeline_py_used():
         full.index(HANDOFF_ADDENDUM),
     ]
     assert positions == sorted(positions)
+
+
+# --- 2026-09-05: two clauses added from observed eval failures ---------
+#
+# Both come from misses that reproduced across two live parity runs, not
+# from reading the prompt. They are pinned because a later edit that
+# quietly drops either one would restore a behaviour we have watched fail.
+
+
+def test_a_specialists_records_are_not_self_knowledge():
+    from jarvis.prompts import GOLDEN_RULES
+    # Case 25, twice: "the registry is empty at the moment" with no tool
+    # call at all. Golden Rule 1 covered unobserved FACTS but the model did
+    # not read a specialist's data as one.
+    assert "A specialist's records are not things you know" in GOLDEN_RULES
+    assert "reporting any of it without asking" in GOLDEN_RULES
+    # The boundary against the memory block, which says the opposite about
+    # memories ("things you already know").
+    assert "a specialist's data never is" in GOLDEN_RULES
+
+
+def test_the_golden_rules_still_permit_not_knowing():
+    from jarvis.prompts import GOLDEN_RULES
+    # The clause above adds an obligation to ask; it must not crowd out the
+    # answer that made Golden Rule 1 work.
+    assert "I don't know why" in GOLDEN_RULES
+
+
+def test_a_specialist_that_can_resolve_the_gap_gets_the_delegation():
+    # Cases 56 and 66, twice: a clarifying question instead of delegating,
+    # which is Rule 4 doing what it says. Rule 9 and HANDOFF_ADDENDUM exist
+    # so the SPECIALIST asks and the orchestrator relays; Rule 4 was
+    # pre-empting that path at the door.
+    assert "But ask ONLY when the missing detail exists nowhere except" in \
+        SUPERVISOR_PROMPT
+    assert "the run log that records every delegation" in SUPERVISOR_PROMPT
+    assert "withholding the delegation is what breaks that path" in \
+        SUPERVISOR_PROMPT
+
+
+def test_rule_4_still_asks_when_only_the_user_has_the_answer():
+    # Cases 36 and 37 ("remind me about the thing", "save a note") expect NO
+    # delegation and pass. The new clause must not turn them into
+    # delegations to a specialist that cannot act.
+    assert 'A vague request like "remind me about the thing" is missing its ' \
+        'content — ask, do not delegate.' in SUPERVISOR_PROMPT
+
+
+def test_only_prompts_py_formats_the_template_directly():
+    """The assembler is the single entry point, by construction.
+
+    2026-09-05: adding {model_catalog} broke scripts/context_growth_probe.py
+    and revealed scripts/voice_model_bench.py had been calling .format()
+    without `units` — a KeyError on every run, in a script nothing
+    exercised. Four independent argument lists for one template is how a
+    placeholder becomes a latent break. Anything that needs the prompt goes
+    through build_supervisor_prompt; only prompts.py itself and this test
+    module touch the raw template.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    offenders = []
+    for folder in ("jarvis", "scripts"):
+        for path in (root / folder).rglob("*.py"):
+            if path.name == "prompts.py" and path.parent.name == "jarvis":
+                continue
+            if "SUPERVISOR_PROMPT.format" in path.read_text(encoding="utf-8"):
+                offenders.append(str(path.relative_to(root)))
+    assert offenders == [], (
+        "these format the template directly instead of calling "
+        f"build_supervisor_prompt: {offenders}"
+    )

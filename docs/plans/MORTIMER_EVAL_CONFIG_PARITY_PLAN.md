@@ -198,6 +198,52 @@ tool returns its own OFFLINE_ERROR. Opt-OUT via
 `EVAL_ALLOW_LIVE_SELFEDIT=1`, so forgetting costs a degraded sub-agent
 rather than a real self-edit.
 
+## Interventions from the two parity runs (2026-09-05)
+
+Run 2 gave 64/70. Three cases flipped against run 1 (#28 and #68 to pass,
+#30 to miss), so the eval is NOT deterministic under parity and no single
+run is a measurement. Five misses reproduced in both runs, and those are
+what these changes target. The sandbox cost nothing — every sidecar case
+still passed.
+
+**#6, #10 — the eval was wrong, not the model.** `remember` calls
+`upsert_fact` (`memory.py:652`) and `mcp_memory` reads the same module via
+`search_facts`, so a fact stored either way is retrievable either way —
+which is why case 8 passes while these failed. The cases asserted a
+distinction the storage layer does not make, against a prompt that draws
+the line the other way ("call remember immediately" on a durable
+statement). `or_tool` in cases.yaml now accepts either, and `case_is_correct`
+requires the tool to have ACTUALLY been called, so a turn that answered
+from nothing still fails.
+
+**#25 — Golden Rule 1 did not reach a specialist's data.** Twice it
+reported the app registry as empty having called no tool. GR1 covered
+unobserved facts; the model did not read a specialist's records as one.
+Added: a specialist's records are not things you know, with the boundary
+against the memory block stated explicitly, since that block says the
+opposite about memories.
+
+**#56, #66 — Rule 4 was pre-empting Rule 9.** Both asked a clarifying
+question instead of delegating, which is Rule 4 doing exactly what it
+says. But `HANDOFF_ADDENDUM`'s NEEDS-INPUT and Rule 9's relay exist so the
+SPECIALIST asks and the orchestrator relays; Rule 4 was cutting that off at
+the door. Rule 4 now asks only when the missing detail exists nowhere but
+in the user's head — a specialist that can resolve it from the working
+tree, the run log or the notes gets the delegation. Cases 36 and 37
+("remind me about the thing", "save a note") stay non-delegations and are
+pinned as such.
+
+**What was ruled out: more memories.** The eval renders
+`"(no memories yet)"` — a sixth parity gap, since production has 423
+facts — but `prompts.py:53` tells the model to "never delegate to recall
+them", and every stable miss is a failure to delegate. More memory content
+pushes the wrong way. For #25 it would be actively worse: a confidently
+stale answer sourced from memory instead of the registry.
+
+**Measurability.** Run-to-run variance is roughly ±3 cases, so a +1 fix
+cannot be seen. Targeting all five stable misses together is what makes
+the result legible: 64 -> ~69 would be unmistakable, 64 -> 65 would not.
+
 ## Decisions (Larry, 2026-09-05)
 
 1. **Configuration: parameterized, defaulting to parity.** One profile

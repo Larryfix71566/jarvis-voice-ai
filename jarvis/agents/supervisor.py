@@ -32,6 +32,7 @@ from jarvis.agents.base import SubAgent, load_sub_agents
 from jarvis.agents.base import _assistant_message as _base_assistant_message
 from jarvis.agents.delegate import build_delegate_tool
 from jarvis.db import get_conn, now_iso
+from jarvis.model_catalog import render_model_catalog
 from jarvis.prompts import build_supervisor_prompt, render_agent_catalog
 from jarvis.memory import render_memory_context
 from jarvis.bot.sensitive_turn import arm_from_text, is_sensitive
@@ -133,6 +134,7 @@ class Orchestrator:
             timezone=settings.jarvis_timezone,
             units=settings.jarvis_units,
             agent_catalog=agent_catalog,
+            model_catalog=render_model_catalog(),
             voice_catalog=(voice_catalog if voice_catalog is not None
                            else "(none configured yet)"),
             memory_context=render_memory_context(),  # U2.5 persistent memory

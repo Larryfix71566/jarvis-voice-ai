@@ -1,0 +1,49 @@
+# Spoken model names -> profile names in config/upgrade_models.yaml.
+#
+# 2026-09-05. This file exists because the mapping used to live in prose, in
+# TWO places, and both had drifted from the registry:
+#
+#   jarvis/prompts.py rule 8   said `fable`        -> no such profile
+#   both prompt locations      said `or-sonnet-5`  -> no such profile
+#
+# An unresolvable profile makes the run REFUSE (see delegate.py's
+# model_profile description), so "use Sonnet" was broken outright and "use
+# Fable" was broken or not depending on which of the two instructions the
+# model happened to follow. Neither was visible to the routing eval, which
+# scores delegate_start and never inspects model_profile.
+#
+# ONLY spoken aliases belong here. Everything else the model needs is
+# already in the registry and is RENDERED from it, never copied:
+#
+#   "frontier" / "mid" / "economy"  -> the `tier` field
+#   "Claude's ..." / "Anthropic's"  -> the `provider` field
+#   "can it see images"             -> the `vision` field
+#
+# Aliasing a tier word would hardcode a guess that goes stale the day a
+# model is added, and it would be wrong anyway: there are five frontier
+# profiles, two of them Anthropic. "Claude's frontier model" is genuinely
+# ambiguous and Mortimer should ASK — reading the two real candidates off
+# the catalog rather than inventing a menu.
+#
+# What an alias DOES decide is which member of a family a bare name means.
+# That is a choice, not a lookup, which is why it is written down here.
+# Every value below is checked against the registry by
+# tests/unit/test_model_catalog.py; an alias pointing at a profile that
+# does not exist fails the suite.
+aliases:
+  # Anthropic
+  Opus: claude-opus
+  Fable: claude-fable-5
+  Fable 5: claude-fable-5
+  Sonnet: claude-sonnet-5
+
+  # Moonshot — the bare name means the flagship, not the coding-tuned K2.
+  Kimi: kimi-k3
+
+  # OpenRouter — each bare name means the newer/higher-tier member, which
+  # preserves what the old prose mapping already intended.
+  Grok: or-grok-4.6
+  DeepSeek: or-deepseek-v4-pro
+  GPT: or-gpt-5.1
+  Codex: or-codex-max
+  Gemini: or-gemini-flash

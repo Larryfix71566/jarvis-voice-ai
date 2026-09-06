@@ -91,6 +91,7 @@ from jarvis.memory import (
     update_memory_from_session,
 )
 from jarvis.kb_digest import write_session_digest
+from jarvis.model_catalog import render_model_catalog
 from jarvis.prompts import (
     build_supervisor_prompt,
     render_agent_catalog,
@@ -518,6 +519,7 @@ def build_pipeline(
         timezone=settings.jarvis_timezone,
         units=settings.jarvis_units,
         agent_catalog=agent_catalog,
+        model_catalog=render_model_catalog(),
         voice_catalog=catalog_summary(catalog),
         memory_context=render_memory_context(stats=memory_stats),  # U2.5
         voice=True,
