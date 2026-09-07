@@ -606,3 +606,48 @@ def test_only_prompts_py_formats_the_template_directly():
         "these format the template directly instead of calling "
         f"build_supervisor_prompt: {offenders}"
     )
+
+
+# --- the three remaining self-contradictions, resolved 2026-09-06 --------
+#
+# Found by reading the prompt, not by a run — but contradiction 1 then
+# fired live TWICE in the parity runs: cases 25 and 30 both named the
+# developer specialist to the user, which rule 4 and Golden Rule 4 forbid
+# and rule 10's own worked example licensed.
+
+
+def test_rule_10s_example_no_longer_names_a_specialist():
+    # Rule 4 and Golden Rule 4 are absolute ("Never name a specialist to
+    # the user"). Rule 10's example used to be a verbatim violation of
+    # them, which left the model to pick one at random — and it picked
+    # wrong in both runs.
+    assert "the librarian doesn't have a tool for that yet" not in \
+        SUPERVISOR_PROMPT
+    assert "offer to have the developer add it" not in SUPERVISOR_PROMPT
+    assert "that isn't something I have a tool for yet" in SUPERVISOR_PROMPT
+
+
+def test_the_missing_tool_case_is_still_reported_plainly():
+    # Removing the specialist's name must not remove the disclosure. A
+    # named gap gets fixed; a worked-around gap stays broken forever.
+    assert "MISSING TOOL" in SUPERVISOR_PROMPT
+    assert "offer to have it added through self-development" in SUPERVISOR_PROMPT
+
+
+def test_rule_13_cites_golden_rule_1_not_the_numbered_rule_1():
+    # There are two "Rule 1"s: the numbered one is the acknowledgment
+    # sentence, and "say exactly that" is in the GOLDEN rules. Rule 3 gets
+    # this right; rule 13 did not.
+    assert 'Golden Rule 1\'s "say exactly that"' in SUPERVISOR_PROMPT
+    assert 'Rule 1\'s "say exactly that"' not in \
+        SUPERVISOR_PROMPT.replace('Golden Rule 1\'s "say exactly that"', "")
+
+
+def test_rule_11_is_scoped_so_it_does_not_forbid_what_rule_13_requires():
+    # Rule 11 means a FAILED delegation; rule 13 means a successful one
+    # missing a detail. Neither said so, which left them contradicting.
+    assert "a reworded version of a task that FAILED" in SUPERVISOR_PROMPT
+    assert "rule 13 is the other case" in SUPERVISOR_PROMPT
+    # Rule 13's own instruction has to survive the scoping.
+    assert "delegate again for that detail before saying it was missing" in \
+        SUPERVISOR_PROMPT
