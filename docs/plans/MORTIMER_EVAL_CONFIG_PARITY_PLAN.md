@@ -1,7 +1,7 @@
 # Eval / production configuration parity
 
-Status: **A–E DONE. F: first parity run recorded 2026-09-05; floors
-still unset pending a second run.**
+Status: **A–E DONE. F: three parity runs recorded; floors still unset,
+and the denominator has since changed to 76.**
 
 ## The problem
 
@@ -197,6 +197,50 @@ HTTP. `isolate_selfedit_service()` now points `JARVIS_ADMIN_URL` at
 tool returns its own OFFLINE_ERROR. Opt-OUT via
 `EVAL_ALLOW_LIVE_SELFEDIT=1`, so forgetting costs a degraded sub-agent
 rather than a real self-edit.
+
+## Run 3, and what followed (2026-09-05/06)
+
+**68/70**, from 63 and 64. Outside the +/-3 noise band, so a real move.
+Honest attribution: +2 was the `or_tool` change (deterministic, not model
+behaviour); #25 and #66 flipped from 2/2 misses to passes, which is the
+two prompt clauses working; #28 and #68 were already flapping and prove
+nothing; **#56 resisted 3/3**.
+
+**#56 had a cause, and it was the catalog rather than the router.**
+`mcp_git/logic.py` resolves a single `_repo_root()` and runs every
+operation with `cwd=_repo_root()`, so exactly one repo can be committed
+to. But the developer description introduced per-app GitHub repos without
+saying they are not commit targets, so "the Jarvis repository, or changes
+elsewhere?" was a correct reading of what the model had been told. Three
+runs of prompt pressure could not move it because nothing was wrong with
+the routing rules.
+
+**That became the agent split.** `app_builder` now owns `mcp-apps`;
+`developer` keeps git, repo, selfedit and runlog. developer had carried
+six MCP servers and ~31 tools against 2-4 for every other specialist and
+was the only category ever to miss. The seam is clean — mcp-apps is pure
+GitHub API and needs nothing from mcp-git, while self-development
+genuinely does.
+
+**The eval is now 76 cases** (two retargeted, six added, app building from
+2 to 7), so the gate needs 69/76 and **no earlier number is a baseline**.
+
+**Separately, the model catalog.** Two profile names in the prompt did not
+exist: rule 8 said `fable` where the registry says `claude-fable-5`, and
+BOTH prompt locations said `or-sonnet-5` where it says `claude-sonnet-5`.
+An unresolvable profile makes the run refuse, so "use Sonnet" was broken
+outright. Now rendered from `config/upgrade_models.yaml` with
+`config/model_aliases.yaml` holding only spoken names, gated offline.
+
+**Still true, and still blocking:** there is no variance measurement. Runs
+1-2 were one configuration, run 3 another, and the tree has changed
+several times since. A variance number needs two runs with NOTHING edited
+between them, and `CATEGORY_FLOORS` cannot be set until there is one.
+
+**What the eval cannot answer:** whether the split makes app development
+better. Cases 71-76 are a tripwire for the split introducing confusion,
+not evidence that it helped. That verdict comes from building an app
+through the interface.
 
 ## Interventions from the two parity runs (2026-09-05)
 
