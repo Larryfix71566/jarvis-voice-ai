@@ -96,7 +96,18 @@ from jarvis.prompts import (
     build_supervisor_prompt,
     render_agent_catalog,
 )
-from jarvis.council import prune as prune_council
+# NOT `from jarvis.council import prune` — that binds the MODULE
+# jarvis/council/prune.py, and calling it raises "'module' object is not
+# callable". The runlog line below looks identical and works only because
+# jarvis/runlog/__init__.py re-exports the function; jarvis/council/__init__.py
+# deliberately re-exports nothing (it is kept transport-free, D1). The two
+# lines being visually identical while resolving differently is exactly why
+# this survived review: council retention pruning failed silently on EVERY
+# boot from 2026-08-22 to 2026-09-07 (16 `council_prune_failed` lines, one
+# success before it), caught by reading the logs rather than by any test,
+# because tests/unit/test_council_prune.py imports the function directly and
+# so never exercised the path production actually uses.
+from jarvis.council.prune import prune as prune_council
 from jarvis.runlog import prune as prune_runlog
 from jarvis.runlog import reconcile_orphaned_runs
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry

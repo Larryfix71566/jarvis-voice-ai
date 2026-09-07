@@ -101,3 +101,32 @@ class TestDirPruning:
     def test_missing_base_dir_does_not_raise(self, db_path, tmp_path):
         result = prune(180, db_path=db_path, root=tmp_path / "nope")
         assert result["dirs_deleted"] == 0
+
+
+class TestStartupWiring:
+    """The defect the other tests in this file could not catch.
+
+    They import `prune` directly, which proves the function works; production
+    reaches it through jarvis/bot/pipeline.py, and THAT is what broke. These
+    pin the caller's binding instead."""
+
+    def test_pipeline_binds_the_prune_function_not_the_module(self):
+        import types
+
+        from jarvis.bot import pipeline
+
+        assert not isinstance(pipeline.prune_council, types.ModuleType), (
+            "pipeline.prune_council is the jarvis.council.prune MODULE — calling "
+            "it raises \"'module' object is not callable\" and council retention "
+            "pruning silently never runs (2026-09-07)"
+        )
+        assert callable(pipeline.prune_council)
+
+    def test_both_startup_pruners_are_callable(self):
+        """Symmetry guard: runlog resolves via a package re-export and council
+        via the submodule, so a future refactor of either __init__ must keep
+        both callable."""
+        from jarvis.bot import pipeline
+
+        assert callable(pipeline.prune_council)
+        assert callable(pipeline.prune_runlog)
