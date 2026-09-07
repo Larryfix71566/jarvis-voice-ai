@@ -69,8 +69,15 @@ def selfedit_start(
     plan_path: str = "",
     staging_id: str = "",
     run_id: str = "",
+    target_paths: list[str] | None = None,
 ) -> dict[str, Any]:
     """Two-phase start of an upgrade run (preview, then confirm).
+
+    TARGET_PATHS (2026-09-07): the repo files the edit will CHANGE. The
+    sidecar's preflight classifies these (Tier 0 / B / routine) instead of
+    whatever paths the goal prose mentions, so "add a line about
+    jarvis/model_catalog.py to docs/REPO_MAP.md" is a docs edit, not a
+    core one.
 
     PLAN_PATH, when set, names a repo plan/spec document the sidecar reads
     and injects into the run — use it whenever the user asks to implement
@@ -87,8 +94,13 @@ def selfedit_start(
     still works for one release as a deprecated fallback."""
     staging_id = (staging_id or "").strip()
 
-    # Confirm path with a staging_id: skip re-deriving anything, replay it.
-    if confirm and staging_id:
+    # Confirm path with a staging_id — or with no goal at all — replays the
+    # sidecar's staged record. The sidecar resolves a mangled or missing id
+    # to the single live staging (2026-09-07: 'stg-…' and '43' both arrived
+    # here and bounced the user back to a fresh preview for a typo the
+    # sidecar could see through) and refuses, naming them, when more than
+    # one is live.
+    if confirm and (staging_id or not (goal or "").strip()):
         run_resp = _call(
             lambda: client.post("/api/selfedit/run", json={"staging_id": staging_id})
         )
@@ -149,10 +161,11 @@ def selfedit_start(
     if not confirm:
         # G2 — stage the preview on the sidecar; the returned staging_id is
         # what the confirm=true call must pass back.
+        targets = [t.strip() for t in (target_paths or []) if t and t.strip()]
         stage_resp = _call(lambda: client.post(
             "/api/selfedit/stage",
             json={"goal": goal, "profile": chosen, "plan_path": plan_path or None,
-                  "run_id": run_id or None},
+                  "run_id": run_id or None, "target_paths": targets or None},
         ))
         if not stage_resp.get("ok"):
             return stage_resp
@@ -273,6 +286,8 @@ def selfedit_status(client, staging_id: str = "") -> dict[str, Any]:
     parts: list[str] = []
     if job.get("state") in ("done", "error") and job.get("summary"):
         parts.append(str(job["summary"]))
+    if job.get("pr_url"):
+        parts.append(f"Pull request: {job['pr_url']} — merging is yours on GitHub.")
 
     if status.get("active"):
         proposals = status.get("proposals", []) or []

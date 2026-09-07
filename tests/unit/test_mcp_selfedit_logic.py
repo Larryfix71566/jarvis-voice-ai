@@ -93,8 +93,20 @@ def test_start_preview_starts_nothing():
     assert c.posts == [
         ("/api/selfedit/stage",
          {"goal": "add a clock panel", "profile": "kimi-k2", "plan_path": None,
-          "run_id": None}),
+          "run_id": None, "target_paths": None}),
     ]
+
+
+def test_start_preview_posts_target_paths_for_the_tier_check():
+    """2026-09-07: preflight classifies what the edit CHANGES, not what the
+    goal mentions. Blank entries are dropped; an all-blank list is None."""
+    c = _client()
+    logic.selfedit_start(c, "add a line about jarvis/model_catalog.py to docs/REPO_MAP.md",
+                         target_paths=["docs/REPO_MAP.md", " ", ""])
+    assert c.posts[0][1]["target_paths"] == ["docs/REPO_MAP.md"]
+    c = _client()
+    logic.selfedit_start(c, "tidy the docs", target_paths=["", " "])
+    assert c.posts[0][1]["target_paths"] is None
 
 
 def test_start_honors_spoken_profile():
@@ -115,7 +127,7 @@ def test_selfedit_start_forwards_run_id():
     assert c.posts == [
         ("/api/selfedit/stage",
          {"goal": "add a clock panel", "profile": "kimi-k2", "plan_path": None,
-          "run_id": "r9"}),
+          "run_id": "r9", "target_paths": None}),
     ]
 
 
@@ -129,6 +141,28 @@ def test_start_missing_key_names_env_var():
     r = logic.selfedit_start(_client(), "x", profile="kimi-k3")
     assert r["ok"] is False
     assert "MOONSHOT_API_KEY" in r["error"]
+
+
+def test_start_confirm_with_no_id_and_no_goal_posts_to_run():
+    """A bare 'yes' — no staging_id survived the relay and no goal was
+    restated — is still handed to the sidecar, which resolves the single
+    live staging or names the real state. It must never be answered
+    client-side with 'I need a goal'."""
+    client = FakeClient({
+        ("POST", "/api/selfedit/run"): {"ok": True, "started": True,
+                                         "profile": "kimi-k2 (kimi-k2.7-code)"},
+    })
+    res = logic.selfedit_start(client, confirm=True)
+    assert res["ok"] and res["started"]
+    assert client.posts == [("/api/selfedit/run", {"staging_id": ""})]
+
+
+def test_start_confirm_with_a_mangled_id_is_passed_through_unchanged():
+    client = FakeClient({
+        ("POST", "/api/selfedit/run"): {"ok": True, "started": True, "profile": "p"},
+    })
+    logic.selfedit_start(client, confirm=True, staging_id="stg-0d049db0947d")
+    assert client.posts == [("/api/selfedit/run", {"staging_id": "stg-0d049db0947d"})]
 
 
 def test_start_confirm_posts_goal_and_profile():
@@ -175,6 +209,7 @@ def test_start_plan_path_in_preview_summary():
             "profile": "kimi-k2",
             "plan_path": "docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md",
             "run_id": None,
+            "target_paths": None,
         }),
     ]
 
@@ -263,6 +298,21 @@ def test_status_composes_session_and_proposals():
     assert "ClockPanel.tsx" in r["summary"]
     assert "Validation has passed" in r["summary"]
     assert r["active"] is True
+
+
+def test_status_speaks_the_pull_request_the_run_opened():
+    done = {
+        "ok": True,
+        "job": {"state": "done", "goal": "add a clock", "profile": "p",
+                "summary": "planned it", "submitted": True,
+                "pr_url": "https://github.com/x/y/pull/12"},
+        "status": {"active": False, "proposals": [], "validated_ok": False},
+        "stagings": [],
+    }
+    r = logic.selfedit_status(_client({("GET", "/api/selfedit/run"): done}))
+    assert "planned it" in r["summary"]
+    assert "https://github.com/x/y/pull/12" in r["summary"]
+    assert "merging is yours" in r["summary"]
 
 
 def test_status_when_idle():

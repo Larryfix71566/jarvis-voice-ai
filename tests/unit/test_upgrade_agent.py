@@ -437,6 +437,38 @@ def test_session_decline_tool_ends_session_immediately(service: SelfEditService)
     assert not (service.repo_root / "jarvis/wakeword.py").exists()
 
 
+def test_run_reports_the_pull_request_it_submitted(service: SelfEditService, monkeypatch) -> None:
+    """The first test to drive edit → validate → submit end to end
+    (2026-09-07 review F7: submit() had never executed, live or in a test).
+    The gates are stubbed green; git add/commit/push run for real against
+    the fixture's bare origin; only the GitHub API call is faked."""
+    service._github_token = "t"
+    monkeypatch.setattr(service, "_open_pr",
+                        lambda title: {"html_url": "https://example.invalid/pr/7"})
+    monkeypatch.setattr(service, "_run", lambda argv, cwd, timeout: (0, "ok"))
+    client = ScriptedClient([
+        _msg(tool_calls=[_tool_call("edit_propose", {
+            "path": "web/src/App.tsx", "new_content": "export default 2;\n",
+            "rationale": "bump"}, "e1")]),
+        _msg(tool_calls=[_tool_call("session_validate", {}, "v1")]),
+        _msg(tool_calls=[_tool_call("session_submit", {}, "s1")]),
+        _msg(content="opened the pull request"),
+    ])
+    result = _agent(service, client).run("bump the default export")
+    assert result["ok"] is True
+    assert result["submitted"] is True
+    assert result["pr_url"] == "https://example.invalid/pr/7"
+    assert service.branch is None  # session torn down after submit
+
+
+def test_run_that_ends_in_prose_reports_no_pull_request(service: SelfEditService) -> None:
+    client = ScriptedClient([_msg(content="I read the files and stopped.")])
+    result = _agent(service, client).run("look around")
+    assert result["ok"] is True          # the loop ended cleanly...
+    assert result["submitted"] is False  # ...but nothing was submitted
+    assert result["pr_url"] is None
+
+
 def test_double_validation_failure_ends_session(service: SelfEditService) -> None:
     client = ScriptedClient([
         _msg(tool_calls=[_tool_call("session_validate", {}, "v1")]),

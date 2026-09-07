@@ -25,7 +25,7 @@ def _get_client():
 @mcp.tool()
 def selfedit_start(
     goal: str = "", profile: str = "", confirm: bool = False, plan_path: str = "",
-    staging_id: str = "", run_id: str = "",
+    staging_id: str = "", run_id: str = "", target_paths: list[str] | None = None,
 ) -> dict:
     """Start a self-development run for GOAL (a change to Mortimer itself).
 
@@ -42,11 +42,15 @@ def selfedit_start(
     is gone, call selfedit_start again to preview a fresh one. The run
     itself is asynchronous: it plans in the background for several
     minutes; use selfedit_status to check progress. `run_id` is filled in
-    by the system; leave it empty.
+    by the system; leave it empty. TARGET_PATHS lists the repo files the
+    edit will CHANGE (e.g. ["docs/REPO_MAP.md"]); the preview's tier check
+    reads these, not the files the goal merely mentions — always pass it
+    when the goal names any file.
     """
     return logic.selfedit_start(
         _get_client(), goal, profile or None, confirm,
         plan_path=plan_path, staging_id=staging_id, run_id=run_id,
+        target_paths=target_paths,
     )
 
 

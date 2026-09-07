@@ -14,7 +14,12 @@ from pathlib import Path
 
 import pytest
 
-from jarvis.selfedit.service import VALIDATE_PYTEST_TIMEOUT_S, SelfEditService
+from jarvis.selfedit.service import (
+    BASE_REF_ENV,
+    CHILD_ENV_KEEP,
+    VALIDATE_PYTEST_TIMEOUT_S,
+    SelfEditService,
+)
 
 ALLOWLIST = {
     "allow": ["web/src/**", "docs/**"],
@@ -500,3 +505,155 @@ class TestPreflight:
         # governs every write.
         res = service.preflight("make the drawer feel more like glass", has_plan=False)
         assert res["ok"] is True and res["paths"] == []
+
+
+# ------------------------------------------------------------------------
+# 2026-09-07: the two defects behind "every self-edit hits a blocker".
+# Neither is about the planner: the sidecar validated in an environment no
+# human runs the suite in, against a base branch no human was running.
+
+
+class TestValidationEnvironmentIsolation:
+    """SelfEditService._run must hand the gates a whitelisted environment.
+    The sidecar's own os.environ carries every .env key (run_admin.sh does
+    `set -a; . ./.env`) and every vault secret (server.py's inject_env()),
+    and two green-in-a-shell tests failed inside validate() on exactly
+    those values."""
+
+    def test_gate_subprocesses_do_not_inherit_the_parent_environment(
+        self, service: SelfEditService, monkeypatch,
+    ) -> None:
+        monkeypatch.setenv("JARVIS_ENV_LEAK_SENTINEL", "leaked")
+        monkeypatch.setenv("SOME_VAULT_SHAPED_KEY", "secret")
+        code, out = service._run(
+            [sys.executable, "-c",
+             "import os; print(sorted(k for k in os.environ "
+             "if k in ('JARVIS_ENV_LEAK_SENTINEL', 'SOME_VAULT_SHAPED_KEY')))"],
+            cwd=service.repo_root, timeout=60,
+        )
+        assert code == 0, out
+        assert out.strip() == "[]"
+
+    def test_gate_subprocesses_keep_what_a_shell_needs(
+        self, service: SelfEditService,
+    ) -> None:
+        code, out = service._run(
+            [sys.executable, "-c", "import os; print(bool(os.environ.get('PATH')))"],
+            cwd=service.repo_root, timeout=60,
+        )
+        assert code == 0, out
+        assert out.strip() == "True"
+        assert "PATH" in CHILD_ENV_KEEP and "HOME" in CHILD_ENV_KEEP
+
+
+class TestConfigurableBaseRef:
+    """The base a session is cut from, and the branch its PR targets, are one
+    configured value. Before this, every session branched from origin/main
+    while the running code lived on an unmerged feature branch: the loop was
+    asked to describe files that did not exist in the tree it edited."""
+
+    def test_default_is_origin_main(self, repo: Path, monkeypatch) -> None:
+        monkeypatch.delenv(BASE_REF_ENV, raising=False)
+        svc = SelfEditService(repo_root=repo, github_token=None)
+        assert svc.base_ref == "origin/main"
+        assert svc.pr_base == "main"
+
+    def test_env_sets_the_base_and_an_explicit_arg_wins(self, repo: Path, monkeypatch) -> None:
+        monkeypatch.setenv(BASE_REF_ENV, "feat/from-env")
+        assert SelfEditService(repo_root=repo, github_token=None).base_ref == "feat/from-env"
+        explicit = SelfEditService(repo_root=repo, github_token=None, base_ref="origin/other")
+        assert explicit.base_ref == "origin/other"
+        assert explicit.pr_base == "other"
+
+    def test_pr_base_strips_only_a_leading_origin_prefix(self, repo: Path) -> None:
+        assert SelfEditService(repo_root=repo, base_ref="origin/main").pr_base == "main"
+        assert SelfEditService(repo_root=repo, base_ref="feat/graph-layer").pr_base == "feat/graph-layer"
+        assert SelfEditService(repo_root=repo, base_ref="origin/feat/x").pr_base == "feat/x"
+
+    def test_local_base_ref_cuts_the_session_from_that_branch(self, repo: Path) -> None:
+        # A local branch with a commit origin/main does not have.
+        _git(repo, "checkout", "-b", "feat/local-only")
+        (repo / "docs").mkdir(exist_ok=True)
+        (repo / "docs/NEW_ON_BRANCH.md").write_text("only on the branch\n")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-m", "branch-only file")
+        _git(repo, "checkout", "main")
+
+        svc = SelfEditService(repo_root=repo, github_token=None, base_ref="feat/local-only")
+        res = svc.start_session("touch the branch-only doc")
+        assert res["ok"], res
+        # The worktree sees the branch's file; origin/main never had it.
+        assert (svc.work_root / "docs/NEW_ON_BRANCH.md").read_text() == "only on the branch\n"
+        # The rollback tag pins the branch tip, not origin/main.
+        out = subprocess.run(
+            ["git", "rev-parse", f"refs/tags/{res['rollback_tag']}^{{commit}}", "feat/local-only"],
+            cwd=repo, capture_output=True, text=True, check=True,
+        ).stdout.split()
+        assert out[0] == out[1]
+        svc.revert()
+
+    def test_open_pr_targets_the_pr_base(self, repo: Path, monkeypatch) -> None:
+        captured: dict = {}
+
+        class _Resp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self):
+                return json.dumps({"html_url": "https://example.invalid/pr/1"}).encode()
+
+        def fake_urlopen(req, timeout=30):
+            captured["url"] = req.full_url
+            captured["body"] = json.loads(req.data.decode("utf-8"))
+            return _Resp()
+
+        monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+        svc = SelfEditService(repo_root=repo, github_token="t", github_repo="o/r",
+                              base_ref="feat/graph-layer")
+        svc.branch = "jarvis/self-edit/20260907-x"
+        svc.goal = "x"
+        svc.proposals = [{"path": "docs/x.md", "rationale": "r", "diff": ""}]
+        pr = svc._open_pr("self-edit: x")
+        assert pr["html_url"] == "https://example.invalid/pr/1"
+        assert captured["url"] == "https://api.github.com/repos/o/r/pulls"
+        assert captured["body"]["base"] == "feat/graph-layer"
+        assert captured["body"]["head"] == "jarvis/self-edit/20260907-x"
+
+
+class TestPreflightTargetPaths:
+    """2026-09-07 (review F5): preflight classifies the files the edit will
+    CHANGE when the caller names them, and consults the prose only as the
+    fallback. The fixture's tiers: docs/** routine, jarvis/** core,
+    jarvis/wakeword.py Tier 0."""
+
+    def test_target_paths_override_a_core_path_the_prose_mentions(self, service) -> None:
+        res = service.preflight(
+            "add a line about jarvis/bot/display.py to docs/README.md",
+            has_plan=False, target_paths=["docs/README.md"],
+        )
+        assert res["ok"] is True, res
+        assert res["paths"] == ["docs/README.md"]
+        assert res["tiers"]["core"] == []
+
+    def test_without_target_paths_the_same_goal_is_refused_as_core(self, service) -> None:
+        res = service.preflight(
+            "add a line about jarvis/bot/display.py to docs/README.md", has_plan=False,
+        )
+        assert res["ok"] is False
+        assert "jarvis/bot/display.py" in res["error"]
+
+    def test_target_paths_catch_a_tier0_target_the_prose_hides(self, service) -> None:
+        res = service.preflight(
+            "make the wake word detector feel snappier", has_plan=False,
+            target_paths=["jarvis/wakeword.py"],
+        )
+        assert res["ok"] is False
+        assert "jarvis/wakeword.py" in res["error"]
+
+    def test_blank_target_paths_fall_back_to_the_prose(self, service) -> None:
+        res = service.preflight("tidy docs/README.md spacing", has_plan=False,
+                                target_paths=["", "  "])
+        assert res["ok"] is True and res["paths"] == ["docs/README.md"]

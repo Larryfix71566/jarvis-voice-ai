@@ -6,7 +6,9 @@ behind it never gets shell or raw git access.
 
 Locked invariants (plan section 1):
 - main is never touched: every operation works on a session branch named
-  jarvis/self-edit/<yyyymmdd>-<slug> created from origin/main.
+  jarvis/self-edit/<yyyymmdd>-<slug> created from the configured base ref
+  (JARVIS_SELFEDIT_BASE_REF, default origin/main); its PR targets that
+  same branch.
 - Only allowlisted paths (config/self_edit_allowlist.json) can be written.
 - submit() refuses unless validate() passed earlier in the same session.
 - A rollback tag pre-selfedit-<ts> is created before anything changes.
@@ -53,12 +55,44 @@ VALIDATE_PYTEST_TIMEOUT_S = 900  # 2026-09-04: 2,150+ tests; the self-edit
 SESSION_BRANCH_PREFIX = "jarvis/self-edit"
 ROLLBACK_TAG_PREFIX = "pre-selfedit"
 DEFAULT_BASE_REF = "origin/main"
+# 2026-09-07: the base a session is cut from (and the branch its PR targets)
+# is configuration, not a constant. Every session to date branched from
+# origin/main while the running code lived on an unmerged feature branch, so
+# the loop validated a tree in which the files it was asked to touch did not
+# exist. Set JARVIS_SELFEDIT_BASE_REF to the branch actually being run
+# (e.g. feat/graph-layer). A ref that starts with "origin/" is fetched
+# before the session; a local ref is used as-is. The PR base is the same
+# value with any "origin/" prefix removed, so the two can never diverge.
+BASE_REF_ENV = "JARVIS_SELFEDIT_BASE_REF"
 # Session worktrees live under data/ — already self-edit-denied and
 # gitignored (data/selfedit_worktrees/ joins .gitignore explicitly), the
 # same home AppWorkspace uses for foreign repos (data/app_workspaces/).
 WORKTREES_DIR = Path("data") / "selfedit_worktrees"
 
 MAX_FILE_BYTES = 200_000  # refuse oversized writes
+
+# Validation subprocesses (the import gates and pytest) get a WHITELISTED
+# environment, never this process's. scripts/run_admin.sh exports every
+# .env key (`set -a; . ./.env`) and jarvis/admin/server.py calls
+# inject_env() at import, so the sidecar's os.environ carries every config
+# flag and every vault secret. 2026-09-07: two unit tests that are green in
+# a plain shell failed inside validate() on exactly JARVIS_NS_ENABLED=true
+# and the vault's JARVIS_GITHUB_TOKEN -- the suite was being run in an
+# environment no human ever runs it in, and vault secrets were in the
+# environment of an LLM-driven subprocess. A whitelist (not a blacklist of
+# known names) is what keeps the next new key from leaking by default; the
+# gates then run the way `uv run pytest tests/unit -q` runs for a person.
+# Git (self._git) is deliberately NOT covered: push/fetch need HOME, the
+# credential helper and whatever the launchd environment provides.
+CHILD_ENV_KEEP = (
+    "PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "TERM",
+    "USER", "LOGNAME", "SHELL",
+)
+
+
+def child_env() -> dict[str, str]:
+    """The environment handed to every validation gate subprocess."""
+    return {k: v for k, v in os.environ.items() if k in CHILD_ENV_KEEP}
 
 # Tier B gate: import-only, no network, no keys read — pipeline.py and the
 # agent modules resolve their clients at build time, not import time.
@@ -124,14 +158,14 @@ class SelfEditService:
         allowlist_path: str | Path | None = None,
         github_token: str | None = None,
         github_repo: str | None = None,
-        base_ref: str = DEFAULT_BASE_REF,
+        base_ref: str | None = None,
     ):
         self.repo_root = Path(repo_root) if repo_root else _repo_root()
         al_path = Path(allowlist_path) if allowlist_path else (
             self.repo_root / "config" / "self_edit_allowlist.json"
         )
         self.allowlist = Allowlist.load(al_path)
-        self.base_ref = base_ref
+        self.base_ref = base_ref or os.environ.get(BASE_REF_ENV) or DEFAULT_BASE_REF
         self._github_token = github_token or os.environ.get("JARVIS_GITHUB_TOKEN")
         self._github_repo = github_repo or os.environ.get(
             "JARVIS_GITHUB_REPO", "Larryfix71566/jarvis-voice-ai"
@@ -149,6 +183,15 @@ class SelfEditService:
         # -D) and for verify_appearance's "what is the human running"
         # question.
         self.work_root: Path | None = None
+
+    @property
+    def pr_base(self) -> str:
+        """The GitHub branch a session's PR targets: base_ref minus any
+        "origin/" prefix. One value drives both `worktree add` and the PR,
+        so a session can never be cut from one branch and opened against
+        another."""
+        ref = self.base_ref
+        return ref[len("origin/"):] if ref.startswith("origin/") else ref
 
     @property
     def tree(self) -> Path:
@@ -199,7 +242,8 @@ class SelfEditService:
     def _run(self, argv: list[str], cwd: Path, timeout: int) -> tuple[int, str]:
         try:
             proc = subprocess.run(
-                argv, cwd=cwd, capture_output=True, text=True, timeout=timeout
+                argv, cwd=cwd, capture_output=True, text=True, timeout=timeout,
+                env=child_env(),
             )
             return proc.returncode, (proc.stdout + proc.stderr).strip()[-4000:]
         except FileNotFoundError as exc:
@@ -224,7 +268,8 @@ class SelfEditService:
         # first (2026-08-30 it deleted a directory to satisfy it).
         try:
             root = self.repo_root
-            self._git_ok("fetch", "origin", "main", cwd=root)
+            if self.base_ref.startswith("origin/"):
+                self._git_ok("fetch", "origin", self.pr_base, cwd=root)
             ts = time.strftime("%Y%m%d-%H%M%S")
             tag = f"{ROLLBACK_TAG_PREFIX}-{ts}"
             # Two sessions inside one second (a retry right after a
@@ -662,7 +707,7 @@ class SelfEditService:
             data=json.dumps({
                 "title": title,
                 "head": self.branch,
-                "base": "main",
+                "base": self.pr_base,
                 "body": "\n".join(body_lines),
             }).encode("utf-8"),
             headers={
@@ -700,16 +745,29 @@ class SelfEditService:
         self._validated_ok = False
         return {"ok": True, "reverted_to": tag}
 
-    def preflight(self, goal: str, has_plan: bool) -> dict:
+    def preflight(self, goal: str, has_plan: bool,
+                  target_paths: list[str] | None = None) -> dict:
         """Tier pre-flight for a goal BEFORE it is staged
         (MORTIMER_SELFEDIT_TIERS_PLAN.md). Classifies the repo paths the
-        goal text names; refuses a Tier-0 (denied) path outright and a
-        Tier-B (core) path with no plan. Best-effort on extraction — a goal
-        that names no files passes through (the planner's own allowlist
-        check still governs every write). The point is to fail at the
-        preview, in one sentence, instead of after confirm + staging + a
-        planner run that discovers the same wall (2026-08-30: three runs)."""
-        paths = extract_paths(goal)
+        edit will TOUCH — `target_paths` when the caller supplies them,
+        otherwise the paths the goal text names; refuses a Tier-0 (denied)
+        path outright and a Tier-B (core) path with no plan. Best-effort on
+        extraction — a goal that names no files passes through (the
+        planner's own allowlist check still governs every write). The
+        point is to fail at the preview, in one sentence, instead of after
+        confirm + staging + a planner run that discovers the same wall
+        (2026-08-30: three runs).
+
+        `target_paths` (2026-09-07 review, F5): prose cannot tell "edit
+        jarvis/model_catalog.py" from "add a line ABOUT
+        jarvis/model_catalog.py" — four previews were refused that day as
+        Tier B for a docs-only edit that merely mentioned a core file, and
+        a goal that named no path at all ("the macOS host console view
+        script") walked a Tier-0 target straight past this gate. When the
+        developer states the files the edit will change, those are what
+        is classified and the prose is not consulted."""
+        targets = [t.strip() for t in (target_paths or []) if t and t.strip()]
+        paths = targets or extract_paths(goal)
         tiers = self.allowlist.classify(paths)
         result: dict = {"ok": True, "paths": paths, "tiers": tiers}
         # GC4 (gap-closure plan, 2026-09-04), WIDENED 2026-09-05: web/ is

@@ -175,8 +175,9 @@ TOOL_SPECS: list[dict] = [
         "type": "function",
         "function": {
             "name": "session_validate",
-            "description": "Run the validation gate (allowlist, backend "
-                           "imports, frontend build).",
+            "description": "Run the validation gates (allowlist, backend "
+                           "imports, core imports for a core change, "
+                           "pytest).",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -392,6 +393,7 @@ class UpgradeAgent:
         # ledger rows (usage_ledger.record_call's plan_state); set at the
         # top of run() from whether a `plan` was supplied.
         self._plan_state: str | None = None
+        self._submit_result: dict | None = None
 
         # Defer client construction when the key is absent: run() fails fast
         # with a clear summary instead of the SDK raising at construction.
@@ -637,6 +639,13 @@ class UpgradeAgent:
         self._failed_profiles = set()     # failover — clean slate per session
         self._failover_notes = []
         self._plan_state = "planned" if plan else "planless"  # Rev 3.3 ledger tag
+        # 2026-09-07 (review F6): a run "ended" is not a run "submitted".
+        # The loop's `ok` means the planner stopped cleanly — including by
+        # writing prose after a failed validation. What the user needs to
+        # hear is whether a pull request exists, so the submit result is
+        # recorded here mechanically (never from the planner's prose) and
+        # returned alongside `ok`.
+        self._submit_result: dict | None = None
 
         started = time.monotonic()
         if not self.service.branch:
@@ -888,6 +897,8 @@ class UpgradeAgent:
             "failovers": list(self._failover_notes),
             "final_profile": self.profile_name,
             "cancelled": cancelled,
+            "submitted": self._submit_result is not None,
+            "pr_url": (self._submit_result or {}).get("pr_url"),
         }
 
     def request_cancel(self) -> None:
@@ -1019,7 +1030,10 @@ class UpgradeAgent:
         if name == "session_validate":
             return self.service.validate()
         if name == "session_submit":
-            return self.service.submit()
+            result = self.service.submit()
+            if result.get("ok"):
+                self._submit_result = result
+            return result
         if name == "session_decline":
             return {"ok": False, "declined": True,
                     "reason": str(args.get("reason", ""))}

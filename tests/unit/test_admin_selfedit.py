@@ -43,7 +43,7 @@ def reset_run_job():
     with srv._run_lock:
         srv._run_job.update(
             state="idle", goal=None, profile=None, summary=None,
-            started_at=None, finished_at=None,
+            started_at=None, finished_at=None, submitted=False, pr_url=None,
         )
     yield
 
@@ -93,7 +93,10 @@ class FakeAgent:
         if self._cancel.is_set():
             return {"ok": False, "cancelled": True,
                     "summary": "cancelled by the user before the next planner step"}
-        return {"ok": True, "summary": f"planned {goal!r}"}
+        # A "planned" fake run is a COMPLETED one: it reports the PR it
+        # opened, the way a real UpgradeAgent.run() does after session_submit.
+        return {"ok": True, "summary": f"planned {goal!r}",
+                "submitted": True, "pr_url": "https://example.invalid/pr/1"}
 
 
 def _install_fake_agent(monkeypatch, crash=False, gate=None):
@@ -426,6 +429,144 @@ def test_run_bare_form_without_staging_id_still_works(registry_file, monkeypatch
     _wait_for_job(c, "done")
 
 
+def test_run_resolves_a_mangled_staging_id_when_exactly_one_is_live(registry_file, monkeypatch):
+    """2026-09-07: the id is relayed as spoken text and arrived as
+    'stg-<id>' and '43'. With one live staging there is nothing to guess —
+    the sidecar starts the preview the user actually approved."""
+    seen = {}
+
+    class CapturingAgent(FakeAgent):
+        def run(self, goal, plan=None):
+            seen["goal"] = goal
+            return {"ok": True, "summary": "done"}
+
+    monkeypatch.setattr(
+        srv, "_make_agent", lambda service, profile, run_id=None: CapturingAgent(service, profile)
+    )
+    c = TestClient(app)
+    sid = c.post("/api/selfedit/stage", json={"goal": "add a clock panel"}).json()["staging_id"]
+    res = c.post("/api/selfedit/run", json={"staging_id": f"stg-{sid}"}).json()
+    assert res["ok"] and res["started"], res
+    _wait_for_job(c, "done")
+    assert seen["goal"] == "add a clock panel"
+    assert c.get("/api/selfedit/run").json()["stagings"] == []  # consumed
+
+
+def test_run_with_no_id_and_no_goal_uses_the_single_live_staging(registry_file, monkeypatch):
+    _install_fake_agent(monkeypatch)
+    c = TestClient(app)
+    c.post("/api/selfedit/stage", json={"goal": "add a clock panel"})
+    res = c.post("/api/selfedit/run", json={}).json()
+    assert res["ok"] and res["started"], res
+    job = _wait_for_job(c, "done")
+    assert job["goal"] == "add a clock panel"
+
+
+def test_run_refuses_to_guess_between_two_live_stagings(registry_file, monkeypatch):
+    _install_fake_agent(monkeypatch)
+    c = TestClient(app)
+    a = c.post("/api/selfedit/stage", json={"goal": "goal A"}).json()["staging_id"]
+    b = c.post("/api/selfedit/stage", json={"goal": "goal B"}).json()["staging_id"]
+    res = c.post("/api/selfedit/run", json={"staging_id": "43"}).json()
+    assert res["ok"] is False
+    assert a in res["error"] and b in res["error"]
+    # Neither approved preview was consumed by the refusal.
+    live = {s["staging_id"] for s in c.get("/api/selfedit/run").json()["stagings"]}
+    assert live == {a, b}
+    # An exact id still works with two live.
+    res = c.post("/api/selfedit/run", json={"staging_id": b}).json()
+    assert res["ok"] and res["started"]
+    assert _wait_for_job(c, "done")["goal"] == "goal B"
+
+
+def test_run_with_no_live_staging_still_names_the_real_state(registry_file):
+    c = TestClient(app)
+    res = c.post("/api/selfedit/run", json={}).json()
+    assert res["ok"] is False
+    assert "no staged edit" in res["error"]
+
+
+def test_confirm_during_a_running_job_does_not_consume_the_staging(registry_file, monkeypatch):
+    """The busy refusal must come before the staging pop: before this, a
+    confirm that landed mid-run burned the preview it was refusing."""
+    gate = threading.Event()
+    _install_fake_agent(monkeypatch, gate=gate)
+    c = TestClient(app)
+    first = c.post("/api/selfedit/run", json={"goal": "long running"}).json()
+    assert first["ok"] and first["started"]
+    try:
+        sid = c.post("/api/selfedit/stage", json={"goal": "the next one"}).json()["staging_id"]
+        res = c.post("/api/selfedit/run", json={"staging_id": sid}).json()
+        assert res["ok"] is False
+        assert "already in progress" in res["error"]
+        live = {s["staging_id"] for s in c.get("/api/selfedit/run").json()["stagings"]}
+        assert sid in live
+    finally:
+        gate.set()
+        _wait_for_job(c, "done")
+
+
+def test_run_job_records_the_pull_request_the_agent_opened(registry_file, monkeypatch):
+    _install_fake_agent(monkeypatch)
+    c = TestClient(app)
+    c.post("/api/selfedit/run", json={"goal": "add a clock"})
+    job = _wait_for_job(c, "done")
+    assert job["submitted"] is True
+    assert job["pr_url"] == "https://example.invalid/pr/1"
+    assert job["summary"] == "planned 'add a clock'"  # no prefix when a PR exists
+
+
+def test_run_that_ends_without_a_pull_request_says_so_first(registry_file, monkeypatch):
+    """Review F6 (2026-09-07): the run that ended in planner prose after two
+    failed validations was reported as state=done. The user must hear
+    that no PR exists before hearing the planner's report."""
+
+    class ProseEndAgent(FakeAgent):
+        def run(self, goal, plan=None):
+            return {"ok": True, "summary": "I looked and the tests are unrelated.",
+                    "submitted": False, "pr_url": None}
+
+    monkeypatch.setattr(
+        srv, "_make_agent", lambda service, profile, run_id=None: ProseEndAgent(service, profile)
+    )
+    c = TestClient(app)
+    c.post("/api/selfedit/run", json={"goal": "add a clock"})
+    job = _wait_for_job(c, "done")
+    assert job["submitted"] is False and job["pr_url"] is None
+    assert job["summary"].startswith("Ended without submitting a pull request.")
+    assert job["summary"].endswith("I looked and the tests are unrelated.")
+
+
+def test_a_leftover_session_is_reverted_before_a_different_goal(registry_file, monkeypatch, tmp_path):
+    """UpgradeAgent.run() reuses an active session as-is; a run that ended
+    without submitting therefore handed its branch and proposal to the
+    NEXT goal. The sidecar drops the leftover first — but resumes it when
+    the goal is the same one (validate/submit by voice)."""
+    _install_fake_agent(monkeypatch)
+    svc = _preflight_service(monkeypatch, tmp_path)
+    svc.branch = "jarvis/self-edit/20260907-old"
+    svc.goal = "old goal"
+    reverted = []
+
+    def fake_revert():
+        reverted.append(svc.branch)
+        svc.branch = None
+        svc.goal = None
+        return {"ok": True}
+
+    monkeypatch.setattr(svc, "revert", fake_revert)
+    c = TestClient(app)
+    c.post("/api/selfedit/run", json={"goal": "old goal"})
+    _wait_for_job(c, "done")
+    assert reverted == []  # same goal → resumed, not dropped
+
+    svc.branch = "jarvis/self-edit/20260907-old"
+    svc.goal = "old goal"
+    c.post("/api/selfedit/run", json={"goal": "a different goal"})
+    _wait_for_job(c, "done")
+    assert reverted == ["jarvis/self-edit/20260907-old"]
+
+
 def test_stage_does_not_start_a_run(registry_file):
     """Staging is a preview-time record only — GET /api/selfedit/run must
     still report idle until confirm actually replays it."""
@@ -492,6 +633,24 @@ def _preflight_service(monkeypatch, tmp_path):
     svc = SelfEditService(repo_root=tmp_path, allowlist_path=al, github_token=None)
     monkeypatch.setattr(srv, "_selfedit_service", svc)
     return svc
+
+
+def test_stage_classifies_target_paths_not_the_prose(registry_file, monkeypatch, tmp_path):
+    _preflight_service(monkeypatch, tmp_path)
+    c = TestClient(app)
+    # docs/README.md is unlisted in this fixture's allowlist (only web/src
+    # is routine, and web/ is frozen), which is exactly the point: the
+    # tier check must see the docs target, not the core file the prose
+    # mentions.
+    goal = "add a note about jarvis/bot/display.py to docs/README.md"
+    refused = c.post("/api/selfedit/stage", json={"goal": goal}).json()
+    assert refused["ok"] is False and "jarvis/bot/display.py" in refused["error"]
+    staged = c.post("/api/selfedit/stage", json={
+        "goal": goal, "target_paths": ["docs/README.md"],
+    }).json()
+    assert staged["ok"] is True, staged
+    assert staged["tiers"]["core"] == []
+    assert staged["core_change"] is False
 
 
 def test_stage_refuses_a_tier0_goal_before_staging(registry_file, monkeypatch, tmp_path):
