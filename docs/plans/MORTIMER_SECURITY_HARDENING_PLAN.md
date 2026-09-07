@@ -1,8 +1,73 @@
 # Mortimer Security Hardening Plan (roadmap track T4a)
 
-**Status:** DRAFT for Larry's approval, 2026-08-26. Implements roadmap track
-**T4a** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.4, "T4a — hardening, not
-gated").
+**Status:** **IMPLEMENTED (code), on `main` by 2026-09-04 — §8 VERIFICATION
+PARTIAL: V1 green, V2–V6 unrun, V7 (Larry's deny commit) NOT APPLIED.** Audited
+against the tree on `feat/graph-layer` (2c0ff5a), 2026-09-07. Implements roadmap
+track **T4a** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.4, "T4a — hardening,
+not gated").
+
+**What is in the tree (path:line).** D-H1/K2: `jarvis/skills/registry.py:50`
+`BASE_ENV_KEYS`, `:76` `env_scoping_enabled`, `:88` `load_requires_env`, `:113`
+`_resolve_dynamic_env`, `:166` `build_child_env`; the only `dict(os.environ)`
+left is the kill-switch fallback at `:181`. D-H2: all six `skill.yaml`
+corrections (`mcp_web` `TAVILY_API_KEY`+`JARVIS_UNITS`, `mcp_git`/`mcp_repo`
+`JARVIS_REPO_ROOT`, `mcp_apps` requires+optional, `mcp_selfedit` optional,
+`mcp_screen` requires+optional+`requires_env_dynamic`); zero "inherits the full
+parent environment" comments left in `config/mcp_servers.yaml`;
+`scripts/check_skills.py` knows `optional_env` and `requires_env_dynamic`;
+`CLAUDE.md:93` carries the allowlist clause. D-H3 `jarvis/sensitive.py`; D-H4
+`jarvis/bot/sensitive_turn.py`; D-H5 constants in `sensitive.py` only; D-H6
+sites: `jarvis/bot/transcript_log.py` (arm/is_sensitive), `jarvis/agents/
+supervisor.py:38,166`, `jarvis/cli.py:17`, `jarvis/bot/pipeline.py:58,158`;
+D-H7 `jarvis/runlog/store.py:74` `SENSITIVE_SENTINEL`, `:155` `_redact`,
+snapshot passed at `jarvis/agents/base.py:467`; D-H8 `jarvis/memory.py:34,391`;
+P14/P15 gates `mcp_servers/mcp_notes/logic.py:16`, `mcp_servers/mcp_reminders/
+logic.py:23`; D-H10 both kill switches read in exactly one place
+(`registry.py:57/77`, `sensitive.py:47/51`), documented at `.env.example:303,305`,
+and neither is set in `.env`, so both mechanisms are ON. Tests: 5 of the §4
+unit files exist with 12+16+15+4+2 = 49 tests plus the `test_memory.py`
+additions; all green inside the 2,329-test suite run 2026-09-07. Roadmap edits
+RE-1–RE-5 are applied (`ROADMAP.md:223` T3.6, `:463` KeychainStore clause,
+`:247` §2.4). **One §4 create item is absent:** `tests/integration/
+test_env_scoping_live.py` was never written; its stated acceptance (spawn the
+real registry, call `get_current_time`, get a time back) is what
+`tests/integration/test_registry.py::test_call_real_tool_round_trip` already
+does, ungated, and it passed in the 102-test integration run of 2026-09-05.
+
+**How it reached `main`.** `.git` reflogs: HEAD left `feat/t4a-security-
+hardening` at its tip `60e9f42` for `main` on 2026-09-04 13:39Z; `main` then
+fast-forwarded twice that day (`47f674c → a0cece1 → e101758`) and
+`feat/graph-layer` was created from `main` at `e101758` at 15:53Z. Every file
+above is on `feat/graph-layer` and none of it was authored there, so the T4a
+work is on `main`. Not run: `git merge-base --is-ancestor
+origin/feat/t4a-security-hardening main` — the one command that makes that
+certain. The 09-04 snapshot's "49 commits sit on feat/t4a-security-hardening"
+describes the branch before that pull.
+
+**STILL OPEN.** (1) **V7 — not applied.** `config/self_edit_allowlist.json`'s
+`deny` does not contain the three W0-SEC entries (`ALLOWLIST_SEQUENCE.md` row
+W0-SEC): `jarvis/skills/registry.py`, `tests/unit/test_agent_isolation.py`,
+`tests/unit/test_requires_env_snapshot.py`. `Allowlist.tier()` returns
+`routine` for all three today (they match the `jarvis/skills/**` and `tests/**`
+allow patterns), so `test_report_self_edit_exposure` prints them rather than
+"none — V7 commit is in". Consequence: the scoping mechanism and BOTH guard
+tests are self-editable, and the snapshot guard that is the reason
+`config/agents.yaml` and `mcp_servers/*/skill.yaml` were left editable can
+itself be rewritten by the edit it is meant to catch. The file is human-only
+(C8); the change is those three lines. (2) **V2–V6 — no record of a run.** The
+mechanisms deliberately log nothing when they arm (logging the event would be
+a persistence site), so the absence of log lines is expected and is evidence
+of nothing; V2's `ps eww` on a live `mcp_time` child and V4's spoken account
+number are the only proofs and both need Larry's hardware. (3) **Drift since
+08-27, not a hole:** `MORTIMER_SELFEDIT_TIERS_PLAN.md` (08-31) made
+`jarvis/**` Tier B (`core`), so D-H9's statement that `jarvis/sensitive.py`,
+`jarvis/memory.py`, `jarvis/bot/sensitive_turn.py` and `jarvis/runlog/store.py`
+"match no allow pattern" now reads "match the core pattern": editable with a
+`plan_path`, a CORE CHANGE block on the PR, and the human merge. Deny > allow >
+core precedence is unchanged.
+
+*Original header, kept for provenance:* DRAFT for Larry's approval,
+2026-08-26.
 
 **Author / origin.** Larry, 2026-08-25/26, quoted in the roadmap's origin
 section:
