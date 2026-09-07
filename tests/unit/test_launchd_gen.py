@@ -75,3 +75,59 @@ def test_backup_db_uses_only_stdlib():
         f"backup_db.py imports non-stdlib {non_stdlib}; either vendor it or "
         f"point the launchd backup job back at an interpreter that has it"
     )
+
+
+def test_mortimer_sh_restarts_every_launchd_service():
+    """scripts/mortimer.sh keeps its own list of services to kickstart.
+
+    2026-09-06: under launchd the script used to REFUSE — exit 3 with a
+    hint naming only com.mortimer.bot, one of five — so "one command to
+    start or restart the whole stack" was false in the configuration that
+    actually ships. It now kickstarts them, which means it carries a second
+    copy of the roster. This is the drift guard: a service added to
+    launchd_gen.SERVICES and not to LAUNCHD_SERVICES would silently never
+    be restarted, and you would find out by debugging stale code.
+    """
+    import re
+    from pathlib import Path
+
+    from scripts.launchd_gen import SERVICES
+
+    root = Path(__file__).resolve().parents[2]
+    src = (root / "scripts" / "mortimer.sh").read_text(encoding="utf-8")
+    m = re.search(r"^LAUNCHD_SERVICES=\(([^)]*)\)", src, re.M)
+    assert m, "LAUNCHD_SERVICES not found in scripts/mortimer.sh"
+    listed = m.group(1).split()
+    assert set(listed) == set(SERVICES), (
+        f"mortimer.sh restarts {sorted(listed)} but launchd_gen installs "
+        f"{sorted(SERVICES)}"
+    )
+    # bot's ProgramArguments wait on vault's port 8484 (wait_for.sh), so
+    # vault must be kickstarted before bot.
+    assert listed.index("vault") < listed.index("bot")
+    # backup is StartCalendarInterval, not a daemon — nothing to restart.
+    assert "backup" not in listed
+
+
+def test_mortimer_sh_no_longer_refuses_to_start_under_launchd():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    src = (root / "scripts" / "mortimer.sh").read_text(encoding="utf-8")
+    # `stop` legitimately still refuses: every service is KeepAlive=true, so
+    # killing one only respawns it. `start` must not.
+    assert src.count("exit 3") == 1, "only `stop` may refuse under launchd"
+    assert "launchd_restart" in src
+
+
+def test_mortimer_sh_logs_follow_the_files_launchd_writes():
+    """The plists write logs/<svc>.launchd.log; `logs` used to tail only
+    logs/<svc>.log, so under launchd it followed files nothing wrote to."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    src = (root / "scripts" / "mortimer.sh").read_text(encoding="utf-8")
+    template = (root / "scripts" / "launchd"
+                / "com.mortimer.template.plist").read_text(encoding="utf-8")
+    assert "logs/__SVC__.launchd.log" in template
+    assert "logs/bot.launchd.log" in src
