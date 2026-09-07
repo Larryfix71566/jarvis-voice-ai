@@ -42,6 +42,9 @@
     "data/**",
     "*.vault",
     "**/*.vault",
-    "macos/**"
+    "macos/**",
+    "jarvis/skills/registry.py",
+    "tests/unit/test_agent_isolation.py",
+    "tests/unit/test_requires_env_snapshot.py"
   ]
 }
