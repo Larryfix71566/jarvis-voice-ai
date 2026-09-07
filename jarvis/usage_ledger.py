@@ -49,6 +49,9 @@ except ImportError:  # pragma: no cover
 
 RUNGS = frozenset({
     "supervisor", "scheduler", "librarian", "analyst", "systems", "developer",
+    # 2026-09-06 — split out of developer. `appbuild_executor` below is a
+    # different rung: that is the build step, this is the specialist.
+    "app_builder",
     "memory_merge", "memory_classify", "memory_extraction", "kb_digest",
     "procedures_describe",
     "planning", "council",

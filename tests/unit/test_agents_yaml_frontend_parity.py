@@ -29,7 +29,12 @@ AGENT_LAYOUT_TS = REPO_ROOT / "web" / "src" / "agentLayout.ts"
 
 # Matches `key: "developer",` (and similarly quoted single/double) inside
 # an AgentLayoutEntry object literal.
-_TS_KEY_RE = re.compile(r"""key:\s*["']([a-z_]+)["']""")
+# 2026-09-06: hyphens allowed. The class was [a-z_]+, so a hyphenated
+# agent name would never match a frontend key and this guard would
+# report the agent missing even once its satellite existed — a check
+# that cannot be satisfied is worse than no check. app_builder uses an
+# underscore, but the guard should not depend on that.
+_TS_KEY_RE = re.compile(r"""key:\s*["']([a-z_-]+)["']""")
 
 
 def _backend_agent_keys() -> set[str]:
@@ -72,10 +77,69 @@ def test_frontend_layout_has_no_extra_agents():
     )
 
 
-def test_exactly_five_agents_today():
+def test_exactly_six_agents_today():
     """Not a permanent invariant — documents the roster size at the time
     this test was written so a future change to the roster is a visible,
-    deliberate edit to this test rather than a silent pass either way."""
+    deliberate edit to this test rather than a silent pass either way.
+
+    2026-09-06: five became six. `app_builder` split out of `developer`,
+    which carried six MCP servers and ~31 tools against 2-4 for every
+    other specialist and was the only category ever to miss in the routing
+    eval. This canary did its job — it failed on the roster change before
+    anything else did, which is the whole point of writing it down.
+    """
     assert _backend_agent_keys() == {
         "scheduler", "librarian", "analyst", "systems", "developer",
+        "app_builder",
     }
+
+
+# --- the LIVE interface, added 2026-09-06 ------------------------------
+#
+# This module guarded web/src/agentLayout.ts and nothing else, while the
+# console moved to Swift and the web client was deprecated. So the guard
+# written to stop "Developer silently never appeared as a satellite" was
+# watching the surface that no longer ships, and the surface that does
+# ship had no guard at all. Splitting app_builder out of developer is the
+# first roster change since; it would have gone missing from the Swift orb
+# field exactly the way Developer once did from the web one.
+
+ORB_FIELD_SWIFT = (
+    REPO_ROOT / "macos" / "MortimerHost" / "Sources" / "MortimerHost"
+    / "Console" / "OrbFieldView.swift"
+)
+
+_SWIFT_KEY_RE = re.compile(r'AgentLayoutEntry\(key:\s*"([a-z_-]+)"')
+
+
+def _swift_agent_keys() -> set[str]:
+    keys = set(_SWIFT_KEY_RE.findall(
+        ORB_FIELD_SWIFT.read_text(encoding="utf-8")))
+    assert keys, (
+        "no AgentLayoutEntry(key: \"...\") entries found in "
+        "OrbFieldView.swift — the regex may need updating if the file's "
+        "structure changed"
+    )
+    return keys
+
+
+def test_the_swift_orb_field_has_every_backend_agent():
+    missing = _backend_agent_keys() - _swift_agent_keys()
+    assert not missing, (
+        f"agent(s) {sorted(missing)} exist in config/agents.yaml but are "
+        f"missing from OrbFieldView.swift's AGENT_LAYOUT — they will not "
+        f"appear as satellites in the console that actually ships."
+    )
+
+
+def test_the_swift_orb_field_invents_no_agents():
+    extra = _swift_agent_keys() - _backend_agent_keys()
+    assert not extra, (
+        f"OrbFieldView.swift positions {sorted(extra)}, which no longer "
+        f"exist in config/agents.yaml — a satellite that can never light up."
+    )
+
+
+def test_both_front_ends_agree_with_each_other():
+    # Two hand-tuned copies of the same geometry; they drift or they don't.
+    assert _swift_agent_keys() == _frontend_agent_keys()

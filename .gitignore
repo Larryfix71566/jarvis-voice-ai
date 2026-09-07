@@ -22,6 +22,12 @@ data/*.bak*
 # GC7: nightly sqlite backups (scripts/backup_db.py)
 data/backups/
 __pycache__/
+
+# 2026-09-06 — nine of these showed up as untracked in one `git status`.
+# Untracked noise beside real changes is how a scoped `git add` becomes an
+# unscoped one; a 79-file commit under a one-file message happened here
+# on 09-05.
+.DS_Store
 *.pyc
 .venv/
 node_modules/

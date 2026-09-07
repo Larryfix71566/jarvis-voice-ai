@@ -48,8 +48,8 @@
 - {input: "what branch is the repo on", expect: developer}
 - {input: "commit these changes", expect: developer}
 - {input: "push my commits to origin", expect: developer}
-- {input: "build me an expense tracker app", expect: developer}
-- {input: "what apps have you built so far", expect: developer}
+- {input: "build me an expense tracker app", expect: app_builder}
+- {input: "what apps have you built so far", expect: app_builder}
 - {input: "change your interface to use a darker theme", expect: developer}
 - {input: "add a clock panel to your own UI, and use Claude Opus for it", expect: developer}
 - {input: "how is the interface edit coming along", expect: developer}
@@ -142,3 +142,19 @@
 # --- graph views -> owning specialist (2) (MORTIMER_GRAPH_LAYER_PLAN.md GL12/GL16) ---
 - {input: "show me how my memories about temperature connect", expect: librarian}
 - {input: "draw the council graph for the last self-edit", expect: developer}
+
+# 2026-09-06 — app_builder split out of developer. Before this the whole
+# app-building dimension was TWO cases (#24, #25), which cannot measure
+# whether a split helps or hurts. Appended rather than inserted so #1-#70
+# keep their numbers: the misses are referenced by number in
+# MORTIMER_EVAL_CONFIG_PARITY_PLAN.md and in three runs of notes.
+#
+# The last four are the discriminating pairs — each has a near-twin above
+# that belongs to the OTHER specialist. If the split introduces confusion,
+# it shows up here first.
+- {input: "create a new app called grocery list", expect: app_builder}
+- {input: "add a settings screen to my expense tracker", expect: app_builder}
+- {input: "how is the expense tracker build going", expect: app_builder}
+- {input: "submit the expense tracker build for review", expect: app_builder}
+- {input: "update my expense tracker", expect: app_builder}
+- {input: "update your own interface", expect: developer}

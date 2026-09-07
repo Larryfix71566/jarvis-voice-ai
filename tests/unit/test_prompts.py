@@ -80,7 +80,8 @@ def test_voice_addendum_is_plain_prose_rule():
 
 
 def test_subagent_prompts_roster_and_contracts():
-    assert set(SUBAGENT_PROMPTS) == {"scheduler", "librarian", "analyst", "systems", "developer"}
+    assert set(SUBAGENT_PROMPTS) == {"scheduler", "librarian", "analyst",
+                                     "systems", "developer", "app_builder"}
     for name, prompt in SUBAGENT_PROMPTS.items():
         assert "FAILED:" in prompt, name
     assert "{timezone}" not in SUBAGENT_PROMPTS["scheduler"].format(
@@ -200,7 +201,8 @@ class TestAgentDiscipline:
     def test_every_subagent_gets_it_exactly_once(self):
         from jarvis.prompts import AGENT_DISCIPLINE, SUBAGENT_PROMPTS
 
-        assert len(SUBAGENT_PROMPTS) == 5
+        # 2026-09-06: six since app_builder split out of developer.
+        assert len(SUBAGENT_PROMPTS) == 6
         for name, prompt in SUBAGENT_PROMPTS.items():
             assert prompt.count(AGENT_DISCIPLINE) == 1, name
 
@@ -224,7 +226,12 @@ class TestAgentDiscipline:
         being appended to rather than consolidated."""
         from jarvis.prompts import SUBAGENT_PROMPTS
 
-        for name in ("scheduler", "librarian", "analyst", "systems"):
+        # 2026-09-06: derived, not hardcoded. app_builder was added to the
+        # roster and slipped straight past this ceiling because it was not
+        # in the tuple — a per-agent budget that a new agent can sidestep
+        # by existing is not a budget. developer is the one exemption and
+        # it is named, so adding another is a deliberate edit here.
+        for name in sorted(set(SUBAGENT_PROMPTS) - {"developer"}):
             assert len(SUBAGENT_PROMPTS[name]) < 1200, name
 
     # --- every clause earns its place; each maps to an observed failure --

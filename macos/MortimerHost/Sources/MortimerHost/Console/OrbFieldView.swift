@@ -15,12 +15,20 @@ struct AgentLayoutEntry {
 }
 
 /// agentLayout.ts:48-54, verbatim.
+// 2026-09-06 — six satellites, not five: `app_builder` split out of
+// `developer`. Rebalanced from a pentagon to an even hexagon (Larry's
+// call) rather than bolting a sixth point onto the old shape. The
+// angular ORDER of the original five is preserved, so nothing crosses
+// the field; each moves a few percent and the new one takes the vacant
+// bottom vertex. Centre (50,50), radius 29. Keep in sync with
+// web/src/agentLayout.ts.
 let AGENT_LAYOUT: [AgentLayoutEntry] = [
-    AgentLayoutEntry(key: "developer", label: "Developer", x: 50, y: 23),
-    AgentLayoutEntry(key: "analyst", label: "Analyst", x: 82, y: 42),
-    AgentLayoutEntry(key: "systems", label: "Systems", x: 70, y: 72),
-    AgentLayoutEntry(key: "librarian", label: "Librarian", x: 30, y: 72),
-    AgentLayoutEntry(key: "scheduler", label: "Scheduler", x: 18, y: 42),
+    AgentLayoutEntry(key: "developer", label: "Developer", x: 50, y: 21),
+    AgentLayoutEntry(key: "analyst", label: "Analyst", x: 79, y: 36),
+    AgentLayoutEntry(key: "systems", label: "Systems", x: 79, y: 64),
+    AgentLayoutEntry(key: "app_builder", label: "App Builder", x: 50, y: 79),
+    AgentLayoutEntry(key: "librarian", label: "Librarian", x: 21, y: 64),
+    AgentLayoutEntry(key: "scheduler", label: "Scheduler", x: 21, y: 36),
 ]
 
 struct OrbFieldView: View {

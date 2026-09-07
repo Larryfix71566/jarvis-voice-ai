@@ -328,8 +328,12 @@ class TestAgentsYaml:
                 / "config" / "agents.yaml")
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
         entries = data["sub_agents"]
+        # 2026-09-06: app_builder split out of developer, appended so the
+        # existing five keep their order (config/agents.yaml is read in file
+        # order and the star layout's angular order follows it).
         assert [e["name"] for e in entries] == [
-            "scheduler", "librarian", "analyst", "systems", "developer"]
+            "scheduler", "librarian", "analyst", "systems", "developer",
+            "app_builder"]
         for e in entries:
             assert e["display_name"] and e["description"]
             assert e["mcp_servers"], e["name"]
