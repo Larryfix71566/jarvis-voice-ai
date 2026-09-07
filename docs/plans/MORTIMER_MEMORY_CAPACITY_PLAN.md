@@ -1,6 +1,68 @@
 # Mortimer — Memory Capacity: the Live = Injected Invariant
 
-**Status: IMPLEMENTED 2026-08-21 — code + tests done, unit suite green. Larry's rein-in run (§4 step 1) still pending on his machine.**
+**Status: IMPLEMENTED 2026-08-21 — code + tests done, unit suite green.
+§4 ACCEPTANCE RE-EVALUATED 2026-09-07: steps 1, 2 and 4 are SATISFIED BY
+EVIDENCE, step 3 (the voice `memory_search` round trip) is still unrun.
+§4's stated targets are SUPERSEDED — read the two notes below before
+running anything.**
+
+**M2's cap numbers no longer hold, deliberately.**
+`MORTIMER_OPTIMIZATION_PLAN.md` Phase 4 Rev 3.4 Stage A moved them, with
+the reasoning recorded at `jarvis/memory.py:71-105`:
+`MAX_PREFERENCE_FACTS` 15 → 30 (2026-08-31, Larry has more than 15 real
+standing preferences) → **60** (2026-09-03 — the 30 cap was dropping 25 of
+55 live preference facts from EVERY session, and the ones it dropped were
+his least-recently-UPDATED working-style preferences, i.e. exactly the
+standing instructions that are stable BECAUSE they never need restating);
+`MAX_CONTEXT_CHARS` 3000 → 8000 → **12000** (raising the fact cap alone
+renders 9,818 chars, which 8,000 would have silently re-truncated);
+`MAX_PROJECT_FACTS` stays **8**, deliberately — project is the growth tier
+and raising it is how the cached prefix grows without bound.
+`MAX_FACTS` is deleted as M2 required. So §4 step 1's expectation — "live
+count lands ≤ 31 (8 identity + 15 pref + 8 proj)" — is unreachable by
+DESIGN CHANGE, not by failure, and must not be treated as a target.
+
+**The rein-in already happened, continuously, via A1.5 rather than the
+one-shot CLI.** Measured on the live store 2026-09-07 (read-only):
+identity 9 (uncapped), preference 58/60, project 8/8, system 0 live —
+every capped tier at or under its cap. 349 archived facts carry
+provenance: `aged-out` 131, `merged:<key>` 37, the rest
+`consolidated:*` / `workflow:*` / `deleted:stale`, with age-outs as recent
+as 2026-09-07T17:48. `logs/bot*.log` carries a dozen
+`memory_enforce {'preference': {'before': 57, 'after': 57, 'cap': 60,
+'merged': 0, 'aged_out': …}}` lines plus
+`memory_enforce_merge_skipped … reason=no_mergeable_cluster`. **Running
+`python -m jarvis.memory_sweep --enforce` today is a no-op** — it would
+print before == after for every tier. Step 1 is satisfied; the mechanism
+it asked for is what has been holding the store since 2026-08-22.
+
+**Step 2 — the invariant holds; `not_reaching_prompt` is 0.** All 75 live
+facts are `audience='interaction'`; no live key is assistant-scoped, so
+`_is_capability_claim` drops nothing; the fact lines
+(`f"- {key}: {content[:200]}"`) sum to ~9,300 chars against
+`MAX_CONTEXT_CHARS` 12,000. Zero dropped by tier cap, zero by char budget,
+and `system` live is 0 so it cannot inflate the endpoint's
+`live - reaching`. **live == injected.** Step 4 (the invariant holding a
+week later under normal use, with no manual cleanup) is satisfied by the
+same evidence over 2026-08-22 → 09-07.
+
+**One real behaviour worth knowing, not a defect.** `project` sits exactly
+at its cap of 8, so a newly written 9th project fact IS dropped from the
+render until the next sweep's A1.5 archives it —
+`memory_context_facts_dropped reason=tier_cap count=2
+keys=['project:project.weather.map_pr…']` in the logs. That window is the
+design working as written (the renderer's drop path is the backstop, the
+sweep is the eliminator), but it means `project` is the tier that will
+show transient over-capacity, and it is the tier deliberately not raised.
+
+**STILL OPEN.** (1) §4 step 3 — say "search my memory for <something
+demoted>" and confirm the librarian finds an ARCHIVED fact via
+`memory_search`; that path has never been exercised by voice. (2) Five
+`memory_reviews` rows are `status='open'` (ids 94-98, 2026-09-05 →
+09-07): four `audience` items asking archive-as-implemented / convert-to-
+workflow, and one `contradiction` between `user.style.direct_instruction`
+and `user.style.isolation`. M7 is holding — none of them came from
+capacity enforcement.
 Author: Claude (Fable), 2026-08-21. Requested by Larry after comparing
 Mortimer's memory system to Hermes Agent's: *"take the best of theirs and
 merge it into ours … give me a plan that fixes those gaps … can our
