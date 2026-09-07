@@ -658,3 +658,40 @@ def test_rule_11_is_scoped_so_it_does_not_forbid_what_rule_13_requires():
     # Rule 13's own instruction has to survive the scoping.
     assert "delegate again for that detail before saying it was missing" in \
         SUPERVISOR_PROMPT
+
+
+def test_the_staging_id_example_matches_what_the_server_generates():
+    """Observed live 2026-09-07, and it is why §8.6 never closed.
+
+    admin/server.py:820 generates `uuid.uuid4().hex[:12]` — a bare
+    twelve-character hex string. Rule 9's worked example used to read
+    "Confirmation: start self-edit staging stg-abc", and the model
+    pattern-matched that `stg-` prefix onto a real id: a preview naming
+    0d049db0947d became a confirmation naming stg-0d049db0947d, which the
+    server answered with "no staged edit with id 'stg-0d049db0947d' — it
+    may have expired". It then re-staged and looped, every cycle producing
+    a fresh bare id the confirmation corrupted again.
+
+    Same shape as the or-sonnet-5 defect: a worked example that does not
+    match what the system produces, turning into an unresolvable
+    identifier and a refusal.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    server = (root / "jarvis" / "admin" / "server.py").read_text(encoding="utf-8")
+    assert "uuid.uuid4().hex[:12]" in server, (
+        "staging_id generation moved — rule 9's example describes its shape "
+        "and must be rechecked against it"
+    )
+
+    # No prefix may appear anywhere in the prompt.
+    assert "stg-" not in SUPERVISOR_PROMPT
+    assert "bare twelve-character hex string with NO prefix" in SUPERVISOR_PROMPT
+
+    # The example id itself must be a plausible product of that generator,
+    # or it teaches the wrong shape all over again.
+    m = re.search(r"a preview naming ([0-9a-f]+) becomes", SUPERVISOR_PROMPT)
+    assert m, "rule 9's staging_id example is missing or reworded"
+    assert len(m.group(1)) == 12, m.group(1)
