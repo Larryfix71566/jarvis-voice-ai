@@ -26,9 +26,9 @@ def git_diff_summary() -> dict:
 
 
 @mcp.tool()
-def prepare_commit(message: str) -> dict:
-    """Stage all changes and draft a commit with the given message. Returns an action_id and a summary to read back to the user. Nothing is committed until the user confirms and commit(action_id) is called."""
-    return logic.prepare_commit(message)
+def prepare_commit(message: str, paths: list[str]) -> dict:
+    """Stage ONLY the named files and draft a commit with the given message. `paths` is required: name every file you changed, exactly as git_status lists it — nothing else is staged, a directory is refused, and files someone else already staged must be named or unstaged first. Returns an action_id and a summary naming every file, to read back to the user. Nothing is committed until the user confirms and commit(action_id) is called."""
+    return logic.prepare_commit(message, paths)
 
 
 @mcp.tool()
