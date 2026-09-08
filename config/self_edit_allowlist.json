@@ -9,7 +9,11 @@
     "mcp_servers/**",
     "tests/**",
     "docs/**",
-    "*.md"
+    "*.md",
+    "macos/JarvisKit/Sources/**",
+    "macos/JarvisKit/Tests/**",
+    "macos/MortimerHost/Sources/**",
+    "macos/MortimerHost/Tests/**"
   ],
   "core": [
     "jarvis/**",
@@ -42,9 +46,15 @@
     "data/**",
     "*.vault",
     "**/*.vault",
-    "macos/**",
     "jarvis/skills/registry.py",
     "tests/unit/test_agent_isolation.py",
-    "tests/unit/test_requires_env_snapshot.py"
+    "tests/unit/test_requires_env_snapshot.py",
+    "macos/**/Package.swift",
+    "macos/**/Package.resolved",
+    "macos/**/*.plist",
+    "macos/**/*.entitlements",
+    "macos/**/scripts/**",
+    "macos/GlassSpike/**",
+    "macos/MortimerShell/**"
   ]
 }
