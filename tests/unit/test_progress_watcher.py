@@ -131,6 +131,76 @@ async def test_selfedit_job_alone_still_updates():
     assert "kimi-k3 (kimi-k3-model)" in rec.spoken[0]
 
 
+async def test_finish_job_is_announced_while_the_gates_run():
+    """SE4 — on the authored path no planner job ever starts, so the finish
+    job's gates are the only thing in flight. They run for minutes (the
+    Swift build plus the suite); silence there is the worst case for a
+    progress watcher."""
+    rec = _Recorder()
+    w = _watcher(rec, selfedit_job={"finish_state": "validating"})
+    await w.tick_once()
+    assert len(rec.spoken) == 1
+    assert "Self-edit validating" in rec.spoken[0]
+
+    rec2 = _Recorder()
+    w2 = _watcher(rec2, selfedit_job={"finish_state": "submitting"})
+    await w2.tick_once()
+    assert "opening the pull request" in rec2.spoken[0]
+
+
+async def test_the_fetcher_treats_a_running_finish_as_in_flight():
+    """The shape _default_fetch_selfedit_job returns for each case, without
+    HTTP: an idle planner job plus a validating finish is IN flight; both
+    idle is not."""
+    from jarvis.bot import progress_watcher as pw
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    class _Client:
+        def __init__(self, payload):
+            self._payload = payload
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def get(self, url):
+            return _Resp(self._payload)
+
+    async def fetch(payload, monkeypatched=None):
+        import sys
+        import types
+        fake = types.ModuleType("httpx")
+        fake.AsyncClient = lambda timeout=None: _Client(payload)
+        saved = sys.modules.get("httpx")
+        sys.modules["httpx"] = fake
+        try:
+            return await pw._default_fetch_selfedit_job("http://x")
+        finally:
+            if saved is not None:
+                sys.modules["httpx"] = saved
+            else:
+                del sys.modules["httpx"]
+
+    idle = {"ok": True, "job": {"state": "idle"}, "finish": {"state": "idle"}}
+    assert await fetch(idle) is None
+
+    validating = {"ok": True, "job": {"state": "idle"},
+                  "finish": {"state": "validating"}}
+    assert await fetch(validating) == {"finish_state": "validating"}
+
+    planning = {"ok": True, "job": {"state": "running", "profile": "kimi-k3"},
+                "finish": {"state": "idle"}}
+    assert (await fetch(planning))["profile"] == "kimi-k3"
+
+
 async def test_delegation_and_selfedit_together_one_update():
     rec = _Recorder()
     w = _watcher(
