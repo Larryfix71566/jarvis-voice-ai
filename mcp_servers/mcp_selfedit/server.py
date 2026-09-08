@@ -67,11 +67,48 @@ def selfedit_status(staging_id: str = "") -> dict:
 
 
 @mcp.tool()
-def selfedit_validate() -> dict:
-    """Validate the proposed edits (allowlist, backend imports, frontend
-    build). Read-only — no user confirmation required. Must pass before
-    selfedit_submit."""
-    return logic.selfedit_validate(_get_client())
+def selfedit_read(path: str) -> dict:
+    """Read one repo file from the OPEN self-edit session's worktree.
+
+    Use this after selfedit_start(confirm=true) reports a session, to see
+    the current content of each file you are about to change. Reading the
+    live checkout with repo_read_file instead risks writing a change based
+    on a version the session does not have."""
+    return logic.selfedit_read(_get_client(), path)
+
+
+@mcp.tool()
+def selfedit_write(path: str, content: str, rationale: str,
+                   visual_intent: str = "") -> dict:
+    """Write one file in the OPEN self-edit session's worktree.
+
+    `content` is the COMPLETE new file, not a patch or a fragment — read
+    the file first with selfedit_read and send it back with your change
+    applied. `rationale` is one line saying why, and appears in the pull
+    request. Set `visual_intent` for a change to the native app's interface
+    (macos/MortimerHost): one sentence saying what should look different,
+    which is what "check your appearance" verifies after the rebuild.
+
+    The allowlist applies exactly as it does to any self-edit: a denied
+    path is refused here, not silently written. Nothing is committed —
+    call selfedit_finish when the whole change is written."""
+    return logic.selfedit_write(_get_client(), path, content, rationale,
+                                visual_intent)
+
+
+@mcp.tool()
+def selfedit_finish() -> dict:
+    """Validate everything written in this session and, if every check
+    passes, open the pull request.
+
+    This is the end of the self-edit: the user already approved it at the
+    preview ("I will write the change, validate it, and if every check
+    passes open the pull request"), so no further confirmation is needed.
+    Runs in the background — the gates take minutes — so report the summary
+    and STOP; call selfedit_status when the user asks how it is going. If
+    validation fails, the session stays open: read the failing check, fix
+    the file with selfedit_write, and call selfedit_finish again."""
+    return logic.selfedit_finish(_get_client())
 
 
 @mcp.tool()
@@ -91,14 +128,6 @@ def selfedit_verify_appearance(branch_override: bool = False,
         _get_client(), branch_override, display)
 
 
-@mcp.tool()
-def selfedit_submit(confirm: bool = False) -> dict:
-    """Open a pull request with the validated edits.
-
-    Two-phase: confirm=false previews; confirm=true submits. Call with
-    confirm=true ONLY after validation has passed AND the user has explicitly
-    asked to submit in a new turn. The PR is never merged by the agent."""
-    return logic.selfedit_submit(_get_client(), confirm)
 
 
 @mcp.tool()

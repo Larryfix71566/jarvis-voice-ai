@@ -24,7 +24,7 @@ ALL_SERVERS = [
 # kb_neighbors; kb_write/kb_delete/kb_flush are logic.py-only, called
 # directly by jarvis/kb_digest.py, never exposed as MCP tools) — shipped
 # without this list or TOTAL_TOOLS being updated (gap-closure plan GC1).
-TOTAL_TOOLS = 69  # ...+2 (2026-08-21: mcp-memory's memory_review_list/_resolve)
+TOTAL_TOOLS = 70  # ...+2 (2026-08-21: mcp-memory's memory_review_list/_resolve)
                   # ...+2 (MORTIMER_GRAPH_LAYER_PLAN.md GL12, 2026-09-04:
                   #   mcp-memory's memory_graph_view, mcp-runlog's graph_view)
                   # ...+1 (B2: mcp-selfedit's selfedit_verify_appearance)
@@ -32,6 +32,10 @@ TOTAL_TOOLS = 69  # ...+2 (2026-08-21: mcp-memory's memory_review_list/_resolve)
                   # ...+3 (MORTIMER_SITE_RESEARCH_AND_COMPARISON_PLAN.md R1:
                   #   mcp-web's research_compare_start/research_status/research_save)
                   # ...+3 (mcp-kb: kb_search/kb_read/kb_neighbors, gap-closure plan GC1)
+                  # ...+1 net (MORTIMER_SELFEDIT_AUTHORING_PLAN.md SE2,
+                  #   2026-09-07: mcp-selfedit gains selfedit_read/_write/
+                  #   _finish and loses selfedit_validate/_submit, which
+                  #   could never complete under registry CALL_TIMEOUT=30 s)
 
 
 @pytest.fixture

@@ -4,12 +4,19 @@ class: privileged
 tools:
   - selfedit_start
   - selfedit_status
-  - selfedit_validate
+  # SE2 (MORTIMER_SELFEDIT_AUTHORING_PLAN.md): the developer writes the
+  # change itself, inside the session worktree. selfedit_validate and
+  # selfedit_submit are gone as TOOLS — jarvis/skills/registry.py bounds
+  # every tool call at 30 s and the pytest gate alone runs for minutes, so
+  # they could never have completed; selfedit_finish is the background job
+  # that replaces both. The sidecar routes stay for the native app.
+  - selfedit_read
+  - selfedit_write
+  - selfedit_finish
   # B2 — a CHECK, not a gate: the four validation gates cannot see the
   # screen, so a visual change stays unverified until a human runs the
   # branch and Mortimer looks at it.
   - selfedit_verify_appearance
-  - selfedit_submit
   - selfedit_revert
   - plan_start
   - plan_status

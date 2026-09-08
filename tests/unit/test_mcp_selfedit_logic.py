@@ -20,10 +20,12 @@ class FakeClient:
         self.routes = routes or {}
         self.fail = fail
         self.posts = []
+        self.gets = []
 
-    def get(self, path):
+    def get(self, path, params=None):
         if self.fail:
             raise ConnectionError("refused")
+        self.gets.append((path, params))
         return self.routes[("GET", path)]
 
     def post(self, path, json=None):
@@ -154,7 +156,7 @@ def test_start_confirm_with_no_id_and_no_goal_posts_to_run():
     })
     res = logic.selfedit_start(client, confirm=True)
     assert res["ok"] and res["started"]
-    assert client.posts == [("/api/selfedit/run", {"staging_id": ""})]
+    assert client.posts == [("/api/selfedit/run", {"staging_id": "", "author": True})]
 
 
 def test_start_confirm_with_a_mangled_id_is_passed_through_unchanged():
@@ -162,7 +164,8 @@ def test_start_confirm_with_a_mangled_id_is_passed_through_unchanged():
         ("POST", "/api/selfedit/run"): {"ok": True, "started": True, "profile": "p"},
     })
     logic.selfedit_start(client, confirm=True, staging_id="stg-0d049db0947d")
-    assert client.posts == [("/api/selfedit/run", {"staging_id": "stg-0d049db0947d"})]
+    assert client.posts == [("/api/selfedit/run",
+                             {"staging_id": "stg-0d049db0947d", "author": True})]
 
 
 def test_start_confirm_posts_goal_and_profile():
@@ -248,7 +251,8 @@ def test_start_confirm_with_staging_id_replays_without_restating_goal():
     r = logic.selfedit_start(c, confirm=True, staging_id="stg-abc")
     assert r["ok"] and r["started"]
     assert r["profile"] == "kimi-k3"
-    assert c.posts == [("/api/selfedit/run", {"staging_id": "stg-abc"})]
+    assert c.posts == [("/api/selfedit/run",
+                       {"staging_id": "stg-abc", "author": True})]
 
 
 def test_start_confirm_staging_id_takes_priority_over_goal():
@@ -260,7 +264,8 @@ def test_start_confirm_staging_id_takes_priority_over_goal():
         c, goal="some other goal entirely", confirm=True, staging_id="stg-abc",
     )
     assert r["ok"] and r["started"]
-    assert c.posts == [("/api/selfedit/run", {"staging_id": "stg-abc"})]
+    assert c.posts == [("/api/selfedit/run",
+                       {"staging_id": "stg-abc", "author": True})]
 
 
 def test_start_confirm_stale_staging_id_surfaces_sidecar_error():
@@ -376,43 +381,97 @@ def test_status_answers_staging_question_even_while_running():
     assert "not currently live" in missing["summary"]
 
 
-# ── selfedit_validate ──────────────────────────────────────────────────────
+# ── selfedit_read / selfedit_write / selfedit_finish (SE2/SE4) ─────────────
 
-def test_validate_pass():
-    r = logic.selfedit_validate(_client())
-    assert r["ok"] and r["validated_ok"]
-    assert "Validation passed" in r["summary"]
+def test_read_passes_the_path_as_a_query_param():
+    c = _client({("GET", "/api/selfedit/file"): {"ok": True, "content": "x = 1\n"}})
+    r = logic.selfedit_read(c, "jarvis/bot/display.py")
+    assert r["ok"] and r["content"] == "x = 1\n"
+    assert c.gets == [("/api/selfedit/file", {"path": "jarvis/bot/display.py"})]
 
 
-def test_validate_failure_details():
-    c = _client({("POST", "/api/selfedit/validate"): {
-        "ok": True,
-        "checks": [{"name": "allowlist", "ok": False, "output": "jarvis/agents denied"}]}})
-    r = logic.selfedit_validate(c)
+def test_read_and_write_refuse_an_empty_path():
+    c = _client()
+    assert logic.selfedit_read(c, "  ")["ok"] is False
+    assert logic.selfedit_write(c, "", "x", "why")["ok"] is False
+    assert c.posts == []
+
+
+def test_write_requires_a_rationale():
+    """It goes in the pull request; an unexplained edit is not reviewable."""
+    c = _client()
+    r = logic.selfedit_write(c, "docs/x.md", "hi\n", "  ")
+    assert r["ok"] is False and "rationale" in r["error"]
+    assert c.posts == []
+
+
+def test_write_posts_the_whole_file_and_reports_the_diff():
+    c = _client({("POST", "/api/selfedit/write"): {
+        "ok": True, "path": "docs/x.md", "diff": "+hi"}})
+    r = logic.selfedit_write(c, "docs/x.md", "hi\n", "note it", "looks blue")
+    assert r["ok"] and r["diff"] == "+hi"
+    assert "selfedit_finish" in r["summary"]
+    assert c.posts == [("/api/selfedit/write", {
+        "path": "docs/x.md", "content": "hi\n", "rationale": "note it",
+        "visual_intent": "looks blue"})]
+
+
+def test_write_relays_an_allowlist_refusal_unchanged():
+    """SE2 changes who writes, never what may be written."""
+    c = _client({("POST", "/api/selfedit/write"): {
+        "ok": False, "error": "jarvis/vault.py is not on the allowlist"}})
+    r = logic.selfedit_write(c, "jarvis/vault.py", "x\n", "why")
     assert r["ok"] is False and "allowlist" in r["error"]
 
 
-# ── selfedit_submit ────────────────────────────────────────────────────────
-
-def test_submit_gated_on_session_state():
-    idle = logic.selfedit_submit(_client(), confirm=True)
-    assert idle["ok"] is False and "no edit session" in idle["error"]
-
-    unvalidated = _client({("GET", "/api/selfedit/run"): {
-        "ok": True, "job": {"state": "done", "summary": "x"},
-        "status": {"active": True, "proposals": [{"path": "a", "rationale": "b"}],
-                   "validated_ok": False}}})
-    r = logic.selfedit_submit(unvalidated, confirm=True)
-    assert r["ok"] is False and "validation" in r["error"]
+def test_finish_starts_the_job_and_says_it_runs_in_the_background():
+    c = _client({("POST", "/api/selfedit/finish"): {
+        "ok": True, "started": True, "state": "validating"}})
+    r = logic.selfedit_finish(c)
+    assert r["ok"] and r["started"]
+    assert "Validating now" in r["summary"]
+    assert c.posts == [("/api/selfedit/finish", {})]
 
 
-def test_submit_preview_then_confirm():
-    c = _client({("GET", "/api/selfedit/run"): SESSION_ACTIVE})
-    preview = logic.selfedit_submit(c, confirm=False)
-    assert preview["needs_confirmation"] and "cannot merge" in preview["summary"]
-    done = logic.selfedit_submit(c, confirm=True)
-    assert done["ok"] and done["pr_url"].endswith("/pull/9")
-    assert "cannot merge" in done["summary"]
+def test_finish_relays_a_refusal():
+    c = _client({("POST", "/api/selfedit/finish"): {
+        "ok": False, "error": "nothing has been written yet"}})
+    assert logic.selfedit_finish(c)["error"] == "nothing has been written yet"
+
+
+def test_status_speaks_the_finish_job_states():
+    def status_with(finish):
+        return _client({("GET", "/api/selfedit/run"): {
+            "ok": True, "job": {"state": "idle"},
+            "status": {"active": True, "proposals": []}, "finish": finish}})
+
+    validating = logic.selfedit_status(status_with({"state": "validating"}))
+    assert "Validating" in validating["summary"]
+
+    done = logic.selfedit_status(status_with({
+        "state": "done", "pr_url": "https://x/pull/3",
+        "notice": "SWIFT CHANGE: rebuild the app"}))
+    assert "SWIFT CHANGE" in done["summary"]
+    assert "https://x/pull/3" in done["summary"]
+
+    failed = logic.selfedit_status(status_with({
+        "state": "failed",
+        "checks": [{"name": "pytest", "ok": False, "output": "1 failed"}]}))
+    assert "pytest" in failed["summary"] and "1 failed" in failed["summary"]
+    assert "want me to fix it" in failed["summary"]
+
+    errored = logic.selfedit_status(status_with({
+        "state": "error", "notice": "push rejected"}))
+    assert "push rejected" in errored["summary"]
+
+
+def test_status_says_nothing_about_a_finish_that_never_ran():
+    c = _client({("GET", "/api/selfedit/run"): {
+        "ok": True, "job": {"state": "idle"},
+        "status": {"active": False}, "finish": {"state": "idle"}}})
+    summary = logic.selfedit_status(c)["summary"]
+    assert "No upgrade run or edit session is active" in summary
+    assert "Validating" not in summary
 
 
 # ── selfedit_revert ────────────────────────────────────────────────────────
@@ -437,8 +496,9 @@ def test_revert_refused_while_running():
 @pytest.mark.parametrize("call", [
     lambda c: logic.selfedit_start(c, "goal", confirm=True),
     lambda c: logic.selfedit_status(c),
-    lambda c: logic.selfedit_validate(c),
-    lambda c: logic.selfedit_submit(c, confirm=True),
+    lambda c: logic.selfedit_read(c, "docs/x.md"),
+    lambda c: logic.selfedit_write(c, "docs/x.md", "hi\n", "why"),
+    lambda c: logic.selfedit_finish(c),
     lambda c: logic.selfedit_revert(c, confirm=True),
     lambda c: logic.plan_start(c, "goal", confirm=True),
     lambda c: logic.plan_status(c),

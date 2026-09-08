@@ -672,7 +672,7 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None,
             proposals = len(_selfedit_service.proposals) if _selfedit_service.branch else 0
             still_open = (
                 f" The session is still open with {proposals} proposed edit(s) — "
-                "say validate or submit to continue, or revert to drop it."
+                "say finish to validate and open the PR, or revert to drop it."
                 if _selfedit_service.branch else ""
             )
             summary = f"Ended without submitting a pull request.{still_open} {summary}".strip()
