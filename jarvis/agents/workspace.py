@@ -65,7 +65,7 @@ class Workspace(Protocol):
     repo_root: Path
     proposals: list[dict]
 
-    def start_session(self, goal: str) -> dict: ...
+    def start_session(self, goal: str, run_id: str | None = None) -> dict: ...
     def read_file(self, path: str) -> dict: ...
     def propose_edit(self, path: str, new_content: str, rationale: str) -> dict: ...
     def validate(self) -> dict: ...
@@ -134,6 +134,7 @@ class AppWorkspace:
 
         self.branch: str | None = None
         self.goal: str | None = None
+        self.run_id: str | None = None
         self.proposals: list[dict] = []
         self._validated_ok = False
 
@@ -174,7 +175,10 @@ class AppWorkspace:
 
     # ---------------------------------------------------------- session
 
-    def start_session(self, goal: str) -> dict:
+    def start_session(self, goal: str, run_id: str | None = None) -> dict:
+        """`run_id` (SE8) is accepted here for one reason: UpgradeAgent.run()
+        is the SAME loop for both workspaces, so the Workspace protocol must
+        have one signature. AppBuildAgent inherits that call."""
         if not goal or not goal.strip():
             return {"ok": False, "error": "goal is empty"}
         if self.branch is not None:
@@ -183,6 +187,7 @@ class AppWorkspace:
                 "error": f"an app-build session is already active on {self.branch} — "
                          "submit or revert it first",
             }
+        self.run_id = (run_id or "").strip() or None
         try:
             remote_url = self._remote_url()
             if not self.repo_root.exists():
@@ -382,6 +387,7 @@ class AppWorkspace:
             "app": self.app_name,
             "branch": self.branch,
             "goal": self.goal,
+            "run_id": self.run_id,
             "proposals": [
                 {"path": p["path"], "rationale": p["rationale"], "diff": p["diff"]}
                 for p in self.proposals

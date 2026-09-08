@@ -1,8 +1,11 @@
 """Unit tests for the GC4 web-freeze preflight rule (gap-closure plan,
 2026-09-04): jarvis/selfedit/service.py's SelfEditService.preflight refuses
 a goal that only touches web/ -- interface work goes to macos/MortimerHost
-now, which is a human PR. The allowlist itself is untouched (web/src/**
-still reads "allow"); this is a separate gate in front of it."""
+now. Since 2026-09-07 (MORTIMER_SELFEDIT_AUTHORING_PLAN.md SE7) that is a
+redirect rather than a dead end: self-edit CAN change the Swift sources,
+so the message names target_paths instead of saying "human PR". The
+allowlist itself is untouched (web/src/** still reads "allow"); this is a
+separate gate in front of it."""
 from __future__ import annotations
 
 from pathlib import Path

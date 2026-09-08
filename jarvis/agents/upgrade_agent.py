@@ -649,7 +649,10 @@ class UpgradeAgent:
 
         started = time.monotonic()
         if not self.service.branch:
-            res = self.service.start_session(goal)
+            # SE8 — the planner path carries the same run_id the developer
+            # path does, so a session opened here is joinable to its
+            # delegating run without a timestamp join.
+            res = self.service.start_session(goal, run_id=self._run_id)
             if not res["ok"]:
                 return {"ok": False, "summary": res["error"],
                         "status": self.service.status()}

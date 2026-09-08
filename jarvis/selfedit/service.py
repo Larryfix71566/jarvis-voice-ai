@@ -139,7 +139,8 @@ def _slugify(text: str, max_len: int = 32) -> str:
 # the four validation gates. web/src is the primary self-edit target by
 # design (the Edit panel grew out of it), which is precisely why this needs
 # saying out loud.
-VISUAL_PATH_PREFIXES = ("web/src/", "web/public/")
+VISUAL_PATH_PREFIXES = ("web/src/", "web/public/",
+                        "macos/MortimerHost/Sources/MortimerHost/")
 
 
 def is_visual_path(path: str) -> bool:
@@ -314,7 +315,12 @@ class SelfEditService:
 
     # ---------------------------------------------------------- session
 
-    def start_session(self, goal: str) -> dict:
+    def start_session(self, goal: str, run_id: str | None = None) -> dict:
+        """Open a session. `run_id` (SE8) is the delegating run's id, from
+        the staging record — carried on the session so the developer run,
+        the sidecar job, the gate log lines and the ledger share ONE id.
+        Reconstructing the 2026-09-07 history needed two logs and four
+        tables joined by timestamp because nothing did."""
         if not goal or not goal.strip():
             return {"ok": False, "error": "goal is empty"}
         if self.branch is not None:
@@ -359,10 +365,12 @@ class SelfEditService:
         self.rollback_tag = tag
         self.work_root = path
         self.goal = goal.strip()
+        self.run_id = (run_id or "").strip() or None
         self.proposals = []
         self._validated_ok = False
         self._last_checks = []
-        logger.info("selfedit_session_start branch=%s tag=%s worktree=%s", branch, tag, path)
+        logger.info("selfedit_session_start branch=%s tag=%s worktree=%s run_id=%s",
+                    branch, tag, path, self.run_id)
         return {"ok": True, "branch": branch, "rollback_tag": tag, "worktree": str(path)}
 
     # ----------------------------------------------------------- edits
@@ -530,6 +538,58 @@ class SelfEditService:
             "The four validation checks cannot see the screen. Run this "
             "branch and say \"check your appearance\" to have Mortimer look "
             "at the result.",
+        ]
+        return lines
+
+    def _swift_change_block(self) -> list[str]:
+        """SE6 — the PR body flags a change that needs a REBUILD.
+
+        Every other gate proves the branch is correct. None of them changes
+        the binary the human is running: MortimerHost is a compiled app,
+        and a merged Swift change does nothing at all until
+        macos/MortimerHost/scripts/bundle.sh runs. That one manual step is
+        the only thing left in the loop, so it is stated in the PR, in the
+        spoken submit notice, and nowhere else does it need saying."""
+        swift = [p["path"] for p in self.proposals if is_swift_path(p["path"])]
+        if not swift:
+            return []
+        lines = ["", "### ⚠ SWIFT CHANGE — rebuild the app before using it", ""]
+        lines += [f"- `{p}`" for p in swift]
+        lines += [
+            "",
+            "The gates ran `swift build` and `swift test` in the session "
+            "worktree, so this branch compiles. The MortimerHost you are "
+            "running is still the binary from the last rebuild. After "
+            "merging and pulling:",
+            "",
+            "    cd macos/MortimerHost && scripts/bundle.sh",
+            "",
+            "Then say \"check your appearance\" to have Mortimer look at the "
+            "result.",
+        ]
+        return lines
+
+    def _validation_block(self) -> list[str]:
+        """SE6 — what the gates actually did, in the PR body.
+
+        `.github/workflows/validate.yml` runs on pull requests to `main`
+        only. While JARVIS_SELFEDIT_BASE_REF points at a feature branch,
+        GitHub runs NO checks on a self-edit PR, and this table is the only
+        record that anything was validated at all."""
+        if not self._last_checks:
+            return []
+        lines = ["", "### Validation (sidecar gates)", "",
+                 "| gate | ok | seconds |", "|---|---|---|"]
+        for check in self._last_checks:
+            seconds = check.get("seconds")
+            shown = "—" if seconds is None or check.get("selected") is False \
+                else f"{seconds:.1f}"
+            lines.append(f"| {check['name']} | {'✓' if check['ok'] else '✗'} | {shown} |")
+        lines += [
+            "",
+            "`.github/workflows/validate.yml` runs only on pull requests to "
+            "`main`; when the base is a feature branch this table is the "
+            "only record of what ran.",
         ]
         return lines
 
@@ -755,7 +815,7 @@ class SelfEditService:
         # on pull requests to main, so when the base is a feature branch
         # these checks are the ONLY record of validation.
         self._last_checks = checks
-        logger.info("selfedit_validate ok=%s", ok)
+        logger.info("selfedit_validate ok=%s run_id=%s", ok, self.run_id)
         return {"ok": ok, "checks": checks}
 
     # ---------------------------------------------------------- submit
@@ -787,7 +847,8 @@ class SelfEditService:
             pr = self._open_pr(msg)
         except SelfEditError as exc:
             return {"ok": False, "error": str(exc)}
-        logger.info("selfedit_submit branch=%s pr=%s", self.branch, pr.get("html_url"))
+        logger.info("selfedit_submit branch=%s pr=%s run_id=%s",
+                    self.branch, pr.get("html_url"), self.run_id)
         capability = [p["path"] for p in self.proposals
                       if is_capability_path(p["path"])]
         core = [p["path"] for p in self.proposals if self.allowlist.is_core(p["path"])]
@@ -809,6 +870,7 @@ class SelfEditService:
                 + ") — run the branch and hold a real conversation before "
                   "merging. " + _MERGE_NOTE
             )
+        swift = [p["path"] for p in self.proposals if is_swift_path(p["path"])]
         if capability:
             # Spoken by the developer when it reports the submit — the
             # human must HEAR that this PR changes what agents can do, not
@@ -821,6 +883,19 @@ class SelfEditService:
                 + ") — review those diffs line by line before merging. "
                 + result["notice"]
             )
+        if swift:
+            # SE6 — the ONE manual step left in the loop. Prepended last so
+            # it is the first thing spoken: a merged Swift change is inert
+            # until the app is rebuilt, and a human who does not hear this
+            # will report the self-edit as having done nothing.
+            result["swift_change"] = True
+            result["swift_paths"] = swift
+            result["notice"] = (
+                "SWIFT CHANGE: after merging, rebuild the app — cd "
+                "macos/MortimerHost && scripts/bundle.sh — the running "
+                "MortimerHost is the old binary until then. "
+                + result["notice"]
+            )
         # Session is complete: tear down the worktree + local branch. The
         # user's checkout is untouched — there is no `checkout main` here
         # any more, by design (module docstring).
@@ -828,6 +903,7 @@ class SelfEditService:
         self._remove_worktree(branch)
         self.branch = None
         self.rollback_tag = None
+        self.run_id = None
         self.proposals = []
         self._validated_ok = False
         self._last_checks = []
@@ -843,9 +919,12 @@ class SelfEditService:
         for p in self.proposals:
             body_lines.append(f"- `{p['path']}` — {p['rationale']}")
         # Loudest first: core, then capability, then visual.
+        # Loudest first: swift (needs an action), core, capability, visual.
+        body_lines += self._swift_change_block()
         body_lines += self._core_change_block()
         body_lines += self._capability_change_block()
         body_lines += self._visual_change_block()
+        body_lines += self._validation_block()
         body_lines += ["", "---", _MERGE_NOTE]
         req = urllib.request.Request(
             f"https://api.github.com/repos/{self._github_repo}/pulls",
@@ -882,10 +961,11 @@ class SelfEditService:
             return {"ok": False, "error": "no active session"}
         branch, tag = self.branch, self.rollback_tag
         self._remove_worktree(branch)
-        logger.info("selfedit_revert branch=%s tag=%s", branch, tag)
+        logger.info("selfedit_revert branch=%s tag=%s run_id=%s", branch, tag, self.run_id)
         self.branch = None
         self.rollback_tag = None
         self.goal = None
+        self.run_id = None
         self.proposals = []
         self._validated_ok = False
         self._last_checks = []
@@ -929,7 +1009,8 @@ class SelfEditService:
         if any(p == "web" or p.startswith("web/") for p in paths):
             result.update(ok=False, error=(
                 "web/ is frozen (2026-09-04): interface work goes to "
-                "macos/MortimerHost, which is a human PR."
+                "macos/MortimerHost, which self-edit can change — name the "
+                "Swift file in target_paths."
             ))
             return result
         if tiers["denied"]:
@@ -971,6 +1052,7 @@ class SelfEditService:
             "rollback_tag": self.rollback_tag,
             "worktree": str(self.work_root) if self.work_root else None,
             "goal": self.goal,
+            "run_id": self.run_id,
             "proposals": [
                 {"path": p["path"], "rationale": p["rationale"], "diff": p["diff"]}
                 for p in self.proposals

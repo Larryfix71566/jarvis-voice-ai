@@ -524,6 +524,145 @@ class TestSwiftGate:
         assert swift_service._validated_ok is False
 
 
+class TestSwiftChangeFlag:
+    """SE6/SE8 — a merged Swift change is INERT until the app is rebuilt,
+    so the PR body and the spoken submit notice both say so; and the PR
+    body records which gates ran, because CI does not run on a PR whose
+    base is a feature branch."""
+
+    def _svc(self, checks=None):
+        svc = SelfEditService()
+        svc.branch = "jarvis/self-edit/test"
+        svc.goal = "add zoom to the memory graph window"
+        if checks is not None:
+            svc._last_checks = checks
+        return svc
+
+    SWIFT_SRC = "macos/MortimerHost/Sources/MortimerHost/Display/GraphImageView.swift"
+
+    def test_pr_body_flags_a_swift_change_and_names_the_rebuild(self):
+        svc = self._svc()
+        svc.proposals = [{"path": self.SWIFT_SRC, "rationale": "zoom", "diff": ""}]
+        block = "\n".join(svc._swift_change_block())
+        assert "SWIFT CHANGE" in block
+        assert self.SWIFT_SRC in block
+        assert "cd macos/MortimerHost && scripts/bundle.sh" in block
+        assert "old binary" in block or "last rebuild" in block
+
+    def test_a_python_change_gets_no_swift_block(self):
+        svc = self._svc()
+        svc.proposals = [{"path": "jarvis/bot/display.py", "rationale": "r", "diff": ""}]
+        assert svc._swift_change_block() == []
+
+    def test_a_manifest_change_gets_no_swift_block(self):
+        """Package.swift is denied by the allowlist — a dependency change is
+        a human PR, and is_swift_path must not claim otherwise."""
+        svc = self._svc()
+        svc.proposals = [
+            {"path": "macos/MortimerHost/Package.swift", "rationale": "r", "diff": ""},
+        ]
+        assert svc._swift_change_block() == []
+
+    def test_mortimerhost_sources_are_visual_too(self):
+        """B1/B2 — the native window is as unverifiable by the gates as the
+        old web console was, so `visual_intent` is recorded for it and
+        `check your appearance` works after the rebuild."""
+        svc = self._svc()
+        svc.proposals = [{"path": self.SWIFT_SRC, "rationale": "zoom",
+                          "diff": "", "visual_intent": "the graph zooms"}]
+        block = "\n".join(svc._visual_change_block())
+        assert "Visual change" in block
+        assert "the graph zooms" in block
+
+    def test_validation_block_lists_every_gate_with_seconds(self):
+        svc = self._svc(checks=[
+            {"name": "allowlist", "ok": True, "seconds": 0.1},
+            {"name": "backend_imports", "ok": True, "seconds": 2.3},
+            {"name": "swift_build:MortimerHost", "ok": True, "seconds": 412.0},
+            {"name": "pytest", "ok": True, "selected": False, "seconds": 0.0},
+        ])
+        block = "\n".join(svc._validation_block())
+        assert "Validation (sidecar gates)" in block
+        assert "| allowlist | ✓ | 0.1 |" in block
+        assert "| swift_build:MortimerHost | ✓ | 412.0 |" in block
+        # a gate that did not run shows no time at all, never "0.0"
+        assert "| pytest | ✓ | — |" in block
+        assert "only on pull requests to" in block
+
+    def test_validation_block_marks_a_failure(self):
+        svc = self._svc(checks=[{"name": "pytest", "ok": False, "seconds": 331.2}])
+        assert "| pytest | ✗ | 331.2 |" in "\n".join(svc._validation_block())
+
+    def test_no_validation_block_before_any_validate(self):
+        assert self._svc()._validation_block() == []
+
+    def test_submit_notice_leads_with_the_rebuild(self, tmp_path, monkeypatch):
+        """The notice is what the developer SPEAKS. A human who does not
+        hear it reports the self-edit as having done nothing."""
+        service = SelfEditService(
+            repo_root=_make_repo(tmp_path, SWIFT_ALLOWLIST, SWIFT_FILES),
+            github_token="t",
+        )
+        monkeypatch.setattr(
+            service, "_open_pr",
+            lambda title: {"html_url": "https://github.com/x/y/pull/1"},
+        )
+        service.start_session("zoom the graph", run_id="run-abc")
+        service.propose_edit(
+            "macos/MortimerHost/Sources/MortimerHost/App.swift",
+            "let b = 99\n", "zoom", "the graph zooms",
+        )
+        monkeypatch.setattr(service, "_run", lambda argv, cwd, timeout: (0, "ok"))
+        assert service.validate()["ok"] is True
+        res = service.submit()
+        assert res["ok"] is True, res
+        assert res["swift_change"] is True
+        assert res["swift_paths"] == [
+            "macos/MortimerHost/Sources/MortimerHost/App.swift"
+        ]
+        assert res["notice"].startswith("SWIFT CHANGE:")
+        assert "scripts/bundle.sh" in res["notice"]
+
+    def test_run_id_threads_through_the_session(self, tmp_path, monkeypatch, caplog):
+        """SE8 — one id across the session, its logs and its status."""
+        service = SelfEditService(
+            repo_root=_make_repo(tmp_path, SWIFT_ALLOWLIST, SWIFT_FILES),
+            github_token=None,
+        )
+        with caplog.at_level("INFO", logger="jarvis.selfedit.service"):
+            service.start_session("zoom the graph", run_id="run-abc")
+        assert service.status()["run_id"] == "run-abc"
+        assert "run_id=run-abc" in caplog.text
+        monkeypatch.setattr(service, "_run", lambda argv, cwd, timeout: (0, "ok"))
+        service.propose_edit("docs/x.md", "hi\n", "doc")
+        with caplog.at_level("INFO", logger="jarvis.selfedit.service"):
+            service.validate()
+        assert "selfedit_validate ok=True run_id=run-abc" in caplog.text
+        service.revert()
+        assert service.status()["run_id"] is None
+
+    def test_a_session_without_a_run_id_is_none_not_empty(self, tmp_path):
+        service = SelfEditService(
+            repo_root=_make_repo(tmp_path, SWIFT_ALLOWLIST, SWIFT_FILES),
+            github_token=None,
+        )
+        service.start_session("no id", run_id="   ")
+        assert service.run_id is None
+
+
+class TestWebFreezeMessageNamesTheSwiftPath:
+    """SE7 — the freeze message used to end the conversation ("which is a
+    human PR"). It is now a redirect: the same request, aimed at the file
+    self-edit can actually change."""
+
+    def test_the_freeze_message_points_at_target_paths(self, service: SelfEditService):
+        res = service.preflight("restyle web/src/App.tsx", has_plan=False)
+        assert res["ok"] is False
+        assert "macos/MortimerHost" in res["error"]
+        assert "target_paths" in res["error"]
+        assert "human PR" not in res["error"]
+
+
 class TestVisualVerification:
     """MORTIMER_DEVELOPER_SECTIONS_AND_VISUAL_VERIFY_PLAN.md Part B.
 
