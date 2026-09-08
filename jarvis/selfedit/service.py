@@ -52,6 +52,23 @@ GIT_TIMEOUT_S = 60
 VALIDATE_PYTEST_TIMEOUT_S = 900  # 2026-09-04: 2,150+ tests; the self-edit
 # run that convened council round e48cfbe1 timed out here at 300 s
 # (gap-closure plan GC1b). CI runs the same command with no timeout.
+# SE5 (MORTIMER_SELFEDIT_AUTHORING_PLAN.md) — the Swift gate. Generous and
+# LOGGED, not tuned: these are hang guards, not budgets. Measured 2026-09-07
+# in a fresh detached worktree with a warm SwiftPM cache (plan §8 V0b/V0c):
+# `swift build` 10.2 s, `swift test` 11.5 s (JarvisKit) / 13.1 s
+# (MortimerHost). The only slow path is a cache MISS — a WebRTC XCFramework
+# fetch from GitHub after a version bump — which is a download, not a
+# compile. Tighten only from logged `seconds`.
+VALIDATE_SWIFT_BUILD_TIMEOUT_S = 1800
+VALIDATE_SWIFT_TEST_TIMEOUT_S = 900
+# Package dependency closure: a JarvisKit change must also build the app
+# that consumes it (macos/MortimerHost/Package.swift declares
+# .package(path: "../JarvisKit")). Order is build order.
+SWIFT_PACKAGES: dict[str, tuple[str, ...]] = {
+    "JarvisKit": ("JarvisKit", "MortimerHost"),
+    "MortimerHost": ("MortimerHost",),
+}
+
 SESSION_BRANCH_PREFIX = "jarvis/self-edit"
 ROLLBACK_TAG_PREFIX = "pre-selfedit"
 DEFAULT_BASE_REF = "origin/main"
@@ -129,6 +146,43 @@ def is_visual_path(path: str) -> bool:
     return str(path).replace("\\", "/").startswith(VISUAL_PATH_PREFIXES)
 
 
+# SE6 — Swift sources. Package manifests, plists, entitlements and scripts
+# are NOT here: they are denied by the allowlist (a manifest change is a
+# dependency change, which is a human PR).
+SWIFT_PATH_PREFIXES = ("macos/JarvisKit/Sources/", "macos/MortimerHost/Sources/")
+
+
+def is_swift_path(path: str) -> bool:
+    return str(path).replace("\\", "/").startswith(SWIFT_PATH_PREFIXES)
+
+
+def swift_packages_for(changed: list[str]) -> list[str]:
+    """Ordered, de-duplicated packages to build for these changed paths —
+    JarvisKit before MortimerHost, because MortimerHost consumes it.
+
+    A path outside macos/, or under a macos/ directory that is not a
+    package (macos/README.md), contributes nothing."""
+    out: list[str] = []
+    for p in changed:
+        parts = str(p).replace("\\", "/").split("/")
+        if len(parts) >= 2 and parts[0] == "macos" and parts[1] in SWIFT_PACKAGES:
+            for pkg in SWIFT_PACKAGES[parts[1]]:
+                if pkg not in out:
+                    out.append(pkg)
+    order = list(SWIFT_PACKAGES)
+    return sorted(out, key=order.index)
+
+
+def is_swift_only(changed: list[str]) -> bool:
+    """True when EVERY changed path is under macos/ — the diff contains no
+    Python for pytest to exercise. Named for the common case; a macos-only
+    diff of docs qualifies too (and gets no Swift gate either, since
+    swift_packages_for ignores non-package paths)."""
+    return bool(changed) and all(
+        str(p).replace("\\", "/").startswith("macos/") for p in changed
+    )
+
+
 # Larry 2026-08-21 ("when those self change edits are present they have to
 # be highlighted so they can't go thru quietly"): paths whose change GRANTS
 # OR REWIRES AGENT CAPABILITIES. These joined the allowlist the same day so
@@ -175,7 +229,14 @@ class SelfEditService:
         self.rollback_tag: str | None = None
         self.goal: str | None = None
         self.proposals: list[dict] = []
+        # SE8 — the delegating run's id, threaded from the staging record
+        # through start_session so every selfedit_* log line, the status
+        # payload and the finish job share ONE id. Set in step 3; declared
+        # here so the gate log lines below never see an unset attribute.
+        self.run_id: str | None = None
         self._validated_ok = False
+        # SE6 — the checks from the LAST validate(), for the PR body.
+        self._last_checks: list[dict] = []
         # The session's isolated worktree (None when no session). Every
         # file read/write and every git command that concerns the SESSION
         # runs here; the user's checkout (repo_root) is only ever used for
@@ -300,6 +361,7 @@ class SelfEditService:
         self.goal = goal.strip()
         self.proposals = []
         self._validated_ok = False
+        self._last_checks = []
         logger.info("selfedit_session_start branch=%s tag=%s worktree=%s", branch, tag, path)
         return {"ok": True, "branch": branch, "rollback_tag": tag, "worktree": str(path)}
 
@@ -345,6 +407,7 @@ class SelfEditService:
         full.parent.mkdir(parents=True, exist_ok=True)
         full.write_text(new_content, encoding="utf-8")
         self._validated_ok = False  # any new edit invalidates prior validation
+        self._last_checks = []
         _c, diff = self._git("diff", "--", rel)
         proposal = {"path": rel, "rationale": rationale, "diff": diff}
         if is_visual_path(rel):
@@ -546,8 +609,23 @@ class SelfEditService:
         checks: list[dict] = []
 
         # 1. Allowlist enforcement on the full diff vs origin/main.
+        t_gate = time.monotonic()
         _c, names = self._git("diff", "--name-only", self.base_ref, "--", ".")
         changed = [n for n in names.splitlines() if n.strip()]
+        # `git diff` lists TRACKED changes only. propose_edit writes a file
+        # but never stages it (submit() is what runs `git add`), so a
+        # self-edit that CREATES a file was invisible to every gate below:
+        # the allowlist check that exists to be independent of
+        # propose_edit's own check saw nothing, and SE5's gate selection
+        # would read a mixed diff as Swift-only. Untracked, non-ignored
+        # files are part of the diff this session will submit, so they are
+        # part of what the gates see. (Found 2026-09-07 writing SE5's
+        # tests; .pytest_cache and __pycache__ are ignored, so gate output
+        # cannot pollute this list.)
+        _c, untracked = self._git("ls-files", "--others", "--exclude-standard")
+        for name in untracked.splitlines():
+            if name.strip() and name not in changed:
+                changed.append(name)
         violations = self.allowlist.filter_violations(changed)
         core_changed = self.allowlist.core_paths(changed)
         checks.append({
@@ -556,7 +634,10 @@ class SelfEditService:
             "output": ("all changed files allowed"
                        if not violations else "forbidden: " + ", ".join(violations))
                       + (f" · core (Tier B): {', '.join(core_changed)}" if core_changed else ""),
+            "seconds": round(time.monotonic() - t_gate, 1),
         })
+        logger.info("selfedit_gate name=allowlist ok=%s seconds=%.1f run_id=%s",
+                    not violations, time.monotonic() - t_gate, self.run_id)
 
         # 2. Backend import smoke.
         # sys.executable, not a bare "python"/"python3" resolved off PATH
@@ -569,12 +650,16 @@ class SelfEditService:
         # on its own terms: it pins the gate to the SAME interpreter (and
         # therefore the same installed deps) the running bot uses, rather
         # than whatever "python" happens to mean in the ambient PATH.
+        t_gate = time.monotonic()
         code, out = self._run(
             [sys.executable, "-c", "import jarvis, jarvis.config, jarvis.cli"],
             cwd=self.tree, timeout=120,
         )
+        seconds = time.monotonic() - t_gate
+        logger.info("selfedit_gate name=backend_imports ok=%s seconds=%.1f run_id=%s",
+                    code == 0, seconds, self.run_id)
         checks.append({"name": "backend_imports", "ok": code == 0,
-                       "output": out or "imports ok"})
+                       "output": out or "imports ok", "seconds": round(seconds, 1)})
 
         # 2b. Tier B (core) — the fifth gate, only when a core path changed
         # (MORTIMER_SELFEDIT_TIERS_PLAN.md): the voice pipeline and the agent
@@ -582,19 +667,18 @@ class SelfEditService:
         # failure the plain `import jarvis` smoke never sees, and it is
         # exactly what a jarvis/bot or jarvis/agents edit can break.
         if core_changed:
+            t_gate = time.monotonic()
             code, out = self._run(
                 [sys.executable, "-c", CORE_IMPORT_SMOKE],
                 cwd=self.tree, timeout=180,
             )
+            seconds = time.monotonic() - t_gate
+            logger.info("selfedit_gate name=core_imports ok=%s seconds=%.1f run_id=%s",
+                        code == 0, seconds, self.run_id)
             checks.append({"name": "core_imports", "ok": code == 0,
                            "output": out[-2000:] or "core imports ok",
-                           "paths": core_changed})
+                           "paths": core_changed, "seconds": round(seconds, 1)})
 
-        # 3. Backend unit tests (C2, MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md).
-        # CI's own pytest step is a hard gate now for the same reason — a
-        # self-edit that imports cleanly can still break backend behavior;
-        # only the test suite catches that.
-        #
         # There is no frontend build step any more (removed 2026-09-05). web/
         # is frozen and no goal can reach it, so building it validated nothing
         # while costing up to 600 s twice per run in a fresh worktree
@@ -602,15 +686,75 @@ class SelfEditService:
         # reason (registry blip, node drift, yanked transitive dep) failed
         # validation, exhausted the single auto-repair, and convened an E1
         # council over a component nobody runs.
-        code, out = self._run(
-            [sys.executable, "-m", "pytest", "tests/unit", "-q"],
-            cwd=self.tree, timeout=VALIDATE_PYTEST_TIMEOUT_S,
-        )
-        checks.append({"name": "pytest", "ok": code == 0,
-                       "output": out[-2000:] or "tests ok"})
+        # 3a. Swift gate (SE5) — only when a Swift PACKAGE changed. Runs
+        # BEFORE pytest: it is the cheaper of the two (measured ~10 s per
+        # package against ~330 s for the suite), so a Swift break is
+        # reported in seconds instead of six minutes.
+        #
+        # The gate keys on `_run`'s EXIT CODE, never on output text: a
+        # `swift test` run prints the Swift Testing runner's "Test run with
+        # 0 tests ... passed" line AFTER an XCTest failure in the same
+        # output (2026-09-07, plan §8 V0c), so the last line lies.
+        for pkg in swift_packages_for(changed):
+            pkg_dir = self.tree / "macos" / pkg
+            for verb, timeout in (("build", VALIDATE_SWIFT_BUILD_TIMEOUT_S),
+                                  ("test", VALIDATE_SWIFT_TEST_TIMEOUT_S)):
+                t_gate = time.monotonic()
+                code, out = self._run(["swift", verb], cwd=pkg_dir, timeout=timeout)
+                seconds = time.monotonic() - t_gate
+                name = f"swift_{verb}:{pkg}"
+                logger.info("selfedit_gate name=%s ok=%s seconds=%.1f run_id=%s",
+                            name, code == 0, seconds, self.run_id)
+                checks.append({"name": name, "ok": code == 0,
+                               "output": out[-2000:] or f"swift {verb} ok",
+                               "seconds": round(seconds, 1)})
+                if code != 0:
+                    # A package that does not build cannot be meaningfully
+                    # tested. The next package is still attempted: whether a
+                    # JarvisKit break also breaks MortimerHost is something
+                    # to READ in the checks, not assume.
+                    break
+
+        # 4. Backend unit tests (C2, MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md).
+        # CI's own pytest step is a hard gate now for the same reason — a
+        # self-edit that imports cleanly can still break backend behavior;
+        # only the test suite catches that.
+        #
+        # SE5 gate SELECTION: a diff entirely under macos/ contains no
+        # Python, and no test under tests/ reads macos/ (verified by grep,
+        # 2026-09-07). Running the suite on it validates nothing and costs
+        # ~330 s. This is a selection rule inside the gate, never a skipped
+        # test: the check is recorded with selected=False so the PR body
+        # and the console both say the suite did not run, and any diff
+        # touching a single Python file runs it in full.
+        if is_swift_only(changed):
+            checks.append({
+                "name": "pytest", "ok": True, "selected": False, "seconds": 0.0,
+                "output": "not run — every changed path is under macos/, so the "
+                          "diff contains no Python; no test under tests/ reads "
+                          "macos/ (verified 2026-09-07)",
+            })
+            logger.info("selfedit_gate name=pytest ok=True seconds=0.0 selected=False "
+                        "run_id=%s", self.run_id)
+        else:
+            t_gate = time.monotonic()
+            code, out = self._run(
+                [sys.executable, "-m", "pytest", "tests/unit", "-q"],
+                cwd=self.tree, timeout=VALIDATE_PYTEST_TIMEOUT_S,
+            )
+            seconds = time.monotonic() - t_gate
+            logger.info("selfedit_gate name=pytest ok=%s seconds=%.1f run_id=%s",
+                        code == 0, seconds, self.run_id)
+            checks.append({"name": "pytest", "ok": code == 0,
+                           "output": out[-2000:] or "tests ok",
+                           "seconds": round(seconds, 1)})
 
         ok = all(c["ok"] for c in checks)
         self._validated_ok = ok
+        # SE6 — the PR body reports what actually ran (step 3). CI runs only
+        # on pull requests to main, so when the base is a feature branch
+        # these checks are the ONLY record of validation.
+        self._last_checks = checks
         logger.info("selfedit_validate ok=%s", ok)
         return {"ok": ok, "checks": checks}
 
@@ -686,6 +830,7 @@ class SelfEditService:
         self.rollback_tag = None
         self.proposals = []
         self._validated_ok = False
+        self._last_checks = []
         result["rollback_tag"] = tag
         return result
 
@@ -743,6 +888,7 @@ class SelfEditService:
         self.goal = None
         self.proposals = []
         self._validated_ok = False
+        self._last_checks = []
         return {"ok": True, "reverted_to": tag}
 
     def preflight(self, goal: str, has_plan: bool,

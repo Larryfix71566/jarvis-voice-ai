@@ -17,8 +17,14 @@ import pytest
 from jarvis.selfedit.service import (
     BASE_REF_ENV,
     CHILD_ENV_KEEP,
+    SWIFT_PACKAGES,
     VALIDATE_PYTEST_TIMEOUT_S,
+    VALIDATE_SWIFT_BUILD_TIMEOUT_S,
+    VALIDATE_SWIFT_TEST_TIMEOUT_S,
     SelfEditService,
+    is_swift_only,
+    is_swift_path,
+    swift_packages_for,
 )
 
 ALLOWLIST = {
@@ -35,8 +41,8 @@ def _git(cwd: Path, *args: str) -> None:
                    capture_output=True, text=True)
 
 
-@pytest.fixture()
-def repo(tmp_path: Path) -> Path:
+def _make_repo(tmp_path: Path, allowlist: dict, extra: dict[str, str] | None = None) -> Path:
+    """A throwaway clone of a bare origin, with the files the tests edit."""
     origin = tmp_path / "origin.git"
     _git(tmp_path, "init", "--bare", str(origin))
     work = tmp_path / "work"
@@ -51,11 +57,20 @@ def repo(tmp_path: Path) -> Path:
     (work / "jarvis/bot").mkdir()
     (work / "jarvis/bot/display.py").write_text("SURFACE = 'window'\n")
     (work / "config").mkdir()
-    (work / "config" / "self_edit_allowlist.json").write_text(json.dumps(ALLOWLIST))
+    (work / "config" / "self_edit_allowlist.json").write_text(json.dumps(allowlist))
+    for rel, body in (extra or {}).items():
+        path = work / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body)
     _git(work, "add", "-A")
     _git(work, "commit", "-m", "init")
     _git(work, "push", "-u", "origin", "main")
     return work
+
+
+@pytest.fixture()
+def repo(tmp_path: Path) -> Path:
+    return _make_repo(tmp_path, ALLOWLIST)
 
 
 @pytest.fixture()
@@ -160,6 +175,37 @@ def test_validate_catches_off_allowlist_working_tree_changes(
     assert "jarvis/wakeword.py" in allowlist_check["output"]
 
 
+def test_validate_sees_a_newly_created_file(service: SelfEditService) -> None:
+    """2026-09-07: propose_edit writes without staging and `git diff` lists
+    only tracked changes, so a CREATED file reached submit() having been
+    checked by propose_edit alone — the allowlist gate, which exists to be
+    an independent check, never saw it. validate() now unions untracked,
+    non-ignored files into the diff it gates."""
+    service.start_session("new file")
+    # Written directly in the worktree, bypassing propose_edit's own check
+    # exactly as test_validate_catches_off_allowlist_working_tree_changes does.
+    (service.work_root / "jarvis" / "sneaky_new.py").write_text("x = 1\n")
+    res = service.validate()
+    allowlist_check = next(c for c in res["checks"] if c["name"] == "allowlist")
+    assert "jarvis/sneaky_new.py" in allowlist_check["output"]
+    # jarvis/** is core in this fixture, so it is reported as core, not
+    # forbidden — the point is that the gate SEES it.
+    assert allowlist_check["ok"] is True
+
+
+def test_validate_catches_a_newly_created_forbidden_file(
+    service: SelfEditService,
+) -> None:
+    service.start_session("sneaky new")
+    (service.work_root / ".github").mkdir(parents=True, exist_ok=True)
+    (service.work_root / ".github" / "evil.yml").write_text("on: push\n")
+    res = service.validate()
+    allowlist_check = next(c for c in res["checks"] if c["name"] == "allowlist")
+    assert allowlist_check["ok"] is False
+    assert ".github/evil.yml" in allowlist_check["output"]
+    assert res["ok"] is False
+
+
 def test_revert_removes_worktree_and_branch(service: SelfEditService) -> None:
     service.start_session("temporary")
     worktree = service.work_root
@@ -228,6 +274,254 @@ def test_pytest_gate_timeout_is_900() -> None:
     no timeout, so the gate and CI must not disagree about what passing
     means -- the fix is headroom, never a faster subset."""
     assert VALIDATE_PYTEST_TIMEOUT_S == 900
+
+
+# --- SE5: the Swift gate (MORTIMER_SELFEDIT_AUTHORING_PLAN.md) ----------
+
+SWIFT_ALLOWLIST = {
+    "allow": ["web/src/**", "docs/**", "macos/README.md",
+              "macos/JarvisKit/**", "macos/MortimerHost/**"],
+    "core": ["jarvis/**"],
+    "deny": ["jarvis/wakeword.py", "jarvis/selfedit/**", ".github/**", "**/.env*",
+             "macos/**/Package.swift"],
+}
+
+SWIFT_FILES = {
+    "macos/JarvisKit/Sources/JarvisKit/AdminAPI.swift": "public let a = 1\n",
+    "macos/MortimerHost/Sources/MortimerHost/App.swift": "let b = 1\n",
+    "macos/README.md": "# native client\n",
+}
+
+
+@pytest.fixture()
+def swift_service(tmp_path: Path) -> SelfEditService:
+    """A service whose allowlist permits Swift sources — what step 8's
+    human allowlist row (W0-SWIFT) grants in the real repo."""
+    return SelfEditService(
+        repo_root=_make_repo(tmp_path, SWIFT_ALLOWLIST, SWIFT_FILES),
+        github_token=None,
+    )
+
+
+class TestSwiftGate:
+    """SE5 — `swift build`/`swift test` run in the session worktree when a
+    Swift package changed, and a diff with no Python skips the suite.
+
+    Every test fakes `_run`, so no toolchain is required here; the real
+    timings are plan §8 V0b/V0c (10-13 s per package, warm cache)."""
+
+    @staticmethod
+    def _fake_run(calls, failing: str | None = None):
+        def run(argv, cwd, timeout):
+            calls.append({"argv": list(argv), "cwd": str(cwd), "timeout": timeout})
+            if failing is not None and " ".join(argv).endswith(failing):
+                return 1, "boom"
+            return 0, "ok"
+        return run
+
+    @staticmethod
+    def _swift_calls(calls):
+        return [(c["argv"][1], Path(c["cwd"]).name)
+                for c in calls if c["argv"][0] == "swift"]
+
+    def test_swift_packages_for_maps_the_dependency_closure(self):
+        assert swift_packages_for(
+            ["macos/JarvisKit/Sources/JarvisKit/AdminAPI.swift"]
+        ) == ["JarvisKit", "MortimerHost"]
+        assert swift_packages_for(
+            ["macos/MortimerHost/Sources/MortimerHost/App.swift"]
+        ) == ["MortimerHost"]
+        # both named, in build order, once each
+        assert swift_packages_for(
+            ["macos/MortimerHost/Sources/MortimerHost/App.swift",
+             "macos/JarvisKit/Sources/JarvisKit/AdminAPI.swift"]
+        ) == ["JarvisKit", "MortimerHost"]
+
+    def test_swift_packages_for_ignores_non_package_macos_paths(self):
+        assert swift_packages_for(["macos/README.md"]) == []
+        assert swift_packages_for(["macos/GlassSpike/Sources/x.swift"]) == []
+        assert swift_packages_for(["jarvis/bot/display.py"]) == []
+        assert swift_packages_for([]) == []
+
+    def test_is_swift_path_covers_sources_only(self):
+        assert is_swift_path("macos/MortimerHost/Sources/MortimerHost/App.swift")
+        assert is_swift_path("macos/JarvisKit/Sources/JarvisKit/AdminAPI.swift")
+        # manifests and scripts are a human PR, not a Swift source edit
+        assert not is_swift_path("macos/MortimerHost/Package.swift")
+        assert not is_swift_path("macos/MortimerHost/scripts/bundle.sh")
+        assert not is_swift_path("jarvis/bot/display.py")
+
+    def test_is_swift_only_needs_every_path_under_macos(self):
+        assert is_swift_only(["macos/README.md"]) is True
+        assert is_swift_only(["macos/MortimerHost/Sources/MortimerHost/App.swift"]) is True
+        assert is_swift_only(
+            ["macos/MortimerHost/Sources/MortimerHost/App.swift", "docs/x.md"]
+        ) is False
+        assert is_swift_only([]) is False
+
+    def test_no_swift_gate_without_a_macos_change(self, swift_service, monkeypatch):
+        calls: list[dict] = []
+        monkeypatch.setattr(swift_service, "_run", self._fake_run(calls))
+        swift_service.start_session("docs only")
+        swift_service.propose_edit("web/src/App.tsx", "export default 5;\n", "ui")
+        res = swift_service.validate()
+        assert self._swift_calls(calls) == []
+        assert not any(n.startswith("swift_") for n in [c["name"] for c in res["checks"]])
+
+    def test_jarviskit_change_builds_and_tests_both_packages_in_order(
+        self, swift_service, monkeypatch
+    ):
+        calls: list[dict] = []
+        monkeypatch.setattr(swift_service, "_run", self._fake_run(calls))
+        swift_service.start_session("jarviskit edit")
+        swift_service.propose_edit(
+            "macos/JarvisKit/Sources/JarvisKit/AdminAPI.swift",
+            "public let a = 2\n", "tweak",
+        )
+        res = swift_service.validate()
+        assert self._swift_calls(calls) == [
+            ("build", "JarvisKit"), ("test", "JarvisKit"),
+            ("build", "MortimerHost"), ("test", "MortimerHost"),
+        ]
+        names = [c["name"] for c in res["checks"]]
+        assert "swift_build:JarvisKit" in names and "swift_test:MortimerHost" in names
+        # each gate runs inside the SESSION worktree, never the user's checkout
+        for c in calls:
+            if c["argv"][0] == "swift":
+                assert str(swift_service.work_root) in c["cwd"]
+        assert res["ok"] is True, res
+
+    def test_mortimerhost_change_builds_only_mortimerhost(
+        self, swift_service, monkeypatch
+    ):
+        calls: list[dict] = []
+        monkeypatch.setattr(swift_service, "_run", self._fake_run(calls))
+        swift_service.start_session("host edit")
+        swift_service.propose_edit(
+            "macos/MortimerHost/Sources/MortimerHost/App.swift", "let b = 2\n", "tweak",
+        )
+        swift_service.validate()
+        assert self._swift_calls(calls) == [
+            ("build", "MortimerHost"), ("test", "MortimerHost"),
+        ]
+
+    def test_failed_swift_build_skips_swift_test_for_that_package(
+        self, swift_service, monkeypatch
+    ):
+        calls: list[dict] = []
+        monkeypatch.setattr(
+            swift_service, "_run", self._fake_run(calls, failing="swift build"),
+        )
+        swift_service.start_session("jarviskit edit")
+        swift_service.propose_edit(
+            "macos/JarvisKit/Sources/JarvisKit/AdminAPI.swift",
+            "public let a = 3\n", "tweak",
+        )
+        res = swift_service.validate()
+        # no `swift test` anywhere: both builds failed
+        assert [v for v, _ in self._swift_calls(calls)] == ["build", "build"]
+        assert res["ok"] is False
+        failed = [c for c in res["checks"] if not c["ok"]]
+        assert [c["name"] for c in failed] == [
+            "swift_build:JarvisKit", "swift_build:MortimerHost",
+        ]
+
+    def test_swift_only_diff_does_not_run_pytest(self, swift_service, monkeypatch):
+        calls: list[dict] = []
+        monkeypatch.setattr(swift_service, "_run", self._fake_run(calls))
+        swift_service.start_session("host edit")
+        swift_service.propose_edit(
+            "macos/MortimerHost/Sources/MortimerHost/App.swift", "let b = 4\n", "tweak",
+        )
+        res = swift_service.validate()
+        assert not any("pytest" in " ".join(c["argv"]) for c in calls), calls
+        check = next(c for c in res["checks"] if c["name"] == "pytest")
+        assert check["ok"] is True and check["selected"] is False
+        assert "no Python" in check["output"]
+        # the import gates still ran — a macos-only diff is not unvalidated
+        assert "backend_imports" in [c["name"] for c in res["checks"]]
+
+    def test_a_mixed_diff_runs_pytest(self, swift_service, monkeypatch):
+        calls: list[dict] = []
+        monkeypatch.setattr(swift_service, "_run", self._fake_run(calls))
+        swift_service.start_session("swift plus docs")
+        swift_service.propose_edit(
+            "macos/MortimerHost/Sources/MortimerHost/App.swift", "let b = 5\n", "tweak",
+        )
+        swift_service.propose_edit("docs/notes.md", "note\n", "doc")
+        res = swift_service.validate()
+        assert any("pytest" in " ".join(c["argv"]) for c in calls)
+        assert "selected" not in next(
+            c for c in res["checks"] if c["name"] == "pytest"
+        )
+
+    def test_a_macos_docs_change_gets_no_swift_gate_and_no_pytest(
+        self, swift_service, monkeypatch
+    ):
+        """macos/README.md is under macos/ but in no package: nothing to
+        build, and no Python to test."""
+        calls: list[dict] = []
+        monkeypatch.setattr(swift_service, "_run", self._fake_run(calls))
+        swift_service.start_session("macos docs")
+        swift_service.propose_edit("macos/README.md", "# updated\n", "doc")
+        res = swift_service.validate()
+        assert self._swift_calls(calls) == []
+        assert not any("pytest" in " ".join(c["argv"]) for c in calls)
+        assert res["ok"] is True, res
+
+    def test_every_gate_records_and_logs_its_seconds(
+        self, swift_service, monkeypatch, caplog
+    ):
+        calls: list[dict] = []
+        monkeypatch.setattr(swift_service, "_run", self._fake_run(calls))
+        swift_service.start_session("jarviskit edit")
+        swift_service.propose_edit(
+            "macos/JarvisKit/Sources/JarvisKit/AdminAPI.swift",
+            "public let a = 6\n", "tweak",
+        )
+        with caplog.at_level("INFO", logger="jarvis.selfedit.service"):
+            res = swift_service.validate()
+        for check in res["checks"]:
+            assert isinstance(check.get("seconds"), float), check
+        text = caplog.text
+        for name in ("allowlist", "backend_imports", "swift_build:JarvisKit", "pytest"):
+            assert f"selfedit_gate name={name}" in text
+        assert "seconds=" in text
+
+    def test_the_swift_timeouts_are_hang_guards_not_budgets(self, swift_service, monkeypatch):
+        """0.7 — generous until logged seconds say otherwise. V0b/V0c
+        measured 10-13 s per package with a warm SwiftPM cache."""
+        assert VALIDATE_SWIFT_BUILD_TIMEOUT_S == 1800
+        assert VALIDATE_SWIFT_TEST_TIMEOUT_S == 900
+        assert list(SWIFT_PACKAGES) == ["JarvisKit", "MortimerHost"]
+        calls: list[dict] = []
+        monkeypatch.setattr(swift_service, "_run", self._fake_run(calls))
+        swift_service.start_session("host edit")
+        swift_service.propose_edit(
+            "macos/MortimerHost/Sources/MortimerHost/App.swift", "let b = 7\n", "t",
+        )
+        swift_service.validate()
+        timeouts = {c["argv"][1]: c["timeout"] for c in calls if c["argv"][0] == "swift"}
+        assert timeouts == {"build": 1800, "test": 900}
+
+    def test_last_checks_holds_the_run_and_is_cleared_by_a_new_edit(
+        self, swift_service, monkeypatch
+    ):
+        """SE6 — the PR body reports what ran; a later edit invalidates it
+        alongside _validated_ok."""
+        calls: list[dict] = []
+        monkeypatch.setattr(swift_service, "_run", self._fake_run(calls))
+        swift_service.start_session("host edit")
+        swift_service.propose_edit(
+            "macos/MortimerHost/Sources/MortimerHost/App.swift", "let b = 8\n", "t",
+        )
+        res = swift_service.validate()
+        assert [c["name"] for c in swift_service._last_checks] == [
+            c["name"] for c in res["checks"]
+        ]
+        swift_service.propose_edit("docs/after.md", "later\n", "doc")
+        assert swift_service._last_checks == []
+        assert swift_service._validated_ok is False
 
 
 class TestVisualVerification:
