@@ -618,6 +618,12 @@ Zoom the graph. Optionally: *"check your appearance"* → `selfedit_verify_appea
 
 Results are appended here.
 
+**V0 — 2026-09-07, PASS (warm).** `env -i PATH=/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin HOME="$HOME" swift build` in `macos/MortimerHost`: `Build complete! (0.94s)`, 5.07 s wall. `swift` resolves from the whitelisted PATH; step 2 is writable. This is a WARM number — the checkout's `.build/` was already populated. A session worktree starts with no `.build/` (`.gitignore:51-53`), so the gate's first run compiles JarvisKit, MortimerHost and resolves the WebRTC XCFramework from scratch; that cold number is measured next.
+
+**V0b — 2026-09-07, cold build, PASS.** `git worktree add --detach /tmp/mh-cold feat/graph-layer` (996c2ac), then the same PATH-only `swift build` in `macos/MortimerHost`: 62 steps, `Build complete! (9.54s)`, 10.2 s wall, 318 % CPU. The WebRTC XCFramework resolved from SwiftPM's cache under `$HOME` — no network. So a fresh session worktree builds in ~10 s when the cache is warm; the only path to a long build is a cache miss (first run after a WebRTC version bump, or a cleared `~/Library/Caches/org.swift.swiftpm`), which is a network fetch, not compile time. `VALIDATE_SWIFT_BUILD_TIMEOUT_S = 1800` stays as the hang guard; it is no longer the plan's top risk. `swift test` cold measured next.
+
+**V0c — 2026-09-07, cold `swift test`, timing PASS; result not yet captured.** Same detached worktree, PATH-only env: JarvisKit 11.5 s wall, MortimerHost 13.1 s wall, each including its compile. All 14 test files are XCTest (`import XCTest`; 96 `func test*` in `JarvisKitTests`, 39 in `MortimerHostTests`); the trailing "0 tests in 0 suites" line is the Swift Testing runner, which has nothing to run here. The pipe to `tail` masked XCTest's `Executed N tests` summary and the exit status, so "the Swift suite is green on feat/graph-layer" is untested until the un-piped run below is recorded. `VALIDATE_SWIFT_TEST_TIMEOUT_S = 900` stays as a hang guard. Note for step 2's tests: the gate reads `_run`'s exit code, never the last line of output — a Swift Testing "passed" line follows an XCTest failure in the same output.
+
 ---
 
 ## §9 Rollback
@@ -633,7 +639,7 @@ Results are appended here.
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
-| Cold `swift build` in a fresh worktree exceeds 1800 s (WebRTC XCFramework fetched from GitHub rather than SwiftPM's cache) | unknown — no measurement exists | V0 measures warm; V4 measures cold; the timeout starts generous; `HOME` is in `CHILD_ENV_KEEP` so the cache is reachable |
+| Cold `swift build` in a fresh worktree exceeds 1800 s | low — measured 10.2 s cold on 2026-09-07 (V0b) with a warm SwiftPM cache; only a cache miss (WebRTC fetch from GitHub) is slower | `HOME` is in `CHILD_ENV_KEEP` so the cache is reachable; 1800 s is a hang guard, not a budget |
 | `swift` not resolvable from the launchd child (`xcode-select` not set) | low; V0 settles it before code | gate fails loudly with code 127 and the error text |
 | A barge-in orphans the developer's authoring run mid-write | medium | writes land in the worktree as they happen; the session stays open; the next turn's `selfedit_status` shows `proposals` and the developer continues |
 | Developer exceeds 25 iterations / 300 s while authoring | low for single-file goals | the session survives; multi-file goals use `plan_path` (SE3) |
