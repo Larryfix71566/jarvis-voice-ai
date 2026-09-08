@@ -82,6 +82,47 @@ def test_actions_endpoint_lists_audit(client):
     assert rows[0]["status"] == "committed"
 
 
+class TestPrepareCommitPaths:
+    """SE1 (MORTIMER_SELFEDIT_AUTHORING_PLAN.md) at the console route.
+
+    logic.prepare_commit requires an explicit file list. This route keeps
+    accepting {message} alone for C1 — MortimerHost's AdminAPI.swift and
+    web's GitPanel.tsx both post that shape — and expands it to every
+    changed file HERE, named in the draft summary the human confirms."""
+
+    def test_message_only_still_works_and_names_every_file(self, client):
+        c, r = client
+        (r / "a.txt").write_text("two\n")
+        (r / "b.txt").write_text("b\n")
+        draft = c.post("/api/git/prepare-commit", json={"message": "all"}).json()
+        assert draft["ok"] is True, draft
+        assert "2 file(s)" in draft["summary"]
+        assert "a.txt" in draft["summary"] and "b.txt" in draft["summary"]
+        assert c.post("/api/git/commit",
+                      json={"action_id": draft["action_id"]}).json()["ok"] is True
+        assert c.get("/api/git/status").json()["clean"] is True
+
+    def test_explicit_paths_stage_only_those(self, client):
+        c, r = client
+        (r / "a.txt").write_text("two\n")
+        (r / "b.txt").write_text("b\n")
+        draft = c.post("/api/git/prepare-commit",
+                       json={"message": "just a", "paths": ["a.txt"]}).json()
+        assert draft["ok"] is True, draft
+        assert "1 file(s)" in draft["summary"] and "b.txt" not in draft["summary"]
+        assert c.post("/api/git/commit",
+                      json={"action_id": draft["action_id"]}).json()["ok"] is True
+        assert "b.txt" in c.get("/api/git/status").json()["changed_files"]
+
+    def test_explicit_unchanged_path_is_refused(self, client):
+        c, r = client
+        (r / "a.txt").write_text("two\n")
+        res = c.post("/api/git/prepare-commit",
+                     json={"message": "x", "paths": ["nope.txt"]}).json()
+        assert res["ok"] is False
+        assert "not changed in the working tree" in res["error"]
+
+
 def test_docs_disabled():
     c = TestClient(app)
     assert c.get("/docs").status_code == 404

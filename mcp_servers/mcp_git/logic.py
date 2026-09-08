@@ -194,6 +194,20 @@ def git_status() -> dict:
     }
 
 
+def changed_files() -> dict:
+    """Every changed FILE in the working tree, one entry per file — the
+    shape prepare_commit accepts.
+
+    git_status()'s `changed_files` is porcelain v1: it QUOTES a path
+    containing a space and collapses an untracked directory to `dir/`.
+    Both forms are rejected by prepare_commit (which needs real, per-file
+    names), so callers that need a list to hand to it use this."""
+    code, files, err = _changed_files(["."])
+    if code != 0:
+        return {"ok": False, "error": err, "files": []}
+    return {"ok": True, "files": files}
+
+
 def git_log(n: int = 5) -> dict:
     n = max(1, min(int(n), 20))
     code, out = _git("log", f"-{n}", "--pretty=format:%h %ad %s", "--date=relative")
@@ -253,6 +267,11 @@ def _clean_paths(paths: list[str] | None) -> list[str]:
         if not isinstance(p, str):
             continue
         p = p.strip()
+        # git_status()'s porcelain-v1 list quotes a path with a space; an
+        # agent that reads a name there and passes it straight back must
+        # not be refused for the quotes git itself added.
+        if len(p) >= 2 and p[0] == '"' and p[-1] == '"':
+            p = p[1:-1].replace('\\"', '"').replace("\\\\", "\\")
         if p.startswith("./"):
             p = p[2:]
         if p and p not in out:

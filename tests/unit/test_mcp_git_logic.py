@@ -289,6 +289,26 @@ class TestPrepareCommitNamesItsFiles:
         assert logic.list_actions()["actions"][0]["status"] == "failed"
         assert logic.commit(draft["action_id"])["ok"] is False
 
+    def test_changed_files_lists_real_per_file_names(self, repo):
+        """The helper the console endpoint uses: no porcelain-v1 quoting,
+        and a new directory expands to its files."""
+        (repo / "a.txt").write_text("two\n")
+        (repo / "new dir").mkdir()
+        (repo / "new dir" / "my file.txt").write_text("hi\n")
+        res = logic.changed_files()
+        assert res["ok"] is True
+        assert sorted(res["files"]) == ["a.txt", "new dir/my file.txt"]
+        # and every name it returns is accepted by prepare_commit
+        assert logic.prepare_commit("both", res["files"])["ok"] is True
+
+    def test_quoted_name_from_git_status_is_accepted(self, repo):
+        """git_status() quotes a path with a space; an agent passing that
+        string straight back must not be refused for git's own quotes."""
+        (repo / "my file.txt").write_text("hi\n")
+        quoted = logic.git_status()["changed_files"][0]
+        assert quoted == '"my file.txt"'  # the porcelain-v1 form
+        assert logic.prepare_commit("quoted", [quoted])["ok"] is True
+
     def test_prepare_commit_stages_a_deletion(self, repo):
         (repo / "a.txt").unlink()
         draft = logic.prepare_commit("drop a", ["a.txt"])

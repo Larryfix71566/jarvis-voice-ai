@@ -136,6 +136,22 @@ class MessageIn(BaseModel):
     message: str
 
 
+class CommitDraftIn(BaseModel):
+    """POST /api/git/prepare-commit.
+
+    `paths` is the SE1 file list (MORTIMER_SELFEDIT_AUTHORING_PLAN.md).
+    It is OPTIONAL here and required in mcp_git.logic: the console clients
+    that call this route — MortimerHost's AdminAPI.swift and web's
+    GitPanel.tsx — post {message} alone, and C1 keeps their contract
+    intact (a required field would 422 the running app until a rebuild).
+    Omitted means "everything git reports as changed", enumerated HERE and
+    passed explicitly, so logic.prepare_commit never stages a set nobody
+    named and the draft summary the human confirms lists every file. The
+    AGENT path is the MCP tool, which has no default."""
+    message: str
+    paths: list[str] | None = None
+
+
 class ActionIn(BaseModel):
     action_id: int
 
@@ -820,8 +836,15 @@ def actions(status: str = "all", limit: int = 10) -> dict:
 
 
 @app.post("/api/git/prepare-commit")
-def prepare_commit(body: MessageIn) -> dict:
-    return logic.prepare_commit(body.message)
+def prepare_commit(body: CommitDraftIn) -> dict:
+    paths = body.paths
+    if paths is None:
+        listed = logic.changed_files()
+        if not listed["ok"]:
+            return {"ok": False, "error": listed["error"]}
+        paths = listed["files"]
+        logger.info("git_prepare_commit_console_all_changed files=%d", len(paths))
+    return logic.prepare_commit(body.message, paths)
 
 
 @app.post("/api/git/commit")
