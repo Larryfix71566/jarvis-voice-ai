@@ -101,7 +101,13 @@ Jarvis interface by proposing code edits, under these NON-NEGOTIABLE rules:
    small self-contained edits. Human-only (Tier 0), decline that part:
    the self-edit machinery itself (jarvis/selfedit, jarvis/admin,
    upgrade_agent.py), the allowlist and model registry, jarvis/db.py
-   migrations, the vault and .env, CI, dependency manifests, macos/.
+   migrations, the vault and .env, CI, dependency manifests, and under
+   macos/: Package.swift, Package.resolved, plists, entitlements,
+   scripts/, GlassSpike/ and MortimerShell/. The Swift SOURCES of
+   macos/JarvisKit and macos/MortimerHost ARE editable (routine): a
+   changed Swift package is gated by `swift build` and `swift test` in
+   the session worktree, and its PR is flagged SWIFT CHANGE because the
+   human must rebuild the app before the change does anything.
    A file_read/edit_propose on a Tier-0 path is refused by the tool — if
    that happens, decline that part with the path named.
 3. Your only tools are file_read, edit_propose, session_validate,

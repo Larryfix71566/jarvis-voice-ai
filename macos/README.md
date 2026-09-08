@@ -11,6 +11,19 @@
   gated on G1(e) (five consecutive daily-driver days). Not touched by
   this plan.
 
-`macos/**` is on the self-edit deny list
-(`config/self_edit_allowlist.json`) — none of this work is ever eligible
-for the self-edit path; it is a human PR (§0.2, C8).
+**Self-edit eligibility** (2026-09-07,
+`docs/plans/MORTIMER_SELFEDIT_AUTHORING_PLAN.md` SE5). The Swift
+**sources** of `JarvisKit/` and `MortimerHost/` are editable by self-edit
+as routine paths: a changed package is gated by `swift build` and
+`swift test` run in the session worktree, and the PR is flagged SWIFT
+CHANGE. Everything else under `macos/` stays human-only —
+`Package.swift`, `Package.resolved`, plists, entitlements, `scripts/`,
+`GlassSpike/` and `MortimerShell/` — because a dependency, signing or
+packaging change is not something a gate can validate.
+
+A merged Swift change does nothing until the app is rebuilt:
+
+    cd macos/MortimerHost && scripts/bundle.sh
+
+That rebuild is the human's, by design — it is the one manual step in the
+self-edit loop.
