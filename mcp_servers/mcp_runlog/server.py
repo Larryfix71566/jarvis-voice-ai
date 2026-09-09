@@ -50,5 +50,11 @@ def council_list(limit: int = 10) -> dict:
     return logic.council_list(limit)
 
 
+@mcp.tool()
+def graph_view(graph: str, focus: str = "", depth: int = 2, since: str = "7d") -> dict:
+    """Draw one of Mortimer's own relationship graphs from its run log and council records: `execution` (runs, tools, models, sessions — needs a focus), `deliberation` (council rounds, proposals, judges), or `capability` (procedures, skills, workflows and the runs that taught them). Read-only; opens the picture on the user's display. Use when investigating which model or tool a run used, how a council round went, or where a rule came from."""
+    return logic.graph_view(graph, focus, depth, since)
+
+
 if __name__ == "__main__":
     mcp.run()

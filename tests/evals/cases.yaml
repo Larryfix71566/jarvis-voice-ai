@@ -3,7 +3,7 @@
 # 12 voice UI control (MORTIMER_VOICE_UI_PLAN.md U8, extended by
 # MORTIMER_DRAWER_POPOUT_PLAN.md DP6), 2 screen vision, 10 terse-imperative/
 # status-ask (MORTIMER_VOICE_MODEL_BENCH_PLAN.md §4, 2026-08-20),
-# 3 troubleshooting->developer (2026-08-20) = 68 total.
+# 3 troubleshooting->developer (2026-08-20), 2 graph views (MORTIMER_GRAPH_LAYER_PLAN.md, 2026-09-04) = 70 total.
 # expect: scheduler | librarian | analyst | systems | developer | none | [agent, agent]
 
 # --- scheduler (5) ---
@@ -14,11 +14,21 @@
 - {input: "wake me up at 6:30 tomorrow morning", expect: scheduler}
 
 # --- librarian (5) ---
-- {input: "remember that my passport expires in March", expect: librarian}
+# 2026-09-05 — `or_tool` accepts the direct `remember` tool as well as a
+# librarian delegation. Both land in the same place: remember calls
+# upsert_fact (jarvis/memory.py:652) and mcp_memory reads the same module
+# via search_facts, so a fact stored either way is retrievable either way
+# — which is why case 8 ("when does my passport expire") passes while
+# these two failed. The cases asserted a distinction the storage layer
+# does not make, and the prompt draws the line the OTHER way ("call
+# remember immediately" on a durable statement), so as written the eval
+# penalised the model for obeying an instruction. Doing nothing at all
+# still fails: or_tool requires that tool to have actually been called.
+- {input: "remember that my passport expires in March", expect: librarian, or_tool: remember}
 - {input: "save a note that the project wifi password is blueplanet42", expect: librarian}
 - {input: "when does my passport expire", expect: librarian}
 - {input: "what did I save about the wifi", expect: librarian}
-- {input: "store this: my dentist is Dr. Patel on Main Street", expect: librarian}
+- {input: "store this: my dentist is Dr. Patel on Main Street", expect: librarian, or_tool: remember}
 
 # --- analyst (5) ---
 - {input: "what's the weather in Berlin", expect: analyst}
@@ -38,8 +48,8 @@
 - {input: "what branch is the repo on", expect: developer}
 - {input: "commit these changes", expect: developer}
 - {input: "push my commits to origin", expect: developer}
-- {input: "build me an expense tracker app", expect: developer}
-- {input: "what apps have you built so far", expect: developer}
+- {input: "build me an expense tracker app", expect: app_builder}
+- {input: "what apps have you built so far", expect: app_builder}
 - {input: "change your interface to use a darker theme", expect: developer}
 - {input: "add a clock panel to your own UI, and use Claude Opus for it", expect: developer}
 - {input: "how is the interface edit coming along", expect: developer}
@@ -128,3 +138,23 @@
 - {input: "why did that search fail", expect: developer}
 - {input: "what did the analyst actually search for", expect: developer}
 - {input: "you said there were no games today, look into why you missed them", expect: developer}
+
+# --- graph views -> owning specialist (2) (MORTIMER_GRAPH_LAYER_PLAN.md GL12/GL16) ---
+- {input: "show me how my memories about temperature connect", expect: librarian}
+- {input: "draw the council graph for the last self-edit", expect: developer}
+
+# 2026-09-06 — app_builder split out of developer. Before this the whole
+# app-building dimension was TWO cases (#24, #25), which cannot measure
+# whether a split helps or hurts. Appended rather than inserted so #1-#70
+# keep their numbers: the misses are referenced by number in
+# MORTIMER_EVAL_CONFIG_PARITY_PLAN.md and in three runs of notes.
+#
+# The last four are the discriminating pairs — each has a near-twin above
+# that belongs to the OTHER specialist. If the split introduces confusion,
+# it shows up here first.
+- {input: "create a new app called grocery list", expect: app_builder}
+- {input: "add a settings screen to my expense tracker", expect: app_builder}
+- {input: "how is the expense tracker build going", expect: app_builder}
+- {input: "submit the expense tracker build for review", expect: app_builder}
+- {input: "update my expense tracker", expect: app_builder}
+- {input: "update your own interface", expect: developer}

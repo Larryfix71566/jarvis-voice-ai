@@ -162,7 +162,18 @@ async def _default_fetch_selfedit_job(admin_url: str) -> dict[str, Any] | None:
     if not isinstance(data, dict) or not data.get("ok"):
         return None
     job = data.get("job") or {}
-    return job if job.get("state") == "running" else None
+    if job.get("state") == "running":
+        return job
+    # SE4 — on the authored path no planner job ever starts: the developer
+    # writes the files itself and the only long-running thing is the finish
+    # job's gates. That is precisely when a progress line is worth most —
+    # the Swift build and the test suite together run for minutes with
+    # nothing else to say — so a validating/submitting finish counts as
+    # in-flight here exactly as a planner run does.
+    finish = data.get("finish") or {}
+    if finish.get("state") in ("validating", "submitting"):
+        return {"finish_state": finish.get("state")}
+    return None
 
 
 def _fmt_delegation_line(d: dict[str, Any]) -> str:
@@ -175,6 +186,11 @@ def _fmt_delegation_line(d: dict[str, Any]) -> str:
 
 
 def _fmt_selfedit_line(job: dict[str, Any]) -> str:
+    finish_state = job.get("finish_state")
+    if finish_state == "validating":
+        return "Self-edit validating — the checks take a few minutes."
+    if finish_state == "submitting":
+        return "Self-edit validated — opening the pull request."
     profile = job.get("profile") or "the planner"
     return f"Self-edit still running with {profile}."
 

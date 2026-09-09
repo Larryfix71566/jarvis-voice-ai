@@ -26,7 +26,7 @@ snapshot that fails CI on any drift, SEC §7.6).
 
 ## Reconciled final `config/self_edit_allowlist.json`
 
-This is the end state after all four rows below have been applied. Deny wins over
+This is the end state after all five rows below have been applied. Deny wins over
 allow (`jarvis/selfedit/allowlist.py` — any deny match rejects; otherwise the
 path must match some allow pattern), which is why a denied `tests/unit/…` file
 stays denied even though `tests/**` is allowed.
@@ -36,7 +36,9 @@ stays denied even though `tests/**` is allowed.
   "allow": [
     "web/src/**", "web/public/**", "config/**", "jarvis/prompts.py",
     "jarvis/skills/**", "jarvis/services/**", "mcp_servers/**",
-    "skills/**", "tests/**", "docs/**", "*.md"
+    "skills/**", "tests/**", "docs/**", "*.md",
+    "macos/JarvisKit/Sources/**", "macos/JarvisKit/Tests/**",
+    "macos/MortimerHost/Sources/**", "macos/MortimerHost/Tests/**"
   ],
   "deny": [
     ".github/**", "jarvis/selfedit/**", "jarvis/agents/**",
@@ -45,7 +47,10 @@ stays denied even though `tests/**` is allowed.
     "config/upgrade_models.yaml", "config/skills.yaml",
     "requirements*.txt", "web/package.json", "web/package-lock.json",
     "DEVIATIONS.md", ".env", ".env.*", "**/.env", "**/.env.*",
-    "jarvis/vault.py", "data/**", "*.vault", "**/*.vault", "macos/**",
+    "jarvis/vault.py", "data/**", "*.vault", "**/*.vault",
+    "macos/**/Package.swift", "macos/**/Package.resolved",
+    "macos/**/*.plist", "macos/**/*.entitlements",
+    "macos/**/scripts/**", "macos/GlassSpike/**", "macos/MortimerShell/**",
 
     "jarvis/skills/registry.py",
     "tests/unit/test_agent_isolation.py",
@@ -68,6 +73,7 @@ independent of that move, so either order works, but this is the canonical one).
 | **W0-SEC** | W0 | `MORTIMER_SECURITY_HARDENING_PLAN.md` | Add to `deny`: `"jarvis/skills/registry.py"`, `"tests/unit/test_agent_isolation.py"`, `"tests/unit/test_requires_env_snapshot.py"`. **Do NOT** add `config/agents.yaml` or `mcp_servers/*/skill.yaml` (they stay editable — resolution §A). | `pytest tests/unit/test_agent_isolation.py -q -s` → the exposure line reads `none — V7 commit is in`; and `pytest tests/unit/test_requires_env_snapshot.py -q` passes. |
 | **W1-REMOTE** | W1 | `MORTIMER_REMOTE_ACCESS_PLAN.md` | Add to `deny`: `"jarvis/auth.py"`, `"jarvis/authmw.py"`, `"jarvis/bind.py"`. | `python -c "import json,sys; d=json.load(open('config/self_edit_allowlist.json'))['deny']; sys.exit(0 if all(x in d for x in ['jarvis/auth.py','jarvis/authmw.py','jarvis/bind.py']) else 1)"` — exit 0; plus REMOTE's `tests/unit/test_service_token.py` passes. |
 | **W2-LOCAL** | W2 | `MORTIMER_LOCAL_VOICE_AND_MINI_PLAN.md` | Add to `deny`: `"docs/runbooks/**"`. | `python -c "import json,sys; sys.exit(0 if 'docs/runbooks/**' in json.load(open('config/self_edit_allowlist.json'))['deny'] else 1)"` — exit 0. |
+| **W0-SWIFT** | W0 | `MORTIMER_SELFEDIT_AUTHORING_PLAN.md` (SE5) | Remove `"macos/**"` from `deny`. Add to `allow`: `"macos/JarvisKit/Sources/**"`, `"macos/JarvisKit/Tests/**"`, `"macos/MortimerHost/Sources/**"`, `"macos/MortimerHost/Tests/**"`. Add to `deny`: `"macos/**/Package.swift"`, `"macos/**/Package.resolved"`, `"macos/**/*.plist"`, `"macos/**/*.entitlements"`, `"macos/**/scripts/**"`, `"macos/GlassSpike/**"`, `"macos/MortimerShell/**"`. Applied 2026-09-07, out of wave order: it depends on the Swift gate landing first, not on the other W0 rows. | `python3 -c "import sys; sys.path.insert(0,'.'); from jarvis.selfedit.allowlist import Allowlist; a=Allowlist.load('config/self_edit_allowlist.json'); want={'macos/MortimerHost/Sources/MortimerHost/App/AppTuning.swift':'routine','macos/JarvisKit/Tests/JarvisKitTests/AdminAPITests.swift':'routine','macos/MortimerHost/Package.swift':'denied','macos/MortimerHost/scripts/bundle.sh':'denied','macos/GlassSpike/Sources/main.swift':'denied','macos/MortimerShell/Sources/ShellWebView.swift':'denied'}; bad=[(p,a.tier(p),t) for p,t in want.items() if a.tier(p)!=t]; print(bad or 'ok'); sys.exit(1 if bad else 0)"` — prints `ok`. Then `uv run pytest tests/unit -q` stays green. |
 
 General verification available at every row (if present in the repo):
 `python3 scripts/check_allowlist.py origin/main...HEAD` — self-edit branches must
@@ -85,6 +91,17 @@ stay inside the allow-list (CLAUDE.md CI gate).
   map fails `tests/unit/test_requires_env_snapshot.py` (a denied file), so the
   grant cannot merge until Larry updates the frozen snapshot by hand in the same
   commit. That is the review gate, not an outright deny wall.
+- **`macos/**` deny → per-path (W0-SWIFT)** was gated on a gate existing.
+  The tiers plan denied all of `macos/` with the reason "no Swift gate
+  exists, so a self-edit here would be unvalidated"; SE5 built that gate
+  (`swift build` + `swift test` per changed package, in the session
+  worktree), so the reason expired for the SOURCES. It did not expire for
+  manifests, `Package.resolved`, plists, entitlements, `scripts/` or the
+  two throwaway targets: a dependency, signing or packaging change is not
+  something `swift build` passing can vouch for. `Tests/**` is allowed
+  alongside `Sources/**` deliberately — an agent that can change Swift but
+  not its tests cannot add coverage, and can only repair a failing
+  `swift test` by bending the source until the old assertion passes.
 - Nothing here is applied by an implementing model — each row is Larry's commit
   (C8). An implementing model that finds itself opening
   `config/self_edit_allowlist.json` should stop (SEC §0.2).

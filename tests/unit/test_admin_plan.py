@@ -3,6 +3,17 @@
 (no network); the module-level _selfedit_service singleton is never
 touched by these tests. Same TestClient + polling pattern as
 tests/unit/test_admin_council.py.
+
+# implementer: MORTIMER_GRAPH_LAYER_PLAN.md GL9 (step 11c) added a run_id
+# kwarg to _run_plan_council's call to council_mod.draft_candidates. This
+# file's _fake_draft_candidates stand-ins predate that plan and were not
+# named in its §4 file manifest, but without run_id=None accepted here
+# every council-mode /api/plan/start call in this file raises TypeError
+# (unexpected keyword argument) — the same failure mode the plan already
+# anticipated and fixed for _make_agent's lambdas in test_admin_selfedit.py/
+# test_admin_appbuild.py. Extending the same accept-and-ignore fix here
+# keeps the fix's own contract (a test double for a function whose real
+# signature gained an optional kwarg) rather than leaving the suite red.
 """
 
 from __future__ import annotations
@@ -130,7 +141,8 @@ def _fake_round(n=2, with_scores=True):
 
 
 def test_council_mode_happy_path_reaches_awaiting_choice(monkeypatch):
-    async def _fake_draft_candidates(goal, *, members=None, judge=True, context=None):
+    async def _fake_draft_candidates(goal, *, members=None, judge=True, context=None,
+                                      run_id=None):
         return _fake_round()
 
     monkeypatch.setattr(srv.council_mod, "draft_candidates", _fake_draft_candidates)
@@ -149,7 +161,8 @@ def test_council_mode_happy_path_reaches_awaiting_choice(monkeypatch):
 
 
 def test_council_mode_none_result_settles_job_as_error(monkeypatch):
-    async def _fake_draft_candidates(goal, *, members=None, judge=True, context=None):
+    async def _fake_draft_candidates(goal, *, members=None, judge=True, context=None,
+                                      run_id=None):
         return None
 
     monkeypatch.setattr(srv.council_mod, "draft_candidates", _fake_draft_candidates)
@@ -163,7 +176,8 @@ def test_council_mode_none_result_settles_job_as_error(monkeypatch):
 def test_council_mode_members_narrowing_passed_through(monkeypatch):
     seen = {}
 
-    async def _fake_draft_candidates(goal, *, members=None, judge=True, context=None):
+    async def _fake_draft_candidates(goal, *, members=None, judge=True, context=None,
+                                      run_id=None):
         seen["members"] = members
         return _fake_round()
 
@@ -192,7 +206,8 @@ def test_start_rejects_bad_mode():
 
 
 def test_second_start_while_running_is_refused(monkeypatch):
-    async def _fake_draft_candidates(goal, *, members=None, judge=True, context=None):
+    async def _fake_draft_candidates(goal, *, members=None, judge=True, context=None,
+                                      run_id=None):
         time.sleep(0.1)
         return _fake_round()
 

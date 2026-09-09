@@ -3,9 +3,13 @@
 import pytest
 
 from jarvis.prompts import (
+    HANDOFF_ADDENDUM,
+    SCREEN_VISION_ADDENDUM,
     SUBAGENT_PROMPTS,
     SUPERVISOR_PROMPT,
+    UI_CONTROL_ADDENDUM,
     VOICE_ADDENDUM,
+    build_supervisor_prompt,
     render_agent_catalog,
     render_voice_catalog,
 )
@@ -18,6 +22,7 @@ def test_supervisor_prompt_formats_all_placeholders():
         timezone="America/New_York",
         units="imperial",
         agent_catalog="- scheduler (Scheduler): time stuff",
+        model_catalog="- claude-opus (say \"Opus\"): anthropic, tier frontier",
         voice_catalog="- rachel: Rachel (calm)",
         memory_context="- user.name: Larry",
     )
@@ -39,11 +44,13 @@ def test_supervisor_prompt_carries_units():
     with pytest.raises(KeyError):
         SUPERVISOR_PROMPT.format(
             jarvis_name="Jarvis", user_name="Boss", timezone="America/New_York",
-            agent_catalog="", voice_catalog="", memory_context="",
+            agent_catalog="", model_catalog="", voice_catalog="",
+            memory_context="",
         )  # units= omitted on purpose
     rendered = SUPERVISOR_PROMPT.format(
         jarvis_name="Jarvis", user_name="Boss", timezone="America/New_York",
-        units="metric", agent_catalog="", voice_catalog="", memory_context="",
+        units="metric", agent_catalog="", model_catalog="",
+        voice_catalog="", memory_context="",
     )
     assert "metric" in rendered
     assert "never re-convert" in rendered.lower()
@@ -73,7 +80,8 @@ def test_voice_addendum_is_plain_prose_rule():
 
 
 def test_subagent_prompts_roster_and_contracts():
-    assert set(SUBAGENT_PROMPTS) == {"scheduler", "librarian", "analyst", "systems", "developer"}
+    assert set(SUBAGENT_PROMPTS) == {"scheduler", "librarian", "analyst",
+                                     "systems", "developer", "app_builder"}
     for name, prompt in SUBAGENT_PROMPTS.items():
         assert "FAILED:" in prompt, name
     assert "{timezone}" not in SUBAGENT_PROMPTS["scheduler"].format(
@@ -193,7 +201,8 @@ class TestAgentDiscipline:
     def test_every_subagent_gets_it_exactly_once(self):
         from jarvis.prompts import AGENT_DISCIPLINE, SUBAGENT_PROMPTS
 
-        assert len(SUBAGENT_PROMPTS) == 5
+        # 2026-09-06: six since app_builder split out of developer.
+        assert len(SUBAGENT_PROMPTS) == 6
         for name, prompt in SUBAGENT_PROMPTS.items():
             assert prompt.count(AGENT_DISCIPLINE) == 1, name
 
@@ -217,7 +226,12 @@ class TestAgentDiscipline:
         being appended to rather than consolidated."""
         from jarvis.prompts import SUBAGENT_PROMPTS
 
-        for name in ("scheduler", "librarian", "analyst", "systems"):
+        # 2026-09-06: derived, not hardcoded. app_builder was added to the
+        # roster and slipped straight past this ceiling because it was not
+        # in the tuple — a per-agent budget that a new agent can sidestep
+        # by existing is not a budget. developer is the one exemption and
+        # it is named, so adding another is a deliberate edit here.
+        for name in sorted(set(SUBAGENT_PROMPTS) - {"developer"}):
             assert len(SUBAGENT_PROMPTS[name]) < 1200, name
 
     # --- every clause earns its place; each maps to an observed failure --
@@ -344,7 +358,9 @@ class TestDeveloperSections:
         with them. If core needs to grow again, trim it first."""
         from jarvis.prompts import select_developer_sections as sel
         assert sel("read config/agents.yaml and tell me the timeout") == []
-        assert len(self._own("show me the git log")) < 1100
+        # 2026-09-04 — MORTIMER_GRAPH_LAYER_PLAN.md step 9: the graph_view
+        # sentence in DEVELOPER_CORE (1,098 -> ~1,220). Next growth trims first.
+        assert len(self._own("show me the git log")) < 1250
 
     def test_a_read_that_could_write_keeps_the_protocol(self):
         """THE hazard of the core-only path. "read the file and fix the bug"
@@ -438,8 +454,244 @@ def test_the_new_rules_survive_formatting():
     rendered = SUPERVISOR_PROMPT.format(
         jarvis_name="Jarvis", user_name="Boss", timezone="America/New_York",
         units="imperial", agent_catalog="- analyst (Analyst): research",
+        model_catalog='- claude-opus (say "Opus"): anthropic, tier frontier',
         voice_catalog="- rachel: Rachel", memory_context="- user.name: Larry",
     )
     assert "Never name a specialist to the user" in rendered
     assert "delegate again for that detail before saying it was missing" in rendered
     assert "{" not in rendered
+
+
+# --- build_supervisor_prompt (2026-09-05, EVAL_CONFIG_PARITY item A) ----
+#
+# The assembly used to exist twice: jarvis/bot/pipeline.py concatenated
+# four addenda onto SUPERVISOR_PROMPT, and jarvis/agents/supervisor.py
+# formatted it bare. They had drifted, and the routing eval — which drives
+# Orchestrator — was scoring a prompt with none of the addenda production
+# ships. These tests exist to prove the extraction changed NOTHING, which
+# is the only reason it is safe to land before the behavioural work.
+
+_FMT = dict(
+    jarvis_name="Mortimer",
+    user_name="Larry",
+    timezone="America/New_York",
+    units="imperial",
+    agent_catalog="- scheduler (Scheduler): time stuff",
+    model_catalog='- claude-opus (say "Opus"): anthropic, tier frontier',
+    voice_catalog="- rachel: Rachel",
+    memory_context="(none yet)",
+)
+
+
+def test_a_bare_call_is_the_prompt_supervisor_py_has_always_built():
+    # Pins jarvis/agents/supervisor.py:92 as a no-op.
+    assert build_supervisor_prompt(**_FMT) == SUPERVISOR_PROMPT.format(**_FMT)
+
+
+def test_the_default_production_call_matches_the_expression_it_replaced():
+    # Pins jarvis/bot/pipeline.py as a no-op. The right-hand side is the
+    # old expression transcribed literally, addendum order and single "\n"
+    # separator included; if either drifts this fails.
+    expected = (
+        SUPERVISOR_PROMPT.format(**_FMT)
+        + "\n"
+        + VOICE_ADDENDUM
+        + ("\n" + UI_CONTROL_ADDENDUM)
+        + ("\n" + SCREEN_VISION_ADDENDUM)
+        + ("\n" + HANDOFF_ADDENDUM)
+    )
+    assert build_supervisor_prompt(
+        **_FMT, voice=True, ui_control=True, screen=True, clipboard=True
+    ) == expected
+
+
+@pytest.mark.parametrize(
+    "flag,addendum",
+    [
+        ("voice", VOICE_ADDENDUM),
+        ("ui_control", UI_CONTROL_ADDENDUM),
+        ("screen", SCREEN_VISION_ADDENDUM),
+        ("clipboard", HANDOFF_ADDENDUM),
+    ],
+)
+def test_each_flag_appends_exactly_its_own_addendum(flag, addendum):
+    base = build_supervisor_prompt(**_FMT)
+    got = build_supervisor_prompt(**_FMT, **{flag: True})
+    assert got == base + "\n" + addendum
+
+
+def test_a_disabled_addendum_leaves_no_trace_in_the_prompt():
+    # U5/U6: a prompt describing an unregistered tool invites hallucinated
+    # calls, so "off" must mean absent, not merely unmentioned elsewhere.
+    off = build_supervisor_prompt(**_FMT, voice=True)
+    assert UI_CONTROL_ADDENDUM not in off
+    assert SCREEN_VISION_ADDENDUM not in off
+    assert HANDOFF_ADDENDUM not in off
+
+
+def test_addenda_keep_the_order_pipeline_py_used():
+    full = build_supervisor_prompt(
+        **_FMT, voice=True, ui_control=True, screen=True, clipboard=True
+    )
+    positions = [
+        full.index(VOICE_ADDENDUM),
+        full.index(UI_CONTROL_ADDENDUM),
+        full.index(SCREEN_VISION_ADDENDUM),
+        full.index(HANDOFF_ADDENDUM),
+    ]
+    assert positions == sorted(positions)
+
+
+# --- 2026-09-05: two clauses added from observed eval failures ---------
+#
+# Both come from misses that reproduced across two live parity runs, not
+# from reading the prompt. They are pinned because a later edit that
+# quietly drops either one would restore a behaviour we have watched fail.
+
+
+def test_a_specialists_records_are_not_self_knowledge():
+    from jarvis.prompts import GOLDEN_RULES
+    # Case 25, twice: "the registry is empty at the moment" with no tool
+    # call at all. Golden Rule 1 covered unobserved FACTS but the model did
+    # not read a specialist's data as one.
+    assert "A specialist's records are not things you know" in GOLDEN_RULES
+    assert "reporting any of it without asking" in GOLDEN_RULES
+    # The boundary against the memory block, which says the opposite about
+    # memories ("things you already know").
+    assert "a specialist's data never is" in GOLDEN_RULES
+
+
+def test_the_golden_rules_still_permit_not_knowing():
+    from jarvis.prompts import GOLDEN_RULES
+    # The clause above adds an obligation to ask; it must not crowd out the
+    # answer that made Golden Rule 1 work.
+    assert "I don't know why" in GOLDEN_RULES
+
+
+def test_a_specialist_that_can_resolve_the_gap_gets_the_delegation():
+    # Cases 56 and 66, twice: a clarifying question instead of delegating,
+    # which is Rule 4 doing what it says. Rule 9 and HANDOFF_ADDENDUM exist
+    # so the SPECIALIST asks and the orchestrator relays; Rule 4 was
+    # pre-empting that path at the door.
+    assert "But ask ONLY when the missing detail exists nowhere except" in \
+        SUPERVISOR_PROMPT
+    assert "the run log that records every delegation" in SUPERVISOR_PROMPT
+    assert "withholding the delegation is what breaks that path" in \
+        SUPERVISOR_PROMPT
+
+
+def test_rule_4_still_asks_when_only_the_user_has_the_answer():
+    # Cases 36 and 37 ("remind me about the thing", "save a note") expect NO
+    # delegation and pass. The new clause must not turn them into
+    # delegations to a specialist that cannot act.
+    assert 'A vague request like "remind me about the thing" is missing its ' \
+        'content — ask, do not delegate.' in SUPERVISOR_PROMPT
+
+
+def test_only_prompts_py_formats_the_template_directly():
+    """The assembler is the single entry point, by construction.
+
+    2026-09-05: adding {model_catalog} broke scripts/context_growth_probe.py
+    and revealed scripts/voice_model_bench.py had been calling .format()
+    without `units` — a KeyError on every run, in a script nothing
+    exercised. Four independent argument lists for one template is how a
+    placeholder becomes a latent break. Anything that needs the prompt goes
+    through build_supervisor_prompt; only prompts.py itself and this test
+    module touch the raw template.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    offenders = []
+    for folder in ("jarvis", "scripts"):
+        for path in (root / folder).rglob("*.py"):
+            if path.name == "prompts.py" and path.parent.name == "jarvis":
+                continue
+            if "SUPERVISOR_PROMPT.format" in path.read_text(encoding="utf-8"):
+                offenders.append(str(path.relative_to(root)))
+    assert offenders == [], (
+        "these format the template directly instead of calling "
+        f"build_supervisor_prompt: {offenders}"
+    )
+
+
+# --- the three remaining self-contradictions, resolved 2026-09-06 --------
+#
+# Found by reading the prompt, not by a run — but contradiction 1 then
+# fired live TWICE in the parity runs: cases 25 and 30 both named the
+# developer specialist to the user, which rule 4 and Golden Rule 4 forbid
+# and rule 10's own worked example licensed.
+
+
+def test_rule_10s_example_no_longer_names_a_specialist():
+    # Rule 4 and Golden Rule 4 are absolute ("Never name a specialist to
+    # the user"). Rule 10's example used to be a verbatim violation of
+    # them, which left the model to pick one at random — and it picked
+    # wrong in both runs.
+    assert "the librarian doesn't have a tool for that yet" not in \
+        SUPERVISOR_PROMPT
+    assert "offer to have the developer add it" not in SUPERVISOR_PROMPT
+    assert "that isn't something I have a tool for yet" in SUPERVISOR_PROMPT
+
+
+def test_the_missing_tool_case_is_still_reported_plainly():
+    # Removing the specialist's name must not remove the disclosure. A
+    # named gap gets fixed; a worked-around gap stays broken forever.
+    assert "MISSING TOOL" in SUPERVISOR_PROMPT
+    assert "offer to have it added through self-development" in SUPERVISOR_PROMPT
+
+
+def test_rule_13_cites_golden_rule_1_not_the_numbered_rule_1():
+    # There are two "Rule 1"s: the numbered one is the acknowledgment
+    # sentence, and "say exactly that" is in the GOLDEN rules. Rule 3 gets
+    # this right; rule 13 did not.
+    assert 'Golden Rule 1\'s "say exactly that"' in SUPERVISOR_PROMPT
+    assert 'Rule 1\'s "say exactly that"' not in \
+        SUPERVISOR_PROMPT.replace('Golden Rule 1\'s "say exactly that"', "")
+
+
+def test_rule_11_is_scoped_so_it_does_not_forbid_what_rule_13_requires():
+    # Rule 11 means a FAILED delegation; rule 13 means a successful one
+    # missing a detail. Neither said so, which left them contradicting.
+    assert "a reworded version of a task that FAILED" in SUPERVISOR_PROMPT
+    assert "rule 13 is the other case" in SUPERVISOR_PROMPT
+    # Rule 13's own instruction has to survive the scoping.
+    assert "delegate again for that detail before saying it was missing" in \
+        SUPERVISOR_PROMPT
+
+
+def test_the_staging_id_example_matches_what_the_server_generates():
+    """Observed live 2026-09-07, and it is why §8.6 never closed.
+
+    admin/server.py:820 generates `uuid.uuid4().hex[:12]` — a bare
+    twelve-character hex string. Rule 9's worked example used to read
+    "Confirmation: start self-edit staging stg-abc", and the model
+    pattern-matched that `stg-` prefix onto a real id: a preview naming
+    0d049db0947d became a confirmation naming stg-0d049db0947d, which the
+    server answered with "no staged edit with id 'stg-0d049db0947d' — it
+    may have expired". It then re-staged and looped, every cycle producing
+    a fresh bare id the confirmation corrupted again.
+
+    Same shape as the or-sonnet-5 defect: a worked example that does not
+    match what the system produces, turning into an unresolvable
+    identifier and a refusal.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    server = (root / "jarvis" / "admin" / "server.py").read_text(encoding="utf-8")
+    assert "uuid.uuid4().hex[:12]" in server, (
+        "staging_id generation moved — rule 9's example describes its shape "
+        "and must be rechecked against it"
+    )
+
+    # No prefix may appear anywhere in the prompt.
+    assert "stg-" not in SUPERVISOR_PROMPT
+    assert "bare twelve-character hex string with NO prefix" in SUPERVISOR_PROMPT
+
+    # The example id itself must be a plausible product of that generator,
+    # or it teaches the wrong shape all over again.
+    m = re.search(r"a preview naming ([0-9a-f]+) becomes", SUPERVISOR_PROMPT)
+    assert m, "rule 9's staging_id example is missing or reworded"
+    assert len(m.group(1)) == 12, m.group(1)

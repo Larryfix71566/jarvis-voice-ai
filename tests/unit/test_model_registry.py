@@ -177,3 +177,72 @@ class TestTierTwoConvenes:
         seen = {tuple(cc.resolve_members(2, "judges", seed=f"round-{i}"))
                 for i in range(40)}
         assert len(seen) > 1
+
+
+def test_app_building_belongs_to_app_builder_not_developer():
+    """Case 56 ("commit that") missed 3/3 by asking WHICH repository.
+
+    Fair, while one description covered both the Jarvis working tree and
+    per-app GitHub repos. 2026-09-06 split them into separate specialists
+    rather than only rewording: developer owns the Jarvis repository and
+    self-development, app_builder owns new applications.
+
+    Untested against a live run — the next parity run says whether case 56
+    moves, and cases 71-76 say whether the split introduced new confusion.
+    """
+    import yaml
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    agents = yaml.safe_load(
+        (root / "config" / "agents.yaml").read_text(encoding="utf-8"))
+    by_name = {a["name"]: a for a in agents["sub_agents"]}
+
+    developer, builder = by_name["developer"], by_name["app_builder"]
+    assert "mcp-apps" in builder["mcp_servers"]
+    assert "mcp-apps" not in developer["mcp_servers"]
+    assert "mcp-git" in developer["mcp_servers"]
+    assert "mcp-git" not in builder["mcp_servers"]
+
+    assert "app_builder specialist" in developer["description"]
+    assert "commit and push never need a repository named" in \
+        developer["description"]
+    assert "no commit or push tool at all" in builder["description"]
+    assert "Mortimer app registry" in builder["description"]
+
+
+def test_only_the_git_server_can_commit():
+    """The claim both descriptions make has to stay true of the tools.
+
+    If mcp-apps ever gains a commit tool, or mcp-git gains a second working
+    directory, the descriptions become false and this fails.
+    """
+    import yaml
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    apps = yaml.safe_load(
+        (root / "mcp_servers" / "mcp_apps" / "skill.yaml").read_text(
+            encoding="utf-8"))
+    assert not [t for t in apps["tools"] if "commit" in t or "push" in t]
+
+    git_src = (root / "mcp_servers" / "mcp_git" / "logic.py").read_text(
+        encoding="utf-8")
+    assert "def commit(" in git_src
+    assert 'os.environ.get("JARVIS_REPO_ROOT"' in git_src
+    assert git_src.count("cwd=") == git_src.count("cwd=_repo_root()")
+
+
+def test_the_new_specialist_has_a_system_prompt():
+    """base.py:264 looks up SUBAGENT_PROMPTS[name] bare, so an agent in the
+    roster with no prompt entry is a KeyError at construction — the bot
+    would not boot. The roster and the prompt ship together."""
+    import yaml
+    from pathlib import Path
+    from jarvis.prompts import SUBAGENT_PROMPTS
+
+    root = Path(__file__).resolve().parents[2]
+    agents = yaml.safe_load(
+        (root / "config" / "agents.yaml").read_text(encoding="utf-8"))
+    for agent in agents["sub_agents"]:
+        assert agent["name"] in SUBAGENT_PROMPTS, agent["name"]

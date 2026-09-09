@@ -46,11 +46,12 @@ export interface AgentLayoutEntry {
  * Do not recompute these at runtime — use the table as given (plan §5.1a).
  */
 export const AGENT_LAYOUT: AgentLayoutEntry[] = [
-  { key: "developer", label: "Developer", x: 50, y: 23, cardAnchor: "above" },
-  { key: "analyst", label: "Analyst", x: 82, y: 42, cardAnchor: "left" },
-  { key: "systems", label: "Systems", x: 70, y: 72, cardAnchor: "left" },
-  { key: "librarian", label: "Librarian", x: 30, y: 72, cardAnchor: "right" },
-  { key: "scheduler", label: "Scheduler", x: 18, y: 42, cardAnchor: "right" },
+  { key: "developer", label: "Developer", x: 50, y: 21, cardAnchor: "above" },
+  { key: "analyst", label: "Analyst", x: 79, y: 36, cardAnchor: "left" },
+  { key: "systems", label: "Systems", x: 79, y: 64, cardAnchor: "left" },
+  { key: "app_builder", label: "App Builder", x: 50, y: 79, cardAnchor: "above" },
+  { key: "librarian", label: "Librarian", x: 21, y: 64, cardAnchor: "right" },
+  { key: "scheduler", label: "Scheduler", x: 21, y: 36, cardAnchor: "right" },
 ];
 
 /** Look up a layout entry by backend agent key (case-sensitive — keys are

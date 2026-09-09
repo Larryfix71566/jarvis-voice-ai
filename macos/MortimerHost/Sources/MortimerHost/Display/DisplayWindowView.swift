@@ -22,19 +22,42 @@ struct DisplayWindowView: View {
         }
         .frame(minWidth: 700, minHeight: 500)
         .foregroundStyle(AppTheme.text)
+        // The panels' viewport while this window is open — what a panel's
+        // "fit to window" (double-click its title) fills.
+        .onGeometryChange(for: CGSize.self) { proxy in
+            proxy.size
+        } action: { size in
+            store.viewportSize = size
+        }
     }
 }
 
 /// One display panel: title bar (close), body via the shared renderer,
-/// drag anywhere on the title, resize by the corner handle. Internal
-/// (not private): ConsoleView renders the SAME stack in-page while the
-/// display window is closed — the web's DisplayPanel/DisplayWindowApp
-/// one-renderer rule (D43), carried over.
+/// drag anywhere on the title, resize by the corner handle, double-click
+/// the title to fill the viewport. Internal (not private): ConsoleView
+/// renders the SAME stack in-page while the display window is closed —
+/// the web's DisplayPanel/DisplayWindowApp one-renderer rule (D43),
+/// carried over.
+///
+/// 2026-09-05 ("graph window sizable without limitation"): both drags
+/// measure in `.global` — the panel's frame changes DURING a resize, so
+/// a `.local` translation is re-derived from the moving frame and fights
+/// the pointer (the same defect as ConsoleView's drawer grip). No maximum
+/// size anywhere; the corner grip grew to a real hit target with hover
+/// feedback; the body reports its size so a graph image can be
+/// re-rendered at the panel's true pixel size (DisplayContentView).
 struct SingleDisplayPanel: View {
     let panel: DisplayWindowPanel
     @Environment(DisplayWindowStore.self) private var store
     @State private var dragTranslation: CGSize = .zero
     @State private var resizeTranslation: CGSize = .zero
+    @State private var gripHovering = false
+
+    private var liveSize: CGSize {
+        DisplayWindowStore.clamped(CGSize(
+            width: panel.size.width + resizeTranslation.width,
+            height: panel.size.height + resizeTranslation.height))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -53,23 +76,32 @@ struct SingleDisplayPanel: View {
             }
             .contentShape(Rectangle())
             .gesture(
-                DragGesture()
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { dragTranslation = $0.translation }
                     .onEnded { value in
                         store.move(id: panel.id, by: value.translation)
                         dragTranslation = .zero
                     }
             )
+            .simultaneousGesture(
+                TapGesture(count: 2).onEnded { store.fit(id: panel.id) }
+            )
+            .help("Drag to move · double-click to fill the window")
 
-            DisplayContentView(payload: panel.payload)
+            // isResizing lets a graph image hold its current bitmap through
+            // the drag and re-request once the size settles.
+            DisplayContentView(payload: panel.payload, isResizing: resizeTranslation != .zero)
 
             HStack {
                 Spacer()
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
                     .font(.caption2)
-                    .foregroundStyle(AppTheme.textDim)
+                    .foregroundStyle(gripHovering || resizeTranslation != .zero ? AppTheme.accent : AppTheme.textDim)
+                    .frame(width: AppTuning.displayPanelGripSize, height: AppTuning.displayPanelGripSize)
+                    .contentShape(Rectangle())
+                    .onHover { gripHovering = $0 }
                     .gesture(
-                        DragGesture()
+                        DragGesture(minimumDistance: 1, coordinateSpace: .global)
                             .onChanged { resizeTranslation = $0.translation }
                             .onEnded { value in
                                 store.resize(id: panel.id, to: CGSize(
@@ -79,18 +111,16 @@ struct SingleDisplayPanel: View {
                                 resizeTranslation = .zero
                             }
                     )
+                    .help("Drag to resize")
             }
         }
         .padding(14)
-        .frame(
-            width: max(280, panel.size.width + resizeTranslation.width),
-            height: max(200, panel.size.height + resizeTranslation.height)
-        )
+        .frame(width: liveSize.width, height: liveSize.height)
         .mortimerGlass(.display)
         .offset(
             x: panel.offset.width + dragTranslation.width,
             y: panel.offset.height + dragTranslation.height
         )
-        .padding(20)
+        .padding(AppTuning.displayPanelInset)
     }
 }

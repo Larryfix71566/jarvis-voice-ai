@@ -840,7 +840,7 @@ def _finalize_too_small(
 
 async def draft_candidates(
     goal: str, *, members: dict[str, list[str]] | None = None, judge: bool = True,
-    context: dict | None = None,
+    context: dict | None = None, run_id: str | None = None,
 ) -> RoundResult | None:
     """Fan out PLAN_AUTHOR_PROMPT to every usable proposer (or the subset
     named in `members["proposers"]`) and, when `judge` is True, score the
@@ -862,16 +862,22 @@ async def draft_candidates(
         return None
     try:
         return await _draft_candidates_inner(
-            goal, members=members, judge=judge, context=context or {},
+            goal, members=members, judge=judge, context=context or {}, run_id=run_id,
         )
     except Exception:  # noqa: BLE001 — D13, never raise into the caller
         logger.warning("council_draft_candidates_failed", exc_info=True)
         return None
 
 
+# implementer: the plan's FIND/REPLACE for step 11(a) changes `run_id=None`
+# to `run_id=run_id` at the three _write_round_row/_finalize_too_small call
+# sites below, which only compiles if `run_id` is in scope here — so
+# `_draft_candidates_inner` gains the parameter and `draft_candidates`
+# passes its own `run_id` through, matching how `context`/`judge`/`members`
+# already flow across this same wrapper/inner split.
 async def _draft_candidates_inner(
     goal: str, *, members: dict[str, list[str]] | None, judge: bool,
-    context: dict,
+    context: dict, run_id: str | None,
 ) -> RoundResult:
     round_id = uuid.uuid4().hex
     started_at = now_iso()
@@ -917,7 +923,7 @@ async def _draft_candidates_inner(
 
     if not proposer_names:
         return _finalize_too_small(
-            round_id=round_id, run_id=None, workflow="planning", placement=placement,
+            round_id=round_id, run_id=run_id, workflow="planning", placement=placement,
             trigger="user", tier=0, goal=goal, proposer_count=0, judge_count=0,
             reason="no usable proposers for planning", started_at=started_at,
         )
@@ -933,7 +939,7 @@ async def _draft_candidates_inner(
 
     if not proposals:
         return _finalize_too_small(
-            round_id=round_id, run_id=None, workflow="planning", placement=placement,
+            round_id=round_id, run_id=run_id, workflow="planning", placement=placement,
             trigger="user", tier=0, goal=goal, proposer_count=len(proposer_names),
             judge_count=0,
             reason=(
@@ -1015,7 +1021,7 @@ async def _draft_candidates_inner(
 
     profile_tiers = {name: prof.get("tier") for name, prof in profiles_by_name.items()}
     _write_round_row(
-        round_id=round_id, run_id=None, workflow="planning", placement=placement,
+        round_id=round_id, run_id=run_id, workflow="planning", placement=placement,
         trigger="user", tier=0, goal=goal,
         proposer_count=len(proposals), judge_count=len(judge_names),
         abstentions=abstentions, winner=None, winner_mean=None,

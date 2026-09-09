@@ -125,3 +125,22 @@ class TestMemorySearch:
         out = logic.memory_search("")
         assert out["ok"] is True
         assert out["results"] == []
+
+
+class TestMemoryGraphView:
+    """MORTIMER_GRAPH_LAYER_PLAN.md GL12 — thin over jarvis.graphs.build; the
+    tool never returns nodes/edges, only the picture URL and a sentence."""
+
+    def test_memory_graph_view_returns_url_and_summary_not_nodes(self, conn):
+        _fact(conn, "user.style.a", "short answers")
+        conn.commit()
+        out = logic.memory_graph_view(focus="user.style.a")
+        assert out["ok"] is True
+        assert "nodes" not in out
+        assert out["image_url"].startswith("http://127.0.0.1:7861/api/graph/memory/image.png?")
+        assert "focus=" in out["image_url"]
+
+    def test_memory_graph_view_error_passthrough(self, conn):
+        out = logic.memory_graph_view(focus="zzz-nothing")
+        assert out["ok"] is False
+        assert "no node matches" in out["error"]

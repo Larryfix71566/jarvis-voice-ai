@@ -89,6 +89,11 @@ final class DrawerState {
 final class ConsoleNoticeState {
     private(set) var speakerGateNotice: String?
     private var clearTask: Task<Void, Never>?
+    /// 2026-09-05 — "audio output moved to AirPods, Mortimer's voice did
+    /// not follow" (JarvisClient.audioOutputChange). NOT auto-fading: it
+    /// carries an action (Reconnect) and stays until the user acts,
+    /// dismisses it, or the session reconnects on its own.
+    private(set) var audioOutputNotice: String?
 
     func showSpeakerGateNotice(_ text: String) {
         speakerGateNotice = text
@@ -97,6 +102,31 @@ final class ConsoleNoticeState {
             try? await Task.sleep(nanoseconds: UInt64(AppTuning.noticeFadeSeconds * 1_000_000_000))
             guard !Task.isCancelled else { return }
             self?.speakerGateNotice = nil
+        }
+    }
+
+    func showAudioOutputNotice(_ text: String) {
+        audioOutputNotice = text
+    }
+
+    func clearAudioOutputNotice() {
+        audioOutputNotice = nil
+    }
+
+    /// 2026-09-05 — "Mic set to MacBook Air … " when connect() repointed the
+    /// input to dodge the AirPods 24 kHz-mic slowdown (JarvisClient.
+    /// audioInputChange). Informational — the fix already happened — so it
+    /// AUTO-FADES like the speaker-gate chip, no action.
+    private(set) var audioInputNotice: String?
+    private var inputClearTask: Task<Void, Never>?
+
+    func showAudioInputNotice(_ text: String) {
+        audioInputNotice = text
+        inputClearTask?.cancel()
+        inputClearTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(AppTuning.noticeFadeSeconds * 2 * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.audioInputNotice = nil
         }
     }
 }

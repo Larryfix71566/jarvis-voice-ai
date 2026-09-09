@@ -47,7 +47,8 @@ DB_PATH = Path(os.environ.get("JARVIS_COSTS_DB") or _REPO_ROOT / "data" / "costs
 # 2 and Phase 3 target separately. Vocabulary mirrors jarvis/usage_ledger.RUNGS.
 BUCKETS = {
     "supervisor": {"supervisor"},
-    "sub_agents": {"scheduler", "librarian", "analyst", "systems", "developer"},
+    "sub_agents": {"scheduler", "librarian", "analyst", "systems",
+                   "developer", "app_builder"},
     "background": {"memory_merge", "memory_classify", "memory_extraction",
                    "kb_digest", "procedures_describe"},
     "planner":    {"planning", "council"},

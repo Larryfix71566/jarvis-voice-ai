@@ -25,7 +25,7 @@ def _get_client():
 @mcp.tool()
 def selfedit_start(
     goal: str = "", profile: str = "", confirm: bool = False, plan_path: str = "",
-    staging_id: str = "",
+    staging_id: str = "", run_id: str = "", target_paths: list[str] | None = None,
 ) -> dict:
     """Start a self-development run for GOAL (a change to Mortimer itself).
 
@@ -41,11 +41,16 @@ def selfedit_start(
     Staging expires after 10 minutes; if confirm=true reports the staging
     is gone, call selfedit_start again to preview a fresh one. The run
     itself is asynchronous: it plans in the background for several
-    minutes; use selfedit_status to check progress.
+    minutes; use selfedit_status to check progress. `run_id` is filled in
+    by the system; leave it empty. TARGET_PATHS lists the repo files the
+    edit will CHANGE (e.g. ["docs/REPO_MAP.md"]); the preview's tier check
+    reads these, not the files the goal merely mentions — always pass it
+    when the goal names any file.
     """
     return logic.selfedit_start(
         _get_client(), goal, profile or None, confirm,
-        plan_path=plan_path, staging_id=staging_id,
+        plan_path=plan_path, staging_id=staging_id, run_id=run_id,
+        target_paths=target_paths,
     )
 
 
@@ -62,11 +67,48 @@ def selfedit_status(staging_id: str = "") -> dict:
 
 
 @mcp.tool()
-def selfedit_validate() -> dict:
-    """Validate the proposed edits (allowlist, backend imports, frontend
-    build). Read-only — no user confirmation required. Must pass before
-    selfedit_submit."""
-    return logic.selfedit_validate(_get_client())
+def selfedit_read(path: str) -> dict:
+    """Read one repo file from the OPEN self-edit session's worktree.
+
+    Use this after selfedit_start(confirm=true) reports a session, to see
+    the current content of each file you are about to change. Reading the
+    live checkout with repo_read_file instead risks writing a change based
+    on a version the session does not have."""
+    return logic.selfedit_read(_get_client(), path)
+
+
+@mcp.tool()
+def selfedit_write(path: str, content: str, rationale: str,
+                   visual_intent: str = "") -> dict:
+    """Write one file in the OPEN self-edit session's worktree.
+
+    `content` is the COMPLETE new file, not a patch or a fragment — read
+    the file first with selfedit_read and send it back with your change
+    applied. `rationale` is one line saying why, and appears in the pull
+    request. Set `visual_intent` for a change to the native app's interface
+    (macos/MortimerHost): one sentence saying what should look different,
+    which is what "check your appearance" verifies after the rebuild.
+
+    The allowlist applies exactly as it does to any self-edit: a denied
+    path is refused here, not silently written. Nothing is committed —
+    call selfedit_finish when the whole change is written."""
+    return logic.selfedit_write(_get_client(), path, content, rationale,
+                                visual_intent)
+
+
+@mcp.tool()
+def selfedit_finish() -> dict:
+    """Validate everything written in this session and, if every check
+    passes, open the pull request.
+
+    This is the end of the self-edit: the user already approved it at the
+    preview ("I will write the change, validate it, and if every check
+    passes open the pull request"), so no further confirmation is needed.
+    Runs in the background — the gates take minutes — so report the summary
+    and STOP; call selfedit_status when the user asks how it is going. If
+    validation fails, the session stays open: read the failing check, fix
+    the file with selfedit_write, and call selfedit_finish again."""
+    return logic.selfedit_finish(_get_client())
 
 
 @mcp.tool()
@@ -86,14 +128,6 @@ def selfedit_verify_appearance(branch_override: bool = False,
         _get_client(), branch_override, display)
 
 
-@mcp.tool()
-def selfedit_submit(confirm: bool = False) -> dict:
-    """Open a pull request with the validated edits.
-
-    Two-phase: confirm=false previews; confirm=true submits. Call with
-    confirm=true ONLY after validation has passed AND the user has explicitly
-    asked to submit in a new turn. The PR is never merged by the agent."""
-    return logic.selfedit_submit(_get_client(), confirm)
 
 
 @mcp.tool()
@@ -108,7 +142,7 @@ def selfedit_revert(confirm: bool = False) -> dict:
 @mcp.tool()
 def plan_start(
     goal: str, mode: str = "single", profile: str = "", confirm: bool = False,
-    review_path: str = "",
+    review_path: str = "", run_id: str = "",
 ) -> dict:
     """Start drafting an implementation plan, specification, or design
     document for GOAL — use this instead of writing the document yourself
@@ -126,10 +160,11 @@ def plan_start(
 
     REVIEW_PATH, when set, reviews that existing repo document instead of
     authoring a new plan — use this whenever the user asks to have a
-    plan, spec, or document reviewed, critiqued, or checked by a model."""
+    plan, spec, or document reviewed, critiqued, or checked by a model.
+    `run_id` is filled in by the system; leave it empty."""
     return logic.plan_start(
         _get_client(), goal, mode or "single", profile or None, confirm,
-        review_path or "",
+        review_path or "", run_id=run_id,
     )
 
 

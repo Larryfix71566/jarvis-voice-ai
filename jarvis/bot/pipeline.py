@@ -43,7 +43,7 @@ from pipecat.turns.user_turn_strategies import UserTurnStrategies
 
 from jarvis import llm_client
 from jarvis.agents.base import load_sub_agents
-from jarvis.agents.delegate import build_delegate_tool
+from jarvis.agents.delegate import build_delegate_tool, foreground_delegation_count
 from jarvis.anthropic_shim import native_base_url
 from jarvis.bot.display import WeatherReportMerger, build_display_payload
 from jarvis.bot.interruption import InterruptionNotifier
@@ -58,6 +58,7 @@ from jarvis.bot.costs_tool import build_cost_summary_tool
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.ui_control import build_ui_control_tool
+from jarvis.bot.tool_schemas import supervisor_tool_schemas
 from jarvis.bot.usage_watcher import UsageMetricsObserver
 from jarvis.bot.handoff_tools import (
     build_clear_clipboard_tool,
@@ -90,15 +91,23 @@ from jarvis.memory import (
     update_memory_from_session,
 )
 from jarvis.kb_digest import write_session_digest
+from jarvis.model_catalog import render_model_catalog
 from jarvis.prompts import (
-    SUPERVISOR_PROMPT,
-    HANDOFF_ADDENDUM,
-    SCREEN_VISION_ADDENDUM,
-    UI_CONTROL_ADDENDUM,
-    VOICE_ADDENDUM,
+    build_supervisor_prompt,
     render_agent_catalog,
 )
-from jarvis.council import prune as prune_council
+# NOT `from jarvis.council import prune` — that binds the MODULE
+# jarvis/council/prune.py, and calling it raises "'module' object is not
+# callable". The runlog line below looks identical and works only because
+# jarvis/runlog/__init__.py re-exports the function; jarvis/council/__init__.py
+# deliberately re-exports nothing (it is kept transport-free, D1). The two
+# lines being visually identical while resolving differently is exactly why
+# this survived review: council retention pruning failed silently on EVERY
+# boot from 2026-08-22 to 2026-09-07 (16 `council_prune_failed` lines, one
+# success before it), caught by reading the logs rather than by any test,
+# because tests/unit/test_council_prune.py imports the function directly and
+# so never exercised the path production actually uses.
+from jarvis.council.prune import prune as prune_council
 from jarvis.runlog import prune as prune_runlog
 from jarvis.runlog import reconcile_orphaned_runs
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry
@@ -164,6 +173,38 @@ class Runtime:
     # the same finally block that stops the other watchers can stop it too.
     sub_agents: dict = field(default_factory=dict)
     keyhealth_notice: Any = None
+
+
+def adapt_to_pipecat(name: str, dict_handler):
+    """Adapt a jarvis tool handler to pipecat's calling convention.
+
+    D-009: pipecat 1.4 register_function handlers receive one
+    FunctionCallParams object and deliver results via
+    params.result_callback(...); jarvis function handlers keep the locked
+    (arguments dict) -> confirmation str contract used by the Supervisor.
+
+    2026-09-05 (MORTIMER_EVAL_CONFIG_PARITY_PLAN.md item E) — `name` is new,
+    and the log line with it. Nothing anywhere recorded the Supervisor
+    calling a DIRECT tool: agent_tool belongs to the sub-agents
+    (jarvis/agents/base.py) and so never fires on a turn that delegated
+    nothing, which is exactly the turn worth seeing. A turn that reached
+    for ui_control instead of delegating was indistinguishable in the logs
+    from a turn that simply answered.
+    """
+
+    async def wrapper(params):
+        _logger.info("supervisor_tool tool=%s", name)
+        result = await dict_handler(params.arguments)
+        await params.result_callback(result)
+
+    return wrapper
+
+
+def register_supervisor_tool(llm, name: str, dict_handler) -> None:
+    """Register one direct Supervisor tool under a single spelling of its
+    name — passing it twice invites a handler registered under the wrong
+    one, which fails only at call time and only in production."""
+    llm.register_function(name, adapt_to_pipecat(name, dict_handler))
 
 
 def bot_event_log(event: dict) -> None:
@@ -377,9 +418,9 @@ def build_pipeline(
         # result into the conversation.
         late_delivery=runtime.late_delivery,
     )
-    set_voice_schema, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
-    remember_schema, remember_handler = build_remember_tool(runtime.session_id)
-    cost_summary_schema, cost_summary_handler = build_cost_summary_tool()
+    _, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
+    _, remember_handler = build_remember_tool(runtime.session_id)
+    _, cost_summary_handler = build_cost_summary_tool()
 
     # MORTIMER_VOICE_UI_PLAN.md U1/U6 — voice control of the console's UI
     # chrome. Kill switch read here, at the single registration site (same
@@ -395,13 +436,13 @@ def build_pipeline(
     screen_enabled = os.environ.get(
         "JARVIS_SCREEN_ENABLED", ""
     ).strip().lower() not in ("false", "0", "no")
-    view_screen_schema, view_screen_handler = build_view_screen_tool()
-    list_screens_schema, list_screens_handler = build_list_screens_tool()
+    _, view_screen_handler = build_view_screen_tool()
+    _, list_screens_handler = build_list_screens_tool()
 
     async def _send_ui_message(message: dict) -> None:
         await send_app_message(transport, message)
 
-    ui_control_schema, ui_control_handler = build_ui_control_tool(_send_ui_message)
+    _, ui_control_handler = build_ui_control_tool(_send_ui_message)
 
     # MORTIMER_HANDOFF_LOOP_PLAN.md H3/H4/H6 — the handoff loop: show a
     # command in the display window, let Larry run it, read the output back
@@ -456,30 +497,19 @@ def build_pipeline(
                     "error": "The admin sidecar isn't running, so I can't reach "
                              "the clipboard. Start it with ./scripts/mortimer.sh start."}
 
-    show_commands_schema, show_commands_handler = build_show_commands_tool(
+    _, show_commands_handler = build_show_commands_tool(
         _emit_display,
         lambda: _clipboard_call("/api/clipboard/clear", post=True),
     )
-    clear_clipboard_schema, clear_clipboard_handler = build_clear_clipboard_tool(
+    _, clear_clipboard_handler = build_clear_clipboard_tool(
         lambda: _clipboard_call("/api/clipboard/clear", post=True),
     )
-    read_clipboard_schema, read_clipboard_handler = build_read_clipboard_tool(
+    _, read_clipboard_handler = build_read_clipboard_tool(
         lambda: _clipboard_call("/api/clipboard"),
         _inject_silent_clipboard,
         _emit_display,
     )
 
-    def adapt_to_pipecat(dict_handler):
-        """D-009: pipecat 1.4 register_function handlers receive one
-        FunctionCallParams object and deliver results via
-        params.result_callback(...); jarvis function handlers keep the locked
-        (arguments dict) -> confirmation str contract used by the Supervisor."""
-
-        async def wrapper(params):
-            result = await dict_handler(params.arguments)
-            await params.result_callback(result)
-
-        return wrapper
     agent_catalog = render_agent_catalog([
         {"name": a.name, "display_name": a.display_name,
          "description": a.description}
@@ -494,25 +524,23 @@ def build_pipeline(
     # 4,096-token cache floor (below it, caching silently stops), and
     # whether the Stage A1 cap raise actually cleared the tier-cap drops.
     memory_stats: dict = {}
-    system_prompt = (
-        SUPERVISOR_PROMPT.format(
-            jarvis_name=settings.jarvis_name,
-            user_name=settings.jarvis_user_name,
-            timezone=settings.jarvis_timezone,
-            units=settings.jarvis_units,
-            agent_catalog=agent_catalog,
-            voice_catalog=catalog_summary(catalog),
-            memory_context=render_memory_context(stats=memory_stats),  # U2.5
-        )
-        + "\n"
-        + VOICE_ADDENDUM
+    system_prompt = build_supervisor_prompt(
+        jarvis_name=settings.jarvis_name,
+        user_name=settings.jarvis_user_name,
+        timezone=settings.jarvis_timezone,
+        units=settings.jarvis_units,
+        agent_catalog=agent_catalog,
+        model_catalog=render_model_catalog(),
+        voice_catalog=catalog_summary(catalog),
+        memory_context=render_memory_context(stats=memory_stats),  # U2.5
+        voice=True,
         # U5/U6: the addendum ships only when the tool does — a prompt
         # describing an unregistered tool would invite hallucinated calls.
-        + ("\n" + UI_CONTROL_ADDENDUM if ui_control_enabled else "")
-        + ("\n" + SCREEN_VISION_ADDENDUM if screen_enabled else "")
+        ui_control=ui_control_enabled,
+        screen=screen_enabled,
         # H3/H6 — show_commands is always registered; the clipboard half
         # of the addendum only makes sense when its tools are.
-        + ("\n" + HANDOFF_ADDENDUM if clipboard_enabled else "")
+        clipboard=clipboard_enabled,
     )
 
     # Phase 4 Rev 3.4 Stage A2 — see memory_stats above. Logged with the
@@ -612,24 +640,22 @@ def build_pipeline(
             base_url=settings.openai_base_url,
             model=settings.openai_model,
         )
-    llm.register_function("delegate_task", adapt_to_pipecat(delegate_handler))
-    llm.register_function("set_voice", adapt_to_pipecat(set_voice_handler))
-    llm.register_function("remember", adapt_to_pipecat(remember_handler))
-    llm.register_function("cost_summary", adapt_to_pipecat(cost_summary_handler))
+    register_supervisor_tool(llm, "delegate_task", delegate_handler)
+    register_supervisor_tool(llm, "set_voice", set_voice_handler)
+    register_supervisor_tool(llm, "remember", remember_handler)
+    register_supervisor_tool(llm, "cost_summary", cost_summary_handler)
     if ui_control_enabled:
-        llm.register_function("ui_control", adapt_to_pipecat(ui_control_handler))
+        register_supervisor_tool(llm, "ui_control", ui_control_handler)
     if screen_enabled:
-        llm.register_function("view_screen", adapt_to_pipecat(view_screen_handler))
-        llm.register_function("list_screens", adapt_to_pipecat(list_screens_handler))
+        register_supervisor_tool(llm, "view_screen", view_screen_handler)
+        register_supervisor_tool(llm, "list_screens", list_screens_handler)
     # H3 — show_commands is registered regardless of the clipboard switch:
     # putting a command on screen instead of speaking it is useful even
     # when the return channel is off. Only the clipboard pair is gated.
-    llm.register_function("show_commands", adapt_to_pipecat(show_commands_handler))
+    register_supervisor_tool(llm, "show_commands", show_commands_handler)
     if clipboard_enabled:
-        llm.register_function(
-            "clear_clipboard", adapt_to_pipecat(clear_clipboard_handler))
-        llm.register_function(
-            "read_clipboard", adapt_to_pipecat(read_clipboard_handler))
+        register_supervisor_tool(llm, "clear_clipboard", clear_clipboard_handler)
+        register_supervisor_tool(llm, "read_clipboard", read_clipboard_handler)
     tts = ElevenLabsTTSService(
         api_key=settings.elevenlabs_api_key,
         settings=ElevenLabsTTSSettings(
@@ -659,21 +685,19 @@ def build_pipeline(
             required=fn["parameters"]["required"],
         )
 
+    # The menu itself lives in jarvis/bot/tool_schemas.py so an offline
+    # caller can ask for this exact configuration (EVAL_CONFIG_PARITY item
+    # B). Same kill switches that decide registration below, so the model
+    # can never see a tool that was not registered.
     standard_tools = [
-        to_function_schema(delegate_schema),
-        to_function_schema(set_voice_schema),
-        to_function_schema(remember_schema),
-        to_function_schema(cost_summary_schema),
+        to_function_schema(schema)
+        for schema in supervisor_tool_schemas(
+            delegate_schema,
+            ui_control=ui_control_enabled,
+            screen=screen_enabled,
+            clipboard=clipboard_enabled,
+        )
     ]
-    if ui_control_enabled:
-        standard_tools.append(to_function_schema(ui_control_schema))
-    if screen_enabled:
-        standard_tools.append(to_function_schema(view_screen_schema))
-        standard_tools.append(to_function_schema(list_screens_schema))
-    standard_tools.append(to_function_schema(show_commands_schema))
-    if clipboard_enabled:
-        standard_tools.append(to_function_schema(clear_clipboard_schema))
-        standard_tools.append(to_function_schema(read_clipboard_schema))
     context = LLMContext(
         messages=[{"role": "system", "content": system_prompt}],
         tools=ToolsSchema(standard_tools=standard_tools),
@@ -1111,6 +1135,20 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             message = {"role": "user", "content": text}
             late_neutralizer.arm(message)
             aggregators.user().add_messages([message])
+            # 2026-09-05 — do NOT force a turn while a tool call is still
+            # outstanding. Pushing a context frame mid-delegation makes the
+            # model answer with a hole where the pending result belongs, and
+            # on 09-05 it re-issued a librarian store it had announced 0.8 s
+            # earlier: one request, two delegate_task calls, notes #22 and
+            # #23. The message is already in the context, so the generation
+            # that the in-flight call's own completion triggers carries it —
+            # later, but exactly once.
+            if foreground_delegation_count():
+                _logger.info(
+                    "late_result_deferred_inflight delegations=%d",
+                    foreground_delegation_count(),
+                )
+                return
             await aggregators.user().push_context_frame()
 
         # Barge-in survival — install the late-delivery hook the delegate

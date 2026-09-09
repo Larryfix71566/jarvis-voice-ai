@@ -19,8 +19,15 @@
 data/*.db
 data/*.db-*
 data/*.bak*
-data/backups/     # GC7: nightly sqlite backups (scripts/backup_db.py)
+# GC7: nightly sqlite backups (scripts/backup_db.py)
+data/backups/
 __pycache__/
+
+# 2026-09-06 — nine of these showed up as untracked in one `git status`.
+# Untracked noise beside real changes is how a scoped `git add` becomes an
+# unscoped one; a 79-file commit under a one-file message happened here
+# on 09-05.
+.DS_Store
 *.pyc
 .venv/
 node_modules/
@@ -54,5 +61,12 @@ data/selfedit_worktrees/
 _to_delete_tarballs/
 
 # GC10 (gap-closure plan, 2026-09-04) hygiene
-*.wav                 # speaker/eval captures live under data/; a WAV at the root is a stray
+# speaker/eval captures live under data/; a WAV at the root is a stray
+*.wav
 web/dist_verify*/
+
+# stray verification renders dropped at the repo root (seam.png, delib.png)
+/*.png
+
+# Claude desktop drops downloaded files here
+Claude outputs/

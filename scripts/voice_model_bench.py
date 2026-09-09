@@ -143,7 +143,8 @@ def build_turn() -> tuple[str, dict, dict[str, Any]]:
     from jarvis.config import load_settings
     from jarvis.db import run_migrations
     from jarvis.memory import render_memory_context
-    from jarvis.prompts import SUPERVISOR_PROMPT, render_agent_catalog
+    from jarvis.model_catalog import render_model_catalog
+    from jarvis.prompts import build_supervisor_prompt, render_agent_catalog
     from jarvis.skills.registry import REPO_ROOT as REG_ROOT
     from jarvis.skills.registry import SkillRegistry
 
@@ -166,11 +167,17 @@ def build_turn() -> tuple[str, dict, dict[str, Any]]:
          "description": a.description}
         for a in sub_agents.values()
     ])
-    system_prompt = SUPERVISOR_PROMPT.format(
+    # 2026-09-05: this call was missing `units` and would have raised
+    # KeyError on every run — the script could not execute as written, and
+    # nothing exercised it. Routed through build_supervisor_prompt with no
+    # addendum flags, which is exactly the bare prompt this intended.
+    system_prompt = build_supervisor_prompt(
         jarvis_name=settings.jarvis_name,
         user_name=settings.jarvis_user_name,
         timezone=settings.jarvis_timezone,
+        units=settings.jarvis_units,
         agent_catalog=agent_catalog,
+        model_catalog=render_model_catalog(),
         voice_catalog="(none configured yet)",
         memory_context=render_memory_context(),
     )

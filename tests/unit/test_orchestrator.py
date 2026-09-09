@@ -279,3 +279,183 @@ class TestDelegatingMode:
         assert tool_msg["role"] == "tool"
         assert "Unknown tool 'get_time'" in tool_msg["content"]
         assert reply == "recovered"
+
+
+class TestExtraTools:
+    """MORTIMER_EVAL_CONFIG_PARITY_PLAN.md item C.
+
+    Delegating mode used to show the model exactly one tool, so the routing
+    eval that drives this class scored every decision in a world where
+    delegating was the only option — production offers ten. These cover the
+    opt-in, and TestDelegatingMode.test_only_delegate_tool_is_offered above
+    is the no-op pin for callers that pass nothing.
+    """
+
+    @staticmethod
+    def _schema(name):
+        return {"type": "function",
+                "function": {"name": name, "description": "d",
+                             "parameters": {"type": "object",
+                                            "properties": {}, "required": []}}}
+
+    async def test_extra_schemas_follow_delegate_task_in_order(self, fresh_db):
+        # Order is load-bearing: a reordered tool list is a different prompt
+        # to the model even when the contents match.
+        orch, completions = make_delegating(
+            [("text", "ok")],
+            extra_tools=[(self._schema("ui_control"), lambda a: "ok"),
+                         (self._schema("remember"), lambda a: "ok")],
+        )
+        await orch.chat("hi")
+        names = [t["function"]["name"]
+                 for t in completions.requests[0]["tools"]]
+        assert names == ["delegate_task", "ui_control", "remember"]
+
+    async def test_a_sync_extra_handler_runs_and_its_result_comes_back(
+            self, fresh_db):
+        seen = []
+
+        def handler(arguments):
+            seen.append(arguments)
+            return "ok"
+
+        orch, _ = make_delegating(
+            [("tool", "ui_control", {"action": "open_panel"}),
+             ("text", "Done.")],
+            extra_tools=[(self._schema("ui_control"), handler)],
+        )
+        assert await orch.chat("open the panel") == "Done."
+        assert seen == [{"action": "open_panel"}]
+
+    async def test_an_async_extra_handler_is_awaited(self, fresh_db):
+        # Every production direct-tool handler is async, so this is the
+        # shape that actually matters; the sync case is for eval stubs.
+        async def handler(arguments):
+            return "ok"
+
+        orch, _ = make_delegating(
+            [("tool", "ui_control", {"action": "open_panel"}),
+             ("text", "Done.")],
+            extra_tools=[(self._schema("ui_control"), handler)],
+        )
+        assert await orch.chat("open the panel") == "Done."
+
+    async def test_an_unknown_tool_still_gets_the_old_message(self, fresh_db):
+        # The fallback must survive: an extras list is not a licence for the
+        # model to invent tool names.
+        orch, _ = make_delegating(
+            [("tool", "not_a_tool", {}), ("text", "Done.")],
+            extra_tools=[(self._schema("ui_control"), lambda a: "ok")],
+        )
+        assert await orch.chat("hi") == "Done."
+        tool_msgs = [m for m in orch.history if m["role"] == "tool"]
+        assert "Unknown tool 'not_a_tool'. Use delegate_task." in \
+            tool_msgs[-1]["content"]
+
+    async def test_every_tool_call_is_observable(self, fresh_db):
+        # The gap this closes: on_event previously reached only the delegate
+        # tool, so a turn that called something else left no trace at all.
+        events = []
+        orch, _ = make_delegating(
+            [("tool", "ui_control", {}), ("text", "Done.")],
+            extra_tools=[(self._schema("ui_control"), lambda a: "ok")],
+            on_event=events.append,
+        )
+        await orch.chat("hi")
+        assert {"type": "supervisor_tool", "tool": "ui_control"} in events
+
+    async def test_a_raising_observer_does_not_break_the_turn(self, fresh_db):
+        def explode(event):
+            raise RuntimeError("observer is broken")
+
+        orch, _ = make_delegating(
+            [("tool", "ui_control", {}), ("text", "Done.")],
+            extra_tools=[(self._schema("ui_control"), lambda a: "ok")],
+            on_event=explode,
+        )
+        assert await orch.chat("hi") == "Done."
+
+    async def test_shadowing_delegate_task_is_refused(self, fresh_db):
+        # Silently shadowing delegation would make a routing eval score the
+        # shadow and report it as a delegation.
+        with pytest.raises(ValueError, match="delegate_task"):
+            make_delegating([("text", "ok")],
+                            extra_tools=[(self._schema("delegate_task"),
+                                          lambda a: "ok")])
+
+    async def test_a_duplicate_tool_name_is_refused(self, fresh_db):
+        with pytest.raises(ValueError, match="duplicate"):
+            make_delegating(
+                [("text", "ok")],
+                extra_tools=[(self._schema("ui_control"), lambda a: "ok"),
+                             (self._schema("ui_control"), lambda a: "ok")])
+
+    async def test_extra_tools_in_direct_mode_is_refused(self, fresh_db):
+        # Accepting and ignoring them would be the worse failure: the caller
+        # would believe the model could see tools it never received.
+        with pytest.raises(ValueError, match="delegating mode"):
+            make_orchestrator([("text", "ok")], mode="direct",
+                              extra_tools=[(self._schema("ui_control"),
+                                            lambda a: "ok")])
+
+
+class TestPromptConfiguration:
+    """MORTIMER_EVAL_CONFIG_PARITY_PLAN.md item D.
+
+    The Orchestrator built SUPERVISOR_PROMPT with none of the four addenda
+    production ships, so the routing eval scored a prompt Mortimer never
+    reads. These cover the opt-in; the defaults are unchanged and every
+    other test in this file is the pin for that.
+    """
+
+    async def test_by_default_no_addendum_reaches_the_prompt(self, fresh_db):
+        from jarvis.prompts import (
+            HANDOFF_ADDENDUM, SCREEN_VISION_ADDENDUM, UI_CONTROL_ADDENDUM,
+            VOICE_ADDENDUM,
+        )
+        orch, completions = make_delegating([("text", "ok")])
+        await orch.chat("hi")
+        system = completions.requests[0]["messages"][0]["content"]
+        for addendum in (VOICE_ADDENDUM, UI_CONTROL_ADDENDUM,
+                         SCREEN_VISION_ADDENDUM, HANDOFF_ADDENDUM):
+            assert addendum not in system
+
+    async def test_the_production_flags_put_all_four_addenda_in(self, fresh_db):
+        from jarvis.prompts import (
+            HANDOFF_ADDENDUM, SCREEN_VISION_ADDENDUM, UI_CONTROL_ADDENDUM,
+            VOICE_ADDENDUM,
+        )
+        orch, completions = make_delegating(
+            [("text", "ok")],
+            voice=True, ui_control=True, screen=True, clipboard=True,
+        )
+        await orch.chat("hi")
+        system = completions.requests[0]["messages"][0]["content"]
+        for addendum in (VOICE_ADDENDUM, UI_CONTROL_ADDENDUM,
+                         SCREEN_VISION_ADDENDUM, HANDOFF_ADDENDUM):
+            assert addendum in system
+
+    async def test_one_flag_brings_only_its_own_addendum(self, fresh_db):
+        from jarvis.prompts import UI_CONTROL_ADDENDUM, VOICE_ADDENDUM
+        orch, completions = make_delegating([("text", "ok")], voice=True)
+        await orch.chat("hi")
+        system = completions.requests[0]["messages"][0]["content"]
+        assert VOICE_ADDENDUM in system
+        assert UI_CONTROL_ADDENDUM not in system
+
+    async def test_the_voice_catalog_defaults_to_the_placeholder(self, fresh_db):
+        orch, completions = make_delegating([("text", "ok")])
+        await orch.chat("hi")
+        assert "(none configured yet)" in \
+            completions.requests[0]["messages"][0]["content"]
+
+    async def test_a_supplied_voice_catalog_replaces_the_placeholder(
+            self, fresh_db):
+        # Production interpolates a real catalog here; the placeholder is
+        # one more way the eval's prompt differed from the shipped one.
+        orch, completions = make_delegating(
+            [("text", "ok")], voice_catalog="- rachel: Rachel")
+        await orch.chat("hi")
+        system = completions.requests[0]["messages"][0]["content"]
+        assert "- rachel: Rachel" in system
+        assert "(none configured yet)" not in system

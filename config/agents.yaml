@@ -46,7 +46,7 @@ sub_agents:
     # so it applies today. Override live, one rung at a time, without
     # touching this file: JARVIS_EFFORT_LIBRARIAN=<level>.
     effort: medium
-    description: "Long-term memory: store and recall facts, notes, preferences. Also resolves flagged memory conflicts and cleanup items awaiting review: list them, keep one side, rewrite, dismiss, convert to a workflow, or archive as implemented. Archived facts (merged or aged out by capacity enforcement, never deleted) are still searchable with memory_search — use it before telling the user something is forgotten. Also searches a separate knowledge base of longer curated project documents and session digests (kb_search/kb_read/kb_neighbors) — distinct from the keyed facts above; use this when the user asks about something more like a document, decision record, or past session's details rather than a short preference or fact."
+    description: "Long-term memory: store and recall facts, notes, preferences. Also resolves flagged memory conflicts and cleanup items awaiting review: list them, keep one side, rewrite, dismiss, convert to a workflow, or archive as implemented. Archived facts (merged or aged out by capacity enforcement, never deleted) are still searchable with memory_search — use it before telling the user something is forgotten. Also searches a separate knowledge base of longer curated project documents and session digests (kb_search/kb_read/kb_neighbors) — distinct from the keyed facts above; use this when the user asks about something more like a document, decision record, or past session's details rather than a short preference or fact. Also draws a picture of how memories relate around a topic (memory_graph_view)."
   - name: analyst
     display_name: Analyst
     mcp_servers: [mcp-web, mcp-screen]
@@ -110,7 +110,7 @@ sub_agents:
   - name: developer
     display_name: Developer
     # mcp-screen: verify UI/window placement visually while debugging.
-    mcp_servers: [mcp-git, mcp-apps, mcp-repo, mcp-selfedit, mcp-runlog, mcp-screen]
+    mcp_servers: [mcp-git, mcp-repo, mcp-selfedit, mcp-runlog, mcp-screen]
     # MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md F3: developer tasks (multi-file
     # review, plan drafting) legitimately exceed the 45s voice-loop
     # default; two live runs timed out doing exactly that. Other agents
@@ -189,4 +189,30 @@ sub_agents:
     # agent's system prompt at construction, so it stops burning its
     # 5-iteration budget rediscovering its own codebase.
     inject_repo_map: true
-    description: "The Jarvis git repository: status, recent commits, diffs, committing and pushing changes (with confirmation), and the audit trail of repository actions. Also reads, searches, and edits files in the local working tree on this machine (previewed and confirmed before anything is written) — separate from GitHub, which is only used to create new app repos and to host pull requests. Also builds new applications: each app gets its own private GitHub repo (created only after user confirmation) and is recorded in the Mortimer app registry. Also self-development: edits to Mortimer's own interface through the self-development loop — preview with the user, plan in the background, validate, and open a pull request only after explicit confirmation; merging always stays with the human on GitHub. Also troubleshooting: investigates why any past task or specialist run failed or found nothing, by reading the run log that records every delegation's tool calls and results."
+    description: "The Jarvis git repository: status, recent commits, diffs, committing and pushing changes (with confirmation), and the audit trail of repository actions. Also reads, searches, and edits files in the local working tree on this machine (previewed and confirmed before anything is written) — separate from GitHub, which is only used to create new app repos and to host pull requests. Building a NEW application is the app_builder specialist and not this one; this specialist owns the Jarvis repository itself and Mortimer's own interface. Its git tools act on one working tree, so commit and push never need a repository named and asking which one is never the missing information. Also self-development: edits to Mortimer's own interface through the self-development loop — preview with the user, plan in the background, validate, and open a pull request only after explicit confirmation; merging always stays with the human on GitHub. Also troubleshooting: investigates why any past task or specialist run failed or found nothing, by reading the run log that records every delegation's tool calls and results. Also the council rounds behind plans and self-edits, and draws a relationship graph of runs, tools, models, and council rounds on request (graph_view)."
+
+  # 2026-09-06 — split out of `developer`. Two reasons, both measured:
+  # developer carried SIX mcp servers and ~31 tools against 2-4 for every
+  # other specialist, and it is the only category that has ever missed in
+  # the routing eval (22 cases; 15/22, then 17/22, then 20/22, while every
+  # other category has been 100% in all three runs). Case 56 ("commit
+  # that") missed 3/3 by asking WHICH repository — a fair question while
+  # one description covered both the Jarvis working tree and per-app
+  # GitHub repos.
+  #
+  # The seam is clean: mcp-apps is pure GitHub API and needs nothing from
+  # mcp-git, while self-development genuinely does (a self-edit ends in a
+  # commit and a PR). Nothing is shared, so nothing had to be torn.
+  #
+  # NAME USES AN UNDERSCORE, not a hyphen: tests/unit/
+  # test_agents_yaml_frontend_parity.py matches frontend keys with
+  # [a-z_]+, so a hyphenated name would never match the layout entry and
+  # the guard would fail even once the satellite was added.
+  - name: app_builder
+    display_name: App Builder
+    mcp_servers: [mcp-apps, mcp-screen]
+    # Mirrors developer exactly (Larry, 2026-09-06): this was developer's
+    # work an hour ago, so the split changes routing, not capability.
+    model_profile: claude-opus
+    on_profile_fallback: refuse
+    description: "Builds and maintains NEW applications, each in its own private GitHub repository: creates the repo (only after user confirmation), writes and reads its files, registers it in the Mortimer app registry, lists what has been built, and starts, checks and submits its builds. All of it goes through the GitHub API — an app repo is never checked out and never committed to locally, so this specialist has no commit or push tool at all. This is NOT self-development: changing Mortimer's own interface, and anything inside the Jarvis repository, is the developer specialist."

@@ -1,4 +1,4 @@
-pipecat-ai[deepgram,elevenlabs,openai,google,silero,mcp,runner,webrtc,anthropic]
+pipecat-ai[deepgram,elevenlabs,openai,google,silero,mcp,runner,webrtc,anthropic]==1.4.0
 # anthropic extra (MORTIMER_OPTIMIZATION_PLAN.md Phase 1, Rev 3.2, landing step
 # (i), 2026-09-01): pulls in the `anthropic` package, which both
 # pipecat.services.anthropic.llm.AnthropicLLMService (Path A, the Supervisor)
@@ -21,6 +21,12 @@ websockets
 # directly so a future lock regeneration can never drop them.
 cryptography
 keyring
+
+# Graph layer (MORTIMER_GRAPH_LAYER_PLAN.md GL10, 2026-09-04): both were already
+# transitive deps pinned in requirements-lock.txt; listed so a lock regeneration
+# can never drop them. networkx = layout only; pillow = PNG encoder. No matplotlib.
+networkx
+pillow
 pytest
 pytest-asyncio
 pytest-cov

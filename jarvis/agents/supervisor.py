@@ -19,11 +19,12 @@ Locked behavior:
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Sequence
 
 from openai import AsyncOpenAI
 
@@ -31,7 +32,8 @@ from jarvis.agents.base import SubAgent, load_sub_agents
 from jarvis.agents.base import _assistant_message as _base_assistant_message
 from jarvis.agents.delegate import build_delegate_tool
 from jarvis.db import get_conn, now_iso
-from jarvis.prompts import SUPERVISOR_PROMPT, render_agent_catalog
+from jarvis.model_catalog import render_model_catalog
+from jarvis.prompts import build_supervisor_prompt, render_agent_catalog
 from jarvis.memory import render_memory_context
 from jarvis.bot.sensitive_turn import arm_from_text, is_sensitive
 from jarvis.usage_ledger import record_completion, provider_from_base_url
@@ -56,13 +58,44 @@ class Orchestrator:
         sub_agents: dict[str, SubAgent] | None = None,
         agents_config: str | Path | None = None,
         on_event: Callable[[dict], None] | None = None,
+        extra_tools: Sequence[tuple[dict, Callable[[dict], Any]]] | None = None,
+        voice_catalog: str | None = None,
+        voice: bool = False,
+        ui_control: bool = False,
+        screen: bool = False,
+        clipboard: bool = False,
     ):
         self._settings = settings
         self._registry = registry
+        self._on_event = on_event
         self._session_id = session_id
         self._allowed_servers = allowed_servers
         self._temperature = temperature
         self._mode = mode
+        # MORTIMER_EVAL_CONFIG_PARITY_PLAN.md item C. Until now delegating
+        # mode showed the model exactly one tool, so the routing eval that
+        # drives this class scored every decision in a world where
+        # delegating was the only thing on offer -- production shows ten.
+        # Schema and handler travel as a pair so a caller cannot show a tool
+        # it cannot answer. Empty is the default and reproduces the old
+        # behaviour exactly; tests/unit/test_orchestrator.py's
+        # test_only_delegate_tool_is_offered pins that.
+        self._extra_tools = list(extra_tools or ())
+        if self._extra_tools and mode != "delegating":
+            raise ValueError(
+                "extra_tools is only meaningful in delegating mode; in direct "
+                "mode the registry supplies the tool list"
+            )
+        self._extra_handlers: dict[str, Callable[[dict], Any]] = {}
+        for schema, handler in self._extra_tools:
+            tool_name = schema["function"]["name"]
+            if tool_name == "delegate_task":
+                # Silently shadowing delegation would make a routing eval
+                # score the shadow and report it as delegation.
+                raise ValueError("extra_tools may not redefine delegate_task")
+            if tool_name in self._extra_handlers:
+                raise ValueError(f"duplicate tool in extra_tools: {tool_name!r}")
+            self._extra_handlers[tool_name] = handler
         if client_factory is not None:
             self._client = client_factory(settings)
         else:
@@ -89,14 +122,26 @@ class Orchestrator:
             self._delegate_handler = None
             # Phase 2 direct mode (plan step 2.3 / Appendix A.4).
             agent_catalog = "(none yet — call tools directly)"
-        self._system_prompt = SUPERVISOR_PROMPT.format(
+        # Defaults reproduce the bare SUPERVISOR_PROMPT this line has
+        # always produced, byte for byte. The flags exist so the routing
+        # eval can ask for the configuration production actually ships
+        # (MORTIMER_EVAL_CONFIG_PARITY_PLAN.md item D) instead of scoring a
+        # prompt carrying none of the four addenda. cli.py passes nothing
+        # and is unaffected.
+        self._system_prompt = build_supervisor_prompt(
             jarvis_name=settings.jarvis_name,
             user_name=settings.jarvis_user_name,
             timezone=settings.jarvis_timezone,
             units=settings.jarvis_units,
             agent_catalog=agent_catalog,
-            voice_catalog="(none configured yet)",
+            model_catalog=render_model_catalog(),
+            voice_catalog=(voice_catalog if voice_catalog is not None
+                           else "(none configured yet)"),
             memory_context=render_memory_context(),  # U2.5 persistent memory
+            voice=voice,
+            ui_control=ui_control,
+            screen=screen,
+            clipboard=clipboard,
         )
         self._history: list[dict] = []
 
@@ -184,16 +229,39 @@ class Orchestrator:
     def _messages(self) -> list[dict]:
         return [{"role": "system", "content": self._system_prompt}, *self._history]
 
+    def _emit_event(self, payload: dict) -> None:
+        """Notify the observer, if any. An observer never breaks a turn."""
+        if self._on_event is None:
+            return
+        try:
+            self._on_event(payload)
+        except Exception:  # noqa: BLE001 — observation is never load-bearing
+            logger.exception("on_event handler raised")
+
     async def _execute_tool(self, name: str, arguments: dict) -> str:
+        # Nothing observed the Supervisor's OWN tool calls before this:
+        # on_event reached only build_delegate_tool, so a turn that called
+        # some other tool instead of delegating left no trace anywhere.
+        # agent_tool is the sub-agents' event (jarvis/agents/base.py) and
+        # does not fire when nothing is delegated, which is exactly the
+        # case worth seeing.
+        self._emit_event({"type": "supervisor_tool", "tool": name})
         if self._mode == "delegating":
             if name == "delegate_task":
                 return await self._delegate_handler(arguments)
+            handler = self._extra_handlers.get(name)
+            if handler is not None:
+                result = handler(arguments)
+                if inspect.isawaitable(result):
+                    result = await result
+                return result
             return f"Unknown tool '{name}'. Use delegate_task."
         return await self._registry.call(name, arguments, self._allowed_servers)
 
     def _tools_kwarg(self) -> dict:
         if self._mode == "delegating":
-            return {"tools": [self._delegate_schema]}
+            return {"tools": [self._delegate_schema,
+                              *(schema for schema, _ in self._extra_tools)]}
         tools = self._registry.openai_tools(self._allowed_servers)
         return {"tools": tools} if tools else {}
 

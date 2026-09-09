@@ -209,8 +209,10 @@ def test_run_produces_app_build_pr_end_to_end(workspace: AppWorkspace, tmp_path:
     # AppWorkspace.submit() opens a real PR over HTTP — stub it, same as
     # the workspace-level test does.
     original_start = workspace.start_session
-    def _start_and_stub(goal):
-        res = original_start(goal)
+    def _start_and_stub(goal, run_id=None):
+        # Mirrors the Workspace protocol's signature (SE8): the loop passes
+        # run_id, so a stub that drops it hides a real mismatch.
+        res = original_start(goal, run_id=run_id)
         workspace._open_pr = lambda title: {"html_url": "https://example.invalid/pr/1"}
         _git(workspace.repo_root, "config", "user.email", "t@e.com")
         _git(workspace.repo_root, "config", "user.name", "T")

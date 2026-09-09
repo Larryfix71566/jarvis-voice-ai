@@ -1,12 +1,13 @@
 # Repository map
 
 Maintained, may lag reality — verify with tools (`repo_read_file`,
-`repo_list_files`, `repo_search`) before writing. Update this file in
-the same change whenever a structural move happens (new top-level
-module, moved directory) — see CLAUDE.md.
+`repo_list_files`, `repo_search`) before writing. Update it in the same
+change as any structural move. Never assume a branch name; check
+`git_status`.
 
-Never assume a branch name; check `git_status` / `repo_search` for the
-current branch.
+Injected into agent prompts under an 8,000-char cap
+(`jarvis/repo_map.py`): anything past it is invisible to the planner, so
+trim, never append.
 
 ## Top-level layout
 
@@ -14,10 +15,14 @@ current branch.
   council, run log, self-edit service. See below.
 - `mcp_servers/` — MCP skill servers, one directory per server, each
   with `logic.py` (pure, testable) + `server.py` (FastMCP wiring) +
-  `skill.yaml` (manifest). Includes `mcp_kb/` — read-only tools
-  (`kb_search`/`kb_read`/`kb_neighbors`) over the knowledge-base
-  service; writes go through `jarvis/kb_digest.py` directly, not MCP.
-- `web/` — the React/Vite console (frontend). See below.
+  `skill.yaml` (manifest). `mcp_kb/` is read-only
+  (`kb_search`/`kb_read`/`kb_neighbors`); KB writes go through
+  `jarvis/kb_digest.py`, not MCP.
+- `macos/` — the native macOS client (Swift, SwiftPM). `JarvisKit/` is
+  the shared library, `MortimerHost/` the app that consumes it. This is
+  the live interface; `web/` is frozen. See below.
+- `web/` — the React/Vite console. FROZEN 2026-09-04 and not served:
+  interface work goes to `macos/MortimerHost`.
 - `config/` — YAML/JSON routing and model config (agents, MCP servers,
   voices, self-edit allowlist, upgrade models/agent bounds). Check here
   first when a capability seems misrouted or over/under-permissioned.
@@ -27,17 +32,14 @@ current branch.
   registry, bot wiring), `evals/` (live routing eval), `acceptance/`
   (manual checklists, not run by pytest).
 - `scripts/` — run/setup/check scripts (`mortimer.sh`, `run_bot.sh`,
-  `run_admin.sh`, `run_web.sh`, `init_db.py`, `check_env.py`, etc.),
-  plus `cost_report.py` (prints the cost-ledger summary),
-  `pull_openrouter_activity.py` (pulls OpenRouter usage into it),
-  `backup_db.py` (stdlib SQLite `.backup()` snapshots of `jarvis.db` /
-  `costs.db`, 14-day retention), and `launchd_gen.py` (renders/
-  installs/uninstalls the launchd plists that supervise the bot/admin/
-  reminder-notifier processes).
-- `data/` — gitignored: `jarvis.db` (SQLite), `secrets.vault`,
+  `run_admin.sh`, `init_db.py`, `check_env.py`), plus `cost_report.py`,
+  `pull_openrouter_activity.py`, `backup_db.py` (SQLite snapshots,
+  14-day retention) and `launchd_gen.py` (the launchd plists that
+  supervise the bot/admin/reminder-notifier processes).
+- `data/` — gitignored: `jarvis.db`, `secrets.vault`,
   `app_workspaces/` (cloned app repos, self-edit-denied).
-- `logs/` — gitignored: per-run JSONL payloads under `agents/<date>/`,
-  council rounds under `council/<date>/`.
+- `logs/` — gitignored: per-run JSONL under `agents/<date>/`, council
+  rounds under `council/<date>/`.
 
 ## `jarvis/` backend
 
@@ -58,6 +60,10 @@ current branch.
   `agreement.py` (judge-quality reporting).
 - `jarvis/runlog/` — `store.py` (RunLogger + read helpers), `cli.py`
   (`python -m jarvis.runlog`).
+- `jarvis/graphs/` — derived, read-only relationship graphs (memory /
+  capability / execution / deliberation) + PNG/SVG renderer; served by the
+  sidecar's `/api/graph/*` and two voice tools (`memory_graph_view`,
+  `graph_view`). One implementation: nothing else derives an edge.
 - `jarvis/selfedit/service.py` — the self-edit sandbox: branch, allow-
   list check, validation gate, PR.
 - `jarvis/skills/registry.py` — spawns MCP servers as subprocesses,
@@ -97,38 +103,48 @@ current branch.
 - `jarvis/toolresult.py` — the one tool-success/failure classifier,
   shared by the registry and the sub-agent loop.
 
-## `web/src/` console
+## `macos/` native client
 
-- `App.tsx` — top-level layout, topbar, RTVI listeners (only two:
-  `AgentStatusPanel` for agent lifecycle, `App.tsx` itself for
-  `type:"display"`/`type:"ui"` messages — never add a third).
-- `components/OrbField.tsx` — the center voice wave + satellites.
-- `components/AmbientStrip.tsx` — the upper-left strip: clock, next
-  reminder, session summary, cached weather.
-- `components/SideDrawer.tsx` — the right-side tabbed drawer (Repo,
-  Edit, Memory, Runs, Dev, Output, Log tabs) — see its own tab-body
-  components (`GitPanel.tsx`, `EditModePanel.tsx`, `MemoryPanel.tsx`,
-  `RunsPanel.tsx`, `DeveloperRunsTab.tsx`, `OutputTab.tsx`,
-  `Transcript.tsx`).
-- `components/DisplayPanel.tsx` — the floating informational-result
-  overlay (weather, research); poppable to a second window.
-- `components/DrawerWindowApp.tsx` / `DisplayWindowApp.tsx` — the
-  popped-out window roots (separate Vite entries: `drawer.html`,
-  `display.html` — their import graphs must never reach
-  `jarvisClient.ts` or use a `@pipecat-ai/client-react` hook).
-- `popoutWindow.ts` — shared pop-out presence/placement plumbing used
-  by both the display and drawer windows.
-- `agentRuns.ts`, `displayResults.ts`, `conversationFeed.ts` — the
-  RTVI-fed module stores (fed only by `AgentStatusPanel`/`App.tsx`;
-  relayed to popped windows via `drawerRelay.ts`, never via a second
-  RTVI listener).
-- `uiCommands.ts` — voice `ui_control` command dispatch.
+The interface. `MortimerHost` (the app) depends on `JarvisKit` (the
+shared library) by path, so a JarvisKit change rebuilds both. Self-edit
+may change the Swift **sources** below — gated by `swift build` +
+`swift test` in the session worktree, PR flagged SWIFT CHANGE, and inert
+until a human runs `macos/MortimerHost/scripts/bundle.sh`. Manifests,
+plists, entitlements, `scripts/`, `GlassSpike/` and `MortimerShell/` are
+human-only.
+
+- `JarvisKit/Sources/JarvisKit/` — `JarvisClient.swift` (voice session),
+  `AdminAPI.swift` (every sidecar call the app makes; the Python side is
+  `jarvis/admin/server.py`), `AppMessage.swift`/`ClientMessage.swift`
+  (RTVI message shapes — mirror the backend's, change both together),
+  plus transport (`DirectWebRTCTransport`, `RTVITransport`,
+  `Signalling`), audio, `WakeWordListener`, `KeychainStore`.
+- `MortimerHost/Sources/MortimerHost/App/` — `MortimerHostApp` (entry),
+  `AppMessageRouter` (app message → UI state), `UICommandRouter` (voice
+  `ui_control` dispatch), `AppTheme`/`AppTuning`/`Glass` (style and
+  tunables), `VoiceState`, `Sounds`.
+- `.../Console/` — always-visible console: `ConsoleView`, `OrbFieldView`
+  and `VoiceWaveView` (the orb), `AmbientStripView`, `TopBarView`,
+  `MicControlsView`, `SystemVitalsView`.
+- `.../Drawer/` — tabbed drawer, one file per tab: `DrawerView`,
+  `EditTab` (drives `/api/selfedit/*`), `RepoTab`, `AgentsTab`,
+  `RunsTab`, `MemoryTab`, `CostsTab`, `OutputTab`, `LogTab`, `TabState`.
+- `.../Display/` — the result window: `DisplayWindowView`,
+  `DisplayContentView`, `DisplayWindowStore`, `GraphImageView` (renders
+  graph-layer images).
+- `.../Placement/`, `.../Stores/` — placement; view stores.
+
+## `web/src/` console (frozen)
+
+Frozen 2026-09-04, served by nothing, deliberately not mapped: this file
+is injected into agent prompts under an 8,000-character cap. Interface
+work goes to `macos/MortimerHost`.
 
 ## Naming discipline (do not confuse these)
 
 - "sidecar" = the admin Python process on `:7861` (`jarvis/admin/server.py`)
   — never the side drawer, never a popped-out window.
-- "drawer" = the tabbed side panel (`SideDrawer.tsx`) — its popped form
-  is "the drawer window".
-- "display window" = the informational-result popup (`DisplayPanel.tsx`)
-  — separate from the drawer window.
+- "drawer" = the tabbed side panel (`DrawerView.swift`) — never the
+  console, never a popped-out window.
+- "display window" = the informational-result window
+  (`DisplayWindowView.swift`) — separate from the drawer.

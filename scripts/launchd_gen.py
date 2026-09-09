@@ -42,7 +42,16 @@ def render(svc: str, repo: Path, hour: int = 3, minute: int = 15) -> str:
     template = TEMPLATE_PATH.read_text()
     repo_str = str(repo)
     if svc == "backup":
-        args_xml = _args_xml([f"{repo_str}/.venv/bin/python", "scripts/backup_db.py"])
+        # 2026-09-05 — the SYSTEM python, deliberately, not the project venv.
+        # .venv/bin/python is a symlink into uv's managed interpreter store
+        # (~/.local/share/uv/python/cpython-*/), which uv can move or collect
+        # on any python upgrade. This job has no fallback (unlike run_bot.sh,
+        # which does `if [ -x .venv/bin/python ] … else python3`), so a moved
+        # interpreter means the 03:15 backup stops silently and forever, and
+        # you find out the night you need a restore. backup_db.py is
+        # stdlib-only by design — test_backup_db_uses_only_stdlib enforces it,
+        # so this stays safe.
+        args_xml = _args_xml(["/usr/bin/python3", "scripts/backup_db.py"])
         schedule = (
             "<key>StartCalendarInterval</key><dict>"
             f"<key>Hour</key><integer>{int(hour)}</integer>"

@@ -29,8 +29,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from jarvis.db import get_conn  # noqa: E402
+from jarvis.model_catalog import render_model_catalog
 from jarvis.prompts import (  # noqa: E402
-    SUPERVISOR_PROMPT,
+    build_supervisor_prompt,
     VOICE_ADDENDUM,
     render_agent_catalog,
 )
@@ -93,14 +94,20 @@ def _approx_system_prompt() -> str:
         "- user.name: Larry\n- user.style.brevity: prefers short answers\n"
         "Previously discussed: reviewed the Mortimer upgrade plan phases."
     )
-    return (
-        SUPERVISOR_PROMPT.format(
-            jarvis_name="Mortimer", user_name="Boss", timezone="America/New_York",
-            units="imperial",
-            agent_catalog=agent_catalog, voice_catalog=voice_catalog,
-            memory_context=memory_context,
-        )
-        + "\n" + VOICE_ADDENDUM
+    # 2026-09-05: goes through build_supervisor_prompt rather than
+    # formatting the template here. Two scripts and two modules were each
+    # calling .format() with their own argument list, so adding
+    # {model_catalog} broke this one and left voice_model_bench.py broken
+    # in a way no test could see. voice=True reproduces the VOICE_ADDENDUM
+    # this used to concatenate by hand.
+    return build_supervisor_prompt(
+        jarvis_name="Mortimer", user_name="Boss", timezone="America/New_York",
+        units="imperial",
+        agent_catalog=agent_catalog,
+        model_catalog=render_model_catalog(),
+        voice_catalog=voice_catalog,
+        memory_context=memory_context,
+        voice=True,
     )
 
 

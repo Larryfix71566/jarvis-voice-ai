@@ -185,6 +185,22 @@ def _decide(
     )
 
 
+def supersede_score_rows(score_rows: list[dict]) -> tuple[list[dict], list[dict]]:
+    """GC6(b) supersession, ONE implementation (shared with jarvis/graphs/deliberation_graph.py):
+    among rows sharing (round_id, judge_profile, proposal_label, shadow) keep only the newest by
+    created_at — a --replay writes fresh rows for a judge whose original call failed, and the
+    newest supersedes the failed original by construction. Returns (kept, superseded); `kept`
+    preserves first-seen order of each key in created_at order, exactly as compute_agreement did
+    inline before Rev 2 of the graph plan factored it out."""
+    keep: dict[tuple, dict] = {}
+    for r in sorted(score_rows, key=lambda r: r.get("created_at") or ""):
+        keep[(r["round_id"], r["judge_profile"], r["proposal_label"], int(r.get("shadow", 0) or 0))] = r
+    kept = list(keep.values())
+    kept_ids = {id(r) for r in kept}
+    superseded = [r for r in score_rows if id(r) not in kept_ids]
+    return kept, superseded
+
+
 def compute_agreement(
     score_rows: list[dict], round_rows: list[dict],
     *, min_rounds: int = COUNCIL_AGREEMENT_MIN_ROUNDS,
@@ -217,12 +233,8 @@ def compute_agreement(
     # _rows_for_round alone would leave the poisoned abstentions counted
     # by _abstention_rate_by_tier/_discrimination_by_tier below, which
     # read the raw rows directly.
-    before = len(score_rows)
-    keep: dict[tuple, dict] = {}
-    for r in sorted(score_rows, key=lambda r: r["created_at"] or ""):
-        keep[(r["round_id"], r["judge_profile"], r["proposal_label"], int(r.get("shadow", 0) or 0))] = r
-    score_rows = list(keep.values())
-    superseded = before - len(score_rows)
+    score_rows, _dropped = supersede_score_rows(score_rows)
+    superseded = len(_dropped)
 
     round_ids_with_shadow = sorted({
         r["round_id"] for r in score_rows if int(r.get("shadow", 0) or 0) == 1

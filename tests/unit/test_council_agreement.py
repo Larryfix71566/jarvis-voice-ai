@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 
-from jarvis.council.agreement import _spearman, compute_agreement
+from jarvis.council.agreement import _spearman, compute_agreement, supersede_score_rows
 
 
 def _score_row(
@@ -330,3 +330,21 @@ def test_superseded_count_reported():
     report = compute_agreement(rows, [_round_row("r1")])
 
     assert report.superseded_shadow_rows == 0
+
+
+# ------------------------------------------------------ supersede_score_rows
+
+def test_supersede_score_rows_keeps_newest_and_returns_dropped():
+    """MORTIMER_GRAPH_LAYER_PLAN.md §5 step 6a — the shared supersession
+    helper factored out of compute_agreement, reused by the deliberation
+    graph builder so the picture and the --agreement report never
+    disagree."""
+    r1 = _score_row("r1", "j1", "mid", "A", "p1", 5.0, created_at="1")
+    r2 = _score_row("r1", "j1", "mid", "A", "p1", 6.0, created_at="3")
+    r3 = _score_row("r1", "j1", "mid", "A", "p1", 7.0, created_at="2")
+    r_other_shadow = _score_row("r1", "j1", "mid", "A", "p1", 9.0, shadow=1, created_at="1")
+
+    kept, superseded = supersede_score_rows([r1, r2, r3, r_other_shadow])
+
+    assert kept == [r2, r_other_shadow]
+    assert superseded == [r1, r3]

@@ -15,6 +15,7 @@ Locked behavior:
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -54,6 +55,13 @@ BASE_ENV_KEYS = (
 
 # Kill switch (plan §6, D-H10). Read HERE and nowhere else in the codebase.
 ENV_SCOPING_ENABLED_ENV = "JARVIS_ENV_SCOPING_ENABLED"
+
+#: MORTIMER_GRAPH_LAYER_PLAN.md GL9 (contract G2). call() overwrites `run_id` in
+#: these tools' arguments with the delegating run's id (or "" outside a run) and
+#: openai_tools() strips the parameter from their schemas so the model never sees
+#: it. The ContextVar cannot cross the MCP child-process boundary; this is the one
+#: point that both knows the run and touches every tool call.
+RUN_ID_INJECTED_TOOLS: frozenset[str] = frozenset({"selfedit_start", "plan_start"})
 
 #: skill.yaml requires_env_dynamic sources. Closed set — an unrecognised
 #: source is a hard error, because a typo that silently grants nothing is
@@ -289,13 +297,18 @@ class SkillRegistry:
         for tool_name, (server, tool) in self._tools.items():
             if allowed is not None and server not in allowed:
                 continue
+            parameters = tool.inputSchema or {"type": "object", "properties": {}}
+            if tool_name in RUN_ID_INJECTED_TOOLS:
+                parameters = copy.deepcopy(parameters)          # GL9: the model never sees run_id
+                (parameters.get("properties") or {}).pop("run_id", None)
+                if isinstance(parameters.get("required"), list):
+                    parameters["required"] = [r for r in parameters["required"] if r != "run_id"]
             schemas.append({
                 "type": "function",
                 "function": {
                     "name": tool.name,
                     "description": tool.description or "",
-                    "parameters": tool.inputSchema
-                    or {"type": "object", "properties": {}},
+                    "parameters": parameters,
                 },
             })
         return schemas
@@ -321,6 +334,8 @@ class SkillRegistry:
         if server_names is not None and server not in set(server_names):
             return f"Tool '{tool_name}' is not available in this context."
         session = self._sessions[server]
+        if tool_name in RUN_ID_INJECTED_TOOLS:
+            arguments = {**arguments, "run_id": get_run_id() or ""}   # GL9: always overwrites
         # Run-logging plan D3/D18/§5.6: record one mcp_call event with the
         # *exact* ok signal for this call (unlike SubAgent's tool_result,
         # which can only infer ok from this function's return string).

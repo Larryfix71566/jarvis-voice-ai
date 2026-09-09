@@ -32,5 +32,11 @@ def memory_search(query: str, limit: int = 10) -> dict:
     return logic.memory_search(query, limit)
 
 
+@mcp.tool()
+def memory_graph_view(focus: str = "", depth: int = 2, edge_types: str = "") -> dict:
+    """Draw the relationship graph of Mortimer's own memory store around a fact, key prefix, or search term: sibling facts under the same key path, what an archived fact became, and the conversation turn that stated it. Read-only; opens the picture on the user's display. Use when the user asks what Mortimer knows around a topic, why it believes something, or what happened to a memory."""
+    return logic.memory_graph_view(focus, depth, edge_types)
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

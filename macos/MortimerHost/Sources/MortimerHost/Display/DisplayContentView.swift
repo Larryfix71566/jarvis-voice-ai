@@ -9,6 +9,14 @@ import JarvisKit
 /// persisted (P9 / C3 — the stores have no disk backing at all).
 struct DisplayContentView: View {
     let payload: DisplayPayload
+    /// True while the containing panel is mid-resize (SingleDisplayPanel);
+    /// a graph image keeps its current bitmap until the size settles.
+    var isResizing: Bool = false
+    /// The scroll viewport, in points — a graph image is requested from the
+    /// sidecar at THIS size (× the screen's backing scale) rather than the
+    /// server's fixed 1400×900 default, so labels stay crisp at any panel
+    /// size (2026-09-05; the endpoint's `w`/`h` were never sent before).
+    @State private var viewport: CGSize = .zero
 
     var body: some View {
         ScrollView {
@@ -41,10 +49,18 @@ struct DisplayContentView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .onGeometryChange(for: CGSize.self) { proxy in
+            proxy.size
+        } action: { size in
+            viewport = size
+        }
     }
 
     /// W6: radar tiles are transparent precipitation overlays — the
-    /// keyless basemap at the same z/x/y stacks UNDER them.
+    /// keyless basemap at the same z/x/y stacks UNDER them. A sidecar
+    /// graph image (GL11 `/api/graph/<name>/image.png`) takes the sized
+    /// path instead: it is a server-side render, so the right size is
+    /// re-drawn, not a bitmap scaled.
     private func imagesStack(images: [String], basemaps: [String]?) -> some View {
         ForEach(Array(images.enumerated()), id: \.offset) { index, urlString in
             ZStack {
@@ -52,8 +68,12 @@ struct DisplayContentView: View {
                     AsyncImage(url: base) { $0.resizable().scaledToFit() } placeholder: { Color.clear }
                 }
                 if let url = URL(string: urlString) {
-                    AsyncImage(url: url) { $0.resizable().scaledToFit() } placeholder: {
-                        ProgressView()
+                    if GraphImageURL.isGraphImage(url) {
+                        GraphImageView(baseURL: url, viewport: viewport, isResizing: isResizing)
+                    } else {
+                        AsyncImage(url: url) { $0.resizable().scaledToFit() } placeholder: {
+                            ProgressView()
+                        }
                     }
                 }
             }

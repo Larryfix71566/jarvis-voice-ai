@@ -61,15 +61,74 @@ rotate_log() {  # name (e.g. "bot" -> logs/bot.log)
   mv "logs/${name}.log" "logs/${name}.log.1"
 }
 
+# 2026-09-06 — under launchd this script used to REFUSE, printing a hint
+# that named only com.mortimer.bot (one of five) and exiting 3. So "one
+# command to start or restart the whole stack" stopped being true in the
+# one configuration that actually ships. launchd owns the processes, but
+# restarting them is still one command; it is just kickstart rather than
+# pkill-then-spawn.
+#
+# Order matters: bot's ProgramArguments wait on vault's port 8484 via
+# wait_for.sh, so vault goes first and bot last.
+#
+# Rotation matters too: the plists write to logs/<svc>.launchd.log, a
+# DIFFERENT file from the logs/<svc>.log this script rotates, and nothing
+# rotated those at all — they grew without bound. Rotating them here keeps
+# the promise the header makes about previous sessions surviving.
+LAUNCHD_SERVICES=(vault admin extractor costs bot)
+
+under_launchd() {
+  launchctl print "gui/$(id -u)/com.mortimer.bot" >/dev/null 2>&1
+}
+
+launchd_restart() {
+  echo "Mortimer is under launchd — restarting its services."
+  mkdir -p logs
+  local s failed=0
+  for s in "${LAUNCHD_SERVICES[@]}"; do rotate_log "${s}.launchd"; done
+  for s in "${LAUNCHD_SERVICES[@]}"; do
+    if launchctl kickstart -k "gui/$(id -u)/com.mortimer.${s}" >/dev/null 2>&1; then
+      echo "  restarted ${s}"
+    else
+      echo "  FAILED   ${s} — not installed? python scripts/launchd_gen.py --status" >&2
+      failed=1
+    fi
+  done
+  echo
+  echo "Mortimer restarted. Logs: ./scripts/mortimer.sh logs"
+  return $failed
+}
+
 case "$cmd" in
   stop)
-    if launchctl print "gui/$(id -u)/com.mortimer.bot" >/dev/null 2>&1; then echo "Mortimer is under launchd — use: python scripts/launchd_gen.py --status | --uninstall, or launchctl kickstart -k gui/$(id -u)/com.mortimer.bot"; exit 3; fi
+    # Still refused under launchd, and this one is not a gap: every service
+    # is KeepAlive=true, so killing it just respawns it. Stopping for real
+    # means unloading the jobs.
+    if under_launchd; then
+      echo "Mortimer is under launchd — killing the processes would only respawn them (KeepAlive)." >&2
+      echo "  stop for real : python scripts/launchd_gen.py --uninstall" >&2
+      echo "  what is loaded: python scripts/launchd_gen.py --status" >&2
+      echo "  just restart  : ./scripts/mortimer.sh" >&2
+      exit 3
+    fi
     stop_all
     echo "Mortimer stopped."
     exit 0
     ;;
   logs)
-    exec tail -f logs/vault.log logs/bot.log logs/extractor.log logs/admin.log logs/web.log logs/costs.log
+    # The plists write logs/<svc>.launchd.log; this used to tail only
+    # logs/<svc>.log, so under launchd it followed files nothing was
+    # writing to. Tail whatever exists, from both sets.
+    files=()
+    for f in logs/vault.log logs/bot.log logs/extractor.log logs/admin.log \
+             logs/web.log logs/costs.log \
+             logs/vault.launchd.log logs/bot.launchd.log \
+             logs/extractor.launchd.log logs/admin.launchd.log \
+             logs/costs.launchd.log; do
+      [ -f "$f" ] && files+=("$f")
+    done
+    if [ ${#files[@]} -eq 0 ]; then echo "no logs yet — start Mortimer first" >&2; exit 1; fi
+    exec tail -f "${files[@]}"
     ;;
   start)
     ;;
@@ -79,7 +138,10 @@ case "$cmd" in
     ;;
 esac
 
-if launchctl print "gui/$(id -u)/com.mortimer.bot" >/dev/null 2>&1; then echo "Mortimer is under launchd — use: python scripts/launchd_gen.py --status | --uninstall, or launchctl kickstart -k gui/$(id -u)/com.mortimer.bot"; exit 3; fi
+if under_launchd; then
+  launchd_restart
+  exit $?
+fi
 
 if [ ! -x .venv/bin/python ]; then
   echo "no virtualenv found at .venv — create it first:" >&2

@@ -37,8 +37,8 @@ class AdminClient:
             timeout=timeout,
         )
 
-    def get(self, path: str) -> dict[str, Any]:
-        return self._client.get(path).json()
+    def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self._client.get(path, params=params).json()
 
     def post(self, path: str, json: dict[str, Any] | None = None) -> dict[str, Any]:
         return self._client.post(path, json=json).json()
@@ -68,8 +68,16 @@ def selfedit_start(
     confirm: bool = False,
     plan_path: str = "",
     staging_id: str = "",
+    run_id: str = "",
+    target_paths: list[str] | None = None,
 ) -> dict[str, Any]:
     """Two-phase start of an upgrade run (preview, then confirm).
+
+    TARGET_PATHS (2026-09-07): the repo files the edit will CHANGE. The
+    sidecar's preflight classifies these (Tier 0 / B / routine) instead of
+    whatever paths the goal prose mentions, so "add a line about
+    jarvis/model_catalog.py to docs/REPO_MAP.md" is a docs edit, not a
+    core one.
 
     PLAN_PATH, when set, names a repo plan/spec document the sidecar reads
     and injects into the run — use it whenever the user asks to implement
@@ -86,13 +94,29 @@ def selfedit_start(
     still works for one release as a deprecated fallback."""
     staging_id = (staging_id or "").strip()
 
-    # Confirm path with a staging_id: skip re-deriving anything, replay it.
-    if confirm and staging_id:
+    # Confirm path with a staging_id — or with no goal at all — replays the
+    # sidecar's staged record. The sidecar resolves a mangled or missing id
+    # to the single live staging (2026-09-07: 'stg-…' and '43' both arrived
+    # here and bounced the user back to a fresh preview for a typo the
+    # sidecar could see through) and refuses, naming them, when more than
+    # one is live.
+    if confirm and (staging_id or not (goal or "").strip()):
+        # SE3 — author=true asks the sidecar to open the session and hand it
+        # back so THIS agent writes the change, instead of restating the
+        # goal to a planner that starts with no map of the repo. A staged
+        # record carrying a plan_path still goes to the planner; the
+        # sidecar decides, from fields, not from anything said here.
         run_resp = _call(
-            lambda: client.post("/api/selfedit/run", json={"staging_id": staging_id})
+            lambda: client.post(
+                "/api/selfedit/run",
+                json={"staging_id": staging_id, "author": True},
+            )
         )
         if not run_resp.get("ok"):
             return run_resp
+        session = run_resp.get("session")
+        if session:
+            return _describe_session(session)
         return {
             "ok": True,
             "started": True,
@@ -148,9 +172,11 @@ def selfedit_start(
     if not confirm:
         # G2 — stage the preview on the sidecar; the returned staging_id is
         # what the confirm=true call must pass back.
+        targets = [t.strip() for t in (target_paths or []) if t and t.strip()]
         stage_resp = _call(lambda: client.post(
             "/api/selfedit/stage",
-            json={"goal": goal, "profile": chosen, "plan_path": plan_path or None},
+            json={"goal": goal, "profile": chosen, "plan_path": plan_path or None,
+                  "run_id": run_id or None, "target_paths": targets or None},
         ))
         if not stage_resp.get("ok"):
             return stage_resp
@@ -168,10 +194,9 @@ def selfedit_start(
             "ok": True,
             "needs_confirmation": True,
             "summary": (
-                f"Ready to plan this edit with {chosen or 'the default planner'}{seeded}: "
-                f"“{goal}”.{core_note} Planning runs in the background and can take several "
-                f"minutes; I can check progress anytime. Say yes to start "
-                f"(staging_id {sid})."
+                f"Ready to make this edit{seeded}: “{goal}”.{core_note} I will "
+                f"write the change, validate it, and if every check passes "
+                f"open the pull request. Say yes to start (staging_id {sid})."
             ),
             "goal": goal,
             "profile": chosen,
@@ -180,7 +205,7 @@ def selfedit_start(
         }
 
     # Deprecated fallback: confirm=true with no staging_id, goal restated.
-    payload: dict[str, Any] = {"goal": goal, "profile": chosen}
+    payload: dict[str, Any] = {"goal": goal, "profile": chosen, "run_id": run_id or None}
     if plan_path:
         payload["plan_path"] = plan_path
     run_resp = _call(lambda: client.post("/api/selfedit/run", json=payload))
@@ -196,6 +221,114 @@ def selfedit_start(
         "profile": run_resp.get("profile", chosen),
         "planner_model": run_resp.get("profile", chosen),  # G7
     }
+
+
+def _describe_session(session: dict[str, Any]) -> dict[str, Any]:
+    """SE3 — the confirm opened a session for THIS agent to write in.
+
+    The summary is an instruction to itself as much as a report: the next
+    move is selfedit_read/selfedit_write/selfedit_finish in this same
+    delegation, not a status poll waiting for a planner that was never
+    launched."""
+    targets = session.get("target_paths") or []
+    named = f" Files to change: {', '.join(targets)}." if targets else ""
+    return {
+        "ok": True,
+        "started": False,
+        "session": session,
+        "branch": session.get("branch"),
+        "target_paths": targets,
+        "summary": (
+            f"Session open on {session.get('branch')}.{named} Read each file "
+            f"with selfedit_read, write the change with selfedit_write, then "
+            f"call selfedit_finish — it validates and opens the pull request "
+            f"if every check passes."
+        ),
+    }
+
+
+def selfedit_read(client, path: str) -> dict[str, Any]:
+    """Read one file from the open session's worktree."""
+    path = (path or "").strip()
+    if not path:
+        return {"ok": False, "error": "which file? selfedit_read needs a repo path"}
+    return _call(lambda: client.get("/api/selfedit/file", params={"path": path}))
+
+
+def selfedit_write(client, path: str, content: str, rationale: str = "",
+                   visual_intent: str = "") -> dict[str, Any]:
+    """Write one file in the open session's worktree (whole-file content)."""
+    path = (path or "").strip()
+    if not path:
+        return {"ok": False, "error": "which file? selfedit_write needs a repo path"}
+    if not (rationale or "").strip():
+        return {"ok": False,
+                "error": "selfedit_write needs a rationale — one line saying why"}
+    resp = _call(lambda: client.post("/api/selfedit/write", json={
+        "path": path, "content": content, "rationale": rationale,
+        "visual_intent": visual_intent,
+    }))
+    if not resp.get("ok"):
+        return resp
+    return {
+        "ok": True,
+        "path": resp.get("path", path),
+        "diff": resp.get("diff", ""),
+        "summary": f"Wrote {resp.get('path', path)}. "
+                   f"Call selfedit_finish when the change is complete.",
+    }
+
+
+def selfedit_finish(client) -> dict[str, Any]:
+    """Validate the session and, if every check passes, open the PR.
+
+    Asynchronous by necessity: jarvis/skills/registry.py's CALL_TIMEOUT is
+    30 s and the pytest gate alone runs for minutes. Ask selfedit_status
+    for progress."""
+    resp = _call(lambda: client.post("/api/selfedit/finish", json={}))
+    if not resp.get("ok"):
+        return resp
+    return {
+        "ok": True,
+        "started": True,
+        "summary": (
+            "Validating now — the gates take a few minutes. I'll open the "
+            "pull request if every check passes; ask me how it's going "
+            "anytime."
+        ),
+    }
+
+
+def _describe_finish(finish: dict[str, Any]) -> str:
+    """One sentence for the finish job's state, or "" when it never ran."""
+    state = (finish or {}).get("state")
+    if state in (None, "idle"):
+        return ""
+    if state == "validating":
+        return "Validating the change now — the gates take a few minutes."
+    if state == "submitting":
+        return "Validation passed; opening the pull request now."
+    if state == "done":
+        notice = (finish.get("notice") or "").strip()
+        pr = finish.get("pr_url") or ""
+        return (f"{notice} Pull request: {pr} — merging is yours on GitHub."
+                if notice else
+                f"Pull request: {pr} — merging is yours on GitHub.")
+    if state == "failed":
+        failed = [c for c in (finish.get("checks") or []) if not c.get("ok")]
+        if failed:
+            first = failed[0]
+            return (
+                f"Validation failed at {first.get('name')}: "
+                f"{(first.get('output') or '')[:200]}. The session is still "
+                f"open — want me to fix it?"
+            )
+        return "Validation failed. The session is still open — want me to fix it?"
+    if state == "error":
+        return (f"The finish step errored: {finish.get('notice') or 'no detail'}. "
+                f"The session is still open."
+                )
+    return ""
 
 
 def _describe_staging(
@@ -240,6 +373,8 @@ def selfedit_status(client, staging_id: str = "") -> dict[str, Any]:
     job = resp.get("job", {})
     status = resp.get("status", {}) or {}
     stagings = resp.get("stagings", []) or []
+    finish = resp.get("finish", {}) or {}
+    finish_sentence = _describe_finish(finish)
 
     # The staging answer is computed BEFORE the running-state branch and
     # attached to every return path. The first cut computed it only on the
@@ -249,6 +384,18 @@ def selfedit_status(client, staging_id: str = "") -> dict[str, Any]:
     # shape that invites the model to fill the gap with an invention. If
     # the question was asked, it gets an answer.
     staging_sentence, staging_found = _describe_staging(staging_id, stagings)
+
+    # SE4 — the finish job is the ONLY thing running on the authored path
+    # (no planner job ever started), so it is reported first and on its own.
+    if finish.get("state") in ("validating", "submitting"):
+        summary = finish_sentence
+        if staging_sentence:
+            summary = f"{summary} {staging_sentence}"
+        return {
+            "ok": True, "summary": summary, "job": job, "finish": finish,
+            "active": bool(status.get("active")),
+            "stagings": stagings, "staging_found": staging_found,
+        }
 
     if job.get("state") == "running":
         summary = (
@@ -269,8 +416,12 @@ def selfedit_status(client, staging_id: str = "") -> dict[str, Any]:
         }
 
     parts: list[str] = []
+    if finish_sentence:
+        parts.append(finish_sentence)
     if job.get("state") in ("done", "error") and job.get("summary"):
         parts.append(str(job["summary"]))
+    if job.get("pr_url"):
+        parts.append(f"Pull request: {job['pr_url']} — merging is yours on GitHub.")
 
     if status.get("active"):
         proposals = status.get("proposals", []) or []
@@ -292,7 +443,7 @@ def selfedit_status(client, staging_id: str = "") -> dict[str, Any]:
         parts.append(staging_sentence)
 
     return {
-        "ok": True, "summary": " ".join(parts), "job": job,
+        "ok": True, "summary": " ".join(parts), "job": job, "finish": finish,
         "active": bool(status.get("active")),
         "planner_model": job.get("profile"),  # G7
         "stagings": stagings,
@@ -313,76 +464,19 @@ def selfedit_verify_appearance(client, branch_override: bool = False,
         json={"branch_override": branch_override, "display": display}))
 
 
-def selfedit_validate(client) -> dict[str, Any]:
-    """Run the validation pipeline (read-only — no confirmation needed)."""
-    resp = _call(lambda: client.post("/api/selfedit/validate"))
-    if not resp.get("ok"):
-        return resp
-    failed = [c for c in resp.get("checks", []) if not c.get("ok")]
-    if failed:
-        detail = "; ".join(f"{c['name']}: {c.get('output', '')[:200]}" for c in failed)
-        return {"ok": False, "error": f"validation failed — {detail}"}
-    return {
-        "ok": True,
-        "validated_ok": True,
-        "summary": (
-            "Validation passed: edits stay inside the allowlist, the backend still "
-            "imports, and the frontend still builds. Review the diffs, then tell me "
-            "to submit the pull request."
-        ),
-    }
-
-
-def selfedit_submit(client, confirm: bool = False) -> dict[str, Any]:
-    """Two-phase PR submission. Only valid after validation has passed."""
-    status = _call(lambda: client.get("/api/selfedit/run"))
-    if not status.get("ok"):
-        return status
-    if status.get("job", {}).get("state") == "running":
-        return {"ok": False, "error": "the planner is still working — ask for status instead."}
-    sess = status.get("status", {}) or {}
-    if not sess.get("active"):
-        return {"ok": False, "error": "there's no edit session to submit — start one first."}
-    if not sess.get("proposals"):
-        return {"ok": False, "error": "no edits have been proposed yet."}
-    if not sess.get("validated_ok"):
-        return {"ok": False, "error": "validation hasn't passed — run validation first."}
-
-    if not confirm:
-        files = ", ".join(p["path"] for p in sess["proposals"])
-        return {
-            "ok": True,
-            "needs_confirmation": True,
-            "summary": (
-                f"Ready to open a pull request with these edits: {files}. "
-                f"I cannot merge it — merging always stays with you on GitHub. "
-                f"Say ‘submit the PR’ to proceed."
-            ),
-        }
-
-    resp = _call(lambda: client.post("/api/selfedit/submit"))
-    if not resp.get("ok"):
-        return resp
-    return {
-        "ok": True,
-        "pr_url": resp.get("pr_url"),
-        "summary": (
-            f"Pull request opened: {resp.get('pr_url')}. Review and merge it on "
-            f"GitHub — I cannot merge it myself."
-        ),
-    }
-
-
-# ------------------------------------------------------- planning pathway
-# MORTIMER_PLANNING_PATHWAY_PLAN.md P7. Same thin-HTTP-client, two-phase-
-# confirmation conventions as the self-edit tools above — no planning
-# logic lives here, only the sidecar's /api/plan/* pass-throughs shaped
-# into spoken-friendly summaries.
+# SE2 (2026-09-07): selfedit_validate and selfedit_submit are GONE as
+# tools and as logic. jarvis/skills/registry.py bounds every MCP tool call
+# at 30 s (CALL_TIMEOUT) and the pytest gate alone runs for minutes, so
+# neither could ever complete against the real suite — part of why no
+# self-edit had reached a pull request. selfedit_finish is the background
+# job that replaces both. The sidecar's own /api/selfedit/validate and
+# /submit routes are untouched (SE10): the native app's Edit tab drives
+# them directly.
 
 
 def plan_start(
     client, goal: str, mode: str = "single", profile: str | None = None,
-    confirm: bool = False, review_path: str = "",
+    confirm: bool = False, review_path: str = "", run_id: str = "",
 ) -> dict[str, Any]:
     """Two-phase start of a planning job. `mode` is 'single' (one named
     model authors the plan) or 'council' (every usable model drafts a
@@ -437,7 +531,7 @@ def plan_start(
     resp = _call(lambda: client.post(
         "/api/plan/start", json={
             "goal": goal, "mode": mode, "profile": profile,
-            "review_path": review_path,
+            "review_path": review_path, "run_id": run_id or None,
         },
     ))
     if not resp.get("ok"):

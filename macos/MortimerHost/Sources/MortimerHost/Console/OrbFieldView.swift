@@ -15,12 +15,20 @@ struct AgentLayoutEntry {
 }
 
 /// agentLayout.ts:48-54, verbatim.
+// 2026-09-06 — six satellites, not five: `app_builder` split out of
+// `developer`. Rebalanced from a pentagon to an even hexagon (Larry's
+// call) rather than bolting a sixth point onto the old shape. The
+// angular ORDER of the original five is preserved, so nothing crosses
+// the field; each moves a few percent and the new one takes the vacant
+// bottom vertex. Centre (50,50), radius 29. Keep in sync with
+// web/src/agentLayout.ts.
 let AGENT_LAYOUT: [AgentLayoutEntry] = [
-    AgentLayoutEntry(key: "developer", label: "Developer", x: 50, y: 23),
-    AgentLayoutEntry(key: "analyst", label: "Analyst", x: 82, y: 42),
-    AgentLayoutEntry(key: "systems", label: "Systems", x: 70, y: 72),
-    AgentLayoutEntry(key: "librarian", label: "Librarian", x: 30, y: 72),
-    AgentLayoutEntry(key: "scheduler", label: "Scheduler", x: 18, y: 42),
+    AgentLayoutEntry(key: "developer", label: "Developer", x: 50, y: 21),
+    AgentLayoutEntry(key: "analyst", label: "Analyst", x: 79, y: 36),
+    AgentLayoutEntry(key: "systems", label: "Systems", x: 79, y: 64),
+    AgentLayoutEntry(key: "app_builder", label: "App Builder", x: 50, y: 79),
+    AgentLayoutEntry(key: "librarian", label: "Librarian", x: 21, y: 64),
+    AgentLayoutEntry(key: "scheduler", label: "Scheduler", x: 21, y: 36),
 ]
 
 struct OrbFieldView: View {
@@ -120,6 +128,57 @@ struct OrbFieldView: View {
                     Text(notice)
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(AppTheme.attn)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .mortimerGlass(.chip)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        .padding(.bottom, geo.size.height * 0.08 + 60)
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
+                }
+
+                // 2026-09-05 — the default output device moved (AirPods)
+                // and the bot's voice did not follow (AudioOutputMonitor).
+                // Same chip idiom, but interactive and persistent: it
+                // carries the one fix this WebRTC build allows.
+                if let notice = notices.audioOutputNotice {
+                    HStack(spacing: 10) {
+                        Text(notice)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(AppTheme.attn)
+                            .lineLimit(1)
+                        Button("Reconnect") {
+                            notices.clearAudioOutputNotice()
+                            Task { await client.reconnect() }
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(AppTheme.accent)
+                        .help("Open a new session so Mortimer's voice plays on the new output device")
+                        Button {
+                            notices.clearAudioOutputNotice()
+                        } label: {
+                            Text("×").font(.system(size: 13, design: .monospaced))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(AppTheme.textDim)
+                        .help("Keep the current session")
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .mortimerGlass(.chip)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, geo.size.height * 0.08 + 96)
+                    .transition(.opacity)
+                }
+
+                // 2026-09-05 — the input got repointed to a rate-matching
+                // mic at connect (AirPods 24 kHz-mic fix). Informational,
+                // auto-fading; the correction already happened.
+                if let notice = notices.audioInputNotice {
+                    Text(notice)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(AppTheme.textDim)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 6)
                         .mortimerGlass(.chip)

@@ -58,10 +58,11 @@ import sys
 import threading
 import time
 import uuid
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -79,6 +80,8 @@ from jarvis import memory as memory_module
 from jarvis.council import config as council_config
 from jarvis.council import council as council_mod
 from jarvis.db import get_conn, now_iso, run_migrations
+from jarvis import graphs
+from jarvis.graphs import config as gcfg, render
 from jarvis.prompts import (
     PLAN_AUTHOR_PROMPT,
     PLAN_REVIEW_PROMPT,
@@ -133,6 +136,22 @@ class MessageIn(BaseModel):
     message: str
 
 
+class CommitDraftIn(BaseModel):
+    """POST /api/git/prepare-commit.
+
+    `paths` is the SE1 file list (MORTIMER_SELFEDIT_AUTHORING_PLAN.md).
+    It is OPTIONAL here and required in mcp_git.logic: the console clients
+    that call this route — MortimerHost's AdminAPI.swift and web's
+    GitPanel.tsx — post {message} alone, and C1 keeps their contract
+    intact (a required field would 422 the running app until a rebuild).
+    Omitted means "everything git reports as changed", enumerated HERE and
+    passed explicitly, so logic.prepare_commit never stages a set nobody
+    named and the draft summary the human confirms lists every file. The
+    AGENT path is the MCP tool, which has no default."""
+    message: str
+    paths: list[str] | None = None
+
+
 class ActionIn(BaseModel):
     action_id: int
 
@@ -153,6 +172,21 @@ class GoalIn(BaseModel):
     # record from POST /api/selfedit/stage; `goal` may be empty in that
     # case (it's optional above specifically to allow this).
     staging_id: str | None = None
+    # MORTIMER_GRAPH_LAYER_PLAN.md GL9 — the delegating run (bare-form only;
+    # the staged path reads it from the staging record). "" is normalised to None.
+    run_id: str | None = None
+    # SE3 — "open the session and let ME write it" (the developer, via
+    # mcp_selfedit). Default False, which is today's behaviour exactly.
+    #
+    # This is an EXPLICIT flag rather than an inference from "no plan_path"
+    # because this route has two callers with different needs. The native
+    # app's Edit tab (macos/MortimerHost/.../Drawer/EditTab.swift:91 →
+    # AdminAPI.selfeditRun) posts a bare {goal, profile} — no plan, no
+    # staging — and reads `started` to know a run began; it has no way to
+    # author anything, so it needs the planner (C1/SE10). The developer
+    # sets author=true and writes the files itself. An older mcp_selfedit
+    # build that does not send the flag gets the planner, the safe default.
+    author: bool = False
 
 
 class SelfEditStageIn(BaseModel):
@@ -160,6 +194,10 @@ class SelfEditStageIn(BaseModel):
     goal: str
     profile: str | None = None
     plan_path: str | None = None
+    run_id: str | None = None      # GL9
+    # 2026-09-07 (review F5): the files the edit will change, classified
+    # by preflight instead of the paths the goal prose happens to mention.
+    target_paths: list[str] | None = None
 
 
 class ConveneIn(BaseModel):
@@ -186,6 +224,7 @@ class PlanStartIn(BaseModel):
     # REVIEW of the repo document at this path instead of authoring a new
     # plan; empty (default) is today's authoring behavior, unchanged.
     review_path: str = ""
+    run_id: str | None = None      # GL9
 
 
 class PlanChooseIn(BaseModel):
@@ -254,6 +293,30 @@ def _prune_expired_stagings() -> None:
         del _selfedit_stagings[sid]
 
 
+def _take_staging(requested: str) -> tuple[dict[str, Any] | None, str, list[str]]:
+    """Pop the staging a confirm refers to.
+
+    Exact id first. Otherwise, when exactly ONE staging is live, that one:
+    the id travels developer → supervisor → user → supervisor → developer
+    as relayed text, and on 2026-09-07 it arrived as 'stg-0d049db0947d'
+    and as '43' — each bounced the user back to a fresh preview for a
+    typo the sidecar could have resolved, since only one preview was ever
+    live. With more than one live staging the caller refuses and names
+    them; guessing between two approved previews is never done here.
+    Takes _staging_lock itself. Returns (record | None, id_used,
+    ids_still_live)."""
+    with _staging_lock:
+        _prune_expired_stagings()
+        used = requested
+        rec = _selfedit_stagings.pop(requested, None) if requested else None
+        if rec is None and len(_selfedit_stagings) == 1:
+            used, rec = _selfedit_stagings.popitem()
+            logger.info("selfedit_run_staging_resolved requested=%r used=%s",
+                        requested, used)
+        live = sorted(_selfedit_stagings)
+    return rec, used, live
+
+
 # Single self-edit session for the sidecar process (plan §3: one at a time).
 _selfedit_service = SelfEditService()
 
@@ -280,6 +343,48 @@ _run_job: dict[str, Any] = {
     "goal": None,
     "profile": None,
     "summary": None,
+    "started_at": None,
+    "finished_at": None,
+    # 2026-09-07 (review F6): "done" says the planner stopped; these say
+    # whether a pull request exists. Set from the agent's result, never
+    # from its prose.
+    "submitted": False,
+    "pr_url": None,
+}
+
+# SE11 (MORTIMER_SELFEDIT_AUTHORING_PLAN.md) — the authoring kill switch,
+# read in exactly ONE place. Off restores today's behaviour exactly:
+# confirm=true launches the Upgrade Agent for every staging and the three
+# authoring routes refuse with a named reason. Same four falsy spellings as
+# jarvis/skills/registry.py's env_scoping_enabled().
+SELFEDIT_AUTHORING_ENABLED_ENV = "JARVIS_SELFEDIT_AUTHORING_ENABLED"
+
+
+def authoring_enabled() -> bool:
+    """True unless JARVIS_SELFEDIT_AUTHORING_ENABLED is an explicit false."""
+    return os.environ.get(SELFEDIT_AUTHORING_ENABLED_ENV, "").strip().lower() not in (
+        "0", "false", "no", "off",
+    )
+
+
+_AUTHORING_OFF = {
+    "ok": False,
+    "error": "developer authoring is disabled "
+             "(JARVIS_SELFEDIT_AUTHORING_ENABLED=false) — the planner path is active",
+}
+
+# SE4 — the finish job: validate, and if every check passes, submit. It is a
+# JOB and not a synchronous route because jarvis/skills/registry.py's
+# CALL_TIMEOUT is 30 s and the pytest gate alone runs for ~330 s: a
+# developer-driven validate could never have completed as a tool call.
+# Process state, reset on restart, exactly like _run_job.
+_finish_lock = threading.Lock()
+_finish_job: dict[str, Any] = {
+    "state": "idle",  # idle | validating | submitting | done | failed | error
+    "checks": None,
+    "pr_url": None,
+    "notice": None,
+    "run_id": None,
     "started_at": None,
     "finished_at": None,
 }
@@ -475,18 +580,79 @@ def _site_summary(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _make_agent(service: SelfEditService, profile: str | None) -> UpgradeAgent:
-    """Construct the planner (seam for tests)."""
-    return UpgradeAgent(service, profile=profile)
+def _make_agent(service: SelfEditService, profile: str | None,
+                run_id: str | None = None) -> UpgradeAgent:
+    """Construct the planner (seam for tests). run_id: GL9 (contract G2)."""
+    return UpgradeAgent(service, profile=profile, run_id=run_id)
 
 
-def _run_agent(goal: str, profile: str | None, plan: str | None = None) -> None:
+def _run_finish() -> None:
+    """SE4 — background thread target: validate, and on green, submit.
+
+    Auto-submit is not a new decision: it is the confirmation the user
+    already gave at the preview, whose sentence says the run will validate
+    and open the pull request if every check passes. On a failure the
+    session stays OPEN with the check output, so repair is the developer on
+    the next turn (read → write → finish again) rather than a dead end."""
+    try:
+        result = _selfedit_service.validate()
+        with _finish_lock:
+            _finish_job["checks"] = result.get("checks")
+        if not result.get("ok"):
+            with _finish_lock:
+                _finish_job.update(state="failed", finished_at=time.time())
+                run_id = _finish_job["run_id"]
+            logger.info("selfedit_state_transition state=finish_failed run_id=%s", run_id)
+            return
+        with _finish_lock:
+            _finish_job["state"] = "submitting"
+        submitted = _selfedit_service.submit()
+        with _finish_lock:
+            if submitted.get("ok"):
+                _finish_job.update(
+                    state="done", pr_url=submitted.get("pr_url"),
+                    notice=submitted.get("notice"), finished_at=time.time(),
+                )
+            else:
+                _finish_job.update(
+                    state="error", notice=submitted.get("error"),
+                    finished_at=time.time(),
+                )
+            state, pr_url, run_id = (_finish_job["state"], _finish_job["pr_url"],
+                                     _finish_job["run_id"])
+        logger.info("selfedit_state_transition state=finish_%s pr=%s run_id=%s",
+                    state, pr_url, run_id)
+    except Exception as exc:  # noqa: BLE001 — a crash must still settle the job
+        # Without this the job would sit in "validating" forever and the
+        # developer would keep reporting it as still running.
+        logger.exception("selfedit finish job crashed")
+        with _finish_lock:
+            _finish_job.update(
+                state="error",
+                notice=f"finish crashed: {type(exc).__name__}: {exc}",
+                finished_at=time.time(),
+            )
+
+
+def _run_agent(goal: str, profile: str | None, plan: str | None = None,
+               run_id: str | None = None) -> None:
     """Background thread target: plan edits, then settle the job state."""
     global _run_agent_instance
     try:
-        agent = _make_agent(_selfedit_service, profile)
+        agent = _make_agent(_selfedit_service, profile, run_id)
         with _run_lock:
             _run_agent_instance = agent
+        # A session left open by an earlier run that ended without
+        # submitting (review F6) must not be inherited by a NEW goal:
+        # UpgradeAgent.run() reuses an active session as-is, so the next
+        # goal would plan on the old branch with the old proposal still
+        # applied. Same goal → resume it (validate/submit by voice); a
+        # different goal → drop the leftover first, and say so in the log.
+        stale = _selfedit_service.branch
+        if stale and (_selfedit_service.goal or "") != goal:
+            logger.info("selfedit_stale_session_reverted branch=%s old_goal=%r new_goal=%r",
+                        stale, _selfedit_service.goal, goal)
+            _selfedit_service.revert()
         result = agent.run(goal, plan=plan)
         if result.get("cancelled"):
             # A cancelled session is discarded whole — same semantics as
@@ -497,6 +663,19 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None) -> None:
                 _selfedit_service.revert()
         else:
             state = "done" if result.get("ok") else "error"
+        summary = result.get("summary", "") or ""
+        submitted = bool(result.get("submitted"))
+        if state == "done" and not submitted:
+            # Mechanical, not prompt-based (review F6): the planner's prose
+            # after a failed validation reads like a report, and "done"
+            # sounded like a PR. Say what actually happened, then relay it.
+            proposals = len(_selfedit_service.proposals) if _selfedit_service.branch else 0
+            still_open = (
+                f" The session is still open with {proposals} proposed edit(s) — "
+                "say finish to validate and open the PR, or revert to drop it."
+                if _selfedit_service.branch else ""
+            )
+            summary = f"Ended without submitting a pull request.{still_open} {summary}".strip()
         with _run_lock:
             _run_job.update(
                 state=state,
@@ -505,12 +684,14 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None) -> None:
                 # REASON survives in admin.log instead of only in memory
                 # (2026-08-30: three state=error transitions logged with no
                 # cause anywhere on disk).
-                summary=result.get("summary", ""),
+                summary=summary,
+                submitted=submitted,
+                pr_url=result.get("pr_url"),
                 finished_at=time.time(),
             )
         # D17 — every self-edit state transition is logged.
-        logger.info("selfedit_state_transition state=%s goal=%r summary=%r",
-                    state, goal, (result.get("summary") or "")[:400])
+        logger.info("selfedit_state_transition state=%s submitted=%s goal=%r summary=%r",
+                    state, submitted, goal, summary[:400])
     except Exception as exc:  # planner crash must still settle the job
         logger.exception("upgrade run crashed")
         with _run_lock:
@@ -526,8 +707,15 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None) -> None:
 
 
 def _busy() -> bool:
+    """True while EITHER self-edit job holds the single session (SE4/SE10).
+    The console's own /validate and /submit routes are gated on this, so a
+    finish job in flight reports "a run is in progress" rather than two
+    validations racing over one worktree."""
     with _run_lock:
-        return _run_job["state"] == "running"
+        if _run_job["state"] == "running":
+            return True
+    with _finish_lock:
+        return _finish_job["state"] in ("validating", "submitting")
 
 
 def _make_appbuild_agent(workspace: AppWorkspace, profile: str | None) -> AppBuildAgent:
@@ -675,10 +863,11 @@ def _run_plan_single(
 
 def _run_plan_council(
     goal: str, members: dict[str, list[str]] | None, context: dict[str, Any],
+    run_id: str | None = None,
 ) -> None:
     try:
         result = asyncio.run(council_mod.draft_candidates(
-            goal, members=members, judge=True, context=context,
+            goal, members=members, judge=True, context=context, run_id=run_id,
         ))
     except Exception as exc:  # noqa: BLE001
         logger.exception("plan council-mode job crashed")
@@ -751,8 +940,15 @@ def actions(status: str = "all", limit: int = 10) -> dict:
 
 
 @app.post("/api/git/prepare-commit")
-def prepare_commit(body: MessageIn) -> dict:
-    return logic.prepare_commit(body.message)
+def prepare_commit(body: CommitDraftIn) -> dict:
+    paths = body.paths
+    if paths is None:
+        listed = logic.changed_files()
+        if not listed["ok"]:
+            return {"ok": False, "error": listed["error"]}
+        paths = listed["files"]
+        logger.info("git_prepare_commit_console_all_changed files=%d", len(paths))
+    return logic.prepare_commit(body.message, paths)
 
 
 @app.post("/api/git/commit")
@@ -803,7 +999,9 @@ def selfedit_stage(body: SelfEditStageIn) -> dict:
     # no plan, is refused here in one sentence — before staging, before
     # confirm, before a planner run rediscovers the same wall (2026-08-30:
     # three runs, ~2.5 minutes each, all "declined: not on the allowlist").
-    flight = _selfedit_service.preflight(goal, has_plan=bool(plan_path))
+    flight = _selfedit_service.preflight(
+        goal, has_plan=bool(plan_path), target_paths=body.target_paths,
+    )
     if not flight["ok"]:
         return {"ok": False, "error": flight["error"], "tiers": flight["tiers"]}
     staging_id = uuid.uuid4().hex[:12]
@@ -813,6 +1011,11 @@ def selfedit_stage(body: SelfEditStageIn) -> dict:
             "goal": goal,
             "profile": body.profile,
             "plan_path": plan_path,
+            "run_id": (body.run_id or "").strip() or None,   # GL9
+            # SE3 — kept, not dropped: the confirm returns these to the
+            # developer as the files it said it would change, so authoring
+            # starts from the same list preflight classified.
+            "target_paths": list(body.target_paths or []),
             "created_at": time.time(),
         }
     return {
@@ -836,15 +1039,38 @@ def selfedit_run(body: GoalIn) -> dict:
     (logged as a deprecation signal), so an older mcp_selfedit build in the
     field doesn't break."""
     staging_id = (body.staging_id or "").strip()
-    if staging_id:
-        with _staging_lock:
-            _prune_expired_stagings()
-            rec = _selfedit_stagings.pop(staging_id, None)
+    bare_goal = (body.goal or "").strip()
+    # Refuse a confirm that lands during a live run BEFORE touching the
+    # staging (2026-09-07 review, F4): the pop used to come first, so the
+    # refusal itself consumed the preview the user had just approved.
+    with _run_lock:
+        if _run_job["state"] == "running":
+            return {
+                "ok": False,
+                "error": "an upgrade run is already in progress — ask for status instead",
+                "job": dict(_run_job),
+            }
+    if staging_id or not bare_goal:
+        rec, staging_id, live = _take_staging(staging_id)
         if rec is None:
+            if len(live) > 1:
+                return {
+                    "ok": False,
+                    "error": (
+                        "more than one staged edit is live ("
+                        + ", ".join(live)
+                        + ") — say which one to start, or preview again."
+                    ),
+                    "stagings": live,
+                }
+            what = (
+                f"no staged edit with id '{staging_id}'" if staging_id
+                else "no staged edit is live and no goal was given"
+            )
             return {
                 "ok": False,
                 "error": (
-                    f"no staged edit with id '{staging_id}' — it may have "
+                    f"{what} — the staging may have "
                     f"expired (staging lasts {int(SELFEDIT_STAGING_TTL_S // 60)} "
                     "minutes) or was already used. Call selfedit_start again "
                     "(confirm=false) to preview a new one."
@@ -853,16 +1079,63 @@ def selfedit_run(body: GoalIn) -> dict:
         goal = rec["goal"]
         profile = rec["profile"]
         plan_path = rec["plan_path"] or ""
+        run_id = rec.get("run_id")
+        target_paths = list(rec.get("target_paths") or [])
     else:
-        goal = (body.goal or "").strip()
-        if not goal:
-            return {"ok": False, "error": "a goal is required — what should I change?"}
+        goal = bare_goal
         logger.warning(
             "selfedit_run_stateless_confirm goal=%r — pass staging_id instead "
             "(deprecated fallback, see G2)", goal,
         )
         profile = body.profile
         plan_path = (body.plan_path or "").strip()
+        run_id = (body.run_id or "").strip() or None
+        # The deprecated bare-goal form carries no target_paths (GoalIn has
+        # no such field and gains none): only a staged preview classified
+        # them.
+        target_paths = []
+
+    if authoring_enabled() and body.author and not plan_path and body.plan is None:
+        # SE3 — developer-authored: an author=true confirm with no plan
+        # document is a single stated goal, which the developer can author
+        # in a few tool calls
+        # (measured exploring runs: 15-72 s). Open the session synchronously
+        # and hand it back; the developer writes in the SAME delegation
+        # rather than restating the goal to a second LLM that starts blind.
+        # A plan_path (or an explicit plan) is implementation-scale work and
+        # still goes to the Upgrade Agent, below. Two declared fields
+        # (author, plan_path), no judgment.
+        if _busy():
+            return {
+                "ok": False,
+                "error": "an upgrade run is already in progress — ask for status instead",
+                "job": dict(_run_job),
+            }
+        stale = _selfedit_service.branch
+        if stale and (_selfedit_service.goal or "") != goal:
+            # Same rule _run_agent applies: a session left open by an
+            # earlier goal must never be inherited by a new one.
+            logger.info("selfedit_stale_session_reverted branch=%s old_goal=%r new_goal=%r",
+                        stale, _selfedit_service.goal, goal)
+            _selfedit_service.revert()
+        if not _selfedit_service.branch:
+            opened = _selfedit_service.start_session(goal, run_id=run_id)
+            if not opened.get("ok"):
+                return {"ok": False, "error": opened.get("error")}
+        logger.info("selfedit_state_transition state=session_open goal=%r run_id=%s",
+                    goal, run_id)
+        return {
+            "ok": True,
+            "started": False,
+            "session": {
+                "branch": _selfedit_service.branch,
+                "goal": goal,
+                "target_paths": target_paths,
+                "run_id": run_id,
+                "worktree": str(_selfedit_service.work_root)
+                            if _selfedit_service.work_root else None,
+            },
+        }
 
     plan = body.plan
     if plan is None and plan_path:
@@ -890,7 +1163,7 @@ def selfedit_run(body: GoalIn) -> dict:
         try:
             # Construct now so an unknown profile fails fast, synchronously,
             # before we report the run as started.
-            agent = _make_agent(_selfedit_service, profile)
+            agent = _make_agent(_selfedit_service, profile, run_id)
         except UnknownModelProfileError as exc:
             return {"ok": False, "error": str(exc)}
         _run_job.update(
@@ -900,11 +1173,13 @@ def selfedit_run(body: GoalIn) -> dict:
             summary=None,
             started_at=time.time(),
             finished_at=None,
+            submitted=False,
+            pr_url=None,
         )
     # D17 — every self-edit state transition is logged.
     logger.info("selfedit_state_transition state=running goal=%r", goal)
     threading.Thread(
-        target=_run_agent, args=(goal, profile, plan), daemon=True,
+        target=_run_agent, args=(goal, profile, plan, run_id), daemon=True,
     ).start()
     return {"ok": True, "started": True, "profile": agent.model_label()}
 
@@ -933,12 +1208,80 @@ def selfedit_run_status() -> dict:
             }
             for sid, rec in _selfedit_stagings.items()
         ]
+    with _finish_lock:
+        finish = dict(_finish_job)
     return {
         "ok": True,
         "job": job,
+        "finish": finish,
         "status": _selfedit_service.status(),
         "stagings": stagings,
     }
+
+
+@app.get("/api/selfedit/file")
+def selfedit_file(path: str) -> dict:
+    """SE2 — read one file from the SESSION worktree, allowlist-checked.
+    Thin wrapper over the read_file the planner has always used."""
+    if not authoring_enabled():
+        return dict(_AUTHORING_OFF)
+    return _selfedit_service.read_file(path)
+
+
+class SelfEditWriteIn(BaseModel):
+    """SE2 — the developer's own edit_propose."""
+    path: str
+    content: str
+    rationale: str = ""
+    visual_intent: str = ""
+
+
+@app.post("/api/selfedit/write")
+def selfedit_write(body: SelfEditWriteIn) -> dict:
+    """SE2 — write one allowlisted edit into the session worktree.
+
+    Same SelfEditService.propose_edit the planner calls: the same allowlist
+    check, the same worktree, the same returned diff. Nothing about WHAT an
+    edit may touch changes here — only which agent does the writing."""
+    if not authoring_enabled():
+        return dict(_AUTHORING_OFF)
+    if not _selfedit_service.branch:
+        return {"ok": False, "error": "no open self-edit session — start one first"}
+    if _busy():
+        return {"ok": False, "error": "validation is running — wait for it to finish, then edit"}
+    return _selfedit_service.propose_edit(
+        body.path, body.content, body.rationale, body.visual_intent,
+    )
+
+
+@app.post("/api/selfedit/finish")
+def selfedit_finish() -> dict:
+    """SE4 — start the finish job: validate, and submit if green."""
+    if not authoring_enabled():
+        return dict(_AUTHORING_OFF)
+    if not _selfedit_service.branch:
+        return {"ok": False, "error": "no open self-edit session"}
+    if not _selfedit_service.proposals:
+        return {"ok": False, "error": "nothing has been written yet"}
+    with _finish_lock:
+        # The busy check is INLINED rather than calling _busy(): _busy()
+        # acquires _finish_lock itself, and calling it from inside this
+        # block would deadlock. _run_job's state is read without _run_lock
+        # deliberately — a single dict lookup, and the authoritative guard
+        # against two jobs is this lock plus _run_lock in selfedit_run.
+        if _run_job["state"] == "running" or _finish_job["state"] in (
+            "validating", "submitting",
+        ):
+            return {"ok": False,
+                    "error": "a run is already in progress — ask for status instead"}
+        _finish_job.update(
+            state="validating", checks=None, pr_url=None, notice=None,
+            run_id=_selfedit_service.run_id, started_at=time.time(), finished_at=None,
+        )
+    logger.info("selfedit_state_transition state=finish_validating run_id=%s",
+                _selfedit_service.run_id)
+    threading.Thread(target=_run_finish, daemon=True).start()
+    return {"ok": True, "started": True, "state": "validating"}
 
 
 @app.post("/api/selfedit/validate")
@@ -1671,6 +2014,41 @@ def council_rounds_list(
     }
 
 
+# ---- MORTIMER_GRAPH_LAYER_PLAN.md GL11 — read-only graph views. Every edge is
+# derived in jarvis/graphs; these endpoints only call build() and render.
+@app.get("/api/graph/{name}")
+def graph_json(name: str, focus: str = "", depth: int | None = None,
+               edge_types: str = "", since: str = "") -> dict:
+    run_migrations()
+    with closing(get_conn()) as conn:
+        return graphs.build(name, conn, focus=focus, depth=depth,
+                            edge_types=edge_types, since=since or None)
+
+
+@app.get("/api/graph/{name}/image.{fmt}")
+def graph_image(name: str, fmt: str, focus: str = "", depth: int | None = None,
+                edge_types: str = "", since: str = "", w: int = 0, h: int = 0):
+    if fmt not in ("png", "svg"):
+        return Response(status_code=404)
+    width = gcfg.GRAPH_IMAGE_W if w <= 0 else max(gcfg.GRAPH_IMAGE_MIN_PX, min(gcfg.GRAPH_IMAGE_MAX_PX, w))
+    height = gcfg.GRAPH_IMAGE_H if h <= 0 else max(gcfg.GRAPH_IMAGE_MIN_PX, min(gcfg.GRAPH_IMAGE_MAX_PX, h))
+    run_migrations()
+    with closing(get_conn()) as conn:
+        result = graphs.build(name, conn, focus=focus, depth=depth, edge_types=edge_types,
+                              since=since or None)
+    media = "image/png" if fmt == "png" else "image/svg+xml"
+    if not result.get("ok"):
+        # GL11: never a 4xx for a graph error — an <img>/AsyncImage shows nothing for one.
+        body = (render.error_image_png(result["error"], width, height) if fmt == "png"
+                else render.error_image_svg(result["error"], width, height))
+        return Response(content=body, media_type=media)
+    graph = graphs.from_json(result)
+    pos = render.layout(graph, result["focus"], width, height)
+    body = (render.to_png(graph, pos, width, height, focus=result["focus"]) if fmt == "png"
+            else render.to_svg(graph, pos, width, height, focus=result["focus"]))
+    return Response(content=body, media_type=media)
+
+
 @app.get("/api/council/roster")
 def council_roster(
     workflow: str = "", status: str = "", since: str = "", limit: int = 20,
@@ -1756,7 +2134,8 @@ def plan_start(body: PlanStartIn) -> dict:
         ).start()
     else:
         threading.Thread(
-            target=_run_plan_council, args=(goal, body.members, context), daemon=True,
+            target=_run_plan_council,
+            args=(goal, body.members, context, (body.run_id or "").strip() or None), daemon=True,
         ).start()
     return {"ok": True, "started": True}
 

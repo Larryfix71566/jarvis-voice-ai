@@ -101,7 +101,13 @@ Jarvis interface by proposing code edits, under these NON-NEGOTIABLE rules:
    small self-contained edits. Human-only (Tier 0), decline that part:
    the self-edit machinery itself (jarvis/selfedit, jarvis/admin,
    upgrade_agent.py), the allowlist and model registry, jarvis/db.py
-   migrations, the vault and .env, CI, dependency manifests, macos/.
+   migrations, the vault and .env, CI, dependency manifests, and under
+   macos/: Package.swift, Package.resolved, plists, entitlements,
+   scripts/, GlassSpike/ and MortimerShell/. The Swift SOURCES of
+   macos/JarvisKit and macos/MortimerHost ARE editable (routine): a
+   changed Swift package is gated by `swift build` and `swift test` in
+   the session worktree, and its PR is flagged SWIFT CHANGE because the
+   human must rebuild the app before the change does anything.
    A file_read/edit_propose on a Tier-0 path is refused by the tool — if
    that happens, decline that part with the path named.
 3. Your only tools are file_read, edit_propose, session_validate,
@@ -175,8 +181,9 @@ TOOL_SPECS: list[dict] = [
         "type": "function",
         "function": {
             "name": "session_validate",
-            "description": "Run the validation gate (allowlist, backend "
-                           "imports, frontend build).",
+            "description": "Run the validation gates (allowlist, backend "
+                           "imports, core imports for a core change, "
+                           "pytest).",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -312,8 +319,13 @@ class UpgradeAgent:
         config_section: str | None = None,
         system_prompt: str | None = None,
         council_workflow: str = "selfedit",
+        run_id: str | None = None,
     ):
         self.service = service
+        # MORTIMER_GRAPH_LAYER_PLAN.md GL9 (contract G2): the delegating sub-agent
+        # run, threaded from SkillRegistry.call() through the sidecar; None for a
+        # console-initiated run. Every convene() below passes it through.
+        self._run_id = run_id
         self.cfg = load_agent_config(config_path, section=config_section)
         self._system_prompt = system_prompt or SYSTEM_PROMPT
         # Cooperative cancel (Larry 2026-08-30/31: a kimi-k3 planner sat
@@ -387,6 +399,7 @@ class UpgradeAgent:
         # ledger rows (usage_ledger.record_call's plan_state); set at the
         # top of run() from whether a `plan` was supplied.
         self._plan_state: str | None = None
+        self._submit_result: dict | None = None
 
         # Defer client construction when the key is absent: run() fails fast
         # with a clear summary instead of the SDK raising at construction.
@@ -632,10 +645,20 @@ class UpgradeAgent:
         self._failed_profiles = set()     # failover — clean slate per session
         self._failover_notes = []
         self._plan_state = "planned" if plan else "planless"  # Rev 3.3 ledger tag
+        # 2026-09-07 (review F6): a run "ended" is not a run "submitted".
+        # The loop's `ok` means the planner stopped cleanly — including by
+        # writing prose after a failed validation. What the user needs to
+        # hear is whether a pull request exists, so the submit result is
+        # recorded here mechanically (never from the planner's prose) and
+        # returned alongside `ok`.
+        self._submit_result: dict | None = None
 
         started = time.monotonic()
         if not self.service.branch:
-            res = self.service.start_session(goal)
+            # SE8 — the planner path carries the same run_id the developer
+            # path does, so a session opened here is joinable to its
+            # delegating run without a timestamp join.
+            res = self.service.start_session(goal, run_id=self._run_id)
             if not res["ok"]:
                 return {"ok": False, "summary": res["error"],
                         "status": self.service.status()}
@@ -883,6 +906,8 @@ class UpgradeAgent:
             "failovers": list(self._failover_notes),
             "final_profile": self.profile_name,
             "cancelled": cancelled,
+            "submitted": self._submit_result is not None,
+            "pr_url": (self._submit_result or {}).get("pr_url"),
         }
 
     def request_cancel(self) -> None:
@@ -960,7 +985,7 @@ class UpgradeAgent:
             from jarvis.council.council import convene
             result = asyncio.run(convene(
                 workflow=self._council_workflow, placement="planner", trigger=trigger,
-                goal=goal, tier=tier, context=context,
+                goal=goal, tier=tier, context=context, run_id=self._run_id,
             ))
         except Exception:                           # noqa: BLE001
             logger.warning("council_escalation_failed", exc_info=True)
@@ -992,7 +1017,7 @@ class UpgradeAgent:
             result = asyncio.run(convene(
                 workflow=self._council_workflow, placement="scope", trigger="E2",
                 goal=goal, tier=1,
-                context={"reason": reason, "allowlist": allowlist},
+                context={"reason": reason, "allowlist": allowlist}, run_id=self._run_id,
             ))
         except Exception:                           # noqa: BLE001
             logger.warning("council_scope_council_failed", exc_info=True)
@@ -1014,7 +1039,10 @@ class UpgradeAgent:
         if name == "session_validate":
             return self.service.validate()
         if name == "session_submit":
-            return self.service.submit()
+            result = self.service.submit()
+            if result.get("ok"):
+                self._submit_result = result
+            return result
         if name == "session_decline":
             return {"ok": False, "declined": True,
                     "reason": str(args.get("reason", ""))}
@@ -1082,6 +1110,7 @@ class AppBuildAgent(UpgradeAgent):
         registry_path: str | os.PathLike[str] | None = None,
         profile: str | None = None,
         client_factory: Callable[[], Any] | None = None,
+        run_id: str | None = None,
     ):
         # Selection order mirrors resolve_profile's own: explicit >
         # env > registry default. resolve_profile only checks
@@ -1092,7 +1121,7 @@ class AppBuildAgent(UpgradeAgent):
             workspace, config_path=config_path, registry_path=registry_path,
             profile=profile, client_factory=client_factory,
             config_section="app_build", system_prompt=APP_BUILD_SYSTEM_PROMPT,
-            council_workflow="appbuild",
+            council_workflow="appbuild", run_id=run_id,
         )
 
 
