@@ -50,11 +50,42 @@ enum GraphImageURL {
     }
 }
 
+/// Pure zoom arithmetic for the graph panel, kept out of the view so the
+/// clamping is testable without a window.
+enum GraphZoom {
+    static let minScale: CGFloat = 0.5
+    static let maxScale: CGFloat = 5.0
+    /// One press of `+` / `-`.
+    static let keyStep: CGFloat = 1.25
+
+    static func clamp(_ scale: CGFloat) -> CGFloat {
+        guard scale.isFinite else { return 1 }
+        return min(maxScale, max(minScale, scale))
+    }
+
+    /// `scale` multiplied by `factor`, clamped.
+    static func stepped(_ scale: CGFloat, by factor: CGFloat) -> CGFloat {
+        clamp(scale * factor)
+    }
+
+    /// Mouse-wheel / trackpad scroll: `deltaY` points of scroll become a
+    /// proportional zoom, clamped. Scrolling up (positive delta) zooms in.
+    static func wheeled(_ scale: CGFloat, deltaY: CGFloat) -> CGFloat {
+        guard deltaY.isFinite, deltaY != 0 else { return clamp(scale) }
+        return clamp(scale * (1 + max(-0.5, min(0.5, deltaY * 0.01))))
+    }
+}
+
 /// Loads a graph image at the panel's pixel size; holds the current
 /// bitmap through a resize and re-requests once the size has settled
 /// (AppTuning.graphImageReloadDebounceSeconds), so a drag costs one
 /// server render, not one per mouse event — and the picture never blinks
 /// to a spinner between sizes.
+///
+/// The loaded bitmap is also zoomable and pannable in place: scroll wheel
+/// or pinch to scale (clamped to GraphZoom's 0.5–5.0), `+` / `-` to step,
+/// drag to move. Zoom and pan are view state only — they never change the
+/// requested render size, so no extra server render is triggered.
 struct GraphImageView: View {
     let baseURL: URL
     let viewport: CGSize
@@ -64,6 +95,12 @@ struct GraphImageView: View {
     @State private var loadedURL: URL?
     @State private var targetURL: URL?
     @State private var failed = false
+
+    @State private var zoom: CGFloat = 1.0
+    @State private var zoomStart: CGFloat = 1.0
+    @State private var pan: CGSize = .zero
+    @State private var panStart: CGSize = .zero
+    @State private var scrollMonitor: Any?
 
     private var scale: CGFloat { NSScreen.main?.backingScaleFactor ?? 2 }
 
@@ -83,6 +120,9 @@ struct GraphImageView: View {
                     // Dim slightly while a re-render at the new size is on
                     // its way; full brightness during the drag itself.
                     .opacity(isResizing || loadedURL == targetURL ? 1 : 0.7)
+                    .scaleEffect(zoom)
+                    .offset(x: pan.width, y: pan.height)
+                    .gesture(panGesture.simultaneously(with: magnifyGesture))
             } else if failed {
                 Text("graph image unavailable")
                     .font(.caption)
@@ -94,9 +134,73 @@ struct GraphImageView: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .clipped()
+        .overlay(zoomKeys)
         .task(id: settleKey) { await settle() }
         .task(id: targetURL) { await load() }
+        .onAppear { startScrollMonitor() }
+        .onDisappear { stopScrollMonitor() }
     }
+
+    // MARK: - zoom / pan input
+
+    private var panGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                pan = CGSize(
+                    width: panStart.width + value.translation.width,
+                    height: panStart.height + value.translation.height
+                )
+            }
+            .onEnded { _ in panStart = pan }
+    }
+
+    private var magnifyGesture: some Gesture {
+        MagnificationGesture()
+            .onChanged { value in zoom = GraphZoom.stepped(zoomStart, by: value) }
+            .onEnded { _ in zoomStart = zoom }
+    }
+
+    /// Zero-size, zero-opacity buttons carrying the `+` / `-` shortcuts:
+    /// keyboard zoom that still respects focus, so typing elsewhere in the
+    /// app is untouched.
+    private var zoomKeys: some View {
+        ZStack {
+            Button("") { setZoom(GraphZoom.stepped(zoom, by: GraphZoom.keyStep)) }
+                .keyboardShortcut(KeyEquivalent("+"), modifiers: [])
+            Button("") { setZoom(GraphZoom.stepped(zoom, by: 1 / GraphZoom.keyStep)) }
+                .keyboardShortcut(KeyEquivalent("-"), modifiers: [])
+        }
+        .buttonStyle(.plain)
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .accessibilityHidden(true)
+    }
+
+    private func setZoom(_ next: CGFloat) {
+        zoom = next
+        zoomStart = next
+        if next <= GraphZoom.minScale {
+            pan = .zero
+            panStart = .zero
+        }
+    }
+
+    private func startScrollMonitor() {
+        guard scrollMonitor == nil else { return }
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            guard image != nil else { return event }
+            setZoom(GraphZoom.wheeled(zoom, deltaY: event.scrollingDeltaY))
+            return event
+        }
+    }
+
+    private func stopScrollMonitor() {
+        if let monitor = scrollMonitor { NSEvent.removeMonitor(monitor) }
+        scrollMonitor = nil
+    }
+
+    // MARK: - loading
 
     /// Decide which URL to show for the current viewport, after the
     /// debounce. First appearance: wait briefly for the first real
