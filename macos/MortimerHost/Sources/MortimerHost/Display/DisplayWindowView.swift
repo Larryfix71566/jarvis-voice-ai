@@ -33,7 +33,7 @@ struct DisplayWindowView: View {
 }
 
 /// One display panel: title bar (close), body via the shared renderer,
-/// drag anywhere on the title, resize by the corner handle, double-click
+/// drag anywhere on the title, resize by any edge or corner, double-click
 /// the title to fill the viewport. Internal (not private): ConsoleView
 /// renders the SAME stack in-page while the display window is closed —
 /// the web's DisplayPanel/DisplayWindowApp one-renderer rule (D43),
@@ -46,17 +46,126 @@ struct DisplayWindowView: View {
 /// size anywhere; the corner grip grew to a real hit target with hover
 /// feedback; the body reports its size so a graph image can be
 /// re-rendered at the panel's true pixel size (DisplayContentView).
+///
+/// 2026-09-08 ("edge resize handles"): the bottom-right grip is joined by
+/// right-edge, bottom-edge and top-left/top-right/bottom-left handles.
+/// A handle anchored on the leading/top side both shrinks the size and
+/// moves the panel, so the opposite edge stays put; `resizeGeometry`
+/// derives the offset from the CLAMPED size, so at the minimum size the
+/// panel stops moving instead of sliding away under the pointer.
 struct SingleDisplayPanel: View {
     let panel: DisplayWindowPanel
     @Environment(DisplayWindowStore.self) private var store
     @State private var dragTranslation: CGSize = .zero
     @State private var resizeTranslation: CGSize = .zero
-    @State private var gripHovering = false
+    @State private var activeHandle: ResizeHandle?
+    @State private var hoveredHandle: ResizeHandle?
 
-    private var liveSize: CGSize {
-        DisplayWindowStore.clamped(CGSize(
-            width: panel.size.width + resizeTranslation.width,
-            height: panel.size.height + resizeTranslation.height))
+    /// Which side(s) of the panel a handle moves. `h`/`v` are +1 for the
+    /// trailing/bottom side, -1 for the leading/top side, 0 for neither.
+    enum ResizeHandle: Hashable {
+        case right, bottom
+        case topLeading, topTrailing, bottomLeading, bottomTrailing
+
+        var h: CGFloat {
+            switch self {
+            case .right, .topTrailing, .bottomTrailing: return 1
+            case .topLeading, .bottomLeading: return -1
+            case .bottom: return 0
+            }
+        }
+
+        var v: CGFloat {
+            switch self {
+            case .bottom, .bottomLeading, .bottomTrailing: return 1
+            case .topLeading, .topTrailing: return -1
+            case .right: return 0
+            }
+        }
+    }
+
+    private static let edgeThickness: CGFloat = 10
+    private static let cornerSize: CGFloat = 16
+
+    /// Pure: the live size and the offset delta for a drag of `translation`
+    /// on `handle`, starting from `base`. The offset delta is derived from
+    /// the clamped size so the minimum-size clamp pins the panel too.
+    static func resizeGeometry(handle: ResizeHandle, base: CGSize, translation: CGSize) -> (size: CGSize, offset: CGSize) {
+        let size = DisplayWindowStore.clamped(CGSize(
+            width: base.width + handle.h * translation.width,
+            height: base.height + handle.v * translation.height))
+        let offset = CGSize(
+            width: handle.h < 0 ? base.width - size.width : 0,
+            height: handle.v < 0 ? base.height - size.height : 0)
+        return (size, offset)
+    }
+
+    private var live: (size: CGSize, offset: CGSize) {
+        guard let handle = activeHandle else {
+            return (DisplayWindowStore.clamped(panel.size), .zero)
+        }
+        return Self.resizeGeometry(handle: handle, base: panel.size, translation: resizeTranslation)
+    }
+
+    private func isLit(_ handle: ResizeHandle) -> Bool {
+        hoveredHandle == handle || activeHandle == handle
+    }
+
+    /// Every resize drag measures in `.global` — see the type comment.
+    private func resizeGesture(_ handle: ResizeHandle) -> some Gesture {
+        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+            .onChanged { value in
+                activeHandle = handle
+                resizeTranslation = value.translation
+            }
+            .onEnded { value in
+                let result = Self.resizeGeometry(handle: handle, base: panel.size, translation: value.translation)
+                store.resize(id: panel.id, to: result.size)
+                if result.offset != .zero {
+                    store.move(id: panel.id, by: result.offset)
+                }
+                resizeTranslation = .zero
+                activeHandle = nil
+            }
+    }
+
+    private func handleShape(_ handle: ResizeHandle) -> some View {
+        Rectangle()
+            .fill(isLit(handle) ? AppTheme.accent.opacity(0.45) : Color.clear)
+            .contentShape(Rectangle())
+            .onHover { inside in
+                if inside {
+                    hoveredHandle = handle
+                } else if hoveredHandle == handle {
+                    hoveredHandle = nil
+                }
+            }
+            .gesture(resizeGesture(handle))
+            .help("Drag to resize")
+    }
+
+    /// Edge strips are inset by a corner's width at each end so the corner
+    /// handles — and the bottom-right grip in the body — stay reachable.
+    private var resizeHandles: some View {
+        ZStack {
+            handleShape(.right)
+                .frame(width: Self.edgeThickness)
+                .padding(.vertical, Self.cornerSize)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+            handleShape(.bottom)
+                .frame(height: Self.edgeThickness)
+                .padding(.horizontal, Self.cornerSize)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            handleShape(.topLeading)
+                .frame(width: Self.cornerSize, height: Self.cornerSize)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            handleShape(.topTrailing)
+                .frame(width: Self.cornerSize, height: Self.cornerSize)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            handleShape(.bottomLeading)
+                .frame(width: Self.cornerSize, height: Self.cornerSize)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        }
     }
 
     var body: some View {
@@ -90,36 +199,33 @@ struct SingleDisplayPanel: View {
 
             // isResizing lets a graph image hold its current bitmap through
             // the drag and re-request once the size settles.
-            DisplayContentView(payload: panel.payload, isResizing: resizeTranslation != .zero)
+            DisplayContentView(payload: panel.payload, isResizing: activeHandle != nil)
 
             HStack {
                 Spacer()
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
                     .font(.caption2)
-                    .foregroundStyle(gripHovering || resizeTranslation != .zero ? AppTheme.accent : AppTheme.textDim)
+                    .foregroundStyle(isLit(.bottomTrailing) ? AppTheme.accent : AppTheme.textDim)
                     .frame(width: AppTuning.displayPanelGripSize, height: AppTuning.displayPanelGripSize)
                     .contentShape(Rectangle())
-                    .onHover { gripHovering = $0 }
-                    .gesture(
-                        DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                            .onChanged { resizeTranslation = $0.translation }
-                            .onEnded { value in
-                                store.resize(id: panel.id, to: CGSize(
-                                    width: panel.size.width + value.translation.width,
-                                    height: panel.size.height + value.translation.height
-                                ))
-                                resizeTranslation = .zero
-                            }
-                    )
+                    .onHover { inside in
+                        if inside {
+                            hoveredHandle = .bottomTrailing
+                        } else if hoveredHandle == .bottomTrailing {
+                            hoveredHandle = nil
+                        }
+                    }
+                    .gesture(resizeGesture(.bottomTrailing))
                     .help("Drag to resize")
             }
         }
         .padding(14)
-        .frame(width: liveSize.width, height: liveSize.height)
+        .frame(width: live.size.width, height: live.size.height)
         .mortimerGlass(.display)
+        .overlay(resizeHandles)
         .offset(
-            x: panel.offset.width + dragTranslation.width,
-            y: panel.offset.height + dragTranslation.height
+            x: panel.offset.width + dragTranslation.width + live.offset.width,
+            y: panel.offset.height + dragTranslation.height + live.offset.height
         )
         .padding(AppTuning.displayPanelInset)
     }
