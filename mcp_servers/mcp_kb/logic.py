@@ -1,5 +1,5 @@
 """mcp-kb logic — curated-documents knowledge base, backed by the
-mortimer-vault HTTP service (a separate package, run via scripts/run_kb.sh).
+mortimer-vault HTTP service (services/mortimer-vault, run via scripts/run_kb.sh).
 
 W1 (2026-08-31): completes the Hermes three-layer memory architecture.
 jarvis.memory is the FACTS layer — short, keyed, auto-injected into every

@@ -1,0 +1,28 @@
+filters:
+  and:
+    - 'type == "decision"'
+formulas:
+  age_days: '(now() - date(updated)) / 86400000'
+properties:
+  file.name:
+    displayName: "Decision"
+  confidence:
+    displayName: "Confidence"
+  updated:
+    displayName: "Last updated"
+  formula.age_days:
+    displayName: "Days since update"
+  tags:
+    displayName: "Tags"
+views:
+  - type: table
+    name: All decisions
+    order:
+      - file.name
+      - confidence
+      - updated
+      - formula.age_days
+      - tags
+    sort:
+      - property: updated
+        direction: DESC

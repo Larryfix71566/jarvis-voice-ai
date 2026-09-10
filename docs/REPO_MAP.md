@@ -1,16 +1,14 @@
 # Repository map
 
-Maintained, may lag reality — verify with tools (`repo_read_file`,
-`repo_list_files`, `repo_search`) before writing. Update it in the same
-change as any structural move. Never assume a branch name; check
-`git_status`.
-
-Injected into agent prompts under an 8,000-char cap
-(`jarvis/repo_map.py`): anything past it is invisible to the planner, so
-trim, never append.
+Verify paths and the current branch before writing. Update this map with
+structural changes. Keep it below the 8,000-character prompt cap
+(`jarvis/repo_map.py`).
 
 ## Top-level layout
 
+- `services/mortimer-vault/` — knowledge-base HTTP service, CLI and tests;
+  setup: `bash scripts/setup_kb.sh`. Documents remain at `MORTIMER_HOME`
+  (default `~/Mortimer`), separate from the credential vault.
 - `jarvis/` — Python backend: bot pipeline, sub-agents, admin sidecar,
   council, run log, self-edit service. See below.
 - `mcp_servers/` — MCP skill servers, one directory per server, each
@@ -136,9 +134,7 @@ human-only.
 
 ## `web/src/` console (frozen)
 
-Frozen 2026-09-04, served by nothing, deliberately not mapped: this file
-is injected into agent prompts under an 8,000-character cap. Interface
-work goes to `macos/MortimerHost`.
+Frozen 2026-09-04. Interface work goes to `macos/MortimerHost`.
 
 ## Naming discipline (do not confuse these)
 

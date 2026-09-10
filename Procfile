@@ -4,7 +4,7 @@
 # rotation and a real stop-then-start restart); scripts/start_jarvis.sh,
 # which used to run this via overmind/hivemind, was removed. Kept here as
 # a reference inventory -- keep it in sync with mortimer.sh by hand.
-# vault: = the KNOWLEDGE-BASE service (~/mortimer-vault, :8484), not jarvis/vault.py (the secrets vault). Names collide; see CLAUDE.md 'Two vaults'.
+# vault: = the KNOWLEDGE-BASE service (services/mortimer-vault, :8484), not jarvis/vault.py (the secrets vault). Names collide; see CLAUDE.md 'Two vaults'.
 vault: ./scripts/run_kb.sh
 bot: ./scripts/wait_for.sh 127.0.0.1 8484 30 vault && ./scripts/run_bot.sh
 # api: ./scripts/wait_for.sh 127.0.0.1 8484 30 vault && ./scripts/run_api.sh

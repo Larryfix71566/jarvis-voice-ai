@@ -1,0 +1,29 @@
+[project]
+name = "mortimer-vault"
+version = "0.1.0"
+description = "Mortimer curated memory vault: markdown + frontmatter, git-versioned, SQLite/FTS5 derived index."
+requires-python = ">=3.12"
+dependencies = [
+  "PyYAML",
+  "watchdog",
+  "fastapi",
+  "uvicorn",
+  "python-ulid",
+  "tiktoken",
+]
+
+[project.scripts]
+mortimer-vault = "mortimer_vault.cli:main"
+
+[project.optional-dependencies]
+test = ["pytest", "httpx"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

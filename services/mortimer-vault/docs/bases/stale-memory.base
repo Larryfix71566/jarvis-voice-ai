@@ -1,0 +1,28 @@
+formulas:
+  days_since_access: '(now() - date(last_accessed)) / 86400000'
+filters:
+  and:
+    - 'formula.days_since_access > 30'
+properties:
+  file.name:
+    displayName: "Memory file"
+  type:
+    displayName: "Type"
+  confidence:
+    displayName: "Confidence"
+  last_accessed:
+    displayName: "Last accessed"
+  formula.days_since_access:
+    displayName: "Days stale"
+views:
+  - type: table
+    name: Stale memory
+    order:
+      - file.name
+      - type
+      - confidence
+      - last_accessed
+      - formula.days_since_access
+    sort:
+      - property: last_accessed
+        direction: ASC
