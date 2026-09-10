@@ -1349,6 +1349,32 @@ def selfedit_write(body: SelfEditWriteIn) -> dict:
     )
 
 
+def _save_document_to_sandbox(path: str, content: str, rationale: str = "") -> dict:
+    """Save generated documents through the same guarded VM editor as code.
+
+    Reuse an explicitly opened session. Never discard another goal, start an
+    unreviewed replacement session, or fall back to the installed checkout.
+    """
+    parts = path.split("/")
+    if (len(parts) < 3 or parts[0] != "docs"
+            or parts[1] not in {"plans", "reviews", "research"}
+            or any(part in {"", ".", ".."} for part in parts)
+            or "\\" in path or "\0" in path or not path.endswith(".md")):
+        return {"ok": False, "error": "Save a Markdown file under docs/plans/, docs/reviews/, or docs/research/."}
+    if not authoring_enabled():
+        return dict(_AUTHORING_OFF)
+    if not _selfedit_service.branch:
+        return {"ok": False, "code": "sandbox_session_required",
+                "error": "Open a self-edit sandbox session for saving this document, then retry the save. The generated document is still available.",
+                "path": path}
+    result = selfedit_write(SelfEditWriteIn(path=path, content=content, rationale=rationale))
+    if not result.get("ok"):
+        return result
+    return {**result, "path": path, "saved_to_sandbox": True,
+            "verified": False, "published": False,
+            "summary": "Saved in the sandbox. Use selfedit_finish to verify the document and prepare a draft PR."}
+
+
 @app.post("/api/selfedit/finish")
 def selfedit_finish() -> dict:
     """SE4 — start the finish job: validate, and submit if green."""
@@ -1709,9 +1735,7 @@ def research_job_status() -> dict:
 
 @app.post("/api/research/save")
 def research_save(body: ResearchSaveIn) -> dict:
-    """R6 — the SAME draft-gated mcp_repo.logic.repo_write_file voice
-    already uses for every other repo write; nothing here is a second
-    write primitive. Attribution footer names the model, both URLs, page
+    """Save through the guarded sandbox editor. Attribution names model, URLs, page
     counts, and credits — a comparison without its sources and cost is a
     claim with no provenance (R6/R8)."""
     with _research_lock:
@@ -1741,7 +1765,7 @@ def research_save(body: ResearchSaveIn) -> dict:
         f"Sites: {', '.join(urls)}. Pages: {pages_note}. "
         f"Credits used: {job.get('credits_used', 0)}.*"
     )
-    result = repo_logic.repo_write_file(
+    result = _save_document_to_sandbox(
         path, comparison + footer,
         rationale=f"Site comparison: {', '.join(urls)}",
     )
@@ -2329,8 +2353,7 @@ def plan_choose(body: PlanChooseIn) -> dict:
 
 @app.post("/api/plan/adopt")
 def plan_adopt(body: PlanAdoptIn) -> dict:
-    """Creates a draft-gated repo write of the finished plan (the SAME
-    actions-table gate voice's repo_write_file/repo_commit_write use) —
+    """Save the finished plan through the guarded sandbox editor.
     P7's attribution footer is appended HERE, once, at adoption: a
     candidate on the ballot stays footer-free and byte-comparable, and a
     plan never adopted stamps nothing."""
@@ -2370,7 +2393,7 @@ def plan_adopt(body: PlanAdoptIn) -> dict:
             f"{'s' if n != 1 else ''} (round {job['round_id']})."
         )
 
-    result = repo_logic.repo_write_file(
+    result = _save_document_to_sandbox(
         path, plan_text + footer, rationale=f"Adopted plan: {job.get('goal') or ''}",
     )
     return dict(result)

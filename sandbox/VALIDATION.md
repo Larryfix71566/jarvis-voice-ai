@@ -185,3 +185,21 @@ are in [the writer-boundary record](acceptance/2026-09-10-writer-boundary.json).
 Initial app scaffolding, registry writes and replacement plan/research saving
 remain unfinished. This check did not run the whole integration suite or create
 an independent publication receipt.
+
+
+## Generated document saving checkpoint
+
+Plan/review/research saving passed an initial 221-test API/unit selection in
+VM `52048bcb8af0`, followed by 127 tests for the final compatibility guards.
+The console production build passed after its save message and button changed.
+Counts overlap. Tests exercise installed path policy, busy/disabled/missing
+sessions, cold retry without a queued edit, validation invalidation, the existing
+validate/submit sequence, and refusal to misreport a legacy draft response as saved.
+API tests inject the test VM runtime; they do not launch nested development VMs.
+
+Separate real Session writes/readback preserved exact plan and research document
+bytes, left verification invalidated, and did not create files in the host source
+checkout. The disposable VM was deleted with logs retained. No independent
+publication receipt or draft was generated for those synthetic documents.
+Exact source/overlay/log hashes are in
+[the document-saving record](acceptance/2026-09-10-document-saving.json).

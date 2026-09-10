@@ -1,0 +1,44 @@
+{
+  "task": "52048bcb8af0",
+  "session": "c6f28b3b597e4b9891e83e131cc27f38",
+  "source_commit": "410f052d3348f9a3d89235ccad418a465050130e",
+  "documents": {
+    "docs/plans/sandbox-save-acceptance.md": "02252440d0c8cf3eccaa26eeb60a15762cc2ddbc6e4301ecad3844eb49eb2a2e",
+    "docs/research/sandbox-save-acceptance.md": "58498df79ce5ba05f23f82ad300f3aa01cb4f7ed57aaf3863dc3a4600a4307df"
+  },
+  "candidate": "803d06f6bea8603ce467b9bbf30163e4511180fb8d71b98b7d7dd13da5d838c1",
+  "real_vm_document_roundtrip": true,
+  "verification_invalidated": true,
+  "published": false,
+  "vm_status": "deleted",
+  "session_phase": "reverted",
+  "date": "2026-09-10",
+  "checks": [
+    {
+      "name": "document-saving",
+      "passed": true,
+      "test_count": 221,
+      "log_sha256": "8fe542fb1b4c0f158cc7615708fe7fed7ab6c5a2b57392c369228872a1853f71"
+    },
+    {
+      "name": "document-final",
+      "passed": true,
+      "test_count": 127,
+      "log_sha256": "e2ace5ec0db910ea96123cdc278bbdd3d9c831e01be615ad1e27f20e8ec666d6"
+    },
+    {
+      "name": "document-console-final",
+      "passed": true,
+      "test_count": null,
+      "log_sha256": "2fee37999f829d785d727028944e7e3b4f76f53de5b13ee70bb4d824138ebdf6"
+    }
+  ],
+  "final_overlay_sha256": {
+    "mcp_servers/mcp_selfedit/logic.py": "b9660be92db9b25f54fd522db1ac761631473646853b3c686e6ce21be77b9ab4",
+    "mcp_servers/mcp_web/logic.py": "28291705921abe0eb3542e2cb654118f81597582009040d25b3c830eda6f5e32",
+    "web/src/components/EditModePanel.tsx": "bc7bc9442362b385f62e075e3a864226e3718356470506c25f7764d3c1349c38",
+    "tests/unit/test_document_saving.py": "dd9a9ca7e25da97c191cc178d4c51ac3923a7874f098a1d03f258d1644ca91d8"
+  },
+  "scope": "API/unit selections and console build ran inside the VM. API tests inject the test VM runtime. Real Session document writes/readback and verification invalidation were exercised separately through the trusted controller. Counts overlap; no full independent verification receipt or publication was produced.",
+  "deployment_changed": false
+}

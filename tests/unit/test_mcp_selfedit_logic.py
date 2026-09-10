@@ -628,15 +628,15 @@ def test_plan_adopt_confirm_posts_and_reports_pending():
     c = _client({
         ("GET", "/api/plan/job"): {"ok": True, "job": {"state": "done"}},
         ("POST", "/api/plan/adopt"): {
-            "ok": True, "pending": True, "action_id": 5,
+            "ok": True, "saved_to_sandbox": True, "published": False,
             "path": "docs/plans/write-a-spec.md",
         },
     })
     r = logic.plan_adopt(c, path="docs/plans/write-a-spec.md", confirm=True)
     assert r["ok"] is True
-    assert r["pending"] is True
-    assert r["action_id"] == 5
-    assert "nothing has been" in r["summary"].lower()
+    assert r["saved_to_sandbox"] is True
+    assert "action_id" not in r
+    assert "not published yet" in r["summary"].lower()
     assert c.posts[0] == ("/api/plan/adopt", {"path": "docs/plans/write-a-spec.md"})
 
 
@@ -708,13 +708,13 @@ def test_plan_adopt_confirm_reports_review_wording():
             "ok": True, "job": {"state": "done", "review_path": "docs/plans/x.md"},
         },
         ("POST", "/api/plan/adopt"): {
-            "ok": True, "pending": True, "action_id": 7,
+            "ok": True, "saved_to_sandbox": True, "published": False,
             "path": "docs/reviews/x.md",
         },
     })
     r = logic.plan_adopt(c, confirm=True)
     assert r["ok"] is True
-    assert "drafted the review" in r["summary"].lower()
+    assert "saved the review" in r["summary"].lower()
 
 
 def test_workspace_preparation_is_reported_without_inventing_a_planner():

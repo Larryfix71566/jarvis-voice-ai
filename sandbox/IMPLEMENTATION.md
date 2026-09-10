@@ -41,6 +41,11 @@ workflow, preview, provider and lifecycle requirements below still apply.
   MCP and console entry points share the same refusal. Repository inspection
   and historical action audit remain available. Prompts route every existing
   repository/app change, including single-file edits, through sandbox workflows.
+- Generated plan/review/research saves use the guarded self-edit VM editor in
+  an explicitly opened session. They enforce document paths and installed policy,
+  preserve warmup retry semantics, invalidate validation, and report saved versus
+  published state distinctly. Voice/console clients do not treat a legacy draft
+  response as a completed sandbox save.
 
 ## Still required for the complete feature
 
@@ -49,14 +54,13 @@ workflow, preview, provider and lifecycle requirements below still apply.
    authoring setup and cold resume now return promptly with an opening job;
    cold file requests require an explicit retry and never queue an unseen edit.
    App selection and saved publication results survive a host process restart.
-   Finish migrating dependent save and bootstrap workflows. `SelfEditService` and `AppWorkspace`
+   Finish migrating bootstrap workflows. `SelfEditService` and `AppWorkspace`
    now route through persistent VM sessions; their cancellation endpoints stop
    running VM work, including finish-job verification. The controller is denied
    by the installed self-edit policy. Initial `app_create` scaffolding still
    writes starter files directly, and app registration still updates registry
-   metadata outside the sandbox. Plan/research repository-save calls now refuse
-   through the retired writer, preserving their generated results in the job;
-   their direct save workflow needs a sandbox replacement. These remaining
+   metadata outside the sandbox. Plan/research saving now requires an explicitly
+   opened self-edit session and subsequent verified draft publication. These remaining
    paths mean the complete application is not yet sandbox-only.
 2. **Development profiles:** complete Mortimer and new-web-app profiles with
    runtimes, dependencies, startup/health checks, migrations, synthetic seeds,

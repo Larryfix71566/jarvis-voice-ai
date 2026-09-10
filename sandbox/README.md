@@ -172,9 +172,16 @@ restart, and app submission runs in the background with status polling.
 Legacy local file writes, Git staging/commit/push, and direct single-file app
 writes return `sandbox_required`, including previously confirmed action IDs.
 Every existing-repository change goes through self-edit or app-build sessions.
-The old plan/research repository-save actions also return this refusal; their
-generated results remain in their jobs. Initial app scaffolding and registry
-updates still require migration, so the application is not yet sandbox-only.
+Plan, review and research saves use the same guarded VM editor. Open a self-edit
+session for saving the document, then confirm `plan_adopt` or `research_save`.
+The console's Save in sandbox button uses the same route. A cold session returns
+retry guidance without queuing a write. Missing/busy sessions preserve the
+generated result. Saves are restricted to Markdown under `docs/plans/`,
+`docs/reviews/` and `docs/research/`, with the installed allowlist still enforced.
+Run `selfedit_finish` to verify and prepare the draft PR; a sandbox save alone
+does not publish the file. Merge the resulting PR before using its path from
+the installed checkout in a later planning run. Initial app scaffolding and
+registry updates still require migration, so the application is not yet sandbox-only.
 
 Native appearance verification is unavailable until the guest preview is
 integrated. It refuses with a clear error and never captures the host desktop.

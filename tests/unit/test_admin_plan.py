@@ -277,12 +277,14 @@ def test_adopt_requires_done_state():
     assert "no finished plan" in res["error"]
 
 
-def test_adopt_cannot_bypass_retired_writer_and_keeps_plan():
+def test_adopt_without_session_keeps_plan(monkeypatch):
+    monkeypatch.setattr(srv, "authoring_enabled", lambda: True)
+    monkeypatch.setattr(srv, "_selfedit_service", type("Missing", (), {"branch": None})())
     with srv._plan_lock:
         srv._plan_job.update(state="done", mode="single", goal="saved plan",
                              plan="# Keep this plan", author="unknown-profile")
     result = TestClient(app).post("/api/plan/adopt", json={}).json()
-    assert result["ok"] is False and result["code"] == "sandbox_required"
+    assert result["ok"] is False and result["code"] == "sandbox_session_required"
     assert "action_id" not in result
     assert srv._plan_job["plan"] == "# Keep this plan"
 
@@ -308,7 +310,7 @@ def test_adopt_single_mode_appends_attribution_footer(tmp_path, monkeypatch):
         return {"ok": True, "pending": True, "action_id": 1, "path": path,
                 "action": "create", "bytes": len(content)}
 
-    monkeypatch.setattr(srv.repo_logic, "repo_write_file", _fake_write)
+    monkeypatch.setattr(srv, "_save_document_to_sandbox", _fake_write)
     c = TestClient(app)
     res = c.post("/api/plan/adopt", json={}).json()
     assert res["ok"] is True
@@ -338,7 +340,7 @@ def test_adopt_council_mode_footer_names_candidate_count_and_round(tmp_path, mon
         )
     captured = {}
     monkeypatch.setattr(
-        srv.repo_logic, "repo_write_file",
+        srv, "_save_document_to_sandbox",
         lambda path, content, rationale="": captured.update(content=content) or
         {"ok": True, "pending": True, "action_id": 1},
     )
@@ -360,7 +362,7 @@ def test_adopt_uses_custom_path(monkeypatch, tmp_path):
         srv._plan_job.update(state="done", mode="single", goal="g", plan="c", author="p1")
     captured = {}
     monkeypatch.setattr(
-        srv.repo_logic, "repo_write_file",
+        srv, "_save_document_to_sandbox",
         lambda path, content, rationale="": captured.update(path=path) or
         {"ok": True, "pending": True, "action_id": 1},
     )

@@ -652,9 +652,7 @@ def plan_choose(client, label: str) -> dict[str, Any]:
 
 
 def plan_adopt(client, path: str | None = None, confirm: bool = False) -> dict[str, Any]:
-    """Two-phase: save the finished plan as a draft repo write (the same
-    draft-gated action_id flow as repo_write_file/repo_commit_write —
-    nothing is committed by this call, confirm or not)."""
+    """Preview, then save the generated plan in an open VM session."""
     status = _call(lambda: client.get("/api/plan/job"))
     if not status.get("ok"):
         return status
@@ -673,8 +671,7 @@ def plan_adopt(client, path: str | None = None, confirm: bool = False) -> dict[s
             "needs_confirmation": True,
             "summary": (
                 f"Ready to save the {noun} as a draft at {target}. Say yes to "
-                f"draft it — nothing is written until you separately confirm "
-                f"the write itself."
+                f"save it in an open self-edit sandbox session. Verification and draft PR preparation follow with selfedit_finish."
             ),
             "path": path,
         }
@@ -682,16 +679,12 @@ def plan_adopt(client, path: str | None = None, confirm: bool = False) -> dict[s
     resp = _call(lambda: client.post("/api/plan/adopt", json={"path": path}))
     if not resp.get("ok"):
         return resp
-    return {
-        "ok": True,
-        "pending": resp.get("pending"),
-        "action_id": resp.get("action_id"),
-        "path": resp.get("path"),
-        "summary": (
-            f"Drafted the {noun} at {resp.get('path')} — nothing has been "
-            f"written yet. Say the word to commit it."
-        ),
-    }
+    if resp.get("saved_to_sandbox") is not True:
+        return {"ok": False, "error": "The server did not confirm a sandbox save. Inspect self-edit status before retrying; no saved document is being reported."}
+    return {**resp, "summary": (
+        f"Saved the {noun} at {resp.get('path')} in the sandbox. "
+        "Use selfedit_finish to verify it and prepare a draft PR; it is not published yet."
+    )}
 
 
 def selfedit_revert(client, confirm: bool = False) -> dict[str, Any]:

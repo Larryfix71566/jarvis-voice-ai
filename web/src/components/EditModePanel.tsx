@@ -545,13 +545,13 @@ export default function EditModePanel() {
   const onPlanAdopt = async () => {
     setPlanNote(null);
     const res = await post("/api/plan/adopt", { path: planAdoptPath || undefined });
-    if (res.ok) {
+    if (res.ok && res.saved_to_sandbox === true) {
       setPlanNote(
-        `drafted at ${res.path ?? "the plan path"} — nothing is written yet; ` +
-          "confirm the write in the Repo tab",
+        `Saved at ${res.path ?? "the plan path"} in the sandbox. ` +
+          "Finish the self-edit session to verify it and prepare a draft PR.",
       );
     } else {
-      setPlanNote(res.error ?? "adopt failed");
+      setPlanNote(res.error ?? "The server did not confirm a sandbox save. Check self-edit status before retrying.");
     }
   };
 
@@ -854,7 +854,7 @@ export default function EditModePanel() {
                 onChange={(e) => setPlanAdoptPath(e.target.value)}
               />
               <button type="button" className="btn" onClick={onPlanAdopt}>
-                Adopt as draft
+                Save in sandbox
               </button>
             </div>
             {!planJob.review_path && (
