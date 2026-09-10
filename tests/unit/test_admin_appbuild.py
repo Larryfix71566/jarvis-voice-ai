@@ -41,10 +41,11 @@ REGISTRY = {
 def reset_jobs():
     with srv._appbuild_lock:
         srv._appbuild_job.update(
-            state="idle", app=None, goal=None, profile=None, summary=None,
+            state="idle", app=None, goal=None, profile=None, summary=None, cancel_requested=False,
             started_at=None, finished_at=None,
         )
         srv._appbuild_workspace = None
+        srv._appbuild_agent_instance = None
     with srv._run_lock:
         srv._run_job.update(
             state="idle", goal=None, profile=None, summary=None,
@@ -82,6 +83,10 @@ class FakeWorkspace:
     def submit(self):
         return {"ok": True, "pr_url": "https://example.invalid/pr/1"}
 
+    def cancel(self):
+        self.branch = None
+        return {"ok": True, "cancelled": True}
+
     def revert(self):
         self.branch = None
         return {"ok": True}
@@ -94,15 +99,26 @@ class FakeAgent:
     def __init__(self, workspace, profile=None):
         self.workspace = workspace
         self.profile = profile
+        self.cancelled = False
+
+    def request_cancel(self):
+        self.cancelled = True
+        self.workspace.cancel()
+        if self.gate is not None:
+            self.gate.set()
 
     def model_label(self):
         return f"{self.profile or 'kimi-k2'} (fake-model)"
 
     def run(self, goal, plan=None):
+        if self.cancelled:
+            return {"ok": False, "cancelled": True, "summary": "Cancelled before starting"}
         self.workspace.branch = "mortimer/app-build/fake"
         self.workspace.goal = goal
         if FakeAgent.gate is not None:
             FakeAgent.gate.wait(timeout=5)
+        if self.cancelled:
+            return {"ok": False, "cancelled": True, "summary": "Cancelled"}
         if FakeAgent.crash:
             raise RuntimeError("boom")
         return {"ok": True, "summary": f"built {goal!r}"}
@@ -151,9 +167,8 @@ def test_second_build_refused_while_running(registry_file, monkeypatch):
         again = c.post("/api/appbuild/start",
                        json={"app": "demo-app", "goal": "two"}).json()
         assert again["ok"] is False and "already in progress" in again["error"]
-        for ep in ("submit", "cancel"):
-            blocked = c.post(f"/api/appbuild/{ep}").json()
-            assert blocked["ok"] is False and "in progress" in blocked["error"]
+        blocked = c.post("/api/appbuild/submit").json()
+        assert blocked["ok"] is False and "in progress" in blocked["error"]
     finally:
         gate.set()
     _wait_for_job(c, "done")
@@ -260,3 +275,30 @@ def test_cancel_after_done_delegates_to_workspace(registry_file, monkeypatch):
     _wait_for_job(c, "done")
     res = c.post("/api/appbuild/cancel").json()
     assert res["ok"] is True
+
+
+def test_cancel_stops_an_active_build(registry_file, monkeypatch):
+    gate = threading.Event()
+    _install_fake_agent(monkeypatch, gate=gate)
+    c = TestClient(app)
+    c.post("/api/appbuild/start", json={"app": "demo-app", "goal": "cancel me"})
+    try:
+        response = c.post("/api/appbuild/cancel").json()
+        assert response["ok"] and response["cancel_requested"]
+        _wait_for_job(c, "cancelled")
+        assert not c.get("/api/appbuild/job").json()["status"]["active"]
+    finally:
+        gate.set()
+
+
+def test_cancel_before_worker_starts_does_not_open_session(registry_file, monkeypatch):
+    _install_fake_agent(monkeypatch)
+    # Exercise the scheduling window directly, before the worker owns an agent.
+    with srv._appbuild_lock:
+        srv._appbuild_job.update(state="running", app="demo-app", cancel_requested=False)
+    c = TestClient(app)
+    assert c.post("/api/appbuild/cancel").json()["cancel_requested"]
+    srv._run_appbuild_agent("demo-app", "cancel before start", None)
+    result = c.get("/api/appbuild/job").json()
+    assert result["job"]["state"] == "cancelled"
+    assert not result["status"]["active"]

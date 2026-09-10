@@ -42,7 +42,7 @@ REGISTRY = {
 def reset_run_job():
     with srv._run_lock:
         srv._run_job.update(
-            state="idle", goal=None, profile=None, summary=None,
+            state="idle", cancel_requested=False, goal=None, profile=None, summary=None,
             started_at=None, finished_at=None, submitted=False, pr_url=None,
         )
     yield
@@ -591,8 +591,7 @@ def test_a_leftover_session_is_reverted_before_a_different_goal(registry_file, m
 
 
 def _authoring_service(monkeypatch, tmp_path):
-    """A real SelfEditService over a scratch git repo, so the session the
-    confirm opens is a real worktree and write/finish act on real files."""
+    """Real service and API routing with a test-only in-memory VM session."""
     import json
     import subprocess
     from jarvis.selfedit.service import SelfEditService
@@ -621,6 +620,7 @@ def _authoring_service(monkeypatch, tmp_path):
     runtime = FakeRuntime(work)
     svc = SelfEditService(repo_root=work, allowlist_path=al, github_token=None,
                           base_ref="main", runtime_factory=lambda: runtime)
+    svc.test_runtime = runtime
     monkeypatch.setattr(srv, "_selfedit_service", svc)
     return svc
 
@@ -629,7 +629,7 @@ def _authoring_service(monkeypatch, tmp_path):
 def reset_finish_job():
     with srv._finish_lock:
         srv._finish_job.update(
-            state="idle", checks=None, pr_url=None, notice=None, run_id=None,
+            state="idle", cancel_requested=False, checks=None, pr_url=None, notice=None, run_id=None,
             started_at=None, finished_at=None,
         )
     yield
@@ -851,7 +851,7 @@ class TestAuthoringRoutes:
         res = c.post("/api/selfedit/write", json={
             "path": "jarvis/vault.py", "content": "x\n", "rationale": "r",
         }).json()
-        assert res["ok"] is False and "allowlist" in res["error"]
+        assert res["ok"] is False and "workspace policy" in res["error"]
 
     def test_the_read_route_honours_the_allowlist(
         self, registry_file, monkeypatch, tmp_path,
@@ -915,7 +915,7 @@ class TestAuthoringRoutes:
         c.post("/api/selfedit/write", json={
             "path": "docs/README.md", "content": "# docs\nid\n", "rationale": "r",
         })
-        svc.run_id = "run-77"
+        svc.test_runtime.current.state["run_id"] = "run-77"
         monkeypatch.setattr(svc, "validate", lambda: {"ok": False, "checks": []})
         c.post("/api/selfedit/finish", json={})
         finish = _wait_for_finish(c, "failed")
@@ -1045,3 +1045,35 @@ def test_stage_routine_goal_unchanged(registry_file, monkeypatch, tmp_path):
     c = TestClient(app)
     res = c.post("/api/selfedit/stage", json={"goal": "tidy docs/README.md"}).json()  # GC4: web/ frozen
     assert res["ok"] is True and res["core_change"] is False
+
+
+def test_cancel_finish_revokes_vm_before_validation_returns(registry_file, monkeypatch, tmp_path):
+    import threading
+    svc = _authoring_service(monkeypatch, tmp_path)
+    svc.start_session('Cancel verification')
+    svc.propose_edit('docs/README.md', '# candidate\n', 'test cancellation')
+    entered, release = threading.Event(), threading.Event()
+
+    def slow_validation():
+        entered.set()
+        assert release.wait(5)
+        # Even a late successful result cannot trigger publication.
+        return {'ok': True, 'checks': [{'name': 'independent-vm', 'ok': True}]}
+
+    monkeypatch.setattr(svc, 'validate', slow_validation)
+    client = TestClient(app)
+    assert client.post('/api/selfedit/finish', json={}).json()['started']
+    assert entered.wait(5)
+    try:
+        assert client.post('/api/selfedit/cancel').json()['cancel_requested']
+        assert svc.status()['phase'] == 'cancelled'
+    finally:
+        release.set()
+    deadline = time.monotonic()+5
+    while time.monotonic()<deadline:
+        state = client.get('/api/selfedit/run').json()['finish']['state']
+        if state == 'cancelled':
+            break
+        time.sleep(.02)
+    assert state == 'cancelled'
+    assert not any(e[0] == 'submit' for e in svc.test_runtime.events)

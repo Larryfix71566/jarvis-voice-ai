@@ -41,7 +41,7 @@ def _db(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _reset_service(monkeypatch):
+def _reset_service(monkeypatch, isolated_workspace_session):
     # Never let a test accidentally touch the real local git repo.
     monkeypatch.setattr(srv._selfedit_service, "branch", None)
     monkeypatch.setattr(srv._selfedit_service, "goal", None)
