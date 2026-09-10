@@ -2,18 +2,41 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
-  validate:
+  allowlist:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       # Gate 1: self-edit branches may only touch allowlisted paths.
       - name: Allowlist enforcement
         run: python scripts/check_allowlist.py origin/main...HEAD
 
+  policy-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Detached-checkout regression tests
+        run: python -m unittest discover -s tests/ci -v
+
+  validate:
+    # Independent of policy enforcement so failures do not hide test results.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       # Gate 2: backend still imports.
       - uses: actions/setup-python@v5
         with:
