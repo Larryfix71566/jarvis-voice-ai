@@ -52,6 +52,11 @@ which selects the application's private knowledge data.
 python3 sandbox/control.py doctor
 python3 sandbox/control.py create --repo /absolute/path/to/repo \
   --ref COMMIT_SHA --image ghcr.io/cirruslabs/macos-tahoe-xcode:26.5
+# First boot offline and observe the boundary before provisioning:
+python3 sandbox/control.py start TASK_ID --headless
+# Wait for the guest agent, then use the same home/tool paths as the controller:
+python3 sandbox/probe.py --home /absolute/sandbox/home --tart /absolute/path/to/tart TASK_ID
+python3 sandbox/control.py stop TASK_ID
 python3 sandbox/control.py start TASK_ID --provision
 # Wait for the guest desktop/agent to be ready, then:
 python3 sandbox/control.py prepare TASK_ID
@@ -59,6 +64,7 @@ python3 sandbox/control.py prepare TASK_ID
 python3 sandbox/control.py start TASK_ID
 python3 sandbox/control.py exec TASK_ID /bin/bash '/Volumes/My Shared Files/input/checks.sh'
 python3 sandbox/control.py exec TASK_ID /bin/bash '/Volumes/My Shared Files/input/preview.sh'
+python3 sandbox/control.py exec TASK_ID /bin/bash '/Volumes/My Shared Files/input/browser-smoke.sh'
 python3 sandbox/control.py export TASK_ID
 python3 sandbox/control.py stop TASK_ID
 ```
@@ -77,10 +83,26 @@ parsing, and all application databases and knowledge records live under
 `/Users/admin/mortimer/state` inside the VM.
 
 The check script runs policy/controller regressions, backend unit tests,
-knowledge-base tests, web compilation, and both native Swift test suites.
+scripted sub-agent evaluations, latency enforcement, knowledge-base tests,
+web compilation, and both native Swift test suites.
 It attempts every group and records separate logs even when one fails.
-The preview script starts guest-local knowledge-base, admin and cost services;
-the VM desktop can be used to launch/debug the native application.
+The preview script starts guest-local knowledge-base, admin, cost and web
+services, and requires successful HTTP responses before reporting readiness.
+The browser smoke script checks console rendering and read-only navigation
+through all seven panels, recording a screenshot and JSON report inside the
+guest. It does not test voice, editing or publication. The VM desktop can
+be used to launch/debug the native application.
+
+`probe.py` runs synthetic host-file and network canaries against an offline
+guest, verifies that the source share exists and rejects writes, and checks
+the actual guest CPU/memory allocation. It writes observations under the
+host task directory and stops the VM on failure. A failed IPv6 connection
+is recorded separately: it alone cannot prove filtering versus absent routing.
+Neither these probes nor passing unit tests establish complete containment.
+
+Two source files contain intentionally fake credential-shaped fixtures.
+`REVIEWED_TEST_FIXTURES` permits only their reviewed path and exact SHA-256
+content. A changed or moved fixture is still rejected by the source scanner.
 
 The exported patch is saved as data, with a SHA-256 identifier. It is not
 applied, pushed, merged or deployed automatically. A guest-controlled report

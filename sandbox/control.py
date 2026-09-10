@@ -29,6 +29,12 @@ MAX_FILE_BYTES = 32 * 1024 * 1024
 TASK_ID = re.compile(r"[0-9a-f]{12}\Z")
 GUEST_ROOT = "/Users/admin/mortimer"
 SECRET = re.compile(rb"(?:gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{24,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY)")
+# Reviewed synthetic leak-detection fixtures. Exact file content and path must
+# both match; editing or moving a fixture requires another host-side review.
+REVIEWED_TEST_FIXTURES = {
+    "tests/unit/test_mcp_apps_github.py": "ce15f378a89c7b056ba88ca5c421342c303fcfc07670141927d2bb5398888e03",
+    "tests/unit/test_memory.py": "5de5186a0ecb7d4698e388825a3b1fc8cd6fec6d7960866500418d4bf11ec3d2",
+}
 
 
 class SandboxError(RuntimeError):
@@ -76,7 +82,8 @@ def snapshot(repo: Path, ref: str, output: Path) -> dict:
                 if size > MAX_FILE_BYTES or total + size > MAX_SOURCE_BYTES:
                     raise SandboxError(f"Source size limit exceeded: {name}")
                 data = subprocess.check_output(["git", "-C", str(repo), "cat-file", "blob", blob])
-                if SECRET.search(data):
+                reviewed_fixture = REVIEWED_TEST_FIXTURES.get(name) == hashlib.sha256(data).hexdigest()
+                if SECRET.search(data) and not reviewed_fixture:
                     raise SandboxError(f"Potential credential in source: {name}")
                 item = tarfile.TarInfo(name)
                 item.size, item.mode, item.mtime = len(data), int(mode, 8) & 0o777, 0
@@ -220,7 +227,16 @@ class Controller:
 
     def stop(self, task: str):
         state = self.read(task)
-        self.command("stop", state["vm"], timeout=60)
+        try:
+            self.command("stop", state["vm"], timeout=60)
+        except subprocess.CalledProcessError:
+            # Tart returns an error for an already stopped VM. Reconcile only
+            # after independently observing that exact local VM as stopped.
+            result = self.command("list", "--source", "local", "--format", "json",
+                                  capture_output=True, text=True, timeout=30)
+            observed = [vm for vm in json.loads(result.stdout) if vm.get("Name") == state["vm"]]
+            if len(observed) != 1 or observed[0].get("State") != "stopped":
+                raise
         state["status"] = "stopped"
         self.save(task, state)
 

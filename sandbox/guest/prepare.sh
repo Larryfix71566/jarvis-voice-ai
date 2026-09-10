@@ -23,6 +23,7 @@ git -c user.name='Mortimer Sandbox' -c user.email=sandbox@example.invalid commit
 # No host credentials are imported. These values satisfy configuration parsing
 # for deterministic tests; they cannot authenticate to any provider.
 cat > "$ROOT/development.env" <<'ENV'
+export PATH=/opt/homebrew/opt/node@22/bin:/opt/homebrew/opt/python@3.12/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin
 export OPENAI_API_KEY=sandbox-placeholder
 export DEEPGRAM_API_KEY=sandbox-placeholder
 export ELEVENLABS_API_KEY=sandbox-placeholder
@@ -36,8 +37,8 @@ export JARVIS_REMINDER_NOTIFICATIONS_ENABLED=false
 ENV
 source "$ROOT/development.env"
 cp "$ROOT/development.env" .env
-brew install python@3.12 node
-/opt/homebrew/bin/python3.12 -m venv .venv
+brew install python@3.12 node@22
+python3.12 -m venv .venv
 .venv/bin/python -m pip install -r requirements-lock.txt
 bash scripts/setup_kb.sh
 .venv/bin/python scripts/init_db.py
@@ -46,7 +47,7 @@ services/mortimer-vault/.venv/bin/mortimer-vault init
 for package in JarvisKit MortimerHost; do
   (cd "macos/$package" && swift package resolve)
 done
-npm install --prefix "$ROOT/browser" --save-exact playwright
+npm install --prefix "$ROOT/browser" --save-exact playwright@1.63.0
 "$ROOT/browser/node_modules/.bin/playwright" install chromium
 {
   sw_vers
