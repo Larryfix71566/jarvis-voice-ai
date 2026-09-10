@@ -11,6 +11,7 @@ Exit 0 = clean, 1 = violations found.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -24,6 +25,13 @@ SELF_EDIT_PREFIX = "jarvis/self-edit"
 
 
 def _current_branch() -> str:
+    # PR checkouts use a detached merge commit. GitHub supplies the source
+    # branch independently of that checkout. Unknown CI context stays
+    # empty so it cannot accidentally exempt an agent-authored change.
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        if os.environ.get("GITHUB_EVENT_NAME") == "pull_request":
+            return os.environ.get("GITHUB_HEAD_REF", "").strip()
+        return ""
     proc = subprocess.run(
         ["git", "branch", "--show-current"],
         cwd=REPO_ROOT, capture_output=True, text=True,
