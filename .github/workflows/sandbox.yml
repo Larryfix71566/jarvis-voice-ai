@@ -1,0 +1,22 @@
+name: Sandbox controller
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  controller-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Controller regressions (no VM or credentials)
+        run: python -m unittest discover -s sandbox/tests -v
+      - name: Shell syntax
+        run: bash -n sandbox/install-network-helper.sh sandbox/guest/*.sh
