@@ -133,6 +133,25 @@ class ControllerTests(unittest.TestCase):
         self.c.save(self.task, {"vm": "mortimer-" + self.task, "status": "provisioning", "network": "provisioning"})
         with self.assertRaises(control.SandboxError): self.c.execute(self.task, ["whoami"], 10)
 
+    def test_preparation_flushes_guest_writes_before_marking_ready_and_stopping(self):
+        self.c.save(self.task, {"vm": "mortimer-" + self.task, "status": "provisioning"})
+        commands = []
+        def guest(task, argv, **kwargs):
+            self.assertFalse(self.c.read(task).get('prepared'))
+            commands.append(argv)
+        def stop(task):
+            self.assertEqual(commands[-1], ['/bin/sync'])
+            self.assertTrue(self.c.read(task)['prepared'])
+        with patch.object(self.c, 'guest', side_effect=guest), patch.object(self.c, 'stop', side_effect=stop):
+            self.c.prepare(self.task)
+
+    def test_failed_flush_does_not_mark_preparation_complete(self):
+        self.c.save(self.task, {"vm": "mortimer-" + self.task, "status": "provisioning"})
+        with patch.object(self.c, 'guest', side_effect=[None, control.SandboxError('sync failed')]):
+            with self.assertRaises(control.SandboxError):
+                self.c.prepare(self.task)
+        self.assertFalse(self.c.read(self.task).get('prepared'))
+
     def test_timeout_stops_guest_not_only_client(self):
         self.c.save(self.task, {"vm": "mortimer-" + self.task, "status": "running"})
         with patch.object(self.c, "command", side_effect=subprocess.TimeoutExpired("tart", 1)), patch.object(self.c, "stop") as stop:

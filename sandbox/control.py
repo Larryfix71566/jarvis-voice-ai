@@ -226,6 +226,9 @@ class Controller:
         if self.read(task)["status"] != "provisioning":
             raise SandboxError("Start a fresh task with --provision first")
         self.guest(task, ["/bin/bash", "/Volumes/My Shared Files/input/prepare.sh"], timeout=7200)
+        # Tart stops the virtual machine rather than shutting down its guest
+        # OS. Flush the guest filesystem before recording durable preparation.
+        self.guest(task, ["/bin/sync"], timeout=60)
         state = self.read(task)
         state["prepared"] = True
         self.save(task, state)
