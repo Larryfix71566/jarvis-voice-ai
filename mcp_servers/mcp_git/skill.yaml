@@ -5,7 +5,9 @@ class: privileged
 tools: [git_status, git_log, git_diff_summary, prepare_commit, commit, prepare_push, push, list_actions]
 # mcp_git/logic.py:44 reads JARVIS_REPO_ROOT. JARVIS_DB_PATH is not listed:
 # it is in registry.BASE_ENV_KEYS.
-requires_env: [JARVIS_REPO_ROOT]
+# GC1/GC3: the code defaults to this checkout; forward overrides when set.
+requires_env: []
+optional_env: [JARVIS_REPO_ROOT]
 requires_keychain: []
 scopes: []
 test: "python3 -m pytest tests/unit/test_mcp_git_logic.py -q"

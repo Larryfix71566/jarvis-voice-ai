@@ -20,7 +20,7 @@ servers:
     args: ["-m", "mcp_servers.mcp_kb.server"]
     env: {}
     # KB_BASE_URL has a code-level default (http://127.0.0.1:8484); no env
-    # entry needed here. skill.yaml's requires_env: [KB_BASE_URL] allowlists
+    # entry needed here. skill.yaml's optional_env: [KB_BASE_URL] allowlists
     # it for pass-through if a real override is ever set.
   - name: mcp-reminders
     command: python
@@ -53,7 +53,7 @@ servers:
     args: ["-m", "mcp_servers.mcp_repo.server"]
     # No env entry (MORTIMER_DEVELOPER_AGENT_FIX_PLAN.md F2): the child's
     # environment is built by SkillRegistry from BASE_ENV_KEYS + this
-    # server's skill.yaml requires_env (MORTIMER_SECURITY_HARDENING_PLAN.md
+    # server's skill.yaml env declarations (MORTIMER_SECURITY_HARDENING_PLAN.md
     # K2); no env: entry is needed here — mcp-repo's skill.yaml declares
     # JARVIS_REPO_ROOT, so it still reaches the child. The previous
     # `JARVIS_REPO_ROOT: "${JARVIS_REPO_ROOT}"` line handed the server a
@@ -80,7 +80,7 @@ servers:
     args: ["-m", "mcp_servers.mcp_screen.server"]
     # No env entry, same rule as mcp-repo/mcp-runlog above: the child's
     # environment is built by SkillRegistry from BASE_ENV_KEYS + this
-    # server's skill.yaml requires_env (MORTIMER_SECURITY_HARDENING_PLAN.md
+    # server's skill.yaml env declarations (MORTIMER_SECURITY_HARDENING_PLAN.md
     # K2); no env: entry is needed here — mcp-screen's skill.yaml declares
     # JARVIS_SCREEN_ENABLED and JARVIS_VISION_PROFILE, and its
     # requires_env_dynamic resolves the vision profile's API key by name at
