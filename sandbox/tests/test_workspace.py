@@ -69,6 +69,13 @@ class WorkspaceAdapterTests(unittest.TestCase):
         self.assertFalse(self.workspace.status()['active'])
         self.assertIsNone(self.workspace.branch)
 
+    def test_published_link_survives_adapter_reconstruction(self):
+        self.state.update(phase='published', publication={'url':'https://github.com/owner/repo/pull/42','number':42})
+        state = self.make().status()
+        self.assertFalse(state['active'])
+        self.assertEqual(state['pr_number'], 42)
+        self.assertTrue(state['pr_url'].endswith('/42'))
+
     def test_only_completed_validation_is_shown_as_passed(self):
         for phase in ['editing', 'validating', 'validation_failed', 'cancelled']:
             self.state['phase'] = phase

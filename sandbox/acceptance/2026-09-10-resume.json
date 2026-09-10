@@ -1,0 +1,49 @@
+{
+  "task": "da3811daeb0d",
+  "session": "3b953d9bb5e0479fa61c8af88d61c305",
+  "source_commit": "fef78f3f17bb79fdfd38e2ee92f45ed86781fff5",
+  "stopped_resume_passed": true,
+  "stale_running_recovery_passed": true,
+  "readme_sha256": "06f3a04473a113a222861827abab0f763708f87577e5b85962413754cfaf4bc4",
+  "edited_resume_passed": true,
+  "edited_path": "docs/MEMORY_PANEL_CLEANUP_WORKFLOW.md",
+  "edited_sha256": "853e41ff60364a78597cf07f391fdeb8285ddd795c4cf76aaabe594ab6ed17dd",
+  "interrupted_verification_task": "f33b9d630250",
+  "candidate": "f03ec1a6e3d99fe31bb6235db6738c3be7c065ca11ac01ada209d82944e75b5f",
+  "interrupted_validation_recovery_passed": true,
+  "cancelled_child_restart_refused": true,
+  "publication_performed": false,
+  "development_cleanup": "deleted",
+  "verification_cleanup": "deleted",
+  "session_phase": "reverted",
+  "date": "2026-09-10",
+  "controller_tests": {
+    "passed": true,
+    "count": 101
+  },
+  "application_checks": [
+    {
+      "name": "resume-api",
+      "passed": true,
+      "test_count": 303,
+      "log_sha256": "acefed3a07ba7ac99c273dd089866b564f5491b827149333969e70e4c64f2258"
+    },
+    {
+      "name": "resume-publication",
+      "passed": true,
+      "test_count": 87,
+      "log_sha256": "7ac48b130b35a3ed249d4bf08b562917ce0bc15969b2bf7096eed4ad0df7dcdf"
+    }
+  ],
+  "test_overlay_sha256": {
+    "sandbox/verify.py": "089a8155473ea59bbc3cdd967365697f45789369ee0590a5d2cd4394da05f8a4",
+    "sandbox/tests/test_verify.py": "aedbe6c6c21b8c4b20ec302fee7d5861a49d154a89e5742faaa521389f5bc541",
+    "sandbox/workspace.py": "70ff4e400f5e56592da09243ef64f2e1afe988bd0ae10b5955705da8103efed2",
+    "sandbox/tests/test_workspace.py": "9576842c2ca0098b77ae5af8131f68d4a9c0749feec0825f8964f21c961bcae8",
+    "mcp_servers/mcp_selfedit/logic.py": "929c7f258852542fe363cac986cf83dfa0e84d415f7abdab9f939056b168a6e9",
+    "tests/unit/test_mcp_selfedit_logic.py": "36906830a2827ced775f5f3d6fdecd3e6c9a2e0bad5bbaeb660b96b63fbd4025"
+  },
+  "failure_injection": "Session marked validating with the lock free, a running verification child, and an injected stale approval and check result. No independent verification was completed for this candidate.",
+  "deployment_changed": false,
+  "scope": "Cold resume and interrupted-verification recovery, with affected API/voice-tool tests. In-flight file failures, slow cancellation/cleanup, alternative writers, profiles, previews, provider broker, simulation and lifecycle/release scope remain outstanding."
+}

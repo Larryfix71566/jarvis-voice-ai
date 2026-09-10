@@ -87,6 +87,8 @@ class SandboxWorkspace:
             checked = bool(state.get('checks')) and all(check.get('ok') is True for check in state['checks'])
             return {**state, 'active': active, 'branch': state['branch'] if active else None,
                 'session_branch': state['branch'], 'worktree': None, 'rollback_tag': None,
+                'pr_url': (state.get('publication') or {}).get('url'),
+                'pr_number': (state.get('publication') or {}).get('number'),
                 'validated_ok': checked and state['phase'] in {'validated', 'publishing', 'publication_pending'}}
         except (SandboxError, OSError, ValueError, KeyError) as exc:
             return {'active': False, 'branch': None, 'proposals': [], 'validated_ok': False, 'worktree': None,

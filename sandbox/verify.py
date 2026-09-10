@@ -42,6 +42,7 @@ class Verifier:
         raise SandboxError("VM did not become ready")
 
     def run_check(self, task: str, name: str, argv: tuple[str, ...], directory: Path, timeout: int) -> dict:
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         script = "cd " + GUEST_ROOT + "/source && source " + GUEST_ROOT + "/development.env && exec " + shlex.join(argv)
         started = time.monotonic()
         def remaining():

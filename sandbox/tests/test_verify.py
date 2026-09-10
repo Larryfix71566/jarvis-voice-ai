@@ -67,6 +67,16 @@ class VerificationTests(unittest.TestCase):
     def verify(self):
         return self.verifier.verify(self, self.directory, "prepared-image", self.profile)
 
+    def test_check_creates_its_log_directory_before_executing(self):
+        directory = self.directory / 'new-check-logs'
+        def guest(task, argv, **kwargs):
+            self.assertTrue(directory.is_dir())
+            kwargs['on_output'](b'progress\n', b'')
+            return subprocess.CompletedProcess(argv, 0, stdout=b'done\n', stderr=b'')
+        with patch.object(self, 'guest', side_effect=guest):
+            self.verifier.run_check('independent-task', 'test', ('true',), directory, 5)
+        self.assertEqual((directory / 'test.log').read_bytes(), b'done\n\n')
+
     def test_live_log_withholds_partial_lines_and_redacts_completed_credentials(self):
         fake_secret = b"sk-" + b"a" * 30
         log = self.directory / "live.log"

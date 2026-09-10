@@ -395,7 +395,10 @@ def selfedit_status(client, staging_id: str = "") -> dict[str, Any]:
             summary += " " + staging_sentence
         return {"ok": True, "opening": opening, "summary": summary,
                 "stagings": stagings, "staging_found": staging_found}
-    if opening.get("state") == "error" and not status.get("active"):
+    if (opening.get("state") == "error" and not status.get("active")
+            and job.get("state") != "running"
+            and (opening.get("started_at") or 0) >= max(job.get("started_at") or 0, finish.get("started_at") or 0)
+            and not status.get("publication")):
         return {"ok": False, "error": opening.get("error", "Sandbox setup failed"),
                 "stagings": stagings, "staging_found": staging_found}
 
@@ -434,8 +437,9 @@ def selfedit_status(client, staging_id: str = "") -> dict[str, Any]:
         parts.append(finish_sentence)
     if job.get("state") in ("done", "error") and job.get("summary"):
         parts.append(str(job["summary"]))
-    if job.get("pr_url"):
-        parts.append(f"Pull request: {job['pr_url']} — merging is yours on GitHub.")
+    pr_url = job.get("pr_url") or status.get("pr_url") or (status.get("publication") or {}).get("url")
+    if pr_url:
+        parts.append(f"Pull request: {pr_url} — merging is yours on GitHub.")
 
     if status.get("active"):
         proposals = status.get("proposals", []) or []
@@ -448,8 +452,6 @@ def selfedit_status(client, staging_id: str = "") -> dict[str, Any]:
             parts.append("The session is active but no edits have been proposed yet.")
         if status.get("validated_ok"):
             parts.append("Validation has passed — say the word and I'll submit the pull request.")
-        if status.get("pr_url"):
-            parts.append(f"Pull request: {status['pr_url']} — merging is yours on GitHub.")
     elif not parts:
         parts.append("No upgrade run or edit session is active right now.")
 

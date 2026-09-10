@@ -162,6 +162,13 @@ voice status can poll; it does not wait for VM preparation inside the HTTP
 request. Cancelling a running planner or a self-edit finish job stops VM work
 and prevents a late successful validation from triggering submission.
 
+Cold file access starts background VM resume and returns a retryable response;
+the caller must explicitly retry the read or edit after readiness is reported.
+No edit is queued by this warmup. A fresh host process reconciles the saved task
+with Tart before resuming. Interrupted verification cancels its child VM and
+clears its approval. App selection and saved draft-PR links survive a process
+restart, and app submission runs in the background with status polling.
+
 Native appearance verification is unavailable until the guest preview is
 integrated. It refuses with a clear error and never captures the host desktop.
 This routing change is not deployment of a complete development environment.
@@ -194,7 +201,8 @@ for recovery. Deleting a disposable task retains its review evidence.
 ## Work still required for the complete development environment
 
 The complete scope is tracked in [IMPLEMENTATION.md](IMPLEMENTATION.md). It
-includes closing remaining direct-write tool paths, restart-aware app selection,
+includes closing remaining direct-write tool paths, bounding interrupted file
+operations and cleanup,
 complete application profiles and templates,
 voice/provider simulations, a scoped host-vault broker, authenticated previews
 and native journeys, runtime/storage/idle limits, checkpoints, and deployment

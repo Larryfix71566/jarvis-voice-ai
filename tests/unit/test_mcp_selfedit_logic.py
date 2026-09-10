@@ -726,3 +726,12 @@ def test_workspace_preparation_is_reported_without_inventing_a_planner():
         'opening': {'state': 'starting'}, 'status': {}, 'stagings': []}})
     result = logic.selfedit_status(client)
     assert 'not ready for edits' in result['summary']
+
+
+def test_saved_publication_is_reported_after_process_job_state_is_lost():
+    client = FakeClient({('GET', '/api/selfedit/run'): {'ok':True,
+        'job':{'state':'idle'}, 'status':{'active':False,
+            'publication':{'url':'https://github.com/test/repo/pull/42'}}}})
+    result = logic.selfedit_status(client)
+    assert 'https://github.com/test/repo/pull/42' in result['summary']
+    assert 'No upgrade' not in result['summary']

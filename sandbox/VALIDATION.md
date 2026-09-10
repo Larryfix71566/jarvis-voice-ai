@@ -145,3 +145,22 @@ interactions, backend dependencies, or native GUI behavior.
 
 Exact revisions, fingerprints and log hashes are in
 [the routing acceptance record](acceptance/2026-09-10-routing.json).
+
+## Resume and reconnect checkpoint
+
+Development VM `da3811daeb0d` passed 303 affected application/API tests, then
+87 workspace and self-edit voice-tool tests after the publication-status fix.
+The trusted controller suite passed 101 tests. These selections overlap and
+must not be added together as distinct test coverage.
+
+A documentation edit and its saved proposal survived a VM stop and fresh
+host controller. Separate checks recovered from a stale recorded running state.
+Controlled failure injection left verification child `f33b9d630250` running
+with the session marked validating and a deliberately stale approval. Resume
+stopped that child, refused its restart, cleared the approval and check list,
+and preserved the edit. This was interruption recovery, not a completed
+independent verification or publication of that candidate.
+
+Both test VMs were deleted and the session reverted, retaining host evidence.
+Exact identifiers and check log hashes are in
+[the resume acceptance record](acceptance/2026-09-10-resume.json).
