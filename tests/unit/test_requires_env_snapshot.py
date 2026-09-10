@@ -22,6 +22,9 @@ from jarvis.skills.registry import REPO_ROOT
 # financial gates call jarvis.sensitive.detect_financial, which transitively
 # reads that kill switch — undeclared, K2 scoping would silently strip it
 # from just these two subprocesses). See the manifests' own comments.
+# 2026-09-10 GC1/GC3 re-audit: code-defaulted settings move from required
+# to optional. Their names remain explicitly frozen here; the union of
+# forwarded names and every env map are unchanged. Credentials stay required.
 EXPECTED = {
     "mcp-time":      ([], [], {}),
     "mcp-notes":     ([], ["JARVIS_SENSITIVE_GUARD_ENABLED"],
@@ -37,23 +40,21 @@ EXPECTED = {
     "mcp-system":    ([], [], {}),
     "mcp-runlog":    ([], ["JARVIS_GRAPHS_ENABLED", "JARVIS_GRAPH_DEPTH",
                            "JARVIS_GRAPH_MAX_NODES", "JARVIS_GRAPH_SINCE"], {}),
-    "mcp-web":       (["TAVILY_API_KEY", "JARVIS_UNITS"], [],
+    "mcp-web":       (["TAVILY_API_KEY"], ["JARVIS_UNITS"],
                       {"TAVILY_API_KEY": "${TAVILY_API_KEY}"}),
-    "mcp-git":       (["JARVIS_REPO_ROOT"], [], {"JARVIS_DB_PATH": "${JARVIS_DB_PATH}"}),
-    "mcp-repo":      (["JARVIS_REPO_ROOT"], [], {}),
+    "mcp-git":       ([], ["JARVIS_REPO_ROOT"], {"JARVIS_DB_PATH": "${JARVIS_DB_PATH}"}),
+    "mcp-repo":      ([], ["JARVIS_REPO_ROOT"], {}),
     "mcp-apps":      (["GITHUB_TOKEN", "GITHUB_OWNER"],
                       ["JARVIS_REGISTRY_REPO", "JARVIS_REGISTRY_BRANCH"],
                       {"GITHUB_TOKEN": "${GITHUB_TOKEN}",
                        "GITHUB_OWNER": "${GITHUB_OWNER}"}),
     "mcp-selfedit":  ([], ["JARVIS_UPGRADE_PROFILE"], {}),
-    "mcp-screen":    (["JARVIS_SCREEN_ENABLED", "JARVIS_VISION_PROFILE"],
-                      ["JARVIS_SCREEN_RETENTION_HOURS", "JARVIS_UPGRADE_MODELS"],
+    "mcp-screen":    ([],
+                      ["JARVIS_SCREEN_ENABLED", "JARVIS_VISION_PROFILE",
+                       "JARVIS_SCREEN_RETENTION_HOURS", "JARVIS_UPGRADE_MODELS"],
                       {}),
-    # 2026-09-01 — mcp-kb (librarian's knowledge-base server, commit 3d63f59
-    # wired it into agents.yaml). KB_BASE_URL is required (no code default;
-    # see the skill.yaml comment) so the vault service URL can be overridden
-    # without expand_env_vars leaving a literal "${KB_BASE_URL}".
-    "mcp-kb":        (["KB_BASE_URL"], [], {}),
+    # logic.py supplies localhost:8484; an explicit URL still reaches the child.
+    "mcp-kb":        ([], ["KB_BASE_URL"], {}),
 }
 
 
