@@ -93,3 +93,40 @@ async def test_multiple_unusable_agents_all_named_in_one_injection():
     assert "weather" in injected[0]
     assert "news" in injected[0]
     assert "calendar" not in injected[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("recovering", [False, True])
+async def test_failed_announcement_retries_without_duplicate(recovering, caplog):
+    agent = FakeAgent("weather", True, "HTTP 401")
+    notice, injected = _notice([agent])
+    if recovering:
+        await notice.tick_once()
+        agent.model_unusable = False
+    original = notice._inject
+
+    async def failed(text):
+        raise RuntimeError("private transport details")
+
+    notice._inject = failed
+    await notice.tick_once()
+    assert "RuntimeError" in caplog.text
+    assert "private transport details" not in caplog.text
+    notice._inject = original
+    await notice.tick_once()
+    await notice.tick_once()
+    assert len(injected) == (2 if recovering else 1)
+    if recovering:
+        assert injected[-1] == KEYHEALTH_RECOVERED_TEMPLATE
+
+
+@pytest.mark.asyncio
+async def test_cancellation_is_not_swallowed():
+    import asyncio
+
+    async def cancelled(text):
+        raise asyncio.CancelledError
+
+    notice = KeyHealthNotice(cancelled, [FakeAgent("weather", True, "401")], lambda: True)
+    with pytest.raises(asyncio.CancelledError):
+        await notice.tick_once()

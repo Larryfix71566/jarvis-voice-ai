@@ -56,3 +56,68 @@ def test_missing_db_is_skipped_not_failed(tmp_path, monkeypatch, capsys):
     assert rc == 0
     assert "skip data/jarvis.db: missing" in out
     assert "skip data/costs.db: missing" in out
+
+
+def test_failed_retry_preserves_existing_backup_and_removes_staging(tmp_path, monkeypatch):
+    import pytest
+
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    monkeypatch.setattr(backup_db, "BACKUP_DIR", backup_dir)
+    src = tmp_path / "jarvis.db"
+    _make_db(src, ["original"])
+    dst = backup_db.backup_one(src, "20260101-0300")
+    original = dst.read_bytes()
+    src.write_bytes(b"not a sqlite database")
+    with pytest.raises(sqlite3.DatabaseError):
+        backup_db.backup_one(src, "20260101-0300")
+    assert dst.read_bytes() == original
+    assert list(backup_dir.iterdir()) == [dst]
+
+
+def test_backup_missing_source_does_not_create_empty_database(tmp_path, monkeypatch):
+    import pytest
+
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    monkeypatch.setattr(backup_db, "BACKUP_DIR", backup_dir)
+    src = tmp_path / "missing.db"
+    with pytest.raises(sqlite3.OperationalError):
+        backup_db.backup_one(src, "20260101-0300")
+    assert not src.exists()
+    assert list(backup_dir.iterdir()) == []
+
+
+def test_backup_includes_committed_wal_rows(tmp_path, monkeypatch):
+    from contextlib import closing
+
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    monkeypatch.setattr(backup_db, "BACKUP_DIR", backup_dir)
+    src = tmp_path / "jarvis.db"
+    with closing(sqlite3.connect(src)) as writer:
+        assert writer.execute("PRAGMA journal_mode=WAL").fetchone() == ("wal",)
+        writer.execute("PRAGMA wal_autocheckpoint=0")
+        writer.execute("CREATE TABLE t (v TEXT)")
+        writer.execute("INSERT INTO t VALUES ('committed in WAL')")
+        writer.commit()
+        assert src.with_name(src.name + "-wal").stat().st_size > 0
+        dst = backup_db.backup_one(src, "20260101-0300")
+        with closing(sqlite3.connect(dst)) as reader:
+            assert reader.execute("SELECT v FROM t").fetchall() == [("committed in WAL",)]
+            assert reader.execute("PRAGMA quick_check").fetchall() == [("ok",)]
+
+
+def test_failed_backup_returns_failure_without_pruning(tmp_path, monkeypatch):
+    monkeypatch.setattr(backup_db, "ROOT", tmp_path)
+    monkeypatch.setattr(backup_db, "DBS", ("data/jarvis.db",))
+    backup_dir = tmp_path / "data" / "backups"
+    backup_dir.mkdir(parents=True)
+    monkeypatch.setattr(backup_db, "BACKUP_DIR", backup_dir)
+    monkeypatch.setattr(backup_db, "BACKUP_KEEP", 1)
+    (tmp_path / "data" / "jarvis.db").write_bytes(b"corrupt")
+    earlier = [backup_dir / f"jarvis.2026010{i}-0300.db" for i in (1, 2)]
+    for path in earlier:
+        _make_db(path, ["saved"])
+    assert backup_db.main() == 1
+    assert sorted(backup_dir.iterdir()) == earlier

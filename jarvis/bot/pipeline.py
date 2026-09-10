@@ -1170,7 +1170,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
         # Default true; runtime.keyhealth_notice stays None when off, so
         # the finally block's guard skips it cleanly.
         if os.environ.get("JARVIS_KEYHEALTH_NOTICE_ENABLED", "").strip().lower() not in (
-            "false", "0", "no",
+            "false", "0", "no", "off",
         ):
             runtime.keyhealth_notice = KeyHealthNotice(
                 inject=inject_context,

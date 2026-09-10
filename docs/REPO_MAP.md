@@ -21,6 +21,7 @@ structural changes. Keep it below the 8,000-character prompt cap
   the live interface; `web/` is frozen. See below.
 - `web/` — the React/Vite console. FROZEN 2026-09-04 and not served:
   interface work goes to `macos/MortimerHost`.
+- `sandbox/` — disposable macOS VMs, guarded files, verification and PRs.
 - `config/` — YAML/JSON routing and model config (agents, MCP servers,
   voices, self-edit allowlist, upgrade models/agent bounds). Check here
   first when a capability seems misrouted or over/under-permissioned.
@@ -32,10 +33,10 @@ structural changes. Keep it below the 8,000-character prompt cap
 - `scripts/` — run/setup/check scripts (`mortimer.sh`, `run_bot.sh`,
   `run_admin.sh`, `init_db.py`, `check_env.py`), plus `cost_report.py`,
   `pull_openrouter_activity.py`, `backup_db.py` (SQLite snapshots,
-  14-day retention) and `launchd_gen.py` (the launchd plists that
+  14 snapshots per database) and `launchd_gen.py` (the launchd plists that
   supervise the bot/admin/reminder-notifier processes).
 - `data/` — gitignored: `jarvis.db`, `secrets.vault`,
-  `app_workspaces/` (cloned app repos, self-edit-denied).
+  `app_workspaces/` (legacy metadata; code lives in VMs).
 - `logs/` — gitignored: per-run JSONL under `agents/<date>/`, council
   rounds under `council/<date>/`.
 
@@ -48,10 +49,9 @@ structural changes. Keep it below the 8,000-character prompt cap
   brain), `base.py` (`SubAgent` — per-agent model/timeout/repo-map),
   `delegate.py` (`delegate_task` tool + retry guard),
   `upgrade_agent.py` (self-edit loop + model registry helpers),
-  `app_build_agent.py` (app-build loop, if present — Part D),
-  `workspace.py` (the Workspace seam shared by both loops, if present).
+  `workspace.py` (workspace interface; adapter in `sandbox/workspace.py`).
 - `jarvis/admin/server.py` — the admin sidecar (`:7861`): self-edit,
-  planning, council, app-build (if present) job endpoints; console Git/
+  planning, council, sandbox app-workspace endpoints; console Git/
   Memory panels' backend.
 - `jarvis/council/` — `council.py` (convene/draft_candidates),
   `scoring.py`, `config.py` (tiers, timeouts, char caps),
@@ -62,8 +62,7 @@ structural changes. Keep it below the 8,000-character prompt cap
   capability / execution / deliberation) + PNG/SVG renderer; served by the
   sidecar's `/api/graph/*` and two voice tools (`memory_graph_view`,
   `graph_view`). One implementation: nothing else derives an edge.
-- `jarvis/selfedit/service.py` — the self-edit sandbox: branch, allow-
-  list check, validation gate, PR.
+- `jarvis/selfedit/service.py` — sandbox facade: allowlist, validation, PRs.
 - `jarvis/skills/registry.py` — spawns MCP servers as subprocesses,
   exposes their tools.
 - `jarvis/prompts.py` — single source of truth for every system prompt.
@@ -106,7 +105,7 @@ structural changes. Keep it below the 8,000-character prompt cap
 The interface. `MortimerHost` (the app) depends on `JarvisKit` (the
 shared library) by path, so a JarvisKit change rebuilds both. Self-edit
 may change the Swift **sources** below — gated by `swift build` +
-`swift test` in the session worktree, PR flagged SWIFT CHANGE, and inert
+`swift test` in an independent VM, PR flagged SWIFT CHANGE, and inert
 until a human runs `macos/MortimerHost/scripts/bundle.sh`. Manifests,
 plists, entitlements, `scripts/`, `GlassSpike/` and `MortimerShell/` are
 human-only.

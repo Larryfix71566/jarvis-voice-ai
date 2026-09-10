@@ -16,6 +16,9 @@ from sandbox.durable import atomic_bytes, atomic_json
 from sandbox.files import WorkspaceFiles
 
 
+# GC1b: retain Larry's 900-second full-unit gate after moving it into the VM.
+VALIDATE_PYTEST_TIMEOUT_S = 900
+
 def runner_fingerprint() -> str:
     root = Path(__file__).resolve().parent
     digest = hashlib.sha256()
@@ -118,7 +121,10 @@ class Verifier:
                 remaining = int(deadline - time.monotonic())
                 if remaining < 1:
                     raise SandboxError("Verification runtime budget exhausted")
-                receipt["checks"].append(self.run_check(verification_task, name, argv, directory, min(remaining, 1800)))
+                budget = (VALIDATE_PYTEST_TIMEOUT_S
+                          if profile.name == "mortimer" and name in {"backend", "baseline-backend"}
+                          else 1800)
+                receipt["checks"].append(self.run_check(verification_task, name, argv, directory, min(remaining, budget)))
                 atomic_json(directory / "receipt.json", receipt)
             observed = Candidate.decode(self.controller.rpc(verification_task, {"operation": "capture",
                 "baseline_paths": [file.path for file in files.baseline.files]}))

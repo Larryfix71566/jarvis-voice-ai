@@ -76,9 +76,10 @@ async def test_mcp_time_server():
     assert {"iso", "human", "timezone", "unix"} <= set(payload)
 
 
-async def test_mcp_notes_server(tmp_path):
+async def test_mcp_notes_server(tmp_path, monkeypatch):
     db = tmp_path / "int_notes.db"
-    os.environ["JARVIS_DB_PATH"] = str(db)
+    # GC1: restore the DB path so subsequent tests cannot inherit this fixture.
+    monkeypatch.setenv("JARVIS_DB_PATH", str(db))
     run_migrations()
     tools, payload = await _call(
         "mcp_servers.mcp_notes.server", "create_note",
@@ -90,11 +91,12 @@ async def test_mcp_notes_server(tmp_path):
     assert "Note saved" in payload["message"]
 
 
-async def test_mcp_notes_search_sessions_over_stdio(tmp_path):
+async def test_mcp_notes_search_sessions_over_stdio(tmp_path, monkeypatch):
     """Plan Phase 5a: search_sessions finds FTS5-indexed conversation rows
     via the real stdio MCP round trip, not just the direct logic.py call."""
     db = tmp_path / "int_notes_search.db"
-    os.environ["JARVIS_DB_PATH"] = str(db)
+    # GC1: restore the DB path so subsequent tests cannot inherit this fixture.
+    monkeypatch.setenv("JARVIS_DB_PATH", str(db))
     run_migrations()
     from jarvis.db import get_conn, now_iso
 
@@ -118,9 +120,10 @@ async def test_mcp_notes_search_sessions_over_stdio(tmp_path):
     assert "garage" in payload["results"][0]["snippet"].lower()
 
 
-async def test_mcp_reminders_server(tmp_path):
+async def test_mcp_reminders_server(tmp_path, monkeypatch):
     db = tmp_path / "int_reminders.db"
-    os.environ["JARVIS_DB_PATH"] = str(db)
+    # GC1: restore the DB path so subsequent tests cannot inherit this fixture.
+    monkeypatch.setenv("JARVIS_DB_PATH", str(db))
     run_migrations()
     tools, payload = await _call(
         "mcp_servers.mcp_reminders.server", "set_reminder",
@@ -202,3 +205,25 @@ async def test_mcp_repo_server_write_gate_over_stdio(tmp_path):
     assert committed["code"] == "sandbox_required"
     assert not (repo_dir / "new.txt").exists()
     assert not db.exists()
+
+
+async def test_server_startup_does_not_check_for_dependency_updates(monkeypatch):
+    """GC1: a real stdio startup must work with DNS forbidden, not wait on PyPI."""
+    monkeypatch.delenv("FASTMCP_CHECK_FOR_UPDATES", raising=False)
+    params = _params("mcp_servers.mcp_time.server")
+    params.args = ["-c", """
+import runpy
+import socket
+
+def forbidden_dns(*args, **kwargs):
+    raise AssertionError('MCP startup must not contact dependency registries')
+
+socket.getaddrinfo = forbidden_dns
+runpy.run_module('mcp_servers.mcp_time.server', run_name='__main__')
+"""]
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            assert {tool.name for tool in (await session.list_tools()).tools} == EXPECTED_TOOLS[
+                "mcp_servers.mcp_time.server"
+            ]
