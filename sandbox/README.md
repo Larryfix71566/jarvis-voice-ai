@@ -21,14 +21,19 @@ The controller currently limits this 16 GB development Mac to one active VM,
 4 CPUs and 8 GiB of memory. Command timeouts stop the VM so work cannot
 continue after its client is killed. Task state is saved outside the repo.
 
-The provisioning phase permits network access through Softnet to install
-dependencies into a fresh trusted guest. Only known, reviewed source should
-be used during this phase. After successful preparation the VM stops, and
+The provisioning phase permits public network access through Softnet to install
+dependencies into a fresh trusted guest. Explicit rules block private networks,
+the host gateway and all host IPv4 interface addresses observed at launch.
+Softnet's default gateway exception is unsafe for this purpose: the real host
+listener probe caught it before the explicit rules were added. Guest setup
+uses public DNS because the host's DNS proxy is also blocked.
+Only known, reviewed source should be used during this phase.
+After successful preparation the VM stops, and
 development restarts with all IPv4 destinations blocked. A prepared task
-cannot be restarted in provisioning mode. Physical containment—including
-IPv6, bridge/gateway behavior and inaccessible host canaries—still needs to
-be demonstrated on the actual host. Do not describe configuration flags or
-mocked tests as proof that those probes passed.
+cannot be restarted in provisioning mode. Repeat the actual canary probes on
+each host in both modes. Do not describe configuration flags or mocked tests
+as proof that those probes passed. A failed IPv6 connection alone is not proof
+of complete IPv6 containment.
 
 ## Host prerequisites
 
@@ -44,6 +49,9 @@ mocked tests as proof that those probes passed.
   disk growth need additional space. Do not start multiple large downloads.
 
 Set `MORTIMER_TART` to the absolute Tart executable path if it is not on PATH.
+Run the controller with host permissions to both launch and stop Tart;
+restricted execution can prevent virtualization or termination. A failed
+stop remains an error and does not clear the recorded active task.
 Use `--home` to select a dedicated state directory. Its default is
 `~/Documents/Codex/MortimerSandbox`; this is separate from `MORTIMER_HOME`,
 which selects the application's private knowledge data.
@@ -59,6 +67,7 @@ python3 sandbox/probe.py --home /absolute/sandbox/home --tart /absolute/path/to/
 python3 sandbox/control.py stop TASK_ID
 python3 sandbox/control.py start TASK_ID --provision
 # Wait for the guest desktop/agent to be ready, then:
+python3 sandbox/probe.py --home /absolute/sandbox/home --tart /absolute/path/to/tart --provisioning TASK_ID
 python3 sandbox/control.py prepare TASK_ID
 # Preparation stops the VM. Restart it offline for development:
 python3 sandbox/control.py start TASK_ID
@@ -76,8 +85,8 @@ Run `status TASK_ID` to inspect saved state and source identifiers.
 ## Included development tools and checks
 
 Guest preparation installs the locked Python backend dependencies, the
-bundled knowledge-base package, Node web dependencies, Swift package
-dependencies, and a Chromium browser with Playwright. The Xcode image
+bundled knowledge-base package, Node 22 web dependencies, Swift package
+dependencies, and a Chromium browser with Playwright 1.63.0. The Xcode image
 provides the native toolchain. Fake placeholder keys permit configuration
 parsing, and all application databases and knowledge records live under
 `/Users/admin/mortimer/state` inside the VM.
@@ -93,10 +102,12 @@ through all seven panels, recording a screenshot and JSON report inside the
 guest. It does not test voice, editing or publication. The VM desktop can
 be used to launch/debug the native application.
 
-`probe.py` runs synthetic host-file and network canaries against an offline
+`probe.py` runs synthetic host-file and network canaries against a running
 guest, verifies that the source share exists and rejects writes, and checks
 the actual guest CPU/memory allocation. It writes observations under the
-host task directory and stops the VM on failure. A failed IPv6 connection
+host task directory and stops the VM on failure. By default public traffic
+must fail; `--provisioning` requires public traffic to succeed while the same
+host/private-network canaries remain blocked. A failed IPv6 connection
 is recorded separately: it alone cannot prove filtering versus absent routing.
 Neither these probes nor passing unit tests establish complete containment.
 
