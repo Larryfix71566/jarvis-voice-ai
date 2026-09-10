@@ -5,6 +5,7 @@ import os
 import shlex
 from pathlib import Path
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -201,6 +202,46 @@ class ControllerTests(unittest.TestCase):
         self.export_writer("sk-" + "a" * 30)
         with self.assertRaises(control.SandboxError): self.c.export(self.task)
         self.assertFalse((self.c.task_dir(self.task) / "candidate.patch").exists())
+
+    def test_captured_stderr_is_bounded_and_stops_the_vm(self):
+        self.export_writer("")
+        executable = Path(self.c.tart)
+        executable.write_text("#!" + sys.executable + "\nimport sys\nsys.stderr.write('x' * 100000)\n")
+        with patch.object(self.c, "stop") as stop:
+            with self.assertRaises(control.SandboxError):
+                self.c.guest(self.task, ["ignored"], timeout=5, capture=True, max_output=100)
+            stop.assert_called_once_with(self.task)
+
+    def test_capture_timeout_stops_guest_even_when_it_produces_no_output(self):
+        self.export_writer("")
+        Path(self.c.tart).write_text("#!" + sys.executable + "\nimport time\ntime.sleep(30)\n")
+        with patch.object(self.c, "stop") as stop:
+            with self.assertRaises(control.SandboxError):
+                self.c.guest(self.task, ["ignored"], timeout=1, capture=True)
+            stop.assert_called_once_with(self.task)
+
+    def test_rpc_requires_offline_preparation_and_matching_host_code(self):
+        self.c.install_file_service(self.task)
+        with patch.object(self.c, "guest") as guest:
+            with self.assertRaises(control.SandboxError):
+                self.c.rpc(self.task, {"operation": "read", "path": "app.py"})
+            guest.assert_not_called()
+        self.c.save(self.task, {"status": "running", "network": "offline", "prepared": True})
+        inputs, _ = self.c._file_service(self.task)
+        (inputs / "rpc.py").write_text("modified")
+        with patch.object(self.c, "guest") as guest:
+            with self.assertRaises(control.SandboxError):
+                self.c.rpc(self.task, {"operation": "read", "path": "app.py"})
+            guest.assert_not_called()
+
+    def test_rpc_request_is_removed_after_lost_response(self):
+        self.c.install_file_service(self.task)
+        self.c.save(self.task, {"status": "running", "network": "offline", "prepared": True})
+        with patch.object(self.c, "guest", side_effect=control.SandboxError("lost")):
+            with self.assertRaises(control.SandboxError):
+                self.c.rpc(self.task, {"operation": "read", "path": "app.py"})
+        inputs, _ = self.c._file_service(self.task)
+        self.assertEqual(list((inputs / "requests").iterdir()), [])
 
 
 if __name__ == "__main__": unittest.main()
