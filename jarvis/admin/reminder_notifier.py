@@ -38,7 +38,12 @@ class ReminderNotifier:
             return 0
         sent = 0
         for row in rows:
-            if self._post(str(row.get("message", ""))):
+            try:
+                posted = self._post(str(row.get("message", "")))
+            except Exception as exc:  # one failed notification must not stop the watcher
+                logger.warning("reminder_notifier_post_failed id=%s error=%s", row.get("id"), type(exc).__name__)
+                continue
+            if posted:
                 try:
                     logic.mark_notified([int(row["id"])])
                     sent += 1

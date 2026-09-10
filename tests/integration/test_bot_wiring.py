@@ -736,8 +736,7 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "env_value, expect_constructed",
-    [("false", False), (None, True)],
-    ids=["switch_off", "switch_default_on"],
+    [("false", False), ("0", False), ("no", False), (" OFF ", False), (None, True)],
 )
 async def test_keyhealth_notice_kill_switch(monkeypatch, tmp_path, env_value, expect_constructed):
     """GC5 (gap-closure plan, 2026-09-04): JARVIS_KEYHEALTH_NOTICE_ENABLED

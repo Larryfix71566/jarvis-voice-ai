@@ -70,6 +70,18 @@ CI (`.github/workflows/validate.yml`, on PRs to `main`) runs, in order: allowlis
 
 ## Architecture
 
+**Sandbox execution update (2026-09-10).** Current self-edit and application
+workspaces use `sandbox/runtime.py` and persistent `sandbox/session.py`
+sessions. `jarvis/selfedit/service.py` is the API facade; candidate code runs
+as an unprivileged worker in a disposable offline macOS VM. An independent
+verification VM checks baseline and candidate tests before draft-PR publication.
+The Mortimer profile runs both full unit suites even for documentation or Swift
+changes; each backend check has the 900-second limit in `sandbox/verify.py`.
+The historical worktree/gate-selection description below predates this migration.
+MCP startup defaults `FASTMCP_CHECK_FOR_UPDATES=off` in `mcp_servers/__init__.py`
+so a startup banner never needs a package-registry connection by default.
+
+
 ```
 Browser (React/Vite) --WebRTC--> Python bot (Pipecat pipeline) --MCP/stdio--> MCP skill servers
 ```

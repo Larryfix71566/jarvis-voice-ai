@@ -67,7 +67,13 @@ class KeyHealthNotice:
             await self.tick_once()
 
     async def tick_once(self) -> None:
-        """One poll cycle. Public for tests; never raises."""
+        """One poll cycle; transient failures retry, cancellation propagates."""
+        try:
+            await self._tick_once()
+        except Exception as exc:
+            logger.warning("Key-health notice poll failed: %s", type(exc).__name__)
+
+    async def _tick_once(self) -> None:
         if not self._is_connected():
             return
         unusable: _UnusableSet = tuple(sorted(

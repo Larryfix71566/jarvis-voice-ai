@@ -13,6 +13,39 @@
 **STILL OPEN:** §8.3 speaker gate (offline); §8.6 self-edit half (staging TTL 600 s — re-stage and confirm promptly; use a `docs/` goal, `macos/**` never reaches validation); the GC6(d) edit itself (`config/upgrade_models.yaml` is human-only). **GC6(d) evidence says DEMOTE:** kimi-k3 produced 12 nulls in 24 rows (50%), alternating not trending — failed 08-23 x2, worked 08-30 x2, failed 09-01, worked 09-05 — while every other mid judge is at zero (or-gpt-5.1 0/24, or-grok-4.3 0/24, or-sonnet-5 0/20, claude-sonnet-5 0/4). **100% of mid-tier abstentions ever are kimi-k3.** Caveat: demotion moves it to the proposer pool rather than fixing it; a 50% timeout rate against one provider suggests the timeout is too tight for Moonshot, and GC6(a) means the next failure will finally carry a real error string.
 
 **DEFECTS FOUND BY RUNNING THIS PLAN, none of them in it.** (1) `jarvis/council/__main__.py` never loaded vault credentials, so `--replay` — GC6(b)'s own repair tool — was dead since it was written; fixed `0084d23`. (2) Validation built the frozen web client on every self-edit; fixed `634d629` (above). (3) A barge-in during a delegation duplicated the next write — one store request produced two `delegate_task` calls and two notes; fixed `2a13857`. (4) `requirements.txt` line 1 had NO version pin, so the venv rebuild during the move resolved pipecat 1.8.1 and dropped the ElevenLabs SDK; pinned `54abcd6`. **This project has no `pyproject.toml` — `uv sync` does not work; rebuild with `uv venv --python 3.12` then `uv pip install -r requirements-lock.txt`.** Original header: DRAFT for Larry's approval, 2026-09-04.
+**2026-09-10 re-audit (in progress).** This audit checks the implementation
+against the current sandbox architecture; the 09-05 results above remain
+historical evidence, not fresh acceptance of every subsequent change.
+
+- GC1: the initial complete-suite attempt was deliberately interrupted after
+  diagnosing repeated PyPI update checks in MCP startup. The diagnostic measured
+  30.46 seconds with checks enabled versus 0.40 seconds disabled. Mortimer MCP
+  services now default `FASTMCP_CHECK_FOR_UPDATES=off` at package initialization;
+  dependency updates remain a maintenance action. The final candidate suite and
+  two alternate-order runs remain required. Three MCP integration tests now
+  restore their temporary database environment setting.
+- GC1b: the effective full-unit gate moved to `sandbox/verify.py`. Both baseline
+  and candidate backend checks retain 900 seconds; the other verification
+  checks keep their existing budgets. The regression is now
+  `sandbox/tests/test_verify.py::VerificationTests::test_mortimer_full_unit_gates_keep_900_second_timeout`.
+- GC2: the repository map now names the VM controller and current workspace
+  adapter, removes nonexistent app-build-agent references, and describes
+  backup retention as 14 snapshots per database.
+- GC5/GC9: transient announcement failures retry on the next poll instead of
+  terminating the watcher. Failed reminder posts leave `notified_at` unset and
+  do not prevent other reminders from being posted. Successful announcements
+  retain their existing deduplication rules. Candidate regression checks pending.
+- GC7: candidate backups publish a checked SQLite snapshot atomically, so a
+  failed retry cannot overwrite a good same-minute backup. Sources open
+  read-only and all connections close explicitly. Candidate WAL/failure tests pending.
+- GC7/GC8 host evidence: read-only inspection of the closed 2026-09-10 03:15
+  snapshots found six backups per database and `PRAGMA quick_check = ok` for
+  both newest snapshots. All 15 non-FTS application tables and the cost-ledger
+  table have `user_id TEXT NOT NULL DEFAULT 'local'`. This proves the saved
+  snapshot schema; no live database or vault was modified.
+- GC12: `JARVIS_KEYHEALTH_NOTICE_ENABLED=off` now disables construction,
+  consistently with the reminder notifier. Expanded wiring tests pending.
+
 **Author / origin:** Larry, 2026-09-04: *"build an implementation plan for the gaps you identified first. I want to close all the gaps and I want the plan to be run by Sonnet."* Scope decisions taken the same day: freeze `web/` now (MortimerHost is the daily driver); **full `user_id` on every table** with backfill `'local'`; fix the six standing test failures and raise the self-edit pytest gate to 900 s (never a fast subset — CI and the gate must agree).
 **Roadmap constraints this plan is bound by:** C3 (nothing financial); K2 (no new MCP servers; one new optional env name declared where read); the self-edit deny tier — every step is a human PR.
 **Contracts this plan INTRODUCES:** GC-T — the tenant column contract (§3 GC8): every table carries `user_id TEXT NOT NULL DEFAULT 'local'`; `jarvis.tenant.current_user_id()` is the one reader of `JARVIS_USER_ID`; `tests/unit/test_tenant_columns.py` fails when a future migration creates a table without the column. Consumed by the subscription track (unwritten) — this plan adds the column, **not** per-user filtering.
@@ -358,7 +391,7 @@ In `jarvis/admin/server.py`, at module top beside the other background-thread sl
 
 | Constant | Where | Default | Env override |
 |---|---|---|---|
-| `VALIDATE_PYTEST_TIMEOUT_S` | `jarvis/selfedit/service.py` | 900 | — |
+| `VALIDATE_PYTEST_TIMEOUT_S` | `sandbox/verify.py` (moved 2026-09-10) | 900 | — |
 | `KEYHEALTH_NOTICE_INTERVAL_S` | `jarvis/bot/keyhealth_notice.py` | 30.0 | — |
 | kill switch | `jarvis/bot/pipeline.py` (construction) | true | `JARVIS_KEYHEALTH_NOTICE_ENABLED` |
 | `BACKUP_KEEP` | `scripts/backup_db.py` | 14 | — |
@@ -367,6 +400,7 @@ In `jarvis/admin/server.py`, at module top beside the other background-thread sl
 | `REMINDER_NOTIFY_INTERVAL_S` / `REMINDER_NOTIFY_GRACE_S` | `jarvis/admin/reminder_notifier.py` | 30.0 / 60.0 | — |
 | kill switch | `jarvis/admin/server.py` (module top) | true | `JARVIS_REMINDER_NOTIFICATIONS_ENABLED` |
 | `DEFAULT_USER_ID` | `jarvis/tenant.py` | `local` | `JARVIS_USER_ID` (validated) |
+| dependency-update banner | `mcp_servers/__init__.py` (default only) | `off` | `FASTMCP_CHECK_FOR_UPDATES` |
 | `REPO_MAP_MAX_CHARS` | `jarvis/repo_map.py:18` (unchanged) | 8000 | — |
 
 ## §7 Tests — by file and function

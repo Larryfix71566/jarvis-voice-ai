@@ -67,6 +67,15 @@ class VerificationTests(unittest.TestCase):
     def verify(self):
         return self.verifier.verify(self, self.directory, "prepared-image", self.profile)
 
+    def test_mortimer_full_unit_gates_keep_900_second_timeout(self):
+        self.profile = Profile("mortimer", (), (), tuple(
+            (name, ("/protected/python", "check.py"))
+            for name in ("baseline-backend", "backend", "native")
+        ))
+        with patch.object(self.verifier, "run_check", wraps=self.verifier.run_check) as check:
+            self.assertTrue(self.verify()["passed"])
+        self.assertEqual([call.args[-1] for call in check.call_args_list], [900, 900, 1800])
+
     def test_check_creates_its_log_directory_before_executing(self):
         directory = self.directory / 'new-check-logs'
         def guest(task, argv, **kwargs):

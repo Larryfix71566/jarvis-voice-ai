@@ -107,3 +107,27 @@ def test_delivered_rows_are_never_notified(db):
     assert sent == 0
     assert posted == []
     assert _row(rid)["notified_at"] is None
+
+
+def test_post_exception_retries_failed_row_and_continues_others(db, caplog):
+    failed_id = _insert_reminder(-120, message="retry me")
+    other_id = _insert_reminder(-120, message="deliver me")
+    posted = []
+
+    def post(message):
+        if message == "retry me":
+            raise RuntimeError("private notification details")
+        posted.append(message)
+        return True
+
+    notifier = ReminderNotifier(post=post)
+    assert notifier.tick_once() == 1
+    assert _row(failed_id)["notified_at"] is None
+    assert _row(other_id)["notified_at"] is not None
+    assert "RuntimeError" in caplog.text
+    assert "private notification details" not in caplog.text
+    notifier._post = lambda message: posted.append(message) or True
+    assert notifier.tick_once() == 1
+    assert notifier.tick_once() == 0
+    assert posted == ["deliver me", "retry me"]
+    assert _row(failed_id)["delivered"] == _row(other_id)["delivered"] == 0
