@@ -9,6 +9,9 @@ fi
 ROOT=/Users/admin/mortimer
 INPUT='/Volumes/My Shared Files/input'
 export PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin
+# The host gateway is deliberately blocked, including its DNS proxy.
+# Resolve public package registries directly through public DNS instead.
+sudo -n /usr/sbin/networksetup -setdnsservers Ethernet 1.1.1.1 8.8.8.8
 mkdir -p "$ROOT/source" "$ROOT/state" "$ROOT/logs" "$ROOT/reports"
 if [ -e "$ROOT/source/.git" ]; then
   echo "Use a fresh task; refusing to overwrite an existing development checkout." >&2

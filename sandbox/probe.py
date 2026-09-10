@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise a running OFFLINE VM boundary using synthetic host canaries.
+"""Exercise a running VM boundary using synthetic host canaries.
 
 Run before importing proposed code. Reports are observations, not a claim
 that unit tests alone prove containment. No production data is used.
@@ -58,12 +58,16 @@ def main():
     parser.add_argument('--home', type=Path, required=True)
     parser.add_argument('--tart', required=True)
     parser.add_argument('--softnet', default='/usr/local/libexec/mortimer-sandbox/softnet')
+    parser.add_argument('--provisioning', action='store_true',
+                        help='Expect public internet during trusted dependency setup')
     parser.add_argument('task')
     args = parser.parse_args()
     controller = Controller(args.home, args.tart, args.softnet)
     state = controller.read(args.task)
-    if state.get('network') != 'offline' or state.get('status') != 'running':
-        raise SandboxError('Containment probes require an offline running task')
+    network = 'provisioning' if args.provisioning else 'offline'
+    status = 'provisioning' if args.provisioning else 'running'
+    if state.get('network') != network or state.get('status') != status:
+        raise SandboxError('Task state does not match the requested probe mode')
     accepted = []
     done = threading.Event()
     listener = socket.socket()
@@ -103,11 +107,15 @@ def main():
         listener.close()
     required = ['shared_source_readable', 'resource_limits_match',
                 'host_file_read_blocked', 'shared_input_write_blocked', 'guest_scratch_writable',
-                'host_gateway_blocked', 'public_ipv4_blocked', 'metadata_address_blocked',
+                'host_gateway_blocked', 'metadata_address_blocked',
                 'virtualized', 'host_canary_unchanged', 'host_input_unchanged', 'host_listener_unreached']
+    result['network_mode'] = network
+    result['expected_public_network_behavior'] = result['public_ipv4_blocked'] is (not args.provisioning)
+    required.append('expected_public_network_behavior')
     result['observed_checks_passed'] = all(result.get(name) is True for name in required)
     result['ipv6_limit'] = 'A failed connection alone does not distinguish filtering from absent IPv6 routing.'
-    report = controller.task_dir(args.task) / 'containment-observations.json'
+    filename = 'provisioning-containment-observations.json' if args.provisioning else 'containment-observations.json'
+    report = controller.task_dir(args.task) / filename
     report.write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result, indent=2))
     if not result['observed_checks_passed']:

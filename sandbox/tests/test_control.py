@@ -114,6 +114,21 @@ class ControllerTests(unittest.TestCase):
     def test_task_traversal_is_rejected(self):
         with self.assertRaises(control.SandboxError): self.c.task_dir("../elsewhere")
 
+    def test_provisioning_blocks_private_ranges_and_all_host_ipv4_addresses(self):
+        interfaces = 'lo0:\n\tinet 127.0.0.1 netmask 0xff000000\nen0:\n\tinet 192.168.1.4 netmask 0xffffff00\nen1:\n\tinet 203.0.113.7 netmask 0xffffff00\n'
+        with patch.object(control.subprocess, 'check_output', return_value=interfaces):
+            args = self.c.run_args(self.task, True, True)
+        blocks = next(arg.split('=', 1)[1] for arg in args if arg.startswith('--net-softnet-block='))
+        networks = [control.ipaddress.IPv4Network(value) for value in blocks.split(',')]
+        for address in ['192.168.2.1', '10.0.0.1', '172.16.0.1', '169.254.169.254', '203.0.113.7']:
+            self.assertTrue(any(control.ipaddress.IPv4Address(address) in net for net in networks))
+        self.assertFalse(any(control.ipaddress.IPv4Address('1.1.1.1') in net for net in networks))
+
+    def test_provisioning_refuses_unknown_host_interfaces(self):
+        with patch.object(control.subprocess, 'check_output', return_value=''):
+            with self.assertRaises(control.SandboxError):
+                self.c.run_args(self.task, True, True)
+
     def test_development_cannot_run_during_provisioning(self):
         self.c.save(self.task, {"vm": "mortimer-" + self.task, "status": "provisioning", "network": "provisioning"})
         with self.assertRaises(control.SandboxError): self.c.execute(self.task, ["whoami"], 10)
