@@ -132,6 +132,7 @@ async def test_mcp_reminders_server(tmp_path):
     assert "Reminder set for" in payload["message"]
 
 
+@pytest.mark.live
 async def test_mcp_web_server():
     tools, payload = await _call(
         "mcp_servers.mcp_web.server", "get_weather", {"city": "Tokyo", "days": 1}

@@ -391,6 +391,71 @@ _finish_job: dict[str, Any] = {
     "finished_at": None,
 }
 
+# VM preparation outlives the voice client's HTTP deadline. Keep the start
+# request short and expose progress; Session persists the underlying task.
+_opening_lock = threading.Lock()
+_opening_job: dict[str, Any] = {"state": "idle", "cancel_requested": False}
+
+
+def _open_authoring(service, goal, run_id, target_paths, job):
+    try:
+        with _opening_lock:
+            if job.get("cancel_requested"):
+                return
+        if service.branch and (service.goal or "") != goal:
+            discarded = service.revert()
+            if not discarded.get("ok"):
+                raise RuntimeError("Previous workspace could not be discarded")
+        if not service.branch:
+            opened = service.start_session(goal, run_id=run_id)
+            if not opened.get("ok"):
+                with _opening_lock:
+                    job.update(state="error", error=opened.get("error"))
+                return
+        state = service.status()
+        result = {"ok": True, "started": False, "session": {
+            "branch": service.branch, "goal": goal, "target_paths": target_paths,
+            "run_id": run_id, "worktree": None,
+            "sandbox_task": state.get("task"), "session_id": state.get("id")}}
+        with _opening_lock:
+            cancelled = job.get("cancel_requested", False)
+            if not cancelled:
+                job.update(state="ready", result=result)
+        if cancelled:
+            service.cancel()
+    except Exception:
+        logger.exception("sandbox authoring setup failed")
+        with _opening_lock:
+            job.update(state="error", error="Sandbox setup failed; inspect the saved session before retrying.")
+    finally:
+        with _opening_lock:
+            if job.get("cancel_requested"):
+                job["state"] = "cancelled"
+            job["finished_at"] = time.time()
+
+
+def _begin_authoring(goal, run_id, target_paths):
+    global _opening_job
+    with _run_lock, _finish_lock, _opening_lock:
+        if (_run_job["state"] == "running" or _finish_job["state"] in {"validating", "submitting"}
+                or _opening_job["state"] == "starting"):
+            return {"ok": False, "error": "an upgrade run is already in progress — ask for status instead"}
+        job = dict(state="starting", goal=goal, run_id=run_id,
+            target_paths=target_paths, cancel_requested=False, started_at=time.time())
+        _opening_job = job
+    worker = threading.Thread(target=_open_authoring,
+        args=(_selfedit_service, goal, run_id, target_paths, job), daemon=True)
+    worker.start()
+    # An already-open session may finish immediately. A fresh VM never holds
+    # this request open for the duration of its preparation.
+    worker.join(timeout=0.05)
+    with _opening_lock:
+        if job["state"] == "ready":
+            return job["result"]
+        if job["state"] == "error":
+            return {"ok": False, "error": job.get("error")}
+    return {"ok": True, "started": True, "opening": True, "state": "starting"}
+
 # MORTIMER_LLM_COUNCIL_V2_PLAN.md V5 — the council's own async-job slot,
 # same shape/pattern as _run_job/_run_lock above (one council round at a
 # time, ever). POST /api/council/convene and the E3 half of POST
@@ -722,6 +787,9 @@ def _busy() -> bool:
     The console's own /validate and /submit routes are gated on this, so a
     finish job in flight reports "a run is in progress" rather than two
     validations racing over one worktree."""
+    with _opening_lock:
+        if _opening_job["state"] == "starting":
+            return True
     with _run_lock:
         if _run_job["state"] == "running":
             return True
@@ -1070,7 +1138,8 @@ def selfedit_run(body: GoalIn) -> dict:
     # staging (2026-09-07 review, F4): the pop used to come first, so the
     # refusal itself consumed the preview the user had just approved.
     with _run_lock:
-        if _run_job["state"] == "running":
+        if (_run_job["state"] == "running" or _opening_job["state"] == "starting"
+                or _finish_job["state"] in {"validating", "submitting"}):
             return {
                 "ok": False,
                 "error": "an upgrade run is already in progress — ask for status instead",
@@ -1131,39 +1200,7 @@ def selfedit_run(body: GoalIn) -> dict:
         # A plan_path (or an explicit plan) is implementation-scale work and
         # still goes to the Upgrade Agent, below. Two declared fields
         # (author, plan_path), no judgment.
-        if _busy():
-            return {
-                "ok": False,
-                "error": "an upgrade run is already in progress — ask for status instead",
-                "job": dict(_run_job),
-            }
-        stale = _selfedit_service.branch
-        if stale and (_selfedit_service.goal or "") != goal:
-            # Same rule _run_agent applies: a session left open by an
-            # earlier goal must never be inherited by a new one.
-            logger.info("selfedit_stale_session_reverted branch=%s old_goal=%r new_goal=%r",
-                        stale, _selfedit_service.goal, goal)
-            _selfedit_service.revert()
-        if not _selfedit_service.branch:
-            opened = _selfedit_service.start_session(goal, run_id=run_id)
-            if not opened.get("ok"):
-                return {"ok": False, "error": opened.get("error")}
-        logger.info("selfedit_state_transition state=session_open goal=%r run_id=%s",
-                    goal, run_id)
-        return {
-            "ok": True,
-            "started": False,
-            "session": {
-                "branch": _selfedit_service.branch,
-                "goal": goal,
-                "target_paths": target_paths,
-                "run_id": run_id,
-                "worktree": str(_selfedit_service.work_root)
-                            if _selfedit_service.work_root else None,
-                "sandbox_task": _selfedit_service.status().get("task"),
-                "session_id": _selfedit_service.status().get("id"),
-            },
-        }
+        return _begin_authoring(goal, run_id, target_paths)
 
     plan = body.plan
     if plan is None and plan_path:
@@ -1182,7 +1219,8 @@ def selfedit_run(body: GoalIn) -> dict:
                 + "\n\n… (plan truncated at injection)"
             )
     with _run_lock:
-        if _run_job["state"] == "running":
+        if (_run_job["state"] == "running" or _opening_job["state"] == "starting"
+                or _finish_job["state"] in {"validating", "submitting"}):
             return {
                 "ok": False,
                 "error": "an upgrade run is already in progress — ask for status instead",
@@ -1242,6 +1280,7 @@ def selfedit_run_status() -> dict:
         "ok": True,
         "job": job,
         "finish": finish,
+        "opening": dict(_opening_job),
         "status": _selfedit_service.status(),
         "stagings": stagings,
     }
@@ -1297,7 +1336,7 @@ def selfedit_finish() -> dict:
         # block would deadlock. _run_job's state is read without _run_lock
         # deliberately — a single dict lookup, and the authoritative guard
         # against two jobs is this lock plus _run_lock in selfedit_run.
-        if _run_job["state"] == "running" or _finish_job["state"] in (
+        if _opening_job["state"] == "starting" or _run_job["state"] == "running" or _finish_job["state"] in (
             "validating", "submitting",
         ):
             return {"ok": False,
@@ -1363,7 +1402,11 @@ def selfedit_cancel() -> dict:
         finishing = _finish_job["state"] in {"validating", "submitting"}
         if finishing:
             _finish_job["cancel_requested"] = True
-    if not running and not finishing:
+    with _opening_lock:
+        opening = _opening_job["state"] == "starting"
+        if opening:
+            _opening_job["cancel_requested"] = True
+    if not running and not finishing and not opening:
         phase = _selfedit_service.status().get("phase")
         if phase not in {"creating", "starting", "validating", "publishing", "publication_pending"}:
             return {"ok": False, "error": "no self-edit run is in progress — use revert to drop an idle session"}

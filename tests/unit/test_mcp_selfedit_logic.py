@@ -715,3 +715,14 @@ def test_plan_adopt_confirm_reports_review_wording():
     r = logic.plan_adopt(c, confirm=True)
     assert r["ok"] is True
     assert "drafted the review" in r["summary"].lower()
+
+
+def test_workspace_preparation_is_reported_without_inventing_a_planner():
+    client = FakeClient({('POST', '/api/selfedit/run'): {'ok': True, 'started': True, 'opening': True}})
+    result = logic.selfedit_start(client, confirm=True, staging_id='stage-1')
+    assert result['opening'] and 'prepared' in result['summary']
+    assert 'planner_model' not in result
+    client = FakeClient({('GET', '/api/selfedit/run'): {'ok': True,
+        'opening': {'state': 'starting'}, 'status': {}, 'stagings': []}})
+    result = logic.selfedit_status(client)
+    assert 'not ready for edits' in result['summary']

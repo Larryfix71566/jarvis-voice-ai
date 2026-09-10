@@ -1077,3 +1077,45 @@ def test_cancel_finish_revokes_vm_before_validation_returns(registry_file, monke
         time.sleep(.02)
     assert state == 'cancelled'
     assert not any(e[0] == 'submit' for e in svc.test_runtime.events)
+
+
+@pytest.fixture(autouse=True)
+def reset_opening_job(monkeypatch):
+    monkeypatch.setattr(srv, '_opening_job', {'state': 'idle', 'cancel_requested': False})
+
+
+@pytest.mark.parametrize('cancel', [False, True])
+def test_slow_workspace_setup_returns_promptly_and_can_be_cancelled(registry_file, monkeypatch, tmp_path, cancel):
+    svc = _authoring_service(monkeypatch, tmp_path)
+    entered, release = threading.Event(), threading.Event()
+    original = svc.start_session
+    def slow_start(*args, **kwargs):
+        entered.set()
+        assert release.wait(5)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(svc, 'start_session', slow_start)
+    client = TestClient(app)
+    staged = client.post('/api/selfedit/stage', json={'goal': 'Update docs/README.md',
+        'target_paths': ['docs/README.md']}).json()
+    started = time.monotonic()
+    response = client.post('/api/selfedit/run', json={'staging_id': staged['staging_id'], 'author': True}).json()
+    assert time.monotonic()-started < 1
+    assert response['ok'] and response['opening']
+    assert entered.wait(1)
+    assert client.get('/api/selfedit/run').json()['opening']['state'] == 'starting'
+    try:
+        if cancel:
+            assert client.post('/api/selfedit/cancel').json()['cancel_requested']
+    finally:
+        release.set()
+    deadline = time.monotonic()+5
+    while time.monotonic()<deadline:
+        opening = client.get('/api/selfedit/run').json()['opening']
+        if opening['state'] in {'ready', 'cancelled', 'error'}:
+            break
+        time.sleep(.02)
+    assert opening['state'] == ('cancelled' if cancel else 'ready'), opening
+    if cancel:
+        assert svc.status()['phase'] == 'cancelled'
+    else:
+        assert opening['result']['session']['sandbox_task'] == svc.status()['task']

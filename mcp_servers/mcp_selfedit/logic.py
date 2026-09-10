@@ -114,6 +114,9 @@ def selfedit_start(
         )
         if not run_resp.get("ok"):
             return run_resp
+        if run_resp.get("opening"):
+            return {"ok": True, "started": True, "opening": True,
+                    "summary": "The isolated workspace is being prepared. Ask for self-edit status; edits can begin when it is ready."}
         session = run_resp.get("session")
         if session:
             return _describe_session(session)
@@ -384,6 +387,17 @@ def selfedit_status(client, staging_id: str = "") -> dict[str, Any]:
     # shape that invites the model to fill the gap with an invention. If
     # the question was asked, it gets an answer.
     staging_sentence, staging_found = _describe_staging(staging_id, stagings)
+
+    opening = resp.get("opening", {}) or {}
+    if opening.get("state") == "starting" or status.get("phase") in {"creating", "starting"}:
+        summary = "The isolated workspace is being prepared; it is not ready for edits yet."
+        if staging_sentence:
+            summary += " " + staging_sentence
+        return {"ok": True, "opening": opening, "summary": summary,
+                "stagings": stagings, "staging_found": staging_found}
+    if opening.get("state") == "error" and not status.get("active"):
+        return {"ok": False, "error": opening.get("error", "Sandbox setup failed"),
+                "stagings": stagings, "staging_found": staging_found}
 
     # SE4 — the finish job is the ONLY thing running on the authored path
     # (no planner job ever started), so it is reported first and on its own.
