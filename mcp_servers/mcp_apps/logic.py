@@ -17,6 +17,8 @@ Conventions (AGENTS.md on the mortimer-dev branch):
 
 from __future__ import annotations
 
+from mcp_servers.development_boundary import sandbox_required
+
 import json
 import os
 import re
@@ -237,34 +239,8 @@ def app_create(
 
 
 def app_write_file(client, app: str, path: str, content: str, rationale: str = "") -> dict:
-    """Create or update one file in an app's own repo (default branch)."""
-    try:
-        app = validate_app_name(app)
-        path = validate_repo_path(path)
-    except ValueError as exc:
-        return _err(str(exc))
-    try:
-        existing = client.get_file(app, path, "main")
-    except Exception as exc:  # noqa: BLE001
-        return _err(f"could not read {path} in {app}: {exc}")
-    verb = "update" if existing else "add"
-    message = f"feat: {verb} {path}" + (f" — {rationale}" if rationale else "")
-    try:
-        res = client.put_file(
-            app, path, content, message, "main",
-            sha=existing["sha"] if existing else None,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return _err(f"write failed: {exc}")
-    sha = (res.get("commit") or {}).get("sha", "")
-    return {
-        "ok": True,
-        "app": app,
-        "path": path,
-        "action": verb,
-        "commit": sha,
-        "summary": f"{verb.capitalize()}d {path} in {app} (commit {sha[:7]}).",
-    }
+    """Retired default-branch writer; use the sandbox app-build workflow."""
+    return sandbox_required(application=True)
 
 
 def app_register(client, app: str, repo_url: str, description: str = "") -> dict:

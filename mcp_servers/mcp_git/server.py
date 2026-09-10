@@ -27,25 +27,26 @@ def git_diff_summary() -> dict:
 
 @mcp.tool()
 def prepare_commit(message: str, paths: list[str]) -> dict:
-    """Stage ONLY the named files and draft a commit with the given message. `paths` is required: name every file you changed, exactly as git_status lists it — nothing else is staged, a directory is refused, and files someone else already staged must be named or unstaged first. Returns an action_id and a summary naming every file, to read back to the user. Nothing is committed until the user confirms and commit(action_id) is called."""
+    """Retired host staging tool. Use selfedit_start and selfedit_write;
+    selfedit_finish verifies the sandbox candidate and prepares a draft PR."""
     return logic.prepare_commit(message, paths)
 
 
 @mcp.tool()
 def commit(action_id: int) -> dict:
-    """Execute a prepared commit after the user has confirmed. Requires the action_id from prepare_commit."""
+    """Retired host commit tool. Old action IDs cannot commit; use selfedit_finish."""
     return logic.commit(action_id)
 
 
 @mcp.tool()
 def prepare_push() -> dict:
-    """Draft a push of the current branch to origin. Returns an action_id and summary. Nothing is pushed until the user confirms and push(action_id) is called."""
+    """Retired host push tool. Use the verified sandbox publication workflow."""
     return logic.prepare_push()
 
 
 @mcp.tool()
 def push(action_id: int) -> dict:
-    """Execute a prepared push after the user has confirmed. Requires the action_id from prepare_push."""
+    """Retired host push confirmation. Old action IDs cannot publish."""
     return logic.push(action_id)
 
 

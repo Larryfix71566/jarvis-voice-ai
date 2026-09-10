@@ -179,8 +179,7 @@ async def test_mcp_repo_server_read(tmp_path):
 
 
 async def test_mcp_repo_server_write_gate_over_stdio(tmp_path):
-    """D12's two-call gate end to end: repo_write_file must not touch disk,
-    and only repo_commit_write(action_id) actually writes."""
+    """Retired tools refuse over the actual MCP transport, without host writes."""
     repo_dir = tmp_path / "int_repo_write"
     repo_dir.mkdir()
     db = tmp_path / "int_repo_write.db"
@@ -190,13 +189,16 @@ async def test_mcp_repo_server_write_gate_over_stdio(tmp_path):
         "mcp_servers.mcp_repo.server", "repo_write_file",
         {"path": "new.txt", "content": "written via stdio\n"}, extra_env,
     )
-    assert preview["ok"] is True
-    assert preview["pending"] is True
+    assert preview["ok"] is False
+    assert preview["code"] == "sandbox_required"
+    assert "action_id" not in preview
     assert not (repo_dir / "new.txt").exists()
 
     _, committed = await _call(
         "mcp_servers.mcp_repo.server", "repo_commit_write",
-        {"action_id": preview["action_id"]}, extra_env,
+        {"action_id": 1}, extra_env,
     )
-    assert committed["ok"] is True
-    assert (repo_dir / "new.txt").read_text() == "written via stdio\n"
+    assert committed["ok"] is False
+    assert committed["code"] == "sandbox_required"
+    assert not (repo_dir / "new.txt").exists()
+    assert not db.exists()

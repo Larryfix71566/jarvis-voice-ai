@@ -58,69 +58,37 @@ def test_log_endpoint(client):
     assert any("init" in line for line in body["commits"])
 
 
-def test_commit_via_api_uses_draft_flow(client):
+@pytest.mark.parametrize("endpoint,body", [
+    ("prepare-commit", {"message":"legacy client"}),
+    ("prepare-commit", {"message":"named files", "paths":["a.txt"]}),
+    ("commit", {"action_id":1}),
+    ("prepare-push", {}),
+    ("push", {"action_id":1}),
+])
+def test_legacy_git_api_refuses_without_touching_repository(client, monkeypatch, endpoint, body):
+    from jarvis.admin import server
     c, r = client
     (r / "a.txt").write_text("two\n")
+    index_before = (r / ".git/index").read_bytes()
+    def unexpected(*args, **kwargs):
+        raise AssertionError("Retired console operation inspected Git")
+    monkeypatch.setattr(server.logic, "_git_raw", unexpected)
+    result = c.post("/api/git/" + endpoint, json=body).json()
+    assert result["ok"] is False and result["code"] == "sandbox_required"
+    assert (r / ".git/index").read_bytes() == index_before
+    assert (r / "a.txt").read_text() == "two\n"
 
-    draft = c.post("/api/git/prepare-commit", json={"message": "via api"}).json()
-    assert draft["ok"] is True
 
-    # commit without the draft's id is meaningless; with it, it executes
-    assert c.post("/api/git/commit", json={"action_id": 9999}).json()["ok"] is False
-    res = c.post("/api/git/commit", json={"action_id": draft["action_id"]}).json()
-    assert res["ok"] is True
-    assert c.get("/api/git/status").json()["clean"] is True
-
-
-def test_actions_endpoint_lists_audit(client):
-    c, r = client
-    (r / "a.txt").write_text("two\n")
-    draft = c.post("/api/git/prepare-commit", json={"message": "audited"}).json()
-    c.post("/api/git/commit", json={"action_id": draft["action_id"]})
+def test_actions_endpoint_keeps_historical_audit(client):
+    from jarvis.db import now_iso
+    c, _ = client
+    conn = get_conn()
+    run_migrations(conn)
+    with conn:
+        conn.execute("INSERT INTO actions (tool, action_class, draft_payload, summary, status, created_at) "
+                     "VALUES ('git_commit', 'privileged', '{}', 'historical commit', 'committed', ?)", (now_iso(),))
     rows = c.get("/api/git/actions").json()["actions"]
-    assert rows and rows[0]["tool"] == "git_commit"
-    assert rows[0]["status"] == "committed"
-
-
-class TestPrepareCommitPaths:
-    """SE1 (MORTIMER_SELFEDIT_AUTHORING_PLAN.md) at the console route.
-
-    logic.prepare_commit requires an explicit file list. This route keeps
-    accepting {message} alone for C1 — MortimerHost's AdminAPI.swift and
-    web's GitPanel.tsx both post that shape — and expands it to every
-    changed file HERE, named in the draft summary the human confirms."""
-
-    def test_message_only_still_works_and_names_every_file(self, client):
-        c, r = client
-        (r / "a.txt").write_text("two\n")
-        (r / "b.txt").write_text("b\n")
-        draft = c.post("/api/git/prepare-commit", json={"message": "all"}).json()
-        assert draft["ok"] is True, draft
-        assert "2 file(s)" in draft["summary"]
-        assert "a.txt" in draft["summary"] and "b.txt" in draft["summary"]
-        assert c.post("/api/git/commit",
-                      json={"action_id": draft["action_id"]}).json()["ok"] is True
-        assert c.get("/api/git/status").json()["clean"] is True
-
-    def test_explicit_paths_stage_only_those(self, client):
-        c, r = client
-        (r / "a.txt").write_text("two\n")
-        (r / "b.txt").write_text("b\n")
-        draft = c.post("/api/git/prepare-commit",
-                       json={"message": "just a", "paths": ["a.txt"]}).json()
-        assert draft["ok"] is True, draft
-        assert "1 file(s)" in draft["summary"] and "b.txt" not in draft["summary"]
-        assert c.post("/api/git/commit",
-                      json={"action_id": draft["action_id"]}).json()["ok"] is True
-        assert "b.txt" in c.get("/api/git/status").json()["changed_files"]
-
-    def test_explicit_unchanged_path_is_refused(self, client):
-        c, r = client
-        (r / "a.txt").write_text("two\n")
-        res = c.post("/api/git/prepare-commit",
-                     json={"message": "x", "paths": ["nope.txt"]}).json()
-        assert res["ok"] is False
-        assert "not changed in the working tree" in res["error"]
+    assert rows[0]["tool"] == "git_commit" and rows[0]["status"] == "committed"
 
 
 def test_docs_disabled():

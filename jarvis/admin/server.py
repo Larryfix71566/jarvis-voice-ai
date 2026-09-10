@@ -1071,14 +1071,9 @@ def actions(status: str = "all", limit: int = 10) -> dict:
 
 @app.post("/api/git/prepare-commit")
 def prepare_commit(body: CommitDraftIn) -> dict:
-    paths = body.paths
-    if paths is None:
-        listed = logic.changed_files()
-        if not listed["ok"]:
-            return {"ok": False, "error": listed["error"]}
-        paths = listed["files"]
-        logger.info("git_prepare_commit_console_all_changed files=%d", len(paths))
-    return logic.prepare_commit(body.message, paths)
+    # Legacy console requests must refuse without inspecting or staging the
+    # host index, even when the client omitted the old optional file list.
+    return logic.prepare_commit(body.message, body.paths or [])
 
 
 @app.post("/api/git/commit")

@@ -50,8 +50,9 @@ def app_create(name: str, template: str = "web_app", description: str = "",
 
 @mcp.tool()
 def app_write_file(app: str, path: str, content: str, rationale: str = "") -> dict:
-    """Create or update one file in an existing app's repo (default branch). One file per call; path is confined to the repo and may not touch .git."""
-    return _degraded(lambda c: logic.app_write_file(c, app, path, content, rationale))
+    """Retired direct writer. Use app_build_start even for a single-file change;
+    app_build_status and app_build_submit provide verified draft publication."""
+    return logic.app_write_file(None, app, path, content, rationale)
 
 
 @mcp.tool()
@@ -77,10 +78,9 @@ def app_build_start(
     app: str, goal: str, profile: str = "", confirm: bool = False,
     plan_path: str = "",
 ) -> dict:
-    """Local working tree, sidecar-driven: build an implementation of GOAL
+    """Offline sandbox, sidecar-driven: build an implementation of GOAL
     inside an EXISTING app's own repo (use app_create first if the app
-    doesn't exist yet). Use this for any implementation of real size — not
-    app_write_file, which is only for small single-file edits. Two-phase:
+    doesn't exist yet). Use this for every development change, including a single-file edit. Two-phase:
     call with confirm=false to preview, then — only after the user
     explicitly agrees — call again with confirm=true. PROFILE optionally
     names a planner from the registry; empty uses the default.

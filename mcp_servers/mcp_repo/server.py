@@ -41,22 +41,15 @@ def repo_search(query: str, subdir: str = "") -> dict:
 
 @mcp.tool()
 def repo_write_file(path: str, content: str, rationale: str = "") -> dict:
-    """Local working tree on this machine: PREVIEW writing a file
-    (create or overwrite). Writes NOTHING yet — returns an action_id and
-    a summary to read back to the user. Nothing is written until the
-    user confirms and repo_commit_write(action_id) is called. Refuses
-    protected configuration paths (agents.yaml, CLAUDE.md, CI, lockfiles,
-    etc.). Plan, spec, and design documents live under docs/plans/ and
-    reviews under docs/reviews/ — write them there and never invent new
-    documentation directories."""
+    """Local working tree on this machine: writing is retired. Use selfedit_start,
+    selfedit_write and selfedit_finish to edit and verify in the sandbox."""
     return logic.repo_write_file(path, content, rationale)
 
 
 @mcp.tool()
 def repo_commit_write(action_id: int) -> dict:
-    """Local working tree on this machine: execute a previously previewed
-    write after the user has confirmed. Requires the action_id from
-    repo_write_file. Fails if already used, unknown, or expired."""
+    """Local working tree on this machine: legacy write confirmations are retired,
+    including previously issued action IDs. Use the self-edit sandbox workflow."""
     return logic.repo_commit_write(action_id)
 
 
