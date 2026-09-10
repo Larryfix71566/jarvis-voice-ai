@@ -1134,6 +1134,8 @@ def selfedit_run(body: GoalIn) -> dict:
                 "run_id": run_id,
                 "worktree": str(_selfedit_service.work_root)
                             if _selfedit_service.work_root else None,
+                "sandbox_task": _selfedit_service.status().get("task"),
+                "session_id": _selfedit_service.status().get("id"),
             },
         }
 

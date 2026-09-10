@@ -565,14 +565,13 @@ def test_a_leftover_session_is_reverted_before_a_different_goal(registry_file, m
     the goal is the same one (validate/submit by voice)."""
     _install_fake_agent(monkeypatch)
     svc = _preflight_service(monkeypatch, tmp_path)
-    svc.branch = "jarvis/self-edit/20260907-old"
-    svc.goal = "old goal"
+    svc.start_session("old goal")
+    old_branch = svc.branch
     reverted = []
 
     def fake_revert():
         reverted.append(svc.branch)
-        svc.branch = None
-        svc.goal = None
+        svc.test_runtime.current.state["phase"] = "reverted"
         return {"ok": True}
 
     monkeypatch.setattr(svc, "revert", fake_revert)
@@ -581,11 +580,11 @@ def test_a_leftover_session_is_reverted_before_a_different_goal(registry_file, m
     _wait_for_job(c, "done")
     assert reverted == []  # same goal → resumed, not dropped
 
-    svc.branch = "jarvis/self-edit/20260907-old"
-    svc.goal = "old goal"
+    svc.start_session("old goal")
+    old_branch = svc.branch
     c.post("/api/selfedit/run", json={"goal": "a different goal"})
     _wait_for_job(c, "done")
-    assert reverted == ["jarvis/self-edit/20260907-old"]
+    assert reverted == [old_branch]
 
 
 # --- SE2/SE3/SE4/SE11: the developer authors, the sidecar finishes -------
@@ -618,8 +617,10 @@ def _authoring_service(monkeypatch, tmp_path):
     git(work, "commit", "-m", "init")
     git(work, "push", "-u", "origin", "main")
 
+    from tests.sandbox_fakes import FakeRuntime
+    runtime = FakeRuntime(work)
     svc = SelfEditService(repo_root=work, allowlist_path=al, github_token=None,
-                          base_ref="main")
+                          base_ref="main", runtime_factory=lambda: runtime)
     monkeypatch.setattr(srv, "_selfedit_service", svc)
     return svc
 
@@ -654,10 +655,11 @@ class TestAuthoringConfirm:
         res = c.post("/api/selfedit/run", json={"staging_id": sid, "author": True}).json()
         assert res["ok"] is True, res
         assert res["started"] is False
-        assert res["session"]["branch"].startswith("jarvis/self-edit/")
+        assert res["session"]["branch"].startswith("mortimer/selfedit/")
         assert res["session"]["goal"] == "add a line to docs/README.md"
         assert res["session"]["target_paths"] == ["docs/README.md"]
-        assert res["session"]["worktree"]
+        assert res["session"]["worktree"] is None
+        assert res["session"]["sandbox_task"]
         assert svc.branch is not None
         # the planner job never started
         assert c.get("/api/selfedit/run").json()["job"]["state"] == "idle"
@@ -983,7 +985,10 @@ def _preflight_service(monkeypatch, tmp_path):
         "allow": ["web/src/**"], "core": ["jarvis/**"],
         "deny": ["jarvis/vault.py"],
     }))
-    svc = SelfEditService(repo_root=tmp_path, allowlist_path=al, github_token=None)
+    from tests.sandbox_fakes import FakeRuntime
+    runtime = FakeRuntime(tmp_path)
+    svc = SelfEditService(repo_root=tmp_path, allowlist_path=al, github_token=None, runtime_factory=lambda: runtime)
+    svc.test_runtime = runtime
     monkeypatch.setattr(srv, "_selfedit_service", svc)
     return svc
 

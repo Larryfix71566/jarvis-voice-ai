@@ -20,8 +20,9 @@ from jarvis.agents.upgrade_agent import TOOL_SPECS, UpgradeAgent
 from jarvis.council.types import Proposal, RoundResult
 from jarvis.db import get_conn, run_migrations
 from jarvis.selfedit.service import SelfEditService
+from tests.sandbox_fakes import FakeRuntime
 
-ALLOWLIST = {"allow": ["web/src/**"], "deny": ["jarvis/**"]}
+ALLOWLIST = {"allow": ["docs/**"], "deny": ["jarvis/**"]}
 
 
 @pytest.fixture(autouse=True)
@@ -50,8 +51,8 @@ def service(tmp_path: Path) -> SelfEditService:
     _git(work, "config", "user.email", "t@e.com")
     _git(work, "config", "user.name", "T")
     _git(work, "checkout", "-b", "main")
-    (work / "web/src").mkdir(parents=True)
-    (work / "web/src/App.tsx").write_text("export default 1;\n")
+    (work / "docs").mkdir(parents=True)
+    (work / "docs/README.md").write_text("export default 1;\n")
     (work / "config").mkdir()
     (work / "config/self_edit_allowlist.json").write_text(json.dumps(ALLOWLIST))
     cfg = {
@@ -62,7 +63,10 @@ def service(tmp_path: Path) -> SelfEditService:
     _git(work, "add", "-A")
     _git(work, "commit", "-m", "init")
     _git(work, "push", "-u", "origin", "main")
-    return SelfEditService(repo_root=work, github_token=None)
+    runtime = FakeRuntime(work)
+    service = SelfEditService(repo_root=work, github_token=None, runtime_factory=lambda: runtime)
+    service.test_runtime = runtime
+    return service
 
 
 def _tool_call(name: str, args: dict, call_id: str = "c1") -> SimpleNamespace:
@@ -337,7 +341,7 @@ def test_halfway_checkpoint_injected_at_half_budget_zero_edits(service: SelfEdit
     nudge injected once it's halfway through its iteration budget."""
     client = ScriptedClient([
         _msg(tool_calls=[_tool_call(
-            "file_read", {"path": "web/src/App.tsx"}, call_id=f"c{i}",
+            "file_read", {"path": "docs/README.md"}, call_id=f"c{i}",
         )])
         for i in range(6)
     ])
@@ -357,12 +361,12 @@ def test_halfway_checkpoint_not_injected_once_an_edit_exists(service: SelfEditSe
     already proposed something legitimately keeps reading/refining."""
     client = ScriptedClient([
         _msg(tool_calls=[_tool_call("edit_propose", {
-            "path": "web/src/App.tsx", "new_content": "export default 2;\n",
+            "path": "docs/README.md", "new_content": "export default 2;\n",
             "rationale": "first edit",
         }, call_id="c0")]),
     ] + [
         _msg(tool_calls=[_tool_call(
-            "file_read", {"path": "web/src/App.tsx"}, call_id=f"c{i}",
+            "file_read", {"path": "docs/README.md"}, call_id=f"c{i}",
         )])
         for i in range(1, 6)
     ])
@@ -382,7 +386,7 @@ def test_exhaustion_with_zero_proposals_names_never_converged(service: SelfEditS
     so, not the generic 'iteration limit' message."""
     client = ScriptedClient([
         _msg(tool_calls=[_tool_call(
-            "file_read", {"path": "web/src/App.tsx"}, call_id=f"c{i}",
+            "file_read", {"path": "docs/README.md"}, call_id=f"c{i}",
         )])
         for i in range(6)
     ])
@@ -397,7 +401,7 @@ def test_iteration_bound_stops_runaway(service: SelfEditService) -> None:
     # The fake model keeps proposing the same edit forever.
     client = ScriptedClient([
         _msg(tool_calls=[_tool_call("edit_propose", {
-            "path": "web/src/App.tsx", "new_content": f"export default {i};\n",
+            "path": "docs/README.md", "new_content": f"export default {i};\n",
             "rationale": "loop",
         }, call_id=f"c{i}")])
         for i in range(50)
@@ -443,12 +447,10 @@ def test_run_reports_the_pull_request_it_submitted(service: SelfEditService, mon
     The gates are stubbed green; git add/commit/push run for real against
     the fixture's bare origin; only the GitHub API call is faked."""
     service._github_token = "t"
-    monkeypatch.setattr(service, "_open_pr",
-                        lambda title: {"html_url": "https://example.invalid/pr/7"})
-    monkeypatch.setattr(service, "_run", lambda argv, cwd, timeout: (0, "ok"))
+    service.test_runtime.pr_url = "https://example.invalid/pr/7"
     client = ScriptedClient([
         _msg(tool_calls=[_tool_call("edit_propose", {
-            "path": "web/src/App.tsx", "new_content": "export default 2;\n",
+            "path": "docs/README.md", "new_content": "export default 2;\n",
             "rationale": "bump"}, "e1")]),
         _msg(tool_calls=[_tool_call("session_validate", {}, "v1")]),
         _msg(tool_calls=[_tool_call("session_submit", {}, "s1")]),
@@ -815,7 +817,7 @@ def test_v10_no_escalation_iteration_cap_unchanged(service: SelfEditService) -> 
     iteration-bound behavior is unchanged."""
     client = ScriptedClient([
         _msg(tool_calls=[_tool_call("edit_propose", {
-            "path": "web/src/App.tsx", "new_content": f"export default {i};\n",
+            "path": "docs/README.md", "new_content": f"export default {i};\n",
             "rationale": "loop",
         }, call_id=f"c{i}")])
         for i in range(50)
@@ -873,7 +875,7 @@ def test_escalation_then_iteration_limit_records_no_retry_outcome(
     client = ScriptedClient(
         [_msg(tool_calls=[_tool_call("session_validate", {}, "v1")]),
          _msg(tool_calls=[_tool_call("session_validate", {}, "v2")])]
-        + [_msg(tool_calls=[_tool_call("file_read", {"path": "web/src/App.tsx"}, f"r{i}")])
+        + [_msg(tool_calls=[_tool_call("file_read", {"path": "docs/README.md"}, f"r{i}")])
            for i in range(4)]
     )
     agent = _agent(service, client)

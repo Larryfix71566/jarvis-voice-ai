@@ -12,6 +12,7 @@ the job settles rather than asserting on the POST response body directly."""
 from __future__ import annotations
 
 import time
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -20,6 +21,13 @@ import jarvis.admin.server as srv
 from jarvis.admin.server import app
 from jarvis.council.types import Proposal, RoundResult
 from jarvis.db import get_conn, run_migrations
+
+
+@pytest.fixture(autouse=True)
+def isolated_workspace_session(monkeypatch):
+    service = SimpleNamespace(branch=None, goal=None, proposals=[],
+        revert=lambda: {"ok": True}, status=lambda: {"active": False})
+    monkeypatch.setattr(srv, "_selfedit_service", service)
 
 
 @pytest.fixture(autouse=True)

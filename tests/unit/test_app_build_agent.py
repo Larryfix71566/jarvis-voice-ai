@@ -25,6 +25,7 @@ from jarvis.agents.upgrade_agent import (
     AppBuildAgent,
 )
 from jarvis.agents.workspace import AppWorkspace
+from tests.sandbox_fakes import FakeRuntime
 from jarvis.db import get_conn, run_migrations
 
 
@@ -83,11 +84,13 @@ def workspace(app_origin: Path, tmp_path: Path) -> AppWorkspace:
         def _owner(self) -> str:
             return "fake-owner"
 
-    return AppWorkspace(
+    runtime = FakeRuntime(tmp_path / "seed")
+    workspace = AppWorkspace(
         "demo-app", github_client=FakeClient(),
-        workspaces_dir=tmp_path / "workspaces",
-        remote_url=str(app_origin),
+        workspaces_dir=tmp_path / "workspaces", runtime_factory=lambda: runtime,
     )
+    workspace.test_runtime = runtime
+    return workspace
 
 
 @pytest.fixture()
@@ -206,18 +209,7 @@ def test_run_produces_app_build_pr_end_to_end(workspace: AppWorkspace, tmp_path:
         _msg(content="Shipped it."),
     ])
     agent = _agent(workspace, client, agent_config_path)
-    # AppWorkspace.submit() opens a real PR over HTTP — stub it, same as
-    # the workspace-level test does.
-    original_start = workspace.start_session
-    def _start_and_stub(goal, run_id=None):
-        # Mirrors the Workspace protocol's signature (SE8): the loop passes
-        # run_id, so a stub that drops it hides a real mismatch.
-        res = original_start(goal, run_id=run_id)
-        workspace._open_pr = lambda title: {"html_url": "https://example.invalid/pr/1"}
-        _git(workspace.repo_root, "config", "user.email", "t@e.com")
-        _git(workspace.repo_root, "config", "user.name", "T")
-        return res
-    workspace.start_session = _start_and_stub  # type: ignore[assignment]
+    workspace.test_runtime.pr_url = "https://example.invalid/pr/1"
 
     result = agent.run("bump the version")
     assert result["ok"], result

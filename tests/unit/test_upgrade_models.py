@@ -11,6 +11,7 @@ import yaml
 
 from jarvis.agents import upgrade_agent as ua
 from jarvis.selfedit.service import SelfEditService
+from tests.sandbox_fakes import FakeRuntime
 
 
 def _git(cwd: Path, *args: str) -> None:
@@ -40,7 +41,10 @@ def service(tmp_path: Path) -> SelfEditService:
     _git(work, "add", "-A")
     _git(work, "commit", "-m", "init")
     _git(work, "push", "-u", "origin", "main")
-    return SelfEditService(repo_root=work, github_token=None)
+    runtime = FakeRuntime(work)
+    service = SelfEditService(repo_root=work, github_token=None, runtime_factory=lambda: runtime)
+    service.test_runtime = runtime
+    return service
 
 
 REGISTRY = {
