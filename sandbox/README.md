@@ -1,4 +1,4 @@
-# Mortimer development sandbox foundation
+# Mortimer development sandbox
 
 Status: real VM provisioning, restart persistence, boundary observations,
 application test suites, browser smoke, patch export and timeout shutdown
@@ -125,23 +125,65 @@ applied, pushed, merged or deployed automatically. A guest-controlled report
 does not authorize publication. Review exported patches for sensitive files
 and rerun required checks on the exact proposed candidate before publishing.
 
+## Prepared images, independent verification and sessions
+
+For the session runtime, register the task immediately after preparation stops
+it, before that VM ever enters development. Registration creates a template
+that is never booted. Every development or verification session clones it.
+
+```bash
+python3 -m sandbox.setup --home /absolute/sandbox/home \
+  --tart /absolute/path/to/tart --prepared-task PREPARATION_TASK_ID
+# Or select an existing registered image:
+python3 -m sandbox.setup --home /absolute/sandbox/home \
+  --tart /absolute/path/to/tart --image PREPARED_IMAGE_ID
+```
+
+This saves paths and image identifiers in the host's `settings.json`; it does
+not store credentials. `MORTIMER_SANDBOX_HOME` selects that runtime for the
+application adapter. The initial installed profile is `mortimer`; an unknown
+profile or dependency change fails before development starts.
+
+The host keeps GitHub authentication in memory and fetches a size-checked,
+immutable revision into a private bare object store. No candidate checkout,
+Git hooks, dependency installation or application test executes on the host.
+`Session` owns the development task, goal, proposed edits and progress records.
+`Runtime` persists the repository-to-session mapping before VM setup so a
+restart can find an interrupted session. `SandboxWorkspace` exposes that
+session through the application's workspace interface. The existing production
+self-edit and app-build classes are not routed through it yet.
+
+Each fresh guest creates an unprivileged worker, replaces the image's known
+administrator credential, and provides an empty synthetic Keychain for native
+authentication tests. The worker cannot use sudo or modify the shared setup
+code, installed Python/Node dependencies, or baseline tests. Candidate shell
+startup files are not loaded by the command runner. Compiler output is separate
+for candidate and baseline Swift tests.
+
+Validation freezes a candidate, stops its development VM, and clones a separate
+verification VM. The installed host profile selects the checks and synthetic
+state seeds. The receipt binds the candidate, baseline commit, image, profile,
+runner and saved log hashes. Failed checks, edits, interruption or a changed
+runner invalidate publication eligibility. A fresh source capture must still
+match before submission. Verification is evidence for these checks, not a
+claim that arbitrary application behavior is safe.
+
+Publication uses GitHub's object API with the accepted files as data. It records
+its intent before external writes and resumes lost commit, branch and draft-PR
+responses without creating duplicates or overwriting another branch. Edits are
+refused once publication begins. Cancellation stops development and related
+verification VMs, prevents late starts, and stops additional publication calls.
+An already in-flight remote request can finish; its returned object is recorded
+for recovery. Deleting a disposable task retains its review evidence.
+
 ## Work still required for the complete development environment
 
-1. Extend the recorded VM checks to additional application journeys and
-   hosts. Package a reusable prepared base image with a fresh-workspace
-   import protocol; the verified bootstrap image is still prepared per task.
-2. Add a credential proxy with scoped development accounts, budgets and
-   approved destinations; connect recorded/fake speech providers and complete
-   voice journeys. Offline placeholder keys do not implement those providers.
-3. Add guest task editing/import APIs and integrate them with the self-edit
-   and app-build agents. The existing `SelfEditService._run` is not changed
-   in this initial foundation; its current host-execution risk remains until
-   the tested guest runner replaces it.
-4. Add independent verification and durable, resumable publishing tied to
-   an exact candidate. Then add application templates, migration/rollback
-   journeys, retention and idle cleanup, and additional platform workers.
-5. Perform real microphone, speaker, Bluetooth and permission checks on a
-   development Mac. Those are separate from virtualized test coverage.
+The complete scope is tracked in [IMPLEMENTATION.md](IMPLEMENTATION.md). It
+includes production agent routing, complete application profiles and templates,
+voice/provider simulations, a scoped host-vault broker, authenticated previews
+and native journeys, runtime/storage/idle limits, checkpoints, and deployment
+and database rollback workflows. Real microphone, speaker, Bluetooth and device
+permission checks require separate physical-device evidence.
 
 ## Controller regression tests
 

@@ -190,6 +190,10 @@ class Controller:
             return self._start_locked(task, provisioning, headless)
 
     def _start_locked(self, task: str, provisioning: bool, headless: bool):
+        state = self.read(task)
+        if (self.task_dir(task) / "cancelled.json").exists() or (state.get("parent_task") and
+                (self.task_dir(state["parent_task"]) / "cancelled.json").exists()):
+            raise SandboxError("Task has been cancelled")
         if not self.doctor()["ready_to_boot"]:
             raise SandboxError("Tart or the root-owned network isolation helper is missing; refusing to boot")
         if self.read(task).get("status") not in {"created", "stopped"}:
@@ -320,7 +324,7 @@ class Controller:
         if not argv:
             raise SandboxError("A guest command is required")
         script = "cd " + GUEST_ROOT + "/source && source " + GUEST_ROOT + "/development.env && exec " + shlex.join(argv)
-        return self.guest(task, [*self.worker_prefix(state), "/bin/bash", "-lc", script], timeout=timeout)
+        return self.guest(task, [*self.worker_prefix(state), "/bin/bash", "--noprofile", "--norc", "-c", script], timeout=timeout)
 
     @staticmethod
     def worker_prefix(state: dict) -> list[str]:
@@ -335,6 +339,14 @@ class Controller:
 
     def stop(self, task: str):
         state = self.read(task)
+        if state.get("status") in {"running", "provisioning"}:
+            # Preserve completed edits, test products and desktop settings.
+            # A hung guest must still be stopped after this bounded grace.
+            try:
+                self.command("exec", state["vm"], "/bin/sync", timeout=5, capture_output=True)
+                state["last_stop_flushed"] = True
+            except (subprocess.SubprocessError, OSError):
+                state["last_stop_flushed"] = False
         try:
             self.command("stop", state["vm"], timeout=60)
         except subprocess.CalledProcessError:
@@ -353,7 +365,7 @@ class Controller:
         with (self.home / "start.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             state = self.read(task)
-            if state.get("vm") != "mortimer-" + task or state.get("status") not in {"stopped", "deleting", "deleted"}:
+            if state.get("vm") != "mortimer-" + task or state.get("status") not in {"created", "failed", "stopped", "deleting", "deleted"}:
                 raise SandboxError("Only a stopped disposable task can be deleted")
             result = self.command("list", "--source", "local", "--format", "json",
                                   capture_output=True, text=True, timeout=30)
@@ -367,13 +379,29 @@ class Controller:
             state.update(status="deleted", deleted_at=int(time.time()))
             self.save(task, state)
 
+    def cancel(self, task: str):
+        """Serialize cancellation with VM start, including verification children."""
+        with (self.home / "start.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            self.read(task)
+            atomic_json(self.task_dir(task) / "cancelled.json", {"requested_at": int(time.time())})
+            targets = [task]
+            for path in (self.home / "tasks").glob("*/state.json"):
+                state = json.loads(path.read_bytes())
+                if state.get("parent_task") == task:
+                    targets.append(path.parent.name)
+            for target in targets:
+                if self.read(target).get("status") in {"running", "provisioning"}:
+                    self.stop(target)
+
     def export(self, task: str) -> Path:
         # Transfer a patch as data. Never unpack a guest-created archive on host.
         script = "cd " + GUEST_ROOT + "/source && git add -N . && git diff --binary HEAD"
         state = self.read(task)
         if state.get("status") != "running" or state.get("network") != "offline":
             raise SandboxError("Export requires an offline running task")
-        process = subprocess.Popen([self.tart, "exec", state["vm"], "/bin/bash", "-lc", script],
+        process = subprocess.Popen([self.tart, "exec", state["vm"], *self.worker_prefix(state),
+                                    "/bin/bash", "--noprofile", "--norc", "-c", script],
                                    env=self.env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         chunks, size, deadline = [], 0, time.monotonic() + 60
         try:

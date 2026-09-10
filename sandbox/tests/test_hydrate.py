@@ -60,6 +60,20 @@ class HydrateTests(unittest.TestCase):
         self.assertEqual((checks / "jarvis" / "app.py").read_bytes(), b"updated application")
         self.assertIn(checks / "jarvis" / "app.py", list(checks.rglob("*.py")))
 
+    def test_swift_verification_copies_dependencies_without_candidate_build_products(self):
+        source = self.root / 'source' / 'macos' / 'Kit' / '.build'
+        destination = self.root / 'verification' / 'macos' / 'Kit' / '.build'
+        destination.parent.mkdir(parents=True)
+        for name in ['artifacts', 'checkouts', 'repositories', 'arm64-apple-macosx']:
+            (source / name).mkdir(parents=True)
+            (source / name / 'data').write_text(name)
+        (source / 'workspace-state.json').write_text(str(source / 'artifacts'))
+        hydrate.swift_dependencies(self.root, source, destination)
+        self.assertFalse((destination / 'arm64-apple-macosx').exists())
+        self.assertEqual((destination / 'workspace-state.json').read_text(), str(destination / 'artifacts'))
+        (source / 'checkouts' / 'data').write_text('mutated')
+        self.assertEqual((destination / 'checkouts' / 'data').read_text(), 'checkouts')
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -148,6 +148,14 @@ class FilesTests(unittest.TestCase):
             self.files.assert_unchanged(frozen.fingerprint)
         self.assertIsNone(self.files.status()["candidate"])
 
+    def test_publication_intent_blocks_further_edits(self):
+        frozen = self.files.freeze()
+        atomic_json(self.host / "publication.json", {"candidate": frozen.fingerprint})
+        with self.assertRaises(SandboxError):
+            self.files.write("app.py", b"late change", "racing publication")
+        self.assertEqual((self.guest / "app.py").read_bytes(), b"original")
+        self.assertEqual(self.files.frozen(), frozen)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -52,7 +52,25 @@ def verification_tree(root: Path, baseline: Candidate, candidate: Candidate, cac
         destination = checks / name
         destination.parent.mkdir(parents=True, exist_ok=True)
         target = root / "dependencies" / PROTECTED[name] if name in PROTECTED else root / "source" / name
-        destination.symlink_to(target, target_is_directory=True)
+        if name.endswith("/.build"):
+            swift_dependencies(root, target, destination)
+        else:
+            destination.symlink_to(target, target_is_directory=True)
+
+
+def swift_dependencies(root: Path, source: Path, destination: Path):
+    # Compiler products embed absolute module-cache paths. Sharing those
+    # products across candidate and baseline roots causes duplicate modules
+    # and can accidentally reuse candidate test binaries. Copy only resolved
+    # dependency inputs; each test tree gets an independent clean build.
+    destination.mkdir()
+    for name in ["artifacts", "checkouts", "repositories"]:
+        shutil.copytree(source / name, destination / name, symlinks=True)
+    state = (source / "workspace-state.json").read_text()
+    state = state.replace(str(root / "source"), str(root / "verification"))
+    (destination / "workspace-state.json").write_text(state)
+    owner = source.stat()
+    ownership(destination, owner.st_uid, owner.st_gid)
 
 
 def hydrate(root: Path, candidate: Candidate, caches: list[str], worker_uid: int, worker_gid: int):

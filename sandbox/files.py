@@ -64,6 +64,8 @@ class WorkspaceFiles:
         if not isinstance(rationale, str) or len(rationale) > 8000:
             raise SandboxError("Invalid edit rationale")
         with self._locked():
+            if (self.directory / "publication.json").exists():
+                raise SandboxError("Publication has started; begin a new session for further edits")
             journal = self._journal()
             # Persist invalidation BEFORE invoking the guest. A lost response
             # can never leave an earlier approval attached to changed code.

@@ -89,17 +89,22 @@ class Images:
         return state
 
     def create(self, image_id: str, repo: Path, ref: str, profile: Profile, *, purpose: str = "development",
-               candidate: Candidate | None = None) -> str:
+               candidate: Candidate | None = None, task_id: str | None = None, parent_task: str | None = None) -> str:
         if purpose not in {"development", "verification"}:
             raise SandboxError("Invalid sandbox task purpose")
         image = self.read(image_id, profile)
-        task = uuid.uuid4().hex[:12]
+        task = task_id or uuid.uuid4().hex[:12]
+        if not re.fullmatch(r"[0-9a-f]{12}", task):
+            raise SandboxError("Invalid allocated task identity")
+        if parent_task is not None:
+            self.controller.read(parent_task)
         directory = self.controller.home / "tasks" / task
         inputs = directory / "input"
         directory.mkdir(parents=True, mode=0o700)
         inputs.mkdir(mode=0o755)
         state = {"id": task, "vm": "mortimer-" + task, "image": image_id,
-                 "purpose": purpose, "profile": profile.name, "status": "creating", "prepared": True}
+                 "purpose": purpose, "profile": profile.name, "status": "creating", "prepared": True,
+                 "parent_task": parent_task}
         self.controller.save(task, state)
         try:
             state.update(snapshot(repo, ref, inputs / "source.tar"))

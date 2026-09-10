@@ -163,7 +163,7 @@ class ControllerTests(unittest.TestCase):
         self.c.save(self.task, {"vm": "mortimer-" + self.task, "status": "running"})
         listing = subprocess.CompletedProcess([], 0, stdout=json.dumps([
             {"Name": "mortimer-" + self.task, "State": "stopped"}]))
-        with patch.object(self.c, "command", side_effect=[subprocess.CalledProcessError(1, "stop"), listing]):
+        with patch.object(self.c, "command", side_effect=[subprocess.CompletedProcess([], 0), subprocess.CalledProcessError(1, "stop"), listing]):
             self.c.stop(self.task)
         self.assertEqual(self.c.read(self.task)["status"], "stopped")
 
@@ -171,10 +171,19 @@ class ControllerTests(unittest.TestCase):
         for entries in [[], [{"Name": "mortimer-" + self.task, "State": "running"}]]:
             self.c.save(self.task, {"vm": "mortimer-" + self.task, "status": "running"})
             listing = subprocess.CompletedProcess([], 0, stdout=json.dumps(entries))
-            with patch.object(self.c, "command", side_effect=[subprocess.CalledProcessError(1, "stop"), listing]):
+            with patch.object(self.c, "command", side_effect=[subprocess.CompletedProcess([], 0), subprocess.CalledProcessError(1, "stop"), listing]):
                 with self.assertRaises(subprocess.CalledProcessError):
                     self.c.stop(self.task)
             self.assertEqual(self.c.read(self.task)["status"], "running")
+
+    def test_stop_flushes_completed_writes_but_a_stalled_flush_cannot_prevent_shutdown(self):
+        self.c.save(self.task, {"vm": "mortimer-" + self.task, "status": "running"})
+        with patch.object(self.c, 'command', side_effect=[subprocess.TimeoutExpired('sync', 5), subprocess.CompletedProcess([], 0)]) as command:
+            self.c.stop(self.task)
+        self.assertEqual(command.call_args_list[0].args, ('exec', 'mortimer-' + self.task, '/bin/sync'))
+        self.assertEqual(command.call_args_list[1].args, ('stop', 'mortimer-' + self.task))
+        self.assertEqual(self.c.read(self.task)['status'], 'stopped')
+        self.assertFalse(self.c.read(self.task)['last_stop_flushed'])
 
     def export_writer(self, payload):
         executable = self.root / "fake-tart"
@@ -273,6 +282,21 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(command.call_count, 1)
         self.assertEqual(self.c.read(self.task)["status"], "deleted")
         self.assertEqual(evidence.read_text(), "review evidence")
+
+    def test_cancellation_stops_children_and_prevents_late_child_start(self):
+        child = 'abcdef012345'
+        (self.c.home / 'tasks' / child).mkdir()
+        self.c.save(self.task, {'vm': 'mortimer-' + self.task, 'status': 'stopped'})
+        self.c.save(child, {'vm': 'mortimer-' + child, 'status': 'running', 'parent_task': self.task})
+        with patch.object(self.c, 'stop') as stop:
+            self.c.cancel(self.task)
+            stop.assert_called_once_with(child)
+        state = self.c.read(child); state['status'] = 'stopped'; self.c.save(child, state)
+        with patch.object(self.c, 'doctor') as doctor, patch.object(control.subprocess, 'Popen') as launch:
+            with self.assertRaises(control.SandboxError): self.c.start(child)
+            with self.assertRaises(control.SandboxError): self.c.start(self.task)
+            doctor.assert_not_called()
+            launch.assert_not_called()
 
 
 if __name__ == "__main__": unittest.main()

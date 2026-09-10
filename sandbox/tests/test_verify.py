@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from sandbox.artifacts import Candidate, File, SandboxError
 from sandbox.profiles import Profile
@@ -55,6 +56,7 @@ class VerificationTests(unittest.TestCase):
     def guest(self, task, argv, **kwargs):
         self.assertEqual(task, "independent-task")
         self.assertEqual(argv[:3], ["sudo", "-u", "mortimer-dev"])
+        self.assertEqual(argv[3:7], ["/bin/bash", "--noprofile", "--norc", "-c"])
         self.events.append(("check", task))
         if self.edit_during_check:
             self.journal.update(candidate=None, verification=None, revision=2)
@@ -112,6 +114,17 @@ class VerificationTests(unittest.TestCase):
         path.write_text(json.dumps(receipt))
         with self.assertRaises(SandboxError):
             self.verifier.receipt(self, "prepared-image", self.profile)
+
+    def test_native_checks_reselect_synthetic_keychain_before_execution(self):
+        calls = []
+        def guest(task, argv, **kwargs):
+            calls.append(argv)
+            return subprocess.CompletedProcess(argv, 0, stdout=b'', stderr=b'')
+        with patch.object(self, 'guest', side_effect=guest):
+            result = self.verifier.run_check('independent-task', 'native', ('swift', 'test'), self.directory, 30)
+        self.assertTrue(result['passed'])
+        self.assertEqual([args[4] for args in calls[:3]], ['list-keychains', 'default-keychain', 'unlock-keychain'])
+        self.assertEqual(calls[-1][3:7], ['/bin/bash', '--noprofile', '--norc', '-c'])
 
 
 if __name__ == "__main__":

@@ -24,6 +24,18 @@ sudo -n /bin/mkdir -p /Users/mortimer-dev
 sudo -n /usr/sbin/chown mortimer-dev:staff /Users/mortimer-dev
 sudo -n /bin/chmod 700 /Users/mortimer-dev
 
+# Native authentication tests need a default Keychain. This contains only
+# disposable test values and is created before any candidate code executes.
+worker_keychain=/Users/mortimer-dev/Library/Keychains/sandbox.keychain-db
+sudo -n -H -u mortimer-dev /bin/mkdir -p /Users/mortimer-dev/Library/Keychains /Users/mortimer-dev/Library/Preferences
+sudo -n -H -u mortimer-dev /usr/bin/security create-keychain -p sandbox-test-only "$worker_keychain"
+sudo -n -H -u mortimer-dev /usr/bin/security list-keychains -d user -s "$worker_keychain"
+sudo -n -H -u mortimer-dev /usr/bin/security default-keychain -d user -s "$worker_keychain"
+sudo -n -H -u mortimer-dev /usr/bin/security set-keychain-settings "$worker_keychain"
+sudo -n -H -u mortimer-dev /usr/bin/security unlock-keychain -p sandbox-test-only "$worker_keychain"
+sudo -n -H -u mortimer-dev /usr/bin/security default-keychain -d user >/dev/null
+unset worker_keychain
+
 # Public VM images have a known admin password. Replace it before candidate
 # code runs; the host's Tart agent uses its existing privileged transport.
 worker_admin_password="$(/usr/bin/openssl rand -hex 32)"

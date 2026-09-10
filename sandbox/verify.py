@@ -44,11 +44,27 @@ class Verifier:
     def run_check(self, task: str, name: str, argv: tuple[str, ...], directory: Path, timeout: int) -> dict:
         script = "cd " + GUEST_ROOT + "/source && source " + GUEST_ROOT + "/development.env && exec " + shlex.join(argv)
         started = time.monotonic()
+        def remaining():
+            budget = int(started + timeout - time.monotonic())
+            if budget < 1:
+                self.controller.stop(task)
+                raise SandboxError("Check runtime budget exhausted")
+            return budget
         state = self.controller.read(task)
         if not state.get("hydrated") or state.get("network") != "offline" or state.get("worker") != "mortimer-dev":
             raise SandboxError("Checks require a hydrated offline worker")
-        result = self.controller.guest(task, [*self.controller.worker_prefix(state), "/bin/bash", "-lc", script],
-            timeout=timeout, capture=True, check=False, binary=True, max_output=2 * 1024 * 1024)
+        if argv and argv[0] in {"swift", "/usr/bin/swift"}:
+            # Headless worker Keychain preferences can disappear between
+            # setup, long test runs and restarts. Select and unlock the
+            # disposable test store immediately before native checks.
+            keychain = "/Users/mortimer-dev/Library/Keychains/sandbox.keychain-db"
+            for arguments in [("list-keychains", "-d", "user", "-s", keychain),
+                              ("default-keychain", "-d", "user", "-s", keychain),
+                              ("unlock-keychain", "-p", "sandbox-test-only", keychain)]:
+                self.controller.guest(task, [*self.controller.worker_prefix(state), "/usr/bin/security", *arguments],
+                                      timeout=min(remaining(), 15), capture=True)
+        result = self.controller.guest(task, [*self.controller.worker_prefix(state), "/bin/bash", "--noprofile", "--norc", "-c", script],
+            timeout=remaining(), capture=True, check=False, binary=True, max_output=2 * 1024 * 1024)
         data = SECRET.sub(b"[redacted credential-shaped value]", result.stdout + b"\n" + result.stderr)
         atomic_bytes(directory / (name + ".log"), data)
         return {"name": name, "argv": list(argv), "returncode": result.returncode,
@@ -76,7 +92,7 @@ class Verifier:
         try:
             self.controller.stop(files.task)
             verification_task = self.images.create(image_id, repo, ref, profile,
-                                                     purpose="verification", candidate=candidate)
+                                                     purpose="verification", candidate=candidate, parent_task=files.task)
             receipt.update(verification_task=verification_task, status="hydrating")
             atomic_json(directory / "receipt.json", receipt)
             self.controller.start(verification_task, provisioning=False, headless=True)
