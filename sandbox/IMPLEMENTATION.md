@@ -36,6 +36,11 @@ workflow, preview, provider and lifecycle requirements below still apply.
 - Candidate-bound publication receipts and resumable GitHub object/branch/draft
   PR creation. Actual lost-response recovery and cleanup passed; CI recognizes
   the new sandbox self-edit branch prefix.
+- Legacy `repo_write_file`, `repo_commit_write`, Git staging/commit/push, and
+  `app_write_file` refuse unconditionally, including old pending action IDs.
+  MCP and console entry points share the same refusal. Repository inspection
+  and historical action audit remain available. Prompts route every existing
+  repository/app change, including single-file edits, through sandbox workflows.
 
 ## Still required for the complete feature
 
@@ -44,13 +49,15 @@ workflow, preview, provider and lifecycle requirements below still apply.
    authoring setup and cold resume now return promptly with an opening job;
    cold file requests require an explicit retry and never queue an unseen edit.
    App selection and saved publication results survive a host process restart.
-   Close alternative direct-write paths as well. `SelfEditService` and `AppWorkspace`
+   Finish migrating dependent save and bootstrap workflows. `SelfEditService` and `AppWorkspace`
    now route through persistent VM sessions; their cancellation endpoints stop
    running VM work, including finish-job verification. The controller is denied
-   by the installed self-edit policy. `mcp_repo.repo_commit_write`,
-   `mcp_apps.app_write_file`, initial app scaffolding and direct Git publication
-   still need integration or an explicit, enforced non-development boundary.
-   Those paths mean the complete application is not yet sandbox-only.
+   by the installed self-edit policy. Initial `app_create` scaffolding still
+   writes starter files directly, and app registration still updates registry
+   metadata outside the sandbox. Plan/research repository-save calls now refuse
+   through the retired writer, preserving their generated results in the job;
+   their direct save workflow needs a sandbox replacement. These remaining
+   paths mean the complete application is not yet sandbox-only.
 2. **Development profiles:** complete Mortimer and new-web-app profiles with
    runtimes, dependencies, startup/health checks, migrations, synthetic seeds,
    required checks, previews and starter templates. Unsupported platforms must

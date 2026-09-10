@@ -1,0 +1,39 @@
+{
+  "task": "88a7ba0a49ab",
+  "session": "deb9162d076e4add98dbcdf89778e008",
+  "source_commit": "8b9dd59e4a1b1b62fb9d93d8e7327efc4eb28dc0",
+  "vm_status": "deleted",
+  "session_phase": "reverted",
+  "date": "2026-09-10",
+  "checks": [
+    {
+      "name": "writer-unit",
+      "passed_tests": 2321,
+      "failed_tests": 0,
+      "log_sha256": "d4dfa3da0b9ca23fdd078ee8ca609e740874b9c4205859878aae4031660edd6a"
+    },
+    {
+      "name": "writer-interface",
+      "passed_tests": 118,
+      "failed_tests": 1,
+      "log_sha256": "ca5ef068e4d28793af38650138cea6bb32b51308855a7a22a29efbdb808e2c2d"
+    },
+    {
+      "name": "writer-prompts",
+      "passed_tests": 65,
+      "failed_tests": 0,
+      "log_sha256": "95b779666dffeb55c93a4a99476617325efe8613e22ef625ee4f1527cdbbf465"
+    }
+  ],
+  "resolved_failure": "writer-interface failed only the app-builder prompt-length limit. The instructions were shortened; all 65 prompt tests passed in writer-prompts afterward. The interface run also passed the real MCP repository-write and app-write refusal checks.",
+  "final_overlay_sha256": {
+    "jarvis/admin/server.py": "a67097c7abb589e5677ce8de4e460f88c34817021d2770ace8ec085c9f8abb96",
+    "jarvis/prompts.py": "3bae8beb36d00485a83af52b9208c457ba8217ad9165586630598e7a15b58f92",
+    "tests/integration/test_mcp_apps.py": "8c9bb4751bc56f5a9b924308cf20be3da66d0c6774f4bc9fe219ea2604f8cbdd",
+    "tests/unit/test_admin_plan.py": "a1eb74322b35fed9fb69da4c4f30d932f9a1f526a3aee0d0460edb69374620bc",
+    "tests/unit/test_admin_research.py": "1b3d0c19402ddf55c70a3f8af906aa40ae3fd346d4172ef8dffacc086bd91806"
+  },
+  "deployment_changed": false,
+  "publication_performed_by_candidate": false,
+  "scope": "Application unit and selected API/MCP regression checks inside an offline VM. Test counts overlap. This is not a full independent verification receipt. Plan/research repository saving now refuses until its sandbox replacement is implemented. Initial app scaffolding and registry writes remain outside the sandbox."
+}
