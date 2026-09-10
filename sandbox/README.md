@@ -1,8 +1,10 @@
 # Mortimer development sandbox foundation
 
-Status: initial implementation; controller unit tests pass. A real VM,
-guest dependency setup, containment probes and full application journeys
-must pass before this can replace the existing self-edit validator.
+Status: real VM provisioning, restart persistence, boundary observations,
+application test suites, browser smoke, patch export and timeout shutdown
+have been exercised. See [the acceptance record](VALIDATION.md) for exact
+coverage and source revisions. Agent integration and full voice/application
+journeys remain required before replacing the existing self-edit validator.
 
 ## Boundary
 
@@ -28,7 +30,10 @@ Softnet's default gateway exception is unsafe for this purpose: the real host
 listener probe caught it before the explicit rules were added. Guest setup
 uses public DNS because the host's DNS proxy is also blocked.
 Only known, reviewed source should be used during this phase.
-After successful preparation the VM stops, and
+After successful preparation the controller flushes the guest filesystem
+before stopping the VM. This is necessary because stopping Tart is not a
+guest OS shutdown; recently installed browser files were lost without the
+flush in the first activation attempt. Then
 development restarts with all IPv4 destinations blocked. A prepared task
 cannot be restarted in provisioning mode. Repeat the actual canary probes on
 each host in both modes. Do not describe configuration flags or mocked tests
@@ -122,8 +127,9 @@ and rerun required checks on the exact proposed candidate before publishing.
 
 ## Work still required for the complete development environment
 
-1. Boot the real VM, finish dependency provisioning, and run containment,
-   native, service and browser checks. Build and pin a verified base image.
+1. Extend the recorded VM checks to additional application journeys and
+   hosts. Package a reusable prepared base image with a fresh-workspace
+   import protocol; the verified bootstrap image is still prepared per task.
 2. Add a credential proxy with scoped development accounts, budgets and
    approved destinations; connect recorded/fake speech providers and complete
    voice journeys. Offline placeholder keys do not implement those providers.
