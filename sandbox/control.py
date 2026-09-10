@@ -10,6 +10,7 @@ import argparse
 import fcntl
 import hashlib
 import io
+import ipaddress
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -35,6 +36,20 @@ REVIEWED_TEST_FIXTURES = {
     "tests/unit/test_mcp_apps_github.py": "ce15f378a89c7b056ba88ca5c421342c303fcfc07670141927d2bb5398888e03",
     "tests/unit/test_memory.py": "5de5186a0ecb7d4698e388825a3b1fc8cd6fec6d7960866500418d4bf11ec3d2",
 }
+PRIVATE_NETWORKS = ('0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8',
+                    '169.254.0.0/16', '172.16.0.0/12', '192.168.0.0/16',
+                    '224.0.0.0/4', '240.0.0.0/4')
+
+
+def provisioning_network_blocks() -> str:
+    # Softnet permits the host gateway by default. Explicit blocks override
+    # that exception, including any globally addressed host interfaces.
+    interfaces = subprocess.check_output(['/sbin/ifconfig'], text=True, timeout=10)
+    addresses = {str(ipaddress.IPv4Address(value)) + '/32'
+                 for value in re.findall(r'^\s*inet\s+(\S+)', interfaces, re.MULTILINE)}
+    if not addresses:
+        raise SandboxError('Cannot determine host IPv4 addresses; refusing provisioning')
+    return ','.join([*PRIVATE_NETWORKS, *sorted(addresses)])
 
 
 class SandboxError(RuntimeError):
@@ -161,8 +176,8 @@ class Controller:
     def run_args(self, task: str, provisioning: bool, headless: bool) -> list[str]:
         state = self.read(task)
         args = ["run", "--no-clipboard", "--no-audio", "--net-softnet"]
-        if not provisioning:
-            args.append("--net-softnet-block=0.0.0.0/0")
+        blocks = provisioning_network_blocks() if provisioning else '0.0.0.0/0'
+        args.append('--net-softnet-block=' + blocks)
         if headless:
             args.append("--no-graphics")
         args += ["--dir=" + "input:" + str(self.task_dir(task) / "input") + ":ro", state["vm"]]
@@ -211,6 +226,9 @@ class Controller:
         if self.read(task)["status"] != "provisioning":
             raise SandboxError("Start a fresh task with --provision first")
         self.guest(task, ["/bin/bash", "/Volumes/My Shared Files/input/prepare.sh"], timeout=7200)
+        # Tart stops the virtual machine rather than shutting down its guest
+        # OS. Flush the guest filesystem before recording durable preparation.
+        self.guest(task, ["/bin/sync"], timeout=60)
         state = self.read(task)
         state["prepared"] = True
         self.save(task, state)
