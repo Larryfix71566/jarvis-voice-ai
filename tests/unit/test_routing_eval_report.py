@@ -247,7 +247,11 @@ def test_an_unset_admin_url_is_still_sandboxed(monkeypatch):
     # The dangerous case: nothing set, so mcp_selfedit would fall back to
     # its DEFAULT_ADMIN_URL and find the real sidecar.
     monkeypatch.delenv(ALLOW_LIVE_SELFEDIT_ENV, raising=False)
-    monkeypatch.delenv("JARVIS_ADMIN_URL", raising=False)
+    # GC1: delenv on an already absent key records no undo. Register its
+    # original state before the guard writes directly to os.environ, or the
+    # dummy port leaks into both graph URL tests when this test runs first.
+    monkeypatch.setenv("JARVIS_ADMIN_URL", "")
+    monkeypatch.delenv("JARVIS_ADMIN_URL")
     assert isolate_selfedit_service() == SANDBOX_ADMIN_URL
     assert os.environ["JARVIS_ADMIN_URL"] == SANDBOX_ADMIN_URL
 
