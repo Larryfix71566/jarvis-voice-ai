@@ -1,0 +1,144 @@
+"""Independent VM verification bound to host-owned candidate and profile data."""
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+import shlex
+import subprocess
+import time
+import uuid
+
+from sandbox.artifacts import Candidate, SECRET, SandboxError
+from sandbox.control import GUEST_ROOT
+from sandbox.durable import atomic_bytes, atomic_json
+from sandbox.files import WorkspaceFiles
+
+
+def runner_fingerprint() -> str:
+    root = Path(__file__).resolve().parent
+    digest = hashlib.sha256()
+    for name in ["artifacts.py", "control.py", "durable.py", "files.py", "images.py", "profiles.py",
+                 "verify.py", "guest/hydrate.py", "guest/worker.sh", "guest/rpc.py"]:
+        digest.update(name.encode() + b"\0" + (root / name).read_bytes() + b"\0")
+    return digest.hexdigest()
+
+
+class Verifier:
+    def __init__(self, controller, images):
+        self.controller, self.images = controller, images
+
+    def wait_ready(self, task: str, timeout: int = 90):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                self.controller.command("exec", self.controller.read(task)["vm"], "/usr/bin/true",
+                                        timeout=10, capture_output=True)
+                return
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                time.sleep(2)
+        self.controller.stop(task)
+        raise SandboxError("VM did not become ready")
+
+    def run_check(self, task: str, name: str, argv: tuple[str, ...], directory: Path, timeout: int) -> dict:
+        script = "cd " + GUEST_ROOT + "/source && source " + GUEST_ROOT + "/development.env && exec " + shlex.join(argv)
+        started = time.monotonic()
+        state = self.controller.read(task)
+        if not state.get("hydrated") or state.get("network") != "offline" or state.get("worker") != "mortimer-dev":
+            raise SandboxError("Checks require a hydrated offline worker")
+        result = self.controller.guest(task, [*self.controller.worker_prefix(state), "/bin/bash", "-lc", script],
+            timeout=timeout, capture=True, check=False, binary=True, max_output=2 * 1024 * 1024)
+        data = SECRET.sub(b"[redacted credential-shaped value]", result.stdout + b"\n" + result.stderr)
+        atomic_bytes(directory / (name + ".log"), data)
+        return {"name": name, "argv": list(argv), "returncode": result.returncode,
+                "passed": result.returncode == 0, "seconds": round(time.monotonic() - started, 3),
+                "log_sha256": hashlib.sha256(data).hexdigest()}
+
+    def verify(self, files: WorkspaceFiles, repo: Path, ref: str, image_id: str, profile, *, timeout: int = 7200) -> dict:
+        if not 1 <= timeout <= 7200 or not profile.checks:
+            raise SandboxError("Invalid verification budget or missing required checks")
+        candidate = files.freeze()
+        revision = files.status()["revision"]
+        attempt = uuid.uuid4().hex
+        directory = files.directory / "verification" / attempt
+        directory.mkdir(parents=True, mode=0o700)
+        receipt = {"version": 1, "attempt": attempt, "candidate": candidate.fingerprint,
+                   "baseline": files.baseline.fingerprint, "image": image_id, "profile": profile.fingerprint,
+                   "runner": runner_fingerprint(), "development_task": files.task, "checks": [],
+                   "passed": False, "status": "starting"}
+        atomic_json(directory / "receipt.json", receipt)
+        deadline = time.monotonic() + timeout
+        verification_task = None
+        try:
+            self.controller.stop(files.task)
+            verification_task = self.images.create(image_id, repo, ref, profile,
+                                                     purpose="verification", candidate=candidate)
+            receipt.update(verification_task=verification_task, status="hydrating")
+            atomic_json(directory / "receipt.json", receipt)
+            self.controller.start(verification_task, provisioning=False, headless=True)
+            self.wait_ready(verification_task)
+            self.images.hydrate(verification_task)
+            for index, argv in enumerate(profile.seeds):
+                remaining = int(deadline - time.monotonic())
+                if remaining < 1:
+                    raise SandboxError("Verification runtime budget exhausted")
+                seed = self.run_check(verification_task, "seed-" + str(index), argv, directory, min(remaining, 180))
+                if not seed["passed"]:
+                    raise SandboxError("Synthetic state initialization failed")
+            receipt["status"] = "checking"
+            for name, argv in profile.checks:
+                remaining = int(deadline - time.monotonic())
+                if remaining < 1:
+                    raise SandboxError("Verification runtime budget exhausted")
+                receipt["checks"].append(self.run_check(verification_task, name, argv, directory, min(remaining, 1800)))
+                atomic_json(directory / "receipt.json", receipt)
+            observed = Candidate.decode(self.controller.rpc(verification_task, {"operation": "capture",
+                "baseline_paths": [file.path for file in files.baseline.files]}))
+            receipt["source_unchanged"] = observed.fingerprint == candidate.fingerprint
+            receipt["passed"] = receipt["source_unchanged"] and all(check["passed"] for check in receipt["checks"])
+            receipt["status"] = "passed" if receipt["passed"] else "failed"
+        except Exception:
+            receipt.update(passed=False, status="interrupted_or_failed")
+            raise
+        finally:
+            try:
+                if verification_task is not None:
+                    self.controller.stop(verification_task)
+            except Exception:
+                receipt.update(passed=False, status="stop_failed")
+                raise
+            finally:
+                atomic_json(directory / "receipt.json", receipt)
+                with files._locked():
+                    journal = files._journal()
+                    if journal.get("candidate") == candidate.fingerprint and journal.get("revision") == revision:
+                        journal["verification"] = {"attempt": attempt, "passed": receipt["passed"]}
+                        files._save(journal)
+        return receipt
+
+    def receipt(self, files: WorkspaceFiles, image_id: str, profile) -> dict:
+        """Fail closed after edits, profile/runner changes, or incomplete checks."""
+        journal = files.status()
+        reference = journal.get("verification")
+        if not isinstance(reference, dict) or reference.get("passed") is not True:
+            raise SandboxError("Candidate has no successful independent verification")
+        attempt = reference.get("attempt")
+        if not isinstance(attempt, str) or len(attempt) != 32 or any(c not in "0123456789abcdef" for c in attempt):
+            raise SandboxError("Invalid verification reference")
+        receipt = json.loads((files.directory / "verification" / attempt / "receipt.json").read_bytes())
+        expected = {"candidate": files.frozen().fingerprint, "baseline": files.baseline.fingerprint,
+                    "image": image_id, "profile": profile.fingerprint, "runner": runner_fingerprint(),
+                    "development_task": files.task, "passed": True, "status": "passed", "source_unchanged": True}
+        if any(receipt.get(key) != value for key, value in expected.items()):
+            raise SandboxError("Verification does not match the current candidate and runner")
+        checks = receipt.get("checks", [])
+        if [(check.get("name"), tuple(check.get("argv", []))) for check in checks] != list(profile.checks):
+            raise SandboxError("Verification omitted or replaced a required check")
+        if any(check.get("passed") is not True or check.get("returncode") != 0 for check in checks):
+            raise SandboxError("A required verification check did not pass")
+        directory = files.directory / "verification" / attempt
+        for check in checks:
+            # Names have already matched the installed host profile exactly.
+            if hashlib.sha256((directory / (check["name"] + ".log")).read_bytes()).hexdigest() != check.get("log_sha256"):
+                raise SandboxError("Verification evidence does not match its receipt")
+        return receipt

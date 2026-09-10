@@ -5,12 +5,13 @@ from pathlib import Path
 import tempfile
 
 
-def atomic_bytes(path: Path, data: bytes) -> None:
+def atomic_bytes(path: Path, data: bytes, *, mode: int = 0o600) -> None:
     descriptor, temporary = tempfile.mkstemp(prefix=".pending-", dir=path.parent)
     try:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(data)
             stream.flush()
+            os.fchmod(stream.fileno(), mode)
             os.fsync(stream.fileno())
         os.replace(temporary, path)
         directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)

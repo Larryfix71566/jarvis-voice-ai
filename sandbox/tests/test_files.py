@@ -140,6 +140,14 @@ class FilesTests(unittest.TestCase):
             with self.assertRaises(SandboxError):
                 self.files.read("app.py")
 
+    def test_changes_outside_edit_api_invalidate_publication_recheck(self):
+        frozen = self.files.freeze()
+        self.files.assert_unchanged(frozen.fingerprint)
+        (self.guest / "app.py").write_text("changed outside the edit API")
+        with self.assertRaises(SandboxError):
+            self.files.assert_unchanged(frozen.fingerprint)
+        self.assertIsNone(self.files.status()["candidate"])
+
 
 if __name__ == "__main__":
     unittest.main()

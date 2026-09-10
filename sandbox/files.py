@@ -120,3 +120,20 @@ class WorkspaceFiles:
     def status(self) -> dict:
         with self._locked():
             return self._journal()
+
+    def assert_unchanged(self, fingerprint: str) -> None:
+        """Publisher rechecks the running development task before using a receipt."""
+        with self._locked():
+            journal = self._journal()
+            try:
+                matches = (journal.get("candidate") == fingerprint
+                           and self._capture().fingerprint == fingerprint
+                           and self._capture().fingerprint == fingerprint)
+            except Exception:
+                journal.update(candidate=None, verification=None)
+                self._save(journal)
+                raise
+            if not matches:
+                journal.update(candidate=None, verification=None)
+                self._save(journal)
+                raise SandboxError("Development source changed after verification")

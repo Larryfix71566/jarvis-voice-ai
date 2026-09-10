@@ -243,5 +243,36 @@ class ControllerTests(unittest.TestCase):
         inputs, _ = self.c._file_service(self.task)
         self.assertEqual(list((inputs / "requests").iterdir()), [])
 
+    def test_cleanup_refuses_active_vm_and_prepared_image_aliases(self):
+        state = {"vm": "mortimer-" + self.task, "status": "stopped"}
+        self.c.save(self.task, state)
+        listing = subprocess.CompletedProcess([], 0, stdout=json.dumps([{"Name": state["vm"], "State": "running"}]))
+        with patch.object(self.c, "command", return_value=listing) as command:
+            with self.assertRaises(control.SandboxError):
+                self.c.destroy(self.task)
+            self.assertEqual(command.call_count, 1)
+        self.c.save(self.task, {"vm": "mortimer-image-protected", "status": "stopped"})
+        with patch.object(self.c, "command") as command:
+            with self.assertRaises(control.SandboxError):
+                self.c.destroy(self.task)
+            command.assert_not_called()
+
+    def test_cleanup_recovers_a_lost_delete_response_and_keeps_evidence(self):
+        state = {"vm": "mortimer-" + self.task, "status": "stopped"}
+        self.c.save(self.task, state)
+        evidence = self.c.task_dir(self.task) / "candidate.patch"
+        evidence.write_text("review evidence")
+        listing = subprocess.CompletedProcess([], 0, stdout=json.dumps([{"Name": state["vm"], "State": "stopped"}]))
+        with patch.object(self.c, "command", side_effect=[listing, OSError("response lost")]):
+            with self.assertRaises(OSError):
+                self.c.destroy(self.task)
+        self.assertEqual(self.c.read(self.task)["status"], "deleting")
+        absent = subprocess.CompletedProcess([], 0, stdout="[]")
+        with patch.object(self.c, "command", return_value=absent) as command:
+            self.c.destroy(self.task)
+            self.assertEqual(command.call_count, 1)
+        self.assertEqual(self.c.read(self.task)["status"], "deleted")
+        self.assertEqual(evidence.read_text(), "review evidence")
+
 
 if __name__ == "__main__": unittest.main()
