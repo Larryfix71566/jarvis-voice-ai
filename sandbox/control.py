@@ -13,7 +13,7 @@ import io
 import ipaddress
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import re
 import selectors
 import shlex
@@ -25,17 +25,17 @@ import tarfile
 import time
 import uuid
 
-MAX_SOURCE_BYTES = 256 * 1024 * 1024
-MAX_FILE_BYTES = 32 * 1024 * 1024
+try:
+    from sandbox.artifacts import (MAX_SOURCE_BYTES, MAX_FILE_BYTES, MAX_FILES, SECRET,
+                                   REVIEWED_TEST_FIXTURES, SandboxError, check_paths, source_path_allowed)
+    from sandbox.durable import atomic_bytes, atomic_json
+except ModuleNotFoundError:  # Direct script invocation.
+    from artifacts import (MAX_SOURCE_BYTES, MAX_FILE_BYTES, MAX_FILES, SECRET,
+                           REVIEWED_TEST_FIXTURES, SandboxError, check_paths, source_path_allowed)
+    from durable import atomic_bytes, atomic_json
+
 TASK_ID = re.compile(r"[0-9a-f]{12}\Z")
 GUEST_ROOT = "/Users/admin/mortimer"
-SECRET = re.compile(rb"(?:gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{24,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY)")
-# Reviewed synthetic leak-detection fixtures. Exact file content and path must
-# both match; editing or moving a fixture requires another host-side review.
-REVIEWED_TEST_FIXTURES = {
-    "tests/unit/test_mcp_apps_github.py": "ce15f378a89c7b056ba88ca5c421342c303fcfc07670141927d2bb5398888e03",
-    "tests/unit/test_memory.py": "5de5186a0ecb7d4698e388825a3b1fc8cd6fec6d7960866500418d4bf11ec3d2",
-}
 PRIVATE_NETWORKS = ('0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8',
                     '169.254.0.0/16', '172.16.0.0/12', '192.168.0.0/16',
                     '224.0.0.0/4', '240.0.0.0/4')
@@ -50,26 +50,6 @@ def provisioning_network_blocks() -> str:
     if not addresses:
         raise SandboxError('Cannot determine host IPv4 addresses; refusing provisioning')
     return ','.join([*PRIVATE_NETWORKS, *sorted(addresses)])
-
-
-class SandboxError(RuntimeError):
-    pass
-
-
-def source_path_allowed(name: str) -> bool:
-    path = PurePosixPath(name)
-    if path.is_absolute() or ".." in path.parts or not path.parts:
-        return False
-    if path.parts[0] in {"data", "logs", "models", "node_modules", ".sandbox-data"}:
-        return False
-    for part in path.parts:
-        if part in {".git", ".venv", "__pycache__", ".ssh", ".aws", ".tart"}:
-            return False
-        if part.startswith(".env") and part != ".env.example":
-            return False
-        if part.endswith((".vault", ".vault.lock", ".p12", ".pfx", ".key", ".pem", ".db", ".sqlite", ".bak")):
-            return False
-    return True
 
 
 def snapshot(repo: Path, ref: str, output: Path) -> dict:
@@ -94,7 +74,7 @@ def snapshot(repo: Path, ref: str, output: Path) -> dict:
                 if kind != "blob" or mode not in {"100644", "100755"}:
                     raise SandboxError(f"Source contains unsupported link/submodule: {name}")
                 size = int(subprocess.check_output(["git", "-C", str(repo), "cat-file", "-s", blob]))
-                if size > MAX_FILE_BYTES or total + size > MAX_SOURCE_BYTES:
+                if size > MAX_FILE_BYTES or total + size > MAX_SOURCE_BYTES or len(files) >= MAX_FILES:
                     raise SandboxError(f"Source size limit exceeded: {name}")
                 data = subprocess.check_output(["git", "-C", str(repo), "cat-file", "blob", blob])
                 reviewed_fixture = REVIEWED_TEST_FIXTURES.get(name) == hashlib.sha256(data).hexdigest()
@@ -105,6 +85,7 @@ def snapshot(repo: Path, ref: str, output: Path) -> dict:
                 archive.addfile(item, io.BytesIO(data))
                 total += len(data)
                 files.append(name)
+        check_paths(files)
         temporary.replace(output)
     finally:
         temporary.unlink(missing_ok=True)
@@ -136,10 +117,29 @@ class Controller:
         return json.loads((self.task_dir(task) / "state.json").read_text())
 
     def save(self, task: str, state: dict):
-        path = self.task_dir(task) / "state.json"
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(state, indent=2) + "\n")
-        tmp.replace(path)
+        atomic_json(self.task_dir(task) / "state.json", state)
+
+    def install_file_service(self, task: str):
+        """Install reviewed host code, never code from the candidate checkout."""
+        inputs, sources = self._file_service(task)
+        inputs.mkdir(parents=True, exist_ok=True, mode=0o700)
+        for name, data in sources.items():
+            installed = inputs / name
+            if installed.exists():
+                if installed.read_bytes() != data:
+                    raise SandboxError("Installed file service has been modified")
+            else:
+                atomic_bytes(installed, data)
+        (inputs / "requests").mkdir(exist_ok=True, mode=0o700)
+
+    def _file_service(self, task: str):
+        root = Path(__file__).resolve().parent
+        sources = {"artifacts.py": (root / "artifacts.py").read_bytes(),
+                   "rpc.py": (root / "guest" / "rpc.py").read_bytes()}
+        version = hashlib.sha256(sources["artifacts.py"] + b"\0" + sources["rpc.py"]).hexdigest()
+        # VirtioFS can retain an old inode after atomic replacement. Versions
+        # get new immutable paths, including during a running task's upgrade.
+        return self.task_dir(task) / "input" / "services" / version, sources
 
     def doctor(self) -> dict:
         helper = Path(self.softnet)
@@ -163,6 +163,7 @@ class Controller:
             state.update(snapshot(repo.resolve(), ref, inputs / "source.tar"))
             for script in (Path(__file__).parent / "guest").glob("*.sh"):
                 shutil.copyfile(script, inputs / script.name)
+            self.install_file_service(task)
             self.command("clone", image, state["vm"], timeout=7200)
             self.command("set", state["vm"], "--cpu", "4", "--memory", "8192", timeout=30)
             state["status"] = "created"
@@ -208,12 +209,15 @@ class Controller:
                      network="provisioning" if provisioning else "offline")
         self.save(task, state)
 
-    def guest(self, task: str, argv: list[str], timeout: int = 1800, capture: bool = False):
+    def guest(self, task: str, argv: list[str], timeout: int = 1800, capture: bool = False,
+              max_output: int = 8 * 1024 * 1024, binary: bool = False):
         if not 1 <= timeout <= 7200:
             raise SandboxError("Timeout must be between 1 and 7200 seconds")
         state = self.read(task)
         if state["status"] not in {"running", "provisioning"}:
             raise SandboxError("Task must be running")
+        if capture:
+            return self._capture(task, argv, timeout, max_output, binary)
         try:
             return self.command("exec", state["vm"], *argv, timeout=timeout,
                                 capture_output=capture, text=capture)
@@ -221,6 +225,75 @@ class Controller:
             # Killing the client alone can leave guest code running.
             self.stop(task)
             raise SandboxError("Command timed out; VM stopped") from None
+
+    def _capture(self, task: str, argv: list[str], timeout: int, limit: int, binary: bool = False):
+        if not 1 <= limit <= MAX_SOURCE_BYTES * 2:
+            raise SandboxError("Invalid output limit")
+        args = [self.tart, "exec", self.read(task)["vm"], *argv]
+        process = subprocess.Popen(args, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        output = {process.stdout: bytearray(), process.stderr: bytearray()}
+        deadline, size = time.monotonic() + timeout, 0
+        try:
+            with selectors.DefaultSelector() as selector:
+                for stream in output:
+                    selector.register(stream, selectors.EVENT_READ)
+                while selector.get_map():
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise SandboxError("Guest response timed out")
+                    for key, _ in selector.select(remaining):
+                        chunk = os.read(key.fileobj.fileno(), 65536)
+                        if not chunk:
+                            selector.unregister(key.fileobj)
+                            continue
+                        size += len(chunk)
+                        if size > limit:
+                            raise SandboxError("Guest response size limit exceeded")
+                        output[key.fileobj].extend(chunk)
+            status = process.wait(timeout=max(0.01, deadline - time.monotonic()))
+        except (SandboxError, subprocess.TimeoutExpired, OSError):
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+            self.stop(task)
+            raise SandboxError("Guest response exceeded its time or size limit; VM stopped") from None
+        finally:
+            for stream in output:
+                stream.close()
+        if status:
+            raise SandboxError("Guest command failed")
+        if binary:
+            return subprocess.CompletedProcess(args, status, stdout=bytes(output[process.stdout]),
+                                               stderr=bytes(output[process.stderr]))
+        return subprocess.CompletedProcess(args, status,
+            stdout=output[process.stdout].decode("utf-8", errors="replace"),
+            stderr=output[process.stderr].decode("utf-8", errors="replace"))
+
+    def rpc(self, task: str, request: dict) -> bytes:
+        state = self.read(task)
+        if state.get("status") != "running" or state.get("network") != "offline" or not state.get("prepared"):
+            raise SandboxError("File operations require a prepared, offline task")
+        inputs, sources = self._file_service(task)
+        # An explicit upgrade can install the service on older prepared tasks;
+        # ordinary requests must use precisely this host controller's version.
+        for name, data in sources.items():
+            installed = inputs / name
+            if not installed.is_file() or installed.read_bytes() != data:
+                raise SandboxError("Task file service needs a host-controlled upgrade")
+        payload = json.dumps(request, ensure_ascii=True).encode("ascii")
+        if len(payload) > MAX_FILE_BYTES * 2:
+            raise SandboxError("File request size limit exceeded")
+        request_path = inputs / "requests" / (uuid.uuid4().hex + ".json")
+        atomic_bytes(request_path, payload)
+        try:
+            shared = "/Volumes/My Shared Files/input/services/" + inputs.name
+            result = self.guest(task, ["/opt/homebrew/opt/python@3.12/bin/python3.12", "-I",
+                shared + "/rpc.py", shared + "/requests/" + request_path.name],
+                timeout=120, capture=True, binary=True,
+                max_output=MAX_SOURCE_BYTES * 2 if request.get("operation") == "capture" else MAX_FILE_BYTES * 2)
+            return result.stdout
+        finally:
+            request_path.unlink(missing_ok=True)
 
     def prepare(self, task: str):
         if self.read(task)["status"] != "provisioning":

@@ -20,6 +20,7 @@
     "scripts/**"
   ],
   "deny": [
+    "sandbox/**",
     ".github/**",
     "jarvis/selfedit/**",
     "jarvis/admin/**",
