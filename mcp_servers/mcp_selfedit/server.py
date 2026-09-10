@@ -187,14 +187,11 @@ def plan_choose(label: str) -> dict:
 
 @mcp.tool()
 def plan_adopt(path: str = "", confirm: bool = False) -> dict:
-    """Save the finished plan as a draft file in the repo (PATH defaults
-    to a docs/plans/ file named after the goal).
-
-    Two-phase, same as repo_write_file: confirm=false previews;
-    confirm=true creates the draft. Even after confirm=true here, nothing
-    is actually written until the draft is separately committed with
-    repo_commit_write — describe it as a draft awaiting confirmation, not
-    as written or saved."""
+    """Save the finished plan/review in an open self-edit sandbox session.
+    confirm=false previews; confirm=true writes the proposed document in the VM.
+    If a session is needed or warming up, follow the returned retry guidance.
+    selfedit_finish verifies and prepares a draft PR; no legacy commit action
+    is created. PATH defaults to docs/plans/ or docs/reviews/."""
     return logic.plan_adopt(_get_client(), path or None, confirm)
 
 

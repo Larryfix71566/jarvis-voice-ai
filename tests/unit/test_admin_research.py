@@ -185,14 +185,16 @@ def test_second_start_refused_while_running(monkeypatch):
 # ------------------------------------------------------------------- R6
 
 
-def test_save_cannot_bypass_retired_writer_and_keeps_report(monkeypatch):
+def test_save_without_session_keeps_report(monkeypatch):
+    monkeypatch.setattr(srv, "authoring_enabled", lambda: True)
+    monkeypatch.setattr(srv, "_selfedit_service", type("Missing", (), {"branch": None})())
     monkeypatch.setattr(srv.research_crawl, "crawl_site", _fake_crawl())
     c = TestClient(app)
     c.post("/api/research/start", json={"urls": ["https://a.com", "https://b.com"]})
     _wait_for_job(c)
     original = c.get("/api/research/job").json()["job"]["comparison"]
     result = c.post("/api/research/save", json={}).json()
-    assert result["ok"] is False and result["code"] == "sandbox_required"
+    assert result["ok"] is False and result["code"] == "sandbox_session_required"
     assert "action_id" not in result
     assert c.get("/api/research/job").json()["job"]["comparison"] == original
 
@@ -205,7 +207,7 @@ def test_save_goes_through_the_repo_write_gate(monkeypatch):
         calls["content"] = content
         return {"ok": True, "pending": True, "action_id": 42, "path": path}
 
-    monkeypatch.setattr(srv.repo_logic, "repo_write_file", _fake_write)
+    monkeypatch.setattr(srv, "_save_document_to_sandbox", _fake_write)
     c = TestClient(app)
     c.post("/api/research/start", json={"urls": ["https://a.com", "https://b.com"]})
     _wait_for_job(c)

@@ -547,8 +547,8 @@ export default function EditModePanel() {
     const res = await post("/api/plan/adopt", { path: planAdoptPath || undefined });
     if (res.ok) {
       setPlanNote(
-        `drafted at ${res.path ?? "the plan path"} — nothing is written yet; ` +
-          "confirm the write in the Repo tab",
+        `Saved at ${res.path ?? "the plan path"} in the sandbox. ` +
+          "Finish the self-edit session to verify it and prepare a draft PR.",
       );
     } else {
       setPlanNote(res.error ?? "adopt failed");
@@ -854,7 +854,7 @@ export default function EditModePanel() {
                 onChange={(e) => setPlanAdoptPath(e.target.value)}
               />
               <button type="button" className="btn" onClick={onPlanAdopt}>
-                Adopt as draft
+                Save in sandbox
               </button>
             </div>
             {!planJob.review_path && (

@@ -223,7 +223,7 @@ def test_adopt_review_uses_review_footer_and_default_reviews_path(tmp_path, monk
         return {"ok": True, "pending": True, "action_id": 1, "path": path,
                 "action": "create", "bytes": len(content)}
 
-    monkeypatch.setattr(srv.repo_logic, "repo_write_file", _fake_write)
+    monkeypatch.setattr(srv, "_save_document_to_sandbox", _fake_write)
     c = TestClient(app)
     res = c.post("/api/plan/adopt", json={}).json()
     assert res["ok"] is True
@@ -259,7 +259,7 @@ def test_adopt_review_council_mode_appends_selected_by_clause(tmp_path, monkeypa
         )
     captured = {}
     monkeypatch.setattr(
-        srv.repo_logic, "repo_write_file",
+        srv, "_save_document_to_sandbox",
         lambda path, content, rationale="": captured.update(path=path, content=content) or
         {"ok": True, "pending": True, "action_id": 1},
     )
@@ -284,7 +284,7 @@ def test_adopt_plan_mode_unaffected_by_review_changes(tmp_path, monkeypatch):
         srv._plan_job.update(state="done", mode="single", goal="a fresh plan", plan="c", author="p1")
     captured = {}
     monkeypatch.setattr(
-        srv.repo_logic, "repo_write_file",
+        srv, "_save_document_to_sandbox",
         lambda path, content, rationale="": captured.update(path=path, content=content) or
         {"ok": True, "pending": True, "action_id": 1},
     )

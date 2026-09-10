@@ -567,11 +567,7 @@ def research_status(client) -> dict:
 
 
 def research_save(client, path: str | None = None, confirm: bool = False) -> dict:
-    """Save the finished comparison as a draft repo document (PATH
-    defaults to docs/research/<sites>.md). Two-phase, same as
-    repo_write_file/plan_adopt: confirm=false previews; confirm=true
-    creates the DRAFT — nothing is actually written until the draft is
-    separately committed with repo_commit_write."""
+    """Preview, then save the generated comparison in an open VM session."""
     status = _call(lambda: client.get("/api/research/job"))
     if not status.get("ok"):
         return status
@@ -585,21 +581,14 @@ def research_save(client, path: str | None = None, confirm: bool = False) -> dic
             "needs_confirmation": True,
             "summary": (
                 f"Ready to save the comparison as a draft at {target}. Say yes "
-                f"to draft it — nothing is written until you separately "
-                f"confirm the write itself."
+                f"to save it in an open self-edit sandbox session. Verification and draft PR preparation follow with selfedit_finish."
             ),
             "path": path,
         }
     resp = _call(lambda: client.post("/api/research/save", json={"path": path}))
     if not resp.get("ok"):
         return resp
-    return {
-        "ok": True,
-        "pending": resp.get("pending"),
-        "action_id": resp.get("action_id"),
-        "path": resp.get("path"),
-        "summary": (
-            f"Drafted the comparison at {resp.get('path')} — nothing has been "
-            f"written yet. Say the word to commit it."
-        ),
-    }
+    return {**resp, "summary": (
+        f"Saved the comparison at {resp.get('path')} in the sandbox. "
+        "Use selfedit_finish to verify it and prepare a draft PR; it is not published yet."
+    )}

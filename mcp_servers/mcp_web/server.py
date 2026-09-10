@@ -51,7 +51,10 @@ def research_status() -> dict:
 
 @mcp.tool()
 def research_save(path: str = "", confirm: bool = False) -> dict:
-    """Save the finished site comparison as a draft document in the repo (PATH defaults to docs/research/<sites>.md). Two-phase, same as other repo drafts: confirm=false previews; confirm=true creates the draft — nothing is written until it is separately committed."""
+    """Save the comparison in an open self-edit sandbox session, under
+    docs/research/ by default. confirm=false previews; confirm=true writes a VM
+    proposal. Follow session/retry guidance; selfedit_finish verifies and
+    prepares a draft PR. This does not create a legacy commit action."""
     return logic.research_save(_get_admin_client(), path or None, confirm)
 
 
