@@ -100,10 +100,13 @@ class RecordingRegistry(SkillRegistry):
 
 
 def settings_for_timezone(tz: str = "America/New_York") -> Settings:
-    """Create Settings."""
+    """Create offline test settings without reading a developer's .env."""
     return Settings(
+        _env_file=None,
         openai_model=os.environ.get("OPENAI_MODEL", "claude-haiku-4-5"),
         openai_api_key="test",
+        deepgram_api_key="test-placeholder",
+        elevenlabs_api_key="test-placeholder",
         openai_base_url="http://unused",
         jarvis_timezone=tz,
     )
