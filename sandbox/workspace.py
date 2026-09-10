@@ -75,9 +75,10 @@ class SandboxWorkspace:
                 return {'active': False, 'branch': None, 'proposals': [], 'validated_ok': False, 'worktree': None}
             state = session.status()
             active = state['phase'] not in TERMINAL
+            checked = bool(state.get('checks')) and all(check.get('ok') is True for check in state['checks'])
             return {**state, 'active': active, 'branch': state['branch'] if active else None,
                 'session_branch': state['branch'], 'worktree': None, 'rollback_tag': None,
-                'validated_ok': state['phase'] == 'validated'}
+                'validated_ok': checked and state['phase'] in {'validated', 'publishing', 'publication_pending'}}
         except (SandboxError, OSError, ValueError, KeyError) as exc:
             return {'active': False, 'branch': None, 'proposals': [], 'validated_ok': False, 'worktree': None,
                     'error': self._error(exc)['error']}

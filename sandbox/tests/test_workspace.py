@@ -67,6 +67,11 @@ class WorkspaceAdapterTests(unittest.TestCase):
             self.state['phase'] = phase
             self.assertFalse(self.workspace.status()['validated_ok'])
         self.state['phase'] = 'validated'
+        self.state['checks'] = [{'ok': True}]
         self.assertTrue(self.workspace.status()['validated_ok'])
+        self.state['phase'] = 'publication_pending'
+        self.assertTrue(self.workspace.status()['validated_ok'])
+        self.state['checks'] = []
+        self.assertFalse(self.workspace.status()['validated_ok'])
 
 if __name__ == '__main__': unittest.main()
