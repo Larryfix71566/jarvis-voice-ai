@@ -15,3 +15,5 @@
 - After marking an item archived/dismissed/resolved, it disappears without a page reload.
 - Unresolved review items appear above active live facts.
 - Adding new item types preserves the cleanup rule and ordering.
+
+<!-- independent sandbox verification acceptance -->
