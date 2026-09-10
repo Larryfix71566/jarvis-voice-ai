@@ -69,11 +69,23 @@ class TestBridge:
         """E1 — THE test. A registry started with no prior bridge call must
         still give its children a real timezone. This is exactly what
         routing_eval did, and what crashed."""
+        from jarvis import config as cfg
+
+        # Exercise configured settings without depending on a developer's
+        # .env file or API credentials (neither exists in a fresh CI checkout).
+        settings = cfg.Settings(
+            _env_file=None,
+            openai_api_key="test-placeholder",
+            deepgram_api_key="test-placeholder",
+            elevenlabs_api_key="test-placeholder",
+            jarvis_timezone="Pacific/Auckland",
+        )
+        monkeypatch.setattr(cfg, "load_settings", lambda: settings)
         monkeypatch.delenv("JARVIS_TIMEZONE", raising=False)
         registry = SkillRegistry(config_file)
         await registry.start()
-        assert os.environ.get("JARVIS_TIMEZONE")
-        assert "${" not in os.environ["JARVIS_TIMEZONE"]
+        assert os.environ["JARVIS_TIMEZONE"] == "Pacific/Auckland"
+        assert captured[0]["JARVIS_TIMEZONE"] == "Pacific/Auckland"
 
     async def test_an_explicit_env_var_still_wins(
             self, monkeypatch, config_file, captured):
