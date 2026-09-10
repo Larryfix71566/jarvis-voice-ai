@@ -67,6 +67,9 @@ def registry_file(tmp_path, monkeypatch):
 class FakeWorkspace:
     """AppWorkspace stand-in: no git, no network."""
 
+    @classmethod
+    def recover(cls): return None
+
     def __init__(self, app_name):
         self.app_name = app_name
         self.branch = None
@@ -302,3 +305,45 @@ def test_cancel_before_worker_starts_does_not_open_session(registry_file, monkey
     result = c.get("/api/appbuild/job").json()
     assert result["job"]["state"] == "cancelled"
     assert not result["status"]["active"]
+
+
+def test_saved_workspace_is_recovered_after_process_state_is_lost(registry_file, monkeypatch):
+    _install_fake_agent(monkeypatch)
+    saved = FakeWorkspace('saved-app')
+    saved.branch = 'mortimer/app-build/saved'
+    saved.goal = 'Resume the application'
+    original_status = saved.status
+    saved.status = lambda: {**original_status(), 'id':'a'*32}
+    monkeypatch.setattr(FakeWorkspace, 'recover', classmethod(lambda cls: saved))
+    client = TestClient(app)
+    result = client.get('/api/appbuild/job').json()
+    assert result['status']['active']
+    assert result['job']['state'] == 'recovered'
+    assert result['job']['app'] == 'saved-app'
+    assert client.post('/api/appbuild/cancel').json()['ok']
+    assert not saved.branch
+
+
+def test_app_submission_returns_while_vm_and_github_work_are_pending(registry_file, monkeypatch):
+    _install_fake_agent(monkeypatch)
+    saved = FakeWorkspace('saved-app'); saved.branch = 'mortimer/app-build/saved'
+    srv._appbuild_workspace = saved
+    entered, release = threading.Event(), threading.Event()
+    def slow_submit():
+        entered.set()
+        assert release.wait(5)
+        return {'ok':True, 'pr_url':'https://example.invalid/pr/1'}
+    saved.submit = slow_submit
+    client = TestClient(app)
+    started = time.monotonic()
+    response = client.post('/api/appbuild/submit').json()
+    assert time.monotonic()-started < 1
+    assert response['started'] and response['state'] == 'submitting'
+    assert entered.wait(1)
+    try:
+        assert not client.post('/api/appbuild/submit').json()['ok']
+        assert client.get('/api/appbuild/job').json()['job']['state'] == 'submitting'
+    finally:
+        release.set()
+    job = _wait_for_job(client, 'done')
+    assert job['submitted'] and job['pr_url'].endswith('/1')

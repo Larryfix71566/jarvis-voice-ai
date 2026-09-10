@@ -7,6 +7,7 @@ from mcp_servers.mcp_apps.github import GitHubClient, GitHubError
 from mcp_servers.mcp_apps.logic import validate_app_name, validate_repo_path
 from sandbox.artifacts import SandboxError
 from sandbox.workspace import SandboxWorkspace
+from sandbox.runtime import Runtime
 APP_WORKSPACES_DIR = Path(__file__).resolve().parents[2] / 'data/app_workspaces'
 APP_MANIFEST_NAME = 'mortimer.app.yaml'
 APP_DENY_PREFIXES = ('.git/', '.github/workflows/')
@@ -83,6 +84,25 @@ class AppWorkspace(SandboxWorkspace):
         self.base_ref = base_ref
         self.repo_root = Path(workspaces_dir or APP_WORKSPACES_DIR) / self.app_name
         super().__init__(repository=self._repository_name, token=lambda : self._get_client().token, kind='app-build', profile=sandbox_profile, base_branch=lambda : self.base_ref, allowed=self._allowed_path, runtime_factory=runtime_factory)
+
+    @classmethod
+    def recover(cls, runtime_factory=None):
+        runtime = (runtime_factory or Runtime.configured)()
+        record = runtime.selected_application()
+        if record is None:
+            return None
+        # Selection is host-owned metadata. Reading status does not fetch a
+        # repository, boot a VM, or ask GitHub for the account's identity.
+        repository = record['repository']
+        workspace = cls(repository.split('/')[1], runtime_factory=lambda: runtime,
+                        sandbox_profile=record['profile'])
+        workspace._app_repo_name = repository
+        return workspace
+
+    def _session(self):
+        session = super()._session()
+        self._runtime().select_application(self._repository_name())
+        return session
 
     def _get_client(self):
         if self._client is None:

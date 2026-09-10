@@ -45,6 +45,15 @@ class SandboxWorkspace:
                     'session_id': session.id, 'source_commit': state['ref'], 'worktree': None}
         except (SandboxError, OSError, ValueError, KeyError) as exc: return self._error(exc)
 
+    def resume(self, expected_session_id=None) -> dict:
+        try:
+            session = self._session()
+            if expected_session_id is not None and session.id != expected_session_id:
+                raise SandboxError('The workspace session changed; inspect its status before retrying.')
+            return session.resume()
+        except (SandboxError, OSError, ValueError, KeyError) as exc:
+            return self._error(exc)
+
     def read_file(self, path: str) -> dict: return self._invoke('read_file', path)
     def propose_edit(self, path: str, new_content: str, rationale: str, visual_intent: str = '') -> dict:
         return self._invoke('propose_edit', path, new_content, rationale, visual_intent)

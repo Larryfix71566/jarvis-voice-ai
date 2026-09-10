@@ -95,6 +95,7 @@ def snapshot(repo: Path, ref: str, output: Path) -> dict:
 
 class Controller:
     def __init__(self, home: Path, tart: str, softnet: str):
+        self._ready_tasks = set()
         self.home = home.expanduser().resolve()
         self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.tart = str(Path(tart).expanduser().resolve())
@@ -117,7 +118,47 @@ class Controller:
         return json.loads((self.task_dir(task) / "state.json").read_text())
 
     def save(self, task: str, state: dict):
+        if state.get("status") != "running":
+            self._ready_tasks.discard(task)
         atomic_json(self.task_dir(task) / "state.json", state)
+
+    def ready(self, task: str) -> bool:
+        state = self.read(task)
+        return (task in self._ready_tasks and state.get("status") == "running"
+                and state.get("hydrated") is True and state.get("network") == "offline")
+
+    def mark_ready(self, task: str):
+        self._ready_tasks.add(task)
+
+    def reconcile(self, task: str) -> dict:
+        """Refresh stale running records before resuming after a host restart.
+
+        This may contact Tart and belongs in background setup, never the
+        synchronous HTTP status path. Only exact owned VM names are changed.
+        """
+        with (self.home / "start.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            result = self.command("list", "--source", "local", "--format", "json",
+                                  capture_output=True, text=True, timeout=30)
+            observed = {vm.get("Name"): vm.get("State") for vm in json.loads(result.stdout)}
+            for path in (self.home / "tasks").glob("*/state.json"):
+                identifier = path.parent.name
+                if not TASK_ID.fullmatch(identifier):
+                    continue
+                state = self.read(identifier)
+                if state.get("vm") != "mortimer-" + identifier:
+                    continue
+                actual = observed.get(state["vm"])
+                if state.get("status") in {"running", "provisioning"} and actual != "running":
+                    state.update(status="stopped" if actual == "stopped" else "missing",
+                                 last_stop_flushed=False, reconciled_at=int(time.time()))
+                    self.save(identifier, state)
+            state = self.read(task)
+            if state.get("vm") != "mortimer-" + task or observed.get(state["vm"]) not in {"running", "stopped"}:
+                raise SandboxError("The saved workspace VM is missing; cancel it and start a new session.")
+            if observed[state["vm"]] == "running" and state.get("status") != "running":
+                raise SandboxError("Workspace VM state is inconsistent; stop it before resuming.")
+            return state
 
     def install_file_service(self, task: str):
         """Install reviewed host code, never code from the candidate checkout."""

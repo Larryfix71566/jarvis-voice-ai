@@ -45,6 +45,17 @@ class RuntimeTests(unittest.TestCase):
         with self.assertRaises(SandboxError): self.start()
         self.runtime.source.fetch.assert_not_called()
 
+    def test_selected_app_survives_runtime_restart_without_credentials(self):
+        repository = 'owner/saved-app'
+        record = {'repository': repository, 'kind': 'app-build', 'profile': 'web-app', 'session': 'c'*32}
+        atomic_json(self.runtime.workspaces / (self.runtime._key(repository, 'app-build')+'.json'), record)
+        self.runtime.select_application(repository)
+        reopened = Runtime(self.c, self.runtime.configured_images)
+        self.assertEqual(reopened.selected_application(), record)
+        self.runtime.source.fetch.assert_not_called()
+        atomic_json(reopened.workspaces / 'selected-app.json', {'repository':'../escape'})
+        with self.assertRaises(SandboxError): reopened.selected_application()
+
     def test_unconfigured_runtime_fails_without_creating_a_checkout(self):
         with patch.dict('os.environ', {'MORTIMER_SANDBOX_HOME': str(self.home / 'absent')}):
             with self.assertRaises(SandboxError): Runtime.configured()

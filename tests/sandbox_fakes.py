@@ -17,6 +17,7 @@ class FakeRuntime:
         self.pr_url = 'https://github.com/test/repo/pull/42'
         self.events = []
 
+    def select_application(self, repository): self.selected_repository = repository
     def active(self, repository, kind, allowed): return self.current
     def publisher(self, token): return object()
     def start(self, repository, kind, base_branch, token, profile, allowed, goal, run_id=None):
@@ -33,8 +34,13 @@ class FakeSession:
         self.id = uuid.uuid4().hex
         self.files = dict(runtime.baseline)
         self.state = {'id':self.id, 'task':self.id[:12], 'phase':'editing', 'goal':goal, 'run_id':run_id,
-            'ref':'a'*40, 'branch':'mortimer/selfedit/'+self.id, 'proposals':[], 'checks':[]}
+            'ready':True, 'vm_status':'running', 'ref':'a'*40, 'branch':'mortimer/selfedit/'+self.id, 'proposals':[], 'checks':[]}
 
+    def resume(self):
+        if self.state['phase'] in {'published', 'reverted', 'cancelled', 'setup_failed'}:
+            raise SandboxError('This session has ended')
+        self.state.update(ready=True, vm_status='running')
+        return {'ok': True, 'ready': True}
     def status(self): return dict(self.state)
     def _path(self, path):
         if not source_path_allowed(path) or not self.allowed(path): raise SandboxError('Path is outside the workspace policy')

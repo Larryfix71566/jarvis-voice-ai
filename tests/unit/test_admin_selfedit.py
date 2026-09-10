@@ -1119,3 +1119,41 @@ def test_slow_workspace_setup_returns_promptly_and_can_be_cancelled(registry_fil
         assert svc.status()['phase'] == 'cancelled'
     else:
         assert opening['result']['session']['sandbox_task'] == svc.status()['task']
+
+
+@pytest.mark.parametrize('method', ['read', 'write'])
+def test_cold_file_request_only_warms_vm_and_requires_explicit_retry(registry_file, monkeypatch, tmp_path, method):
+    svc = _authoring_service(monkeypatch, tmp_path)
+    svc.start_session('Resume saved edit')
+    session = svc.test_runtime.current
+    session.state.update(ready=False, vm_status='stopped')
+    before = session.files['docs/README.md']
+    entered, release = threading.Event(), threading.Event()
+    resume = svc.resume
+    def slow_resume(expected_session_id=None):
+        entered.set()
+        assert release.wait(5)
+        return resume(expected_session_id)
+    monkeypatch.setattr(svc, 'resume', slow_resume)
+    client = TestClient(app)
+    def request():
+        if method == 'read':
+            return client.get('/api/selfedit/file', params={'path':'docs/README.md'}).json()
+        return client.post('/api/selfedit/write', json={'path':'docs/README.md',
+            'content':'# resumed edit\n', 'rationale':'one explicit edit'}).json()
+    started = time.monotonic()
+    response = request()
+    assert time.monotonic()-started < 1
+    assert not response['ok'] and response['pending'] and response['retryable']
+    assert entered.wait(1)
+    assert session.files['docs/README.md'] == before
+    assert not session.state['proposals']
+    release.set()
+    deadline = time.monotonic()+5
+    while time.monotonic()<deadline:
+        if client.get('/api/selfedit/run').json()['opening']['state'] == 'ready':
+            break
+        time.sleep(.02)
+    assert not session.state['proposals'], 'Warmup must never replay a submitted edit.'
+    assert request()['ok']
+    assert len(session.state['proposals']) == (1 if method == 'write' else 0)

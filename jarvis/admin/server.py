@@ -402,17 +402,31 @@ def _open_authoring(service, goal, run_id, target_paths, job):
         with _opening_lock:
             if job.get("cancel_requested"):
                 return
-        if service.branch and (service.goal or "") != goal:
-            discarded = service.revert()
-            if not discarded.get("ok"):
-                raise RuntimeError("Previous workspace could not be discarded")
-        if not service.branch:
-            opened = service.start_session(goal, run_id=run_id)
+        if job.get("resume_session_id"):
+            opened = service.resume(job["resume_session_id"])
             if not opened.get("ok"):
                 with _opening_lock:
                     job.update(state="error", error=opened.get("error"))
                 return
+        else:
+            if service.branch and (service.goal or "") != goal:
+                discarded = service.revert()
+                if not discarded.get("ok"):
+                    raise RuntimeError("Previous workspace could not be discarded")
+            if not service.branch:
+                opened = service.start_session(goal, run_id=run_id)
+                if not opened.get("ok"):
+                    with _opening_lock:
+                        job.update(state="error", error=opened.get("error"))
+                    return
         state = service.status()
+        if state.get("ready") is False:
+            resumed = service.resume(state.get("id"))
+            if not resumed.get("ok"):
+                with _opening_lock:
+                    job.update(state="error", error=resumed.get("error"))
+                return
+            state = service.status()
         result = {"ok": True, "started": False, "session": {
             "branch": service.branch, "goal": goal, "target_paths": target_paths,
             "run_id": run_id, "worktree": None,
@@ -434,14 +448,15 @@ def _open_authoring(service, goal, run_id, target_paths, job):
             job["finished_at"] = time.time()
 
 
-def _begin_authoring(goal, run_id, target_paths):
+def _begin_authoring(goal, run_id, target_paths, *, resume_session_id=None):
     global _opening_job
     with _run_lock, _finish_lock, _opening_lock:
         if (_run_job["state"] == "running" or _finish_job["state"] in {"validating", "submitting"}
                 or _opening_job["state"] == "starting"):
             return {"ok": False, "error": "an upgrade run is already in progress — ask for status instead"}
         job = dict(state="starting", goal=goal, run_id=run_id,
-            target_paths=target_paths, cancel_requested=False, started_at=time.time())
+            target_paths=target_paths, resume_session_id=resume_session_id,
+            cancel_requested=False, started_at=time.time())
         _opening_job = job
     worker = threading.Thread(target=_open_authoring,
         args=(_selfedit_service, goal, run_id, target_paths, job), daemon=True)
@@ -455,6 +470,27 @@ def _begin_authoring(goal, run_id, target_paths):
         if job["state"] == "error":
             return {"ok": False, "error": job.get("error")}
     return {"ok": True, "started": True, "opening": True, "state": "starting"}
+
+def _prepare_file_access():
+    """Start only VM warmup; the caller must retry its read or edit explicitly."""
+    with _opening_lock:
+        opening = _opening_job["state"] == "starting"
+    state = _selfedit_service.status()
+    if not opening and state.get("active") and state.get("ready") is False:
+        if _busy():
+            return {"ok": False, "error": "Sandbox work is in progress; wait before reading or editing files."}
+        result = _begin_authoring(state.get("goal", ""), state.get("run_id"), [],
+                                  resume_session_id=state["id"])
+        if not result.get("ok"):
+            return result
+        # Return a pending response even if this warmup finished immediately:
+        # no file operation was executed by the background worker.
+        opening = True
+    if opening:
+        return {"ok": False, "pending": True, "retryable": True, "opening": True,
+                "error": "The sandbox workspace is reopening. Retry this file request once self-edit status reports it ready; no edit was queued."}
+    return None
+
 
 # MORTIMER_LLM_COUNCIL_V2_PLAN.md V5 — the council's own async-job slot,
 # same shape/pattern as _run_job/_run_lock above (one council round at a
@@ -804,7 +840,7 @@ def _make_appbuild_agent(workspace: AppWorkspace, profile: str | None) -> AppBui
 
 def _appbuild_busy() -> bool:
     with _appbuild_lock:
-        return _appbuild_job["state"] == "running"
+        return _appbuild_job["state"] in {"running", "submitting"}
 
 
 def _run_appbuild_agent(
@@ -1292,6 +1328,9 @@ def selfedit_file(path: str) -> dict:
     Thin wrapper over the read_file the planner has always used."""
     if not authoring_enabled():
         return dict(_AUTHORING_OFF)
+    pending = _prepare_file_access()
+    if pending is not None:
+        return pending
     return _selfedit_service.read_file(path)
 
 
@@ -1314,6 +1353,9 @@ def selfedit_write(body: SelfEditWriteIn) -> dict:
         return dict(_AUTHORING_OFF)
     if not _selfedit_service.branch:
         return {"ok": False, "error": "no open self-edit session — start one first"}
+    pending = _prepare_file_access()
+    if pending is not None:
+        return pending
     if _busy():
         return {"ok": False, "error": "validation is running — wait for it to finish, then edit"}
     return _selfedit_service.propose_edit(
@@ -1511,7 +1553,7 @@ def appbuild_start(body: AppBuildGoalIn) -> dict:
                 + "\n\n… (plan truncated at injection)"
             )
     with _appbuild_lock:
-        if _appbuild_job["state"] == "running":
+        if _appbuild_job["state"] in {"running", "submitting"}:
             return {
                 "ok": False,
                 "error": "an app build is already in progress — ask for status instead",
@@ -1543,33 +1585,78 @@ def appbuild_start(body: AppBuildGoalIn) -> dict:
     return {"ok": True, "started": True, "profile": agent.model_label()}
 
 
+def _recover_appbuild_workspace():
+    global _appbuild_workspace
+    with _appbuild_lock:
+        if _appbuild_workspace is not None or _appbuild_job["state"] in {"running", "submitting"}:
+            return _appbuild_workspace
+    try:
+        recovered = AppWorkspace.recover()
+    except Exception:
+        # No configured runtime is normal on a host that has never developed
+        # an app. Start still reports its actionable setup/configuration error.
+        return None
+    with _appbuild_lock:
+        if _appbuild_workspace is None and _appbuild_job["state"] not in {"running", "submitting"}:
+            _appbuild_workspace = recovered
+        return _appbuild_workspace
+
+
 @app.get("/api/appbuild/job")
 def appbuild_job_status() -> dict:
+    _recover_appbuild_workspace()
     with _appbuild_lock:
         job = dict(_appbuild_job)
         workspace = _appbuild_workspace
     status = workspace.status() if workspace is not None else {"active": False}
+    if job["state"] == "idle" and status.get("id"):
+        job.update(state="recovered", app=status.get("app"), goal=status.get("goal"),
+                   summary="Reopened the saved workspace. The earlier planner is not running.")
     return {"ok": True, "job": job, "status": status}
+
+
+def _submit_appbuild(workspace, operation_id, output):
+    try:
+        result = workspace.submit()
+    except Exception:
+        logger.exception("app workspace submission failed")
+        result = {"ok": False, "error": "App submission failed; inspect the saved workspace before retrying."}
+    output["result"] = result
+    with _appbuild_lock:
+        if _appbuild_job.get("operation_id") == operation_id:
+            _appbuild_job.update(state="done" if result.get("ok") else
+                ("cancelled" if _appbuild_job.get("cancel_requested") else "error"),
+                submitted=bool(result.get("ok")), pr_url=result.get("pr_url"),
+                summary=result.get("notice") or result.get("error") or "Draft pull request opened.",
+                finished_at=time.time())
 
 
 @app.post("/api/appbuild/submit")
 def appbuild_submit() -> dict:
-    if _appbuild_busy():
-        return {"ok": False, "error": "an app build is in progress — ask for status instead"}
+    workspace = _recover_appbuild_workspace()
     with _appbuild_lock:
-        workspace = _appbuild_workspace
-    if workspace is None or not workspace.branch:
-        return {"ok": False, "error": "no active app-build session to submit"}
-    result = workspace.submit()
-    logger.info("appbuild_state_transition state=submitted ok=%s", result.get("ok"))
-    return result
+        if _appbuild_job["state"] in {"running", "submitting"}:
+            return {"ok": False, "error": "an app build is in progress — ask for status instead"}
+        if workspace is None or not workspace.branch:
+            return {"ok": False, "error": "no active app-build session to submit"}
+        operation_id = uuid.uuid4().hex
+        _appbuild_job.update(state="submitting", operation_id=operation_id, cancel_requested=False,
+                            submitted=False, pr_url=None, finished_at=None)
+    output = {}
+    worker = threading.Thread(target=_submit_appbuild, args=(workspace, operation_id, output), daemon=True)
+    worker.start()
+    worker.join(timeout=0.05)
+    if not worker.is_alive():
+        return output["result"]
+    return {"ok": True, "started": True, "state": "submitting"}
 
 
 @app.post("/api/appbuild/cancel")
 def appbuild_cancel() -> dict:
     """Stop a running build, including VM work, or discard an idle session."""
+    _recover_appbuild_workspace()
     with _appbuild_lock:
-        running = _appbuild_job["state"] == "running"
+        running = _appbuild_job["state"] in {"running", "submitting"}
         workspace = _appbuild_workspace
         agent = _appbuild_agent_instance
         if running:
@@ -1579,6 +1666,8 @@ def appbuild_cancel() -> dict:
         # thread constructs its agent. Never hold the job lock during VM I/O.
         if agent is not None:
             agent.request_cancel()
+        elif workspace is not None:
+            workspace.cancel()
         return {"ok": True, "cancel_requested": True,
                 "note": "Sandbox cancellation requested; the planner stops at its next step."}
     if workspace is None or not workspace.branch:

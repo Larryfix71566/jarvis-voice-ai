@@ -67,3 +67,14 @@ def test_app_policy_cancel_and_reopen(workspace):
     assert not workspace.status()['active']
     assert workspace.start_session('Next goal')['ok']
     assert workspace.revert()['ok']
+
+
+def test_recovered_application_uses_saved_identity_without_github_lookup(workspace):
+    workspace.start_session('Keep working')
+    runtime = workspace.test_runtime
+    runtime.selected_application = lambda: {'repository':'test/example-app','profile':'web-app','session':runtime.current.id}
+    with patch('jarvis.agents.workspace.GitHubClient', side_effect=AssertionError('Unexpected GitHub lookup')):
+        recovered = AppWorkspace.recover(runtime_factory=lambda: runtime)
+        assert recovered.status()['id'] == workspace.status()['id']
+        assert recovered.status()['app'] == 'example-app'
+        assert recovered.read_file('src/app.js')['content'] == 'original\n'

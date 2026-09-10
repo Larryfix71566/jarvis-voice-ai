@@ -40,6 +40,13 @@ class WorkspaceAdapterTests(unittest.TestCase):
         reopened.revert(); self.session.revert.assert_called_once()
         self.assertEqual(reopened.branch, self.state['branch'])
 
+    def test_resume_is_bound_to_the_selected_session(self):
+        result = self.workspace.resume('different-session')
+        self.assertFalse(result['ok'])
+        self.session.resume.assert_not_called()
+        self.session.resume.return_value = {'ok':True, 'ready':True}
+        self.assertTrue(self.workspace.resume(self.session.id)['ready'])
+
     def test_missing_sandbox_returns_actionable_error_without_fallback(self):
         factory = Mock(side_effect=SandboxError('Sandbox is not configured'))
         self.workspace._runtime_factory = factory
