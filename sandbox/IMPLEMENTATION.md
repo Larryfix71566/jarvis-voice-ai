@@ -22,38 +22,40 @@ still use their previous workspaces until the integration below is complete.
 - Durable host records, bounded captured output, and immutable service versions
   to avoid stale file handles when upgrading a running VM's read-only share.
 
+- Reusable prepared templates, immutable dependency compatibility checks,
+  fresh candidate hydration and independent verification VMs. Host-selected
+  checks include protected baseline tests and separate native compiler output.
+- Unprivileged guest workers, protected dependency code, synthetic native test
+  Keychains, disabled shell startup files, and bounded flush-before-stop.
+- Persistent shared sessions and host-only source caches. A setup interruption
+  remains attached to its session, and cancellation covers verification children.
+- Candidate-bound publication receipts and resumable GitHub object/branch/draft
+  PR creation. Actual lost-response recovery and cleanup passed; CI recognizes
+  the new sandbox self-edit branch prefix.
+
 ## Still required for the complete feature
 
 1. **Agent integration:** shared persistent sessions for `SelfEditService` and
    `AppWorkspace`; all candidate reads/edits/commands inside VMs, no host
    execution fallback, restart/reconnect and cancellation through the same
    task identity. Protect the installed sandbox controller from self-edit.
-2. **Independent verification:** reusable prepared images, dependency/profile
-   compatibility checks, fresh candidate hydration, and verification in a
-   separate disposable VM. Host-selected required checks and receipts must
-   bind the frozen candidate, image, profile and runner version. Later changes
-   must invalidate publication eligibility.
-3. **Publication and recovery:** host-only GitHub credentials, strict candidate
-   acceptance, resumable commit/branch/PR creation, duplicate avoidance and
-   recovery after lost responses. No guest-provided commands or Git hooks on
-   the host. Deployment remains a separately approved operation.
-4. **Development profiles:** complete Mortimer and new-web-app profiles with
+2. **Development profiles:** complete Mortimer and new-web-app profiles with
    runtimes, dependencies, startup/health checks, migrations, synthetic seeds,
    required checks, previews and starter templates. Unsupported platforms must
    identify the additional worker they require.
-5. **Full-stack simulation:** deterministic AI, STT, TTS, search and external
+3. **Full-stack simulation:** deterministic AI, STT, TTS, search and external
    tool fakes; recorded audio; voice connection/interruption/reconnection,
    provider errors, duplicate/cancelled tools, memory extraction, costs,
    optional wake-word and backup/restore flows.
-6. **Controlled live integrations:** host vault access through a scoped broker,
+4. **Controlled live integrations:** host vault access through a scoped broker,
    explicit operation/domain policies, request/runtime/API-spend limits, and
    no provider credentials in the guest. Provisioning egress must narrow from
    public-internet access to the approved dependency/documentation policy.
-7. **Preview and native acceptance:** authenticated task previews, guest desktop,
+5. **Preview and native acceptance:** authenticated task previews, guest desktop,
    logs/screenshots and a clear development indicator. Exercise native GUI
    journeys and representative self-edit/new-app workflows. Physical audio and
    device permissions need their own evidence where a change requires them.
-8. **Lifecycle and release:** idle cleanup, retention/storage quotas, checkpoints,
+6. **Lifecycle and release:** idle cleanup, retention/storage quotas, checkpoints,
    task crash recovery, archived evidence, approved deployment and rollback,
    including database backup/migration/restore. Exercise adversarial package
    and test code, resource exhaustion, and recovery rather than relying only
@@ -77,3 +79,19 @@ An intentional one-second timeout of a 30-second guest sleep also exercised
 the bounded-response path. The VM stopped, and its saved state matched Tart's
 independently queried state. Forty sandbox regression tests and eight existing
 allowlist/CI policy tests pass locally.
+
+## Shared-session acceptance
+
+The complete shared-session flow passed with source revision
+`beeeaeec34f121801a59016aeaa28f755c81df06`: host-only bare source fetch,
+fresh development VM, edit, fresh independent verification, saved-session
+reopening, draft publication, simulated lost-response recovery, and cleanup.
+All 12 required checks passed. Both backend runs passed 2,396 tests; both
+candidate and baseline native runs passed 96 library and 39 app tests.
+
+The temporary draft [PR 57](https://github.com/Larryfix71566/jarvis-voice-ai/pull/57)
+was closed without merging. Its branch and disposable VMs were deleted, with
+receipts and logs retained. No live checkout or deployment was changed.
+The [acceptance record](acceptance/2026-09-10-session.json) records exact
+candidate, source, image, runner and log identifiers. This completes the shared
+session building block; it does not complete the remaining scope above.

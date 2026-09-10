@@ -1,0 +1,210 @@
+{
+  "date": "2026-09-10",
+  "receipt": {
+    "version": 1,
+    "attempt": "714e3a87095c487bba93b7678a972e3b",
+    "candidate": "3773ade5047b7bc2afbca2496904a1dcf469f3d49c7c9ba89574967cac0016f7",
+    "baseline": "c3a408ae3c80374eb1c8ed6d612a5296f47fb8f935c5a864bb3a3a17c0a54c4c",
+    "source_commit": "beeeaeec34f121801a59016aeaa28f755c81df06",
+    "image": "32a82fdd1de4ebdd002bd720f671fe08af485a1631b21364442a7600d4abd49f",
+    "profile": "dfbb48c515887091eca52a1a60f516ac6a1f51f7acc21ae562a7cc312b9ad29f",
+    "runner": "c8164f6aad639ae9df10a48da757288d091f476be2a76a08586f976f94d75512",
+    "development_task": "a272ce19a427",
+    "checks": [
+      {
+        "name": "backend-imports",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-c",
+          "import jarvis, jarvis.config, jarvis.cli, jarvis.runlog"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 1.824,
+        "log_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+      },
+      {
+        "name": "baseline-backend",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/tests/unit",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 341.645,
+        "log_sha256": "30b76a804f50b46bfc482fb22fbf8c8707b925fb5eafb01a9ca5356cc3e6826e"
+      },
+      {
+        "name": "backend",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "tests/unit",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 339.466,
+        "log_sha256": "2dbd19be45bfbf39e78413ed756c93b33ad1f596e3ae63031b999223b75ef4c2"
+      },
+      {
+        "name": "scripted-evals",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/tests/evals/sub_agent_evals.py",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 1.753,
+        "log_sha256": "240da0e827c0ef8908b48bb7ccd27eb0f0197ee00a8bcb3b0d4639c1e438d5ef"
+      },
+      {
+        "name": "latency",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "scripts/latency_probe.py",
+          "--budget",
+          "tests/fixtures/latency_sample.log"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 0.972,
+        "log_sha256": "c192bbb7b228dedbda047e7571ca16605031294ad5dea939ebe8696c07781b2a"
+      },
+      {
+        "name": "knowledge-base",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+          "-m",
+          "pytest",
+          "services/mortimer-vault/tests",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 3.644,
+        "log_sha256": "984932369fa1dfa5edf65bdd9223e2f47cdb85c22ca4832bc06abed0f963cd76"
+      },
+      {
+        "name": "baseline-knowledge-base",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/services/mortimer-vault/tests",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 4.648,
+        "log_sha256": "c460d96adb3c1437592783d4af8a947b5463b4671347afa9f3477fde5f8a2e44"
+      },
+      {
+        "name": "web",
+        "argv": [
+          "npm",
+          "--prefix",
+          "web",
+          "run",
+          "build"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 30.885,
+        "log_sha256": "7f52eeec99a526a4b388d8067960410cbd9511ff93ac49c796040002cb7d94be"
+      },
+      {
+        "name": "native-library",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "macos/JarvisKit"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 78.383,
+        "log_sha256": "75d3a5c7ec8862dac7aca7e7979ea12165ccfe1338f57f810317360cd9492287"
+      },
+      {
+        "name": "native-app",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "macos/MortimerHost"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 13.244,
+        "log_sha256": "274db978e663748bdd0f9bff9c3c520d6de5475b1256bda69a23d05535ba07ef"
+      },
+      {
+        "name": "baseline-native-library",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "/Users/admin/mortimer/verification/macos/JarvisKit"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 10.532,
+        "log_sha256": "e44a4af773658e8eef120b9d4e51ec46a49889c5016fc6bf90a314532a831aa6"
+      },
+      {
+        "name": "baseline-native-app",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "/Users/admin/mortimer/verification/macos/MortimerHost"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 13.438,
+        "log_sha256": "bec12c9430e2671eaa022414708be4a05c5aed4c743ac333e0df3ca6a8202b8a"
+      }
+    ],
+    "passed": true,
+    "status": "passed",
+    "verification_task": "41ef481f6514",
+    "source_unchanged": true
+  },
+  "publication": {
+    "ok": true,
+    "number": 57,
+    "url": "https://github.com/Larryfix71566/jarvis-voice-ai/pull/57",
+    "commit": "3a3317b19f5adcaad8e6a40b2192d0bb5310e822",
+    "candidate": "3773ade5047b7bc2afbca2496904a1dcf469f3d49c7c9ba89574967cac0016f7",
+    "session": "a08b6b7678ad48f0b7968d50ab2a584f",
+    "lost_response_recovered": true,
+    "draft_closed_without_merge": true,
+    "temporary_branch_deleted": true,
+    "development_vm_deleted": true,
+    "verification_vm_deleted": true,
+    "state_at_submission": "open",
+    "final_state": "closed"
+  },
+  "local_regressions": {
+    "sandbox": 89,
+    "ci_policy": 9
+  },
+  "suite_counts": {
+    "baseline_backend": 2396,
+    "candidate_backend": 2396,
+    "baseline_native_library": 96,
+    "candidate_native_library": 96,
+    "baseline_native_app": 39,
+    "candidate_native_app": 39
+  },
+  "production_changed": false,
+  "scope": "Shared session, fresh independent verification, publication retry and disposable cleanup. Production agent routing and the remaining environment scope are tracked separately."
+}

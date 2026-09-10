@@ -75,11 +75,47 @@ files and the toolchain report did not survive that restart. The controller
 now runs guest `sync` before marking preparation complete and stopping.
 The fresh-task restart and browser checks verified persistence afterward.
 
+## Independent session acceptance (2026-09-10)
+
+A shared session fetched committed source into a host-only bare cache, created
+an offline development VM, edited one documentation canary, froze its complete
+candidate, and verified it in a separate fresh VM. All 12 checks passed:
+backend imports; baseline and candidate backend suites (2,396 each); scripted
+evaluations; latency fixture; baseline and candidate knowledge-base tests; web
+build; and baseline/candidate native library (96 each) and app (39 each) tests.
+The final guest capture matched the candidate exactly.
+
+The host reopened the saved session and published the verified files through
+GitHub's object API. An intentionally lost draft-create response was recovered
+by retrying the same operation; only one PR existed. The temporary
+[PR 57](https://github.com/Larryfix71566/jarvis-voice-ai/pull/57) was closed
+without merging, and its branch and disposable VMs were deleted. Evidence was
+retained in the host task records. See the committed
+[receipt and publication record](acceptance/2026-09-10-session.json).
+
+Additional actual-VM checks established that the worker cannot use sudo or
+write protected tools, baseline tests or the read-only input share. A worker
+login startup file that tried to bypass a check was not loaded. Native checks
+passed across a restart. The final session's development and verification
+stops both recorded successful filesystem flushes.
+
+Setup testing found three issues: secure-token administrator password changes
+needed the public image's factory credential; the automatic-login credential
+also needed updating for Tart's agent to survive restarts; and native tests
+needed a disposable Keychain plus a preferences directory and explicit default
+selection before each native run. Sharing Swift compiler products across two
+source roots caused duplicate-module failures; the baseline now gets resolved
+dependency inputs and its own clean compiler output. Python and Node package
+code stays protected while required build caches remain writable.
+
+The installed host implementation passed 89 sandbox regressions and nine CI
+policy tests. Candidate application checks ran inside VMs. This is evidence
+for the listed checks, not a blanket claim about arbitrary candidate behavior.
+
 ## Remaining scope
 
-The existing SelfEditService and application-build agent still need the
-verified guest runner integrated; their existing host execution paths are
-unchanged. Scoped provider access, speech mocks, complete voice journeys,
-application templates, independent publication checks, reusable prepared
-images, and physical audio/permission tests remain separate work. Guest
-reports never authorize applying, pushing, merging or deploying a change.
+Production agent routing, complete application profiles, scoped provider/vault
+access, speech simulations, full voice and native preview journeys, lifecycle
+quotas/checkpoints, and release/database rollback workflows remain. The full
+scope is tracked in [IMPLEMENTATION.md](IMPLEMENTATION.md). Physical audio and
+device permission tests require separate evidence.
