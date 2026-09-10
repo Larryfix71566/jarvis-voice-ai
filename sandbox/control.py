@@ -216,14 +216,14 @@ class Controller:
         self.save(task, state)
 
     def guest(self, task: str, argv: list[str], timeout: int = 1800, capture: bool = False,
-              max_output: int = 8 * 1024 * 1024, binary: bool = False, check: bool = True):
+              max_output: int = 8 * 1024 * 1024, binary: bool = False, check: bool = True, on_output=None):
         if not 1 <= timeout <= 7200:
             raise SandboxError("Timeout must be between 1 and 7200 seconds")
         state = self.read(task)
         if state["status"] not in {"running", "provisioning"}:
             raise SandboxError("Task must be running")
         if capture:
-            return self._capture(task, argv, timeout, max_output, binary, check)
+            return self._capture(task, argv, timeout, max_output, binary, check, on_output)
         try:
             return self.command("exec", state["vm"], *argv, timeout=timeout,
                                 capture_output=capture, text=capture)
@@ -232,13 +232,14 @@ class Controller:
             self.stop(task)
             raise SandboxError("Command timed out; VM stopped") from None
 
-    def _capture(self, task: str, argv: list[str], timeout: int, limit: int, binary: bool = False, check: bool = True):
+    def _capture(self, task: str, argv: list[str], timeout: int, limit: int, binary: bool = False, check: bool = True, on_output=None):
         if not 1 <= limit <= MAX_SOURCE_BYTES * 2:
             raise SandboxError("Invalid output limit")
         args = [self.tart, "exec", self.read(task)["vm"], *argv]
         process = subprocess.Popen(args, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         output = {process.stdout: bytearray(), process.stderr: bytearray()}
         deadline, size = time.monotonic() + timeout, 0
+        reported_at = float("-inf")
         try:
             with selectors.DefaultSelector() as selector:
                 for stream in output:
@@ -256,6 +257,11 @@ class Controller:
                         if size > limit:
                             raise SandboxError("Guest response size limit exceeded")
                         output[key.fileobj].extend(chunk)
+                        if on_output is not None and time.monotonic() - reported_at >= 1:
+                            on_output(bytes(output[process.stdout]), bytes(output[process.stderr]))
+                            reported_at = time.monotonic()
+            if on_output is not None:
+                on_output(bytes(output[process.stdout]), bytes(output[process.stderr]))
             status = process.wait(timeout=max(0.01, deadline - time.monotonic()))
         except (SandboxError, subprocess.TimeoutExpired, OSError):
             if process.poll() is None:

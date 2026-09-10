@@ -221,6 +221,21 @@ class ControllerTests(unittest.TestCase):
                 self.c.guest(self.task, ["ignored"], timeout=5, capture=True, max_output=100)
             stop.assert_called_once_with(self.task)
 
+    def test_capture_reports_progress_before_command_exit(self):
+        self.export_writer("")
+        release = self.c.home / "release-test-process"
+        Path(self.c.tart).write_text("#!" + sys.executable + "\nimport time, pathlib\nprint('ready', flush=True)\np=pathlib.Path(" + repr(str(release)) + ")\nwhile not p.exists(): time.sleep(.01)\nprint('done', flush=True)\n")
+        updates = []
+        def progress(stdout, stderr):
+            updates.append(stdout)
+            if b'ready' in stdout:
+                release.touch()
+        with patch.object(self.c, "stop"):
+            result = self.c.guest(self.task, ["ignored"], timeout=5, capture=True, on_output=progress)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(updates[0], b'ready\n')
+        self.assertIn(b'done', updates[-1])
+
     def test_capture_timeout_stops_guest_even_when_it_produces_no_output(self):
         self.export_writer("")
         Path(self.c.tart).write_text("#!" + sys.executable + "\nimport time\ntime.sleep(30)\n")

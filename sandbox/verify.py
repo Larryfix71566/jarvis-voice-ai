@@ -63,8 +63,15 @@ class Verifier:
                               ("unlock-keychain", "-p", "sandbox-test-only", keychain)]:
                 self.controller.guest(task, [*self.controller.worker_prefix(state), "/usr/bin/security", *arguments],
                                       timeout=min(remaining(), 15), capture=True)
+        def progress(stdout, stderr):
+            # Only complete lines are exposed while a process is running, so
+            # a credential split across chunks is redacted as one value.
+            complete = lambda data: data[:data.rfind(b"\n") + 1]
+            data = SECRET.sub(b"[redacted credential-shaped value]", complete(stdout) + b"\n" + complete(stderr))
+            atomic_bytes(directory / (name + ".log"), data)
         result = self.controller.guest(task, [*self.controller.worker_prefix(state), "/bin/bash", "--noprofile", "--norc", "-c", script],
-            timeout=remaining(), capture=True, check=False, binary=True, max_output=2 * 1024 * 1024)
+            timeout=remaining(), capture=True, check=False, binary=True, max_output=2 * 1024 * 1024,
+            on_output=progress)
         data = SECRET.sub(b"[redacted credential-shaped value]", result.stdout + b"\n" + result.stderr)
         atomic_bytes(directory / (name + ".log"), data)
         return {"name": name, "argv": list(argv), "returncode": result.returncode,
