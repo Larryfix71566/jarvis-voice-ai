@@ -545,13 +545,13 @@ export default function EditModePanel() {
   const onPlanAdopt = async () => {
     setPlanNote(null);
     const res = await post("/api/plan/adopt", { path: planAdoptPath || undefined });
-    if (res.ok) {
+    if (res.ok && res.saved_to_sandbox === true) {
       setPlanNote(
         `Saved at ${res.path ?? "the plan path"} in the sandbox. ` +
           "Finish the self-edit session to verify it and prepare a draft PR.",
       );
     } else {
-      setPlanNote(res.error ?? "adopt failed");
+      setPlanNote(res.error ?? "The server did not confirm a sandbox save. Check self-edit status before retrying.");
     }
   };
 

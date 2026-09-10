@@ -81,3 +81,24 @@ def test_disabled_authoring_never_saves(workspace, monkeypatch):
     monkeypatch.setattr(srv, 'authoring_enabled', lambda: False)
     assert not srv._save_document_to_sandbox('docs/plans/x.md', 'x')['ok']
     assert not service.proposals
+
+
+@pytest.mark.parametrize('kind', ['plan','research'])
+@pytest.mark.parametrize('response', [
+    {'ok':False, 'pending':True, 'retryable':True, 'error':'Workspace reopening'},
+    {'ok':True, 'pending':True, 'action_id':42},
+    {'ok':True, 'saved_to_sandbox':True, 'published':False, 'path':'docs/plans/x.md'},
+])
+def test_voice_save_preserves_retry_and_never_invents_saved_state(kind, response):
+    from mcp_servers.mcp_selfedit.logic import plan_adopt
+    from mcp_servers.mcp_web.logic import research_save
+    class Client:
+        def get(self, path): return {'ok':True, 'job':{'state':'done'}}
+        def post(self, path, json): return dict(response)
+    result = (plan_adopt if kind == 'plan' else research_save)(Client(), confirm=True)
+    assert result['ok'] is bool(response.get('saved_to_sandbox'))
+    if response.get('retryable'):
+        assert result['retryable'] and result['error'] == response['error']
+    if result['ok']:
+        assert 'not published yet' in result['summary']
+        assert 'action_id' not in result

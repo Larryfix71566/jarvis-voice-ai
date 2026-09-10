@@ -588,6 +588,8 @@ def research_save(client, path: str | None = None, confirm: bool = False) -> dic
     resp = _call(lambda: client.post("/api/research/save", json={"path": path}))
     if not resp.get("ok"):
         return resp
+    if resp.get("saved_to_sandbox") is not True:
+        return {"ok": False, "error": "The server did not confirm a sandbox save. Inspect self-edit status before retrying; no saved document is being reported."}
     return {**resp, "summary": (
         f"Saved the comparison at {resp.get('path')} in the sandbox. "
         "Use selfedit_finish to verify it and prepare a draft PR; it is not published yet."
