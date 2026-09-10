@@ -1,8 +1,8 @@
 # Sandbox implementation ledger
 
 This ledger tracks the complete development sandbox. A working VM alone does
-not complete the feature. The production self-edit and app-building services
-still use their previous workspaces until the integration below is complete.
+not complete the feature. The self-edit and app-building adapters now use VM sessions. The remaining
+workflow, preview, provider and lifecycle requirements below still apply.
 
 ## Implemented and exercised
 
@@ -35,10 +35,17 @@ still use their previous workspaces until the integration below is complete.
 
 ## Still required for the complete feature
 
-1. **Agent integration:** shared persistent sessions for `SelfEditService` and
-   `AppWorkspace`; all candidate reads/edits/commands inside VMs, no host
-   execution fallback, restart/reconnect and cancellation through the same
-   task identity. Protect the installed sandbox controller from self-edit.
+1. **Agent integration:** complete asynchronous cold-resume/file-operation
+   responses and restart/reconnect in the API and app selector. Initial
+   authoring setup now returns promptly with an opening job and supports
+   cancellation; a stopped VM can still outlive a file caller’s HTTP deadline.
+   Close alternative direct-write paths as well. `SelfEditService` and `AppWorkspace`
+   now route through persistent VM sessions; their cancellation endpoints stop
+   running VM work, including finish-job verification. The controller is denied
+   by the installed self-edit policy. `mcp_repo.repo_commit_write`,
+   `mcp_apps.app_write_file`, initial app scaffolding and direct Git publication
+   still need integration or an explicit, enforced non-development boundary.
+   Those paths mean the complete application is not yet sandbox-only.
 2. **Development profiles:** complete Mortimer and new-web-app profiles with
    runtimes, dependencies, startup/health checks, migrations, synthetic seeds,
    required checks, previews and starter templates. Unsupported platforms must

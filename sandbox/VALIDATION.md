@@ -119,3 +119,29 @@ access, speech simulations, full voice and native preview journeys, lifecycle
 quotas/checkpoints, and release/database rollback workflows remain. The full
 scope is tracked in [IMPLEMENTATION.md](IMPLEMENTATION.md). Physical audio and
 device permission tests require separate evidence.
+
+
+## Application routing and web starter checkpoint
+
+The adapters now use VM sessions. The complete unit suite plus the updated
+self-edit API integration passed 2,340 tests inside development VM
+`e1b7f62568f4`. After asynchronous authoring setup was added, the affected API
+and voice-tool selection passed all 164 tests. The trusted host controller
+suite passes 93 tests, including live log delivery and split-credential
+redaction. These are separate runs, not additive test totals.
+
+A broader `pytest tests` run was interrupted after 1,060 seconds while real
+tool-server startup remained slow. Its failed-test cache identified the weather
+integration test, which calls a real external API and now carries the suite’s
+`live` marker. The whole integration suite has not passed; startup performance
+and remaining integration failures require follow-up.
+
+A disposable copy of the repository’s plain web starter was edited in VM
+`a22b4261e933` and independently verified in VM `e3bd8c798ea7`. Both required
+checks passed: JavaScript syntax and offline browser startup/initial render.
+The complete candidate stayed unchanged. No repository or pull request was
+created for this web fixture. This does not cover arbitrary application
+interactions, backend dependencies, or native GUI behavior.
+
+Exact revisions, fingerprints and log hashes are in
+[the routing acceptance record](acceptance/2026-09-10-routing.json).

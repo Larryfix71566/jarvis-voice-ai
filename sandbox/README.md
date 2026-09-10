@@ -141,8 +141,10 @@ python3 -m sandbox.setup --home /absolute/sandbox/home \
 
 This saves paths and image identifiers in the host's `settings.json`; it does
 not store credentials. `MORTIMER_SANDBOX_HOME` selects that runtime for the
-application adapter. The initial installed profile is `mortimer`; an unknown
-profile or dependency change fails before development starts.
+application adapter. The installed profiles are `mortimer` and `web-app`. The latter supports
+the repository’s dependency-free HTML/CSS/JavaScript starter. Unknown runtimes
+or dependency changes require a matching prepared profile before development
+starts. Register each profile with `sandbox.setup --profile PROFILE`.
 
 The host keeps GitHub authentication in memory and fetches a size-checked,
 immutable revision into a private bare object store. No candidate checkout,
@@ -150,8 +152,19 @@ Git hooks, dependency installation or application test executes on the host.
 `Session` owns the development task, goal, proposed edits and progress records.
 `Runtime` persists the repository-to-session mapping before VM setup so a
 restart can find an interrupted session. `SandboxWorkspace` exposes that
-session through the application's workspace interface. The existing production
-self-edit and app-build classes are not routed through it yet.
+session through the application’s workspace interface. `SelfEditService` and
+`AppWorkspace` now use that interface for reads, edits, validation, publication
+and cancellation; they do not create host candidate worktrees. App builds use
+the installed `web-app` profile, and candidate manifest commands cannot choose
+the verification commands. API responses include the sandbox task and session
+identity. Initial authoring setup returns promptly with an `opening` job that
+voice status can poll; it does not wait for VM preparation inside the HTTP
+request. Cancelling a running planner or a self-edit finish job stops VM work
+and prevents a late successful validation from triggering submission.
+
+Native appearance verification is unavailable until the guest preview is
+integrated. It refuses with a clear error and never captures the host desktop.
+This routing change is not deployment of a complete development environment.
 
 Each fresh guest creates an unprivileged worker, replaces the image's known
 administrator credential, and provides an empty synthetic Keychain for native
@@ -163,7 +176,9 @@ for candidate and baseline Swift tests.
 Validation freezes a candidate, stops its development VM, and clones a separate
 verification VM. The installed host profile selects the checks and synthetic
 state seeds. The receipt binds the candidate, baseline commit, image, profile,
-runner and saved log hashes. Failed checks, edits, interruption or a changed
+runner and saved log hashes. Check logs update while commands run; incomplete
+lines are withheld until recognizable credentials can be redacted. Failed
+checks, edits, interruption or a changed
 runner invalidate publication eligibility. A fresh source capture must still
 match before submission. Verification is evidence for these checks, not a
 claim that arbitrary application behavior is safe.
@@ -179,7 +194,8 @@ for recovery. Deleting a disposable task retains its review evidence.
 ## Work still required for the complete development environment
 
 The complete scope is tracked in [IMPLEMENTATION.md](IMPLEMENTATION.md). It
-includes production agent routing, complete application profiles and templates,
+includes closing remaining direct-write tool paths, restart-aware app selection,
+complete application profiles and templates,
 voice/provider simulations, a scoped host-vault broker, authenticated previews
 and native journeys, runtime/storage/idle limits, checkpoints, and deployment
 and database rollback workflows. Real microphone, speaker, Bluetooth and device
