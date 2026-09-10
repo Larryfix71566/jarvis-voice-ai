@@ -1,5 +1,9 @@
 # App-build engine — acceptance checklist
 
+Historical engine checklist: VM behavior and remaining gaps are now tracked in
+`sandbox/IMPLEMENTATION.md` and `sandbox/VALIDATION.md`. The old host checkout,
+candidate-defined commands and concurrent-VM expectations below are superseded.
+
 MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md Part D. Manual, run
 against a live stack (`./scripts/mortimer.sh`) with `GITHUB_TOKEN` set
 and a real pre-existing test app repo. Not run by pytest. **The bot must
@@ -32,8 +36,8 @@ tools are read at boot.
       slots). A second `app_build_start` while one is already running
       IS refused ("already in progress").
 - [ ] D6: "build a login page for `<test-app>`" — Mortimer calls
-      `app_build_start` (not `app_write_file`) for anything beyond a
-      single dictated file; two-phase confirmation is honored (preview,
+      `app_build_start` for every change, including a single dictated file;
+      the retired `app_write_file` returns `sandbox_required`; two-phase confirmation is honored (preview,
       then explicit yes).
 - [ ] D7: set `JARVIS_APPBUILD_PROFILE=kimi-k2` and unset
       `JARVIS_UPGRADE_PROFILE` — an app build picks `kimi-k2` while a

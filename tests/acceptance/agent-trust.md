@@ -43,14 +43,11 @@ unless otherwise noted.
 - [ ] Ask it to read `.env` or `.git/config`. Confirm the tool call is
   refused with a "not readable through this tool" error, and the refusal
   is spoken/shown, not silently swallowed.
-- [ ] Ask it to write a new file. Confirm it calls `repo_write_file`
-  first (nothing written yet), reads back a summary, and only calls
-  `repo_commit_write` after explicit confirmation — same two-phase pattern
-  as `mcp-git`'s commit flow.
-- [ ] Ask it to overwrite `config/agents.yaml` or `CLAUDE.md`. Confirm the
-  write is refused with "not writable through this tool (protected
-  configuration)" at the `repo_write_file` preview step, before any
-  confirmation is even asked for.
+- [ ] Ask it to write a new file. Confirm it uses `selfedit_start`, then
+  `selfedit_read`, `selfedit_write` and `selfedit_finish` in the VM session.
+- [ ] Call legacy `repo_write_file` and `repo_commit_write`, including an old
+  pending action ID. Both must return `sandbox_required` without changing the
+  installed repository. Protected paths remain refused by self-edit policy.
 - [ ] Confirm a request to "create a new GitHub repo for this app" still
   routes to `mcp-apps`/`app_create`, not `mcp-repo` — the local/GitHub
   distinction in tool descriptions (D14) must not cause the reverse
@@ -58,10 +55,8 @@ unless otherwise noted.
 
 ## Part C — operational hygiene
 
-- [ ] Manually create a stale lock: `touch .git/index.lock`, then ask the
-  Developer sub-agent to commit. Confirm the error names the lock path,
-  its age, and the exact `rm` command — and that the file is NOT deleted
-  automatically. Remove it manually afterward (`rm .git/index.lock`).
+- [ ] Call the legacy Git staging, commit and push tools with old action IDs.
+  Confirm `sandbox_required`, with the host index, commits and remote unchanged.
 - [ ] Kill the bot process mid-delegation (e.g. `kill -9` while a sub-agent
   run is `status='running'`), then restart via `./scripts/mortimer.sh`.
   Confirm `sqlite3 data/jarvis.db "select run_id, status from agent_runs

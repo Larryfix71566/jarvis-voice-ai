@@ -184,6 +184,18 @@ def test_second_start_refused_while_running(monkeypatch):
 
 # ------------------------------------------------------------------- R6
 
+
+def test_save_cannot_bypass_retired_writer_and_keeps_report(monkeypatch):
+    monkeypatch.setattr(srv.research_crawl, "crawl_site", _fake_crawl())
+    c = TestClient(app)
+    c.post("/api/research/start", json={"urls": ["https://a.com", "https://b.com"]})
+    _wait_for_job(c)
+    original = c.get("/api/research/job").json()["job"]["comparison"]
+    result = c.post("/api/research/save", json={}).json()
+    assert result["ok"] is False and result["code"] == "sandbox_required"
+    assert "action_id" not in result
+    assert c.get("/api/research/job").json()["job"]["comparison"] == original
+
 def test_save_goes_through_the_repo_write_gate(monkeypatch):
     monkeypatch.setattr(srv.research_crawl, "crawl_site", _fake_crawl())
     calls = {}

@@ -47,3 +47,10 @@ async def test_mcp_apps_tool_set_and_degraded_mode():
             payload = json.loads(result.content[0].text)
             assert payload["ok"] is False
             assert "GITHUB_TOKEN" in payload["error"]
+            result = await session.call_tool("app_write_file", {
+                "app": "test-app", "path": "src/app.js", "content": "unverified",
+            })
+            payload = json.loads(result.content[0].text)
+            assert payload["ok"] is False
+            assert payload["code"] == "sandbox_required"
+            assert "app_build_start" in payload["replacement_tools"]

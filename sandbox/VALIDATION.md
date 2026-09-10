@@ -164,3 +164,24 @@ independent verification or publication of that candidate.
 Both test VMs were deleted and the session reverted, retaining host evidence.
 Exact identifiers and check log hashes are in
 [the resume acceptance record](acceptance/2026-09-10-resume.json).
+
+
+## Legacy writer retirement checkpoint
+
+The complete unit suite passed 2,321 tests inside disposable VM `88a7ba0a49ab`.
+A later API/MCP selection passed 118 tests, including actual stdio calls to the
+retired repository and app writers. Its one failure was the app-builder prompt
+length limit; the instructions were shortened and all 65 prompt tests passed
+on the final version. These runs overlap and are not additive coverage totals.
+
+Regression checks use temporary Git repositories inside the VM to confirm
+legacy drafts cannot change the index, commit, or remote. Old file-write action
+IDs cannot change repository files. The direct app writer refuses without
+accessing its GitHub client, including through MCP without a token. Plan and
+research save calls return the refusal and retain their generated job results.
+
+The VM was deleted, retaining host logs. Exact source, overlay and log hashes
+are in [the writer-boundary record](acceptance/2026-09-10-writer-boundary.json).
+Initial app scaffolding, registry writes and replacement plan/research saving
+remain unfinished. This check did not run the whole integration suite or create
+an independent publication receipt.

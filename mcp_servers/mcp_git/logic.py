@@ -1,32 +1,20 @@
-"""mcp-git: repo operations as pure logic (upgrade plan §10 U1.5).
+"""Read-only Git inspection and historical action audit.
 
-Transport-free (invariant 9): no MCP imports here; server.py is the thin
-wrapper. Git is invoked via subprocess with an argument list (never shell),
-a fixed timeout, and cwd pinned to the repo root.
-
-Draft → confirm → commit (plan §5.2): writes are two-phase. prepare_*
-stages/validates and records a pending row in the `actions` table;
-the matching execute function requires the action_id and refuses anything
-not pending. Drafts expire after DRAFT_TTL_SECONDS.
-
-Allowlist only (plan §9.3): there is no force-push, no branch deletion,
-and no way to commit anything but the files a draft named (SE1, 2026-09-07:
-prepare_commit stages ONLY its `paths`; commit refuses an index that drifted). Push is plain `git push`
-of the current branch to its configured upstream.
+The legacy staging, commit and push entry points return an unconditional
+sandbox-required response. Publication is owned by the verified VM session.
 """
 
 from __future__ import annotations
 
-import json
+from mcp_servers.development_boundary import sandbox_required
+
 import os
 import sqlite3
 import subprocess
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
-from jarvis.db import get_conn, now_iso, run_migrations
-
-DRAFT_TTL_SECONDS = 900  # 15 minutes
+from jarvis.db import get_conn, run_migrations
 
 # ⚙ TUNING KNOB — age past which a held index.lock is called out as
 # unusually old in the D15 message below (MORTIMER_AGENT_TRUST_PLAN.md
@@ -108,6 +96,7 @@ def _git_raw(*args: str) -> tuple[int, str, str]:
     proc = subprocess.run(
         ["git", *args],
         cwd=_repo_root(),
+        env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
         capture_output=True,
         text=True,
         timeout=30,
@@ -223,194 +212,24 @@ def git_diff_summary() -> dict:
 # ------------------------------------------------------- drafts (writes)
 
 
-def _insert_action(tool: str, payload: dict, summary: str) -> int:
-    conn = _db()
-    with conn:
-        cur = conn.execute(
-            "INSERT INTO actions (tool, action_class, draft_payload, summary, status, created_at)"
-            " VALUES (?, 'privileged', ?, ?, 'pending', ?)",
-            (tool, json.dumps(payload), summary, now_iso()),
-        )
-    return int(cur.lastrowid)
-
-
-def _load_pending(action_id: int, tool: str) -> dict | None:
-    conn = _db()
-    row = conn.execute(
-        "SELECT * FROM actions WHERE id = ? AND tool = ?", (action_id, tool)
-    ).fetchone()
-    if row is None or row["status"] != "pending":
-        return None
-    created = datetime.fromisoformat(row["created_at"])
-    if _now_utc() - created > timedelta(seconds=DRAFT_TTL_SECONDS):
-        with conn:
-            conn.execute(
-                "UPDATE actions SET status = 'expired', resolved_at = ? WHERE id = ?",
-                (now_iso(), action_id),
-            )
-        return None
-    return dict(row)
-
-
-def _resolve(action_id: int, status: str, result: str) -> None:
-    conn = _db()
-    with conn:
-        conn.execute(
-            "UPDATE actions SET status = ?, resolved_at = ?, result = ? WHERE id = ?",
-            (status, now_iso(), result, action_id),
-        )
-
-
-def _clean_paths(paths: list[str] | None) -> list[str]:
-    out: list[str] = []
-    for p in paths or []:
-        if not isinstance(p, str):
-            continue
-        p = p.strip()
-        # git_status()'s porcelain-v1 list quotes a path with a space; an
-        # agent that reads a name there and passes it straight back must
-        # not be refused for the quotes git itself added.
-        if len(p) >= 2 and p[0] == '"' and p[-1] == '"':
-            p = p[1:-1].replace('\\"', '"').replace("\\\\", "\\")
-        if p.startswith("./"):
-            p = p[2:]
-        if p and p not in out:
-            out.append(p)
-    return out
-
-
 def prepare_commit(message: str, paths: list[str]) -> dict:
-    """Stage ONLY `paths` and draft a commit. Does not commit.
-
-    2026-09-07 (MORTIMER_SELFEDIT_AUTHORING_PLAN.md SE1): this used to run
-    `git add -A` and drafted whatever was dirty — actions #22 and #26
-    committed 61 and 62 files to main by voice under one-line messages
-    (#3: 69 files, #11: 27 files, same way). A commit tool that stages the
-    whole tree is a defect; the developer names what it wrote. Every named
-    path must be exactly one changed FILE as `git status` reports it — a
-    directory (or ".") is refused, because staging a directory is `git add
-    -A` by another name — and nothing else may already be in the index,
-    because `git commit` commits the whole index, not the named files."""
-    if not message or not message.strip():
-        return {"ok": False, "error": "commit message is empty"}
-    wanted = _clean_paths(paths)
-    if not wanted:
-        return {
-            "ok": False,
-            "error": "prepare_commit needs the list of files to commit — "
-                     "name the files you changed",
-        }
-    st = git_status()
-    if st["clean"]:
-        return {"ok": False, "error": "working tree is clean — nothing to commit"}
-    code, changed, err = _changed_files(wanted)
-    if code != 0:
-        return {"ok": False, "error": f"git status failed: {err}"}
-    missing = [p for p in wanted if p not in changed]
-    if missing:
-        under = [p for p in changed if p not in wanted]
-        hint = (f" — under those paths git reports: {', '.join(under)}"
-                if under else "")
-        return {
-            "ok": False,
-            "error": "not changed in the working tree (name each changed "
-                     f"file, not a directory): {', '.join(missing)}{hint}",
-        }
-    code, out = _git("add", "--", *wanted)
-    if code != 0:
-        return {"ok": False, "error": f"git add failed: {out}"}
-    code, staged, err = _staged_files()
-    if code != 0:
-        return {"ok": False, "error": f"git diff --cached failed: {err}"}
-    unnamed = [p for p in staged if p not in wanted]
-    if unnamed:
-        return {
-            "ok": False,
-            "error": "the index already holds files you did not name: "
-                     f"{', '.join(unnamed)} — unstage them "
-                     f"(git restore --staged {' '.join(unnamed)}) or name them",
-        }
-    summary = (
-        f"Commit {len(wanted)} file(s) on branch '{st['branch']}' "
-        f"with message: \"{message}\". Files: {', '.join(wanted)}"
-    )
-    action_id = _insert_action(
-        "git_commit", {"message": message, "files": wanted, "branch": st["branch"]}, summary
-    )
-    return {"ok": True, "action_id": action_id, "summary": summary}
+    """Retired: do not stage host files or create a legacy commit draft."""
+    return sandbox_required()
 
 
 def commit(action_id: int) -> dict:
-    """Execute a previously prepared commit draft."""
-    row = _load_pending(action_id, "git_commit")
-    if row is None:
-        return {"ok": False, "error": "no pending commit with that id (missing, used, or expired)"}
-    payload = json.loads(row["draft_payload"])
-    # SE1: the index must still be exactly the drafted set — `git commit`
-    # commits the index, so anything staged since the draft would ride
-    # along under this message without the user having heard it.
-    drafted = list(payload.get("files") or [])
-    code, staged, err = _staged_files()
-    if code != 0:
-        _resolve(action_id, "failed", err)
-        return {"ok": False, "error": f"git diff --cached failed: {err}"}
-    extra = [p for p in staged if p not in drafted]
-    gone = [p for p in drafted if p not in staged]
-    if extra or gone:
-        parts = []
-        if extra:
-            parts.append(f"staged but not drafted: {', '.join(extra)}")
-        if gone:
-            parts.append(f"drafted but no longer staged: {', '.join(gone)}")
-        msg = ("staged set drifted since the draft: " + "; ".join(parts)
-               + " — prepare the commit again")
-        _resolve(action_id, "failed", msg)
-        return {"ok": False, "error": msg}
-    code, out = _git("commit", "-m", payload["message"])
-    if code != 0:
-        _resolve(action_id, "failed", out)
-        return {"ok": False, "error": out}
-    _resolve(action_id, "committed", out)
-    return {"ok": True, "result": out}
+    """Retired: old action IDs cannot bypass sandbox verification."""
+    return sandbox_required()
 
 
 def prepare_push() -> dict:
-    """Draft a push of the current branch to its upstream. Does not push."""
-    st = git_status()
-    if st["ahead"] == 0:
-        return {"ok": False, "error": f"branch '{st['branch']}' has no unpushed commits"}
-    summary = f"Push {st['ahead']} commit(s) on branch '{st['branch']}' to origin."
-    action_id = _insert_action("git_push", {"branch": st["branch"], "ahead": st["ahead"]}, summary)
-    return {"ok": True, "action_id": action_id, "summary": summary}
+    """Retired: publication belongs to the verified sandbox session."""
+    return sandbox_required()
 
 
 def push(action_id: int) -> dict:
-    """Execute a previously prepared push draft."""
-    row = _load_pending(action_id, "git_push")
-    if row is None:
-        return {"ok": False, "error": "no pending push with that id (missing, used, or expired)"}
-    # Push the branch the draft was prepared for, by explicit refspec, and
-    # set its upstream. A bare `git push` depends on push.default and on
-    # the branch's configured upstream — a branch cut from main inherits
-    # `origin/main` as upstream, so pushing it bare fails with "the upstream
-    # branch of your current branch does not match the name of your
-    # current branch" (2026-08-23 and 2026-08-30, both live). The draft
-    # recorded which branch it meant; refuse if HEAD has moved since, so a
-    # confirm never pushes a branch the user did not preview.
-    branch = (json.loads(row["draft_payload"]) or {}).get("branch") or ""
-    current = git_status()["branch"]
-    if branch and current != branch:
-        msg = (f"HEAD moved since the draft: it was prepared for branch "
-               f"'{branch}' but '{current}' is checked out now — prepare the push again")
-        _resolve(action_id, "failed", msg)
-        return {"ok": False, "error": msg}
-    target = branch or current
-    code, out = _git("push", "-u", "origin", f"{target}:refs/heads/{target}")
-    if code != 0:
-        _resolve(action_id, "failed", out)
-        return {"ok": False, "error": out}
-    _resolve(action_id, "committed", out)
-    return {"ok": True, "result": out}
+    """Retired: never push a host checkout, including a confirmed old draft."""
+    return sandbox_required()
 
 
 def list_actions(status: str = "all", limit: int = 10) -> dict:

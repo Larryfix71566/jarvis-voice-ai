@@ -277,6 +277,16 @@ def test_adopt_requires_done_state():
     assert "no finished plan" in res["error"]
 
 
+def test_adopt_cannot_bypass_retired_writer_and_keeps_plan():
+    with srv._plan_lock:
+        srv._plan_job.update(state="done", mode="single", goal="saved plan",
+                             plan="# Keep this plan", author="unknown-profile")
+    result = TestClient(app).post("/api/plan/adopt", json={}).json()
+    assert result["ok"] is False and result["code"] == "sandbox_required"
+    assert "action_id" not in result
+    assert srv._plan_job["plan"] == "# Keep this plan"
+
+
 def test_adopt_single_mode_appends_attribution_footer(tmp_path, monkeypatch):
     registry_path = tmp_path / "upgrade_models.yaml"
     registry_path.write_text(

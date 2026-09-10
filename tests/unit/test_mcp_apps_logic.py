@@ -151,18 +151,15 @@ def test_app_create_rejects_bad_name(client):
 # ---------------------------------------------------------- app_write_file
 
 
-def test_app_write_file_add_then_update(client):
-    client.repos["app1"] = {}
-    add = logic.app_write_file(client, "app1", "src/new.js", "// new", "add file")
-    assert add["ok"] and add["action"] == "add"
-    upd = logic.app_write_file(client, "app1", "src/new.js", "// v2")
-    assert upd["ok"] and upd["action"] == "update"
-    assert client.repos["app1"]["src/new.js"] == "// v2"
-
-
-def test_app_write_file_path_guard(client):
-    result = logic.app_write_file(client, "app1", "../evil", "x")
-    assert not result["ok"]
+@pytest.mark.parametrize("path", ["src/new.js", "README.md", "../evil"])
+def test_app_write_file_never_contacts_github(path):
+    class ForbiddenClient:
+        def __getattr__(self, name):
+            raise AssertionError("Retired writer accessed GitHub: " + name)
+    result = logic.app_write_file(ForbiddenClient(), "app1", path, "replacement")
+    assert result["ok"] is False and result["code"] == "sandbox_required"
+    assert result["replacement_tools"][0] == "app_build_start"
+    assert "commit" not in result
 
 
 # ------------------------------------------------------------- app_register

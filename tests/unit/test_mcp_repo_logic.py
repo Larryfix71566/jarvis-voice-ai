@@ -290,124 +290,28 @@ class TestRepoSearch:
 # --------------------------------------------------------- writes (D12)
 
 
-class TestRepoWriteFile:
-    def test_preview_writes_nothing(self, repo):
-        target = repo / "new.txt"
-        res = logic.repo_write_file("new.txt", "content\n")
-        assert res["ok"] is True
-        assert res["pending"] is True
-        assert not target.exists()
-
-    def test_preview_reports_create_vs_overwrite(self, repo):
-        res_create = logic.repo_write_file("new.txt", "x")
-        assert res_create["action"] == "create"
-        res_overwrite = logic.repo_write_file("README.md", "x")
-        assert res_overwrite["action"] == "overwrite"
-
-    def test_denied_read_path_rejected_at_preview(self, repo):
-        res = logic.repo_write_file(".env", "x")
-        assert res["ok"] is False
-
-    def test_denied_write_only_path_rejected(self, repo):
-        res = logic.repo_write_file("config/agents.yaml", "x")
-        assert res["ok"] is False
-        assert "not writable" in res["error"]
-
-    def test_denied_write_only_path_case_insensitive(self, repo):
-        res = logic.repo_write_file("CLAUDE.md", "x")
-        assert res["ok"] is False
-
-    def test_denied_write_segment_github(self, repo):
-        res = logic.repo_write_file(".github/workflows/ci.yml", "x")
-        assert res["ok"] is False
-
-    def test_denied_write_segment_scripts(self, repo):
-        res = logic.repo_write_file("scripts/new.sh", "x")
-        assert res["ok"] is False
-
-    def test_denied_write_glob_requirements(self, repo):
-        res = logic.repo_write_file("requirements.txt", "x")
-        assert res["ok"] is False
-
-    def test_denied_write_glob_lockfile(self, repo):
-        res = logic.repo_write_file("package-lock.json", "x")
-        assert res["ok"] is False
-
-    def test_readable_but_not_writable_path_still_readable(self, repo):
-        # config/agents.yaml is readable (not in the READ deny list) but
-        # not writable — the two deny lists are independent.
-        read_res = logic.repo_read_file("config/agents.yaml")
-        assert read_res["ok"] is True
-        write_res = logic.repo_write_file("config/agents.yaml", "x")
-        assert write_res["ok"] is False
+@pytest.mark.parametrize("path", ["README.md", "new/nested/file.py", "docs/plans/plan.md", ".env", "../escape"])
+def test_legacy_preview_never_writes_or_creates_an_action(repo, path):
+    from unittest.mock import patch
+    before = (repo / "README.md").read_bytes()
+    with patch.object(logic, "_repo_root", side_effect=AssertionError("must not inspect host files")):
+        result = logic.repo_write_file(path, "replacement\n")
+    assert result["ok"] is False and result["code"] == "sandbox_required"
+    assert "action_id" not in result and not result.get("pending")
+    assert (repo / "README.md").read_bytes() == before
+    assert not (repo / "new").exists()
 
 
-class TestRepoCommitWrite:
-    def test_full_create_flow(self, repo):
-        preview = logic.repo_write_file("new.txt", "hello world\n")
-        assert preview["ok"] is True
-        res = logic.repo_commit_write(preview["action_id"])
-        assert res["ok"] is True
-        assert (repo / "new.txt").read_text() == "hello world\n"
-
-    def test_full_overwrite_flow(self, repo):
-        preview = logic.repo_write_file("README.md", "changed\n")
-        res = logic.repo_commit_write(preview["action_id"])
-        assert res["ok"] is True
-        assert (repo / "README.md").read_text() == "changed\n"
-
-    def test_creates_parent_dirs_inside_repo(self, repo):
-        preview = logic.repo_write_file("new/nested/dir/file.txt", "x\n")
-        res = logic.repo_commit_write(preview["action_id"])
-        assert res["ok"] is True
-        assert (repo / "new" / "nested" / "dir" / "file.txt").read_text() == "x\n"
-
-    def test_unknown_action_id_rejected(self, repo):
-        res = logic.repo_commit_write(999999)
-        assert res["ok"] is False
-        assert "unknown" in res["error"] or "already used" in res["error"]
-
-    def test_action_id_single_use(self, repo):
-        preview = logic.repo_write_file("new.txt", "x\n")
-        first = logic.repo_commit_write(preview["action_id"])
-        assert first["ok"] is True
-        second = logic.repo_commit_write(preview["action_id"])
-        assert second["ok"] is False
-        assert "already used" in second["error"]
-
-    def test_expired_action_rejected(self, repo, monkeypatch):
-        preview = logic.repo_write_file("new.txt", "x\n")
-        monkeypatch.setattr(logic, "REPO_WRITE_ACTION_TTL_S", -1)
-        res = logic.repo_commit_write(preview["action_id"])
-        assert res["ok"] is False
-        assert "expired" in res["error"]
-
-    def test_revalidated_at_commit_time_not_trusted_from_preview(self, repo):
-        # Simulates the between-calls symlink-swap window: the path was
-        # valid at preview time, but by commit time it resolves outside
-        # the repo. Call 2 must re-run resolve_repo_path, not trust the
-        # stored resolved path from call 1.
-        preview = logic.repo_write_file("swap.txt", "x\n")
-        target = repo / "swap.txt"
-        outside = repo.parent / "outside.txt"
-        outside.write_text("nope\n")
-        try:
-            target.symlink_to(outside)
-        except OSError:
-            pytest.skip("symlinks not supported in this environment")
-        res = logic.repo_commit_write(preview["action_id"])
-        assert res["ok"] is False
-
-    def test_write_is_atomic_no_partial_file_on_failure(self, repo, monkeypatch):
-        preview = logic.repo_write_file("atomic.txt", "content\n")
-
-        def boom(*a, **k):
-            raise OSError("disk full")
-
-        monkeypatch.setattr(os, "replace", boom)
-        res = logic.repo_commit_write(preview["action_id"])
-        assert res["ok"] is False
-        assert not (repo / "atomic.txt").exists()
-        # temp file must not be left behind either
-        leftovers = [p for p in repo.iterdir() if p.name.startswith(".atomic.txt.tmp")]
-        assert leftovers == []
+def test_old_pending_write_cannot_execute(repo):
+    import json
+    from jarvis.db import get_conn, now_iso, run_migrations
+    conn = get_conn()
+    run_migrations(conn)
+    with conn:
+        action = conn.execute(
+            "INSERT INTO actions (tool, action_class, draft_payload, summary, status, created_at) "
+            "VALUES ('repo_write', 'privileged', ?, 'old write', 'pending', ?)",
+            (json.dumps({"path":"README.md", "content":"escaped", "action":"overwrite"}), now_iso()))
+    result = logic.repo_commit_write(action.lastrowid)
+    assert result["ok"] is False and result["code"] == "sandbox_required"
+    assert (repo / "README.md").read_text() == "hello\n"

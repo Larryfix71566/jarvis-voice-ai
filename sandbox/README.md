@@ -169,6 +169,13 @@ with Tart before resuming. Interrupted verification cancels its child VM and
 clears its approval. App selection and saved draft-PR links survive a process
 restart, and app submission runs in the background with status polling.
 
+Legacy local file writes, Git staging/commit/push, and direct single-file app
+writes return `sandbox_required`, including previously confirmed action IDs.
+Every existing-repository change goes through self-edit or app-build sessions.
+The old plan/research repository-save actions also return this refusal; their
+generated results remain in their jobs. Initial app scaffolding and registry
+updates still require migration, so the application is not yet sandbox-only.
+
 Native appearance verification is unavailable until the guest preview is
 integrated. It refuses with a clear error and never captures the host desktop.
 This routing change is not deployment of a complete development environment.
