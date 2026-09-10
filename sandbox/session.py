@@ -82,16 +82,51 @@ class Session:
         if not task or state.get("phase") in {"reverted", "setup_failed"} or (self.directory / "cancelled.json").exists():
             raise SandboxError("Development session is not available")
         vm = self.controller.read(task)
+        if not self.controller.ready(task):
+            vm = self.controller.reconcile(task)
         if vm.get("status") in {"created", "stopped"}:
             self.controller.start(task, provisioning=False, headless=True)
             self.verifier.wait_ready(task)
         elif vm.get("status") != "running":
             raise SandboxError("Development task cannot be resumed")
+        elif not self.controller.ready(task):
+            self.verifier.wait_ready(task)
         if not self.controller.read(task).get("hydrated"):
             self.images.hydrate(task)
         if (self.directory / "cancelled.json").exists():
             self.controller.cancel(task)
             raise SandboxError("Development session has been cancelled")
+        self.controller.mark_ready(task)
+
+    def resume(self) -> dict:
+        with self._locked():
+            state = self._read()
+            if state.get("phase") in {"published", "reverted", "cancelled", "setup_failed"}:
+                raise SandboxError("This development session has ended.")
+            # An active verifier owns the session lock. Reaching this phase
+            # with the lock free means that its host process was interrupted.
+            if state.get("phase") == "validating":
+                for path in (self.controller.home / "tasks").glob("*/state.json"):
+                    child = json.loads(path.read_bytes())
+                    if child.get("parent_task") == state["task"] and child.get("purpose") == "verification":
+                        if child.get("status") not in {"deleted", "deleting"}:
+                            self.controller.cancel(path.parent.name)
+                files = self._files(state)
+                with files._locked():
+                    journal = files._journal()
+                    journal["verification"] = None
+                    files._save(journal)
+                state.update(phase="validation_failed", checks=[],
+                    recovery_notice="Verification was interrupted; run validation again before publication.")
+                self._save(state)
+            self._ensure_running(state)
+            if state.get("phase") in {"creating", "starting"}:
+                state["phase"] = "editing"
+                self._save(state)
+            elif state.get("phase") == "publishing":
+                state["phase"] = "publication_pending"
+                self._save(state)
+            return {"ok": True, "session_id": self.id, "sandbox_task": state["task"], "ready": True}
 
     def _files(self, state):
         return WorkspaceFiles(self.controller, state["task"], self.allowed)
@@ -208,4 +243,5 @@ class Session:
             state["phase"] = "cancelled"
         vm = self.controller.read(state["task"]) if self._has_task(state) else {}
         return {**state, "sandbox_task": state.get("task"), "vm_status": vm.get("status"),
+                "ready": self.controller.ready(state["task"]) if self._has_task(state) else False,
                 "boundary": "Candidate files and commands run inside a disposable offline VM."}

@@ -95,6 +95,7 @@ def snapshot(repo: Path, ref: str, output: Path) -> dict:
 
 class Controller:
     def __init__(self, home: Path, tart: str, softnet: str):
+        self._ready_tasks = set()
         self.home = home.expanduser().resolve()
         self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.tart = str(Path(tart).expanduser().resolve())
@@ -117,7 +118,47 @@ class Controller:
         return json.loads((self.task_dir(task) / "state.json").read_text())
 
     def save(self, task: str, state: dict):
+        if state.get("status") != "running":
+            self._ready_tasks.discard(task)
         atomic_json(self.task_dir(task) / "state.json", state)
+
+    def ready(self, task: str) -> bool:
+        state = self.read(task)
+        return (task in self._ready_tasks and state.get("status") == "running"
+                and state.get("hydrated") is True and state.get("network") == "offline")
+
+    def mark_ready(self, task: str):
+        self._ready_tasks.add(task)
+
+    def reconcile(self, task: str) -> dict:
+        """Refresh stale running records before resuming after a host restart.
+
+        This may contact Tart and belongs in background setup, never the
+        synchronous HTTP status path. Only exact owned VM names are changed.
+        """
+        with (self.home / "start.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            result = self.command("list", "--source", "local", "--format", "json",
+                                  capture_output=True, text=True, timeout=30)
+            observed = {vm.get("Name"): vm.get("State") for vm in json.loads(result.stdout)}
+            for path in (self.home / "tasks").glob("*/state.json"):
+                identifier = path.parent.name
+                if not TASK_ID.fullmatch(identifier):
+                    continue
+                state = self.read(identifier)
+                if state.get("vm") != "mortimer-" + identifier:
+                    continue
+                actual = observed.get(state["vm"])
+                if state.get("status") in {"running", "provisioning"} and actual != "running":
+                    state.update(status="stopped" if actual == "stopped" else "missing",
+                                 last_stop_flushed=False, reconciled_at=int(time.time()))
+                    self.save(identifier, state)
+            state = self.read(task)
+            if state.get("vm") != "mortimer-" + task or observed.get(state["vm"]) not in {"running", "stopped"}:
+                raise SandboxError("The saved workspace VM is missing; cancel it and start a new session.")
+            if observed[state["vm"]] == "running" and state.get("status") != "running":
+                raise SandboxError("Workspace VM state is inconsistent; stop it before resuming.")
+            return state
 
     def install_file_service(self, task: str):
         """Install reviewed host code, never code from the candidate checkout."""
@@ -216,14 +257,14 @@ class Controller:
         self.save(task, state)
 
     def guest(self, task: str, argv: list[str], timeout: int = 1800, capture: bool = False,
-              max_output: int = 8 * 1024 * 1024, binary: bool = False, check: bool = True):
+              max_output: int = 8 * 1024 * 1024, binary: bool = False, check: bool = True, on_output=None):
         if not 1 <= timeout <= 7200:
             raise SandboxError("Timeout must be between 1 and 7200 seconds")
         state = self.read(task)
         if state["status"] not in {"running", "provisioning"}:
             raise SandboxError("Task must be running")
         if capture:
-            return self._capture(task, argv, timeout, max_output, binary, check)
+            return self._capture(task, argv, timeout, max_output, binary, check, on_output)
         try:
             return self.command("exec", state["vm"], *argv, timeout=timeout,
                                 capture_output=capture, text=capture)
@@ -232,13 +273,14 @@ class Controller:
             self.stop(task)
             raise SandboxError("Command timed out; VM stopped") from None
 
-    def _capture(self, task: str, argv: list[str], timeout: int, limit: int, binary: bool = False, check: bool = True):
+    def _capture(self, task: str, argv: list[str], timeout: int, limit: int, binary: bool = False, check: bool = True, on_output=None):
         if not 1 <= limit <= MAX_SOURCE_BYTES * 2:
             raise SandboxError("Invalid output limit")
         args = [self.tart, "exec", self.read(task)["vm"], *argv]
         process = subprocess.Popen(args, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         output = {process.stdout: bytearray(), process.stderr: bytearray()}
         deadline, size = time.monotonic() + timeout, 0
+        reported_at = float("-inf")
         try:
             with selectors.DefaultSelector() as selector:
                 for stream in output:
@@ -256,6 +298,11 @@ class Controller:
                         if size > limit:
                             raise SandboxError("Guest response size limit exceeded")
                         output[key.fileobj].extend(chunk)
+                        if on_output is not None and time.monotonic() - reported_at >= 1:
+                            on_output(bytes(output[process.stdout]), bytes(output[process.stderr]))
+                            reported_at = time.monotonic()
+            if on_output is not None:
+                on_output(bytes(output[process.stdout]), bytes(output[process.stderr]))
             status = process.wait(timeout=max(0.01, deadline - time.monotonic()))
         except (SandboxError, subprocess.TimeoutExpired, OSError):
             if process.poll() is None:

@@ -40,6 +40,13 @@ class WorkspaceAdapterTests(unittest.TestCase):
         reopened.revert(); self.session.revert.assert_called_once()
         self.assertEqual(reopened.branch, self.state['branch'])
 
+    def test_resume_is_bound_to_the_selected_session(self):
+        result = self.workspace.resume('different-session')
+        self.assertFalse(result['ok'])
+        self.session.resume.assert_not_called()
+        self.session.resume.return_value = {'ok':True, 'ready':True}
+        self.assertTrue(self.workspace.resume(self.session.id)['ready'])
+
     def test_missing_sandbox_returns_actionable_error_without_fallback(self):
         factory = Mock(side_effect=SandboxError('Sandbox is not configured'))
         self.workspace._runtime_factory = factory
@@ -62,11 +69,23 @@ class WorkspaceAdapterTests(unittest.TestCase):
         self.assertFalse(self.workspace.status()['active'])
         self.assertIsNone(self.workspace.branch)
 
+    def test_published_link_survives_adapter_reconstruction(self):
+        self.state.update(phase='published', publication={'url':'https://github.com/owner/repo/pull/42','number':42})
+        state = self.make().status()
+        self.assertFalse(state['active'])
+        self.assertEqual(state['pr_number'], 42)
+        self.assertTrue(state['pr_url'].endswith('/42'))
+
     def test_only_completed_validation_is_shown_as_passed(self):
         for phase in ['editing', 'validating', 'validation_failed', 'cancelled']:
             self.state['phase'] = phase
             self.assertFalse(self.workspace.status()['validated_ok'])
         self.state['phase'] = 'validated'
+        self.state['checks'] = [{'ok': True}]
         self.assertTrue(self.workspace.status()['validated_ok'])
+        self.state['phase'] = 'publication_pending'
+        self.assertTrue(self.workspace.status()['validated_ok'])
+        self.state['checks'] = []
+        self.assertFalse(self.workspace.status()['validated_ok'])
 
 if __name__ == '__main__': unittest.main()

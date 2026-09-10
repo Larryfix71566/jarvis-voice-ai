@@ -98,6 +98,26 @@ class ControllerTests(unittest.TestCase):
         (self.root / "tasks" / self.task / "input").mkdir(parents=True)
         self.c.save(self.task, {"vm": "mortimer-" + self.task, "status": "created"})
 
+    def test_reconcile_clears_stale_running_records_and_readiness(self):
+        state = self.c.read(self.task)
+        state.update(status='running', hydrated=True, network='offline')
+        self.c.save(self.task, state)
+        self.c.mark_ready(self.task)
+        self.assertTrue(self.c.ready(self.task))
+        result = subprocess.CompletedProcess([], 0, stdout=json.dumps([
+            {'Name': state['vm'], 'State': 'stopped'}]))
+        with patch.object(self.c, 'command', return_value=result) as command:
+            self.assertEqual(self.c.reconcile(self.task)['status'], 'stopped')
+        self.assertFalse(self.c.ready(self.task))
+        self.assertFalse(self.c.read(self.task)['last_stop_flushed'])
+        self.assertEqual(command.call_args.args[0], 'list')
+
+    def test_reconcile_refuses_a_missing_vm_without_starting_another(self):
+        state = self.c.read(self.task); state['status'] = 'running'; self.c.save(self.task, state)
+        with patch.object(self.c, 'command', return_value=subprocess.CompletedProcess([], 0, stdout='[]')):
+            with self.assertRaises(control.SandboxError): self.c.reconcile(self.task)
+        self.assertEqual(self.c.read(self.task)['status'], 'missing')
+
     def test_missing_helper_fails_before_start(self):
         with patch.object(control.subprocess, "Popen") as launch:
             with self.assertRaises(control.SandboxError): self.c.start(self.task)
@@ -220,6 +240,21 @@ class ControllerTests(unittest.TestCase):
             with self.assertRaises(control.SandboxError):
                 self.c.guest(self.task, ["ignored"], timeout=5, capture=True, max_output=100)
             stop.assert_called_once_with(self.task)
+
+    def test_capture_reports_progress_before_command_exit(self):
+        self.export_writer("")
+        release = self.c.home / "release-test-process"
+        Path(self.c.tart).write_text("#!" + sys.executable + "\nimport time, pathlib\nprint('ready', flush=True)\np=pathlib.Path(" + repr(str(release)) + ")\nwhile not p.exists(): time.sleep(.01)\nprint('done', flush=True)\n")
+        updates = []
+        def progress(stdout, stderr):
+            updates.append(stdout)
+            if b'ready' in stdout:
+                release.touch()
+        with patch.object(self.c, "stop"):
+            result = self.c.guest(self.task, ["ignored"], timeout=5, capture=True, on_output=progress)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(updates[0], b'ready\n')
+        self.assertIn(b'done', updates[-1])
 
     def test_capture_timeout_stops_guest_even_when_it_produces_no_output(self):
         self.export_writer("")

@@ -1,8 +1,8 @@
 # Sandbox implementation ledger
 
 This ledger tracks the complete development sandbox. A working VM alone does
-not complete the feature. The production self-edit and app-building services
-still use their previous workspaces until the integration below is complete.
+not complete the feature. The self-edit and app-building adapters now use VM sessions. The remaining
+workflow, preview, provider and lifecycle requirements below still apply.
 
 ## Implemented and exercised
 
@@ -29,16 +29,28 @@ still use their previous workspaces until the integration below is complete.
   Keychains, disabled shell startup files, and bounded flush-before-stop.
 - Persistent shared sessions and host-only source caches. A setup interruption
   remains attached to its session, and cancellation covers verification children.
+- Background cold resume with explicit file-request retry, saved app selection,
+  and recovered publication links. Fresh controller instances reconcile actual
+  VM state before trusting readiness. Interrupted verification cancels its
+  abandoned child and clears the previous approval before resuming edits.
 - Candidate-bound publication receipts and resumable GitHub object/branch/draft
   PR creation. Actual lost-response recovery and cleanup passed; CI recognizes
   the new sandbox self-edit branch prefix.
 
 ## Still required for the complete feature
 
-1. **Agent integration:** shared persistent sessions for `SelfEditService` and
-   `AppWorkspace`; all candidate reads/edits/commands inside VMs, no host
-   execution fallback, restart/reconnect and cancellation through the same
-   task identity. Protect the installed sandbox controller from self-edit.
+1. **Agent integration:** complete bounded responses for failures during an
+   already-ready file operation and for slow cancellation/cleanup. Initial
+   authoring setup and cold resume now return promptly with an opening job;
+   cold file requests require an explicit retry and never queue an unseen edit.
+   App selection and saved publication results survive a host process restart.
+   Close alternative direct-write paths as well. `SelfEditService` and `AppWorkspace`
+   now route through persistent VM sessions; their cancellation endpoints stop
+   running VM work, including finish-job verification. The controller is denied
+   by the installed self-edit policy. `mcp_repo.repo_commit_write`,
+   `mcp_apps.app_write_file`, initial app scaffolding and direct Git publication
+   still need integration or an explicit, enforced non-development boundary.
+   Those paths mean the complete application is not yet sandbox-only.
 2. **Development profiles:** complete Mortimer and new-web-app profiles with
    runtimes, dependencies, startup/health checks, migrations, synthetic seeds,
    required checks, previews and starter templates. Unsupported platforms must
@@ -95,3 +107,17 @@ receipts and logs retained. No live checkout or deployment was changed.
 The [acceptance record](acceptance/2026-09-10-session.json) records exact
 candidate, source, image, runner and log identifiers. This completes the shared
 session building block; it does not complete the remaining scope above.
+
+## Resume and reconnect acceptance
+
+An actual proposed edit survived a stopped development VM and a fresh host
+controller. A stale saved running state was also reconciled against Tart.
+Controlled interruption of verification stopped its running child VM, refused
+that child's restart, cleared the injected old approval and check result, and
+reopened the edited workspace. Both disposable VMs were deleted afterward.
+
+The affected application/API selection passed 303 tests inside the VM; a later
+publication-status selection passed 87. The trusted controller suite passed
+101 tests. These are separate, overlapping runs. Exact source and log identifiers,
+plus the controlled failure-injection limits, are recorded in
+[the resume acceptance record](acceptance/2026-09-10-resume.json).

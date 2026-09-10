@@ -281,3 +281,22 @@ def test_app_build_submit_previews_then_confirms():
     assert preview["ok"] and preview["needs_confirmation"]
     confirmed = logic.app_build_submit(admin, confirm=True)
     assert confirmed["ok"] and confirmed["pr_url"] == "https://example.invalid/pr/1"
+
+
+def test_app_submit_reports_background_work_without_a_fabricated_pr_url():
+    admin = FakeAdminClient(get_responses={'/api/appbuild/job': {'ok':True, 'job':{},
+        'status': {'active':True, 'proposals':[{'path':'src/app.js'}], 'validated_ok':True}}},
+        post_responses={'/api/appbuild/submit': {'ok':True, 'started':True, 'state':'submitting'}})
+    result = logic.app_build_submit(admin, confirm=True)
+    assert result['ok'] and result['started']
+    assert 'pr_url' not in result
+    assert 'has started' in result['summary']
+
+
+def test_recovered_app_status_reports_a_saved_publication():
+    admin = FakeAdminClient(get_responses={'/api/appbuild/job': {'ok':True,
+        'job': {'state':'recovered', 'summary':'Reopened the saved workspace.'},
+        'status': {'active':False, 'publication':{'url':'https://github.com/test/app/pull/1'}}}})
+    result = logic.app_build_status(admin)
+    assert 'https://github.com/test/app/pull/1' in result['summary']
+    assert 'No app-build' not in result['summary']

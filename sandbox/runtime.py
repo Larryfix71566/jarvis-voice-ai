@@ -57,6 +57,25 @@ class Runtime:
         profile = get_profile(record['profile'])
         return Session(self.controller, self.images, self.verifier, profile, allowed, record['session'])
 
+    def selected_application(self):
+        path = self.workspaces / 'selected-app.json'
+        if not path.exists():
+            return None
+        selected = json.loads(path.read_bytes())
+        repository = selected['repository']
+        record_path = self.workspaces / (self._key(repository, 'app-build') + '.json')
+        record = json.loads(record_path.read_bytes())
+        if record.get('repository') != repository or record.get('kind') != 'app-build':
+            raise SandboxError('Saved app selection does not match its workspace')
+        return record
+
+    def select_application(self, repository):
+        key = self._key(repository, 'app-build')
+        record = json.loads((self.workspaces / (key + '.json')).read_bytes())
+        if record.get('repository') != repository or record.get('kind') != 'app-build':
+            raise SandboxError('Unknown app workspace selection')
+        atomic_json(self.workspaces / 'selected-app.json', {'repository': repository})
+
     def start(self, repository: str, kind: str, base_branch: str, token: str, profile_name: str, allowed,
               goal: str, run_id: str | None = None) -> Session:
         if not isinstance(goal, str) or not goal.strip() or len(goal) > 8000:
@@ -76,6 +95,8 @@ class Runtime:
             def allocated(session):
                 atomic_json(self.workspaces / (key + '.json'), {'repository': repository, 'kind': kind,
                     'profile': profile_name, 'session': session.id})
+                if kind == 'app-build':
+                    self.select_application(repository)
             return Session.create(self.controller, self.images, self.verifier, profile, allowed,
                 image_id=image, repo=repo, ref=ref, repository=repository, base_branch=base_branch,
                 kind=kind, goal=goal, run_id=run_id, on_created=allocated)

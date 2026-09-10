@@ -374,6 +374,8 @@ def app_build_status(client) -> dict:
     job = resp.get("job", {}) or {}
     status = resp.get("status", {}) or {}
 
+    if job.get("state") == "submitting":
+        return {"ok": True, "summary": "The saved candidate is being submitted as a draft pull request. Ask for app-build status to see the result.", "job": job}
     if job.get("state") == "running":
         return {
             "ok": True,
@@ -385,7 +387,11 @@ def app_build_status(client) -> dict:
             "job": job,
         }
     parts: list[str] = []
-    if job.get("state") in ("done", "error") and job.get("summary"):
+    publication = status.get("publication") or {}
+    pr_url = job.get("pr_url") or publication.get("url")
+    if pr_url:
+        parts.append(f"Draft pull request: {pr_url}.")
+    if job.get("state") in ("done", "error", "recovered", "cancelled") and job.get("summary"):
         parts.append(str(job["summary"]))
     if status.get("active"):
         proposals = status.get("proposals", []) or []
@@ -394,6 +400,8 @@ def app_build_status(client) -> dict:
                 "Proposed edits: "
                 + "; ".join(f"{p['path']} — {p.get('rationale', '')}" for p in proposals)
             )
+        if not proposals:
+            parts.append("The saved app workspace is open with no proposed edits yet.")
         if status.get("validated_ok"):
             parts.append("Validation has passed — say the word and I'll submit the pull request.")
     elif not parts:
@@ -410,7 +418,7 @@ def app_build_submit(client, confirm: bool = False) -> dict:
         return _err(f"the admin sidecar looks offline: {exc}")
     if not status_resp.get("ok"):
         return status_resp
-    if status_resp.get("job", {}).get("state") == "running":
+    if status_resp.get("job", {}).get("state") in {"running", "submitting"}:
         return _err("the app build is still working — ask for status instead.")
     sess = status_resp.get("status", {}) or {}
     if not sess.get("active"):
@@ -436,6 +444,9 @@ def app_build_submit(client, confirm: bool = False) -> dict:
         return _err(f"the admin sidecar looks offline: {exc}")
     if not resp.get("ok"):
         return resp
+    if resp.get("started"):
+        return {"ok": True, "started": True,
+                "summary": "Draft submission has started. Ask for app-build status to get the pull request when it is ready."}
     return {
         "ok": True, "pr_url": resp.get("pr_url"),
         "summary": (

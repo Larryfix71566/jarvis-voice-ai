@@ -110,6 +110,8 @@ class Images:
             state.update(snapshot(repo, ref, inputs / "source.tar"))
             baseline = Candidate.from_snapshot(inputs / "source.tar")
             selected = candidate if candidate is not None else baseline
+            profile.validate_source(baseline)
+            profile.validate_source(selected)
             if profile.dependency_key(selected) != image["dependencies"]:
                 raise SandboxError("Dependencies changed; prepare a new image before developing this source")
             if profile.dependency_key(baseline) != image["dependencies"]:
@@ -118,8 +120,9 @@ class Images:
             atomic_bytes(inputs / "baseline.json", baseline.encode())
             atomic_json(inputs / "hydrate.json", {"candidate": selected.fingerprint, "caches": profile.caches})
             root = Path(__file__).resolve().parent
-            for name in ["artifacts.py", "guest/hydrate.py", "guest/worker.sh"]:
-                atomic_bytes(inputs / Path(name).name, (root / name).read_bytes())
+            for name in ["artifacts.py", "guest/hydrate.py", "guest/worker.sh", "guest/static-web-check.mjs"]:
+                atomic_bytes(inputs / Path(name).name, (root / name).read_bytes(),
+                             mode=0o644 if name.endswith(".mjs") else 0o600)
             self.controller.install_file_service(task)
             self.controller.command("clone", image["vm"], state["vm"], timeout=600)
             self.controller.command("set", state["vm"], "--cpu", "4", "--memory", "8192", timeout=30)

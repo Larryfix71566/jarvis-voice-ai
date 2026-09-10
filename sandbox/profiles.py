@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 
-from sandbox.artifacts import Candidate, SandboxError
+from sandbox.artifacts import Candidate, SandboxError, source_path_allowed
 
 PYTHON = "/Users/admin/mortimer/dependencies/python/bin/python"
 KB_PYTHON = "/Users/admin/mortimer/dependencies/knowledge-python/bin/python"
@@ -16,6 +16,19 @@ class Profile:
     caches: tuple[str, ...]
     checks: tuple[tuple[str, tuple[str, ...]], ...]
     seeds: tuple[tuple[str, ...], ...] = ()
+
+    def validate_source(self, candidate: Candidate):
+        if self.name != "web-app":
+            return
+        files = {file.path: file for file in candidate.files}
+        try:
+            manifest = json.loads(files["manifest.json"].data)
+            entry = manifest["entry_point"]
+            if (not isinstance(entry, str) or not source_path_allowed(entry) or not entry.endswith(".html")
+                    or entry not in files or manifest.get("dependencies") != [] or "src/app.js" not in files):
+                raise ValueError()
+        except (ValueError, KeyError, TypeError):
+            raise SandboxError("This profile requires the dependency-free web starter; prepare a matching profile for another application runtime") from None
 
     def dependency_key(self, candidate: Candidate) -> str:
         files = {file.path: file for file in candidate.files}
@@ -54,7 +67,13 @@ MORTIMER = Profile(
     seeds=((PYTHON, "scripts/init_db.py"), (KB_PYTHON, "-m", "mortimer_vault.cli", "init")),
 )
 
-PROFILES = {MORTIMER.name: MORTIMER}
+WEB_APP = Profile(
+    name="web-app", dependencies=(), caches=(".venv",),
+    checks=(("javascript", ("node", "--check", "src/app.js")),
+            ("browser", ("node", "/Volumes/My Shared Files/input/static-web-check.mjs"))),
+)
+
+PROFILES = {profile.name: profile for profile in [MORTIMER, WEB_APP]}
 
 
 def get_profile(name: str) -> Profile:

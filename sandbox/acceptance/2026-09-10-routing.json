@@ -1,0 +1,76 @@
+{
+  "date": "2026-09-10",
+  "routing_revision": "ac8f72a5afb142133c362f389082daa281d7b6e4",
+  "controller_tests": {
+    "passed": true,
+    "count": 93
+  },
+  "application_checks": [
+    {
+      "name": "routing-unit-and-api",
+      "passed": true,
+      "test_count": 2340,
+      "log_sha256": "6692bbaea663a5b9f670dedde1290c5db6e178e6fca397a0bd506756b761b24a"
+    },
+    {
+      "name": "routing-background-setup",
+      "passed": true,
+      "test_count": 164,
+      "log_sha256": "96df035b93d8329ec169a5ac4eb3e2f96845f1fc61a873296ce84b5533fc1216"
+    }
+  ],
+  "broader_integration_run": {
+    "completed": false,
+    "reason": "Interrupted after 1060 seconds while tool-server integration startup remained slow. Failed-test cache identified a real weather API call; it is now marked live. Remaining integration startup diagnosis is outstanding.",
+    "log_sha256": "415b01a19e63a3899fab22917b4afa224c01addf323ac6e7536eca821e97c1df"
+  },
+  "web_app": {
+    "fixture_template": "mcp_servers/mcp_apps/templates/web_app",
+    "name": "sandbox-demo",
+    "description": "Disposable offline acceptance application",
+    "created_at": "2026-09-10",
+    "receipt": {
+      "version": 1,
+      "attempt": "bcae1244ab6d476da1dd63b988314fa2",
+      "candidate": "b528e295668c9f1b316b86ab4da9b6924c575d45a3f315ed556900f7f219a7ea",
+      "baseline": "58ea7d7542545e687343c8b0d55f7999b1a713853ef418e58e1164571f049280",
+      "source_commit": "a5ba7152e4d87b66c0aaaa63d80db365e73c73c0",
+      "image": "a4a94ef6fcbceea4e5e73a94077792f4792a7e027f9232bfa194a6de42f681fd",
+      "profile": "87ce6b769a5e6d54e0e642ddba3de26dbf71e1fb3096975513998d6b1c1eaf77",
+      "runner": "ae56d5409c2d40b7e9402f696501d649c95ee07c6f76e3f8b66e20ac09004752",
+      "development_task": "a22b4261e933",
+      "checks": [
+        {
+          "name": "javascript",
+          "argv": [
+            "node",
+            "--check",
+            "src/app.js"
+          ],
+          "returncode": 0,
+          "passed": true,
+          "seconds": 0.274,
+          "log_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+        },
+        {
+          "name": "browser",
+          "argv": [
+            "node",
+            "/Volumes/My Shared Files/input/static-web-check.mjs"
+          ],
+          "returncode": 0,
+          "passed": true,
+          "seconds": 3.194,
+          "log_sha256": "d7a4bcf01775098623786f45b2f2b952989d270aa9f7dd0e6edc4567a0d9d04e"
+        }
+      ],
+      "passed": true,
+      "status": "passed",
+      "verification_task": "e3bd8c798ea7",
+      "source_unchanged": true
+    },
+    "published": false
+  },
+  "deployment_changed": false,
+  "scope": "Adapter/API regression and dependency-free web starter acceptance. Native GUI, cold-resume HTTP handling, alternative tool writers, provider broker and lifecycle/release acceptance remain outstanding."
+}

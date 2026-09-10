@@ -114,6 +114,9 @@ def selfedit_start(
         )
         if not run_resp.get("ok"):
             return run_resp
+        if run_resp.get("opening"):
+            return {"ok": True, "started": True, "opening": True,
+                    "summary": "The isolated workspace is being prepared. Ask for self-edit status; edits can begin when it is ready."}
         session = run_resp.get("session")
         if session:
             return _describe_session(session)
@@ -385,6 +388,20 @@ def selfedit_status(client, staging_id: str = "") -> dict[str, Any]:
     # the question was asked, it gets an answer.
     staging_sentence, staging_found = _describe_staging(staging_id, stagings)
 
+    opening = resp.get("opening", {}) or {}
+    if opening.get("state") == "starting" or status.get("phase") in {"creating", "starting"}:
+        summary = "The isolated workspace is being prepared; it is not ready for edits yet."
+        if staging_sentence:
+            summary += " " + staging_sentence
+        return {"ok": True, "opening": opening, "summary": summary,
+                "stagings": stagings, "staging_found": staging_found}
+    if (opening.get("state") == "error" and not status.get("active")
+            and job.get("state") != "running"
+            and (opening.get("started_at") or 0) >= max(job.get("started_at") or 0, finish.get("started_at") or 0)
+            and not status.get("publication")):
+        return {"ok": False, "error": opening.get("error", "Sandbox setup failed"),
+                "stagings": stagings, "staging_found": staging_found}
+
     # SE4 — the finish job is the ONLY thing running on the authored path
     # (no planner job ever started), so it is reported first and on its own.
     if finish.get("state") in ("validating", "submitting"):
@@ -420,8 +437,9 @@ def selfedit_status(client, staging_id: str = "") -> dict[str, Any]:
         parts.append(finish_sentence)
     if job.get("state") in ("done", "error") and job.get("summary"):
         parts.append(str(job["summary"]))
-    if job.get("pr_url"):
-        parts.append(f"Pull request: {job['pr_url']} — merging is yours on GitHub.")
+    pr_url = job.get("pr_url") or status.get("pr_url") or (status.get("publication") or {}).get("url")
+    if pr_url:
+        parts.append(f"Pull request: {pr_url} — merging is yours on GitHub.")
 
     if status.get("active"):
         proposals = status.get("proposals", []) or []
@@ -434,8 +452,6 @@ def selfedit_status(client, staging_id: str = "") -> dict[str, Any]:
             parts.append("The session is active but no edits have been proposed yet.")
         if status.get("validated_ok"):
             parts.append("Validation has passed — say the word and I'll submit the pull request.")
-        if status.get("pr_url"):
-            parts.append(f"Pull request: {status['pr_url']} — merging is yours on GitHub.")
     elif not parts:
         parts.append("No upgrade run or edit session is active right now.")
 

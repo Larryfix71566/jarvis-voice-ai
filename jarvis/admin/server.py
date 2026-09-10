@@ -339,7 +339,8 @@ _run_lock = threading.Lock()
 # cancel flag (the same reason _appbuild_workspace exists).
 _run_agent_instance: Any = None
 _run_job: dict[str, Any] = {
-    "state": "idle",  # idle | running | done | error
+    "state": "idle",  # idle | running | done | error | cancelled
+    "cancel_requested": False,
     "goal": None,
     "profile": None,
     "summary": None,
@@ -380,7 +381,8 @@ _AUTHORING_OFF = {
 # Process state, reset on restart, exactly like _run_job.
 _finish_lock = threading.Lock()
 _finish_job: dict[str, Any] = {
-    "state": "idle",  # idle | validating | submitting | done | failed | error
+    "cancel_requested": False,
+    "state": "idle",  # idle | validating | submitting | done | failed | error | cancelled
     "checks": None,
     "pr_url": None,
     "notice": None,
@@ -388,6 +390,107 @@ _finish_job: dict[str, Any] = {
     "started_at": None,
     "finished_at": None,
 }
+
+# VM preparation outlives the voice client's HTTP deadline. Keep the start
+# request short and expose progress; Session persists the underlying task.
+_opening_lock = threading.Lock()
+_opening_job: dict[str, Any] = {"state": "idle", "cancel_requested": False}
+
+
+def _open_authoring(service, goal, run_id, target_paths, job):
+    try:
+        with _opening_lock:
+            if job.get("cancel_requested"):
+                return
+        if job.get("resume_session_id"):
+            opened = service.resume(job["resume_session_id"])
+            if not opened.get("ok"):
+                with _opening_lock:
+                    job.update(state="error", error=opened.get("error"))
+                return
+        else:
+            if service.branch and (service.goal or "") != goal:
+                discarded = service.revert()
+                if not discarded.get("ok"):
+                    raise RuntimeError("Previous workspace could not be discarded")
+            if not service.branch:
+                opened = service.start_session(goal, run_id=run_id)
+                if not opened.get("ok"):
+                    with _opening_lock:
+                        job.update(state="error", error=opened.get("error"))
+                    return
+        state = service.status()
+        if state.get("ready") is False:
+            resumed = service.resume(state.get("id"))
+            if not resumed.get("ok"):
+                with _opening_lock:
+                    job.update(state="error", error=resumed.get("error"))
+                return
+            state = service.status()
+        result = {"ok": True, "started": False, "session": {
+            "branch": service.branch, "goal": goal, "target_paths": target_paths,
+            "run_id": run_id, "worktree": None,
+            "sandbox_task": state.get("task"), "session_id": state.get("id")}}
+        with _opening_lock:
+            cancelled = job.get("cancel_requested", False)
+            if not cancelled:
+                job.update(state="ready", result=result)
+        if cancelled:
+            service.cancel()
+    except Exception:
+        logger.exception("sandbox authoring setup failed")
+        with _opening_lock:
+            job.update(state="error", error="Sandbox setup failed; inspect the saved session before retrying.")
+    finally:
+        with _opening_lock:
+            if job.get("cancel_requested"):
+                job["state"] = "cancelled"
+            job["finished_at"] = time.time()
+
+
+def _begin_authoring(goal, run_id, target_paths, *, resume_session_id=None):
+    global _opening_job
+    with _run_lock, _finish_lock, _opening_lock:
+        if (_run_job["state"] == "running" or _finish_job["state"] in {"validating", "submitting"}
+                or _opening_job["state"] == "starting"):
+            return {"ok": False, "error": "an upgrade run is already in progress — ask for status instead"}
+        job = dict(state="starting", goal=goal, run_id=run_id,
+            target_paths=target_paths, resume_session_id=resume_session_id,
+            cancel_requested=False, started_at=time.time())
+        _opening_job = job
+    worker = threading.Thread(target=_open_authoring,
+        args=(_selfedit_service, goal, run_id, target_paths, job), daemon=True)
+    worker.start()
+    # An already-open session may finish immediately. A fresh VM never holds
+    # this request open for the duration of its preparation.
+    worker.join(timeout=0.05)
+    with _opening_lock:
+        if job["state"] == "ready":
+            return job["result"]
+        if job["state"] == "error":
+            return {"ok": False, "error": job.get("error")}
+    return {"ok": True, "started": True, "opening": True, "state": "starting"}
+
+def _prepare_file_access():
+    """Start only VM warmup; the caller must retry its read or edit explicitly."""
+    with _opening_lock:
+        opening = _opening_job["state"] == "starting"
+    state = _selfedit_service.status()
+    if not opening and state.get("active") and state.get("ready") is False:
+        if _busy():
+            return {"ok": False, "error": "Sandbox work is in progress; wait before reading or editing files."}
+        result = _begin_authoring(state.get("goal", ""), state.get("run_id"), [],
+                                  resume_session_id=state["id"])
+        if not result.get("ok"):
+            return result
+        # Return a pending response even if this warmup finished immediately:
+        # no file operation was executed by the background worker.
+        opening = True
+    if opening:
+        return {"ok": False, "pending": True, "retryable": True, "opening": True,
+                "error": "The sandbox workspace is reopening. Retry this file request once self-edit status reports it ready; no edit was queued."}
+    return None
+
 
 # MORTIMER_LLM_COUNCIL_V2_PLAN.md V5 — the council's own async-job slot,
 # same shape/pattern as _run_job/_run_lock above (one council round at a
@@ -438,8 +541,10 @@ _plan_job: dict[str, Any] = {
 # block self-edit jobs — separate slots, separate locks.
 _appbuild_lock = threading.Lock()
 _appbuild_workspace: AppWorkspace | None = None
+_appbuild_agent_instance: AppBuildAgent | None = None
 _appbuild_job: dict[str, Any] = {
-    "state": "idle",  # idle | running | done | error
+    "state": "idle",  # idle | running | done | error | cancelled
+    "cancel_requested": False,
     "app": None,
     "goal": None,
     "profile": None,
@@ -595,9 +700,16 @@ def _run_finish() -> None:
     session stays OPEN with the check output, so repair is the developer on
     the next turn (read → write → finish again) rather than a dead end."""
     try:
+        with _finish_lock:
+            if _finish_job.get("cancel_requested"):
+                _finish_job.update(state="cancelled", finished_at=time.time())
+                return
         result = _selfedit_service.validate()
         with _finish_lock:
             _finish_job["checks"] = result.get("checks")
+            if _finish_job.get("cancel_requested"):
+                _finish_job.update(state="cancelled", finished_at=time.time())
+                return
         if not result.get("ok"):
             with _finish_lock:
                 _finish_job.update(state="failed", finished_at=time.time())
@@ -615,7 +727,7 @@ def _run_finish() -> None:
                 )
             else:
                 _finish_job.update(
-                    state="error", notice=submitted.get("error"),
+                    state="cancelled" if _finish_job.get("cancel_requested") else "error", notice=submitted.get("error"),
                     finished_at=time.time(),
                 )
             state, pr_url, run_id = (_finish_job["state"], _finish_job["pr_url"],
@@ -628,7 +740,7 @@ def _run_finish() -> None:
         logger.exception("selfedit finish job crashed")
         with _finish_lock:
             _finish_job.update(
-                state="error",
+                state="cancelled" if _finish_job.get("cancel_requested") else "error",
                 notice=f"finish crashed: {type(exc).__name__}: {exc}",
                 finished_at=time.time(),
             )
@@ -642,6 +754,9 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None,
         agent = _make_agent(_selfedit_service, profile, run_id)
         with _run_lock:
             _run_agent_instance = agent
+            cancelled = _run_job.get("cancel_requested", False)
+        if cancelled:
+            agent.request_cancel()
         # A session left open by an earlier run that ended without
         # submitting (review F6) must not be inherited by a NEW goal:
         # UpgradeAgent.run() reuses an active session as-is, so the next
@@ -654,13 +769,11 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None,
                         stale, _selfedit_service.goal, goal)
             _selfedit_service.revert()
         result = agent.run(goal, plan=plan)
-        if result.get("cancelled"):
-            # A cancelled session is discarded whole — same semantics as
-            # appbuild_cancel (revert), so nothing half-planned lingers on
-            # a sandbox branch waiting for a confirm that never comes.
+        if result.get("cancelled") or _run_job.get("cancel_requested", False):
             state = "cancelled"
-            if _selfedit_service.branch:
-                _selfedit_service.revert()
+            # Cancellation stops the VM and revokes publication eligibility;
+            # the saved session remains available for inspection and cleanup.
+            _selfedit_service.cancel()
         else:
             state = "done" if result.get("ok") else "error"
         summary = result.get("summary", "") or ""
@@ -677,6 +790,7 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None,
             )
             summary = f"Ended without submitting a pull request.{still_open} {summary}".strip()
         with _run_lock:
+            _run_agent_instance = None
             _run_job.update(
                 state=state,
                 # The summary is what the developer relays and what the Edit
@@ -695,15 +809,13 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None,
     except Exception as exc:  # planner crash must still settle the job
         logger.exception("upgrade run crashed")
         with _run_lock:
+            _run_agent_instance = None
             _run_job.update(
                 state="error",
                 summary=f"upgrade run crashed: {type(exc).__name__}: {exc}",
                 finished_at=time.time(),
             )
         logger.info("selfedit_state_transition state=error goal=%r", goal)
-    finally:
-        with _run_lock:
-            _run_agent_instance = None
 
 
 def _busy() -> bool:
@@ -711,6 +823,9 @@ def _busy() -> bool:
     The console's own /validate and /submit routes are gated on this, so a
     finish job in flight reports "a run is in progress" rather than two
     validations racing over one worktree."""
+    with _opening_lock:
+        if _opening_job["state"] == "starting":
+            return True
     with _run_lock:
         if _run_job["state"] == "running":
             return True
@@ -725,7 +840,7 @@ def _make_appbuild_agent(workspace: AppWorkspace, profile: str | None) -> AppBui
 
 def _appbuild_busy() -> bool:
     with _appbuild_lock:
-        return _appbuild_job["state"] == "running"
+        return _appbuild_job["state"] in {"running", "submitting"}
 
 
 def _run_appbuild_agent(
@@ -735,29 +850,44 @@ def _run_appbuild_agent(
     settle _appbuild_job. The AppWorkspace itself lives on _appbuild_
     workspace so the status/submit/cancel endpoints can reach the same
     session this thread is driving."""
-    global _appbuild_workspace
+    global _appbuild_workspace, _appbuild_agent_instance
+    workspace = None
     try:
         workspace = AppWorkspace(app)
+        agent = _make_appbuild_agent(workspace, profile)
         with _appbuild_lock:
             _appbuild_workspace = workspace
-        agent = _make_appbuild_agent(workspace, profile)
+            _appbuild_agent_instance = agent
+            cancelled = _appbuild_job.get("cancel_requested", False)
+        if cancelled:
+            agent.request_cancel()
         result = agent.run(goal, plan=plan)
-        state = "done" if result.get("ok") else "error"
         with _appbuild_lock:
+            cancelled = _appbuild_job.get("cancel_requested", False) or result.get("cancelled", False)
+        if cancelled:
+            workspace.cancel()
+        state = "cancelled" if cancelled else ("done" if result.get("ok") else "error")
+        with _appbuild_lock:
+            if _appbuild_job.get("cancel_requested", False):
+                state = "cancelled"
+            _appbuild_agent_instance = None
             _appbuild_job.update(
                 state=state, summary=result.get("summary", ""),
+                submitted=bool(result.get("submitted")), pr_url=result.get("pr_url"),
                 finished_at=time.time(),
             )
         logger.info("appbuild_state_transition state=%s app=%r goal=%r", state, app, goal)
     except Exception as exc:  # a build crash must still settle the job
         logger.exception("app build run crashed")
         with _appbuild_lock:
+            cancelled = _appbuild_job.get("cancel_requested", False)
+            _appbuild_agent_instance = None
             _appbuild_job.update(
-                state="error",
-                summary=f"app build run crashed: {type(exc).__name__}: {exc}",
+                state="cancelled" if cancelled else "error",
+                summary="Build cancelled." if cancelled else f"app build run crashed: {type(exc).__name__}: {exc}",
                 finished_at=time.time(),
             )
-        logger.info("appbuild_state_transition state=error app=%r goal=%r", app, goal)
+        logger.info("appbuild_state_transition state=%s app=%r", "cancelled" if cancelled else "error", app)
 
 
 def _council_busy() -> bool:
@@ -1044,7 +1174,8 @@ def selfedit_run(body: GoalIn) -> dict:
     # staging (2026-09-07 review, F4): the pop used to come first, so the
     # refusal itself consumed the preview the user had just approved.
     with _run_lock:
-        if _run_job["state"] == "running":
+        if (_run_job["state"] == "running" or _opening_job["state"] == "starting"
+                or _finish_job["state"] in {"validating", "submitting"}):
             return {
                 "ok": False,
                 "error": "an upgrade run is already in progress — ask for status instead",
@@ -1105,37 +1236,7 @@ def selfedit_run(body: GoalIn) -> dict:
         # A plan_path (or an explicit plan) is implementation-scale work and
         # still goes to the Upgrade Agent, below. Two declared fields
         # (author, plan_path), no judgment.
-        if _busy():
-            return {
-                "ok": False,
-                "error": "an upgrade run is already in progress — ask for status instead",
-                "job": dict(_run_job),
-            }
-        stale = _selfedit_service.branch
-        if stale and (_selfedit_service.goal or "") != goal:
-            # Same rule _run_agent applies: a session left open by an
-            # earlier goal must never be inherited by a new one.
-            logger.info("selfedit_stale_session_reverted branch=%s old_goal=%r new_goal=%r",
-                        stale, _selfedit_service.goal, goal)
-            _selfedit_service.revert()
-        if not _selfedit_service.branch:
-            opened = _selfedit_service.start_session(goal, run_id=run_id)
-            if not opened.get("ok"):
-                return {"ok": False, "error": opened.get("error")}
-        logger.info("selfedit_state_transition state=session_open goal=%r run_id=%s",
-                    goal, run_id)
-        return {
-            "ok": True,
-            "started": False,
-            "session": {
-                "branch": _selfedit_service.branch,
-                "goal": goal,
-                "target_paths": target_paths,
-                "run_id": run_id,
-                "worktree": str(_selfedit_service.work_root)
-                            if _selfedit_service.work_root else None,
-            },
-        }
+        return _begin_authoring(goal, run_id, target_paths)
 
     plan = body.plan
     if plan is None and plan_path:
@@ -1154,7 +1255,8 @@ def selfedit_run(body: GoalIn) -> dict:
                 + "\n\n… (plan truncated at injection)"
             )
     with _run_lock:
-        if _run_job["state"] == "running":
+        if (_run_job["state"] == "running" or _opening_job["state"] == "starting"
+                or _finish_job["state"] in {"validating", "submitting"}):
             return {
                 "ok": False,
                 "error": "an upgrade run is already in progress — ask for status instead",
@@ -1167,7 +1269,7 @@ def selfedit_run(body: GoalIn) -> dict:
         except UnknownModelProfileError as exc:
             return {"ok": False, "error": str(exc)}
         _run_job.update(
-            state="running",
+            state="running", cancel_requested=False,
             goal=goal,
             profile=agent.model_label(),
             summary=None,
@@ -1214,6 +1316,7 @@ def selfedit_run_status() -> dict:
         "ok": True,
         "job": job,
         "finish": finish,
+        "opening": dict(_opening_job),
         "status": _selfedit_service.status(),
         "stagings": stagings,
     }
@@ -1225,6 +1328,9 @@ def selfedit_file(path: str) -> dict:
     Thin wrapper over the read_file the planner has always used."""
     if not authoring_enabled():
         return dict(_AUTHORING_OFF)
+    pending = _prepare_file_access()
+    if pending is not None:
+        return pending
     return _selfedit_service.read_file(path)
 
 
@@ -1247,6 +1353,9 @@ def selfedit_write(body: SelfEditWriteIn) -> dict:
         return dict(_AUTHORING_OFF)
     if not _selfedit_service.branch:
         return {"ok": False, "error": "no open self-edit session — start one first"}
+    pending = _prepare_file_access()
+    if pending is not None:
+        return pending
     if _busy():
         return {"ok": False, "error": "validation is running — wait for it to finish, then edit"}
     return _selfedit_service.propose_edit(
@@ -1269,13 +1378,13 @@ def selfedit_finish() -> dict:
         # block would deadlock. _run_job's state is read without _run_lock
         # deliberately — a single dict lookup, and the authoritative guard
         # against two jobs is this lock plus _run_lock in selfedit_run.
-        if _run_job["state"] == "running" or _finish_job["state"] in (
+        if _opening_job["state"] == "starting" or _run_job["state"] == "running" or _finish_job["state"] in (
             "validating", "submitting",
         ):
             return {"ok": False,
                     "error": "a run is already in progress — ask for status instead"}
         _finish_job.update(
-            state="validating", checks=None, pr_url=None, notice=None,
+            state="validating", checks=None, pr_url=None, notice=None, cancel_requested=False,
             run_id=_selfedit_service.run_id, started_at=time.time(), finished_at=None,
         )
     logger.info("selfedit_state_transition state=finish_validating run_id=%s",
@@ -1325,26 +1434,31 @@ def selfedit_submit() -> dict:
 
 @app.post("/api/selfedit/cancel")
 def selfedit_cancel() -> dict:
-    """Stop a RUNNING planner at its next step and discard the session.
-
-    Closes the 2026-08-22/23 gap where a kimi-k3 planner sat "still
-    running" and selfedit_revert refused while busy — there was no way to
-    stop it short of killing the sidecar. Cooperative: an in-flight
-    completion call finishes (or hits its read timeout) first, then the
-    loop sees the flag, returns cancelled, and _run_agent reverts the
-    session. Idle → nothing to cancel (use revert for an idle-but-active
-    session)."""
+    """Cancel planner, validation or publication through the saved VM session."""
     with _run_lock:
         running = _run_job["state"] == "running"
         agent = _run_agent_instance
-    if not running or agent is None:
-        return {"ok": False, "error": "no self-edit run is in progress — "
-                                      "use revert to drop an idle session"}
-    agent.request_cancel()
+        if running:
+            _run_job["cancel_requested"] = True
+    with _finish_lock:
+        finishing = _finish_job["state"] in {"validating", "submitting"}
+        if finishing:
+            _finish_job["cancel_requested"] = True
+    with _opening_lock:
+        opening = _opening_job["state"] == "starting"
+        if opening:
+            _opening_job["cancel_requested"] = True
+    if not running and not finishing and not opening:
+        phase = _selfedit_service.status().get("phase")
+        if phase not in {"creating", "starting", "validating", "publishing", "publication_pending"}:
+            return {"ok": False, "error": "no self-edit run is in progress — use revert to drop an idle session"}
+    if running and agent is not None:
+        agent.request_cancel()
+    else:
+        _selfedit_service.cancel()
     logger.info("selfedit_state_transition state=cancel_requested")
     return {"ok": True, "cancel_requested": True,
-            "note": "the planner stops at its next step; poll GET /api/selfedit/run "
-                    "for state=cancelled"}
+            "note": "Sandbox cancellation requested; the planner stops at its next step. Any already-created pull request remains visible."}
 
 
 @app.post("/api/selfedit/revert")
@@ -1416,6 +1530,7 @@ def selfedit_reject() -> dict:
 @app.post("/api/appbuild/start")
 def appbuild_start(body: AppBuildGoalIn) -> dict:
     """Start an app-build run in the background; poll GET /api/appbuild/job."""
+    global _appbuild_workspace, _appbuild_agent_instance
     goal = (body.goal or "").strip()
     if not goal:
         return {"ok": False, "error": "a goal is required — what should I build?"}
@@ -1438,7 +1553,7 @@ def appbuild_start(body: AppBuildGoalIn) -> dict:
                 + "\n\n… (plan truncated at injection)"
             )
     with _appbuild_lock:
-        if _appbuild_job["state"] == "running":
+        if _appbuild_job["state"] in {"running", "submitting"}:
             return {
                 "ok": False,
                 "error": "an app build is already in progress — ask for status instead",
@@ -1455,8 +1570,11 @@ def appbuild_start(body: AppBuildGoalIn) -> dict:
             return {"ok": False, "error": str(exc)}
         except Exception as exc:  # noqa: BLE001 — e.g. GitHubError: no token configured
             return {"ok": False, "error": str(exc)}
+        _appbuild_workspace = None
+        _appbuild_agent_instance = None
         _appbuild_job.update(
-            state="running", app=app_name, goal=goal,
+            state="running", app=app_name, goal=goal, cancel_requested=False,
+            submitted=False, pr_url=None,
             profile=agent.model_label(), summary=None,
             started_at=time.time(), finished_at=None,
         )
@@ -1467,35 +1585,91 @@ def appbuild_start(body: AppBuildGoalIn) -> dict:
     return {"ok": True, "started": True, "profile": agent.model_label()}
 
 
+def _recover_appbuild_workspace():
+    global _appbuild_workspace
+    with _appbuild_lock:
+        if _appbuild_workspace is not None or _appbuild_job["state"] in {"running", "submitting"}:
+            return _appbuild_workspace
+    try:
+        recovered = AppWorkspace.recover()
+    except Exception:
+        # No configured runtime is normal on a host that has never developed
+        # an app. Start still reports its actionable setup/configuration error.
+        return None
+    with _appbuild_lock:
+        if _appbuild_workspace is None and _appbuild_job["state"] not in {"running", "submitting"}:
+            _appbuild_workspace = recovered
+        return _appbuild_workspace
+
+
 @app.get("/api/appbuild/job")
 def appbuild_job_status() -> dict:
+    _recover_appbuild_workspace()
     with _appbuild_lock:
         job = dict(_appbuild_job)
         workspace = _appbuild_workspace
     status = workspace.status() if workspace is not None else {"active": False}
+    if job["state"] == "idle" and status.get("id"):
+        job.update(state="recovered", app=status.get("app"), goal=status.get("goal"),
+                   summary="Reopened the saved workspace. The earlier planner is not running.")
     return {"ok": True, "job": job, "status": status}
+
+
+def _submit_appbuild(workspace, operation_id, output):
+    try:
+        result = workspace.submit()
+    except Exception:
+        logger.exception("app workspace submission failed")
+        result = {"ok": False, "error": "App submission failed; inspect the saved workspace before retrying."}
+    output["result"] = result
+    with _appbuild_lock:
+        if _appbuild_job.get("operation_id") == operation_id:
+            _appbuild_job.update(state="done" if result.get("ok") else
+                ("cancelled" if _appbuild_job.get("cancel_requested") else "error"),
+                submitted=bool(result.get("ok")), pr_url=result.get("pr_url"),
+                summary=result.get("notice") or result.get("error") or "Draft pull request opened.",
+                finished_at=time.time())
 
 
 @app.post("/api/appbuild/submit")
 def appbuild_submit() -> dict:
-    if _appbuild_busy():
-        return {"ok": False, "error": "an app build is in progress — ask for status instead"}
+    workspace = _recover_appbuild_workspace()
     with _appbuild_lock:
-        workspace = _appbuild_workspace
-    if workspace is None or not workspace.branch:
-        return {"ok": False, "error": "no active app-build session to submit"}
-    result = workspace.submit()
-    logger.info("appbuild_state_transition state=submitted ok=%s", result.get("ok"))
-    return result
+        if _appbuild_job["state"] in {"running", "submitting"}:
+            return {"ok": False, "error": "an app build is in progress — ask for status instead"}
+        if workspace is None or not workspace.branch:
+            return {"ok": False, "error": "no active app-build session to submit"}
+        operation_id = uuid.uuid4().hex
+        _appbuild_job.update(state="submitting", operation_id=operation_id, cancel_requested=False,
+                            submitted=False, pr_url=None, finished_at=None)
+    output = {}
+    worker = threading.Thread(target=_submit_appbuild, args=(workspace, operation_id, output), daemon=True)
+    worker.start()
+    worker.join(timeout=0.05)
+    if not worker.is_alive():
+        return output["result"]
+    return {"ok": True, "started": True, "state": "submitting"}
 
 
 @app.post("/api/appbuild/cancel")
 def appbuild_cancel() -> dict:
-    """Discard the active app-build session (mirrors selfedit_revert)."""
-    if _appbuild_busy():
-        return {"ok": False, "error": "an app build is in progress — ask for status instead"}
+    """Stop a running build, including VM work, or discard an idle session."""
+    _recover_appbuild_workspace()
     with _appbuild_lock:
+        running = _appbuild_job["state"] in {"running", "submitting"}
         workspace = _appbuild_workspace
+        agent = _appbuild_agent_instance
+        if running:
+            _appbuild_job["cancel_requested"] = True
+    if running:
+        # The job flag also covers cancellation before the worker
+        # thread constructs its agent. Never hold the job lock during VM I/O.
+        if agent is not None:
+            agent.request_cancel()
+        elif workspace is not None:
+            workspace.cancel()
+        return {"ok": True, "cancel_requested": True,
+                "note": "Sandbox cancellation requested; the planner stops at its next step."}
     if workspace is None or not workspace.branch:
         return {"ok": False, "error": "no active app-build session to cancel"}
     result = workspace.revert()

@@ -42,7 +42,7 @@ REGISTRY = {
 def reset_run_job():
     with srv._run_lock:
         srv._run_job.update(
-            state="idle", goal=None, profile=None, summary=None,
+            state="idle", cancel_requested=False, goal=None, profile=None, summary=None,
             started_at=None, finished_at=None, submitted=False, pr_url=None,
         )
     yield
@@ -565,14 +565,13 @@ def test_a_leftover_session_is_reverted_before_a_different_goal(registry_file, m
     the goal is the same one (validate/submit by voice)."""
     _install_fake_agent(monkeypatch)
     svc = _preflight_service(monkeypatch, tmp_path)
-    svc.branch = "jarvis/self-edit/20260907-old"
-    svc.goal = "old goal"
+    svc.start_session("old goal")
+    old_branch = svc.branch
     reverted = []
 
     def fake_revert():
         reverted.append(svc.branch)
-        svc.branch = None
-        svc.goal = None
+        svc.test_runtime.current.state["phase"] = "reverted"
         return {"ok": True}
 
     monkeypatch.setattr(svc, "revert", fake_revert)
@@ -581,19 +580,18 @@ def test_a_leftover_session_is_reverted_before_a_different_goal(registry_file, m
     _wait_for_job(c, "done")
     assert reverted == []  # same goal → resumed, not dropped
 
-    svc.branch = "jarvis/self-edit/20260907-old"
-    svc.goal = "old goal"
+    svc.start_session("old goal")
+    old_branch = svc.branch
     c.post("/api/selfedit/run", json={"goal": "a different goal"})
     _wait_for_job(c, "done")
-    assert reverted == ["jarvis/self-edit/20260907-old"]
+    assert reverted == [old_branch]
 
 
 # --- SE2/SE3/SE4/SE11: the developer authors, the sidecar finishes -------
 
 
 def _authoring_service(monkeypatch, tmp_path):
-    """A real SelfEditService over a scratch git repo, so the session the
-    confirm opens is a real worktree and write/finish act on real files."""
+    """Real service and API routing with a test-only in-memory VM session."""
     import json
     import subprocess
     from jarvis.selfedit.service import SelfEditService
@@ -618,8 +616,11 @@ def _authoring_service(monkeypatch, tmp_path):
     git(work, "commit", "-m", "init")
     git(work, "push", "-u", "origin", "main")
 
+    from tests.sandbox_fakes import FakeRuntime
+    runtime = FakeRuntime(work)
     svc = SelfEditService(repo_root=work, allowlist_path=al, github_token=None,
-                          base_ref="main")
+                          base_ref="main", runtime_factory=lambda: runtime)
+    svc.test_runtime = runtime
     monkeypatch.setattr(srv, "_selfedit_service", svc)
     return svc
 
@@ -628,7 +629,7 @@ def _authoring_service(monkeypatch, tmp_path):
 def reset_finish_job():
     with srv._finish_lock:
         srv._finish_job.update(
-            state="idle", checks=None, pr_url=None, notice=None, run_id=None,
+            state="idle", cancel_requested=False, checks=None, pr_url=None, notice=None, run_id=None,
             started_at=None, finished_at=None,
         )
     yield
@@ -654,10 +655,11 @@ class TestAuthoringConfirm:
         res = c.post("/api/selfedit/run", json={"staging_id": sid, "author": True}).json()
         assert res["ok"] is True, res
         assert res["started"] is False
-        assert res["session"]["branch"].startswith("jarvis/self-edit/")
+        assert res["session"]["branch"].startswith("mortimer/selfedit/")
         assert res["session"]["goal"] == "add a line to docs/README.md"
         assert res["session"]["target_paths"] == ["docs/README.md"]
-        assert res["session"]["worktree"]
+        assert res["session"]["worktree"] is None
+        assert res["session"]["sandbox_task"]
         assert svc.branch is not None
         # the planner job never started
         assert c.get("/api/selfedit/run").json()["job"]["state"] == "idle"
@@ -849,7 +851,7 @@ class TestAuthoringRoutes:
         res = c.post("/api/selfedit/write", json={
             "path": "jarvis/vault.py", "content": "x\n", "rationale": "r",
         }).json()
-        assert res["ok"] is False and "allowlist" in res["error"]
+        assert res["ok"] is False and "workspace policy" in res["error"]
 
     def test_the_read_route_honours_the_allowlist(
         self, registry_file, monkeypatch, tmp_path,
@@ -913,7 +915,7 @@ class TestAuthoringRoutes:
         c.post("/api/selfedit/write", json={
             "path": "docs/README.md", "content": "# docs\nid\n", "rationale": "r",
         })
-        svc.run_id = "run-77"
+        svc.test_runtime.current.state["run_id"] = "run-77"
         monkeypatch.setattr(svc, "validate", lambda: {"ok": False, "checks": []})
         c.post("/api/selfedit/finish", json={})
         finish = _wait_for_finish(c, "failed")
@@ -983,7 +985,10 @@ def _preflight_service(monkeypatch, tmp_path):
         "allow": ["web/src/**"], "core": ["jarvis/**"],
         "deny": ["jarvis/vault.py"],
     }))
-    svc = SelfEditService(repo_root=tmp_path, allowlist_path=al, github_token=None)
+    from tests.sandbox_fakes import FakeRuntime
+    runtime = FakeRuntime(tmp_path)
+    svc = SelfEditService(repo_root=tmp_path, allowlist_path=al, github_token=None, runtime_factory=lambda: runtime)
+    svc.test_runtime = runtime
     monkeypatch.setattr(srv, "_selfedit_service", svc)
     return svc
 
@@ -1040,3 +1045,115 @@ def test_stage_routine_goal_unchanged(registry_file, monkeypatch, tmp_path):
     c = TestClient(app)
     res = c.post("/api/selfedit/stage", json={"goal": "tidy docs/README.md"}).json()  # GC4: web/ frozen
     assert res["ok"] is True and res["core_change"] is False
+
+
+def test_cancel_finish_revokes_vm_before_validation_returns(registry_file, monkeypatch, tmp_path):
+    import threading
+    svc = _authoring_service(monkeypatch, tmp_path)
+    svc.start_session('Cancel verification')
+    svc.propose_edit('docs/README.md', '# candidate\n', 'test cancellation')
+    entered, release = threading.Event(), threading.Event()
+
+    def slow_validation():
+        entered.set()
+        assert release.wait(5)
+        # Even a late successful result cannot trigger publication.
+        return {'ok': True, 'checks': [{'name': 'independent-vm', 'ok': True}]}
+
+    monkeypatch.setattr(svc, 'validate', slow_validation)
+    client = TestClient(app)
+    assert client.post('/api/selfedit/finish', json={}).json()['started']
+    assert entered.wait(5)
+    try:
+        assert client.post('/api/selfedit/cancel').json()['cancel_requested']
+        assert svc.status()['phase'] == 'cancelled'
+    finally:
+        release.set()
+    deadline = time.monotonic()+5
+    while time.monotonic()<deadline:
+        state = client.get('/api/selfedit/run').json()['finish']['state']
+        if state == 'cancelled':
+            break
+        time.sleep(.02)
+    assert state == 'cancelled'
+    assert not any(e[0] == 'submit' for e in svc.test_runtime.events)
+
+
+@pytest.fixture(autouse=True)
+def reset_opening_job(monkeypatch):
+    monkeypatch.setattr(srv, '_opening_job', {'state': 'idle', 'cancel_requested': False})
+
+
+@pytest.mark.parametrize('cancel', [False, True])
+def test_slow_workspace_setup_returns_promptly_and_can_be_cancelled(registry_file, monkeypatch, tmp_path, cancel):
+    svc = _authoring_service(monkeypatch, tmp_path)
+    entered, release = threading.Event(), threading.Event()
+    original = svc.start_session
+    def slow_start(*args, **kwargs):
+        entered.set()
+        assert release.wait(5)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(svc, 'start_session', slow_start)
+    client = TestClient(app)
+    staged = client.post('/api/selfedit/stage', json={'goal': 'Update docs/README.md',
+        'target_paths': ['docs/README.md']}).json()
+    started = time.monotonic()
+    response = client.post('/api/selfedit/run', json={'staging_id': staged['staging_id'], 'author': True}).json()
+    assert time.monotonic()-started < 1
+    assert response['ok'] and response['opening']
+    assert entered.wait(1)
+    assert client.get('/api/selfedit/run').json()['opening']['state'] == 'starting'
+    try:
+        if cancel:
+            assert client.post('/api/selfedit/cancel').json()['cancel_requested']
+    finally:
+        release.set()
+    deadline = time.monotonic()+5
+    while time.monotonic()<deadline:
+        opening = client.get('/api/selfedit/run').json()['opening']
+        if opening['state'] in {'ready', 'cancelled', 'error'}:
+            break
+        time.sleep(.02)
+    assert opening['state'] == ('cancelled' if cancel else 'ready'), opening
+    if cancel:
+        assert svc.status()['phase'] == 'cancelled'
+    else:
+        assert opening['result']['session']['sandbox_task'] == svc.status()['task']
+
+
+@pytest.mark.parametrize('method', ['read', 'write'])
+def test_cold_file_request_only_warms_vm_and_requires_explicit_retry(registry_file, monkeypatch, tmp_path, method):
+    svc = _authoring_service(monkeypatch, tmp_path)
+    svc.start_session('Resume saved edit')
+    session = svc.test_runtime.current
+    session.state.update(ready=False, vm_status='stopped')
+    before = session.files['docs/README.md']
+    entered, release = threading.Event(), threading.Event()
+    resume = svc.resume
+    def slow_resume(expected_session_id=None):
+        entered.set()
+        assert release.wait(5)
+        return resume(expected_session_id)
+    monkeypatch.setattr(svc, 'resume', slow_resume)
+    client = TestClient(app)
+    def request():
+        if method == 'read':
+            return client.get('/api/selfedit/file', params={'path':'docs/README.md'}).json()
+        return client.post('/api/selfedit/write', json={'path':'docs/README.md',
+            'content':'# resumed edit\n', 'rationale':'one explicit edit'}).json()
+    started = time.monotonic()
+    response = request()
+    assert time.monotonic()-started < 1
+    assert not response['ok'] and response['pending'] and response['retryable']
+    assert entered.wait(1)
+    assert session.files['docs/README.md'] == before
+    assert not session.state['proposals']
+    release.set()
+    deadline = time.monotonic()+5
+    while time.monotonic()<deadline:
+        if client.get('/api/selfedit/run').json()['opening']['state'] == 'ready':
+            break
+        time.sleep(.02)
+    assert not session.state['proposals'], 'Warmup must never replay a submitted edit.'
+    assert request()['ok']
+    assert len(session.state['proposals']) == (1 if method == 'write' else 0)

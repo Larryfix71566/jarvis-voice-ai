@@ -715,3 +715,23 @@ def test_plan_adopt_confirm_reports_review_wording():
     r = logic.plan_adopt(c, confirm=True)
     assert r["ok"] is True
     assert "drafted the review" in r["summary"].lower()
+
+
+def test_workspace_preparation_is_reported_without_inventing_a_planner():
+    client = FakeClient({('POST', '/api/selfedit/run'): {'ok': True, 'started': True, 'opening': True}})
+    result = logic.selfedit_start(client, confirm=True, staging_id='stage-1')
+    assert result['opening'] and 'prepared' in result['summary']
+    assert 'planner_model' not in result
+    client = FakeClient({('GET', '/api/selfedit/run'): {'ok': True,
+        'opening': {'state': 'starting'}, 'status': {}, 'stagings': []}})
+    result = logic.selfedit_status(client)
+    assert 'not ready for edits' in result['summary']
+
+
+def test_saved_publication_is_reported_after_process_job_state_is_lost():
+    client = FakeClient({('GET', '/api/selfedit/run'): {'ok':True,
+        'job':{'state':'idle'}, 'status':{'active':False,
+            'publication':{'url':'https://github.com/test/repo/pull/42'}}}})
+    result = logic.selfedit_status(client)
+    assert 'https://github.com/test/repo/pull/42' in result['summary']
+    assert 'No upgrade' not in result['summary']

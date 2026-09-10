@@ -26,7 +26,7 @@ class SessionTests(unittest.TestCase):
         self.guests = {}
         self.fail_hydration = False
         self.cancel_in_check = False
-        for name in ('start', 'stop', 'destroy', 'rpc'):
+        for name in ('start', 'stop', 'destroy', 'rpc', 'reconcile'):
             p = patch.object(self.c, name, side_effect=getattr(self, name))
             p.start(); self.addCleanup(p.stop)
         self.session = Session.create(self.c, self, self, self.profile, lambda p: p == 'app.py',
@@ -46,6 +46,8 @@ class SessionTests(unittest.TestCase):
         guest = self.root / ('guest-' + task); guest.mkdir(); (guest / 'app.py').write_bytes(b'original')
         self.guests[task] = guest
         return task
+
+    def reconcile(self, task): return self.c.read(task)
 
     def start(self, task, **kwargs):
         self.events.append(('start', task))
@@ -70,6 +72,29 @@ class SessionTests(unittest.TestCase):
             raise SandboxError('cancelled during verification')
         return {'passed': True, 'candidate': candidate.fingerprint, 'attempt': 'b' * 32,
             'verification_task': 'c' * 12, 'checks': [{'name': 'required', 'passed': True, 'returncode': 0, 'seconds': 1}]}
+
+    def test_resume_preserves_edits_and_requires_fresh_readiness_after_restart(self):
+        self.session.propose_edit('app.py', 'saved edit', 'keep it')
+        task = self.session.status()['task']
+        self.assertTrue(self.session.status()['ready'])
+        self.stop(task)
+        self.assertFalse(self.session.status()['ready'])
+        self.assertTrue(self.session.resume()['ready'])
+        self.assertEqual(self.session.read_file('app.py')['content'], 'saved edit')
+        self.c._ready_tasks.clear()  # A newly constructed host runtime trusts no cached readiness.
+        self.assertFalse(self.session.status()['ready'])
+        self.session.resume()
+        self.assertTrue(self.session.status()['ready'])
+        self.assertEqual(len(self.session.status()['proposals']), 1)
+
+    def test_resume_invalidates_an_abandoned_verification(self):
+        self.session.propose_edit('app.py', 'saved edit', 'keep it')
+        state = self.session._read(); state.update(phase='validating', checks=[{'ok':True}]); self.session._save(state)
+        self.session.resume()
+        self.assertEqual(self.session.status()['phase'], 'validation_failed')
+        self.assertEqual(self.session.status()['checks'], [])
+        self.assertIn('interrupted', self.session.status()['recovery_notice'])
+        self.assertIsNone(self.session._files(state).status()['verification'])
 
     def test_reopen_reads_same_guest_and_preserves_validation_invalidation(self):
         self.session.propose_edit('app.py', 'updated', 'needed')

@@ -119,3 +119,48 @@ access, speech simulations, full voice and native preview journeys, lifecycle
 quotas/checkpoints, and release/database rollback workflows remain. The full
 scope is tracked in [IMPLEMENTATION.md](IMPLEMENTATION.md). Physical audio and
 device permission tests require separate evidence.
+
+
+## Application routing and web starter checkpoint
+
+The adapters now use VM sessions. The complete unit suite plus the updated
+self-edit API integration passed 2,340 tests inside development VM
+`e1b7f62568f4`. After asynchronous authoring setup was added, the affected API
+and voice-tool selection passed all 164 tests. The trusted host controller
+suite passes 93 tests, including live log delivery and split-credential
+redaction. These are separate runs, not additive test totals.
+
+A broader `pytest tests` run was interrupted after 1,060 seconds while real
+tool-server startup remained slow. Its failed-test cache identified the weather
+integration test, which calls a real external API and now carries the suite’s
+`live` marker. The whole integration suite has not passed; startup performance
+and remaining integration failures require follow-up.
+
+A disposable copy of the repository’s plain web starter was edited in VM
+`a22b4261e933` and independently verified in VM `e3bd8c798ea7`. Both required
+checks passed: JavaScript syntax and offline browser startup/initial render.
+The complete candidate stayed unchanged. No repository or pull request was
+created for this web fixture. This does not cover arbitrary application
+interactions, backend dependencies, or native GUI behavior.
+
+Exact revisions, fingerprints and log hashes are in
+[the routing acceptance record](acceptance/2026-09-10-routing.json).
+
+## Resume and reconnect checkpoint
+
+Development VM `da3811daeb0d` passed 303 affected application/API tests, then
+87 workspace and self-edit voice-tool tests after the publication-status fix.
+The trusted controller suite passed 101 tests. These selections overlap and
+must not be added together as distinct test coverage.
+
+A documentation edit and its saved proposal survived a VM stop and fresh
+host controller. Separate checks recovered from a stale recorded running state.
+Controlled failure injection left verification child `f33b9d630250` running
+with the session marked validating and a deliberately stale approval. Resume
+stopped that child, refused its restart, cleared the approval and check list,
+and preserved the edit. This was interruption recovery, not a completed
+independent verification or publication of that candidate.
+
+Both test VMs were deleted and the session reverted, retaining host evidence.
+Exact identifiers and check log hashes are in
+[the resume acceptance record](acceptance/2026-09-10-resume.json).

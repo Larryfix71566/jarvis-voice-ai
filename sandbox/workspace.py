@@ -45,6 +45,15 @@ class SandboxWorkspace:
                     'session_id': session.id, 'source_commit': state['ref'], 'worktree': None}
         except (SandboxError, OSError, ValueError, KeyError) as exc: return self._error(exc)
 
+    def resume(self, expected_session_id=None) -> dict:
+        try:
+            session = self._session()
+            if expected_session_id is not None and session.id != expected_session_id:
+                raise SandboxError('The workspace session changed; inspect its status before retrying.')
+            return session.resume()
+        except (SandboxError, OSError, ValueError, KeyError) as exc:
+            return self._error(exc)
+
     def read_file(self, path: str) -> dict: return self._invoke('read_file', path)
     def propose_edit(self, path: str, new_content: str, rationale: str, visual_intent: str = '') -> dict:
         return self._invoke('propose_edit', path, new_content, rationale, visual_intent)
@@ -75,9 +84,12 @@ class SandboxWorkspace:
                 return {'active': False, 'branch': None, 'proposals': [], 'validated_ok': False, 'worktree': None}
             state = session.status()
             active = state['phase'] not in TERMINAL
+            checked = bool(state.get('checks')) and all(check.get('ok') is True for check in state['checks'])
             return {**state, 'active': active, 'branch': state['branch'] if active else None,
                 'session_branch': state['branch'], 'worktree': None, 'rollback_tag': None,
-                'validated_ok': state['phase'] == 'validated'}
+                'pr_url': (state.get('publication') or {}).get('url'),
+                'pr_number': (state.get('publication') or {}).get('number'),
+                'validated_ok': checked and state['phase'] in {'validated', 'publishing', 'publication_pending'}}
         except (SandboxError, OSError, ValueError, KeyError) as exc:
             return {'active': False, 'branch': None, 'proposals': [], 'validated_ok': False, 'worktree': None,
                     'error': self._error(exc)['error']}

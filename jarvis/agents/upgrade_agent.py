@@ -626,6 +626,9 @@ class UpgradeAgent:
         PLAN_DIVERGENCE_RULE (Phase 3) rides in the same message, ahead
         of the plan text — see that constant's comment.
         """
+        if self._cancel.is_set():
+            return {"ok": False, "cancelled": True, "session_started": False,
+                    "summary": "Cancelled before starting a development session.", "status": self.service.status()}
         if self._key_missing:
             return {
                 "ok": False,
@@ -914,6 +917,9 @@ class UpgradeAgent:
         """Ask the running edit loop to stop at its next step (see
         __init__). Safe to call from any thread; idempotent."""
         self._cancel.set()
+        cancel = getattr(self.service, "cancel", None)
+        if callable(cancel):
+            cancel()
 
     @property
     def cancel_requested(self) -> bool:
