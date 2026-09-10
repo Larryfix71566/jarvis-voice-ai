@@ -156,26 +156,31 @@ def test_base_env_keys_are_copied_only_when_present(monkeypatch):
 
 def test_missing_declared_var_warns_and_does_not_crash(monkeypatch, caplog):
     """K2: spawn proceeds, a WARNING names the server and the variable."""
-    from jarvis.skills.registry import _WARNED_MISSING
-    _WARNED_MISSING.discard(("mcp-repo", "JARVIS_REPO_ROOT"))
-    monkeypatch.delenv("JARVIS_REPO_ROOT", raising=False)
+    from jarvis.skills import registry
+    # GC1/GC3: repo root now correctly has a default; exercise a real
+    # credential requirement and restore the warning cache after this test.
+    monkeypatch.setattr(registry, "_WARNED_MISSING", set())
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
     with caplog.at_level("WARNING"):
-        env = build_child_env({"name": "mcp-repo", "env": {}})
-    assert "JARVIS_REPO_ROOT" not in env
+        env = build_child_env({"name": "mcp-web", "env": {}})
+    assert "TAVILY_API_KEY" not in env
     assert "mcp_server_env_missing" in caplog.text
-    assert "mcp-repo" in caplog.text
-    assert "JARVIS_REPO_ROOT" in caplog.text
+    assert "mcp-web" in caplog.text
+    assert "TAVILY_API_KEY" in caplog.text
 
 
 def test_missing_var_warns_once_per_process(monkeypatch, caplog):
     """Measured: without dedupe, mcp-screen printed 6 WARNINGs per spawn."""
-    from jarvis.skills.registry import _WARNED_MISSING
-    _WARNED_MISSING.discard(("mcp-repo", "JARVIS_REPO_ROOT"))
-    monkeypatch.delenv("JARVIS_REPO_ROOT", raising=False)
+    from jarvis.skills import registry
+    # GC1/GC3: repo root now correctly has a default; exercise a real
+    # credential requirement and restore the warning cache after this test.
+    monkeypatch.setattr(registry, "_WARNED_MISSING", set())
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
     with caplog.at_level("WARNING"):
-        build_child_env({"name": "mcp-repo", "env": {}})
+        build_child_env({"name": "mcp-web", "env": {}})
+        assert "mcp_server_env_missing" in caplog.text
         caplog.clear()
-        build_child_env({"name": "mcp-repo", "env": {}})
+        build_child_env({"name": "mcp-web", "env": {}})
     assert "mcp_server_env_missing" not in caplog.text
 
 

@@ -4,8 +4,9 @@ version: 1.0.0
 class: standard
 tools: [screen_list, screen_view]
 # logic.py:97 JARVIS_SCREEN_ENABLED, logic.py:274 JARVIS_VISION_PROFILE (both
-# gate whether vision runs at all).
-requires_env: [JARVIS_SCREEN_ENABLED, JARVIS_VISION_PROFILE]
+# gate whether vision runs at all). Both have defaults: screen_enabled()
+# and _resolve_vision_profile(). Explicit settings still reach the child.
+requires_env: []
 # JARVIS_SCREEN_RETENTION_HOURS (logic.py:108) has a code default.
 # JARVIS_UPGRADE_MODELS is read TRANSITIVELY: logic.py:66 imports
 # jarvis.agents.upgrade_agent, which reads it (upgrade_agent.py:218) to locate
@@ -13,7 +14,7 @@ requires_env: [JARVIS_SCREEN_ENABLED, JARVIS_VISION_PROFILE]
 # it a custom-registry operator would silently load the WRONG registry (review
 # F11). optional_env forwards it when the operator has set it; default installs
 # (unset) stay green under check_skills.py.
-optional_env: [JARVIS_SCREEN_RETENTION_HOURS, JARVIS_UPGRADE_MODELS]
+optional_env: [JARVIS_SCREEN_ENABLED, JARVIS_VISION_PROFILE, JARVIS_SCREEN_RETENTION_HOURS, JARVIS_UPGRADE_MODELS]
 # The vision API key's NAME is a value in config/upgrade_models.yaml
 # (api_key_env:), chosen at call time by JARVIS_VISION_PROFILE — see
 # mcp_screen/logic.py:283. A static list would go stale the day a profile

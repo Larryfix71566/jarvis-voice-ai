@@ -1,6 +1,8 @@
 # Mortimer gap closure — the thirteen gaps from the 2026-09-04 architecture snapshot
 
-**Status:** **IMPLEMENTED (code) 2026-09-04 — §8 VERIFICATION ALL BUT COMPLETE, 2026-09-05.** All GC items are in the tree: GC1b (`VALIDATE_PYTEST_TIMEOUT_S` 900), GC2 (REPO_MAP), GC3 (ROADMAP), GC4 (web freeze — **scope amended 09-05, see below**), GC5 (`bot/pipeline.py:1130`), GC6 (judge error string, `temperature: null`, `agreement.py:188`), GC7 (`backup_db.py`, `launchd_gen.py`), GC8 (`jarvis/tenant.py`), GC9 (migration 0021 + `reminder_notifier.py` + `notify.py`), GC10 (root `.wav` gone).
+**Status:** CODE IMPLEMENTED; autonomous gap re-audit verified 2026-09-10. User-dependent acceptance and deployment remain open (see current re-audit below).
+
+**Original status (2026-09-05):** **IMPLEMENTED (code) 2026-09-04 — §8 VERIFICATION ALL BUT COMPLETE, 2026-09-05.** All GC items are in the tree: GC1b (`VALIDATE_PYTEST_TIMEOUT_S` 900), GC2 (REPO_MAP), GC3 (ROADMAP), GC4 (web freeze — **scope amended 09-05, see below**), GC5 (`bot/pipeline.py:1130`), GC6 (judge error string, `temperature: null`, `agreement.py:188`), GC7 (`backup_db.py`, `launchd_gen.py`), GC8 (`jarvis/tenant.py`), GC9 (migration 0021 + `reminder_notifier.py` + `notify.py`), GC10 (root `.wav` gone).
 
 **§8 RESULTS (Larry's hardware, 2026-09-05).** §8.2 PASS. §8.4 **COMPLETE** — first backups ever, verified (`integrity_check ok`, 36/36 rounds, 414/414 runs); launchd live, five pids, both supervision proofs (`mortimer.sh` exits 3; killing the bot respawns it in <10 s); vault key exported off-machine. §8.5 **MEASURED** — voice $0.2239 vs LLM $0.3647, ratio **0.61**, so snapshot item 9 did NOT hold; but 09-03 measured 3-4x on a conversational workload, so it swings with the session and is n=1 both ways - do not buy hardware on it. §8.7 **COMPLETE** — `d6e0059b` replayed, five frontier judges, `superseded shadow rows: 20`, frontier abstention 0.4 -> 0.0. §8.8 **COMPLETE**. §8.9 **COMPLETE** — notified at +76 s while disconnected, spoken exactly once on reconnect. §8.10 **COMPLETE** — audit first: `git ls-files -- '*.wav'` returned nothing, so GC10's removal was already total and this step's `git rm --cached` had nothing to act on; cleared ~26 MB of `_to_delete` and `_to_delete_tarballs`, and added `Claude outputs/` to `.gitignore` since the desktop app writes downloads into the repo root on every save.
 
@@ -13,38 +15,93 @@
 **STILL OPEN:** §8.3 speaker gate (offline); §8.6 self-edit half (staging TTL 600 s — re-stage and confirm promptly; use a `docs/` goal, `macos/**` never reaches validation); the GC6(d) edit itself (`config/upgrade_models.yaml` is human-only). **GC6(d) evidence says DEMOTE:** kimi-k3 produced 12 nulls in 24 rows (50%), alternating not trending — failed 08-23 x2, worked 08-30 x2, failed 09-01, worked 09-05 — while every other mid judge is at zero (or-gpt-5.1 0/24, or-grok-4.3 0/24, or-sonnet-5 0/20, claude-sonnet-5 0/4). **100% of mid-tier abstentions ever are kimi-k3.** Caveat: demotion moves it to the proposer pool rather than fixing it; a 50% timeout rate against one provider suggests the timeout is too tight for Moonshot, and GC6(a) means the next failure will finally carry a real error string.
 
 **DEFECTS FOUND BY RUNNING THIS PLAN, none of them in it.** (1) `jarvis/council/__main__.py` never loaded vault credentials, so `--replay` — GC6(b)'s own repair tool — was dead since it was written; fixed `0084d23`. (2) Validation built the frozen web client on every self-edit; fixed `634d629` (above). (3) A barge-in during a delegation duplicated the next write — one store request produced two `delegate_task` calls and two notes; fixed `2a13857`. (4) `requirements.txt` line 1 had NO version pin, so the venv rebuild during the move resolved pipecat 1.8.1 and dropped the ElevenLabs SDK; pinned `54abcd6`. **This project has no `pyproject.toml` — `uv sync` does not work; rebuild with `uv venv --python 3.12` then `uv pip install -r requirements-lock.txt`.** Original header: DRAFT for Larry's approval, 2026-09-04.
-**2026-09-10 re-audit (in progress).** This audit checks the implementation
-against the current sandbox architecture; the 09-05 results above remain
-historical evidence, not fresh acceptance of every subsequent change.
+**2026-09-10 re-audit — current implementation and remaining acceptance.**
+The original plan and September 5 results are historical. This re-audit
+checks the current sandbox architecture. The reproducible verification record
+is `sandbox/acceptance/2026-09-10-gap-closure.json`; PR #62 contains the recovery fixes; PR #63 contains the manifest correction and final record.
 
-- GC1: the initial complete-suite attempt was deliberately interrupted after
-  diagnosing repeated PyPI update checks in MCP startup. The diagnostic measured
-  30.46 seconds with checks enabled versus 0.40 seconds disabled. Mortimer MCP
-  services now default `FASTMCP_CHECK_FOR_UPDATES=off` at package initialization;
-  dependency updates remain a maintenance action. The final candidate suite and
-  two alternate-order runs remain required. Three MCP integration tests now
-  restore their temporary database environment setting.
-- GC1b: the effective full-unit gate moved to `sandbox/verify.py`. Both baseline
-  and candidate backend checks retain 900 seconds; the other verification
-  checks keep their existing budgets. The regression is now
-  `sandbox/tests/test_verify.py::VerificationTests::test_mortimer_full_unit_gates_keep_900_second_timeout`.
-- GC2: the repository map now names the VM controller and current workspace
-  adapter, removes nonexistent app-build-agent references, and describes
-  backup retention as 14 snapshots per database.
-- GC5/GC9: transient announcement failures retry on the next poll instead of
-  terminating the watcher. Failed reminder posts leave `notified_at` unset and
-  do not prevent other reminders from being posted. Successful announcements
-  retain their existing deduplication rules. Candidate regression checks pending.
-- GC7: candidate backups publish a checked SQLite snapshot atomically, so a
-  failed retry cannot overwrite a good same-minute backup. Sources open
-  read-only and all connections close explicitly. Candidate WAL/failure tests pending.
-- GC7/GC8 host evidence: read-only inspection of the closed 2026-09-10 03:15
-  snapshots found six backups per database and `PRAGMA quick_check = ok` for
-  both newest snapshots. All 15 non-FTS application tables and the cost-ledger
-  table have `user_id TEXT NOT NULL DEFAULT 'local'`. This proves the saved
-  snapshot schema; no live database or vault was modified.
-- GC12: `JARVIS_KEYHEALTH_NOTICE_ENABLED=off` now disables construction,
-  consistently with the reminder notifier. Expanded wiring tests pending.
+- **GC1 / step 13:** All three complete unit/integration runs passed (2,458 passed, four existing live-service skips each): normal, reverse and seeded shuffle. Wrapper wall times were 375.655 s, 370.993 s, 439.586 s. Shell syntax, launchd dry run and static skill validation also passed. MCP startup now defaults the optional
+  FastMCP package-update banner off: the offline diagnostic fell from 30.46 s
+  to 0.40 s. Real stdio startup is regression-tested with DNS forbidden.
+  Three MCP integration tests restore their temporary database environment.
+  Alternate-order testing exposed an admin-URL polluter in the routing-eval
+  tests; fixing that test's environment cleanup restored both graph tests
+  without changing their assertions. No skip or xfail was added by the re-audit.
+- **GC1b:** both baseline and candidate full-unit gates in `sandbox/verify.py`
+  retain 900 seconds. The controller regression verifies both actual budgets.
+  2350 passed, 11 warnings in 237.20s (0:03:57); wrapper wall time 238.791 s under the 900-second budget. These VM timings do not justify reducing Larry's 900-second
+  decision; they are not measurements of a voice-triggered production edit.
+- **GC2:** REPO_MAP contains all 18 required phase modules, is 7,880 characters
+  (limit 8,000), and names the current VM controller and workspace adapter.
+  CLAUDE retains its historical architecture and identifies the replacement.
+- **GC3:** the seven plan status headers, Swift roadmap direction, two-vault
+  explanation and Procfile clarification are present. The required skill
+  validator exposed six settings incorrectly declared mandatory despite
+  runtime defaults. Five manifests now classify those settings as optional;
+  credentials remain required. Exact environment snapshots were updated in
+  this maintenance PR for review. All 13 servers retain the same forwarded
+  names and environment maps. Overrides still reach their child processes.
+  The installed trusted validator also accepted the candidate manifests
+  against the Mac's existing configuration, without exposing or transferring
+  vault contents or executing candidate application code on the host.
+- **GC4:** preflight refuses any goal naming a web path, including mixed goals.
+  Normal startup does not launch the web client; the manual fallback remains.
+  The current sandbox profile can verify the frozen frontend with prepared
+  dependencies. This is separate from permission to edit it and supersedes
+  the original fresh-worktree dependency-install procedure.
+- **GC5 / GC12:** refusal/recovery notices remain once per connection state;
+  failed injections now retry without advancing deduplication state. Cancellation
+  propagates. Construction tests cover the default and false/0/no/off settings.
+  Both new notice kill switches are read at their construction/start boundary.
+- **GC6:** judge/proposer failures include exception type; score supersession
+  keeps the newest round/judge/label/shadow row before metrics and reports the
+  dropped count. Regression tests cover timeout and supersession behavior.
+  The successful paid replay remains September 5 evidence; no paid replay was
+  repeated. `kimi-k3` remains mid tier pending Larry's explicit decision.
+- **GC7:** backups now publish an integrity-checked SQLite snapshot atomically,
+  open sources read-only, and close connections explicitly. Tests cover WAL
+  rows, a missing source, failed publication preserving an existing backup,
+  and failure without pruning. The executable CLI also copied two synthetic
+  databases successfully inside the VM. Retention remains 14 snapshots per
+  database and the default schedule remains 03:15.
+  Read-only Mac inspection found all six launchd jobs loaded, five services
+  running with KeepAlive, and the scheduled backup's last exit status zero.
+  **Current command behavior (since September 6):** `mortimer.sh start`
+  restarts all five launchd services; only `stop` refuses with exit 3. Logs
+  include the launchd files and restart rotates them. Do not repeat the old
+  start-refusal instruction in §8.4. No services were restarted for this audit.
+- **GC8:** transactional migration, the `(user_id, key)` fact index/conflict
+  target, validated tenant reader and default-column tests are present.
+  Closed September 10 03:15 backups passed `quick_check`; all 15 non-FTS
+  application tables and the cost table contain `user_id TEXT NOT NULL
+  DEFAULT 'local'`. Six snapshots existed for each database. This verifies
+  saved schema without touching the live database. Per-user filtering remains
+  outside this plan; the migrations/key export were already accepted September 5.
+- **GC9:** the notifier retains 30-second polling, 60-second grace and the
+  5-second/200-character notification bounds. A thrown post now leaves that
+  reminder unnotified, permits other due reminders, and retries next poll.
+  Successful notifications remain deduplicated and never mark spoken delivery.
+  Database, escaping and failure regressions pass in the complete suite.
+  Real disconnected notification/reconnect acceptance remains September 5 evidence.
+- **GC10:** no named legacy WAV/test/build artifacts remain tracked; ignore
+  rules cover the relevant paths. The sole remaining inactive `.overmind.sock`
+  had no open handles and was reversibly archived under
+  `_to_delete/2026-09-10/` after rechecking its identity. No production code,
+  database, vault, service configuration or running process was changed.
+- **GC11:** the platform roadmap retains gap closure before W1 and the
+  referenced T2/T3/T5/T6 tracks. Their product implementation is explicitly
+  outside this plan (§2); this audit does not claim those tracks are complete.
+
+**Remaining user-dependent acceptance:** label the existing speaker captures
+and verify Larry-versus-TV thresholds before enabling the speaker gate; run
+one real voice-driven docs self-edit on the approved version and inspect its
+sandbox verification receipt and draft PR (the old `selfedit validate` command
+is retired); decide whether to keep or demote `kimi-k3`; review/merge PR #63 and
+approve any deployment. The 20 existing speaker WAVs have no label manifest,
+so filenames alone cannot establish speaker acceptance. Historical cost ratios
+are workload-specific and do not establish a hardware-purchase recommendation.
+The original §8 and §12 command lists describe the 2026-09-04/05 rollout, not
+instructions to replay migrations, reinstall supervision, or use retired APIs.
 
 **Author / origin:** Larry, 2026-09-04: *"build an implementation plan for the gaps you identified first. I want to close all the gaps and I want the plan to be run by Sonnet."* Scope decisions taken the same day: freeze `web/` now (MortimerHost is the daily driver); **full `user_id` on every table** with backfill `'local'`; fix the six standing test failures and raise the self-edit pytest gate to 900 s (never a fast subset — CI and the gate must agree).
 **Roadmap constraints this plan is bound by:** C3 (nothing financial); K2 (no new MCP servers; one new optional env name declared where read); the self-edit deny tier — every step is a human PR.

@@ -1,0 +1,315 @@
+{
+  "date": "2026-09-10",
+  "scope": "Current GC1-GC12 gap-plan re-audit, excluding user-dependent hardware, model-tier and deployment decisions.",
+  "implementation_pr": 62,
+  "followup_pr": 63,
+  "source": {
+    "source_commit": "3ad589860ea13f30207c9d30e6362c023e749815",
+    "source_sha256": "8af6e3329876eb4f4439afb01aec36d5ea09d9e3c9a40894587ad53b3bad0c7b",
+    "source_files": 770,
+    "source_bytes": 9632801,
+    "candidate_fingerprint": "a60e56831b2b0db48c99d0adf25d06edef03ce45ae0a0bbc122de9df6620baa3",
+    "matches_tested_vm_source": true,
+    "identical_tree_to": "0b21ab77985e6a80dd1e87249516f0b7aade81d3"
+  },
+  "environment": {
+    "execution": "Offline disposable macOS VM; synthetic test data only",
+    "task": "27a887ef25ff",
+    "prepared_image": "32a82fdd1de4ebdd002bd720f671fe08af485a1631b21364442a7600d4abd49f",
+    "cpus": 4,
+    "memory_gib": 8,
+    "candidate_unchanged_after_checks": true,
+    "ordering": [
+      "normal",
+      "reverse",
+      "random.Random(19473).shuffle"
+    ]
+  },
+  "checks": [
+    {
+      "name": "gap-v4-normal",
+      "passed": true,
+      "returncode": 0,
+      "seconds": 375.655,
+      "log_sha256": "8acadbd88ff84d177d2ae685fd6903c9ef3c54f3fe599c2ec58bb9a070788c4a",
+      "pytest_summary": "2458 passed, 4 skipped, 27 warnings in 374.54s (0:06:14)"
+    },
+    {
+      "name": "gap-v4-reverse",
+      "passed": true,
+      "returncode": 0,
+      "seconds": 370.993,
+      "log_sha256": "8719c788f62927efc7b15b3f66de9c9724c79650009e3d92ccbb9d26b41d278b",
+      "pytest_summary": "2458 passed, 4 skipped, 27 warnings in 370.20s (0:06:10)"
+    },
+    {
+      "name": "gap-v4-shuffle",
+      "passed": true,
+      "returncode": 0,
+      "seconds": 439.586,
+      "log_sha256": "1d69eeec7ce4fd0b934259024c973e4751bf965abb5f306b6581204800f932bd",
+      "pytest_summary": "2458 passed, 4 skipped, 27 warnings in 437.85s (0:07:17)"
+    },
+    {
+      "name": "gap-v4-unit-wall-time",
+      "passed": true,
+      "returncode": 0,
+      "seconds": 238.791,
+      "log_sha256": "199a0f3409a7c46f1488e3df3ba67ca9c9500d24022440d73d2a29b23e2187ae",
+      "pytest_summary": "2350 passed, 11 warnings in 237.20s (0:03:57)"
+    },
+    {
+      "name": "gap-v4-shell-syntax",
+      "passed": true,
+      "returncode": 0,
+      "seconds": 0.258,
+      "log_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "name": "gap-v4-launchd-dry-run",
+      "passed": true,
+      "returncode": 0,
+      "seconds": 0.112,
+      "log_sha256": "595842ae5a4f45b7c84a78c51a03a4651ca8a9145d17161ef6c5737263e8a925"
+    },
+    {
+      "name": "gap-v4-skill-manifests",
+      "passed": true,
+      "returncode": 0,
+      "seconds": 0.315,
+      "log_sha256": "e40f137c2d1f72ec3bd997c99ec844c6e270505bad822dcb16eacc4a3bfcdf36"
+    }
+  ],
+  "controller_ci": {
+    "commit": "3ad589860ea13f30207c9d30e6362c023e749815",
+    "passed": true,
+    "tests": 102,
+    "seconds": 2.197,
+    "job_url": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/34500387769/job/102949405541"
+  },
+  "backup_executable_check": {
+    "name": "gap-backup-cli-executable",
+    "passed": true,
+    "seconds": 0.853,
+    "log_sha256": "67567e8ad45c812fa9d11576c21a861695e66668622ff184fe218d7202958982"
+  },
+  "static_evidence": {
+    "environment_contract": {
+      "servers": 13,
+      "forwarded_names_unchanged": true,
+      "env_maps_unchanged": true
+    },
+    "repo_map": {
+      "characters": 7880,
+      "required_names": [
+        "jarvis/usage_ledger.py",
+        "costs_api.py",
+        "memory_extraction.py",
+        "memory_extraction_worker.py",
+        "kb_digest.py",
+        "effort.py",
+        "anthropic_shim.py",
+        "sensitive.py",
+        "bot/sensitive_turn.py",
+        "bot/usage_watcher.py",
+        "bot/late_result.py",
+        "bot/costs_tool.py",
+        "tenant.py",
+        "mcp_servers/mcp_kb",
+        "scripts/cost_report.py",
+        "scripts/pull_openrouter_activity.py",
+        "scripts/backup_db.py",
+        "scripts/launchd_gen.py"
+      ],
+      "all_present": true,
+      "path_notation": "Scripts and MCP names are grouped under their directory entries."
+    }
+  },
+  "host_launchd_observation": {
+    "checked_at": "2026-09-10T15:31:52.782345+00:00",
+    "services": {
+      "vault": {
+        "loaded": true,
+        "runtime": {
+          "state": "running",
+          "pid": "83345"
+        },
+        "keep_alive": true,
+        "schedule": null
+      },
+      "bot": {
+        "loaded": true,
+        "runtime": {
+          "state": "running",
+          "pid": "83367"
+        },
+        "keep_alive": true,
+        "schedule": null
+      },
+      "extractor": {
+        "loaded": true,
+        "runtime": {
+          "state": "running",
+          "pid": "83356"
+        },
+        "keep_alive": true,
+        "schedule": null
+      },
+      "admin": {
+        "loaded": true,
+        "runtime": {
+          "state": "running",
+          "pid": "83352"
+        },
+        "keep_alive": true,
+        "schedule": null
+      },
+      "costs": {
+        "loaded": true,
+        "runtime": {
+          "state": "running",
+          "pid": "83361"
+        },
+        "keep_alive": true,
+        "schedule": null
+      },
+      "backup": {
+        "loaded": true,
+        "runtime": {
+          "state": "not running",
+          "last exit code": "0"
+        },
+        "keep_alive": false,
+        "schedule": {
+          "Hour": 3,
+          "Minute": 15
+        }
+      }
+    }
+  },
+  "closed_backup_observation": {
+    "observed_at": "2026-09-10T16:11:29.348847+00:00",
+    "backups": {
+      "jarvis": {
+        "latest": "jarvis.20260910-0315.db",
+        "snapshot_count": 6,
+        "quick_check": "ok",
+        "tenant_columns": {
+          "notes": {
+            "type": "TEXT",
+            "not_null": true,
+            "default": "'local'"
+          },
+          "reminders": {
+            "type": "TEXT",
+            "not_null": true,
+            "default": "'local'"
+          },
+          "conversations": {
+            "type": "TEXT",
+            "not_null": true,
+            "default": "'local'"
+          },
+          "actions": {
+            "type": "TEXT",
+            "not_null": true,
+            "default": "'local'"
+          },
+          "memories": {
+            "type": "TEXT",
+            "not_null": true,
+            "default": "'local'"
+          },
+          "observations": {
+            "type": "TEXT",
+            "not_null": true,
+            "default": "'local'"
+          },
+          "agent_runs": {
+            "type": "TEXT",
+            "not_null": true,
+            "default": "'local'"
+          },
+          "agent_events": {
+            "type": "TEXT",
+            "not_null": true,
+            "default": "'local'"
+          },
+          "procedures": {
+            "type": "TEXT",
+            "not_null": true,
+            "default": "'local'"
+          },
+          "council_rounds": {
+            "type": "TEXT",
+            "not_null": true,
+            "default": "'local'"
+          },
+          "council_scores": {
+            "type": "TEXT",
+            "not_null": true,
+            "default": "'local'"
+          },
+          "memory_reviews": {
+            "type": "TEXT",
+            "not_null": true,
+            "default": "'local'"
+          },
+          "memory_extraction_cursor": {
+            "type": "TEXT",
+            "not_null": true,
+            "default": "'local'"
+          },
+          "memory_extraction_pending": {
+            "type": "TEXT",
+            "not_null": true,
+            "default": "'local'"
+          },
+          "memory_recall_events": {
+            "type": "TEXT",
+            "not_null": true,
+            "default": "'local'"
+          }
+        },
+        "source_metadata_unchanged": true
+      },
+      "costs": {
+        "latest": "costs.20260910-0315.db",
+        "snapshot_count": 6,
+        "quick_check": "ok",
+        "tenant_columns": {
+          "llm_calls": {
+            "type": "TEXT",
+            "not_null": true,
+            "default": "'local'"
+          }
+        },
+        "source_metadata_unchanged": true
+      }
+    },
+    "archival": {
+      "original_absent": true,
+      "archive_is_socket": true
+    }
+  },
+  "live_configuration_validation": {
+    "passed": true,
+    "method": "Installed trusted check_skills validator and installed registry read candidate manifests as data after installed vault injection. Candidate application code was not executed on the host. No credential contents were output or copied."
+  },
+  "prior_regressions": {
+    "routing_polluter": "Both graph tests passed alone; the unset-admin-URL routing test reproduced both failures. Restoring its environment resolved them without modifying graph assertions.",
+    "manifest_contracts": "After defaulted settings became optional, two old contract assertions failed alone. Update required/optional categories and test warnings against the still-required TAVILY_API_KEY. Forwarded-name unions and env maps are unchanged.",
+    "new_skips_or_xfails": false,
+    "existing_live_service_skips": 4
+  },
+  "deployment_changed": false,
+  "host_cleanup": "Only the inactive .overmind.sock was archived to _to_delete/2026-09-10 after no-open-handle and identity checks. No production code, database, vault, service configuration or running service was changed.",
+  "remaining_user_steps": [
+    "Label speaker recordings and verify Larry-versus-TV thresholds before enabling the speaker gate.",
+    "Run one real voice-driven docs self-edit on the approved version and inspect its sandbox verification receipt and draft PR.",
+    "Decide whether kimi-k3 remains mid tier or is demoted.",
+    "Review/merge the follow-up and authorize deployment."
+  ],
+  "historical_acceptance": "September 5 voice, paid council replay, supervision restart, key export and notification/reconnect results remain historical evidence, not repeated in this audit.",
+  "other_tracks": "T2/T3/T5/T6 implementations remain explicitly outside this plan."
+}

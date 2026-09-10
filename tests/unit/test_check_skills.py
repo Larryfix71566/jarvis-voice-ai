@@ -124,3 +124,29 @@ def test_run_tests_flag_executes(mod, scratch):
     p.write_text(p.read_text().replace('test: "true"', 'test: "false"'))
     errors = mod.validate(scratch, run_tests=True)
     assert any("test command failed" in e for e in errors)
+
+
+def test_defaulted_settings_are_optional_and_overrides_still_reach_children(mod, monkeypatch, tmp_path):
+    """GC1/GC3: explicit-only manifest requirements falsely rejected live defaults."""
+    import yaml
+    from jarvis.skills import registry
+
+    monkeypatch.setattr(registry, "_WARNED_MISSING", set())
+    monkeypatch.setattr(mod, "load_env_file", lambda root: {})
+    defaults = (
+        ("mcp-git", "JARVIS_REPO_ROOT", str(tmp_path)),
+        ("mcp-repo", "JARVIS_REPO_ROOT", str(tmp_path)),
+        ("mcp-kb", "KB_BASE_URL", "http://127.0.0.1:18484"),
+        ("mcp-screen", "JARVIS_SCREEN_ENABLED", "false"),
+        ("mcp-screen", "JARVIS_VISION_PROFILE", "test-vision"),
+        ("mcp-web", "JARVIS_UNITS", "metric"),
+    )
+    for manifest_path in (ROOT / "mcp_servers").glob("*/skill.yaml"):
+        for name in yaml.safe_load(manifest_path.read_text()).get("requires_env", []):
+            monkeypatch.setenv(name, "test-set")
+    for _, name, _ in defaults:
+        monkeypatch.delenv(name, raising=False)
+    assert mod.validate(ROOT) == []
+    for server, name, value in defaults:
+        monkeypatch.setenv(name, value)
+        assert registry.build_child_env({"name": server})[name] == value
