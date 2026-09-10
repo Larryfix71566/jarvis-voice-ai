@@ -1,6 +1,8 @@
 import importlib.util
+import hashlib
 import json
 import os
+import shlex
 from pathlib import Path
 import subprocess
 import tarfile
@@ -67,6 +69,23 @@ class SourceTests(unittest.TestCase):
             self.assertFalse(control.source_path_allowed(name), name)
         self.assertTrue(control.source_path_allowed("tests/fixtures/example.json"))
 
+    def test_reviewed_synthetic_fixture_requires_exact_path_and_content(self):
+        data = ("sk-" + "a" * 30).encode()
+        (self.repo / "fixture.py").write_bytes(data)
+        self.commit()
+        reviewed = {"fixture.py": hashlib.sha256(data).hexdigest()}
+        with patch.dict(control.REVIEWED_TEST_FIXTURES, reviewed, clear=True):
+            control.snapshot(self.repo, "HEAD", self.root / "source.tar")
+            (self.repo / "fixture.py").write_bytes(data + b"changed")
+            self.commit()
+            with self.assertRaises(control.SandboxError):
+                control.snapshot(self.repo, "HEAD", self.root / "changed.tar")
+            (self.repo / "fixture.py").unlink()
+            (self.repo / "elsewhere.py").write_bytes(data)
+            self.commit()
+            with self.assertRaises(control.SandboxError):
+                control.snapshot(self.repo, "HEAD", self.root / "moved.tar")
+
 
 class ControllerTests(unittest.TestCase):
     def setUp(self):
@@ -104,6 +123,50 @@ class ControllerTests(unittest.TestCase):
         with patch.object(self.c, "command", side_effect=subprocess.TimeoutExpired("tart", 1)), patch.object(self.c, "stop") as stop:
             with self.assertRaises(control.SandboxError): self.c.guest(self.task, ["sleep", "99"], timeout=1)
             stop.assert_called_once_with(self.task)
+
+    def test_stop_reconciles_a_vm_that_already_exited(self):
+        self.c.save(self.task, {"vm": "mortimer-" + self.task, "status": "running"})
+        listing = subprocess.CompletedProcess([], 0, stdout=json.dumps([
+            {"Name": "mortimer-" + self.task, "State": "stopped"}]))
+        with patch.object(self.c, "command", side_effect=[subprocess.CalledProcessError(1, "stop"), listing]):
+            self.c.stop(self.task)
+        self.assertEqual(self.c.read(self.task)["status"], "stopped")
+
+    def test_failed_stop_does_not_claim_a_running_or_unknown_vm_stopped(self):
+        for entries in [[], [{"Name": "mortimer-" + self.task, "State": "running"}]]:
+            self.c.save(self.task, {"vm": "mortimer-" + self.task, "status": "running"})
+            listing = subprocess.CompletedProcess([], 0, stdout=json.dumps(entries))
+            with patch.object(self.c, "command", side_effect=[subprocess.CalledProcessError(1, "stop"), listing]):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    self.c.stop(self.task)
+            self.assertEqual(self.c.read(self.task)["status"], "running")
+
+    def export_writer(self, payload):
+        executable = self.root / "fake-tart"
+        executable.write_text("#!/bin/sh\nprintf %s " + shlex.quote(payload) + "\n")
+        executable.chmod(0o755)
+        self.c.tart = str(executable)
+        self.c.save(self.task, {"vm": "mortimer-" + self.task,
+                               "status": "running", "network": "offline"})
+
+    def test_patch_export_is_data_with_a_fingerprint(self):
+        payload = "diff --git a/app.py b/app.py\n+print('hello')\n"
+        self.export_writer(payload)
+        output = self.c.export(self.task)
+        self.assertEqual(output.read_text(), payload)
+        self.assertEqual(self.c.read(self.task)["export_sha256"], hashlib.sha256(payload.encode()).hexdigest())
+
+    def test_oversized_export_stops_the_guest(self):
+        self.export_writer("a" * 100)
+        with patch.object(control, "MAX_SOURCE_BYTES", 4), patch.object(self.c, "stop") as stop:
+            with self.assertRaises(control.SandboxError): self.c.export(self.task)
+            stop.assert_called_once_with(self.task)
+        self.assertFalse((self.c.task_dir(self.task) / "candidate.patch").exists())
+
+    def test_secret_shaped_export_is_not_written(self):
+        self.export_writer("sk-" + "a" * 30)
+        with self.assertRaises(control.SandboxError): self.c.export(self.task)
+        self.assertFalse((self.c.task_dir(self.task) / "candidate.patch").exists())
 
 
 if __name__ == "__main__": unittest.main()
