@@ -58,6 +58,15 @@ class AllowlistGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("requirements.txt", result.stdout)
 
+    def test_sandbox_publisher_branches_remain_restricted_in_ci_and_locally(self):
+        branch = 'mortimer/selfedit/session-123'
+        self.git('checkout', '-qb', branch)
+        self.assertEqual(self.gate(ci=False).returncode, 1)
+        self.git('checkout', '--detach', '-q')
+        result = self.gate(branch=branch)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('requirements.txt', result.stdout)
+
     def test_missing_ci_branch_is_conservative_even_on_named_checkout(self):
         self.assertEqual(self.gate().returncode, 1)
 

@@ -122,15 +122,15 @@ class Controller:
     def install_file_service(self, task: str):
         """Install reviewed host code, never code from the candidate checkout."""
         inputs, sources = self._file_service(task)
-        inputs.mkdir(parents=True, exist_ok=True, mode=0o700)
+        inputs.mkdir(parents=True, exist_ok=True, mode=0o755)
         for name, data in sources.items():
             installed = inputs / name
             if installed.exists():
                 if installed.read_bytes() != data:
                     raise SandboxError("Installed file service has been modified")
             else:
-                atomic_bytes(installed, data)
-        (inputs / "requests").mkdir(exist_ok=True, mode=0o700)
+                atomic_bytes(installed, data, mode=0o644)
+        (inputs / "requests").mkdir(exist_ok=True, mode=0o755)
 
     def _file_service(self, task: str):
         root = Path(__file__).resolve().parent
@@ -190,8 +190,14 @@ class Controller:
             return self._start_locked(task, provisioning, headless)
 
     def _start_locked(self, task: str, provisioning: bool, headless: bool):
+        state = self.read(task)
+        if (self.task_dir(task) / "cancelled.json").exists() or (state.get("parent_task") and
+                (self.task_dir(state["parent_task"]) / "cancelled.json").exists()):
+            raise SandboxError("Task has been cancelled")
         if not self.doctor()["ready_to_boot"]:
             raise SandboxError("Tart or the root-owned network isolation helper is missing; refusing to boot")
+        if self.read(task).get("status") not in {"created", "stopped"}:
+            raise SandboxError("Task is not in a startable state")
         for file in (self.home / "tasks").glob("*/state.json"):
             if json.loads(file.read_text()).get("status") in {"running", "provisioning"}:
                 raise SandboxError("An active task is recorded; stop it before starting another")
@@ -210,14 +216,14 @@ class Controller:
         self.save(task, state)
 
     def guest(self, task: str, argv: list[str], timeout: int = 1800, capture: bool = False,
-              max_output: int = 8 * 1024 * 1024, binary: bool = False):
+              max_output: int = 8 * 1024 * 1024, binary: bool = False, check: bool = True):
         if not 1 <= timeout <= 7200:
             raise SandboxError("Timeout must be between 1 and 7200 seconds")
         state = self.read(task)
         if state["status"] not in {"running", "provisioning"}:
             raise SandboxError("Task must be running")
         if capture:
-            return self._capture(task, argv, timeout, max_output, binary)
+            return self._capture(task, argv, timeout, max_output, binary, check)
         try:
             return self.command("exec", state["vm"], *argv, timeout=timeout,
                                 capture_output=capture, text=capture)
@@ -226,7 +232,7 @@ class Controller:
             self.stop(task)
             raise SandboxError("Command timed out; VM stopped") from None
 
-    def _capture(self, task: str, argv: list[str], timeout: int, limit: int, binary: bool = False):
+    def _capture(self, task: str, argv: list[str], timeout: int, limit: int, binary: bool = False, check: bool = True):
         if not 1 <= limit <= MAX_SOURCE_BYTES * 2:
             raise SandboxError("Invalid output limit")
         args = [self.tart, "exec", self.read(task)["vm"], *argv]
@@ -260,7 +266,7 @@ class Controller:
         finally:
             for stream in output:
                 stream.close()
-        if status:
+        if status and check:
             raise SandboxError("Guest command failed")
         if binary:
             return subprocess.CompletedProcess(args, status, stdout=bytes(output[process.stdout]),
@@ -273,6 +279,8 @@ class Controller:
         state = self.read(task)
         if state.get("status") != "running" or state.get("network") != "offline" or not state.get("prepared"):
             raise SandboxError("File operations require a prepared, offline task")
+        if state.get("hydrated") is False:
+            raise SandboxError("Fresh task hydration has not completed")
         inputs, sources = self._file_service(task)
         # An explicit upgrade can install the service on older prepared tasks;
         # ordinary requests must use precisely this host controller's version.
@@ -284,10 +292,10 @@ class Controller:
         if len(payload) > MAX_FILE_BYTES * 2:
             raise SandboxError("File request size limit exceeded")
         request_path = inputs / "requests" / (uuid.uuid4().hex + ".json")
-        atomic_bytes(request_path, payload)
+        atomic_bytes(request_path, payload, mode=0o644)
         try:
             shared = "/Volumes/My Shared Files/input/services/" + inputs.name
-            result = self.guest(task, ["/opt/homebrew/opt/python@3.12/bin/python3.12", "-I",
+            result = self.guest(task, [*self.worker_prefix(state), "/opt/homebrew/opt/python@3.12/bin/python3.12", "-I",
                 shared + "/rpc.py", shared + "/requests/" + request_path.name],
                 timeout=120, capture=True, binary=True,
                 max_output=MAX_SOURCE_BYTES * 2 if request.get("operation") == "capture" else MAX_FILE_BYTES * 2)
@@ -311,13 +319,34 @@ class Controller:
         state = self.read(task)
         if state.get("network") != "offline" or not state.get("prepared"):
             raise SandboxError("Development commands require a prepared, offline task")
+        if state.get("hydrated") is False:
+            raise SandboxError("Fresh task hydration has not completed")
         if not argv:
             raise SandboxError("A guest command is required")
         script = "cd " + GUEST_ROOT + "/source && source " + GUEST_ROOT + "/development.env && exec " + shlex.join(argv)
-        return self.guest(task, ["/bin/bash", "-lc", script], timeout=timeout)
+        return self.guest(task, [*self.worker_prefix(state), "/bin/bash", "--noprofile", "--norc", "-c", script], timeout=timeout)
+
+    @staticmethod
+    def worker_prefix(state: dict) -> list[str]:
+        worker = state.get("worker")
+        if worker is None:
+            if state.get("purpose") in {"development", "verification"}:
+                raise SandboxError("Isolated task has no unprivileged worker")
+            return []  # Manually prepared foundation tasks predate profiles.
+        if worker != "mortimer-dev":
+            raise SandboxError("Unexpected candidate worker identity")
+        return ["/usr/bin/sudo", "-n", "-H", "-u", worker]
 
     def stop(self, task: str):
         state = self.read(task)
+        if state.get("status") in {"running", "provisioning"}:
+            # Preserve completed edits, test products and desktop settings.
+            # A hung guest must still be stopped after this bounded grace.
+            try:
+                self.command("exec", state["vm"], "/bin/sync", timeout=5, capture_output=True)
+                state["last_stop_flushed"] = True
+            except (subprocess.SubprocessError, OSError):
+                state["last_stop_flushed"] = False
         try:
             self.command("stop", state["vm"], timeout=60)
         except subprocess.CalledProcessError:
@@ -331,13 +360,48 @@ class Controller:
         state["status"] = "stopped"
         self.save(task, state)
 
+    def destroy(self, task: str):
+        """Delete only a stopped disposable VM; retain its host evidence."""
+        with (self.home / "start.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            state = self.read(task)
+            if state.get("vm") != "mortimer-" + task or state.get("status") not in {"created", "failed", "stopped", "deleting", "deleted"}:
+                raise SandboxError("Only a stopped disposable task can be deleted")
+            result = self.command("list", "--source", "local", "--format", "json",
+                                  capture_output=True, text=True, timeout=30)
+            matching = [vm for vm in json.loads(result.stdout) if vm.get("Name") == state["vm"]]
+            if matching and (len(matching) != 1 or matching[0].get("State") != "stopped"):
+                raise SandboxError("Task VM is still active; refusing deletion")
+            state["status"] = "deleting"
+            self.save(task, state)
+            if matching:
+                self.command("delete", state["vm"], timeout=120)
+            state.update(status="deleted", deleted_at=int(time.time()))
+            self.save(task, state)
+
+    def cancel(self, task: str):
+        """Serialize cancellation with VM start, including verification children."""
+        with (self.home / "start.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            self.read(task)
+            atomic_json(self.task_dir(task) / "cancelled.json", {"requested_at": int(time.time())})
+            targets = [task]
+            for path in (self.home / "tasks").glob("*/state.json"):
+                state = json.loads(path.read_bytes())
+                if state.get("parent_task") == task:
+                    targets.append(path.parent.name)
+            for target in targets:
+                if self.read(target).get("status") in {"running", "provisioning"}:
+                    self.stop(target)
+
     def export(self, task: str) -> Path:
         # Transfer a patch as data. Never unpack a guest-created archive on host.
         script = "cd " + GUEST_ROOT + "/source && git add -N . && git diff --binary HEAD"
         state = self.read(task)
         if state.get("status") != "running" or state.get("network") != "offline":
             raise SandboxError("Export requires an offline running task")
-        process = subprocess.Popen([self.tart, "exec", state["vm"], "/bin/bash", "-lc", script],
+        process = subprocess.Popen([self.tart, "exec", state["vm"], *self.worker_prefix(state),
+                                    "/bin/bash", "--noprofile", "--norc", "-c", script],
                                    env=self.env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         chunks, size, deadline = [], 0, time.monotonic() + 60
         try:
@@ -385,7 +449,7 @@ def main():
     create.add_argument("--repo", type=Path, required=True)
     create.add_argument("--ref", required=True)
     create.add_argument("--image", required=True)
-    for verb in ["start", "prepare", "status", "stop", "export", "exec"]:
+    for verb in ["start", "prepare", "status", "stop", "destroy", "export", "exec"]:
         cmd = sub.add_parser(verb)
         cmd.add_argument("task")
         if verb == "start":
@@ -402,6 +466,7 @@ def main():
     elif args.action == "prepare": control.prepare(args.task)
     elif args.action == "status": print(json.dumps(control.read(args.task), indent=2))
     elif args.action == "stop": control.stop(args.task)
+    elif args.action == "destroy": control.destroy(args.task)
     elif args.action == "export": print(control.export(args.task))
     elif args.action == "exec": control.execute(args.task, args.command, args.timeout)
 

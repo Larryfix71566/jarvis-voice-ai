@@ -140,6 +140,22 @@ class FilesTests(unittest.TestCase):
             with self.assertRaises(SandboxError):
                 self.files.read("app.py")
 
+    def test_changes_outside_edit_api_invalidate_publication_recheck(self):
+        frozen = self.files.freeze()
+        self.files.assert_unchanged(frozen.fingerprint)
+        (self.guest / "app.py").write_text("changed outside the edit API")
+        with self.assertRaises(SandboxError):
+            self.files.assert_unchanged(frozen.fingerprint)
+        self.assertIsNone(self.files.status()["candidate"])
+
+    def test_publication_intent_blocks_further_edits(self):
+        frozen = self.files.freeze()
+        atomic_json(self.host / "publication.json", {"candidate": frozen.fingerprint})
+        with self.assertRaises(SandboxError):
+            self.files.write("app.py", b"late change", "racing publication")
+        self.assertEqual((self.guest / "app.py").read_bytes(), b"original")
+        self.assertEqual(self.files.frozen(), frozen)
+
 
 if __name__ == "__main__":
     unittest.main()

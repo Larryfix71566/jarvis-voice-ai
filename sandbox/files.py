@@ -64,6 +64,8 @@ class WorkspaceFiles:
         if not isinstance(rationale, str) or len(rationale) > 8000:
             raise SandboxError("Invalid edit rationale")
         with self._locked():
+            if (self.directory / "publication.json").exists():
+                raise SandboxError("Publication has started; begin a new session for further edits")
             journal = self._journal()
             # Persist invalidation BEFORE invoking the guest. A lost response
             # can never leave an earlier approval attached to changed code.
@@ -120,3 +122,20 @@ class WorkspaceFiles:
     def status(self) -> dict:
         with self._locked():
             return self._journal()
+
+    def assert_unchanged(self, fingerprint: str) -> None:
+        """Publisher rechecks the running development task before using a receipt."""
+        with self._locked():
+            journal = self._journal()
+            try:
+                matches = (journal.get("candidate") == fingerprint
+                           and self._capture().fingerprint == fingerprint
+                           and self._capture().fingerprint == fingerprint)
+            except Exception:
+                journal.update(candidate=None, verification=None)
+                self._save(journal)
+                raise
+            if not matches:
+                journal.update(candidate=None, verification=None)
+                self._save(journal)
+                raise SandboxError("Development source changed after verification")

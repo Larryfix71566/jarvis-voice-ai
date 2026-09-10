@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """CI gate: fail if the diff touches paths outside the self-edit allowlist.
 
-Self-edit branches (jarvis/self-edit/*) must only contain allowlisted
+Self-edit branches (jarvis/self-edit/* and mortimer/selfedit/*) must only contain allowlisted
 changes (plan section 2.2 step 2). Other branches (human development) are
 exempt: the allowlist constrains the agent, not the humans.
 
@@ -21,7 +21,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from jarvis.selfedit.allowlist import Allowlist  # noqa: E402
 
-SELF_EDIT_PREFIX = "jarvis/self-edit"
+SELF_EDIT_PREFIXES = ("jarvis/self-edit", "mortimer/selfedit/")
 
 
 def _current_branch() -> str:
@@ -42,7 +42,7 @@ def _current_branch() -> str:
 def main() -> int:
     diff_range = sys.argv[1] if len(sys.argv) > 1 else "origin/main...HEAD"
     branch = _current_branch()
-    if branch and not branch.startswith(SELF_EDIT_PREFIX):
+    if branch and not branch.startswith(SELF_EDIT_PREFIXES):
         print(f"check_allowlist: branch '{branch}' is not a self-edit branch - "
               "allowlist not enforced")
         return 0
