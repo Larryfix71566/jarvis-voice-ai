@@ -1,0 +1,23 @@
+name: Knowledge base
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  knowledge-base:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install knowledge-base package
+        run: bash scripts/setup_kb.sh
+      - name: Knowledge-base tests
+        run: services/mortimer-vault/.venv/bin/python -m pytest services/mortimer-vault/tests -q

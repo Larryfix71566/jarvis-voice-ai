@@ -111,6 +111,22 @@ A text-only REPL is also available for quick checks without a browser:
 python3 -m jarvis.cli
 ```
 
+### Knowledge-base service
+
+The knowledge-base service and its tests are included in
+[`services/mortimer-vault`](services/mortimer-vault/README.md). From the
+repository root, install its separate environment with
+`bash scripts/setup_kb.sh`; the normal launcher then uses this repository
+copy. For manual startup, run `bash scripts/run_kb.sh`.
+
+Existing documents remain at `MORTIMER_HOME` (default `~/Mortimer`); no data
+migration is required. Stop the old service before switching to the new
+launcher. A fresh installation can initialize an empty knowledge base with
+`services/mortimer-vault/.venv/bin/mortimer-vault init`.
+The encrypted credential vault (`jarvis/vault.py`) is separate; its secrets
+remain on your Mac. See the package README for isolated development data
+and test commands.
+
 ## 4. Using Mortimer
 
 - **Talk naturally.** "What time is it?", "Remind me to call the dentist

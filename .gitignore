@@ -70,3 +70,10 @@ web/dist_verify*/
 
 # Claude desktop drops downloaded files here
 Claude outputs/
+
+# Bundled knowledge-base package: generated files and optional local test data.
+services/mortimer-vault/*.egg-info/
+services/mortimer-vault/src/*.egg-info/
+services/mortimer-vault/build/
+.pytest_cache/
+.sandbox-data/
