@@ -47,7 +47,7 @@ class VerificationTests(unittest.TestCase):
         return "independent-task"
     def hydrate(self, task): self.events.append(("hydrate", task))
     def read(self, task):
-        return {"vm": task, "hydrated": True, "network": "offline", "worker": "mortimer-dev"}
+        return {"vm": task, "hydrated": True, "network": "offline", "worker": "mortimer-dev", "source_commit": "a" * 40}
     def worker_prefix(self, state): return ["sudo", "-u", "mortimer-dev"]
     def rpc(self, task, request):
         self.assertEqual(task, "independent-task")
@@ -63,7 +63,7 @@ class VerificationTests(unittest.TestCase):
         return subprocess.CompletedProcess(argv, self.exit_code, stdout=b"check output", stderr=b"")
 
     def verify(self):
-        return self.verifier.verify(self, self.directory, "HEAD", "prepared-image", self.profile)
+        return self.verifier.verify(self, self.directory, "prepared-image", self.profile)
 
     def test_receipt_binds_a_separate_vm_candidate_profile_and_logs(self):
         receipt = self.verify()

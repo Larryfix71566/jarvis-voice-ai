@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import time
@@ -54,16 +55,19 @@ class Verifier:
                 "passed": result.returncode == 0, "seconds": round(time.monotonic() - started, 3),
                 "log_sha256": hashlib.sha256(data).hexdigest()}
 
-    def verify(self, files: WorkspaceFiles, repo: Path, ref: str, image_id: str, profile, *, timeout: int = 7200) -> dict:
+    def verify(self, files: WorkspaceFiles, repo: Path, image_id: str, profile, *, timeout: int = 7200) -> dict:
         if not 1 <= timeout <= 7200 or not profile.checks:
             raise SandboxError("Invalid verification budget or missing required checks")
+        ref = self.controller.read(files.task).get("source_commit")
+        if not isinstance(ref, str) or not re.fullmatch(r"[0-9a-f]{40,64}", ref):
+            raise SandboxError("Development task has no immutable source revision")
         candidate = files.freeze()
         revision = files.status()["revision"]
         attempt = uuid.uuid4().hex
         directory = files.directory / "verification" / attempt
         directory.mkdir(parents=True, mode=0o700)
         receipt = {"version": 1, "attempt": attempt, "candidate": candidate.fingerprint,
-                   "baseline": files.baseline.fingerprint, "image": image_id, "profile": profile.fingerprint,
+                   "baseline": files.baseline.fingerprint, "source_commit": ref, "image": image_id, "profile": profile.fingerprint,
                    "runner": runner_fingerprint(), "development_task": files.task, "checks": [],
                    "passed": False, "status": "starting"}
         atomic_json(directory / "receipt.json", receipt)
@@ -127,6 +131,7 @@ class Verifier:
             raise SandboxError("Invalid verification reference")
         receipt = json.loads((files.directory / "verification" / attempt / "receipt.json").read_bytes())
         expected = {"candidate": files.frozen().fingerprint, "baseline": files.baseline.fingerprint,
+                    "source_commit": self.controller.read(files.task).get("source_commit"),
                     "image": image_id, "profile": profile.fingerprint, "runner": runner_fingerprint(),
                     "development_task": files.task, "passed": True, "status": "passed", "source_unchanged": True}
         if any(receipt.get(key) != value for key, value in expected.items()):
