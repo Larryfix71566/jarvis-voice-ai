@@ -247,9 +247,32 @@ Computer Use observations in the running offline app:
   No Run, Validate or Submit action was invoked. The VM correctly reports that
   the admin service is unreachable.
 
-The view changed during attempted pop-out interactions; those observations do
-not prove detachment/redocking, full draft equality, or all eight tab interactions.
-Those cases stay open. This evidence also does not establish connected backend
-health, microphone/playout behavior, VoiceOver, real monitor recovery, final
-frozen verification, rollback acceptance, or deployment. The visible app is only
-in the disposable VM; no production app or service was deployed.
+The first pop-out attempt was inconclusive. Subsequent Computer Use interactions
+in this same offline GUI VM established the following additional observations:
+
+- All eight tabs were selected in the detached Mortimer Drawer: Repo, Edit,
+  Memory, Runs, Agents, Output, Log and Costs. Their existing controls, empty
+  states or offline errors were visible. Both ends of the scrolling header were
+  reachable with Extra large labels remaining readable.
+- Closing the detached window returned the selected Edit tab to the docked
+  sidecar. Reopening it restored the detached presentation.
+- The detached window was manually widened from approximately 420 to 690 points.
+  After closing/redocking and reopening, the wider frame was retained.
+- The complete unsent synthetic draft below was visible at the wider size,
+  survived traversing all eight tabs and returning to Edit, and remained equal
+  after closing/redocking/reopening. Selected Edit and Extra large text also
+  survived. No Run, Validate or Submit action was invoked.
+
+Observed draft (including the actual punctuation produced by guest input):
+`synthetic ui draft; preserve draftalpha text across tabs and windows.aui-draft-0911`
+
+These are same-process preservation observations, not a claim of draft recovery
+after app termination. The later VM restart cleared session-only application
+state. Evidence is the Computer Use screenshots in the task transcript; no
+separate screenshot artifact was captured. Backend services were offline during
+these sidecar interactions, so live content and polling counts remain unverified.
+
+This evidence does not establish microphone/playout behavior, VoiceOver, physical
+multi-monitor recovery, final frozen verification, rollback acceptance, or
+deployment. The visible app is only in the disposable VM; no production app or
+service was deployed.

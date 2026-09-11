@@ -70,7 +70,10 @@ final class MemoryGraphStore {
         self.defaults = defaults
         if let key = persistenceKey, let data = defaults.data(forKey: key), data.count < 200_000,
            var saved = try? JSONDecoder().decode(MemoryGraphMetadata.self, from: data), saved.version == 1 {
-            saved.validate(); metadata = saved; needsFit = false
+            saved.validate(); metadata = saved
+            // Closing an unavailable or empty graph also saves metadata. There
+            // is no established view to restore until it has node positions.
+            needsFit = saved.positions.isEmpty
         } else { metadata = MemoryGraphMetadata(query: query) }
     }
 

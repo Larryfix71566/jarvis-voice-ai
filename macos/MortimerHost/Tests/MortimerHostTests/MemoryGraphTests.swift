@@ -212,6 +212,53 @@ final class MemoryGraphStoreTests: XCTestCase {
         }
     }
 
+    func testFirstSuccessfulLoadFitsAfterRestoringFailedVisit() async throws {
+        let suite = "graph-fixture-\(UUID().uuidString)", key = "view"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let failedVisit = MemoryGraphStore(persistenceKey: key, defaults: defaults)
+        failedVisit.load { _ in throw URLError(.notConnectedToInternet) }
+        for _ in 0..<200 where failedVisit.loading {
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertFalse(failedVisit.loading)
+        XCTAssertNotNil(failedVisit.error)
+        failedVisit.saveView()
+
+        let restored = MemoryGraphStore(persistenceKey: key, defaults: defaults)
+        XCTAssertTrue(restored.needsFit)
+        await loaded(restored, response: try GraphFixture.make(count: 50))
+        XCTAssertTrue(restored.needsFit)
+        let size = CGSize(width: 980, height: 200)
+        restored.fit(size: size)
+        XCTAssertFalse(restored.needsFit)
+        XCTAssertEqual(restored.metadata.positions.count, 50)
+        for point in restored.metadata.positions.values {
+            let screen = restored.metadata.camera.screenPoint(point, size: size)
+            XCTAssertGreaterThanOrEqual(screen.x, 0)
+            XCTAssertLessThanOrEqual(screen.x, size.width)
+            XCTAssertGreaterThanOrEqual(screen.y, 0)
+            XCTAssertLessThanOrEqual(screen.y, size.height)
+        }
+    }
+
+    func testRestoredPopulatedViewKeepsManualCameraAfterReload() async throws {
+        let suite = "graph-fixture-\(UUID().uuidString)", key = "view"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = MemoryGraphStore(persistenceKey: key, defaults: defaults)
+        let graph = try GraphFixture.make()
+        await loaded(store, response: graph)
+        let camera = GraphCamera(scale: 1.7, offset: CGPoint(x: 20, y: -30))
+        store.setCamera(camera)
+        let restored = MemoryGraphStore(persistenceKey: key, defaults: defaults)
+        XCTAssertFalse(restored.needsFit)
+        await loaded(restored, response: graph)
+        XCTAssertFalse(restored.needsFit)
+        XCTAssertEqual(restored.metadata.camera, camera)
+        XCTAssertEqual(restored.metadata.positions, store.metadata.positions)
+    }
+
     func testBackRestoresCameraSelectionAndFilters() async throws {
         let store = MemoryGraphStore(), graph = try GraphFixture.make()
         await loaded(store, response: graph)

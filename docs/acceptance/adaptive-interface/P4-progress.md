@@ -240,3 +240,56 @@ The regression creates a traced path and relationship selection, focuses another
 graph, changes the search/selection/inspector, then verifies Back restores the
 saved view state. This is store-level navigation evidence; real interaction,
 performance and other P4/P6 acceptance requirements remain open.
+
+## Initial fit after an unavailable graph visit
+
+The first successful synthetic graph load in the GUI VM displayed clipped nodes
+until Fit was clicked. A previous failed visit had persisted empty positions;
+restoring any valid metadata record unconditionally disabled initial fitting.
+Restoration now leaves fitting pending when validated positions are empty. A
+populated saved view retains its camera and node positions.
+
+Full native host check `p4-restored-fit-host` in offline GUI task `ab9c8fe5bf23`:
+122 tests, zero failures; 39.678 seconds for the suite, 108.144 seconds including
+verifier setup and build. Log SHA-256:
+`e3632200181cd0475b77033f32a53abe9fce8f4717d3beb07945362dcbeff01f`.
+The new regression saves metadata after a failed read, restores a new store,
+loads 50 synthetic nodes and verifies every node fits a 980 by 200 viewport.
+A second test reloads a populated saved view and verifies its manually chosen
+camera and node positions remain unchanged. Existing viewport guards and all
+other host assertions remain enabled.
+
+This is additional development-VM evidence, not a replacement for the frozen
+profile receipt or the remaining physical display, accessibility and performance
+acceptance checks.
+
+### Updated native app interaction checks
+
+The candidate was rebuilt, its embedded framework and application signed and
+verified, and the app launched in the same offline VM. A controlled 503 graph
+visit was left through Conversation, then the app was quit. Read-only inspection
+confirmed the saved graph metadata contained empty positions. After restoring
+normal fixture responses and relaunching, opening Memory graph automatically fit
+50 nodes and 80 relationships into the short canvas; Fit was not clicked.
+
+Additional Computer Use observations at the approximately 988 by 768 desktop:
+
+- Browse / filter opens as a readable sheet. Hiding fact nodes changes the count
+  to 10 visible of 50 loaded and zero visible relationships; restoring facts
+  returns all 50. Hiding stated_in leaves 40 visible relationships; restoring it
+  returns 80.
+- Searching `synthetic memory 0.0` produces one matching loaded node. Selecting it
+  closes the browser and opens Graph details with the matching ID, type, fixture
+  preview, supplied provenance and two loaded connections.
+- Focus / expand neighbors loads 10 nodes and 16 relationships. Done closes the
+  inspector. Back restores 50 nodes, 80 relationships and the original selected
+  memory inspector.
+- Read full detail returns the fixture's intentional 404 and presents Retry full
+  detail while retaining the selected node and supplied preview/provenance. This
+  verifies error presentation, not successful full-content retrieval.
+
+These observations are recorded in the task's Computer Use screenshots. The
+fixture exposes only synthetic read-only data; its implementation and usage are
+in `probes/GraphFixtureServer.py` and `probes/GRAPH_FIXTURE.md`. The app was quit
+normally after this session. Graph pointer dragging, keyboard/VoiceOver traversal,
+real service integration and frame-time requirements remain open.

@@ -1,0 +1,53 @@
+{
+  "source_parent": "bf718b5",
+  "task": "ab9c8fe5bf23",
+  "environment": "offline unprivileged GUI development VM",
+  "source_sha256": {
+    "macos/MortimerHost/Sources/MortimerHost/Display/MemoryGraphStore.swift": "6ebd0abbf2c8702a7986e2f6605b48b66e9608f16f873c58dff6fca705330173",
+    "macos/MortimerHost/Tests/MortimerHostTests/MemoryGraphTests.swift": "bc794159b954ba5316e16a91694b88761980ab284939f97a6ecd65cc9612ff72",
+    "docs/acceptance/adaptive-interface/probes/GraphFixtureServer.py": "112f00cc76ab82e290eb7118dedf584d39145f07db17b2913c700ad71764f307"
+  },
+  "native_check": {
+    "name": "p4-restored-fit-host",
+    "argv": [
+      "swift",
+      "test",
+      "--package-path",
+      "macos/MortimerHost"
+    ],
+    "returncode": 0,
+    "passed": true,
+    "seconds": 108.144,
+    "log_sha256": "e3632200181cd0475b77033f32a53abe9fce8f4717d3beb07945362dcbeff01f"
+  },
+  "scope": "Development verification only; not a frozen-profile release receipt.",
+  "fixture_cleanup_and_requests": {
+    "stopped_fixture_pid": 676,
+    "requests": [
+      {
+        "path": "/api/graph/memory",
+        "mode": "normal"
+      },
+      {
+        "path": "/api/graph/memory?depth=2",
+        "mode": "normal"
+      },
+      {
+        "path": "/api/graph/memory?depth=2",
+        "mode": "error"
+      },
+      {
+        "path": "/api/graph/memory?depth=2",
+        "mode": "normal"
+      },
+      {
+        "path": "/api/graph/memory?depth=2&focus=fact:project.0.item.0",
+        "mode": "normal"
+      },
+      {
+        "path": "/api/memory",
+        "mode": "normal"
+      }
+    ]
+  }
+}
