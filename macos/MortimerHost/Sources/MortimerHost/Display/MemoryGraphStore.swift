@@ -261,7 +261,15 @@ final class MemoryGraphStore {
     private func reconcileSelection() {
         let ids = Set(graph?.nodes.map(\.id) ?? [])
         if let selected = metadata.selectedID, !ids.contains(selected) { metadata.selectedID = nil; fullDetail = nil }
-        if let edge = selectedEdge, graph?.edges.contains(edge) != true { selectedEdge = nil }
+        if let edge = selectedEdge {
+            let candidates = (graph?.edges ?? []).filter {
+                $0.from == edge.from && $0.to == edge.to && $0.type == edge.type
+            }
+            // Attributes can change on refresh. Preserve an exact match first;
+            // otherwise update only an unambiguous directed relationship.
+            selectedEdge = candidates.first(where: { $0 == edge })
+                ?? (candidates.count == 1 ? candidates.first : nil)
+        }
         if let start = pathStart, !ids.contains(start) { pathStart = nil }
         if let end = pathEnd, !ids.contains(end) { pathEnd = nil }
     }

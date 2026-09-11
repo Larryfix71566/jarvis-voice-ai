@@ -168,3 +168,24 @@ This closes the identified shared URL-cache gap for the new graph JSON/PNG
 requests. It does not establish comprehensive privacy, live-service, hardware,
 performance or release acceptance. Legacy original-result rendering and existing
 detail APIs are outside this narrowly changed request path and still need review.
+
+## Relationship selection survives updated attributes
+
+Refresh previously compared the entire selected relationship, including mutable
+attributes. A connection whose supplied details changed therefore lost selection.
+A sandbox regression test reproduced that failure before the fix:
+`p4-edge-refresh-repro`, exit 1, log SHA-256
+`70fbac0968891098554449f904ed071f18072f6262d88f95925469a5bf50a5a9`.
+
+Reconciliation now prefers an exact edge match, then a unique match of directed
+endpoints and relationship type, replacing the inspector data with that fresh
+edge. Deleted relationships clear selection. Multiple nonmatching parallel edges
+remain ambiguous and clear selection rather than inventing an identity; the API
+provides no separate relationship ID. Node selection remains available.
+
+Full sandbox host check `p4-edge-refresh-fixed`: 99 tests, zero failures; verifier
+12.977 seconds. Log SHA-256:
+`6f8fc25cc8132e64673c301ec80ad032b79cfb3f42a92f512ff469bfb9732932`.
+Tests cover updated attributes, retained inspector state, deletion and ambiguous
+parallel relationships. This is state reconciliation evidence; real graph gesture,
+frame-time, accessibility and remaining integrated acceptance gates remain open.

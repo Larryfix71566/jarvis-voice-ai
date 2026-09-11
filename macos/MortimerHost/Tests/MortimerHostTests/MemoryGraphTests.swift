@@ -25,13 +25,13 @@ enum GraphFixture {
         return try JSONDecoder().decode(MemoryGraphResponse.self, from: JSONSerialization.data(withJSONObject: object))
     }
 
-    static func make(count: Int = 4, edges edgeCount: Int? = nil) throws -> MemoryGraphResponse {
+    static func make(count: Int = 4, edges edgeCount: Int? = nil, edgeNote: String? = nil) throws -> MemoryGraphResponse {
         let nodes: [[String: Any]] = (0..<count).map {
             ["id": "fact:\($0)", "type": "fact", "label": "Synthetic node \($0)", "attrs": ["content_preview": "fixture content only"]]
         }
         let edgeTotal = edgeCount ?? max(0, count - 1)
         let edges: [[String: Any]] = (0..<edgeTotal).map {
-            ["from": "fact:\($0 % count)", "to": "fact:\(($0 + 1) % count)", "type": "child_of", "attrs": [:]]
+            ["from": "fact:\($0 % count)", "to": "fact:\(($0 + 1) % count)", "type": "child_of", "attrs": edgeNote.map { ["note": $0] } ?? [:]]
         }
         let object: [String: Any] = ["ok": true, "graph": "memory", "focus": NSNull(), "depth": 2, "edge_types": ["child_of"],
             "node_count": count, "edge_count": edgeTotal, "truncated": false, "truncated_reason": "", "nodes": nodes, "edges": edges,
@@ -91,6 +91,31 @@ final class MemoryGraphStoreTests: XCTestCase {
         for _ in 0..<200 where store.loading { try? await Task.sleep(nanoseconds: 5_000_000) }
         XCTAssertFalse(store.loading, "Graph load did not settle")
         XCTAssertNil(store.error)
+    }
+
+    func testRefreshKeepsRelationshipSelectionAndUpdatesSuppliedAttributes() async throws {
+        let store = MemoryGraphStore()
+        let original = try GraphFixture.make(edgeNote: "Original supplied detail")
+        await loaded(store, response: original)
+        store.select("fact:0")
+        store.select(edge: original.edges[0])
+        await loaded(store, response: try GraphFixture.make(edgeNote: "Updated supplied detail"))
+        XCTAssertEqual(store.selectedEdge?.from, "fact:0")
+        XCTAssertEqual(store.selectedEdge?.to, "fact:1")
+        XCTAssertEqual(store.selectedEdge?.type, "child_of")
+        XCTAssertEqual(store.selectedEdge?.attrs["note"], .string("Updated supplied detail"))
+        XCTAssertTrue(store.showsInspector)
+        await loaded(store, response: try GraphFixture.make(edges: 0))
+        XCTAssertNil(store.selectedEdge)
+        XCTAssertEqual(store.selectedNode?.id, "fact:0")
+    }
+
+    func testAmbiguousRefreshedRelationshipsDoNotInventSelectionIdentity() async throws {
+        let store = MemoryGraphStore(), original = try GraphFixture.make(edgeNote: "Original")
+        await loaded(store, response: original)
+        store.select(edge: original.edges[0])
+        await loaded(store, response: try GraphFixture.make(edges: 8, edgeNote: "Changed"))
+        XCTAssertNil(store.selectedEdge)
     }
 
     func testStaleRequestCannotReplaceNewerFocus() async throws {
