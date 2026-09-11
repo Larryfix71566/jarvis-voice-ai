@@ -42,7 +42,6 @@ final class MemoryGraphStore {
     var search = ""
     var showsInspector = true
     var usesImageFallback = false
-    var showsOriginalResult = false
     private(set) var needsFit = true
 
     @ObservationIgnored private var generation = 0

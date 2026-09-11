@@ -12,6 +12,7 @@ struct WorkspaceResultPane: View {
     @Environment(DrawerState.self) private var drawer
 
     var body: some View {
+        let presentation = workspace.presentation(for: result)
         VStack(alignment: .leading, spacing: 8) {
             Text(result.payload.title ?? "Result").font(.headline)
             if !onSupportingDisplay && display.isWindowOpen && workspace.supportingContent == .result(result.id) {
@@ -20,20 +21,44 @@ struct WorkspaceResultPane: View {
                 } actions: {
                     Button("Return here") { drawer.placementRef?.closeDisplay() }
                 }
-            } else if let url = MemoryGraphSource.imageURL(result.payload) {
-                let graphStore = workspace.graphStore(for: result, url: url)
-                Button(graphStore.showsOriginalResult ? "Interactive graph" : "Original result and sources") {
-                    graphStore.showsOriginalResult.toggle()
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack { modePicker(presentation); exportButton }
+                    VStack(alignment: .leading) { modePicker(presentation); exportButton }
                 }
-                if graphStore.showsOriginalResult { original }
-                else {
-                    if let body = result.payload.body { Text(body).font(.caption).textSelection(.enabled) }
-                    MemoryGraphView(store: graphStore, api: client.admin)
+                if workspace.exporter.resultID == result.id, let message = workspace.exporter.message {
+                    Text(message).font(.caption).textSelection(.enabled)
                 }
-            } else { original }
+                switch presentation.mode {
+                case .summary: original
+                case .sources: WorkspaceSourcesView(result: result, presentation: presentation)
+                case .connections:
+                    if let url = MemoryGraphSource.imageURL(result.payload) {
+                        let graphStore = workspace.graphStore(for: result, url: url)
+                        if let body = result.payload.body { Text(body).font(.caption).textSelection(.enabled) }
+                        MemoryGraphView(store: graphStore, api: client.admin)
+                    } else { original }
+                }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .id(result.id)
+    }
+
+    private func modePicker(_ presentation: WorkspaceResultPresentation) -> some View {
+        Picker("Result view", selection: Binding(get: { presentation.mode }, set: { presentation.mode = $0 })) {
+            Text("Summary").tag(WorkspaceResultMode.summary)
+            Text("Sources").tag(WorkspaceResultMode.sources)
+            if MemoryGraphSource.imageURL(result.payload) != nil {
+                Text("Connections").tag(WorkspaceResultMode.connections)
+            }
+        }.pickerStyle(.segmented)
+    }
+
+    private var exportButton: some View {
+        Button("Export…") { workspace.exporter.chooseDestination(for: result) }
+            .disabled(workspace.exporter.busy)
+            .help("Save supplied text and reference URLs; clipboard content is excluded")
     }
 
     private var original: some View {

@@ -35,7 +35,9 @@ final class WorkspaceStore {
     private(set) var showsMemoryGraph = false
     private(set) var supportingContent: SupportingDisplayContent?
     var showComparisonOnCompact = false
+    let exporter = WorkspaceExportCoordinator()
     let memoryGraph = MemoryGraphStore(persistenceKey: "mortimer.interface.memoryGraph.view")
+    @ObservationIgnored private var presentations: [UUID: WorkspaceResultPresentation] = [:]
     @ObservationIgnored private var resultGraphs: [UUID: MemoryGraphStore] = [:]
     private(set) var scrollOffsets: [UUID: Double] = [:]
     private var hasReceivedResult = false
@@ -90,6 +92,13 @@ final class WorkspaceStore {
         return results.first { $0.id == id }
     }
 
+    func presentation(for result: WorkspaceResult) -> WorkspaceResultPresentation {
+        if let existing = presentations[result.id] { return existing }
+        let state = WorkspaceResultPresentation(hasConnections: MemoryGraphSource.imageURL(result.payload) != nil)
+        presentations[result.id] = state
+        return state
+    }
+
     func graphStore(for result: WorkspaceResult, url: URL) -> MemoryGraphStore {
         if let existing = resultGraphs[result.id] { return existing }
         let store = MemoryGraphStore(query: MemoryGraphSource.query(url))
@@ -135,6 +144,7 @@ final class WorkspaceStore {
 
     private func remove(_ id: UUID) {
         if supportingContent == .result(id) { supportingContent = nil }
+        presentations.removeValue(forKey: id)
         resultGraphs.removeValue(forKey: id)?.cancel()
         results.removeAll { $0.id == id }
         pinnedIDs.remove(id)
