@@ -188,3 +188,39 @@ The fallback is runtime resilience, not completion of P2. Actual observation
 adapter integration and paired hardware acceptance remain mandatory. Also verify
 window occlusion/minimization animation suspension and Reduce Motion on hardware;
 appear/disappear pausing alone is not full visibility acceptance.
+
+## Exact pinned upstream source traced
+
+The [120.0.0 release](https://github.com/stasel/WebRTC/releases/tag/120.0.0)
+identifies WebRTC source commit `b0cc68e61205fd11a7256a6e85307ec17ad95790`.
+Eight relevant files were fetched at that exact commit and hashed in
+P2-upstream-source-manifest.json. They match the corresponding inspected M120
+branch files; conclusions below use the pinned commit, not current main.
+
+- [audio_level.cc](https://webrtc.googlesource.com/src/+/b0cc68e61205fd11a7256a6e85307ec17ad95790/audio/audio_level.cc)
+  holds a peak level and updates it every eleventh nominal 10ms frame, roughly
+  9.09Hz. Its cumulative energy calculation uses that held value too. Taking
+  energy differences therefore does not recover an independent fresh RMS signal.
+- [audio_send_stream.cc](https://webrtc.googlesource.com/src/+/b0cc68e61205fd11a7256a6e85307ec17ad95790/audio/audio_send_stream.cc)
+  computes these levels in SendAudioData before encoding. The inspected native
+  AudioTransportImpl path invokes senders after ProcessCaptureFrame and optional
+  asynchronous processing. This is stronger evidence for a processed-input seam,
+  but does not by itself prove quiet-speech, noise or echo eligibility.
+- [channel_receive.cc](https://webrtc.googlesource.com/src/+/b0cc68e61205fd11a7256a6e85307ec17ad95790/audio/channel_receive.cc)
+  updates receiver levels inside GetAudioFrameWithInfo after channel gain. This
+  is the audio mixer's pull path, not simply packet arrival. It still precedes
+  final device rendering, and uses the same held-level implementation.
+- [rtc_stats_collector.h](https://webrtc.googlesource.com/src/+/b0cc68e61205fd11a7256a6e85307ec17ad95790/pc/rtc_stats_collector.h)
+  defaults to a 50ms report cache. A fresh report timestamp does not establish
+  a fresh level measurement. The previous duplicate-timestamp probe is consistent
+  with this caching but did not measure all of these intervals.
+
+These findings rule out treating 30Hz polling or energy differences as proof
+of 30Hz fresh levels. They do not constitute a measured failure of the 150ms
+p95 target: that still requires active-audio trials. Before wiring these stats
+into AudioActivityAccumulator, an adapter must establish actual measurement
+times; using collection time would violate the current validity contract.
+
+A concrete separately reviewed observation proposal is recorded in
+P2-additive-observation-design.md. No framework was rebuilt, dependency replaced,
+capture enabled or production audio changed during this source investigation.
