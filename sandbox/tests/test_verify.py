@@ -26,6 +26,7 @@ class VerificationTests(unittest.TestCase):
         self.final_candidate = self.candidate
         self.failure = False
         self.edit_during_check = False
+        self.start_kwargs = []
         self.profile = Profile("test", (), (), (("required", ("/protected/python", "check.py")),))
         self.verifier = Verifier(self, self)
 
@@ -39,7 +40,8 @@ class VerificationTests(unittest.TestCase):
     def frozen(self): return self.candidate
 
     def stop(self, task): self.events.append(("stop", task))
-    def start(self, task, **kwargs): self.events.append(("start", task))
+    def start(self, task, **kwargs):
+        self.events.append(("start", task)); self.start_kwargs.append(kwargs)
     def command(self, *args, **kwargs): return subprocess.CompletedProcess(args, 0)
     def create(self, *args, **kwargs):
         self.assertEqual(self.events[-1], ("stop", self.task))
@@ -75,6 +77,15 @@ class VerificationTests(unittest.TestCase):
         with patch.object(self.verifier, "run_check", wraps=self.verifier.run_check) as check:
             self.assertTrue(self.verify()["passed"])
         self.assertEqual([call.args[-1] for call in check.call_args_list], [900, 900, 1800])
+
+    def test_graphics_required_profile_runs_independent_clone_with_desktop(self):
+        self.profile = Profile("graphics", (), (), (("required", ("check.py",)),), requires_graphics=True)
+        self.assertTrue(self.verify()["passed"])
+        self.assertEqual(self.start_kwargs[-1], {"provisioning": False, "headless": False})
+
+    def test_default_profile_verification_remains_headless(self):
+        self.assertTrue(self.verify()["passed"])
+        self.assertEqual(self.start_kwargs[-1], {"provisioning": False, "headless": True})
 
     def test_check_creates_its_log_directory_before_executing(self):
         directory = self.directory / 'new-check-logs'

@@ -106,7 +106,11 @@ class Verifier:
                                                      purpose="verification", candidate=candidate, parent_task=files.task)
             receipt.update(verification_task=verification_task, status="hydrating")
             atomic_json(directory / "receipt.json", receipt)
-            self.controller.start(verification_task, provisioning=False, headless=True)
+            # Native AppKit tests need a real desktop surface for window
+            # visibility, focus and animation assertions. Profiles opt in
+            # explicitly; network, audio and clipboard isolation are unchanged.
+            self.controller.start(verification_task, provisioning=False,
+                                  headless=not profile.requires_graphics)
             self.wait_ready(verification_task)
             self.images.hydrate(verification_task)
             for index, argv in enumerate(profile.seeds):
