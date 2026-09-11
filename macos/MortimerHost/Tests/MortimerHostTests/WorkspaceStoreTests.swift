@@ -64,6 +64,47 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertNotEqual(a.id, b.id)
     }
 
+    func testOutputExpansionBelongsToHistoryAndDoesNotReopenCollapsedItems() throws {
+        let store = DisplayResultStore()
+        store.apply(try result().payload)
+        let first = try XCTUnwrap(store.results.first?.id)
+        XCTAssertEqual(store.expandedID, first)
+        store.expandedID = nil
+        // A new presentation reads the same store without an on-appear reset.
+        let detached = store
+        XCTAssertNil(detached.expandedID)
+        detached.apply(try result().payload)
+        XCTAssertEqual(detached.expandedID, detached.results.first?.id)
+        detached.remove(id: detached.results.first!.id)
+        XCTAssertNil(detached.expandedID)
+        XCTAssertEqual(detached.results.first?.id, first)
+    }
+
+    func testSupportingResultSurvivesHistoryTrimmingWithoutChangingMainSelection() throws {
+        let store = WorkspaceStore(historyLimit: 1)
+        let main = try result(), supporting = try result()
+        store.receive(main); store.receive(supporting)
+        store.rememberScroll(310, for: supporting.id)
+        XCTAssertTrue(store.sendToDisplay(.result(supporting.id)))
+        for _ in 0..<10 { store.receive(try result()) }
+        XCTAssertEqual(store.activeID, main.id)
+        XCTAssertEqual(store.supportingResult?.id, supporting.id)
+        XCTAssertEqual(store.scrollOffsets[supporting.id], 310)
+        XCTAssertFalse(store.sendToDisplay(.result(UUID())))
+    }
+
+    func testGraphDisplayAssignmentReusesGraphOwnerAndKeepsCompactComparisonChoice() {
+        let store = WorkspaceStore()
+        let graph = store.memoryGraph
+        store.showComparisonOnCompact = true
+        XCTAssertTrue(store.sendToDisplay(.memoryGraph))
+        store.returnToConversation()
+        store.returnToWorkspace()
+        XCTAssertTrue(store.memoryGraph === graph)
+        XCTAssertEqual(store.supportingContent, .memoryGraph)
+        XCTAssertTrue(store.showComparisonOnCompact)
+    }
+
     func testCloseActivePromotesComparisonAndRemovesOnlyItsMetadata() throws {
         let store = WorkspaceStore()
         let a = try result(), b = try result()

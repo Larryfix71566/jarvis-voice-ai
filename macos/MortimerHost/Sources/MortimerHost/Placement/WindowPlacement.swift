@@ -1,11 +1,9 @@
 import AppKit
 import JarvisKit
 
-/// APP plan §3 P11, §5 step 2 — a thin caller of MortimerHost's ported
-/// ScreenPlacement (DP8 semantics, CORE §3 N15). NO new placement math:
-/// this opens a scene, marks drawer popped-state, and asks ScreenPlacement
-/// to reposition; the 60/40 split, visibleFrame choice, and hot-plug
-/// observer all live in ScreenPlacement, unchanged.
+/// Opens/closes scenes and updates drawer ownership. ScreenPlacement owns
+/// debouncing, display recovery and placement policy; this adapter does not
+/// manipulate frames or duplicate the topology observer.
 @MainActor
 final class WindowPlacement {
     private let drawer: DrawerState
@@ -22,9 +20,7 @@ final class WindowPlacement {
         windows.open("display")
         // The window needs a runloop turn to exist before placement can
         // find it by identifier (same deferral the spike used).
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            ScreenPlacement.shared.reposition()
-        }
+        ScreenPlacement.shared.scheduleReposition()
     }
 
     /// The toolbar pop-out button's call and drawer_popout's (P15).
@@ -32,14 +28,13 @@ final class WindowPlacement {
         drawer.isOpen = false
         drawer.isPoppedOut = true
         windows.open("drawer")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            ScreenPlacement.shared.reposition()
-        }
+        ScreenPlacement.shared.scheduleReposition()
     }
 
     /// The topbar ↩︎ pop-in button's call and drawer_popin's — the same
     /// close path in both directions (App.tsx:318-322).
     func popInDrawer() {
+        ScreenPlacement.shared.noteClosed(.drawer)
         windows.dismiss("drawer")
         drawer.isPoppedOut = false
         drawer.isOpen = true
@@ -47,6 +42,7 @@ final class WindowPlacement {
 
     /// The topbar ↩︎ display pop-in / display_close.
     func closeDisplay() {
+        ScreenPlacement.shared.noteClosed(.display)
         windows.dismiss("display")
     }
 }

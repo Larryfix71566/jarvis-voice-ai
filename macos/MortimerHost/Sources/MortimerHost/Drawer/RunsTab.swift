@@ -16,7 +16,7 @@ let RUN_STATUSES = ["ok", "failed", "timeout", "running", "orphaned"]
 @MainActor
 @Observable
 final class RunsViewModel {
-    let api: AdminAPI
+    private(set) var api: AdminAPI
     var state: TabState<[RunSummary]> = .loading
     /// Filters passed server-side as ?agent=&status= (RunsPanel.tsx:111-116).
     var agentFilter: String? { didSet { if agentFilter != oldValue { refreshSoon() } } }
@@ -31,6 +31,12 @@ final class RunsViewModel {
     }
 
     init(api: AdminAPI) { self.api = api }
+
+    func updateAPI(_ api: AdminAPI) {
+        stopPolling()
+        self.api = api
+        stopped = false
+    }
 
     func startPolling() {
         guard pollTask == nil, !stopped else { return }
@@ -51,8 +57,10 @@ final class RunsViewModel {
     func refresh() async {
         do {
             let list = try await api.runsTyped(agent: agentFilter, status: statusFilter)
+            guard !Task.isCancelled else { return }
             state = TabStateMapper.map(ok: list.ok, error: nil, isEmpty: list.runs.isEmpty, value: list.runs)
         } catch {
+            guard !Task.isCancelled else { return }
             let (message, unauthorized) = TabStateMapper.fromError(error)
             state = .error(message)
             if unauthorized { stopped = true; stopPolling() }
@@ -132,15 +140,14 @@ struct RunsTab: View {
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .preserveDrawerScroll("runs")
         .task {
             // E5: a satellite click while this tab was unmounted must be
             // readable at the next mount.
             if let requested = agentRuns.consumeRequestedAgentFilter() {
                 model.agentFilter = requested
             }
-            model.startPolling()
         }
-        .onDisappear { model.stopPolling() }
     }
 
     private func statusColor(_ status: String) -> Color {

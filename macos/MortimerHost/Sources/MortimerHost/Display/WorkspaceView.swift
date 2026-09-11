@@ -6,13 +6,29 @@ struct WorkspaceView: View {
     @EnvironmentObject private var client: JarvisClient
     @Environment(WorkspaceStore.self) private var workspace
     @State private var pinLimitNotice = false
-    @State private var showComparisonOnCompact = false
+    @Environment(DisplayWindowStore.self) private var display
+    @Environment(DrawerState.self) private var drawer
 
     var body: some View {
         VStack(spacing: 12) {
             HStack {
                 Button("Conversation") { workspace.returnToConversation() }
                 Button("Memory graph") { workspace.openMemoryGraph() }
+                Menu("Display") {
+                    Button("Show memory graph") { sendToDisplay(.memoryGraph) }
+                    if let active = workspace.activeResult {
+                        Button("Show active result") { sendToDisplay(.result(active.id)) }
+                    }
+                    if let comparison = workspace.comparisonResult {
+                        Button("Show comparison result") { sendToDisplay(.result(comparison.id)) }
+                    }
+                    ForEach(workspace.results.filter { workspace.pinnedIDs.contains($0.id) }) { result in
+                        Button(result.payload.title ?? "Pinned result") { sendToDisplay(.result(result.id)) }
+                    }
+                    if display.isWindowOpen {
+                        Button("Return display content here") { drawer.placementRef?.closeDisplay() }
+                    }
+                }
                 Spacer()
                 if let active = workspace.activeResult {
                     Button(workspace.pinnedIDs.contains(active.id) ? "Unpin" : "Pin") {
@@ -52,26 +68,32 @@ struct WorkspaceView: View {
                 }
             }
             if workspace.showsMemoryGraph {
-                MemoryGraphView(store: workspace.memoryGraph, api: client.admin)
+                if display.isWindowOpen && workspace.supportingContent == .memoryGraph {
+                    ContentUnavailableView {
+                        Label("Memory graph is on the supporting display", systemImage: "display")
+                    } actions: {
+                        Button("Return here") { drawer.placementRef?.closeDisplay() }
+                    }
+                } else { MemoryGraphView(store: workspace.memoryGraph, api: client.admin) }
             } else if let active = workspace.activeResult {
                 GeometryReader { geometry in
                     if let comparison = workspace.comparisonResult {
                         if geometry.size.width >= 960 {
                             HStack(spacing: 16) {
-                                resultPane(active)
+                                WorkspaceResultPane(result: active)
                                 Divider()
-                                resultPane(comparison)
+                                WorkspaceResultPane(result: comparison)
                             }
                         } else {
                             VStack {
-                                Picker("Comparison pane", selection: $showComparisonOnCompact) {
+                                Picker("Comparison pane", selection: Binding(get: { workspace.showComparisonOnCompact }, set: { workspace.showComparisonOnCompact = $0 })) {
                                     Text("A: \(active.payload.title ?? "Result")").tag(false)
                                     Text("B: \(comparison.payload.title ?? "Result")").tag(true)
                                 }.pickerStyle(.segmented)
-                                resultPane(showComparisonOnCompact ? comparison : active)
+                                WorkspaceResultPane(result: workspace.showComparisonOnCompact ? comparison : active)
                             }
                         }
-                    } else { resultPane(active) }
+                    } else { WorkspaceResultPane(result: active) }
                 }
             } else {
                 ContentUnavailableView("Results appear here", systemImage: "doc.text.magnifyingglass",
@@ -85,29 +107,8 @@ struct WorkspaceView: View {
         } message: { Text("Unpin a result before pinning another. Your existing pins are preserved.") }
     }
 
-    private func resultPane(_ result: WorkspaceResult) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(result.payload.title ?? "Result").font(.headline)
-            if let url = MemoryGraphSource.imageURL(result.payload) {
-                let graphStore = workspace.graphStore(for: result, url: url)
-                Button(graphStore.showsOriginalResult ? "Interactive graph" : "Original result and sources") {
-                    graphStore.showsOriginalResult.toggle()
-                }
-                if graphStore.showsOriginalResult {
-                    DisplayContentView(payload: result.payload,
-                        restoredScrollOffset: workspace.scrollOffsets[result.id],
-                        onScrollOffset: { workspace.rememberScroll($0, for: result.id) })
-                } else {
-                    if let body = result.payload.body { Text(body).font(.caption).textSelection(.enabled) }
-                    MemoryGraphView(store: graphStore, api: client.admin, fallbackURL: url)
-                }
-            } else {
-                DisplayContentView(payload: result.payload,
-                    restoredScrollOffset: workspace.scrollOffsets[result.id],
-                    onScrollOffset: { workspace.rememberScroll($0, for: result.id) })
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .id(result.id)
+    private func sendToDisplay(_ content: SupportingDisplayContent) {
+        guard workspace.sendToDisplay(content) else { return }
+        drawer.placementRef?.openDisplay()
     }
 }

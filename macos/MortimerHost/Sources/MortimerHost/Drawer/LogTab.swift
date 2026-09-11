@@ -8,6 +8,7 @@ import JarvisKit
 /// ordered by timestamp so the Log tells the session's story, not just
 /// its words. Auto-scrolls to the newest entry.
 struct LogTab: View {
+    @Environment(DrawerModels.self) private var models
     @Environment(ConversationStore.self) private var conversation
     @Environment(AgentRunStore.self) private var agentRuns
 
@@ -76,10 +77,13 @@ struct LogTab: View {
                 .padding(16)
                 .frame(maxWidth: .infinity)
             }
+            .preserveDrawerScroll("transcript")
             .onChange(of: items.count) { _, _ in
                 withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
             }
-            .onAppear { proxy.scrollTo("bottom", anchor: .bottom) }
+            .onAppear {
+                if models.scrollOffsets["transcript"] == nil { proxy.scrollTo("bottom", anchor: .bottom) }
+            }
         }
     }
 

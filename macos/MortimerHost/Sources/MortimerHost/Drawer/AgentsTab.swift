@@ -37,6 +37,7 @@ struct AgentsTab: View {
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .preserveDrawerScroll("agents")
     }
 
     private func card(_ run: AgentRun) -> some View {

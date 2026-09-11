@@ -16,6 +16,11 @@ struct WorkspaceResult: Identifiable, Equatable, Sendable {
     }
 }
 
+enum SupportingDisplayContent: Equatable {
+    case result(UUID)
+    case memoryGraph
+}
+
 /// App-owned presentation state. Incoming results never change an existing
 /// selection. Closing a tab has no authority over Output or display history.
 @MainActor
@@ -28,6 +33,8 @@ final class WorkspaceStore {
     private(set) var unreadIDs: Set<UUID> = []
     private(set) var showsConversation = true
     private(set) var showsMemoryGraph = false
+    private(set) var supportingContent: SupportingDisplayContent?
+    var showComparisonOnCompact = false
     let memoryGraph = MemoryGraphStore(persistenceKey: "mortimer.interface.memoryGraph.view")
     @ObservationIgnored private var resultGraphs: [UUID: MemoryGraphStore] = [:]
     private(set) var scrollOffsets: [UUID: Double] = [:]
@@ -68,6 +75,20 @@ final class WorkspaceStore {
     func returnToConversation() { showsConversation = true }
     func openMemoryGraph() { showsMemoryGraph = true; showsConversation = false }
     func returnToWorkspace() { showsConversation = false }
+
+    @discardableResult
+    func sendToDisplay(_ content: SupportingDisplayContent) -> Bool {
+        if case .result(let id) = content, !results.contains(where: { $0.id == id }) { return false }
+        supportingContent = content
+        trimHistory()
+        return true
+    }
+
+    func showOriginalDisplayPanels() { supportingContent = nil; trimHistory() }
+    var supportingResult: WorkspaceResult? {
+        guard case .result(let id) = supportingContent else { return nil }
+        return results.first { $0.id == id }
+    }
 
     func graphStore(for result: WorkspaceResult, url: URL) -> MemoryGraphStore {
         if let existing = resultGraphs[result.id] { return existing }
@@ -113,6 +134,7 @@ final class WorkspaceStore {
     }
 
     private func remove(_ id: UUID) {
+        if supportingContent == .result(id) { supportingContent = nil }
         resultGraphs.removeValue(forKey: id)?.cancel()
         results.removeAll { $0.id == id }
         pinnedIDs.remove(id)
@@ -123,7 +145,7 @@ final class WorkspaceStore {
     private func trimHistory() {
         // Pins and the two panes are protected, with explicit finite bounds.
         // Retain historyLimit other results so reading never evicts a pane.
-        let protected = pinnedIDs.union([activeID, comparisonID].compactMap { $0 })
+        let protected = pinnedIDs.union([activeID, comparisonID, supportingResult?.id].compactMap { $0 })
         let ordinary = results.filter { !protected.contains($0.id) }
         for result in ordinary.prefix(max(0, ordinary.count - historyLimit)) { remove(result.id) }
     }

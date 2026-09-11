@@ -1,12 +1,5 @@
 // WindowLookup.swift
-// Ported from macos/MortimerShell/Sources/MortimerShell/WindowLookup.swift
-// (§3 N15) — mechanical rename only: ShellWindowKind -> HostWindowKind,
-// findShellWindow -> findHostWindow. MortimerHost opens only ONE window
-// in this plan (N2), so this port is currently unused by
-// MortimerHostApp/HostView; it lives here because this is the tree
-// T1.3 grows from, and porting it twice (once here, once later into the
-// real app) is how the two copies would diverge. The original three-rule
-// lookup and its reasoning are preserved verbatim below.
+// Resolves the console, display and drawer scenes for placement and recovery.
 //
 // The previous lookup (`window.identifier?.rawValue == kind.rawValue`,
 // exact equality) was the prime suspect for why placement and hot-plug
@@ -22,7 +15,7 @@ import os
 
 private let logger = Logger(subsystem: "com.mortimer.host", category: "window-lookup")
 
-enum HostWindowKind: String {
+enum HostWindowKind: String, Codable, CaseIterable, Sendable {
     case console, display, drawer
 }
 

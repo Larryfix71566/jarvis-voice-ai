@@ -31,6 +31,7 @@ struct MortimerHostApp: App {
     @State private var conversation = ConversationStore()
     @State private var displayWindow = DisplayWindowStore()
     @State private var drawer = DrawerState()
+    @State private var drawerModels = DrawerModels()
     @State private var overlay = ConsoleOverlayState()
     @State private var notices = ConsoleNoticeState()
 
@@ -53,6 +54,7 @@ struct MortimerHostApp: App {
                 .environment(conversation)
                 .environment(displayWindow)
                 .environment(drawer)
+                .environment(drawerModels)
                 .environment(overlay)
                 .environment(notices)
                 .background(WindowIdentifierSetter(identifier: "console"))
@@ -70,6 +72,9 @@ struct MortimerHostApp: App {
         Window("Mortimer Display", id: "display") {
             DisplayWindowView()
                 .environment(displayWindow)
+                .environment(workspace)
+                .environment(drawer)
+                .environmentObject(client)
                 .background(WindowIdentifierSetter(identifier: "display"))
                 // The native form of the web's hasLivePopup poll: scene
                 // content on screen = window open. Drives the topbar's
@@ -88,6 +93,7 @@ struct MortimerHostApp: App {
                 .environment(workspace)
                 .environment(conversation)
                 .environment(drawer)
+                .environment(drawerModels)
                 .background(WindowIdentifierSetter(identifier: "drawer"))
                 // A traffic-light close of the popped drawer must flip
                 // the console back to docked semantics (the web's
@@ -118,6 +124,12 @@ struct MortimerHostApp: App {
                     }
                 }
                 .keyboardShortcut("f", modifiers: [.command, .control])
+            }
+            CommandMenu("Layout") {
+                Button("Reset Layout") {
+                    ScreenPlacement.shared.resetLayout()
+                    drawer.width = AppTuning.drawerDefaultWidth
+                }
             }
             CommandMenu("Debug") {
                 Button(layoutVersion == 1 ? "Use previous layout" : "Preview adaptive layout") {

@@ -4,7 +4,7 @@ import JarvisKit
 /// APP plan §3 P15, §5 step 6 — the tab strip + active tab body; the
 /// DrawerScene body and the console's docked drawer share it. The eight
 /// keys/labels are load-bearing (SideDrawer.tsx / ui_control.py aliases)
-/// and are owned by DrawerState. View-models are owned HERE (the scene),
+/// and are owned by DrawerState. View-models are owned by app-scoped DrawerModels,
 /// not by the tab views — a tab view unmounting on switch must not
 /// restart its poll or lose a half-finished draft (P6). "costs" added
 /// 2026-09-01 (MORTIMER_OPTIMIZATION_PLAN.md Phase 0 step 9).
@@ -15,13 +15,8 @@ struct DrawerView: View {
     @Environment(DisplayResultStore.self) private var displayResults
     @Environment(ConversationStore.self) private var conversation
 
-    @State private var repoModel: RepoViewModel?
-    @State private var editModel: EditViewModel?
-    @State private var memoryModel: MemoryViewModel?
-    @State private var runsModel: RunsViewModel?
-    @State private var costsModel: CostsViewModel?
-    /// Interface Task — the council roster under the Agents tab's runs.
-    @State private var councilModel: CouncilViewModel?
+    @Environment(DrawerModels.self) private var models
+    @State private var visibilityLease = UUID()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,16 +35,13 @@ struct DrawerView: View {
         .padding(.trailing, 8)
         .padding(.leading, drawer.isPoppedOut ? 8 : 0)
         .foregroundStyle(AppTheme.text)
-        .onAppear(perform: buildModelsOnce)
-    }
-
-    private func buildModelsOnce() {
-        if repoModel == nil { repoModel = RepoViewModel(api: client.admin) }
-        if editModel == nil { editModel = EditViewModel(api: client.admin) }
-        if memoryModel == nil { memoryModel = MemoryViewModel(api: client.admin) }
-        if runsModel == nil { runsModel = RunsViewModel(api: client.admin) }
-        if costsModel == nil { costsModel = CostsViewModel(api: client.costs) }
-        if councilModel == nil { councilModel = CouncilViewModel(api: client.admin) }
+        .onAppear {
+            models.configure(client.config)
+            models.acquire(visibilityLease, tab: drawer.activeTab)
+        }
+        .onChange(of: drawer.activeTab) { _, tab in models.acquire(visibilityLease, tab: tab) }
+        .onChange(of: client.state) { _, _ in models.configure(client.config) }
+        .onDisappear { models.release(visibilityLease) }
     }
 
     /// The tab strip (SideDrawer.tsx:255-292, parity sweep 2026-08-30):
@@ -105,21 +97,21 @@ struct DrawerView: View {
     private var activeBody: some View {
         switch drawer.activeTab {
         case "repo":
-            if let repoModel { RepoTab(model: repoModel) }
+            if let repoModel = models.repo { RepoTab(model: repoModel) }
         case "edit":
-            if let editModel { EditTab(model: editModel) }
+            if let editModel = models.edit { EditTab(model: editModel) }
         case "memory":
-            if let memoryModel { MemoryTab(model: memoryModel) }
+            if let memoryModel = models.memory { MemoryTab(model: memoryModel) }
         case "runs":
-            if let runsModel { RunsTab(model: runsModel) }
+            if let runsModel = models.runs { RunsTab(model: runsModel) }
         case "agents":
-            AgentsTab(council: councilModel)
+            AgentsTab(council: models.council)
         case "output":
             OutputTab()
         case "transcript":
             LogTab()
         case "costs":
-            if let costsModel { CostsTab(model: costsModel) }
+            if let costsModel = models.costs { CostsTab(model: costsModel) }
         default:
             EmptyView()
         }
