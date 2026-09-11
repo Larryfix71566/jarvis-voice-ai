@@ -11,38 +11,15 @@ struct WorkspaceView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            HStack {
-                Button("Conversation") { workspace.returnToConversation() }
-                Button("Memory graph") { workspace.openMemoryGraph() }
-                Menu("Display") {
-                    Button("Show memory graph") { sendToDisplay(.memoryGraph) }
-                    if let active = workspace.activeResult {
-                        Button("Show active result") { sendToDisplay(.result(active.id)) }
-                    }
-                    if let comparison = workspace.comparisonResult {
-                        Button("Show comparison result") { sendToDisplay(.result(comparison.id)) }
-                    }
-                    ForEach(workspace.results.filter { workspace.pinnedIDs.contains($0.id) }) { result in
-                        Button(result.payload.title ?? "Pinned result") { sendToDisplay(.result(result.id)) }
-                    }
-                    if display.isWindowOpen {
-                        Button("Return display content here") { drawer.placementRef?.closeDisplay() }
-                    }
-                }
-                Spacer()
-                if let active = workspace.activeResult {
-                    Button(workspace.pinnedIDs.contains(active.id) ? "Unpin" : "Pin") {
-                        if workspace.pinnedIDs.contains(active.id) { workspace.unpin(active.id) }
-                        else { pinLimitNotice = !workspace.pin(active.id) }
-                    }
-                    Menu("Compare") {
-                        ForEach(workspace.results.filter { $0.id != active.id }) { result in
-                            Button(result.payload.title ?? "Result") { workspace.compare(with: result.id) }
-                        }
-                        Button("End comparison") { workspace.compare(with: nil) }
-                    }
+            ViewThatFits(in: .horizontal) {
+                HStack { navigationControls; Spacer(); resultControls }
+                    .fixedSize(horizontal: true, vertical: false)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack { navigationControls; Spacer(minLength: 0) }
+                    HStack { resultControls; Spacer(minLength: 0) }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             ScrollView(.horizontal) {
                 HStack {
                     ForEach(workspace.results) { result in
@@ -78,8 +55,8 @@ struct WorkspaceView: View {
             } else if let active = workspace.activeResult {
                 GeometryReader { geometry in
                     if let comparison = workspace.comparisonResult {
-                        if geometry.size.width >= 960 {
-                            HStack(spacing: 16) {
+                        if geometry.size.width >= AdaptiveLayoutMetrics.minimumComparisonWidth {
+                            HStack(spacing: AdaptiveLayoutMetrics.comparisonSpacing) {
                                 WorkspaceResultPane(result: active)
                                 Divider()
                                 WorkspaceResultPane(result: comparison)
@@ -100,11 +77,48 @@ struct WorkspaceView: View {
                     description: Text("Ask Mortimer to research something, or return to conversation."))
             }
         }
-        .padding(16)
+        .padding(AdaptiveLayoutMetrics.workspacePadding)
         .background(AppTheme.bg)
         .alert("Pin limit reached", isPresented: $pinLimitNotice) {
             Button("OK", role: .cancel) {}
         } message: { Text("Unpin a result before pinning another. Your existing pins are preserved.") }
+    }
+
+    @ViewBuilder
+    private var navigationControls: some View {
+        Button("Conversation") { workspace.returnToConversation() }
+        Button("Memory graph") { workspace.openMemoryGraph() }
+        Menu("Display") {
+            Button("Show memory graph") { sendToDisplay(.memoryGraph) }
+            if let active = workspace.activeResult {
+                Button("Show active result") { sendToDisplay(.result(active.id)) }
+            }
+            if let comparison = workspace.comparisonResult {
+                Button("Show comparison result") { sendToDisplay(.result(comparison.id)) }
+            }
+            ForEach(workspace.results.filter { workspace.pinnedIDs.contains($0.id) }) { result in
+                Button(result.payload.title ?? "Pinned result") { sendToDisplay(.result(result.id)) }
+            }
+            if display.isWindowOpen {
+                Button("Return display content here") { drawer.placementRef?.closeDisplay() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var resultControls: some View {
+        if let active = workspace.activeResult {
+            Button(workspace.pinnedIDs.contains(active.id) ? "Unpin" : "Pin") {
+                if workspace.pinnedIDs.contains(active.id) { workspace.unpin(active.id) }
+                else { pinLimitNotice = !workspace.pin(active.id) }
+            }
+            Menu("Compare") {
+                ForEach(workspace.results.filter { $0.id != active.id }) { result in
+                    Button(result.payload.title ?? "Result") { workspace.compare(with: result.id) }
+                }
+                Button("End comparison") { workspace.compare(with: nil) }
+            }
+        }
     }
 
     private func sendToDisplay(_ content: SupportingDisplayContent) {

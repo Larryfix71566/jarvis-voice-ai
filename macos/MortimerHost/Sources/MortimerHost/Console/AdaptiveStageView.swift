@@ -24,13 +24,13 @@ struct AdaptiveStageView: View {
                         Spacer()
                     }.padding(16)
                 }
-            } else if wideWindow && geometry.size.width >= 680 {
+            } else if wideWindow && geometry.size.width >= AdaptiveLayoutMetrics.minimumRailStageWidth {
                 HStack(spacing: 0) {
                     VStack(spacing: 0) {
                         VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse)
                             .frame(height: 150)
                         OrbFieldView(voiceState: voiceState, compactPresentation: true, hidesLettering: true)
-                    }.frame(width: 200)
+                    }.frame(width: AdaptiveLayoutMetrics.voiceRailWidth)
                     Divider()
                     WorkspaceView()
                 }

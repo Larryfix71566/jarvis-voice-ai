@@ -26,10 +26,16 @@ struct ConsoleView: View {
     @State private var stageCenterX: CGFloat?
     /// Live width during a resize drag (committed to drawer.width on end).
     @State private var dragWidth: Double?
+    @State private var dragStartWidth: Double?
     /// Pointer over the resize grip — drives the cursor + the highlight.
     @State private var handleHovering = false
     @State private var windowWidth: Double = 1280
     @State private var keyMonitor: Any?
+
+    private var visibleDrawerWidth: Double {
+        let requested = dragWidth ?? drawer.width
+        return layoutVersion == 1 ? AdaptiveLayoutMetrics.drawerWidth(requested, windowWidth: windowWidth) : requested
+    }
 
     var body: some View {
         ZStack {
@@ -80,7 +86,7 @@ struct ConsoleView: View {
                     if drawer.isOpen && !drawer.isPoppedOut {
                         resizeHandle
                         DrawerView()
-                            .frame(width: dragWidth ?? drawer.width)
+                            .frame(width: visibleDrawerWidth)
                             .transition(.move(edge: .trailing))
                     }
                 }
@@ -161,15 +167,18 @@ struct ConsoleView: View {
             .gesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { value in
-                        // drawer.width is NOT mutated until onEnded, so it is
-                        // the stable base for the whole drag.
-                        dragWidth = DrawerState.clampWidth(
-                            drawer.width - value.translation.width, windowWidth: windowWidth)
+                        // Start at the displayed width, which may be temporarily
+                        // constrained without changing the saved preference.
+                        if dragStartWidth == nil { dragStartWidth = visibleDrawerWidth }
+                        let requested = (dragStartWidth ?? visibleDrawerWidth) - value.translation.width
+                        dragWidth = layoutVersion == 1
+                            ? AdaptiveLayoutMetrics.drawerWidth(requested, windowWidth: windowWidth)
+                            : DrawerState.clampWidth(requested, windowWidth: windowWidth)
                         NSCursor.resizeLeftRight.set()
                     }
                     .onEnded { _ in
                         if let dragWidth { drawer.width = dragWidth }
-                        dragWidth = nil
+                        dragWidth = nil; dragStartWidth = nil
                         if !handleHovering { NSCursor.arrow.set() }
                     }
             )

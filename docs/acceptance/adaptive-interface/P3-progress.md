@@ -99,3 +99,35 @@ window closure/reparenting, actual result scroll restoration, the full payload
 and monitor matrix, and final performance/privacy/regression gates. Synthetic
 renderings and the tested write seam do not establish those checks. Real audio
 metering remains P2 work; this follow-up does not complete the full plan.
+
+## Readable-width correction
+
+Starting application commit `934ebe8`. AdaptiveLayoutMetrics accounts for the
+480-point readable result target plus workspace padding, resize handle, voice
+rail, comparison spacing and divider. At a 900-point window the adaptive docked
+drawer is limited to 378 points without changing its saved width. The previous
+layout keeps its previous width policy. Explicit resizing starts from the actual
+visible edge and commits only on drag end; passive window shrinking does not
+replace the saved preference. A larger window restores the requested width.
+
+The left rail requires a 713-point stage. Side-by-side comparison requires 993
+points inside workspace padding; below this it uses existing A/B tabs. Toolbar
+controls wrap into two rows rather than squeezing labels at narrow widths.
+
+Offline sandbox task `66fed310bde6`, final full host check
+`p3-readable-width-final`: 90 tests, zero failures, no skips. Log SHA-256:
+`8dbf3e77dd041bf9f2c77369eb262999688b3ec927881ed364848384270fd1e9`.
+Policy tests exercise requested drawer widths across supported window widths,
+preserved preference, and rail/comparison boundaries. Native WorkspaceView
+fixtures at 512×450 and 1,100×450 points show narrow results and wide comparison;
+initial renderings were visually inspected. The final rerender also includes
+left-aligned toolbar placement and the corrected comparison threshold.
+
+- `workspace-readable-512.png` SHA-256 `85a903462dadf7d98e196b9672611febdc4308e481dde759afa9febd67a26253`.
+
+- `workspace-readable-1100.png` SHA-256 `fe85e0bfdc99f36c9f8c5ae3ffa287c64b3838bbc08e3ef0c1465f563165304e`.
+
+These fixtures cover the workspace region, not the full 900×600 console with
+voice controls and sidecar. Full-window height, large-text/VoiceOver and actual
+pointer resize/dock/monitor interaction remain acceptance items. All P0/P2/P6
+and other open requirements remain open; nothing was merged or deployed.
