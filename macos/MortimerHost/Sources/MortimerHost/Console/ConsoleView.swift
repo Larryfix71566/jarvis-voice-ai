@@ -9,6 +9,7 @@ import JarvisKit
 /// Keyboard: T toggles the Log tab (three-case), Escape closes the
 /// drawer (App.tsx:512-528), SPACE PTT lives in MicControlsView.
 struct ConsoleView: View {
+    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 0
     @EnvironmentObject private var client: JarvisClient
     @Environment(AgentRunStore.self) private var agentRuns
     @Environment(DisplayResultStore.self) private var displayResults
@@ -33,10 +34,12 @@ struct ConsoleView: View {
     var body: some View {
         ZStack {
             AppTheme.bg.ignoresSafeArea()
+            if layoutVersion != 1 {
             VoiceWaveView(voiceState: voiceState,
                           stageCenterX: stageCenterX,
                           wakePulse: client.wakePulse)
                 .ignoresSafeArea()
+            }
 
             VStack(spacing: 0) {
                 TopBarView()
@@ -45,6 +48,9 @@ struct ConsoleView: View {
                 }
                 HStack(spacing: 0) {
                     ZStack {
+                        if layoutVersion == 1 {
+                            AdaptiveStageView(voiceState: voiceState, wideWindow: windowWidth >= 1180)
+                        } else {
                         OrbFieldView(voiceState: voiceState)
                         // The web's in-page DisplayPanel stack: window-
                         // surface results float here while the display
@@ -56,6 +62,7 @@ struct ConsoleView: View {
                                     .frame(maxWidth: .infinity, maxHeight: .infinity,
                                            alignment: .topTrailing)
                             }
+                        }
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

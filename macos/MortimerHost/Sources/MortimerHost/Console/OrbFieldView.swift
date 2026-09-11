@@ -33,6 +33,8 @@ let AGENT_LAYOUT: [AgentLayoutEntry] = [
 
 struct OrbFieldView: View {
     let voiceState: VoiceState
+    var compactPresentation = false
+    var hidesLettering = false
     @EnvironmentObject private var client: JarvisClient
     @Environment(AgentRunStore.self) private var agentRuns
     @Environment(DrawerState.self) private var drawer
@@ -56,6 +58,9 @@ struct OrbFieldView: View {
 
     var body: some View {
         GeometryReader { geo in
+            if compactPresentation {
+                compactReadout
+            } else {
             ZStack {
                 // Faint center radial (command-deck.css .orb-field).
                 RadialGradient(colors: [AppTheme.accent.opacity(0.05), .clear],
@@ -189,6 +194,7 @@ struct OrbFieldView: View {
                 }
             }
         }
+        }
         .onChange(of: voiceState) { _, next in
             // E2: every connect is an arrival (connecting -> live).
             if prevState == .connecting && (next == .listening || next == .speaking) {
@@ -204,6 +210,37 @@ struct OrbFieldView: View {
                 now = Date()
                 try? await Task.sleep(nanoseconds: 500_000_000)
             }
+        }
+    }
+
+    /// Compact layout reuses the same status, caption and satellite owners.
+    /// Scrolling keeps every notice and agent reachable in a narrow voice rail.
+    private var compactReadout: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                centerReadout
+                if client.wakeWordOn { Text("Wake word armed").font(.caption) }
+                if !client.micEnabled { Text("Microphone muted").foregroundStyle(AppTheme.attn) }
+                if attention { Text("Confirmation needed in Output").foregroundStyle(AppTheme.attn) }
+                if let notice = notices.speakerGateNotice { Text(notice).foregroundStyle(AppTheme.attn) }
+                if let notice = notices.audioOutputNotice {
+                    Text(notice).foregroundStyle(AppTheme.attn)
+                    HStack {
+                        Button("Reconnect") {
+                            notices.clearAudioOutputNotice()
+                            Task { await client.reconnect() }
+                        }
+                        Button("Dismiss") { notices.clearAudioOutputNotice() }
+                    }
+                }
+                if let notice = notices.audioInputNotice { Text(notice).font(.caption) }
+                captions
+                ForEach(AGENT_LAYOUT, id: \.key) { agent in satellite(agent) }
+                AmbientStripView(connected: connected)
+                SystemVitalsView(connected: connected)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -244,6 +281,7 @@ struct OrbFieldView: View {
 
     private var centerReadout: some View {
         VStack(spacing: 14) {
+            if !hidesLettering {
             // "M.O.R.T.I.M.E.R." — per-letter boot cascade (40ms steps),
             // replayed per connect via the bootPulse key.
             HStack(spacing: 0) {
@@ -257,6 +295,10 @@ struct OrbFieldView: View {
             .foregroundStyle(readoutColor)
             .shadow(color: attention ? AppTheme.attnDim : (wakeArmed ? AppTheme.accentDim : .clear),
                     radius: attention ? 7 : 6)
+
+            } else {
+                Text("Mortimer").font(.headline).foregroundStyle(readoutColor)
+            }
 
             // .orb-label — dot + STATE_LABEL / Thinking (speech outranks
             // the shimmer).

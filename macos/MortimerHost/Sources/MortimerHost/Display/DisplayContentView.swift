@@ -12,6 +12,10 @@ struct DisplayContentView: View {
     /// True while the containing panel is mid-resize (SingleDisplayPanel);
     /// a graph image keeps its current bitmap until the size settles.
     var isResizing: Bool = false
+    var restoredScrollOffset: Double? = nil
+    var onScrollOffset: ((Double) -> Void)? = nil
+    @State private var scrollPosition = ScrollPosition(y: 0)
+    @State private var restoredScroll = false
     /// The scroll viewport, in points — a graph image is requested from the
     /// sidecar at THIS size (× the screen's backing scale) rather than the
     /// server's fixed 1400×900 default, so labels stay crisp at any panel
@@ -48,6 +52,16 @@ struct DisplayContentView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollPosition($scrollPosition)
+        .onScrollGeometryChange(for: Double.self) { geometry in
+            Double(geometry.contentOffset.y + geometry.contentInsets.top)
+        } action: { _, offset in
+            if restoredScroll { onScrollOffset?(offset) }
+        }
+        .onAppear {
+            if let offset = restoredScrollOffset { scrollPosition.scrollTo(y: offset) }
+            restoredScroll = true
         }
         .onGeometryChange(for: CGSize.self) { proxy in
             proxy.size

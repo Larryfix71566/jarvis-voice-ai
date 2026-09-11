@@ -48,6 +48,22 @@ probe does not establish an application accessibility defect or a pass.
 
 ## Open gates
 
+### Rendering harness resolution
+
+The wide-header label fixture now passes. In-process
+`AXEnhancedUserInterface` activation exposes the SwiftUI nodes. Those nodes
+implement the public `accessibilityLabel`/`accessibilityChildren` selectors
+without declaring formal protocol conformance, so the fixture reads those
+selectors after checking support. Exact expected labels use the existing
+uppercase header presentation; all eight complete names remain asserted.
+No existing test was removed or skipped. The fixture is still only a
+wide-header label check, not interaction or comprehensive VoiceOver acceptance.
+
+Latest full host check with the P3 preview: `p3-console-header-labels`, 51 tests,
+zero failures. Log SHA-256:
+`b95a7f8d3e0fb8def1dbdd194416fd33ffec238e5b0d33729aa7b6609e4f1a31`.
+The earlier failures above remain as diagnostic history, superseded by this run.
+
 - P0 functional screenshots, hardware/performance baseline and safe real
   input/playout observations. Existing simulated amplitude is not evidence.
 - P1 rendered/accessibility checks, keyboard and voice selection, narrow and

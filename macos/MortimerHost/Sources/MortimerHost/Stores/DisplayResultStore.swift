@@ -8,6 +8,7 @@ struct DisplayResult: Identifiable, Equatable, Sendable {
     let id: Int
     let payload: DisplayPayload
     let receivedAt: Date
+    var workspaceID: UUID? = nil
 }
 
 /// APP plan §3 P8/P14 — the native displayResults.ts: DRAWER-routed
@@ -30,9 +31,9 @@ final class DisplayResultStore {
         return Self.draftTools.contains(newest.payload.tool ?? "")
     }
 
-    func apply(_ payload: DisplayPayload) {
+    func apply(_ payload: DisplayPayload, workspaceID: UUID? = nil) {
         seq += 1
-        results = Array(([DisplayResult(id: seq, payload: payload, receivedAt: Date())] + results)
+        results = Array(([DisplayResult(id: seq, payload: payload, receivedAt: Date(), workspaceID: workspaceID)] + results)
             .prefix(AppTuning.maxDisplayResults))
     }
 

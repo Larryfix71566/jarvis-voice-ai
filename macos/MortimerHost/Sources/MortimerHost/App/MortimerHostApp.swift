@@ -24,8 +24,10 @@ struct MortimerHostApp: App {
         }
     }
 
+    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 0
     @State private var agentRuns = AgentRunStore()
     @State private var displayResults = DisplayResultStore()
+    @State private var workspace = WorkspaceStore()
     @State private var conversation = ConversationStore()
     @State private var displayWindow = DisplayWindowStore()
     @State private var drawer = DrawerState()
@@ -47,6 +49,7 @@ struct MortimerHostApp: App {
                 .environmentObject(client)
                 .environment(agentRuns)
                 .environment(displayResults)
+                .environment(workspace)
                 .environment(conversation)
                 .environment(displayWindow)
                 .environment(drawer)
@@ -82,6 +85,7 @@ struct MortimerHostApp: App {
                 .environmentObject(client)
                 .environment(agentRuns)
                 .environment(displayResults)
+                .environment(workspace)
                 .environment(conversation)
                 .environment(drawer)
                 .background(WindowIdentifierSetter(identifier: "drawer"))
@@ -116,6 +120,10 @@ struct MortimerHostApp: App {
                 .keyboardShortcut("f", modifiers: [.command, .control])
             }
             CommandMenu("Debug") {
+                Button(layoutVersion == 1 ? "Use previous layout" : "Preview adaptive layout") {
+                    layoutVersion = layoutVersion == 1 ? 0 : 1
+                }
+                Divider()
                 Button("Clear stored token") {
                     KeychainStore.setToken(nil, for: client.config.botURL)
                 }
@@ -142,6 +150,7 @@ struct MortimerHostApp: App {
             agentRuns: agentRuns,
             displayResults: displayResults,
             displayWindow: displayWindow,
+            workspace: workspace,
             conversation: conversation,
             drawer: drawer,
             notices: notices

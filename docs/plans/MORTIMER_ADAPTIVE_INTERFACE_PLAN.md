@@ -1,6 +1,6 @@
 # Mortimer adaptive interface implementation plan
 
-**Status:** DESIGN AGREED IN CONVERSATION; IMPLEMENTATION NOT STARTED.
+**Status:** IMPLEMENTATION IN PROGRESS; NO RELEASE ACCEPTANCE. See `docs/acceptance/adaptive-interface/` for measured progress and open gates.
 **Scope:** Native MortimerHost interface, dual-speaker Silo feedback, central results, interactive memory graph, preserved sidecar, automatic monitor adaptation.
 **Baseline inspected:** repository commit `2ccf66cd7e00b82cf9136d2cd00f42e9bddb90af` (PR #63), 2026-09-10. Recheck the actual starting commit before implementation.
 **Owner:** Larry. Implementation may be assigned to a coding model one phase at a time. This document authorizes no application-code change by itself.
