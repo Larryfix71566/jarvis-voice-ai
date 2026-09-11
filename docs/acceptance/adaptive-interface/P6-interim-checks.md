@@ -44,3 +44,28 @@ The detailed summary identifies all skips: three cases in
 `tests/integration/test_mcp_servers.py:138`, all with the existing reason
 “live test — set RUN_LIVE=1 to enable”. These external-service cases remain
 unverified, not accepted. Seeded order and all other final gates remain open.
+
+## Seeded-order failure and isolated fixture correction
+
+Seed 20260911 shuffles the full collected item list using a local Random
+instance. `p6-interim-seeded-unit-integration` completed with 2,457 passed,
+1 failed, 4 existing live skips and 27 warnings, in 441.122 verifier seconds.
+SHA-256 `7b7881d97b4481e6e267d34379d7b9c8822cc5bac2d41fdbc3fc1b4dd9f92361`.
+
+Failure: `test_bare_run_empty_run_id_is_none` encountered FakeAgent.crash=True
+left by `test_agent_crash_settles_job_as_error`. The two-test order reproduced
+it independently (`p6-fake-agent-leak-repro`, SHA-256
+`a522c082a175a309b97c023029325a997c9d08f3ecbda6d5567294bb10b0341d`).
+The producer helper assigned shared class attributes directly. It now uses
+monkeypatch.setattr for both crash and gate, restoring each at teardown. No
+production behavior, assertions, waits, test selection or timeouts were changed.
+
+After correction:
+- The exact pair passes (`p6-fake-agent-leak-fixed`), SHA-256
+  `0990d48a7900ad120e0d250730549f048c4f14e8b7a8bc21fc136d67066651b3`.
+- The complete admin self-edit test module passes (`p6-selfedit-module-fixed`),
+  SHA-256 `bdef4d81e56aca737fbf1139cd8c45be4bf568d61d3aeaef056d364683f24a5f`.
+
+Full seeded/normal/reverse checks must pass again after this fixture correction.
+The failed run remains failed evidence; the focused reproduction is not a
+substitute for those complete reruns or the remaining release gates.
