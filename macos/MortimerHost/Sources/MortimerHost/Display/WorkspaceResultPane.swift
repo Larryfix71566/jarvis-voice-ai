@@ -28,7 +28,7 @@ struct WorkspaceResultPane: View {
                 if graphStore.showsOriginalResult { original }
                 else {
                     if let body = result.payload.body { Text(body).font(.caption).textSelection(.enabled) }
-                    MemoryGraphView(store: graphStore, api: client.admin, fallbackURL: url)
+                    MemoryGraphView(store: graphStore, api: client.admin)
                 }
             } else { original }
         }

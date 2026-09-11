@@ -126,3 +126,21 @@ extension AdminAPI {
         return try JSONDecoder().decode(MemoryGraphResponse.self, from: data)
     }
 }
+
+/// Image fallback uses the configured admin origin, never a result-supplied host.
+extension AdminAPI {
+    public func memoryGraphImage(_ query: MemoryGraphQuery = MemoryGraphQuery()) async throws -> Data {
+        let graphRequest = memoryGraphRequest(query)
+        var components = URLComponents(url: config.adminURL.appending(path: "api/graph/memory/image.png"), resolvingAgainstBaseURL: false)!
+        components.queryItems = URLComponents(url: graphRequest.url!, resolvingAgainstBaseURL: false)!.queryItems
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "GET"
+        request.setValue("image/png", forHTTPHeaderField: "Accept")
+        let (data, response) = try await JarvisHTTP.send(request, config: config)
+        guard response.mimeType == "image/png", data.count <= 20_000_000,
+              data.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]) else {
+            throw MemoryGraphError.unavailable("The server did not return a supported graph image.")
+        }
+        return data
+    }
+}

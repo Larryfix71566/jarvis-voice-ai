@@ -29,6 +29,7 @@ struct MemoryGraphMetadata: Codable {
 @MainActor
 @Observable
 final class MemoryGraphStore {
+    let imageFallback = MemoryGraphImageStore()
     private(set) var graph: MemoryGraphResponse?
     private(set) var loading = false
     private(set) var error: String?
@@ -141,6 +142,7 @@ final class MemoryGraphStore {
     }
 
     func cancel() {
+        imageFallback.cancel()
         generation += 1
         request?.cancel(); request = nil
         resetRequest?.cancel(); resetRequest = nil

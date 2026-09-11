@@ -20,7 +20,9 @@ public enum JarvisHTTP {
     {
         var r = req
         r.timeoutInterval = timeoutSeconds
-        r.setValue("application/json", forHTTPHeaderField: "Accept")
+        if r.value(forHTTPHeaderField: "Accept") == nil {
+            r.setValue("application/json", forHTTPHeaderField: "Accept")
+        }
         // K1 — Authorization on EVERY sidecar /api/* route AND on the bot's
         // signalling routes. One attach point; there is no other sender.
         if let t = config.token { r.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }

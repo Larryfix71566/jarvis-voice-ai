@@ -72,4 +72,36 @@ final class MemoryGraphAPITests: XCTestCase {
         XCTAssertEqual(items.filter { $0.name == "depth" }.map(\.value), ["4"])
         XCTAssertEqual(items.first { $0.name == "edge_types" }?.value, "child_of,became")
     }
+    func testImageFallbackUsesAuthenticatedConfiguredOriginAndQuery() async throws {
+        StubURLProtocol.reset(); URLProtocol.registerClass(StubURLProtocol.self)
+        defer { URLProtocol.unregisterClass(StubURLProtocol.self); StubURLProtocol.reset() }
+        let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1cAAAAASUVORK5CYII=")!
+        StubURLProtocol.responseBody = png
+        StubURLProtocol.responseHeaders = ["Content-Type": "image/png"]
+        let api = AdminAPI(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
+            adminURL: URL(string: "http://127.0.0.1:7861")!, wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: "synthetic-image-token"))
+        let focus = "fact:notes&depth=99"
+        let result = try await api.memoryGraphImage(MemoryGraphQuery(focus: focus, depth: 3))
+        XCTAssertEqual(result, png)
+        let request = try XCTUnwrap(StubURLProtocol.lastRequest)
+        XCTAssertEqual(request.url?.host, "127.0.0.1")
+        XCTAssertEqual(request.url?.port, 7861)
+        XCTAssertEqual(request.url?.path, "/api/graph/memory/image.png")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-image-token")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "image/png")
+        let items = try XCTUnwrap(URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(items.filter { $0.name == "focus" }.map(\.value), [focus])
+        XCTAssertEqual(items.filter { $0.name == "depth" }.map(\.value), ["3"])
+        StubURLProtocol.statusCode = 401
+        do { _ = try await api.memoryGraphImage(); XCTFail("Unauthorized image must fail") }
+        catch { XCTAssertEqual(error as? JarvisError, .unauthorized) }
+        StubURLProtocol.statusCode = 403
+        do { _ = try await api.memoryGraphImage(); XCTFail("Forbidden image must fail") }
+        catch { XCTAssertEqual(error as? JarvisError, .forbidden) }
+        StubURLProtocol.statusCode = 200
+        StubURLProtocol.responseBody = Data("not an image".utf8)
+        do { _ = try await api.memoryGraphImage(); XCTFail("Invalid image must fail") }
+        catch { XCTAssertNotNil(error as? MemoryGraphError) }
+    }
+
 }

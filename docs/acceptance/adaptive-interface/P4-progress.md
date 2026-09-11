@@ -77,10 +77,40 @@ evidence, not proof of pointer/keyboard/VoiceOver or monitor interactions.
 - Verify p95 interaction frame time with the specified fixtures and hardware.
 - Verify full detail requests, forbidden/unauthorized handling and offline
   recovery against the actual service without exposing private memory in logs.
-- Extend/verify authenticated image fallback for direct graph access (which
-  has no originating image URL). Existing graph-result fallback currently uses
-  the preserved image renderer; it has not passed authenticated fallback testing.
+- Authenticated fallback follow-up is implemented and covered by native tests
+  below. Actual service, visual failure-state and interaction acceptance remains
+  open. The separately retained original result still uses its legacy renderer.
 - Complete full backend/profile/final integration gates and P0/P2/P3/P5/P6
   acceptance. This phase does not establish dual-speaker audio or monitor
   recovery, and the adaptive preview remains disabled by default.
 - No merge or deployment occurred.
+
+## Authenticated image fallback follow-up
+
+Starting application commit `d8099ce`; isolated stacked development branch.
+Direct graph access and graph-result interactive views now offer an authenticated
+PNG fallback using the current graph query. The request uses the configured admin
+origin and existing JarvisHTTP authorization/error mapping, never a host supplied
+by an image URL. Existing default JSON requests retain their Accept header;
+image requests explicitly request PNG. The response requires PNG media/signature
+and a 20 MB accepted-data cap; native decoding checks the server's 3,000-pixel
+per-axis limit. This is a post-download acceptance limit, not a streaming limit.
+
+One image owner per graph retains the bitmap across view/window reconstruction,
+cancels superseded work, rejects stale replies and exposes explicit reload/error
+states. It does not write image data to preferences. HTTP cache/privacy review
+remains part of P6; this is not evidence about URLSession disk caching. The UI
+states that server images do not apply local filters or manual node placement.
+
+Prepared offline VM, task `66fed310bde6`, full native suites:
+
+- `p4-auth-image-library`: 103 tests, zero failures; SHA-256
+  `7e77317b0c0125ddc3ac8c9949511673721602ca175443d22b667c1d9cd30387`.
+- `p4-auth-image-host`: 79 tests, zero failures; SHA-256
+  `1175842555f0ada00d9172e5182777c2be89d1bb7c7b4c472d4a0aa5d46e48fd`.
+- New checks verify configured origin, query escaping, authorization/Accept headers,
+  401/403 propagation, invalid-image rejection, retry, stale focus responses and
+  reparenting without another request. These use synthetic PNG data, not a live
+  memory service or private content.
+
+Full graph interaction, frame-time, hardware and integrated acceptance remain open.

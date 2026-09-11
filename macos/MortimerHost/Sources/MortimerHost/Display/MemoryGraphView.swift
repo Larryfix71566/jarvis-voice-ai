@@ -4,7 +4,6 @@ import JarvisKit
 struct MemoryGraphView: View {
     @Bindable var store: MemoryGraphStore
     let api: AdminAPI
-    var fallbackURL: URL? = nil
     @State private var serverFocus = ""
     @State private var viewport = CGSize.zero
     @State private var showBrowser = false
@@ -92,19 +91,31 @@ struct MemoryGraphView: View {
             Button("+") { var camera = store.metadata.camera; camera.zoom(1.25); store.setCamera(camera) }.accessibilityLabel("Zoom in")
             Button("Fit") { store.fit(size: viewport) }
             Button("Reset layout") { store.resetLayout() }
-            if fallbackURL != nil {
-                Toggle("Image fallback", isOn: $store.usesImageFallback).toggleStyle(.button)
-            }
+            Toggle("Image fallback", isOn: $store.usesImageFallback).toggleStyle(.button)
         }
     }
 
     @ViewBuilder
     private var graphSurface: some View {
-        if store.usesImageFallback, let url = fallbackURL {
+        if store.usesImageFallback {
             VStack {
                 Text("Image fallback · pan, node selection and inspection are unavailable in this view.")
                     .font(.caption).foregroundStyle(AppTheme.attn)
-                GraphImageView(baseURL: url, viewport: viewport, isResizing: false)
+                Text("Server image for the current focus and depth; local filters and node placement do not apply.")
+                    .font(.caption).foregroundStyle(AppTheme.textDim)
+                if store.imageFallback.loading { ProgressView("Loading graph image…") }
+                if let error = store.imageFallback.error {
+                    Text(error).foregroundStyle(AppTheme.attn).textSelection(.enabled)
+                }
+                if let image = store.imageFallback.image {
+                    Image(nsImage: image).resizable().scaledToFit()
+                        .accessibilityLabel("Memory graph image. Use the interactive view for accessible node details.")
+                }
+                Button("Reload image") { store.imageFallback.load(api: api, query: store.metadata.query, force: true) }
+            }
+            .onAppear { store.imageFallback.load(api: api, query: store.metadata.query) }
+            .onChange(of: store.metadata.query) { _, query in
+                store.imageFallback.load(api: api, query: query)
             }
         } else if store.graph?.nodes.isEmpty == true {
             ContentUnavailableView("No memories in this view", systemImage: "point.3.connected.trianglepath.dotted",
