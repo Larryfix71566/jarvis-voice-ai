@@ -186,3 +186,12 @@ standard typography coverage and add 22pt at all five existing dimensions;
 Output, the typography menu, mute and wake controls remain inside the window.
 These are offscreen native fixtures, not hardware display or menu-action
 acceptance. Actual menu selection and preference restoration remain open.
+
+### Isolated PR CI completion
+
+GitHub check-runs for PR66 head
+`fdf1b89d768c1ed9c9b056a61ecd00f30a52f673` were rechecked on 2026-09-11.
+All five completed successfully: validate, allowlist, controller-tests,
+policy-tests and knowledge-base. This is the isolated original header change;
+it does not cover later typography additions or imply manual acceptance.
+No merge or deployment was performed.

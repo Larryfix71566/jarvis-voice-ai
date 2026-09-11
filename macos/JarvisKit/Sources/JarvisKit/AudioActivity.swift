@@ -8,6 +8,8 @@ public struct AudioActivitySnapshot: Equatable, Sendable {
     public let timestamp: TimeInterval
     public let userLevel: Double?
     public let outputLevel: Double?
+    public let userMeasuredAt: TimeInterval?
+    public let outputMeasuredAt: TimeInterval?
     public let microphoneEligible: Bool
 }
 
@@ -72,8 +74,12 @@ public struct AudioActivityAccumulator {
                   now - sample.timestamp < Self.staleAfter else { return nil }
             return sample.level
         }
+        let userLevel = microphoneEligible ? fresh(input) : nil
+        let outputLevel = fresh(output)
         return AudioActivitySnapshot(generation: generation, timestamp: now,
-            userLevel: microphoneEligible ? fresh(input) : nil,
-            outputLevel: fresh(output), microphoneEligible: microphoneEligible)
+            userLevel: userLevel, outputLevel: outputLevel,
+            userMeasuredAt: userLevel == nil ? nil : input?.timestamp,
+            outputMeasuredAt: outputLevel == nil ? nil : output?.timestamp,
+            microphoneEligible: microphoneEligible)
     }
 }

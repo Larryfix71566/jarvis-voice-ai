@@ -134,3 +134,30 @@ time rather than callback arrival, and enforce the observation-rate budget.
 The two channel names express required provenance; they do not establish it.
 Active-audio feasibility, UI smoothing/state integration, and real-device
 quality/latency acceptance remain required. P2 remains incomplete.
+
+## Presentation state and original observation deadlines
+
+VoicePresentationState now derives offline/connecting/listening/user/assistant/
+thinking/muted states without writing to audio controls. Eligible user audio
+takes visual priority during overlap while assistant activity remains available.
+Muted status is orthogonal to output, silence cannot invent thinking, and missing
+levels remain explicitly unavailable. VoiceEnvelope uses elapsed-time exponential
+attack (40ms) and release (180ms); unavailable observations clear immediately.
+
+Review found that a snapshot created near expiry could otherwise renew a sample's
+life. AudioActivitySnapshot now carries original per-channel measurement times.
+The presenter checks those times as well as the snapshot generation and time. A
+regression covers a snapshot made at 290ms and rendered at 310ms: it cannot expose
+the old input as current speech. Other tests cover overlap, mute/output, missing
+levels, stale sessions, connection precedence and equivalent 30/60Hz smoothing.
+
+Full offline checks passed:
+- JarvisKit: `p2-measurement-deadlines-library`, 109 tests, SHA-256
+  `93fdacc75e8c0b8c4c795998bb2ae395ec0ada228f4b5d8998744bd25c6024cc`.
+- MortimerHost: `p2-measurement-deadlines-host`, 114 tests, SHA-256
+  `7d7c8056f0a0067ae928067bdbae2a6a259df78033790a8daee7e565189c818f`.
+
+These types are compiled but not yet connected to the actual wave or transport.
+They establish presentation policy, not active metering or physical latency.
+The existing wave still has its simulated envelope; removing it from the new
+presentation and supplying proven observations remain required before P2 passes.
