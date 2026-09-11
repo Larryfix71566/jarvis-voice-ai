@@ -99,3 +99,65 @@ route rather than repeatedly requesting approval or bypassing it with another
 UI automation technology. The pending Computer Use permission belongs to the
 host, and has not been granted. Continue independent controller/repository work;
 GUI acceptance remains open. No visibility assertion has been removed or relaxed.
+
+## Host approval received; setup screen confirmed
+
+Larry subsequently approved Computer Use. Tart accessibility and screenshot
+access now work. The fresh VM visibly remains in Setup Assistant, initially on
+Accessibility and then on “How Do You Connect?”. A Messages Agent request for
+the “sandbox” keychain repeatedly reappears after Cancel. No password was entered
+and no keychain access was granted. The earlier statement that host permission
+has not been granted is superseded by this observation.
+
+The normal-app probe was rerun through the scoped controller channel after
+approval. It still reported overall `passed: false`: shown, reshown, restored
+and actual minimization failed; hide/detach passed. Application activation was
+false and occlusion remained 8192. Setup has not been confirmed complete, so
+neither this result nor host approval establishes desktop visibility acceptance.
+
+## Recurring keychain prompt resolved
+
+Inspection of `sandbox/guest/worker.sh` confirmed that provisioning creates the
+worker's default `sandbox.keychain-db` with a synthetic test credential. Its
+unlock does not survive the GUI restart. Through the trusted controller, a
+guest-only command verified UID 502 and the virtual-machine flag, then unlocked
+that exact keychain using its existing provisioned credential (exit 0). No
+credential was changed and no host keychain or production vault was accessed.
+
+After dismissing the outstanding dialog once, it stopped recurring. Computer Use
+advanced Setup Assistant through offline connection selection and the Data &
+Privacy notice. The next observed screen requests an age range. Desktop setup
+and visibility acceptance are still incomplete. A GUI setup runbook must account
+for unlocking the synthetic test keychain after a worker-session restart; this
+recovery has not yet been added to the normal frozen verification runner.
+
+## Worker dispatch after GUI login
+
+The controller previously always prefixed candidate commands with `sudo -u
+mortimer-dev`. When Tart's executor is already in that unprivileged GUI session,
+sudo correctly refuses access. The dispatcher now recognizes the actual worker
+UID/name and runs directly; a root/admin session still drops privileges with
+noninteractive sudo. Both routes verify real UID, effective UID and name before
+candidate execution and set HOME/USER/LOGNAME to the worker. Unexpected accounts,
+a failed sudo invocation, and a failed privilege drop stop before the payload.
+The worker has not been added to sudoers or given an administrator role.
+
+All 107 sandbox tests passed in the offline VM, including five new shell-dispatch
+tests exercising direct worker execution, literal argv and exit-code preservation,
+root/admin dispatch, mismatched identities, and failed privilege drops. The OS
+identity/sudo boundaries are stand-ins in those unit tests; they do not prove an
+actual administrator-session transition. Log SHA-256:
+`d467f3376f64fdeea59c695d312738cffc219910d91d7437d93c786da2b19751`.
+
+A separate invocation using the real Tart worker session and the new dispatcher
+returned real/effective UID 502, HOME `/Users/mortimer-dev`, USER/LOGNAME
+`mortimer-dev`, and a failed `sudo -n true` privilege check. Host and guest hashes
+matched for the executed controller and tests:
+
+- `sandbox/control.py`: `6df7a06227f3522f93112ceb6d59ca48210c27dc2549cd7e7c09eb7391782eb5`
+- `sandbox/tests/test_control.py`: `b106c68da0c866564ff20d9cb109b305a181daa53e316be6a2639b0e51759ca4`
+
+These are development diagnostics, not a fresh frozen verification receipt or
+proof of desktop/visibility acceptance. Setup remains paused at the age-range
+selection pending Larry's confirmation. P2 live metering and hardware acceptance
+remain open independently of this runner correction.
