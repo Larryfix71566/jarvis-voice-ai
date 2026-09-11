@@ -27,6 +27,9 @@ final class WorkspaceStore {
     private(set) var pinnedIDs: Set<UUID> = []
     private(set) var unreadIDs: Set<UUID> = []
     private(set) var showsConversation = true
+    private(set) var showsMemoryGraph = false
+    let memoryGraph = MemoryGraphStore(persistenceKey: "mortimer.interface.memoryGraph.view")
+    @ObservationIgnored private var resultGraphs: [UUID: MemoryGraphStore] = [:]
     private(set) var scrollOffsets: [UUID: Double] = [:]
     private var hasReceivedResult = false
     private let historyLimit: Int
@@ -58,10 +61,20 @@ final class WorkspaceStore {
         if comparisonID == id { comparisonID = activeID }
         activeID = id
         showsConversation = false
+        showsMemoryGraph = false
         unreadIDs.remove(id)
     }
 
     func returnToConversation() { showsConversation = true }
+    func openMemoryGraph() { showsMemoryGraph = true; showsConversation = false }
+    func returnToWorkspace() { showsConversation = false }
+
+    func graphStore(for result: WorkspaceResult, url: URL) -> MemoryGraphStore {
+        if let existing = resultGraphs[result.id] { return existing }
+        let store = MemoryGraphStore(query: MemoryGraphSource.query(url))
+        resultGraphs[result.id] = store
+        return store
+    }
 
     @discardableResult
     func pin(_ id: UUID) -> Bool {
@@ -80,6 +93,7 @@ final class WorkspaceStore {
         comparisonID = id
         unreadIDs.remove(id)
         showsConversation = false
+        showsMemoryGraph = false
     }
 
     func rememberScroll(_ offset: Double, for id: UUID) {
@@ -95,10 +109,11 @@ final class WorkspaceStore {
             comparisonID = nil
         }
         if comparisonID == id { comparisonID = nil }
-        if activeID == nil { showsConversation = true }
+        if activeID == nil && !showsMemoryGraph { showsConversation = true }
     }
 
     private func remove(_ id: UUID) {
+        resultGraphs.removeValue(forKey: id)?.cancel()
         results.removeAll { $0.id == id }
         pinnedIDs.remove(id)
         unreadIDs.remove(id)

@@ -1,7 +1,9 @@
 import SwiftUI
+import JarvisKit
 
 /// Central results share the existing renderer and never invoke tools.
 struct WorkspaceView: View {
+    @EnvironmentObject private var client: JarvisClient
     @Environment(WorkspaceStore.self) private var workspace
     @State private var pinLimitNotice = false
     @State private var showComparisonOnCompact = false
@@ -10,6 +12,7 @@ struct WorkspaceView: View {
         VStack(spacing: 12) {
             HStack {
                 Button("Conversation") { workspace.returnToConversation() }
+                Button("Memory graph") { workspace.openMemoryGraph() }
                 Spacer()
                 if let active = workspace.activeResult {
                     Button(workspace.pinnedIDs.contains(active.id) ? "Unpin" : "Pin") {
@@ -48,7 +51,9 @@ struct WorkspaceView: View {
                     }
                 }
             }
-            if let active = workspace.activeResult {
+            if workspace.showsMemoryGraph {
+                MemoryGraphView(store: workspace.memoryGraph, api: client.admin)
+            } else if let active = workspace.activeResult {
                 GeometryReader { geometry in
                     if let comparison = workspace.comparisonResult {
                         if geometry.size.width >= 960 {
@@ -83,9 +88,24 @@ struct WorkspaceView: View {
     private func resultPane(_ result: WorkspaceResult) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(result.payload.title ?? "Result").font(.headline)
-            DisplayContentView(payload: result.payload,
-                restoredScrollOffset: workspace.scrollOffsets[result.id],
-                onScrollOffset: { workspace.rememberScroll($0, for: result.id) })
+            if let url = MemoryGraphSource.imageURL(result.payload) {
+                let graphStore = workspace.graphStore(for: result, url: url)
+                Button(graphStore.showsOriginalResult ? "Interactive graph" : "Original result and sources") {
+                    graphStore.showsOriginalResult.toggle()
+                }
+                if graphStore.showsOriginalResult {
+                    DisplayContentView(payload: result.payload,
+                        restoredScrollOffset: workspace.scrollOffsets[result.id],
+                        onScrollOffset: { workspace.rememberScroll($0, for: result.id) })
+                } else {
+                    if let body = result.payload.body { Text(body).font(.caption).textSelection(.enabled) }
+                    MemoryGraphView(store: graphStore, api: client.admin, fallbackURL: url)
+                }
+            } else {
+                DisplayContentView(payload: result.payload,
+                    restoredScrollOffset: workspace.scrollOffsets[result.id],
+                    onScrollOffset: { workspace.rememberScroll($0, for: result.id) })
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .id(result.id)

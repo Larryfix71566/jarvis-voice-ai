@@ -13,15 +13,16 @@ struct AdaptiveStageView: View {
                 ZStack {
                     VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse)
                     OrbFieldView(voiceState: voiceState, hidesLettering: true)
-                    if let active = workspace.activeResult {
-                        VStack {
-                            HStack {
-                                Spacer()
-                                Button("Return to results") { workspace.select(active.id) }
-                            }
+                    VStack {
+                        HStack {
                             Spacer()
-                        }.padding(16)
-                    }
+                            Button("Memory graph") { workspace.openMemoryGraph() }
+                            if workspace.activeResult != nil || workspace.showsMemoryGraph {
+                                Button("Return to workspace") { workspace.returnToWorkspace() }
+                            }
+                        }
+                        Spacer()
+                    }.padding(16)
                 }
             } else if wideWindow && geometry.size.width >= 680 {
                 HStack(spacing: 0) {
