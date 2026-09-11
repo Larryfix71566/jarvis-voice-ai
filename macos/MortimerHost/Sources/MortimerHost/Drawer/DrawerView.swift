@@ -56,17 +56,21 @@ struct DrawerView: View {
                                tabDot(key).map { (key, $0) }
                            }), select: drawer.setTab, textSize: tabTextSize)
             Menu {
-                Picker("Tab text size", selection: $tabTextSize) {
-                    Text("Standard").tag(11.0)
-                    Text("Large").tag(16.0)
-                    Text("Extra large").tag(22.0)
-                }
+                // Use direct menu actions rather than a nested Picker. On
+                // macOS a Picker inside Menu becomes a hover submenu; moving
+                // from the Aa button into that submenu can dismiss it before
+                // a size is selectable. Direct actions keep the menu open
+                // until the user clicks or presses a size.
+                tabTextSizeItem("Standard", value: 11)
+                tabTextSizeItem("Large", value: 16)
+                tabTextSizeItem("Extra large", value: 22)
             } label: {
                 Text("Aa").font(.system(size: 13))
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
             .accessibilityLabel("Sidecar tab text size")
+            .accessibilityValue(tabTextSizeDescription)
             .help("Change the size of sidecar tab names")
             if !drawer.isPoppedOut {
                 Button {
@@ -91,6 +95,29 @@ struct DrawerView: View {
             }
         }
         .padding(8)
+    }
+
+    private var tabTextSizeDescription: String {
+        switch tabTextSize {
+        case 16: return "Large"
+        case 22: return "Extra large"
+        default: return "Standard"
+        }
+    }
+
+    @ViewBuilder
+    private func tabTextSizeItem(_ title: String, value: Double) -> some View {
+        Button {
+            tabTextSize = value
+        } label: {
+            HStack {
+                Text(title)
+                if tabTextSize == value {
+                    Spacer()
+                    Image(systemName: "checkmark")
+                }
+            }
+        }
     }
 
     /// D7/E1 — the per-tab dots: Agents pulses cyan while a self-edit is
