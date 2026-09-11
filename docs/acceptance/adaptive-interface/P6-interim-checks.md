@@ -276,3 +276,15 @@ This evidence does not establish microphone/playout behavior, VoiceOver, physica
 multi-monitor recovery, final frozen verification, rollback acceptance, or
 deployment. The visible app is only in the disposable VM; no production app or
 service was deployed.
+
+## Candidate JarvisKit regression check
+
+After the graph change, the candidate JarvisKit package was rebuilt and its full
+test suite ran in the same offline VM as UID 502 (`mortimer-dev`). The suite
+passed with return code 0 in 12.374 seconds. The saved log is outside the source
+tree because generated check output is not application content; its SHA-256 is
+`6ba0e585fa883b6f622c55f6c91b4d367d3c917150435dfaf31d952bc9363982`.
+
+This confirms the graph-store change did not alter the pinned WebRTC/signalling
+package behavior. It is a candidate regression check, not the independent frozen
+profile receipt; the full profile and hardware gates remain open.
