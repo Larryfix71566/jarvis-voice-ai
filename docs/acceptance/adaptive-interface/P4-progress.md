@@ -114,3 +114,18 @@ Prepared offline VM, task `66fed310bde6`, full native suites:
   memory service or private content.
 
 Full graph interaction, frame-time, hardware and integrated acceptance remain open.
+
+## Initial viewport fit correction
+
+Starting application commit `087232c`. A zero/undersized initial SwiftUI viewport
+or temporarily empty visible-node set previously consumed `needsFit` even though
+the camera operation did nothing. Fit now waits for finite dimensions above the
+camera's padding threshold and at least one visible point. The regression test
+checks retained fit intent and unchanged camera for invalid/empty views, then
+checks that the eventual usable fit places all fixture nodes inside the viewport.
+
+Offline sandbox check `p4-deferred-fit-verified`: all 85 host tests pass, no skips;
+SHA-256 `d67d350b8c8aee7f592aca73d1877ec6ddc9e967efbdf1e78d5f2caa11a136b6`.
+The first attempt failed to compile an ambiguously typed infinity in the new
+fixture; explicitly using CGFloat corrected the fixture without weakening it.
+This regression check does not replace graph frame-time or hardware acceptance.

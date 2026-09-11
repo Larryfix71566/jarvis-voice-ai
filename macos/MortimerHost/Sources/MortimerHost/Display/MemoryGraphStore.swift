@@ -204,8 +204,13 @@ final class MemoryGraphStore {
         if save { persist() }
     }
     func fit(size: CGSize) {
+        // SwiftUI may report zero before layout, or all nodes may temporarily
+        // be grouped/filtered. Neither consumes the pending initial fit.
+        let points = visibleNodes.compactMap { metadata.positions[$0.id] }
+        guard size.width.isFinite, size.height.isFinite,
+              size.width > 80, size.height > 80, !points.isEmpty else { return }
         var camera = metadata.camera
-        camera.fit(visibleNodes.compactMap { metadata.positions[$0.id] }, size: size)
+        camera.fit(points, size: size)
         setCamera(camera)
     }
     func saveView() { persist() }

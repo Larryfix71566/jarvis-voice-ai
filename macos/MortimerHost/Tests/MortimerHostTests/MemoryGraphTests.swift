@@ -106,6 +106,33 @@ final class MemoryGraphStoreTests: XCTestCase {
         XCTAssertEqual(store.metadata.query.focus, "new")
     }
 
+    func testInitialFitWaitsForUsableViewportAndVisibleNodes() async throws {
+        let store = MemoryGraphStore()
+        await loaded(store, response: try GraphFixture.make())
+        let original = store.metadata.camera
+        for size in [CGSize.zero, CGSize(width: 80, height: 600),
+                     CGSize(width: 900, height: CGFloat.infinity)] {
+            store.fit(size: size)
+            XCTAssertTrue(store.needsFit)
+            XCTAssertEqual(store.metadata.camera, original)
+        }
+        store.toggleGroup("fact")
+        store.fit(size: CGSize(width: 900, height: 600))
+        XCTAssertTrue(store.needsFit)
+        XCTAssertEqual(store.metadata.camera, original)
+        store.toggleGroup("fact")
+        let size = CGSize(width: 900, height: 600)
+        store.fit(size: size)
+        XCTAssertFalse(store.needsFit)
+        for point in store.metadata.positions.values {
+            let screen = store.metadata.camera.screenPoint(point, size: size)
+            XCTAssertGreaterThanOrEqual(screen.x, 0)
+            XCTAssertLessThanOrEqual(screen.x, size.width)
+            XCTAssertGreaterThanOrEqual(screen.y, 0)
+            XCTAssertLessThanOrEqual(screen.y, size.height)
+        }
+    }
+
     func testBackRestoresCameraSelectionAndFilters() async throws {
         let store = MemoryGraphStore(), graph = try GraphFixture.make()
         await loaded(store, response: graph)
