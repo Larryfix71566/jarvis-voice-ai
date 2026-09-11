@@ -112,3 +112,25 @@ energy may describe decoded/received audio and must not be labeled actual speake
 output without alignment measurements. Source levels remain a candidate input
 signal, not proof of processed user-speech eligibility or echo rejection. P2 stays
 incomplete, with no production visualization or transport changes from this probe.
+
+## Observation validity boundary implemented
+
+AudioActivitySnapshot and AudioActivityAccumulator now define the presentation
+measurement boundary in JarvisKit. They hold normalized optional levels, a
+connection generation, and monotonic measurement times; no raw audio. Missing
+levels remain distinct from measured zero. Snapshots expire levels after 300ms
+even if callbacks stop. Duplicate timestamps cannot renew freshness; wrong-session,
+future, nonfinite and out-of-range observations are rejected. Muting immediately
+clears input without suppressing output; delayed pre-unmute observations cannot
+reappear after eligibility resumes. Reset clears both levels and eligibility.
+
+Offline full JarvisKit check `p2-activity-eligibility-boundary` passed 109 tests,
+including four new behavioral tests, in 1.507 verifier seconds. SHA-256:
+`709c7f76cf1256fbaa2976f9f1f5347ece19a022ba9c8e33abca6b1c07c4345a`.
+
+This boundary is not yet wired to transport or the wave. An adapter still must
+prove eligible processed input and actual playout provenance, use measurement
+time rather than callback arrival, and enforce the observation-rate budget.
+The two channel names express required provenance; they do not establish it.
+Active-audio feasibility, UI smoothing/state integration, and real-device
+quality/latency acceptance remain required. P2 remains incomplete.
