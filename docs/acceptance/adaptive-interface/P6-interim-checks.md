@@ -131,3 +131,20 @@ The initial render check was `p6-minimum-console`, SHA-256
 This covers one full-console offline state. All-tab interactions, connected voice,
 long/error payloads, text scaling, other screen dimensions and physical monitor
 acceptance remain separate open requirements.
+
+## Supplemental profile checks and stale development comparison tree
+
+At `8c411ed`, supplemental profile commands in the long-lived development VM
+passed backend imports, trusted backend tests (2,350 passed), scripted evaluations
+(13 passed), fixture latency, both knowledge-base suites, web build, and trusted
+native library tests. Full outcomes/hashes are in the task's
+`interface-checks/p6-supplemental-results.json`.
+
+The trusted native app check failed to compile: linked candidate source referenced
+new types absent from its comparison directory. `verification_tree` intentionally
+uses immutable baseline tests with links to candidate non-test files. That tree
+was created at task hydration before the new native files were added. The failure
+is not a passing baseline and the eight successes do not form a verification
+receipt. No baseline tests or gates were relaxed. The next validation must use
+Verifier.verify, which freezes current source and hydrates a fresh verification VM
+with all candidate paths before running the full installed profile.
