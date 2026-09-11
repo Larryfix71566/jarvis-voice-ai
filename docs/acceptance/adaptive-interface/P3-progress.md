@@ -167,12 +167,13 @@ activation at these sizes. It does not establish mouse/keyboard traversal,
 full-console minimum-height acceptance, accessibility text scaling, scrolling all
 status notices, monitor recovery, or any real audio requirement.
 
-## Current host runtime observation
+## Host runtime observation — attribution corrected
 
-On 2026-09-11 the installed host app was observed running with the legacy
-`mortimer.interface.layoutVersion` value (`0`). Its console still showed the
-original central `M . O . R . T . I . M . E . R .` lettering and reported that the
-Mortimer stack was unavailable. This is consistent with the adaptive console
-remaining a reversible preview; it is not evidence that the new workspace has
-been deployed or that its backend/content behavior is accepted. No layout
-preference was changed during this observation.
+The earlier 2026-09-11 report combined an assumed candidate layout setting with
+a desktop capture showing "Mortimer stack isn't running". At application source
+`6264fdf`, that exact retry screen is implemented in MortimerShell/RetryView.swift,
+not MortimerHost. The UI tool's Mortimer target therefore does not establish the
+candidate's layout preference, backend health, or graph presentation. The prior
+claim that this observation verified candidate layout version 0 is withdrawn.
+See P6-interim-checks.md for the executable-path check and current inspection
+limitation. Candidate graph and workspace acceptance remain open.

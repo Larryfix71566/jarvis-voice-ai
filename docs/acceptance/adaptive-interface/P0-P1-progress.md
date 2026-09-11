@@ -195,3 +195,13 @@ All five completed successfully: validate, allowlist, controller-tests,
 policy-tests and knowledge-base. This is the isolated original header change;
 it does not cover later typography additions or imply manual acceptance.
 No merge or deployment was performed.
+
+## Font menu interaction confirmed by Larry
+
+Application commit `6264fdf` replaces the nested font-size Picker with direct
+Standard, Large and Extra large menu actions. Larry reported on 2026-09-11:
+"picker is working correctly now." This closes the reported disappearing-menu
+interaction defect. It does not establish preference restoration after relaunch,
+VoiceOver, keyboard/voice selection, detached-drawer coverage, or the remaining
+P1 preservation matrix. The host controller suite passed 109 tests after the
+edit; that suite is not a native menu interaction test.

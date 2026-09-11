@@ -374,3 +374,43 @@ The smoke test confirms native startup, sidecar rendering and one successful
 request on the candidate checkout. It does not establish live dual-speaker
 levels, wake-word operation, VoiceOver, multi-monitor recovery, full profile
 verification or deployment health.
+
+## Candidate screen attribution and graph-routing correction
+
+On 2026-09-11, Larry reported that the candidate was running and its memory graph
+still appeared in a separate window resembling the original renderer. Repeated
+Computer Use calls to `getApp("Mortimer")` showed the older retry screen. That
+capture was incorrectly attributed to the candidate in the conversation.
+
+Read-only process inspection subsequently identified PID 20185 running:
+`/Users/larryfix/Library/Developer/Xcode/DerivedData/MortimerHost-fnyhrnunlzjldjbcsqlzxrqthpji/Build/Products/Debug/MortimerHost`.
+Computer Use rejected that exact executable path as `Invalid app`. At source
+`6264fdf`, the captured text "Mortimer stack isn't running" and its start-script
+instruction occur in `macos/MortimerShell/Sources/MortimerShell/RetryView.swift`.
+They are not the candidate MortimerHost error UI. These observations establish
+an inspection-target mismatch; they do not establish a failed candidate backend
+or its active layout mode. Do not restart the working candidate or backend based
+on that older shell screen.
+
+The source review also corrects the earlier claimed routing defect:
+
+- AppMessageRouter sends every display payload to WorkspaceStore before applying
+  the existing surface-specific destination. Window-surface results are already
+  available to the central workspace.
+- MemoryGraphSource recognizes supplied memory image paths ending in
+  `/api/graph/memory/image.png` or `/api/graph/memory/image.svg`.
+- WorkspaceResultPresentation defaults recognized memory results to Connections;
+  WorkspaceResultPane then renders MemoryGraphView. The dedicated Memory graph
+  button is an additional entry point, not the only interactive graph path.
+- WorkspaceStore preserves an existing selection on subsequent arrivals. A later
+  graph result is added as unread rather than replacing what Larry is reading.
+- DisplayWindowView retains original display panels unless adaptive mode and an
+  explicit supporting-content assignment select the new renderer. Preserving
+  existing surface routing is required by plan UI-3; that fact alone is not a bug.
+
+The live symptom remains unverified. Needed evidence is the candidate's actual
+window/menu, active layout mode, selected result and graph controls. A screenshot
+from Larry or a supported Computer Use target for the Xcode executable can supply
+the missing UI evidence. No routing change is justified by the misidentified
+shell capture. No application code, live preference, backend, or audio setting
+was changed during this corrective source/process inspection.
