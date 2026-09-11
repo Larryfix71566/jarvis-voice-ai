@@ -348,3 +348,29 @@ No test, timeout, visibility assertion or profile gate was weakened. The
 graphics-required verifier now reliably provisions the worker identity, but a
 real active, unoccluded guest desktop is still required before the independent
 AppKit gate can pass.
+
+## Candidate host runtime smoke test
+
+On 2026-09-11, the candidate branch was run from the native `MortimerHost`
+package in Xcode with scheme `MortimerHost` and destination `My Mac`. Larry
+observed all eight sidecar tabs loaded, received Mortimer's startup response,
+and completed a weather request successfully. The app remained running during
+the interaction. This is live application evidence, but it is a smoke test
+rather than the final hardware or release matrix.
+
+The Xcode console also records these boundaries:
+
+- `botIsSpeaking_unavailable` is the documented pinned-WebRTC limitation; it
+  does not claim local playout metering and keeps P2 open.
+- Connections to `127.0.0.1:7862` were refused, so the optional wake-word
+  sidecar was not running. This did not prevent the startup or weather flow.
+- `keychain_token_present=false` was visible, but the successful local weather
+  flow shows that this run did not require that token for the exercised path.
+- `com.apple.linkd.autoShortcut`, `DetachedSignatures`, missing-main-bundle
+  indexing and audio-factory messages are host/Xcode diagnostics; no crash or
+  application termination followed them.
+
+The smoke test confirms native startup, sidecar rendering and one successful
+request on the candidate checkout. It does not establish live dual-speaker
+levels, wake-word operation, VoiceOver, multi-monitor recovery, full profile
+verification or deployment health.
