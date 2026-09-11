@@ -121,7 +121,7 @@ extension AdminAPI {
     }
 
     public func memoryGraph(_ query: MemoryGraphQuery = MemoryGraphQuery()) async throws -> MemoryGraphResponse {
-        let (data, _) = try await JarvisHTTP.send(memoryGraphRequest(query), config: config)
+        let (data, _) = try await JarvisHTTP.sendTransient(memoryGraphRequest(query), config: config, session: graphSession)
         guard data.count <= 10_000_000 else { throw MemoryGraphError.invalidShape }
         return try JSONDecoder().decode(MemoryGraphResponse.self, from: data)
     }
@@ -136,7 +136,7 @@ extension AdminAPI {
         var request = URLRequest(url: components.url!)
         request.httpMethod = "GET"
         request.setValue("image/png", forHTTPHeaderField: "Accept")
-        let (data, response) = try await JarvisHTTP.send(request, config: config)
+        let (data, response) = try await JarvisHTTP.sendTransient(request, config: config, session: graphSession)
         guard response.mimeType == "image/png", data.count <= 20_000_000,
               data.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]) else {
             throw MemoryGraphError.unavailable("The server did not return a supported graph image.")

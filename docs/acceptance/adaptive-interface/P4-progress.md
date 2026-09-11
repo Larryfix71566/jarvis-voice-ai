@@ -141,3 +141,30 @@ Offline sandbox check `p4-image-cancellation`: 95 host tests, zero failures,
 including a new cancellation/reparent/reload regression check. Log SHA-256:
 `08f54e8b9168f3086c6e32da194feb6c8aaa12adb542a84435b54720b36a3aa3`.
 Full hardware and integrated acceptance remain open.
+
+## Transient graph HTTP sessions
+
+Starting application commit `bd9d690`. Graph JSON and fallback PNG reads now use
+an ephemeral session with no URL cache, cookie storage or credential storage,
+and reloadIgnoringLocalCacheData on the request. Bearer authorization, Accept
+headers, timeout and status/error mapping remain in JarvisHTTP's single sender.
+Production sessions are invalidated after the read. Other existing API and
+signalling traffic retains its existing session behavior.
+
+An internal AdminAPI session seam lets tests explicitly attach their URLProtocol
+stub to a transient configuration. The initial test attempt showed that global
+URLProtocol registration did not intercept the ephemeral session; no assertions
+were removed to resolve that harness mismatch. Cache tests insert a stale
+synthetic shared-cache entry, require a fresh graph response and verify that the
+shared entry was not replaced. Configuration and request policy are also checked.
+
+Offline task `66fed310bde6`, complete native suites:
+- `p4-transient-session-library`: 105 tests, zero failures; SHA-256
+  `ed95bfa73daf94f14aa36f8da1224c0c13184dfa030f83524d0153895ad29054`.
+- `p4-transient-session-host`: 96 tests, zero failures; SHA-256
+  `c763aa3d9ccf66485cdd548ce4e75cd5979f434a332b8881f59950fd11a8027e`.
+
+This closes the identified shared URL-cache gap for the new graph JSON/PNG
+requests. It does not establish comprehensive privacy, live-service, hardware,
+performance or release acceptance. Legacy original-result rendering and existing
+detail APIs are outside this narrowly changed request path and still need review.
