@@ -118,6 +118,25 @@ final class MemoryGraphStoreTests: XCTestCase {
         XCTAssertNil(store.selectedEdge)
     }
 
+    func testFailedFullDetailCanRetryWithoutReselectingNode() async throws {
+        let store = MemoryGraphStore()
+        await loaded(store, response: try GraphFixture.make())
+        store.select("fact:0")
+        store.loadFullDetail { throw URLError(.notConnectedToInternet) }
+        for _ in 0..<200 where store.detailLoading { try await Task.sleep(nanoseconds: 5_000_000) }
+        XCTAssertFalse(store.detailLoading)
+        XCTAssertNotNil(store.detailError)
+        XCTAssertNil(store.fullDetail)
+        XCTAssertEqual(store.selectedNode?.id, "fact:0")
+        let response = try JSONDecoder().decode(MemoryOverview.self, from: Data(#"{"ok":true}"#.utf8))
+        store.loadFullDetail { response }
+        for _ in 0..<200 where store.detailLoading { try await Task.sleep(nanoseconds: 5_000_000) }
+        XCTAssertFalse(store.detailLoading)
+        XCTAssertNil(store.detailError)
+        XCTAssertEqual(store.fullDetail, "Full detail is unavailable for this memory.")
+        XCTAssertEqual(store.selectedNode?.id, "fact:0")
+    }
+
     func testStaleRequestCannotReplaceNewerFocus() async throws {
         let store = MemoryGraphStore(), old = try GraphFixture.make(count: 3), new = try GraphFixture.make(count: 5)
         store.load(query: MemoryGraphQuery(focus: "old")) { _ in

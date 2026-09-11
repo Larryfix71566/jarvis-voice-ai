@@ -214,7 +214,10 @@ struct MemoryGraphView: View {
                     if let detail = store.fullDetail { Text(detail) }
                     else {
                         Text("Graph labels and content previews may be abbreviated.").font(.caption)
-                        Button("Read full detail") { store.loadFullDetail(api: api) }.disabled(store.detailLoading)
+                        if let error = store.detailError { Text(error).foregroundStyle(AppTheme.attn) }
+                        Button(store.detailError == nil ? "Read full detail" : "Retry full detail") {
+                            store.loadFullDetail(api: api)
+                        }.disabled(store.detailLoading)
                     }
                     if store.detailLoading { ProgressView() }
                     Divider()

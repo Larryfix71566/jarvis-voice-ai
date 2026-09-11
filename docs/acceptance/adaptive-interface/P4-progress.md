@@ -189,3 +189,21 @@ Full sandbox host check `p4-edge-refresh-fixed`: 99 tests, zero failures; verifi
 Tests cover updated attributes, retained inspector state, deletion and ambiguous
 parallel relationships. This is state reconciliation evidence; real graph gesture,
 frame-time, accessibility and remaining integrated acceptance gates remain open.
+
+## Retry failed full-detail reads
+
+Graph detail errors previously occupied the full-content slot, hiding the only
+load control. The store now separates detail errors from successful content and
+the inspector offers Retry full detail on failure. Retry uses the existing
+memoryOverview API and preserves selected node identity; it adds no automatic
+request or new endpoint. Selecting another node or navigating Back clears the
+old error. An unsuccessful API response remains an error, not supplied content.
+
+Full sandbox host check `p4-detail-retry`: 100 tests, zero failures; verifier
+13.375 seconds. Log SHA-256:
+`528ec132920bea6e72543fc9c82a9d8c9d702bea8ec653ab34641ae5aeeb8aa0`.
+A focused async test fails the first read, verifies retryable error state and
+unchanged selection, then retries successfully and verifies the error clears.
+The successful fixture has no matching fact and exercises the truthful missing
+content message, not evidence of a live full-fact retrieval. Actual inspector
+button traversal and live authenticated retrieval remain integrated checks.

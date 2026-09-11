@@ -38,6 +38,7 @@ final class MemoryGraphStore {
     private(set) var pathStart: String?
     private(set) var pathEnd: String?
     private(set) var fullDetail: String?
+    private(set) var detailError: String?
     private(set) var detailLoading = false
     var search = ""
     var showsInspector = true
@@ -153,7 +154,7 @@ final class MemoryGraphStore {
         guard let previous = history.popLast() else { return }
         cancel()
         graph = previous.0; metadata = previous.1
-        error = nil; selectedEdge = nil; fullDetail = nil
+        error = nil; selectedEdge = nil; fullDetail = nil; detailError = nil
         pathStart = nil; pathEnd = nil
         persist()
     }
@@ -163,7 +164,7 @@ final class MemoryGraphStore {
         metadata.selectedID = id
         metadata.hiddenNodeTypes.remove(node.type)
         metadata.collapsedTypes.remove(node.type)
-        selectedEdge = nil; fullDetail = nil; showsInspector = true
+        selectedEdge = nil; fullDetail = nil; detailError = nil; showsInspector = true
         detailRequest?.cancel(); detailLoading = false
         persist()
     }
@@ -239,21 +240,27 @@ final class MemoryGraphStore {
     }
 
     func loadFullDetail(api: AdminAPI) {
+        loadFullDetail { try await api.memoryOverview() }
+    }
+
+    func loadFullDetail(fetch: @escaping @Sendable () async throws -> MemoryOverview) {
         guard let node = selectedNode, node.type == "fact", node.id.hasPrefix("fact:") else {
             fullDetail = "Full detail is unavailable through the current read API."
             return
         }
         let key = String(node.id.dropFirst(5)), current = generation
-        detailRequest?.cancel(); detailLoading = true
+        detailRequest?.cancel(); detailLoading = true; detailError = nil; fullDetail = nil
         detailRequest = Task { [weak self] in
             do {
-                let overview = try await api.memoryOverview()
+                let overview = try await fetch()
                 guard let self, !Task.isCancelled, self.generation == current, self.metadata.selectedID == node.id else { return }
-                self.fullDetail = overview.ok ? (overview.facts.first { $0.key == key }?.content ?? "Full detail is unavailable for this memory.") : "Memory details unavailable."
+                if overview.ok {
+                    self.fullDetail = overview.facts.first { $0.key == key }?.content ?? "Full detail is unavailable for this memory."
+                } else { self.detailError = "Memory details unavailable." }
                 self.detailLoading = false
             } catch {
                 guard let self, !Task.isCancelled, self.generation == current, self.metadata.selectedID == node.id else { return }
-                self.fullDetail = TabStateMapper.fromError(error).0; self.detailLoading = false
+                self.detailError = TabStateMapper.fromError(error).0; self.detailLoading = false
             }
         }
     }
