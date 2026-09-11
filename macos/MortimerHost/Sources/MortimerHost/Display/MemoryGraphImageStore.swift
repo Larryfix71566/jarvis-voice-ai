@@ -49,6 +49,7 @@ final class MemoryGraphImageStore {
     }
 
     func cancel() {
+        if loading { error = "Image request cancelled. Choose Reload image to try again." }
         generation += 1; request?.cancel(); request = nil; loading = false
     }
 }

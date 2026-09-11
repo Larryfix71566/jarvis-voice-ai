@@ -129,3 +129,15 @@ SHA-256 `d67d350b8c8aee7f592aca73d1877ec6ddc9e967efbdf1e78d5f2caa11a136b6`.
 The first attempt failed to compile an ambiguously typed infinity in the new
 fixture; explicitly using CGFloat corrected the fixture without weakening it.
 This regression check does not replace graph frame-time or hardware acceptance.
+
+## Image cancellation recovery
+
+Starting application commit `72ecc7b`. Cancelling an in-flight image request now
+leaves a readable cancellation message with the existing explicit Reload image
+action. Rebuilding the graph view does not silently retry the cancelled request;
+late responses cannot replace the message, and an explicit reload can recover.
+
+Offline sandbox check `p4-image-cancellation`: 95 host tests, zero failures,
+including a new cancellation/reparent/reload regression check. Log SHA-256:
+`08f54e8b9168f3086c6e32da194feb6c8aaa12adb542a84435b54720b36a3aa3`.
+Full hardware and integrated acceptance remain open.
