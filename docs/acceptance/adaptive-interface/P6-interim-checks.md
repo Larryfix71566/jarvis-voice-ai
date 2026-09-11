@@ -148,3 +148,33 @@ is not a passing baseline and the eight successes do not form a verification
 receipt. No baseline tests or gates were relaxed. The next validation must use
 Verifier.verify, which freezes current source and hydrates a fresh verification VM
 with all candidate paths before running the full installed profile.
+
+## Independent full-profile verification passed
+
+Application candidate at local commit `4d188e87fc3ff2b209e0e71b1fc5c1e390cb5342`
+matched all 817 tracked files, with no missing supported paths, extra files, byte
+or mode differences. Frozen fingerprint:
+`4733415884f7cd727937f3e17df061ab102838f13897b0075284d36cdca60817`.
+
+Attempt `033251ffe661461ab995895818946a84` used fresh verification task
+`25b78155ff13` and completed all 12 installed profile checks successfully. The
+independent verifier recorded `source_unchanged: true`; its receipt validator
+then checked the current profile, runner, source fingerprint and every log hash.
+Trusted/candidate backend suites each passed 2,350 tests; native candidate library
+and app each passed 105 tests, trusted native library 96 and app 39. Scripted
+evaluations passed 13 tests; both knowledge-base suites passed 17. Imports,
+fixture-based latency and web build also passed. The latency fixture is not real
+speech-latency acceptance.
+
+Receipt location under the sandbox task:
+`verification/033251ffe661461ab995895818946a84/receipt.json`.
+A user-facing copy is in the task outputs as `interface-verification-receipt.json`.
+The first attempt `24265f44860549d7b8746a9628e8689b` ended before checking because
+macOS denied stopping the old development VM. Scoped controller lifecycle
+permission resolved that startup issue; the failed attempt remains failed.
+
+This evidence applies to the exact commit/fingerprint above. This documentation
+addition is later and does not retroactively change the receipt. The full-profile
+pass does not complete P2, physical-device/display acceptance, all interaction or
+accessibility/performance gates, final integration orders after further code
+changes, phase PR review, or release authorization.
