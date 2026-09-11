@@ -91,3 +91,19 @@ Its blob `6bd7295caf52a93437cac8cccb58ce16b90e334a` matches the locally tested
 file exactly. It does not publish or establish acceptance of the UI phases.
 The plan PR #64 was independently confirmed merged. No implementation PR was
 merged and no application deployment occurred during this work.
+
+## Isolated fixture PR CI verified
+
+On 2026-09-11, GitHub PR #65 remained open, draft and unmerged at exact head
+`a3293cb7327683e38c3f43869c12dd0b34032ed5`. Its description was updated with the
+three completed local full-suite orders, explicitly distinguishing the local UI
+candidate from the isolated remote commit.
+
+GitHub's commit check-runs endpoint returned five completed successful checks:
+allowlist, policy-tests and validate (workflow run 34565837983), knowledge-base
+(run 34565837992), and controller-tests (run 34565837955). The legacy combined
+status list was empty; this was not treated as either failure or proof of success.
+The check-runs response supplied the actual outcomes. The validate job finished
+at 05:29:17 UTC. These results cover the isolated fixture PR only, not unsubmitted
+native interface changes or real hardware acceptance. No merge or deployment was
+performed and the PR remains draft for review.
