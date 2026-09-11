@@ -48,3 +48,42 @@ Real-device feasibility and paired quality/latency acceptance remain open. This
 finding blocks claiming P2 complete; it does not block independent implementation
 or verification of the other phases. No candidate audio code or live app was
 changed during this inspection.
+
+## Muted runtime schema probe (2026-09-11)
+
+At local application commit `46da90a`, a disposable XCTest was transferred into
+JarvisKitTests in the offline VM, executed alone, and removed afterward. Its
+reproducible source is `probes/AudioStatisticsProbeTests.swift` beside this record;
+it is deliberately outside the shipping target and ordinary test suite. To repeat,
+copy it into the disposable VM's JarvisKitTests, run `swift test --package-path
+macos/JarvisKit --filter AudioStatisticsProbeTests`, then remove the temporary file.
+Never run this candidate probe on the production host.
+
+The probe creates one local peer connection with the existing capture constraints,
+disables its synthetic microphone track before adding it, and creates a local
+offer. It has no remote peer, server connection, credentials, enabled microphone,
+or raw audio recording. This is a schema observation, not a voice acceptance test.
+
+Check `p2-muted-statistics-probe` returned exit 0 in 3.654 verifier seconds.
+Log SHA-256:
+`824ae7bbc615212e6dec2995e9d1cc92d7f97e51701c1d71574f588e9ca558ce`.
+All 12 reports contained an audio `media-source` record with `audioLevel`,
+`totalAudioEnergy`, `totalSamplesDuration`, and `trackIdentifier`. Level, energy
+and sample duration were zero throughout, consistent with the disabled source.
+An `outbound-rtp` record included `mediaSourceId`, supporting explicit association
+rather than selecting an arbitrary audio record. No inbound/playout record was
+observed in this unnegotiated connection; that does not prove its absence in a
+connected session.
+
+Reports 8 and 9 had exactly the same statistics timestamp. The probe slept at
+least 33.3 ms between completed callbacks, but did not independently instrument
+callback latency or scheduling. Neither its report intervals nor its zero values
+establish active-source freshness, processed speech eligibility, the noise floor,
+echo rejection, or the 150 ms display latency target.
+
+This changes the next step from guessing whether an input level key exists to
+measuring this specific source-linked candidate under controlled active audio.
+Any observer must reject repeated/older timestamps, bind to the current session
+and track, and expire stale levels independently of callback arrival. Receiver
+statistics still need separate evidence of actual playout correspondence. P2
+remains incomplete; no production transport, meter or wave behavior changed.
