@@ -3,6 +3,10 @@
 Status: not final release acceptance. P2 audio, hardware, accessibility and
 other phase acceptance remain open. No merge or deployment.
 
+Latest follow-up: [reduced-motion scheduling correction](P2-reduced-motion-static.md)
+records the full-profile failure for `88e2f07`, its correction, and the subsequent
+125-test native pass. A fresh full-profile receipt is still required for that correction.
+
 ## Normal-order backend suite
 
 Prepared offline Mortimer VM, task `66fed310bde6`; check

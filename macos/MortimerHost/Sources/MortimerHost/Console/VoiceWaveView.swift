@@ -36,24 +36,28 @@ struct VoiceWaveAnimation: View {
     @State private var engine = WaveEngine()
 
     var body: some View {
+        Group {
+            if let presentation, reduceMotion {
+                // A paused animation timeline can still reevaluate its content.
+                // Reduced motion has no animation schedule or visibility-driven
+                // sampling; ordinary parent state changes still update its label.
+                wave(presentation())
+            } else {
+                animatedWave
+            }
+        }
+        .allowsHitTesting(false)
+        .onDisappear { engine.suspend() }
+        .onChange(of: wakePulse) { _, _ in engine.flashWake() }
+    }
+
+    private var animatedWave: some View {
         let initial = presentation?()
         let active = (initial?.userLevel ?? 0) > 0 || (initial?.outputLevel ?? 0) > 0 ||
             initial?.activity == .thinking || initial?.activity == .connecting
-        TimelineView(.animation(minimumInterval: presentation == nil ? nil : (active ? 1.0 / 60 : 1.0 / 15),
-                                paused: !visible || !windowVisible || (presentation != nil && reduceMotion))) { timeline in
-            let current = presentation?()
-            Canvas { context, size in
-                engine.draw(
-                    context: &context,
-                    size: size,
-                    now: ProcessInfo.processInfo.systemUptime,
-                    state: voiceState,
-                    stageCenterX: stageCenterX,
-                    presentation: current, reduceMotion: reduceMotion
-                )
-            }
-            .accessibilityLabel(current?.label ?? voiceState.label)
-            .accessibilityValue(current?.audioLevelUnavailable == true ? "Audio level unavailable" : "")
+        return TimelineView(.animation(minimumInterval: presentation == nil ? nil : (active ? 1.0 / 60 : 1.0 / 15),
+                                paused: !visible || !windowVisible)) { _ in
+            wave(presentation?())
         }
         .background(WindowVisibilityReader { windowVisible = $0 })
         .onChange(of: windowVisible) { _, value in
@@ -61,10 +65,17 @@ struct VoiceWaveAnimation: View {
         }
         .onAppear { visible = true }
         .onDisappear { visible = false; engine.suspend() }
-        .allowsHitTesting(false)
-        .onChange(of: wakePulse) { _, _ in
-            engine.flashWake()
+    }
+
+    private func wave(_ current: VoicePresentationState?) -> some View {
+        Canvas { context, size in
+            engine.draw(context: &context, size: size,
+                        now: ProcessInfo.processInfo.systemUptime,
+                        state: voiceState, stageCenterX: stageCenterX,
+                        presentation: current, reduceMotion: reduceMotion)
         }
+        .accessibilityLabel(current?.label ?? voiceState.label)
+        .accessibilityValue(current?.audioLevelUnavailable == true ? "Audio level unavailable" : "")
     }
 }
 
