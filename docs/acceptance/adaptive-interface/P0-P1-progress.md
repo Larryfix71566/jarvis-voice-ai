@@ -71,3 +71,15 @@ The earlier failures above remain as diagnostic history, superseded by this run.
 - P2 through P6 remain incomplete, including complete backend/profile gates,
   integrated results/graph/monitor behavior and real-device acceptance.
 - No candidate has been deployed. This record authorizes no merge or release.
+
+## Narrow selected-label evidence
+
+At source `60a6cda` plus the new test, a native 300-point standalone tab strip
+opens with Costs selected. Accessibility frame assertions verify the complete
+COSTS text lies inside the scroll viewport after subtracting outer padding,
+fixed arrows and control gaps. An empty accessibility tree fails the test.
+Full host check `p1-narrow-tab-viewport`: 96 tests, zero failures, no skips;
+SHA-256 `4455dd69236e6fea60fa66b32642b1dff6ee684daa37c6bc92c5dc3d6c4b00e7`.
+This proves this initial selected-label case only. It does not establish actual
+DrawerView chrome sizing, all tab selections, arrow/keyboard/voice interactions,
+large text or full VoiceOver acceptance. Those remain pending.
