@@ -48,6 +48,53 @@ final class DrawerTabStripRenderingTests: XCTestCase {
         }
     }
 
+    func testNarrowMountedStripRevealsEverySelectionInBothDirections() throws {
+        _ = NSApplication.shared
+        NSApplication.shared.accessibilitySetValue(true,
+            forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+        let selection = HeaderSelection()
+        let view = NSHostingView(rootView: MountedHeader(selection: selection)
+            .padding(8).background(Color.black))
+        view.frame = NSRect(x: 0, y: 0, width: 300, height: 64)
+        let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = view
+        window.orderFrontRegardless()
+        defer { window.close() }
+        window.layoutIfNeeded(); view.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.25))
+        for key in DrawerState.tabKeys + DrawerState.tabKeys.reversed() {
+        selection.tab = key
+        RunLoop.main.run(until: Date().addingTimeInterval(0.25))
+        var selectedFrames: [CGRect] = []
+        func visit(_ value: Any) {
+            guard let element = value as? NSObject else { return }
+            let labelSelector = NSSelectorFromString("accessibilityLabel")
+            if element.responds(to: labelSelector),
+               let label = element.perform(labelSelector)?.takeUnretainedValue() as? String,
+               label == DrawerState.tabLabels[key]?.uppercased(), element.responds(to: NSSelectorFromString("accessibilityFrame")),
+               let frame = element.value(forKey: "accessibilityFrame") as? NSValue {
+                selectedFrames.append(frame.rectValue)
+            }
+            let childrenSelector = NSSelectorFromString("accessibilityChildren")
+            if element.responds(to: childrenSelector),
+               let children = element.perform(childrenSelector)?.takeUnretainedValue() as? [Any] {
+                for child in children { visit(child) }
+            }
+        }
+        visit(view)
+        XCTAssertFalse(selectedFrames.isEmpty, "Selected tab must be exposed to accessibility")
+        // Exclude outer padding, fixed overflow arrows and inter-control gaps:
+        // being inside the window alone would not prove the label is unclipped.
+        let visible = window.convertToScreen(view.convert(view.bounds, to: nil))
+            .insetBy(dx: 8 + 24 + 2, dy: 0)
+        for frame in selectedFrames {
+            XCTAssertGreaterThan(frame.width, 0)
+            XCTAssertGreaterThanOrEqual(frame.minX, visible.minX)
+            XCTAssertLessThanOrEqual(frame.maxX, visible.maxX)
+        }
+        }
+    }
+
     func testWideHeaderExposesEveryLabel() throws {
         _ = NSApplication.shared
         NSApplication.shared.accessibilitySetValue(true,
@@ -88,5 +135,16 @@ final class DrawerTabStripRenderingTests: XCTestCase {
             // the complete rendered label, including every character.
             XCTAssertTrue(labels.contains(label.uppercased()), "Missing accessible tab: \(label); tree: \(labels)")
         }
+    }
+}
+
+@MainActor
+@Observable
+private final class HeaderSelection { var tab = "repo" }
+
+private struct MountedHeader: View {
+    @Bindable var selection: HeaderSelection
+    var body: some View {
+        DrawerTabStrip(selectedTab: selection.tab, attention: [:]) { selection.tab = $0 }
     }
 }

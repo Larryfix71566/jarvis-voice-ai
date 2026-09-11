@@ -83,3 +83,19 @@ SHA-256 `4455dd69236e6fea60fa66b32642b1dff6ee684daa37c6bc92c5dc3d6c4b00e7`.
 This proves this initial selected-label case only. It does not establish actual
 DrawerView chrome sizing, all tab selections, arrow/keyboard/voice interactions,
 large text or full VoiceOver acceptance. Those remain pending.
+
+## All mounted header selections at narrow width
+
+A new native header test keeps one SwiftUI header mounted at 300 points and
+changes its observable selection through all eight tab keys in forward and
+reverse order. At each step it verifies the entire selected label's accessible
+frame is inside the scroll viewport, excluding outer padding and fixed overflow
+arrows. The original restored-last-tab and wide-header tests remain intact.
+
+Sandbox full host check `p1-all-tab-selections`: 104 tests, zero failures; verifier
+16.509 seconds. Log SHA-256:
+`8753691b69032bf8f8d251af2d4a6d339770dcda40e4dd5ed284c13abd988e65`.
+This proves selection changes in a mounted narrow strip reveal every selected
+label without reconstructing the header. It does not prove keyboard/voice event
+routing, arrow-button activation, large-text behavior, all tab bodies or detached
+drawer chrome. Those requirements remain open independently.
