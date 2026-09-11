@@ -11,9 +11,10 @@
 # Usage:  macos/MortimerHost/scripts/bundle.sh [debug|release]   (default debug)
 # Output: macos/MortimerHost/.build/MortimerHost.app  (then `open`s it)
 #
-# The copied binary keeps its absolute LC_RPATH entries into .build/, so the
-# WebRTC.xcframework SPM linked resolves from the bundle location on this
-# machine. Local-run packaging only — not a distributable build.
+# SPM resolves WebRTC beside the executable. Copy its resolved framework next
+# to the executable, alongside SPM resource bundles, so launch does not depend
+# on the executable remaining in SPM's build-products directory. Ad-hoc signing
+# is for local testing; this is not a notarized distribution package.
 set -euo pipefail
 CONFIG="${1:-debug}"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -29,6 +30,13 @@ cp "$BIN" "$APP/Contents/MacOS/MortimerHost"
 for b in "$HERE/.build/$CONFIG"/*.bundle; do
   [ -e "$b" ] && cp -R "$b" "$APP/Contents/MacOS/"
 done
+for framework in "$HERE/.build/$CONFIG"/*.framework; do
+  [ -e "$framework" ] && cp -R "$framework" "$APP/Contents/MacOS/"
+done
+if [ ! -f "$APP/Contents/MacOS/WebRTC.framework/WebRTC" ]; then
+  echo "Missing bundled WebRTC runtime; refusing to launch." >&2
+  exit 1
+fi
 cat > "$APP/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -54,6 +62,13 @@ cat > "$APP/Contents/Info.plist" << PLIST
 </plist>
 PLIST
 # Ad-hoc sign so TCC (microphone) attributes the grant to a stable identity.
-codesign --force --sign - "$APP" >/dev/null 2>&1 || true
+# SPM's resolved framework is not necessarily signed. Sign only our embedded
+# copy, then seal the containing app and verify both before attempting launch.
+for framework in "$APP/Contents/MacOS"/*.framework; do
+  [ -d "$framework" ] || continue
+  codesign --force --sign - "$framework"
+done
+codesign --force --sign - "$APP"
+codesign --verify --deep --strict "$APP"
 echo "bundled: $APP"
 open "$APP"

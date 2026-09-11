@@ -196,3 +196,60 @@ result, not physical ultrawide/portrait display or multi-monitor trials. They do
 not verify connected notices, every payload, accessibility scaling, all status
 scrolling or resize gestures. The earlier frozen-profile receipt remains tied to
 its earlier source snapshot, not these later test and graph-history changes.
+
+## Native bundle launch correction and desktop interactions
+
+In offline GUI task `ab9c8fe5bf23` (macOS 26.4, unprivileged worker), bundling
+the candidate at parent commit `b475692` returned success and its outer signature
+verified, but the application did not stay running. Capturing startup reported
+termination by signal 6 and `Library not loaded: @rpath/WebRTC.framework/WebRTC`:
+the framework was missing next to the bundled executable.
+
+Read-only comparison with the production checkout confirmed that its existing
+local `bundle.sh` patch already copies the resolved framework beside the binary
+and refuses a missing runtime. This behavior is now explicitly incorporated into
+the candidate repository script. The production checkout was not changed; its
+base remains `2ccf66cd7e00b82cf9136d2cd00f42e9bddb90af` with the five local
+customizations recorded by the plan.
+
+The candidate additionally signs the embedded framework copy before signing the
+app, verifies nested code with `codesign --verify --deep --strict`, and propagates
+signing/verification failures instead of ignoring them. An initial real build
+with the framework copied but unsigned failed verification as expected; signing
+the embedded copy resolved that failure. Dependency versions and audio transport
+code were unchanged. This is ad-hoc local packaging, not notarized distribution.
+
+Five packaging regression tests pass inside the VM: embedding resources and
+framework symlinks, missing runtime, failed build, failed framework/app signing,
+and failed signature verification. Failures prevent `open`. The test harness
+uses command stand-ins, while a separate real build/sign/launch validates the
+native tools. A first test failure caused by `/var` versus `/private/var`
+temporary-path aliases was corrected by resolving both paths before comparing
+containment. No containment assertion was dropped.
+
+The real app subsequently opened, remained visible across several minutes of
+interaction, and was independently observed running as PID 2272. Inspection
+confirmed an embedded WebRTC runtime and no symlinks escaping the app bundle.
+Combined packaging-test and actual build/sign/launch log SHA-256:
+`ffa2d64d964922ea7dbb046b9d4a5407bdc163d7ecbe3c00d642b49cae56e476`.
+
+Computer Use observations in the running offline app:
+
+- The Debug preview reaches the adaptive layout; the decorative dotted lettering
+  becomes the functional Mortimer status label.
+- `t` opens the Log sidecar; Escape closes it, and `t` reopens it.
+- The Aa submenu shows Standard, Large and Extra large. Extra large was selected
+  and confirmed by its checkmark and visibly larger, single-line tab labels.
+- Left scrolling reaches Repo, Edit and Memory while the Log body remains
+  selected, confirming scrolling alone does not change content. Edit selection
+  then presents its Goal input and existing Run/Validate/Submit/Revert controls.
+- An unsent synthetic Edit draft remains visible after tab and layout changes.
+  No Run, Validate or Submit action was invoked. The VM correctly reports that
+  the admin service is unreachable.
+
+The view changed during attempted pop-out interactions; those observations do
+not prove detachment/redocking, full draft equality, or all eight tab interactions.
+Those cases stay open. This evidence also does not establish connected backend
+health, microphone/playout behavior, VoiceOver, real monitor recovery, final
+frozen verification, rollback acceptance, or deployment. The visible app is only
+in the disposable VM; no production app or service was deployed.
