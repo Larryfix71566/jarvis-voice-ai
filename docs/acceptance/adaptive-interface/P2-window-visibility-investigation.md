@@ -1,8 +1,9 @@
 # Window visibility verification remains incomplete
 
-Status: candidate implementation and tests are uncommitted; no pass or release
-acceptance. The last completed implementation commit remains b5f09ea before this
-investigation. WindowVisibilityReader observes the existing NSWindow's visibility,
+Status: candidate implementation and tests are committed; no release acceptance
+is claimed. The implementation is present on the adaptive branch, with the
+graphics-required verifier and worker-session correction in commits `2fb6a9f`
+and `bae4aa5`. WindowVisibilityReader observes the existing NSWindow's visibility,
 occlusion, minimization and app hide notifications. VoiceWaveView uses it to
 pause animation and clear transient amplitude when hidden. The intended behavior
 has not passed the visible/resume checks in the current test environment.
@@ -207,3 +208,13 @@ The normal verification VM's GUI-session prerequisites still need resolving;
 do not skip these tests or count a headless failure as acceptance. System-setting
 toggle/VoiceOver acceptance, CPU/frame timing on the deployment hardware, real
 audio input/playout observations and the remaining hardware matrix stay open.
+
+The latest independent graphics-required receipt (task `6f6e8c4ebc48`, attempt
+`77a62a4763ad4917ba0d815354115b55`) confirms the corrected worker lifecycle:
+candidate and baseline processes ran as `mortimer-dev` after the graphics
+restart. Candidate MortimerHost still failed the same nine
+`WindowVisibilityTests` because Tart exposed no active, unoccluded desktop
+space to the worker process. This result supersedes the earlier headless-only
+diagnostic for runner status, but does not supersede the positive development
+VM evidence above. The AppKit gate remains open until the independent guest
+desktop is genuinely active.
