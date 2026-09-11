@@ -120,6 +120,10 @@ final class MemoryGraphStore {
                 } onCancel: { layoutTask.cancel() }
                 guard let self, self.generation == current, !Task.isCancelled else { return }
                 self.graph = response
+                // Full facts come from a separate read and may no longer match
+                // the refreshed graph, even when the selected ID survives.
+                self.detailRequest?.cancel(); self.detailRequest = nil
+                self.detailLoading = false; self.fullDetail = nil; self.detailError = nil
                 // A user may drag while a fetch/layout is in flight. Keep
                 // their latest points for IDs which survived the refresh.
                 let latestPoints = self.metadata.positions

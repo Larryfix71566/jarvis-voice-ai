@@ -137,6 +137,41 @@ final class MemoryGraphStoreTests: XCTestCase {
         XCTAssertEqual(store.selectedNode?.id, "fact:0")
     }
 
+    func testGraphRefreshInvalidatesPreviouslyLoadedFullFact() async throws {
+        let store = MemoryGraphStore(), graph = try GraphFixture.make()
+        await loaded(store, response: graph); store.select("fact:0")
+        let detail = try JSONDecoder().decode(MemoryOverview.self,
+            from: Data(#"{"ok":true,"facts":[{"key":"0","content":"Original full memory"}]}"#.utf8))
+        store.loadFullDetail { detail }
+        for _ in 0..<200 where store.detailLoading { try await Task.sleep(nanoseconds: 5_000_000) }
+        XCTAssertEqual(store.fullDetail, "Original full memory")
+        await loaded(store, response: graph)
+        XCTAssertEqual(store.selectedNode?.id, "fact:0")
+        XCTAssertNil(store.fullDetail)
+        XCTAssertNil(store.detailError)
+        XCTAssertFalse(store.detailLoading)
+    }
+
+    func testLateDetailCannotReplaceNewSelection() async throws {
+        let store = MemoryGraphStore()
+        await loaded(store, response: try GraphFixture.make()); store.select("fact:0")
+        let detail = try JSONDecoder().decode(MemoryOverview.self,
+            from: Data(#"{"ok":true,"facts":[{"key":"0","content":"Old selection"}]}"#.utf8))
+        let started = expectation(description: "Old detail request started")
+        store.loadFullDetail {
+            started.fulfill()
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            return detail // intentionally returns despite cancellation
+        }
+        await fulfillment(of: [started], timeout: 1)
+        store.select("fact:1")
+        try await Task.sleep(nanoseconds: 120_000_000)
+        XCTAssertEqual(store.selectedNode?.id, "fact:1")
+        XCTAssertNil(store.fullDetail)
+        XCTAssertNil(store.detailError)
+        XCTAssertFalse(store.detailLoading)
+    }
+
     func testStaleRequestCannotReplaceNewerFocus() async throws {
         let store = MemoryGraphStore(), old = try GraphFixture.make(count: 3), new = try GraphFixture.make(count: 5)
         store.load(query: MemoryGraphQuery(focus: "old")) { _ in

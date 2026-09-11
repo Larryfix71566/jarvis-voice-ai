@@ -207,3 +207,20 @@ unchanged selection, then retries successfully and verifies the error clears.
 The successful fixture has no matching fact and exercises the truthful missing
 content message, not evidence of a live full-fact retrieval. Actual inspector
 button traversal and live authenticated retrieval remain integrated checks.
+
+## Full-detail freshness after graph refresh
+
+A successful graph refresh now invalidates separately fetched full-fact text and
+its error state, cancels any pending detail read, and retains the selected node
+when it still exists. The user can explicitly read the current full detail again.
+Failed graph refreshes retain the previously displayed graph and content. This
+avoids displaying old full text as though it accompanied a new graph response.
+
+Sandbox full host check `p4-detail-refresh`: 102 tests, zero failures; verifier
+12.663 seconds. Log SHA-256:
+`0eeb7ed41c4814487d59a606f7d3267b33ff89907181614f8b74aaaa22f3ea5c`.
+One test loads a real synthetic full-fact response, refreshes the graph with the
+same node ID, and checks text invalidation with selection preserved. Another waits
+for an old detail request to start, selects a different node, and verifies that
+the old response returning despite cancellation cannot populate the new inspector.
+These tests do not establish real-service freshness or integrated UI acceptance.
