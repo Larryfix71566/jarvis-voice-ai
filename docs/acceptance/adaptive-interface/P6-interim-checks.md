@@ -325,3 +325,26 @@ process has no active desktop space and reports a non-visible window. The receip
 is retained as failed evidence; no assertion or gate was relaxed. A future
 graphics verification runner must attach or activate the guest desktop before
 this automated gate can pass.
+
+The worker-session lifecycle was then corrected in candidate `bae4aa5`: the
+graphics worker creates a guest-only random password, resets `mortimer-dev` to
+that password and enables auto-login before handing control to the verifier. A
+new independent full-profile receipt (task `6f6e8c4ebc48`, attempt
+`77a62a4763ad4917ba0d815354115b55`) ran both baseline and candidate backend
+processes as UID 502 (`mortimer-dev`) after the graphics restart. Imports,
+backend suites, scripted evaluations, latency, both knowledge suites, web,
+JarvisKit and the trusted baseline MortimerHost suite passed. Candidate
+MortimerHost still returned the same nine `WindowVisibilityTests` failures: the
+guest process has no active unoccluded desktop space, so its window reports
+`window.occlusionState == false`. This repeated failure after confirming the
+correct worker account isolates the remaining issue to Tart's guest display /
+session attachment rather than account selection or application logic.
+
+The receipt is retained as failed evidence (candidate snapshot fingerprint
+`09409f2c4e5028d3ab2a3c8b1255205cf0869f493624fb04b4cb462413cc4824`, baseline
+fingerprint `71c1b8c7b7f100486d9d08fc5319c791c622eb3efbbf668c02519ef462779289`,
+profile fingerprint `c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e`).
+No test, timeout, visibility assertion or profile gate was weakened. The
+graphics-required verifier now reliably provisions the worker identity, but a
+real active, unoccluded guest desktop is still required before the independent
+AppKit gate can pass.
