@@ -173,3 +173,16 @@ in both directions at a 300pt strip width. This resolves the ineffective
 Dynamic Type fixture; it does not establish actual menu interaction, preference
 restoration, complete drawer chrome fit, or comprehensive large-text acceptance.
 Those remain required, including mounted size changes without selection loss.
+
+### Mounted typography and integrated console checks
+
+`p1-standard-large-console` passed the full native host suite on 2026-09-11,
+33.866 seconds, log SHA-256
+`d392752419a50689eecb4914f62cc523386f41b951f42fa49c7bfe09bdc8e84e`.
+The mounted strip now changes from 11pt to 22pt for every tab in both
+directions, retaining selection and asserting the enlarged selected frame
+remains completely in the scrolling viewport. Full console fixtures retain
+standard typography coverage and add 22pt at all five existing dimensions;
+Output, the typography menu, mute and wake controls remain inside the window.
+These are offscreen native fixtures, not hardware display or menu-action
+acceptance. Actual menu selection and preference restoration remain open.

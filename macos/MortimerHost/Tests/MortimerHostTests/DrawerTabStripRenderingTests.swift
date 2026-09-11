@@ -100,7 +100,7 @@ final class DrawerTabStripRenderingTests: XCTestCase {
         NSApplication.shared.accessibilitySetValue(true,
             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
         let selection = HeaderSelection()
-        let view = NSHostingView(rootView: MountedHeader(selection: selection, textSize: 22)
+        let view = NSHostingView(rootView: MountedHeader(selection: selection)
             .padding(8).background(Color.black))
         view.frame = NSRect(x: 0, y: 0, width: 300, height: 128)
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -111,6 +111,9 @@ final class DrawerTabStripRenderingTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.25))
         for key in DrawerState.tabKeys + DrawerState.tabKeys.reversed() {
         selection.tab = key
+        selection.textSize = 11
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        selection.textSize = 22
         RunLoop.main.run(until: Date().addingTimeInterval(0.25))
         var selectedFrames: [CGRect] = []
         func visit(_ value: Any) {
@@ -129,6 +132,7 @@ final class DrawerTabStripRenderingTests: XCTestCase {
             }
         }
         visit(view)
+        XCTAssertEqual(selection.tab, key, "Changing typography must preserve selection")
         XCTAssertFalse(selectedFrames.isEmpty, "Selected tab must be exposed to accessibility")
         XCTAssertGreaterThan(selectedFrames.map(\.height).max() ?? 0, 32,
             "The enlarged-text fixture must actually enlarge the selected control")
@@ -239,12 +243,11 @@ final class DrawerTabStripRenderingTests: XCTestCase {
 
 @MainActor
 @Observable
-private final class HeaderSelection { var tab = "repo" }
+private final class HeaderSelection { var tab = "repo"; var textSize: Double = 11 }
 
 private struct MountedHeader: View {
     @Bindable var selection: HeaderSelection
-    var textSize: Double = 11
     var body: some View {
-        DrawerTabStrip(selectedTab: selection.tab, attention: [:], select: { selection.tab = $0 }, textSize: textSize)
+        DrawerTabStrip(selectedTab: selection.tab, attention: [:], select: { selection.tab = $0 }, textSize: selection.textSize)
     }
 }

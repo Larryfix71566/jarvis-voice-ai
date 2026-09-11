@@ -7,6 +7,14 @@ import JarvisKit
 @MainActor
 final class FullConsoleRenderingTests: XCTestCase {
     func testMinimumConsoleKeepsOutputAndMicrophoneControlsReachable() throws {
+        try checkConsole(tabTextSize: 11)
+    }
+
+    func testEnlargedTabTextKeepsFullConsoleControlsReachable() throws {
+        try checkConsole(tabTextSize: 22)
+    }
+
+    private func checkConsole(tabTextSize: Double) throws {
         _ = NSApplication.shared
         NSApplication.shared.accessibilitySetValue(true,
             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
@@ -14,6 +22,7 @@ final class FullConsoleRenderingTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(1, forKey: "mortimer.interface.layoutVersion")
+        defaults.set(tabTextSize, forKey: "mortimer.interface.sidecarTabTextSize")
         let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
             adminURL: URL(string: "http://127.0.0.1:7861")!, wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: "synthetic"))
         let drawerKeys = ["mortimer.drawer.tab", "mortimer.drawer.open", "mortimer.drawer.width"]
@@ -53,7 +62,7 @@ final class FullConsoleRenderingTests: XCTestCase {
         }
         visit(view)
         let viewport = window.convertToScreen(view.convert(view.bounds, to: nil))
-        for label in ["OUTPUT", "🔇 Mic off", "Wake word off"] {
+        for label in ["OUTPUT", "Sidecar tab text size", "🔇 Mic off", "Wake word off"] {
             let control = try XCTUnwrap(controls[label], "Missing \(label); labels: \(controls.keys.sorted())")
             let frame = try XCTUnwrap(control.value(forKey: "accessibilityFrame") as? NSValue).rectValue
             XCTAssertTrue(viewport.insetBy(dx: -1, dy: -1).contains(frame), "Clipped \(label): \(frame)")
@@ -66,7 +75,7 @@ final class FullConsoleRenderingTests: XCTestCase {
         view.cacheDisplay(in: view.bounds, to: bitmap)
         let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(".build/interface-fixtures")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: directory.appendingPathComponent("console-\(width)-\(height).png"))
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: directory.appendingPathComponent("console-\(width)-\(height)-text-\(Int(tabTextSize)).png"))
         }
     }
 }
