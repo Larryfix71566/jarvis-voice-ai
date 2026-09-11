@@ -288,3 +288,28 @@ tree because generated check output is not application content; its SHA-256 is
 This confirms the graph-store change did not alter the pinned WebRTC/signalling
 package behavior. It is a candidate regression check, not the independent frozen
 profile receipt; the full profile and hardware gates remain open.
+
+## Current full-profile verification attempt
+
+The exact candidate at local commit `55767c0` was frozen as
+`945c257c716b20781d73667debd7d401f5bd318998094fcfefbe01e1ea129d69` against the
+trusted baseline `68a5ce8` (baseline fingerprint
+`71c1b8c7b7f100486d9d08fc5319c791c622eb3efbbf668c02519ef462779289`). The
+independent receipt is retained at sandbox task `2973ab205e37`, attempt
+`87e8c30748f64330b6bfcf0424f41a61`; its source was unchanged after checking.
+
+The receipt passed backend imports, baseline backend (2,350 tests), candidate
+backend (2,355 tests), scripted evaluations, fixture latency, both knowledge-base
+suites, the web build, candidate JarvisKit, and the trusted baseline JarvisKit and
+MortimerHost suites. Candidate MortimerHost returned nine failures in
+`WindowVisibilityTests`: its new AppKit fixture requires an unoccluded visible
+window, while independent profile verification runs headless. The log reports
+`NSApplicationActivationPolicy.regular` with no visible window; the failures are
+the fixture's visibility, animation-resume and sampling assertions. The trusted
+baseline MortimerHost suite passed, and the same 122 candidate tests passed in the
+graphics-enabled offline GUI task `ab9c8fe5bf23`.
+
+This remains a failed full receipt, not a release pass. No visibility assertion,
+test selection, timeout or profile gate was weakened. The candidate GUI result is
+separate evidence; a graphics-enabled independent verification path is still
+required before this checklist item can close.
