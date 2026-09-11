@@ -99,3 +99,20 @@ This proves selection changes in a mounted narrow strip reveal every selected
 label without reconstructing the header. It does not prove keyboard/voice event
 routing, arrow-button activation, large-text behavior, all tab bodies or detached
 drawer chrome. Those requirements remain open independently.
+
+## Overflow arrow activation
+
+The native 300-point header test now invokes actual accessibility press actions
+on the right arrow until it disables, then on the left arrow until it disables.
+It checks each end label is fully inside the scroll viewport and the selected
+Repo tab never changes as a consequence of scrolling. This exercises the actual
+ScrollViewReader action and end-of-scroll disabled state, not just policy math.
+
+Full host sandbox check `p1-overflow-actions-fixed-harness`: 105 tests, zero
+failures; verifier 20.713 seconds. Log SHA-256:
+`a4a50ff3baf7d0b7fb97262f6061aa1949596b279998dc1762272a222652558b`.
+The first harness did not compile because macOS exposes the Reduce Motion
+environment key as read-only; it was corrected to use the actual system setting
+and allow the existing animation to settle. No production change or weakened
+assertion was needed. This does not claim a Reduce Motion test, physical pointer
+or wheel input, keyboard navigation, or all-tab-body acceptance.
