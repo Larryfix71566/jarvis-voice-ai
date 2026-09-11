@@ -81,6 +81,7 @@ class VerificationTests(unittest.TestCase):
     def test_graphics_required_profile_runs_independent_clone_with_desktop(self):
         self.profile = Profile("graphics", (), (), (("required", ("check.py",)),), requires_graphics=True)
         self.assertTrue(self.verify()["passed"])
+        self.assertEqual(len(self.start_kwargs), 2)
         self.assertEqual(self.start_kwargs[-1], {"provisioning": False, "headless": False})
 
     def test_default_profile_verification_remains_headless(self):

@@ -113,6 +113,13 @@ class Verifier:
                                   headless=not profile.requires_graphics)
             self.wait_ready(verification_task)
             self.images.hydrate(verification_task)
+            if profile.requires_graphics:
+                # worker.sh configures the disposable worker for auto-login.
+                # Restart once so AppKit checks run inside that worker's real
+                # WindowServer session instead of the provisioning admin login.
+                self.controller.stop(verification_task)
+                self.controller.start(verification_task, provisioning=False, headless=False)
+                self.wait_ready(verification_task)
             for index, argv in enumerate(profile.seeds):
                 remaining = int(deadline - time.monotonic())
                 if remaining < 1:

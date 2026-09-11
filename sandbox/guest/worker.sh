@@ -39,6 +39,9 @@ unset worker_keychain
 # Public VM images have a known admin password. Replace it before candidate
 # code runs; the host's Tart agent uses its existing privileged transport.
 worker_admin_password="$(/usr/bin/openssl rand -hex 32)"
+# Keep a random credential inside the disposable guest so the worker can
+# auto-login when graphics-required verification restarts the clone.
+worker_login_password="$(/usr/bin/openssl rand -hex 32)"
 # Secure-token accounts require the image's existing administrator credential
 # even when the caller is root. This is the public factory image password,
 # never a password from the host Mac or its vault.
@@ -54,8 +57,13 @@ fi
 # automatic-login credential as well so controlled tasks survive a restart.
 sudo -n /usr/sbin/sysadminctl -autologin set -userName admin -password "$worker_admin_password" \
   -adminUser admin -adminPassword "$worker_admin_password" >/dev/null 2>&1
+sudo -n /usr/sbin/sysadminctl -adminUser admin -adminPassword "$worker_admin_password" \
+  -resetPasswordFor mortimer-dev -newPassword "$worker_login_password" >/dev/null 2>&1
+sudo -n /usr/sbin/sysadminctl -autologin set -userName mortimer-dev -password "$worker_login_password" \
+  -adminUser admin -adminPassword "$worker_admin_password" >/dev/null 2>&1
 sudo -n /usr/sbin/chown root:wheel /etc/kcpassword
 sudo -n /bin/chmod 600 /etc/kcpassword
+unset worker_login_password
 unset worker_admin_password
 sudo -n /bin/chmod o+x /Users/admin
 
