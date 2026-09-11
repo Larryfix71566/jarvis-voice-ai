@@ -16,7 +16,23 @@ struct VoiceWaveView: View {
     /// stale measurements expire even when callbacks stop. Nil retains rollback.
     var presentation: (() -> VoicePresentationState)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VoiceWaveAnimation(voiceState: voiceState, stageCenterX: stageCenterX,
+            wakePulse: wakePulse, presentation: presentation, reduceMotion: reduceMotion)
+    }
+}
+
+/// Separates the system accessibility setting from animation scheduling. The
+/// same content can be exercised with either setting without changing macOS.
+struct VoiceWaveAnimation: View {
+    let voiceState: VoiceState
+    var stageCenterX: CGFloat? = nil
+    var wakePulse: Int = 0
+    var presentation: (() -> VoicePresentationState)? = nil
+    let reduceMotion: Bool
     @State private var visible = false
+    @State private var windowVisible = false
     @State private var engine = WaveEngine()
 
     var body: some View {
@@ -24,7 +40,7 @@ struct VoiceWaveView: View {
         let active = (initial?.userLevel ?? 0) > 0 || (initial?.outputLevel ?? 0) > 0 ||
             initial?.activity == .thinking || initial?.activity == .connecting
         TimelineView(.animation(minimumInterval: presentation == nil ? nil : (active ? 1.0 / 60 : 1.0 / 15),
-                                paused: !visible || (presentation != nil && reduceMotion))) { timeline in
+                                paused: !visible || !windowVisible || (presentation != nil && reduceMotion))) { timeline in
             let current = presentation?()
             Canvas { context, size in
                 engine.draw(
@@ -39,8 +55,12 @@ struct VoiceWaveView: View {
             .accessibilityLabel(current?.label ?? voiceState.label)
             .accessibilityValue(current?.audioLevelUnavailable == true ? "Audio level unavailable" : "")
         }
+        .background(WindowVisibilityReader { windowVisible = $0 })
+        .onChange(of: windowVisible) { _, value in
+            if !value { engine.suspend() }
+        }
         .onAppear { visible = true }
-        .onDisappear { visible = false }
+        .onDisappear { visible = false; engine.suspend() }
         .allowsHitTesting(false)
         .onChange(of: wakePulse) { _, _ in
             engine.flashWake()
@@ -94,6 +114,14 @@ final class WaveEngine {
     private var lastState: VoiceState = .offline
     private var bootStart: Double = 0   // 0 = never booted = full amplitude
     private var wakeFlashStart: Double = 0   // 0 = no flash pending/active
+
+    /// Drop transient amplitude and pending wake flashes across invisibility.
+    func suspend() {
+        last = nil
+        level = 0
+        measuredEnvelope = VoiceEnvelope()
+        wakeFlashStart = 0
+    }
 
     /// Wake-detection flash: a ~0.9s glow + amplitude swell, decaying
     /// ease-out. Called from the view on each wakePulse.

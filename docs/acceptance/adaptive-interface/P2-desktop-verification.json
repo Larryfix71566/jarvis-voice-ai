@@ -1,0 +1,28 @@
+{
+  "scope": "Development GUI VM; not independent frozen acceptance",
+  "source_parent": "8feffd0",
+  "vm_task": "ab9c8fe5bf23",
+  "network": "offline",
+  "worker": "mortimer-dev",
+  "macos": "26.4",
+  "native_check": {
+    "name": "p2-ready-desktop-host",
+    "argv": [
+      "swift",
+      "test",
+      "--package-path",
+      "macos/MortimerHost"
+    ],
+    "returncode": 0,
+    "passed": true,
+    "seconds": 44.125,
+    "log_sha256": "72aa77fa7473319a136a5ae7c42c424dc8352befd6260640ac25725af3dcb51d"
+  },
+  "source_sha256": {
+    "macos/MortimerHost/Sources/MortimerHost/Console/VoiceWaveView.swift": "4e87930cf1274ce5c8bbb0078db0702fd813947cbee5ac18538ac9e3131b8781",
+    "macos/MortimerHost/Sources/MortimerHost/Console/WindowVisibilityReader.swift": "4e5e2699c258977ddc5ae885b15f178ed47d4deb9b0b81f6a115d78224ca10ff",
+    "macos/MortimerHost/Tests/MortimerHostTests/WindowVisibilityTests.swift": "e4c3b6c660172a1b068391fd445db37aa6495566c475ce26e75ec15554129a20",
+    "docs/acceptance/adaptive-interface/probes/WindowVisibilityProbe.swift": "516a0267745279ffeb3f9297dcd6dd9e782f6455d5b601485acc548a9ffe3edd"
+  },
+  "probe_result_sha256": "41a01f4ab72893b01f4672bff4d94053f71c96b040c6663c64bf897314a11c97"
+}

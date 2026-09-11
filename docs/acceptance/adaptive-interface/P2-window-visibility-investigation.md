@@ -161,3 +161,49 @@ These are development diagnostics, not a fresh frozen verification receipt or
 proof of desktop/visibility acceptance. Setup remains paused at the age-range
 selection pending Larry's confirmation. P2 live metering and hardware acceptance
 remain open independently of this runner correction.
+
+## Desktop recovered and native behavior checked
+
+On the next observation, setup had advanced to the Welcome screen. Computer Use
+completed Get Started and confirmed the worker desktop. The pending age-selection
+block above is superseded. The temporary `.gui-test-password` file was removed
+inside the VM after setup; its contents were not displayed or copied out.
+
+On this macOS 26.4 development VM, the original standalone probe passed all six
+show/hide/minimize/restore/detach checks. The complete host suite then exposed one
+initial-visibility failure among 118 tests: actual occlusion was visible while
+the observer still reported false. The failing log was preserved (SHA-256
+`038ae7d8a35c7ac466f0c31264b16fa760ec3c192a5b62480c5d874df8705b10`).
+No assertion or wait duration was weakened. The observer now also listens for
+completed window updates and reads visibility when its deferred callback is
+delivered. This fixes a pre-show value remaining cached until a later transition.
+The complete 118-test suite subsequently passed (log SHA-256
+`7f336cb578794c0e94d9c2217a581be0d2c5701707a87c98690fc463293d8f75`).
+
+The standalone probe was extended with real full-window occlusion/uncovering and
+application hide/unhide. All ten checks passed; the sanitized result is retained
+in `P2-window-visibility-probe-result.json`. These observe actual AppKit states,
+not synthetic notification posts.
+
+Two more tests mount the actual wave animation and count presentation requests:
+active visible animation requests new samples; hidden animation stops and resumes
+when shown; the reduced-motion animation remains static. SwiftUI's system
+Reduce Motion environment value is read-only, so an initial test-build failure
+was preserved (log SHA-256
+`852694a626cf1380fc9cb645f86210b912d0d4f12d96a11c2aa010fc83490baa`).
+The view now passes that system value to its shared animation content; tests
+supply the value to the same content without changing macOS preferences.
+
+Final result: all **120 host tests passed**, no skips, in 40.090 seconds of test
+execution (44.125 seconds for the verifier check including build/setup). Log
+SHA-256 `72aa77fa7473319a136a5ae7c42c424dc8352befd6260640ac25725af3dcb51d`.
+The four native window tests cover initial visibility, hide/show/minimize/detach,
+stale callback teardown, wave sampling suspension/resumption, and reduced motion.
+Exact source hashes and environment/check metadata are in
+`P2-desktop-verification.json`.
+
+This is positive development-VM evidence, not a new independent frozen receipt.
+The normal verification VM's GUI-session prerequisites still need resolving;
+do not skip these tests or count a headless failure as acceptance. System-setting
+toggle/VoiceOver acceptance, CPU/frame timing on the deployment hardware, real
+audio input/playout observations and the remaining hardware matrix stay open.

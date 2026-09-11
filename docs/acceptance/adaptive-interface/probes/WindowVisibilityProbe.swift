@@ -7,6 +7,7 @@ final class ProbeDelegate: NSObject, NSApplicationDelegate {
     var view: WindowVisibilityView!
     var reported: Bool?
     var checks: [[String: Any]] = []
+    var cover: NSWindow?
     func applicationDidFinishLaunching(_ notification: Notification) {
         view = WindowVisibilityView(frame: NSRect(x: 0, y: 0, width: 400, height: 240))
         view.changed = { [weak self] in self?.reported = $0 }
@@ -22,9 +23,37 @@ final class ProbeDelegate: NSObject, NSApplicationDelegate {
                     self.later { self.check("minimized", expected: false, condition: self.window.isMiniaturized)
                         self.window.deminiaturize(nil); self.window.makeKeyAndOrderFront(nil)
                         self.later { self.check("restored", expected: true, condition: !self.window.isMiniaturized)
-                            self.window.contentView = nil
-                            self.later { self.check("detached", expected: false); self.finish() }
+                            self.checkOcclusionAndApplicationHide()
                         }
+                    }
+                }
+            }
+        }
+    }
+    func checkOcclusionAndApplicationHide() {
+        let cover = NSWindow(contentRect: window.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        cover.isReleasedWhenClosed = false
+        cover.isOpaque = true
+        cover.backgroundColor = .black
+        cover.level = .floating
+        self.cover = cover
+        cover.orderFront(nil)
+        later {
+            self.check("fully-covered", expected: false, condition: !self.window.occlusionState.contains(.visible))
+            cover.orderOut(nil)
+            self.later {
+                self.check("uncovered", expected: true, condition: self.window.occlusionState.contains(.visible))
+                cover.close(); self.cover = nil
+                NSApp.hide(nil)
+                self.later {
+                    self.check("application-hidden", expected: false, condition: NSApp.isHidden)
+                    NSApp.unhide(nil)
+                    NSApp.activate(ignoringOtherApps: true)
+                    self.window.makeKeyAndOrderFront(nil)
+                    self.later {
+                        self.check("application-unhidden", expected: true, condition: !NSApp.isHidden)
+                        self.window.contentView = nil
+                        self.later { self.check("detached", expected: false); self.finish() }
                     }
                 }
             }

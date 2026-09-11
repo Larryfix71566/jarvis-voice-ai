@@ -1,0 +1,95 @@
+{
+  "checks" : [
+    {
+      "active" : true,
+      "expected" : true,
+      "name" : "shown",
+      "occlusion" : 8194,
+      "passed" : true,
+      "reported" : true,
+      "windowVisible" : true
+    },
+    {
+      "active" : true,
+      "expected" : false,
+      "name" : "hidden",
+      "occlusion" : 8192,
+      "passed" : true,
+      "reported" : false,
+      "windowVisible" : false
+    },
+    {
+      "active" : true,
+      "expected" : true,
+      "name" : "reshown",
+      "occlusion" : 8194,
+      "passed" : true,
+      "reported" : true,
+      "windowVisible" : true
+    },
+    {
+      "active" : true,
+      "expected" : false,
+      "name" : "minimized",
+      "occlusion" : 8192,
+      "passed" : true,
+      "reported" : false,
+      "windowVisible" : false
+    },
+    {
+      "active" : true,
+      "expected" : true,
+      "name" : "restored",
+      "occlusion" : 8194,
+      "passed" : true,
+      "reported" : true,
+      "windowVisible" : true
+    },
+    {
+      "active" : true,
+      "expected" : false,
+      "name" : "fully-covered",
+      "occlusion" : 8192,
+      "passed" : true,
+      "reported" : false,
+      "windowVisible" : true
+    },
+    {
+      "active" : true,
+      "expected" : true,
+      "name" : "uncovered",
+      "occlusion" : 8194,
+      "passed" : true,
+      "reported" : true,
+      "windowVisible" : true
+    },
+    {
+      "active" : false,
+      "expected" : false,
+      "name" : "application-hidden",
+      "occlusion" : 8192,
+      "passed" : true,
+      "reported" : false,
+      "windowVisible" : false
+    },
+    {
+      "active" : true,
+      "expected" : true,
+      "name" : "application-unhidden",
+      "occlusion" : 8194,
+      "passed" : true,
+      "reported" : true,
+      "windowVisible" : true
+    },
+    {
+      "active" : true,
+      "expected" : false,
+      "name" : "detached",
+      "occlusion" : 8194,
+      "passed" : true,
+      "reported" : false,
+      "windowVisible" : true
+    }
+  ],
+  "passed" : true
+}
