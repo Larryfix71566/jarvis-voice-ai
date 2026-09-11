@@ -35,6 +35,7 @@ struct OrbFieldView: View {
     let voiceState: VoiceState
     var compactPresentation = false
     var hidesLettering = false
+    var presentation: VoicePresentationState? = nil
     @EnvironmentObject private var client: JarvisClient
     @Environment(AgentRunStore.self) private var agentRuns
     @Environment(DrawerState.self) private var drawer
@@ -307,13 +308,16 @@ struct OrbFieldView: View {
                     .fill(labelColor)
                     .frame(width: 6, height: 6)
                     .modifier(DotPulse(active: dotPulses, period: dotPeriod))
-                Text(thinkingVisible ? "Thinking" : voiceState.label)
+                Text(presentation?.label ?? (thinkingVisible ? "Thinking" : voiceState.label))
                     .textCase(.uppercase)
                     .kerning(3.3)   // letter-spacing: 0.3em at 11px
             }
             .font(.system(size: 11, design: .monospaced))
             .foregroundStyle(labelColor)
             .shadow(color: voiceState == .speaking ? AppTheme.accentDim : .clear, radius: 5)
+            if presentation?.audioLevelUnavailable == true {
+                Text("Audio level unavailable").font(.caption2).foregroundStyle(AppTheme.textDim)
+            }
         }
         .allowsHitTesting(false)
     }

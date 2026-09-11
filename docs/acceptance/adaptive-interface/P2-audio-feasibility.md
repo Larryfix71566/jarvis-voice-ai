@@ -161,3 +161,30 @@ These types are compiled but not yet connected to the actual wave or transport.
 They establish presentation policy, not active metering or physical latency.
 The existing wave still has its simulated envelope; removing it from the new
 presentation and supplying proven observations remain required before P2 passes.
+
+## Adaptive renderer connected; live source still missing
+
+AdaptiveStageView now supplies VoicePresentationState to Silo and the preserved
+OrbField readout. Silo retains its layered geometry and explicit wake flash.
+The adaptive branch never calls simLevel: it smooths provided measured levels,
+uses teal for user and violet for assistant, and renders a static trace when
+measurements are missing. OrbField shows the derived status and an explicit
+Audio level unavailable message while preserving existing captions and notices.
+The previous layout's simulated path remains available only as the legacy
+rollback presentation. This change does not enable adaptive layout by default.
+
+Native rendered tests compare unavailable-speaking PNGs ten seconds apart
+(they are identical) and inspect actual rendered pixels for distinct teal and
+violet using synthetic measured inputs. `p2-wave-rendered-truth` passed the full
+116-test host suite, 36.658 verifier seconds; SHA-256:
+`f25de52955e453b56b25c22a75fca8d98164b80bbe29ead7c7dfe62e7787c2d2`.
+A subsequent source-only edit clarifies the renderer documentation.
+
+The adaptive production provider explicitly supplies no audio snapshot because
+P0 has not proven the observation source. Consequently live user audio does not
+yet drive the wave. These fixtures prove rendering behavior with supplied values,
+not microphone eligibility, playout timing, capture quality, or latency.
+The fallback is runtime resilience, not completion of P2. Actual observation
+adapter integration and paired hardware acceptance remain mandatory. Also verify
+window occlusion/minimization animation suspension and Reduce Motion on hardware;
+appear/disappear pausing alone is not full visibility acceptance.

@@ -1,26 +1,10 @@
 import SwiftUI
 
-/// VoiceWave — SILO-style voice display, ported EXACTLY from
-/// web/src/components/VoiceWave.tsx (the canvas math, layer stack,
-/// per-state targets, colors, easings and envelope are that file's
-/// values verbatim; deviations are marked).
-///
-/// A full-window horizontal sine field rendered behind everything.
-/// Silent states show a dim slow-breathing trace; while Mortimer speaks
-/// the wave blooms bright cyan-white. The central peak is a
-/// super-Gaussian window — the middle ~10% of the width holds >=94% of
-/// peak with fast falloff either side (the "tight in the middle" look).
-/// The peak follows the STAGE center, not the window center, so an open
-/// drawer slides the wave over (eased, never teleported).
-///
-/// Deviation from the web, on the record:
-///  - amplitude while speaking uses the web's own simulated-speech
-///    envelope (simLevel) — the real-audio AnalyserNode path needs an
-///    audio tap JarvisKit deliberately does not have yet (APP plan §2).
-///
-/// The wake-detection flash (previously deferred) is live: JarvisClient
-/// now publishes wakePulse and each pulse kicks a brief glow/amplitude
-/// swell, the wave's answer to the web's wake flash.
+/// Silo's original layered sine geometry, with separate adaptive and rollback
+/// presentation paths. Adaptive amplitude uses only supplied measured levels;
+/// missing levels produce a static trace and accessible unavailable detail.
+/// The legacy layout retains its original simulated envelope for rollback.
+/// Wake flashes remain explicit wake-event feedback, never speech evidence.
 struct VoiceWaveView: View {
     let voiceState: VoiceState
     /// Stage horizontal center in window coordinates; nil = window center.
@@ -28,20 +12,35 @@ struct VoiceWaveView: View {
     /// JarvisClient.wakePulse — a change triggers the wake flash.
     var wakePulse: Int = 0
 
+    /// Adaptive presentation supplies current truth on each display tick so
+    /// stale measurements expire even when callbacks stop. Nil retains rollback.
+    var presentation: (() -> VoicePresentationState)? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var visible = false
     @State private var engine = WaveEngine()
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        let initial = presentation?()
+        let active = (initial?.userLevel ?? 0) > 0 || (initial?.outputLevel ?? 0) > 0 ||
+            initial?.activity == .thinking || initial?.activity == .connecting
+        TimelineView(.animation(minimumInterval: presentation == nil ? nil : (active ? 1.0 / 60 : 1.0 / 15),
+                                paused: !visible || (presentation != nil && reduceMotion))) { timeline in
+            let current = presentation?()
             Canvas { context, size in
                 engine.draw(
                     context: &context,
                     size: size,
-                    now: timeline.date.timeIntervalSinceReferenceDate,
+                    now: ProcessInfo.processInfo.systemUptime,
                     state: voiceState,
-                    stageCenterX: stageCenterX
+                    stageCenterX: stageCenterX,
+                    presentation: current, reduceMotion: reduceMotion
                 )
             }
+            .accessibilityLabel(current?.label ?? voiceState.label)
+            .accessibilityValue(current?.audioLevelUnavailable == true ? "Audio level unavailable" : "")
         }
+        .onAppear { visible = true }
+        .onDisappear { visible = false }
         .allowsHitTesting(false)
         .onChange(of: wakePulse) { _, _ in
             engine.flashWake()
@@ -89,6 +88,7 @@ final class WaveEngine {
                           cr: 95, cg: 130, cb: 150)
     private var p1 = 0.0, p2 = 0.0, p3 = 0.0
     private var level = 0.0
+    private var measuredEnvelope = VoiceEnvelope()
     private var cxEased = -1.0
     private var last: Double?
     private var lastState: VoiceState = .offline
@@ -108,10 +108,15 @@ final class WaveEngine {
     }
 
     func draw(context: inout GraphicsContext, size: CGSize, now: Double,
-              state: VoiceState, stageCenterX: CGFloat?) {
-        let dt = min(now - (last ?? now), 0.1)
+              state: VoiceState, stageCenterX: CGFloat?,
+              presentation: VoicePresentationState? = nil, reduceMotion: Bool = false) {
+        let staticTrace = presentation.map { value in
+            reduceMotion || (value.userLevel == nil && value.outputLevel == nil &&
+                value.activity != .thinking && value.activity != .connecting)
+        } ?? false
+        let dt = staticTrace ? 0 : max(0, min(now - (last ?? now), 0.1))
         last = now
-        let t = now
+        let t = staticTrace ? 0 : now
 
         // E2 boot ramp: rises from flatline over 900ms when a connection
         // arrives (offline/connecting -> listening/speaking).
@@ -121,11 +126,15 @@ final class WaveEngine {
         }
         lastState = state
 
-        // --- voice level: simulated when speaking (fast attack, slow
-        // release — feels like a VU meter) ---
-        let target = state == .speaking ? simLevel(t) : 0
-        level = target > level ? level + (target - level) * 0.45
-                               : level + (target - level) * 0.06
+        // Adaptive levels are measured; only the legacy rollback uses simulation.
+        if let presentation {
+            let target = presentation.activity == .user ? presentation.userLevel : presentation.outputLevel
+            level = measuredEnvelope.advance(target: target, now: now)
+        } else {
+            let target = state == .speaking ? simLevel(t) : 0
+            level = target > level ? level + (target - level) * 0.45
+                                   : level + (target - level) * 0.06
+        }
 
         // --- ease dynamics + color toward the current state (0.06) ---
         let tg = Self.targets[state]!
@@ -137,6 +146,18 @@ final class WaveEngine {
         dyn.cr += (tr - dyn.cr) * 0.06
         dyn.cg += (tgc - dyn.cg) * 0.06
         dyn.cb += (tb - dyn.cb) * 0.06
+
+        if let presentation {
+            let color = presentation.activity == .user ? (45.0, 212.0, 191.0) :
+                (presentation.activity == .assistant || presentation.activity == .thinking ?
+                    (167.0, 139.0, 250.0) : (95.0, 130.0, 150.0))
+            dyn.cr = color.0; dyn.cg = color.1; dyn.cb = color.2
+            dyn.base = 0.004
+            dyn.alpha = presentation.activity == .offline ? 0.16 : 0.65
+            dyn.glow = staticTrace ? 0 : 0.4
+            dyn.speed = staticTrace ? 0 : 0.45
+            if staticTrace { p1 = 0; p2 = 0; p3 = 0 }
+        }
 
         p1 += dt * 2.2 * dyn.speed
         p2 -= dt * 3.1 * dyn.speed
@@ -152,8 +173,9 @@ final class WaveEngine {
         let cx = cxEased
         let cy = h * 0.5
 
-        let breath = state == .listening ? 0.004 + 0.004 * sin(t * 0.9) : 0
-        let voice = state == .speaking ? level * 0.115 : 0
+        let breath = presentation == nil ? (state == .listening ? 0.004 + 0.004 * sin(t * 0.9) : 0) :
+            (presentation?.activity == .thinking && !reduceMotion ? 0.004 * (1 + sin(t * 0.9)) : 0)
+        let voice = presentation == nil ? (state == .speaking ? level * 0.115 : 0) : level * 0.115
         var bootRamp = 1.0
         if bootStart > 0 {
             let p = min(1, (now - bootStart) / Self.bootRampSeconds)
@@ -168,6 +190,8 @@ final class WaveEngine {
             if p < 1 { flash = 1 - p * (2 - p) } else { wakeFlashStart = 0 }
         }
 
+        if presentation != nil { bootRamp = 1 }
+        if presentation != nil && reduceMotion { flash = 0 }
         let amp = h * (dyn.base + breath + voice + 0.01 * flash) * Self.ampScale * bootRamp
         let alpha = min(1, dyn.alpha + 0.4 * flash)
         let glow = min(1, dyn.glow + flash)
@@ -203,7 +227,9 @@ final class WaveEngine {
                 glowContext.addFilter(.blur(radius: 13 * glow))
                 glowContext.stroke(
                     path,
-                    with: .color(Color(red: 44 / 255, green: 201 / 255, blue: 1.0)
+                    with: .color(Color(red: presentation == nil ? 44 / 255 : r / 255,
+                                       green: presentation == nil ? 201 / 255 : g / 255,
+                                       blue: presentation == nil ? 1 : b / 255)
                         .opacity(0.75 * glow * layer.aMul)),
                     style: StrokeStyle(lineWidth: layer.width * 2, lineJoin: .round)
                 )
