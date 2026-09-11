@@ -69,3 +69,23 @@ After correction:
 Full seeded/normal/reverse checks must pass again after this fixture correction.
 The failed run remains failed evidence; the focused reproduction is not a
 substitute for those complete reruns or the remaining release gates.
+
+## Corrected full-suite results and review artifact
+
+After local fixture commit `0fb982b`:
+- `p6-corrected-seeded` (seed 20260911): 2,458 passed, 4 existing live skips,
+  27 warnings; verifier 434.289 seconds. SHA-256
+  `6f2ab5c9549ad3f3c5029801b36441455e032666199896c27382ed381e740fa6`.
+- `p6-corrected-normal`: 2,458 passed, 4 existing live skips, 27 warnings;
+  verifier 374.878 seconds. SHA-256
+  `9b30c0c6a2753e7aad3bb0b4d794835414f497e7a1ec3b75f9a5e56d0a73fc14`.
+- Corrected reverse-order execution remains pending at this record's update.
+
+The isolated fixture correction is draft PR #65:
+https://github.com/Larryfix71566/jarvis-voice-ai/pull/65
+Remote commit `a3293cb7327683e38c3f43869c12dd0b34032ed5` is based on current main
+`d36299bc899adc822f04c4e4991cb5a86b27ce1b` and changes only the reviewed test file.
+Its blob `6bd7295caf52a93437cac8cccb58ce16b90e334a` matches the locally tested
+file exactly. It does not publish or establish acceptance of the UI phases.
+The plan PR #64 was independently confirmed merged. No implementation PR was
+merged and no application deployment occurred during this work.
