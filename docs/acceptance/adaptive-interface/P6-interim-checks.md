@@ -178,3 +178,21 @@ addition is later and does not retroactively change the receipt. The full-profil
 pass does not complete P2, physical-device/display acceptance, all interaction or
 accessibility/performance gates, final integration orders after further code
 changes, phase PR review, or release authorization.
+
+## Full console across planned window shapes
+
+The existing minimum-console test now repeats its original checks at 900×600,
+1280×800, 1440×900, 2560×1080 and 900×1440 logical points. It asserts the actual
+rendered dimensions, selected Output label and microphone/wake control frames,
+and unchanged result/tab selection. Ultrawide and portrait renderings were also
+visually inspected: the voice rail/bottom adaptation and results/sidecar remain
+separate, with fixed top/bottom controls inside the window.
+
+Full host sandbox check `p6-console-dimensions`: 106 tests, zero failures; verifier
+24.712 seconds. Log SHA-256:
+`cf2ab75d9489d444630350da9b3e0dd9bd7f1a087d92ac9bde85399521a816e9`.
+These are native offscreen-cache fixtures with an offline client and one synthetic
+result, not physical ultrawide/portrait display or multi-monitor trials. They do
+not verify connected notices, every payload, accessibility scaling, all status
+scrolling or resize gestures. The earlier frozen-profile receipt remains tied to
+its earlier source snapshot, not these later test and graph-history changes.

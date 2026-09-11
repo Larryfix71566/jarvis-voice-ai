@@ -31,12 +31,13 @@ final class FullConsoleRenderingTests: XCTestCase {
             from: Data(#"{"body":"Synthetic research result for minimum console acceptance.","surface":"drawer"}"#.utf8))
         let result = WorkspaceResult(payload: payload)
         workspace.receive(result); output.apply(payload, workspaceID: result.id)
+        for (width, height) in [(900, 600), (1280, 800), (1440, 900), (2560, 1080), (900, 1440)] {
         let view = NSHostingView(rootView: ConsoleView().defaultAppStorage(defaults)
             .environmentObject(client).environment(AgentRunStore()).environment(output)
             .environment(workspace).environment(ConversationStore()).environment(DisplayWindowStore())
             .environment(drawer).environment(DrawerModels()).environment(ConsoleOverlayState())
             .environment(ConsoleNoticeState()).preferredColorScheme(.dark))
-        view.frame = NSRect(x: 0, y: 0, width: 900, height: 600)
+        view.frame = NSRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height))
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
         defer { window.close() }
@@ -57,12 +58,15 @@ final class FullConsoleRenderingTests: XCTestCase {
             let frame = try XCTUnwrap(control.value(forKey: "accessibilityFrame") as? NSValue).rectValue
             XCTAssertTrue(viewport.insetBy(dx: -1, dy: -1).contains(frame), "Clipped \(label): \(frame)")
         }
+        XCTAssertEqual(view.bounds.width, CGFloat(width))
+        XCTAssertEqual(view.bounds.height, CGFloat(height))
         XCTAssertEqual(workspace.activeID, result.id)
         XCTAssertEqual(drawer.activeTab, "output")
         let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: bitmap)
         let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(".build/interface-fixtures")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: directory.appendingPathComponent("console-900-600.png"))
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: directory.appendingPathComponent("console-\(width)-\(height).png"))
+        }
     }
 }
