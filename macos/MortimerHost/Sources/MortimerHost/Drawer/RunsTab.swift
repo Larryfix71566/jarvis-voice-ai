@@ -23,19 +23,39 @@ final class RunsViewModel {
     var statusFilter: String? { didSet { if statusFilter != oldValue { refreshSoon() } } }
     var detail: RunDetail?
     var detailRunId: String?
+    private(set) var detailError: String?
+    @ObservationIgnored private var listGeneration = 0
+    @ObservationIgnored private var detailGeneration = 0
+    @ObservationIgnored private var filterTask: Task<Void, Never>?
+    @ObservationIgnored private var detailTask: Task<Void, Never>?
+    @ObservationIgnored private let fetchList: @Sendable (AdminAPI, String?, String?) async throws -> RunsList
+    @ObservationIgnored private let fetchDetail: @Sendable (AdminAPI, String) async throws -> RunDetail
     private var pollTask: Task<Void, Never>?
     private var stopped = false
 
     private func refreshSoon() {
-        Task { await refresh() }
+        listGeneration += 1
+        filterTask?.cancel()
+        state = .loading
+        filterTask = Task { [weak self] in await self?.refresh() }
     }
 
-    init(api: AdminAPI) { self.api = api }
+    init(api: AdminAPI,
+         fetchList: @escaping @Sendable (AdminAPI, String?, String?) async throws -> RunsList = { api, agent, status in
+             try await api.runsTyped(agent: agent, status: status)
+         },
+         fetchDetail: @escaping @Sendable (AdminAPI, String) async throws -> RunDetail = { api, id in
+             try await api.runTyped(id: id)
+         }) {
+        self.api = api; self.fetchList = fetchList; self.fetchDetail = fetchDetail
+    }
 
     func updateAPI(_ api: AdminAPI) {
         stopPolling()
         self.api = api
         stopped = false
+        detailGeneration += 1; detailTask?.cancel(); detailTask = nil
+        if let id = detailRunId { loadDetail(runId: id, force: true) }
     }
 
     func startPolling() {
@@ -50,29 +70,50 @@ final class RunsViewModel {
     }
 
     func stopPolling() {
+        listGeneration += 1
+        filterTask?.cancel(); filterTask = nil
         pollTask?.cancel()
         pollTask = nil
     }
 
     func refresh() async {
+        guard !Task.isCancelled else { return }
+        listGeneration += 1
+        let generation = listGeneration
+        let agent = agentFilter, status = statusFilter, api = api
         do {
-            let list = try await api.runsTyped(agent: agentFilter, status: statusFilter)
-            guard !Task.isCancelled else { return }
+            let list = try await fetchList(api, agent, status)
+            guard !Task.isCancelled, generation == listGeneration,
+                  agent == agentFilter, status == statusFilter else { return }
             state = TabStateMapper.map(ok: list.ok, error: nil, isEmpty: list.runs.isEmpty, value: list.runs)
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, generation == listGeneration,
+                  agent == agentFilter, status == statusFilter else { return }
             let (message, unauthorized) = TabStateMapper.fromError(error)
             state = .error(message)
             if unauthorized { stopped = true; stopPolling() }
         }
     }
 
-    func loadDetail(runId: String) {
-        if detailRunId == runId { detailRunId = nil; detail = nil; return }
-        detailRunId = runId
-        detail = nil
-        Task {
-            detail = try? await api.runTyped(id: runId)
+    func loadDetail(runId: String, force: Bool = false) {
+        detailGeneration += 1
+        detailTask?.cancel(); detailTask = nil
+        detailError = nil
+        if detailRunId == runId && !force { detailRunId = nil; detail = nil; return }
+        detailRunId = runId; detail = nil
+        let generation = detailGeneration, api = api, fetch = fetchDetail
+        detailTask = Task { [weak self] in
+            do {
+                let response = try await fetch(api, runId)
+                guard !Task.isCancelled, let self, self.detailGeneration == generation,
+                      self.detailRunId == runId else { return }
+                self.detail = response; self.detailTask = nil
+            } catch {
+                guard !Task.isCancelled, let self, self.detailGeneration == generation,
+                      self.detailRunId == runId else { return }
+                self.detailError = TabStateMapper.fromError(error).0
+                self.detailTask = nil
+            }
         }
     }
 
@@ -201,7 +242,12 @@ struct RunsTab: View {
 
     @ViewBuilder
     private var detailView: some View {
-        if let detail = model.detail {
+        if let error = model.detailError {
+            Text(error).foregroundStyle(AppTheme.red).font(.caption)
+            if let id = model.detailRunId {
+                Button("Retry details") { model.loadDetail(runId: id, force: true) }
+            }
+        } else if let detail = model.detail {
             if let error = detail.error {
                 Text(error).foregroundStyle(AppTheme.red).font(.caption)
             }

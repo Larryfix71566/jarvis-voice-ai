@@ -59,3 +59,26 @@ Full `swift test --package-path macos/MortimerHost`, no skipped tests.
   graph interaction timing and audio/hardware acceptance across the full plan.
 - Dual-speaker audio remains unimplemented. Passing this phase's tests is not
   evidence that P2 or the overall plan is complete.
+
+## Runs request ownership follow-up
+
+Starting application commit `ca38c1f`. The app-owned Runs model now rejects
+obsolete list responses after filter/configuration changes and obsolete detail
+responses after selecting or closing a run. Cancelled queued refresh tasks exit
+before starting a request or invalidating a newer generation. Detail failures
+produce a readable error and explicit Retry details action instead of an endless
+spinner. Existing typed APIs, tab filters, polling interval and drawer ownership
+remain intact; no backend or permission change.
+
+Offline sandbox check `p5-run-queued-cancellation`: all 94 host tests pass, no
+skips. SHA-256:
+`1f5f45555b939843d127930c7697da529661c4a64fae99edb70b16cebfcc3263`.
+Four added tests exercise stale filter authorization errors, late detail replies
+including closing the selected run, failed details, and cancelled queued refresh
+without another request. These are injected asynchronous reads, not real HTTP
+poll-count, credential replacement or pointer/window acceptance. Those broader
+checks remain open.
+
+The separate P2-audio-feasibility record contains current installed-header
+inspection. It explicitly leaves measured microphone/playout feedback unresolved.
+No merge or deployment occurred.
