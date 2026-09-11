@@ -224,3 +224,19 @@ same node ID, and checks text invalidation with selection preserved. Another wai
 for an old detail request to start, selects a different node, and verifies that
 the old response returning despite cancellation cannot populate the new inspector.
 These tests do not establish real-service freshness or integrated UI acceptance.
+
+## Back restores the complete inspected graph state
+
+History entries now retain the selected relationship, path endpoints, search text
+and inspector visibility alongside the existing graph, camera, node selection,
+filters and positions. Back restores those values and reconciles selected IDs
+against the saved graph. The existing 20-entry history bound remains. Separately
+fetched full-fact text is not restored as current data.
+
+Full sandbox host check `p4-back-view-state`: 106 tests, zero failures; verifier
+90.316 seconds including rebuilding after VM restart. Log SHA-256:
+`677f0b255aff6a5f69ea3fb7a188baf5fb95f9e576f2f7feb7a40a2acda964c2`.
+The regression creates a traced path and relationship selection, focuses another
+graph, changes the search/selection/inspector, then verifies Back restores the
+saved view state. This is store-level navigation evidence; real interaction,
+performance and other P4/P6 acceptance requirements remain open.

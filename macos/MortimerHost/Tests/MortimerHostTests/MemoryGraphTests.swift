@@ -226,6 +226,27 @@ final class MemoryGraphStoreTests: XCTestCase {
         XCTAssertEqual(store.metadata.hiddenEdgeTypes, ["child_of"])
     }
 
+    func testBackRestoresRelationshipPathSearchAndInspectorState() async throws {
+        let store = MemoryGraphStore(), graph = try GraphFixture.make()
+        await loaded(store, response: graph)
+        store.select("fact:0"); store.traceFromSelection()
+        store.select("fact:2"); store.traceToSelection()
+        store.select(edge: graph.edges[0])
+        store.search = "Synthetic node 2"; store.showsInspector = false
+        let path = store.tracedPath
+        store.load(query: MemoryGraphQuery(focus: "fact:3"), remember: true) { _ in graph }
+        await settle(store)
+        store.select("fact:3"); store.clearPath(); store.search = "other"; store.showsInspector = true
+        store.back()
+        XCTAssertEqual(store.selectedEdge, graph.edges[0])
+        XCTAssertEqual(store.selectedNode?.id, "fact:2")
+        XCTAssertEqual(store.pathStart, "fact:0")
+        XCTAssertEqual(store.pathEnd, "fact:2")
+        XCTAssertEqual(store.tracedPath, path)
+        XCTAssertEqual(store.search, "Synthetic node 2")
+        XCTAssertFalse(store.showsInspector)
+    }
+
     func testRefreshPreservesNodeDraggedWhileRequestIsInFlight() async throws {
         let store = MemoryGraphStore(), graph = try GraphFixture.make()
         await loaded(store, response: graph)

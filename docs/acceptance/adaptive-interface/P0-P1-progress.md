@@ -116,3 +116,18 @@ environment key as read-only; it was corrected to use the actual system setting
 and allow the existing animation to settle. No production change or weakened
 assertion was needed. This does not claim a Reduce Motion test, physical pointer
 or wheel input, keyboard navigation, or all-tab-body acceptance.
+
+## Isolated P1 review artifact
+
+Draft PR #66: https://github.com/Larryfix71566/jarvis-voice-ai/pull/66
+Remote commit `fdf1b89d768c1ed9c9b056a61ecd00f30a52f673` has tree
+`38d1f111847668bd2ccdcf261af480878503992b`, identical to isolated local commit
+`92ff56f25546b72669615f9095478aa2120f8eeb`. The five-file phase preserves the
+original tab bodies and view-model ownership, separating later P3/P5 changes.
+
+All 12 installed profile gates passed in independent attempt
+`2d8a311c8cc9454499bda7a25cbb9b13`, development task `091a6729bb74`, with
+unchanged frozen source `8756eddb4d6e08934c0e36e10f28a3ea17ec1527de5b3f104239bd1b56babf9a`.
+Candidate native app: 48 tests, zero failures. Receipt validation checked all
+log hashes. The PR remains draft pending GitHub CI and the explicitly listed
+manual P1 acceptance. It has not been merged or deployed.

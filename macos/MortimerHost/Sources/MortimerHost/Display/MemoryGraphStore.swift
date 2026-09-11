@@ -51,7 +51,16 @@ final class MemoryGraphStore {
     @ObservationIgnored private var request: Task<Void, Never>?
     @ObservationIgnored private var detailRequest: Task<Void, Never>?
     @ObservationIgnored private var resetRequest: Task<Void, Never>?
-    @ObservationIgnored private var history: [(MemoryGraphResponse?, MemoryGraphMetadata)] = []
+    private struct HistoryEntry {
+        let graph: MemoryGraphResponse?
+        let metadata: MemoryGraphMetadata
+        let selectedEdge: MemoryGraphEdge?
+        let pathStart: String?
+        let pathEnd: String?
+        let search: String
+        let showsInspector: Bool
+    }
+    @ObservationIgnored private var history: [HistoryEntry] = []
     @ObservationIgnored private let persistenceKey: String?
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -100,7 +109,11 @@ final class MemoryGraphStore {
     func load(query: MemoryGraphQuery? = nil, remember: Bool = false,
               fetch: @escaping @Sendable (MemoryGraphQuery) async throws -> MemoryGraphResponse) {
         hasRequested = true
-        if remember { history.append((graph, metadata)); history = Array(history.suffix(20)) }
+        if remember {
+            history.append(HistoryEntry(graph: graph, metadata: metadata, selectedEdge: selectedEdge,
+                pathStart: pathStart, pathEnd: pathEnd, search: search, showsInspector: showsInspector))
+            history = Array(history.suffix(20))
+        }
         let next = query ?? metadata.query
         let preserving = metadata.positions
         cancel()
@@ -157,9 +170,11 @@ final class MemoryGraphStore {
     func back() {
         guard let previous = history.popLast() else { return }
         cancel()
-        graph = previous.0; metadata = previous.1
-        error = nil; selectedEdge = nil; fullDetail = nil; detailError = nil
-        pathStart = nil; pathEnd = nil
+        graph = previous.graph; metadata = previous.metadata
+        error = nil; selectedEdge = previous.selectedEdge; fullDetail = nil; detailError = nil
+        pathStart = previous.pathStart; pathEnd = previous.pathEnd
+        search = previous.search; showsInspector = previous.showsInspector
+        reconcileSelection()
         persist()
     }
 
