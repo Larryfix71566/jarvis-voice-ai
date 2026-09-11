@@ -87,3 +87,28 @@ Any observer must reject repeated/older timestamps, bind to the current session
 and track, and expire stale levels independently of callback arrival. Receiver
 statistics still need separate evidence of actual playout correspondence. P2
 remains incomplete; no production transport, meter or wave behavior changed.
+
+## Muted connected-peer receiver schema probe
+
+A second disposable probe exchanges local SDP between two peer connections inside
+the offline VM. Both tracks are disabled before adding them; no production
+signalling, credentials, enabled microphone or private audio is used. Source:
+`probes/ConnectedAudioStatisticsProbeTests.swift`. Copy it into the disposable
+JarvisKitTests directory, run its named filter, then remove it; it is not part of
+the ordinary test suite or application target.
+
+Check `p2-muted-connected-probe`: exit 0, 8.499 verifier seconds; log SHA-256
+`d00a4d3067ef8fe3eddbd2462de8b9cbcfc0a93dbdca3523a74d0e258933ba1a`.
+The runtime reported peer connection state raw value 2 and ICE state 3. It exposed
+inbound-rtp, outbound-rtp and media-source audio records. Inbound keys included
+totalAudioEnergy, totalSamplesDuration, totalSamplesReceived, jitterBufferDelay
+and jitterBufferEmittedCount. The inspected receiver record did not include
+`audioLevel`; no media-playout record was observed. Energy/sample counters were
+zero, so this is a negotiated schema probe, not proof of active audio decoding or
+physical playout. It cannot establish whether extra fields appear with live media.
+
+The result strengthens the need for active audio trials: cumulative receiver
+energy may describe decoded/received audio and must not be labeled actual speaker
+output without alignment measurements. Source levels remain a candidate input
+signal, not proof of processed user-speech eligibility or echo rejection. P2 stays
+incomplete, with no production visualization or transport changes from this probe.
