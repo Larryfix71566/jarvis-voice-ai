@@ -68,3 +68,34 @@ host suite. Keep the current assertions and report all initial failures. Also
 verify actual occlusion, application hide/unhide, callback teardown and the
 wave's display scheduling. Do not claim all visibility requirements from just
 an NSView disappear callback or a successful offscreen screenshot.
+
+## Fresh-clone follow-up and approval constraint
+
+A fresh offline development task `ab9c8fe5bf23` was created in session
+`9d49cb3a928943de994a888d497c9933`. The previous task remains preserved.
+The fresh task hydrated successfully and received the unfinished visibility
+sources/tests. Its worker remains UID 502 without sudo rights.
+
+On this host, restricted-shell Tart calls timed out whereas the scoped controller
+channel used to launch the VM successfully returned the guest identity. Do not
+restart merely because a restricted observation times out: confirm the existing
+VM through the working channel and wait for any cleanup process to terminate.
+
+The fresh GUI worker authenticated successfully and was configured for automatic
+login. In its own logged-in session, sysadminctl explicitly reported screenLock
+is off. A private synthetic one-time credential remains inside the disposable
+worker home at `.gui-test-password` for controlled setup; it must not be printed
+or copied into the repository and should be removed after setup is resolved.
+No production account or credential was used.
+
+The normal-app probe nevertheless still failed shown/reshown/restored acceptance.
+Screen-lock policy being off is not proof that the current screen is unlocked.
+The current probe result is retained in the local window-visibility-probe work
+directory; do not treat any successful hide/detach subset as overall acceptance.
+
+A Computer Use attempt reported pending host Accessibility and Screen Recording
+permissions. Larry stated that he cannot approve inside the VM. Stop that UI
+route rather than repeatedly requesting approval or bypassing it with another
+UI automation technology. The pending Computer Use permission belongs to the
+host, and has not been granted. Continue independent controller/repository work;
+GUI acceptance remains open. No visibility assertion has been removed or relaxed.
