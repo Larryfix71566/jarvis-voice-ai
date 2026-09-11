@@ -6,7 +6,9 @@ struct DrawerTabStrip: View {
     let attention: [String: Color]
     let select: (String) -> Void
 
-    @ScaledMetric(relativeTo: .caption) private var tabHeight: CGFloat = 32
+    var textSize: Double = 11
+    private var labelSize: CGFloat { CGFloat(min(22, max(11, textSize.isFinite ? textSize : 11))) }
+    private var tabHeight: CGFloat { max(32, labelSize + 20) }
     @State private var tabViewport = TabStripViewport()
     @State private var tabFrames: [String: CGRect] = [:]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -43,6 +45,9 @@ struct DrawerTabStrip: View {
                         // Shared setter includes voice commands and restored preferences.
                         proxy.scrollTo(tab)
                     }
+                    .onChange(of: tabViewport.contentWidth) { _, _ in
+                        proxy.scrollTo(selectedTab)
+                    }
                     .onChange(of: tabViewport.width) { _, _ in
                         proxy.scrollTo(selectedTab)
                     }
@@ -62,7 +67,7 @@ struct DrawerTabStrip: View {
             HStack(spacing: 6) {
                 Text(DrawerState.tabLabels[key] ?? key)
                     .textCase(.uppercase)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.system(size: labelSize, design: .monospaced))
                     .kerning(1.2)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)

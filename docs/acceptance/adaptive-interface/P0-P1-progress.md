@@ -131,3 +131,45 @@ unchanged frozen source `8756eddb4d6e08934c0e36e10f28a3ea17ec1527de5b3f104239bd1
 Candidate native app: 48 tests, zero failures. Receipt validation checked all
 log hashes. The PR remains draft pending GitHub CI and the explicitly listed
 manual P1 acceptance. It has not been merged or deployed.
+
+## Enlarged-text probe: acceptance remains open
+
+The strengthened `p1-accessibility-text-measured` sandbox check failed on
+2026-09-11: one test, 16 assertions, with every selected control still 32 points
+high after applying `.dynamicTypeSize(.accessibility3)`. Log SHA-256:
+`50ada9a3c0a56338af49d1555f7d318c77e25f57bb958a166f28676c8d0c02ad`.
+The earlier `p1-accessibility-text` pass did not measure enlargement and must
+not be used as enlarged-text acceptance evidence.
+
+Apple's EnvironmentValues.dynamicTypeSize documentation explicitly says that
+on macOS the value does not affect text size:
+https://developer.apple.com/documentation/swiftui/environmentvalues/dynamictypesize
+This explains the ineffective fixture, rather than proving that real enlarged
+text has been tested. The current ScaledMetric is not evidence of macOS text
+scaling support.
+
+Next implementation must provide a real, user-reachable text-size mechanism
+(or verify a supported native mechanism), size the strip from that typography,
+and test actual label enlargement as well as complete label visibility. A
+test-only size injection with no production path is insufficient. Preserve
+the failing assertion until the replacement measures that behavior; do not
+lower its threshold or mark this requirement accepted. The isolated P1 PR
+and its earlier receipt do not include this probe or resolve this gate.
+
+### Real tab typography implementation
+
+DrawerView now exposes a fixed Aa menu with Standard (11pt), Large (16pt)
+and Extra large (22pt) tab typography, stored separately from existing drawer
+preferences. DrawerTabStrip sizes its actual font and header height from this
+value, clamps malformed values, and reveals the selected tab after content
+width changes. This changes header typography only, not tab contents.
+
+Offline check `p1-real-tab-text-size` passed the full host suite (107 tests),
+30.745 seconds; SHA-256
+`9122a9a3e78ed93a6ce93f5806d5b3568dca0141790604c1929f132af07b40a7`.
+The enlarged fixture now uses the same 22pt production parameter, retains
+the greater-than-32pt control assertion, and checks all eight selected labels
+in both directions at a 300pt strip width. This resolves the ineffective
+Dynamic Type fixture; it does not establish actual menu interaction, preference
+restoration, complete drawer chrome fit, or comprehensive large-text acceptance.
+Those remain required, including mounted size changes without selection loss.

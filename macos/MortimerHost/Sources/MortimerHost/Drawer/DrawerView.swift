@@ -17,6 +17,7 @@ struct DrawerView: View {
 
     @Environment(DrawerModels.self) private var models
     @State private var visibilityLease = UUID()
+    @AppStorage("mortimer.interface.sidecarTabTextSize") private var tabTextSize = 11.0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -53,7 +54,20 @@ struct DrawerView: View {
             DrawerTabStrip(selectedTab: drawer.activeTab,
                            attention: Dictionary(uniqueKeysWithValues: DrawerState.tabKeys.compactMap { key in
                                tabDot(key).map { (key, $0) }
-                           }), select: drawer.setTab)
+                           }), select: drawer.setTab, textSize: tabTextSize)
+            Menu {
+                Picker("Tab text size", selection: $tabTextSize) {
+                    Text("Standard").tag(11.0)
+                    Text("Large").tag(16.0)
+                    Text("Extra large").tag(22.0)
+                }
+            } label: {
+                Text("Aa").font(.system(size: 13))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .accessibilityLabel("Sidecar tab text size")
+            .help("Change the size of sidecar tab names")
             if !drawer.isPoppedOut {
                 Button {
                     drawer.placementRef?.popOutDrawer()   // same call drawer_popout makes
