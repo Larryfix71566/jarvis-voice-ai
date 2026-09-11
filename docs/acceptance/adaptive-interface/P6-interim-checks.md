@@ -107,3 +107,27 @@ The check-runs response supplied the actual outcomes. The validate job finished
 at 05:29:17 UTC. These results cover the isolated fixture PR only, not unsubmitted
 native interface changes or real hardware acceptance. No merge or deployment was
 performed and the PR remains draft for review.
+
+## Minimum full-console native fixture
+
+Added a native ConsoleView fixture at 900×600 logical points with adaptive layout,
+400-point requested drawer width, Output selected, one synthetic result in both
+its existing Output home and the central workspace, and an offline client. The
+fixture verifies the selected Output header and microphone/wake control frames
+are inside the full window and preserves selected result/tab identity. Drawer
+preferences are restored after the fixture and adaptive preferences use an
+isolated defaults suite. No production connection is established.
+
+The initial full rendering was visually inspected: research copy and result
+controls fit, the selected Output label is fully visible with overflow arrows,
+and the bottom microphone controls remain reachable. The compact status region
+is scrollable; this image does not prove scrolling every notice or agent entry.
+
+Final full host check `p6-minimum-console-isolated`: 103 tests, zero failures;
+verifier 13.051 seconds. Log SHA-256:
+`d44ac0f6d3f02cc3588015d7195eca43b33ac09cc3587d3dc44e12dac0634f6a`.
+The initial render check was `p6-minimum-console`, SHA-256
+`0ada899db53c03ffcc231c727e5e93fe9abfc208b96d4b3923d216d67a246088`.
+This covers one full-console offline state. All-tab interactions, connected voice,
+long/error payloads, text scaling, other screen dimensions and physical monitor
+acceptance remain separate open requirements.
