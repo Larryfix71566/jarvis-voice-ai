@@ -147,3 +147,22 @@ control label and unchanged conversation selection. Both 1000×600 offline
 renderings were visually inspected. This does not prove actual toggle interaction,
 minimum-width controls, live audio, or full-console acceptance. The wave remains
 simulated pending P2; this preference is not evidence of measured metering.
+
+## Compact conversation interaction and narrow controls
+
+The native fixture now includes an existing research result and remembered scroll
+position, exercising all three conversation controls at stage widths 512 and
+1,000 points in both saved modes. It checks each control's accessibility frame
+is inside the window, invokes the actual accessibility press action on the mode
+button, and verifies the opposite control label, persisted preference, unchanged
+active result, remembered scroll and conversation selection after rendering.
+
+Full host check `p3-compact-interaction`: 97 tests, zero failures; verifier 11.275
+seconds. Log SHA-256:
+`9361c13635861fd2225b0ee6f646bb0d3d3f7b800e2f93e70c6b47b43656a545`.
+The 512-point compact rendering was visually inspected: all three labels fit,
+conversation copy wraps, and the existing compact status/agent scroll region
+occupies the bottom beside the wave. This closes the earlier untested toggle
+activation at these sizes. It does not establish mouse/keyboard traversal,
+full-console minimum-height acceptance, accessibility text scaling, scrolling all
+status notices, monitor recovery, or any real audio requirement.
