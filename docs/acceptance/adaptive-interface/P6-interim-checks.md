@@ -79,7 +79,9 @@ After local fixture commit `0fb982b`:
 - `p6-corrected-normal`: 2,458 passed, 4 existing live skips, 27 warnings;
   verifier 374.878 seconds. SHA-256
   `9b30c0c6a2753e7aad3bb0b4d794835414f497e7a1ec3b75f9a5e56d0a73fc14`.
-- Corrected reverse-order execution remains pending at this record's update.
+- `p6-corrected-reverse`: 2,458 passed, 4 existing live skips, 27 warnings;
+  pytest 373.09 seconds. Log SHA-256
+  `6a1c3260e2173ae719feb8b3d21ab65912f49af287fa444dd802ba4c85d5f4cf`.
 
 The isolated fixture correction is draft PR #65:
 https://github.com/Larryfix71566/jarvis-voice-ai/pull/65

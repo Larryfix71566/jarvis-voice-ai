@@ -131,3 +131,19 @@ These fixtures cover the workspace region, not the full 900×600 console with
 voice controls and sidecar. Full-window height, large-text/VoiceOver and actual
 pointer resize/dock/monitor interaction remain acceptance items. All P0/P2/P6
 and other open requirements remain open; nothing was merged or deployed.
+
+## Saved compact conversation preference
+
+The adaptive preview now offers Keep voice compact / Expand voice during
+conversation. The additive boolean preference persists the choice; results still
+use the responsive rail/bottom presentation. No audio path or workspace identity
+changes are part of this addition.
+
+Sandbox check `p3-compact-conversation` completed with 97 host tests and zero
+failures. Log SHA-256:
+`53cd29bf8d9133bded137282ce3056d4267caa9a91847c278a04d894a9ff3b87`.
+The native test mounts both saved preference values and checks the accessible
+control label and unchanged conversation selection. Both 1000×600 offline
+renderings were visually inspected. This does not prove actual toggle interaction,
+minimum-width controls, live audio, or full-console acceptance. The wave remains
+simulated pending P2; this preference is not evidence of measured metering.
