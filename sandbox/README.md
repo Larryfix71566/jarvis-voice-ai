@@ -116,6 +116,13 @@ host/private-network canaries remain blocked. A failed IPv6 connection
 is recorded separately: it alone cannot prove filtering versus absent routing.
 Neither these probes nor passing unit tests establish complete containment.
 
+The installed Mortimer verification profile declares that its native AppKit
+checks require graphics. Independent verification therefore starts its clone
+without `--no-graphics`, while retaining offline networking, disabled audio and
+clipboard sharing, the unprivileged worker and all existing timeouts. Graphics
+allocation alone does not prove that a guest desktop session is active; the
+window-visibility fixtures must still report an unoccluded window.
+
 Two source files contain intentionally fake credential-shaped fixtures.
 `REVIEWED_TEST_FIXTURES` permits only their reviewed path and exact SHA-256
 content. A changed or moved fixture is still rejected by the source scanner.

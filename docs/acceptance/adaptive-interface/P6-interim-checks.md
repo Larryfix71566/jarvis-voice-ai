@@ -313,3 +313,15 @@ This remains a failed full receipt, not a release pass. No visibility assertion,
 test selection, timeout or profile gate was weakened. The candidate GUI result is
 separate evidence; a graphics-enabled independent verification path is still
 required before this checklist item can close.
+
+The verifier was then updated so the Mortimer profile explicitly requests a
+graphics-enabled verification clone; the capability is included in the profile
+fingerprint and covered by sandbox unit tests (109 tests, zero failures). A fresh
+receipt for the updated candidate at `2fb6a9f` used that mode (attempt
+`9a6e0bb581674f25a5911d0717478e89`). All non-native checks and both trusted
+baseline suites passed again, but the candidate AppKit suite produced the same
+nine visibility failures: the Tart graphics process exists, yet the guest test
+process has no active desktop space and reports a non-visible window. The receipt
+is retained as failed evidence; no assertion or gate was relaxed. A future
+graphics verification runner must attach or activate the guest desktop before
+this automated gate can pass.
