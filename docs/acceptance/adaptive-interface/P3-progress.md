@@ -177,3 +177,50 @@ candidate's layout preference, backend health, or graph presentation. The prior
 claim that this observation verified candidate layout version 0 is withdrawn.
 See P6-interim-checks.md for the executable-path check and current inspection
 limitation. Candidate graph and workspace acceptance remain open.
+
+## Explicit navigation before the first result
+
+The offline GUI worker reproduced a separate UI-3 navigation defect after source
+`ed847b8`: open Memory graph before receiving any result, return to Conversation,
+then receive the first result. WorkspaceStore changed `showsConversation` back
+to false, reopening the graph despite the explicit return. A first result arriving
+while the graph remained open also lacked its unread marker.
+
+Check `p3-first-result-navigation-red` executed 12 workspace tests and failed three
+assertions across the two new cases. Log SHA-256:
+`253e7a82b6ee003100efc5161db5db4e694b98d680060991fb64fbaa3abb15c0`.
+The fix records explicit presentation choices separately from whether a result
+has arrived. The first result remains reachable, but cannot override that choice;
+an unseen first result is marked unread. Without explicit navigation, the first
+result still opens the workspace automatically. Existing later-arrival,
+comparison, pin, history, and display ownership tests remain unchanged.
+
+The initial full native run executed 125 tests; all 12 workspace tests passed,
+with one failure in `testReducedMotionKeepsVisibleWaveStatic` at its visible-window
+assertion. An unrelated guest keychain prompt was observed on the VM desktop.
+This failed run is retained as `p3-first-result-navigation-fixed`, log SHA-256
+`bc42b8055c25016392ea2d1a6ada835b4907c05565e666bf91372a5f2e96b08f`.
+The prompt was dismissed; a subsequent setup attempt found the existing guest
+test keychain rejected its documented password. Only that disposable worker
+keychain was recreated, preserving its prior files. The host keychain and vault
+were not accessed. No visibility assertion, timeout, or suite was relaxed.
+
+This navigation issue is distinct from Larry's screenshot showing the candidate
+in its previous-layout mode. It does not explain or prove a live graph defect.
+
+After repairing the disposable test keychain, `p3-first-result-navigation-full`
+ran the complete native app suite: **125 tests passed, zero failures**, 42.227
+verifier seconds. Log SHA-256:
+`2e2fbacb404622a91ceb337b824b0d805e303a99b7ea74dabe8a6a605c89a08f`.
+WindowVisibilityTests also passed; its diagnostic reported an active app, one
+screen, and an on-space visible window. This is development-VM evidence, not a
+fresh independent full-profile receipt. The earlier repaired check accidentally
+selected WorkspaceStoreTests because the helper matched names ending in `red`;
+that helper was corrected before this explicitly unfiltered full run.
+
+The updated guest app bundle and embedded WebRTC framework were built, signed
+and verified successfully without launching the UI. A VM-only read fixture
+served 50 synthetic nodes and 80 relationships, with POST rejected. Subsequent
+Computer Use could read the Tart desktop but returned `noWindowsAvailable` on
+attempted Finder actions; the controller independently confirmed the VM remained
+running. No new interactive graph acceptance is claimed from this session.

@@ -414,3 +414,26 @@ from Larry or a supported Computer Use target for the Xcode executable can suppl
 the missing UI evidence. No routing change is justified by the misidentified
 shell capture. No application code, live preference, backend, or audio setting
 was changed during this corrective source/process inspection.
+
+## User-supplied screenshot resolves the displayed-layout question
+
+Larry subsequently supplied a screenshot of the running candidate on 2026-09-11.
+It shows READY and Disconnect in the top bar, the central decorative lettering,
+the original agent-satellite arrangement, the scrollable sidecar with its Aa
+control, and two overlapping graph-image panels inside the console. It is not
+the MortimerShell retry screen. The screenshot contains private memory content
+and is not copied into the repository.
+
+At application source `6264fdf`, ConsoleView renders those original floating
+panels only in its previous-layout branch (`layoutVersion != 1`) while the
+separate display window is closed. AdaptiveStageView passes `hidesLettering: true`
+to every OrbFieldView presentation and uses WorkspaceView for results. Thus the
+screenshot identifies the candidate's previous-layout presentation; it does not
+show the adaptive interactive graph or establish a graph-routing failure.
+
+The candidate's MortimerHostApp menu exposes Debug > Preview adaptive layout
+when that preference is not 1, and Debug > Use previous layout when it is 1.
+The adaptive workspace's Memory graph button opens the interactive main-area
+graph. These controls are verified in source; their activation on Larry's running
+candidate and the resulting graph remain to be observed. No live preference was
+changed by the assistant.

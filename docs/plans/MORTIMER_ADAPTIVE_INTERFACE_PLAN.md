@@ -5,10 +5,12 @@
 source phases and sandbox runner corrections are present, but release acceptance
 is intentionally not claimed.
 **Latest manual evidence:** Larry confirmed the sidecar font picker works after
-`6264fdf`. The reported old-looking separate graph remains unresolved: desktop
-automation selected the older MortimerShell retry screen, not the running
-MortimerHost candidate. See the inspection correction in P6-interim-checks.md;
-neither a candidate connection failure nor a graph-routing defect was verified.
+`6264fdf`. Larry's subsequent screenshot shows the connected candidate using its
+previous-layout presentation with floating graph images inside the main console.
+Adaptive graph activation and acceptance remain open. Desktop automation had
+selected the older MortimerShell retry screen; see the correction and screenshot
+analysis in P6-interim-checks.md. A candidate connection failure or graph-routing
+defect was not established by those earlier captures.
 **Scope:** Native MortimerHost interface, dual-speaker Silo feedback, central results, interactive memory graph, preserved sidecar, automatic monitor adaptation.
 **Baseline inspected:** repository commit `2ccf66cd7e00b82cf9136d2cd00f42e9bddb90af` (PR #63), 2026-09-10. Recheck the actual starting commit before implementation.
 **Owner:** Larry. Implementation may be assigned to a coding model one phase at a time. This document authorizes no application-code change by itself.

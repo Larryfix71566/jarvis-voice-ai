@@ -33,6 +33,43 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.unreadIDs.count, 1)
     }
 
+    func testFirstResultDoesNotUndoReturnFromGraphToConversation() throws {
+        let store = WorkspaceStore()
+        store.openMemoryGraph()
+        store.returnToConversation()
+        let incoming = try result()
+        store.receive(incoming)
+
+        XCTAssertTrue(store.showsConversation, "A result must not undo explicit navigation.")
+        XCTAssertEqual(store.activeID, incoming.id, "The result must remain reachable from conversation.")
+        XCTAssertTrue(store.unreadIDs.contains(incoming.id))
+    }
+
+    func testFirstResultWhileBrowsingGraphIsUnreadAndPreservesGraph() throws {
+        let store = WorkspaceStore()
+        store.openMemoryGraph()
+        let graph = store.memoryGraph
+        let incoming = try result()
+        store.receive(incoming)
+
+        XCTAssertTrue(store.showsMemoryGraph)
+        XCTAssertFalse(store.showsConversation)
+        XCTAssertTrue(store.memoryGraph === graph)
+        XCTAssertTrue(store.unreadIDs.contains(incoming.id), "A result hidden behind the graph has not been read.")
+        store.select(incoming.id)
+        XCTAssertFalse(store.showsMemoryGraph)
+        XCTAssertFalse(store.unreadIDs.contains(incoming.id))
+    }
+
+    func testFirstResultStillOpensWorkspaceWithoutExplicitNavigation() throws {
+        let store = WorkspaceStore()
+        let incoming = try result()
+        store.receive(incoming)
+        XCTAssertFalse(store.showsConversation)
+        XCTAssertEqual(store.activeID, incoming.id)
+        XCTAssertFalse(store.unreadIDs.contains(incoming.id))
+    }
+
     func testPinLimitRefusesWithoutEviction() throws {
         let store = WorkspaceStore(historyLimit: 1, pinLimit: 2)
         let a = try result(), b = try result(), c = try result()

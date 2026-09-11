@@ -41,6 +41,7 @@ final class WorkspaceStore {
     @ObservationIgnored private var resultGraphs: [UUID: MemoryGraphStore] = [:]
     private(set) var scrollOffsets: [UUID: Double] = [:]
     private var hasReceivedResult = false
+    private var hasChosenPresentation = false
     private let historyLimit: Int
     private let pinLimit: Int
 
@@ -57,7 +58,13 @@ final class WorkspaceStore {
         results.append(result)
         if !hasReceivedResult {
             activeID = result.id
-            showsConversation = false
+            // Opening the graph or returning to conversation can happen
+            // before any result arrives. Preserve that explicit choice.
+            if hasChosenPresentation {
+                unreadIDs.insert(result.id)
+            } else {
+                showsConversation = false
+            }
         } else {
             unreadIDs.insert(result.id)
         }
@@ -74,9 +81,19 @@ final class WorkspaceStore {
         unreadIDs.remove(id)
     }
 
-    func returnToConversation() { showsConversation = true }
-    func openMemoryGraph() { showsMemoryGraph = true; showsConversation = false }
-    func returnToWorkspace() { showsConversation = false }
+    func returnToConversation() {
+        hasChosenPresentation = true
+        showsConversation = true
+    }
+    func openMemoryGraph() {
+        hasChosenPresentation = true
+        showsMemoryGraph = true
+        showsConversation = false
+    }
+    func returnToWorkspace() {
+        hasChosenPresentation = true
+        showsConversation = false
+    }
 
     @discardableResult
     func sendToDisplay(_ content: SupportingDisplayContent) -> Bool {
