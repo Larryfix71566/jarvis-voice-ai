@@ -421,7 +421,7 @@ extension DirectWebRTCTransport: RTCDataChannelDelegate {
 /// present in M120's headers). V6's whole point is a counter that keeps
 /// climbing while the bot talks; these are the real packets, not a
 /// proxy.
-struct OutboundAudioStats {
+struct OutboundAudioStats: Equatable {
     let packetsSent: Int
     let bytesSent: Int
 }
