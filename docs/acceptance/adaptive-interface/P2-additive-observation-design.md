@@ -1,5 +1,7 @@
 # Additive audio observation proposal
 
+**RETIRED 2026-09-11** by `docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSURE_PLAN.md` locked decision L1: measured levels come from the native-audio transport's own `AVAudioEngine` taps (closure C6/C7), not from taps inside the pinned WebRTC build. Kept as a record; not implemented.
+
 Status: design for separate review; not implemented, approved or accepted.
 Scope: remove the exact pinned framework's measurement-timestamp and held-level
 limitations without changing the captured or rendered audio. P2 remains open.

@@ -1,0 +1,40 @@
+14,21c14,17
+< # Frameworks: the SPM binary's only LC_RPATH is @loader_path (checked
+< # 2026-09-08 — there is NO absolute .build/ rpath, whatever earlier
+< # toolchains did), so WebRTC.framework resolves beside the binary in
+< # .build/debug/ and NOT once the binary is copied into Contents/MacOS/. The
+< # app then dies at launch: "Library not loaded: @rpath/WebRTC.framework".
+< # So every .framework SPM produced is copied beside the binary too, exactly
+< # as the resource bundles below are. Local-run packaging only — not a
+< # distributable build.
+---
+> # SPM resolves WebRTC beside the executable. Copy its resolved framework next
+> # to the executable, alongside SPM resource bundles, so launch does not depend
+> # on the executable remaining in SPM's build-products directory. Ad-hoc signing
+> # is for local testing; this is not a notarized distribution package.
+37,39c33,34
+< # Linked frameworks (WebRTC.xcframework's slice) — see the header comment.
+< for fw in "$HERE/.build/$CONFIG"/*.framework; do
+<   [ -e "$fw" ] && cp -R "$fw" "$APP/Contents/MacOS/"
+---
+> for framework in "$HERE/.build/$CONFIG"/*.framework; do
+>   [ -e "$framework" ] && cp -R "$framework" "$APP/Contents/MacOS/"
+41,42c36,39
+< [ -e "$APP/Contents/MacOS/WebRTC.framework/WebRTC" ] \
+<   || { echo "bundle.sh: WebRTC.framework not found beside the binary — the app will not launch" >&2; exit 1; }
+---
+> if [ ! -f "$APP/Contents/MacOS/WebRTC.framework/WebRTC" ]; then
+>   echo "Missing bundled WebRTC runtime; refusing to launch." >&2
+>   exit 1
+> fi
+68c65,72
+< codesign --force --sign - "$APP" >/dev/null 2>&1 || true
+---
+> # SPM's resolved framework is not necessarily signed. Sign only our embedded
+> # copy, then seal the containing app and verify both before attempting launch.
+> for framework in "$APP/Contents/MacOS"/*.framework; do
+>   [ -d "$framework" ] || continue
+>   codesign --force --sign - "$framework"
+> done
+> codesign --force --sign - "$APP"
+> codesign --verify --deep --strict "$APP"

@@ -1,0 +1,35 @@
+diff --git a/macos/MortimerHost/scripts/bundle.sh b/macos/MortimerHost/scripts/bundle.sh
+index 1909bea..3ace5f2 100755
+--- a/macos/MortimerHost/scripts/bundle.sh
++++ b/macos/MortimerHost/scripts/bundle.sh
+@@ -11,9 +11,14 @@
+ # Usage:  macos/MortimerHost/scripts/bundle.sh [debug|release]   (default debug)
+ # Output: macos/MortimerHost/.build/MortimerHost.app  (then `open`s it)
+ #
+-# The copied binary keeps its absolute LC_RPATH entries into .build/, so the
+-# WebRTC.xcframework SPM linked resolves from the bundle location on this
+-# machine. Local-run packaging only — not a distributable build.
++# Frameworks: the SPM binary's only LC_RPATH is @loader_path (checked
++# 2026-09-08 — there is NO absolute .build/ rpath, whatever earlier
++# toolchains did), so WebRTC.framework resolves beside the binary in
++# .build/debug/ and NOT once the binary is copied into Contents/MacOS/. The
++# app then dies at launch: "Library not loaded: @rpath/WebRTC.framework".
++# So every .framework SPM produced is copied beside the binary too, exactly
++# as the resource bundles below are. Local-run packaging only — not a
++# distributable build.
+ set -euo pipefail
+ CONFIG="${1:-debug}"
+ HERE="$(cd "$(dirname "$0")/.." && pwd)"
+@@ -29,6 +34,12 @@ cp "$BIN" "$APP/Contents/MacOS/MortimerHost"
+ for b in "$HERE/.build/$CONFIG"/*.bundle; do
+   [ -e "$b" ] && cp -R "$b" "$APP/Contents/MacOS/"
+ done
++# Linked frameworks (WebRTC.xcframework's slice) — see the header comment.
++for fw in "$HERE/.build/$CONFIG"/*.framework; do
++  [ -e "$fw" ] && cp -R "$fw" "$APP/Contents/MacOS/"
++done
++[ -e "$APP/Contents/MacOS/WebRTC.framework/WebRTC" ] \
++  || { echo "bundle.sh: WebRTC.framework not found beside the binary — the app will not launch" >&2; exit 1; }
+ cat > "$APP/Contents/Info.plist" << PLIST
+ <?xml version="1.0" encoding="UTF-8"?>
+ <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

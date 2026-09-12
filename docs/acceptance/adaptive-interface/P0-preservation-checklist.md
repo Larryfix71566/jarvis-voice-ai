@@ -78,3 +78,32 @@ Source presence is only inventory evidence. P0 still requires baseline captures
 and real audio/performance measurements; P1–P6 acceptance records identify the
 limited automated/visual checks already performed. Every unchecked row above
 remains a release gate until its complete interaction scope is verified.
+
+## Pre-existing at baseline (closure plan C0.3, gap G22)
+
+Recorded 2026-09-11 against baseline `2ccf66c`. These are conditions the
+candidate inherited; a row here is not a regression attributable to any
+phase, and each names the item that resolves or accepts it.
+
+- `macos/JarvisKit/Sources/JarvisKit/WakeWordListener.swift:162-178` runs its
+  own `AVAudioEngine` input tap (a second microphone capture engine). It runs
+  only while the mic is muted (N10 rule 1) and is not echo-cancelled
+  (`AudioSession.swift:116-118`). UI-2's "no second capture engine" applies to
+  the meter; this tap is pre-existing and stays until the native-audio plan
+  (closure C6) owns capture. Not a P2 violation.
+- Two window minimums: `NSWindow.minSize`/`contentMinSize` are 400×300
+  (`macos/MortimerHost/Sources/MortimerHost/App/MortimerHostApp.swift:239,244`,
+  set deliberately to defeat SwiftUI's own limits) while the SwiftUI frame
+  minimum is 900×600 (`Console/ConsoleView.swift:96` in the candidate). The
+  900×600 SwiftUI value is the preserved contract of interface-plan §7; the
+  NSWindow floor is intentionally lower and is not a supported size.
+- `Display/GraphImageView.swift:125` fetches graph images with
+  `URLSession.shared` and no Authorization header, bypassing `JarvisHTTP`
+  (the "one attach point", K1). Harmless today only because
+  `/api/graph/{name}` carries no server-side auth. Closed by closure C3.3
+  (2026-09-12: `GraphImageView` now fetches via `AdminAPI.graphImageData(at:)`;
+  see `C3-p4-gaps.md`).
+- An unsaved Edit draft did not survive drawer pop-out/pop-in: `EditViewModel`
+  was `@State` on `DrawerView` (baseline `Drawer/DrawerView.swift:18-24`) and
+  the console and drawer windows each built their own `DrawerView`. Closed by
+  the app-scoped `DrawerModels` hoist (locked decision L3).
