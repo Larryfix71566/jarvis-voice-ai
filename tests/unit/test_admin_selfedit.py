@@ -100,8 +100,10 @@ class FakeAgent:
 
 
 def _install_fake_agent(monkeypatch, crash=False, gate=None):
-    FakeAgent.crash = crash
-    FakeAgent.gate = gate
+    # Restore class-level behavior when this test's monkeypatch scope ends.
+    # Later tests may construct FakeAgent directly rather than use this helper.
+    monkeypatch.setattr(FakeAgent, "crash", crash)
+    monkeypatch.setattr(FakeAgent, "gate", gate)
     monkeypatch.setattr(srv, "_make_agent", lambda service, profile, run_id=None: FakeAgent(service, profile))
 
 
