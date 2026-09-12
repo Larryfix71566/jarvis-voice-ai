@@ -187,9 +187,10 @@ final class WaveEngine {
         dyn.cb += (tb - dyn.cb) * 0.06
 
         if let presentation {
-            let color = presentation.activity == .user ? (45.0, 212.0, 191.0) :
+            // §7 colours, one source (AudioPresentationTuning, closure C2.4).
+            let color = presentation.activity == .user ? AudioPresentationTuning.userRGB :
                 (presentation.activity == .assistant || presentation.activity == .thinking ?
-                    (167.0, 139.0, 250.0) : (95.0, 130.0, 150.0))
+                    AudioPresentationTuning.assistantRGB : AudioPresentationTuning.neutralRGB)
             dyn.cr = color.0; dyn.cg = color.1; dyn.cb = color.2
             dyn.base = 0.004
             dyn.alpha = presentation.activity == .offline ? 0.16 : 0.65

@@ -219,7 +219,14 @@ struct OrbFieldView: View {
     private var compactReadout: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                centerReadout
+                ZStack {
+                    // C2.1 (gap G05): the wake burst has a home in the rail too.
+                    if ripplePulse > 0 {
+                        WakeRipple(diameter: 72).id(ripplePulse)
+                            .accessibilityLabel("Wake word detected")
+                    }
+                    centerReadout
+                }
                 if client.wakeWordOn { Text("Wake word armed").font(.caption) }
                 if !client.micEnabled { Text("Microphone muted").foregroundStyle(AppTheme.attn) }
                 if attention { Text("Confirmation needed in Output").foregroundStyle(AppTheme.attn) }
@@ -236,7 +243,9 @@ struct OrbFieldView: View {
                 }
                 if let notice = notices.audioInputNotice { Text(notice).font(.caption) }
                 captions
-                ForEach(AGENT_LAYOUT, id: \.key) { agent in satellite(agent) }
+                ForEach(AGENT_LAYOUT, id: \.key) { agent in
+                    HStack(spacing: 8) { compactBeam(agent); satellite(agent) }
+                }
                 AmbientStripView(connected: connected)
                 SystemVitalsView(connected: connected)
             }
@@ -315,11 +324,32 @@ struct OrbFieldView: View {
             .font(.system(size: 11, design: .monospaced))
             .foregroundStyle(labelColor)
             .shadow(color: voiceState == .speaking ? AppTheme.accentDim : .clear, radius: 5)
+            VoiceOverlapLabel(presentation: presentation)
             if presentation?.audioLevelUnavailable == true {
                 Text("Audio level unavailable").font(.caption2).foregroundStyle(AppTheme.textDim)
             }
         }
         .allowsHitTesting(false)
+    }
+
+    /// C2.1 (gap G05): the beam's meaning — "this agent is working now /
+    /// just finished" — in a form that fits the compact rail. Same
+    /// isWorking / lastCompleted truth as the full-stage beams.
+    private func compactBeam(_ agent: AgentLayoutEntry) -> some View {
+        let working = isWorking(agent.key)
+        var opacity = 0.0
+        var label: String? = nil
+        if working {
+            opacity = 0.55; label = "\(agent.label) working"
+        } else if let done = agentRuns.lastCompleted[agent.key] {
+            let age = now.timeIntervalSince(done.doneAt)
+            if age < 2.4 { opacity = 0.5 * (1 - age / 2.4); label = "\(agent.label) finished" }
+        }
+        return Rectangle()
+            .fill(AppTheme.accent.opacity(opacity))
+            .frame(width: 18, height: 2)
+            .accessibilityHidden(label == nil)
+            .accessibilityLabel(label ?? "")
     }
 
     private var labelColor: Color {
@@ -461,11 +491,12 @@ struct OrbFieldView: View {
 /// command-deck.css .wake-ripple — expanding ring from the field centre,
 /// 0.9s ease-out, one-shot (replayed by identity).
 private struct WakeRipple: View {
+    var diameter: CGFloat = 300
     @State private var expanded = false
     var body: some View {
         Circle()
             .strokeBorder(AppTheme.accent, lineWidth: 2)
-            .frame(width: 300, height: 300)
+            .frame(width: diameter, height: diameter)
             .scaleEffect(expanded ? 1.6 : 0.85)
             .opacity(expanded ? 0 : 0.9)
             .onAppear {
@@ -512,5 +543,22 @@ private struct DotPulse: ViewModifier {
                     withAnimation(.linear(duration: 0.1)) { dim = false }
                 }
             }
+    }
+}
+
+/// §4.3 barge-in indicator (closure C2.2, gap G06): a small violet label
+/// that stays while Mortimer is still speaking under the user's teal
+/// priority. Internal so a rendering test can host it alone.
+struct VoiceOverlapLabel: View {
+    let presentation: VoicePresentationState?
+    var body: some View {
+        if let text = presentation?.overlapLabel {
+            Text(text)
+                .font(.caption2)
+                .foregroundStyle(AudioPresentationTuning.assistantColor)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(text)
+                .accessibilityAddTraits(.isStaticText)
+        }
     }
 }

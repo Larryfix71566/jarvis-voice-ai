@@ -55,7 +55,7 @@ struct ConsoleView: View {
                 HStack(spacing: 0) {
                     ZStack {
                         if layoutVersion == 1 {
-                            AdaptiveStageView(voiceState: voiceState, wideWindow: windowWidth >= 1180)
+                            AdaptiveStageView(voiceState: voiceState, wideWindow: windowWidth >= AppTuning.wideLayoutMinWidth)
                         } else {
                         OrbFieldView(voiceState: voiceState)
                         // The web's in-page DisplayPanel stack: window-

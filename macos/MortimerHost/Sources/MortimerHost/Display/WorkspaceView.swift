@@ -6,6 +6,7 @@ struct WorkspaceView: View {
     @EnvironmentObject private var client: JarvisClient
     @Environment(WorkspaceStore.self) private var workspace
     @State private var pinLimitNotice = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(DisplayWindowStore.self) private var display
     @Environment(DrawerState.self) private var drawer
 
@@ -79,6 +80,9 @@ struct WorkspaceView: View {
         }
         .padding(AdaptiveLayoutMetrics.workspacePadding)
         .background(AppTheme.bg)
+        // §7 / closure C2.3: entering or leaving comparison and the graph animate for 200 ms.
+        .animation(AdaptiveTransition.animation(reduceMotion: reduceMotion), value: workspace.comparisonID)
+        .animation(AdaptiveTransition.animation(reduceMotion: reduceMotion), value: workspace.showsMemoryGraph)
         .alert("Pin limit reached", isPresented: $pinLimitNotice) {
             Button("OK", role: .cancel) {}
         } message: { Text("Unpin a result before pinning another. Your existing pins are preserved.") }

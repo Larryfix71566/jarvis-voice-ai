@@ -23,6 +23,14 @@ struct VoicePresentationState: Equatable {
         }
     }
 
+    /// Interface plan §4.3, barge-in: while eligible user audio has visual
+    /// priority, Mortimer's continuing speech stays indicated by this small
+    /// label until the actual interrupted/stopped event clears
+    /// `assistantSpeaking`. Nil outside overlap (closure C2.2, gap G06).
+    var overlapLabel: String? {
+        activity == .user && assistantSpeaking ? "Mortimer still speaking" : nil
+    }
+
     var audioLevelUnavailable: Bool {
         switch activity {
         case .offline, .connecting: return false
@@ -79,7 +87,7 @@ struct VoiceEnvelope {
             level = 0; last = now; return level
         }
         last = now
-        let duration = target > level ? 0.040 : 0.180
+        let duration = target > level ? AudioPresentationTuning.attackSeconds : AudioPresentationTuning.releaseSeconds
         level += (target - level) * (1 - exp(-(now - previous) / duration))
         return level
     }

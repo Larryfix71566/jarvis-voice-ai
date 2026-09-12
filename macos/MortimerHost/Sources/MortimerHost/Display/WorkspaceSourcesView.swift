@@ -12,12 +12,12 @@ struct WorkspaceSourcesView: View {
         GeometryReader { geometry in
             HStack(alignment: .top, spacing: 12) {
                 sourceList
-                if geometry.size.width >= 820 && presentation.showsInspector {
+                if geometry.size.width >= AppTuning.inspectorSubpaneMinWidth && presentation.showsInspector {
                     Divider()
-                    inspector.frame(width: 300)
+                    inspector.frame(width: AppTuning.inspectorWidth)
                 }
             }
-            .sheet(isPresented: Binding(get: { geometry.size.width < 820 && presentation.showsInspector },
+            .sheet(isPresented: Binding(get: { geometry.size.width < AppTuning.inspectorSubpaneMinWidth && presentation.showsInspector },
                                        set: { presentation.showsInspector = $0 })) {
                 inspector.padding(20).frame(minWidth: 320, idealWidth: 420, minHeight: 300)
             }
