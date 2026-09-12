@@ -13,7 +13,7 @@ enum MemoryGraphSource {
     static func query(_ url: URL) -> MemoryGraphQuery {
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
-        return MemoryGraphQuery(focus: value("focus") ?? "", depth: Int(value("depth") ?? "") ?? 2,
+        return MemoryGraphQuery(focus: value("focus") ?? "", depth: Int(value("depth") ?? ""),
                                 edgeTypes: (value("edge_types") ?? "").split(separator: ",").map(String.init),
                                 since: value("since"))
     }

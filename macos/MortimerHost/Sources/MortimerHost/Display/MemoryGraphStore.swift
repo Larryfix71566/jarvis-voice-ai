@@ -181,17 +181,36 @@ final class MemoryGraphStore {
         persist()
     }
 
+    /// Closure C3.5 (gap G15): selecting never mutates the user's filters.
+    /// A hidden selection is disclosed by `selectedNodeHidden`; revealing it
+    /// is the explicit `revealSelection()` action.
     func select(_ id: String) {
-        guard let node = graph?.nodes.first(where: { $0.id == id }) else { return }
+        guard graph?.nodes.contains(where: { $0.id == id }) == true else { return }
         metadata.selectedID = id
-        metadata.hiddenNodeTypes.remove(node.type)
-        metadata.collapsedTypes.remove(node.type)
         selectedEdge = nil; fullDetail = nil; detailError = nil; showsInspector = true
         detailRequest?.cancel(); detailLoading = false
         persist()
     }
 
     func select(edge: MemoryGraphEdge) { selectedEdge = edge; showsInspector = true }
+
+    var selectedNodeHidden: Bool {
+        guard let node = selectedNode else { return false }
+        return metadata.hiddenNodeTypes.contains(node.type) || metadata.collapsedTypes.contains(node.type)
+    }
+
+    func revealSelection() {
+        guard let node = selectedNode else { return }
+        metadata.hiddenNodeTypes.remove(node.type)
+        metadata.collapsedTypes.remove(node.type)
+        persist()
+    }
+
+    /// Arrowhead vocabulary for the canvas (closure C3.4): the server's
+    /// legend keys, or the documented memory-graph set when absent.
+    var directionalEdgeTypes: Set<String> {
+        graph?.legend.directionalEdgeTypes ?? MemoryGraphLegend.memoryDirectionalEdgeTypes
+    }
 
     func centerSelection() {
         guard let id = metadata.selectedID, let point = metadata.positions[id] else { return }

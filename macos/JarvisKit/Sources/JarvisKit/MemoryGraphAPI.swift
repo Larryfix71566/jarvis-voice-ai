@@ -2,15 +2,38 @@ import Foundation
 
 public struct MemoryGraphQuery: Codable, Equatable, Sendable {
     public var focus: String
+    /// Effective depth shown in the UI (server default 2 when unspecified).
     public var depth: Int
+    /// Closure C3.4 (gap G14): `depth` is only SENT when the user chose one,
+    /// so an operator's `JARVIS_GRAPH_DEPTH` server default still applies.
+    public var depthSpecified: Bool
     public var edgeTypes: [String]
     public var since: String?
 
-    public init(focus: String = "", depth: Int = 2, edgeTypes: [String] = [], since: String? = nil) {
+    public init(focus: String = "", depth: Int? = nil, edgeTypes: [String] = [], since: String? = nil) {
         self.focus = focus
-        self.depth = min(4, max(1, depth))
+        self.depth = min(4, max(1, depth ?? 2))
+        self.depthSpecified = depth != nil
         self.edgeTypes = edgeTypes
         self.since = since
+    }
+
+    enum CodingKeys: String, CodingKey { case focus, depth, depthSpecified, edgeTypes, since }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        focus = try c.decodeIfPresent(String.self, forKey: .focus) ?? ""
+        depth = min(4, max(1, try c.decodeIfPresent(Int.self, forKey: .depth) ?? 2))
+        // Records saved before this field existed carried an explicit depth.
+        depthSpecified = try c.decodeIfPresent(Bool.self, forKey: .depthSpecified) ?? (c.contains(.depth))
+        edgeTypes = try c.decodeIfPresent([String].self, forKey: .edgeTypes) ?? []
+        since = try c.decodeIfPresent(String.self, forKey: .since)
+    }
+
+    /// Choose a depth explicitly (the Depth picker); marks it for sending.
+    public mutating func setDepth(_ value: Int) {
+        depth = min(4, max(1, value))
+        depthSpecified = true
     }
 }
 
@@ -28,10 +51,31 @@ public struct MemoryGraphEdge: Decodable, Equatable, Sendable {
     public let attrs: [String: JSONValue]
 }
 
+/// Shape of `render.legend_for` in jarvis/graphs/render.py: node type → hex
+/// colour, edge type → style name ("solid"/"dashed"/"dotted"/"won"). Every
+/// key is optional so an absent or partial legend still decodes (G14).
 public struct MemoryGraphLegend: Decodable, Equatable, Sendable {
     public let nodeTypes: [String: String]
     public let edgeTypes: [String: String]
     enum CodingKeys: String, CodingKey { case nodeTypes = "node_types", edgeTypes = "edge_types" }
+    public init(nodeTypes: [String: String] = [:], edgeTypes: [String: String] = [:]) {
+        self.nodeTypes = nodeTypes; self.edgeTypes = edgeTypes
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        nodeTypes = try c.decodeIfPresent([String: String].self, forKey: .nodeTypes) ?? [:]
+        edgeTypes = try c.decodeIfPresent([String: String].self, forKey: .edgeTypes) ?? [:]
+    }
+    /// The memory graph's builder (jarvis/graphs/memory_graph.py) emits every
+    /// edge as src → dst: child_of (fact/prefix → parent prefix), became
+    /// (fact → successor/archive), stated_in and restated (fact → turn). The
+    /// legend carries the server's current edge-type vocabulary, so arrows are
+    /// drawn for exactly the types the server declares; when the legend is
+    /// absent, this documented set is the fallback.
+    public static let memoryDirectionalEdgeTypes: Set<String> = ["child_of", "became", "stated_in", "restated"]
+    public var directionalEdgeTypes: Set<String> {
+        edgeTypes.isEmpty ? Self.memoryDirectionalEdgeTypes : Set(edgeTypes.keys)
+    }
 }
 
 public enum MemoryGraphError: Error, LocalizedError, Equatable {
@@ -80,7 +124,7 @@ public struct MemoryGraphResponse: Decodable, Equatable, Sendable {
         edgeTypes = try c.decode([String].self, forKey: .edgeTypes)
         nodeCount = try c.decode(Int.self, forKey: .nodeCount)
         edgeCount = try c.decode(Int.self, forKey: .edgeCount)
-        legend = try c.decode(MemoryGraphLegend.self, forKey: .legend)
+        legend = try c.decodeIfPresent(MemoryGraphLegend.self, forKey: .legend) ?? MemoryGraphLegend()
         let allNodes = try c.decode([MemoryGraphNode].self, forKey: .nodes)
         let allEdges = try c.decode([MemoryGraphEdge].self, forKey: .edges)
         let allIDs = Set(allNodes.map(\.id))
@@ -110,7 +154,8 @@ public struct MemoryGraphResponse: Decodable, Equatable, Sendable {
 extension AdminAPI {
     func memoryGraphRequest(_ query: MemoryGraphQuery) -> URLRequest {
         var components = URLComponents(url: config.adminURL.appending(path: "api/graph/memory"), resolvingAgainstBaseURL: false)!
-        var items = [URLQueryItem(name: "depth", value: String(min(4, max(1, query.depth))))]
+        var items: [URLQueryItem] = []
+        if query.depthSpecified { items.append(URLQueryItem(name: "depth", value: String(min(4, max(1, query.depth))))) }
         if !query.focus.isEmpty { items.append(URLQueryItem(name: "focus", value: query.focus)) }
         if !query.edgeTypes.isEmpty { items.append(URLQueryItem(name: "edge_types", value: query.edgeTypes.joined(separator: ","))) }
         if let since = query.since, !since.isEmpty { items.append(URLQueryItem(name: "since", value: since)) }
@@ -142,5 +187,35 @@ extension AdminAPI {
             throw MemoryGraphError.unavailable("The server did not return a supported graph image.")
         }
         return data
+    }
+}
+
+/// Closure C3.3 (gap G13): the legacy `GraphImageView` path used a bare
+/// `URLSession.shared` with no Authorization and the shared URL cache. Every
+/// graph image now goes through JarvisHTTP's transient sender, and only for
+/// URLs on the configured admin origin under /api/graph/.
+extension AdminAPI {
+    public enum GraphImageOriginError: Error, Equatable { case foreignOrigin, notAGraphImage }
+
+    public func graphImageData(at url: URL) async throws -> Data {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let admin = URLComponents(url: config.adminURL, resolvingAgainstBaseURL: false),
+              components.scheme?.lowercased() == admin.scheme?.lowercased(),
+              components.host?.lowercased() == admin.host?.lowercased(),
+              (components.port ?? defaultPort(components.scheme)) == (admin.port ?? defaultPort(admin.scheme))
+        else { throw GraphImageOriginError.foreignOrigin }
+        guard components.path.contains("/api/graph/"),
+              components.path.hasSuffix("/image.png") || components.path.hasSuffix("/image.svg")
+        else { throw GraphImageOriginError.notAGraphImage }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue(components.path.hasSuffix(".svg") ? "image/svg+xml" : "image/png", forHTTPHeaderField: "Accept")
+        let (data, _) = try await JarvisHTTP.sendTransient(request, config: config, session: graphSession)
+        guard data.count <= 20_000_000 else { throw MemoryGraphError.invalidShape }
+        return data
+    }
+
+    private func defaultPort(_ scheme: String?) -> Int? {
+        switch scheme?.lowercased() { case "https": return 443; case "http": return 80; default: return nil }
     }
 }

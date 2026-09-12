@@ -326,7 +326,12 @@ final class MemoryGraphStoreTests: XCTestCase {
         XCTAssertTrue(store.visibleNodes.isEmpty)
         XCTAssertEqual(store.graph?.nodes.count, 4)
         XCTAssertEqual(store.selectedNode?.id, "fact:2")
+        // Closure C3.5 (G15): re-selecting never un-collapses the group; the
+        // hidden selection is disclosed and revealed by an explicit action.
         store.select("fact:2")
+        XCTAssertTrue(store.visibleNodes.isEmpty)
+        XCTAssertTrue(store.selectedNodeHidden)
+        store.revealSelection()
         XCTAssertEqual(store.visibleNodes.count, 4)
         await loaded(store, response: try GraphFixture.make(count: 2))
         XCTAssertNil(store.selectedNode)

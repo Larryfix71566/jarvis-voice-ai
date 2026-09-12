@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import JarvisKit
 
 /// 2026-09-05 — the sidecar's graph images (MORTIMER_GRAPH_LAYER_PLAN.md
 /// GL11, `/api/graph/<name>/image.png`) are server-side renders whose
@@ -59,6 +60,10 @@ struct GraphImageView: View {
     let baseURL: URL
     let viewport: CGSize
     let isResizing: Bool
+    /// Closure C3.3 (gap G13): the fetch goes through the configured
+    /// AdminAPI (JarvisHTTP transient sender, Authorization attached, no
+    /// shared URL cache) and only for the admin origin's /api/graph/ images.
+    @EnvironmentObject private var client: JarvisClient
 
     @State private var image: NSImage?
     @State private var loadedURL: URL?
@@ -122,12 +127,8 @@ struct GraphImageView: View {
     private func load() async {
         guard let url = targetURL, url != loadedURL else { return }
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            let data = try await client.admin.graphImageData(at: url)
             guard !Task.isCancelled else { return }
-            if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-                if image == nil { failed = true }
-                return
-            }
             guard let loaded = NSImage(data: data) else {
                 if image == nil { failed = true }
                 return

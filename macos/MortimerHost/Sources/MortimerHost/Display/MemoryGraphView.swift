@@ -19,7 +19,7 @@ struct MemoryGraphView: View {
                     .onSubmit { focusServer() }
                 Button("Focus") { focusServer() }
                 Picker("Depth", selection: Binding(get: { store.metadata.query.depth }, set: { depth in
-                    var query = store.metadata.query; query.depth = depth
+                    var query = store.metadata.query; query.setDepth(depth)
                     store.load(api: api, query: query, remember: true)
                 })) { ForEach(1...4, id: \.self) { Text("\($0)").tag($0) } }
                 .frame(width: 95)
@@ -47,7 +47,12 @@ struct MemoryGraphView: View {
                     if let path = store.tracedPath {
                         Text("Path: \(path.count - 1) connections in this loaded view").font(.caption)
                     } else if store.pathEnd != nil {
-                        Text("No path in this loaded view with the current filters.").font(.caption)
+                        // Interface plan §4.5 item 6 wording, exactly; the
+                        // filter caveat is a separate line (closure C3.5).
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("No path in this loaded view").font(.caption)
+                            Text("Current filters and the loaded subset limit the search.").font(.caption2).foregroundStyle(AppTheme.textDim)
+                        }
                     } else { Text("Select a second node, then choose Trace to selected.").font(.caption) }
                     Button("Clear path") { store.clearPath() }
                 }
@@ -196,8 +201,11 @@ struct MemoryGraphView: View {
                     Text(node.label).font(.headline)
                     Text(node.id).font(.caption)
                     Text("Type: \(node.type)").font(.caption)
-                    if store.metadata.hiddenNodeTypes.contains(node.type) || store.metadata.collapsedTypes.contains(node.type) {
-                        Text("Selected node is hidden by the current display filters.").foregroundStyle(AppTheme.attn)
+                    if store.selectedNodeHidden {
+                        HStack {
+                            Text("Selected node is hidden by a filter").foregroundStyle(AppTheme.attn)
+                            Button("Reveal") { store.revealSelection() }
+                        }
                     }
                     Button("Focus / expand neighbors") {
                         var query = store.metadata.query; query.focus = node.id
