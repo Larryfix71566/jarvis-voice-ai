@@ -17,6 +17,17 @@ final class WindowVisibilityTests: XCTestCase {
         }
     }
 
+    /// Pumps events until `condition` holds or `timeout` elapses. The
+    /// visibility observer reports through window-server occlusion events,
+    /// whose latency is not fixed: 0.3 s was enough on the deployment Mac and
+    /// once not enough in the sandbox guest (verification attempt
+    /// 7ef13e35…, closure C5 record). The assertion that follows is unchanged;
+    /// only the wait is bounded instead of fixed.
+    private func pumpEvents(until condition: () -> Bool, timeout: TimeInterval = 3) {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat { pumpEvents(for: 0.05) } while !condition() && Date() < deadline
+    }
+
     func testActualWindowHideShowAndDetachUpdateVisibility() throws {
         _ = NSApplication.shared
         let originalPolicy = NSApp.activationPolicy()
@@ -32,28 +43,28 @@ final class WindowVisibilityTests: XCTestCase {
         defer { window.close() }
         window.contentView = view
         window.makeKeyAndOrderFront(nil)
-        pumpEvents(for: 0.3)
+        pumpEvents(until: { reports.last == true })
         print("VISIBILITY_FIXTURE active=\(NSApp.isActive) screens=\(NSScreen.screens.count) onSpace=\(window.isOnActiveSpace) frame=\(window.frame) occlusion=\(window.occlusionState.rawValue)")
         XCTAssertTrue(window.isVisible)
         XCTAssertTrue(window.occlusionState.contains(.visible), "Fixture must have a visibly unoccluded window; policy=\(NSApp.activationPolicy()) hidden=\(NSApp.isHidden)")
         XCTAssertEqual(reports.last, true, "A visible window must resume animation")
         window.orderOut(nil)
-        pumpEvents(for: 0.3)
+        pumpEvents(until: { reports.last == false })
         XCTAssertEqual(reports.last, false, "Ordering the window out must suspend animation")
         window.makeKeyAndOrderFront(nil)
-        pumpEvents(for: 0.3)
+        pumpEvents(until: { reports.last == true })
         XCTAssertEqual(reports.last, true)
         window.miniaturize(nil)
-        pumpEvents(for: 0.6)
+        pumpEvents(until: { window.isMiniaturized && reports.last == false })
         XCTAssertTrue(window.isMiniaturized, "The fixture must actually minimize the window")
         XCTAssertEqual(reports.last, false)
         window.deminiaturize(nil)
         window.makeKeyAndOrderFront(nil)
-        pumpEvents(for: 0.6)
+        pumpEvents(until: { !window.isMiniaturized && reports.last == true })
         XCTAssertFalse(window.isMiniaturized)
         XCTAssertEqual(reports.last, true)
         window.contentView = nil
-        pumpEvents(for: 0.1)
+        pumpEvents(until: { reports.last == false })
         XCTAssertEqual(reports.last, false)
     }
 

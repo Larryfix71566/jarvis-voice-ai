@@ -55,7 +55,9 @@ extension GraphFixture {
 
 /// Closure C3.1 (gap G11): pans and zooms the dense-hub stress graph for 300
 /// frames in a real window and writes the distribution to
-/// docs/acceptance/adaptive-interface/P4-frame-time.json. Gate: p95 ≤ 33 ms.
+/// macos/MortimerHost/.build/interface-fixtures/P4-frame-time.json (promoted to
+/// docs/acceptance/adaptive-interface/P4-frame-time.json when a run is recorded).
+/// Gate: p95 ≤ 33 ms.
 ///
 /// A "frame" is one camera step measured from the store mutation until the
 /// render server has run the completion block of the Core Animation
@@ -274,7 +276,15 @@ final class MemoryGraphFrameTimeTests: XCTestCase {
             "recorded_at": ISO8601DateFormatter().string(from: Date()),
             "test": "MemoryGraphFrameTimeTests.testPanAndZoomFrameTimesOnTheDenseHubFixtureMeetTheP95Gate",
         ]
-        let output = GraphFixture.repositoryRoot().appendingPathComponent("docs/acceptance/adaptive-interface/P4-frame-time.json")
+        // Written under the package's ignored build directory, like the
+        // rendering snapshots: a test must not rewrite a tracked file — the
+        // sandbox verifier compares the source tree before and after the
+        // checks and rejects any mutation (attempt d68e28c1…, C5 record).
+        // The acceptance copy docs/acceptance/adaptive-interface/P4-frame-time.json
+        // is promoted from here by the closure-checks launcher when a run is recorded.
+        let directory = GraphFixture.repositoryRoot().appendingPathComponent("macos/MortimerHost/.build/interface-fixtures", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let output = directory.appendingPathComponent("P4-frame-time.json")
         try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys]).write(to: output)
         print("P4 frame time: p50 \(p50) ms, p95 \(p95) ms, max \(maximum) ms; control p50 \(controlP50) ms; main thread p95 \(percentile(Array(stress.mainThread.suffix(301)), 0.95)) ms; test rasterize p50 \(percentile(stress.rasterize, 0.5)) ms → \(output.path)")
         for line in stress.layerSurvey() { print("P4 layer: " + line) }
