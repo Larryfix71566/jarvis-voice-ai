@@ -130,6 +130,26 @@ improvise around it.
 5. **Wake word unaffected.** Confirm the wake listener's separate `:7862`
    socket path is independent of the transport swap.
 
+### §3 findings — 2026-09-12 (C6 step 1, items 1, 2 and 5)
+
+Verified against the installed **pipecat-ai 1.4.0** (`.venv` of the `jarvis-voice-ai-clean` checkout, `requirements-lock.txt:119`), with every file read checked against the wheel's `RECORD` (all `sha256=` entries match — the files are the published 1.4.0, unmodified). SHA-256 of the files read: `transports/websocket/server.py` `b1c6e3ee…`, `transports/websocket/fastapi.py` `ccf09739…`, `serializers/protobuf.py` `a9c0a278…`, `serializers/base_serializer.py` `79f28aa0…`, `frames/frames.proto` `adcd346a…`, `runner/run.py` `8551d184…`, `runner/utils.py` `72308dd4…`, `transports/base_input.py` `8bc46109…`. Items 3 and 4 are bench measurements on hardware and are still open (Larry).
+
+**§3.1 — confirmed, with two corrections to the plan's candidates.**
+
+- The transport is `pipecat.transports.websocket.fastapi.FastAPIWebsocketTransport` with `FastAPIWebsocketParams(TransportParams)` (`add_wav_header`, `serializer`, `session_timeout`, `fixed_audio_packet_size`, `allowed_origins`, `ws_close_timeout`). `WebsocketServerTransport` exists but is **deprecated since 1.4.0** (an alias of `SingleClientWebsocketServerTransport`, `transports/websocket/server.py:635`, removal in 2.0) and it binds its own `websockets` server on a separate port; the FastAPI one rides the runner's existing `:7860` app. The runner already serves it: `_setup_websocket_routes` registers `/ws-client` and `/ws-client/{token}` on the same FastAPI app as `/api/offer` whenever `fastapi` + `websockets` import (`runner/run.py:455-494`, `_configure_server_app` registers every transport family regardless of `--transport`, `run.py:530-534`; `websockets 16.1.1` and `fastapi 0.141.1` are in the lock). A connection there calls `bot()` with `WebSocketRunnerArguments(websocket=…, transport_type="websocket")` (`run.py:441-452`). So **D7 is a second `case` in `bot()`**, not a second server: `case WebSocketRunnerArguments(): FastAPIWebsocketTransport(websocket=runner_args.websocket, params=FastAPIWebsocketParams(...))`; SmallWebRTC stays for `/api/offer`. Nothing about ports or the runner changes; `scripts/run_bot.sh` is untouched. Auth: `--ws-auth` defaults to `none` (`PIPECAT_WEBSOCKET_AUTH`), so the loopback client connects to `ws://127.0.0.1:7860/ws-client` with no token; the origin check passes an absent `Origin` header when `PIPECAT_ALLOWED_ORIGINS` is unset (`is_origin_allowed` returns True for an empty list) — a native `URLSessionWebSocketTask` sends no `Origin`, so that variable must stay unset (or the client must send one).
+- Audio: the input transport deserializes each socket message and pushes `InputAudioRawFrame` into the normal audio path (`fastapi.py:359-374`); the output transport sends `OutputAudioRawFrame` per chunk and **paces them to real time** (`write_audio_frame` → `_write_audio_sleep`, `_send_interval = (chunk / rate) / 2`, `fastapi.py:454,509-590`), so the client needs only a small playout queue. **The WebSocket input path does not resample** (`BaseInputTransport.push_audio_frame` queues the frame as received, `base_input.py:188-195`; only SmallWebRTC has an `_audio_in_resampler`). The pipeline's input rate is `audio_in_sample_rate` (param) or the `StartFrame` default **16000**; output is `audio_out_sample_rate` or the default **24000** (`frames.py:922-923`), and every outbound audio frame carries `sample_rate`/`num_channels` in the protobuf. Therefore **D2's wire format is 16 kHz mono Int16 PCM upstream** (the client's `AVAudioConverter` targets 16 kHz, which is what SmallWebRTC resamples to today, so VAD/Flux see identical audio) and the client plays whatever rate the frames declare (24 kHz from ElevenLabs). The plan's "48 kHz" is replaced by this.
+- Serializer: `ProtobufFrameSerializer` (`serializers/protobuf.py`, schema `frames/frames.proto`: `oneof frame { text, audio, transcription, message, interruption }`; `AudioRawFrame` = `bytes audio, uint32 sample_rate, uint32 num_channels`; `protobuf 6.33.6` installed). Raw-PCM-without-protobuf would need a custom `FrameSerializer` subclass (`serialize`/`deserialize`/`setup`, `base_serializer.py:23-100`) — not needed: the protobuf envelope is a few dozen bytes per 40 ms chunk and is the only built-in serializer that carries both audio and messages, so **D5 uses `ProtobufFrameSerializer` on the wire** and the Swift side needs a protobuf encoder for exactly five message types (hand-written varint encoding is enough; no SwiftProtobuf dependency required — decide in C6 step 3).
+
+**§3.2 — confirmed: same socket, framed by the serializer — with one setting and one server-side change.**
+
+- Outbound: `send_app_message` → `OutputTransportMessageUrgentFrame` → `serialize` wraps `frame.message` as `MessageFrame(data=json.dumps(message))` (`protobuf.py:88-95`); the client receives the same JSON the data channel carries today, `AppMessage` decoding unchanged (`AppMessage.swift:324-333` already accepts the `server-message` envelope). **Setting:** `FrameSerializer.InputParams.ignore_rtvi_messages` defaults to **True** and drops every outbound message whose `label == "rtvi-ai"` (`base_serializer.py:51-69`) — which is every message `_wrap_rtvi` produces. The serializer must be built as `ProtobufFrameSerializer(params=FrameSerializer.InputParams(ignore_rtvi_messages=False))`, or the native path is silent. This is a hard fail-if-forgotten; it gets a server test (§7).
+- Inbound: a `message` protobuf is deserialized to `InputTransportMessageFrame` and **broadcast into the pipeline** (`fastapi.py:373-374`). `FastAPIWebsocketTransport` registers only `on_client_connected` / `on_client_disconnected` / `on_session_timeout` (`fastapi.py:656-658`) — there is **no `on_app_message` event and no connection object**, so `pipeline.py`'s `@webrtc_connection.event_handler("app-message")` receive path does not exist on this transport. **Server change:** `handle_voice_set` / `handle_ui_noop` are reached through a small `FrameProcessor` placed after `transport.input()` that consumes `InputTransportMessageFrame` (running `_unwrap_client_message` as today), on the WebSocket case; the WebRTC case keeps the connection-level handler. This is the "possibly NEW `jarvis/bot/ws_transport.py`" item in §5 — it is a processor, not a transport.
+- Also on the wire: the output transport serializes `InterruptionFrame` (`fastapi.py:491` `process_frame` → `_write_frame`; proto `interruption`). The native client must **flush its player queue on it** (drop queued TTS buffers), otherwise queued audio keeps playing after a barge-in; WebRTC hid this because the track simply stopped. Add to D3/D6.
+
+**§3.5 — confirmed, with one bench item added.** The wake listener opens its own `URLSession.shared.webSocketTask` to `wakeWordURL` (`ws://127.0.0.1:7862/ws`, `JarvisConfig.swift:8,41`; `WakeWordListener.swift:104,223`) and streams 16 kHz PCM from its own `AVAudioEngine` input tap (`WakeWordListener.swift:162-178`); nothing in it references the RTVI transport. Independent of the swap. What is *not* independent: the listener runs while the session is connected and the mic is muted (`JarvisClient.swift:303`), so **two `AVAudioEngine` instances share the input device in one process**, one of them (the transport's) with Voice Processing enabled. Today's equivalent is the libwebrtc ADM alongside the wake engine, so concurrent capture itself is proven; the VPIO combination is not — it joins the §3.3 bench: wake word must still fire while the transport is connected, muted, VPIO on, on the built-in mic and on AirPods.
+
+**Open (hardware, Larry): §3.3 VPIO echo bench and §3.4 latency parity** — §3.4 needs the C0.4 WebRTC baseline captures first.
+
 ---
 
 ## §4 Design decisions (made — the implementer does not choose)
@@ -173,6 +193,18 @@ improvise around it.
   flag and the input-notice UI — the native converter makes the whole
   mic-rate problem disappear. `AudioOutputMonitor` + the Reconnect chip stay
   (they still serve the WebRTC/remote path).
+- **Amendments from the §3 findings (2026-09-12)** — these override the
+  text above where they differ: D2 wire format is **16 kHz mono Int16 PCM**
+  upstream (the WebSocket input does not resample; 16 kHz is what SmallWebRTC
+  delivers to the pipeline today), playout at the rate each frame declares
+  (24 kHz). D5 wire framing is pipecat's `ProtobufFrameSerializer`, built with
+  `ignore_rtvi_messages=False`. D7's server class is
+  `FastAPIWebsocketTransport` on the runner's existing `/ws-client` route —
+  a second `case` in `bot()`, no new server or port. Inbound app messages on
+  that transport are consumed by a small `InputTransportMessageFrame`
+  processor (the WebRTC case keeps its connection-level handler). D3/D6: the
+  client flushes its player queue on the serializer's `interruption` frame.
+  Branch: `feat/native-audio-transport`, cut from `main` `6cdf1b8`.
 
 ---
 
