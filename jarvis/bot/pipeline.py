@@ -396,9 +396,16 @@ STT_KEYTERMS = [
 
 
 def build_pipeline(
-    transport: Any, runtime: Runtime, pusher: FramePusher | None = None
+    transport: Any, runtime: Runtime, pusher: FramePusher | None = None,
+    client_messages: Any = None,
 ) -> tuple[Pipeline, Any, Any, FramePusher]:
-    """Build the locked pipeline. Returns (pipeline, llm, aggregators, pusher)."""
+    """Build the locked pipeline. Returns (pipeline, llm, aggregators, pusher).
+
+    ``client_messages`` (a ``ClientMessageProcessor``) sits directly after
+    ``transport.input()`` when given — the WebSocket transport's receive
+    path for client app messages (native-audio plan §3.2 findings). The
+    WebRTC case passes None and keeps its connection-level handler.
+    """
     settings = runtime.settings
     pusher = pusher or FramePusher()
     catalog = load_voice_catalog()
@@ -794,6 +801,10 @@ def build_pipeline(
 
     pipeline_steps = [
         transport.input(),
+    ]
+    if client_messages is not None:
+        pipeline_steps.append(client_messages)
+    pipeline_steps += [
         # stop_secs 2.5 (default 0.2): wiring tuning so a mid-sentence pause
         # (~2 s) does not trigger the local smart-turn analyzer to close the
         # turn early (Phase 4 acceptance item 11; recorded in DEVIATIONS.md
@@ -859,8 +870,16 @@ async def send_app_message(transport: Any, message: dict) -> None:
         OutputTransportMessageUrgentFrame(message=_wrap_rtvi(message)))
 
 
-async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
-    """Build per-connection resources and run the pipeline to completion."""
+async def run_session(transport: Any, webrtc_connection: Any = None,
+                      client_messages: Any = None) -> None:
+    """Build per-connection resources and run the pipeline to completion.
+
+    ``webrtc_connection`` is the SmallWebRTC case's connection object (its
+    app-message event is the client-message receive path there);
+    ``client_messages`` is the WebSocket case's ``ClientMessageProcessor``
+    (native-audio plan D7), placed after ``transport.input()`` and bound to
+    the same two handlers. A session has one or the other.
+    """
     # MORTIMER_SESSION_MISSES_PLAN.md S3 — Deepgram Flux streams for the
     # whole connection and emits no usage metric, so the session's
     # wall-clock is what the teardown below bills as streamed audio.
@@ -964,7 +983,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
 
     try:
         catalog = load_voice_catalog()
-        pipeline, _llm, aggregators, pusher = build_pipeline(transport, runtime)
+        if client_messages is not None:
+            # Native-audio plan D7: on the WebSocket transport client app
+            # messages arrive as InputTransportMessageFrame in the pipeline;
+            # the processor is bound to the handlers below once they exist.
+            pipeline, _llm, aggregators, pusher = build_pipeline(
+                transport, runtime, client_messages=client_messages)
+        else:
+            pipeline, _llm, aggregators, pusher = build_pipeline(transport, runtime)
         async def inject_silent(text: str) -> None:
             # Phase 3: interruption notice. Unlike inject_context (greeting,
             # reminders), this does NOT call push_context_frame() — it only
@@ -1317,6 +1343,11 @@ async def run_session(transport: Any, webrtc_connection: Any = None) -> None:
             async def on_connection_app_message(connection: Any, message: Any) -> None:
                 await handle_voice_set(message)
                 await handle_ui_noop(message)
+        elif client_messages is not None:
+            # WebSocket transport (native-audio plan §3.2 findings): no
+            # connection object and no on_app_message event — the same two
+            # handlers run from the pipeline processor instead.
+            client_messages.bind(handle_voice_set, handle_ui_noop)
 
         runner = PipelineRunner()
         try:
