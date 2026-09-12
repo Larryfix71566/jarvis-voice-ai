@@ -1,6 +1,14 @@
 import SwiftUI
 
 /// Presentation-only header. Its state cannot recreate tab models or change a draft.
+///
+/// Closure plan C1.1 (gap G01): the strip is a keyboard-focusable control.
+/// With focus, ← / → move the selection one tab, Home / End jump to the
+/// first / last tab, and the existing selection observer scrolls the
+/// chosen tab into view. Selection changes go through the SAME `select`
+/// setter click and voice use (interface plan §4.2), so keyboard can never
+/// diverge from them. Scrolling the strip with the arrow buttons still
+/// never changes selection.
 struct DrawerTabStrip: View {
     let selectedTab: String
     let attention: [String: Color]
@@ -11,6 +19,7 @@ struct DrawerTabStrip: View {
     private var tabHeight: CGFloat { max(32, labelSize + 20) }
     @State private var tabViewport = TabStripViewport()
     @State private var tabFrames: [String: CGRect] = [:]
+    @FocusState private var stripFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -51,13 +60,42 @@ struct DrawerTabStrip: View {
                     .onChange(of: tabViewport.width) { _, _ in
                         proxy.scrollTo(selectedTab)
                     }
+                    // C1.1 — keyboard navigation. The container, not each
+                    // button, takes focus: one Tab stop for the whole strip,
+                    // arrows move within it. A visible focus ring is kept
+                    // (focusEffectDisabled is NOT applied) so the user can
+                    // see where keys will land.
+                    .focusable()
+                    .focused($stripFocused)
+                    .onKeyPress(.leftArrow) { moveSelection(by: -1) }
+                    .onKeyPress(.rightArrow) { moveSelection(by: 1) }
+                    .onKeyPress(.home) { jumpSelection(toFirst: true) }
+                    .onKeyPress(.end) { jumpSelection(toFirst: false) }
                     .accessibilityElement(children: .contain)
                     .accessibilityLabel("Sidecar tabs")
+                    .accessibilityHint("Use the left and right arrow keys to change tab")
                     if tabViewport.overflows {
                         tabScrollButton(forward: true, proxy: proxy)
                     }
                 }
             }
+    }
+
+    /// ← / →: the neighbouring tab in DrawerState.tabKeys order; the ends do
+    /// not wrap, so a key press at an end is a no-op rather than a jump.
+    private func moveSelection(by step: Int) -> KeyPress.Result {
+        let keys = DrawerState.tabKeys
+        guard let index = keys.firstIndex(of: selectedTab) else { return .ignored }
+        let next = index + step
+        guard keys.indices.contains(next) else { return .handled }
+        select(keys[next])
+        return .handled
+    }
+
+    private func jumpSelection(toFirst: Bool) -> KeyPress.Result {
+        guard let target = toFirst ? DrawerState.tabKeys.first : DrawerState.tabKeys.last else { return .ignored }
+        if target != selectedTab { select(target) }
+        return .handled
     }
 
     private func tabButton(_ key: String) -> some View {

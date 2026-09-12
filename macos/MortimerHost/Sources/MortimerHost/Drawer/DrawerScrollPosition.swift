@@ -5,6 +5,8 @@ private struct DrawerScrollRestoration: ViewModifier {
     @Environment(DrawerModels.self) private var models
     @State private var position = ScrollPosition(y: 0)
     @State private var restored = false
+    /// C1.4 — this presentation's identity for scroll-writer arbitration.
+    @State private var presentation = UUID()
 
     func body(content: Content) -> some View {
         content
@@ -12,12 +14,18 @@ private struct DrawerScrollRestoration: ViewModifier {
             .onScrollGeometryChange(for: Double.self) { geometry in
                 Double(geometry.contentOffset.y + geometry.contentInsets.top)
             } action: { _, offset in
-                guard restored, offset.isFinite else { return }
-                models.scrollOffsets[tab] = max(0, offset)
+                guard restored else { return }
+                models.recordScroll(offset, tab: tab, from: presentation)
             }
             .onAppear {
+                // The most recently mounted presentation of a tab is the one
+                // that records; an outgoing presentation cannot overwrite it.
+                models.claimScrollWriter(presentation, tab: tab)
                 if let offset = models.scrollOffsets[tab] { position.scrollTo(y: offset) }
                 restored = true
+            }
+            .onDisappear {
+                models.releaseScrollWriter(presentation, tab: tab)
             }
     }
 }

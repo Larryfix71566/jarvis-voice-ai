@@ -13,9 +13,18 @@ final class DrawerModels {
     private(set) var runs: RunsViewModel?
     private(set) var costs: CostsViewModel?
     private(set) var council: CouncilViewModel?
+    /// Remembered reading position per tab, restored when a presentation
+    /// of that tab mounts (dock → pop-out → dock keeps the place).
     var scrollOffsets: [String: Double] = [:]
     @ObservationIgnored private var config: JarvisConfig?
     @ObservationIgnored private var leases: [UUID: String] = [:]
+    /// Closure plan C1.4 (gap G04): at most ONE mounted presentation of a
+    /// tab records scroll offsets — the most recently mounted one. Without
+    /// this, a docked and a detached presentation of the same tab (both
+    /// alive during a pop-out transition) would overwrite each other's
+    /// offset on every scroll event. The writer is a lease, not the
+    /// offset: releasing it never discards the remembered position.
+    @ObservationIgnored private var scrollWriters: [String: UUID] = [:]
 
     func configure(_ next: JarvisConfig) {
         guard config != next else { return }
@@ -44,6 +53,32 @@ final class DrawerModels {
     }
 
     func visibleCount(for tab: String) -> Int { leases.values.filter { $0 == tab }.count }
+
+    // MARK: - Scroll-offset writer arbitration (C1.4)
+
+    /// The presentation `id` becomes the tab's scroll writer, displacing any
+    /// earlier writer. Called when a presentation of `tab` appears.
+    func claimScrollWriter(_ id: UUID, tab: String) {
+        scrollWriters[tab] = id
+    }
+
+    /// Only the current writer relinquishes; a stale presentation
+    /// disappearing after its replacement claimed the tab changes nothing.
+    func releaseScrollWriter(_ id: UUID, tab: String) {
+        if scrollWriters[tab] == id { scrollWriters[tab] = nil }
+    }
+
+    /// Records `offset` for `tab` only when `id` holds the writer lease.
+    /// Returns whether the offset was recorded (for tests and callers that
+    /// want to know they were ignored).
+    @discardableResult
+    func recordScroll(_ offset: Double, tab: String, from id: UUID) -> Bool {
+        guard offset.isFinite, scrollWriters[tab] == id else { return false }
+        scrollOffsets[tab] = max(0, offset)
+        return true
+    }
+
+    func isScrollWriter(_ id: UUID, tab: String) -> Bool { scrollWriters[tab] == id }
 
     private func start(_ tab: String) {
         switch tab {
