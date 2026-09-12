@@ -1,9 +1,12 @@
 import Foundation
 
+/// A display as placement sees it: a persistent identity and its work area
+/// in AppKit points. Backing scale is deliberately not part of it — frames
+/// are points on every display, so mixed-scale setups need no pixel clamp
+/// (closure C4.2, gap G17).
 struct PlacementScreen: Equatable {
     let id: String
     let visibleFrame: CGRect
-    var scale: Double = 1
 }
 
 struct PlacementRecovery: Codable, Equatable {

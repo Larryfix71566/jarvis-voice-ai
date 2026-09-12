@@ -2,7 +2,7 @@ import XCTest
 @testable import MortimerHost
 
 final class DisplayPlacementPolicyTests: XCTestCase {
-    private let primary = PlacementScreen(id: "primary", visibleFrame: CGRect(x: 0, y: 0, width: 1440, height: 900), scale: 2)
+    private let primary = PlacementScreen(id: "primary", visibleFrame: CGRect(x: 0, y: 0, width: 1440, height: 900))
     private let external = PlacementScreen(id: "external", visibleFrame: CGRect(x: 1440, y: 0, width: 1920, height: 1080))
     private let console = CGRect(x: 80, y: 80, width: 1000, height: 700)
     private let manual = CGRect(x: 1700, y: 200, width: 600, height: 500)
@@ -55,7 +55,7 @@ final class DisplayPlacementPolicyTests: XCTestCase {
 
     func testStableDisplayRolesSurviveScreenArrayReordering() {
         var policy = DisplayPlacementPolicy()
-        let portrait = PlacementScreen(id: "portrait", visibleFrame: CGRect(x: -1080, y: -200, width: 1080, height: 1920), scale: 2)
+        let portrait = PlacementScreen(id: "portrait", visibleFrame: CGRect(x: -1080, y: -200, width: 1080, height: 1920))
         let first = policy.reconcile(windows: [.console: console, .display: console, .drawer: console], screens: [primary, external, portrait], primaryID: primary.id)
         let second = policy.reconcile(windows: [.console: console, .display: first[.display]!, .drawer: first[.drawer]!], screens: [portrait, external, primary], primaryID: primary.id)
         XCTAssertEqual(second[.display], first[.display])
@@ -89,7 +89,7 @@ final class DisplayPlacementPolicyTests: XCTestCase {
         let large = CGRect(x: 1700, y: 100, width: 1400, height: 900)
         policy.noteManual(.display, frame: large, screens: [primary, external])
         _ = policy.reconcile(windows: [.console: console, .display: large], screens: [primary, external], primaryID: primary.id)
-        let smaller = PlacementScreen(id: external.id, visibleFrame: CGRect(x: 1440, y: 0, width: 1280, height: 720), scale: 2)
+        let smaller = PlacementScreen(id: external.id, visibleFrame: CGRect(x: 1440, y: 0, width: 1280, height: 720))
         let shrunk = policy.reconcile(windows: [.console: console, .display: large], screens: [primary, smaller], primaryID: primary.id)
         XCTAssertTrue(smaller.visibleFrame.contains(shrunk[.display]!))
         let restored = policy.reconcile(windows: [.console: console, .display: shrunk[.display]!], screens: [primary, external], primaryID: primary.id)
