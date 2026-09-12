@@ -96,6 +96,14 @@ public enum JarvisFlags {
     /// `defaults write com.mortimer.host JARVIS_MATCH_INPUT_RATE -bool false`
     /// to keep whatever mic is selected (and accept the slowdown).
     public static var matchInputRate: Bool { on("JARVIS_MATCH_INPUT_RATE") }
+    /// MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md D1/§9 — the rollback lever.
+    /// OPT-IN (absent key == off): on, a loopback bot uses
+    /// `DirectWebRTCTransport` exactly as before the native path existed
+    /// (`defaults write com.mortimer.host JARVIS_FORCE_WEBRTC -bool true`),
+    /// and the WebRTC-only device band-aids run again with it.
+    public static var forceWebRTC: Bool {
+        UserDefaults.standard.bool(forKey: "JARVIS_FORCE_WEBRTC")
+    }
 }
 
 /// §6 — one home for every numeric constant in the package. Nothing else
