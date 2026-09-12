@@ -205,6 +205,21 @@ class VerificationTests(unittest.TestCase):
         self.assertEqual(len(calls), 3)
         self.assertEqual(calls[-1][3:7], ['/bin/bash', '--noprofile', '--norc', '-c'])
 
+    def test_failed_keychain_selection_is_logged_and_stops_the_native_check(self):
+        calls = []
+        def guest(task, argv, **kwargs):
+            calls.append(argv)
+            if argv[3] == '/usr/bin/security':
+                return subprocess.CompletedProcess(argv, 1, stdout=b'', stderr=b'security: SecKeychainSetSearchList: not found\n')
+            return subprocess.CompletedProcess(argv, 0, stdout=b'', stderr=b'')
+        with patch.object(self, 'guest', side_effect=guest):
+            with self.assertRaises(SandboxError):
+                self.verifier.run_check('independent-task', 'native', ('swift', 'test'), self.directory, 30)
+        self.assertEqual(len(calls), 1, 'the check itself must not run after a failed selection')
+        log = (self.directory / 'native.log').read_bytes()
+        self.assertIn(b'security list-keychains -d user -s /Users/mortimer-dev/Library/Keychains/login.keychain-db exited 1', log)
+        self.assertIn(b'SecKeychainSetSearchList: not found', log)
+
 
 if __name__ == "__main__":
     unittest.main()

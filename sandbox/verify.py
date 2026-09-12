@@ -85,8 +85,16 @@ class Verifier:
             keychain = "/Users/mortimer-dev/Library/Keychains/login.keychain-db"
             for arguments in [("list-keychains", "-d", "user", "-s", keychain),
                               ("default-keychain", "-d", "user", "-s", keychain)]:
-                self.controller.guest(task, [*self.controller.worker_prefix(state), "/usr/bin/security", *arguments],
-                                      timeout=min(remaining(), 15), capture=True)
+                selection = self.controller.guest(task, [*self.controller.worker_prefix(state), "/usr/bin/security", *arguments],
+                                                  timeout=min(remaining(), 15), capture=True, check=False, binary=True)
+                if selection.returncode != 0:
+                    # Keep the evidence: a bare "guest command failed" left
+                    # attempt 01ff3480 (closure C5 record) undiagnosable.
+                    data = SECRET.sub(b"[redacted credential-shaped value]",
+                                      b"security " + " ".join(arguments).encode() + b" exited " + str(selection.returncode).encode()
+                                      + b"\n" + selection.stdout + b"\n" + selection.stderr)
+                    atomic_bytes(directory / (name + ".log"), data)
+                    raise SandboxError("Keychain selection failed before " + name + " (see " + name + ".log)")
         def progress(stdout, stderr):
             # Only complete lines are exposed while a process is running, so
             # a credential split across chunks is redacted as one value.
