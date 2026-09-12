@@ -58,33 +58,10 @@ struct DrawerView: View {
     /// pending draft), then ⧉ pop-out and × close chrome controls.
     private var tabStrip: some View {
         HStack(spacing: 2) {
-            ForEach(DrawerState.tabKeys, id: \.self) { key in
-                Button {
-                    drawer.setTab(key)   // the SAME setter drawer_tab calls (C5)
-                } label: {
-                    HStack(spacing: 6) {
-                        Text((DrawerState.tabLabels[key] ?? key).uppercased())
-                            .font(.system(size: 10, design: .monospaced))
-                            .kerning(1.2)
-                        if let dotColor = tabDot(key) {
-                            Circle()
-                                .fill(dotColor)
-                                .frame(width: 6, height: 6)
-                                .shadow(color: dotColor, radius: 4)
-                        }
-                    }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 2)
-                            .strokeBorder(drawer.activeTab == key ? AppTheme.accentDim : .clear,
-                                          lineWidth: 1)
-                    )
-                    .foregroundStyle(drawer.activeTab == key ? AppTheme.accent : AppTheme.textDim)
-                }
-                .buttonStyle(.plain)
-            }
-            Spacer()
+            DrawerTabStrip(selectedTab: drawer.activeTab,
+                           attention: Dictionary(uniqueKeysWithValues: DrawerState.tabKeys.compactMap { key in
+                               tabDot(key).map { (key, $0) }
+                           }), select: drawer.setTab)
             if !drawer.isPoppedOut {
                 Button {
                     drawer.placementRef?.popOutDrawer()   // same call drawer_popout makes
