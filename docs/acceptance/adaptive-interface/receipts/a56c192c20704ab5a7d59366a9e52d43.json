@@ -1,0 +1,184 @@
+{
+  "version": 1,
+  "attempt": "a56c192c20704ab5a7d59366a9e52d43",
+  "candidate": "bb795d04e097174aa04ec94109ebb5754769f44044b830ae2785978933539041",
+  "baseline": "bb795d04e097174aa04ec94109ebb5754769f44044b830ae2785978933539041",
+  "source_commit": "8c1fb5a340f51270cc6b6744af0d29cfc95e9b41",
+  "image": "32a82fdd1de4ebdd002bd720f671fe08af485a1631b21364442a7600d4abd49f",
+  "profile": "c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e",
+  "runner": "1b80cf588b0815d17234710a5a221a2bb6f7301e35a53c1b87218cdcd7ace9ff",
+  "development_task": "3e5a1d4b5c82",
+  "checks": [
+    {
+      "name": "backend-imports",
+      "argv": [
+        "/Users/admin/mortimer/dependencies/python/bin/python",
+        "-c",
+        "import jarvis, jarvis.config, jarvis.cli, jarvis.runlog"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 6.072,
+      "log_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "name": "baseline-backend",
+      "argv": [
+        "/Users/admin/mortimer/dependencies/python/bin/python",
+        "-m",
+        "pytest",
+        "/Users/admin/mortimer/verification/tests/unit",
+        "-q"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 317.377,
+      "log_sha256": "03835cedfc2c5827b90a1a17fd0c217552fe4d3e7997658edfcd1fb31a6ff24e"
+    },
+    {
+      "name": "backend",
+      "argv": [
+        "/Users/admin/mortimer/dependencies/python/bin/python",
+        "-m",
+        "pytest",
+        "tests/unit",
+        "-q"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 315.039,
+      "log_sha256": "9e730c96d5b9ddaf88100e0191d666c116a73939f8e75e3c7d43b4877be87db5"
+    },
+    {
+      "name": "scripted-evals",
+      "argv": [
+        "/Users/admin/mortimer/dependencies/python/bin/python",
+        "-m",
+        "pytest",
+        "/Users/admin/mortimer/verification/tests/evals/sub_agent_evals.py",
+        "-q"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 2.343,
+      "log_sha256": "f423c4bcec86052a17627b5e53520f2a4cfbd25f0594c306cf45db0941709657"
+    },
+    {
+      "name": "latency",
+      "argv": [
+        "/Users/admin/mortimer/dependencies/python/bin/python",
+        "scripts/latency_probe.py",
+        "--budget",
+        "tests/fixtures/latency_sample.log"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 0.312,
+      "log_sha256": "c192bbb7b228dedbda047e7571ca16605031294ad5dea939ebe8696c07781b2a"
+    },
+    {
+      "name": "knowledge-base",
+      "argv": [
+        "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+        "-m",
+        "pytest",
+        "services/mortimer-vault/tests",
+        "-q"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 3.515,
+      "log_sha256": "6b2c181b9f82faf763418d643913e57b63e233f151f59564605a79e63ce94f67"
+    },
+    {
+      "name": "baseline-knowledge-base",
+      "argv": [
+        "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+        "-m",
+        "pytest",
+        "/Users/admin/mortimer/verification/services/mortimer-vault/tests",
+        "-q"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 4.678,
+      "log_sha256": "082524bbdbe7d916415e7b4c67afee7b8577163d5513756c0a04ae668ea625e3"
+    },
+    {
+      "name": "web",
+      "argv": [
+        "npm",
+        "--prefix",
+        "web",
+        "run",
+        "build"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 31.036,
+      "log_sha256": "2bab01985e3659316abb11b8d71d16b8e3734a6869b1993d14867de8aa5b6035"
+    },
+    {
+      "name": "native-library",
+      "argv": [
+        "swift",
+        "test",
+        "--package-path",
+        "macos/JarvisKit"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 77.021,
+      "log_sha256": "39630c9d9cc0f62555c004f28995fb9a0927acfbfc41dff2486716de17145263"
+    },
+    {
+      "name": "native-app",
+      "argv": [
+        "swift",
+        "test",
+        "--package-path",
+        "macos/MortimerHost"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 90.456,
+      "log_sha256": "e04bc7486c5810f3a96b0fbe711923e9295a2fd94b3b96a40d3273a45053c7f7"
+    },
+    {
+      "name": "baseline-native-library",
+      "argv": [
+        "swift",
+        "test",
+        "--package-path",
+        "/Users/admin/mortimer/verification/macos/JarvisKit"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 9.623,
+      "log_sha256": "c881a5323929593645b8434caf7c86ae6d4b43954313f314122d825bd9765cfb"
+    },
+    {
+      "name": "baseline-native-app",
+      "argv": [
+        "swift",
+        "test",
+        "--package-path",
+        "/Users/admin/mortimer/verification/macos/MortimerHost"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 89.998,
+      "log_sha256": "69b1f4ed255a47bd984bcabc4c7ab0f4babe6d915a0f88f80fb50ed1dcc8ff81"
+    }
+  ],
+  "passed": true,
+  "status": "passed",
+  "verification_task": "7a21634cb1ec",
+  "desktop_probe": {
+    "returncode": 0,
+    "passed": true,
+    "seconds": 23.918,
+    "log_sha256": "adbe9a9199ac1cd291958992aa51394dbd50840d5c75fed5cd68600ea52742d9"
+  },
+  "source_unchanged": true
+}
