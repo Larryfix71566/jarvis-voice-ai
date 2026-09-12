@@ -36,6 +36,7 @@ except ModuleNotFoundError:  # Direct script invocation.
 
 TASK_ID = re.compile(r"[0-9a-f]{12}\Z")
 GUEST_ROOT = "/Users/admin/mortimer"
+GUEST_INPUT = "/Volumes/My Shared Files/input"
 PRIVATE_NETWORKS = ('0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8',
                     '169.254.0.0/16', '172.16.0.0/12', '192.168.0.0/16',
                     '224.0.0.0/4', '240.0.0.0/4')
