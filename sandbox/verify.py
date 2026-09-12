@@ -11,7 +11,7 @@ import time
 import uuid
 
 from sandbox.artifacts import Candidate, SECRET, SandboxError
-from sandbox.control import GUEST_ROOT
+from sandbox.control import GUEST_INPUT, GUEST_ROOT
 from sandbox.durable import atomic_bytes, atomic_json
 from sandbox.files import WorkspaceFiles
 
@@ -23,7 +23,8 @@ def runner_fingerprint() -> str:
     root = Path(__file__).resolve().parent
     digest = hashlib.sha256()
     for name in ["artifacts.py", "control.py", "durable.py", "files.py", "images.py", "profiles.py",
-                 "verify.py", "guest/hydrate.py", "guest/worker.sh", "guest/rpc.py", "guest/static-web-check.mjs"]:
+                 "verify.py", "guest/hydrate.py", "guest/worker.sh", "guest/rpc.py", "guest/static-web-check.mjs",
+                 "guest/desktop-probe.sh"]:
         digest.update(name.encode() + b"\0" + (root / name).read_bytes() + b"\0")
     return digest.hexdigest()
 
@@ -44,6 +45,23 @@ class Verifier:
         self.controller.stop(task)
         raise SandboxError("VM did not become ready")
 
+    def desktop_probe(self, task: str, directory: Path, timeout: int = 180) -> dict:
+        """Fail closed unless the worker owns a visible desktop (closure C5.1)."""
+        state = self.controller.read(task)
+        if not state.get("hydrated") or state.get("network") != "offline" or state.get("worker") != "mortimer-dev":
+            raise SandboxError("Desktop probe requires a hydrated offline worker")
+        started = time.monotonic()
+        result = self.controller.guest(task, [*self.controller.worker_prefix(state), "/bin/bash",
+                                              GUEST_INPUT + "/desktop-probe.sh"],
+                                       timeout=timeout, capture=True, check=False, binary=True, max_output=256 * 1024)
+        data = SECRET.sub(b"[redacted credential-shaped value]", result.stdout + b"\n" + result.stderr)
+        atomic_bytes(directory / "desktop-probe.log", data)
+        record = {"returncode": result.returncode, "passed": result.returncode == 0 and b"desktop=visible" in data,
+                  "seconds": round(time.monotonic() - started, 3), "log_sha256": hashlib.sha256(data).hexdigest()}
+        if not record["passed"]:
+            raise SandboxError("Guest desktop is not attached; native checks cannot run (see desktop-probe.log)")
+        return record
+
     def run_check(self, task: str, name: str, argv: tuple[str, ...], directory: Path, timeout: int) -> dict:
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         script = "cd " + GUEST_ROOT + "/source && source " + GUEST_ROOT + "/development.env && exec " + shlex.join(argv)
@@ -58,13 +76,15 @@ class Verifier:
         if not state.get("hydrated") or state.get("network") != "offline" or state.get("worker") != "mortimer-dev":
             raise SandboxError("Checks require a hydrated offline worker")
         if argv and argv[0] in {"swift", "/usr/bin/swift"}:
-            # Headless worker Keychain preferences can disappear between
-            # setup, long test runs and restarts. Select and unlock the
-            # disposable test store immediately before native checks.
-            keychain = "/Users/mortimer-dev/Library/Keychains/sandbox.keychain-db"
+            # Worker Keychain preferences can disappear between setup, long
+            # test runs and restarts. Re-select the disposable store
+            # immediately before native checks. It is the worker's login
+            # keychain (closure C5): loginwindow unlocks it at auto-login,
+            # its password is a guest-only secret, and the desktop probe has
+            # already proven it accepts writes without a prompt.
+            keychain = "/Users/mortimer-dev/Library/Keychains/login.keychain-db"
             for arguments in [("list-keychains", "-d", "user", "-s", keychain),
-                              ("default-keychain", "-d", "user", "-s", keychain),
-                              ("unlock-keychain", "-p", "sandbox-test-only", keychain)]:
+                              ("default-keychain", "-d", "user", "-s", keychain)]:
                 self.controller.guest(task, [*self.controller.worker_prefix(state), "/usr/bin/security", *arguments],
                                       timeout=min(remaining(), 15), capture=True)
         def progress(stdout, stderr):
@@ -106,9 +126,25 @@ class Verifier:
                                                      purpose="verification", candidate=candidate, parent_task=files.task)
             receipt.update(verification_task=verification_task, status="hydrating")
             atomic_json(directory / "receipt.json", receipt)
-            self.controller.start(verification_task, provisioning=False, headless=True)
+            # Native AppKit tests need a real desktop surface for window
+            # visibility, focus and animation assertions. Profiles opt in
+            # explicitly; network, audio and clipboard isolation are unchanged.
+            self.controller.start(verification_task, provisioning=False,
+                                  headless=not profile.requires_graphics)
             self.wait_ready(verification_task)
             self.images.hydrate(verification_task)
+            if profile.requires_graphics:
+                # worker.sh configures the disposable worker for auto-login.
+                # Restart once so AppKit checks run inside that worker's real
+                # WindowServer session instead of the provisioning admin login.
+                self.controller.stop(verification_task)
+                self.controller.start(verification_task, provisioning=False, headless=False)
+                self.wait_ready(verification_task)
+                # Closure C5.1 (gap G20): graphics allocation alone proves
+                # nothing; a probe window must report itself visible in the
+                # worker's own session before any AppKit check runs.
+                receipt["desktop_probe"] = self.desktop_probe(verification_task, directory)
+                atomic_json(directory / "receipt.json", receipt)
             for index, argv in enumerate(profile.seeds):
                 remaining = int(deadline - time.monotonic())
                 if remaining < 1:

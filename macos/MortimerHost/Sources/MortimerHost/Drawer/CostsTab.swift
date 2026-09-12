@@ -22,13 +22,19 @@ import JarvisKit
 @MainActor
 @Observable
 final class CostsViewModel {
-    let api: CostsAPI
+    private(set) var api: CostsAPI
     var state: TabState<CostSummary> = .loading
     var daily: [DailyCost] = []
     private var pollTask: Task<Void, Never>?
     private var stopped = false
 
     init(api: CostsAPI) { self.api = api }
+
+    func updateAPI(_ api: CostsAPI) {
+        stopPolling()
+        self.api = api
+        stopped = false
+    }
 
     func startPolling() {
         guard pollTask == nil, !stopped else { return }
@@ -51,10 +57,13 @@ final class CostsViewModel {
             async let s = api.summary()
             async let d = api.daily()
             let summary = try await s
+            guard !Task.isCancelled else { return }
             let dailyResp = try await d
+            guard !Task.isCancelled else { return }
             daily = dailyResp.daily
             state = TabStateMapper.map(ok: true, error: nil, isEmpty: summary.calls == 0, value: summary)
         } catch {
+            guard !Task.isCancelled else { return }
             let (message, unauthorized) = TabStateMapper.fromError(error)
             state = .error(message)
             if unauthorized { stopped = true; stopPolling() }
@@ -96,8 +105,7 @@ struct CostsTab: View {
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .task { model.startPolling() }
-        .onDisappear { model.stopPolling() }
+        .preserveDrawerScroll("costs")
     }
 
     private func header(_ s: CostSummary) -> some View {

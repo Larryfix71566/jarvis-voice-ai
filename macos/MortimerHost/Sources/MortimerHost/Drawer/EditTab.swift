@@ -10,7 +10,7 @@ import JarvisKit
 @MainActor
 @Observable
 final class EditViewModel {
-    let api: AdminAPI
+    private(set) var api: AdminAPI
     var state: TabState<SelfEditStatus> = .loading
     var models: [SelfEditModel] = []
     var selectedModel = ""
@@ -21,6 +21,12 @@ final class EditViewModel {
     private var stopped = false
 
     init(api: AdminAPI) { self.api = api }
+
+    func updateAPI(_ api: AdminAPI) {
+        stopPolling()
+        self.api = api
+        stopped = false
+    }
 
     func startPolling() {
         guard pollTask == nil, !stopped else { return }
@@ -41,6 +47,7 @@ final class EditViewModel {
 
     func loadModels() async {
         guard let response = try? await api.selfeditModelsTyped(), response.ok else { return }
+        guard !Task.isCancelled else { return }
         models = response.models
         if selectedModel.isEmpty {
             selectedModel = response.models.first(where: \.isDefault)?.name
@@ -51,6 +58,7 @@ final class EditViewModel {
     func refresh() async {
         do {
             let status = try await api.selfeditStatusTyped()
+            guard !Task.isCancelled else { return }
             // Two shapes (P3): busy → error != nil; idle real status with
             // nothing active → empty; else loaded.
             if let error = status.error {
@@ -61,6 +69,7 @@ final class EditViewModel {
                 state = .loaded(status)
             }
         } catch {
+            guard !Task.isCancelled else { return }
             let (message, unauthorized) = TabStateMapper.fromError(error)
             state = .error(message)
             if unauthorized { stopped = true; stopPolling() }
@@ -123,8 +132,7 @@ struct EditTab: View {
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .task { model.startPolling() }
-        .onDisappear { model.stopPolling() }
+        .preserveDrawerScroll("edit")
     }
 
     private var controls: some View {

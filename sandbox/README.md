@@ -116,6 +116,21 @@ host/private-network canaries remain blocked. A failed IPv6 connection
 is recorded separately: it alone cannot prove filtering versus absent routing.
 Neither these probes nor passing unit tests establish complete containment.
 
+The installed Mortimer verification profile declares that its native AppKit
+checks require graphics. Independent verification therefore starts its clone
+without `--no-graphics`, while retaining offline networking, disabled audio and
+clipboard sharing, the unprivileged worker and all existing timeouts. Graphics
+allocation alone does not prove that a guest desktop session is active, so
+after the graphics restart the verifier runs `guest/desktop-probe.sh` as the
+worker: it must be the console user of an Aqua session with no Setup
+Assistant running, a probe window must report `occlusionState.visible`
+after pumping AppKit events, and the login keychain must accept a write
+without a SecurityAgent prompt. The probe's exit code and log hash are bound
+into the receipt; a failure aborts before any check runs. `worker.sh` makes
+that desktop possible: the worker's keychain is its login keychain (unlocked
+by loginwindow at auto-login) and every Setup Assistant page is pre-marked
+as seen for the running build.
+
 Two source files contain intentionally fake credential-shaped fixtures.
 `REVIEWED_TEST_FIXTURES` permits only their reviewed path and exact SHA-256
 content. A changed or moved fixture is still rejected by the source scanner.

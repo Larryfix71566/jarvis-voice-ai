@@ -51,7 +51,12 @@ struct MemoryReviewResolveIn: Encodable {
 /// them.
 public struct AdminAPI: Sendable {
     let config: JarvisConfig
-    public init(config: JarvisConfig) { self.config = config }
+    // Internal read-test seam. Production creates its own transient session.
+    let graphSession: URLSession?
+    public init(config: JarvisConfig) { self.config = config; self.graphSession = nil }
+    init(config: JarvisConfig, graphSession: URLSession) {
+        self.config = config; self.graphSession = graphSession
+    }
 
     private func percentEncoded(_ segment: String) -> String {
         segment.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? segment

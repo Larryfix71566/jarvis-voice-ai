@@ -120,9 +120,9 @@ class Images:
             atomic_bytes(inputs / "baseline.json", baseline.encode())
             atomic_json(inputs / "hydrate.json", {"candidate": selected.fingerprint, "caches": profile.caches})
             root = Path(__file__).resolve().parent
-            for name in ["artifacts.py", "guest/hydrate.py", "guest/worker.sh", "guest/static-web-check.mjs"]:
+            for name in ["artifacts.py", "guest/hydrate.py", "guest/worker.sh", "guest/static-web-check.mjs", "guest/desktop-probe.sh"]:
                 atomic_bytes(inputs / Path(name).name, (root / name).read_bytes(),
-                             mode=0o644 if name.endswith(".mjs") else 0o600)
+                             mode=0o644 if name.endswith((".mjs", "desktop-probe.sh")) else 0o600)
             self.controller.install_file_service(task)
             self.controller.command("clone", image["vm"], state["vm"], timeout=600)
             self.controller.command("set", state["vm"], "--cpu", "4", "--memory", "8192", timeout=30)

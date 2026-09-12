@@ -1,4 +1,6 @@
 import Foundation
+import SwiftUI
+import AppKit
 
 /// APP plan §6 — every number, one place. Constants marked "web parity"
 /// carry their measured source; the UserDefaults-overridable ones read
@@ -96,4 +98,45 @@ enum AppTuning {
     static let captionMaxBot = 600
     /// App.tsx transient-notice auto-dismiss (speaker gate, popout errors)
     static let noticeFadeSeconds = 4.0
+
+    // --- adaptive interface (closure plan C2.3 / C2.4; interface plan §7) ---
+    /// §7: layout/mode transitions take 200 ms; Reduce Motion, a held
+    /// pointer button or keyboard editing suppress the animation entirely
+    /// (see AdaptiveTransition).
+    static let layoutTransitionSeconds: Double = 0.2
+    /// §7: the wide layout (left voice rail + workspace) starts here; below
+    /// it the compact bottom-wave placement is used.
+    static let wideLayoutMinWidth: Double = 1180
+    /// §7: the sources inspector is a 300 pt subpane only when the results
+    /// pane is at least this wide; otherwise it opens as a sheet.
+    static let inspectorSubpaneMinWidth: Double = 820
+    static let inspectorWidth: Double = 300
+}
+
+/// Interface plan §7 audio-presentation values, one place (closure C2.4).
+/// Colors are the plan's teal #2DD4BF (user) and violet #A78BFA (Mortimer);
+/// contrast verification against the actual theme is a C8 row.
+enum AudioPresentationTuning {
+    static let userRGB: (Double, Double, Double) = (45, 212, 191)        // #2DD4BF
+    static let assistantRGB: (Double, Double, Double) = (167, 139, 250)  // #A78BFA
+    static let neutralRGB: (Double, Double, Double) = (95, 130, 150)
+    static var userColor: Color { Color(red: userRGB.0 / 255, green: userRGB.1 / 255, blue: userRGB.2 / 255) }
+    static var assistantColor: Color { Color(red: assistantRGB.0 / 255, green: assistantRGB.1 / 255, blue: assistantRGB.2 / 255) }
+    /// VoiceEnvelope smoothing, elapsed-time exponential (§7: attack 40 ms, release 180 ms).
+    static let attackSeconds: Double = 0.040
+    static let releaseSeconds: Double = 0.180
+}
+
+/// The one decision for §7's layout transition: animate for 200 ms, or not
+/// at all. No transition under Reduce Motion, while a pointer button is
+/// held (a drag or resize in progress), or while a text view has keyboard
+/// focus (selection/editing must not be disturbed).
+@MainActor
+enum AdaptiveTransition {
+    static func animation(reduceMotion: Bool) -> Animation? {
+        if reduceMotion { return nil }
+        if NSEvent.pressedMouseButtons != 0 { return nil }
+        if NSApplication.shared.keyWindow?.firstResponder is NSTextView { return nil }
+        return .easeInOut(duration: AppTuning.layoutTransitionSeconds)
+    }
 }

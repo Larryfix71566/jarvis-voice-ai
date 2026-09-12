@@ -36,6 +36,7 @@ except ModuleNotFoundError:  # Direct script invocation.
 
 TASK_ID = re.compile(r"[0-9a-f]{12}\Z")
 GUEST_ROOT = "/Users/admin/mortimer"
+GUEST_INPUT = "/Volumes/My Shared Files/input"
 PRIVATE_NETWORKS = ('0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8',
                     '169.254.0.0/16', '172.16.0.0/12', '192.168.0.0/16',
                     '224.0.0.0/4', '240.0.0.0/4')
@@ -382,7 +383,26 @@ class Controller:
             return []  # Manually prepared foundation tasks predate profiles.
         if worker != "mortimer-dev":
             raise SandboxError("Unexpected candidate worker identity")
-        return ["/usr/bin/sudo", "-n", "-H", "-u", worker]
+        # Tart executes in the current guest login session. A GUI test session
+        # is already the unprivileged worker and must not need sudo rights.
+        # Check the actual identity again after any privilege drop, before
+        # sourcing the candidate environment or executing its arguments.
+        guarded_exec = '''
+test "$(/usr/bin/id -u):$(/usr/bin/id -ru):$(/usr/bin/id -un)" = "502:502:mortimer-dev" || exit 77
+HOME=/Users/mortimer-dev
+USER=mortimer-dev
+LOGNAME=mortimer-dev
+export HOME USER LOGNAME
+exec "$@"
+'''
+        dispatch = '''
+case "$(/usr/bin/id -u):$(/usr/bin/id -un)" in
+502:mortimer-dev) exec /bin/sh -c ''' + shlex.quote(guarded_exec) + ''' mortimer-dev "$@" ;;
+0:root|501:admin) exec /usr/bin/sudo -n -H -u mortimer-dev /bin/sh -c ''' + shlex.quote(guarded_exec) + ''' mortimer-dev "$@" ;;
+*) exit 77 ;;
+esac
+'''
+        return ["/bin/sh", "-c", dispatch, worker]
 
     def stop(self, task: str):
         state = self.read(task)

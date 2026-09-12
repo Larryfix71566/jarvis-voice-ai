@@ -8,8 +8,6 @@ import JarvisKit
 /// re-expanding what the user collapsed); the web's exact empty copy.
 struct OutputTab: View {
     @Environment(DisplayResultStore.self) private var store
-    @State private var expandedId: Int?
-    @State private var lastNewestId: Int?
     /// 30s heartbeat so the relative times don't freeze.
     @State private var now = Date()
 
@@ -42,20 +40,7 @@ struct OutputTab: View {
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .onAppear {
-            // First mount: newest starts expanded (OutputTab.tsx:23-26).
-            if expandedId == nil && lastNewestId == nil {
-                expandedId = store.results.first?.id
-            }
-            lastNewestId = store.results.first?.id
-        }
-        .onChange(of: store.results.first?.id) { _, newest in
-            // Auto-expand only a genuinely NEW newest item (D32).
-            if let newest, newest != lastNewestId {
-                expandedId = newest
-            }
-            lastNewestId = newest
-        }
+        .preserveDrawerScroll("output")
         .task {
             while !Task.isCancelled {
                 now = Date()
@@ -94,10 +79,10 @@ struct OutputTab: View {
             .padding(.vertical, 6)
             .contentShape(Rectangle())
             .onTapGesture {
-                expandedId = (expandedId == result.id) ? nil : result.id
+                store.expandedID = (store.expandedID == result.id) ? nil : result.id
             }
 
-            if expandedId == result.id {
+            if store.expandedID == result.id {
                 Divider().overlay(AppTheme.hairline)
                 DisplayContentView(payload: result.payload)
                     .padding(8)

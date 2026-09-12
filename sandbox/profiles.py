@@ -16,6 +16,7 @@ class Profile:
     caches: tuple[str, ...]
     checks: tuple[tuple[str, tuple[str, ...]], ...]
     seeds: tuple[tuple[str, ...], ...] = ()
+    requires_graphics: bool = False
 
     def validate_source(self, candidate: Candidate):
         if self.name != "web-app":
@@ -39,7 +40,8 @@ class Profile:
     @property
     def fingerprint(self) -> str:
         return hashlib.sha256(json.dumps({"name": self.name, "dependencies": self.dependencies,
-            "caches": self.caches, "checks": self.checks, "seeds": self.seeds}, sort_keys=True).encode()).hexdigest()
+            "caches": self.caches, "checks": self.checks, "seeds": self.seeds,
+            "requires_graphics": self.requires_graphics}, sort_keys=True).encode()).hexdigest()
 
 
 MORTIMER = Profile(
@@ -65,6 +67,7 @@ MORTIMER = Profile(
         ("baseline-native-app", ("swift", "test", "--package-path", VERIFICATION + "/macos/MortimerHost")),
     ),
     seeds=((PYTHON, "scripts/init_db.py"), (KB_PYTHON, "-m", "mortimer_vault.cli", "init")),
+    requires_graphics=True,
 )
 
 WEB_APP = Profile(

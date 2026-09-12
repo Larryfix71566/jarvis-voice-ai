@@ -27,6 +27,7 @@ final class AppMessageRouter {
         agentRuns: AgentRunStore,
         displayResults: DisplayResultStore,
         displayWindow: DisplayWindowStore,
+        workspace: WorkspaceStore? = nil,
         conversation: ConversationStore? = nil,
         drawer: DrawerState? = nil,
         notices: ConsoleNoticeState? = nil
@@ -84,10 +85,12 @@ final class AppMessageRouter {
                     if case .agentDone(let done) = message { Sounds.play(done.ok ? .done : .fail) }
                     agentRuns.apply(message)
                 case .display(let payload):
+                    let result = WorkspaceResult(payload: payload)
+                    workspace?.receive(result)
                     switch payload.surface {
-                    case .window: displayWindow.apply(payload)
+                    case .window: displayWindow.apply(payload, workspaceID: result.id)
                     case .drawer:
-                        displayResults.apply(payload)
+                        displayResults.apply(payload, workspaceID: result.id)
                         // D31's three-case auto-open rule (App.tsx:247-254),
                         // drawer-routed results only: closed → open on
                         // Output; open elsewhere → dot; open on Output →

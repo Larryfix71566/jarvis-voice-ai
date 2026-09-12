@@ -88,6 +88,98 @@ class SourceTests(unittest.TestCase):
                 control.snapshot(self.repo, "HEAD", self.root / "moved.tar")
 
 
+class WorkerDispatchTests(unittest.TestCase):
+    """Run the dispatch shell with stand-ins only for OS identity and sudo.
+
+    The payload records whether execution happened, its literal arguments and
+    home. A broken privilege drop must never reach that payload.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.identity = self.root / "id"
+        self.identity.write_text('''#!/bin/sh
+case "$1" in
+-u) printf '%s\\n' "$TEST_UID" ;;
+-ru) printf '%s\\n' "${TEST_RUID:-$TEST_UID}" ;;
+-un) printf '%s\\n' "$TEST_NAME" ;;
+*) exit 90 ;;
+esac
+''')
+        self.sudo = self.root / "sudo"
+        self.sudo.write_text('''#!/bin/sh
+printf 'called\\n' >> "$TEST_SUDO_LOG"
+test "$1:$2:$3:$4" = "-n:-H:-u:mortimer-dev" || exit 91
+shift 4
+if [ "${TEST_SUDO_FAIL:-0}" = 1 ]; then exit 1; fi
+if [ "${TEST_BAD_DROP:-0}" != 1 ]; then
+  TEST_UID=502 TEST_RUID=502 TEST_NAME=mortimer-dev
+  export TEST_UID TEST_RUID TEST_NAME
+fi
+exec "$@"
+''')
+        self.identity.chmod(0o755)
+        self.sudo.chmod(0o755)
+        self.log = self.root / "sudo.log"
+        self.result = self.root / "payload.json"
+
+    def run_dispatch(self, uid, name, *, real_uid=None, bad_drop=False, sudo_fail=False, arguments=(), exit_code=0):
+        prefix = control.Controller.worker_prefix({"worker": "mortimer-dev"})
+        # Replace the OS boundary, not the branching or the post-drop guard.
+        prefix[2] = prefix[2].replace("/usr/bin/id", str(self.identity)).replace("/usr/bin/sudo", str(self.sudo))
+        env = {"PATH": "/usr/bin:/bin", "HOME": "/Users/admin", "USER": "admin", "LOGNAME": "admin",
+               "TEST_UID": str(uid), "TEST_RUID": str(real_uid if real_uid is not None else uid),
+               "TEST_NAME": name, "TEST_SUDO_LOG": str(self.log), "TEST_BAD_DROP": str(int(bad_drop)),
+               "TEST_SUDO_FAIL": str(int(sudo_fail))}
+        payload = ("import json,os,pathlib,sys; "
+                   "pathlib.Path(sys.argv[1]).write_text(json.dumps({'args':sys.argv[2:],"
+                   "'home':os.environ['HOME'],'user':os.environ['USER'],'logname':os.environ['LOGNAME']})); "
+                   + "sys.exit(" + str(exit_code) + ")")
+        return subprocess.run([*prefix, sys.executable, "-c", payload, str(self.result), *arguments],
+                              env=env, capture_output=True, timeout=10)
+
+    def test_logged_in_worker_needs_no_sudo_and_preserves_literal_arguments(self):
+        sentinel = self.root / "must-not-exist"
+        arguments = ["", "two words", "line one\nline two", "'quoted'", "$(touch " + str(sentinel) + ")", "; exit 99"]
+        result = self.run_dispatch(502, "mortimer-dev", arguments=arguments, exit_code=23)
+        self.assertEqual(result.returncode, 23, result.stderr)
+        self.assertFalse(self.log.exists())
+        self.assertFalse(sentinel.exists())
+        self.assertEqual(json.loads(self.result.read_text()), {
+            "args": arguments, "home": "/Users/mortimer-dev", "user": "mortimer-dev", "logname": "mortimer-dev"})
+
+    def test_admin_and_root_drop_privilege_before_payload(self):
+        for uid, name in [(0, "root"), (501, "admin")]:
+            with self.subTest(uid=uid):
+                self.result.unlink(missing_ok=True)
+                self.log.unlink(missing_ok=True)
+                result = self.run_dispatch(uid, name)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(self.log.read_text(), "called\n")
+                self.assertEqual(json.loads(self.result.read_text())["home"], "/Users/mortimer-dev")
+
+    def test_unknown_or_mismatched_identity_never_runs_candidate(self):
+        for uid, name, real_uid in [(503, "other", 503), (502, "admin", 502), (501, "mortimer-dev", 501),
+                                    (0, "other", 0), (502, "mortimer-dev", 0)]:
+            with self.subTest(uid=uid, name=name, real_uid=real_uid):
+                result = self.run_dispatch(uid, name, real_uid=real_uid)
+                self.assertEqual(result.returncode, 77, result.stderr)
+                self.assertFalse(self.log.exists())
+                self.assertFalse(self.result.exists())
+
+    def test_unsuccessful_privilege_drop_never_runs_candidate(self):
+        result = self.run_dispatch(501, "admin", bad_drop=True)
+        self.assertEqual(result.returncode, 77, result.stderr)
+        self.assertFalse(self.result.exists())
+
+    def test_sudo_failure_does_not_fall_back_to_current_user(self):
+        result = self.run_dispatch(501, "admin", sudo_fail=True)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertFalse(self.result.exists())
+
+
 class ControllerTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

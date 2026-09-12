@@ -8,6 +8,7 @@ struct DisplayWindowPanel: Identifiable, Equatable, Sendable {
     let id: Int
     let payload: DisplayPayload
     let receivedAt: Date
+    var workspaceID: UUID? = nil
     /// Cascade offset within the display window (points); the panel view
     /// adds the user's drag translation on top.
     var offset: CGSize
@@ -40,11 +41,11 @@ final class DisplayWindowStore {
     /// viewport is simply clipped by it; grow the window.
     static let minPanelSize = CGSize(width: 280, height: 200)
 
-    func apply(_ payload: DisplayPayload) {
+    func apply(_ payload: DisplayPayload, workspaceID: UUID? = nil) {
         seq += 1
         let step = Self.cascadeStep * CGFloat(panels.count % 8)
         let panel = DisplayWindowPanel(
-            id: seq, payload: payload, receivedAt: Date(),
+            id: seq, payload: payload, receivedAt: Date(), workspaceID: workspaceID,
             offset: CGSize(width: step, height: step),
             size: Self.defaultSize
         )

@@ -1,6 +1,16 @@
 # Mortimer adaptive interface implementation plan
 
-**Status:** DESIGN AGREED IN CONVERSATION; IMPLEMENTATION NOT STARTED.
+**Status:** IMPLEMENTATION IN PROGRESS; NO RELEASE ACCEPTANCE. See `docs/acceptance/adaptive-interface/` for measured progress and open gates.
+**Current application candidate:** `6264fdf` on `feat/adaptive-compact-conversation`; adaptive
+source phases and sandbox runner corrections are present, but release acceptance
+is intentionally not claimed.
+**Latest manual evidence:** Larry confirmed the sidecar font picker works after
+`6264fdf`. Larry's subsequent screenshot shows the connected candidate using its
+previous-layout presentation with floating graph images inside the main console.
+Adaptive graph activation and acceptance remain open. Desktop automation had
+selected the older MortimerShell retry screen; see the correction and screenshot
+analysis in P6-interim-checks.md. A candidate connection failure or graph-routing
+defect was not established by those earlier captures.
 **Scope:** Native MortimerHost interface, dual-speaker Silo feedback, central results, interactive memory graph, preserved sidecar, automatic monitor adaptation.
 **Baseline inspected:** repository commit `2ccf66cd7e00b82cf9136d2cd00f42e9bddb90af` (PR #63), 2026-09-10. Recheck the actual starting commit before implementation.
 **Owner:** Larry. Implementation may be assigned to a coding model one phase at a time. This document authorizes no application-code change by itself.
@@ -92,7 +102,7 @@ Three logical regions:
 
 A contextual inspector belongs to the workspace. On a wide screen it may be a resizable subpane; on a narrow screen it opens as a sheet/overlay without changing the sidecar's selected tab or destroying the workspace state. Do not create a permanently crowded fourth column.
 
-Conversation presentation uses a large wave only when the user has returned to conversation and no result is active. The first eligible result may enter workspace presentation. Once there, remain there until an explicit user action changes it. New results arriving while the user is reading are added to history with an indicator; they do not replace the current selection. No focus stealing when Mortimer begins speaking.
+Conversation presentation uses a large wave only when the user has returned to conversation (amended 2026-09-12 by MORTIMER_ADAPTIVE_INTERFACE_CLOSURE_PLAN C2.5: returning to conversation keeps the active result selected in history so "Return to workspace" resumes where the user was; the large wave means no result is *presented*, not that none is selected). The first eligible result may enter workspace presentation. Once there, remain there until an explicit user action changes it. New results arriving while the user is reading are added to history with an indicator; they do not replace the current selection. No focus stealing when Mortimer begins speaking.
 
 At compact widths, use a shallow bottom wave instead of a left rail if necessary to preserve a readable center. This is the responsive form of the same feature, not an alternate app. User can choose to keep the compact voice region even during conversation. Optional comparison uses two panes on wide windows and switchable A/B tabs when space is insufficient.
 
@@ -182,7 +192,7 @@ These are proposed design defaults/acceptance targets, **not measured baseline r
 - User teal `#2DD4BF`, AI violet `#A78BFA`; verify text contrast on the actual theme and supply labels/icons. Do not recolor existing warning/error semantics.
 - Wide layout starts at 1,180 logical points; below it use compact voice placement. Initial left rail 200 points; minimum usable results width 480 points. Preserve the existing 900×600 app minimum; any smaller supported size is an additional tested case.
 - Inspector initial width 300 points only when it fits; otherwise overlay. Existing drawer width limits/preferences remain authoritative.
-- Tab label text initial 12 points, minimum control height 32 points. Accessibility text scaling must scroll, not shrink. Existing labels remain intact.
+- Tab label text initial 11 points (amended 2026-09-12 by MORTIMER_ADAPTIVE_INTERFACE_CLOSURE_PLAN C1.3: 11 pt is the Standard size Larry accepted live on 2026-09-11 with the Aa menu offering 16 and 22 pt; the baseline was 10 pt), minimum control height 32 points. Accessibility text scaling must scroll, not shrink. Existing labels remain intact.
 - Layout transition 200 ms; Reduce Motion uses an immediate change or non-moving fade. No forced transition during pointer drag, text selection or keyboard editing.
 - Audio observation publishes at most 30 Hz; rendering targets 60 Hz when visible and active, at most 15 Hz when idle. Suspend animation/layout work when not visible. Stale audio observations decay to zero within 300 ms. Proposed attack 40 ms, release 180 ms, using elapsed time rather than frame count. Input activation uses the existing processed speech signal plus a calibrated noise floor; no hardcoded universal microphone threshold.
 - User-audio-to-visible-feedback target: p95 ≤150 ms on the deployment Mac, measured from eligible captured/processed audio to displayed change. Measure AI playout alignment too; target p95 ≤150 ms. Do not substitute server transcription completion for microphone response.

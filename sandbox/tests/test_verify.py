@@ -26,6 +26,8 @@ class VerificationTests(unittest.TestCase):
         self.final_candidate = self.candidate
         self.failure = False
         self.edit_during_check = False
+        self.start_kwargs = []
+        self.desktop_exit, self.desktop_output = 0, b"desktop=visible keychain=unlocked\n"
         self.profile = Profile("test", (), (), (("required", ("/protected/python", "check.py")),))
         self.verifier = Verifier(self, self)
 
@@ -39,7 +41,8 @@ class VerificationTests(unittest.TestCase):
     def frozen(self): return self.candidate
 
     def stop(self, task): self.events.append(("stop", task))
-    def start(self, task, **kwargs): self.events.append(("start", task))
+    def start(self, task, **kwargs):
+        self.events.append(("start", task)); self.start_kwargs.append(kwargs)
     def command(self, *args, **kwargs): return subprocess.CompletedProcess(args, 0)
     def create(self, *args, **kwargs):
         self.assertEqual(self.events[-1], ("stop", self.task))
@@ -56,6 +59,9 @@ class VerificationTests(unittest.TestCase):
     def guest(self, task, argv, **kwargs):
         self.assertEqual(task, "independent-task")
         self.assertEqual(argv[:3], ["sudo", "-u", "mortimer-dev"])
+        if argv[3:] == ["/bin/bash", "/Volumes/My Shared Files/input/desktop-probe.sh"]:
+            self.events.append(("desktop-probe", task))
+            return subprocess.CompletedProcess(argv, self.desktop_exit, stdout=self.desktop_output, stderr=b"")
         self.assertEqual(argv[3:7], ["/bin/bash", "--noprofile", "--norc", "-c"])
         self.events.append(("check", task))
         if self.edit_during_check:
@@ -75,6 +81,41 @@ class VerificationTests(unittest.TestCase):
         with patch.object(self.verifier, "run_check", wraps=self.verifier.run_check) as check:
             self.assertTrue(self.verify()["passed"])
         self.assertEqual([call.args[-1] for call in check.call_args_list], [900, 900, 1800])
+
+    def test_graphics_required_profile_runs_independent_clone_with_desktop(self):
+        self.profile = Profile("graphics", (), (), (("required", ("check.py",)),), requires_graphics=True)
+        receipt = self.verify()
+        self.assertTrue(receipt["passed"])
+        self.assertEqual(len(self.start_kwargs), 2)
+        self.assertEqual(self.start_kwargs[-1], {"provisioning": False, "headless": False})
+        # Closure C5.1: the desktop probe runs after the graphics restart and
+        # before the first check, and its evidence is bound into the receipt.
+        kinds = [event[0] for event in self.events]
+        self.assertLess(kinds.index("desktop-probe"), kinds.index("check"))
+        self.assertEqual(kinds.count("desktop-probe"), 1)
+        self.assertTrue(receipt["desktop_probe"]["passed"])
+        self.assertEqual(receipt["desktop_probe"]["returncode"], 0)
+        attempt = self.directory / "verification" / receipt["attempt"]
+        self.assertEqual((attempt / "desktop-probe.log").read_bytes(), b"desktop=visible keychain=unlocked\n\n")
+
+    def test_graphics_profile_fails_closed_without_a_visible_desktop(self):
+        self.profile = Profile("graphics", (), (), (("required", ("check.py",)),), requires_graphics=True)
+        for exit_code, output in [(4, b"desktop=absent reason=window-not-visible\n"), (0, b"something else\n")]:
+            self.desktop_exit, self.desktop_output = exit_code, output
+            self.events.clear()
+            with self.assertRaises(SandboxError):
+                self.verify()
+            self.assertNotIn("check", [event[0] for event in self.events], "no check may run without a desktop")
+            self.assertEqual(self.events[-1], ("stop", "independent-task"))
+            self.assertFalse(self.journal["verification"]["passed"])
+
+    def test_headless_profile_never_runs_the_desktop_probe(self):
+        self.assertTrue(self.verify()["passed"])
+        self.assertNotIn("desktop-probe", [event[0] for event in self.events])
+
+    def test_default_profile_verification_remains_headless(self):
+        self.assertTrue(self.verify()["passed"])
+        self.assertEqual(self.start_kwargs[-1], {"provisioning": False, "headless": True})
 
     def test_check_creates_its_log_directory_before_executing(self):
         directory = self.directory / 'new-check-logs'
@@ -157,7 +198,11 @@ class VerificationTests(unittest.TestCase):
         with patch.object(self, 'guest', side_effect=guest):
             result = self.verifier.run_check('independent-task', 'native', ('swift', 'test'), self.directory, 30)
         self.assertTrue(result['passed'])
-        self.assertEqual([args[4] for args in calls[:3]], ['list-keychains', 'default-keychain', 'unlock-keychain'])
+        # Closure C5: the store is the worker's login keychain, unlocked by
+        # loginwindow; its password is guest-only, so there is no unlock step.
+        self.assertEqual([args[4] for args in calls[:2]], ['list-keychains', 'default-keychain'])
+        self.assertTrue(all(args[-1].endswith('/login.keychain-db') for args in calls[:2]))
+        self.assertEqual(len(calls), 3)
         self.assertEqual(calls[-1][3:7], ['/bin/bash', '--noprofile', '--norc', '-c'])
 
 

@@ -26,12 +26,18 @@ import JarvisKit
 @MainActor
 @Observable
 final class CouncilViewModel {
-    let api: AdminAPI
+    private(set) var api: AdminAPI
     var state: TabState<[CouncilRoster]> = .loading
     private var pollTask: Task<Void, Never>?
     private var stopped = false
 
     init(api: AdminAPI) { self.api = api }
+
+    func updateAPI(_ api: AdminAPI) {
+        stopPolling()
+        self.api = api
+        stopped = false
+    }
 
     func startPolling() {
         guard pollTask == nil, !stopped else { return }
@@ -54,10 +60,12 @@ final class CouncilViewModel {
     func refresh() async {
         do {
             let list = try await api.councilRosterTyped()
+            guard !Task.isCancelled else { return }
             state = TabStateMapper.map(
                 ok: list.ok, error: nil, isEmpty: list.rounds.isEmpty, value: list.rounds
             )
         } catch {
+            guard !Task.isCancelled else { return }
             let (message, unauthorized) = TabStateMapper.fromError(error)
             state = .error(message)
             if unauthorized { stopped = true; stopPolling() }
@@ -90,8 +98,6 @@ struct CouncilRosterSection: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .task { model.startPolling() }
-        .onDisappear { model.stopPolling() }
     }
 }
 

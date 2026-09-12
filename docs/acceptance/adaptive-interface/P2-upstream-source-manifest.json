@@ -1,0 +1,39 @@
+{
+  "release": "https://github.com/stasel/WebRTC/releases/tag/120.0.0",
+  "source_commit": "b0cc68e61205fd11a7256a6e85307ec17ad95790",
+  "release_archive_sha256": "47f6642cb9cd61da99086f091c0519c12a5641c99626e07344f2510b76ee93c5",
+  "files": [
+    {
+      "path": "audio/audio_level.cc",
+      "sha256": "d095ec856f66e7f0ec5665541fa92c0319472b4087e2c53c30a9d6e588cf5d64"
+    },
+    {
+      "path": "audio/audio_receive_stream.cc",
+      "sha256": "43ee5d1f09d9493f120fd12822909f9f545e25c0d15a63dc2e71cda7d1df6cf6"
+    },
+    {
+      "path": "audio/audio_send_stream.cc",
+      "sha256": "898eac53cf3a9513421ab74a65afe5a6192d8ef717c0d2d579cf742f32688059"
+    },
+    {
+      "path": "audio/audio_transport_impl.cc",
+      "sha256": "e74928991e0cc6ed21496098b11587ebca2360e3769ff62f74da2486470fda4f"
+    },
+    {
+      "path": "audio/channel_receive.cc",
+      "sha256": "99b3e36c73b03a37f78e923bc11c17517d656bdddcc05f85f98c2054b2f31af2"
+    },
+    {
+      "path": "pc/rtc_stats_collector.cc",
+      "sha256": "34f2d67e33ec2b6c91972d276d7f2cc735844e0502edd575f516618e4e5fd2b7"
+    },
+    {
+      "path": "pc/rtc_stats_collector.h",
+      "sha256": "cc22d2e6866146af5cf0febb70fa9960480031b7f66aa4c268a4ccb4bf20dd25"
+    },
+    {
+      "path": "media/engine/webrtc_voice_engine.cc",
+      "sha256": "0856b479da46c8cdbb2a0145d4a9b6f7e6b8ff190e1e23be7e181e679bac6599"
+    }
+  ]
+}

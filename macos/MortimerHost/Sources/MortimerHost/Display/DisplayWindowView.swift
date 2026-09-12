@@ -6,11 +6,29 @@ import JarvisKit
 /// payloads (weather, radar, research). Parked on a second monitor by
 /// ScreenPlacement (P11).
 struct DisplayWindowView: View {
+    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 0
     @Environment(DisplayWindowStore.self) private var store
+    @Environment(WorkspaceStore.self) private var workspace
+    @Environment(DrawerState.self) private var drawer
+    @EnvironmentObject private var client: JarvisClient
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             AppTheme.bg.ignoresSafeArea()
+            if layoutVersion == 1 && workspace.supportingContent != nil {
+                VStack(spacing: 12) {
+                    HStack {
+                        Button("Original display panels") { workspace.showOriginalDisplayPanels() }
+                        Spacer()
+                        Button("Return to main window") { drawer.placementRef?.closeDisplay() }
+                    }
+                    if workspace.supportingContent == .memoryGraph {
+                        MemoryGraphView(store: workspace.memoryGraph, api: client.admin)
+                    } else if let result = workspace.supportingResult {
+                        WorkspaceResultPane(result: result, onSupportingDisplay: true)
+                    }
+                }.padding(16)
+            } else {
             if store.panels.isEmpty {
                 Text("Nothing on display. Ask for something visual — \"show the radar\".")
                     .foregroundStyle(AppTheme.textDim)
@@ -18,6 +36,7 @@ struct DisplayWindowView: View {
             }
             ForEach(store.panels) { panel in
                 SingleDisplayPanel(panel: panel)
+            }
             }
         }
         .frame(minWidth: 700, minHeight: 500)

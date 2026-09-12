@@ -1,0 +1,443 @@
+# Integrated acceptance — interim checks
+
+Status: not final release acceptance. P2 audio, hardware, accessibility and
+other phase acceptance remain open. No merge or deployment.
+
+Latest follow-up: [reduced-motion scheduling correction](P2-reduced-motion-static.md)
+records the full-profile failure for `88e2f07`, its correction, and the subsequent
+125-test native pass. A fresh full-profile receipt is still required for that correction.
+
+## Normal-order backend suite
+
+Prepared offline Mortimer VM, task `66fed310bde6`; check
+`p6-interim-unit-integration`. Command:
+
+`/Users/admin/mortimer/dependencies/python/bin/python -m pytest tests/unit tests/integration -q -p no:randomly`
+
+Result: 2,458 passed, 4 skipped, 27 warnings, pytest duration 376.05 seconds;
+verifier duration 377.751 seconds, exit 0. The 900-second limit was preserved.
+Log SHA-256: `f4cf56a946f02d9d74c38843aceeb06f2c49fc4d71552736417ca983db1b9a8c`.
+No backend source or Python tests changed relative to baseline `30850f9`.
+Native implementation present corresponds to `60a6cda`; this is an interim
+check, not a frozen-source final verification receipt.
+
+No skips were added or changed. The run did not print individual skip reasons;
+reverse-order execution with `-rs` is pending to account for them explicitly.
+The repository's existing live orchestrator tests are marked `live`, and the
+unchanged tests/conftest.py requires RUN_LIVE=1 for them. Do not count skipped
+external-service tests as exercised or enable live credentials in this offline VM.
+
+## Still required
+
+Reverse and deterministic seeded order, installed profile baseline/candidate
+checks, final frozen-source receipt, live/hardware requirements, performance,
+accessibility and rollback acceptance. A successful interim pytest run does
+not substitute for any of those gates.
+
+## Reverse-order backend suite
+
+Check `p6-interim-reverse-unit-integration` reverses the complete collected item
+list through a pytest collection hook; no tests are removed. Same two test roots,
+`-q -rs -p no:randomly`, same installed interpreter and 900-second limit.
+Result: 2,458 passed, 4 skipped, 27 warnings; pytest 372.60 seconds, verifier
+373.871 seconds, exit 0. SHA-256:
+`e31f16b651b84369d8a503b5d631f86126a96aff87ff9b86dca438628d5dcb91`.
+
+The detailed summary identifies all skips: three cases in
+`tests/integration/test_orchestrator_live.py` and one in
+`tests/integration/test_mcp_servers.py:138`, all with the existing reason
+“live test — set RUN_LIVE=1 to enable”. These external-service cases remain
+unverified, not accepted. Seeded order and all other final gates remain open.
+
+## Seeded-order failure and isolated fixture correction
+
+Seed 20260911 shuffles the full collected item list using a local Random
+instance. `p6-interim-seeded-unit-integration` completed with 2,457 passed,
+1 failed, 4 existing live skips and 27 warnings, in 441.122 verifier seconds.
+SHA-256 `7b7881d97b4481e6e267d34379d7b9c8822cc5bac2d41fdbc3fc1b4dd9f92361`.
+
+Failure: `test_bare_run_empty_run_id_is_none` encountered FakeAgent.crash=True
+left by `test_agent_crash_settles_job_as_error`. The two-test order reproduced
+it independently (`p6-fake-agent-leak-repro`, SHA-256
+`a522c082a175a309b97c023029325a997c9d08f3ecbda6d5567294bb10b0341d`).
+The producer helper assigned shared class attributes directly. It now uses
+monkeypatch.setattr for both crash and gate, restoring each at teardown. No
+production behavior, assertions, waits, test selection or timeouts were changed.
+
+After correction:
+- The exact pair passes (`p6-fake-agent-leak-fixed`), SHA-256
+  `0990d48a7900ad120e0d250730549f048c4f14e8b7a8bc21fc136d67066651b3`.
+- The complete admin self-edit test module passes (`p6-selfedit-module-fixed`),
+  SHA-256 `bdef4d81e56aca737fbf1139cd8c45be4bf568d61d3aeaef056d364683f24a5f`.
+
+Full seeded/normal/reverse checks must pass again after this fixture correction.
+The failed run remains failed evidence; the focused reproduction is not a
+substitute for those complete reruns or the remaining release gates.
+
+## Corrected full-suite results and review artifact
+
+After local fixture commit `0fb982b`:
+- `p6-corrected-seeded` (seed 20260911): 2,458 passed, 4 existing live skips,
+  27 warnings; verifier 434.289 seconds. SHA-256
+  `6f2ab5c9549ad3f3c5029801b36441455e032666199896c27382ed381e740fa6`.
+- `p6-corrected-normal`: 2,458 passed, 4 existing live skips, 27 warnings;
+  verifier 374.878 seconds. SHA-256
+  `9b30c0c6a2753e7aad3bb0b4d794835414f497e7a1ec3b75f9a5e56d0a73fc14`.
+- `p6-corrected-reverse`: 2,458 passed, 4 existing live skips, 27 warnings;
+  pytest 373.09 seconds. Log SHA-256
+  `6a1c3260e2173ae719feb8b3d21ab65912f49af287fa444dd802ba4c85d5f4cf`.
+
+The isolated fixture correction is draft PR #65:
+https://github.com/Larryfix71566/jarvis-voice-ai/pull/65
+Remote commit `a3293cb7327683e38c3f43869c12dd0b34032ed5` is based on current main
+`d36299bc899adc822f04c4e4991cb5a86b27ce1b` and changes only the reviewed test file.
+Its blob `6bd7295caf52a93437cac8cccb58ce16b90e334a` matches the locally tested
+file exactly. It does not publish or establish acceptance of the UI phases.
+The plan PR #64 was independently confirmed merged. No implementation PR was
+merged and no application deployment occurred during this work.
+
+## Isolated fixture PR CI verified
+
+On 2026-09-11, GitHub PR #65 remained open, draft and unmerged at exact head
+`a3293cb7327683e38c3f43869c12dd0b34032ed5`. Its description was updated with the
+three completed local full-suite orders, explicitly distinguishing the local UI
+candidate from the isolated remote commit.
+
+GitHub's commit check-runs endpoint returned five completed successful checks:
+allowlist, policy-tests and validate (workflow run 34565837983), knowledge-base
+(run 34565837992), and controller-tests (run 34565837955). The legacy combined
+status list was empty; this was not treated as either failure or proof of success.
+The check-runs response supplied the actual outcomes. The validate job finished
+at 05:29:17 UTC. These results cover the isolated fixture PR only, not unsubmitted
+native interface changes or real hardware acceptance. No merge or deployment was
+performed and the PR remains draft for review.
+
+## Minimum full-console native fixture
+
+Added a native ConsoleView fixture at 900×600 logical points with adaptive layout,
+400-point requested drawer width, Output selected, one synthetic result in both
+its existing Output home and the central workspace, and an offline client. The
+fixture verifies the selected Output header and microphone/wake control frames
+are inside the full window and preserves selected result/tab identity. Drawer
+preferences are restored after the fixture and adaptive preferences use an
+isolated defaults suite. No production connection is established.
+
+The initial full rendering was visually inspected: research copy and result
+controls fit, the selected Output label is fully visible with overflow arrows,
+and the bottom microphone controls remain reachable. The compact status region
+is scrollable; this image does not prove scrolling every notice or agent entry.
+
+Final full host check `p6-minimum-console-isolated`: 103 tests, zero failures;
+verifier 13.051 seconds. Log SHA-256:
+`d44ac0f6d3f02cc3588015d7195eca43b33ac09cc3587d3dc44e12dac0634f6a`.
+The initial render check was `p6-minimum-console`, SHA-256
+`0ada899db53c03ffcc231c727e5e93fe9abfc208b96d4b3923d216d67a246088`.
+This covers one full-console offline state. All-tab interactions, connected voice,
+long/error payloads, text scaling, other screen dimensions and physical monitor
+acceptance remain separate open requirements.
+
+## Supplemental profile checks and stale development comparison tree
+
+At `8c411ed`, supplemental profile commands in the long-lived development VM
+passed backend imports, trusted backend tests (2,350 passed), scripted evaluations
+(13 passed), fixture latency, both knowledge-base suites, web build, and trusted
+native library tests. Full outcomes/hashes are in the task's
+`interface-checks/p6-supplemental-results.json`.
+
+The trusted native app check failed to compile: linked candidate source referenced
+new types absent from its comparison directory. `verification_tree` intentionally
+uses immutable baseline tests with links to candidate non-test files. That tree
+was created at task hydration before the new native files were added. The failure
+is not a passing baseline and the eight successes do not form a verification
+receipt. No baseline tests or gates were relaxed. The next validation must use
+Verifier.verify, which freezes current source and hydrates a fresh verification VM
+with all candidate paths before running the full installed profile.
+
+## Independent full-profile verification passed
+
+Application candidate at local commit `4d188e87fc3ff2b209e0e71b1fc5c1e390cb5342`
+matched all 817 tracked files, with no missing supported paths, extra files, byte
+or mode differences. Frozen fingerprint:
+`4733415884f7cd727937f3e17df061ab102838f13897b0075284d36cdca60817`.
+
+Attempt `033251ffe661461ab995895818946a84` used fresh verification task
+`25b78155ff13` and completed all 12 installed profile checks successfully. The
+independent verifier recorded `source_unchanged: true`; its receipt validator
+then checked the current profile, runner, source fingerprint and every log hash.
+Trusted/candidate backend suites each passed 2,350 tests; native candidate library
+and app each passed 105 tests, trusted native library 96 and app 39. Scripted
+evaluations passed 13 tests; both knowledge-base suites passed 17. Imports,
+fixture-based latency and web build also passed. The latency fixture is not real
+speech-latency acceptance.
+
+Receipt location under the sandbox task:
+`verification/033251ffe661461ab995895818946a84/receipt.json`.
+A user-facing copy is in the task outputs as `interface-verification-receipt.json`.
+The first attempt `24265f44860549d7b8746a9628e8689b` ended before checking because
+macOS denied stopping the old development VM. Scoped controller lifecycle
+permission resolved that startup issue; the failed attempt remains failed.
+
+This evidence applies to the exact commit/fingerprint above. This documentation
+addition is later and does not retroactively change the receipt. The full-profile
+pass does not complete P2, physical-device/display acceptance, all interaction or
+accessibility/performance gates, final integration orders after further code
+changes, phase PR review, or release authorization.
+
+## Full console across planned window shapes
+
+The existing minimum-console test now repeats its original checks at 900×600,
+1280×800, 1440×900, 2560×1080 and 900×1440 logical points. It asserts the actual
+rendered dimensions, selected Output label and microphone/wake control frames,
+and unchanged result/tab selection. Ultrawide and portrait renderings were also
+visually inspected: the voice rail/bottom adaptation and results/sidecar remain
+separate, with fixed top/bottom controls inside the window.
+
+Full host sandbox check `p6-console-dimensions`: 106 tests, zero failures; verifier
+24.712 seconds. Log SHA-256:
+`cf2ab75d9489d444630350da9b3e0dd9bd7f1a087d92ac9bde85399521a816e9`.
+These are native offscreen-cache fixtures with an offline client and one synthetic
+result, not physical ultrawide/portrait display or multi-monitor trials. They do
+not verify connected notices, every payload, accessibility scaling, all status
+scrolling or resize gestures. The earlier frozen-profile receipt remains tied to
+its earlier source snapshot, not these later test and graph-history changes.
+
+## Native bundle launch correction and desktop interactions
+
+In offline GUI task `ab9c8fe5bf23` (macOS 26.4, unprivileged worker), bundling
+the candidate at parent commit `b475692` returned success and its outer signature
+verified, but the application did not stay running. Capturing startup reported
+termination by signal 6 and `Library not loaded: @rpath/WebRTC.framework/WebRTC`:
+the framework was missing next to the bundled executable.
+
+Read-only comparison with the production checkout confirmed that its existing
+local `bundle.sh` patch already copies the resolved framework beside the binary
+and refuses a missing runtime. This behavior is now explicitly incorporated into
+the candidate repository script. The production checkout was not changed; its
+base remains `2ccf66cd7e00b82cf9136d2cd00f42e9bddb90af` with the five local
+customizations recorded by the plan.
+
+The candidate additionally signs the embedded framework copy before signing the
+app, verifies nested code with `codesign --verify --deep --strict`, and propagates
+signing/verification failures instead of ignoring them. An initial real build
+with the framework copied but unsigned failed verification as expected; signing
+the embedded copy resolved that failure. Dependency versions and audio transport
+code were unchanged. This is ad-hoc local packaging, not notarized distribution.
+
+Five packaging regression tests pass inside the VM: embedding resources and
+framework symlinks, missing runtime, failed build, failed framework/app signing,
+and failed signature verification. Failures prevent `open`. The test harness
+uses command stand-ins, while a separate real build/sign/launch validates the
+native tools. A first test failure caused by `/var` versus `/private/var`
+temporary-path aliases was corrected by resolving both paths before comparing
+containment. No containment assertion was dropped.
+
+The real app subsequently opened, remained visible across several minutes of
+interaction, and was independently observed running as PID 2272. Inspection
+confirmed an embedded WebRTC runtime and no symlinks escaping the app bundle.
+Combined packaging-test and actual build/sign/launch log SHA-256:
+`ffa2d64d964922ea7dbb046b9d4a5407bdc163d7ecbe3c00d642b49cae56e476`.
+
+Computer Use observations in the running offline app:
+
+- The Debug preview reaches the adaptive layout; the decorative dotted lettering
+  becomes the functional Mortimer status label.
+- `t` opens the Log sidecar; Escape closes it, and `t` reopens it.
+- The Aa submenu shows Standard, Large and Extra large. Extra large was selected
+  and confirmed by its checkmark and visibly larger, single-line tab labels.
+- Left scrolling reaches Repo, Edit and Memory while the Log body remains
+  selected, confirming scrolling alone does not change content. Edit selection
+  then presents its Goal input and existing Run/Validate/Submit/Revert controls.
+- An unsent synthetic Edit draft remains visible after tab and layout changes.
+  No Run, Validate or Submit action was invoked. The VM correctly reports that
+  the admin service is unreachable.
+
+The first pop-out attempt was inconclusive. Subsequent Computer Use interactions
+in this same offline GUI VM established the following additional observations:
+
+- All eight tabs were selected in the detached Mortimer Drawer: Repo, Edit,
+  Memory, Runs, Agents, Output, Log and Costs. Their existing controls, empty
+  states or offline errors were visible. Both ends of the scrolling header were
+  reachable with Extra large labels remaining readable.
+- Closing the detached window returned the selected Edit tab to the docked
+  sidecar. Reopening it restored the detached presentation.
+- The detached window was manually widened from approximately 420 to 690 points.
+  After closing/redocking and reopening, the wider frame was retained.
+- The complete unsent synthetic draft below was visible at the wider size,
+  survived traversing all eight tabs and returning to Edit, and remained equal
+  after closing/redocking/reopening. Selected Edit and Extra large text also
+  survived. No Run, Validate or Submit action was invoked.
+
+Observed draft (including the actual punctuation produced by guest input):
+`synthetic ui draft; preserve draftalpha text across tabs and windows.aui-draft-0911`
+
+These are same-process preservation observations, not a claim of draft recovery
+after app termination. The later VM restart cleared session-only application
+state. Evidence is the Computer Use screenshots in the task transcript; no
+separate screenshot artifact was captured. Backend services were offline during
+these sidecar interactions, so live content and polling counts remain unverified.
+
+This evidence does not establish microphone/playout behavior, VoiceOver, physical
+multi-monitor recovery, final frozen verification, rollback acceptance, or
+deployment. The visible app is only in the disposable VM; no production app or
+service was deployed.
+
+## Candidate JarvisKit regression check
+
+After the graph change, the candidate JarvisKit package was rebuilt and its full
+test suite ran in the same offline VM as UID 502 (`mortimer-dev`). The suite
+passed with return code 0 in 12.374 seconds. The saved log is outside the source
+tree because generated check output is not application content; its SHA-256 is
+`6ba0e585fa883b6f622c55f6c91b4d367d3c917150435dfaf31d952bc9363982`.
+
+This confirms the graph-store change did not alter the pinned WebRTC/signalling
+package behavior. It is a candidate regression check, not the independent frozen
+profile receipt; the full profile and hardware gates remain open.
+
+## Current full-profile verification attempt
+
+The exact candidate at local commit `55767c0` was frozen as
+`945c257c716b20781d73667debd7d401f5bd318998094fcfefbe01e1ea129d69` against the
+trusted baseline `68a5ce8` (baseline fingerprint
+`71c1b8c7b7f100486d9d08fc5319c791c622eb3efbbf668c02519ef462779289`). The
+independent receipt is retained at sandbox task `2973ab205e37`, attempt
+`87e8c30748f64330b6bfcf0424f41a61`; its source was unchanged after checking.
+
+The receipt passed backend imports, baseline backend (2,350 tests), candidate
+backend (2,355 tests), scripted evaluations, fixture latency, both knowledge-base
+suites, the web build, candidate JarvisKit, and the trusted baseline JarvisKit and
+MortimerHost suites. Candidate MortimerHost returned nine failures in
+`WindowVisibilityTests`: its new AppKit fixture requires an unoccluded visible
+window, while independent profile verification runs headless. The log reports
+`NSApplicationActivationPolicy.regular` with no visible window; the failures are
+the fixture's visibility, animation-resume and sampling assertions. The trusted
+baseline MortimerHost suite passed, and the same 122 candidate tests passed in the
+graphics-enabled offline GUI task `ab9c8fe5bf23`.
+
+This remains a failed full receipt, not a release pass. No visibility assertion,
+test selection, timeout or profile gate was weakened. The candidate GUI result is
+separate evidence; a graphics-enabled independent verification path is still
+required before this checklist item can close.
+
+The verifier was then updated so the Mortimer profile explicitly requests a
+graphics-enabled verification clone; the capability is included in the profile
+fingerprint and covered by sandbox unit tests (109 tests, zero failures). A fresh
+receipt for the updated candidate at `2fb6a9f` used that mode (attempt
+`9a6e0bb581674f25a5911d0717478e89`). All non-native checks and both trusted
+baseline suites passed again, but the candidate AppKit suite produced the same
+nine visibility failures: the Tart graphics process exists, yet the guest test
+process has no active desktop space and reports a non-visible window. The receipt
+is retained as failed evidence; no assertion or gate was relaxed. A future
+graphics verification runner must attach or activate the guest desktop before
+this automated gate can pass.
+
+The worker-session lifecycle was then corrected in candidate `bae4aa5`: the
+graphics worker creates a guest-only random password, resets `mortimer-dev` to
+that password and enables auto-login before handing control to the verifier. A
+new independent full-profile receipt (task `6f6e8c4ebc48`, attempt
+`77a62a4763ad4917ba0d815354115b55`) ran both baseline and candidate backend
+processes as UID 502 (`mortimer-dev`) after the graphics restart. Imports,
+backend suites, scripted evaluations, latency, both knowledge suites, web,
+JarvisKit and the trusted baseline MortimerHost suite passed. Candidate
+MortimerHost still returned the same nine `WindowVisibilityTests` failures: the
+guest process has no active unoccluded desktop space, so its window reports
+`window.occlusionState == false`. This repeated failure after confirming the
+correct worker account isolates the remaining issue to Tart's guest display /
+session attachment rather than account selection or application logic.
+
+The receipt is retained as failed evidence (candidate snapshot fingerprint
+`09409f2c4e5028d3ab2a3c8b1255205cf0869f493624fb04b4cb462413cc4824`, baseline
+fingerprint `71c1b8c7b7f100486d9d08fc5319c791c622eb3efbbf668c02519ef462779289`,
+profile fingerprint `c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e`).
+No test, timeout, visibility assertion or profile gate was weakened. The
+graphics-required verifier now reliably provisions the worker identity, but a
+real active, unoccluded guest desktop is still required before the independent
+AppKit gate can pass.
+
+## Candidate host runtime smoke test
+
+On 2026-09-11, the candidate branch was run from the native `MortimerHost`
+package in Xcode with scheme `MortimerHost` and destination `My Mac`. Larry
+observed all eight sidecar tabs loaded, received Mortimer's startup response,
+and completed a weather request successfully. The app remained running during
+the interaction. This is live application evidence, but it is a smoke test
+rather than the final hardware or release matrix.
+
+The Xcode console also records these boundaries:
+
+- `botIsSpeaking_unavailable` is the documented pinned-WebRTC limitation; it
+  does not claim local playout metering and keeps P2 open.
+- Connections to `127.0.0.1:7862` were refused, so the optional wake-word
+  sidecar was not running. This did not prevent the startup or weather flow.
+- `keychain_token_present=false` was visible, but the successful local weather
+  flow shows that this run did not require that token for the exercised path.
+- `com.apple.linkd.autoShortcut`, `DetachedSignatures`, missing-main-bundle
+  indexing and audio-factory messages are host/Xcode diagnostics; no crash or
+  application termination followed them.
+
+The smoke test confirms native startup, sidecar rendering and one successful
+request on the candidate checkout. It does not establish live dual-speaker
+levels, wake-word operation, VoiceOver, multi-monitor recovery, full profile
+verification or deployment health.
+
+## Candidate screen attribution and graph-routing correction
+
+On 2026-09-11, Larry reported that the candidate was running and its memory graph
+still appeared in a separate window resembling the original renderer. Repeated
+Computer Use calls to `getApp("Mortimer")` showed the older retry screen. That
+capture was incorrectly attributed to the candidate in the conversation.
+
+Read-only process inspection subsequently identified PID 20185 running:
+`/Users/larryfix/Library/Developer/Xcode/DerivedData/MortimerHost-fnyhrnunlzjldjbcsqlzxrqthpji/Build/Products/Debug/MortimerHost`.
+Computer Use rejected that exact executable path as `Invalid app`. At source
+`6264fdf`, the captured text "Mortimer stack isn't running" and its start-script
+instruction occur in `macos/MortimerShell/Sources/MortimerShell/RetryView.swift`.
+They are not the candidate MortimerHost error UI. These observations establish
+an inspection-target mismatch; they do not establish a failed candidate backend
+or its active layout mode. Do not restart the working candidate or backend based
+on that older shell screen.
+
+The source review also corrects the earlier claimed routing defect:
+
+- AppMessageRouter sends every display payload to WorkspaceStore before applying
+  the existing surface-specific destination. Window-surface results are already
+  available to the central workspace.
+- MemoryGraphSource recognizes supplied memory image paths ending in
+  `/api/graph/memory/image.png` or `/api/graph/memory/image.svg`.
+- WorkspaceResultPresentation defaults recognized memory results to Connections;
+  WorkspaceResultPane then renders MemoryGraphView. The dedicated Memory graph
+  button is an additional entry point, not the only interactive graph path.
+- WorkspaceStore preserves an existing selection on subsequent arrivals. A later
+  graph result is added as unread rather than replacing what Larry is reading.
+- DisplayWindowView retains original display panels unless adaptive mode and an
+  explicit supporting-content assignment select the new renderer. Preserving
+  existing surface routing is required by plan UI-3; that fact alone is not a bug.
+
+The live symptom remains unverified. Needed evidence is the candidate's actual
+window/menu, active layout mode, selected result and graph controls. A screenshot
+from Larry or a supported Computer Use target for the Xcode executable can supply
+the missing UI evidence. No routing change is justified by the misidentified
+shell capture. No application code, live preference, backend, or audio setting
+was changed during this corrective source/process inspection.
+
+## User-supplied screenshot resolves the displayed-layout question
+
+Larry subsequently supplied a screenshot of the running candidate on 2026-09-11.
+It shows READY and Disconnect in the top bar, the central decorative lettering,
+the original agent-satellite arrangement, the scrollable sidecar with its Aa
+control, and two overlapping graph-image panels inside the console. It is not
+the MortimerShell retry screen. The screenshot contains private memory content
+and is not copied into the repository.
+
+At application source `6264fdf`, ConsoleView renders those original floating
+panels only in its previous-layout branch (`layoutVersion != 1`) while the
+separate display window is closed. AdaptiveStageView passes `hidesLettering: true`
+to every OrbFieldView presentation and uses WorkspaceView for results. Thus the
+screenshot identifies the candidate's previous-layout presentation; it does not
+show the adaptive interactive graph or establish a graph-routing failure.
+
+The candidate's MortimerHostApp menu exposes Debug > Preview adaptive layout
+when that preference is not 1, and Debug > Use previous layout when it is 1.
+The adaptive workspace's Memory graph button opens the interactive main-area
+graph. These controls are verified in source; their activation on Larry's running
+candidate and the resulting graph remain to be observed. No live preference was
+changed by the assistant.

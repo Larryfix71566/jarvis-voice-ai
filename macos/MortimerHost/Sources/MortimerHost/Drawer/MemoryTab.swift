@@ -16,7 +16,7 @@ final class MemoryViewModel {
         var knowledge: KnowledgeOverview?
     }
 
-    let api: AdminAPI
+    private(set) var api: AdminAPI
     var state: TabState<Loaded> = .loading
     var actionError: String?
     var confirmingDeleteKey: String?
@@ -24,6 +24,12 @@ final class MemoryViewModel {
     private var stopped = false
 
     init(api: AdminAPI) { self.api = api }
+
+    func updateAPI(_ api: AdminAPI) {
+        stopPolling()
+        self.api = api
+        stopped = false
+    }
 
     func startPolling() {
         guard pollTask == nil, !stopped else { return }
@@ -44,6 +50,7 @@ final class MemoryViewModel {
     func refresh() async {
         do {
             let overview = try await api.memoryOverview()
+            guard !Task.isCancelled else { return }
             let reviews = try? await api.memoryReviewsTyped()
             let knowledge = try? await api.knowledgeTyped()
             if !overview.ok {
@@ -58,6 +65,7 @@ final class MemoryViewModel {
                 ))
             }
         } catch {
+            guard !Task.isCancelled else { return }
             let (message, unauthorized) = TabStateMapper.fromError(error)
             state = .error(message)
             if unauthorized { stopped = true; stopPolling() }
@@ -115,8 +123,7 @@ struct MemoryTab: View {
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .task { model.startPolling() }
-        .onDisappear { model.stopPolling() }
+        .preserveDrawerScroll("memory")
     }
 
     @ViewBuilder

@@ -9,7 +9,7 @@ import JarvisKit
 @MainActor
 @Observable
 final class RepoViewModel {
-    let api: AdminAPI
+    private(set) var api: AdminAPI
     var state: TabState<GitStatus> = .loading
     var commitMessage = ""
     var pendingCommit: GitDraft?
@@ -19,6 +19,12 @@ final class RepoViewModel {
     private var stopped = false
 
     init(api: AdminAPI) { self.api = api }
+
+    func updateAPI(_ api: AdminAPI) {
+        stopPolling()
+        self.api = api
+        stopped = false
+    }
 
     func startPolling() {
         guard pollTask == nil, !stopped else { return }
@@ -42,12 +48,14 @@ final class RepoViewModel {
     func refresh() async {
         do {
             let status = try await api.gitStatusTyped()
+            guard !Task.isCancelled else { return }
             // git_status() is returned VERBATIM (no ok wrapper, P2). A
             // clean tree still renders the full panel (branch line +
             // disabled input + Push), exactly the web's GitPanel — never
             // an empty state that hides the controls (parity sweep).
             state = .loaded(status)
         } catch {
+            guard !Task.isCancelled else { return }
             let (message, unauthorized) = TabStateMapper.fromError(error)
             state = .error(message)
             if unauthorized { stopped = true; stopPolling() }   // N13: no retry on 401
@@ -131,8 +139,7 @@ struct RepoTab: View {
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .task { model.startPolling() }
-        .onDisappear { model.stopPolling() }
+        .preserveDrawerScroll("repo")
     }
 
     // GitPanel.tsx:92-158, matched: ⎇ branch · clean/"N changed" ·

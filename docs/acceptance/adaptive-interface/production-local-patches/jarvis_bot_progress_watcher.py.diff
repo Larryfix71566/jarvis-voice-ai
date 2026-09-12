@@ -1,0 +1,67 @@
+diff --git a/jarvis/bot/progress_watcher.py b/jarvis/bot/progress_watcher.py
+index 27ff590..c37ee8a 100644
+--- a/jarvis/bot/progress_watcher.py
++++ b/jarvis/bot/progress_watcher.py
+@@ -114,26 +114,38 @@ class SpeakingStateTracker(BaseObserver):
+             self._user_speaking = False
+ 
+ 
+-def _last_tool_for_run(run_id: str, db_path: Any = None) -> str | None:
+-    """Best-effort: the most recent tool_result event's tool name for this
+-    run. Never raises — a status line missing "last was X" is a cosmetic
+-    loss, not worth failing the whole tick over."""
++def _live_progress_for_run(run_id: str, db_path: Any = None) -> tuple[int, str | None]:
++    """(tool calls so far, last tool name) for a RUNNING run, read from
++    agent_events.
++
++    agent_runs.tool_count is written once, at run end (jarvis/runlog/store.py
++    — `self._tool_count` is in-memory and only reaches the row in the final
++    UPDATE), so while a run is in flight that column still reads 0. The
++    watcher used it for the count and agent_events for the name, and so
++    said "0 tool calls in, last was repo_search" every 30 s — a line that
++    contradicts itself, and the only evidence a user has that anything is
++    happening. 2026-09-08: Larry disconnected mid-self-edit because the
++    narration gave him no reason to think it was working. Count the events.
++
++    Never raises — a degraded status line is a cosmetic loss, not worth
++    failing the whole tick over.
++    """
+     from jarvis.db import get_conn
+ 
+     try:
+         conn = get_conn(db_path)
+         try:
+             conn.row_factory = sqlite3.Row
+-            row = conn.execute(
++            rows = conn.execute(
+                 "SELECT tool FROM agent_events WHERE run_id = ? AND type = 'tool_result' "
+-                "ORDER BY seq DESC LIMIT 1",
++                "ORDER BY seq DESC",
+                 (run_id,),
+-            ).fetchone()
+-            return row["tool"] if row else None
++            ).fetchall()
++            return len(rows), (rows[0]["tool"] if rows else None)
+         finally:
+             conn.close()
+     except Exception:  # noqa: BLE001 — cosmetic field, must never break the tick
+-        return None
++        return 0, None
+ 
+ 
+ async def _default_fetch_delegations(session_id: str) -> list[dict[str, Any]]:
+@@ -144,11 +156,12 @@ async def _default_fetch_delegations(session_id: str) -> list[dict[str, Any]]:
+     for r in rows:
+         if session_id and r.get("session_id") not in (session_id, None, ""):
+             continue
++        live_count, last_tool = _live_progress_for_run(str(r.get("run_id") or ""))
+         out.append({
+             "run_id": r.get("run_id"),
+             "display_name": r.get("display_name") or r.get("agent") or "a specialist",
+-            "tool_count": int(r.get("tool_count") or 0),
+-            "last_tool": _last_tool_for_run(str(r.get("run_id") or "")),
++            "tool_count": live_count or int(r.get("tool_count") or 0),
++            "last_tool": last_tool,
+         })
+     return out
+ 

@@ -24,11 +24,14 @@ struct MortimerHostApp: App {
         }
     }
 
+    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 0
     @State private var agentRuns = AgentRunStore()
     @State private var displayResults = DisplayResultStore()
+    @State private var workspace = WorkspaceStore()
     @State private var conversation = ConversationStore()
     @State private var displayWindow = DisplayWindowStore()
     @State private var drawer = DrawerState()
+    @State private var drawerModels = DrawerModels()
     @State private var overlay = ConsoleOverlayState()
     @State private var notices = ConsoleNoticeState()
 
@@ -47,9 +50,11 @@ struct MortimerHostApp: App {
                 .environmentObject(client)
                 .environment(agentRuns)
                 .environment(displayResults)
+                .environment(workspace)
                 .environment(conversation)
                 .environment(displayWindow)
                 .environment(drawer)
+                .environment(drawerModels)
                 .environment(overlay)
                 .environment(notices)
                 .background(WindowIdentifierSetter(identifier: "console"))
@@ -67,6 +72,9 @@ struct MortimerHostApp: App {
         Window("Mortimer Display", id: "display") {
             DisplayWindowView()
                 .environment(displayWindow)
+                .environment(workspace)
+                .environment(drawer)
+                .environmentObject(client)
                 .background(WindowIdentifierSetter(identifier: "display"))
                 // The native form of the web's hasLivePopup poll: scene
                 // content on screen = window open. Drives the topbar's
@@ -82,8 +90,10 @@ struct MortimerHostApp: App {
                 .environmentObject(client)
                 .environment(agentRuns)
                 .environment(displayResults)
+                .environment(workspace)
                 .environment(conversation)
                 .environment(drawer)
+                .environment(drawerModels)
                 .background(WindowIdentifierSetter(identifier: "drawer"))
                 // A traffic-light close of the popped drawer must flip
                 // the console back to docked semantics (the web's
@@ -115,7 +125,17 @@ struct MortimerHostApp: App {
                 }
                 .keyboardShortcut("f", modifiers: [.command, .control])
             }
+            CommandMenu("Layout") {
+                Button("Reset Layout") {
+                    ScreenPlacement.shared.resetLayout()
+                    drawer.width = AppTuning.drawerDefaultWidth
+                }
+            }
             CommandMenu("Debug") {
+                Button(layoutVersion == 1 ? "Use previous layout" : "Preview adaptive layout") {
+                    layoutVersion = layoutVersion == 1 ? 0 : 1
+                }
+                Divider()
                 Button("Clear stored token") {
                     KeychainStore.setToken(nil, for: client.config.botURL)
                 }
@@ -142,6 +162,7 @@ struct MortimerHostApp: App {
             agentRuns: agentRuns,
             displayResults: displayResults,
             displayWindow: displayWindow,
+            workspace: workspace,
             conversation: conversation,
             drawer: drawer,
             notices: notices
