@@ -324,12 +324,43 @@ public final class JarvisClient: ObservableObject {
     /// could flip that condition.
     private func updateWakeListenerRunState() {
         let shouldRun = wakeWordOn && state == .connected && !micEnabled
+        #if os(macOS)
+        // Native path (§3.5, measured 2026-09-13): the listener must NOT
+        // open its own AVAudioEngine on top of the transport's. A second
+        // engine on the same input device receives silence on the
+        // built-in mic and costs the transport's engine its echo
+        // cancellation (38.4 dB of reduction becomes 0.7 dB). Wake audio
+        // comes from the transport's processed tap instead — which is
+        // also strictly better input for the detector, since it is
+        // echo-cancelled (N10 rule 4's pause during bot speech stays as
+        // it is; it is no longer the only thing keeping the bot's own
+        // voice out of the detector).
+        if let native = transport as? NativeAudioTransport {
+            if shouldRun {
+                native.setCaptureMonitor { [weak self] pcm in self?.feedWakeAudio(pcm) }
+                Task { await wakeListener.start(source: .external) }
+            } else {
+                native.setCaptureMonitor(nil)
+                Task { await wakeListener.stop() }
+            }
+            return
+        }
+        #endif
         if shouldRun {
             Task { await wakeListener.start() }
         } else {
             Task { await wakeListener.stop() }
         }
     }
+
+    #if os(macOS)
+    /// The transport's capture monitor fires on the audio engine's thread;
+    /// this is the hop onto the main actor, the same boundary shape as the
+    /// RTVITransportDelegate callbacks at the bottom of this file.
+    nonisolated func feedWakeAudio(_ pcm: Data) {
+        Task { @MainActor in self.wakeListener.feed(pcm) }
+    }
+    #endif
 
     private func handleWakeEvent() {
         // wakeWord.ts:118 / MicControls.tsx:77-80 — a wake event unmutes.

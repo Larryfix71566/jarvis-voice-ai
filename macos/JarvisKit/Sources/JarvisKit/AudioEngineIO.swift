@@ -127,6 +127,28 @@ final class CaptureConverter {
         return result
     }
 
+    /// Channel 0 of `buffer` as a mono Float32 buffer at the buffer's rate
+    /// (the buffer itself when it is already mono, non-interleaved
+    /// Float32). Used on the input tap: with Voice Processing on, the
+    /// MacBook Air's input bus delivers the 9-channel array layout with
+    /// every channel carrying the same processed signal.
+    static func firstChannel(of buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        let frames = Int(buffer.frameLength)
+        let channels = Int(buffer.format.channelCount)
+        guard frames > 0, channels > 0, let src = buffer.floatChannelData else { return nil }
+        if channels == 1, !buffer.format.isInterleaved { return buffer }
+        guard let mono = AVAudioFormat(standardFormatWithSampleRate: buffer.format.sampleRate, channels: 1),
+              let out = AVAudioPCMBuffer(pcmFormat: mono, frameCapacity: AVAudioFrameCount(frames)),
+              let dst = out.floatChannelData else { return nil }
+        if buffer.format.isInterleaved {
+            for i in 0..<frames { dst[0][i] = src[0][i * channels] }
+        } else {
+            dst[0].update(from: src[0], count: frames)
+        }
+        out.frameLength = AVAudioFrameCount(frames)
+        return out
+    }
+
     /// A copy of `count` frames of `buffer` starting at `from`, in the
     /// buffer's own format.
     static func slice(_ buffer: AVAudioPCMBuffer, from: Int, count: Int) -> AVAudioPCMBuffer? {
@@ -239,12 +261,24 @@ final class AudioEngineIO {
     /// 16 kHz Int16 mono bytes plus the level of the buffer they came from.
     /// Called on the engine's queue, hence @Sendable.
     var onCapturedPCM: (@Sendable (Data, AudioLevelSample) -> Void)?
+    /// Every converted capture buffer, whether or not capture is enabled.
+    /// The wake path needs audio precisely while the mic is muted (§3.5:
+    /// a second AVAudioEngine on the same device gets silence and breaks
+    /// this engine's echo cancellation), and it must be the processed
+    /// signal, so it is taken from the same tap rather than a new engine.
+    /// Every converted capture buffer, whether or not capture is enabled.
+    /// The wake path needs audio precisely while the mic is muted (§3.5:
+    /// a second AVAudioEngine on the same device gets silence and breaks
+    /// this engine's echo cancellation), and it must be the processed
+    /// signal, so it is taken from the same tap rather than a new engine.
+    var onMonitorPCM: (@Sendable (Data) -> Void)?
     /// True while at least one scheduled playout buffer is unfinished.
     var onPlayoutChanged: (@Sendable (Bool) -> Void)?
 
     private let queue = DispatchQueue(label: "com.mortimer.jarviskit.audio-engine")
     private let slotLock = NSLock()
     private var inputSlot: AudioLevelSample?
+    private var _captureTapFormat: AVAudioFormat?
     private var playoutSlot: AudioLevelSample?
 
     private var engine: AVAudioEngine?
@@ -268,6 +302,8 @@ final class AudioEngineIO {
     var latestInputLevel: AudioLevelSample? { slotLock.withLock { inputSlot } }
     /// Latest level at the main mixer output (what the speaker plays), or nil.
     var latestPlayoutLevel: AudioLevelSample? { slotLock.withLock { playoutSlot } }
+    /// The input bus format the running tap was installed with (bench/diagnostics).
+    var captureTapFormat: AVAudioFormat? { slotLock.withLock { _captureTapFormat } }
     var isPlaying: Bool { queue.sync { playout.isPlaying } }
 
     // MARK: Lifecycle
@@ -303,9 +339,31 @@ final class AudioEngineIO {
 
     // MARK: Queue-confined implementation
 
+    /// Builds the graph the 2026-09-13 benches showed both starting and
+    /// cancelling echo on this Mac (`macos/VPIOBench --probe`, `--channels`):
+    ///
+    /// - the hardware formats are read BEFORE `setVoiceProcessingEnabled`;
+    ///   afterwards the input bus reports the mic array's raw layout (9 ch
+    ///   on the MacBook Air) and the output bus 0 ch / 0 Hz, and a
+    ///   `mainMixer → output` connection with `format: nil` inherits that
+    ///   nothing and fails `kAUInitialize` (-10875);
+    /// - the input node is NOT connected to anything: it is tapped with
+    ///   `format: nil`, i.e. in whatever layout Voice Processing reports,
+    ///   and channel 0 of each buffer is taken (the `--channels` bench
+    ///   showed all nine channels identical, at the idle floor during
+    ///   playback). Connecting the input node to the main mixer in a mono
+    ///   format — the earlier shape — starts fine but the canceller then
+    ///   leaves the playback in the tap at −2 dB, and Silero raises user
+    ///   turns on it (built-in mic + speakers, quiet room);
+    /// - `mainMixer → output` gets the hardware output format explicitly.
     private func startLocked() throws {
         if engine != nil { stopLocked() }
         let engine = AVAudioEngine()
+        let hardwareInput = engine.inputNode.outputFormat(forBus: 0)
+        let hardwareOutput = engine.outputNode.outputFormat(forBus: 0)
+        guard hardwareInput.sampleRate > 0, hardwareOutput.sampleRate > 0, hardwareOutput.channelCount > 0 else {
+            throw JarvisError.transport("no audio devices: input \(hardwareInput), output \(hardwareOutput)")
+        }
         // VPIO must be set before the input node is used or the engine started.
         if wantsVoiceProcessing {
             try engine.inputNode.setVoiceProcessingEnabled(true)
@@ -314,34 +372,54 @@ final class AudioEngineIO {
         } else {
             voiceProcessing = false
         }
+        // The bus format after VPIO is what the tap delivers (9 ch / 48 kHz
+        // on the MacBook Air mic array, 1 ch on AirPods); the converter
+        // works on channel 0 of it.
+        let tapFormat = engine.inputNode.outputFormat(forBus: 0)
+        guard tapFormat.sampleRate > 0, tapFormat.channelCount > 0,
+              let captureFormat = AVAudioFormat(standardFormatWithSampleRate: tapFormat.sampleRate, channels: 1),
+              let outputFormat = AVAudioFormat(standardFormatWithSampleRate: hardwareOutput.sampleRate, channels: hardwareOutput.channelCount) else {
+            throw JarvisError.transport("no graph formats for input \(tapFormat), output \(hardwareOutput)")
+        }
         engine.attach(player)
-        // Pull the output side up so the engine has a render path even
-        // before the first playout frame declares its format.
-        engine.connect(engine.mainMixerNode, to: engine.outputNode, format: nil)
-        try installTaps(on: engine)
+        engine.connect(engine.mainMixerNode, to: engine.outputNode, format: outputFormat)
+        try installTaps(on: engine, captureFormat: captureFormat)
         engine.prepare()
-        try engine.start()
+        do { try engine.start() } catch {
+            // Say what the graph looked like: the bench and the app log both
+            // need it to tell a permission refusal from a VPIO/device fault.
+            removeTaps(from: engine)
+            throw JarvisError.transport("audio engine start failed (\(error)); input \(engine.inputNode.outputFormat(forBus: 0)), output \(engine.outputNode.outputFormat(forBus: 0)), voice processing \(voiceProcessing)")
+        }
         self.engine = engine
         configObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { [weak self] _ in
             self?.queue.async { self?.rebuildLocked() }
         }
-        engineLog.notice("audio engine started: input \(engine.inputNode.outputFormat(forBus: 0).sampleRate, privacy: .public) Hz, VPIO \(self.voiceProcessing ? "on" : "off", privacy: .public)")
+        engineLog.notice("audio engine started: capture \(captureFormat.sampleRate, privacy: .public) Hz mono, channel 0 of \(tapFormat.channelCount, privacy: .public) (hardware \(hardwareInput.channelCount, privacy: .public) ch before VPIO), output \(outputFormat.sampleRate, privacy: .public) Hz \(outputFormat.channelCount, privacy: .public) ch, VPIO \(self.voiceProcessing ? "on" : "off", privacy: .public)")
     }
 
-    private func installTaps(on engine: AVAudioEngine) throws {
-        let inputFormat = engine.inputNode.outputFormat(forBus: 0)
-        guard inputFormat.sampleRate > 0, let converter = CaptureConverter(inputFormat: inputFormat) else {
-            throw JarvisError.transport("no capture converter for input format \(inputFormat)")
+    private func installTaps(on engine: AVAudioEngine, captureFormat: AVAudioFormat) throws {
+        guard let converter = CaptureConverter(inputFormat: captureFormat) else {
+            throw JarvisError.transport("no capture converter for \(captureFormat)")
         }
         self.converter = converter
-        engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, time in
-            guard let self else { return }
+        slotLock.withLock { _captureTapFormat = engine.inputNode.outputFormat(forBus: 0) }
+        // `format: nil` = the input bus format as VPIO reports it; the
+        // converter and the meter see channel 0 of it.
+        engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] raw, time in
+            guard let self, let buffer = CaptureConverter.firstChannel(of: raw) else { return }
             let level = AudioLevelSample(rms: LevelMeter.rms(of: buffer), hostTime: time.hostTime)
             self.slotLock.withLock { self.inputSlot = level }
             self.queue.async {
-                guard self.captureEnabled, let data = self.converter?.convert(buffer), !data.isEmpty else { return }
-                self.onCapturedPCM?(data, level)
+                let monitor = self.onMonitorPCM
+                guard self.captureEnabled || monitor != nil else { return }
+                guard let data = self.converter?.convert(buffer), !data.isEmpty else { return }
+                monitor?(data)
+                // With a monitor attached (the wake path) conversion runs
+                // while muted too, which also keeps the resampler's
+                // history continuous across a mute toggle.
+                if self.captureEnabled { self.onCapturedPCM?(data, level) }
             }
         }
         engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, time in
@@ -369,25 +447,29 @@ final class AudioEngineIO {
         converter = nil
         playerFormat = nil
         if playout.flush() { onPlayoutChanged?(false) }
-        slotLock.withLock { inputSlot = nil; playoutSlot = nil }
+        slotLock.withLock { inputSlot = nil; playoutSlot = nil; _captureTapFormat = nil }
     }
 
-    /// D3: a device change stops the engine; rebuild the graph in place
-    /// with the new input format and keep the player node and its format.
+    /// D3: a device change (AirPods arriving, the default output moving)
+    /// stops the engine and may change both hardware formats, so the graph
+    /// is built again from scratch through `startLocked` — the same player
+    /// node object is re-attached, so the transport's reference and the
+    /// declared playout format survive; whatever was queued in the old
+    /// engine is gone (a short gap mid-sentence, then the stream resumes),
+    /// which `playout.flush()` reports as not-playing.
     private func rebuildLocked() {
-        guard let engine else { return }
+        guard engine != nil else { return }
         rebuildCount += 1
-        removeTaps(from: engine)
+        let keptFormat = playerFormat
+        let wasEnabled = captureEnabled
         do {
-            try installTaps(on: engine)
-            if let playerFormat, engine.attachedNodes.contains(player) {
-                engine.connect(player, to: engine.mainMixerNode, format: playerFormat)
+            try startLocked()          // stops the old engine first
+            captureEnabled = wasEnabled
+            if let keptFormat, let engine {
+                engine.connect(player, to: engine.mainMixerNode, format: keptFormat)
+                playerFormat = keptFormat
             }
-            engine.connect(engine.mainMixerNode, to: engine.outputNode, format: nil)
-            engine.prepare()
-            try engine.start()
-            if playerFormat != nil, playout.isPlaying { player.play() }
-            engineLog.notice("audio engine rebuilt after configuration change (#\(self.rebuildCount, privacy: .public)): input \(engine.inputNode.outputFormat(forBus: 0).sampleRate, privacy: .public) Hz")
+            engineLog.notice("audio engine rebuilt after configuration change (#\(self.rebuildCount, privacy: .public))")
         } catch {
             engineLog.error("audio engine rebuild failed: \(error.localizedDescription, privacy: .public)")
         }

@@ -1,6 +1,82 @@
 import XCTest
 @testable import JarvisKit
 
+#if os(macOS)
+/// The native path's wake source (§3.5). A stub socket stands in for
+/// the sidecar so the framing and the mic-ownership rules are asserted
+/// without a sidecar, a microphone, or a second AVAudioEngine.
+@MainActor
+final class WakeExternalFeedTests: XCTestCase {
+    final class StubWakeSocket: WakeSocket {
+        var onText: (@Sendable (String) -> Void)?
+        var onFailure: (@Sendable (Error) -> Void)?
+        private(set) var opens = 0
+        private(set) var closes = 0
+        private(set) var sent: [Data] = []
+        func open() { opens += 1 }
+        func send(_ data: Data) { sent.append(data) }
+        func close() { closes += 1 }
+    }
+
+    private let config = JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
+                                      adminURL: URL(string: "http://127.0.0.1:7861")!,
+                                      wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: nil)
+
+    private func listener() -> (WakeWordListener, StubWakeSocket) {
+        let socket = StubWakeSocket()
+        let l = WakeWordListener(config: config, makeSocket: { _ in socket })
+        return (l, socket)
+    }
+
+    func testExternalStartOpensTheSidecarSocketWithoutAnEngineOfItsOwn() async {
+        let (l, socket) = listener()
+        await l.start(source: .external)
+        XCTAssertEqual(socket.opens, 1)
+        XCTAssertEqual(l.source, .external)
+        XCTAssertFalse(l.isUsingOwnEngine, "the native path must not open a second AVAudioEngine")
+        XCTAssertEqual(l.availability, .available)
+        await l.stop()
+        XCTAssertEqual(socket.closes, 1)
+    }
+
+    func testFedAudioReachesTheSidecarAsWholeFramesOnly() async {
+        let (l, socket) = listener()
+        await l.start(source: .external)
+        l.feed(Data(repeating: 7, count: JarvisTuning.wakeFrameBytes - 1))
+        XCTAssertEqual(socket.sent.count, 0, "never a partial frame")
+        l.feed(Data(repeating: 7, count: 1))
+        XCTAssertEqual(socket.sent.count, 1)
+        XCTAssertEqual(socket.sent[0].count, JarvisTuning.wakeFrameBytes)
+        l.feed(Data(repeating: 7, count: JarvisTuning.wakeFrameBytes * 2 + 5))
+        XCTAssertEqual(socket.sent.map(\.count), Array(repeating: JarvisTuning.wakeFrameBytes, count: 3))
+        await l.stop()
+    }
+
+    func testFeedIsIgnoredWhenPausedStoppedOrOwningItsOwnEngine() async {
+        let (l, socket) = listener()
+        let frame = Data(repeating: 3, count: JarvisTuning.wakeFrameBytes)
+        l.feed(frame)
+        XCTAssertEqual(socket.sent.count, 0, "not started")
+        await l.start(source: .external)
+        l.setPaused(true)                       // N10 rule 4: bot speaking
+        l.feed(frame)
+        XCTAssertEqual(socket.sent.count, 0, "paused")
+        l.setPaused(false)
+        l.feed(frame)
+        XCTAssertEqual(socket.sent.count, 1)
+        await l.stop()
+        l.feed(frame)
+        XCTAssertEqual(socket.sent.count, 1, "stopped")
+        // A listener that owns its own engine (the WebRTC path) must
+        // ignore fed audio, so audio can never arrive twice.
+        let (own, ownSocket) = listener()
+        XCTAssertEqual(own.source, .ownEngine, "the WebRTC path's default")
+        own.feed(frame)
+        XCTAssertEqual(ownSocket.sent.count, 0)
+    }
+}
+#endif
+
 final class WakeWordFramingTests: XCTestCase {
     func testWakePCMFramesAreExactly2560Bytes() {
         var framer = WakeFramer()

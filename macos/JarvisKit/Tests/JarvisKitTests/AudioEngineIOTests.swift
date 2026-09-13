@@ -129,4 +129,52 @@ final class AudioEngineIOTests: XCTestCase {
         let sample = AudioLevelSample(rms: 0.25, hostTime: mach_absolute_time())
         XCTAssertEqual(sample.seconds, ProcessInfo.processInfo.systemUptime, accuracy: 0.5, "host time and systemUptime share a clock")
     }
+
+    /// The input tap under Voice Processing delivers the mic array layout
+    /// (9 ch / 48 kHz on the MacBook Air); the converter is fed channel 0.
+    func testFirstChannelTakesChannelZeroOfAMultiChannelTapBufferAndPassesMonoThrough() throws {
+        // No standard layout exists for 9 channels; the mic array reports a
+        // discrete layout, which is what this builds.
+        let layout = try XCTUnwrap(AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_DiscreteInOrder | 9))
+        let nine = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, interleaved: false, channelLayout: layout)
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: nine, frameCapacity: 480))
+        buffer.frameLength = 480
+        for ch in 0..<9 {
+            for i in 0..<480 { buffer.floatChannelData![ch][i] = Float(ch) + Float(i) / 1000 }
+        }
+        let mono = try XCTUnwrap(CaptureConverter.firstChannel(of: buffer))
+        XCTAssertEqual(mono.format.channelCount, 1)
+        XCTAssertEqual(mono.format.sampleRate, 48_000)
+        XCTAssertEqual(mono.frameLength, 480)
+        XCTAssertEqual(mono.floatChannelData![0][0], 0)
+        XCTAssertEqual(mono.floatChannelData![0][479], 0.479, accuracy: 1e-6)
+
+        let layout3 = try XCTUnwrap(AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_DiscreteInOrder | 3))
+        let interleaved = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, interleaved: true, channelLayout: layout3)
+        let ibuf = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: interleaved, frameCapacity: 4))
+        ibuf.frameLength = 4
+        for i in 0..<12 { ibuf.floatChannelData![0][i] = Float(i) }
+        let imono = try XCTUnwrap(CaptureConverter.firstChannel(of: ibuf))
+        XCTAssertEqual((0..<4).map { imono.floatChannelData![0][$0] }, [0, 3, 6, 9])
+
+        let monoFormat = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 24_000, channels: 1))
+        let already = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: monoFormat, frameCapacity: 10))
+        already.frameLength = 10
+        XCTAssertTrue(CaptureConverter.firstChannel(of: already) === already, "mono input is passed through, not copied")
+
+        // Channel 0 of a tap-shaped buffer converts to the wire format. A
+        // single 10 ms buffer is shorter than the resampler's priming, so
+        // the length is checked over 20 consecutive buffers (20 × 480
+        // frames at 48 kHz = 0.2 s = 3,200 samples = 6,400 bytes) with the
+        // same tolerances as the continuity test above.
+        let converter = try XCTUnwrap(CaptureConverter(inputFormat: mono.format))
+        var total = Data()
+        for _ in 0..<20 {
+            let channelZero = try XCTUnwrap(CaptureConverter.firstChannel(of: buffer))
+            total.append(try XCTUnwrap(converter.convert(channelZero)))
+        }
+        XCTAssertEqual(total.count % 2, 0)
+        XCTAssertGreaterThan(total.count, 6_400 - 512, "\(total.count) bytes")
+        XCTAssertLessThanOrEqual(total.count, 6_400 + 64, "\(total.count) bytes")
+    }
 }

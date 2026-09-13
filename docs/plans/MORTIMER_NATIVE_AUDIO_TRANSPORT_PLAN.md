@@ -148,7 +148,12 @@ Verified against the installed **pipecat-ai 1.4.0** (`.venv` of the `jarvis-voic
 
 **§3.5 — confirmed, with one bench item added.** The wake listener opens its own `URLSession.shared.webSocketTask` to `wakeWordURL` (`ws://127.0.0.1:7862/ws`, `JarvisConfig.swift:8,41`; `WakeWordListener.swift:104,223`) and streams 16 kHz PCM from its own `AVAudioEngine` input tap (`WakeWordListener.swift:162-178`); nothing in it references the RTVI transport. Independent of the swap. What is *not* independent: the listener runs while the session is connected and the mic is muted (`JarvisClient.swift:303`), so **two `AVAudioEngine` instances share the input device in one process**, one of them (the transport's) with Voice Processing enabled. Today's equivalent is the libwebrtc ADM alongside the wake engine, so concurrent capture itself is proven; the VPIO combination is not — it joins the §3.3 bench: wake word must still fire while the transport is connected, muted, VPIO on, on the built-in mic and on AirPods.
 
-**Open (hardware, Larry): §3.3 VPIO echo bench and §3.4 latency parity** — §3.4 needs the C0.4 WebRTC baseline captures first.
+**§3.3 and §3.5 — measured 2026-09-13 on the MacBook Air (Mac17,4, macOS 26.6.2), built-in mic + speakers, quiet room.** Full numbers, discarded runs and log hashes: `docs/acceptance/adaptive-interface/C6-native-audio.md`. Two results override the text above.
+
+1. **Voice Processing cancels, and the gate is met on this device.** With nothing else holding the input device, `AudioEngineIO` VPIO-on leaves the bot's own playback **6.0 dB *below* the idle noise floor** (39.2 dB below the VPIO-off residual), and the pipeline's own `SileroVADAnalyzer` with `pipeline.py`'s `VADParams` scores **0 speaking chunks and 0 user turns** on it (confidence max 0.156 against a 0.7 threshold), while the VPIO-off capture of the same signal raises 7 turns. So no server-side change is needed for §3.3's fallback list, on this configuration. The two AirPods configurations still need a run on the shipped graph (§3.3 asks for three).
+2. **§3.5 is refuted: the wake listener must not open its own engine on the native path.** A second `AVAudioEngine` on the same input device — exactly what `WakeWordListener.startCapture()` does today — costs the transport's engine its cancellation (39.2 dB of reduction collapses to 0.7 dB; the residual sits 32.9 dB *above* the floor and Silero raises **9 user turns** on the bot's own voice) and the second engine itself receives **silence** on the built-in mic (`wakeRMS` 0 in every VPIO-on phase; on AirPods it did receive audio, so the deafness is device-dependent and the cancellation loss is not). Both symptoms are one cause. **Design change (approved by Larry, 2026-09-13):** on the native path the wake listener is fed from the transport's own processed capture tap and opens no engine — `AudioEngineIO.onMonitorPCM` (fires whether or not capture is enabled, since wake runs precisely while the mic is muted) → `NativeAudioTransport.setCaptureMonitor(_:)` → `WakeWordListener.feed(_:)`, with `WakeAudioSource.external` suppressing `startCapture()`. Measured in that shape: the wake path receives every buffer while muted (121 of 121 in both phases) and the canceller stays intact (residual 2.7 dB below the idle floor, 0 speaking chunks, 0 user turns). The wake audio is now echo-cancelled, which is strictly better input for the detector; N10 rule 4's pause during bot speech is kept unchanged. The WebRTC path keeps `.ownEngine` — libwebrtc's ADM tolerates the second engine, which is what ships today.
+
+**Open (hardware, Larry): §3.3 on the two AirPods configurations, and §3.4 latency parity** — §3.4 needs the C0.4 WebRTC baseline captures first.
 
 ---
 
@@ -205,6 +210,16 @@ Verified against the installed **pipecat-ai 1.4.0** (`.venv` of the `jarvis-voic
   processor (the WebRTC case keeps its connection-level handler). D3/D6: the
   client flushes its player queue on the serializer's `interruption` frame.
   Branch: `feat/native-audio-transport`, cut from `main` `6cdf1b8`.
+- **D9 (2026-09-13, from the §3.3/§3.5 measurements):** the input node is
+  **tapped, never connected**. With Voice Processing on, this Mac's input bus
+  reports the mic array's 9-channel 48 kHz layout (1 ch before) and the output
+  bus 0 ch / 0 Hz; a `mainMixer → output` connection with `format: nil`
+  inherits that nothing and fails `kAUInitialize` (-10875), so that connection
+  carries the hardware output format explicitly, read *before* VPIO is
+  enabled. The tap takes `format: nil` and `CaptureConverter.firstChannel(of:)`
+  feeds channel 0 to the converter (the `--channels` bench measured all nine
+  channels identical). And on the native path the wake listener is fed from
+  that same tap instead of opening its own engine (§3.5 above).
 
 ---
 

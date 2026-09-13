@@ -30,6 +30,7 @@ final class NativeAudioTransportTests: XCTestCase {
 
     final class StubAudio: NativeAudioIO {
         var onCapturedPCM: (@Sendable (Data, AudioLevelSample) -> Void)?
+        var onMonitorPCM: (@Sendable (Data) -> Void)?
         var onPlayoutChanged: (@Sendable (Bool) -> Void)?
         private let lock = NSLock()
         private var _started = 0, _stopped = 0, _flushes = 0
@@ -46,6 +47,15 @@ final class NativeAudioTransportTests: XCTestCase {
         func setCaptureEnabled(_ enabled: Bool) { lock.withLock { _capture.append(enabled) } }
         func play(pcm: Data, sampleRate: Double, channels: Int) { lock.withLock { _played.append((pcm, sampleRate, channels)) } }
         func flushPlayout() { lock.withLock { _flushes += 1 } }
+    }
+
+    /// Collects what a capture monitor hears (called on the transport's
+    /// queue, asserted from the test thread).
+    final class Collector: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _all: [Data] = []
+        var all: [Data] { lock.withLock { _all } }
+        func add(_ data: Data) { lock.withLock { _all.append(data) } }
     }
 
     final class Recorder: RTVITransportDelegate {
@@ -230,6 +240,35 @@ final class NativeAudioTransportTests: XCTestCase {
         XCTAssertEqual(audios[0].played[0].1, 24_000)
         XCTAssertEqual(audios[0].played[0].2, 1)
         XCTAssertEqual(recorder.frames.count, 0, "audio, text and interruption never reach the app-message path")
+        await transport.disconnect()
+    }
+
+    /// §3.5: the wake listener runs exactly while the mic is muted, so
+    /// its audio source cannot be the mute-gated capture path — and it
+    /// must not be a second AVAudioEngine either (that costs VPIO its
+    /// echo cancellation, measured 2026-09-13).
+    func testCaptureMonitorHearsProcessedAudioWhileMutedAndDoesNotSurviveTheSession() async throws {
+        let transport = makeTransport()
+        try await transport.connect(config: config)
+        let heard = Collector()
+        transport.setCaptureMonitor { heard.add($0) }
+        audios[0].onMonitorPCM?(Data([1, 2]))
+        settle({ heard.all.count == 1 }, "wake audio does not wait for the bot socket to open")
+        sockets[0].onOpen?()
+        settle({ self.recorder.connects == 1 }, "open")
+        transport.setMicEnabled(false)
+        let level = AudioLevelSample(rms: 0.1, hostTime: 1)
+        audios[0].onMonitorPCM?(Data([3, 4]))
+        audios[0].onCapturedPCM?(Data([3, 4]), level)
+        settle({ heard.all.count == 2 }, "the monitor fires while muted")
+        XCTAssertEqual(heard.all, [Data([1, 2]), Data([3, 4])])
+        XCTAssertEqual(sockets[0].sent.count, 0, "the same buffer is not sent to the bot while muted")
+        await transport.disconnect()
+        XCTAssertNil(audios[0].onMonitorPCM, "the engine callback is cleared with the session")
+        try await transport.connect(config: config)
+        audios[1].onMonitorPCM?(Data([5, 6]))
+        Thread.sleep(forTimeInterval: 0.05)
+        XCTAssertEqual(heard.all.count, 2, "a monitor does not survive a reconnect — the owner re-arms it")
         await transport.disconnect()
     }
 

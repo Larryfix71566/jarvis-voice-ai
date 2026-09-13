@@ -20,6 +20,7 @@ protocol NativeSocket: AnyObject {
 /// The capture/playout half (`AudioEngineIO` in production).
 protocol NativeAudioIO: AnyObject {
     var onCapturedPCM: (@Sendable (Data, AudioLevelSample) -> Void)? { get set }
+    var onMonitorPCM: (@Sendable (Data) -> Void)? { get set }
     var onPlayoutChanged: (@Sendable (Bool) -> Void)? { get set }
     func start() throws
     func stop()
@@ -84,6 +85,7 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
     private var keepAliveTimer: DispatchSourceTimer?
     private var watchdogTimer: DispatchSourceTimer?
     private var lastPongAt: Date = .distantPast
+    private var captureMonitor: (@Sendable (Data) -> Void)?
     private var audioFramesSent = 0
     private var audioBytesSent = 0
     private(set) var sessionCount = 0
@@ -95,6 +97,27 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
     var outboundAudioStats: OutboundAudioStats {
         queue.sync { OutboundAudioStats(packetsSent: audioFramesSent, bytesSent: audioBytesSent) }
     }
+    /// The wake path's audio sink (§3.5). Set while the owner wants the
+    /// wake listener fed from this engine's processed tap — the only
+    /// supported way to run wake on the native path, since a second
+    /// AVAudioEngine on the same input device receives silence and costs
+    /// this one its echo cancellation. Cleared on teardown with the rest
+    /// of the session state; frames are 16 kHz Int16 mono, i.e. already
+    /// `JarvisTuning.wakeSampleRate`.
+    func setCaptureMonitor(_ monitor: (@Sendable (Data) -> Void)?) {
+        queue.sync {
+            captureMonitor = monitor
+            guard monitor != nil else { audio?.onMonitorPCM = nil; return }
+            let session = sessionCount
+            // Installed only while a monitor exists, so with wake off the
+            // engine does no capture conversion at all on a muted mic.
+            audio?.onMonitorPCM = { [weak self] pcm in
+                guard let self else { return }
+                self.queue.async { [weak self] in self?.monitored(pcm, session: session) }
+            }
+        }
+    }
+
     /// The last answered keep-alive ping; nil before the socket opens.
     var lastKeepAliveDate: Date? {
         queue.sync { lastPongAt == .distantPast ? nil : lastPongAt }
@@ -254,6 +277,14 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         }
     }
 
+    /// Unlike `captured`, this does NOT require `micEnabled` — the wake
+    /// listener runs exactly while the mic is muted — nor an open socket:
+    /// wake audio goes to the sidecar, not to the bot.
+    private func monitored(_ pcm: Data, session: Int) {
+        guard session == sessionCount else { return }
+        captureMonitor?(pcm)
+    }
+
     private func armOpenDeadline(session: Int) {
         openDeadlineTimer?.cancel()
         let timer = DispatchSource.makeTimerSource(queue: queue)
@@ -305,13 +336,14 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         let hadSession = socket != nil || audio != nil
         socket?.onOpen = nil; socket?.onClose = nil; socket?.onMessage = nil
         socket?.close()
-        audio?.onCapturedPCM = nil; audio?.onPlayoutChanged = nil
+        audio?.onCapturedPCM = nil; audio?.onPlayoutChanged = nil; audio?.onMonitorPCM = nil
         audio?.stop()
         socket = nil
         audio = nil
         config = nil
         isOpen = false
         outboundQueue.removeAll()
+        captureMonitor = nil
         audioFramesSent = 0
         audioBytesSent = 0
         lastPongAt = .distantPast
