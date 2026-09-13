@@ -16,13 +16,17 @@ struct AdaptiveStageView: View {
     @Environment(WorkspaceStore.self) private var workspace
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    // P0 has not yet proven an input/playout adapter. Missing measurements are
-    // explicit; this fallback is not completion of dual-speaker metering.
-    @State private var observationGeneration = UUID()
+    // Closure C7: measured levels from the native path's own taps, sampled
+    // app-scoped at ≤30 Hz by JarvisClient's AudioActivityObserver (the
+    // generation lives there now, not in this view — gap G24). A nil
+    // snapshot is still explicit: on the WebRTC path, with the meter
+    // disabled, or between sessions the presentation reports the level as
+    // unavailable rather than drawing silence.
     private func voicePresentation() -> VoicePresentationState {
         VoicePresentationState.derive(connection: client.state, microphoneEnabled: client.micEnabled,
             botSpeaking: client.botIsSpeaking, thinking: client.botIsThinking,
-            snapshot: nil, generation: observationGeneration, now: ProcessInfo.processInfo.systemUptime)
+            snapshot: client.audioActivity, generation: client.audioActivityGeneration,
+            now: ProcessInfo.processInfo.systemUptime)
     }
 
     /// §4.1 (as amended by closure C2.5): the large wave is shown when the

@@ -43,6 +43,81 @@ enum WakeFrameDecoder {
     }
 }
 
+/// The sidecar socket, as a seam (the shape `NativeAudioTransport` uses
+/// for `NativeSocket`): production is a URLSession WebSocket to the wake
+/// sidecar, and the tests substitute a collector so the framing and the
+/// mic-contention rules are provable without a sidecar or a live mic.
+protocol WakeSocket: AnyObject {
+    var onText: (@Sendable (String) -> Void)? { get set }
+    var onFailure: (@Sendable (Error) -> Void)? { get set }
+    func open()
+    func send(_ data: Data)
+    func close()
+}
+
+final class URLSessionWakeSocket: WakeSocket {
+    var onText: (@Sendable (String) -> Void)?
+    var onFailure: (@Sendable (Error) -> Void)?
+    private let url: URL
+    private var session: URLSession?
+    private var task: URLSessionWebSocketTask?
+
+    init(url: URL) { self.url = url }
+
+    func open() {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.waitsForConnectivity = false
+        let session = URLSession(configuration: configuration)
+        let task = session.webSocketTask(with: url)
+        self.session = session
+        self.task = task
+        task.resume()
+        receiveLoop(task)
+    }
+
+    func send(_ data: Data) {
+        task?.send(.data(data)) { error in
+            if let error { wakeLog.error("wake socket send failed: \(error.localizedDescription, privacy: .public)") }
+        }
+    }
+
+    func close() {
+        task?.cancel(with: .goingAway, reason: nil)
+        task = nil
+        session = nil
+    }
+
+    /// Failure ends the loop (the owner reports it as unavailable); the
+    /// sidecar only ever sends text (server.py:84-85).
+    private func receiveLoop(_ task: URLSessionWebSocketTask) {
+        task.receive { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(.string(let text)):
+                self.onText?(text)
+                self.receiveLoop(task)
+            case .success:
+                self.receiveLoop(task)
+            case .failure(let error):
+                self.onFailure?(error)
+            }
+        }
+    }
+}
+
+/// Where the wake listener's audio comes from. `.ownEngine` is the
+/// WebRTC path's shape (the listener opens its own AVAudioEngine, which
+/// WebRTC's ADM tolerates). `.external` is the native path, measured
+/// 2026-09-13: a second AVAudioEngine on the same input device receives
+/// silence on the built-in mic AND costs the transport's engine its echo
+/// cancellation (38.4 dB of reduction becomes 0.7 dB, and Silero raises
+/// nine user turns on the bot's own playback), so the listener is fed
+/// from the transport's already-processed tap through `feed(_:)` instead.
+enum WakeAudioSource: Sendable, Equatable {
+    case ownEngine
+    case external
+}
+
 /// The state WakeWordListener reports to JarvisClient.
 public enum WakeAvailability: Sendable, Equatable {
     case unknown
@@ -69,16 +144,23 @@ final class WakeWordListener {
 
     var onWake: (() -> Void)?
     var onAvailabilityChange: ((WakeAvailability) -> Void)?
+    private(set) var source: WakeAudioSource = .ownEngine
+    private let makeSocket: (URL) -> WakeSocket
 
     #if os(macOS)
     private var engine: AVAudioEngine?
     private var converter: AVAudioConverter?
-    private var webSocketTask: URLSessionWebSocketTask?
+    private var socket: WakeSocket?
     private var chimePlayer: ChimePlayer?
+    /// True while this listener owns an AVAudioEngine of its own — false
+    /// on the native path, where audio arrives through `feed(_:)`.
+    var isUsingOwnEngine: Bool { engine != nil }
     #endif
 
-    init(config: JarvisConfig) {
+    init(config: JarvisConfig,
+         makeSocket: @escaping (URL) -> WakeSocket = { URLSessionWakeSocket(url: $0) }) {
         self.config = config
+        self.makeSocket = makeSocket
     }
 
     private func setAvailability(_ a: WakeAvailability) {
@@ -122,7 +204,10 @@ final class WakeWordListener {
         #endif
     }
 
-    func start() async {
+    /// `source` decides who owns the microphone; the owner
+    /// (JarvisClient) picks it from the live transport.
+    func start(source: WakeAudioSource = .ownEngine) async {
+        self.source = source
         guard JarvisFlags.wakeWordEnabled else {
             setAvailability(.unavailable(reason: "disabled by JARVIS_WAKEWORD_ENABLED"))
             return
@@ -136,7 +221,7 @@ final class WakeWordListener {
         isRunning = true
         isPaused = false
         startSocket()
-        startCapture()
+        if source == .ownEngine { startCapture() }
         #endif
     }
 
@@ -209,47 +294,47 @@ final class WakeWordListener {
         framer = WakeFramer()
     }
 
+    /// The native path's audio entry point: 16 kHz Int16 mono frames
+    /// from the transport's processed capture tap
+    /// (`CaptureConverter.wireSampleRate` == `JarvisTuning.wakeSampleRate`,
+    /// so no conversion happens here). Ignored unless this listener was
+    /// started with `.external`, so audio can never arrive twice.
+    func feed(_ pcm: Data) {
+        guard source == .external else { return }
+        handleCapturedPCM(pcm)
+    }
+
     private func handleCapturedPCM(_ data: Data) {
         guard isRunning, !isPaused else { return }
         let frames = framer.append(data)
-        for frame in frames {
-            webSocketTask?.send(.data(frame)) { error in
-                if let error { wakeLog.error("wake socket send failed: \(error.localizedDescription, privacy: .public)") }
-            }
-        }
+        for frame in frames { socket?.send(frame) }
     }
 
     private func startSocket() {
-        let task = URLSession.shared.webSocketTask(with: config.wakeWordURL)
-        webSocketTask = task
-        task.resume()
+        let socket = makeSocket(config.wakeWordURL)
+        socket.onText = { [weak self] text in
+            guard let data = text.data(using: .utf8),
+                  let event = WakeFrameDecoder.decodeWakeEvent(from: data) else { return }
+            Task { @MainActor in self?.handleWake(event) }
+        }
+        socket.onFailure = { [weak self] error in
+            // Describe it here: only Sendable values cross into the actor.
+            let reason = "wake socket error: \(error.localizedDescription)"
+            Task { @MainActor in
+                self?.setAvailability(.unavailable(reason: reason))
+                self?.isRunning = false
+            }
+        }
+        self.socket = socket
+        socket.open()
         setAvailability(.available)
-        receiveNext()
     }
 
     private func stopSocket() {
-        webSocketTask?.cancel(with: .goingAway, reason: nil)
-        webSocketTask = nil
-    }
-
-    private func receiveNext() {
-        webSocketTask?.receive { [weak self] result in
-            guard let self else { return }
-            switch result {
-            case .failure(let error):
-                Task { @MainActor in
-                    self.setAvailability(.unavailable(reason: "wake socket error: \(error.localizedDescription)"))
-                    self.isRunning = false
-                }
-                return
-            case .success(let message):
-                if case .string(let text) = message, let data = text.data(using: .utf8),
-                   let event = WakeFrameDecoder.decodeWakeEvent(from: data) {
-                    Task { @MainActor in self.handleWake(event) }
-                }
-            }
-            Task { @MainActor in self.receiveNext() }
-        }
+        socket?.onText = nil
+        socket?.onFailure = nil
+        socket?.close()
+        socket = nil
     }
 
     private func handleWake(_ event: WakeEvent) {

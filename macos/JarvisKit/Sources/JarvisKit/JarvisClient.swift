@@ -29,6 +29,21 @@ public final class JarvisClient: ObservableObject {
     // up preconditions (e.g. "wakeWordAvailable = false") by direct field
     // assignment via @testable import, which sees `internal` but not
     // `private` across files.
+    /// Closure C7: measured input and playout levels for the wave, at
+    /// ≤30 Hz, from the native path's own capture and mixer taps. Nil on
+    /// the WebRTC path and while the meter is disabled — the presentation
+    /// says "unavailable" rather than drawing silence.
+    @Published public private(set) var audioActivity: AudioActivitySnapshot?
+    /// The generation the presentation must match; a new session
+    /// invalidates the last one's observations (gap G24: this used to be
+    /// view `@State`).
+    public var audioActivityGeneration: UUID { audioMeter.generation }
+    /// C7.5: the meter's reading for the session that just ended, captured
+    /// before the observer clears its window. The app writes the acceptance
+    /// report from this, so the gate's evidence does not depend on anyone
+    /// remembering a menu item mid-call. Non-nil with zero observations is
+    /// a real answer: a session happened and measured nothing.
+    @Published public private(set) var lastSessionAudioLatency: AudioMeterLatency?
     @Published public internal(set) var micEnabled: Bool = true
     @Published public internal(set) var wakeWordOn: Bool = false
     @Published public internal(set) var wakeWordAvailable: Bool = false
@@ -86,10 +101,33 @@ public final class JarvisClient: ObservableObject {
     // test-only initializer at the bottom of this file. @testable import
     // exposes `internal`, never `private`, across files — hence internal.
     lazy var transport: RTVITransport = {
-        let t = DirectWebRTCTransport()
+        let t = Self.makeTransport(for: config)
         t.delegate = self
         return t
     }()
+
+    /// MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md D1: a loopback bot gets the
+    /// native path (AVAudioEngine + one WebSocket); anything else — the
+    /// remote/T2 path — keeps WebRTC. `JarvisFlags.forceWebRTC` is the
+    /// rollback lever (§9): on, loopback uses WebRTC exactly as before.
+    static func usesNativeAudio(for config: JarvisConfig) -> Bool {
+        guard let host = config.botURL.host, JarvisConfig.loopbackHosts.contains(host) else { return false }
+        return !JarvisFlags.forceWebRTC
+    }
+
+    static func makeTransport(for config: JarvisConfig) -> RTVITransport {
+        usesNativeAudio(for: config) ? NativeAudioTransport() : DirectWebRTCTransport()
+    }
+
+    /// True while the live transport is the native path — the app uses it
+    /// to hide the WebRTC-only device notices.
+    public var isNativeAudio: Bool { transport is NativeAudioTransport }
+    private lazy var audioMeter: AudioActivityObserver = {
+        AudioActivityObserver(publish: { [weak self] snapshot in
+            Task { @MainActor in self?.audioActivity = snapshot }
+        })
+    }()
+
     private lazy var wakeListener: WakeWordListener = {
         let l = WakeWordListener(config: config)
         l.onWake = { [weak self] in self?.handleWakeEvent() }
@@ -193,43 +231,62 @@ public final class JarvisClient: ObservableObject {
         // AirPods 24 kHz-mic / 48 kHz-speaker split), repoint the default
         // input at the built-in 48 kHz mic so the duplex unit is clean.
         // Restored in disconnect(). AirPods stay the output device.
+        // Native-audio plan D8: the band-aid serves the WebRTC path only —
+        // the native converter takes any input rate, so the system default
+        // input is never touched there.
         audioInputChange = nil
-        if JarvisFlags.matchInputRate {
+        if JarvisFlags.matchInputRate, transport is DirectWebRTCTransport {
             audioInputChange = audioInputCoordinator.matchInputToOutputIfNeeded()
         }
         #endif
 
         // (4)/(5) — the transport itself calls disconnect() first if it
         // already holds a live pc (step 5 lifetime, F3).
+        clientLog.notice("""
+            connect: transport \(String(describing: type(of: self.transport)), privacy: .public),             bot \(self.config.botURL.absoluteString, privacy: .public),             native \(self.isNativeAudio, privacy: .public),             forceWebRTC \(JarvisFlags.forceWebRTC, privacy: .public),             token \(self.config.token == nil ? "absent" : "present", privacy: .public)
+            """)
         do {
             try await transport.connect(config: config)
+            clientLog.notice("connect: transport reported connected")
             state = .connected
+            audioMeter.beginSession(source: transport as? AudioLevelSource,
+                                    microphoneEnabled: micEnabled)
             startStatsTimer()
             updateWakeListenerRunState()
             #if os(macOS)
             // Playout was just initialised against the CURRENT default
-            // output device — a fresh baseline for the monitor.
+            // output device — a fresh baseline for the monitor. WebRTC
+            // only (native-audio plan D3/D8): AVAudioEngine follows the
+            // default output itself, so the native path needs no notice
+            // and no reconnect.
             audioOutputChange = nil
-            audioOutputMonitor.start()
+            if transport is DirectWebRTCTransport { audioOutputMonitor.start() }
             #endif
             // N10 runtime availability probe — enables the wake toggle
-            // when the sidecar is reachable. Gated to the real transport:
+            // when the sidecar is reachable. Gated to the real transports:
             // under a stub transport (tests) the probe's real socket to
             // 127.0.0.1:7862 would race the tests' manual
             // wakeWordAvailable setup.
-            if transport is DirectWebRTCTransport {
+            if transport is DirectWebRTCTransport || transport is NativeAudioTransport {
                 Task { await wakeListener.probeAvailability() }
             }
         } catch JarvisError.unauthorized {
             state = .failed("Token required")   // N13 — no retry
         } catch let error as JarvisError {
+            clientLog.error("connect failed (JarvisError): \(Self.describe(error), privacy: .public)")
             state = .failed(Self.describe(error))
         } catch {
+            clientLog.error("""
+                connect failed: \(String(describing: error), privacy: .public)                 — \(error.localizedDescription, privacy: .public)
+                """)
             state = .failed(error.localizedDescription)
         }
     }
 
     public func disconnect() async {
+        lastSessionAudioLatency = audioMeter.latency()
+        audioMeter.endSession()
+        audioActivity = nil
         #if os(macOS)
         audioOutputMonitor.stop()
         // Give the user's original mic back — the rate-match is only for the
@@ -271,6 +328,10 @@ public final class JarvisClient: ObservableObject {
 
     // MARK: - Outbound
 
+    /// C7.5: p50/p95 of buffer-host-time to presentation over the last
+    /// 60 s. The debug menu writes it to the acceptance record.
+    public func audioMeterLatency() -> AudioMeterLatency { audioMeter.latency() }
+
     public func send(_ message: ClientMessage) {
         guard let data = try? message.jsonData() else { return }
         try? transport.send(data)
@@ -279,6 +340,7 @@ public final class JarvisClient: ObservableObject {
     public func setMicEnabled(_ on: Bool) {
         micEnabled = on
         transport.setMicEnabled(on)
+        audioMeter.setMicrophoneEnabled(on)
         debugAudioStats.micTrackEnabled = on
         updateWakeListenerRunState()
     }
@@ -301,12 +363,43 @@ public final class JarvisClient: ObservableObject {
     /// could flip that condition.
     private func updateWakeListenerRunState() {
         let shouldRun = wakeWordOn && state == .connected && !micEnabled
+        #if os(macOS)
+        // Native path (§3.5, measured 2026-09-13): the listener must NOT
+        // open its own AVAudioEngine on top of the transport's. A second
+        // engine on the same input device receives silence on the
+        // built-in mic and costs the transport's engine its echo
+        // cancellation (38.4 dB of reduction becomes 0.7 dB). Wake audio
+        // comes from the transport's processed tap instead — which is
+        // also strictly better input for the detector, since it is
+        // echo-cancelled (N10 rule 4's pause during bot speech stays as
+        // it is; it is no longer the only thing keeping the bot's own
+        // voice out of the detector).
+        if let native = transport as? NativeAudioTransport {
+            if shouldRun {
+                native.setCaptureMonitor { [weak self] pcm in self?.feedWakeAudio(pcm) }
+                Task { await wakeListener.start(source: .external) }
+            } else {
+                native.setCaptureMonitor(nil)
+                Task { await wakeListener.stop() }
+            }
+            return
+        }
+        #endif
         if shouldRun {
             Task { await wakeListener.start() }
         } else {
             Task { await wakeListener.stop() }
         }
     }
+
+    #if os(macOS)
+    /// The transport's capture monitor fires on the audio engine's thread;
+    /// this is the hop onto the main actor, the same boundary shape as the
+    /// RTVITransportDelegate callbacks at the bottom of this file.
+    nonisolated func feedWakeAudio(_ pcm: Data) {
+        Task { @MainActor in self.wakeListener.feed(pcm) }
+    }
+    #endif
 
     private func handleWakeEvent() {
         // wakeWord.ts:118 / MicControls.tsx:77-80 — a wake event unmutes.
@@ -503,17 +596,25 @@ public final class JarvisClient: ObservableObject {
     /// continuously through the bot's entire reply is the proof that
     /// N9's never-withhold-audio obligation holds.
     private func tickStats() {
-        guard let direct = transport as? DirectWebRTCTransport else { return }
-        direct.fetchOutboundAudioStats { [weak self] stats in
-            Task { @MainActor in
-                guard let self, let stats else { return }
-                self.debugAudioStats.sentPacketsLastSecond =
-                    max(0, stats.packetsSent - self.lastAudioPacketsSent)
-                self.lastAudioPacketsSent = stats.packetsSent
-                self.debugAudioStats.sentBytes = stats.bytesSent
-                self.debugAudioStats.lastKeepAliveAt = direct.lastKeepAliveDate
+        if let direct = transport as? DirectWebRTCTransport {
+            direct.fetchOutboundAudioStats { [weak self] stats in
+                Task { @MainActor in
+                    guard let self, let stats else { return }
+                    self.applyAudioStats(stats, lastKeepAlive: direct.lastKeepAliveDate)
+                }
             }
+        } else if let native = transport as? NativeAudioTransport {
+            // Native path: the frames this client put on the socket, and
+            // the last answered keep-alive ping.
+            applyAudioStats(native.outboundAudioStats, lastKeepAlive: native.lastKeepAliveDate)
         }
+    }
+
+    private func applyAudioStats(_ stats: OutboundAudioStats, lastKeepAlive: Date?) {
+        debugAudioStats.sentPacketsLastSecond = max(0, stats.packetsSent - lastAudioPacketsSent)
+        lastAudioPacketsSent = stats.packetsSent
+        debugAudioStats.sentBytes = stats.bytesSent
+        debugAudioStats.lastKeepAliveAt = lastKeepAlive
     }
 
     private static func describe(_ error: JarvisError) -> String {
@@ -546,6 +647,9 @@ extension JarvisClient: RTVITransportDelegate {
             }
             self.botIsSpeaking = false
             self.stopStatsTimer()
+            self.lastSessionAudioLatency = self.audioMeter.latency()
+            self.audioMeter.endSession()
+            self.audioActivity = nil
             await self.wakeListener.stop()
         }
     }

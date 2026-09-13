@@ -169,6 +169,23 @@ def test_pipeline_processor_order_locked(runtime, fakes):
     ]
 
 
+def test_websocket_case_puts_the_client_message_processor_right_after_input(runtime, fakes):
+    """Native-audio transport plan §3.2 findings: on the WebSocket
+    transport client app messages arrive as InputTransportMessageFrame, so
+    run_session hands build_pipeline a ClientMessageProcessor and it sits
+    directly after transport.input(); the locked order is otherwise
+    unchanged. The WebRTC case passes None (the test above)."""
+    from jarvis.bot.ws_transport import ClientMessageProcessor
+
+    processor = ClientMessageProcessor()
+    pipeline, _llm, _aggregators, _pusher = build_pipeline(
+        FakeTransport(), runtime, client_messages=processor)
+    assert pipeline.processors[0] == "TRANSPORT_INPUT"
+    assert pipeline.processors[1] is processor
+    assert isinstance(pipeline.processors[2], FakeVAD)
+    assert len(pipeline.processors) == 10
+
+
 def test_anthropic_base_url_builds_native_service_with_caching(runtime, fakes, monkeypatch):
     """Phase 1 (Rev 3.2) landing step (iii), task 6: an Anthropic-direct
     base_url with native routing on (the default) builds pipecat's own
