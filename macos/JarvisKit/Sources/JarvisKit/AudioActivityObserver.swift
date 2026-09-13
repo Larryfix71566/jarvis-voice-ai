@@ -79,14 +79,20 @@ public final class AudioActivityObserver: @unchecked Sendable {
             latencies.removeAll()
         }
         meterLog.notice("""
-            audio meter session \\(self.generation.uuidString, privacy: .public): \
-            source \\(source == nil ? "none (levels unavailable)" : "measured", privacy: .public), \
-            \\(Self.sampleHz, format: .fixed(precision: 0), privacy: .public) Hz
+            audio meter session \(self.generation.uuidString, privacy: .public): \
+            source \(source == nil ? "none (levels unavailable)" : "measured", privacy: .public), \
+            \(Self.sampleHz, format: .fixed(precision: 0), privacy: .public) Hz
             """)
         startTimer()
     }
 
     public func endSession() {
+        let summary = latency()
+        if summary.samples > 0 {
+            meterLog.notice("""
+                audio meter session ended: \(summary.samples, privacy: .public) observations,                 p50 \(summary.p50 * 1000, format: .fixed(precision: 1), privacy: .public) ms,                 p95 \(summary.p95 * 1000, format: .fixed(precision: 1), privacy: .public) ms,                 worst \(summary.worst * 1000, format: .fixed(precision: 1), privacy: .public) ms                 (C7.5 gate: p95 under 150 ms)
+                """)
+        }
         timer?.cancel(); timer = nil
         lock.withLock {
             source = nil
