@@ -142,6 +142,19 @@ struct MortimerHostApp: App {
                 Button("Show message log") {
                     windowActions.open("debug-log")
                 }
+                Divider()
+                // Closure C7.5: the meter's own latency, buffer host time to
+                // the snapshot the presentation was handed, over the last
+                // 60 s. Written where the acceptance record expects it so
+                // the gate (p95 under 150 ms) is evidence rather than a
+                // remembered number. Nothing is written when the meter has
+                // not observed anything — an empty file would read as a
+                // measurement of zero.
+                Button("Write audio meter latency (P2-latency.json)") {
+                    AudioMeterLatencyReport.write(client.audioMeterLatency(),
+                                                  connected: client.state == .connected,
+                                                  native: client.isNativeAudio)
+                }
             }
         }
     }
