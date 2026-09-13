@@ -29,6 +29,15 @@ public final class JarvisClient: ObservableObject {
     // up preconditions (e.g. "wakeWordAvailable = false") by direct field
     // assignment via @testable import, which sees `internal` but not
     // `private` across files.
+    /// Closure C7: measured input and playout levels for the wave, at
+    /// ≤30 Hz, from the native path's own capture and mixer taps. Nil on
+    /// the WebRTC path and while the meter is disabled — the presentation
+    /// says "unavailable" rather than drawing silence.
+    @Published public private(set) var audioActivity: AudioActivitySnapshot?
+    /// The generation the presentation must match; a new session
+    /// invalidates the last one's observations (gap G24: this used to be
+    /// view `@State`).
+    public var audioActivityGeneration: UUID { audioMeter.generation }
     @Published public internal(set) var micEnabled: Bool = true
     @Published public internal(set) var wakeWordOn: Bool = false
     @Published public internal(set) var wakeWordAvailable: Bool = false
@@ -107,6 +116,12 @@ public final class JarvisClient: ObservableObject {
     /// True while the live transport is the native path — the app uses it
     /// to hide the WebRTC-only device notices.
     public var isNativeAudio: Bool { transport is NativeAudioTransport }
+    private lazy var audioMeter: AudioActivityObserver = {
+        AudioActivityObserver(publish: { [weak self] snapshot in
+            Task { @MainActor in self?.audioActivity = snapshot }
+        })
+    }()
+
     private lazy var wakeListener: WakeWordListener = {
         let l = WakeWordListener(config: config)
         l.onWake = { [weak self] in self?.handleWakeEvent() }
@@ -221,9 +236,15 @@ public final class JarvisClient: ObservableObject {
 
         // (4)/(5) — the transport itself calls disconnect() first if it
         // already holds a live pc (step 5 lifetime, F3).
+        clientLog.notice("""
+            connect: transport \(String(describing: type(of: self.transport)), privacy: .public),             bot \(self.config.botURL.absoluteString, privacy: .public),             native \(self.isNativeAudio, privacy: .public),             forceWebRTC \(JarvisFlags.forceWebRTC, privacy: .public),             token \(self.config.token == nil ? "absent" : "present", privacy: .public)
+            """)
         do {
             try await transport.connect(config: config)
+            clientLog.notice("connect: transport reported connected")
             state = .connected
+            audioMeter.beginSession(source: transport as? AudioLevelSource,
+                                    microphoneEnabled: micEnabled)
             startStatsTimer()
             updateWakeListenerRunState()
             #if os(macOS)
@@ -246,13 +267,19 @@ public final class JarvisClient: ObservableObject {
         } catch JarvisError.unauthorized {
             state = .failed("Token required")   // N13 — no retry
         } catch let error as JarvisError {
+            clientLog.error("connect failed (JarvisError): \(Self.describe(error), privacy: .public)")
             state = .failed(Self.describe(error))
         } catch {
+            clientLog.error("""
+                connect failed: \(String(describing: error), privacy: .public)                 — \(error.localizedDescription, privacy: .public)
+                """)
             state = .failed(error.localizedDescription)
         }
     }
 
     public func disconnect() async {
+        audioMeter.endSession()
+        audioActivity = nil
         #if os(macOS)
         audioOutputMonitor.stop()
         // Give the user's original mic back — the rate-match is only for the
@@ -294,6 +321,10 @@ public final class JarvisClient: ObservableObject {
 
     // MARK: - Outbound
 
+    /// C7.5: p50/p95 of buffer-host-time to presentation over the last
+    /// 60 s. The debug menu writes it to the acceptance record.
+    public func audioMeterLatency() -> AudioMeterLatency { audioMeter.latency() }
+
     public func send(_ message: ClientMessage) {
         guard let data = try? message.jsonData() else { return }
         try? transport.send(data)
@@ -302,6 +333,7 @@ public final class JarvisClient: ObservableObject {
     public func setMicEnabled(_ on: Bool) {
         micEnabled = on
         transport.setMicEnabled(on)
+        audioMeter.setMicrophoneEnabled(on)
         debugAudioStats.micTrackEnabled = on
         updateWakeListenerRunState()
     }
@@ -608,6 +640,8 @@ extension JarvisClient: RTVITransportDelegate {
             }
             self.botIsSpeaking = false
             self.stopStatsTimer()
+            self.audioMeter.endSession()
+            self.audioActivity = nil
             await self.wakeListener.stop()
         }
     }

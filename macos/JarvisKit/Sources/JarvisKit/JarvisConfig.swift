@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let configLog = Logger(subsystem: "com.mortimer.jarviskit", category: "config")
 
 /// K5: one base URL per service, resolved in ONE place. Also the home for
 /// K1's client-side bearer token.
@@ -29,9 +32,23 @@ public struct JarvisConfig: Sendable, Equatable {
     /// K5: one base URL per service, resolved in ONE place.
     /// Order: process environment -> UserDefaults -> compiled default.
     public static func `default`() -> JarvisConfig {
+        // Which source won is worth a line in the log: a URL (or a flag —
+        // JarvisFlags reads UserDefaults the same way) that silently falls
+        // through to the compiled default looks exactly like a bug in the
+        // thing it points at. §8, 2026-09-13: an hour went into a client
+        // that was dialing the fallback port.
         func url(_ name: String, _ fallback: String) -> URL {
-            if let s = ProcessInfo.processInfo.environment[name], let u = URL(string: s) { return u }
-            if let s = UserDefaults.standard.string(forKey: name), let u = URL(string: s) { return u }
+            if let s = ProcessInfo.processInfo.environment[name], let u = URL(string: s) {
+                configLog.notice("\(name, privacy: .public) from environment: \(s, privacy: .public)")
+                return u
+            }
+            if let s = UserDefaults.standard.string(forKey: name), let u = URL(string: s) {
+                configLog.notice("\(name, privacy: .public) from UserDefaults: \(s, privacy: .public)")
+                return u
+            }
+            configLog.notice("""
+                \(name, privacy: .public) unset in environment and UserDefaults                 (domain \(Bundle.main.bundleIdentifier ?? "none", privacy: .public)) —                 using the compiled default \(fallback, privacy: .public)
+                """)
             return URL(string: fallback)!
         }
         let bot = url("JARVIS_BOT_URL", "http://127.0.0.1:7860")
@@ -77,6 +94,17 @@ public enum JarvisFlags {
     /// off must never fail open onto a remote host in the clear.
     public static var authEnabled: Bool { on("JARVIS_CLIENT_AUTH_ENABLED") }
     public static var glassEnabled: Bool { on("JARVIS_GLASS_ENABLED") }
+    /// Closure C7.4 runtime disable path: `JARVIS_AUDIO_METER=off` in the
+    /// environment, or `defaults write com.mortimer.host JARVIS_AUDIO_METER
+    /// -bool false`, stops the observer publishing. The status stays
+    /// truthful — the wave reports the level as unavailable rather than
+    /// showing a flat line as if it were silence.
+    public static var audioMeterEnabled: Bool {
+        if let raw = ProcessInfo.processInfo.environment["JARVIS_AUDIO_METER"]?.lowercased() {
+            return !["off", "false", "0", "no"].contains(raw)
+        }
+        return on("JARVIS_AUDIO_METER")
+    }
     /// 2026-09-05 — auto-reconnect the session when the default output
     /// device changes (AirPods), so the bot's voice follows it. OPT-IN,
     /// unlike the three above (absent key == off): the plain WebRTC build
@@ -119,6 +147,24 @@ public enum JarvisTuning {
     /// 3 s window, so the client fails the session BEFORE the server
     /// silences the bot's audio.
     public static let keepAliveStallSeconds: TimeInterval = 2.5
+    /// Native path only (§8, 2026-09-13). Two things the WebRTC constants
+    /// above cannot express, because on that path `/api/offer` answers only
+    /// after the server has built the session, whereas here the WebSocket
+    /// handshake completes first and `run_session` then loads Smart Turn and
+    /// Silero, prunes run logs, sweeps memory and connects Deepgram and
+    /// ElevenLabs with the event loop blocked — measured at 5.4 s on this
+    /// Mac, and longer on a cold model cache. So:
+    ///
+    /// - the stall watchdog is not armed until the server shows a sign of
+    ///   life (a pong or any inbound frame); `nativeReadyDeadline` bounds
+    ///   that wait instead, generously;
+    /// - once established, `nativeKeepAliveStallSeconds` is the threshold.
+    ///   It is NOT the 2.5 s above: that number exists to beat SmallWebRTC's
+    ///   3 s staleness window (connection.py:672), which does not exist on
+    ///   this transport, and the server's own per-turn model inference can
+    ///   block its loop for longer than 2.5 s.
+    public static let nativeReadyDeadline: TimeInterval = 30.0
+    public static let nativeKeepAliveStallSeconds: TimeInterval = 6.0
     /// Mirrors DATA_CHANNEL_TIMEOUT_SECS (connection.py:77); if `.open` is
     /// not reached by this deadline the client disconnects loudly at the
     /// same moment the server discards queued messages.

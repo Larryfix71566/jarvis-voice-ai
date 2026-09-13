@@ -31,6 +31,9 @@ protocol NativeAudioIO: AnyObject {
 
 extension AudioEngineIO: NativeAudioIO {}
 
+/// C7: the native transport is the only measured level source.
+extension NativeAudioTransport: AudioLevelSource {}
+
 // MARK: - Transport (plan D1, D5, D6; §6 step 3)
 
 /// The second `RTVITransport` conformer: for a loopback bot, PCM audio
@@ -74,6 +77,13 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.mortimer.jarviskit.native-transport")
     private let makeSocket: (URLRequest) -> NativeSocket
     private let makeAudio: () -> NativeAudioIO
+    /// Injected so the tests can drive the establishment phase in
+    /// milliseconds instead of waiting out the real deadlines.
+    private let readyDeadline: TimeInterval
+    /// Must stay well above `pingInterval`: the stall test is "no pong for
+    /// this long", and pongs only arrive as often as pings are sent.
+    private let stallSeconds: TimeInterval
+    private let pingInterval: TimeInterval
 
     private var socket: NativeSocket?
     private var audio: NativeAudioIO?
@@ -85,6 +95,11 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
     private var keepAliveTimer: DispatchSourceTimer?
     private var watchdogTimer: DispatchSourceTimer?
     private var lastPongAt: Date = .distantPast
+    /// False from socket-open until the server's first pong or frame: the
+    /// stall watchdog does not run before that (§8 finding — the server
+    /// spends seconds building the session after the handshake).
+    private var isEstablished = false
+    private var readyDeadlineTimer: DispatchSourceTimer?
     private var captureMonitor: (@Sendable (Data) -> Void)?
     private var audioFramesSent = 0
     private var audioBytesSent = 0
@@ -118,19 +133,32 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         }
     }
 
+    /// True once the server has answered — a pong or any inbound frame —
+    /// which is the moment the stall watchdog starts running (§8: the
+    /// server accepts the socket several seconds before it can answer).
+    var isSessionEstablished: Bool { queue.sync { isEstablished } }
+
     /// The last answered keep-alive ping; nil before the socket opens.
     var lastKeepAliveDate: Date? {
         queue.sync { lastPongAt == .distantPast ? nil : lastPongAt }
     }
 
     /// Latest levels for C7 (closure C6.2): forwarded from the engine.
-    var latestInputLevel: AudioLevelSample? { (audio as? AudioEngineIO)?.latestInputLevel }
-    var latestPlayoutLevel: AudioLevelSample? { (audio as? AudioEngineIO)?.latestPlayoutLevel }
+    /// `public` and protocol-visible because the meter is the one consumer
+    /// outside this file (`AudioLevelSource`).
+    public var latestInputLevel: AudioLevelSample? { (audio as? AudioEngineIO)?.latestInputLevel }
+    public var latestPlayoutLevel: AudioLevelSample? { (audio as? AudioEngineIO)?.latestPlayoutLevel }
 
     init(makeSocket: @escaping (URLRequest) -> NativeSocket = { URLSessionSocket(request: $0) },
-         makeAudio: @escaping () -> NativeAudioIO = { AudioEngineIO() }) {
+         makeAudio: @escaping () -> NativeAudioIO = { AudioEngineIO() },
+         readyDeadline: TimeInterval = JarvisTuning.nativeReadyDeadline,
+         stallSeconds: TimeInterval = JarvisTuning.nativeKeepAliveStallSeconds,
+         pingInterval: TimeInterval = JarvisTuning.keepAliveInterval) {
         self.makeSocket = makeSocket
         self.makeAudio = makeAudio
+        self.readyDeadline = readyDeadline
+        self.stallSeconds = stallSeconds
+        self.pingInterval = pingInterval
     }
 
     // MARK: RTVITransport
@@ -140,6 +168,7 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         guard let url = Self.socketURL(for: config.botURL) else {
             throw JarvisError.transport("no WebSocket URL for \(config.botURL)")
         }
+        nativeLog.notice("dialing \(url.absoluteString, privacy: .public)")
         var request = URLRequest(url: url)
         if let token = config.token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         try queue.sync {
@@ -222,8 +251,10 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
     private func opened(session: Int) {
         guard session == sessionCount, socket != nil else { return }
         isOpen = true
+        nativeLog.notice("socket open (session \(session, privacy: .public))")
         openDeadlineTimer?.cancel(); openDeadlineTimer = nil
-        startKeepAliveAndWatchdog(session: session)
+        startKeepAlive(session: session)
+        armReadyDeadline(session: session)
         delegate?.transportDidConnect()
         let queued = outboundQueue
         outboundQueue.removeAll()
@@ -234,7 +265,26 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
 
     private func pongReceived(session: Int) {
         guard session == sessionCount else { return }
+        let gap = Date().timeIntervalSince(lastPongAt)
         lastPongAt = Date()
+        // Evidence for §8: a server loop blocked long enough to matter shows
+        // up here before it shows up as a teardown.
+        if isEstablished, gap > JarvisTuning.keepAliveStallSeconds {
+            nativeLog.notice("pong gap \(gap, format: .fixed(precision: 2), privacy: .public)s")
+        }
+        establish(session: session)
+    }
+
+    /// The server is alive: stop waiting for it and start watching for a
+    /// stall. Called on the first pong and on the first inbound frame,
+    /// whichever the server produces first.
+    private func establish(session: Int) {
+        guard session == sessionCount, !isEstablished, isOpen else { return }
+        isEstablished = true
+        readyDeadlineTimer?.cancel(); readyDeadlineTimer = nil
+        lastPongAt = Date()
+        startStallWatchdog(session: session)
+        nativeLog.notice("session established; stall watchdog armed at \(self.stallSeconds, privacy: .public)s")
     }
 
     private func playoutChanged(_ playing: Bool, session: Int) {
@@ -243,12 +293,16 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
     }
 
     private func closed(error: Error?, session: Int) {
+        nativeLog.error("""
+            socket closed (session \(session, privacy: .public), current \(self.sessionCount, privacy: .public),             established \(self.isEstablished, privacy: .public)):             \(error.map { String(describing: $0) } ?? "no error", privacy: .public)
+            """)
         guard session == sessionCount, socket != nil else { return }
         teardown(notify: true, error: error)
     }
 
     private func received(_ data: Data, session: Int) {
         guard session == sessionCount else { return }
+        establish(session: session)
         guard let frame = PipecatFrameCodec.decode(data) else {
             nativeLog.error("undecodable frame of \(data.count, privacy: .public) bytes dropped")
             return
@@ -298,10 +352,26 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         timer.resume()
     }
 
-    private func startKeepAliveAndWatchdog(session: Int) {
+    /// Bounds the establishment phase: the server accepted the socket but
+    /// has not yet answered anything. Deliberately generous — the work it
+    /// does in that window is model loading, not a network round trip.
+    private func armReadyDeadline(session: Int) {
+        readyDeadlineTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + readyDeadline)
+        timer.setEventHandler { [weak self] in
+            guard let self, session == self.sessionCount, !self.isEstablished else { return }
+            nativeLog.error("no reply from the bot within \(self.readyDeadline, privacy: .public)s of the socket opening")
+            self.teardown(notify: true, error: JarvisError.transport("the bot did not start the session"))
+        }
+        readyDeadlineTimer = timer
+        timer.resume()
+    }
+
+    private func startKeepAlive(session: Int) {
         lastPongAt = Date()
         let keepAlive = DispatchSource.makeTimerSource(queue: queue)
-        keepAlive.schedule(deadline: .now() + JarvisTuning.keepAliveInterval, repeating: JarvisTuning.keepAliveInterval)
+        keepAlive.schedule(deadline: .now() + pingInterval, repeating: pingInterval)
         keepAlive.setEventHandler { [weak self] in
             guard let self, session == self.sessionCount, let socket = self.socket else { return }
             socket.ping { [weak self] error in
@@ -311,13 +381,17 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         }
         keepAliveTimer = keepAlive
         keepAlive.resume()
+    }
 
+    private func startStallWatchdog(session: Int) {
+        watchdogTimer?.cancel()
         let watchdog = DispatchSource.makeTimerSource(queue: queue)
-        watchdog.schedule(deadline: .now() + 1.0, repeating: 1.0)
+        let tick = min(pingInterval, stallSeconds / 2)
+        watchdog.schedule(deadline: .now() + tick, repeating: tick)
         watchdog.setEventHandler { [weak self] in
-            guard let self, session == self.sessionCount else { return }
-            if Date().timeIntervalSince(self.lastPongAt) > JarvisTuning.keepAliveStallSeconds {
-                nativeLog.error("keep-alive stalled past \(JarvisTuning.keepAliveStallSeconds, privacy: .public)s")
+            guard let self, session == self.sessionCount, self.isEstablished else { return }
+            if Date().timeIntervalSince(self.lastPongAt) > self.stallSeconds {
+                nativeLog.error("keep-alive stalled past \(self.stallSeconds, privacy: .public)s")
                 self.teardown(notify: true, error: JarvisError.transport("keep-alive stalled"))
             }
         }
@@ -327,6 +401,7 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
 
     private func cancelAllTimers() {
         openDeadlineTimer?.cancel(); openDeadlineTimer = nil
+        readyDeadlineTimer?.cancel(); readyDeadlineTimer = nil
         keepAliveTimer?.cancel(); keepAliveTimer = nil
         watchdogTimer?.cancel(); watchdogTimer = nil
     }
@@ -342,6 +417,7 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         audio = nil
         config = nil
         isOpen = false
+        isEstablished = false
         outboundQueue.removeAll()
         captureMonitor = nil
         audioFramesSent = 0
@@ -380,6 +456,7 @@ final class URLSessionSocket: NSObject, NativeSocket, URLSessionWebSocketDelegat
         task.maximumMessageSize = 4 * 1024 * 1024
         self.session = session
         self.task = task
+        nativeLog.notice("URLSession task resuming for \(self.request.url?.absoluteString ?? "nil", privacy: .public)")
         task.resume()
         receiveLoop(task)
     }
@@ -420,6 +497,9 @@ final class URLSessionSocket: NSObject, NativeSocket, URLSessionWebSocketDelegat
     }
 
     private func finish(error: Error?) {
+        nativeLog.notice("""
+            URLSession finish: \(error.map { String(describing: $0) } ?? "no error", privacy: .public)             (already closed: \(self.closed, privacy: .public), HTTP             \((self.task?.response as? HTTPURLResponse)?.statusCode ?? -1, privacy: .public))
+            """)
         guard !closed else { return }
         closed = true
         onClose?(error)
@@ -427,6 +507,7 @@ final class URLSessionSocket: NSObject, NativeSocket, URLSessionWebSocketDelegat
 
     // URLSessionWebSocketDelegate
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
+        nativeLog.notice("URLSession didOpen (HTTP \((webSocketTask.response as? HTTPURLResponse)?.statusCode ?? -1, privacy: .public))")
         onOpen?()
     }
 
