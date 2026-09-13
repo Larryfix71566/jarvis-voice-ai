@@ -540,11 +540,16 @@ final class AudioEngineIO: @unchecked Sendable {
         // dominant term in every latency this client has (C7.5).
         AudioDeviceTuning.report()
         #endif
-        let hardwareInput = engine.inputNode.outputFormat(forBus: 0)
-        let hardwareOutput = engine.outputNode.outputFormat(forBus: 0)
-        guard hardwareInput.sampleRate > 0, hardwareOutput.sampleRate > 0, hardwareOutput.channelCount > 0 else {
-            throw JarvisError.transport("no audio devices: input \(hardwareInput), output \(hardwareOutput)")
-        }
+        // CoreAudio reports a half-built device for a moment after another
+        // engine stops — measured 2026-09-13 in the bench, which starts and
+        // stops engines back to back: input read "2 ch, 44100 Hz" (not this
+        // mic at all) and output "0 ch, 0 Hz", and the start was refused.
+        // The same window exists in the app on D3's device-change rebuild,
+        // where refusing means the session drops and stays down. Wait for
+        // the devices to settle instead of failing on the first read.
+        let (hardwareInput, hardwareOutput) = try Self.settledFormats(
+            input: { engine.inputNode.outputFormat(forBus: 0) },
+            output: { engine.outputNode.outputFormat(forBus: 0) })
         // VPIO must be set before the input node is used or the engine started.
         if wantsVoiceProcessing {
             try engine.inputNode.setVoiceProcessingEnabled(true)
@@ -578,6 +583,31 @@ final class AudioEngineIO: @unchecked Sendable {
             self?.queue.async { self?.rebuildLocked() }
         }
         engineLog.notice("audio engine started: capture \(captureFormat.sampleRate, privacy: .public) Hz mono, channel 0 of \(tapFormat.channelCount, privacy: .public) (hardware \(hardwareInput.channelCount, privacy: .public) ch before VPIO), output \(outputFormat.sampleRate, privacy: .public) Hz \(outputFormat.channelCount, privacy: .public) ch, VPIO \(self.voiceProcessing ? "on" : "off", privacy: .public)")
+    }
+
+    /// Polls both device formats until they are usable, up to
+    /// `deadline`. Pure enough to test: the reads are injected.
+    static func settledFormats(input: () -> AVAudioFormat, output: () -> AVAudioFormat,
+                               deadline: TimeInterval = 1.0, step: TimeInterval = 0.05,
+                               sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
+    ) throws -> (AVAudioFormat, AVAudioFormat) {
+        var waited: TimeInterval = 0
+        var lastInput = input(), lastOutput = output()
+        while waited <= deadline {
+            if lastInput.sampleRate > 0, lastOutput.sampleRate > 0, lastOutput.channelCount > 0 {
+                if waited > 0 {
+                    engineLog.notice("audio devices settled after \(waited * 1000, format: .fixed(precision: 0), privacy: .public) ms")
+                }
+                return (lastInput, lastOutput)
+            }
+            sleep(step)
+            waited += step
+            lastInput = input(); lastOutput = output()
+        }
+        throw JarvisError.transport("""
+            no audio devices after \(String(format: "%.1f", deadline))s: \
+            input \(lastInput), output \(lastOutput)
+            """)
     }
 
     private func installTaps(on engine: AVAudioEngine, captureFormat: AVAudioFormat) throws {
