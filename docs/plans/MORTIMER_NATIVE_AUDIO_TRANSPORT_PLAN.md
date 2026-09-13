@@ -227,9 +227,11 @@ Verified against the installed **pipecat-ai 1.4.0** (`.venv` of the `jarvis-voic
   `playerTime`, stamped at the playing slice's start (the engine renders
   12–20 ms ahead of the wall clock, and a measurement time in the reader's
   future is discarded). Evidence and the three bugs found on the way:
-  `docs/acceptance/adaptive-interface/C7-measured-audio.md`. **§3.3 must be
-  re-run on this graph before D10 is signed off**, and §3.4 remains open — the
-  buffering term is known, parity is not.
+  `docs/acceptance/adaptive-interface/C7-measured-audio.md`. §3.3 was re-run on
+  this graph and improved: the residual sits 20.3 dB below the idle floor
+  (6.0 dB before), 50.1 dB of echo reduction, Silero 0 user turns against a
+  control raising 10. §3.4 remains open — the buffering term is known, parity
+  is not measured.
 - **D9 (2026-09-13, from the §3.3/§3.5 measurements):** the input node is
   **tapped, never connected**. With Voice Processing on, this Mac's input bus
   reports the mic array's 9-channel 48 kHz layout (1 ch before) and the output
