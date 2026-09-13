@@ -16,11 +16,45 @@ public protocol AudioLevelSource: AnyObject {
 
 /// Round-trip of one observation: the audio buffer's own host time to the
 /// moment the presentation was given the snapshot derived from it.
-public struct AudioMeterLatency: Equatable, Sendable {
+public struct AudioMeterChannelLatency: Equatable, Sendable {
     public let samples: Int
-    public let p50: Double
-    public let p95: Double
+    public let displayedP50: Double
+    public let displayedP95: Double
     public let worst: Double
+    public let arrivals: Int
+    public let arrivalP50: Double
+    public let arrivalP95: Double
+
+    public static let empty = AudioMeterChannelLatency(samples: 0, displayedP50: 0, displayedP95: 0,
+                                                       worst: 0, arrivals: 0, arrivalP50: 0, arrivalP95: 0)
+
+    public init(samples: Int, displayedP50: Double, displayedP95: Double, worst: Double,
+                arrivals: Int, arrivalP50: Double, arrivalP95: Double) {
+        self.samples = samples
+        self.displayedP50 = displayedP50
+        self.displayedP95 = displayedP95
+        self.worst = worst
+        self.arrivals = arrivals
+        self.arrivalP50 = arrivalP50
+        self.arrivalP95 = arrivalP95
+    }
+}
+
+public struct AudioMeterLatency: Equatable, Sendable {
+    public let input: AudioMeterChannelLatency
+    public let playout: AudioMeterChannelLatency
+
+    public init(input: AudioMeterChannelLatency, playout: AudioMeterChannelLatency) {
+        self.input = input
+        self.playout = playout
+    }
+
+    /// Whole-meter figures take the worse channel: the gate is about what
+    /// a viewer sees, and they see both.
+    public var samples: Int { input.samples + playout.samples }
+    public var p50: Double { max(input.displayedP50, playout.displayedP50) }
+    public var p95: Double { max(input.displayedP95, playout.displayedP95) }
+    public var worst: Double { max(input.worst, playout.worst) }
 }
 
 /// Closure C7.1: the connection generation and the sampling live here,
@@ -42,7 +76,15 @@ public final class AudioActivityObserver: @unchecked Sendable {
     private var timer: DispatchSourceTimer?
     private weak var source: AudioLevelSource?
     private var eligible = false
-    private var latencies: [(measuredAt: TimeInterval, delay: Double)] = []
+    /// Two readings (C7.5). `displayed` counts the level the snapshot
+    /// carries on every tick — what the viewer sees, ageing while it waits
+    /// for the next buffer. `arrivals` counts each level once, the first
+    /// time the sampler sees it — the audio path's own delay, which a
+    /// faster sampler cannot reduce. The first reading was 132 ms p50 and
+    /// could not distinguish the two.
+    private var displayed: [(channel: Int, measuredAt: TimeInterval, delay: Double)] = []
+    private var arrivals: [(channel: Int, measuredAt: TimeInterval, delay: Double)] = []
+    private var lastSeen: [TimeInterval?] = [nil, nil]      // 0 input, 1 playout
     private var _snapshot: AudioActivitySnapshot?
     private var _generation: UUID
 
@@ -76,7 +118,7 @@ public final class AudioActivityObserver: @unchecked Sendable {
             accumulator.setMicrophoneEligible(microphoneEnabled && source != nil, at: now())
             eligible = microphoneEnabled && source != nil
             self.source = source
-            latencies.removeAll()
+            displayed.removeAll(); arrivals.removeAll(); lastSeen = [nil, nil]
         }
         meterLog.notice("""
             audio meter session \(self.generation.uuidString, privacy: .public): \
@@ -90,7 +132,7 @@ public final class AudioActivityObserver: @unchecked Sendable {
         let summary = latency()
         if summary.samples > 0 {
             meterLog.notice("""
-                audio meter session ended: \(summary.samples, privacy: .public) observations,                 p50 \(summary.p50 * 1000, format: .fixed(precision: 1), privacy: .public) ms,                 p95 \(summary.p95 * 1000, format: .fixed(precision: 1), privacy: .public) ms,                 worst \(summary.worst * 1000, format: .fixed(precision: 1), privacy: .public) ms                 (C7.5 gate: p95 under 150 ms)
+                audio meter session ended — input: \(summary.input.samples, privacy: .public) shown, displayed p95 \(summary.input.displayedP95 * 1000, format: .fixed(precision: 1), privacy: .public) ms, arrival p95 \(summary.input.arrivalP95 * 1000, format: .fixed(precision: 1), privacy: .public) ms over \(summary.input.arrivals, privacy: .public) arrivals; playout: \(summary.playout.samples, privacy: .public) shown, displayed p95 \(summary.playout.displayedP95 * 1000, format: .fixed(precision: 1), privacy: .public) ms, arrival p95 \(summary.playout.arrivalP95 * 1000, format: .fixed(precision: 1), privacy: .public) ms over \(summary.playout.arrivals, privacy: .public) arrivals (C7.5 gate: displayed p95 under 150 ms)
                 """)
         }
         timer?.cancel(); timer = nil
@@ -139,13 +181,18 @@ public final class AudioActivityObserver: @unchecked Sendable {
                                     measuredAt: playout.seconds, now: moment, generation: generation)
             }
             let snapshot = accumulator.snapshot(at: moment)
-            // C7.5: the delay a viewer actually sees is from the buffer's
-            // own host time to the snapshot the presentation is handed.
-            for measuredAt in [snapshot.userMeasuredAt, snapshot.outputMeasuredAt].compactMap({ $0 }) {
-                latencies.append((measuredAt, moment - measuredAt))
+            for (channel, measuredAt) in [snapshot.userMeasuredAt, snapshot.outputMeasuredAt].enumerated() {
+                guard let measuredAt else { continue }
+                let delay = moment - measuredAt
+                displayed.append((channel, measuredAt, delay))
+                if lastSeen[channel] != measuredAt {
+                    lastSeen[channel] = measuredAt
+                    arrivals.append((channel, measuredAt, delay))
+                }
             }
             let cutoff = moment - 60
-            latencies.removeAll { $0.measuredAt < cutoff }
+            displayed.removeAll { $0.measuredAt < cutoff }
+            arrivals.removeAll { $0.measuredAt < cutoff }
             _snapshot = snapshot
             return snapshot
         }
@@ -153,15 +200,22 @@ public final class AudioActivityObserver: @unchecked Sendable {
         publish(snapshot)
     }
 
-    /// p50/p95 over the last 60 s (C7.5 gate: p95 ≤ 150 ms).
+    /// Per channel, over the last 60 s (C7.5 gate: displayed p95 ≤ 150 ms).
     public func latency() -> AudioMeterLatency {
-        let delays = lock.withLock { latencies.map(\.delay) }.sorted()
-        guard !delays.isEmpty else { return AudioMeterLatency(samples: 0, p50: 0, p95: 0, worst: 0) }
-        func percentile(_ p: Double) -> Double {
-            let index = min(delays.count - 1, max(0, Int((p * Double(delays.count - 1)).rounded())))
-            return delays[index]
+        let (shown, arrived) = lock.withLock { (displayed, arrivals) }
+        func percentile(_ sorted: [Double], _ p: Double) -> Double {
+            guard !sorted.isEmpty else { return 0 }
+            return sorted[min(sorted.count - 1, max(0, Int((p * Double(sorted.count - 1)).rounded())))]
         }
-        return AudioMeterLatency(samples: delays.count, p50: percentile(0.5),
-                                 p95: percentile(0.95), worst: delays[delays.count - 1])
+        func channel(_ index: Int) -> AudioMeterChannelLatency {
+            let d = shown.filter { $0.channel == index }.map(\.delay).sorted()
+            let a = arrived.filter { $0.channel == index }.map(\.delay).sorted()
+            guard !d.isEmpty else { return .empty }
+            return AudioMeterChannelLatency(
+                samples: d.count, displayedP50: percentile(d, 0.5), displayedP95: percentile(d, 0.95),
+                worst: d[d.count - 1], arrivals: a.count,
+                arrivalP50: percentile(a, 0.5), arrivalP95: percentile(a, 0.95))
+        }
+        return AudioMeterLatency(input: channel(0), playout: channel(1))
     }
 }

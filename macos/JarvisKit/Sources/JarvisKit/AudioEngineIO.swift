@@ -60,6 +60,116 @@ enum LevelMeter {
     }
 }
 
+/// C7.5 diagnosis, 2026-09-13: the meter measured its levels arriving
+/// ~137 ms old (input) and ~104 ms (playout), with a spread of under
+/// 2 ms — a fixed offset rather than jitter — while new levels appeared
+/// only 2.3 and 8.8 times a second against a 1024-frame tap that should
+/// deliver ~47. Neither number is explicable from the sampler, so the
+/// tap itself is measured here: how big its buffers really are, how far
+/// apart the callbacks land, and how old the audio already is when the
+/// callback runs (`AVAudioTime.seconds(forHostTime:)` against
+/// `systemUptime`, the same clock the meter compares).
+final class TapCadence: @unchecked Sendable {
+    private let lock = NSLock()
+    private let label: String
+    private var buffers = 0
+    private var frames = 0
+    private var lastCallback: TimeInterval?
+    private var intervals: [Double] = []
+    private var ages: [Double] = []
+    private var lastReport: TimeInterval
+
+    init(label: String, now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+        self.label = label
+        self.lastReport = now
+    }
+
+    func record(frameLength: Int, sampleRate: Double, channels: Int, bufferSeconds: TimeInterval) {
+        let now = ProcessInfo.processInfo.systemUptime
+        let report: String? = lock.withLock {
+            buffers += 1
+            frames += frameLength
+            ages.append(now - bufferSeconds)
+            if let last = lastCallback { intervals.append(now - last) }
+            lastCallback = now
+            guard now - lastReport >= 2.0, buffers > 1 else { return nil }
+            let sortedAges = ages.sorted(), sortedIntervals = intervals.sorted()
+            func median(_ v: [Double]) -> Double { v.isEmpty ? 0 : v[v.count / 2] }
+            let text = """
+                \(label) tap: \(buffers) buffers in \(String(format: "%.1f", now - lastReport))s                 (\(String(format: "%.1f", Double(buffers) / (now - lastReport)))/s),                 \(frames / max(buffers, 1)) frames each at \(Int(sampleRate)) Hz \(channels) ch                 = \(String(format: "%.1f", Double(frames / max(buffers, 1)) / sampleRate * 1000)) ms of audio,                 callback interval median \(String(format: "%.1f", median(sortedIntervals) * 1000)) ms,                 age at callback median \(String(format: "%.1f", median(sortedAges) * 1000)) ms                 (worst \(String(format: "%.1f", (sortedAges.last ?? 0) * 1000)) ms)
+                """
+            buffers = 0; frames = 0; intervals.removeAll(); ages.removeAll(); lastReport = now
+            return text
+        }
+        if let report { engineLog.notice("\(report, privacy: .public)") }
+    }
+}
+
+/// D10 (2026-09-13): capture through `AVAudioSinkNode` instead of a tap.
+///
+/// `installTap(bufferSize:)` is a hint the engine is free to ignore, and on
+/// this Mac it does: both taps deliver **4800 frames — 100 ms — ten times a
+/// second**, while the devices themselves run at 512 frames (10.7 ms) and
+/// will not accept more than 4096. That 100 ms sits in front of everything
+/// the client sends: the bot hears a word a tenth of a second late, a
+/// barge-in registers a tenth of a second late, and the wave lags by the
+/// same amount (measured: levels arriving 137 ms old, C7.5 p95 204 ms
+/// against a 150 ms gate). WebRTC's device module delivered 10 ms frames,
+/// so the tap silently broke D6's "no behaviour change vs today".
+///
+/// A sink node receives the render quantum itself. Its block runs on the
+/// audio thread, so it does no allocation: channel 0 is copied into one of
+/// a small ring of preallocated mono buffers and everything else — the
+/// level, the resample, the send — happens on the engine queue. The ring
+/// holds ~85 ms at 512 frames, far more slack than the queue needs, and a
+/// buffer reused before the queue reads it would show up as a glitch in
+/// the capture, not as a crash.
+final class SinkCapture {
+    let node: AVAudioSinkNode
+    private let pool: [AVAudioPCMBuffer]
+    private let cursor = OSAllocatedUnfairLock(initialState: 0)
+
+    /// `deliver` is called on the audio thread with a mono buffer valid
+    /// until the ring wraps; it must copy or hand off, never block.
+    init?(inputFormat: AVAudioFormat, maxFrames: AVAudioFrameCount = 4096, depth: Int = 8,
+          deliver: @escaping @Sendable (AVAudioPCMBuffer, UInt64) -> Void) {
+        guard let mono = AVAudioFormat(standardFormatWithSampleRate: inputFormat.sampleRate, channels: 1) else { return nil }
+        var buffers: [AVAudioPCMBuffer] = []
+        for _ in 0..<depth {
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: mono, frameCapacity: maxFrames) else { return nil }
+            buffers.append(buffer)
+        }
+        self.pool = buffers
+        let pool = buffers
+        let cursor = self.cursor
+        let channels = Int(inputFormat.channelCount)
+        let interleaved = inputFormat.isInterleaved
+        node = AVAudioSinkNode { timestamp, frameCount, audioBufferList -> OSStatus in
+            let frames = Int(frameCount)
+            guard frames > 0, frames <= Int(maxFrames) else { return noErr }
+            let list = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: audioBufferList))
+            guard let raw = list.first?.mData?.assumingMemoryBound(to: Float.self) else { return noErr }
+            let index = cursor.withLock { value -> Int in
+                let current = value
+                value = (value + 1) % pool.count
+                return current
+            }
+            let buffer = pool[index]
+            guard let destination = buffer.floatChannelData?[0] else { return noErr }
+            if interleaved || list.count == 1 {
+                // One buffer holding every channel: stride past the rest.
+                let stride = interleaved ? channels : 1
+                for i in 0..<frames { destination[i] = raw[i * stride] }
+            } else {
+                destination.update(from: raw, count: frames)   // channel 0 is its own buffer
+            }
+            buffer.frameLength = AVAudioFrameCount(frames)
+            deliver(buffer, timestamp.pointee.mHostTime)
+            return noErr
+        }
+    }
+}
+
 // MARK: - Capture conversion (D2)
 
 /// Converts whatever the input node delivers (any rate, 1–2 channels,
@@ -257,7 +367,11 @@ enum PlayoutDecoder {
 /// Not exercised by XCTest (it needs a live input device and would raise
 /// the microphone permission prompt inside the test runner); the §3.3
 /// bench and §8 are its verification.
-final class AudioEngineIO {
+/// `@unchecked Sendable` on the same terms as `NativeAudioTransport`: every
+/// mutable member is confined to `queue`, except the level slots and the
+/// engine handles, which are guarded by `slotLock`. The audio thread (the
+/// sink node's block) touches only preallocated buffers and those locks.
+final class AudioEngineIO: @unchecked Sendable {
     /// 16 kHz Int16 mono bytes plus the level of the buffer they came from.
     /// Called on the engine's queue, hence @Sendable.
     var onCapturedPCM: (@Sendable (Data, AudioLevelSample) -> Void)?
@@ -279,6 +393,22 @@ final class AudioEngineIO {
     private let slotLock = NSLock()
     private var inputSlot: AudioLevelSample?
     private var _captureTapFormat: AVAudioFormat?
+    /// Held for the life of the engine: the sink node's block stops being
+    /// called when the graph is torn down (D10).
+    private var sinkCapture: SinkCapture?
+    /// D10: RMS per ~20 ms of scheduled playout, positioned in the
+    /// player's sample clock. Trimmed as the player passes each slice.
+    private var playoutSlices: [(start: AVAudioFramePosition, end: AVAudioFramePosition, rms: Double)] = []
+    /// Where the queue ends in the player's sample clock. That clock runs
+    /// on while the player is started, silence included, so a slice's
+    /// position must be anchored to where the player actually is when the
+    /// buffer is scheduled — a running total of scheduled frames falls
+    /// behind at the first gap and every slice is then read as already
+    /// played (measured: the channel went permanently dark).
+    private var lastScheduledEnd: AVAudioFramePosition = 0
+    private var playoutHits = 0
+    private var playoutMisses = 0
+    private var lastTimelineReport: TimeInterval = 0
     private var playoutSlot: AudioLevelSample?
 
     private var engine: AVAudioEngine?
@@ -301,7 +431,51 @@ final class AudioEngineIO {
     /// Latest input level (post-VPIO, what the bot hears), or nil before capture starts.
     var latestInputLevel: AudioLevelSample? { slotLock.withLock { inputSlot } }
     /// Latest level at the main mixer output (what the speaker plays), or nil.
-    var latestPlayoutLevel: AudioLevelSample? { slotLock.withLock { playoutSlot } }
+    /// The level of the audio the player is rendering *now*. On the
+    /// scheduled path this is looked up rather than measured after the
+    /// fact, so it carries the render time itself (D10); on the tap
+    /// fallback it is whatever the mixer tap last reported.
+    var latestPlayoutLevel: AudioLevelSample? {
+        guard JarvisFlags.captureUsesSinkNode else { return slotLock.withLock { playoutSlot } }
+        guard let nodeTime = player.lastRenderTime, nodeTime.isSampleTimeValid,
+              let playerTime = player.playerTime(forNodeTime: nodeTime) else { return nil }
+        let position = playerTime.sampleTime
+        return slotLock.withLock {
+            // Drop everything the player has already passed.
+            if let index = playoutSlices.lastIndex(where: { $0.end <= position }), index >= 0 {
+                playoutSlices.removeFirst(index + 1)
+            }
+            let slice = playoutSlices.first
+            let hit = slice.map { $0.start <= position && position < $0.end } ?? false
+            if hit { playoutHits += 1 } else { playoutMisses += 1 }
+            let now = ProcessInfo.processInfo.systemUptime
+            // The engine renders ahead of the speaker, so lastRenderTime can
+            // sit in the future — and the accumulator refuses a measurement
+            // time later than now, which is why a working timeline still
+            // produced zero observations. The level is known before the
+            // audio plays, so "now" is the honest stamp; the raw lead is
+            // logged rather than hidden.
+            let renderSeconds = AVAudioTime.seconds(forHostTime: nodeTime.hostTime)
+            let lead = renderSeconds - now
+            if now - lastTimelineReport >= 2.0, playoutHits + playoutMisses > 0 {
+                lastTimelineReport = now
+                engineLog.notice("playout timeline: \(self.playoutSlices.count, privacy: .public) slices queued, player at \(position, privacy: .public), \(self.playoutHits, privacy: .public) hits / \(self.playoutMisses, privacy: .public) misses, render time leads now by \(lead * 1000, format: .fixed(precision: 1), privacy: .public) ms")
+                playoutHits = 0; playoutMisses = 0
+            }
+            guard hit, let slice else { return nil }
+            // Stamp the level with when this slice STARTED playing, not
+            // with the render time: the engine renders 12–20 ms ahead of
+            // the wall clock, and the meter reads its own `now` before
+            // asking for the level, so any stamp at or after the render
+            // time is in that reader's future and the accumulator drops it
+            // (measured: a timeline with 60 hits per 2 s recording zero
+            // observations). The final clamp keeps it strictly in the past
+            // for a reader whose `now` is microseconds older than ours.
+            let sliceAge = Double(position - slice.start) / max(playerTime.sampleRate, 1)
+            let measured = min(renderSeconds - sliceAge, now - 0.001)
+            return AudioLevelSample(rms: slice.rms, hostTime: AVAudioTime.hostTime(forSeconds: measured))
+        }
+    }
     /// The input bus format the running tap was installed with (bench/diagnostics).
     var captureTapFormat: AVAudioFormat? { slotLock.withLock { _captureTapFormat } }
     var isPlaying: Bool { queue.sync { playout.isPlaying } }
@@ -359,6 +533,13 @@ final class AudioEngineIO {
     private func startLocked() throws {
         if engine != nil { stopLocked() }
         let engine = AVAudioEngine()
+        #if os(macOS)
+        // Before the graph is built: what the devices' I/O buffers are, and
+        // a different size if JARVIS_AUDIO_IO_FRAMES asks for one. The
+        // measured default here is 4800 frames — 100 ms — which is the
+        // dominant term in every latency this client has (C7.5).
+        AudioDeviceTuning.report()
+        #endif
         let hardwareInput = engine.inputNode.outputFormat(forBus: 0)
         let hardwareOutput = engine.outputNode.outputFormat(forBus: 0)
         guard hardwareInput.sampleRate > 0, hardwareOutput.sampleRate > 0, hardwareOutput.channelCount > 0 else {
@@ -404,17 +585,27 @@ final class AudioEngineIO {
             throw JarvisError.transport("no capture converter for \(captureFormat)")
         }
         self.converter = converter
-        slotLock.withLock { _captureTapFormat = engine.inputNode.outputFormat(forBus: 0) }
-        // `format: nil` = the input bus format as VPIO reports it; the
-        // converter and the meter see channel 0 of it.
-        engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] raw, time in
-            guard let self, let buffer = CaptureConverter.firstChannel(of: raw) else { return }
-            let level = AudioLevelSample(rms: LevelMeter.rms(of: buffer), hostTime: time.hostTime)
+        let inputFormat = engine.inputNode.outputFormat(forBus: 0)
+        slotLock.withLock { _captureTapFormat = inputFormat }
+        let inputCadence = TapCadence(label: "input")
+        // One handler for both capture paths: everything after the copy is
+        // identical, so the flag changes only how audio is delivered.
+        let handle: @Sendable (AVAudioPCMBuffer, UInt64, Int, Int) -> Void = { [weak self] buffer, hostTime, rawFrames, rawChannels in
+            guard let self else { return }
+            let level = AudioLevelSample(rms: LevelMeter.rms(of: buffer), hostTime: hostTime)
+            inputCadence.record(frameLength: rawFrames, sampleRate: inputFormat.sampleRate,
+                                channels: rawChannels, bufferSeconds: level.seconds)
             self.slotLock.withLock { self.inputSlot = level }
+            let frames = Int(buffer.frameLength)
+            // Copy off the audio thread's buffer before the ring wraps.
+            // `nonisolated(unsafe)`: AVAudioPCMBuffer is not Sendable, but
+            // this copy has exactly one owner — made here, read once on
+            // `queue`, referenced nowhere else.
+            nonisolated(unsafe) let owned = CaptureConverter.slice(buffer, from: 0, count: frames)
             self.queue.async {
                 let monitor = self.onMonitorPCM
-                guard self.captureEnabled || monitor != nil else { return }
-                guard let data = self.converter?.convert(buffer), !data.isEmpty else { return }
+                guard self.captureEnabled || monitor != nil, let owned else { return }
+                guard let data = self.converter?.convert(owned), !data.isEmpty else { return }
                 monitor?(data)
                 // With a monitor attached (the wake path) conversion runs
                 // while muted too, which also keeps the resampler's
@@ -422,16 +613,55 @@ final class AudioEngineIO {
                 if self.captureEnabled { self.onCapturedPCM?(data, level) }
             }
         }
-        engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, time in
-            guard let self else { return }
-            let level = AudioLevelSample(rms: LevelMeter.rms(of: buffer), hostTime: time.hostTime)
-            self.slotLock.withLock { self.playoutSlot = level }
+        if JarvisFlags.captureUsesSinkNode,
+           let sink = SinkCapture(inputFormat: inputFormat,
+                                  deliver: { buffer, hostTime in
+                                      handle(buffer, hostTime, Int(buffer.frameLength), Int(inputFormat.channelCount))
+                                  }) {
+            engine.attach(sink.node)
+            engine.connect(engine.inputNode, to: sink.node, format: nil)
+            sinkCapture = sink
+            engineLog.notice("capture: sink node (render quantum), input \(inputFormat, privacy: .public)")
+        } else {
+            // Rollback path (JARVIS_AUDIO_CAPTURE=tap): 100 ms buffers.
+            engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { raw, time in
+                guard let buffer = CaptureConverter.firstChannel(of: raw) else { return }
+                handle(buffer, time.hostTime, Int(raw.frameLength), Int(raw.format.channelCount))
+            }
+            engineLog.notice("capture: input tap (JARVIS_AUDIO_CAPTURE=tap)")
+        }
+        // Playout metering (D10). The mixer tap has the same 100 ms
+        // problem, and a sink node cannot fix it here: a sink is driven by
+        // the input hardware, so hung off the mixer nothing ever pulls it
+        // and it delivered exactly zero buffers when tried. But playout
+        // needs no tap at all — this client schedules every buffer, so the
+        // level is known before the audio reaches the speaker. The levels
+        // go into a timeline in the player's own sample clock, and the
+        // meter asks the player where it is (`playerTime`) when it reads.
+        // Zero added latency, and it cannot disagree with what is audible.
+        if !JarvisFlags.captureUsesSinkNode {
+            let playoutCadence = TapCadence(label: "playout")
+            engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, time in
+                guard let self else { return }
+                let level = AudioLevelSample(rms: LevelMeter.rms(of: buffer), hostTime: time.hostTime)
+                playoutCadence.record(frameLength: Int(buffer.frameLength), sampleRate: buffer.format.sampleRate,
+                                      channels: Int(buffer.format.channelCount), bufferSeconds: level.seconds)
+                self.slotLock.withLock { self.playoutSlot = level }
+            }
+            engineLog.notice("playout meter: main-mixer tap (JARVIS_AUDIO_CAPTURE=tap)")
+        } else {
+            engineLog.notice("playout meter: scheduled levels on the player clock")
         }
     }
 
     private func removeTaps(from engine: AVAudioEngine) {
-        engine.inputNode.removeTap(onBus: 0)
-        engine.mainMixerNode.removeTap(onBus: 0)
+        if let sinkCapture {
+            engine.detach(sinkCapture.node)
+            self.sinkCapture = nil
+        } else {
+            engine.inputNode.removeTap(onBus: 0)
+        }
+        if !JarvisFlags.captureUsesSinkNode { engine.mainMixerNode.removeTap(onBus: 0) }
     }
 
     private func stopLocked() {
@@ -447,7 +677,8 @@ final class AudioEngineIO {
         converter = nil
         playerFormat = nil
         if playout.flush() { onPlayoutChanged?(false) }
-        slotLock.withLock { inputSlot = nil; playoutSlot = nil; _captureTapFormat = nil }
+        lastScheduledEnd = 0
+        slotLock.withLock { inputSlot = nil; playoutSlot = nil; playoutSlices.removeAll(); _captureTapFormat = nil }
     }
 
     /// D3: a device change (AirPods arriving, the default output moving)
@@ -480,9 +711,11 @@ final class AudioEngineIO {
         if playerFormat == nil || playerFormat!.sampleRate != buffer.format.sampleRate
             || playerFormat!.channelCount != buffer.format.channelCount {
             player.stop()
+            resetPlayoutTimeline()
             engine.connect(player, to: engine.mainMixerNode, format: buffer.format)
             playerFormat = buffer.format
         }
+        recordPlayoutLevels(of: buffer)
         let wasPlaying = playout.isPlaying
         let generation = playout.scheduled()
         player.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
@@ -495,9 +728,45 @@ final class AudioEngineIO {
         if !wasPlaying { onPlayoutChanged?(true) }
     }
 
+    /// ~20 ms slices, so the wave has something to move to within a
+    /// syllable rather than per scheduled chunk.
+    private func recordPlayoutLevels(of buffer: AVAudioPCMBuffer) {
+        let frames = Int(buffer.frameLength)
+        guard frames > 0 else { return }
+        // The queue plays back to back from wherever the player is now.
+        let base = max(currentPlayerPosition() ?? 0, lastScheduledEnd)
+        let sliceFrames = max(1, Int(buffer.format.sampleRate * 0.020))
+        var offset = 0
+        var slices: [(AVAudioFramePosition, AVAudioFramePosition, Double)] = []
+        while offset < frames {
+            let count = min(sliceFrames, frames - offset)
+            if let slice = CaptureConverter.slice(buffer, from: offset, count: count) {
+                let start = base + AVAudioFramePosition(offset)
+                slices.append((start, start + AVAudioFramePosition(count), LevelMeter.rms(of: slice)))
+            }
+            offset += count
+        }
+        lastScheduledEnd = base + AVAudioFramePosition(frames)
+        slotLock.withLock { playoutSlices.append(contentsOf: slices) }
+    }
+
+    private func currentPlayerPosition() -> AVAudioFramePosition? {
+        guard let nodeTime = player.lastRenderTime, nodeTime.isSampleTimeValid,
+              let playerTime = player.playerTime(forNodeTime: nodeTime) else { return nil }
+        return playerTime.sampleTime
+    }
+
+    /// The player's sample clock restarts with the player, so the timeline
+    /// must too — otherwise the meter reads the previous utterance.
+    private func resetPlayoutTimeline() {
+        lastScheduledEnd = 0
+        slotLock.withLock { playoutSlices.removeAll() }
+    }
+
     private func flushLocked() {
         let changed = playout.flush()
         player.stop()
+        resetPlayoutTimeline()
         if playerFormat != nil, engine?.isRunning == true { player.play() }
         if changed { onPlayoutChanged?(false) }
     }

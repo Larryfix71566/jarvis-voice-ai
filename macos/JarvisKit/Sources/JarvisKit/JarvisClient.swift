@@ -38,6 +38,12 @@ public final class JarvisClient: ObservableObject {
     /// invalidates the last one's observations (gap G24: this used to be
     /// view `@State`).
     public var audioActivityGeneration: UUID { audioMeter.generation }
+    /// C7.5: the meter's reading for the session that just ended, captured
+    /// before the observer clears its window. The app writes the acceptance
+    /// report from this, so the gate's evidence does not depend on anyone
+    /// remembering a menu item mid-call. Non-nil with zero observations is
+    /// a real answer: a session happened and measured nothing.
+    @Published public private(set) var lastSessionAudioLatency: AudioMeterLatency?
     @Published public internal(set) var micEnabled: Bool = true
     @Published public internal(set) var wakeWordOn: Bool = false
     @Published public internal(set) var wakeWordAvailable: Bool = false
@@ -278,6 +284,7 @@ public final class JarvisClient: ObservableObject {
     }
 
     public func disconnect() async {
+        lastSessionAudioLatency = audioMeter.latency()
         audioMeter.endSession()
         audioActivity = nil
         #if os(macOS)
@@ -640,6 +647,7 @@ extension JarvisClient: RTVITransportDelegate {
             }
             self.botIsSpeaking = false
             self.stopStatsTimer()
+            self.lastSessionAudioLatency = self.audioMeter.latency()
             self.audioMeter.endSession()
             self.audioActivity = nil
             await self.wakeListener.stop()

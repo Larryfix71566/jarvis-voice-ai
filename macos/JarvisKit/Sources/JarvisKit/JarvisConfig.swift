@@ -94,6 +94,13 @@ public enum JarvisFlags {
     /// off must never fail open onto a remote host in the clear.
     public static var authEnabled: Bool { on("JARVIS_CLIENT_AUTH_ENABLED") }
     public static var glassEnabled: Bool { on("JARVIS_GLASS_ENABLED") }
+    /// D10 rollback: `JARVIS_AUDIO_CAPTURE=tap` returns capture to the
+    /// input tap, whose 100 ms buffers were the whole reason for the sink
+    /// node. Anything else (or unset) uses the sink node.
+    public static var captureUsesSinkNode: Bool {
+        ProcessInfo.processInfo.environment["JARVIS_AUDIO_CAPTURE"]?.lowercased() != "tap"
+            && UserDefaults.standard.string(forKey: "JARVIS_AUDIO_CAPTURE")?.lowercased() != "tap"
+    }
     /// Closure C7.4 runtime disable path: `JARVIS_AUDIO_METER=off` in the
     /// environment, or `defaults write com.mortimer.host JARVIS_AUDIO_METER
     /// -bool false`, stops the observer publishing. The status stays

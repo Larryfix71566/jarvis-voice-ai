@@ -122,6 +122,7 @@ final class AudioActivityObserverTests: XCTestCase {
         let box = SnapshotBox(); let observer = observer(box); let source = StubSource()
         begin(observer, source: source)
         XCTAssertEqual(observer.latency().samples, 0)
+        XCTAssertEqual(observer.latency().input, .empty)
         // Oldest first: each sample must be measured LATER than the last
         // or the accumulator's watermark refuses it, so the delays are fed
         // in decreasing order of age.
@@ -130,10 +131,12 @@ final class AudioActivityObserverTests: XCTestCase {
             observer.sample()
         }
         let latency = observer.latency()
-        XCTAssertEqual(latency.samples, 5)
+        XCTAssertEqual(latency.input.samples, 5)
+        XCTAssertEqual(latency.input.arrivals, 5, "five distinct measurement times, each seen once")
         XCTAssertEqual(latency.p50, 0.030, accuracy: 0.010)
         XCTAssertEqual(latency.p95, 0.100, accuracy: 0.010)
         XCTAssertEqual(latency.worst, 0.100, accuracy: 0.010)
+        XCTAssertEqual(latency.playout, .empty, "nothing played, nothing measured")
         XCTAssertLessThanOrEqual(latency.p95, 0.150, "the gate this readout exists to answer")
     }
 
@@ -150,6 +153,21 @@ final class AudioActivityObserverTests: XCTestCase {
         XCTAssertEqual(snapshot.outputLevel, 0.6, "playout has no eligibility gate")
     }
 
+    /// The distinction the first C7.5 reading could not make: a level the
+    /// sampler sees three times is three things the viewer saw, but only
+    /// one thing the audio path delivered.
+    func testALevelSeenRepeatedlyCountsOnceOnArrivalAndEveryTickAsDisplayed() {
+        let box = SnapshotBox(); let observer = observer(box); let source = StubSource()
+        begin(observer, source: source)
+        source.set(input: level(0.3, ago: 0.02), playout: nil)
+        observer.sample(); observer.sample(); observer.sample()
+        let latency = observer.latency()
+        XCTAssertEqual(latency.input.samples, 3, "the viewer saw it three times")
+        XCTAssertEqual(latency.input.arrivals, 1, "the audio path delivered it once")
+        XCTAssertGreaterThanOrEqual(latency.input.displayedP95, latency.input.arrivalP95,
+                                    "ageing in the slot can only add delay")
+    }
+
     func testTheMeterCanBeDisabledAtRuntime() {
         UserDefaults.standard.set(false, forKey: "JARVIS_AUDIO_METER")
         defer { UserDefaults.standard.removeObject(forKey: "JARVIS_AUDIO_METER") }
@@ -159,5 +177,23 @@ final class AudioActivityObserverTests: XCTestCase {
         source.set(input: level(0.4, ago: 0.01), playout: level(0.6, ago: 0.01))
         observer.sample()
         XCTAssertTrue(box.all.isEmpty, "JARVIS_AUDIO_METER off publishes nothing")
+    }
+}
+
+/// C7.5: the reading survives the session that produced it, so the report
+/// is written from a real value rather than from an observer that has
+/// already cleared its window.
+@MainActor
+final class SessionLatencyHandoffTests: XCTestCase {
+    func testDisconnectKeepsTheFinalReadingForTheReport() async {
+        let config = JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
+                                  adminURL: URL(string: "http://127.0.0.1:7861")!,
+                                  wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: nil)
+        let client = JarvisClient(config: config, stubTransport: StubTransport())
+        XCTAssertNil(client.lastSessionAudioLatency, "nothing has ended yet")
+        await client.disconnect()
+        let latency = client.lastSessionAudioLatency
+        XCTAssertNotNil(latency, "a session that ends leaves a reading, even an empty one")
+        XCTAssertEqual(latency?.samples, 0, "a stub transport is not a measured source")
     }
 }

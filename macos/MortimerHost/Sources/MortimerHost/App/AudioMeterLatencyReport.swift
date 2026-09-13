@@ -49,10 +49,32 @@ enum AudioMeterLatencyReport {
             payload["gate"] = "no data"
             return payload
         }
+        func channel(_ c: AudioMeterChannelLatency) -> [String: Any] {
+            [
+                "observations": c.samples,
+                "displayed_p50_ms": (c.displayedP50 * 1000).rounded(toPlaces: 1),
+                "displayed_p95_ms": (c.displayedP95 * 1000).rounded(toPlaces: 1),
+                "worst_ms": (c.worst * 1000).rounded(toPlaces: 1),
+                // How old each level was the first time the sampler saw it:
+                // the audio path's own cost, which no sampler change fixes.
+                "arrivals": c.arrivals,
+                "arrival_p50_ms": (c.arrivalP50 * 1000).rounded(toPlaces: 1),
+                "arrival_p95_ms": (c.arrivalP95 * 1000).rounded(toPlaces: 1),
+            ]
+        }
+        payload["input"] = channel(latency.input)
+        payload["playout"] = channel(latency.playout)
         payload["p50_ms"] = (latency.p50 * 1000).rounded(toPlaces: 1)
         payload["p95_ms"] = (latency.p95 * 1000).rounded(toPlaces: 1)
         payload["worst_ms"] = (latency.worst * 1000).rounded(toPlaces: 1)
-        payload["gate"] = latency.p95 <= gateSeconds ? "pass" : "FAIL"
+        // A silent channel is not a fast one. C7.5 is a statement about
+        // both, so a session where one produced nothing cannot pass on the
+        // strength of the other.
+        if latency.input.samples == 0 || latency.playout.samples == 0 {
+            payload["gate"] = "incomplete — one channel produced no observations"
+        } else {
+            payload["gate"] = latency.p95 <= gateSeconds ? "pass" : "FAIL"
+        }
         return payload
     }
 

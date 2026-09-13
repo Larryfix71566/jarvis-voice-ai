@@ -210,6 +210,26 @@ Verified against the installed **pipecat-ai 1.4.0** (`.venv` of the `jarvis-voic
   processor (the WebRTC case keeps its connection-level handler). D3/D6: the
   client flushes its player queue on the serializer's `interruption` frame.
   Branch: `feat/native-audio-transport`, cut from `main` `6cdf1b8`.
+- **D10 (2026-09-13, from the C7.5 latency measurement):** capture does not
+  use a tap. `installTap(bufferSize:)` is a hint, and this engine ignored it —
+  both taps delivered 4800 frames (100 ms) ten times a second while the
+  devices themselves ran at 512 frames and would not accept more than 4096.
+  That buffer sat in front of the socket as well as the meter: 100 ms before
+  the bot heard a word and before a barge-in could register, against the 10 ms
+  frames WebRTC's device module delivered — so the tap silently broke D6.
+  Capture is an `AVAudioSinkNode` (render quantum, measured 512 frames /
+  10.7 ms, age at callback 14.7 ms against 108.3); its block allocates nothing
+  and hands a preallocated mono copy to the engine queue.
+  `JARVIS_AUDIO_CAPTURE=tap` is the rollback. Playout metering takes no tap
+  either — a sink node is driven by the input hardware and delivers nothing
+  when hung off the mixer — so the levels are sliced from the buffers this
+  client schedules, positioned in the player's sample clock and read through
+  `playerTime`, stamped at the playing slice's start (the engine renders
+  12–20 ms ahead of the wall clock, and a measurement time in the reader's
+  future is discarded). Evidence and the three bugs found on the way:
+  `docs/acceptance/adaptive-interface/C7-measured-audio.md`. **§3.3 must be
+  re-run on this graph before D10 is signed off**, and §3.4 remains open — the
+  buffering term is known, parity is not.
 - **D9 (2026-09-13, from the §3.3/§3.5 measurements):** the input node is
   **tapped, never connected**. With Voice Processing on, this Mac's input bus
   reports the mic array's 9-channel 48 kHz layout (1 ch before) and the output

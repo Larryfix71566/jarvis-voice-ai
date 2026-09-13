@@ -58,6 +58,16 @@ struct MortimerHostApp: App {
                 .environment(overlay)
                 .environment(notices)
                 .background(WindowIdentifierSetter(identifier: "console"))
+                // C7.5: every session that ends writes its own evidence.
+                // The Debug menu item stays for an on-demand reading
+                // mid-session, but the gate no longer depends on anyone
+                // clicking it — or on the app having a menu bar at all,
+                // which a bare-executable launch does not.
+                .onChange(of: client.lastSessionAudioLatency) { _, latency in
+                    guard let latency else { return }
+                    AudioMeterLatencyReport.write(latency, connected: false,
+                                                  native: client.isNativeAudio)
+                }
                 .onAppear(perform: startRoutersOnce)
                 .installWindowActions(windowActions)
         }
