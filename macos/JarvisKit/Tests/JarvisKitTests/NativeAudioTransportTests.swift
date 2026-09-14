@@ -22,7 +22,14 @@ final class NativeAudioTransportTests: XCTestCase {
         var closedCount: Int { lock.withLock { _closed } }
         var pings: Int { lock.withLock { _pings } }
         init(request: URLRequest) { self.request = request }
-        func open() { lock.withLock { _opened += 1 } }
+        /// A real socket opens on its own, and `connect` no longer returns
+        /// before that happens, so the stub does too. Tests that need the
+        /// window before open turn it off through `socketAutoOpens`.
+        var autoOpen = true
+        func open() {
+            lock.withLock { _opened += 1 }
+            if autoOpen { onOpen?() }
+        }
         func send(_ data: Data, completion: @escaping (Error?) -> Void) { lock.withLock { _sent.append(data) }; completion(nil) }
         /// Answered by default; `answersPings = false` models a server whose
         /// event loop is blocked (building the session, §8 finding).
@@ -96,11 +103,32 @@ final class NativeAudioTransportTests: XCTestCase {
                                stallSeconds: TimeInterval = JarvisTuning.nativeKeepAliveStallSeconds,
                                pingInterval: TimeInterval = JarvisTuning.keepAliveInterval) -> NativeAudioTransport {
         let transport = NativeAudioTransport(
-            makeSocket: { [unowned self] request in let s = StubSocket(request: request); self.sockets.append(s); return s },
+            makeSocket: { [unowned self] request in
+                let s = StubSocket(request: request)
+                s.autoOpen = self.socketAutoOpens
+                s.answersPings = self.socketAnswersPings
+                self.sockets.append(s)
+                return s
+            },
             makeAudio: { [unowned self] in let a = StubAudio(); self.audios.append(a); return a },
             readyDeadline: readyDeadline, stallSeconds: stallSeconds, pingInterval: pingInterval)
         transport.delegate = recorder
         return transport
+    }
+
+    /// How the next stub socket behaves. `connect` returns only once the
+    /// server has answered, so the defaults let it complete; a test needing
+    /// the pre-open or pre-answer window turns one off BEFORE calling
+    /// connect, since the socket is created inside it.
+    private var socketAutoOpens = true
+    private var socketAnswersPings = true
+
+    /// Waits for the socket `connect` created while the call is still in
+    /// flight. Cooperative, unlike `settle`, which blocks its thread.
+    private func awaitSocket(_ index: Int) async {
+        for _ in 0..<400 where sockets.count <= index {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
     }
 
     /// Delegate calls and stub callbacks hop through the transport's own
@@ -121,21 +149,24 @@ final class NativeAudioTransportTests: XCTestCase {
 
     // MARK: Lifecycle
 
-    func testConnectStartsCaptureOpensTheSocketAndReportsConnectedOnlyWhenItOpens() async throws {
+    func testConnectStartsCaptureOpensTheSocketAndReportsConnectedOnlyWhenTheBotAnswers() async throws {
+        socketAutoOpens = false
         let transport = makeTransport()
-        try await transport.connect(config: config)
+        let connecting = Task { try await transport.connect(config: self.config) }
+        await awaitSocket(0)
         XCTAssertEqual(audios.count, 1); XCTAssertEqual(sockets.count, 1)
         XCTAssertEqual(audios[0].started, 1)
         XCTAssertEqual(audios[0].captureCalls, [true], "capture enabled with the default mic state")
         XCTAssertEqual(sockets[0].opened, 1)
         XCTAssertEqual(sockets[0].request.url?.absoluteString, "ws://127.0.0.1:7860/ws-client")
         XCTAssertEqual(sockets[0].request.value(forHTTPHeaderField: "Authorization"), "Bearer tok")
-        XCTAssertEqual(recorder.connects, 0, "not connected until the socket opens")
+        XCTAssertEqual(recorder.connects, 0, "not connected until the bot answers")
         // A message before open is queued, not sent.
         try transport.send(Data(#"{"type":"voice/set","voice":"a"}"#.utf8))
         XCTAssertEqual(sockets[0].sent.count, 0)
         sockets[0].onOpen?()
-        settle({ self.recorder.connects == 1 }, "connected on open")
+        try await connecting.value
+        XCTAssertEqual(recorder.connects, 1, "connected once the bot answered the first ping")
         settle({ self.sockets[0].sent.count == 1 }, "queued message flushed on open")
         XCTAssertEqual(PipecatFrameCodec.decode(sockets[0].sent[0]), .message(json: Data(#"{"type":"voice/set","voice":"a"}"#.utf8)))
         try transport.send(Data(#"{"type":"ui/noop","reason":"r"}"#.utf8))
@@ -147,10 +178,13 @@ final class NativeAudioTransportTests: XCTestCase {
     }
 
     func testOutboundQueueBeforeOpenIsBoundedOldestDropped() async throws {
+        socketAutoOpens = false
         let transport = makeTransport()
-        try await transport.connect(config: config)
+        let connecting = Task { try await transport.connect(config: self.config) }
+        await awaitSocket(0)
         for i in 0..<(JarvisTuning.outboundQueueMax + 5) { try transport.send(Data("{\"n\":\(i)}".utf8)) }
         sockets[0].onOpen?()
+        try await connecting.value
         settle({ self.sockets[0].sent.count == JarvisTuning.outboundQueueMax }, "queue capped at outboundQueueMax")
         XCTAssertEqual(PipecatFrameCodec.decode(sockets[0].sent[0]), .message(json: Data("{\"n\":5}".utf8)), "oldest five dropped")
         await transport.disconnect()
@@ -287,12 +321,15 @@ final class NativeAudioTransportTests: XCTestCase {
     }
 
     func testCapturedPCMIsSentOnlyWhileOpenAndUnmuted() async throws {
+        socketAutoOpens = false
         let transport = makeTransport()
-        try await transport.connect(config: config)
+        let connecting = Task { try await transport.connect(config: self.config) }
+        await awaitSocket(0)
         let level = AudioLevelSample(rms: 0.1, hostTime: 1)
         audios[0].onCapturedPCM?(Data([1, 2, 3, 4]), level)
         sockets[0].onOpen?()
-        settle({ self.recorder.connects == 1 }, "open")
+        try await connecting.value
+        XCTAssertEqual(recorder.connects, 1, "open")
         XCTAssertEqual(sockets[0].sent.count, 0, "frames captured before open are dropped, not queued")
         audios[0].onCapturedPCM?(Data([1, 2, 3, 4]), level)
         settle({ self.sockets[0].sent.count == 1 }, "captured frame sent")
@@ -332,18 +369,19 @@ final class NativeAudioTransportTests: XCTestCase {
     /// before the bot ever spoke.
     func testASilentServerIsGivenTheReadyDeadlineBeforeTheStallWatchdogExists() async throws {
         // stall > ping, as in production (6 s vs 1 s), scaled down.
-        let transport = makeTransport(readyDeadline: 1.5, stallSeconds: 0.3, pingInterval: 0.05)
-        try await transport.connect(config: config)
-        sockets[0].answersPings = false          // loop blocked: no pongs
-        sockets[0].onOpen?()
-        settle({ self.recorder.connects == 1 }, "open")
+        socketAnswersPings = false               // loop blocked: no pongs
+        let transport = makeTransport(readyDeadline: 3.0, stallSeconds: 0.3, pingInterval: 0.05)
+        let connecting = Task { try await transport.connect(config: self.config) }
+        await awaitSocket(0)
         // Well past the stall threshold, nowhere near the ready deadline.
         try await Task.sleep(for: .milliseconds(700))
         XCTAssertEqual(recorder.disconnects.count, 0, "a server still starting up must not be torn down")
+        XCTAssertEqual(recorder.connects, 0, "and it is not called connected while it starts")
         XCTAssertGreaterThan(sockets[0].pings, 5, "pings are sent throughout the wait")
-        // Now it answers: the session establishes and stays up.
+        // Now it answers: the session establishes and connect returns.
         sockets[0].answersPings = true
-        try await Task.sleep(for: .milliseconds(600))
+        try await connecting.value
+        XCTAssertEqual(recorder.connects, 1, "connected when the server answered")
         XCTAssertEqual(recorder.disconnects.count, 0, "an answering server keeps the session")
         // And the watchdog is now armed — proof that establishment happened.
         XCTAssertTrue(transport.isSessionEstablished, "the answered ping established the session")
@@ -352,39 +390,45 @@ final class NativeAudioTransportTests: XCTestCase {
     }
 
     func testTheReadyDeadlineFailsTheSessionWhenTheBotNeverAnswers() async throws {
+        socketAnswersPings = false
         let transport = makeTransport(readyDeadline: 0.4, stallSeconds: 0.3, pingInterval: 0.05)
-        try await transport.connect(config: config)
-        sockets[0].answersPings = false
-        sockets[0].onOpen?()
-        settle({ self.recorder.connects == 1 }, "open")
-        settle({ self.recorder.disconnects.count == 1 }, "the ready deadline fails the session")
-        XCTAssertEqual(Self.message(recorder.disconnects.first ?? nil), "the bot did not start the session")
+        do {
+            try await transport.connect(config: config)
+            XCTFail("connect must not succeed when the bot never answers")
+        } catch {
+            XCTAssertEqual(Self.message(error), "the bot did not start the session")
+        }
         XCTAssertEqual(audios[0].stopped, 1, "the engine is stopped with the session")
+        XCTAssertEqual(recorder.connects, 0, "it was never reported connected")
+        XCTAssertEqual(recorder.disconnects.count, 0,
+                       "a session that never started is a failed connect, not a drop")
     }
 
     func testOnceEstablishedSilenceBeyondTheStallThresholdTearsTheSessionDown() async throws {
         let transport = makeTransport(readyDeadline: 5.0, stallSeconds: 0.3, pingInterval: 0.05)
         try await transport.connect(config: config)
-        sockets[0].onOpen?()
         // lastKeepAliveDate is non-nil from the moment pings start, so it is
-        // not the establishment signal — this is.
-        settle({ transport.isSessionEstablished }, "established by the first pong")
+        // not the establishment signal — this is, and connect waited for it.
+        XCTAssertTrue(transport.isSessionEstablished, "established by the first pong")
         sockets[0].answersPings = false          // the server goes quiet mid-session
         settle({ self.recorder.disconnects.count == 1 }, "the stall watchdog fires once established")
         XCTAssertEqual(Self.message(recorder.disconnects.first ?? nil), "keep-alive stalled")
     }
 
     func testAnInboundFrameEstablishesTheSessionWithoutAPong() async throws {
-        let transport = makeTransport(readyDeadline: 0.6, stallSeconds: 5.0, pingInterval: 0.05)
-        try await transport.connect(config: config)
-        sockets[0].answersPings = false
-        sockets[0].onOpen?()
-        settle({ self.recorder.connects == 1 }, "open")
-        // The bot's first message is as good a sign of life as a pong.
+        socketAnswersPings = false
+        let transport = makeTransport(readyDeadline: 3.0, stallSeconds: 5.0, pingInterval: 0.05)
+        let connecting = Task { try await transport.connect(config: self.config) }
+        await awaitSocket(0)
+        // The bot's first message is as good a sign of life as a pong. The
+        // stub opens itself inside connect and every callback hops through
+        // the same serial queue, so `opened` has already run by now.
         sockets[0].onMessage?(PipecatFrameCodec.encodeMessage(json: Data(#"{"type":"bot-ready"}"#.utf8)))
+        try await connecting.value
+        XCTAssertEqual(recorder.connects, 1, "the frame established the session")
         settle({ self.recorder.frames.count == 1 }, "frame delivered")
         XCTAssertTrue(transport.isSessionEstablished, "a frame establishes the session")
-        try await Task.sleep(for: .milliseconds(900))
+        try await Task.sleep(for: .milliseconds(300))
         XCTAssertEqual(recorder.disconnects.count, 0, "the ready deadline was cancelled by the frame")
         await transport.disconnect()
     }

@@ -101,6 +101,10 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
     /// spends seconds building the session after the handshake).
     private var isEstablished = false
     private var readyDeadlineTimer: DispatchSourceTimer?
+    /// `connect` parks here until the server shows a sign of life, so that
+    /// `.connected` means "the bot can answer" on this transport too
+    /// (C6 step 6 parity finding 1). Queue-confined like everything else.
+    private var readyContinuation: CheckedContinuation<Void, Error>?
     private var captureMonitor: (@Sendable (Data) -> Void)?
     private var audioFramesSent = 0
     private var audioBytesSent = 0
@@ -172,6 +176,7 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         nativeLog.notice("dialing \(url.absoluteString, privacy: .public)")
         var request = URLRequest(url: url)
         if let token = config.token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        var startedSession = 0
         try queue.sync {
             self.config = config
             sessionCount += 1
@@ -222,7 +227,34 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
             audio.setCaptureEnabled(micEnabled)
             armOpenDeadline(session: session)
             socket.open()
+            startedSession = session
         }
+        // C6 step 6, parity finding 1. On WebRTC this call returns after
+        // /api/offer, which the server answers only once the session is
+        // built, so JarvisClient's `state = .connected` means the bot can
+        // answer. Here the socket opening says nothing about the bot --
+        // measured 5.4 s between the handshake and the pipeline starting --
+        // so returning at open() reported a session that could not yet hear
+        // anything. Wait for the signal `establish` already keys on, bounded
+        // by `readyDeadline`.
+        let session = startedSession
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            queue.async {
+                guard session == self.sessionCount, self.socket != nil else {
+                    continuation.resume(throwing: JarvisError.transport("the session ended before the bot started"))
+                    return
+                }
+                if self.isEstablished { continuation.resume(); return }
+                self.readyContinuation = continuation
+            }
+        }
+    }
+
+    /// Resolves `connect`'s wait exactly once.
+    private func resumeReady(_ error: Error?) {
+        guard let continuation = readyContinuation else { return }
+        readyContinuation = nil
+        if let error { continuation.resume(throwing: error) } else { continuation.resume() }
     }
 
     func disconnect() async {
@@ -257,13 +289,14 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
     // MARK: Queue-confined
 
     private func opened(session: Int) {
-        guard session == sessionCount, socket != nil else { return }
+        guard session == sessionCount, socket != nil, !isOpen else { return }
         isOpen = true
         nativeLog.notice("socket open (session \(session, privacy: .public))")
         openDeadlineTimer?.cancel(); openDeadlineTimer = nil
         startKeepAlive(session: session)
         armReadyDeadline(session: session)
-        delegate?.transportDidConnect()
+        // NOT transportDidConnect() -- the socket being up says nothing about
+        // the bot. That moves to `establish` (C6 step 6, finding 1).
         let queued = outboundQueue
         outboundQueue.removeAll()
         for frame in queued {
@@ -302,6 +335,8 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         lastPongAt = Date()
         startStallWatchdog(session: session)
         nativeLog.notice("session established; stall watchdog armed at \(self.stallSeconds, privacy: .public)s")
+        delegate?.transportDidConnect()
+        resumeReady(nil)
     }
 
     private func playoutChanged(_ playing: Bool, session: Int) {
@@ -388,7 +423,9 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
     private func startKeepAlive(session: Int) {
         lastPongAt = Date()
         let keepAlive = DispatchSource.makeTimerSource(queue: queue)
-        keepAlive.schedule(deadline: .now() + pingInterval, repeating: pingInterval)
+        // Immediately, not one interval later: this ping is what tells us
+        // the server's loop is free, and `connect` is waiting on the answer.
+        keepAlive.schedule(deadline: .now(), repeating: pingInterval)
         keepAlive.setEventHandler { [weak self] in
             guard let self, session == self.sessionCount, let socket = self.socket else { return }
             socket.ping { [weak self] error in
@@ -426,6 +463,11 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
     private func teardown(notify: Bool, error: Error?) {
         cancelAllTimers()
         let hadSession = socket != nil || audio != nil
+        // A session that never established has no connect for the delegate
+        // to be disconnected from: `connect` throws instead, the way a
+        // refused /api/offer throws on the WebRTC path.
+        let neverStarted = readyContinuation != nil
+        resumeReady(error ?? JarvisError.transport("the session ended before the bot started"))
         socket?.onOpen = nil; socket?.onClose = nil; socket?.onMessage = nil
         socket?.close()
         audio?.onCapturedPCM = nil; audio?.onPlayoutChanged = nil; audio?.onMonitorPCM = nil
@@ -442,7 +484,7 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         audioBytesSent = 0
         lastPongAt = .distantPast
         sessionCount += 1   // orphan any callback still in flight
-        if notify, hadSession { delegate?.transportDidDisconnect(error: error) }
+        if notify, hadSession, !neverStarted { delegate?.transportDidDisconnect(error: error) }
     }
 }
 
