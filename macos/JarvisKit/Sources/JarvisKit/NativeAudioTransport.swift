@@ -22,6 +22,7 @@ protocol NativeAudioIO: AnyObject {
     var onCapturedPCM: (@Sendable (Data, AudioLevelSample) -> Void)? { get set }
     var onMonitorPCM: (@Sendable (Data) -> Void)? { get set }
     var onPlayoutChanged: (@Sendable (Bool) -> Void)? { get set }
+    var onFailure: (@Sendable (Error) -> Void)? { get set }
     func start() throws
     func stop()
     func setCaptureEnabled(_ enabled: Bool)
@@ -188,6 +189,13 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
                 guard let self else { return }
                 self.queue.async { [weak self] in self?.playoutChanged(playing, session: session) }
             }
+            // The engine has given up on the device (D3). The socket is
+            // still fine, which is exactly the problem: without this the
+            // session stays "connected" with no audio in either direction.
+            audio.onFailure = { [weak self] error in
+                guard let self else { return }
+                self.queue.async { [weak self] in self?.audioFailed(error, session: session) }
+            }
             let socket = makeSocket(request)
             socket.onOpen = { [weak self] in
                 guard let self else { return }
@@ -261,6 +269,15 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         for frame in queued {
             socket?.send(PipecatFrameCodec.encodeMessage(json: frame)) { _ in }
         }
+    }
+
+    /// D3: the audio engine could not be rebuilt after a device change.
+    /// Fail the session so the UI and the bot both find out, rather than
+    /// holding a healthy socket over a dead engine.
+    private func audioFailed(_ error: Error, session: Int) {
+        guard session == sessionCount else { return }
+        nativeLog.error("audio engine failed: \(String(describing: error), privacy: .public)")
+        teardown(notify: true, error: error)
     }
 
     private func pongReceived(session: Int) {
@@ -412,6 +429,7 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         socket?.onOpen = nil; socket?.onClose = nil; socket?.onMessage = nil
         socket?.close()
         audio?.onCapturedPCM = nil; audio?.onPlayoutChanged = nil; audio?.onMonitorPCM = nil
+        audio?.onFailure = nil
         audio?.stop()
         socket = nil
         audio = nil

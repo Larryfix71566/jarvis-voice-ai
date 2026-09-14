@@ -242,6 +242,26 @@ Verified against the installed **pipecat-ai 1.4.0** (`.venv` of the `jarvis-voic
   feeds channel 0 to the converter (the `--channels` bench measured all nine
   channels identical). And on the native path the wake listener is fed from
   that same tap instead of opening its own engine (§3.5 above).
+- **D3 amended (2026-09-13, from a bench failure and a code read):** "AirPods
+  hot-plug is automatic — no reconnect" held only while the rebuild
+  succeeded, and the rebuild had no way to succeed twice. Two faults, found
+  together. First, `startLocked` read both hardware formats once and threw:
+  the bench, which starts and stops engines back to back, was refused with
+  `input <2 ch, 44100 Hz>, output <0 ch, 0 Hz>` — not this Mac's mic and not
+  a device at all, but what CoreAudio reports for a moment after another
+  engine releases the hardware. `settledFormats` now polls to a 1 s deadline
+  (50 ms steps), costing nothing in the normal case where the first read is
+  already good. Second, and worse: `rebuildLocked` caught the failure, logged
+  one line and returned — but `startLocked` had already run `stopLocked`,
+  which nils the engine **and removes the configuration-change observer**, so
+  nothing could ever call the rebuild again. The device coming back did not
+  help. The socket, the keep-alive and the UI all stayed healthy over a dead
+  engine. The rebuild now retries (6 attempts, 0.5 s apart, scheduled on the
+  queue rather than slept so `stop()` is not held behind them; only the first
+  attempt pays the full settle wait), and on exhaustion `onFailure` fails the
+  session through the transport instead of leaving it silently deaf. The
+  retry budget is a guess until §8's output-device-switch check measures how
+  long a real AirPods reconnect takes — that measurement should set it.
 
 ---
 

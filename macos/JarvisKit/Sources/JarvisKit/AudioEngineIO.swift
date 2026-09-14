@@ -389,6 +389,14 @@ final class AudioEngineIO: @unchecked Sendable {
     /// True while at least one scheduled playout buffer is unfinished.
     var onPlayoutChanged: (@Sendable (Bool) -> Void)?
 
+    /// The engine is down and will not come back by itself: every retry of
+    /// a device-change rebuild has failed. Nothing else reports this -- by
+    /// the time it fires the configuration-change observer is gone, so no
+    /// further device notification will arrive, and the socket above is
+    /// still perfectly healthy. The transport turns it into a visible
+    /// session failure rather than a silent one (D3).
+    var onFailure: (@Sendable (Error) -> Void)?
+
     private let queue = DispatchQueue(label: "com.mortimer.jarviskit.audio-engine")
     private let slotLock = NSLock()
     private var inputSlot: AudioLevelSample?
@@ -420,6 +428,16 @@ final class AudioEngineIO: @unchecked Sendable {
     private var configObserver: NSObjectProtocol?
     private(set) var voiceProcessing = false
     private(set) var rebuildCount = 0
+    /// Set by the public `stop()`, cleared by the public `start()`. A
+    /// rebuild retry scheduled before a stop must not resurrect the engine
+    /// after it; `stopLocked` alone cannot say, because `startLocked` calls
+    /// it on every rebuild.
+    private var stoppedByOwner = false
+    /// How long a device is given to come back before the session is failed:
+    /// `rebuildAttempts` tries, `rebuildRetryGap` apart, on top of the
+    /// settle wait inside each attempt.
+    private static let rebuildAttempts = 6
+    private static let rebuildRetryGap: TimeInterval = 0.5
     /// Production always asks for Voice Processing I/O; the §3.3 bench
     /// builds a second engine with it off to measure what VPIO removes.
     let wantsVoiceProcessing: Bool
@@ -486,11 +504,17 @@ final class AudioEngineIO: @unchecked Sendable {
     /// input device cannot be opened. `voiceProcessing` reports whether
     /// VPIO was accepted (it is required; a refusal is thrown, not hidden).
     func start() throws {
-        try queue.sync { try startLocked() }
+        try queue.sync {
+            stoppedByOwner = false
+            try startLocked()
+        }
     }
 
     func stop() {
-        queue.sync { stopLocked() }
+        queue.sync {
+            stoppedByOwner = true
+            stopLocked()
+        }
     }
 
     /// Mute keeps the tap running (the VPIO reference path stays stable)
@@ -530,7 +554,7 @@ final class AudioEngineIO: @unchecked Sendable {
     ///   leaves the playback in the tap at −2 dB, and Silero raises user
     ///   turns on it (built-in mic + speakers, quiet room);
     /// - `mainMixer → output` gets the hardware output format explicitly.
-    private func startLocked() throws {
+    private func startLocked(settleDeadline: TimeInterval = 1.0) throws {
         if engine != nil { stopLocked() }
         let engine = AVAudioEngine()
         #if os(macOS)
@@ -549,7 +573,8 @@ final class AudioEngineIO: @unchecked Sendable {
         // the devices to settle instead of failing on the first read.
         let (hardwareInput, hardwareOutput) = try Self.settledFormats(
             input: { engine.inputNode.outputFormat(forBus: 0) },
-            output: { engine.outputNode.outputFormat(forBus: 0) })
+            output: { engine.outputNode.outputFormat(forBus: 0) },
+            deadline: settleDeadline)
         // VPIO must be set before the input node is used or the engine started.
         if wantsVoiceProcessing {
             try engine.inputNode.setVoiceProcessingEnabled(true)
@@ -718,21 +743,36 @@ final class AudioEngineIO: @unchecked Sendable {
     /// declared playout format survive; whatever was queued in the old
     /// engine is gone (a short gap mid-sentence, then the stream resumes),
     /// which `playout.flush()` reports as not-playing.
-    private func rebuildLocked() {
-        guard engine != nil else { return }
-        rebuildCount += 1
-        let keptFormat = playerFormat
-        let wasEnabled = captureEnabled
+    ///
+    /// A failed attempt is not the end of it. `startLocked` has by then
+    /// stopped the old engine, which also removed the configuration-change
+    /// observer, so nothing will ever call this again on its own: without a
+    /// retry the session stays up with a dead engine. Retries are scheduled
+    /// on `queue` rather than slept so `stop()` is not stuck behind them,
+    /// and only the first attempt pays the full settle wait.
+    private func rebuildLocked(attempt: Int = 1, keeping carried: (AVAudioFormat?, Bool)? = nil) {
+        guard !stoppedByOwner else { return }
+        guard attempt > 1 || engine != nil else { return }
+        if attempt == 1 { rebuildCount += 1 }
+        let (keptFormat, wasEnabled) = carried ?? (playerFormat, captureEnabled)
         do {
-            try startLocked()          // stops the old engine first
+            try startLocked(settleDeadline: attempt == 1 ? 1.0 : 0.2)  // stops the old engine first
             captureEnabled = wasEnabled
             if let keptFormat, let engine {
                 engine.connect(player, to: engine.mainMixerNode, format: keptFormat)
                 playerFormat = keptFormat
             }
-            engineLog.notice("audio engine rebuilt after configuration change (#\(self.rebuildCount, privacy: .public))")
+            engineLog.notice("audio engine rebuilt after configuration change (#\(self.rebuildCount, privacy: .public), attempt \(attempt, privacy: .public))")
         } catch {
-            engineLog.error("audio engine rebuild failed: \(error.localizedDescription, privacy: .public)")
+            guard attempt < Self.rebuildAttempts else {
+                engineLog.error("audio engine rebuild failed after \(attempt, privacy: .public) attempts: \(error.localizedDescription, privacy: .public)")
+                onFailure?(JarvisError.transport("audio device lost: \(error.localizedDescription)"))
+                return
+            }
+            engineLog.error("audio engine rebuild attempt \(attempt, privacy: .public) failed (\(error.localizedDescription, privacy: .public)); retrying")
+            queue.asyncAfter(deadline: .now() + Self.rebuildRetryGap) { [weak self] in
+                self?.rebuildLocked(attempt: attempt + 1, keeping: (keptFormat, wasEnabled))
+            }
         }
     }
 

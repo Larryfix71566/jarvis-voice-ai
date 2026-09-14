@@ -42,6 +42,7 @@ final class NativeAudioTransportTests: XCTestCase {
         var onCapturedPCM: (@Sendable (Data, AudioLevelSample) -> Void)?
         var onMonitorPCM: (@Sendable (Data) -> Void)?
         var onPlayoutChanged: (@Sendable (Bool) -> Void)?
+        var onFailure: (@Sendable (Error) -> Void)?
         private let lock = NSLock()
         private var _started = 0, _stopped = 0, _flushes = 0
         private var _capture: [Bool] = []
@@ -391,6 +392,45 @@ final class NativeAudioTransportTests: XCTestCase {
     private static func message(_ error: Error?) -> String? {
         guard case .transport(let text)? = error as? JarvisError else { return nil }
         return text
+    }
+
+    /// D3: a device change the engine cannot recover from leaves the
+    /// socket perfectly healthy -- pongs and all -- so nothing else in the
+    /// stack notices. The session has to be failed from the audio side.
+    func testAnEngineThatGivesUpOnItsDeviceFailsTheSession() async throws {
+        let transport = makeTransport()
+        try await transport.connect(config: config)
+        sockets[0].onOpen?()
+        settle({ self.recorder.connects == 1 }, "open")
+
+        audios[0].onFailure?(JarvisError.transport("audio device lost: nope"))
+
+        settle({ self.recorder.disconnects.count == 1 }, "the session is torn down")
+        XCTAssertEqual(Self.message(recorder.disconnects.first ?? nil), "audio device lost: nope")
+        XCTAssertEqual(audios[0].stopped, 1, "the engine is stopped with the session")
+        XCTAssertEqual(sockets[0].closedCount, 1, "and the socket does not stay up without audio")
+    }
+
+    /// The callback is cleared with the session: a late failure from an
+    /// engine belonging to a torn-down session must not disturb the next one.
+    func testAFailureFromAPreviousSessionIsIgnored() async throws {
+        let transport = makeTransport()
+        try await transport.connect(config: config)
+        sockets[0].onOpen?()
+        settle({ self.recorder.connects == 1 }, "open")
+        let orphaned = audios[0].onFailure
+        await transport.disconnect()
+
+        try await transport.connect(config: config)
+        sockets[1].onOpen?()
+        settle({ self.recorder.connects == 2 }, "second session open")
+        let disconnectsBefore = recorder.disconnects.count
+
+        orphaned?(JarvisError.transport("audio device lost: stale"))
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(recorder.disconnects.count, disconnectsBefore,
+                       "a dead session's engine cannot tear down the live one")
+        await transport.disconnect()
     }
 
     func testKeepAlivePingsRunWhileOpen() async throws {
