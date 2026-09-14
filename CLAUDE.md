@@ -83,10 +83,19 @@ so a startup banner never needs a package-registry connection by default.
 
 
 ```
-Browser (React/Vite) --WebRTC--> Python bot (Pipecat pipeline) --MCP/stdio--> MCP skill servers
+Browser (React/Vite)  --WebRTC----> Python bot (Pipecat pipeline) --MCP/stdio--> MCP skill servers
+MortimerHost (Swift)  --WebSocket-> Python bot (same pipeline)
 ```
 
-**Bot pipeline** (`jarvis/bot/pipeline.py`): `SmallWebRTCTransport` audio in → Silero VAD → `DeepgramFluxSTTService` → context aggregator → `OpenAILLMService` (Supervisor brain, any OpenAI-compatible Chat Completions endpoint with function calling) → `ElevenLabsTTSService` → audio out. Tool calls from the LLM go through the MCP tool layer or `delegate_task(agent, task)`.
+**Bot pipeline** (`jarvis/bot/pipeline.py`): transport audio in → Silero VAD → `DeepgramFluxSTTService` → context aggregator → `OpenAILLMService` (Supervisor brain, any OpenAI-compatible Chat Completions endpoint with function calling) → `ElevenLabsTTSService` → audio out. Tool calls from the LLM go through the MCP tool layer or `delegate_task(agent, task)`. The transport is chosen in `bot()` (`jarvis/bot/bot.py`) by which runner argument arrives — `SmallWebRTCTransport` for `/api/offer`, `FastAPIWebsocketTransport` for `/ws-client` — and `run_session` below it is the same code either way. Do not add transport-conditional behaviour to the pipeline: the only branch that exists is `ClientMessageProcessor`, and it exists solely because the WebSocket transport has no connection object to hang `on_app_message` off.
+
+**Native audio transport** (`macos/JarvisKit/Sources/JarvisKit/NativeAudioTransport.swift` + `AudioEngineIO.swift`, docs/plans/MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md): the macOS app talks to a same-Mac bot over one WebSocket on the runner's `/ws-client` route — PCM both ways plus the RTVI app messages, framed with pipecat's `ProtobufFrameSerializer` (`PipecatFrameCodec` is the hand-written client half). `JARVIS_FORCE_WEBRTC=true` is the rollback to the old path; a remote bot always uses WebRTC. Rules learned the hard way, each with a measurement behind it in the plan's D9/D10/D3 amendments:
+
+- **The input node is tapped, never connected**, and capture comes off an `AVAudioSinkNode`, not `installTap` — `bufferSize:` is a hint this engine ignores, and it delivered 100 ms buffers where the device runs at 512 frames. Anything that reintroduces a capture tap puts 100 ms in front of both the bot and barge-in.
+- **Read the hardware formats before enabling Voice Processing**, and give `mainMixer → output` the output format explicitly. With VPIO on, the input bus reports the mic array's 9-channel layout and the output bus 0 ch / 0 Hz; `format: nil` inherits that and fails `kAUInitialize` (-10875).
+- **One engine.** A second `AVAudioEngine` on the same input costs VPIO its echo cancellation (measured 38.4 dB → 0.7 dB), so the wake listener is fed from the transport's monitor tap rather than opening its own.
+- **`.connected` must mean the bot can answer.** `connect()` waits for the server's first pong or frame, because the WebSocket handshake completes ~5.4 s before the pipeline starts. Returning at socket-open reported a session that could not hear anything.
+- **A device-change rebuild that fails is not self-healing** — stopping the engine also removes the configuration-change observer — so it retries and then fails the session through `onFailure`. Never let that path just log.
 
 **Delegation model**: the Supervisor never calls skill tools directly for delegated domains — it calls `delegate_task`, which hands the task to a `SubAgent` (`jarvis/agents/base.py`, `delegate.py`, `supervisor.py`), which in turn only has access to the MCP servers listed for it in `config/agents.yaml`. This routing config is the single source of truth for "who can do what" — read it before assuming a capability lives elsewhere. `jarvis/prompts.py` is the single source of truth for all system prompts (Supervisor, sub-agents, voice addendum); look there before searching for prompt text elsewhere.
 
