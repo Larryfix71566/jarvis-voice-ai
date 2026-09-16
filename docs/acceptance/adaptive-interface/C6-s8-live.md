@@ -59,7 +59,14 @@ So roughly 700 ms of dead audio per rebuild.
 `input: 1568 shown, displayed p95 24.5 ms, arrival p95 24.5 ms over 1523
 arrivals; playout: 431 shown, displayed p95 65.5 ms, arrival p95 1.0 ms over
 406 arrivals` — against a 150 ms gate. **Pass**, and the first time the gate
-has been measured on a Bluetooth input.
+has been measured on a Bluetooth input. Written to
+`P2-latency.json` by the app at session end (`p95_ms` 65.5, against 67.6 on
+the 2026-09-13 built-in run).
+
+One detail there corroborates finding 2 below: input `worst_ms` is **294.2**,
+against 26.5 on the built-in run. A single observation that stale is the
+rebuild gap appearing in the latency data — the gate is a p95 so it survives,
+but the churn is visible in the numbers, not only in the log.
 
 ---
 
