@@ -1,6 +1,7 @@
 # What is left, and what closes each
 
-State at `c9a9e54` on `main`, 2026-09-16. Eleven items. Two are decisions,
+State at `9e11625` on `docs/wave-and-agent-recovery`, 2026-09-16. Twelve
+items. Two are decisions,
 two are investigations, three need one hardware run each, one needs
 re-specifying, two are someone else's call, and one is a defect with a
 measured cause.
@@ -249,7 +250,7 @@ arriving: `staticTrace` (:152) and the `VoiceEnvelope` clamp on stale or
 absent levels are what keep that true, and any gain applied has to sit
 *inside* them, not around them.
 
-## 11. A sub-agent is unusable after an error — DEFECT, TWO CANDIDATE CAUSES
+## 11. A sub-agent is unusable after an error — TESTED, NEITHER CAUSE REPRODUCED
 
 **What it is.** Larry, 2026-09-16: "when a sub-agent hits an error it is no
 longer usable... I need to be able to overcome an error and not have to
@@ -360,3 +361,152 @@ run after it**.
 **What must not regress.** The A2 test suite, and the 2026-08-25 carve-out
 for the confirm-half of a two-phase flow (`_shares_long_identifier`). Any
 new path has to leave both intact.
+
+---
+
+## Test result for item 11 — 2026-09-16, 11:42-11:45 local
+
+Ran per the plan above: bot relaunched on the rotating launcher, the
+librarian asked for a memory graph of a topic with no nodes, then asked
+again in the same words. `closure-checks/logs/bot-c6.log`, one launch,
+126 KB.
+
+**Neither candidate fired.**
+
+- **`delegate_retry_guard` lines in the log: zero.** Two librarian
+  delegations went out 8 s apart with near-identical tasks
+  (`toolu_015xcQQq...` at 11:44:12.869, `toolu_01QXiSD...` at 11:44:20.972)
+  and **both ran to completion**. A developer delegation at 11:45:02 also
+  ran fine, 41 s, `tools_ok=10`.
+- **Rule 11 did not fire either.** The Supervisor relayed the failure
+  correctly, re-delegated immediately, then delegated onward to the
+  developer. It never declined to try again.
+
+**Why the guard could not fire, which is itself the finding.** The first
+delegation was orphaned by an interruption at 11:44:18.845
+(`delegate_orphaned_by_interruption run_id=101c52cf`) and did not record its
+failure until `subagent_done` at 11:44:21.964 - but the *second* delegation
+was issued at 11:44:20.972, about a second **before** `last_failure` was
+armed. In the interrupt-heavy path Larry actually uses, a retry routinely
+outruns the failure record, so the 120 s window is much harder to reach than
+reading the code suggests. The guard is real; it is not what he hit.
+
+**What did reproduce is a third mechanism, and it is the better candidate.**
+`SkillRegistry` is built per session (`pipeline.py:979`) and stopped in
+`run_session`'s `finally` (`pipeline.py:1440`), where `stop()` sets
+`self._tools = {}` (`skills/registry.py:286`). A sub-agent run survives the
+session by design (barge-in survival, delegate.py's docstring) - but its
+**tools do not**. Measured:
+
+- 11:45:25.433 `[session] client disconnected`, pipeline cancelled.
+- 11:45:27.6 the developer's `repo_read_file` calls still work.
+- 11:45:33.6 and 11:45:43.9 its `repo_search` calls come back
+  `Unknown tool 'repo_search'. Available: none.`
+  (`skills/registry.py:332`, with `self._tools` empty).
+
+`repo_search` is a real tool - `mcp-repo` started with 5 tools at
+11:43:38 - so this is not a hallucinated name. The run finished `ok` with
+`tools_failed=2`, and its own reply says the two failures stopped it from
+answering the question it was sent to answer.
+
+That is a sub-agent that is genuinely unusable after an error, triggered
+from the client side, and cured by reconnecting - the shape of Larry's
+report. **Not yet confirmed as what he experienced**: this needs a
+disconnect while a run is in flight. What would test it: delegate a long
+task, disconnect the app mid-run, reconnect, and check whether the run's
+later tool calls carry `Available: none`.
+
+**Fix shape.** The barge-in design deliberately outlives the voice turn.
+Either the registry has to outlive it too (hoist it above `run_session`, or
+reference-count it against in-flight detached runs), or a detached run has
+to be told its tools are gone and say so, instead of reporting `ok` with two
+silent failures. The second is smaller; the first is what the design implies.
+
+## 12. The bot has been writing to the wrong database since 2026-09-13 — TOP PRIORITY
+
+**What it is.** Larry, mid-test: *"I don't understand why they're not there.
+We've had many discussions. There should be many memories."* He is right, and
+the memories were never lost.
+
+**Measured, both databases, 2026-09-16:**
+
+| | `~/jarvis-voice-ai-clean/data/jarvis.db` | `…/active-repo/data/jarvis.db` |
+|---|---|---|
+| conversations | 2842, last 2026-09-11T19:20 | 288, last 2026-09-16T15:45 |
+| extraction cursor | 2842, updated 2026-09-11T19:20 | **0, updated 1970-01-01** |
+| memories | **434** | 2 |
+| observations | **146** | 0 |
+
+Everything Larry has said to Mortimer since 2026-09-13 went into
+`active-repo/data/jarvis.db`: 288 conversations, an extraction cursor that
+has **never advanced**, and two memory rows - a rolling summary and
+`fact:user.name`. His real memory, 434 memories and 146 observations, is
+intact in the clean copy, where the extraction worker had caught up
+completely as of 09-11.
+
+**Why nothing was extracted even there.** `extract_facts_and_observations =
+not memory_extraction_v2_enabled()` (`bot/memory_watcher.py:85`,
+`bot/pipeline.py:1390`). v2 is on, so the legacy in-session fact writes are
+correctly skipped - hence `v2_writes_skipped=True` on every
+`memory_updated` line - and the v2 worker
+(`jarvis/memory_extraction_worker.py`, launched as `extractor` by
+`scripts/mortimer.sh`) is supposed to do the work instead. That worker runs
+against the clean copy: `logs/extractor.launchd.log` there was last written
+2026-09-11T19:20, and `active-repo/logs/` has no extractor log at all. So
+the DB the bot writes has no extractor, and the DB the extractor watches
+gets no conversations.
+
+**This also corrects the developer agent's own finding.** It reported
+"real emptiness, not lost data… those facts were never stored." True of the
+database it could see, and wrong about Larry. It could not check further
+because `repo_search` had gone toolless (item 11 above).
+
+**Not a stale read.** The write-ahead logs settle it: active-repo's
+`jarvis.db-wal` is 1.77 MB timestamped 15:45 - the test session - while the
+clean copy's is 8 KB and untouched since 2026-09-11T19:23, as is its main
+database file. The split is real, not an artifact of reading a WAL-mode
+database read-only.
+
+**Where the path comes from - the obvious answer is ruled out.** The
+launcher exports `JARVIS_DB_PATH="$CLEAN/data/jarvis.db"`, and its header now
+has Python print what it actually resolves. At the 11:55 launch all three
+agree:
+
+```
+db:    /Users/larryfix/jarvis-voice-ai-clean/data/jarvis.db   (python env)
+db:    /Users/larryfix/jarvis-voice-ai-clean/data/jarvis.db   (settings)
+db:    /Users/larryfix/jarvis-voice-ai-clean/data/jarvis.db   (RESOLVED)
+```
+
+So startup resolution is **correct**, and something later in the process
+takes the relative fallback. Ruled out by reading: `db.py:605`
+`_default_db_path()` reads that env var; `config.py:269` bridges with
+`setdefault`, so a real env var keeps winning; `vault.inject_env` fills only
+names that are missing or empty and injected 0 this launch; `active-repo`
+has no `.env` for dotenv to win with; `JARVIS_DB_PATH` is in the registry's
+`BASE_ENV_KEYS`, so MCP children receive it; and those children are spawned
+with `cwd=REPO_ROOT` (`registry.py:430`). **Mechanism still unidentified -
+untested.**
+
+**The next test, and it costs one sentence of speech.** The 11:55 bot is
+running and has served no session. Say one thing to it, then compare the two
+`jarvis.db-wal` sizes:
+- active-repo's WAL grows -> the writer ignores the resolved path, and the
+  next step is one log line in `get_conn` printing `path.resolve()` once per
+  distinct path, which names the writer on the following session.
+- the clean copy's WAL grows -> something about the earlier launches was
+  different (a stale bot process is the obvious candidate) and the fault may
+  already be gone. Either way the answer arrives without more code reading.
+
+**To close.** In order:
+1. Run the WAL test above. One utterance, one answer.
+2. Fix the writer, so the bot writes to the clean copy's DB - the one with
+   his memory and the one the extractor watches.
+3. Decide what to do with the 288 orphaned conversations: merge them into
+   the real DB so the extractor can process them, or discard them. Merging
+   is the only option that turns three days of talking into memories.
+4. Only then re-test item 11 - and re-run the librarian graph, which should
+   now find 434 memories to draw.
+
+**Nothing else on this list matters until this is fixed.** Every
+conversation held in the meantime goes to the wrong place.
