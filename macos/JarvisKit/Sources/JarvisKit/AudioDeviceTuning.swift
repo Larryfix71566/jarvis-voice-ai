@@ -42,6 +42,30 @@ public enum AudioDeviceTuning {
         return status == noErr ? id : nil
     }
 
+    /// The device's own nominal rate, read from CoreAudio rather than from
+    /// a running engine: with Voice Processing on, the engine reports the
+    /// processed layout, which is not what identifies the hardware.
+    static func nominalSampleRate(_ device: AudioDeviceID) -> Double? {
+        var rate = Double(0)
+        var size = UInt32(MemoryLayout<Double>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        let status = AudioObjectGetPropertyData(device, &address, 0, nil, &size, &rate)
+        return status == noErr && rate > 0 ? rate : nil
+    }
+
+    /// What identifies the current device topology: which devices are
+    /// default, and at what rate. Used to tell a real configuration change
+    /// from the one our own rebuild provokes.
+    static func signature() -> String {
+        let ids = (defaultDevice(input: true), defaultDevice(input: false))
+        let rates = (ids.0.flatMap(nominalSampleRate), ids.1.flatMap(nominalSampleRate))
+        return "in \(ids.0.map(String.init) ?? "-")@\(rates.0.map { String(Int($0)) } ?? "-")"
+            + " out \(ids.1.map(String.init) ?? "-")@\(rates.1.map { String(Int($0)) } ?? "-")"
+    }
+
     static func bufferFrames(_ device: AudioDeviceID, input: Bool) -> UInt32? {
         var frames = UInt32(0)
         var size = UInt32(MemoryLayout<UInt32>.size)

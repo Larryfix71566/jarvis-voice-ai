@@ -105,6 +105,12 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
     /// `.connected` means "the bot can answer" on this transport too
     /// (C6 step 6 parity finding 1). Queue-confined like everything else.
     private var readyContinuation: CheckedContinuation<Void, Error>?
+    /// When the socket opened, so the first frame's delay can be reported.
+    /// The 2026-09-15 run showed `establish` firing on a pong 5.77 s before
+    /// the server's pipeline started, so the pong is not readiness; what
+    /// the server sends FIRST, and when, decides where the gate belongs.
+    private var openedAt: Date?
+    private var firstFrameLogged = false
     private var captureMonitor: (@Sendable (Data) -> Void)?
     private var audioFramesSent = 0
     private var audioBytesSent = 0
@@ -291,6 +297,8 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
     private func opened(session: Int) {
         guard session == sessionCount, socket != nil, !isOpen else { return }
         isOpen = true
+        openedAt = Date()
+        firstFrameLogged = false
         nativeLog.notice("socket open (session \(session, privacy: .public))")
         openDeadlineTimer?.cancel(); openDeadlineTimer = nil
         startKeepAlive(session: session)
@@ -311,6 +319,26 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         guard session == sessionCount else { return }
         nativeLog.error("audio engine failed: \(String(describing: error), privacy: .public)")
         teardown(notify: true, error: error)
+    }
+
+    /// For the first-frame diagnostic: the frame's kind, and for a message
+    /// frame the payload's `type`, which is what would identify a readiness
+    /// message if the server sends one.
+    private static func describe(_ frame: PipecatFrame) -> String {
+        switch frame {
+        case .audio(let pcm, let rate, let channels):
+            return "audio \(pcm.count)B @\(rate)Hz x\(channels)"
+        case .message(let json):
+            let type = (try? JSONSerialization.jsonObject(with: json)) as? [String: Any]
+            let inner = (type?["data"] as? [String: Any])?["type"] as? String
+            return "message type=\(type?["type"] as? String ?? "?")\(inner.map { " data.type=\($0)" } ?? "")"
+        case .interruption:
+            return "interruption"
+        case .text:
+            return "text"
+        case .transcription:
+            return "transcription"
+        }
     }
 
     private func pongReceived(session: Int) {
@@ -358,6 +386,14 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         guard let frame = PipecatFrameCodec.decode(data) else {
             nativeLog.error("undecodable frame of \(data.count, privacy: .public) bytes dropped")
             return
+        }
+        if !firstFrameLogged {
+            firstFrameLogged = true
+            let delay = openedAt.map { Date().timeIntervalSince($0) } ?? -1
+            nativeLog.notice("""
+                first inbound frame: \(Self.describe(frame), privacy: .public), \
+                \(delay * 1000, format: .fixed(precision: 0), privacy: .public) ms after the socket opened
+                """)
         }
         switch frame {
         case .audio(let pcm, let sampleRate, let channels):

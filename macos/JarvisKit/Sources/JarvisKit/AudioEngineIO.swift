@@ -443,6 +443,9 @@ final class AudioEngineIO: @unchecked Sendable {
     /// How long a device is given to come back before the session is failed:
     /// `rebuildAttempts` tries, `rebuildRetryGap` apart, on top of the
     /// settle wait inside each attempt.
+    /// The device topology the running graph was built against; see the
+    /// configuration-change observer.
+    private var builtDeviceSignature = "-"
     private static let rebuildAttempts = 6
     private static let rebuildRetryGap: TimeInterval = 0.5
     /// Production always asks for Voice Processing I/O; the §3.3 bench
@@ -614,9 +617,23 @@ final class AudioEngineIO: @unchecked Sendable {
             throw JarvisError.transport("audio engine start failed (\(error)); input \(engine.inputNode.outputFormat(forBus: 0)), output \(engine.outputNode.outputFormat(forBus: 0)), voice processing \(voiceProcessing)")
         }
         self.engine = engine
+        #if os(macOS)
+        builtDeviceSignature = AudioDeviceTuning.signature()
+        #endif
         slotLock.withLock { playerAttached = true }
         configObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { [weak self] _ in
+            // The signature is read HERE, on the notification, not inside
+            // the rebuild: the question this answers is whether the device
+            // topology actually differs from what the running graph was
+            // built against, or whether this notification is our own
+            // rebuild talking (2026-09-15: two hardware changes, six
+            // rebuilds, no kAudioHardwareProperty change behind four).
+            #if os(macOS)
+            let now = AudioDeviceTuning.signature()
+            let built = self?.builtDeviceSignature ?? "-"
+            engineLog.notice("configuration change: devices now [\(now, privacy: .public)], graph built against [\(built, privacy: .public)]\(now == built ? " — NO DEVICE DIFFERENCE" : "", privacy: .public)")
+            #endif
             self?.queue.async { self?.rebuildLocked() }
         }
         engineLog.notice("audio engine started: capture \(captureFormat.sampleRate, privacy: .public) Hz mono, channel 0 of \(tapFormat.channelCount, privacy: .public) (hardware \(hardwareInput.channelCount, privacy: .public) ch before VPIO), output \(outputFormat.sampleRate, privacy: .public) Hz \(outputFormat.channelCount, privacy: .public) ch, VPIO \(self.voiceProcessing ? "on" : "off", privacy: .public)")
