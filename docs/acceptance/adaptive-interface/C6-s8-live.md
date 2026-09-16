@@ -437,3 +437,69 @@ p95 (displayed) 135.0 ms
 A healthy session, and the old displayed-based gate would have passed it by
 15 ms. The change was not cosmetic: the previous threshold sat close enough
 to ordinary conversation shape that a FAIL was a matter of timing.
+
+---
+
+# §9 rollback — PROVEN, 2026-09-15 21:22–21:30
+
+Third attempt, and the first valid one. The two failures before it were both
+in the lever rather than the path:
+
+1. **21:00** — `forceWebRTC` read UserDefaults only, so the environment
+   variable §9 documents did nothing. Fixed in `ac80e3e`.
+2. **21:19** — with the fix committed and `launchctl getenv
+   JARVIS_FORCE_WEBRTC` returning `true`, the app still logged `forceWebRTC
+   false`. Cause not established; most likely a stale bundle. It is
+   unfalsifiable after the fact, which is the point of the logging added
+   below.
+
+`JarvisConfig.default()` now records where the value came from, every time:
+
+```
+21:22:35  JARVIS_FORCE_WEBRTC: environment true, UserDefaults absent -> resolved true
+21:23:36  connect: transport DirectWebRTCTransport, native false, forceWebRTC true
+21:23:36  connect: transport reported connected
+```
+
+That one line would have diagnosed both earlier failures immediately. The
+most important flag in the app should not be the one whose provenance has to
+be inferred.
+
+## The session
+
+```
+21:29:05  USER:     for Spartanburg.
+21:29:07  MORTIMER: Let me pull the current weather for Spartanburg.
+21:29:14  MORTIMER: Right now it's 73 degrees and mostly cloudy in Spartanburg.
+                    Tonight will dip to 66. Wednesday's high is 91, low 64.
+21:29:26  USER:     What about the rest of the week? Can you give me that?
+21:29:28  MORTIMER: Checking the full week ahead for you.
+21:29:46  MORTIMER: Here's what I have. Through Thursday: tonight 66, Wednesday
+                    high 91 low 64, Thursday high 93 low 69. Friday looks sunny
+                    and humid. Saturday and Sunday bring afternoon thunderstorms.
+```
+
+Speech in, Deepgram STT, the LLM, an Analyst delegation with `web_search`,
+ElevenLabs TTS out — the whole path on `DirectWebRTCTransport`. The voice
+picker populated with "Jarvis (British, calm)" and the ambient strip filled
+with weather and a reminder, so the data channel carried the app messages
+too.
+
+**§9 satisfied. Step 7's deletion of `AudioInputCoordinator` is unblocked.**
+
+## A muted mic reads as a broken transport
+
+Recorded because it cost two sessions tonight. The app launched with the mic
+off, and the consequence differs by path:
+
+- **WebRTC** (21:23–21:29): `micTrack.isEnabled = false`, so the server
+  received a stream carrying nothing and logged
+  `Timeout: No audio frame received within the specified time` every two
+  seconds. Indistinguishable from a broken connection in the log.
+- **Native** (21:00): the client sends no frames at all, and the bot replied
+  "I'm still not catching that clearly, Boss."
+
+This is the mute divergence the parity pass listed as open, now observed from
+both sides. The gap is not in either transport — it is that nothing in the
+log, or reaching the server, says the user is muted. A client that stops
+sending should say why.

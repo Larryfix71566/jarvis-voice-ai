@@ -52,6 +52,16 @@ public struct JarvisConfig: Sendable, Equatable {
             return URL(string: fallback)!
         }
         let bot = url("JARVIS_BOT_URL", "http://127.0.0.1:7860")
+        // The rollback lever's resolution, every time config is built. §8's
+        // rollback proof failed twice over this flag -- once because the
+        // code ignored the environment, and once for a reason the log could
+        // not distinguish, because nothing recorded WHERE the value came
+        // from. The most important flag in the app should not be the one you
+        // have to infer.
+        let rawForce = ProcessInfo.processInfo.environment["JARVIS_FORCE_WEBRTC"] ?? "absent"
+        let defForce = UserDefaults.standard.object(forKey: "JARVIS_FORCE_WEBRTC") == nil
+            ? "absent" : String(UserDefaults.standard.bool(forKey: "JARVIS_FORCE_WEBRTC"))
+        configLog.notice("JARVIS_FORCE_WEBRTC: environment \(rawForce, privacy: .public), UserDefaults \(defForce, privacy: .public) -> resolved \(JarvisFlags.forceWebRTC, privacy: .public)")
         return JarvisConfig(
             botURL: bot,
             adminURL: url("JARVIS_ADMIN_URL", "http://127.0.0.1:7861"),
