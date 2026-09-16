@@ -1,6 +1,8 @@
 # Mortimer native client core — visual-ceiling spike and JarvisKit
 
-**Status:** DRAFT for Larry's approval, 2026-08-26. Implements roadmap track T1, sub-items **T1.1** (visual-ceiling spike) and **T1.2** (`JarvisKit` shared Swift package), plus the minimum macOS host app needed to pass gate **G1(b)**.
+**Status:** IMPLEMENTED (code), verified through §8's build-and-unit gate as of 2026-09-15. Implements roadmap track T1, sub-items **T1.1** (visual-ceiling spike) and **T1.2** (`JarvisKit` shared Swift package), plus the minimum macOS host app needed to pass gate **G1(b)**.
+
+**§8 status.** V1–V4 (build and unit gate) pass: `macos/JarvisKit` builds and runs **170 tests** green, `macos/MortimerHost` **154** green, `macos/VPIOBench` builds. G1(b)'s live-session items (V5 session, V6 audio never stops, V7a–c interruption scenarios) have been exercised repeatedly during the C6 native-audio work — full conversations with barge-in, on both transports — but were **not recorded case by case against V5/V6/V7**, so G1(b) is not claimed as formally passed. Doing so needs one session walked against that table.
 
 **Author / origin (Larry's words, quoted from the roadmap's origin section):**
 - *"The plan is to migrate away from the web part since it is holding us back from what we want to do related to multiscreen and transparent windows."*
