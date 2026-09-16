@@ -1,6 +1,6 @@
 # What is left, and what closes each
 
-State at `9e11625` on `docs/wave-and-agent-recovery`, 2026-09-16. Twelve
+State at `9b9c3df` on `docs/wave-and-agent-recovery`, 2026-09-16. Thirteen
 items. Two are decisions,
 two are investigations, three need one hardware run each, one needs
 re-specifying, two are someone else's call, and one is a defect with a
@@ -521,14 +521,67 @@ The extraction worker was alive and watching the right database the whole
 time - it simply had nothing to do. Thirteen seconds after the bot started
 writing to the right file, the cursor was current.
 
-**What is left.**
-1. **Larry's decision:** the 288 conversations stranded in
-   `active-repo/data/jarvis.db` (2026-09-13 to 2026-09-16). Merging them
-   into the real database is the only thing that turns those three days into
-   memories, and it is a write into the file holding all 434 - so it wants a
-   backup and a reversible script, not an ad-hoc `INSERT`.
-2. Re-test item 11 against a database that now has memories to draw.
-3. Remove `closure-checks/trace/` once nothing else needs the trace.
+**The stranded conversations: merged, and it produced nothing.** Larry chose
+to see the plan first (`closure-checks/MERGE-PLAN.md`), then applied it at
+12:38. 299 conversations and 44 `agent_runs` moved; destination went
+2847 → 3146 with `conversations_fts` matching at 3146, which is the FTS
+trigger confirming itself rather than being assumed. The extraction worker
+picked them up on its next tick with no cursor rewind, exactly as the plan
+predicted, and ran to 3146.
+
+Yield, measured from the worker's own log across the merged range
+(turn > 2847):
+
+| | |
+|---|---|
+| exchanges extracted | 94 |
+| facts | **0** |
+| observations | **1** |
+| promoted | 0 |
+
+Not a deduplication artifact - the per-exchange log lines themselves report
+`facts=0 observations=0`. The extractor found nothing to remember, because
+those three days were almost entirely diagnostic traffic: "stand by",
+weather checks, and the memory-graph attempts that failed. `memories` stayed
+at 434 and `observations` went 119 → 120.
+
+**So the backfill was not the win; the fix was.** From 2026-09-16 12:30 on,
+conversations reach the database the extractor watches. That is the thing
+that was broken for three days and is now demonstrably working.
+
+## 13. `get_conn` has no busy timeout — DEFECT, MEASURED UNDER LOAD
+
+**What it is.** The backfill lost **28 of 122** attempted exchanges to
+`sqlite3.OperationalError: database is locked`, raised from
+`memory.py:671 upsert_fact` and `memory.py:728 add_observation` by way of
+`memory_extraction.py:267 / :307`.
+
+**Cause.** `jarvis/db.py:613` is `sqlite3.connect(path)` with no `timeout`
+argument and no `PRAGMA busy_timeout` beside the `journal_mode=WAL` it does
+set. Python's default allows 5 s and no more. Every writer in the codebase
+funnels through `get_conn`, and it is the one connection helper that was
+given nothing - `usage_ledger.py:184` and `costs_api.py:54` both pass
+`timeout=5.0` explicitly.
+
+**Why it had never been seen.** WAL permits many readers but serialises
+writers. The bot and the extraction worker are two writers by design, but
+from 09-13 to 09-16 they were writing to *different files* (item 12), so
+they never contended - and before that, the load never included ~150
+back-to-back extractions racing a live voice session.
+
+**Where the lost exchanges went.** Nowhere recoverable: the cursor advanced
+past them at tick end, so those turns are never revisited. Recovery would
+mean rewinding the cursor to before turn 2933 and re-extracting ~100
+exchanges. **Not worth doing** - the 94 that succeeded in that same range
+yielded 0 facts, so the 28 that failed almost certainly held nothing either.
+That retires the rewind question rather than leaving it open.
+
+**To close.** Add a real `timeout` and a `PRAGMA busy_timeout` in `get_conn`.
+It is two lines, but it is the shared chokepoint for every database write in
+the application, so it wants its own change, its own test, and a deliberate
+value - not a number picked to make one backfill pass. The discriminating
+test already exists: two writers, one under sustained load, and count the
+`OperationalError`s.
 
 **Note for the record:** every §8 acceptance session ran against
 `active-repo/data/jarvis.db`. The audio and transport measurements do not
