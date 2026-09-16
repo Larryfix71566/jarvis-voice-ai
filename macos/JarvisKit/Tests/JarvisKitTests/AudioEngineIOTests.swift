@@ -224,3 +224,33 @@ final class DeviceSettlingTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(slept, 0.2, "it used its deadline before giving up")
     }
 }
+
+/// The crash of 2026-09-14 19:50:00.245. Pulling an AirPod tore the engine
+/// down while the audio meter's own 30 Hz timer was mid-read, and
+/// `-[AVAudioNode lastRenderTime]` on a node whose engine is gone raises
+/// `required condition is false: _engine != nil` -- an Objective-C
+/// exception Swift cannot catch, so the app was terminated rather than
+/// failing a session.
+///
+/// There is no way to assert against that: on the unfixed code these two
+/// tests kill the test process. The proof is the suite dying before the
+/// guard and passing after it.
+final class DetachedPlayerTests: XCTestCase {
+    func testPlayoutLevelIsNilWhenThePlayerHasNoEngine() {
+        XCTAssertTrue(JarvisFlags.captureUsesSinkNode,
+                      "only the sink-node path reads lastRenderTime; the guard is untested otherwise")
+        let io = AudioEngineIO(voiceProcessing: false)
+        // Never started, so the player was never attached to anything.
+        XCTAssertNil(io.latestPlayoutLevel)
+    }
+
+    func testPlayoutLevelIsNilAfterTheEngineStopsWhileTheMeterKeepsAsking() {
+        let io = AudioEngineIO(voiceProcessing: false)
+        io.stop()
+        // The meter does not know the session ended; it just keeps sampling.
+        for _ in 0..<5 {
+            XCTAssertNil(io.latestPlayoutLevel)
+            XCTAssertNil(io.latestInputLevel)
+        }
+    }
+}

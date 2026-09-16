@@ -262,6 +262,36 @@ Verified against the installed **pipecat-ai 1.4.0** (`.venv` of the `jarvis-voic
   session through the transport instead of leaving it silently deaf. The
   retry budget is a guess until §8's output-device-switch check measures how
   long a real AirPods reconnect takes — that measurement should set it.
+- **D10 amendment (2026-09-14, from a crash):** removing an AirPod mid-session
+  terminated the app. `-[AVAudioNode lastRenderTime]` on a node whose engine
+  has gone raises `required condition is false: _engine != nil`, an
+  Objective-C exception Swift cannot catch, and `latestPlayoutLevel` read it
+  with nothing checking the player was still attached. `stopLocked` calls
+  `engine.detach(player)`; the audio meter samples on its own 30 Hz timer and
+  knows nothing about that. Nothing was logged at all, because the process
+  died before it could log — the app's os_log simply stops mid-session, which
+  is the signature to recognise next time.
+
+  It had stayed hidden because `JarvisClient.disconnect()` stops the meter
+  BEFORE `transport.disconnect()`, so a user-initiated disconnect is safe by
+  ordering. Every other teardown races it: `transportDidDisconnect` reaches
+  the MainActor through a `Task`, by which time the engine is already
+  detached, and `rebuildLocked` detaches and then polls `settledFormats` for
+  up to a second — roughly thirty chances at 30 Hz. The device-settling fix
+  is what widened that window from microseconds to a second and turned a
+  latent C7 defect into a reliable crash.
+
+  `playerAttached` is now flipped under `slotLock` with the detach inside the
+  same critical section, and every `lastRenderTime` read happens while
+  holding that lock: a reader either finds the node attached for the whole
+  read or gets nil. **The rule this establishes: no `AVAudioNode` call may be
+  reachable from outside the engine queue without that guard.** A misuse
+  there is not a catchable error — it is process death — so the guard is the
+  invariant, never a property of the caller.
+
+  Pinned by `DetachedPlayerTests`, which throw that exact exception on the
+  unfixed code (XCTest traps it as a failure; the app has no such handler,
+  which is why it terminated instead).
 
 ---
 

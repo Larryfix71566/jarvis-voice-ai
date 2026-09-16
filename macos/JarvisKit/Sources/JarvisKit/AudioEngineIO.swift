@@ -414,6 +414,13 @@ final class AudioEngineIO: @unchecked Sendable {
     /// behind at the first gap and every slice is then read as already
     /// played (measured: the channel went permanently dark).
     private var lastScheduledEnd: AVAudioFramePosition = 0
+    /// True only while `player` is attached to a live engine. Guarded by
+    /// `slotLock`, and the detach in `stopLocked` happens inside that same
+    /// critical section: `AVAudioNode.lastRenderTime` on a DETACHED node
+    /// raises an Objective-C exception that Swift cannot catch, so a
+    /// non-atomic check would still lose the race and kill the process
+    /// (measured 2026-09-14 — an AirPod coming out terminated the app).
+    private var playerAttached = false
     private var playoutHits = 0
     private var playoutMisses = 0
     private var lastTimelineReport: TimeInterval = 0
@@ -455,10 +462,14 @@ final class AudioEngineIO: @unchecked Sendable {
     /// fallback it is whatever the mixer tap last reported.
     var latestPlayoutLevel: AudioLevelSample? {
         guard JarvisFlags.captureUsesSinkNode else { return slotLock.withLock { playoutSlot } }
-        guard let nodeTime = player.lastRenderTime, nodeTime.isSampleTimeValid,
-              let playerTime = player.playerTime(forNodeTime: nodeTime) else { return nil }
-        let position = playerTime.sampleTime
-        return slotLock.withLock {
+        // The whole read sits inside the lock, node time included: this
+        // runs on the meter's 30 Hz timer while the engine can be torn
+        // down on its own queue, and touching a detached node is fatal.
+        return slotLock.withLock { () -> AudioLevelSample? in
+            guard playerAttached,
+                  let nodeTime = player.lastRenderTime, nodeTime.isSampleTimeValid,
+                  let playerTime = player.playerTime(forNodeTime: nodeTime) else { return nil }
+            let position = playerTime.sampleTime
             // Drop everything the player has already passed.
             if let index = playoutSlices.lastIndex(where: { $0.end <= position }), index >= 0 {
                 playoutSlices.removeFirst(index + 1)
@@ -603,6 +614,7 @@ final class AudioEngineIO: @unchecked Sendable {
             throw JarvisError.transport("audio engine start failed (\(error)); input \(engine.inputNode.outputFormat(forBus: 0)), output \(engine.outputNode.outputFormat(forBus: 0)), voice processing \(voiceProcessing)")
         }
         self.engine = engine
+        slotLock.withLock { playerAttached = true }
         configObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { [weak self] _ in
             self?.queue.async { self?.rebuildLocked() }
@@ -726,7 +738,13 @@ final class AudioEngineIO: @unchecked Sendable {
             removeTaps(from: engine)
             player.stop()
             engine.stop()
-            engine.detach(player)
+            // Atomic with the flag, not merely before it: a reader that had
+            // already passed the check would otherwise still be inside
+            // lastRenderTime when the node lost its engine.
+            slotLock.withLock {
+                playerAttached = false
+                engine.detach(player)
+            }
         }
         engine = nil
         converter = nil
@@ -821,9 +839,16 @@ final class AudioEngineIO: @unchecked Sendable {
     }
 
     private func currentPlayerPosition() -> AVAudioFramePosition? {
-        guard let nodeTime = player.lastRenderTime, nodeTime.isSampleTimeValid,
-              let playerTime = player.playerTime(forNodeTime: nodeTime) else { return nil }
-        return playerTime.sampleTime
+        // Same rule as `latestPlayoutLevel`: never ask a detached node for
+        // its render time. This one runs on the engine queue, where the
+        // engine is normally alive, but the guard is the invariant and not
+        // a property of the caller.
+        slotLock.withLock { () -> AVAudioFramePosition? in
+            guard playerAttached,
+                  let nodeTime = player.lastRenderTime, nodeTime.isSampleTimeValid,
+                  let playerTime = player.playerTime(forNodeTime: nodeTime) else { return nil }
+            return playerTime.sampleTime
+        }
     }
 
     /// The player's sample clock restarts with the player, so the timeline
