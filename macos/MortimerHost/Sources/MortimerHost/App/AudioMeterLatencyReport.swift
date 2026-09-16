@@ -8,14 +8,23 @@ private let reportLog = Logger(subsystem: "com.mortimer.host", category: "audio-
 /// record names, next to the other measured artefacts
 /// (`P4-frame-time.json`, `P2-desktop-verification.json`).
 ///
-/// The gate is p95 ≤ 150 ms for both channels on the deployment Mac, so
-/// the verdict is computed here rather than left to whoever reads the
-/// file, and the context that makes the number meaningful — whether a
+/// The gate is ARRIVAL p95 ≤ 50 ms for both channels on the deployment
+/// Mac, so the verdict is computed here rather than left to whoever reads
+/// the file, and the context that makes the number meaningful — whether a
 /// session was live and whether it was the native path — travels with it.
 /// A report with no observations is written as `"gate": "no data"`: a
 /// meter that never ran is not a meter that measured zero.
+///
+/// It gated on DISPLAYED p95 ≤ 150 ms until 2026-09-15, which was the wrong
+/// number: `displayed` counts a held level's staleness on every 30 Hz tick,
+/// so on the intermittent playout channel it measured how recently the bot
+/// had spoken. Three sessions of identical code returned 34.3, 65.5 and
+/// 167.6 ms — one of them a FAIL — while arrival never left 1.0-1.7 ms.
+/// The 50 ms threshold comes from the measurements: healthy input arrival
+/// p95 of 23.5, 24.5, 25.2 and 41.9 ms (the last on the 24 kHz Bluetooth
+/// path), against ~110 ms for the D10 regression this gate exists to catch.
 enum AudioMeterLatencyReport {
-    static let gateSeconds: Double = 0.150
+    static let gateSeconds: Double = 0.050
 
     /// Repo-relative so a debug build run from the working copy lands the
     /// file in the acceptance directory; falls back to the user's
@@ -44,6 +53,9 @@ enum AudioMeterLatencyReport {
             "connected": connected,
             "native_audio": native,
             "gate_p95_seconds": gateSeconds,
+            // Named so a reader knows which figure the verdict used, and
+            // does not reach for `p95_ms` (displayed) beside it.
+            "gate_metric": "arrival_p95",
         ]
         guard latency.samples > 0 else {
             payload["gate"] = "no data"
@@ -66,6 +78,7 @@ enum AudioMeterLatencyReport {
         payload["playout"] = channel(latency.playout)
         payload["p50_ms"] = (latency.p50 * 1000).rounded(toPlaces: 1)
         payload["p95_ms"] = (latency.p95 * 1000).rounded(toPlaces: 1)
+        payload["arrival_p95_ms"] = (latency.arrivalP95 * 1000).rounded(toPlaces: 1)
         payload["worst_ms"] = (latency.worst * 1000).rounded(toPlaces: 1)
         // A silent channel is not a fast one. C7.5 is a statement about
         // both, so a session where one produced nothing cannot pass on the
@@ -73,7 +86,7 @@ enum AudioMeterLatencyReport {
         if latency.input.samples == 0 || latency.playout.samples == 0 {
             payload["gate"] = "incomplete — one channel produced no observations"
         } else {
-            payload["gate"] = latency.p95 <= gateSeconds ? "pass" : "FAIL"
+            payload["gate"] = latency.arrivalP95 <= gateSeconds ? "pass" : "FAIL"
         }
         return payload
     }

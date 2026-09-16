@@ -278,3 +278,96 @@ device-dependent threshold.
 Until that exists, **C7.5 should not be described as passing.** It passes on
 the built-in array (67.6 ms) and on a mixed session (65.5 ms) and fails on
 this one.
+
+---
+
+# Third run, 2026-09-15 20:48:00–20:49:27 — steady state
+
+The discriminating session the gate failure asked for: AirPods set before
+connecting, a two-minute conversation, **no device touched**.
+
+```
+rebuilds                        0
+configuration-change notices    0
+fatal lines                     0
+engine                          capture 48000 Hz mono, channel 0 of 3
+                                (hardware 1 ch before VPIO), output 48000 Hz 2 ch
+gate                            pass, p95 34.3 ms
+  input    displayed p95 23.5   arrival p95 23.5   worst 23.5   obs 76
+  playout  displayed p95 34.3   arrival p95  1.0   worst 298.7  obs 1514
+```
+
+## What this settles, and what it does not
+
+**Settles:** with no rebuild, the gate passed comfortably. The 167.6 ms
+failure was not a steady-state property of the code.
+
+**Does NOT settle the 24 kHz question.** This session came up at **48 kHz**
+(480 frames = 10.0 ms), not the 24 kHz of the second run. AirPods negotiate
+either rate between sessions, which is a variable that was not known before
+and was not controlled for. The 24 kHz path remains unmeasured in steady
+state.
+
+## The real finding: the gate was reading the wrong number
+
+Three sessions of identical code on one Mac:
+
+| run | playout obs | displayed p95 | arrival p95 | worst | verdict |
+|---|---|---|---|---|---|
+| 1 | 431 | 65.5 ms | 1.7 ms | 298.9 ms | pass |
+| 2 | 275 | **167.6 ms** | 1.0 ms | 271.1 ms | **FAIL** |
+| 3 | 1514 | 34.3 ms | 1.0 ms | 298.7 ms | pass |
+
+Arrival latency never moved. From `AudioActivityObserver.sample()`:
+
+```swift
+let delay = moment - measuredAt
+displayed.append((channel, measuredAt, delay))               // every 30 Hz tick
+if lastSeen[channel] != measuredAt { arrivals.append(...) }  // once per level
+```
+
+`snapshot.outputMeasuredAt` is a **held** value, and the accumulator keeps
+one for up to 300 ms of staleness. So each time the bot stops speaking, the
+playout channel appends about nine increasingly stale entries — 33, 66, 100
+… 300 ms — for a single measurement. The `worst_ms` column is that ceiling,
+which is why it reads ~300 ms in every run including the passing ones.
+
+The verdict was therefore a function of how much the bot happened to talk: a
+dense session buries those idle entries below p95, a sparse one lets them
+set it. The gate was measuring what fraction of samples caught a channel
+between bursts. The rebuild in run 2 mattered mostly by making the playout
+sample sparse, not by being slow.
+
+**The gate now reads arrival p95, at 50 ms.** From the data: healthy input
+arrival p95 of 23.5, 24.5, 25.2 and 41.9 ms (the last on the 24 kHz
+Bluetooth path) against ~110 ms for the D10 tap regression the gate exists
+to catch. `displayed` stays in the report, labelled, with `gate_metric:
+"arrival_p95"` beside the verdict so the two are not confused. Pinned by
+`testAQuietBotDoesNotFailTheGate`, which encodes run 2's numbers.
+
+## Unexplained: the input channel's observation count
+
+| run | input obs | session length |
+|---|---|---|
+| 1 | 1568 | ~9 min |
+| 2 | 840 | ~4.6 min |
+| 3 | **76** | ~87 s |
+
+Run 3's capture path delivered ~100 buffers/s throughout (the tap
+diagnostic confirms it), so roughly 8,700 buffers produced 76 accepted
+observations. `shown` equalled `arrivals` exactly, so every entry was a
+fresh level — the accumulator simply had nothing to hold most of the time.
+No explanation yet, and it means the input arrival figure the gate now
+depends on rests on a thin sample in at least one session. **Open.**
+
+## A harness defect worth recording
+
+`run-s8-steady.command` set `JARVIS_BOT_URL` with `launchctl setenv`, which
+is user-wide, and cleaned up only `JARVIS_FORCE_WEBRTC`. `JarvisConfig`
+reads the environment before UserDefaults, so the leftover `:7870` failed
+`ConfigAndAuthTests.testDefaultURLsAreLoopback` in the next `swift test`
+run — the test was right and the harness had changed the machine it
+measured on. Both session launchers now unset both variables on exit.
+
+Separately, that test reads ambient process environment and so can fail for
+reasons unrelated to the code under test. Worth making hermetic.
