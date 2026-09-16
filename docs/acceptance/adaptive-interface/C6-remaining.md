@@ -1,8 +1,13 @@
 # What is left, and what closes each
 
-State at `4c0bd01` on `fix/audio-device-resilience` (PR #73), 2026-09-15.
-Nine items. Two are decisions, one is an investigation, three need one
-hardware run each, one needs re-specifying, and two are someone else's call.
+State at `c9a9e54` on `main`, 2026-09-16. Eleven items. Two are decisions,
+two are investigations, three need one hardware run each, one needs
+re-specifying, two are someone else's call, and one is a defect with a
+measured cause.
+
+Items 10 and 11 were added by Larry on 2026-09-16 from daily driving, not
+from the plan. They outrank items 1-9: both are in the interface he is now
+using every day.
 
 ---
 
@@ -180,3 +185,178 @@ the supervisor pin lives (`model_endpoints.yaml` vs the already-denied
 `config/upgrade_agent.yaml`), and whether `scripts/sync_models.py` should be
 Tier 0. Both shape the implementation, so they want answering before anyone
 starts it.
+
+## 10. The wave lost its amplitude and width — DEFECT, CAUSE MEASURED
+
+**What it is.** Larry, 2026-09-16: "the sine wave for voice interaction lost
+its amplitude and width from the previous version, I want that back."
+
+**Cause.** Three separate terms, all in `VoiceWaveView.draw`'s adaptive
+branch (`presentation != nil`), plus a layout choice. The amplitude line is
+`amp = h * (dyn.base + breath + voice + 0.01 * flash) * ampScale`
+(VoiceWaveView.swift:235, `ampScale = 2.0`):
+
+1. **`dyn.base` is pinned to `0.004`** (VoiceWaveView.swift:196). That is the
+   `.offline` target. The legacy path eases `dyn.base` toward the per-state
+   target - `0.016` speaking, `0.01` listening (the `targets` table, :93-98).
+   So the adaptive trace draws its *resting* thickness from the offline value
+   in every state, a 4x cut while speaking.
+2. **`voice = level * 0.115` now carries a real level** (:218). Both paths use
+   the same `0.115`. Legacy fed it `simLevel(t)`, which returns
+   `0.25 + 0.75*|...|` - a floor of 0.25 and a ceiling of 1.0 (:144-147).
+   Adaptive feeds it `measuredEnvelope.advance(...)`, i.e. linear RMS, 0...1
+   full scale (`AudioLevelSample.rms`). Speech RMS is nowhere near 1.
+   Worked, at `h = 800`: legacy speaking peak
+   `800 * (0.016 + 0.115) * 2 = 210 px`; adaptive at a measured RMS of 0.10,
+   `800 * (0.004 + 0.0115) * 2 = 25 px`.
+3. **`dyn.speed` is pinned to `0.45`** (:199), against a legacy speaking
+   target of `1.0`. The wobble runs at a little under half rate, which reads
+   as less alive even at equal amplitude.
+
+**Width** is not the window function - `env = exp(-((x-cx)/(0.11*w))^4)` is
+identical on both paths, so the lobe is always the same *fraction* of `w`.
+What changed is `w`. Legacy renders the wave as a full-window background
+(`ConsoleView.swift:44`, `.ignoresSafeArea()`), so `w` is the window width.
+Adaptive has three call sites (`AdaptiveStageView.swift:53/66/78`) and only
+the first is full-size: `.rail` clamps to `height: 150`, `.bottom` to
+`width: 140`. At `w = 140` the lobe's half-width is `0.11 * 140 = 15 px`.
+
+**What is not yet measured.** The actual RMS of Larry's speech through this
+capture path. Item 2's figure of 0.10 above is illustrative, not observed -
+no artifact records level magnitudes (`P2-latency.json` records arrival
+*timing* only). That number sets how much of the 210 -> 25 px gap is the
+level scale versus the base pin, so it decides which term to fix and by how
+much.
+
+**To close.** In order:
+- Log `max(userLevel, outputLevel)` over one ordinary conversation. One
+  os_log line in `VoicePresentationState.derive`, one session, one number.
+- Then pick a mapping deliberately rather than reusing `0.115`: a measured
+  RMS needs its own curve (a gain, or a perceptual/log mapping) to land in
+  the same visual range the simulation occupied. This is the real decision -
+  the honest level should stay honest and still be visible.
+- Let `dyn.base` and `dyn.speed` ease to their per-state targets on the
+  adaptive path too, instead of being pinned to the offline values. Keep the
+  §7 colour pinning, which is a separate and deliberate choice (C2.4).
+- Decide the frame: whether `.rail`/`.bottom` should give the wave more room,
+  or whether the full-size `.conversation` wave is the one Larry means by
+  "the previous version". Ask before changing the layout; the numbers above
+  are enough to fix amplitude without touching it.
+
+**Regression risk.** C7's whole point was that the meter shows measured
+audio. Re-inflating the trace must not reintroduce motion when nothing is
+arriving: `staticTrace` (:152) and the `VoiceEnvelope` clamp on stale or
+absent levels are what keep that true, and any gain applied has to sit
+*inside* them, not around them.
+
+## 11. A sub-agent is unusable after an error — DEFECT, TWO CANDIDATE CAUSES
+
+**What it is.** Larry, 2026-09-16: "when a sub-agent hits an error it is no
+longer usable... I need to be able to overcome an error and not have to
+re-boot the interface to regain the use of the sub-agent."
+
+**Only one mechanism in the codebase refuses a delegation *because* of a
+prior error**: the A2 retry guard (`jarvis/agents/delegate.py:330-364`).
+On `FAILED:` it records `last_failure[agent] = (task_tokens, now)` (:462).
+The next delegation to that agent is refused when all of:
+- it arrives within `RETRY_GUARD_WINDOW_S = 120` s of the failure;
+- `_overlap_score(prior, new) >= 0.5`;
+- and it is not an *earned* continuation.
+
+Three properties make it match Larry's description exactly:
+
+- **It is session state.** `last_failure` is a closure local of
+  `build_delegate_tool`, called from `build_pipeline` (pipeline.py:417),
+  called from `run_session`, which pipecat runs **once per connection**
+  (`jarvis/bot/bot.py:65`). A reconnect builds a fresh empty dict - which is
+  what "re-boot the interface" does.
+- **The escape hatch cannot be reached after a plain failure.** `continuation`
+  is only honoured if `awaiting_user[agent]` is true, and that is set from
+  the *agent's own reply* containing `NEEDS-INPUT:` or being exhausted
+  (:458). A plain `FAILED:` sets it **false**. So after an ordinary failure
+  there is no legitimate way for the Supervisor to re-delegate - and no way
+  for Larry to authorise one either. An unearned claim is logged
+  `delegate_continuation_unearned` and refused anyway.
+- **A short natural re-ask is the most likely thing to be refused.**
+  `_overlap_score` divides by the *smaller* token set
+  (`jarvis/procedures.py:137-146`), so any terse follow-up whose tokens are a
+  subset of the failed task scores **1.0**. "try the memory graph again"
+  after a failed memory-graph task is a guaranteed refusal.
+
+**The second candidate is the prompt, not the code.** Supervisor rule 11
+(`jarvis/prompts.py:73`) says to report the sub-agent's reason and *ask how
+to proceed*, and "Never immediately re-delegate a reworded version of a task
+that FAILED". A model over-applying that will refuse to try again for the
+rest of the conversation - also conversation-scoped, so also cleared by a
+reconnect. Same symptom, different fix.
+
+**Why the one occurrence that matters cannot be attributed.** A guard
+refusal returns before `run_id` is generated, so **it creates no run row** -
+`agent_runs` cannot show it. Its only trace is
+`logger.info("delegate_retry_guard_refused ...")` on the bot's stdout.
+
+That stdout *is* captured. The launcher Larry actually runs,
+`closure-checks/run-bot-c6.command`, pipes it to
+`closure-checks/logs/bot-c6.log` with `PYTHONUNBUFFERED=1`. The defect was
+that it used a bare `tee`, which **truncates** - so every relaunch destroyed
+the session before it:
+
+- The librarian failed at 2026-09-16T00:09:18 UTC, which is 20:09 local.
+- `bot-c6.log`'s first line is `2026-09-15 20:47:10`: a single launch,
+  431 KB, ending 21:59. The bot was relaunched at 20:47 and took the 20:09
+  session's log with it.
+- What survives in that window: three delegations, all `analyst`, all
+  `subagent_done` with no failure, and **zero** `delegate_retry_guard`
+  lines. Nothing to attribute, and nothing that rules the guard out either.
+
+`scripts/mortimer.sh` has rotated the launchd stack's logs through five
+generations since the run-logging plan's D11, for exactly this reason. The
+closure-checks launcher never did. Fixed 2026-09-16: same rotation, then
+`tee -a`. That launcher lives under `closure-checks/`, which
+`.git/info/exclude` ignores, so the fix is on the deployment Mac and not in
+this commit.
+
+What the run log *does* show (queried 2026-09-16): 40 runs, 4 failed. The
+one relevant sequence is 2026-09-13 - analyst failed at 22:44:41, ran fine
+at 22:49:54 (5 min later, outside the 120 s window), failed again at
+22:50:18. Consistent with the guard, and equally consistent with no guard at
+all. The newest failure is the librarian above,
+`memory_graph_view found no node matching "interests"`, with **no librarian
+run after it**.
+
+**To close.** Three steps, in order:
+1. **Stop destroying the log.** Done 2026-09-16 - the launcher rotates five
+   generations and appends instead of truncating. Until that was in, the next
+   occurrence would have been erased by the next restart, which is precisely
+   what happened to the last one.
+2. **Reproduce and discriminate.** The librarian failure above is
+   reproducible - ask for a memory graph of a node that does not exist. Then
+   re-ask *in the same words* inside 120 s:
+   - Mortimer relays "blocked by a safety guard" wording, or the log shows
+     `delegate_retry_guard_refused` -> **the guard**. Fix is an
+     authorisation path.
+   - Mortimer instead says it failed and asks how to proceed, and will not
+     act on "try it again" -> **rule 11**. Fix is a prompt amendment.
+   Then wait past 120 s and ask again. If it runs, nothing is permanently
+   latched and a reconnect was never actually required - worth knowing either
+   way.
+3. **Fix, per the outcome.** If it is the guard, the design constraint is
+   real and must be kept: A2 exists because a live session produced six
+   reworded retries in a row, one inventing "vault credentials", so
+   authorisation must come from a source the Supervisor **cannot author**.
+   `NEEDS-INPUT:` qualifies because another model wrote it. Options, to
+   choose before writing code:
+   - *User speech as the authoriser.* Allow one retry when a user transcript
+     frame arrived between the refusal and the retry. STT output is not
+     model-authored, so it cannot be forged - the same property that makes
+     `NEEDS-INPUT:` usable.
+   - *Refuse once, then warn.* The first re-delegation is refused; a second
+     runs with the refusal text appended to the task. Bounded, not unbounded.
+   - *Shorten the window.* Least invasive, does not solve "I want to retry
+     now", and 120 s was not chosen arbitrarily.
+   Whichever is chosen, the refusal text should stop claiming there is no way
+   forward when there now is one.
+
+**What must not regress.** The A2 test suite, and the 2026-08-25 carve-out
+for the confirm-half of a two-phase flow (`_shares_long_identifier`). Any
+new path has to leave both intact.
