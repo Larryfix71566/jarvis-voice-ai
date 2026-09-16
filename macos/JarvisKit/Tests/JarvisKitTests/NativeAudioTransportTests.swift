@@ -26,9 +26,19 @@ final class NativeAudioTransportTests: XCTestCase {
         /// before that happens, so the stub does too. Tests that need the
         /// window before open turn it off through `socketAutoOpens`.
         var autoOpen = true
+        /// A real server sends something unprompted when the session starts
+        /// (measured: `voice/catalog`, 5.7 s after the socket opened), and
+        /// `connect` now waits for that rather than for a pong. An AUDIO
+        /// frame is used because it establishes without reaching the
+        /// delegate, so it does not disturb the frame-counting tests.
+        var autoFirstFrame = true
         func open() {
             lock.withLock { _opened += 1 }
-            if autoOpen { onOpen?() }
+            guard autoOpen else { return }
+            onOpen?()
+            if autoFirstFrame {
+                onMessage?(PipecatFrameCodec.encodeAudio(pcm: Data([0, 0]), sampleRate: 24_000, channels: 1))
+            }
         }
         func send(_ data: Data, completion: @escaping (Error?) -> Void) { lock.withLock { _sent.append(data) }; completion(nil) }
         /// Answered by default; `answersPings = false` models a server whose
@@ -106,6 +116,7 @@ final class NativeAudioTransportTests: XCTestCase {
             makeSocket: { [unowned self] request in
                 let s = StubSocket(request: request)
                 s.autoOpen = self.socketAutoOpens
+                s.autoFirstFrame = self.socketAutoFirstFrame
                 s.answersPings = self.socketAnswersPings
                 self.sockets.append(s)
                 return s
@@ -121,7 +132,17 @@ final class NativeAudioTransportTests: XCTestCase {
     /// the pre-open or pre-answer window turns one off BEFORE calling
     /// connect, since the socket is created inside it.
     private var socketAutoOpens = true
+    private var socketAutoFirstFrame = true
     private var socketAnswersPings = true
+
+    /// Opens the stub AND delivers the frame `connect` waits for. A real
+    /// server sends something unprompted when the session starts (measured:
+    /// `voice/catalog`), so a test driving `open()` by hand has to do the
+    /// same or the call sits until the ready deadline and throws.
+    private func openAndAnswer(_ index: Int) {
+        sockets[index].onOpen?()
+        sockets[index].onMessage?(PipecatFrameCodec.encodeAudio(pcm: Data([0, 0]), sampleRate: 24_000, channels: 1))
+    }
 
     /// Waits for the socket `connect` created while the call is still in
     /// flight. Cooperative, unlike `settle`, which blocks its thread.
@@ -164,7 +185,7 @@ final class NativeAudioTransportTests: XCTestCase {
         // A message before open is queued, not sent.
         try transport.send(Data(#"{"type":"voice/set","voice":"a"}"#.utf8))
         XCTAssertEqual(sockets[0].sent.count, 0)
-        sockets[0].onOpen?()
+        openAndAnswer(0)
         try await connecting.value
         XCTAssertEqual(recorder.connects, 1, "connected once the bot answered the first ping")
         settle({ self.sockets[0].sent.count == 1 }, "queued message flushed on open")
@@ -183,7 +204,7 @@ final class NativeAudioTransportTests: XCTestCase {
         let connecting = Task { try await transport.connect(config: self.config) }
         await awaitSocket(0)
         for i in 0..<(JarvisTuning.outboundQueueMax + 5) { try transport.send(Data("{\"n\":\(i)}".utf8)) }
-        sockets[0].onOpen?()
+        openAndAnswer(0)
         try await connecting.value
         settle({ self.sockets[0].sent.count == JarvisTuning.outboundQueueMax }, "queue capped at outboundQueueMax")
         XCTAssertEqual(PipecatFrameCodec.decode(sockets[0].sent[0]), .message(json: Data("{\"n\":5}".utf8)), "oldest five dropped")
@@ -271,14 +292,20 @@ final class NativeAudioTransportTests: XCTestCase {
     }
 
     func testAudioFramesGoToPlayoutInterruptionFlushesAndTextFramesAreIgnored() async throws {
+        // No auto first frame: this test counts what reaches playout, so the
+        // audio vector below has to be the frame that establishes.
+        socketAutoOpens = false
+        socketAutoFirstFrame = false
         let transport = makeTransport()
-        try await transport.connect(config: config)
+        let connecting = Task { try await transport.connect(config: self.config) }
+        await awaitSocket(0)
         sockets[0].onOpen?()
-        settle({ self.recorder.connects == 1 }, "open")
         let pcm = Data([0, 0, 0, 0x40, 0, 0x80, 0xff, 0x7f])
         // The server-side audio vector (id/name present) and the two frames
         // the client ignores.
         sockets[0].onMessage?(Data(hexString: "1229080712154f7574707574417564696f5261774672616d6523371a08000000400080ff7f20c0bb012801"))
+        try await connecting.value
+        XCTAssertEqual(recorder.connects, 1, "the audio frame established the session")
         sockets[0].onMessage?(Data(hexString: "0a170803120b546578744672616d6523331a0668c3a96c6c6f"))
         sockets[0].onMessage?(Data(hexString: "2a1708091213496e74657272757074696f6e4672616d652339"))
         sockets[0].onMessage?(Data([0x10, 0x01]))   // malformed: dropped
@@ -327,7 +354,7 @@ final class NativeAudioTransportTests: XCTestCase {
         await awaitSocket(0)
         let level = AudioLevelSample(rms: 0.1, hostTime: 1)
         audios[0].onCapturedPCM?(Data([1, 2, 3, 4]), level)
-        sockets[0].onOpen?()
+        openAndAnswer(0)
         try await connecting.value
         XCTAssertEqual(recorder.connects, 1, "open")
         XCTAssertEqual(sockets[0].sent.count, 0, "frames captured before open are dropped, not queued")
@@ -370,6 +397,7 @@ final class NativeAudioTransportTests: XCTestCase {
     func testASilentServerIsGivenTheReadyDeadlineBeforeTheStallWatchdogExists() async throws {
         // stall > ping, as in production (6 s vs 1 s), scaled down.
         socketAnswersPings = false               // loop blocked: no pongs
+        socketAutoFirstFrame = false             // and nothing sent yet
         let transport = makeTransport(readyDeadline: 3.0, stallSeconds: 0.3, pingInterval: 0.05)
         let connecting = Task { try await transport.connect(config: self.config) }
         await awaitSocket(0)
@@ -378,8 +406,12 @@ final class NativeAudioTransportTests: XCTestCase {
         XCTAssertEqual(recorder.disconnects.count, 0, "a server still starting up must not be torn down")
         XCTAssertEqual(recorder.connects, 0, "and it is not called connected while it starts")
         XCTAssertGreaterThan(sockets[0].pings, 5, "pings are sent throughout the wait")
-        // Now it answers: the session establishes and connect returns.
+        // A pong is NOT readiness any more, so answering pings changes
+        // nothing; the session becomes ready when the server sends a frame.
         sockets[0].answersPings = true
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(recorder.connects, 0, "an answered ping is not the bot starting the session")
+        sockets[0].onMessage?(PipecatFrameCodec.encodeAudio(pcm: Data([0, 0]), sampleRate: 24_000, channels: 1))
         try await connecting.value
         XCTAssertEqual(recorder.connects, 1, "connected when the server answered")
         XCTAssertEqual(recorder.disconnects.count, 0, "an answering server keeps the session")
@@ -390,6 +422,7 @@ final class NativeAudioTransportTests: XCTestCase {
     }
 
     func testTheReadyDeadlineFailsTheSessionWhenTheBotNeverAnswers() async throws {
+        socketAutoFirstFrame = false
         socketAnswersPings = false
         let transport = makeTransport(readyDeadline: 0.4, stallSeconds: 0.3, pingInterval: 0.05)
         do {
@@ -416,6 +449,7 @@ final class NativeAudioTransportTests: XCTestCase {
     }
 
     func testAnInboundFrameEstablishesTheSessionWithoutAPong() async throws {
+        socketAutoFirstFrame = false
         socketAnswersPings = false
         let transport = makeTransport(readyDeadline: 3.0, stallSeconds: 5.0, pingInterval: 0.05)
         let connecting = Task { try await transport.connect(config: self.config) }
@@ -474,6 +508,34 @@ final class NativeAudioTransportTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(150))
         XCTAssertEqual(recorder.disconnects.count, disconnectsBefore,
                        "a dead session's engine cannot tear down the live one")
+        await transport.disconnect()
+    }
+
+    /// The 2026-09-15 measurement, as a test: the first pong arrived in the
+    /// same millisecond as the socket opening, 5.72 s before the server's
+    /// first frame, because uvicorn answers pings from its protocol layer
+    /// while the session is still being built. A pong must therefore not
+    /// make the session ready, and must not arm the stall watchdog either --
+    /// the old behaviour left under 300 ms between a healthy start and a
+    /// spurious teardown.
+    func testAnsweredPingsAloneNeverMakeTheSessionReady() async throws {
+        socketAutoFirstFrame = false
+        let transport = makeTransport(readyDeadline: 5.0, stallSeconds: 0.3, pingInterval: 0.02)
+        // Stated, not inferred: a Task whose body the compiler reads as
+        // non-throwing becomes Task<Void, Never> and every `try` in it is an
+        // error, which is how the duplicate above surfaced.
+        let connecting: Task<Void, Error> = Task { try await transport.connect(config: self.config) }
+        await awaitSocket(0)
+        // Pings answered throughout, well past the stall threshold.
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertGreaterThan(sockets[0].pings, 5, "the server is answering")
+        XCTAssertEqual(recorder.connects, 0, "answered pings are not the bot being ready")
+        XCTAssertEqual(recorder.disconnects.count, 0, "and the stall watchdog is not armed yet")
+        // The frame is what does it.
+        sockets[0].onMessage?(PipecatFrameCodec.encodeAudio(pcm: Data([0, 0]), sampleRate: 24_000, channels: 1))
+        try await connecting.value
+        XCTAssertEqual(recorder.connects, 1)
+        XCTAssertTrue(transport.isSessionEstablished)
         await transport.disconnect()
     }
 

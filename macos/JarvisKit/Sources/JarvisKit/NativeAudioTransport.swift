@@ -350,12 +350,22 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         if isEstablished, gap > JarvisTuning.keepAliveStallSeconds {
             nativeLog.notice("pong gap \(gap, format: .fixed(precision: 2), privacy: .public)s")
         }
-        establish(session: session)
+        // Deliberately NOT establish(). Measured 2026-09-15: the first pong
+        // arrived in the same millisecond as the socket opening, 5.72 s
+        // before the server's first frame, because uvicorn answers pings
+        // from its protocol layer while the session is still being built. A
+        // pong says the socket layer is alive and keeps `lastPongAt` fresh
+        // for the watchdog; it says nothing about the bot.
     }
 
-    /// The server is alive: stop waiting for it and start watching for a
-    /// stall. Called on the first pong and on the first inbound frame,
-    /// whichever the server produces first.
+    /// The server's pipeline is running -- it has sent us something. Stop
+    /// waiting, report connected, and start watching for a stall.
+    ///
+    /// Called ONLY from `received`, on the first frame. Arming the watchdog
+    /// here rather than at socket open also closes a near-miss: it used to
+    /// be armed on the first pong with a 6 s threshold while the first
+    /// frame took 5.72 s (5.79 s the run before), leaving under 300 ms
+    /// between a healthy start and a spurious teardown.
     private func establish(session: Int) {
         guard session == sessionCount, !isEstablished, isOpen else { return }
         isEstablished = true

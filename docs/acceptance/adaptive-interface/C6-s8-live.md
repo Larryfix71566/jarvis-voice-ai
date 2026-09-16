@@ -128,3 +128,103 @@ speculation.**
   §3.3 on the two AirPods configurations.
 - §3.4 latency parity — still blocked on a C0.4 WebRTC baseline that has
   never been captured.
+
+---
+
+# Second run, 2026-09-15 20:22:33–20:27:11
+
+Instrumented rerun at `e4f785f` to settle the two findings above. Step markers
+recorded this time (`closure-checks/logs/s8-markers.log`), so actions are
+attributed rather than inferred: AirPods both ways → conversation → output to
+built-in speakers → back to AirPods → wake word while muted → disconnect.
+
+No fatal lines. Two engine rebuilds, both recovered.
+
+## Finding 1 — settled, and fixed
+
+```
+20:22:33.341  socket open
+20:22:33.341  session established          (on the first pong, same ms)
+20:22:33.359  state = .connected
+20:22:39.065  first inbound frame: message type=server-message
+              data.type=voice/catalog, 5724 ms after the socket opened
+```
+
+There is no `bot-ready` on this path — the first thing the server sends is the
+voice catalog, and it arrives when the pipeline is actually running. So the
+frame is the readiness signal and the pong is not: uvicorn answers pings from
+its protocol layer while the session is still being built.
+
+`pongReceived` no longer establishes. `connect`, `transportDidConnect` and the
+stall watchdog all now key on the first frame.
+
+**That also closed a near-miss nobody had noticed.** The watchdog was armed at
+socket open with a 6 s threshold while the first frame took 5.72 s here and
+5.79 s in the first run — under 300 ms between a healthy start and a spurious
+teardown. It had been passing on luck.
+
+The coupling introduced is worth stating: the native path now requires the
+server to send something unprompted at session start. It does (`voice/catalog`,
+then the greeting), and `nativeReadyDeadline` (30 s) bounds the wait — but a
+server that only answered when spoken to would never be reported connected.
+
+Pinned by `testAnsweredPingsAloneNeverMakeTheSessionReady`.
+
+## Finding 2 — NOT confirmed; this run argues against it
+
+Both configuration changes were genuine:
+
+```
+20:24:48.720  devices now [in 71@48000 out 76@48000], built against [in 93@48000 out 87@48000]
+20:26:01.779  devices now [in 183@48000 out 177@48000], built against [in 71@48000 out 76@48000]
+```
+
+Zero `— NO DEVICE DIFFERENCE` lines, and the six-rebuild loop did not
+reproduce at all. The hypothesis that our own rebuild provokes the next
+notification is **unsupported**: the instrumentation that would have caught it
+was in place and caught nothing.
+
+The difference between the runs is what was done to the hardware. The first
+run's churn followed an **earbud being removed**, with the input alternating
+1 ch / 2 ch across rebuilds — AirPods genuinely renegotiating. This run used
+deliberate switches in System Settings, which are clean. So the churn is
+more likely the hardware settling than a feedback loop, and repeating the
+earbud removal with the signature logging in place is what would settle it.
+
+No fix shipped. The instrumentation stays.
+
+## The retry path finally ran
+
+Switching **to** AirPods needed two attempts:
+
+```
+20:26:01.779  configuration change
+20:26:02.779  input device 183: buffer 480 frames    output 177: buffer 512, range 15…960
+20:26:05.393  rebuild attempt 1 failed; retrying
+20:26:05.895  input device 183: buffer 480           output 177: buffer 480, range 8…4096
+20:26:06.494  engine started, rebuilt (#2, attempt 2)
+```
+
+**4.72 s total**, against 862 ms for the switch to built-in. Note the output
+device's buffer configuration changed between the two attempts (512 frames /
+range 15…960 → 480 / 8…4096): the device was still activating when attempt 1
+ran. So the retry budget is doing real work, and the driver is device
+activation time rather than the number of gaps.
+
+Why attempt 1 failed is **not recorded**, because `rebuildLocked` logged
+`error.localizedDescription`, which renders a `JarvisError` as
+`"The operation couldn't be completed. (JarvisKit.JarvisError error 1.)"` and
+discards the message. Fixed to `String(describing:)`; the next retried
+rebuild will say what it hit.
+
+## AirPods run the engine at 24 kHz
+
+```
+capture 24000 Hz mono, channel 0 of 3 (hardware 1 ch before VPIO), output 24000 Hz 2 ch
+input tap: 100 buffers in 2.0s (49.6/s), 480 frames each at 24000 Hz = 20.0 ms of audio
+```
+
+Against 512 frames at 48 kHz — 10.7 ms — on the built-in array. The capture
+quantum doubles on Bluetooth. It does not threaten the C7.5 gate (24.5 ms
+input displayed p95 measured on AirPods in the first run), but it is the
+floor on this path and belongs in any future latency work.

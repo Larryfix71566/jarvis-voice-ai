@@ -800,11 +800,15 @@ final class AudioEngineIO: @unchecked Sendable {
             engineLog.notice("audio engine rebuilt after configuration change (#\(self.rebuildCount, privacy: .public), attempt \(attempt, privacy: .public))")
         } catch {
             guard attempt < Self.rebuildAttempts else {
-                engineLog.error("audio engine rebuild failed after \(attempt, privacy: .public) attempts: \(error.localizedDescription, privacy: .public)")
+                // String(describing:) not localizedDescription: a JarvisError
+                // renders as "JarvisKit.JarvisError error 1" through the
+                // latter, which is how the one retried rebuild on
+                // 2026-09-15 came out unexplained in the log.
+                engineLog.error("audio engine rebuild failed after \(attempt, privacy: .public) attempts: \(String(describing: error), privacy: .public)")
                 onFailure?(JarvisError.transport("audio device lost: \(error.localizedDescription)"))
                 return
             }
-            engineLog.error("audio engine rebuild attempt \(attempt, privacy: .public) failed (\(error.localizedDescription, privacy: .public)); retrying")
+            engineLog.error("audio engine rebuild attempt \(attempt, privacy: .public) failed (\(String(describing: error), privacy: .public)); retrying")
             queue.asyncAfter(deadline: .now() + Self.rebuildRetryGap) { [weak self] in
                 self?.rebuildLocked(attempt: attempt + 1, keeping: (keptFormat, wasEnabled))
             }
