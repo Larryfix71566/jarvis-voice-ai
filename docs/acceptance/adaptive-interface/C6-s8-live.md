@@ -371,3 +371,69 @@ measured on. Both session launchers now unset both variables on exit.
 
 Separately, that test reads ambient process environment and so can fail for
 reasons unrelated to the code under test. Worth making hermetic.
+
+---
+
+# Fourth run, 2026-09-15 21:00:59 — the rollback proof that wasn't
+
+Run as `./closure-checks/run-s8-steady.command webrtc`, with
+`JARVIS_FORCE_WEBRTC=true` set in the environment. The launcher reported
+`forceWebRTC=true`. The app reported:
+
+```
+21:00:59.272  connect: transport NativeAudioTransport, bot http://127.0.0.1:7870,
+              native true, forceWebRTC false, token absent
+21:01:07.074  connect: transport reported connected
+```
+
+**The rollback did not engage.** The session ran, Mortimer answered, and
+everything looked like a successful rollback proof — on the native path.
+
+`JarvisFlags.forceWebRTC` read UserDefaults only:
+
+```swift
+public static var forceWebRTC: Bool {
+    UserDefaults.standard.bool(forKey: "JARVIS_FORCE_WEBRTC")
+}
+```
+
+while its siblings `captureUsesSinkNode` and `audioMeterEnabled` both read
+the environment first — and §9 documents the lever as
+`JARVIS_FORCE_WEBRTC=true`, which reads as an environment variable. Anyone
+following the plan literally would have got a native session and no
+indication the setting had been ignored. **A rollback lever that silently
+does nothing is worse than one that errors**, because the failure only
+surfaces when it is needed.
+
+It was visible only because of the connect-path logging added during §8,
+which prints the flag the client actually resolved. Without that line this
+would have been recorded as "rollback proven".
+
+Fixed: environment first, then UserDefaults, with an explicit `false` in the
+environment meaning off rather than merely present. §9 now names both
+mechanisms. Pinned by
+`testForceWebRTCHonoursTheEnvironmentTheWaySection9DocumentsIt` and
+`testTheEnvironmentWinsOverUserDefaultsLikeTheOtherFlags`.
+
+The launcher was also at fault: it ran `defaults delete com.mortimer.host
+JARVIS_FORCE_WEBRTC` immediately after the `setenv`, removing the only
+source the old code read. It works now because the environment takes
+precedence, but clearing the thing you just set is wrong regardless.
+
+**§8's rollback item remains unproven, and step 7 stays blocked on it.**
+
+## Incidentally: the new gate on this session
+
+This was the first report written by the arrival-based gate.
+
+```
+gate            pass      gate_metric arrival_p95     threshold 0.050
+arrival_p95     24.8 ms
+p95 (displayed) 135.0 ms
+  input    obs 959  arrival p95 24.8  displayed p95 24.8
+  playout  obs 524  arrival p95  4.0  displayed p95 135.0
+```
+
+A healthy session, and the old displayed-based gate would have passed it by
+15 ms. The change was not cosmetic: the previous threshold sat close enough
+to ordinary conversation shape that a FAIL was a matter of timing.

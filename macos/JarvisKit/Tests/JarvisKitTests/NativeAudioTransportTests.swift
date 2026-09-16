@@ -564,7 +564,32 @@ final class TransportSelectionTests: XCTestCase {
 
     override func tearDown() {
         UserDefaults.standard.removeObject(forKey: "JARVIS_FORCE_WEBRTC")
+        unsetenv("JARVIS_FORCE_WEBRTC")
         super.tearDown()
+    }
+
+    /// §9 writes the lever as `JARVIS_FORCE_WEBRTC=true`, which reads as an
+    /// environment variable — and it was UserDefaults-only, so following the
+    /// plan literally left the session on the native path with nothing to
+    /// say the setting had been ignored. §8's rollback proof on 2026-09-15
+    /// is what found it: the connect line logged `forceWebRTC false` with
+    /// the variable set.
+    func testForceWebRTCHonoursTheEnvironmentTheWaySection9DocumentsIt() {
+        XCTAssertFalse(JarvisFlags.forceWebRTC, "opt-in: absent means off")
+        setenv("JARVIS_FORCE_WEBRTC", "true", 1)
+        XCTAssertTrue(JarvisFlags.forceWebRTC, "the variable §9 names must work")
+        setenv("JARVIS_FORCE_WEBRTC", "false", 1)
+        XCTAssertFalse(JarvisFlags.forceWebRTC, "an explicit false is off, not merely set")
+        unsetenv("JARVIS_FORCE_WEBRTC")
+        XCTAssertFalse(JarvisFlags.forceWebRTC)
+    }
+
+    func testTheEnvironmentWinsOverUserDefaultsLikeTheOtherFlags() {
+        UserDefaults.standard.set(true, forKey: "JARVIS_FORCE_WEBRTC")
+        XCTAssertTrue(JarvisFlags.forceWebRTC, "UserDefaults still works on its own")
+        setenv("JARVIS_FORCE_WEBRTC", "false", 1)
+        XCTAssertFalse(JarvisFlags.forceWebRTC,
+                       "environment first, matching captureUsesSinkNode and audioMeterEnabled")
     }
 
     func testLoopbackBotsUseTheNativePathAndRemoteBotsKeepWebRTC() {

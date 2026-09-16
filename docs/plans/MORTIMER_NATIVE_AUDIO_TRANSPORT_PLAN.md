@@ -374,7 +374,9 @@ Verified against the installed **pipecat-ai 1.4.0** (`.venv` of the `jarvis-voic
 
 ## §9 Rollback
 
-`JARVIS_FORCE_WEBRTC=true` → the client uses `DirectWebRTCTransport` for local
+`JARVIS_FORCE_WEBRTC=true` in the environment, or `defaults write
+com.mortimer.host JARVIS_FORCE_WEBRTC -bool true` → the client uses
+`DirectWebRTCTransport` for local
 too, exactly as today. The server keeps the SmallWebRTC case, so nothing on
 either side is removed until Larry is satisfied. The band-aid removal (D8) is
 the last commit and is itself revertible.
