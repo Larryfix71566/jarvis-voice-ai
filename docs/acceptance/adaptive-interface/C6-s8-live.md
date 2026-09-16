@@ -228,3 +228,53 @@ Against 512 frames at 48 kHz — 10.7 ms — on the built-in array. The capture
 quantum doubles on Bluetooth. It does not threaten the C7.5 gate (24.5 ms
 input displayed p95 measured on AirPods in the first run), but it is the
 floor on this path and belongs in any future latency work.
+
+## The C7.5 gate FAILED on the second run
+
+`P2-latency.json`, written at session end. This supersedes the passing
+figures above, and it is the first failure the gate has recorded.
+
+```
+gate      FAIL        (threshold: displayed p95 under 150 ms)
+p95_ms    167.6
+window    the last 60 s of the session, 20:26:05–20:27:05
+input     displayed p50 35.2, p95 41.9, worst 42.0, 840 arrivals
+playout   arrival p50 0.9, p95 1.0  —  displayed p50 0.9, p95 167.6,
+          worst 271.1, 243 arrivals / 275 observations
+```
+
+Facts, before any explanation:
+
+- **The failure is entirely the playout channel.** Input is 41.9 ms with a
+  worst case of 42.0 — a distribution with no tail at all. Playout *arrival*
+  is 1.0 ms; it is the *displayed* age that blows the gate.
+- **Input roughly doubled**, 24.5 → 41.9 ms, which tracks the 24 kHz AirPods
+  path measured above: a 480-frame buffer at 24 kHz is 20 ms of audio against
+  10.7 ms on the built-in array.
+- **The window is the last 60 s**, not the session, and it contains the 4.72 s
+  two-attempt rebuild that finished at 20:26:06.494.
+- **The playout sample is sparse** — 275 observations in 60 s, because playout
+  only produces levels while the bot is speaking. A p95 over that sample is
+  roughly the fourteenth worst reading.
+
+[likely] the tail comes from playout stamping immediately after a rebuild:
+`resetPlayoutTimeline` clears the slice list and `lastScheduledEnd`, so the
+first slices scheduled against a fresh player clock can be anchored wrong,
+and in a sparse sample a handful of stale stamps move the p95 a long way. The
+first run shows the same shape with a smaller tail (playout worst 298.9 ms,
+p95 65.5).
+
+[guessing] whether the 24 kHz path alone would fail. Input at 41.9 ms says
+the device costs real latency, but 20 ms of quantum does not account for
+167.6 ms on its own.
+
+**The measurement that discriminates:** one session on AirPods with *no
+device change at all* — connect, talk for a minute or two, disconnect,
+touch nothing. If playout displayed p95 comes in under 150 ms, the rebuild
+is the cause and the fix is in the timeline reset. If it is still ~167 ms,
+the 24 kHz path itself is, and the gate needs either a fix or a
+device-dependent threshold.
+
+Until that exists, **C7.5 should not be described as passing.** It passes on
+the built-in array (67.6 ms) and on a mixed session (65.5 ms) and fails on
+this one.
