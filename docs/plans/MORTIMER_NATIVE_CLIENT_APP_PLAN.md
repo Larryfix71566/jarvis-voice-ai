@@ -1,6 +1,10 @@
 # Mortimer native client — full macOS view port (T1.3)
 
-**Status:** DRAFT for Larry's approval, 2026-08-27. Implements roadmap track **T1.3** (the full macOS SwiftUI view port that `MORTIMER_NATIVE_CLIENT_CORE_PLAN.md` (T1.1/T1.2) explicitly deferred).
+**Status:** IMPLEMENTED (code) as of 2026-09-15; **§8 hardware verification PARTIAL — V3 through V9 are unverified.** Implements roadmap track **T1.3** (the full macOS SwiftUI view port that `MORTIMER_NATIVE_CLIENT_CORE_PLAN.md` (T1.1/T1.2) explicitly deferred).
+
+**§8 status, item by item.** V1 (build + unit tests) passes — JarvisKit **170**, MortimerHost **154**. V2 (connect and talk) verified repeatedly during the C6 work. **V3–V8 unverified:** the Agents tab live, the four HTTP tabs with their draft→confirm round-trips, Output + Log, the display window, multi-display DP8 behaviour, and the T1.0 glass acceptance have not been walked. **V9 — the five-day daily-driver period (gate G1(e)) — began 2026-09-15**, the first day the adaptive layout was actually in use; `Debug ▸ Preview adaptive layout` had left it off until then.
+
+**This header is what `MORTIMER_WEB_RETIREMENT_PLAN.md` §0 gate 3 reads.** T1.4 wants "the T1.3 plan has been marked implemented", and the roadmap additionally wants the G1 daily-driver period served. Code-complete is not the same as V3–V9 verified, so T1.4 should not start on the strength of this line alone.
 
 **Author / origin (Larry's words, quoted from the roadmap's origin section):**
 - *"The plan is to migrate away from the web part since it is holding us back from what we want to do related to multiscreen and transparent windows."*

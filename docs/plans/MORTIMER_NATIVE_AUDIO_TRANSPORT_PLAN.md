@@ -1,9 +1,35 @@
 # Mortimer native-audio transport — retire WebRTC on the local path
 
-**Status:** DRAFT for Larry's approval, 2026-09-05. Implement **after** the
-current gap-closure list is resolved (Larry's sequencing). Supersedes the
-`AudioInputCoordinator` band-aid (2026-09-05, JarvisKit) — that stopgap is
-deleted in this plan's Step 8. Written for a Sonnet-class implementer after a
+**Status:** IMPLEMENTED (code) 2026-09-15, merged to `main` as `3f0ea58`
+(PR #73). §8 hardware verification **substantially complete**; Step 7 and
+five measurement items remain open, each named below and in
+`docs/acceptance/adaptive-interface/C6-remaining.md`. Not "IMPLEMENTED"
+unqualified, because that line is what a later plan's gate reads.
+
+**§8 verified on the deployment Mac (2026-09-14/15):** native session with
+AirPods both ways, output switched mid-session without a reconnect across
+eight engine rebuilds, wake word while muted, and §9 rollback proven — a
+full conversation on `DirectWebRTCTransport` with `forceWebRTC true`.
+Evidence: `C6-native-audio.md`, `C7-measured-audio.md`, `C6-parity.md`,
+`C6-s8-live.md`.
+
+**Open, and why each is still open:**
+- **Step 7** (delete the `AudioInputCoordinator` band-aid) — not done. It
+  serves only the WebRTC path, so deleting it degrades the §9 rollback on
+  AirPods. Subsumed by T1.4 if the whole WebRTC client path goes.
+- **§3.3 echo on the two AirPods configurations** — not measured. Four clean
+  AirPods conversations are indirect evidence only.
+- **§3.4 latency parity** — cannot be measured as specified: the client
+  meter needs `AudioLevelSource` and only `NativeAudioTransport` implements
+  it. Re-specify onto the server-side `TURN user_end->first_audio` metric.
+- **Rebuild churn** — six rebuilds from two device changes, observed once,
+  not reproduced. Instrumented; needs an earbud-removal run.
+- **Input observation count** — 76 observations in 87 s against 1568 and
+  840 elsewhere. Unexplained.
+
+Supersedes the `AudioInputCoordinator` band-aid (2026-09-05, JarvisKit) —
+that stopgap was to be deleted in this plan's Step 8, which is the open
+item above. Written for a Sonnet-class implementer after a
 frontier planner: every design decision is made here; the implementer builds,
 it does not choose. Branch: cut from the gap-closure result, name TBD by Larry.
 The implementer never runs git (same rule as every Mortimer plan).
