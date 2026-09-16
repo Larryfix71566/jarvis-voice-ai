@@ -1,33 +1,33 @@
 {
-  "arrival_p95_ms" : 24.5,
+  "arrival_p95_ms" : 24.399999999999999,
   "connected" : false,
   "gate" : "pass",
   "gate_metric" : "arrival_p95",
   "gate_p95_seconds" : 0.050000000000000003,
   "input" : {
-    "arrival_p50_ms" : 19.300000000000001,
-    "arrival_p95_ms" : 24.5,
-    "arrivals" : 1800,
-    "displayed_p50_ms" : 19.300000000000001,
-    "displayed_p95_ms" : 24.5,
-    "observations" : 1800,
-    "worst_ms" : 26.5
+    "arrival_p50_ms" : 20.300000000000001,
+    "arrival_p95_ms" : 24.399999999999999,
+    "arrivals" : 1789,
+    "displayed_p50_ms" : 20.300000000000001,
+    "displayed_p95_ms" : 24.399999999999999,
+    "observations" : 1789,
+    "worst_ms" : 27
   },
-  "measured_at" : "2026-09-16T15:45:25Z",
+  "measured_at" : "2026-09-16T16:31:57Z",
   "native_audio" : true,
-  "observations" : 2482,
-  "p50_ms" : 19.300000000000001,
-  "p95_ms" : 67.599999999999994,
+  "observations" : 2700,
+  "p50_ms" : 20.300000000000001,
+  "p95_ms" : 24.399999999999999,
   "playout" : {
     "arrival_p50_ms" : 1,
-    "arrival_p95_ms" : 2.2999999999999998,
-    "arrivals" : 638,
+    "arrival_p95_ms" : 2.2000000000000002,
+    "arrivals" : 887,
     "displayed_p50_ms" : 1,
-    "displayed_p95_ms" : 67.599999999999994,
-    "observations" : 682,
-    "worst_ms" : 298.80000000000001
+    "displayed_p95_ms" : 2.2000000000000002,
+    "observations" : 911,
+    "worst_ms" : 268.80000000000001
   },
   "sample_hz" : 30,
   "window_seconds" : 60,
-  "worst_ms" : 298.80000000000001
+  "worst_ms" : 268.80000000000001
 }

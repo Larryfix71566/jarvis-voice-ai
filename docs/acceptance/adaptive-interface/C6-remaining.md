@@ -422,7 +422,7 @@ reference-count it against in-flight detached runs), or a detached run has
 to be told its tools are gone and say so, instead of reporting `ok` with two
 silent failures. The second is smaller; the first is what the design implies.
 
-## 12. The bot has been writing to the wrong database since 2026-09-13 — TOP PRIORITY
+## 12. The bot wrote to the wrong database from 2026-09-13 to 2026-09-16 — FIXED
 
 **What it is.** Larry, mid-test: *"I don't understand why they're not there.
 We've had many discussions. There should be many memories."* He is right, and
@@ -461,52 +461,76 @@ gets no conversations.
 database it could see, and wrong about Larry. It could not check further
 because `repo_search` had gone toolless (item 11 above).
 
-**Not a stale read.** The write-ahead logs settle it: active-repo's
-`jarvis.db-wal` is 1.77 MB timestamped 15:45 - the test session - while the
-clean copy's is 8 KB and untouched since 2026-09-11T19:23, as is its main
-database file. The split is real, not an artifact of reading a WAL-mode
-database read-only.
+**Not a stale read.** The write-ahead logs settled it: active-repo's
+`jarvis.db-wal` was 1.77 MB timestamped 15:45 - the test session - while the
+clean copy's was 8 KB and untouched since 2026-09-11T19:23, as was its main
+database file.
 
-**Where the path comes from - the obvious answer is ruled out.** The
-launcher exports `JARVIS_DB_PATH="$CLEAN/data/jarvis.db"`, and its header now
-has Python print what it actually resolves. At the 11:55 launch all three
-agree:
+**Root cause - `load_dotenv(override=True)`.** Found by tracing
+`sqlite3.connect`, after three rounds of reading the code reached the wrong
+conclusion:
+
+`pipecat/runner/run.py:140` calls `load_dotenv(override=True)` at module
+import. `find_dotenv` walks up from site-packages and reaches
+`~/jarvis-voice-ai-clean/.env`, line 28 of which was
+`JARVIS_DB_PATH=data/jarvis.db` - **relative**. `override=True` overwrites
+the launcher's absolute export *inside the process*, and the relative path
+then resolves against the bot's cwd, which is `active-repo`. The trace,
+in the server process (pid 8541 = `Started server process [8541]`):
 
 ```
-db:    /Users/larryfix/jarvis-voice-ai-clean/data/jarvis.db   (python env)
-db:    /Users/larryfix/jarvis-voice-ai-clean/data/jarvis.db   (settings)
-db:    /Users/larryfix/jarvis-voice-ai-clean/data/jarvis.db   (RESOLVED)
+pipeline.py:895  run_session -> run_migrations()
+db.py:627        conn = conn or get_conn()
+db.py:613        sqlite3.connect("data/jarvis.db")   <- literal relative string
 ```
 
-So startup resolution is **correct**, and something later in the process
-takes the relative fallback. Ruled out by reading: `db.py:605`
-`_default_db_path()` reads that env var; `config.py:269` bridges with
-`setdefault`, so a real env var keeps winning; `vault.inject_env` fills only
-names that are missing or empty and injected 0 this launch; `active-repo`
-has no `.env` for dotenv to win with; `JARVIS_DB_PATH` is in the registry's
-`BASE_ENV_KEYS`, so MCP children receive it; and those children are spawned
-with `cwd=REPO_ROOT` (`registry.py:430`). **Mechanism still unidentified -
-untested.**
+Every static reading was correct and irrelevant: `_default_db_path()` does
+read the env var, `config.py`'s two bridges do use `setdefault`,
+`vault.inject_env` does fill only empty names, and nothing in `jarvis/`
+mutates `os.environ`. The mutation is in a dependency, at import time, and
+only on the import path `bot.py` takes - `from pipecat.runner.run import
+main` inside its `__main__` block. A staged probe that imported
+`jarvis.bot.pipeline` and stopped there printed the correct path at every
+stage, because it was one import short of the bug.
 
-**The next test, and it costs one sentence of speech.** The 11:55 bot is
-running and has served no session. Say one thing to it, then compare the two
-`jarvis.db-wal` sizes:
-- active-repo's WAL grows -> the writer ignores the resolved path, and the
-  next step is one log line in `get_conn` printing `path.resolve()` once per
-  distinct path, which names the writer on the following session.
-- the clean copy's WAL grows -> something about the earlier launches was
-  different (a stale bot process is the obvious candidate) and the fault may
-  already be gone. Either way the answer arrives without more code reading.
+**Second casualty, same cause.** Only two keys in that `.env` held relative
+paths: `JARVIS_DB_PATH` (line 28) and `JARVIS_WAKEWORD_MODEL` (line 38). The
+launcher exports both absolute and both were reverted, so the wake-word
+model had been resolving against `active-repo` too. `JARVIS_VAULT_PATH` is
+not in the `.env` at all, which is why the vault kept working - override can
+only clobber a key the file defines.
 
-**To close.** In order:
-1. Run the WAL test above. One utterance, one answer.
-2. Fix the writer, so the bot writes to the clean copy's DB - the one with
-   his memory and the one the extractor watches.
-3. Decide what to do with the 288 orphaned conversations: merge them into
-   the real DB so the extractor can process them, or discard them. Merging
-   is the only option that turns three days of talking into memories.
-4. Only then re-test item 11 - and re-run the librarian graph, which should
-   now find 434 memories to draw.
+**Fix.** Both keys in `~/jarvis-voice-ai-clean/.env` made absolute. The
+`.env` is the authoritative source precisely because pipecat re-reads it
+with `override=True` on every launch; no shell export can outrank it. The
+launcher's own exports are now redundant rather than wrong.
 
-**Nothing else on this list matters until this is fixed.** Every
-conversation held in the meantime goes to the wrong place.
+**Verified 2026-09-16 12:30.** Traced opens in both the server process
+(pid 8669) and an MCP child (pid 8682) now name
+`/Users/larryfix/jarvis-voice-ai-clean/data/jarvis.db`. The real database,
+read live:
+
+| | before | after |
+|---|---|---|
+| conversations | 2842, last 09-11 | **2847, last 16:31:26** |
+| extraction cursor | 2842 @ 09-11T19:20 | **2847 @ 16:31:39** |
+| memories | 434 | 434 |
+| agent_runs | - | 458, last 16:31:17 |
+
+The extraction worker was alive and watching the right database the whole
+time - it simply had nothing to do. Thirteen seconds after the bot started
+writing to the right file, the cursor was current.
+
+**What is left.**
+1. **Larry's decision:** the 288 conversations stranded in
+   `active-repo/data/jarvis.db` (2026-09-13 to 2026-09-16). Merging them
+   into the real database is the only thing that turns those three days into
+   memories, and it is a write into the file holding all 434 - so it wants a
+   backup and a reversible script, not an ad-hoc `INSERT`.
+2. Re-test item 11 against a database that now has memories to draw.
+3. Remove `closure-checks/trace/` once nothing else needs the trace.
+
+**Note for the record:** every §8 acceptance session ran against
+`active-repo/data/jarvis.db`. The audio and transport measurements do not
+depend on the database, so nothing measured is invalidated - but any run-log
+evidence cited from those sessions lives in that file, not the real one.
