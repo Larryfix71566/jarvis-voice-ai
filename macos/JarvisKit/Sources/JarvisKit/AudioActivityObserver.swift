@@ -55,6 +55,14 @@ public struct AudioMeterLatency: Equatable, Sendable {
     public var p50: Double { max(input.displayedP50, playout.displayedP50) }
     public var p95: Double { max(input.displayedP95, playout.displayedP95) }
     public var worst: Double { max(input.worst, playout.worst) }
+    /// What C7.5 is actually about: the cost from the audio arriving to the
+    /// accumulator holding it. `displayed` above counts a HELD level's
+    /// staleness on every tick, so on the intermittent playout channel it
+    /// measures how recently the bot spoke -- three sessions of identical
+    /// code gave 34.3, 65.5 and 167.6 ms while these figures stayed at
+    /// 1.0-1.7 ms. The gate reads these.
+    public var arrivalP50: Double { max(input.arrivalP50, playout.arrivalP50) }
+    public var arrivalP95: Double { max(input.arrivalP95, playout.arrivalP95) }
 }
 
 /// Closure C7.1: the connection generation and the sampling live here,
@@ -132,7 +140,7 @@ public final class AudioActivityObserver: @unchecked Sendable {
         let summary = latency()
         if summary.samples > 0 {
             meterLog.notice("""
-                audio meter session ended — input: \(summary.input.samples, privacy: .public) shown, displayed p95 \(summary.input.displayedP95 * 1000, format: .fixed(precision: 1), privacy: .public) ms, arrival p95 \(summary.input.arrivalP95 * 1000, format: .fixed(precision: 1), privacy: .public) ms over \(summary.input.arrivals, privacy: .public) arrivals; playout: \(summary.playout.samples, privacy: .public) shown, displayed p95 \(summary.playout.displayedP95 * 1000, format: .fixed(precision: 1), privacy: .public) ms, arrival p95 \(summary.playout.arrivalP95 * 1000, format: .fixed(precision: 1), privacy: .public) ms over \(summary.playout.arrivals, privacy: .public) arrivals (C7.5 gate: displayed p95 under 150 ms)
+                audio meter session ended — input: \(summary.input.samples, privacy: .public) shown, displayed p95 \(summary.input.displayedP95 * 1000, format: .fixed(precision: 1), privacy: .public) ms, arrival p95 \(summary.input.arrivalP95 * 1000, format: .fixed(precision: 1), privacy: .public) ms over \(summary.input.arrivals, privacy: .public) arrivals; playout: \(summary.playout.samples, privacy: .public) shown, displayed p95 \(summary.playout.displayedP95 * 1000, format: .fixed(precision: 1), privacy: .public) ms, arrival p95 \(summary.playout.arrivalP95 * 1000, format: .fixed(precision: 1), privacy: .public) ms over \(summary.playout.arrivals, privacy: .public) arrivals (C7.5 gate: ARRIVAL p95 under 50 ms; displayed counts a held level's staleness and is informational)
                 """)
         }
         timer?.cancel(); timer = nil
@@ -200,7 +208,7 @@ public final class AudioActivityObserver: @unchecked Sendable {
         publish(snapshot)
     }
 
-    /// Per channel, over the last 60 s (C7.5 gate: displayed p95 ≤ 150 ms).
+    /// Per channel, over the last 60 s (C7.5 gate: arrival p95 ≤ 50 ms).
     public func latency() -> AudioMeterLatency {
         let (shown, arrived) = lock.withLock { (displayed, arrivals) }
         func percentile(_ sorted: [Double], _ p: Double) -> Double {

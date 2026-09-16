@@ -178,3 +178,79 @@ final class AudioEngineIOTests: XCTestCase {
         XCTAssertLessThanOrEqual(total.count, 6_400 + 64, "\(total.count) bytes")
     }
 }
+
+/// A device that is still coming up must be waited for, not refused: the
+/// bench measured CoreAudio reporting "2 ch, 44100 Hz" input and "0 ch,
+/// 0 Hz" output for a moment after another engine stopped, and the same
+/// window exists on the app's device-change rebuild (D3).
+final class DeviceSettlingTests: XCTestCase {
+    private let good = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)!
+
+    func testUsableFormatsAreReturnedImmediately() throws {
+        var slept = 0.0
+        let (input, output) = try AudioEngineIO.settledFormats(
+            input: { self.good }, output: { self.good }, sleep: { slept += $0 })
+        XCTAssertEqual(input.sampleRate, 48_000)
+        XCTAssertEqual(output.channelCount, 2)
+        XCTAssertEqual(slept, 0, "no wait when the devices are already up")
+    }
+
+    func testAHalfBuiltOutputIsWaitedForRatherThanRefused() throws {
+        var reads = 0
+        var slept = 0.0
+        let (_, output) = try AudioEngineIO.settledFormats(
+            input: { self.good },
+            output: {
+                reads += 1
+                // Three reads of a not-yet-ready output, then the real one.
+                return reads < 4 ? AVAudioFormat() : self.good
+            },
+            sleep: { slept += $0 })
+        XCTAssertEqual(output.channelCount, 2, "the settled format, not the transient one")
+        XCTAssertGreaterThan(slept, 0, "it waited")
+        XCTAssertLessThan(slept, 1.0, "and not for the whole deadline")
+    }
+
+    func testADeviceThatNeverComesUpStillFails() {
+        var slept = 0.0
+        XCTAssertThrowsError(try AudioEngineIO.settledFormats(
+            input: { self.good }, output: { AVAudioFormat() },
+            deadline: 0.2, step: 0.05, sleep: { slept += $0 })) { error in
+            guard case JarvisError.transport(let message)? = error as? JarvisError else {
+                return XCTFail("expected a transport error, got \(error)")
+            }
+            XCTAssertTrue(message.contains("no audio devices after"), message)
+        }
+        XCTAssertGreaterThanOrEqual(slept, 0.2, "it used its deadline before giving up")
+    }
+}
+
+/// The crash of 2026-09-14 19:50:00.245. Pulling an AirPod tore the engine
+/// down while the audio meter's own 30 Hz timer was mid-read, and
+/// `-[AVAudioNode lastRenderTime]` on a node whose engine is gone raises
+/// `required condition is false: _engine != nil` -- an Objective-C
+/// exception Swift cannot catch, so the app was terminated rather than
+/// failing a session.
+///
+/// There is no way to assert against that: on the unfixed code these two
+/// tests kill the test process. The proof is the suite dying before the
+/// guard and passing after it.
+final class DetachedPlayerTests: XCTestCase {
+    func testPlayoutLevelIsNilWhenThePlayerHasNoEngine() {
+        XCTAssertTrue(JarvisFlags.captureUsesSinkNode,
+                      "only the sink-node path reads lastRenderTime; the guard is untested otherwise")
+        let io = AudioEngineIO(voiceProcessing: false)
+        // Never started, so the player was never attached to anything.
+        XCTAssertNil(io.latestPlayoutLevel)
+    }
+
+    func testPlayoutLevelIsNilAfterTheEngineStopsWhileTheMeterKeepsAsking() {
+        let io = AudioEngineIO(voiceProcessing: false)
+        io.stop()
+        // The meter does not know the session ended; it just keeps sampling.
+        for _ in 0..<5 {
+            XCTAssertNil(io.latestPlayoutLevel)
+            XCTAssertNil(io.latestInputLevel)
+        }
+    }
+}

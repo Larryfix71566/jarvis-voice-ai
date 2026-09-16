@@ -114,8 +114,12 @@ human-only.
   `AdminAPI.swift` (every sidecar call the app makes; the Python side is
   `jarvis/admin/server.py`), `AppMessage.swift`/`ClientMessage.swift`
   (RTVI message shapes — mirror the backend's, change both together),
-  plus transport (`DirectWebRTCTransport`, `RTVITransport`,
-  `Signalling`), audio, `WakeWordListener`, `KeychainStore`.
+  plus transport (`RTVITransport` the protocol, with
+  `DirectWebRTCTransport` + `Signalling` for remote and
+  `NativeAudioTransport` + `PipecatFrameCodec` for a same-Mac bot),
+  audio (`AudioEngineIO` owns capture and playout on the native path,
+  `AudioActivityObserver` the measured levels behind the wave),
+  `WakeWordListener`, `KeychainStore`.
 - `MortimerHost/Sources/MortimerHost/App/` — `MortimerHostApp` (entry),
   `AppMessageRouter` (app message → UI state), `UICommandRouter` (voice
   `ui_control` dispatch), `AppTheme`/`AppTuning`/`Glass` (style and

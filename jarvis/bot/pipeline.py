@@ -865,7 +865,13 @@ def _unwrap_client_message(message: Any) -> dict | None:
 
 
 async def send_app_message(transport: Any, message: dict) -> None:
-    """Server->client app message over the WebRTC data channel."""
+    """Server->client app message, on whichever transport is running.
+
+    Both cases go through ``transport.output()``: the data channel on
+    SmallWebRTC, a protobuf message frame on the WebSocket. Keep it that
+    way -- this is the one sender, and parity between the two client
+    paths rests on it (docs/acceptance/adaptive-interface/C6-parity.md).
+    """
     await transport.output().send_message(
         OutputTransportMessageUrgentFrame(message=_wrap_rtvi(message)))
 

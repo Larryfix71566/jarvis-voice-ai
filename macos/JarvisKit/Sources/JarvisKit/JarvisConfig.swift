@@ -52,6 +52,16 @@ public struct JarvisConfig: Sendable, Equatable {
             return URL(string: fallback)!
         }
         let bot = url("JARVIS_BOT_URL", "http://127.0.0.1:7860")
+        // The rollback lever's resolution, every time config is built. §8's
+        // rollback proof failed twice over this flag -- once because the
+        // code ignored the environment, and once for a reason the log could
+        // not distinguish, because nothing recorded WHERE the value came
+        // from. The most important flag in the app should not be the one you
+        // have to infer.
+        let rawForce = ProcessInfo.processInfo.environment["JARVIS_FORCE_WEBRTC"] ?? "absent"
+        let defForce = UserDefaults.standard.object(forKey: "JARVIS_FORCE_WEBRTC") == nil
+            ? "absent" : String(UserDefaults.standard.bool(forKey: "JARVIS_FORCE_WEBRTC"))
+        configLog.notice("JARVIS_FORCE_WEBRTC: environment \(rawForce, privacy: .public), UserDefaults \(defForce, privacy: .public) -> resolved \(JarvisFlags.forceWebRTC, privacy: .public)")
         return JarvisConfig(
             botURL: bot,
             adminURL: url("JARVIS_ADMIN_URL", "http://127.0.0.1:7861"),
@@ -132,12 +142,24 @@ public enum JarvisFlags {
     /// to keep whatever mic is selected (and accept the slowdown).
     public static var matchInputRate: Bool { on("JARVIS_MATCH_INPUT_RATE") }
     /// MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md D1/§9 — the rollback lever.
-    /// OPT-IN (absent key == off): on, a loopback bot uses
-    /// `DirectWebRTCTransport` exactly as before the native path existed
-    /// (`defaults write com.mortimer.host JARVIS_FORCE_WEBRTC -bool true`),
-    /// and the WebRTC-only device band-aids run again with it.
+    /// OPT-IN (absent == off): on, a loopback bot uses
+    /// `DirectWebRTCTransport` exactly as before the native path existed,
+    /// and the WebRTC-only device band-aids run again with it. Either
+    /// `JARVIS_FORCE_WEBRTC=true` in the environment or `defaults write
+    /// com.mortimer.host JARVIS_FORCE_WEBRTC -bool true`.
+    ///
+    /// The environment half was missing until 2026-09-15 and §8's rollback
+    /// proof is what found it: this read UserDefaults only, so setting the
+    /// variable §9 documents left the session on the native path and logged
+    /// `forceWebRTC false` — a rollback lever that silently does nothing is
+    /// worse than one that errors. Environment first, like
+    /// `captureUsesSinkNode` and `audioMeterEnabled`; an explicit false in
+    /// the environment is off rather than merely present.
     public static var forceWebRTC: Bool {
-        UserDefaults.standard.bool(forKey: "JARVIS_FORCE_WEBRTC")
+        if let raw = ProcessInfo.processInfo.environment["JARVIS_FORCE_WEBRTC"]?.lowercased() {
+            return ["1", "true", "yes", "on"].contains(raw)
+        }
+        return UserDefaults.standard.bool(forKey: "JARVIS_FORCE_WEBRTC")
     }
 }
 

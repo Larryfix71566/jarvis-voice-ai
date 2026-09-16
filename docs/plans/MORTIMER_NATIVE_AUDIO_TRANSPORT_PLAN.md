@@ -242,6 +242,56 @@ Verified against the installed **pipecat-ai 1.4.0** (`.venv` of the `jarvis-voic
   feeds channel 0 to the converter (the `--channels` bench measured all nine
   channels identical). And on the native path the wake listener is fed from
   that same tap instead of opening its own engine (§3.5 above).
+- **D3 amended (2026-09-13, from a bench failure and a code read):** "AirPods
+  hot-plug is automatic — no reconnect" held only while the rebuild
+  succeeded, and the rebuild had no way to succeed twice. Two faults, found
+  together. First, `startLocked` read both hardware formats once and threw:
+  the bench, which starts and stops engines back to back, was refused with
+  `input <2 ch, 44100 Hz>, output <0 ch, 0 Hz>` — not this Mac's mic and not
+  a device at all, but what CoreAudio reports for a moment after another
+  engine releases the hardware. `settledFormats` now polls to a 1 s deadline
+  (50 ms steps), costing nothing in the normal case where the first read is
+  already good. Second, and worse: `rebuildLocked` caught the failure, logged
+  one line and returned — but `startLocked` had already run `stopLocked`,
+  which nils the engine **and removes the configuration-change observer**, so
+  nothing could ever call the rebuild again. The device coming back did not
+  help. The socket, the keep-alive and the UI all stayed healthy over a dead
+  engine. The rebuild now retries (6 attempts, 0.5 s apart, scheduled on the
+  queue rather than slept so `stop()` is not held behind them; only the first
+  attempt pays the full settle wait), and on exhaustion `onFailure` fails the
+  session through the transport instead of leaving it silently deaf. The
+  retry budget is a guess until §8's output-device-switch check measures how
+  long a real AirPods reconnect takes — that measurement should set it.
+- **D10 amendment (2026-09-14, from a crash):** removing an AirPod mid-session
+  terminated the app. `-[AVAudioNode lastRenderTime]` on a node whose engine
+  has gone raises `required condition is false: _engine != nil`, an
+  Objective-C exception Swift cannot catch, and `latestPlayoutLevel` read it
+  with nothing checking the player was still attached. `stopLocked` calls
+  `engine.detach(player)`; the audio meter samples on its own 30 Hz timer and
+  knows nothing about that. Nothing was logged at all, because the process
+  died before it could log — the app's os_log simply stops mid-session, which
+  is the signature to recognise next time.
+
+  It had stayed hidden because `JarvisClient.disconnect()` stops the meter
+  BEFORE `transport.disconnect()`, so a user-initiated disconnect is safe by
+  ordering. Every other teardown races it: `transportDidDisconnect` reaches
+  the MainActor through a `Task`, by which time the engine is already
+  detached, and `rebuildLocked` detaches and then polls `settledFormats` for
+  up to a second — roughly thirty chances at 30 Hz. The device-settling fix
+  is what widened that window from microseconds to a second and turned a
+  latent C7 defect into a reliable crash.
+
+  `playerAttached` is now flipped under `slotLock` with the detach inside the
+  same critical section, and every `lastRenderTime` read happens while
+  holding that lock: a reader either finds the node attached for the whole
+  read or gets nil. **The rule this establishes: no `AVAudioNode` call may be
+  reachable from outside the engine queue without that guard.** A misuse
+  there is not a catchable error — it is process death — so the guard is the
+  invariant, never a property of the caller.
+
+  Pinned by `DetachedPlayerTests`, which throw that exact exception on the
+  unfixed code (XCTest traps it as a failure; the app has no such handler,
+  which is why it terminated instead).
 
 ---
 
@@ -324,7 +374,9 @@ Verified against the installed **pipecat-ai 1.4.0** (`.venv` of the `jarvis-voic
 
 ## §9 Rollback
 
-`JARVIS_FORCE_WEBRTC=true` → the client uses `DirectWebRTCTransport` for local
+`JARVIS_FORCE_WEBRTC=true` in the environment, or `defaults write
+com.mortimer.host JARVIS_FORCE_WEBRTC -bool true` → the client uses
+`DirectWebRTCTransport` for local
 too, exactly as today. The server keeps the SmallWebRTC case, so nothing on
 either side is removed until Larry is satisfied. The band-aid removal (D8) is
 the last commit and is itself revertible.

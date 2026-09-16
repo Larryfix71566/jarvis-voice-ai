@@ -389,6 +389,14 @@ final class AudioEngineIO: @unchecked Sendable {
     /// True while at least one scheduled playout buffer is unfinished.
     var onPlayoutChanged: (@Sendable (Bool) -> Void)?
 
+    /// The engine is down and will not come back by itself: every retry of
+    /// a device-change rebuild has failed. Nothing else reports this -- by
+    /// the time it fires the configuration-change observer is gone, so no
+    /// further device notification will arrive, and the socket above is
+    /// still perfectly healthy. The transport turns it into a visible
+    /// session failure rather than a silent one (D3).
+    var onFailure: (@Sendable (Error) -> Void)?
+
     private let queue = DispatchQueue(label: "com.mortimer.jarviskit.audio-engine")
     private let slotLock = NSLock()
     private var inputSlot: AudioLevelSample?
@@ -406,6 +414,13 @@ final class AudioEngineIO: @unchecked Sendable {
     /// behind at the first gap and every slice is then read as already
     /// played (measured: the channel went permanently dark).
     private var lastScheduledEnd: AVAudioFramePosition = 0
+    /// True only while `player` is attached to a live engine. Guarded by
+    /// `slotLock`, and the detach in `stopLocked` happens inside that same
+    /// critical section: `AVAudioNode.lastRenderTime` on a DETACHED node
+    /// raises an Objective-C exception that Swift cannot catch, so a
+    /// non-atomic check would still lose the race and kill the process
+    /// (measured 2026-09-14 — an AirPod coming out terminated the app).
+    private var playerAttached = false
     private var playoutHits = 0
     private var playoutMisses = 0
     private var lastTimelineReport: TimeInterval = 0
@@ -420,6 +435,19 @@ final class AudioEngineIO: @unchecked Sendable {
     private var configObserver: NSObjectProtocol?
     private(set) var voiceProcessing = false
     private(set) var rebuildCount = 0
+    /// Set by the public `stop()`, cleared by the public `start()`. A
+    /// rebuild retry scheduled before a stop must not resurrect the engine
+    /// after it; `stopLocked` alone cannot say, because `startLocked` calls
+    /// it on every rebuild.
+    private var stoppedByOwner = false
+    /// How long a device is given to come back before the session is failed:
+    /// `rebuildAttempts` tries, `rebuildRetryGap` apart, on top of the
+    /// settle wait inside each attempt.
+    /// The device topology the running graph was built against; see the
+    /// configuration-change observer.
+    private var builtDeviceSignature = "-"
+    private static let rebuildAttempts = 6
+    private static let rebuildRetryGap: TimeInterval = 0.5
     /// Production always asks for Voice Processing I/O; the §3.3 bench
     /// builds a second engine with it off to measure what VPIO removes.
     let wantsVoiceProcessing: Bool
@@ -437,10 +465,14 @@ final class AudioEngineIO: @unchecked Sendable {
     /// fallback it is whatever the mixer tap last reported.
     var latestPlayoutLevel: AudioLevelSample? {
         guard JarvisFlags.captureUsesSinkNode else { return slotLock.withLock { playoutSlot } }
-        guard let nodeTime = player.lastRenderTime, nodeTime.isSampleTimeValid,
-              let playerTime = player.playerTime(forNodeTime: nodeTime) else { return nil }
-        let position = playerTime.sampleTime
-        return slotLock.withLock {
+        // The whole read sits inside the lock, node time included: this
+        // runs on the meter's 30 Hz timer while the engine can be torn
+        // down on its own queue, and touching a detached node is fatal.
+        return slotLock.withLock { () -> AudioLevelSample? in
+            guard playerAttached,
+                  let nodeTime = player.lastRenderTime, nodeTime.isSampleTimeValid,
+                  let playerTime = player.playerTime(forNodeTime: nodeTime) else { return nil }
+            let position = playerTime.sampleTime
             // Drop everything the player has already passed.
             if let index = playoutSlices.lastIndex(where: { $0.end <= position }), index >= 0 {
                 playoutSlices.removeFirst(index + 1)
@@ -486,11 +518,17 @@ final class AudioEngineIO: @unchecked Sendable {
     /// input device cannot be opened. `voiceProcessing` reports whether
     /// VPIO was accepted (it is required; a refusal is thrown, not hidden).
     func start() throws {
-        try queue.sync { try startLocked() }
+        try queue.sync {
+            stoppedByOwner = false
+            try startLocked()
+        }
     }
 
     func stop() {
-        queue.sync { stopLocked() }
+        queue.sync {
+            stoppedByOwner = true
+            stopLocked()
+        }
     }
 
     /// Mute keeps the tap running (the VPIO reference path stays stable)
@@ -530,7 +568,7 @@ final class AudioEngineIO: @unchecked Sendable {
     ///   leaves the playback in the tap at −2 dB, and Silero raises user
     ///   turns on it (built-in mic + speakers, quiet room);
     /// - `mainMixer → output` gets the hardware output format explicitly.
-    private func startLocked() throws {
+    private func startLocked(settleDeadline: TimeInterval = 1.0) throws {
         if engine != nil { stopLocked() }
         let engine = AVAudioEngine()
         #if os(macOS)
@@ -540,11 +578,17 @@ final class AudioEngineIO: @unchecked Sendable {
         // dominant term in every latency this client has (C7.5).
         AudioDeviceTuning.report()
         #endif
-        let hardwareInput = engine.inputNode.outputFormat(forBus: 0)
-        let hardwareOutput = engine.outputNode.outputFormat(forBus: 0)
-        guard hardwareInput.sampleRate > 0, hardwareOutput.sampleRate > 0, hardwareOutput.channelCount > 0 else {
-            throw JarvisError.transport("no audio devices: input \(hardwareInput), output \(hardwareOutput)")
-        }
+        // CoreAudio reports a half-built device for a moment after another
+        // engine stops — measured 2026-09-13 in the bench, which starts and
+        // stops engines back to back: input read "2 ch, 44100 Hz" (not this
+        // mic at all) and output "0 ch, 0 Hz", and the start was refused.
+        // The same window exists in the app on D3's device-change rebuild,
+        // where refusing means the session drops and stays down. Wait for
+        // the devices to settle instead of failing on the first read.
+        let (hardwareInput, hardwareOutput) = try Self.settledFormats(
+            input: { engine.inputNode.outputFormat(forBus: 0) },
+            output: { engine.outputNode.outputFormat(forBus: 0) },
+            deadline: settleDeadline)
         // VPIO must be set before the input node is used or the engine started.
         if wantsVoiceProcessing {
             try engine.inputNode.setVoiceProcessingEnabled(true)
@@ -573,11 +617,51 @@ final class AudioEngineIO: @unchecked Sendable {
             throw JarvisError.transport("audio engine start failed (\(error)); input \(engine.inputNode.outputFormat(forBus: 0)), output \(engine.outputNode.outputFormat(forBus: 0)), voice processing \(voiceProcessing)")
         }
         self.engine = engine
+        #if os(macOS)
+        builtDeviceSignature = AudioDeviceTuning.signature()
+        #endif
+        slotLock.withLock { playerAttached = true }
         configObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { [weak self] _ in
+            // The signature is read HERE, on the notification, not inside
+            // the rebuild: the question this answers is whether the device
+            // topology actually differs from what the running graph was
+            // built against, or whether this notification is our own
+            // rebuild talking (2026-09-15: two hardware changes, six
+            // rebuilds, no kAudioHardwareProperty change behind four).
+            #if os(macOS)
+            let now = AudioDeviceTuning.signature()
+            let built = self?.builtDeviceSignature ?? "-"
+            engineLog.notice("configuration change: devices now [\(now, privacy: .public)], graph built against [\(built, privacy: .public)]\(now == built ? " — NO DEVICE DIFFERENCE" : "", privacy: .public)")
+            #endif
             self?.queue.async { self?.rebuildLocked() }
         }
         engineLog.notice("audio engine started: capture \(captureFormat.sampleRate, privacy: .public) Hz mono, channel 0 of \(tapFormat.channelCount, privacy: .public) (hardware \(hardwareInput.channelCount, privacy: .public) ch before VPIO), output \(outputFormat.sampleRate, privacy: .public) Hz \(outputFormat.channelCount, privacy: .public) ch, VPIO \(self.voiceProcessing ? "on" : "off", privacy: .public)")
+    }
+
+    /// Polls both device formats until they are usable, up to
+    /// `deadline`. Pure enough to test: the reads are injected.
+    static func settledFormats(input: () -> AVAudioFormat, output: () -> AVAudioFormat,
+                               deadline: TimeInterval = 1.0, step: TimeInterval = 0.05,
+                               sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
+    ) throws -> (AVAudioFormat, AVAudioFormat) {
+        var waited: TimeInterval = 0
+        var lastInput = input(), lastOutput = output()
+        while waited <= deadline {
+            if lastInput.sampleRate > 0, lastOutput.sampleRate > 0, lastOutput.channelCount > 0 {
+                if waited > 0 {
+                    engineLog.notice("audio devices settled after \(waited * 1000, format: .fixed(precision: 0), privacy: .public) ms")
+                }
+                return (lastInput, lastOutput)
+            }
+            sleep(step)
+            waited += step
+            lastInput = input(); lastOutput = output()
+        }
+        throw JarvisError.transport("""
+            no audio devices after \(String(format: "%.1f", deadline))s: \
+            input \(lastInput), output \(lastOutput)
+            """)
     }
 
     private func installTaps(on engine: AVAudioEngine, captureFormat: AVAudioFormat) throws {
@@ -671,7 +755,13 @@ final class AudioEngineIO: @unchecked Sendable {
             removeTaps(from: engine)
             player.stop()
             engine.stop()
-            engine.detach(player)
+            // Atomic with the flag, not merely before it: a reader that had
+            // already passed the check would otherwise still be inside
+            // lastRenderTime when the node lost its engine.
+            slotLock.withLock {
+                playerAttached = false
+                engine.detach(player)
+            }
         }
         engine = nil
         converter = nil
@@ -688,21 +778,40 @@ final class AudioEngineIO: @unchecked Sendable {
     /// declared playout format survive; whatever was queued in the old
     /// engine is gone (a short gap mid-sentence, then the stream resumes),
     /// which `playout.flush()` reports as not-playing.
-    private func rebuildLocked() {
-        guard engine != nil else { return }
-        rebuildCount += 1
-        let keptFormat = playerFormat
-        let wasEnabled = captureEnabled
+    ///
+    /// A failed attempt is not the end of it. `startLocked` has by then
+    /// stopped the old engine, which also removed the configuration-change
+    /// observer, so nothing will ever call this again on its own: without a
+    /// retry the session stays up with a dead engine. Retries are scheduled
+    /// on `queue` rather than slept so `stop()` is not stuck behind them,
+    /// and only the first attempt pays the full settle wait.
+    private func rebuildLocked(attempt: Int = 1, keeping carried: (AVAudioFormat?, Bool)? = nil) {
+        guard !stoppedByOwner else { return }
+        guard attempt > 1 || engine != nil else { return }
+        if attempt == 1 { rebuildCount += 1 }
+        let (keptFormat, wasEnabled) = carried ?? (playerFormat, captureEnabled)
         do {
-            try startLocked()          // stops the old engine first
+            try startLocked(settleDeadline: attempt == 1 ? 1.0 : 0.2)  // stops the old engine first
             captureEnabled = wasEnabled
             if let keptFormat, let engine {
                 engine.connect(player, to: engine.mainMixerNode, format: keptFormat)
                 playerFormat = keptFormat
             }
-            engineLog.notice("audio engine rebuilt after configuration change (#\(self.rebuildCount, privacy: .public))")
+            engineLog.notice("audio engine rebuilt after configuration change (#\(self.rebuildCount, privacy: .public), attempt \(attempt, privacy: .public))")
         } catch {
-            engineLog.error("audio engine rebuild failed: \(error.localizedDescription, privacy: .public)")
+            guard attempt < Self.rebuildAttempts else {
+                // String(describing:) not localizedDescription: a JarvisError
+                // renders as "JarvisKit.JarvisError error 1" through the
+                // latter, which is how the one retried rebuild on
+                // 2026-09-15 came out unexplained in the log.
+                engineLog.error("audio engine rebuild failed after \(attempt, privacy: .public) attempts: \(String(describing: error), privacy: .public)")
+                onFailure?(JarvisError.transport("audio device lost: \(error.localizedDescription)"))
+                return
+            }
+            engineLog.error("audio engine rebuild attempt \(attempt, privacy: .public) failed (\(String(describing: error), privacy: .public)); retrying")
+            queue.asyncAfter(deadline: .now() + Self.rebuildRetryGap) { [weak self] in
+                self?.rebuildLocked(attempt: attempt + 1, keeping: (keptFormat, wasEnabled))
+            }
         }
     }
 
@@ -751,9 +860,16 @@ final class AudioEngineIO: @unchecked Sendable {
     }
 
     private func currentPlayerPosition() -> AVAudioFramePosition? {
-        guard let nodeTime = player.lastRenderTime, nodeTime.isSampleTimeValid,
-              let playerTime = player.playerTime(forNodeTime: nodeTime) else { return nil }
-        return playerTime.sampleTime
+        // Same rule as `latestPlayoutLevel`: never ask a detached node for
+        // its render time. This one runs on the engine queue, where the
+        // engine is normally alive, but the guard is the invariant and not
+        // a property of the caller.
+        slotLock.withLock { () -> AVAudioFramePosition? in
+            guard playerAttached,
+                  let nodeTime = player.lastRenderTime, nodeTime.isSampleTimeValid,
+                  let playerTime = player.playerTime(forNodeTime: nodeTime) else { return nil }
+            return playerTime.sampleTime
+        }
     }
 
     /// The player's sample clock restarts with the player, so the timeline
