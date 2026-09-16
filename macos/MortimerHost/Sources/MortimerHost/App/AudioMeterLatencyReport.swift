@@ -94,6 +94,18 @@ enum AudioMeterLatencyReport {
     @discardableResult
     static func write(_ latency: AudioMeterLatency, connected: Bool, native: Bool) -> URL? {
         let url = destination()
+        // A session with no meter at all must not erase one that measured.
+        // Observed 2026-09-15: the section 9 rollback session runs on
+        // DirectWebRTCTransport, which is not an AudioLevelSource, so the
+        // observer had no source and wrote {"gate": "no data"} over the
+        // arrival-gate figures from the session before it. "No data" is the
+        // right PAYLOAD for such a session (a meter that never ran is not a
+        // meter that measured zero) and the wrong thing to overwrite
+        // evidence with.
+        guard latency.samples > 0 else {
+            reportLog.notice("not writing \(url.lastPathComponent, privacy: .public): no observations this session, keeping the existing report")
+            return nil
+        }
         do {
             let data = try JSONSerialization.data(withJSONObject: payload(latency, connected: connected, native: native),
                                                   options: [.prettyPrinted, .sortedKeys])
