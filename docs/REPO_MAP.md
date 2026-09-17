@@ -8,21 +8,23 @@ Verify paths and the current branch before writing. Keep this map below the
 - `services/mortimer-vault/` — knowledge-base HTTP service, CLI and tests;
   setup: `bash scripts/setup_kb.sh`. Documents remain at `MORTIMER_HOME`.
 - `jarvis/` — Python backend: bot pipeline, sub-agents, admin sidecar,
-  council, run log, self-edit service. See below.
-- `mcp_servers/` — MCP skill servers, each with `logic.py`, `server.py`
-  and `skill.yaml`. `mcp_kb/` is read-only; KB writes go through
-  `jarvis/kb_digest.py`.
+  council, run log, self-edit. See below.
+ - `mcp_servers/` — MCP skill servers, one directory per server, each
+   with `logic.py` (pure, testable) + `server.py` (FastMCP wiring) +
+   `skill.yaml` (manifest). `mcp_kb/` is read-only
+   (`kb_search`/`kb_read`/`kb_neighbors`); KB writes go through
+   `jarvis/kb_digest.py`, not MCP.
 - `macos/` — the native macOS client (Swift, SwiftPM). `JarvisKit/` is
   the shared library, `MortimerHost/` the app that consumes it. This is
   the live interface; `web/` is frozen. See below.
 - `web/` — the React/Vite console. FROZEN 2026-09-04 and not served:
   interface work goes to `macos/MortimerHost`.
-- `sandbox/` — disposable macOS VMs, guarded files, checks and PRs.
+ - `sandbox/` — disposable macOS VMs, guarded files, verification, PRs.
 - `config/` — YAML/JSON routing and model config (agents, MCP servers,
   voices, self-edit allowlist, upgrade models/agent bounds). Check here
   first when a capability seems misrouted or over/under-permissioned.
-- `docs/` — `plans/` (implementation plans + specs, `plans/implemented/`
-  for completed ones), `reviews/` (adopted model reviews). This file.
+- `docs/` — `plans/` (+ `plans/implemented/`), `reviews/`, `acceptance/`.
+  This file.
 - `tests/` — `unit/` (no external calls), `integration/` (MCP-over-stdio,
   registry, bot wiring), `evals/` (live routing eval), `acceptance/`
   (manual checklists, not run by pytest).
@@ -98,48 +100,46 @@ Verify paths and the current branch before writing. Keep this map below the
 
 ## `macos/` native client
 
-The interface. `MortimerHost` (the app) depends on `JarvisKit` (the
-shared library) by path, so a JarvisKit change rebuilds both. Self-edit
-may change the Swift **sources** below — gated by `swift build` +
-`swift test` in an independent VM, PR flagged SWIFT CHANGE, and inert
-until a human runs `macos/MortimerHost/scripts/bundle.sh`. Manifests,
-plists, entitlements, `scripts/`, `GlassSpike/` and `MortimerShell/` are
-human-only.
+`MortimerHost` (the app) depends on `JarvisKit` by path, so a JarvisKit
+change rebuilds both. Self-edit may change the Swift **sources** below,
+gated by `swift build` + `swift test` in an independent VM and a PR flagged
+SWIFT CHANGE, inert until a human runs `MortimerHost/scripts/bundle.sh`.
+Manifests, plists, entitlements, `scripts/`, `GlassSpike/`,
+`MortimerShell/` are human-only.
 
 - `JarvisKit/Sources/JarvisKit/` — `JarvisClient.swift` (voice session),
-  `AdminAPI.swift` (every sidecar call the app makes; the Python side is
-  `jarvis/admin/server.py`), `AppMessage.swift`/`ClientMessage.swift`
-  (RTVI message shapes — mirror the backend's, change both together),
-  plus transport (`RTVITransport` the protocol, with
-  `DirectWebRTCTransport` + `Signalling` for remote and
-  `NativeAudioTransport` + `PipecatFrameCodec` for a same-Mac bot),
-  audio (`AudioEngineIO` owns capture and playout on the native path,
-  `AudioActivityObserver` the measured levels behind the wave),
-  `WakeWordListener`, `KeychainStore`.
+  `AdminAPI.swift` (every sidecar call; Python side `jarvis/admin/server.py`),
+  `AppMessage.swift`/`ClientMessage.swift` (RTVI shapes — mirror the
+  backend's, change both together), transport (`RTVITransport` protocol;
+  `DirectWebRTCTransport` + `Signalling` remote, `NativeAudioTransport` +
+  `PipecatFrameCodec` same-Mac bot), audio (`AudioEngineIO` capture and
+  playout on the native path, `AudioActivityObserver` the measured levels
+  behind the wave), `WakeWordListener`, `KeychainStore`.
 - `MortimerHost/Sources/MortimerHost/App/` — `MortimerHostApp` (entry),
   `AppMessageRouter` (app message → UI state), `UICommandRouter` (voice
   `ui_control` dispatch), `AppTheme`/`AppTuning`/`Glass` (style and
   tunables), `VoiceState`, `Sounds`.
-- `.../Console/` — always-visible console: `ConsoleView`, `OrbFieldView`
-  and `VoiceWaveView` (the orb), `AmbientStripView`, `TopBarView`,
+- `.../Console/` — `ConsoleView`, `AdaptiveStageView` (default layout since
+  2026-09-17; `layoutVersion` 0 is legacy), `OrbFieldView`/`VoiceWaveView`
+  (the orb), `WaveTuningView`, `AmbientStripView`, `TopBarView`,
   `MicControlsView`, `SystemVitalsView`.
-- `.../Drawer/` — tabbed drawer, one file per tab: `DrawerView`,
+- `.../Drawer/` — one file per tab: `DrawerView`,
   `EditTab` (drives `/api/selfedit/*`), `RepoTab`, `AgentsTab`,
   `RunsTab`, `MemoryTab`, `CostsTab`, `OutputTab`, `LogTab`, `TabState`.
 - `.../Display/` — the result window: `DisplayWindowView`,
-  `DisplayContentView`, `DisplayWindowStore`, `GraphImageView` (renders
-  graph-layer images).
+  `DisplayContentView`, `DisplayWindowStore`, `GraphImageView` (graph-layer
+  images).
 - `.../Placement/`, `.../Stores/` — placement; view stores.
 
 ## `web/src/` console (frozen)
 
-Frozen 2026-09-04. Interface work goes to `macos/MortimerHost`.
+Frozen 2026-09-04; interface work goes to `macos/MortimerHost`.
 
 ## Naming discipline (do not confuse these)
 
 - "sidecar" = the admin Python process on `:7861` (`jarvis/admin/server.py`)
-  — never the side drawer, never a popped-out window.
+  — never the side drawer.
 - "drawer" = the tabbed side panel (`DrawerView.swift`) — never the
-  console, never a popped-out window.
+  console; neither is a popped-out window.
 - "display window" = the informational-result window
   (`DisplayWindowView.swift`) — separate from the drawer.
