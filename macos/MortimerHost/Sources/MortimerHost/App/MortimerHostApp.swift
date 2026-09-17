@@ -123,6 +123,13 @@ struct MortimerHostApp: App {
             DebugLogView()
                 .environmentObject(client)
         }
+
+        // Item 10: the wave's dB windows, dragged while talking.
+        Window("Wave Levels", id: "wave-tuning") {
+            WaveTuningView()
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 420, height: 380)
         .commands {
             // A guaranteed Full Screen path independent of the green
             // button's mode: sets the behavior and toggles in one step.
@@ -151,6 +158,9 @@ struct MortimerHostApp: App {
                 }
                 Button("Show message log") {
                     windowActions.open("debug-log")
+                }
+                Button("Wave level windows") {
+                    windowActions.open("wave-tuning")
                 }
                 Divider()
                 // Closure C7.5: the meter's own latency, buffer host time to

@@ -166,8 +166,14 @@ final class WaveEngine {
         lastState = state
 
         // Adaptive levels are measured; only the legacy rollback uses simulation.
+        // Item 10: mapped through the channel's dB window BEFORE smoothing,
+        // so the envelope's 40 ms/180 ms easing runs in perceptual space —
+        // a linear release from a loud syllable would otherwise collapse
+        // most of its visible travel in the first few milliseconds.
         if let presentation {
-            let target = presentation.activity == .user ? presentation.userLevel : presentation.outputLevel
+            let isInput = presentation.activity == .user
+            let raw = isInput ? presentation.userLevel : presentation.outputLevel
+            let target = AudioPresentationTuning.presentationLevel(rms: raw, isInput: isInput)
             level = measuredEnvelope.advance(target: target, now: now)
         } else {
             let target = state == .speaking ? simLevel(t) : 0
@@ -192,11 +198,19 @@ final class WaveEngine {
                 (presentation.activity == .assistant || presentation.activity == .thinking ?
                     AudioPresentationTuning.assistantRGB : AudioPresentationTuning.neutralRGB)
             dyn.cr = color.0; dyn.cg = color.1; dyn.cb = color.2
-            dyn.base = 0.004
             dyn.alpha = presentation.activity == .offline ? 0.16 : 0.65
             dyn.glow = staticTrace ? 0 : 0.4
-            dyn.speed = staticTrace ? 0 : 0.45
-            if staticTrace { p1 = 0; p2 = 0; p3 = 0 }
+            // Item 10: `base` and `speed` were pinned to 0.004 and 0.45 —
+            // the first is the `.offline` target, so the resting thickness
+            // was the one meant for a dead connection, and the second runs
+            // the wobble at under half the legacy speaking rate. Both now
+            // ease to the per-state targets above like the legacy path.
+            // `staticTrace` still stops motion dead, which is what keeps a
+            // trace with nothing arriving honest.
+            if staticTrace {
+                dyn.speed = 0
+                p1 = 0; p2 = 0; p3 = 0
+            }
         }
 
         p1 += dt * 2.2 * dyn.speed
