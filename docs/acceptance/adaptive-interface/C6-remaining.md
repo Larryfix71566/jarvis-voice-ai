@@ -201,24 +201,65 @@ Settings change. Then read the signature lines:
 - signatures genuinely differ → it is the hardware settling, there is
   nothing to fix, and it gets recorded as expected behaviour.
 
-## 4. The input channel's observation count — INVESTIGATION
+## 4. The input channel's observation count — RESOLVED 2026-09-17 — NOT A DEFECT
 
-**What it is.** Input observations per session: 1568, 840, **76**, 959. The
-76 came from an 87 s session whose capture path delivered ~100 buffers/s —
-roughly 8,700 buffers producing 76 accepted observations. `shown` equalled
-`arrivals` exactly, so every entry was fresh; the accumulator simply had
-nothing to hold most of the time.
+**It was never a rejection rate.** `observations` is not a count of accepted
+samples against offered ones — it is how many of the report's trailing
+60-second window had a level present at all, and it is hard-capped:
 
-**Why it matters.** The C7.5 gate now reads input arrival p95, so the figure
-it depends on rested on a 76-sample base once. A gate is only as good as
-the sample under it.
+```
+observations = min(hz * window, hz * seconds-of-level-present)
+             = min(30 * 60, 30 * seconds)   =   min(1800, 30 * seconds)
+```
 
-**To close.** Not a measurement — a code read plus one instrumented run.
-`AudioActivityAccumulator` refuses observations on watermark, 300 ms
-staleness and mute-eligibility rules; none obviously explains a 97%
-rejection rate on a live capture path. Log the refusal reason per rejected
-observation, run one session, count by reason. That says whether it is a
-defect or correct behaviour nobody had quantified.
+`AudioActivityObserver.sample()` appends to `displayed` once per 30 Hz tick
+per channel whenever the snapshot carries a `measuredAt`, then drops
+everything older than `moment - 60`. So the figure is a **duty cycle over a
+trailing minute**, and 1800 is its ceiling, not a healthy reading.
+
+| report | observations | = seconds of level | % of window |
+| --- | --- | --- | --- |
+| 2026-09-17T01:35Z input | 1800 | 60.0 | 100% — **saturated** |
+| the "1568" case | 1568 | 52.3 | 87% |
+| the "840" case | 840 | 28.0 | 47% |
+| 2026-09-17T01:49Z input | 220 | 7.3 | 12% |
+| the "76" case | 76 | 2.5 | 4% |
+
+The 87-second session that produced 76 is not a path delivering 8,700
+buffers and accepting 76. It is a report written when only the last 2.5
+seconds of the trailing minute had a level — the window looks back 60 s
+from the moment the report is taken, not over the session.
+
+**The discriminating check, on two reports 14 minutes apart.** If the count
+measured sampling health, an 8.2x drop in it would move the cadence. It does
+not:
+
+| | observations | arrivals | arrival p50 | arrival p95 |
+| --- | --- | --- | --- | --- |
+| 01:35 input | 1800 | 1800 | 19.5 ms | 24.7 ms |
+| 01:49 input | 220 | 220 | 19.9 ms | 25.2 ms |
+
+Same cadence at both ends. And `observations == arrivals` on the input
+channel in both, which is the earlier note that "`shown` equalled `arrivals`
+exactly" — correct, and it means every tick carried a *fresh* buffer. The
+accumulator was not refusing anything. Nothing to instrument; no run needed.
+
+**Two real gaps this exposed, neither a defect in the meter.**
+
+1. *The gate has no minimum-sample floor.* `AudioMeterLatencyReport` renders
+   `"gate": "pass"` from `arrival_p95 <= 50 ms` at any count above zero, so a
+   report taken 2.5 s after connect passes on 76 samples, where p95 is the
+   72nd value of 76. Defensible, thin, and nothing in the artefact says so.
+2. *The artefact invites exactly the misreading above.* It records
+   `window_seconds: 60` and `sample_hz: 30` but not how much of the window
+   held data, so a saturated window and a 7-second one are indistinguishable
+   from a full one without doing this arithmetic by hand.
+
+Proposed, NOT done here: a `coverage` field
+(`observations / (window_seconds * sample_hz)`) and a sample floor on the
+verdict. Both change what a **gate** reports, and per section 6 of the
+closure plan that is Larry's call, not a side-errand — the same reasoning
+that left the C3.1 frame-time gate alone below.
 
 ## 5. 24 kHz steady state — OPPORTUNISTIC RUN
 
@@ -291,10 +332,10 @@ closed on the 32 native turns already on disk). The docs half of step 8 is
 also done — `CLAUDE.md:92` carries the native-audio section and
 `docs/REPO_MAP.md:116` names `NativeAudioTransport`.
 
-Still blocking the unqualified word, all three needing AirPods in hand:
+Still blocking the unqualified word — **two**, both needing AirPods in hand
+(item 4 resolved 2026-09-17 by a code read: it was never a defect):
 
 - item 3 — rebuild churn, one earbud-removal run
-- item 4 — the input channel's observation count
 - item 7 — §3.3 echo bench, or written acceptance of the indirect evidence
 
 Item 5 (24 kHz steady state) is opportunistic and does not gate this line.

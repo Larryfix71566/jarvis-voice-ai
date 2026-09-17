@@ -4,11 +4,13 @@
 (PR #73). §8 hardware verification **substantially complete**. Step 7 is
 resolved as a partial (D8 AMENDED 2026-09-17: the coordinator stays for the
 remote path, its flag is deleted) and §3.4 latency parity is closed
-(2026-09-17). **Three hardware measurements remain**, all of them requiring
-AirPods in hand, each named in the open list below and in
+(2026-09-17). **Two hardware measurements remain**, both requiring AirPods
+in hand, each named in the open list below and in
 `docs/acceptance/adaptive-interface/C6-remaining.md`: §3.3 echo on the two
-AirPods configurations, rebuild churn on a device change, and the input
-observation count. Not "IMPLEMENTED" unqualified, because that line is what
+AirPods configurations, and rebuild churn on a device change. The input
+observation count was the third until 2026-09-17, when a code read settled
+it as arithmetic rather than a defect — `observations` is a duty cycle over
+a trailing 60 s window, capped at 30 Hz × 60 s = 1800, not a sampling rate. Not "IMPLEMENTED" unqualified, because that line is what
 a later plan's gate reads — `MORTIMER_ADAPTIVE_INTERFACE_CLOSURE_PLAN.md`
 C11 item 2, which defers to §6 step 8, which is Larry's to flip after §8.
 
@@ -38,8 +40,15 @@ Evidence: `C6-native-audio.md`, `C7-measured-audio.md`, `C6-parity.md`,
   WebRTC sample is n=3.
 - **Rebuild churn** — six rebuilds from two device changes, observed once,
   not reproduced. Instrumented; needs an earbud-removal run.
-- **Input observation count** — 76 observations in 87 s against 1568 and
-  840 elsewhere. Unexplained.
+- **Input observation count** — **RESOLVED 2026-09-17, not a defect.** The
+  figure is `min(1800, 30 × seconds-of-level-present)` over a trailing 60 s
+  window, so 1800 is a saturated ceiling and 76 is a report taken when only
+  the last 2.5 s of that minute carried a level. Two reports 14 minutes
+  apart give 1800 and 220 observations at an unchanged arrival p50 of 19.5
+  and 19.9 ms — an 8.2× swing in the count with no change in cadence, which
+  is what a duty cycle does and a rate does not. Details, plus the two
+  reporting gaps it exposed (no minimum-sample floor on the gate verdict; no
+  coverage field in the artefact), in `C6-remaining.md` item 4.
 
 Supersedes the `AudioInputCoordinator` band-aid (2026-09-05, JarvisKit) on
 the native path only. The original text said the stopgap "was to be deleted
@@ -486,7 +495,7 @@ equal footing — that is a fifteen-minute run, not a plan item.
    transport-choice problem. `JarvisClient` now gates the coordinator on
    `transport is DirectWebRTCTransport` instead of on a flag.
 8. Docs: CLAUDE.md audio section, REPO_MAP, and this plan's Status → IMPLEMENTED
-   (Larry, after §8). **Blocked only on the three hardware measurements named
+   (Larry, after §8). **Blocked only on the two hardware measurements named
    in the header**; the docs half (CLAUDE.md, REPO_MAP) is done. This is the
    step `MORTIMER_ADAPTIVE_INTERFACE_CLOSURE_PLAN.md` C11 item 2 reads.
 
