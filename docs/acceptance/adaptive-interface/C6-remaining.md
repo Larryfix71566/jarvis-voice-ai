@@ -187,7 +187,7 @@ the supervisor pin lives (`model_endpoints.yaml` vs the already-denied
 Tier 0. Both shape the implementation, so they want answering before anyone
 starts it.
 
-## 10. The wave lost its amplitude and width — DEFECT, CAUSE MEASURED
+## 10. The wave lost its amplitude and width — AMPLITUDE CLOSED, WIDTH OPEN
 
 **What it is.** Larry, 2026-09-16: "the sine wave for voice interaction lost
 its amplitude and width from the previous version, I want that back."
@@ -243,6 +243,49 @@ much.
   or whether the full-size `.conversation` wave is the one Larry means by
   "the previous version". Ask before changing the layout; the numbers above
   are enough to fix amplitude without touching it.
+
+**CLOSED for amplitude, 2026-09-16 (`fabc349`).** Fixed by mapping the level
+through its channel's dBFS window before the envelope, and by letting
+`dyn.base` and `dyn.speed` ease to their per-state targets instead of being
+pinned to `0.004` (the `.offline` value) and `0.45`. A gain constant was
+ruled out by measurement, not preference: the input channel spans 134x
+between its median and its p95, and `VoiceEnvelope.advance` rejects a target
+outside 0…1, so a large gain would make loud syllables vanish rather than
+clip. Because a dB-normalised level occupies 0…1 the way `simLevel` did,
+`0.115` needed no change and stopped being an inherited constant.
+
+Verified against Larry's own session, not against the arithmetic — the
+reading at 2026-09-17T00:33:36Z, written by the automatic session-end
+trigger:
+
+| channel | median | p95 | peak | legacy |
+|---|---|---|---|---|
+| input | 75 px | 189 px | 208 px | 72–210 px |
+| playout | 85 px | 181 px | 205 px | 72–210 px |
+
+Larry, on seeing it: *"visually it is back to what we had in the previous
+interface so I like it."* That is the acceptance — the criterion was always
+perceptual, and no measurement substitutes for it.
+
+Which window reads best is also perceptual, so the four dB values are
+UserDefaults-backed and `Debug ▸ Wave level windows` drags them live while
+talking, with the measured values as fallbacks and a copyable summary.
+Larry: *"I like that implementation."* The defaults were left where they
+are, because they are where he liked the trace.
+
+Note for the record: the input median measured 0.0012 on the first reading
+and 0.0046 on the second — a 4x spread, from how much inter-syllable silence
+falls inside the 60 s window. So the trace is livelier on continuous speech
+than on sparse speech by design; raising the floor toward −50 dB would
+compress that if it ever grates.
+
+**WIDTH REMAINS OPEN**, and it is a layout decision rather than a defect.
+The super-Gaussian window is byte-identical on both paths, so the lobe is
+always the same fraction of `w`; what differs is `w` — full-window on the
+legacy path and in adaptive `.conversation`, clamped to `height: 150` in
+`.rail` and `width: 140` in `.bottom`. Larry has not reported it as still
+wrong since the amplitude fix. To close: either he names the mode it reads
+narrow in, or it is recorded as satisfied by the amplitude change.
 
 **Regression risk.** C7's whole point was that the meter shows measured
 audio. Re-inflating the trace must not reintroduce motion when nothing is

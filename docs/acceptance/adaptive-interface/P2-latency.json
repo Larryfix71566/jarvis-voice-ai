@@ -7,33 +7,33 @@
   "input" : {
     "arrival_p50_ms" : 20.100000000000001,
     "arrival_p95_ms" : 25.399999999999999,
-    "arrivals" : 200,
+    "arrivals" : 277,
     "displayed_p50_ms" : 20.100000000000001,
     "displayed_p95_ms" : 25.399999999999999,
-    "level_max" : 0.2722,
-    "level_p50" : 0.039800000000000002,
-    "level_p95" : 0.21479999999999999,
-    "observations" : 200,
-    "worst_ms" : 25.5
+    "level_max" : 0.30330000000000001,
+    "level_p50" : 0.0045999999999999999,
+    "level_p95" : 0.16420000000000001,
+    "observations" : 277,
+    "worst_ms" : 25.399999999999999
   },
-  "measured_at" : "2026-09-17T00:19:24Z",
+  "measured_at" : "2026-09-17T00:33:36Z",
   "native_audio" : true,
-  "observations" : 1173,
+  "observations" : 656,
   "p50_ms" : 20.100000000000001,
-  "p95_ms" : 25.399999999999999,
+  "p95_ms" : 134.30000000000001,
   "playout" : {
-    "arrival_p50_ms" : 1,
+    "arrival_p50_ms" : 0.90000000000000002,
     "arrival_p95_ms" : 1,
-    "arrivals" : 933,
-    "displayed_p50_ms" : 1,
-    "displayed_p95_ms" : 3.2999999999999998,
-    "level_max" : 0.59530000000000005,
-    "level_p50" : 0.070699999999999999,
-    "level_p95" : 0.30249999999999999,
-    "observations" : 973,
-    "worst_ms" : 267.69999999999999
+    "arrivals" : 335,
+    "displayed_p50_ms" : 0.90000000000000002,
+    "displayed_p95_ms" : 134.30000000000001,
+    "level_max" : 0.52349999999999997,
+    "level_p50" : 0.11899999999999999,
+    "level_p95" : 0.39729999999999999,
+    "observations" : 379,
+    "worst_ms" : 297.80000000000001
   },
   "sample_hz" : 30,
   "window_seconds" : 60,
-  "worst_ms" : 267.69999999999999
+  "worst_ms" : 297.80000000000001
 }
