@@ -1,6 +1,12 @@
 # Mortimer — Self-Edit Authoring Plan (the developer writes; the sidecar validates; Larry reviews, merges, rebuilds)
 
-**Status:** DRAFT for Larry's approval, 2026-09-07. Implements the architecture verdict in `Claude outputs/selfedit_architecture_review_2026-09-07.md` (options C, A, B) against roadmap track T1.3's live interface (`macos/MortimerHost`).
+**Status:** HISTORICAL DRAFT, 2026-09-07; operational workflow superseded
+by the sandbox migration (reviewed 2026-09-17). Use `sandbox/README.md`,
+`sandbox/IMPLEMENTATION.md`, `sandbox/runtime.py` and `sandbox/session.py`
+for current workspace and verification behavior. Do not execute this
+draft's older host-worktree or validation sequence as current instructions.
+The user outcome remains required; migration does not itself establish
+end-to-end voice authoring acceptance. Implements the architecture verdict in `Claude outputs/selfedit_architecture_review_2026-09-07.md` (options C, A, B) against roadmap track T1.3's live interface (`macos/MortimerHost`).
 
 **Author / origin.** Larry, 2026-09-07, verbatim:
 

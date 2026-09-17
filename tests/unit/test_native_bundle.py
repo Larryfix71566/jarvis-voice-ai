@@ -1,6 +1,7 @@
 """Packaging contracts; fake build/sign/open boundaries never launch an app."""
 import json
 import os
+import plistlib
 from pathlib import Path
 import subprocess
 import sys
@@ -51,12 +52,14 @@ if name=='codesign':
             path.chmod(0o755)
         self.app = self.package / ".build/MortimerHost.app"
 
-    def run_bundle(self, failure=""):
+    def run_bundle(self, failure="", **overrides):
         env = {**os.environ, "PATH": str(self.bin) + ":/usr/bin:/bin",
-               "BUNDLE_TEST_LOG": str(self.log), "BUNDLE_TEST_FAILURE": failure}
+               "BUNDLE_TEST_LOG": str(self.log), "BUNDLE_TEST_FAILURE": failure,
+               "MORTIMER_SOURCE_REVISION": "unknown", "MORTIMER_CANDIDATE_FINGERPRINT": "unknown", "MORTIMER_BUNDLE_LAUNCH": "1"}
+        env.update(overrides)
         result = subprocess.run(["/bin/bash", str(self.script), "debug"], env=env,
                                 capture_output=True, text=True, timeout=20)
-        commands = [json.loads(line) for line in self.log.read_text().splitlines()]
+        commands = [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
         return result, commands
 
     def test_runtime_and_resources_are_embedded_and_signed_before_launch(self):
@@ -74,6 +77,23 @@ if name=='codesign':
             ["codesign", "--verify", "--deep", "--strict", str(self.app)],
             ["open", str(self.app)],
         ])
+
+    def test_release_provenance_is_embedded_without_launching_the_app(self):
+        revision = "a" * 40
+        result, commands = self.run_bundle(MORTIMER_SOURCE_REVISION=revision, MORTIMER_CANDIDATE_FINGERPRINT="b" * 64, MORTIMER_BUNDLE_LAUNCH="0")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        info = plistlib.loads((self.app / "Contents/Info.plist").read_bytes())
+        self.assertEqual(info["MortimerSourceRevision"], revision)
+        self.assertEqual(info["MortimerCandidateFingerprint"], "b" * 64)
+        self.assertEqual(info["MortimerBuildConfiguration"], "debug")
+        self.assertNotIn("open", [command[0] for command in commands])
+        self.assertIn(["codesign", "--verify", "--deep", "--strict", str(self.app)], commands)
+
+    def test_invalid_source_identity_is_rejected_before_building(self):
+        result, commands = self.run_bundle(MORTIMER_SOURCE_REVISION="<not-a-revision>")
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(commands, [])
+        self.assertFalse(self.app.exists())
 
     def test_missing_runtime_prevents_signing_and_launch(self):
         (self.framework / "Versions/A/WebRTC").unlink()

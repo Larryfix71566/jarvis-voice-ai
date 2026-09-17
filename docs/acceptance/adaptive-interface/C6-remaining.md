@@ -1,6 +1,13 @@
 # What is left, and what closes each
 
-State at `1acd275` on `docs/wave-and-agent-recovery`, 2026-09-17. Fourteen
+**Status index, reconciled 2026-09-17 against `5faa2e6`:** this file is a
+chronological investigation log, including resolved items and superseded
+proposals. Use `RELEASE_READINESS.md` for release gates. PR #76 remains open;
+all five reported CI checks passed on its current head. This does not prove
+that the running services have loaded its fixes.
+
+**Historical inventory at `1acd275`:**
+Fourteen
 items. Two are decisions,
 two are investigations, three need one hardware run each, one needs
 re-specifying, two are someone else's call, and one is a defect with a

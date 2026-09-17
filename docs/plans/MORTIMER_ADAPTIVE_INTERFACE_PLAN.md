@@ -3,16 +3,16 @@
 **Status:** IMPLEMENTATION IN PROGRESS; NO RELEASE ACCEPTANCE. See `docs/acceptance/adaptive-interface/` for measured progress and open gates.
 
 **2026-09-17:** the adaptive layout is now the DEFAULT (`layoutVersion` 1, closure item C9.5 / gap G30). `Debug ▸ Use previous layout` is retained for one release. C8 acceptance is still unrun — its unexercised rows are accepted as known limitations in `docs/acceptance/adaptive-interface/C8-open-items.md` under Gate G-C8's written-acceptance route, which is not the same as acceptance having been performed.
-**Current application candidate:** `6264fdf` on `feat/adaptive-compact-conversation`; adaptive
-source phases and sandbox runner corrections are present, but release acceptance
-is intentionally not claimed.
-**Latest manual evidence:** Larry confirmed the sidecar font picker works after
-`6264fdf`. Larry's subsequent screenshot shows the connected candidate using its
-previous-layout presentation with floating graph images inside the main console.
-Adaptive graph activation and acceptance remain open. Desktop automation had
-selected the older MortimerShell retry screen; see the correction and screenshot
-analysis in P6-interim-checks.md. A candidate connection failure or graph-routing
-defect was not established by those earlier captures.
+**Current reviewed application source:** `5faa2e6` on
+`docs/wave-and-agent-recovery`, 2026-09-17 (PR #76, still open at review).
+The running app's exact compiled revision is not established by that source
+identity. See `docs/acceptance/adaptive-interface/RELEASE_READINESS.md` for
+separate merge, verification, deployment and acceptance evidence.
+**Historical manual evidence (2026-09-11):** Larry confirmed the font picker
+fix after `6264fdf`; the screenshot from that session showed the previous
+layout. It must not be used to identify the current build. Later native
+sessions and the adaptive default decision are recorded in C6/C7 and
+`C8-open-items.md`; C8 itself remains unrun.
 **Scope:** Native MortimerHost interface, dual-speaker Silo feedback, central results, interactive memory graph, preserved sidecar, automatic monitor adaptation.
 **Baseline inspected:** repository commit `2ccf66cd7e00b82cf9136d2cd00f42e9bddb90af` (PR #63), 2026-09-10. Recheck the actual starting commit before implementation.
 **Owner:** Larry. Implementation may be assigned to a coding model one phase at a time. This document authorizes no application-code change by itself.

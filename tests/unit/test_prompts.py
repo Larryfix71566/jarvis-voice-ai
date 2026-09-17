@@ -695,3 +695,16 @@ def test_the_staging_id_example_matches_what_the_server_generates():
     m = re.search(r"a preview naming ([0-9a-f]+) becomes", SUPERVISOR_PROMPT)
     assert m, "rule 9's staging_id example is missing or reworded"
     assert len(m.group(1)) == 12, m.group(1)
+
+
+def test_selfedit_previews_then_starts_without_an_extra_spoken_confirmation():
+    from jarvis.prompts import DEVELOPER_SECTIONS
+    text = DEVELOPER_SECTIONS["self_development"]
+    assert "speak the returned preview summary" in text
+    assert "same turn with confirm set to true" in text
+    assert "exact staging_id" in text
+    assert "user approves or rejects the result in the pull request" in text
+    assert "Merging is never yours" in text
+    assert "only after explicit confirmation in a new turn" not in text
+    # Larry's self-edit decision does not silently change new-app creation.
+    assert "only after the user explicitly confirms in a new turn" in DEVELOPER_SECTIONS["app_development"]

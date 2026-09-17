@@ -8,7 +8,7 @@ final class AudioMeterLatencyReportTests: XCTestCase {
     private func latency(p95: Double, samples: Int = 100) -> AudioMeterLatency {
         let channel = AudioMeterChannelLatency(samples: samples, displayedP50: p95 / 2,
                                                displayedP95: p95, worst: p95 * 1.2,
-                                               arrivals: samples / 2, arrivalP50: p95 / 4,
+                                               arrivals: samples, arrivalP50: p95 / 4,
                                                arrivalP95: p95 / 3)
         return AudioMeterLatency(input: channel, playout: channel)
     }
@@ -39,6 +39,34 @@ final class AudioMeterLatencyReportTests: XCTestCase {
         let payload = AudioMeterLatencyReport.payload(
             AudioMeterLatency(input: good, playout: .empty), connected: true, native: true)
         XCTAssertEqual(payload["gate"] as? String, "incomplete — one channel produced no observations")
+    }
+
+    func testHeldSnapshotsCannotTurnAShortSampleIntoAPass() {
+        let sparse = AudioMeterChannelLatency(samples: 1800, displayedP50: 0.01,
+            displayedP95: 0.02, worst: 0.03, arrivals: 99,
+            arrivalP50: 0.01, arrivalP95: 0.02)
+        let sufficient = AudioMeterChannelLatency(samples: 1800, displayedP50: 0.01,
+            displayedP95: 0.02, worst: 0.03, arrivals: 100,
+            arrivalP50: 0.01, arrivalP95: 0.02)
+        for channels in [(sparse, sufficient), (sufficient, sparse)] {
+            let payload = AudioMeterLatencyReport.payload(
+                AudioMeterLatency(input: channels.0, playout: channels.1), connected: true, native: true)
+            XCTAssertEqual(payload["gate"] as? String,
+                "incomplete — fewer than 100 distinct arrivals on one or both channels")
+        }
+        let enough = AudioMeterLatencyReport.payload(
+            AudioMeterLatency(input: sufficient, playout: sufficient), connected: true, native: true)
+        XCTAssertEqual(enough["gate"] as? String, "pass")
+    }
+
+    func testCoverageDescribesActivityAcrossTheSixtySecondWindow() throws {
+        let payload = AudioMeterLatencyReport.payload(latency(p95: 0.08, samples: 900), connected: false, native: true)
+        let input = try XCTUnwrap(payload["input"] as? [String: Any])
+        XCTAssertEqual(input["activity_coverage_fraction"] as? Double, 0.5)
+        XCTAssertEqual(input["level_present_seconds"] as? Double, 30)
+        XCTAssertEqual(payload["minimum_arrivals_per_channel"] as? Int, 100)
+        XCTAssertEqual(payload["connected"] as? Bool, false,
+            "ending a session does not erase its preceding observations")
     }
 
     func testAnArrivalP95OverTheGateFails() {

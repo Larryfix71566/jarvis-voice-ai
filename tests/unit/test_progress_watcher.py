@@ -345,3 +345,20 @@ async def test_kill_switch_env_read_at_pipeline_construction_site():
     assert "JARVIS_PROGRESS_UPDATES_ENABLED" in pipeline_module.__loader__.get_source(
         pipeline_module.__name__
     )
+
+
+def test_live_progress_uses_completed_events_not_the_unfinished_run_counter(tmp_path):
+    import sqlite3
+    from jarvis.bot.progress_watcher import _live_progress_for_run
+    db = tmp_path / "progress.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE agent_events (run_id TEXT, seq INTEGER, type TEXT, tool TEXT)")
+        conn.executemany("INSERT INTO agent_events VALUES (?,?,?,?)", [
+            ("active", 1, "tool_result", "repo_read_file"),
+            ("active", 2, "tool_result", "repo_search"),
+            ("active", 3, "tool_call", "unfinished"),
+            ("other", 4, "tool_result", "unrelated"),
+        ])
+    assert _live_progress_for_run("active", db) == (2, "repo_search")
+    assert _live_progress_for_run("missing", db) == (0, None)
+    assert _live_progress_for_run("active", tmp_path / "uninitialized.db") == (0, None)

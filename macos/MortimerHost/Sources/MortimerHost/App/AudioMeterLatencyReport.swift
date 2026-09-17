@@ -25,6 +25,11 @@ private let reportLog = Logger(subsystem: "com.mortimer.host", category: "audio-
 /// path), against ~110 ms for the D10 regression this gate exists to catch.
 enum AudioMeterLatencyReport {
     static let gateSeconds: Double = 0.050
+    // Operational evidence floor, not a statistical confidence guarantee:
+    // 100 distinct buffers put about five observations in the p95 tail.
+    // Held snapshots must not count as additional arrival measurements.
+    static let minimumArrivalsPerChannel = 100
+    static let windowSeconds: Double = 60
 
     /// Repo-relative so a debug build run from the working copy lands the
     /// file in the acceptance directory; falls back to the user's
@@ -47,7 +52,9 @@ enum AudioMeterLatencyReport {
         let formatter = ISO8601DateFormatter()
         var payload: [String: Any] = [
             "measured_at": formatter.string(from: date),
-            "window_seconds": 60,
+            "window_seconds": windowSeconds,
+            "minimum_arrivals_per_channel": minimumArrivalsPerChannel,
+            "coverage_metric": "level-present sampler ticks / (sample_hz * window_seconds)",
             "sample_hz": AudioActivityObserver.sampleHz,
             "observations": latency.samples,
             "connected": connected,
@@ -64,6 +71,9 @@ enum AudioMeterLatencyReport {
         func channel(_ c: AudioMeterChannelLatency) -> [String: Any] {
             [
                 "observations": c.samples,
+                // Activity coverage, not dropped-buffer or transport health.
+                "activity_coverage_fraction": min(1, max(0, Double(c.samples) / (AudioActivityObserver.sampleHz * windowSeconds))),
+                "level_present_seconds": Double(c.samples) / AudioActivityObserver.sampleHz,
                 "displayed_p50_ms": (c.displayedP50 * 1000).rounded(toPlaces: 1),
                 "displayed_p95_ms": (c.displayedP95 * 1000).rounded(toPlaces: 1),
                 "worst_ms": (c.worst * 1000).rounded(toPlaces: 1),
@@ -92,6 +102,9 @@ enum AudioMeterLatencyReport {
         // strength of the other.
         if latency.input.samples == 0 || latency.playout.samples == 0 {
             payload["gate"] = "incomplete — one channel produced no observations"
+        } else if latency.input.arrivals < minimumArrivalsPerChannel
+                    || latency.playout.arrivals < minimumArrivalsPerChannel {
+            payload["gate"] = "incomplete — fewer than 100 distinct arrivals on one or both channels"
         } else {
             payload["gate"] = latency.arrivalP95 <= gateSeconds ? "pass" : "FAIL"
         }

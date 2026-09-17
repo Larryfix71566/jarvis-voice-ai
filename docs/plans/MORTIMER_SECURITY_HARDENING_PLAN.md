@@ -1,8 +1,10 @@
 # Mortimer Security Hardening Plan (roadmap track T4a)
 
 **Status:** **IMPLEMENTED (code), on `main` by 2026-09-04 — §8 VERIFICATION
-PARTIAL: V1 green, V2–V6 unrun, V7 (Larry's deny commit) NOT APPLIED.** Audited
-against the tree on `feat/graph-layer` (2c0ff5a), 2026-09-07. Implements roadmap
+PARTIAL: V1 has historical passing evidence; V2–V6 remain unverified.
+V7's three deny entries ARE APPLIED on main (`25ab904d`), checked 2026-09-17.**
+The implementation inventory below was originally audited against
+`feat/graph-layer` (2c0ff5a), 2026-09-07. Implements roadmap
 track **T4a** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.4, "T4a — hardening,
 not gated").
 
@@ -44,17 +46,14 @@ origin/feat/t4a-security-hardening main` — the one command that makes that
 certain. The 09-04 snapshot's "49 commits sit on feat/t4a-security-hardening"
 describes the branch before that pull.
 
-**STILL OPEN.** (1) **V7 — not applied.** `config/self_edit_allowlist.json`'s
-`deny` does not contain the three W0-SEC entries (`ALLOWLIST_SEQUENCE.md` row
-W0-SEC): `jarvis/skills/registry.py`, `tests/unit/test_agent_isolation.py`,
-`tests/unit/test_requires_env_snapshot.py`. `Allowlist.tier()` returns
-`routine` for all three today (they match the `jarvis/skills/**` and `tests/**`
-allow patterns), so `test_report_self_edit_exposure` prints them rather than
-"none — V7 commit is in". Consequence: the scoping mechanism and BOTH guard
-tests are self-editable, and the snapshot guard that is the reason
-`config/agents.yaml` and `mcp_servers/*/skill.yaml` were left editable can
-itself be rewritten by the edit it is meant to catch. The file is human-only
-(C8); the change is those three lines. (2) **V2–V6 — no record of a run.** The
+**Current verification status (2026-09-17).** V7's policy edit is present:
+`jarvis/skills/registry.py`, `tests/unit/test_agent_isolation.py` and
+`tests/unit/test_requires_env_snapshot.py` are all denied in
+`config/self_edit_allowlist.json` on main and candidate `5faa2e6`. Do not
+repeat the allowlist edit. The original claim that these files were
+self-editable is superseded by that source check; current release test
+evidence belongs in `docs/acceptance/adaptive-interface/RELEASE_READINESS.md`.
+**Still open: V2–V6 — no recorded acceptance run found.** The
 mechanisms deliberately log nothing when they arm (logging the event would be
 a persistence site), so the absence of log lines is expected and is evidence
 of nothing; V2's `ps eww` on a live `mcp_time` child and V4's spoken account

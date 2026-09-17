@@ -42,13 +42,25 @@ final class PresentationLevelMappingTests: XCTestCase {
         super.tearDown()
     }
 
-    /// A window someone inverted with `defaults write` must not divide by
-    /// zero or draw an upside-down wave.
-    func testAnInvertedWindowFallsBackToFullDeflection() {
-        UserDefaults.standard.set(-10.0, forKey: AudioPresentationTuning.inputFloorKey)
-        UserDefaults.standard.set(-60.0, forKey: AudioPresentationTuning.inputCeilingKey)
-        XCTAssertEqual(level(inputP95, isInput: true), 1.0)
-        XCTAssertEqual(level(inputMedian, isInput: true), 1.0)
+    /// Crossed or equal slider settings must retain measured variation,
+    /// not report the quietest nonzero buffer as full-scale speech.
+    func testInvalidWindowsPreserveTheDefaultChannelResponse() {
+        for isInput in [true, false] {
+            let floorKey = isInput ? AudioPresentationTuning.inputFloorKey : AudioPresentationTuning.outputFloorKey
+            let ceilingKey = isInput ? AudioPresentationTuning.inputCeilingKey : AudioPresentationTuning.outputCeilingKey
+            let quiet = isInput ? inputMedian : outputMedian
+            let loud = isInput ? inputP95 : outputP95
+            let expectedQuiet = level(quiet, isInput: isInput)
+            let expectedLoud = level(loud, isInput: isInput)
+            for ceiling in [-60.0, -10.0] {
+                UserDefaults.standard.set(-10.0, forKey: floorKey)
+                UserDefaults.standard.set(ceiling, forKey: ceilingKey)
+                XCTAssertEqual(level(quiet, isInput: isInput), expectedQuiet, accuracy: 0.0001)
+                XCTAssertEqual(level(loud, isInput: isInput), expectedLoud, accuracy: 0.0001)
+                XCTAssertGreaterThan(level(loud, isInput: isInput), level(quiet, isInput: isInput))
+                XCTAssertEqual(level(0, isInput: isInput), 0)
+            }
+        }
     }
 
     /// Item 10b. The width slider reads back exactly, clamps a stray
