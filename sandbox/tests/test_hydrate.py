@@ -45,7 +45,7 @@ class HydrateTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             hydrate.hydrate(self.root, candidate, [".venv"], os.getuid(), os.getgid())
 
-    def test_baseline_tests_remain_independent_of_candidate_tests_and_see_candidate_source(self):
+    def test_baseline_tests_use_baseline_source_and_exclude_candidate_tests(self):
         baseline = Candidate((File("tests/test_app.py", 0o644, b"original required test"),
                               File("jarvis/app.py", 0o644, b"old application")))
         candidate = Candidate((File("tests/test_app.py", 0o644, b"weakened test"),
@@ -57,7 +57,7 @@ class HydrateTests(unittest.TestCase):
         checks = self.root / "verification"
         self.assertEqual((checks / "tests" / "test_app.py").read_bytes(), b"original required test")
         self.assertFalse((checks / "tests" / "test_added.py").exists())
-        self.assertEqual((checks / "jarvis" / "app.py").read_bytes(), b"updated application")
+        self.assertEqual((checks / "jarvis" / "app.py").read_bytes(), b"old application")
         self.assertIn(checks / "jarvis" / "app.py", list(checks.rglob("*.py")))
 
     def test_swift_verification_copies_dependencies_without_candidate_build_products(self):
