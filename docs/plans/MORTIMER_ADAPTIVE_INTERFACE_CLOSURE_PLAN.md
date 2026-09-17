@@ -3,7 +3,13 @@
 **Status:** IMPLEMENTATION SPECIFICATION; NOT A CLAIM OF ACCEPTANCE. Supersedes nothing — it extends `docs/plans/MORTIMER_ADAPTIVE_INTERFACE_PLAN.md` (the "interface plan") and sequences `docs/plans/MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md` (the "native-audio plan") ahead of P2.
 
 **2026-09-17 — C9.5 closed, C8 not.** `layoutVersion` defaults to `1`. Gate G-C8 was satisfied by its written-acceptance route: `docs/acceptance/adaptive-interface/C8-open-items.md` names every unexercised row with Larry's acceptance, grouped by whether the flag can reach it at all (13 of 24 rows render from a `DrawerView` instantiated outside the `layoutVersion` branch). C8's five requirements remain open work.
-**Baseline inspected:** candidate `6bf0270` on `feat/adaptive-compact-conversation` in the isolated checkout `~/Documents/Codex/2026-09-09/can/work/active-repo`; installed checkout `~/jarvis-voice-ai-clean` at `2ccf66c` (= `origin/main` on 2026-09-10) with five uncommitted local changes. Gap inventory is `docs/reviews/MORTIMER_ADAPTIVE_INTERFACE_PLAN_REVIEW.md` (2026-09-11). Recheck all three before starting.
+**Current release tracking (2026-09-17):** use
+`docs/acceptance/adaptive-interface/RELEASE_READINESS.md`. C1–C5 have
+implementation evidence; C6/C7 now have code and live evidence, with named
+hardware/acceptance gaps. The original baseline and checklist below are
+historical and are not a current release verdict. C8 remains open.
+
+**Baseline originally inspected:** candidate `6bf0270` on `feat/adaptive-compact-conversation` in the isolated checkout `~/Documents/Codex/2026-09-09/can/work/active-repo`; installed checkout `~/jarvis-voice-ai-clean` at `2ccf66c` (= `origin/main` on 2026-09-10) with five uncommitted local changes. Gap inventory is `docs/reviews/MORTIMER_ADAPTIVE_INTERFACE_PLAN_REVIEW.md` (2026-09-11). Recheck all three before starting.
 **Owner:** Larry. Implementation is assigned to a coding model one phase at a time; Larry runs every merge and every deployment. The implementer never runs `git merge`, `git push --force`, `launchctl`, or `open` against the production host. This document authorizes no application-code change by itself.
 **Safety claim:** the interface plan's contracts UI-1 through UI-7 remain in force verbatim. This plan adds no new contract and relaxes none. Anything unmeasured stays open; a status of "done" in this document means positive evidence exists at the named path.
 
@@ -141,7 +147,7 @@ Execute `MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md` as written, in its own branch 
 
 1. Its §3 verify-first gate is a hard stop: pipecat 1.4.0 WebSocket audio transport identity, app-frame carriage, VPIO echo-cancellation quality on AirPods-out + built-in-mic and AirPods-both, latency parity against the C0.4 baseline, and wake-listener independence. Findings are written into that plan before any transport code.
 2. Its D4 (`botIsSpeaking` from the player node) is the source of the **playout** channel for C7; its D2 capture tap is the source of the **input** channel. Design `AudioEngineIO` so both expose a latest-value level slot (RMS over the last buffer, with the buffer's host time) that C7 can read without a second tap. This is the one addition to that plan; it is additive and does not change its steps.
-3. Its D8 (delete `AudioInputCoordinator` and the input-notice chip) removes one of the eleven OrbField indicators inventoried in the review. Record that removal in `P0-preservation-checklist.md` as intentional, with the plan reference, before C8.
+3. **D8 amended 2026-09-17:** retain `AudioInputCoordinator` and its truthful input notice for the Swift WebRTC remote/rollback path; remove only the obsolete `matchInputRate` flag. Native capture does not need the coordinator. Preserve the notice in P0/C8; do not delete it by following the original D8 text.
 4. Server change (`jarvis/bot/bot.py` WebSocket case) means the backend restarts at deployment (C10.4).
 
 Acceptance: that plan's §7 tests and §8 verification (Larry runs) recorded; `JARVIS_FORCE_WEBRTC=true` rollback proven. PR: per that plan.
@@ -154,7 +160,7 @@ Primary files: new `JK/AudioActivityObserver.swift`, `JK/AudioActivity.swift`, `
 2. **Eligibility.** Input level is published only when `micEnabled` is true and the transport is the native path; on the WebRTC path the observer publishes nothing and the wave shows "Audio level unavailable" (already implemented). Muting zeroes input immediately (already tested in `JKT/AudioActivityTests.swift`).
 3. **Wire.** `AdaptiveStageView` receives the observer's snapshot instead of `nil`. Nothing else in the presentation changes.
 4. **Runtime disable path (§10).** `JARVIS_AUDIO_METER=off` (declared in `JarvisConfig`, tested) makes the observer publish nothing; status stays truthful.
-5. **Latency instrumentation.** The observer records, per sample, host time of the audio buffer and the time the presentation consumed it; a debug menu item dumps p50/p95 over the last 60 s to `docs/acceptance/adaptive-interface/P2-latency.json` on demand. Gate: p95 ≤150 ms for both channels on the deployment Mac.
+5. **Latency instrumentation.** The observer records, per sample, host time of the audio buffer and the time the presentation consumed it; a debug menu item dumps p50/p95 over the last 60 s to `docs/acceptance/adaptive-interface/P2-latency.json` on demand. **Metric amended 2026-09-15:** the saved report gates observer-arrival p95 ≤50 ms for both channels. Its former displayed-age metric measured held-level staleness, not rendered-frame latency. Do not represent the arrival gate as direct buffer-to-screen latency evidence; sample-floor/coverage and hardware acceptance remain separately tracked.
 
 Acceptance: JarvisKit and host suites green; §9.3 matrix run in C8. PR: "P2 — measured dual-speaker voice feedback (native path)".
 

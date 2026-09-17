@@ -1159,3 +1159,23 @@ def test_cold_file_request_only_warms_vm_and_requires_explicit_retry(registry_fi
     assert not session.state['proposals'], 'Warmup must never replay a submitted edit.'
     assert request()['ok']
     assert len(session.state['proposals']) == (1 if method == 'write' else 0)
+
+
+def test_finish_failure_records_the_submit_reason(monkeypatch, caplog):
+    from types import SimpleNamespace
+    with srv._finish_lock:
+        before = dict(srv._finish_job)
+        srv._finish_job.update(cancel_requested=False, run_id="diagnostic-fixture")
+    monkeypatch.setattr(srv, "_selfedit_service", SimpleNamespace(
+        validate=lambda: {"ok": True, "checks": []},
+        submit=lambda: {"ok": False, "error": "synthetic publication rejected"},
+    ))
+    try:
+        with caplog.at_level("INFO", logger=srv.logger.name):
+            srv._run_finish()
+        assert "state=finish_error" in caplog.text
+        assert "synthetic publication rejected" in caplog.text
+    finally:
+        with srv._finish_lock:
+            srv._finish_job.clear()
+            srv._finish_job.update(before)

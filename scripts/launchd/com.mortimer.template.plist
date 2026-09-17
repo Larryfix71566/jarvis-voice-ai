@@ -4,7 +4,7 @@
   <key>Label</key><string>com.mortimer.__SVC__</string>
   <key>ProgramArguments</key><array>__ARGS__</array>
   <key>WorkingDirectory</key><string>__REPO__</string>
-  <key>EnvironmentVariables</key><dict><key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string></dict>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
   <key>StandardOutPath</key><string>__REPO__/logs/__SVC__.launchd.log</string>
   <key>StandardErrorPath</key><string>__REPO__/logs/__SVC__.launchd.log</string>
   __SCHEDULE__

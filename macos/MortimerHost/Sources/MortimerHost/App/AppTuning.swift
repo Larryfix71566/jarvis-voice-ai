@@ -200,11 +200,13 @@ enum AudioPresentationTuning {
     static func presentationLevel(rms: Double?, isInput: Bool) -> Double? {
         guard let rms, rms.isFinite else { return nil }
         guard rms > 0 else { return 0 }
-        let floorDb = isInput ? inputLevelFloorDb : outputLevelFloorDb
-        let ceilingDb = isInput ? inputLevelCeilingDb : outputLevelCeilingDb
-        // An inverted or zero-width window would divide by zero or invert the
-        // mapping; fall back to full deflection rather than drawing garbage.
-        guard ceilingDb > floorDb else { return 1 }
+        let storedFloor = isInput ? inputLevelFloorDb : outputLevelFloorDb
+        let storedCeiling = isInput ? inputLevelCeilingDb : outputLevelCeilingDb
+        // Invalid overrides must not turn quiet input into full deflection.
+        // Fall back to the measured channel window, preserving level variation.
+        let validWindow = storedCeiling > storedFloor
+        let floorDb = validWindow ? storedFloor : (isInput ? inputFloorDefault : outputFloorDefault)
+        let ceilingDb = validWindow ? storedCeiling : (isInput ? inputCeilingDefault : outputCeilingDefault)
         let db = 20 * log10(rms)
         return min(1, max(0, (db - floorDb) / (ceilingDb - floorDb)))
     }

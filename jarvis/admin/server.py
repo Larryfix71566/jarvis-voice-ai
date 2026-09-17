@@ -723,8 +723,13 @@ def _run_finish() -> None:
                 )
             state, pr_url, run_id = (_finish_job["state"], _finish_job["pr_url"],
                                      _finish_job["run_id"])
-        logger.info("selfedit_state_transition state=finish_%s pr=%s run_id=%s",
-                    state, pr_url, run_id)
+            notice = _finish_job.get("notice")
+        # The notice carries the git/GitHub error text on failure. Logging
+        # only the state (2026-09-08) meant a submit that died in 0.47 s
+        # left NO record of why, and the reason had to be chased through a
+        # live API call before it was overwritten by the next attempt.
+        logger.info("selfedit_state_transition state=finish_%s pr=%s run_id=%s notice=%r",
+                    state, pr_url, run_id, notice)
     except Exception as exc:  # noqa: BLE001 — a crash must still settle the job
         # Without this the job would sit in "validating" forever and the
         # developer would keep reporting it as still running.

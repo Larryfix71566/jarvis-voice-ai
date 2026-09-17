@@ -17,8 +17,25 @@
 # is for local testing; this is not a notarized distribution package.
 set -euo pipefail
 CONFIG="${1:-debug}"
+case "$CONFIG" in debug|release) ;; *) echo "Expected debug or release" >&2; exit 2 ;; esac
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$HERE"
+# Git is absent in a sanitized sandbox snapshot. The release driver can
+# supply its immutable source revision; otherwise record what Git knows,
+# or 'unknown'. Never mistake a constant bundle version for build provenance.
+SOURCE_REVISION="${MORTIMER_SOURCE_REVISION:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
+if [[ "$SOURCE_REVISION" != "unknown" && ! "$SOURCE_REVISION" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "MORTIMER_SOURCE_REVISION must be a full Git revision" >&2; exit 2
+fi
+CANDIDATE_FINGERPRINT="${MORTIMER_CANDIDATE_FINGERPRINT:-unknown}"
+if [[ "$CANDIDATE_FINGERPRINT" != "unknown" && ! "$CANDIDATE_FINGERPRINT" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "MORTIMER_CANDIDATE_FINGERPRINT must be a full source digest" >&2; exit 2
+fi
+SOURCE_DIRTY="unknown"
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  SOURCE_DIRTY="false"
+  if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then SOURCE_DIRTY="true"; fi
+fi
 swift build -c "$CONFIG"
 BIN="$HERE/.build/$CONFIG/MortimerHost"
 APP="$HERE/.build/MortimerHost.app"
@@ -51,6 +68,10 @@ cat > "$APP/Contents/Info.plist" << PLIST
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1</string>
   <key>CFBundleVersion</key><string>1</string>
+  <key>MortimerSourceRevision</key><string>$SOURCE_REVISION</string>
+  <key>MortimerCandidateFingerprint</key><string>$CANDIDATE_FINGERPRINT</string>
+  <key>MortimerSourceDirty</key><string>$SOURCE_DIRTY</string>
+  <key>MortimerBuildConfiguration</key><string>$CONFIG</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>NSHighResolutionCapable</key><true/>
@@ -71,4 +92,6 @@ done
 codesign --force --sign - "$APP"
 codesign --verify --deep --strict "$APP"
 echo "bundled: $APP"
-open "$APP"
+if [ "${MORTIMER_BUNDLE_LAUNCH:-1}" != "0" ]; then
+  open "$APP"
+fi

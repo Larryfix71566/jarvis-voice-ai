@@ -108,8 +108,18 @@ struct WaveTuningView: View {
             Text(measured)
                 .font(.system(.caption2, design: .monospaced))
                 .foregroundStyle(.tertiary)
-            row("floor", value: floor, range: floorRange, tint: tint)
-            row("ceiling", value: ceiling, range: ceilingRange, tint: tint)
+            row("floor", value: Binding(
+                get: { floor.wrappedValue },
+                set: { newValue in
+                    floor.wrappedValue = newValue
+                    if ceiling.wrappedValue <= newValue { ceiling.wrappedValue = newValue + 1 }
+                }), range: floorRange, tint: tint)
+            row("ceiling", value: Binding(
+                get: { ceiling.wrappedValue },
+                set: { newValue in
+                    ceiling.wrappedValue = newValue
+                    if floor.wrappedValue >= newValue { floor.wrappedValue = newValue - 1 }
+                }), range: ceilingRange, tint: tint)
         }
     }
 
