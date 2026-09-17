@@ -9,7 +9,8 @@ import JarvisKit
 /// Keyboard: T toggles the Log tab (three-case), Escape closes the
 /// drawer (App.tsx:512-528), SPACE PTT lives in MicControlsView.
 struct ConsoleView: View {
-    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 0
+    // C9.5 / G30 — see MortimerHostApp for the default's provenance.
+    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 1
     @EnvironmentObject private var client: JarvisClient
     @Environment(AgentRunStore.self) private var agentRuns
     @Environment(DisplayResultStore.self) private var displayResults

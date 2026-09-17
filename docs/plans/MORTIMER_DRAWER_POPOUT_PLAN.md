@@ -1,5 +1,16 @@
 # MORTIMER DRAWER POP-OUT — implementation plan
 
+**Status:** IMPLEMENTED in `web/` — acceptance partly unverified; superseded
+by the native app (status line added 2026-09-17; the document had none). The
+§2 files exist: `web/drawer.html` (DP1), `web/src/popoutWindow.ts` (DP2),
+`web/src/conversationFeed.ts` (DP4), and `tests/acceptance/drawer-popout.md`
+carries the §4 checklist with the two-windows-one-screen row (DP8) still
+unchecked. The same capability now ships natively as `MortimerHost`'s
+"Mortimer Drawer" window scene, whose multi-display behaviour is T1.3 §8's
+own DP8 row (also unwalked). When T1.4 deletes `web/`, this plan's code goes
+with it and the native window is the surviving implementation.
+
+
 **Goal (Larry, 2026-08-17).** The side drawer — the right-side tabbed
 panel (Repo / Edit / Memory / Runs / Dev / Output / Log) — should be
 poppable into a real second browser window that parks on the extra

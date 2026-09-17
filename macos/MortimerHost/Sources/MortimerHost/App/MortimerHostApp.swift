@@ -24,7 +24,12 @@ struct MortimerHostApp: App {
         }
     }
 
-    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 0
+    // C9.5 / G30 — default 1 since 2026-09-17: a fresh install gets the
+    // adaptive layout. `Debug ▸ Use previous layout` is retained (L4) so the
+    // rollback is a menu press, not a rebuild. C8 is unrun; its unexercised
+    // rows are accepted in docs/acceptance/adaptive-interface/C8-open-items.md
+    // under Gate G-C8's written-acceptance route.
+    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 1
     @State private var agentRuns = AgentRunStore()
     @State private var displayResults = DisplayResultStore()
     @State private var workspace = WorkspaceStore()
@@ -123,6 +128,13 @@ struct MortimerHostApp: App {
             DebugLogView()
                 .environmentObject(client)
         }
+
+        // Item 10: the wave's dB windows, dragged while talking.
+        Window("Wave Levels", id: "wave-tuning") {
+            WaveTuningView()
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 420, height: 380)
         .commands {
             // A guaranteed Full Screen path independent of the green
             // button's mode: sets the behavior and toggles in one step.
@@ -151,6 +163,9 @@ struct MortimerHostApp: App {
                 }
                 Button("Show message log") {
                     windowActions.open("debug-log")
+                }
+                Button("Wave level windows") {
+                    windowActions.open("wave-tuning")
                 }
                 Divider()
                 // Closure C7.5: the meter's own latency, buffer host time to

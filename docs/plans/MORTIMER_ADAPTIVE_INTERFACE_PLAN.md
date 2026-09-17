@@ -1,6 +1,8 @@
 # Mortimer adaptive interface implementation plan
 
 **Status:** IMPLEMENTATION IN PROGRESS; NO RELEASE ACCEPTANCE. See `docs/acceptance/adaptive-interface/` for measured progress and open gates.
+
+**2026-09-17:** the adaptive layout is now the DEFAULT (`layoutVersion` 1, closure item C9.5 / gap G30). `Debug ▸ Use previous layout` is retained for one release. C8 acceptance is still unrun — its unexercised rows are accepted as known limitations in `docs/acceptance/adaptive-interface/C8-open-items.md` under Gate G-C8's written-acceptance route, which is not the same as acceptance having been performed.
 **Current application candidate:** `6264fdf` on `feat/adaptive-compact-conversation`; adaptive
 source phases and sandbox runner corrections are present, but release acceptance
 is intentionally not claimed.

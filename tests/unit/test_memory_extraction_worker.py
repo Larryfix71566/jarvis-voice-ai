@@ -7,6 +7,7 @@ tests/unit/test_memory_extraction.py's fixture/fake-client conventions.
 from __future__ import annotations
 
 import json
+import time
 
 import pytest
 
@@ -93,6 +94,48 @@ def _capturing_factory(payload, sink):
     so a test can assert WHICH user turn a pairing actually used, not just
     how many pairings happened."""
     return lambda _settings: _CapturingClient(payload, sink)
+
+
+# --- tick_once: the tick must not hold its own write lock across extractions
+
+
+class TestTickDoesNotDeadlockItself:
+    """Item 13 (2026-09-17). Before the per-session commit, a multi-session
+    batch lost every extraction after the first session that touched
+    memory_extraction_pending: that INSERT/DELETE opened a transaction on the
+    tick's connection, and extract_from_exchange's own connection then waited
+    the full busy timeout for a lock the same thread was holding. 28 of 122
+    exchanges on the 2026-09-16 backfill, all inside a write."""
+
+    async def test_a_later_sessions_fact_lands_despite_an_earlier_pending_write(self, conn):
+        # Session A: two user turns, no reply. Nothing to extract, but the
+        # trailing user turn makes the tick write to the pending table --
+        # which is what takes the lock.
+        _add_turn(conn, "sess-a", "user", "first thing")
+        _add_turn(conn, "sess-a", "user", "second thing, still no reply")
+        # Session B, processed after A, has an exchange whose extraction
+        # must WRITE a fact through its own connection.
+        _add_turn(conn, "sess-b", "user", "I drive a 1969 Camaro")
+        _add_turn(conn, "sess-b", "assistant", "Noted.")
+
+        started = time.perf_counter()
+        result = await tick_once(
+            _FakeSettings(),
+            client_factory=_factory(_fact_payload("user.car", "1969 Camaro")),
+        )
+        elapsed = time.perf_counter() - started
+
+        assert result["exchanges"] == 1
+        row = conn.execute("SELECT content FROM memories WHERE key='user.car'").fetchone()
+        assert row is not None and row["content"] == "1969 Camaro", (
+            "session B's fact was lost to a lock the tick itself was holding")
+        # A self-deadlock stalls for the whole 5 s busy timeout per blocked
+        # write before failing; a healthy tick is milliseconds.
+        assert elapsed < 4.0
+        pending = conn.execute(
+            "SELECT session_id FROM memory_extraction_pending").fetchall()
+        assert [r["session_id"] for r in pending] == ["sess-a"], (
+            "the pending write itself still landed")
 
 
 # --- tick_once: basic pairing -------------------------------------------

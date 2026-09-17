@@ -168,6 +168,38 @@ final class AudioActivityObserverTests: XCTestCase {
                                     "ageing in the slot can only add delay")
     }
 
+    /// Item 10. The magnitudes have to be counted per distinct level, like
+    /// `arrivals` — counting them per 30 Hz tick would let a held level drag
+    /// the percentiles toward whatever the sampler repeated most, the same
+    /// error the C7.5 gate was changed to stop making.
+    func testLevelMagnitudesAreCountedPerDistinctLevelNotPerTick() {
+        let box = SnapshotBox(); let observer = observer(box); let source = StubSource()
+        begin(observer, source: source)
+        // Decreasing `ago` so each measurement is later than the last, or
+        // the accumulator's watermark refuses it.
+        for (rms, ago) in [(0.02, 0.050), (0.30, 0.040), (0.06, 0.030)] {
+            source.set(input: level(rms, ago: ago), playout: nil)
+            observer.sample()
+            observer.sample()                  // same level, seen twice
+        }
+        let input = observer.latency().input
+        XCTAssertEqual(input.samples, 6, "six ticks")
+        XCTAssertEqual(input.arrivals, 3, "three distinct levels")
+        XCTAssertEqual(input.levelMax, 0.30, accuracy: 0.0001)
+        XCTAssertEqual(input.levelP50, 0.06, accuracy: 0.0001,
+                       "median of the three distinct levels, not of the six ticks")
+        XCTAssertEqual(observer.latency().playout, .empty, "nothing played")
+    }
+
+    /// The defaults exist so the five pre-existing construction sites keep
+    /// compiling; a channel that measured nothing must report 0, not a
+    /// stale or invented magnitude.
+    func testAChannelWithNoObservationsReportsZeroMagnitude() {
+        XCTAssertEqual(AudioMeterChannelLatency.empty.levelP50, 0)
+        XCTAssertEqual(AudioMeterChannelLatency.empty.levelP95, 0)
+        XCTAssertEqual(AudioMeterChannelLatency.empty.levelMax, 0)
+    }
+
     func testTheMeterCanBeDisabledAtRuntime() {
         UserDefaults.standard.set(false, forKey: "JARVIS_AUDIO_METER")
         defer { UserDefaults.standard.removeObject(forKey: "JARVIS_AUDIO_METER") }

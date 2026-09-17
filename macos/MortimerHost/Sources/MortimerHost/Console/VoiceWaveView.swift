@@ -166,8 +166,14 @@ final class WaveEngine {
         lastState = state
 
         // Adaptive levels are measured; only the legacy rollback uses simulation.
+        // Item 10: mapped through the channel's dB window BEFORE smoothing,
+        // so the envelope's 40 ms/180 ms easing runs in perceptual space —
+        // a linear release from a loud syllable would otherwise collapse
+        // most of its visible travel in the first few milliseconds.
         if let presentation {
-            let target = presentation.activity == .user ? presentation.userLevel : presentation.outputLevel
+            let isInput = presentation.activity == .user
+            let raw = isInput ? presentation.userLevel : presentation.outputLevel
+            let target = AudioPresentationTuning.presentationLevel(rms: raw, isInput: isInput)
             level = measuredEnvelope.advance(target: target, now: now)
         } else {
             let target = state == .speaking ? simLevel(t) : 0
@@ -178,13 +184,26 @@ final class WaveEngine {
         // --- ease dynamics + color toward the current state (0.06) ---
         let tg = Self.targets[state]!
         let (tr, tgc, tb) = Self.colors[state]!
-        dyn.base += (tg.base - dyn.base) * 0.06
-        dyn.speed += (tg.speed - dyn.speed) * 0.06
-        dyn.alpha += (tg.alpha - dyn.alpha) * 0.06
-        dyn.glow += (tg.glow - dyn.glow) * 0.06
-        dyn.cr += (tr - dyn.cr) * 0.06
-        dyn.cg += (tgc - dyn.cg) * 0.06
-        dyn.cb += (tb - dyn.cb) * 0.06
+        // Item 10 follow-up: `staticTrace` freezes the easing too. Removing
+        // the `dyn.base` pin (item 10) left `base` easing 0.004 -> 0.016
+        // once per draw call even when nothing was arriving, so a trace
+        // with no measured audio thickened four-fold across successive
+        // draws -- caught by testUnavailableSpeechRendersIdenticallyAcrossTime
+        // as an 11329 vs 11409 byte render. Zeroing `speed` stopped lateral
+        // motion but not this, so the comment below claiming motion stops
+        // dead was only two-thirds true. Freezing instead of snapping to
+        // `tg.base`: snapping would pop the trace the moment audio stopped,
+        // and holding the last value is what "nothing is arriving" looks
+        // like. Measured audio is unaffected -- staticTrace is false then.
+        if !staticTrace {
+            dyn.base += (tg.base - dyn.base) * 0.06
+            dyn.speed += (tg.speed - dyn.speed) * 0.06
+            dyn.alpha += (tg.alpha - dyn.alpha) * 0.06
+            dyn.glow += (tg.glow - dyn.glow) * 0.06
+            dyn.cr += (tr - dyn.cr) * 0.06
+            dyn.cg += (tgc - dyn.cg) * 0.06
+            dyn.cb += (tb - dyn.cb) * 0.06
+        }
 
         if let presentation {
             // §7 colours, one source (AudioPresentationTuning, closure C2.4).
@@ -192,11 +211,19 @@ final class WaveEngine {
                 (presentation.activity == .assistant || presentation.activity == .thinking ?
                     AudioPresentationTuning.assistantRGB : AudioPresentationTuning.neutralRGB)
             dyn.cr = color.0; dyn.cg = color.1; dyn.cb = color.2
-            dyn.base = 0.004
             dyn.alpha = presentation.activity == .offline ? 0.16 : 0.65
             dyn.glow = staticTrace ? 0 : 0.4
-            dyn.speed = staticTrace ? 0 : 0.45
-            if staticTrace { p1 = 0; p2 = 0; p3 = 0 }
+            // Item 10: `base` and `speed` were pinned to 0.004 and 0.45 —
+            // the first is the `.offline` target, so the resting thickness
+            // was the one meant for a dead connection, and the second runs
+            // the wobble at under half the legacy speaking rate. Both now
+            // ease to the per-state targets above like the legacy path.
+            // `staticTrace` still stops motion dead, which is what keeps a
+            // trace with nothing arriving honest.
+            if staticTrace {
+                dyn.speed = 0
+                p1 = 0; p2 = 0; p3 = 0
+            }
         }
 
         p1 += dt * 2.2 * dyn.speed
@@ -238,14 +265,19 @@ final class WaveEngine {
 
         let r = dyn.cr, g = dyn.cg, b = dyn.cb
 
+        // Item 10b: the lobe width is tunable on the adaptive path (Debug ▸
+        // Wave level windows). The legacy rollback keeps the constant so it
+        // stays the known quantity a rollback exists to be.
+        let widthFraction = presentation == nil ? 0.11 : AudioPresentationTuning.waveWidthFraction
         for layer in Self.layers {
             var path = Path()
             var x = 0.0
             var first = true
             while x <= w {
                 // Super-Gaussian window: tight central plateau (middle
-                // ~10% of the width holds >=94% of peak), fast falloff.
-                let env = exp(-pow((x - cx) / (0.11 * w), 4))
+                // ~10% of the width holds >=94% of peak at the default
+                // 0.11), fast falloff.
+                let env = exp(-pow((x - cx) / (widthFraction * w), 4))
                 // slow speech-like wobble along the trace
                 let mod = 0.65 + 0.35 * sin(0.012 * x * layer.fMul + t * 6.3 * dyn.speed + layer.po)
                 let y = cy + env * amp * layer.aMul * mod *

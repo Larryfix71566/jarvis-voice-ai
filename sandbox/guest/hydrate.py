@@ -28,26 +28,23 @@ def ownership(path: Path, uid: int, gid: int):
 
 
 def verification_tree(root: Path, baseline: Candidate, candidate: Candidate, caches: list[str]):
-    """Immutable baseline tests inspect candidate files through per-file links.
+    """Materialize an independent baseline source tree for baseline checks.
 
-    Per-file links preserve directory walks used by existing invariant tests.
-    Added or edited candidate tests run separately in the writable source tree.
+    Baseline checks must execute the baseline application and tests. Linking
+    non-test files to the candidate made intentional contract changes appear
+    as baseline regressions. Candidate checks run separately in ``source``.
     """
     checks = root / "verification"
     checks.mkdir()
     before = {file.path: file for file in baseline.files}
     after = {file.path: file for file in candidate.files}
-    names = {name for name in before if name.startswith(TEST_ROOTS)} | {name for name in after if not name.startswith(TEST_ROOTS)}
+    names = set(before)
     check_paths(names)
     for name in sorted(names):
-        is_test = name.startswith(TEST_ROOTS)
         destination = checks / name
         destination.parent.mkdir(parents=True, exist_ok=True)
-        if is_test:
-            destination.write_bytes(before[name].data)
-            destination.chmod(before[name].mode)
-        else:
-            destination.symlink_to(root / "source" / name)
+        destination.write_bytes(before[name].data)
+        destination.chmod(before[name].mode)
     for name in caches:
         destination = checks / name
         destination.parent.mkdir(parents=True, exist_ok=True)

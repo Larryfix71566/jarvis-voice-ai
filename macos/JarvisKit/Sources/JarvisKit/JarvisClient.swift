@@ -81,8 +81,8 @@ public final class JarvisClient: ObservableObject {
     }
     /// 2026-09-05 — set when connect() repointed the default INPUT to a
     /// rate-matching mic so the AirPods 24 kHz mic can't slow playout
-    /// (JarvisFlags.matchInputRate; see AudioInputCoordinator). Informational
-    /// — the fix already happened. Cleared on the next connect.
+    /// (see AudioInputCoordinator). Informational — the fix already
+    /// happened. Cleared on the next connect.
     @Published public private(set) var audioInputChange: AudioInputChange?
     private let audioInputCoordinator = AudioInputCoordinator()
     #endif
@@ -235,7 +235,13 @@ public final class JarvisClient: ObservableObject {
         // the native converter takes any input rate, so the system default
         // input is never touched there.
         audioInputChange = nil
-        if JarvisFlags.matchInputRate, transport is DirectWebRTCTransport {
+        // 2026-09-17, item 01 / D8 amendment: unconditional on this
+        // transport. The kill switch (JARVIS_MATCH_INPUT_RATE) is gone —
+        // a mismatch produces unusable audio, so there was never a case for
+        // turning the correction off, and a lever that disables a
+        // load-bearing fix is the class of thing that silently did nothing
+        // until this week's provenance logging caught its sibling.
+        if transport is DirectWebRTCTransport {
             audioInputChange = audioInputCoordinator.matchInputToOutputIfNeeded()
         }
         #endif

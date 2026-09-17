@@ -6,7 +6,8 @@ import JarvisKit
 /// payloads (weather, radar, research). Parked on a second monitor by
 /// ScreenPlacement (P11).
 struct DisplayWindowView: View {
-    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 0
+    // C9.5 / G30 — see MortimerHostApp for the default's provenance.
+    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 1
     @Environment(DisplayWindowStore.self) private var store
     @Environment(WorkspaceStore.self) private var workspace
     @Environment(DrawerState.self) private var drawer

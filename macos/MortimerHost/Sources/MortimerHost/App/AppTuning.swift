@@ -125,6 +125,89 @@ enum AudioPresentationTuning {
     /// VoiceEnvelope smoothing, elapsed-time exponential (§7: attack 40 ms, release 180 ms).
     static let attackSeconds: Double = 0.040
     static let releaseSeconds: Double = 0.180
+
+    // MARK: - Level mapping (item 10, 2026-09-16)
+    //
+    // The wave multiplies its level by 0.115, a constant calibrated against
+    // `simLevel()` — a simulated envelope with a 0.25 floor and a 1.0
+    // ceiling. The adaptive path feeds it linear RMS instead, measured at a
+    // median of 0.0012 on the input channel: 6.6 px of trace where the
+    // legacy one never fell below 72 px.
+    //
+    // A gain constant cannot close that. Input speech spans 134x between
+    // its median and its p95, so any multiplier that lifts the median
+    // saturates everything above it — and `VoiceEnvelope.advance` refuses a
+    // target outside 0...1, so a large gain makes loud syllables vanish
+    // rather than clip. dBFS is the perceptual scale, and normalising a dB
+    // window to 0...1 puts the level back in the range `simLevel` occupied,
+    // which is what makes 0.115 correct rather than inherited.
+    //
+    // Windows are per channel because the two measure about 40 dB apart
+    // (input median -58.4 dBFS, playout -18.6). One shared window leaves
+    // the playout trace pinned near its ceiling with no motion left.
+    // Measured 2026-09-17T00:06Z, P2-latency.json.
+    // Tunable from Debug ▸ Wave level windows, because which window reads
+    // best is a perceptual judgement and not something the measurement can
+    // settle on its own. The measured values below are the fallbacks; a
+    // slider that has never been touched reads exactly them.
+    static let inputFloorKey = "mortimer.wave.inputFloorDb"
+    static let inputCeilingKey = "mortimer.wave.inputCeilingDb"
+    static let outputFloorKey = "mortimer.wave.outputFloorDb"
+    static let outputCeilingKey = "mortimer.wave.outputCeilingDb"
+
+    static let inputFloorDefault: Double = -60
+    static let inputCeilingDefault: Double = -10
+    static let outputFloorDefault: Double = -25
+    static let outputCeilingDefault: Double = -5
+
+    /// A stored override, or the measured default. Rejects a non-finite or
+    /// inverted value rather than dividing by zero in `presentationLevel`:
+    /// `defaults write` is a supported way in, so the value cannot be
+    /// assumed to have come from a slider with a sane range.
+    private static func storedDb(_ key: String, default fallback: Double) -> Double {
+        guard let raw = UserDefaults.standard.object(forKey: key) as? Double,
+              raw.isFinite else { return fallback }
+        return raw
+    }
+
+    static var inputLevelFloorDb: Double { storedDb(inputFloorKey, default: inputFloorDefault) }
+    static var inputLevelCeilingDb: Double { storedDb(inputCeilingKey, default: inputCeilingDefault) }
+    static var outputLevelFloorDb: Double { storedDb(outputFloorKey, default: outputFloorDefault) }
+    static var outputLevelCeilingDb: Double { storedDb(outputCeilingKey, default: outputCeilingDefault) }
+
+    // Item 10b (2026-09-17) — the lobe's half-width as a fraction of the
+    // frame: the 0.11 in VoiceWaveView's super-Gaussian window,
+    // exp(-((x - cx) / (fraction * w))^4). Tunable for the same reason the
+    // dB windows are. The clamp keeps a `defaults write` from producing a
+    // zero-width lobe (division by zero in the window) or one wider than
+    // the frame can show.
+    static let waveWidthKey = "mortimer.wave.widthFraction"
+    static let waveWidthDefault: Double = 0.11
+    static let waveWidthRange: ClosedRange<Double> = 0.04 ... 0.45
+
+    static var waveWidthFraction: Double {
+        guard let raw = UserDefaults.standard.object(forKey: waveWidthKey) as? Double,
+              raw.isFinite else { return waveWidthDefault }
+        return min(waveWidthRange.upperBound, max(waveWidthRange.lowerBound, raw))
+    }
+
+    /// Linear RMS (0…1 full scale) to a 0…1 presentation level, through the
+    /// channel's dB window. `nil` in, `nil` out: an absent level is not a
+    /// silent one, and `VoiceEnvelope` needs to tell them apart.
+    ///
+    /// An RMS of exactly 0 is real — a muted or digitally silent buffer —
+    /// and maps to 0 rather than to `log10(0)`.
+    static func presentationLevel(rms: Double?, isInput: Bool) -> Double? {
+        guard let rms, rms.isFinite else { return nil }
+        guard rms > 0 else { return 0 }
+        let floorDb = isInput ? inputLevelFloorDb : outputLevelFloorDb
+        let ceilingDb = isInput ? inputLevelCeilingDb : outputLevelCeilingDb
+        // An inverted or zero-width window would divide by zero or invert the
+        // mapping; fall back to full deflection rather than drawing garbage.
+        guard ceilingDb > floorDb else { return 1 }
+        let db = 20 * log10(rms)
+        return min(1, max(0, (db - floorDb) / (ceilingDb - floorDb)))
+    }
 }
 
 /// The one decision for §7's layout transition: animate for 200 ms, or not

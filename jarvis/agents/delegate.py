@@ -132,6 +132,43 @@ _background_tasks: set[asyncio.Task] = set()
 _foreground_delegations: set[str] = set()
 
 
+# Item 11 (2026-09-17) -- how long session teardown waits for detached
+# delegation runs before stopping the registry under them. A developer run
+# measured 41 s on 2026-09-16; the agents' own iteration budgets bound the
+# rest. Past this the registry is stopped anyway and the run's remaining
+# tool calls fail -- the pre-fix behaviour, now logged instead of silent.
+DETACHED_DRAIN_TIMEOUT_S = 120.0
+
+
+async def drain_detached(in_flight: set, timeout: float) -> int:
+    """Wait, bounded, for the session's detached delegation runs to finish.
+
+    Barge-in survival keeps a sub-agent running after the voice turn that
+    started it is cancelled -- and after the whole session ends, since
+    nothing cancels the detached task at shutdown either. The registry those
+    runs call tools through is per-session, and stopping it under a live run
+    turns every remaining tool call into "Unknown tool ... Available: none"
+    (measured 2026-09-16 11:45:33, a developer run eight seconds after the
+    client disconnected). Teardown therefore drains first.
+
+    Returns how many runs were still going at the deadline, so the caller
+    can log that the teardown is about to fail them.
+    """
+    pending = {task for task in in_flight if not task.done()}
+    if not pending:
+        return 0
+    logger.info("delegate_drain_started runs=%d timeout_s=%.0f", len(pending), timeout)
+    done, still = await asyncio.wait(pending, timeout=timeout)
+    if still:
+        logger.warning(
+            "delegate_drain_timeout runs=%d -- stopping the registry under "
+            "them; their remaining tool calls will fail", len(still),
+        )
+    else:
+        logger.info("delegate_drain_complete runs=%d", len(done))
+    return len(still)
+
+
 def foreground_delegation_count() -> int:
     """How many delegations the current voice turn is still awaiting.
 
@@ -180,6 +217,7 @@ def build_delegate_tool(
     *,
     session_id: str | None = None,
     late_delivery: dict | None = None,
+    in_flight: set | None = None,
 ) -> tuple[dict, Callable[[dict], Any]]:
     """Return (openai_tool_schema, async_handler) for delegate_task.
 
@@ -496,6 +534,13 @@ def build_delegate_tool(
         run_task = asyncio.create_task(_execute())
         _background_tasks.add(run_task)
         run_task.add_done_callback(_background_tasks.discard)
+        # Item 11: the session that owns this registry drains this set
+        # before stopping it. Per-session on purpose -- _background_tasks is
+        # module-level, shared across sessions, and also holds learn_from_run
+        # and late-delivery tasks that teardown has no reason to wait on.
+        if in_flight is not None:
+            in_flight.add(run_task)
+            run_task.add_done_callback(in_flight.discard)
         # The voice turn is now awaiting this call; see
         # foreground_delegation_count(). The finally below clears it on every
         # exit path INCLUDING the barge-in cancellation, because once the

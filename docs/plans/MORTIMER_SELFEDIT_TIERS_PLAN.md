@@ -1,5 +1,14 @@
 # Mortimer Self-Edit Tiers — make self-edit useful without letting it destroy itself
 
+**Status:** IMPLEMENTED (status line added 2026-09-17; the document had
+none). `jarvis/selfedit/allowlist.py` classifies paths into the tiers
+(`classify()` groups `denied` / `core` / the rest), `jarvis/selfedit/service.py:132–153`
+returns them from the preview, and `mcp_servers/mcp_selfedit/logic.py:188`
+applies the Tier B rule — a preview that names core paths must say so before
+anything is staged. Both files cite this plan by name at the site that
+implements it.
+
+
 *Larry, 2026-08-31: "if we continue to deny everything we want to do self-edit wise
 then a self-edit is not useful, we have to structure the self-edit so that we can
 make changes/upgrades without running into dead ends while still limiting the

@@ -65,18 +65,13 @@ final class AudioOutputTests: XCTestCase {
         XCTAssertFalse(AudioInputCoordinator.rateMismatch(input: 48000, output: 0))
     }
 
-    func testMatchInputRateIsOnByDefault() {
-        let key = "JARVIS_MATCH_INPUT_RATE"
-        let saved = UserDefaults.standard.object(forKey: key)
-        defer {
-            if let saved { UserDefaults.standard.set(saved, forKey: key) }
-            else { UserDefaults.standard.removeObject(forKey: key) }
-        }
-        UserDefaults.standard.removeObject(forKey: key)
-        XCTAssertTrue(JarvisFlags.matchInputRate)   // absent == on (unusable audio otherwise)
-        UserDefaults.standard.set(false, forKey: key)
-        XCTAssertFalse(JarvisFlags.matchInputRate)
-    }
+    // `testMatchInputRateIsOnByDefault` was deleted 2026-09-17 along with
+    // the JARVIS_MATCH_INPUT_RATE flag it pinned (item 01 / the D8
+    // amendment). The correction is unconditional on the WebRTC path now,
+    // so the property worth guaranteeing is that nothing can turn it off —
+    // which the absent symbol enforces and a test cannot express without
+    // adding a production introspection hook purely for the test's sake.
+    // `rateMismatch`'s own tests above still cover the decision itself.
 
     func testInputNoticeTextNamesTheRates() {
         let change = AudioInputChange(from: "Larry's AirPods Pro 3", to: "MacBook Air Microphone",

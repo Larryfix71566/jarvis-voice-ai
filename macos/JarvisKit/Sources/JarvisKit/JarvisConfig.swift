@@ -132,15 +132,6 @@ public enum JarvisFlags {
     public static var followAudioOutput: Bool {
         UserDefaults.standard.bool(forKey: "JARVIS_FOLLOW_AUDIO_OUTPUT")
     }
-    /// 2026-09-05 — before connecting, repoint the system default INPUT to a
-    /// device whose sample rate matches the output (the built-in 48 kHz mic)
-    /// when they mismatch, so WebRTC's duplex audio unit runs at one rate.
-    /// This is the AirPods slow-voice fix (their 24 kHz mic vs 48 kHz
-    /// speaker). ON by default — a mismatch produces unusable audio, so the
-    /// safe default is to correct it; the input is restored on disconnect.
-    /// `defaults write com.mortimer.host JARVIS_MATCH_INPUT_RATE -bool false`
-    /// to keep whatever mic is selected (and accept the slowdown).
-    public static var matchInputRate: Bool { on("JARVIS_MATCH_INPUT_RATE") }
     /// MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md D1/§9 — the rollback lever.
     /// OPT-IN (absent == off): on, a loopback bot uses
     /// `DirectWebRTCTransport` exactly as before the native path existed,
