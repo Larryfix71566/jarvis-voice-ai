@@ -39,7 +39,7 @@ reinstates the original bug with nothing left to restore the fix.
 
 Either way it is one commit. Nothing else depends on it.
 
-## 2. `layoutVersion` default — CORRECTION: it is C9.5, gated on C8
+## 2. `layoutVersion` default — CLOSED 2026-09-17 (C9.5, on G-C8's escape hatch)
 
 **This entry was wrong as first written.** It said "No plan step covers
 flipping it, so it would have stayed hidden indefinitely." The closure plan
@@ -85,6 +85,44 @@ look like an oversight:
   `C8-open-items.md` with written acceptance. The second is legitimate under
   Gate G-C8, but it should be a deliberate choice rather than a shortcut
   taken by someone unaware the gate existed.
+
+**CLOSED 2026-09-17.** Larry: "lets push layoutVersion default to 1 and
+clear that item." Default flipped to `1` in all three declarations
+(`MortimerHostApp`, `ConsoleView`, `DisplayWindowView` — they must agree or
+the app disagrees with itself about which layout it is in). `Debug ▸ Use
+previous layout` retained per L4, so the rollback is a menu press.
+
+**C8 was NOT run**, and this closes on Gate G-C8's second route: every
+unexercised row named in `C8-open-items.md` with Larry's written acceptance.
+That file groups the 24 rows by whether the flag can reach them, which is
+the substance of the acceptance rather than a formality:
+
+- **13 rows are structurally outside the flag.** `DrawerView()` is
+  instantiated at `ConsoleView.swift:88`, outside the `layoutVersion`
+  branch, so the eight drawer tabs and the shared tab behaviours render
+  identically in both modes. The flag can neither break nor hide a defect
+  in them. They remain owed as T1.3 §8 V3–V8, not as a gate on this flip.
+- **6 rows have incidental evidence** from daily use since 09-15 — top bar,
+  mic toggle and wake-while-muted, orb states, agent satellites, the app
+  menus, and `DisplayContentView` (the memory graph rendered to the display
+  window at 12:51 today). Not row-by-row screenshots, which is what C8
+  asks for, but not unknown either.
+- **5 rows are the accepted risk**, each reachable only in adaptive mode:
+  the drawer's width and drag path, display-panel routing through the
+  workspace instead of `SingleDisplayPanel`, the workspace pins/A-B
+  surfaces, the `OrbFieldView` notices inside a 150 px or 140 px compact
+  region, and `DisplayWindowView`'s supporting-content branch. Plus
+  multi-display DP8, which is unwalked in both places.
+
+Of those five, the one worth watching is the **pending-draft notice**: the
+others fail visibly (a wrong width, a result that does not appear), while
+missing that notice means not knowing a write is awaiting confirmation.
+
+Also updated per C9 ladder item 7: both plan status headers, `CLAUDE.md`
+(with the three-declarations rule and the "do not cite C9.5 as evidence the
+preservation matrix passed" caveat) and `docs/REPO_MAP.md` (naming
+`AdaptiveStageView` and `WaveTuningView`, paid for by condensing prose to
+stay under the character cap — 7963 now).
 
 ## 3. The rebuild churn — ONE HARDWARE RUN
 

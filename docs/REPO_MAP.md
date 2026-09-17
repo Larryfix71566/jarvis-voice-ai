@@ -10,7 +10,7 @@ structural changes. Keep it below the 8,000-character prompt cap
   setup: `bash scripts/setup_kb.sh`. Documents remain at `MORTIMER_HOME`
   (default `~/Mortimer`), separate from the credential vault.
 - `jarvis/` — Python backend: bot pipeline, sub-agents, admin sidecar,
-  council, run log, self-edit service. See below.
+  council, run log, self-edit. See below.
 - `mcp_servers/` — MCP skill servers, one directory per server, each
   with `logic.py` (pure, testable) + `server.py` (FastMCP wiring) +
   `skill.yaml` (manifest). `mcp_kb/` is read-only
@@ -21,12 +21,12 @@ structural changes. Keep it below the 8,000-character prompt cap
   the live interface; `web/` is frozen. See below.
 - `web/` — the React/Vite console. FROZEN 2026-09-04 and not served:
   interface work goes to `macos/MortimerHost`.
-- `sandbox/` — disposable macOS VMs, guarded files, verification and PRs.
+- `sandbox/` — disposable macOS VMs, guarded files, verification, PRs.
 - `config/` — YAML/JSON routing and model config (agents, MCP servers,
   voices, self-edit allowlist, upgrade models/agent bounds). Check here
   first when a capability seems misrouted or over/under-permissioned.
-- `docs/` — `plans/` (implementation plans + specs, `plans/implemented/`
-  for completed ones), `reviews/` (adopted model reviews). This file.
+- `docs/` — `plans/` (+ `plans/implemented/`), `reviews/`, `acceptance/`.
+  This file.
 - `tests/` — `unit/` (no external calls), `integration/` (MCP-over-stdio,
   registry, bot wiring), `evals/` (live routing eval), `acceptance/`
   (manual checklists, not run by pytest).
@@ -102,12 +102,12 @@ structural changes. Keep it below the 8,000-character prompt cap
 
 ## `macos/` native client
 
-The interface. `MortimerHost` (the app) depends on `JarvisKit` (the
-shared library) by path, so a JarvisKit change rebuilds both. Self-edit
-may change the Swift **sources** below, gated by `swift build` + `swift
-test` in an independent VM and a PR flagged SWIFT CHANGE, inert until a
-human runs `macos/MortimerHost/scripts/bundle.sh`. Manifests, plists,
-entitlements, `scripts/`, `GlassSpike/`, `MortimerShell/` are human-only.
+`MortimerHost` (the app) depends on `JarvisKit` by path, so a JarvisKit
+change rebuilds both. Self-edit may change the Swift **sources** below,
+gated by `swift build` + `swift test` in an independent VM and a PR flagged
+SWIFT CHANGE, inert until a human runs `MortimerHost/scripts/bundle.sh`.
+Manifests, plists, entitlements, `scripts/`, `GlassSpike/`,
+`MortimerShell/` are human-only.
 
 - `JarvisKit/Sources/JarvisKit/` — `JarvisClient.swift` (voice session),
   `AdminAPI.swift` (every sidecar call; Python side `jarvis/admin/server.py`),
@@ -121,8 +121,9 @@ entitlements, `scripts/`, `GlassSpike/`, `MortimerShell/` are human-only.
   `AppMessageRouter` (app message → UI state), `UICommandRouter` (voice
   `ui_control` dispatch), `AppTheme`/`AppTuning`/`Glass` (style and
   tunables), `VoiceState`, `Sounds`.
-- `.../Console/` — always visible: `ConsoleView`, `OrbFieldView` and
-  `VoiceWaveView` (the orb), `AmbientStripView`, `TopBarView`,
+- `.../Console/` — `ConsoleView`, `AdaptiveStageView` (default layout since
+  2026-09-17; `layoutVersion` 0 is legacy), `OrbFieldView`/`VoiceWaveView`
+  (the orb), `WaveTuningView`, `AmbientStripView`, `TopBarView`,
   `MicControlsView`, `SystemVitalsView`.
 - `.../Drawer/` — one file per tab: `DrawerView`,
   `EditTab` (drives `/api/selfedit/*`), `RepoTab`, `AgentsTab`,

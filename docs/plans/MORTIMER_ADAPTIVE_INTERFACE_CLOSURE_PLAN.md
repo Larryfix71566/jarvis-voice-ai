@@ -1,6 +1,8 @@
 # Mortimer adaptive interface closure plan — close the review gaps, land on `main`, deploy
 
 **Status:** IMPLEMENTATION SPECIFICATION; NOT A CLAIM OF ACCEPTANCE. Supersedes nothing — it extends `docs/plans/MORTIMER_ADAPTIVE_INTERFACE_PLAN.md` (the "interface plan") and sequences `docs/plans/MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md` (the "native-audio plan") ahead of P2.
+
+**2026-09-17 — C9.5 closed, C8 not.** `layoutVersion` defaults to `1`. Gate G-C8 was satisfied by its written-acceptance route: `docs/acceptance/adaptive-interface/C8-open-items.md` names every unexercised row with Larry's acceptance, grouped by whether the flag can reach it at all (13 of 24 rows render from a `DrawerView` instantiated outside the `layoutVersion` branch). C8's five requirements remain open work.
 **Baseline inspected:** candidate `6bf0270` on `feat/adaptive-compact-conversation` in the isolated checkout `~/Documents/Codex/2026-09-09/can/work/active-repo`; installed checkout `~/jarvis-voice-ai-clean` at `2ccf66c` (= `origin/main` on 2026-09-10) with five uncommitted local changes. Gap inventory is `docs/reviews/MORTIMER_ADAPTIVE_INTERFACE_PLAN_REVIEW.md` (2026-09-11). Recheck all three before starting.
 **Owner:** Larry. Implementation is assigned to a coding model one phase at a time; Larry runs every merge and every deployment. The implementer never runs `git merge`, `git push --force`, `launchctl`, or `open` against the production host. This document authorizes no application-code change by itself.
 **Safety claim:** the interface plan's contracts UI-1 through UI-7 remain in force verbatim. This plan adds no new contract and relaxes none. Anything unmeasured stays open; a status of "done" in this document means positive evidence exists at the named path.
@@ -51,7 +53,7 @@ Every row is a finding from the review, the work item that closes it, and the ev
 | G27 | Preservation checklist 0/22 rows checked | C8.1 | Every row checked with tester, date, viewport, screenshot/log |
 | G28 | Rollback never exercised | C8.4 | Rollback record with synthetic state |
 | G29 | Five production local patches not reconciled | C0.2 / C10.2 | Per-file decision recorded; working tree clean after deployment |
-| G30 | Adaptive layout off by default (L4) | C9.5 | Default flipped in its own PR after C8 |
+| G30 | Adaptive layout off by default (L4) | C9.5 | **CLOSED 2026-09-17** — default flipped to `1` on Gate G-C8's written-acceptance route (`C8-open-items.md`), C8 itself still unrun |
 
 ## 3. Phase order and dependencies
 

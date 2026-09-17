@@ -24,7 +24,12 @@ struct MortimerHostApp: App {
         }
     }
 
-    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 0
+    // C9.5 / G30 — default 1 since 2026-09-17: a fresh install gets the
+    // adaptive layout. `Debug ▸ Use previous layout` is retained (L4) so the
+    // rollback is a menu press, not a rebuild. C8 is unrun; its unexercised
+    // rows are accepted in docs/acceptance/adaptive-interface/C8-open-items.md
+    // under Gate G-C8's written-acceptance route.
+    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 1
     @State private var agentRuns = AgentRunStore()
     @State private var displayResults = DisplayResultStore()
     @State private var workspace = WorkspaceStore()
