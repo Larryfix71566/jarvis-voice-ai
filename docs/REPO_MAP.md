@@ -104,46 +104,43 @@ structural changes. Keep it below the 8,000-character prompt cap
 
 The interface. `MortimerHost` (the app) depends on `JarvisKit` (the
 shared library) by path, so a JarvisKit change rebuilds both. Self-edit
-may change the Swift **sources** below — gated by `swift build` +
-`swift test` in an independent VM, PR flagged SWIFT CHANGE, and inert
-until a human runs `macos/MortimerHost/scripts/bundle.sh`. Manifests,
-plists, entitlements, `scripts/`, `GlassSpike/` and `MortimerShell/` are
-human-only.
+may change the Swift **sources** below, gated by `swift build` + `swift
+test` in an independent VM and a PR flagged SWIFT CHANGE, inert until a
+human runs `macos/MortimerHost/scripts/bundle.sh`. Manifests, plists,
+entitlements, `scripts/`, `GlassSpike/`, `MortimerShell/` are human-only.
 
 - `JarvisKit/Sources/JarvisKit/` — `JarvisClient.swift` (voice session),
-  `AdminAPI.swift` (every sidecar call the app makes; the Python side is
-  `jarvis/admin/server.py`), `AppMessage.swift`/`ClientMessage.swift`
-  (RTVI message shapes — mirror the backend's, change both together),
-  plus transport (`RTVITransport` the protocol, with
-  `DirectWebRTCTransport` + `Signalling` for remote and
-  `NativeAudioTransport` + `PipecatFrameCodec` for a same-Mac bot),
-  audio (`AudioEngineIO` owns capture and playout on the native path,
-  `AudioActivityObserver` the measured levels behind the wave),
-  `WakeWordListener`, `KeychainStore`.
+  `AdminAPI.swift` (every sidecar call; Python side `jarvis/admin/server.py`),
+  `AppMessage.swift`/`ClientMessage.swift` (RTVI shapes — mirror the
+  backend's, change both together), transport (`RTVITransport` protocol;
+  `DirectWebRTCTransport` + `Signalling` remote, `NativeAudioTransport` +
+  `PipecatFrameCodec` same-Mac bot), audio (`AudioEngineIO` capture and
+  playout on the native path, `AudioActivityObserver` the measured levels
+  behind the wave), `WakeWordListener`, `KeychainStore`.
 - `MortimerHost/Sources/MortimerHost/App/` — `MortimerHostApp` (entry),
   `AppMessageRouter` (app message → UI state), `UICommandRouter` (voice
   `ui_control` dispatch), `AppTheme`/`AppTuning`/`Glass` (style and
   tunables), `VoiceState`, `Sounds`.
-- `.../Console/` — always-visible console: `ConsoleView`, `OrbFieldView`
-  and `VoiceWaveView` (the orb), `AmbientStripView`, `TopBarView`,
+- `.../Console/` — always visible: `ConsoleView`, `OrbFieldView` and
+  `VoiceWaveView` (the orb), `AmbientStripView`, `TopBarView`,
   `MicControlsView`, `SystemVitalsView`.
-- `.../Drawer/` — tabbed drawer, one file per tab: `DrawerView`,
+- `.../Drawer/` — one file per tab: `DrawerView`,
   `EditTab` (drives `/api/selfedit/*`), `RepoTab`, `AgentsTab`,
   `RunsTab`, `MemoryTab`, `CostsTab`, `OutputTab`, `LogTab`, `TabState`.
 - `.../Display/` — the result window: `DisplayWindowView`,
-  `DisplayContentView`, `DisplayWindowStore`, `GraphImageView` (renders
-  graph-layer images).
+  `DisplayContentView`, `DisplayWindowStore`, `GraphImageView` (graph-layer
+  images).
 - `.../Placement/`, `.../Stores/` — placement; view stores.
 
 ## `web/src/` console (frozen)
 
-Frozen 2026-09-04. Interface work goes to `macos/MortimerHost`.
+Frozen 2026-09-04; interface work goes to `macos/MortimerHost`.
 
 ## Naming discipline (do not confuse these)
 
 - "sidecar" = the admin Python process on `:7861` (`jarvis/admin/server.py`)
-  — never the side drawer, never a popped-out window.
+  — never the side drawer.
 - "drawer" = the tabbed side panel (`DrawerView.swift`) — never the
-  console, never a popped-out window.
+  console; neither is a popped-out window.
 - "display window" = the informational-result window
   (`DisplayWindowView.swift`) — separate from the drawer.

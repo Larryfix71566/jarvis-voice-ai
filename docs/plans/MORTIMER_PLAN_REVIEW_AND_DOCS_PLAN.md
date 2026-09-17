@@ -1,5 +1,18 @@
 # MORTIMER PLAN REVIEW + DOCUMENT CONSOLIDATION — implementation plan
 
+**Status:** IMPLEMENTED — Parts A, B and C (status line added 2026-09-17;
+the document had none). Evidence per decision: R2 `PLAN_REVIEW_PROMPT` at
+`jarvis/prompts.py:244`; R1/R4/R5 `review_path` plumbed through
+`jarvis/agents/delegate.py`, `jarvis/bot/display.py:343` and
+`jarvis/bot/plan_watcher.py:132` as a variant of the planning pathway; R7 the
+`Fable` / `Fable 5` → `claude-fable-5` aliases in `config/model_aliases.yaml`;
+R8 `STT_KEYTERMS` passed to `DeepgramFluxSTTSettings` (`jarvis/bot/pipeline.py:400`);
+D2 nineteen plans retired to `docs/plans/implemented/`; D3 `docs/README.md`
+present. R6's routing eval was not re-run for this status line — `tests/evals/`
+exists, but whether it still covers the capability-denial case is unverified
+here.
+
+
 **Problem (from the 2026-08-17 12:44–12:50 session's logs).** Larry asked
 Mortimer to "use Fable 5 to review this plan" (the geolocation development
 plan) and the request failed at every layer at once:

@@ -51,6 +51,84 @@ async def _full_normal_turn(notifier: InterruptionNotifier) -> None:
     await notifier.on_push_frame(pushed(InterruptionFrame()))
 
 
+class TestTheSameFrameAtEveryHop:
+    """Item 14 (2026-09-17). A task-level observer sees one InterruptionFrame
+    once per downstream hop, and the hops after the LLM arrive after the
+    next reply's LLMFullResponseStartFrame has re-armed the notifier.
+    Measured 2026-09-16 11:43: exactly one `broadcasting interruption` per
+    user turn in the pipecat log, exactly three notes per user turn in the
+    context -- the three hops downstream of the LLM. Every test above this
+    class pushes each frame once, which is why none of them caught it."""
+
+    async def test_a_routine_boundary_seen_at_four_hops_across_a_rearm_injects_nothing(self):
+        injected = []
+
+        async def inject(text):
+            injected.append(text)
+
+        notifier = InterruptionNotifier(inject)
+        for frame in (LLMFullResponseStartFrame(), LLMFullResponseEndFrame(),
+                      BotStartedSpeakingFrame(), BotStoppedSpeakingFrame()):
+            await notifier.on_push_frame(pushed(frame))          # a clean reply
+        boundary = InterruptionFrame()                            # the next turn opening
+        await notifier.on_push_frame(pushed(boundary))            # hop: aggregator -> LLM
+        await notifier.on_push_frame(pushed(LLMFullResponseStartFrame()))  # the new reply re-arms
+        for _ in range(3):                                        # LLM -> TTS -> output -> assistant agg
+            await notifier.on_push_frame(pushed(boundary))
+        assert injected == []
+
+    async def test_a_genuine_barge_in_seen_at_four_hops_injects_exactly_once(self):
+        injected = []
+
+        async def inject(text):
+            injected.append(text)
+
+        notifier = InterruptionNotifier(inject)
+        await notifier.on_push_frame(pushed(LLMFullResponseStartFrame()))   # reply in flight
+        cut = InterruptionFrame()
+        await notifier.on_push_frame(pushed(cut))                            # hop 1: genuine
+        await notifier.on_push_frame(pushed(LLMFullResponseStartFrame()))   # reply to the interruption
+        for _ in range(3):
+            await notifier.on_push_frame(pushed(cut))
+        assert injected == [INTERRUPTION_NOTICE_WHILE_THINKING]
+
+    async def test_two_distinct_interruptions_after_two_replies_inject_twice(self):
+        """The dedupe is by frame, not by turn: a second real barge-in on a
+        second reply must still be reported."""
+        injected = []
+
+        async def inject(text):
+            injected.append(text)
+
+        notifier = InterruptionNotifier(inject)
+        for _ in range(2):
+            await notifier.on_push_frame(pushed(LLMFullResponseStartFrame()))
+            await notifier.on_push_frame(pushed(InterruptionFrame()))
+        assert injected == [INTERRUPTION_NOTICE_WHILE_THINKING] * 2
+
+    async def test_a_hop_arriving_mid_inject_does_not_see_the_reply_as_active(self):
+        """Two DISTINCT frames, so this isolates the check-then-await race
+        from the dedupe: the second lands while the first's inject is still
+        awaiting, and must find the reply already marked inactive."""
+        import asyncio
+
+        gate = asyncio.Event()
+        injected = []
+
+        async def inject(text):
+            injected.append(text)
+            await gate.wait()
+
+        notifier = InterruptionNotifier(inject)
+        await notifier.on_push_frame(pushed(LLMFullResponseStartFrame()))
+        first = asyncio.create_task(notifier.on_push_frame(pushed(InterruptionFrame())))
+        await asyncio.sleep(0)                                    # parked inside inject
+        await notifier.on_push_frame(pushed(InterruptionFrame()))  # arrives mid-await
+        gate.set()
+        await first
+        assert injected == [INTERRUPTION_NOTICE_WHILE_THINKING]
+
+
 class TestNoFalsePositive:
     async def test_completed_turn_produces_no_note(self):
         """The important negative case: no barge-in occurred, so no note."""

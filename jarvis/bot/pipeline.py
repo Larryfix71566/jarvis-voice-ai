@@ -43,7 +43,10 @@ from pipecat.turns.user_turn_strategies import UserTurnStrategies
 
 from jarvis import llm_client
 from jarvis.agents.base import load_sub_agents
-from jarvis.agents.delegate import build_delegate_tool, foreground_delegation_count
+from jarvis.agents.delegate import (
+    DETACHED_DRAIN_TIMEOUT_S, build_delegate_tool, drain_detached,
+    foreground_delegation_count,
+)
 from jarvis.anthropic_shim import native_base_url
 from jarvis.bot.display import WeatherReportMerger, build_display_payload
 from jarvis.bot.interruption import InterruptionNotifier
@@ -156,6 +159,11 @@ class Runtime:
     # at construction time — same late-binding reason RemindersWatcher
     # takes inject= at run_session level.
     late_delivery: dict = field(default_factory=dict)
+    # Item 11 (2026-09-17): the detached delegation runs this session
+    # started and has not seen finish. run_session drains it before
+    # registry.stop(), because those runs call tools through this
+    # session's registry and outlive the session by design.
+    detached_runs: set = field(default_factory=set)
     # Tier 2 (2026-08-21): the live TranscriptGate instance when the
     # speaker gate is active, else None. run_session hands it to
     # TranscriptObserver so persisted USER lines match what the LLM
@@ -424,6 +432,7 @@ def build_pipeline(
         # delegation orphaned by user interruption can still deliver its
         # result into the conversation.
         late_delivery=runtime.late_delivery,
+        in_flight=runtime.detached_runs,
     )
     _, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
     _, remember_handler = build_remember_tool(runtime.session_id)
@@ -1437,4 +1446,16 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                     exc_info=True,
                 )
     finally:
+        # Item 11: a delegation the user walked away from is still doing its
+        # work, and its tools live in this registry. Wait for it, bounded,
+        # before pulling the registry out from under it -- measured
+        # 2026-09-16, a developer run lost its last two tool calls to
+        # "Available: none" eight seconds after the client disconnected.
+        still = await drain_detached(runtime.detached_runs,
+                                     timeout=DETACHED_DRAIN_TIMEOUT_S)
+        if still:
+            _logger.warning(
+                "session_teardown_under_detached_runs session=%s runs=%d",
+                runtime.session_id, still,
+            )
         await registry.stop()

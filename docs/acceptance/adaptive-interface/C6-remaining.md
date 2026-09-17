@@ -1,6 +1,6 @@
 # What is left, and what closes each
 
-State at `9b9c3df` on `docs/wave-and-agent-recovery`, 2026-09-16. Thirteen
+State at `8c51bc7`+ on `docs/wave-and-agent-recovery`, 2026-09-17. Fourteen
 items. Two are decisions,
 two are investigations, three need one hardware run each, one needs
 re-specifying, two are someone else's call, and one is a defect with a
@@ -142,7 +142,7 @@ threshold has less headroom than it appears.
 known; until it is, this is repeat-until-observed rather than a test that
 can be asked for.
 
-## 6. §3.4 latency parity — RE-SPECIFY, THEN TWO SHORT RUNS
+## 6. §3.4 latency parity — RE-SPECIFIED AND CLOSED 2026-09-17
 
 **What it is.** The plan wants native vs WebRTC latency compared, gated on a
 C0.4 WebRTC baseline that was never captured.
@@ -158,6 +158,18 @@ emits transport-agnostically: `TURN user_end->first_audio`. The WebRTC
 session on 2026-09-15 already produced 899, 1379 and 1431 ms. Two short
 matched sessions — same device, same kind of question — give the comparison
 the plan actually wanted. Amend §3.4 to name that metric.
+
+**CLOSED 2026-09-17, on evidence already on disk.** Re-specified in the
+plan (§3.4 finding) into the two halves that can be attributed: the
+pipeline half is `TURN user_end->first_audio`, which the bot prints per
+turn; the transport half is what the C7.5 meter measures on native and
+cannot be measured on WebRTC with this build. Every `bot-c6.log*` is a
+native session: 39 `TURN` lines, 7 artefacts at 0–19 ms excluded, **32 real
+turns — median 1084 ms, p95 2613 ms**, against the §9 WebRTC session's
+899/1379/1431 ms. 21 of 32 native turns sit at or below the WebRTC median.
+No native penalty on the pipeline half; the transport half is better by
+construction (no codec, no jitter buffer). Caveat recorded in the plan: the
+WebRTC side is n=3.
 
 ## 7. §3.3 echo on AirPods — TWO BENCH RUNS, OR ACCEPT INDIRECT
 
@@ -293,7 +305,7 @@ arriving: `staticTrace` (:152) and the `VoiceEnvelope` clamp on stale or
 absent levels are what keep that true, and any gain applied has to sit
 *inside* them, not around them.
 
-## 11. A sub-agent is unusable after an error — TESTED, NEITHER CAUSE REPRODUCED
+## 11. A sub-agent is unusable after an error — ROOT CAUSE FIXED 2026-09-17
 
 **What it is.** Larry, 2026-09-16: "when a sub-agent hits an error it is no
 longer usable... I need to be able to overcome an error and not have to
@@ -465,6 +477,32 @@ reference-count it against in-flight detached runs), or a detached run has
 to be told its tools are gone and say so, instead of reporting `ok` with two
 silent failures. The second is smaller; the first is what the design implies.
 
+**FIXED 2026-09-17 — reproduced by test, not by disconnect.** The
+registry-teardown candidate above is confirmed and closed. Mechanism, read
+from the source: `run_session` builds one `SkillRegistry` per connection
+and its `finally` called `registry.stop()` unconditionally
+(`pipeline.py:1440`), emptying `_tools`; barge-in survival deliberately runs
+the sub-agent in a detached task the turn's cancellation cannot reach, and
+nothing cancels that task at shutdown either — the delegate code even names
+"session shutdown" as the case where the task *is* cancelled, and that case
+never happened. Neither cancelled nor supported.
+
+Fix: `build_delegate_tool` takes a caller-owned `in_flight` set (like
+`late_delivery`); `Runtime.detached_runs` holds it; teardown calls
+`drain_detached(runtime.detached_runs, timeout=DETACHED_DRAIN_TIMEOUT_S)`
+(120 s — a developer run measured 41 s) **before** `registry.stop()`, and
+logs `session_teardown_under_detached_runs` with the count if the deadline
+passes. Per-session on purpose: `_background_tasks` is module-level, shared
+across sessions, and holds `learn_from_run` and late-delivery tasks teardown
+has no reason to wait on.
+
+`tests/unit/test_delegate_teardown.py`, five tests, spawn-free: the defect
+reproduced (stop under a detached run → `Unknown tool 'get_current_time'.
+Available: none.`), the fix (drain first → the run's tool call returns
+`12:00`), the deadline (returns 1 still running), the clean path (nothing
+left in flight), and the empty case. **5/5 pass**; delegate + registry
+neighbours 63/63; bot wiring 31/31.
+
 ## 12. The bot wrote to the wrong database from 2026-09-13 to 2026-09-16 — FIXED
 
 **What it is.** Larry, mid-test: *"I don't understand why they're not there.
@@ -582,17 +620,26 @@ Yield, measured from the worker's own log across the merged range
 | observations | **1** |
 | promoted | 0 |
 
-Not a deduplication artifact - the per-exchange log lines themselves report
-`facts=0 observations=0`. The extractor found nothing to remember, because
-those three days were almost entirely diagnostic traffic: "stand by",
-weather checks, and the memory-graph attempts that failed. `memories` stayed
-at 434 and `observations` went 119 → 120.
+**CORRECTED 2026-09-17 — the yield conclusion below was wrong.** The
+`memory_exchange_extracted facts=N` line is logged *after* the writes
+succeed, and every one of the 28 failures was raised *inside* a write
+(`upsert_fact` / `add_observation`). So the 94 that logged `facts=0` were
+exchanges with nothing to store, and the 28 that failed were exactly the
+ones that had something. The true yield of those three days is unknown and
+bounded above by 28 exchanges — see item 13, which found why they failed.
+Recoverable: rewind the cursor to 2847 after item 13's fix is in; the
+novelty gate deduplicates what was already stored. **Larry's call**, added
+to the list as item 12b.
+
+(Original text, kept for the record:) Not a deduplication artifact - the
+per-exchange log lines themselves report `facts=0 observations=0`. `memories`
+stayed at 434 and `observations` went 119 → 120.
 
 **So the backfill was not the win; the fix was.** From 2026-09-16 12:30 on,
 conversations reach the database the extractor watches. That is the thing
 that was broken for three days and is now demonstrably working.
 
-## 13. `get_conn` has no busy timeout — DEFECT, MEASURED UNDER LOAD
+## 13. `get_conn` has no busy timeout — RE-DIAGNOSED: A SELF-DEADLOCK, FIXED 2026-09-17
 
 **What it is.** The backfill lost **28 of 122** attempted exchanges to
 `sqlite3.OperationalError: database is locked`, raised from
@@ -630,3 +677,80 @@ test already exists: two writers, one under sustained load, and count the
 `active-repo/data/jarvis.db`. The audio and transport measurements do not
 depend on the database, so nothing measured is invalidated - but any run-log
 evidence cited from those sessions lives in that file, not the real one.
+
+**RE-DIAGNOSED AND FIXED 2026-09-17.** The busy timeout was the wrong
+target. `tick_once` opens one connection for the whole tick and, per
+session, writes to `memory_extraction_pending` (`_set_pending` or
+`_clear_pending` — an INSERT or DELETE). Python's sqlite3 opens an implicit
+transaction on the first DML and holds the write lock until commit, and the
+tick committed **once, at the end**. `extract_from_exchange` writes through
+a *second* connection (`memory_extraction.py:370`), same process, same
+thread — so from the second session on, its `upsert_fact` waits the full 5 s
+for a lock the same thread holds, then fails. A longer timeout would only
+lengthen the wait before the identical failure; `db.py` is deliberately
+untouched. Never seen before because a normal tick carries one session's
+rows, so its pending write lands after its only extraction.
+
+Fix: `conn.commit()` after each session's pending write
+(`memory_extraction_worker.py`), releasing the lock before the next
+session's extraction. Regression test in
+`tests/unit/test_memory_extraction_worker.py`: session A leaves a pending
+write, session B's extraction must land a fact through its own connection,
+and the tick must finish in under 4 s (a self-deadlock stalls ≥ 5 s per
+blocked write). **12/12 pass** in that file.
+
+**Consequence for item 12:** the 28 lost exchanges were the ones with
+content. Recorded there as item 12b.
+
+## 12b. Re-extract the 28 exchanges the deadlock lost — LARRY'S CALL
+
+With item 13 fixed, rewinding `memory_extraction_cursor` to **2847** makes
+the worker re-walk the 299 merged rows; the novelty gate skips what is
+already stored, so the cost is ~149 LLM calls on the `memory_extraction`
+rung and the gain is whatever those 28 exchanges held. One `UPDATE` with the
+bot stopped, and the worker does the rest on its next tick. Not done
+unasked: it is a write into the real database and a bill.
+
+## 14. The interruption storm — DIAGNOSED AND FIXED 2026-09-17
+
+**What it is.** Nine `[system] Your previous reply was interrupted by the
+user before any audio played` notes in a 90-second conversation on
+2026-09-16 11:43, three per user turn, on every turn — including turns where
+the bot had finished speaking two seconds before the user spoke. Larry:
+"Stop talking over me."
+
+**Measured.** In `bot-c6.log.5`, pipecat logs exactly **one**
+`LLMUserAggregator#0: broadcasting interruption` per user turn. The LLM
+context carries exactly **three** notes per user turn. One frame, three
+notes.
+
+**Mechanism.** `InterruptionNotifier` is a task-level observer, and an
+observer's `on_push_frame` runs once per processor hop
+(`pipecat/processors/frame_processor.py:868–893`) — the same
+`InterruptionFrame` object is observed at aggregator→LLM, LLM→TTS,
+TTS→output, output→assistant-aggregator. It is a `SystemFrame`, so those
+hops are not synchronous with one another: by the time the hops after the
+LLM are observed, the aggregator has closed the user turn and the LLM has
+pushed `LLMFullResponseStartFrame` for the **new** reply, which re-arms
+`_assistant_active`. The old turn's boundary frame, at its remaining three
+hops, then reads as three fresh barge-ins against the new reply. Three hops
+downstream of the LLM; three notes. A second, independent race: the notifier
+cleared `_assistant_active` only *after* awaiting the inject, so any hop
+landing during that await also saw the reply as active. Every existing test
+pushed each frame exactly once, which is why none of them caught either.
+
+**Fix** (`jarvis/bot/interruption.py`): record `frame.id` on first sight
+regardless of state and ignore later hops of the same frame; clear
+`_assistant_active` before the await. Four tests added to
+`tests/unit/test_interruption.py`: a routine boundary seen at four hops
+across a re-arm injects nothing; a genuine barge-in seen at four hops
+injects exactly once; two distinct barge-ins on two replies inject twice
+(the dedupe is per frame, not per turn); and a hop arriving mid-inject with
+a *distinct* frame does not see the reply as active. **12/12 pass** in that
+file.
+
+**What this does not claim.** It removes the spurious notes, which were
+padding every turn's context and telling the model it kept getting cut off
+when it hadn't. Whether the bot also *starts speaking too early* — the
+other reading of "stop talking over me" — is a turn-detection question
+(Deepgram Flux end-of-turn), separate, and not diagnosed here.

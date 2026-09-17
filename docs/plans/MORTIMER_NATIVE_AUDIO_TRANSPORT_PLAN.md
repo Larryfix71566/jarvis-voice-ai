@@ -19,9 +19,12 @@ Evidence: `C6-native-audio.md`, `C7-measured-audio.md`, `C6-parity.md`,
   AirPods. Subsumed by T1.4 if the whole WebRTC client path goes.
 - **§3.3 echo on the two AirPods configurations** — not measured. Four clean
   AirPods conversations are indirect evidence only.
-- **§3.4 latency parity** — cannot be measured as specified: the client
-  meter needs `AudioLevelSource` and only `NativeAudioTransport` implements
-  it. Re-specify onto the server-side `TURN user_end->first_audio` metric.
+- **§3.4 latency parity** — re-specified 2026-09-17 (see the §3.4 finding
+  below) and **closed on the evidence already on disk**: 32 native turns
+  give a median `user_end->first_audio` of 1084 ms against the WebRTC
+  session's 899/1379/1431 ms; the transport half is equal-or-better by
+  construction and measured at 25 ms p95 arrival. One caveat stands — the
+  WebRTC sample is n=3.
 - **Rebuild churn** — six rebuilds from two device changes, observed once,
   not reproduced. Instrumented; needs an earbud-removal run.
 - **Input observation count** — 76 observations in 87 s against 1568 and
@@ -179,7 +182,58 @@ Verified against the installed **pipecat-ai 1.4.0** (`.venv` of the `jarvis-voic
 1. **Voice Processing cancels, and the gate is met on this device.** With nothing else holding the input device, `AudioEngineIO` VPIO-on leaves the bot's own playback **6.0 dB *below* the idle noise floor** (39.2 dB below the VPIO-off residual), and the pipeline's own `SileroVADAnalyzer` with `pipeline.py`'s `VADParams` scores **0 speaking chunks and 0 user turns** on it (confidence max 0.156 against a 0.7 threshold), while the VPIO-off capture of the same signal raises 7 turns. So no server-side change is needed for §3.3's fallback list, on this configuration. The two AirPods configurations still need a run on the shipped graph (§3.3 asks for three).
 2. **§3.5 is refuted: the wake listener must not open its own engine on the native path.** A second `AVAudioEngine` on the same input device — exactly what `WakeWordListener.startCapture()` does today — costs the transport's engine its cancellation (39.2 dB of reduction collapses to 0.7 dB; the residual sits 32.9 dB *above* the floor and Silero raises **9 user turns** on the bot's own voice) and the second engine itself receives **silence** on the built-in mic (`wakeRMS` 0 in every VPIO-on phase; on AirPods it did receive audio, so the deafness is device-dependent and the cancellation loss is not). Both symptoms are one cause. **Design change (approved by Larry, 2026-09-13):** on the native path the wake listener is fed from the transport's own processed capture tap and opens no engine — `AudioEngineIO.onMonitorPCM` (fires whether or not capture is enabled, since wake runs precisely while the mic is muted) → `NativeAudioTransport.setCaptureMonitor(_:)` → `WakeWordListener.feed(_:)`, with `WakeAudioSource.external` suppressing `startCapture()`. Measured in that shape: the wake path receives every buffer while muted (121 of 121 in both phases) and the canceller stays intact (residual 2.7 dB below the idle floor, 0 speaking chunks, 0 user turns). The wake audio is now echo-cancelled, which is strictly better input for the detector; N10 rule 4's pause during bot speech is kept unchanged. The WebRTC path keeps `.ownEngine` — libwebrtc's ADM tolerates the second engine, which is what ships today.
 
-**Open (hardware, Larry): §3.3 on the two AirPods configurations, and §3.4 latency parity** — §3.4 needs the C0.4 WebRTC baseline captures first.
+**Open (hardware, Larry): §3.3 on the two AirPods configurations.** §3.4 was re-specified and closed on 2026-09-17 — see the finding below.
+
+### §3.4 finding — 2026-09-17 (re-specified, then closed on existing evidence)
+
+**As written, §3.4 could not be measured.** "Round-trip mouth-to-ear on the
+native path vs WebRTC" needs a client-side latency reading on *both*
+transports. The client meter reads `AudioLevelSource`, which only
+`NativeAudioTransport` implements; `DirectWebRTCTransport` exposes no audio
+renderer in this build, so there is no client-side WebRTC figure and no
+amount of running produces one. The C0.4 "WebRTC baseline capture" this
+section was waiting on was therefore never going to arrive.
+
+**Re-specification.** Split the round trip into the two halves that can
+actually be attributed:
+
+1. *The pipeline half* — from the user's end of turn to the first outbound
+   TTS audio frame, which the bot already prints per turn as
+   `TURN user_end->first_audio` (`jarvis/bot/transcript_log.py:166`). It is
+   transport-agnostic, which is the point: any serving difference the
+   native path introduces (the 16 kHz Int16 upstream, the WebSocket
+   framing) shows up here, and nothing else does.
+2. *The transport half* — capture-to-accumulator and playout buffering.
+   Native: measured directly by the C7.5 meter, input arrival p95 23.5–41.9
+   ms across every session, playout 1–4.5 ms. WebRTC: **not measurable with
+   this build**, recorded as such. The plan's own expectation — "equal or
+   better (no Opus, no jitter buffer)" — holds for this half by
+   construction: the native path has neither, and its buffering term is the
+   render quantum the meter measures.
+
+**Evidence, native path — already on disk.** Every `bot-c6.log*` since the
+launcher began rotating is a native session. Thirty-nine `TURN` lines, of
+which seven are artefacts at 0–19 ms (interrupted turns and late-result
+injections with no real user end; excluded) — leaving **32 real turns**:
+
+| | native (n=32) | WebRTC (n=3, 2026-09-15 §9 session) |
+|---|---|---|
+| median | **1084 ms** | 1379 ms |
+| p95 | 2613 ms | — |
+| min / max | 725 / 5293 ms | 899 / 1431 ms |
+
+21 of the 32 native turns are at or below the WebRTC median. The 5293 ms
+maximum is a turn that delegated to a sub-agent and waited for it; the
+distribution is dominated by LLM time-to-first-token and TTS, not by
+either transport, which is why the two overlap.
+
+**Verdict.** No evidence of a native-path penalty on the pipeline half; the
+transport half is better by construction and measured on the side that can
+be measured. §3.4 closes. **Caveat, stated plainly:** the WebRTC side is
+three samples from one session. If parity ever needs to be defended rather
+than merely satisfied, two matched sessions (same device, same kind of
+question, one per transport) on the rollback flag would put both columns on
+equal footing — that is a fifteen-minute run, not a plan item.
 
 ---
 
@@ -256,8 +310,9 @@ Verified against the installed **pipecat-ai 1.4.0** (`.venv` of the `jarvis-voic
   `docs/acceptance/adaptive-interface/C7-measured-audio.md`. §3.3 was re-run on
   this graph and improved: the residual sits 20.3 dB below the idle floor
   (6.0 dB before), 50.1 dB of echo reduction, Silero 0 user turns against a
-  control raising 10. §3.4 remains open — the buffering term is known, parity
-  is not measured.
+  control raising 10. §3.4 was subsequently re-specified and closed
+  (2026-09-17, above): the buffering term is the measured half, the pipeline
+  half is `TURN user_end->first_audio`, and the latter overlaps WebRTC's.
 - **D9 (2026-09-13, from the §3.3/§3.5 measurements):** the input node is
   **tapped, never connected**. With Voice Processing on, this Mac's input bus
   reports the mic array's 9-channel 48 kHz layout (1 ch before) and the output

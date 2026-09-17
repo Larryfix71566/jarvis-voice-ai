@@ -79,6 +79,14 @@ class InterruptionNotifier(BaseObserver):
         self._assistant_active = False
         self._llm_response_ended = False
         self._audio_played = False
+        # Item 14 (2026-09-17): the id of the last InterruptionFrame acted
+        # on. An observer sees the same frame once per downstream hop, and
+        # the hops after the LLM land after the next reply's
+        # LLMFullResponseStartFrame has re-armed this notifier -- so
+        # without this, one routine turn boundary produced three notes,
+        # every turn (measured 2026-09-16 11:43: one broadcast per turn in
+        # the pipecat log, three notes per turn in the context).
+        self._last_interruption_id: int | None = None
 
     async def on_push_frame(self, data: FramePushed) -> None:
         # InterruptionFrame is broadcast both directions; every other frame
@@ -109,7 +117,17 @@ class InterruptionNotifier(BaseObserver):
             return
 
         if isinstance(frame, InterruptionFrame):
+            # One frame, one decision -- recorded on first sight regardless
+            # of state, so a boundary observed while no reply was in flight
+            # stays ignored at its later hops even after a re-arm.
+            if frame.id == self._last_interruption_id:
+                return
+            self._last_interruption_id = frame.id
             if self._assistant_active:
+                # Cleared BEFORE the await: a hop that lands while the
+                # inject is still in flight must not read the reply as
+                # still active.
+                self._assistant_active = False
                 if self._enabled:
                     note = (
                         INTERRUPTION_NOTICE_MID_SPEECH
@@ -117,5 +135,4 @@ class InterruptionNotifier(BaseObserver):
                         else INTERRUPTION_NOTICE_WHILE_THINKING
                     )
                     await self._inject(note)
-                self._assistant_active = False
             return

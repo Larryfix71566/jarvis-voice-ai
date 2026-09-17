@@ -1,5 +1,15 @@
 # Geolocation Backend Implementation Specification
 
+**Status:** SUPERSEDED — never built as written (status line added
+2026-09-17; the document had none). Specifies a TypeScript service
+(`src/services/geolocationService.ts`) and four `/api/geolocation/*`
+endpoints; none exist in this repository, and the `src/` layout it assumes
+is not this codebase's. Geocoding today is Open-Meteo's keyless geocoder in
+`mcp_servers/mcp_web/logic.py`, and location acquisition is
+`jarvis/ambient_weather.py` (see GEOLOCATION_DEVELOPMENT_PLAN.md's status).
+Companion to that plan; retire together.
+
+
 ## Overview
 This document defines the backend implementation requirements for geolocation services in Jarvis. The geolocation system provides location-based data retrieval, caching, and API integration while maintaining performance and reliability standards.
 

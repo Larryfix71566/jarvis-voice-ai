@@ -1,5 +1,17 @@
 # Implementation Plan: Interval-Based Polling Capability
 
+**Status:** NOT IMPLEMENTED — orphaned (status line added 2026-09-17; the
+document had none). The plan says so itself in §2: "the goal names no
+codebase, language, or runtime", and it assumes TypeScript, Vitest and a
+`src/` layout, none of which is this repository. No `poller.ts` or
+equivalent exists anywhere in the tree. The polling this project actually
+needs is done by Python watchers on the bot side (`jarvis/bot/progress_watcher.py`,
+`memory_watcher.py`, the reminders watcher) and by `memory_extraction_worker`'s
+poll loop, each purpose-built. No track owns this document; it is a candidate
+for `docs/plans/implemented/`'s neighbour, a retired folder, rather than a
+gate anything reads.
+
+
 ## 1. Problem Statement
 
 The project has no reusable mechanism for repeatedly executing an asynchronous operation on a fixed time interval. Callers that need to poll (e.g., re-fetch a status endpoint, refresh a resource) must hand-roll `setInterval` logic, which typically gets three things wrong: overlapping executions when the operation outlives the interval, unhandled promise rejections from failed polls, and no clean shutdown. This plan adds a single, well-tested polling primitive that handles scheduling, overlap prevention, error routing, and cancellation.

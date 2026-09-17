@@ -256,6 +256,15 @@ async def tick_once(
                     )
                 else:
                     _clear_pending(conn, session_id)
+                # Item 13 (2026-09-17): release the write lock NOW. The
+                # INSERT/DELETE above opened an implicit transaction on this
+                # connection, and extract_from_exchange writes through a
+                # connection of its own -- so without this commit every
+                # session after the first blocks on this one, in the same
+                # thread, until the busy timeout fails it. Measured on the
+                # 2026-09-16 backfill: 28 of 122 exchanges lost, every one
+                # inside upsert_fact or add_observation.
+                conn.commit()
 
             new_cursor = rows[-1]["id"]
             _set_cursor(conn, new_cursor)

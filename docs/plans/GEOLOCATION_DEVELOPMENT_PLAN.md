@@ -1,5 +1,18 @@
 # Geolocation on Login: Development Plan
 
+**Status:** SUPERSEDED — never built as written (status line added
+2026-09-17; the document had none). This is a browser-side, TypeScript-shaped
+plan (frontend localStorage, `src/services/geolocationService.ts`) dated
+"2024", predating the Python bot. Its *intent* — a layered location fallback
+feeding the weather and scheduler agents — is implemented in Python:
+`jarvis/ambient_weather.py` prefers a device-reported location
+(`set_device_location`), falls back to IP geolocation via ip-api.com, then to
+the configured default; `jarvis/admin/server.py:2004` follows the same order.
+None of the storage schema, endpoints or frontend code specified here exists,
+and the web frontend itself is scheduled for removal (T1.4). Kept for the
+design rationale only.
+
+
 **Date:** 2024  
 **Primary Location:** Spartanburg, SC  
 **Primary Timezone:** America/New_York  
