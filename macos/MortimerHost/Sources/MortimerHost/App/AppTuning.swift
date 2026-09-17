@@ -175,6 +175,22 @@ enum AudioPresentationTuning {
     static var outputLevelFloorDb: Double { storedDb(outputFloorKey, default: outputFloorDefault) }
     static var outputLevelCeilingDb: Double { storedDb(outputCeilingKey, default: outputCeilingDefault) }
 
+    // Item 10b (2026-09-17) — the lobe's half-width as a fraction of the
+    // frame: the 0.11 in VoiceWaveView's super-Gaussian window,
+    // exp(-((x - cx) / (fraction * w))^4). Tunable for the same reason the
+    // dB windows are. The clamp keeps a `defaults write` from producing a
+    // zero-width lobe (division by zero in the window) or one wider than
+    // the frame can show.
+    static let waveWidthKey = "mortimer.wave.widthFraction"
+    static let waveWidthDefault: Double = 0.11
+    static let waveWidthRange: ClosedRange<Double> = 0.04 ... 0.45
+
+    static var waveWidthFraction: Double {
+        guard let raw = UserDefaults.standard.object(forKey: waveWidthKey) as? Double,
+              raw.isFinite else { return waveWidthDefault }
+        return min(waveWidthRange.upperBound, max(waveWidthRange.lowerBound, raw))
+    }
+
     /// Linear RMS (0…1 full scale) to a 0…1 presentation level, through the
     /// channel's dB window. `nil` in, `nil` out: an absent level is not a
     /// silent one, and `VoiceEnvelope` needs to tell them apart.

@@ -252,14 +252,19 @@ final class WaveEngine {
 
         let r = dyn.cr, g = dyn.cg, b = dyn.cb
 
+        // Item 10b: the lobe width is tunable on the adaptive path (Debug ▸
+        // Wave level windows). The legacy rollback keeps the constant so it
+        // stays the known quantity a rollback exists to be.
+        let widthFraction = presentation == nil ? 0.11 : AudioPresentationTuning.waveWidthFraction
         for layer in Self.layers {
             var path = Path()
             var x = 0.0
             var first = true
             while x <= w {
                 // Super-Gaussian window: tight central plateau (middle
-                // ~10% of the width holds >=94% of peak), fast falloff.
-                let env = exp(-pow((x - cx) / (0.11 * w), 4))
+                // ~10% of the width holds >=94% of peak at the default
+                // 0.11), fast falloff.
+                let env = exp(-pow((x - cx) / (widthFraction * w), 4))
                 // slow speech-like wobble along the trace
                 let mod = 0.65 + 0.35 * sin(0.012 * x * layer.fMul + t * 6.3 * dyn.speed + layer.po)
                 let y = cy + env * amp * layer.aMul * mod *

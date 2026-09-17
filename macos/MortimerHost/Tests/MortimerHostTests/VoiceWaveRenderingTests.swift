@@ -18,6 +18,7 @@ final class PresentationLevelMappingTests: XCTestCase {
     private static let keys = [
         AudioPresentationTuning.inputFloorKey, AudioPresentationTuning.inputCeilingKey,
         AudioPresentationTuning.outputFloorKey, AudioPresentationTuning.outputCeilingKey,
+        AudioPresentationTuning.waveWidthKey,
     ]
     private var saved: [String: Any?] = [:]
 
@@ -48,6 +49,21 @@ final class PresentationLevelMappingTests: XCTestCase {
         UserDefaults.standard.set(-60.0, forKey: AudioPresentationTuning.inputCeilingKey)
         XCTAssertEqual(level(inputP95, isInput: true), 1.0)
         XCTAssertEqual(level(inputMedian, isInput: true), 1.0)
+    }
+
+    /// Item 10b. The width slider reads back exactly, clamps a stray
+    /// `defaults write`, and never lets a non-finite value reach the
+    /// window's division.
+    func testTheWidthFractionIsStoredClampedAndDefaulted() {
+        XCTAssertEqual(AudioPresentationTuning.waveWidthFraction, 0.11, "the constant the draw used before")
+        UserDefaults.standard.set(0.25, forKey: AudioPresentationTuning.waveWidthKey)
+        XCTAssertEqual(AudioPresentationTuning.waveWidthFraction, 0.25)
+        UserDefaults.standard.set(0.0, forKey: AudioPresentationTuning.waveWidthKey)
+        XCTAssertEqual(AudioPresentationTuning.waveWidthFraction, 0.04, "a zero-width lobe would divide by zero")
+        UserDefaults.standard.set(3.0, forKey: AudioPresentationTuning.waveWidthKey)
+        XCTAssertEqual(AudioPresentationTuning.waveWidthFraction, 0.45)
+        UserDefaults.standard.set(Double.nan, forKey: AudioPresentationTuning.waveWidthKey)
+        XCTAssertEqual(AudioPresentationTuning.waveWidthFraction, 0.11)
     }
 
     func testAStoredWindowOverridesTheMeasuredDefault() {

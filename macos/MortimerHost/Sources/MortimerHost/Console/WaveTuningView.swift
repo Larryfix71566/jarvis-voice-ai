@@ -18,6 +18,8 @@ struct WaveTuningView: View {
         AudioPresentationTuning.outputFloorDefault
     @AppStorage(AudioPresentationTuning.outputCeilingKey) private var outputCeiling =
         AudioPresentationTuning.outputCeilingDefault
+    @AppStorage(AudioPresentationTuning.waveWidthKey) private var widthFraction =
+        AudioPresentationTuning.waveWidthDefault
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -47,12 +49,33 @@ struct WaveTuningView: View {
                 floorRange: -60 ... -10, ceilingRange: -25 ... 0
             )
 
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Width").font(.subheadline.weight(.medium))
+                Text("How much of the frame the lobe spans. Shape only — in the "
+                     + "compact layouts the frame itself is the limit.")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 10) {
+                    Text("lobe")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 52, alignment: .leading)
+                    Slider(value: $widthFraction, in: AudioPresentationTuning.waveWidthRange, step: 0.01)
+                    Text(String(format: "%.2f", widthFraction))
+                        .font(.system(.caption, design: .monospaced))
+                        .monospacedDigit()
+                        .frame(width: 58, alignment: .trailing)
+                }
+            }
+
             HStack {
                 Button("Reset to measured") {
                     inputFloor = AudioPresentationTuning.inputFloorDefault
                     inputCeiling = AudioPresentationTuning.inputCeilingDefault
                     outputFloor = AudioPresentationTuning.outputFloorDefault
                     outputCeiling = AudioPresentationTuning.outputCeilingDefault
+                    widthFraction = AudioPresentationTuning.waveWidthDefault
                 }
                 Spacer()
                 Text(summary)
@@ -68,8 +91,8 @@ struct WaveTuningView: View {
     /// Copyable, so a set of values that reads well can be pasted back
     /// rather than read off four sliders by eye.
     private var summary: String {
-        String(format: "in %.0f…%.0f · out %.0f…%.0f",
-               inputFloor, inputCeiling, outputFloor, outputCeiling)
+        String(format: "in %.0f…%.0f · out %.0f…%.0f · width %.2f",
+               inputFloor, inputCeiling, outputFloor, outputCeiling, widthFraction)
     }
 
     @ViewBuilder
