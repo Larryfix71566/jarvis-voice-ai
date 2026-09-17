@@ -17,7 +17,7 @@ Verify paths and the current branch before writing. Keep this map below the
   the live interface; `web/` is frozen. See below.
 - `web/` — the React/Vite console. FROZEN 2026-09-04 and not served:
   interface work goes to `macos/MortimerHost`.
-- `sandbox/` — disposable macOS VMs, guarded files, verification and PRs.
+- `sandbox/` — disposable macOS VMs, guarded files, checks and PRs.
 - `config/` — YAML/JSON routing and model config (agents, MCP servers,
   voices, self-edit allowlist, upgrade models/agent bounds). Check here
   first when a capability seems misrouted or over/under-permissioned.
