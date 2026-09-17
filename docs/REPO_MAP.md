@@ -1,8 +1,7 @@
 # Repository map
 
-Verify paths and the current branch before writing. Update this map with
-structural changes. Keep it below the 8,000-character prompt cap
-(`jarvis/repo_map.py`).
+Verify paths and the current branch before writing. Keep this map below the
+8,000-character prompt cap (`jarvis/repo_map.py`).
 
 ## Top-level layout
 
