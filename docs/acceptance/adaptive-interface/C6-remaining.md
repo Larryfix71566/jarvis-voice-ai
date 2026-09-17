@@ -913,3 +913,58 @@ failing on `main`. The `macos/` section is tightened by 121 characters; all
 sixteen modules the test names are still present; now 7988. Note for whoever
 checks this next: the cap is on **characters**, and `wc -c` reports 8096
 bytes for the same file because of 108 multi-byte em-dashes.
+
+**Item 10 shipped two defects, both caught 2026-09-17 and fixed in
+`2bc51dc`.** Item 10 is still closed — the amplitude Larry accepted on sight
+is unchanged — but its first commit was green only because the launcher
+lied, so the record belongs here.
+
+1. *A real regression.* Removing the `dyn.base = 0.004` pin let the resting
+   thickness ease to the per-state target, which is what made the wave
+   visible. But `VoiceWaveView.draw`'s easing block runs once per draw call
+   unconditionally, so with `assistantSpeaking` true and no measured audio
+   `base` crawled 0.004 → 0.016 across successive draws: the trace thickened
+   four-fold while nothing was arriving.
+   `testUnavailableSpeechRendersIdenticallyAcrossTime` caught it as an
+   11329-vs-11409-byte PNG between `now: 10` and `now: 20`. `staticTrace`
+   zeroed `speed` and the phases and its comment claimed it "stops motion
+   dead" — it stopped lateral motion only. Fixed by freezing the whole
+   easing block under `staticTrace`, not by snapping `base` to `tg.base`,
+   which would pop the trace the moment audio stopped.
+
+2. *A guessed threshold in my own test.*
+   `testThePlayoutWindowKeepsMortimersVoiceMoving` asserted the playout
+   trace run through the *input* window travels less than 0.15. It travels
+   0.1721327612353618 — the playout p95 (−8.4 dB) sits above the input
+   window's −10 dB ceiling and clamps to 1.0 while the median lands at
+   0.828 — reproduced to sixteen digits on three consecutive runs. Not
+   relaxed to 0.18, which is the same guess with a bigger number: replaced
+   with the relation the test actually claims, that the shared window gives
+   less than half the travel of the dedicated one (0.172 against 0.510),
+   with both figures pinned.
+
+**The launcher displayed one test run and gated on a different one.**
+`QUEUED-swift.sh` ran `swift test` twice per package — once piped to `grep`
+for display, then again inside the `if` for the gate — so the two failures
+above printed on screen (`Executed 162 tests, with 2 failures`) and the
+commit went ahead anyway. The gate regex was correct; it judged a separate
+run. Every launcher now captures once into a variable and gates on those
+same bytes; the rule is written up in `closure-checks/LAUNCHER-RULES.md`.
+
+**New observation — the C3.1 frame-time gate is load-sensitive, and §6 of
+the closure plan designates it a gate rather than a report.** Running the
+162-test MortimerHost suite three times back to back stretched the third
+run from 63 s to 312 s, and only in that run did
+`MemoryGraphFrameTimeTests.testPanAndZoomFrameTimesOnTheDenseHubFixtureMeetTheP95Gate`
+fail — p50 frame time 510 ms against its ≤33 ms gate, with its own
+self-check ("the measured span does not respond to drawing cost") also
+tripping, which says the measurement had stopped measuring Canvas work at
+all. `DrawerTabStripRenderingTests.testOverflowButtonsReachBothEndsWithoutChangingSelection`
+failed in the same run only. Both passed in runs 1 and 2 and again on the
+clean confirming run. So: not flaky in the ordinary sense — they are
+accurate under contention and meaningless under it. A CI machine running
+suites in parallel will fail this gate intermittently and the failure will
+look like a graphics regression. Untested: whether the gate can detect its
+own invalidity and skip rather than fail. Naming it here rather than
+fixing it, because it is a gate and changing its behaviour is not a
+side-errand.
