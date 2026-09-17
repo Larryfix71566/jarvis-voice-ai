@@ -1,6 +1,6 @@
 # What is left, and what closes each
 
-State at `8c51bc7`+ on `docs/wave-and-agent-recovery`, 2026-09-17. Fourteen
+State at `1acd275` on `docs/wave-and-agent-recovery`, 2026-09-17. Fourteen
 items. Two are decisions,
 two are investigations, three need one hardware run each, one needs
 re-specifying, two are someone else's call, and one is a defect with a
@@ -199,7 +199,7 @@ the supervisor pin lives (`model_endpoints.yaml` vs the already-denied
 Tier 0. Both shape the implementation, so they want answering before anyone
 starts it.
 
-## 10. The wave lost its amplitude and width — AMPLITUDE CLOSED, WIDTH OPEN
+## 10. The wave lost its amplitude and width — CLOSED (both), 2026-09-17
 
 **What it is.** Larry, 2026-09-16: "the sine wave for voice interaction lost
 its amplitude and width from the previous version, I want that back."
@@ -291,13 +291,33 @@ falls inside the 60 s window. So the trace is livelier on continuous speech
 than on sparse speech by design; raising the floor toward −50 dB would
 compress that if it ever grates.
 
-**WIDTH REMAINS OPEN**, and it is a layout decision rather than a defect.
-The super-Gaussian window is byte-identical on both paths, so the lobe is
-always the same fraction of `w`; what differs is `w` — full-window on the
-legacy path and in adaptive `.conversation`, clamped to `height: 150` in
-`.rail` and `width: 140` in `.bottom`. Larry has not reported it as still
-wrong since the amplitude fix. To close: either he names the mode it reads
-narrow in, or it is recorded as satisfied by the amplitude change.
+**WIDTH — CLOSED 2026-09-17 as a slider** (`1acd275`). Larry: "add a slider
+option like the amplitude so that it is customizable by the user."
+
+The `0.11` in the super-Gaussian window
+`exp(-((x - cx) / (0.11 * w))^4)` *is* the width: the lobe's half-width as a
+fraction of the frame, identical on every layout mode. It is now
+`AudioPresentationTuning.waveWidthFraction` — UserDefaults-backed with 0.11
+as the fallback, clamped to 0.04…0.45 so a stray `defaults write` can
+neither divide the window by zero nor exceed the frame — and it is the fifth
+slider in `Debug ▸ Wave level windows`, carried in the copyable summary as
+`width 0.11`. Applied on the adaptive path only; the legacy rollback keeps
+the constant, because a rollback's value is being the thing already known.
+
+**What the slider cannot do, stated so it is not discovered later:** widen
+the *frame*. In `AdaptiveStageView`'s `.bottom` mode the wave draws into
+`width: 140` and in `.rail` into `height: 150`, so the lobe is a fraction of
+that however the slider is set; only `.conversation` gives it the full
+stage. If the trace still reads narrow after the slider is at 0.45, the
+remaining change is a layout one — which mode gets more room — and that
+needs Larry to name the mode he is in when it reads wrong. Not carried as an
+open item: the slider is the thing he asked for, and there is no evidence
+yet that it is insufficient.
+
+One test: the fraction reads back exactly, clamps 0.0 → 0.04 and 3.0 → 0.45,
+and falls back to 0.11 on a non-finite value. The tuning tests'
+save-and-restore covers the width key too, so a tuning session survives a
+test run.
 
 **Regression risk.** C7's whole point was that the meter shows measured
 audio. Re-inflating the trace must not reintroduce motion when nothing is
@@ -754,3 +774,29 @@ padding every turn's context and telling the model it kept getting cut off
 when it hadn't. Whether the bot also *starts speaking too early* — the
 other reading of "stop talking over me" — is a turn-detection question
 (Deepgram Flux end-of-turn), separate, and not diagnosed here.
+
+---
+
+## Also closed 2026-09-17, outside the numbered list
+
+**Six plans had no status line at all** — a plan with no status cannot be
+audited, and more than one of this week's wrong turns came from trusting a
+header over the code. Each now carries one written against the tree:
+`GEOLOCATION_DEVELOPMENT_PLAN` and `GEOLOCATION_BACKEND_SPEC` are
+TypeScript-shaped, dated "2024", never built, and superseded in intent by
+`jarvis/ambient_weather.py`; `INTERVAL_POLLING_CAPABILITY` is orphaned and
+says so itself ("the goal names no codebase"); `MORTIMER_DRAWER_POPOUT_PLAN`
+is implemented in `web/` with DP8 unverified and superseded by the native
+drawer window; `MORTIMER_SELFEDIT_TIERS_PLAN` and
+`MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN` are implemented, with evidence cited
+per decision. R6's routing eval was not re-run and the status line says so.
+
+**`docs/REPO_MAP.md` was over its prompt cap and silently truncating.** PR
+#73's native-audio lines took it to 8109 characters against the 8000 in
+`jarvis/repo_map.py`, and over the cap `load_repo_map_suffix` truncates —
+so every sub-agent prompt since 09-15 carried a repository map cut off
+mid-sentence, and `test_repo_map_under_cap_and_names_phase_modules` had been
+failing on `main`. The `macos/` section is tightened by 121 characters; all
+sixteen modules the test names are still present; now 7988. Note for whoever
+checks this next: the cap is on **characters**, and `wc -c` reports 8096
+bytes for the same file because of 108 multi-byte em-dashes.
