@@ -1,13 +1,202 @@
 # Mortimer — Automated Memory Consolidation
 
-**Status: APPROVED by Larry 2026-08-20 ("implement the plan") — IMPLEMENTED,
-tests green.**
-Author: Claude, 2026-08-20. Requested by Larry (*"memory
-optimization/consolidation needs to be automated to keep memory optimized …
-ask for confirmation on contradictory rules/memory so that those can be
-clarified and resolved"*).
+**Status (2026-09-17): August consolidation phase IMPLEMENTED; section B's
+automatic, useful memory phase PLANNED and not implemented.** Larry requested
+that the recommendations be added to this existing plan. That request updates
+the plan; it does not certify the new behavior or its acceptance gates.
 
----
+Original plan: Claude, 2026-08-20, approved by Larry for implementation.
+September 17 amendment: automatic classification and maintenance, relevant
+recall, scoped corrections, minimal interruptions, and measurable user value.
+The historical specification and verification are retained below section B.
+
+## B — Automatic, useful memory (planned, 2026-09-17)
+
+Larry's direction: classification should happen automatically, with less
+asking him to administer memory; it should be seamless and add value.
+He requested these recommendations be added to this existing plan.
+**This section is a proposed implementation phase, not delivered behavior.**
+It supersedes A2/A3/A5's routine human classification and contradiction
+review policy, the startup-only restriction, and the blanket prohibition
+on automatically resolving any contradiction. The August implementation
+and its test results below remain a historical record, not proof of B.
+
+### B0 — Verified starting point and intended outcome
+
+Source reviewed: `5faa2e639918075413c8962eafbbc466770f8111`.
+`memory_extraction.py` already extracts per-exchange facts and observations,
+deduplicates candidates and promotes repeated observations. `memory.py`
+infers durability tiers primarily from dotted keys; its ordinary prompt
+context is ordered by tier and recency. `memory_sweep.py` classifies
+audience, but task-rule/implemented verdicts require manual review before
+changing audience or archiving. Its review cache is keyed by key sets;
+changed content must not be assumed to trigger reclassification.
+
+A read-only September 17 database audit found 83 audience review records:
+36 resolved, 45 dismissed, 2 open. There were 76 live facts: 9 identity,
+59 preference, 8 project, all with effective audience `interaction`.
+These are a snapshot, not a quality score; dismissal counts do not explain
+why users dismissed the suggestions.
+
+Success means fewer repeated questions, correct reuse of accepted decisions,
+less stale or irrelevant context, and fewer unnecessary interruptions.
+More stored memories, fewer live rows, or a prettier graph are not success
+criteria by themselves. Extend the existing extraction, memory, sweep,
+retrieval and native Memory surfaces; do not create another competing store.
+Coordinate with `MORTIMER_OPTIMIZATION_PLAN.md` for per-exchange extraction,
+`MORTIMER_MEMORY_CAPACITY_PLAN.md` for storage/context limits and
+`implemented/MORTIMER_MEMORY_PROCEDURES_PLAN.md` for work rules.
+
+### B1 — Classify at admission, with evidence and scope
+
+Automatically assign a candidate's subject/entity, project or global scope,
+type (fact, explicit preference, inferred preference, decision, task rule,
+or temporary context), provenance, confidence/evidence status, and lifetime.
+Retain the existing tier/audience fields through a compatible migration;
+the implementation design must define their mapping to the new metadata.
+Users never need to choose internal labels or dotted keys.
+
+- Explicit user preferences and corrections become usable immediately,
+  subject to existing content and privacy rules.
+- Inferred preferences remain tentative until supported by independent
+  evidence across sessions. Repeated extraction of the same exchange is
+  not additional evidence and must not inflate recurrence or confidence.
+- Attribute user statements, tool-observed facts and assistant assertions
+  separately. Mortimer repeating its own claim cannot establish a fact
+  about Larry. Quoted documents are not automatically user instructions.
+- Link memories to their source turns and preserve revisions. Record why a
+  classification changed, not just its latest label.
+- Cache classification by content revision and classifier/policy version,
+  rather than key alone. Reclassification is bounded and incremental.
+- Unknown classification remains tentative and inspectable. It must not
+  silently become a permanent global instruction or trigger a question.
+
+### B2 — Resolve ordinary changes quietly
+
+Apply explicit corrections over older inferences. Supersede old values when
+the same subject, scope and effective time establish a real replacement;
+preserve the prior version and source for undo. Do not use "newer wins" as
+the sole rule. A statement about a trip must not replace a home location.
+
+Resolve apparent conflicts by scope or time where evidence permits:
+short spoken answers and detailed written plans can both be valid.
+When evidence is insufficient, retain uncertainty and avoid relying on the
+disputed value. Ask only when that uncertainty would materially change the
+current action or answer and cannot be resolved from available evidence.
+Questions should describe the practical choice, never ask users to classify
+a memory. Do not ask again for an already explicit, applicable decision.
+
+This permits a sourced identity correction to supersede an old value; it
+does not permit a model to merge, age out or guess identity information.
+An inferred preference cannot override an explicit instruction. Memory
+classification never grants permissions, executes an action, or bypasses
+the existing gates for changing executable workflows or repository code.
+
+### B3 — Retrieve for the task and verify changing state
+
+Maintain a small standing context of applicable explicit preferences and
+identity defaults. Retrieve additional decisions, constraints and prior
+work for the current subject, project and task. Rank by relevance, scope,
+evidence strength and validity; use recency as one signal, not the policy.
+Archive and prompt exclusion must not make historical evidence unreachable.
+
+Keep storage capacity separate from the per-turn context budget. Do not
+archive a useful long-term fact merely to fit every live fact into every
+prompt. Reconcile A5 and the capacity plan's "every live fact reaches the
+prompt" invariant before changing admission or eviction behavior.
+
+For "continue the sandbox work," recover the current objective, accepted
+decisions and outstanding blockers, then verify changeable status from the
+repository/runtime. A merged PR is not proof that a feature is deployed.
+Do not auto-archive a request as implemented solely because the classifier
+thinks it sounds familiar or the assistant previously claimed success.
+Record which retrieved memories actually informed an answer; retrieval
+alone is not evidence that a memory was useful or used correctly.
+
+### B4 — Maintain memory without creating chores
+
+Classify and deduplicate during admission; perform bounded background
+consolidation and re-evaluation during idle periods, independently of boot
+frequency. Use persistent work records, content versions, retry limits and
+per-period budgets. A restart must not reset the budget or endlessly
+reprocess the same facts. Failures remain visible without interrupting voice.
+
+Give temporary context an expiry or revalidation rule based on its meaning.
+Do not expire an explicit standing preference merely because it is old or
+rarely recalled. Retain reversible history for correction and audit.
+Unanswered, immaterial uncertainty can remain uncertain.
+
+Replace routine greeting-time review counts with quiet maintenance. Keep
+an optional activity/history view and concise explanations on request.
+The native Memory tab and graph become inspection and correction tools:
+show provenance, scope, confidence/evidence, what superseded what, why a
+memory was used, and undo/forget controls. A dismissal is not corroborating
+evidence, and should not permanently suppress reconsideration of changed
+content. Preserve existing authorized forget/delete and privacy behavior.
+
+### B5 — Measure benefit and regressions before rollout
+
+Build a versioned synthetic or redacted evaluation corpus with expected
+outcomes independently specified before tuning. Include the August failure
+corpus and these required scenarios:
+
+1. Explicit units preference is applied later without asking again.
+2. Temporary travel does not overwrite home; an explicit move does update it.
+3. Concise voice replies and detailed written plans coexist by scope.
+4. Resuming a project recalls its accepted decisions and verifies its live
+   deployment state instead of treating a plan or merged PR as runtime truth.
+5. Assistant-invented claims and quoted external instructions do not become
+   trusted user preferences or permissions.
+6. Replaying a source exchange does not create duplicates or inflate evidence;
+   changed content is eligible for reclassification despite an old review.
+7. An uncertain detail creates no interruption until it is consequential;
+   an explicit correction is honored and remains reversible.
+8. Relevant archived information is recalled; unrelated project memories
+   stay out of the answer. Privacy/forget rules apply to every retrieval path.
+
+Record correct preference/decision use, repeated-question rate, unnecessary
+interruptions, stale-memory errors, retrieval precision/coverage, unsupported
+promotions, classification corrections, latency and model cost. Record
+sample counts and denominators. A model's confidence score or its own
+assessment of helpfulness is not the acceptance oracle.
+
+All required cases must pass with zero unauthorized scope/permission
+expansions and zero privacy/forget regressions. Compare quality, latency and
+cost with a captured baseline; set numerical rollout limits in the evaluation
+record before the shadow run. Unnecessary interruptions and stale-memory errors must improve on cases
+where the baseline fails; an existing zero-error baseline must stay at zero.
+Relevant recall and correct explicit-preference use must not regress.
+Do not declare success from a lower queue count or reduced prompt size alone.
+
+### B6 — Delivery order and gates
+
+- [ ] Inventory current admission, classification, retrieval and review
+  behavior; capture baseline metrics and reconcile overlapping plan rules.
+- [ ] Specify backward-compatible metadata, evidence/version semantics,
+  retry/idempotency, budgets, privacy boundaries and rollback.
+- [ ] Implement admission-time classification and the scoped correction
+  policy in the sandbox, using synthetic fixtures and injected model clients.
+- [ ] Implement task-relevant retrieval and evidence-based validity checks;
+  preserve standing preferences and historical recall.
+- [ ] Add bounded idle maintenance and optional native inspection/undo;
+  remove routine classification questions and greeting reminders.
+- [ ] Shadow existing memories without changing live values, prompts or
+  user-facing questions; evaluate against the recorded gates.
+- [ ] Enable gradually with reversible writes and monitor benefit, errors,
+  cost and interruptions. Revisit inferred confidence with observed evidence.
+
+The approved recovery of 28 failed historical exchanges is separate release
+repair, not evidence that B is implemented. Back up first, replay only the
+verified failed pairs after deployment, preserve the live extraction cursor,
+and record results. Do not combine recovery with bulk reclassification.
+
+## Historical August implementation specification and evidence
+
+The sections below describe the delivered August behavior. Where they
+require routine manual classification, prohibit every automatic correction,
+make all interaction facts permanent prompt occupants, or limit maintenance
+to startup, section B governs the proposed next implementation. The old
+approval checkboxes and test counts do not approve or validate section B.
 
 ## 0. What changed, and what the manual cleanup proved
 
