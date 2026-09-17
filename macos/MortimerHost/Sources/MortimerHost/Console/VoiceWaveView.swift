@@ -184,13 +184,26 @@ final class WaveEngine {
         // --- ease dynamics + color toward the current state (0.06) ---
         let tg = Self.targets[state]!
         let (tr, tgc, tb) = Self.colors[state]!
-        dyn.base += (tg.base - dyn.base) * 0.06
-        dyn.speed += (tg.speed - dyn.speed) * 0.06
-        dyn.alpha += (tg.alpha - dyn.alpha) * 0.06
-        dyn.glow += (tg.glow - dyn.glow) * 0.06
-        dyn.cr += (tr - dyn.cr) * 0.06
-        dyn.cg += (tgc - dyn.cg) * 0.06
-        dyn.cb += (tb - dyn.cb) * 0.06
+        // Item 10 follow-up: `staticTrace` freezes the easing too. Removing
+        // the `dyn.base` pin (item 10) left `base` easing 0.004 -> 0.016
+        // once per draw call even when nothing was arriving, so a trace
+        // with no measured audio thickened four-fold across successive
+        // draws -- caught by testUnavailableSpeechRendersIdenticallyAcrossTime
+        // as an 11329 vs 11409 byte render. Zeroing `speed` stopped lateral
+        // motion but not this, so the comment below claiming motion stops
+        // dead was only two-thirds true. Freezing instead of snapping to
+        // `tg.base`: snapping would pop the trace the moment audio stopped,
+        // and holding the last value is what "nothing is arriving" looks
+        // like. Measured audio is unaffected -- staticTrace is false then.
+        if !staticTrace {
+            dyn.base += (tg.base - dyn.base) * 0.06
+            dyn.speed += (tg.speed - dyn.speed) * 0.06
+            dyn.alpha += (tg.alpha - dyn.alpha) * 0.06
+            dyn.glow += (tg.glow - dyn.glow) * 0.06
+            dyn.cr += (tr - dyn.cr) * 0.06
+            dyn.cg += (tgc - dyn.cg) * 0.06
+            dyn.cb += (tb - dyn.cb) * 0.06
+        }
 
         if let presentation {
             // §7 colours, one source (AudioPresentationTuning, closure C2.4).

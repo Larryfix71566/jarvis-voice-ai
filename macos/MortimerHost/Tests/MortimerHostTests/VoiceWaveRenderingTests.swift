@@ -94,7 +94,18 @@ final class PresentationLevelMappingTests: XCTestCase {
         XCTAssertEqual(level(outputP95, isInput: false), 0.830, accuracy: 0.005)
         XCTAssertEqual(level(outputPeak, isInput: false), 0.985, accuracy: 0.005)
         XCTAssertGreaterThan(level(outputP95, isInput: false) - level(outputMedian, isInput: false), 0.4)
-        XCTAssertLessThan(level(outputP95, isInput: true) - level(outputMedian, isInput: true), 0.15,
+        // The 0.15 that stood here was picked, not computed: the real figure
+        // is 0.1721327612353618, because the playout p95 (-8.4 dB) sits above
+        // the input window's -10 dB ceiling and clamps to 1.0 while the
+        // median lands at 0.828. Asserting the RELATION instead of a
+        // threshold states the actual claim and cannot be satisfied by
+        // loosening a number: the shared window has to give less than half
+        // the travel the dedicated one does.
+        let sharedWindowTravel = level(outputP95, isInput: true) - level(outputMedian, isInput: true)
+        let dedicatedTravel = level(outputP95, isInput: false) - level(outputMedian, isInput: false)
+        XCTAssertEqual(sharedWindowTravel, 0.172, accuracy: 0.005)
+        XCTAssertEqual(dedicatedTravel, 0.510, accuracy: 0.005)
+        XCTAssertLessThan(sharedWindowTravel, dedicatedTravel / 2,
                           "one shared window would pin the playout trace — this is why there are two")
     }
 
