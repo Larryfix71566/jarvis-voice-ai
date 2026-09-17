@@ -1,10 +1,16 @@
 # Mortimer native-audio transport — retire WebRTC on the local path
 
 **Status:** IMPLEMENTED (code) 2026-09-15, merged to `main` as `3f0ea58`
-(PR #73). §8 hardware verification **substantially complete**; Step 7 and
-five measurement items remain open, each named below and in
-`docs/acceptance/adaptive-interface/C6-remaining.md`. Not "IMPLEMENTED"
-unqualified, because that line is what a later plan's gate reads.
+(PR #73). §8 hardware verification **substantially complete**. Step 7 is
+resolved as a partial (D8 AMENDED 2026-09-17: the coordinator stays for the
+remote path, its flag is deleted) and §3.4 latency parity is closed
+(2026-09-17). **Three hardware measurements remain**, all of them requiring
+AirPods in hand, each named in the open list below and in
+`docs/acceptance/adaptive-interface/C6-remaining.md`: §3.3 echo on the two
+AirPods configurations, rebuild churn on a device change, and the input
+observation count. Not "IMPLEMENTED" unqualified, because that line is what
+a later plan's gate reads — `MORTIMER_ADAPTIVE_INTERFACE_CLOSURE_PLAN.md`
+C11 item 2, which defers to §6 step 8, which is Larry's to flip after §8.
 
 **§8 verified on the deployment Mac (2026-09-14/15):** native session with
 AirPods both ways, output switched mid-session without a reconnect across
@@ -14,9 +20,14 @@ Evidence: `C6-native-audio.md`, `C7-measured-audio.md`, `C6-parity.md`,
 `C6-s8-live.md`.
 
 **Open, and why each is still open:**
-- **Step 7** (delete the `AudioInputCoordinator` band-aid) — not done. It
-  serves only the WebRTC path, so deleting it degrades the §9 rollback on
-  AirPods. Subsumed by T1.4 if the whole WebRTC client path goes.
+- **Step 7** (delete the `AudioInputCoordinator` band-aid) — **resolved
+  2026-09-17 as a partial: the coordinator and its notice stay, the flag
+  goes.** See the D8 amendment below. The previous text said this was
+  "subsumed by T1.4 if the whole WebRTC client path goes"; that conditional
+  can never fire — `MORTIMER_WEB_RETIREMENT_PLAN.md` retires the *web
+  console*, and its only mention of WebRTC is a `CLAUDE.md` edit that keeps
+  the Swift client's: "Native app (JarvisKit) --WebRTC--> Python bot". T2
+  needs that path too.
 - **§3.3 echo on the two AirPods configurations** — not measured. Four clean
   AirPods conversations are indirect evidence only.
 - **§3.4 latency parity** — re-specified 2026-09-17 (see the §3.4 finding
@@ -30,11 +41,16 @@ Evidence: `C6-native-audio.md`, `C7-measured-audio.md`, `C6-parity.md`,
 - **Input observation count** — 76 observations in 87 s against 1568 and
   840 elsewhere. Unexplained.
 
-Supersedes the `AudioInputCoordinator` band-aid (2026-09-05, JarvisKit) —
-that stopgap was to be deleted in this plan's Step 8, which is the open
-item above. Written for a Sonnet-class implementer after a
-frontier planner: every design decision is made here; the implementer builds,
-it does not choose. Branch: cut from the gap-closure result, name TBD by Larry.
+Supersedes the `AudioInputCoordinator` band-aid (2026-09-05, JarvisKit) on
+the native path only. The original text said the stopgap "was to be deleted
+in this plan's Step 8" — wrong twice: the deletion was Step 7, not Step 8,
+and per D8 AMENDED 2026-09-17 the coordinator is not deleted at all. It
+stays for `DirectWebRTCTransport`, which remains the remote and rollback
+transport; only its `matchInputRate` flag is gone.
+
+Written for a Sonnet-class implementer after a frontier planner: every
+design decision is made here; the implementer builds, it does not choose.
+Branch: cut from the gap-closure result, name TBD by Larry.
 The implementer never runs git (same rule as every Mortimer plan).
 
 ---
@@ -278,6 +294,46 @@ equal footing — that is a fifteen-minute run, not a plan item.
   flag and the input-notice UI — the native converter makes the whole
   mic-rate problem disappear. `AudioOutputMonitor` + the Reconnect chip stay
   (they still serve the WebRTC/remote path).
+- **D8 AMENDED 2026-09-17 (Larry's question: would the band-aid be used for
+  a remote connection, or does the native path remove the need?).** D8's
+  premise — "the native converter makes the whole mic-rate problem
+  disappear" — is true of *local* and false of remote, so only the flag is
+  removed. The coordinator and the input notice **stay**.
+
+  Why, from the code rather than from the plan's expectation:
+
+  1. **Remote is WebRTC by design.** `usesNativeAudio`
+     (`JarvisClient.swift:114`) returns true only for a host in
+     `{127.0.0.1, ::1, localhost}` (D1); everything else gets
+     `DirectWebRTCTransport`, and the coordinator is gated to exactly that
+     transport. Remote is the only path on which it ever runs.
+  2. **The native path avoids the bug; it does not fix it.** AirPods Pro 3
+     present as two CoreAudio devices — a 48 kHz output and a separate
+     24 kHz mic — and WebRTC runs *one* duplex audio unit so it can
+     echo-cancel, so the 24 kHz capture clock drags 48 kHz playout to half
+     speed. `AudioEngineIO` taps input and converts at whatever rate the
+     hardware reports, so there is no shared duplex clock to drag. The bug
+     is structural to libwebrtc's ADM in this build, which also exposes no
+     device-selection API — the system default input is the only lever that
+     exists.
+  3. **Native cannot take over remote.** `NativeAudioTransport` has no
+     jitter buffer, no loss concealment and no reordering: it is raw 16 kHz
+     Int16 PCM on a WebSocket. Those absences are precisely why it is
+     *better* on loopback (§3.4: no Opus, no jitter buffer) and why it would
+     be unusable over a WAN.
+
+  **What changes:** `JarvisFlags.matchInputRate` and
+  `JARVIS_MATCH_INPUT_RATE` are deleted and the correction runs
+  unconditionally on the WebRTC path. A kill switch for a fix whose own
+  docstring says a mismatch "produces unusable audio" had no legitimate
+  off-position, and it is the same class of lever as
+  `JARVIS_FORCE_WEBRTC`, which was found this week to have been silently
+  doing nothing. The input notice stays: it truthfully reports a device
+  change the user did not make, which matters more on a remote session.
+
+  **When the coordinator can actually go:** when the WebRTC *client* path
+  goes — which no current plan does. Not gated on the native path being
+  the local default, which it now is.
 - **Amendments from the §3 findings (2026-09-12)** — these override the
   text above where they differ: D2 wire format is **16 kHz mono Int16 PCM**
   upstream (the WebSocket input does not resample; 16 kHz is what SmallWebRTC
@@ -422,9 +478,17 @@ equal footing — that is a fifteen-minute run, not a plan item.
 6. Full parity pass against today's behavior: transcripts, tool events,
    display payloads, UI commands, mute, barge-in, wake word.
 7. Remove the band-aid (D8): delete `AudioInputCoordinator`, its flag, its UI,
-   its tests.
+   its tests. **PARTIAL 2026-09-17 — see D8 AMENDED.** Only the
+   `matchInputRate` flag and `JARVIS_MATCH_INPUT_RATE` were deleted; the
+   coordinator, its notice and its tests stay, because
+   `DirectWebRTCTransport` is still the remote and rollback transport and the
+   48 kHz-out/24 kHz-in AirPods split is a WebRTC-duplex problem, not a
+   transport-choice problem. `JarvisClient` now gates the coordinator on
+   `transport is DirectWebRTCTransport` instead of on a flag.
 8. Docs: CLAUDE.md audio section, REPO_MAP, and this plan's Status → IMPLEMENTED
-   (Larry, after §8).
+   (Larry, after §8). **Blocked only on the three hardware measurements named
+   in the header**; the docs half (CLAUDE.md, REPO_MAP) is done. This is the
+   step `MORTIMER_ADAPTIVE_INTERFACE_CLOSURE_PLAN.md` C11 item 2 reads.
 
 ---
 
