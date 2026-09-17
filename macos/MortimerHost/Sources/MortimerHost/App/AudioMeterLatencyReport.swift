@@ -72,6 +72,13 @@ enum AudioMeterLatencyReport {
                 "arrivals": c.arrivals,
                 "arrival_p50_ms": (c.arrivalP50 * 1000).rounded(toPlaces: 1),
                 "arrival_p95_ms": (c.arrivalP95 * 1000).rounded(toPlaces: 1),
+                // Item 10: the magnitudes behind those timings. Linear RMS,
+                // 0…1 full scale — the number VoiceWaveView multiplies by
+                // 0.115. Four decimal places because speech RMS lives in
+                // the third and fourth.
+                "level_p50": c.levelP50.rounded(toPlaces: 4),
+                "level_p95": c.levelP95.rounded(toPlaces: 4),
+                "level_max": c.levelMax.rounded(toPlaces: 4),
             ]
         }
         payload["input"] = channel(latency.input)

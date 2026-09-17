@@ -24,12 +24,22 @@ public struct AudioMeterChannelLatency: Equatable, Sendable {
     public let arrivals: Int
     public let arrivalP50: Double
     public let arrivalP95: Double
+    /// Item 10 (2026-09-16): the MAGNITUDE behind the timings above, linear
+    /// RMS 0…1 full scale, one entry per distinct level. VoiceWaveView maps
+    /// this through `level * 0.115`, a multiplier inherited from a simulated
+    /// envelope that floored at 0.25 and peaked at 1.0; real speech RMS is
+    /// far below that, which is why the adaptive trace lost its amplitude.
+    /// Nothing else on disk records it.
+    public let levelP50: Double
+    public let levelP95: Double
+    public let levelMax: Double
 
     public static let empty = AudioMeterChannelLatency(samples: 0, displayedP50: 0, displayedP95: 0,
                                                        worst: 0, arrivals: 0, arrivalP50: 0, arrivalP95: 0)
 
     public init(samples: Int, displayedP50: Double, displayedP95: Double, worst: Double,
-                arrivals: Int, arrivalP50: Double, arrivalP95: Double) {
+                arrivals: Int, arrivalP50: Double, arrivalP95: Double,
+                levelP50: Double = 0, levelP95: Double = 0, levelMax: Double = 0) {
         self.samples = samples
         self.displayedP50 = displayedP50
         self.displayedP95 = displayedP95
@@ -37,6 +47,9 @@ public struct AudioMeterChannelLatency: Equatable, Sendable {
         self.arrivals = arrivals
         self.arrivalP50 = arrivalP50
         self.arrivalP95 = arrivalP95
+        self.levelP50 = levelP50
+        self.levelP95 = levelP95
+        self.levelMax = levelMax
     }
 }
 
@@ -91,7 +104,7 @@ public final class AudioActivityObserver: @unchecked Sendable {
     /// faster sampler cannot reduce. The first reading was 132 ms p50 and
     /// could not distinguish the two.
     private var displayed: [(channel: Int, measuredAt: TimeInterval, delay: Double)] = []
-    private var arrivals: [(channel: Int, measuredAt: TimeInterval, delay: Double)] = []
+    private var arrivals: [(channel: Int, measuredAt: TimeInterval, delay: Double, level: Double)] = []
     private var lastSeen: [TimeInterval?] = [nil, nil]      // 0 input, 1 playout
     private var _snapshot: AudioActivitySnapshot?
     private var _generation: UUID
@@ -189,13 +202,17 @@ public final class AudioActivityObserver: @unchecked Sendable {
                                     measuredAt: playout.seconds, now: moment, generation: generation)
             }
             let snapshot = accumulator.snapshot(at: moment)
+            let levels = [snapshot.userLevel, snapshot.outputLevel]
             for (channel, measuredAt) in [snapshot.userMeasuredAt, snapshot.outputMeasuredAt].enumerated() {
                 guard let measuredAt else { continue }
                 let delay = moment - measuredAt
                 displayed.append((channel, measuredAt, delay))
                 if lastSeen[channel] != measuredAt {
                     lastSeen[channel] = measuredAt
-                    arrivals.append((channel, measuredAt, delay))
+                    // A nil level with a non-nil measuredAt means the snapshot
+                    // withheld it (muted, or ineligible), so 0 is the honest
+                    // magnitude for that arrival rather than a skipped entry.
+                    arrivals.append((channel, measuredAt, delay, levels[channel] ?? 0))
                 }
             }
             let cutoff = moment - 60
@@ -218,11 +235,14 @@ public final class AudioActivityObserver: @unchecked Sendable {
         func channel(_ index: Int) -> AudioMeterChannelLatency {
             let d = shown.filter { $0.channel == index }.map(\.delay).sorted()
             let a = arrived.filter { $0.channel == index }.map(\.delay).sorted()
+            let levels = arrived.filter { $0.channel == index }.map(\.level).sorted()
             guard !d.isEmpty else { return .empty }
             return AudioMeterChannelLatency(
                 samples: d.count, displayedP50: percentile(d, 0.5), displayedP95: percentile(d, 0.95),
                 worst: d[d.count - 1], arrivals: a.count,
-                arrivalP50: percentile(a, 0.5), arrivalP95: percentile(a, 0.95))
+                arrivalP50: percentile(a, 0.5), arrivalP95: percentile(a, 0.95),
+                levelP50: percentile(levels, 0.5), levelP95: percentile(levels, 0.95),
+                levelMax: levels.last ?? 0)
         }
         return AudioMeterLatency(input: channel(0), playout: channel(1))
     }
