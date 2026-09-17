@@ -7,15 +7,12 @@ structural changes. Keep it below the 8,000-character prompt cap
 ## Top-level layout
 
 - `services/mortimer-vault/` — knowledge-base HTTP service, CLI and tests;
-  setup: `bash scripts/setup_kb.sh`. Documents remain at `MORTIMER_HOME`
-  (default `~/Mortimer`), separate from the credential vault.
+  setup: `bash scripts/setup_kb.sh`. Documents remain at `MORTIMER_HOME`.
 - `jarvis/` — Python backend: bot pipeline, sub-agents, admin sidecar,
   council, run log, self-edit service. See below.
-- `mcp_servers/` — MCP skill servers, one directory per server, each
-  with `logic.py` (pure, testable) + `server.py` (FastMCP wiring) +
-  `skill.yaml` (manifest). `mcp_kb/` is read-only
-  (`kb_search`/`kb_read`/`kb_neighbors`); KB writes go through
-  `jarvis/kb_digest.py`, not MCP.
+- `mcp_servers/` — MCP skill servers, each with `logic.py`, `server.py`
+  and `skill.yaml`. `mcp_kb/` is read-only; KB writes go through
+  `jarvis/kb_digest.py`.
 - `macos/` — the native macOS client (Swift, SwiftPM). `JarvisKit/` is
   the shared library, `MortimerHost/` the app that consumes it. This is
   the live interface; `web/` is frozen. See below.
