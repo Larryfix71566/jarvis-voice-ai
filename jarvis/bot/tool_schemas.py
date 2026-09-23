@@ -37,6 +37,8 @@ from jarvis.bot.remember_tool import REMEMBER_SCHEMA
 from jarvis.bot.screen_tool import LIST_SCREENS_SCHEMA, VIEW_SCREEN_SCHEMA
 from jarvis.bot.ui_control import UI_CONTROL_SCHEMA
 from jarvis.bot.voice_switch import SET_VOICE_SCHEMA
+from jarvis.bot.console_actions import CONSOLE_ACTION_SCHEMA
+from jarvis.bot.shared_content import SHARED_CONTENT_SCHEMA
 
 
 def supervisor_tool_schemas(
@@ -45,6 +47,8 @@ def supervisor_tool_schemas(
     ui_control: bool = False,
     screen: bool = False,
     clipboard: bool = False,
+    command_console: bool = False,
+    shared_content: bool = False,
 ) -> list[dict]:
     """OpenAI-style tool schemas the Supervisor sees, for one configuration.
 
@@ -75,4 +79,8 @@ def supervisor_tool_schemas(
     if clipboard:
         schemas.append(CLEAR_CLIPBOARD_SCHEMA)
         schemas.append(READ_CLIPBOARD_SCHEMA)
+    if command_console:
+        schemas.append(CONSOLE_ACTION_SCHEMA)
+    if command_console and shared_content:
+        schemas.append(SHARED_CONTENT_SCHEMA)
     return schemas

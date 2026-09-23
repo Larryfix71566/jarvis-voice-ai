@@ -38,6 +38,18 @@ final class AdminResponseDecodeTests: XCTestCase {
         _ = first.tier
     }
 
+    func testDecodeArchitectureReference() throws {
+        let json = """
+        {"ok":true,"path":"docs/ARCHITECTURE.md","content":"# Runtime shape\\n","sha256":"abc","truncated":false}
+        """
+        let reference = try JSONDecoder().decode(ArchitectureReference.self, from: Data(json.utf8))
+        XCTAssertTrue(reference.ok)
+        XCTAssertEqual(reference.path, "docs/ARCHITECTURE.md")
+        XCTAssertTrue(reference.content.contains("Runtime shape"))
+        XCTAssertEqual(reference.sha256, "abc")
+        XCTAssertFalse(reference.truncated)
+    }
+
     func testDecodeSelfEditStatusReal() throws {
         let status = try JSONDecoder().decode(SelfEditStatus.self, from: fixture("selfedit_status"))
         // A real (idle) status has NO ok key.
@@ -62,6 +74,29 @@ final class AdminResponseDecodeTests: XCTestCase {
         }
         _ = overview.usage.tiers              // [String: Int]
         _ = overview.usage.overCapacity       // Bool
+    }
+
+    func testDecodeMemoryFactMetadata() throws {
+        let json = """
+        {"ok":true,"facts":[{"id":7,"key":"user.name","content":"Larry",
+          "subject":"user","scope":"global","memory_type":"explicit_preference",
+          "provenance":"user","evidence_status":"explicit","confidence":0.97,
+          "content_revision":2,"classifier_version":"b1","used_for_count":3,
+          "supersedes_id":4}],"summary":"","observations":[],
+          "usage":{"fact_count":1,"tiers":{},"caps":{},"max_context_chars":100,"over_capacity":false}}
+        """
+        let overview = try JSONDecoder().decode(MemoryOverview.self, from: Data(json.utf8))
+        let fact = try XCTUnwrap(overview.facts.first)
+        XCTAssertEqual(fact.id, 7)
+        XCTAssertEqual(fact.subject, "user")
+        XCTAssertEqual(fact.scope, "global")
+        XCTAssertEqual(fact.memoryType, "explicit_preference")
+        XCTAssertEqual(fact.evidenceStatus, "explicit")
+        XCTAssertEqual(fact.confidence, 0.97, accuracy: 0.0001)
+        XCTAssertEqual(fact.contentRevision, 2)
+        XCTAssertEqual(fact.classifierVersion, "b1")
+        XCTAssertEqual(fact.usedForCount, 3)
+        XCTAssertEqual(fact.supersedesId, 4)
     }
 
     func testDecodeMemoryReviews() throws {

@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 import jarvis.bot.pipeline as bp
-from jarvis.bot.pipeline import Runtime, build_pipeline
+from jarvis.bot.pipeline import Runtime, build_pipeline, connection_greeting_note
 from jarvis.bot.transcript_log import TranscriptLogger
 
 
@@ -98,6 +98,30 @@ class FakePipeline:
 
     def __init__(self, processors):
         self.processors = list(processors)
+
+
+def test_connection_greeting_keeps_memory_maintenance_silent():
+    """Open review rows never become a reconnect-time voice chore.
+
+    The Memory panel and explicit librarian requests remain the inspection and
+    correction paths. The connect context must contain only the time-aware
+    greeting instruction, so the model cannot turn a stale queue count into a
+    spoken request for cleanup.
+    """
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    note = connection_greeting_note(
+        "America/New_York",
+        datetime(2026, 9, 18, 14, 7, tzinfo=ZoneInfo("America/New_York")),
+    )
+
+    assert note == (
+        "[system] The user just connected. Greet them briefly by name; "
+        "it is 2:07 PM their time."
+    )
+    assert "memory" not in note.lower()
+    assert "review" not in note.lower()
 
 
 @pytest.fixture

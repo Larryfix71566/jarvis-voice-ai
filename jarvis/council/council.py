@@ -31,6 +31,10 @@ from jarvis import effort, llm_client
 from jarvis.db import get_conn, now_iso
 from jarvis.prompts import PLAN_AUTHOR_PROMPT, PLAN_REVIEW_PROMPT
 from jarvis.usage_ledger import record_completion, provider_from_base_url
+from jarvis.model_routing import (
+    AccessRoute, ModelRouteError, make_sync_route_client, resolve_model_route,
+)
+from jarvis.privacy_policy import DataPolicy, assert_route_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +43,7 @@ COUNCIL_MEMBER_TIMEOUT_S = 120
 COUNCIL_PREVIEW_CHARS = 2000
 
 COUNCIL_LOG_DIR = Path("logs/council")
+POLICY_REDACTED = "<policy-protected>"
 
 # D11 — the kill switch's single enforcement point.
 KILL_SWITCH_ENV = "JARVIS_COUNCIL_ENABLED"
@@ -55,6 +60,37 @@ COUNCIL_SHADOW_INLINE = False
 # pass to finish before asserting on its writes — production code never
 # reads this.
 _last_shadow_thread: threading.Thread | None = None
+
+
+def _context_data_policy(context: dict[str, Any]) -> DataPolicy | None:
+    """Read an optional stricter policy carried by a council request.
+
+    Existing council callers omit this field and retain their configured
+    workload behavior. New delegated callers can pass either
+    ``{"data_policy": {"level": ..., "source": ...}}`` or the compact
+    ``{"privacy": "..."}`` form; malformed values fail closed at the call
+    boundary rather than being silently downgraded.
+    """
+    raw = context.get("data_policy") if isinstance(context, dict) else None
+    if raw is None and isinstance(context, dict) and "privacy" in context:
+        raw = {"level": context.get("privacy"), "source": "council-context"}
+    if raw is None:
+        return None
+    if isinstance(raw, DataPolicy):
+        return raw
+    if not isinstance(raw, dict):
+        raise ModelRouteError("council data_policy must be a mapping")
+    return DataPolicy(
+        level=str(raw.get("level") or raw.get("privacy") or ""),
+        source=str(raw.get("source") or "council-context"),
+    )
+
+
+def _redact_council_value(value: Any, policy: DataPolicy | None) -> Any:
+    """Keep policy-protected council payloads out of durable result sinks."""
+    if policy is not None and policy.level in {"confidential", "local_only"}:
+        return POLICY_REDACTED
+    return value
 
 
 def _council_enabled() -> bool:
@@ -203,7 +239,7 @@ text after the SCORES section."""
 
 async def _call_profile(
     profile: dict[str, Any], system_prompt: str, user_content: str,
-    timeout_s: float, *, rung: str,
+    timeout_s: float, *, rung: str, data_policy: DataPolicy | None = None,
 ) -> tuple[str, dict[str, int] | None]:
     """One OpenAI-compatible chat completion for one registry profile.
     Raises on any failure (missing key, network error, timeout) — callers
@@ -217,10 +253,29 @@ async def _call_profile(
     fabricated)."""
 
     def _sync_call() -> tuple[str, dict[str, int] | None]:
-        api_key_env = profile.get("api_key_env", "OPENAI_API_KEY")
-        api_key = os.environ.get(api_key_env)
-        if not api_key:
+        use_routing = os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
+        resolved_route = None
+        if use_routing:
+            try:
+                resolved_route = resolve_model_route(
+                    "council", explicit_profile=str(profile["name"]))
+            except ModelRouteError as exc:
+                raise RuntimeError(str(exc)) from exc
+        api_key_env = (resolved_route.api_key_env if resolved_route is not None
+                       else profile.get("api_key_env", "OPENAI_API_KEY"))
+        api_key = os.environ.get(api_key_env) if api_key_env else None
+        if resolved_route is None and not api_key:
             raise RuntimeError(f"{api_key_env} is not set")
+        if data_policy is not None:
+            route_for_policy = (
+                resolved_route.route if resolved_route is not None else
+                AccessRoute(
+                    name="direct_api", adapter="openai_compatible",
+                    billing="provider_api", credential_env=api_key_env,
+                    privacy="approved_external", capabilities=("text", "tools"),
+                )
+            )
+            assert_route_allowed(route_for_policy, data_policy)
         # Phase 1 (MORTIMER_OPTIMIZATION_PLAN.md, Rev 3.2, landing step
         # (ii), 2026-09-02): llm_client.make_sync_client routes an
         # Anthropic-direct profile through jarvis/anthropic_shim.py
@@ -228,12 +283,16 @@ async def _call_profile(
         # unless JARVIS_ANTHROPIC_NATIVE=0. Every other provider (incl.
         # OpenRouter, which gets task 4's cache_control passthrough for
         # anthropic/* models) is unaffected.
-        client = llm_client.make_sync_client(
-            api_key=api_key, base_url=profile.get("base_url"),
-            provider=profile.get("provider"),
-        )
+        client = (make_sync_route_client(resolved_route,
+                                         timeout=COUNCIL_MEMBER_TIMEOUT_S,
+                                         max_retries=0)
+                  if resolved_route is not None else
+                  llm_client.make_sync_client(
+                      api_key=api_key, base_url=profile.get("base_url"),
+                      provider=profile.get("provider"),
+                  ))
         request: dict[str, Any] = {
-            "model": profile["model"],
+            "model": resolved_route.model if resolved_route is not None else profile["model"],
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
@@ -249,10 +308,12 @@ async def _call_profile(
         # provider= was already being computed) for a registry entry
         # that omits provider: explicitly. Reused below for
         # record_completion too, replacing its own re-derivation.
-        provider = profile.get("provider") or provider_from_base_url(str(client.base_url))
+        provider = ((resolved_route.route.name if resolved_route is not None else None)
+                    or profile.get("provider")
+                    or provider_from_base_url(str(client.base_url)))
         extra_body = effort.extra_body_for(
             rung=rung, provider=provider, explicit=profile.get("effort"),
-            model=profile.get("model"),
+            model=resolved_route.model if resolved_route is not None else profile.get("model"),
         )
         if extra_body:
             request["extra_body"] = extra_body
@@ -261,7 +322,7 @@ async def _call_profile(
             record_completion(
                 rung=rung,
                 provider=provider,
-                model=profile["model"],
+                model=resolved_route.model if resolved_route is not None else profile["model"],
                 response=response,
             )
         except Exception:
@@ -379,6 +440,7 @@ async def _gather_proposals(
     user_content: str, system_prompt: str = PROPOSER_PROMPT,
     usage_by_name: dict[str, dict[str, int] | None] | None = None,
     *, timeout_s: float = COUNCIL_MEMBER_TIMEOUT_S, rung: str,
+    data_policy: DataPolicy | None = None,
 ) -> tuple[list[Proposal], dict[str, int]]:
     """Fan out `system_prompt` (V14: PROPOSER_PROMPT or, for a scope
     round, SCOPE_ADVISOR_PROMPT — `_convene_inner` selects the pair once
@@ -408,9 +470,12 @@ async def _gather_proposals(
 
     async def _one(name: str) -> tuple[str, str | None, dict[str, int] | None]:
         try:
+            call_kwargs = {"rung": rung}
+            if data_policy is not None:
+                call_kwargs["data_policy"] = data_policy
             content, usage = await _call_profile(
                 profiles_by_name[name], system_prompt, user_content,
-                timeout_s, rung=rung,
+                timeout_s, **call_kwargs,
             )
             return name, content, usage
         except Exception as exc:  # noqa: BLE001 — never raise into convene()
@@ -477,6 +542,7 @@ async def _gather_scores(
     system_prompt: str = JUDGE_PROMPT,
     usage_by_name: dict[str, dict[str, int] | None] | None = None,
     timeout_s: float = COUNCIL_MEMBER_TIMEOUT_S, rung: str,
+    data_policy: DataPolicy | None = None,
 ) -> tuple[list[Score], dict[str, int]]:
     """Fan out `system_prompt` (V14: JUDGE_PROMPT or, for a scope round,
     SCOPE_JUDGE_PROMPT — selected once by the caller, same rule as
@@ -494,9 +560,12 @@ async def _gather_scores(
 
     async def _one(name: str) -> tuple[list[Score], dict[str, int] | None]:
         try:
+            call_kwargs = {"rung": rung}
+            if data_policy is not None:
+                call_kwargs["data_policy"] = data_policy
             raw, usage = await _call_profile(
                 profiles_by_name[name], system_prompt, judge_user_content,
-                timeout_s, rung=rung,
+                timeout_s, **call_kwargs,
             )
             return parse_scores(name, raw, labels), usage
         except Exception as exc:  # noqa: BLE001
@@ -560,6 +629,7 @@ async def _convene_inner(
     round_id = uuid.uuid4().hex
     started_at = now_iso()
     started_monotonic = time.monotonic()
+    data_policy = _context_data_policy(context)
 
     # MORTIMER_LLM_COUNCIL_V2_PLAN.md V14 — the ONE prompt-pair selection
     # site. Every gather call in this round (proposer fan-out, live
@@ -653,7 +723,7 @@ async def _convene_inner(
     proposals, proposer_usage = await _gather_proposals(
         proposer_names, profiles_by_name, proposer_user_content,
         proposer_system_prompt, usage_by_name=proposer_usage_by_name,
-        rung="council",
+        rung="council", data_policy=data_policy,
     )
 
     # MORTIMER_LLM_COUNCIL_V2_PLAN.md V1 — the carried proposal is a real
@@ -701,7 +771,7 @@ async def _convene_inner(
     live_scores, live_usage = await _gather_scores(
         judge_names, profiles_by_name, judge_user_content, labels, shadow=False,
         system_prompt=judge_system_prompt, usage_by_name=judge_usage_by_name,
-        rung="council",
+        rung="council", data_policy=data_policy,
     )
 
     # V9 — the round row's token totals sum only the proposer + live-
@@ -751,10 +821,12 @@ async def _convene_inner(
         # by a dead credential is indistinguishable from a small one.
         proposers_attempted=len(proposer_names),
         judges_attempted=len(judge_names),
+        data_policy=data_policy,
     )
     label_to_profile = {p.label: p.profile for p in proposals}
     _write_score_rows(
         round_id, live_scores, profile_tiers, label_to_profile, shadow=False,
+        data_policy=data_policy,
     )
     proposal_usage_by_profile = dict(proposer_usage_by_name)
     payload_path = _payload_path(round_id, started_at)
@@ -767,6 +839,7 @@ async def _convene_inner(
         proposal_usage_by_profile=proposal_usage_by_profile,
         score_usage_by_profile=judge_usage_by_name,
         registry_order=registry_order,
+        data_policy=data_policy,
     )
 
     # MORTIMER_LLM_COUNCIL_V2_PLAN.md V7 — shadow judging, off the live
@@ -791,6 +864,7 @@ async def _convene_inner(
                     round_id, shadow_judge_names, profiles_by_name,
                     judge_user_content, labels, profile_tiers, label_to_profile,
                     payload_path, judge_system_prompt=judge_system_prompt,
+                    data_policy=data_policy,
                 )
             else:
                 global _last_shadow_thread
@@ -800,6 +874,7 @@ async def _convene_inner(
                         judge_user_content, labels, profile_tiers,
                         label_to_profile, payload_path,
                         judge_system_prompt=judge_system_prompt,
+                        data_policy=data_policy,
                     )),
                     daemon=True,
                 )
@@ -882,6 +957,7 @@ async def _draft_candidates_inner(
     round_id = uuid.uuid4().hex
     started_at = now_iso()
     started_monotonic = time.monotonic()
+    data_policy = _context_data_policy(context)
 
     is_review = context.get("document") is not None
     placement = "review" if is_review else "doc"
@@ -934,7 +1010,7 @@ async def _draft_candidates_inner(
         proposer_names, profiles_by_name, proposer_user_content,
         proposer_system_prompt, usage_by_name=proposer_usage_by_name,
         timeout_s=council_config.PLANNING_MEMBER_TIMEOUT_S,
-        rung="planning",
+        rung="planning", data_policy=data_policy,
     )
 
     if not proposals:
@@ -993,7 +1069,7 @@ async def _draft_candidates_inner(
                 shadow=False, system_prompt=PLAN_JUDGE_PROMPT,
                 usage_by_name=judge_usage_by_name,
                 timeout_s=council_config.PLANNING_MEMBER_TIMEOUT_S,
-                rung="planning",
+                rung="planning", data_policy=data_policy,
             )
 
     reported_calls = proposer_usage["reported_calls"] + live_usage["reported_calls"]
@@ -1031,9 +1107,13 @@ async def _draft_candidates_inner(
         registry_order=registry_order,
         proposers_attempted=len(proposer_names),
         judges_attempted=len(judge_names),
+        data_policy=data_policy,
     )
     label_to_profile = {p.label: p.profile for p in proposals}
-    _write_score_rows(round_id, live_scores, profile_tiers, label_to_profile, shadow=False)
+    _write_score_rows(
+        round_id, live_scores, profile_tiers, label_to_profile, shadow=False,
+        data_policy=data_policy,
+    )
     _write_payload(
         round_id=round_id, workflow="planning", placement=placement, trigger="user",
         tier=0, goal=goal, context=context, proposals=proposals, live_scores=live_scores,
@@ -1041,6 +1121,7 @@ async def _draft_candidates_inner(
         proposal_usage_by_profile=dict(proposer_usage_by_name),
         score_usage_by_profile=judge_usage_by_name,
         registry_order=registry_order, status="awaiting_user",
+        data_policy=data_policy,
     )
 
     return result
@@ -1127,6 +1208,7 @@ def _write_round_row(
     registry_order: list[str] | None = None,
     proposers_attempted: int | None = None,
     judges_attempted: int | None = None,
+    data_policy: DataPolicy | None = None,
 ) -> None:
     """V9 — `prompt_tokens`/`completion_tokens` are NULL (unknown) unless
     at least one member call in this round reported usage; never 0 —
@@ -1158,10 +1240,13 @@ def _write_round_row(
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     round_id, run_id, workflow, placement, trigger, tier,
-                    _truncate(goal), proposer_count, judge_count, abstentions,
+                    _truncate(_redact_council_value(goal, data_policy)),
+                    proposer_count, judge_count, abstentions,
                     winner.profile if winner else None,
                     winner.label if winner else None,
-                    winner_mean, _truncate(select_reason), status, started_at,
+                    winner_mean,
+                    _truncate(_redact_council_value(select_reason, data_policy)),
+                    status, started_at,
                     ended_at, latency_ms, prompt_tokens, completion_tokens,
                     json.dumps(registry_order) if registry_order is not None else None,
                     proposers_attempted, judges_attempted,
@@ -1177,6 +1262,7 @@ def _write_round_row(
 def _write_score_rows(
     round_id: str, scores: list[Score], profile_tiers: dict[str, str | None],
     label_to_profile: dict[str, str], *, shadow: bool,
+    data_policy: DataPolicy | None = None,
 ) -> None:
     """`label_to_profile` unmasks each score's anonymised `proposal_label`
     back to the profile that actually wrote it (D8's `proposal_profile`
@@ -1199,8 +1285,10 @@ def _write_score_rows(
                         profile_tiers.get(s.judge_profile) or "unknown",
                         1 if shadow else 0, s.proposal_label,
                         label_to_profile.get(s.proposal_label, "unknown"),
-                        s.value, s.abstain_reason,
-                        _truncate(s.justification), created_at,
+                        s.value,
+                        _redact_council_value(s.abstain_reason, data_policy),
+                        _truncate(_redact_council_value(s.justification, data_policy)),
+                        created_at,
                     )
                     for s in scores
                 ],
@@ -1570,6 +1658,7 @@ def _write_payload(
     score_usage_by_profile: dict[str, dict[str, int] | None] | None = None,
     registry_order: list[str] | None = None,
     status: str | None = None,
+    data_policy: DataPolicy | None = None,
 ) -> None:
     """Full, untruncated record for one round: mirrors logs/agents/'s
     two-tier pattern (jarvis/runlog/store.py). Read by
@@ -1600,22 +1689,26 @@ def _write_payload(
             {
                 "type": "round_start", "round_id": round_id, "workflow": workflow,
                 "placement": placement, "trigger": trigger, "tier": tier,
-                "goal": goal, "context": context, "started_at": started_at,
+                "goal": _redact_council_value(goal, data_policy),
+                "context": _redact_council_value(context, data_policy),
+                "started_at": started_at,
                 "registry_order": registry_order,
             },
         ]
         for p in proposals:
             records.append({
                 "type": "proposal", "label": p.label, "profile": p.profile,
-                "content": p.content, "carried": p.label in carried_labels,
+                "content": _redact_council_value(p.content, data_policy),
+                "carried": p.label in carried_labels,
                 "usage": (proposal_usage_by_profile or {}).get(p.profile),
             })
         for s in live_scores:
             records.append({
                 "type": "score", "judge_profile": s.judge_profile,
                 "proposal_label": s.proposal_label, "value": s.value,
-                "justification": s.justification,
-                "abstain_reason": s.abstain_reason, "shadow": False,
+                "justification": _redact_council_value(s.justification, data_policy),
+                "abstain_reason": _redact_council_value(s.abstain_reason, data_policy),
+                "shadow": False,
                 "usage": (score_usage_by_profile or {}).get(s.judge_profile),
             })
         # MORTIMER_PLANNING_PATHWAY_PLAN.md P7 — `status` override: a
@@ -1631,7 +1724,8 @@ def _write_payload(
             "winner_label": result.winner.label if result.winner else None,
             "winner_profile": result.winner.profile if result.winner else None,
             "winner_mean": result.winner_mean,
-            "select_reason": result.select_reason, "ended_at": ended_at,
+            "select_reason": _redact_council_value(result.select_reason, data_policy),
+            "ended_at": ended_at,
         })
         with path.open("w", encoding="utf-8") as f:
             for record in records:
@@ -1647,6 +1741,7 @@ async def _shadow_pass(
     labels: list[str], profile_tiers: dict[str, str | None],
     label_to_profile: dict[str, str], payload_path: Path,
     *, judge_system_prompt: str = JUDGE_PROMPT,
+    data_policy: DataPolicy | None = None,
 ) -> None:
     """MORTIMER_LLM_COUNCIL_V2_PLAN.md V7 — the shadow pass's entire
     execution, extracted so it can run inline (tests, `COUNCIL_SHADOW_
@@ -1672,7 +1767,7 @@ async def _shadow_pass(
             shadow_judge_names, profiles_by_name, judge_user_content, labels,
             shadow=True, system_prompt=judge_system_prompt,
             usage_by_name=shadow_usage_by_name,
-            rung="council",
+            rung="council", data_policy=data_policy,
         )
     except Exception:  # noqa: BLE001 — D8.2.1, never degrades the round
         logger.warning("council_shadow_failed round_id=%s", round_id, exc_info=True)
@@ -1681,6 +1776,7 @@ async def _shadow_pass(
     if shadow_scores:
         _write_score_rows(
             round_id, shadow_scores, profile_tiers, label_to_profile, shadow=True,
+            data_policy=data_policy,
         )
 
     try:
@@ -1690,8 +1786,9 @@ async def _shadow_pass(
                 record = {
                     "type": "score", "judge_profile": s.judge_profile,
                     "proposal_label": s.proposal_label, "value": s.value,
-                    "justification": s.justification,
-                    "abstain_reason": s.abstain_reason, "shadow": True,
+                    "justification": _redact_council_value(s.justification, data_policy),
+                    "abstain_reason": _redact_council_value(s.abstain_reason, data_policy),
+                    "shadow": True,
                     "usage": shadow_usage_by_name.get(s.judge_profile),
                 }
                 f.write(json.dumps(record, default=str))

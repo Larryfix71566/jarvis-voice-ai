@@ -30,6 +30,34 @@ protocol NativeAudioIO: AnyObject {
     func flushPlayout()
 }
 
+/// The audio seam is queue-confined by its implementations. This small box
+/// makes that ownership explicit when the synchronous start is handed to a
+/// background DispatchQueue under Swift 6's Sendable checking.
+private final class AudioStartRequest: @unchecked Sendable {
+    let audio: NativeAudioIO?
+    let micEnabled: Bool
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Error>?
+
+    init(audio: NativeAudioIO?, micEnabled: Bool, continuation: CheckedContinuation<Void, Error>) {
+        self.audio = audio
+        self.micEnabled = micEnabled
+        self.continuation = continuation
+    }
+
+    @discardableResult
+    func finish(_ result: Result<Void, Error>) -> Bool {
+        let pending = lock.withLock {
+            let pending = continuation
+            continuation = nil
+            return pending
+        }
+        guard let pending else { return false }
+        pending.resume(with: result)
+        return true
+    }
+}
+
 extension AudioEngineIO: NativeAudioIO {}
 
 /// C7: the native transport is the only measured level source.
@@ -81,6 +109,7 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
     /// Injected so the tests can drive the establishment phase in
     /// milliseconds instead of waiting out the real deadlines.
     private let readyDeadline: TimeInterval
+    private let audioStartDeadline: TimeInterval
     /// Must stay well above `pingInterval`: the stall test is "no pong for
     /// this long", and pongs only arrive as often as pings are sent.
     private let stallSeconds: TimeInterval
@@ -90,13 +119,14 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
     private var audio: NativeAudioIO?
     private var config: JarvisConfig?
     private var isOpen = false
+    private var audioStarting = false
     private var micEnabled = true
     private var outboundQueue: [Data] = []
     private var openDeadlineTimer: DispatchSourceTimer?
     private var keepAliveTimer: DispatchSourceTimer?
     private var watchdogTimer: DispatchSourceTimer?
     private var lastPongAt: Date = .distantPast
-    /// False from socket-open until the server's first pong or frame: the
+    /// False from socket-open until the server's first frame: the
     /// stall watchdog does not run before that (§8 finding — the server
     /// spends seconds building the session after the handshake).
     private var isEstablished = false
@@ -144,7 +174,7 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         }
     }
 
-    /// True once the server has answered — a pong or any inbound frame —
+    /// True once the server has sent an inbound frame —
     /// which is the moment the stall watchdog starts running (§8: the
     /// server accepts the socket several seconds before it can answer).
     var isSessionEstablished: Bool { queue.sync { isEstablished } }
@@ -163,11 +193,13 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
     init(makeSocket: @escaping (URLRequest) -> NativeSocket = { URLSessionSocket(request: $0) },
          makeAudio: @escaping () -> NativeAudioIO = { AudioEngineIO() },
          readyDeadline: TimeInterval = JarvisTuning.nativeReadyDeadline,
+         audioStartDeadline: TimeInterval = JarvisTuning.nativeReadyDeadline,
          stallSeconds: TimeInterval = JarvisTuning.nativeKeepAliveStallSeconds,
          pingInterval: TimeInterval = JarvisTuning.keepAliveInterval) {
         self.makeSocket = makeSocket
         self.makeAudio = makeAudio
         self.readyDeadline = readyDeadline
+        self.audioStartDeadline = audioStartDeadline
         self.stallSeconds = stallSeconds
         self.pingInterval = pingInterval
     }
@@ -183,7 +215,9 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         var request = URLRequest(url: url)
         if let token = config.token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         var startedSession = 0
-        try queue.sync {
+        var startedAudio: NativeAudioIO?
+        var micEnabledAtStart = true
+        queue.sync {
             self.config = config
             sessionCount += 1
             let session = sessionCount
@@ -222,18 +256,60 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
             }
             self.socket = socket
             self.audio = audio
-            // Capture starts with the socket so the first words are not
-            // lost to engine warm-up; frames before open are dropped in
-            // `captured`.
-            do { try audio.start() } catch {
-                self.audio = nil
-                self.socket = nil
-                throw error
-            }
-            audio.setCaptureEnabled(micEnabled)
+            self.audioStarting = true
+            // Open the socket before CoreAudio initialization. On a real Mac,
+            // AVAudioEngine can spend several seconds settling a device (or
+            // wait on an input-permission/device transition). Opening first
+            // lets the bot build its session in parallel instead of leaving
+            // the native client stuck in CONNECTING with no server request.
+            // Capture callbacks begin only when the engine actually starts.
             armOpenDeadline(session: session)
             socket.open()
             startedSession = session
+            startedAudio = audio
+            micEnabledAtStart = micEnabled
+        }
+        // CoreAudio can block while it negotiates a device or waits for the
+        // input-permission transition. Do this outside the transport queue
+        // AND outside the caller's actor: JarvisClient.connect() is
+        // @MainActor, so a synchronous start here freezes the Command
+        // Console while the socket is already able to open and answer.
+        // URLSession delivers `onOpen` onto the transport queue, and holding
+        // either queue or the main actor here leaves the candidate stuck in
+        // CONNECTING with an unresponsive window.
+        do {
+            try await Self.startAudioOffMainActor(startedAudio, micEnabled: micEnabledAtStart,
+                                                 deadline: audioStartDeadline)
+        } catch {
+            let audio = startedAudio
+            queue.sync {
+                guard startedSession == sessionCount else { return }
+                socket?.onOpen = nil; socket?.onClose = nil; socket?.onMessage = nil
+                audio?.onCapturedPCM = nil; audio?.onPlayoutChanged = nil
+                audio?.onMonitorPCM = nil; audio?.onFailure = nil
+                // A timed-out CoreAudio start can still hold the engine queue.
+                // Its completion owns cleanup; waiting in stop() here would
+                // block the transport queue and defeat the startup deadline.
+                socket?.close()
+                self.audio = nil
+                self.audioStarting = false
+                self.socket = nil
+                self.cancelAllTimers()
+                self.isOpen = false
+                self.isEstablished = false
+                self.sessionCount += 1
+                self.resumeReady(error)
+            }
+            throw error
+        }
+        let current = queue.sync {
+            guard startedSession == sessionCount, socket != nil else { return false }
+            audioStarting = false
+            return true
+        }
+        guard current else {
+            startedAudio?.stop()
+            throw JarvisError.transport("the session ended while the audio device was starting")
         }
         // C6 step 6, parity finding 1. On WebRTC this call returns after
         // /api/offer, which the server answers only once the session is
@@ -245,13 +321,46 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         // by `readyDeadline`.
         let session = startedSession
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            queue.async {
+            // Install the continuation synchronously on the owner queue. The
+            // first server frame can arrive while CoreAudio is starting or
+            // immediately before this wait is reached; using queue.async here
+            // left a valid established session waiting forever when the
+            // establish callback won that race.
+            queue.sync {
                 guard session == self.sessionCount, self.socket != nil else {
                     continuation.resume(throwing: JarvisError.transport("the session ended before the bot started"))
                     return
                 }
                 if self.isEstablished { continuation.resume(); return }
                 self.readyContinuation = continuation
+            }
+        }
+    }
+
+    /// AudioEngineIO.start() performs synchronous CoreAudio negotiation. The
+    /// native client is normally driven by JarvisClient's @MainActor, so even
+    /// a correct transport-queue handoff is insufficient: the call would
+    /// still block the UI actor until the device settles. Keep the seam
+    /// asynchronous so the socket callbacks and the Command Console remain
+    /// responsive while the engine starts.
+    private static func startAudioOffMainActor(_ audio: NativeAudioIO?,
+                                               micEnabled: Bool, deadline: TimeInterval) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            let request = AudioStartRequest(audio: audio, micEnabled: micEnabled,
+                                            continuation: continuation)
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + deadline) { [weak request] in
+                request?.finish(.failure(JarvisError.transport(
+                    "audio device startup timed out; check the selected input/output devices and reconnect")))
+            }
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try request.audio?.start()
+                    request.audio?.setCaptureEnabled(request.micEnabled)
+                    if !request.finish(.success(())) { request.audio?.stop() }
+                } catch {
+                    request.audio?.stop()
+                    request.finish(.failure(error))
+                }
             }
         }
     }
@@ -518,7 +627,10 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         socket?.close()
         audio?.onCapturedPCM = nil; audio?.onPlayoutChanged = nil; audio?.onMonitorPCM = nil
         audio?.onFailure = nil
-        audio?.stop()
+        // A CoreAudio call may be stuck on the engine queue. The pending
+        // start completion will stop its orphaned engine when it returns.
+        if !audioStarting { audio?.stop() }
+        audioStarting = false
         socket = nil
         audio = nil
         config = nil

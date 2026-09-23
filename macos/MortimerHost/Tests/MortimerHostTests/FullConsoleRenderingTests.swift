@@ -6,6 +6,11 @@ import JarvisKit
 
 @MainActor
 final class FullConsoleRenderingTests: XCTestCase {
+    func testUnknownPersistedLayoutFallsBackToAdaptive() {
+        XCTAssertEqual(InterfaceLayoutVersion.resolve(99), 1)
+        XCTAssertEqual(InterfaceLayoutVersion.resolve(-1), 1)
+    }
+
     func testMinimumConsoleKeepsOutputAndMicrophoneControlsReachable() throws {
         try checkConsole(tabTextSize: 11)
     }
@@ -14,14 +19,21 @@ final class FullConsoleRenderingTests: XCTestCase {
         try checkConsole(tabTextSize: 22)
     }
 
-    private func checkConsole(tabTextSize: Double) throws {
+    func testCommandConsoleStartsInConversationWithVoiceControls() throws {
+        try checkConsole(tabTextSize: 11, layoutVersion: 2, startup: true)
+    }
+
+    private func checkConsole(tabTextSize: Double, layoutVersion: Int = 1, startup: Bool = false) throws {
         _ = NSApplication.shared
         NSApplication.shared.accessibilitySetValue(true,
             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
         let suite = "full-console-" + UUID().uuidString
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(1, forKey: "mortimer.interface.layoutVersion")
+        defaults.set(layoutVersion, forKey: "mortimer.interface.layoutVersion")
+        // Existing-layout checks opt out explicitly. The startup fixture
+        // exercises the production default, which is compact conversation.
+        if !startup { defaults.set(false, forKey: "mortimer.interface.compactConversation") }
         defaults.set(tabTextSize, forKey: "mortimer.interface.sidecarTabTextSize")
         let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
             adminURL: URL(string: "http://127.0.0.1:7861")!, wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: "synthetic"))
@@ -35,16 +47,18 @@ final class FullConsoleRenderingTests: XCTestCase {
         }
         let drawer = DrawerState(); drawer.activeTab = "output"; drawer.isOpen = true
         drawer.width = 400
-        let workspace = WorkspaceStore(), output = DisplayResultStore()
+        let workspace = WorkspaceStore(), output = DisplayResultStore(), attachments = AttachmentStore()
         let payload = try JSONDecoder().decode(DisplayPayload.self,
             from: Data(#"{"body":"Synthetic research result for minimum console acceptance.","surface":"drawer"}"#.utf8))
         let result = WorkspaceResult(payload: payload)
-        workspace.receive(result); output.apply(payload, workspaceID: result.id)
+        if !startup { workspace.receive(result); output.apply(payload, workspaceID: result.id) }
         for (width, height) in [(900, 600), (1280, 800), (1440, 900), (2560, 1080), (900, 1440)] {
         let view = NSHostingView(rootView: ConsoleView().defaultAppStorage(defaults)
             .environmentObject(client).environment(AgentRunStore()).environment(output)
             .environment(workspace).environment(ConversationStore()).environment(DisplayWindowStore())
-            .environment(drawer).environment(DrawerModels()).environment(ConsoleOverlayState())
+            .environment(drawer).environment(DrawerModels()).environment(attachments)
+            .environment(ShareCoordinator())
+            .environment(ConsoleOverlayState())
             .environment(ConsoleNoticeState()).preferredColorScheme(.dark))
         view.frame = NSRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height))
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -62,14 +76,16 @@ final class FullConsoleRenderingTests: XCTestCase {
         }
         visit(view)
         let viewport = window.convertToScreen(view.convert(view.bounds, to: nil))
-        for label in ["OUTPUT", "Sidecar tab text size", "🔇 Mic off", "Wake word off"] {
+        let required = ["OUTPUT", "Sidecar tab text size", "🔇 Mic off", "Wake word off"] + (startup ? ["Expand voice", "Knowledge Atlas", "Memory graph", "Paste content", "Choose content"] : [])
+        for label in required {
             let control = try XCTUnwrap(controls[label], "Missing \(label); labels: \(controls.keys.sorted())")
             let frame = try XCTUnwrap(control.value(forKey: "accessibilityFrame") as? NSValue).rectValue
             XCTAssertTrue(viewport.insetBy(dx: -1, dy: -1).contains(frame), "Clipped \(label): \(frame)")
         }
         XCTAssertEqual(view.bounds.width, CGFloat(width))
         XCTAssertEqual(view.bounds.height, CGFloat(height))
-        XCTAssertEqual(workspace.activeID, result.id)
+        XCTAssertEqual(workspace.activeID, startup ? nil : result.id)
+        XCTAssertEqual(workspace.showsConversation, startup)
         XCTAssertEqual(drawer.activeTab, "output")
         let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: bitmap)

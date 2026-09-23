@@ -1,0 +1,19 @@
+{
+  "fixture": "tests/fixtures/memory_rollout_acceptance.json",
+  "fixture_sha256": "258a5f4d8cdcd41da86463d5884c533e92f10248c24a7f8358e0346e762e412b",
+  "gate": {
+    "benefit_ok": true,
+    "budget_ok": true,
+    "cost_limit_usd": 0.04,
+    "first_review_ok": true,
+    "p95_latency_ms": 210.0,
+    "passed": true,
+    "safety_ok": true,
+    "stage_order_ok": true,
+    "version": "memory-automation-rollout-v1",
+    "violations": []
+  },
+  "live_database_touched": false,
+  "production_automation_enabled": false,
+  "version": "memory-automation-rollout-receipt-v1"
+}

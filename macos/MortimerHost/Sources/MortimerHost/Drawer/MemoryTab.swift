@@ -199,6 +199,19 @@ struct MemoryTab: View {
                         .foregroundStyle(AppTheme.textDim)
                     }
                 }
+                Text("\(fact.memoryType) · \(fact.scope) · \(fact.evidenceStatus) · \(Int(min(max(fact.confidence, 0), 1) * 100))% confidence")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.textDim)
+                let provenanceDetails = [
+                    fact.provenance == "user" ? nil : fact.provenance,
+                    fact.usedForCount > 0 ? "used \(fact.usedForCount)×" : nil,
+                    fact.supersedesId.map { "supersedes #\($0)" },
+                ].compactMap { $0 }
+                if !provenanceDetails.isEmpty {
+                    Text(provenanceDetails.joined(separator: " · "))
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.textDim)
+                }
                 Text(fact.content).font(.callout)
             }
             .padding(8)

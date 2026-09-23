@@ -7,6 +7,16 @@ import Foundation
 struct PlacementScreen: Equatable {
     let id: String
     let visibleFrame: CGRect
+    /// The display macOS currently designates as the main display. This is
+    /// the default console role; an explicit user move can still override it
+    /// through a persisted manual placement record.
+    let isMain: Bool
+
+    init(id: String, visibleFrame: CGRect, isMain: Bool = false) {
+        self.id = id
+        self.visibleFrame = visibleFrame
+        self.isMain = isMain
+    }
 }
 
 struct PlacementRecovery: Codable, Equatable {
@@ -152,8 +162,20 @@ struct DisplayPlacementPolicy {
             }
             if kind == .console || external.isEmpty {
                 if record == nil {
-                    let screen = Self.screen(for: live, in: screens) ?? primary
-                    records[kind] = PlacementRecord(screenID: screen.id, frame: live, manual: false)
+                    // A new or reset layout always puts the console on the
+                    // selected primary display. This prevents a stale
+                    // AppKit-restored frame on an auxiliary screen from
+                    // inverting the console/display roles. Once the user
+                    // drags the console, noteManual persists that intent and
+                    // the manual branch above preserves it.
+                    let destination = primary
+                    let safe = Self.clamp(live, to: destination.visibleFrame)
+                    records[kind] = PlacementRecord(screenID: destination.id,
+                                                    frame: safe,
+                                                    manual: false)
+                    if live != safe {
+                        moves[kind] = safe
+                    }
                 }
                 continue
             }

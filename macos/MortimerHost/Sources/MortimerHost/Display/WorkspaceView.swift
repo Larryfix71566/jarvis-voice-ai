@@ -3,12 +3,20 @@ import JarvisKit
 
 /// Central results share the existing renderer and never invoke tools.
 struct WorkspaceView: View {
+    /// Optional for the legacy/adaptive layouts; layout 2 injects the
+    /// app-scoped coordinator so result and view navigation share voice.
+    let coordinator: ConsoleActionCoordinator?
     @EnvironmentObject private var client: JarvisClient
     @Environment(WorkspaceStore.self) private var workspace
     @State private var pinLimitNotice = false
+    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 2
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(DisplayWindowStore.self) private var display
     @Environment(DrawerState.self) private var drawer
+
+    init(coordinator: ConsoleActionCoordinator? = nil) {
+        self.coordinator = coordinator
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -26,7 +34,11 @@ struct WorkspaceView: View {
                     ForEach(workspace.results) { result in
                         HStack(spacing: 6) {
                             Button {
-                                workspace.select(result.id)
+                                if let coordinator {
+                                    _ = coordinator.executePointer(.resultSelect, target: result.id.uuidString)
+                                } else {
+                                    workspace.select(result.id)
+                                }
                             } label: {
                                 HStack {
                                     if workspace.pinnedIDs.contains(result.id) { Image(systemName: "pin.fill") }
@@ -36,7 +48,13 @@ struct WorkspaceView: View {
                                 }
                             }
                             .accessibilityAddTraits(workspace.activeID == result.id ? [.isSelected] : [])
-                            Button { workspace.close(result.id) } label: { Image(systemName: "xmark") }
+                            Button {
+                                if let coordinator {
+                                    _ = coordinator.executePointer(.resultClose, target: result.id.uuidString)
+                                } else {
+                                    workspace.close(result.id)
+                                }
+                            } label: { Image(systemName: "xmark") }
                                 .accessibilityLabel("Close \(result.payload.title ?? "result")")
                         }
                         .padding(8)
@@ -46,21 +64,23 @@ struct WorkspaceView: View {
                 }
             }
             if workspace.showsMemoryGraph {
-                if display.isWindowOpen && workspace.supportingContent == .memoryGraph {
+                if isOnSupportingDisplay(.memoryGraph) {
                     ContentUnavailableView {
                         Label("Memory graph is on the supporting display", systemImage: "display")
                     } actions: {
                         Button("Return here") { drawer.placementRef?.closeDisplay() }
                     }
-                } else { MemoryGraphView(store: workspace.memoryGraph, api: client.admin) }
+                } else { MemoryGraphView(store: workspace.memoryGraph, api: client.admin, coordinator: coordinator) }
+            } else if workspace.showsAtlas {
+                KnowledgeAtlasView(coordinator: coordinator)
             } else if let active = workspace.activeResult {
                 GeometryReader { geometry in
                     if let comparison = workspace.comparisonResult {
                         if geometry.size.width >= AdaptiveLayoutMetrics.minimumComparisonWidth {
                             HStack(spacing: AdaptiveLayoutMetrics.comparisonSpacing) {
-                                WorkspaceResultPane(result: active)
+                                resultPane(active)
                                 Divider()
-                                WorkspaceResultPane(result: comparison)
+                                resultPane(comparison)
                             }
                         } else {
                             VStack {
@@ -68,10 +88,10 @@ struct WorkspaceView: View {
                                     Text("A: \(active.payload.title ?? "Result")").tag(false)
                                     Text("B: \(comparison.payload.title ?? "Result")").tag(true)
                                 }.pickerStyle(.segmented)
-                                WorkspaceResultPane(result: workspace.showComparisonOnCompact ? comparison : active)
+                                resultPane(workspace.showComparisonOnCompact ? comparison : active)
                             }
                         }
-                    } else { WorkspaceResultPane(result: active) }
+                    } else { resultPane(active) }
                 }
             } else {
                 ContentUnavailableView("Results appear here", systemImage: "doc.text.magnifyingglass",
@@ -89,9 +109,37 @@ struct WorkspaceView: View {
     }
 
     @ViewBuilder
+    private func resultPane(_ result: WorkspaceResult) -> some View {
+        if isOnSupportingDisplay(.result(result.id)) {
+            ContentUnavailableView {
+                Label("Result is on the supporting display", systemImage: "display")
+            } actions: {
+                Button("Return here") { drawer.placementRef?.closeDisplay() }
+            }
+        } else {
+            WorkspaceResultPane(result: result, coordinator: coordinator)
+        }
+    }
+
+    private func isOnSupportingDisplay(_ content: SupportingDisplayContent) -> Bool {
+        display.isPresented(content, selection: workspace.supportingContent,
+                            layoutVersion: InterfaceLayoutVersion.resolve(layoutVersion))
+    }
+
+    @ViewBuilder
     private var navigationControls: some View {
-        Button("Conversation") { workspace.returnToConversation() }
-        Button("Memory graph") { workspace.openMemoryGraph() }
+        Button("Conversation") {
+            if let coordinator { _ = coordinator.executePointer(.viewSet, target: "conversation") }
+            else { workspace.returnToConversation() }
+        }
+        Button("Knowledge Atlas") {
+            if let coordinator { _ = coordinator.executePointer(.viewSet, target: "atlas") }
+            else { workspace.openAtlas() }
+        }
+        Button("Memory graph") {
+            if let coordinator { _ = coordinator.executePointer(.viewSet, target: "memory") }
+            else { workspace.openMemoryGraph() }
+        }
         Menu("Display") {
             Button("Show memory graph") { sendToDisplay(.memoryGraph) }
             if let active = workspace.activeResult {
@@ -113,14 +161,30 @@ struct WorkspaceView: View {
     private var resultControls: some View {
         if let active = workspace.activeResult {
             Button(workspace.pinnedIDs.contains(active.id) ? "Unpin" : "Pin") {
-                if workspace.pinnedIDs.contains(active.id) { workspace.unpin(active.id) }
+                if let coordinator {
+                    let action: ConsoleAction = workspace.pinnedIDs.contains(active.id) ? .resultUnpin : .resultPin
+                    if coordinator.executePointer(action, target: active.id.uuidString) == .noop {
+                        pinLimitNotice = true
+                    }
+                } else if workspace.pinnedIDs.contains(active.id) { workspace.unpin(active.id) }
                 else { pinLimitNotice = !workspace.pin(active.id) }
             }
             Menu("Compare") {
                 ForEach(workspace.results.filter { $0.id != active.id }) { result in
-                    Button(result.payload.title ?? "Result") { workspace.compare(with: result.id) }
+                    Button(result.payload.title ?? "Result") {
+                        if let coordinator {
+                            _ = coordinator.executePointer(.compareSet,
+                                target: active.id.uuidString,
+                                secondaryTarget: result.id.uuidString)
+                        } else {
+                            workspace.compare(with: result.id)
+                        }
+                    }
                 }
-                Button("End comparison") { workspace.compare(with: nil) }
+                Button("End comparison") {
+                    if let coordinator { _ = coordinator.executePointer(.compareEnd) }
+                    else { workspace.compare(with: nil) }
+                }
             }
         }
     }

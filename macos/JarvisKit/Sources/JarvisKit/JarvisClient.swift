@@ -56,6 +56,11 @@ public final class JarvisClient: ObservableObject {
     @Published public private(set) var transcript: [ConversationEntry] = []
     @Published public private(set) var voices: [Voice] = []
     @Published public private(set) var currentVoice: String = ""
+    /// The negotiated console identity used to bind approved content
+    /// transfers to the current bot session. Nil until the handshake arrives.
+    @Published public private(set) var consoleSessionID: UUID?
+    @Published public private(set) var consoleGeneration: UUID?
+    @Published public private(set) var consoleInputProfile: ConsoleInputProfile?
 
     /// §5 step 9 — the barge-in conformance harness. sentPacketsLastSecond
     /// is a coarse proxy computed from the transport's running byte
@@ -137,6 +142,8 @@ public final class JarvisClient: ObservableObject {
 
     private var handlers: [UUID: @MainActor (AppMessage) -> Void] = [:]
     private var streamContinuations: [UUID: AsyncStream<AppMessage>.Continuation] = [:]
+    private var inputAcceptWaiters: [UUID: CheckedContinuation<InputAccept?, Never>] = [:]
+    private var inputAckWaiters: [String: CheckedContinuation<Bool, Never>] = [:]
     private var statsTimer: Timer?
     /// Cumulative outbound-rtp packetsSent at the last 1 Hz tick, so the
     /// per-second delta V6 watches can be computed.
@@ -303,6 +310,10 @@ public final class JarvisClient: ObservableObject {
         await transport.disconnect()
         state = .offline
         botIsSpeaking = false
+        consoleSessionID = nil
+        consoleGeneration = nil
+        consoleInputProfile = nil
+        resolveInputWaiters()
         stopStatsTimer()
         lastAudioPacketsSent = 0   // fresh session, fresh cumulative counters
         // transcript, voices, currentVoice are NOT cleared (self-audit
@@ -341,6 +352,64 @@ public final class JarvisClient: ObservableObject {
     public func send(_ message: ClientMessage) {
         guard let data = try? message.jsonData() else { return }
         try? transport.send(data)
+    }
+
+    /// Wait for the server's input/accept before sending any content bytes.
+    /// The continuation is session-scoped and is resolved on disconnect so a
+    /// failed transport cannot strand a task or retain staged data forever.
+    public func waitForInputAccept(batchID: UUID) async -> InputAccept? {
+        await withTaskCancellationHandler(operation: {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled { continuation.resume(returning: nil) }
+                else { inputAcceptWaiters[batchID] = continuation }
+            }
+        }, onCancel: { [weak self] in
+            Task { @MainActor in self?.cancelInputAcceptWaiter(batchID: batchID) }
+        })
+    }
+
+    /// Wait for the single outstanding chunk acknowledgement required by the
+    /// transfer contract. The caller owns the timeout and cancellation policy.
+    public func waitForInputAck(transferID: UUID, attachmentID: UUID,
+                                sequence: Int) async -> Bool {
+        let key = inputAckKey(transferID: transferID, attachmentID: attachmentID,
+                              sequence: sequence)
+        return await withTaskCancellationHandler(operation: {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled { continuation.resume(returning: false) }
+                else { inputAckWaiters[key] = continuation }
+            }
+        }, onCancel: { [weak self] in
+            Task { @MainActor in self?.cancelInputAckWaiter(key: key) }
+        })
+    }
+
+    private func inputAckKey(transferID: UUID, attachmentID: UUID, sequence: Int) -> String {
+        "\(transferID.uuidString.lowercased()):\(attachmentID.uuidString.lowercased()):\(sequence)"
+    }
+
+    private func resolveInputWaiters() {
+        inputAcceptWaiters.values.forEach { $0.resume(returning: nil) }
+        inputAcceptWaiters.removeAll()
+        inputAckWaiters.values.forEach { $0.resume(returning: false) }
+        inputAckWaiters.removeAll()
+    }
+
+    private func cancelInputAcceptWaiter(batchID: UUID) {
+        inputAcceptWaiters.removeValue(forKey: batchID)?.resume(returning: nil)
+    }
+
+    private func cancelInputAckWaiter(key: String) {
+        inputAckWaiters.removeValue(forKey: key)?.resume(returning: false)
+    }
+
+    /// AppMessageRouter records the server's bounded console identity here;
+    /// views use it only to construct versioned input messages.
+    public func setConsoleIdentity(sessionID: UUID, generation: UUID,
+                                   inputProfile: ConsoleInputProfile? = nil) {
+        consoleSessionID = sessionID
+        consoleGeneration = generation
+        consoleInputProfile = inputProfile
     }
 
     public func setMicEnabled(_ on: Bool) {
@@ -459,6 +528,22 @@ public final class JarvisClient: ObservableObject {
         guard let message = try? AppMessage.decode(frame: data) else { return }
 
         switch message {
+        case .inputAccept(let accept):
+            if let batchID = accept.batchID,
+               let waiter = inputAcceptWaiters.removeValue(forKey: batchID) {
+                waiter.resume(returning: accept)
+            }
+        case .inputAck(let ack):
+            let key = inputAckKey(transferID: ack.transferID,
+                                  attachmentID: ack.attachmentID,
+                                  sequence: ack.sequence)
+            if let waiter = inputAckWaiters.removeValue(forKey: key) {
+                waiter.resume(returning: true)
+            }
+        case .inputReady:
+            // Readiness is delivered to the normal message stream for the
+            // host/router; byte senders have already completed their commit.
+            break
         case .voiceCatalog(let catalog):
             voices = catalog.voices
             if let current = catalog.current { currentVoice = current }
@@ -656,6 +741,7 @@ extension JarvisClient: RTVITransportDelegate {
             self.lastSessionAudioLatency = self.audioMeter.latency()
             self.audioMeter.endSession()
             self.audioActivity = nil
+            self.resolveInputWaiters()
             await self.wakeListener.stop()
         }
     }

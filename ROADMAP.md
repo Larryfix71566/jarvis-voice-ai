@@ -6,6 +6,51 @@ per the discipline in MORTIMER_VOICE_UI_PLAN.md §7. Items here have had
 their *direction* decided in discussion with Larry; each still gets its
 own plan doc before implementation.
 
+## Model Use Enhancements (added 2026-09-20)
+
+- [ ] **MAR-A** — Reconcile the deployed Mac checkout and capture live
+  baseline evidence.
+- [ ] **MAR-D** — Finish the broader tool-result/continuation privacy audit.
+- [ ] **MAR-E** — Validate SAYGM credentials, catalog, and confidential
+  synthetic inference.
+- [ ] **MAR-F** — Re-authenticate Claude and validate subscription capabilities
+  and account isolation.
+- [ ] **MAR-G** — Produce enabled-mode runtime evidence across all routed
+  non-voice call sites.
+- [ ] **MAR-H** — Complete live voice route-control acceptance.
+- [ ] **MAR-I** — Run the research, development, and confidential-memory pilot.
+- [ ] **MAR-J** — Complete latency, quality, privacy, rollback, and deployed
+  release evidence.
+
+- [x] **MAR-B/C foundation** — Model/route/workload contracts and the
+  provider-neutral execution boundary are implemented and covered by tests.
+- [x] **MAR-D foundation** — Policy-aware run-log/council redaction and
+  protected delegation activity-event handling are implemented.
+- [x] **MAR-F foundation** — Gated Claude/Codex text adapters isolate
+  subscription subprocesses from inherited API credentials and endpoints.
+- [x] **MAR-H foundation** — Sidecar, native Repo controls, route metadata,
+  and the gated voice preference tool share the same draft/confirm store.
+
+See the detailed [Model Use Enhancements plan](docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md)
+and [acceptance status](docs/acceptance/model-use-enhancements/STATUS.md) for
+evidence, test counts, and exact handoff commands.
+
+**Status:** In progress. The routing foundation, SAYGM catalog parser,
+privacy checks, provider-neutral execution contract, and read-only route
+status are implemented behind `JARVIS_MODEL_ROUTING_ENABLED=1`; the sidecar
+and native API now expose draft-confirmed persistent route controls. Live
+provider credentials, subscription capability validation, runtime-enabled
+evidence, and release deployment remain open.
+The document records manual per-model and per-workload subscription/API
+selection, separate Claude/Codex subscription adapters, SAYGM confidential
+inference, privacy enforcement, and quality/latency acceptance.
+Haiku voice orchestration, Deepgram, and ElevenLabs retain their existing
+routes. No silent paid fallback or downgrade in privacy or model quality.
+
+**Trigger to build:** Implementation is requested after the saved plan is
+reviewed. Begin with MAR-A's deployed-backend reconciliation and baseline;
+model availability and provider limitations are explicit validation gates.
+
 ## Personal VAD — speaker-gated turn-taking (added 2026-08-16)
 
 **What:** local speaker recognition (enroll ~30s of Larry's voice once;

@@ -1,21 +1,36 @@
 # Mortimer — Automated Memory Consolidation
 
-**Status (2026-09-17): August consolidation phase IMPLEMENTED; section B's
-automatic, useful memory phase PLANNED and not implemented.** Larry requested
-that the recommendations be added to this existing plan. That request updates
-the plan; it does not certify the new behavior or its acceptance gates.
+**Status (2026-09-18): August consolidation phase IMPLEMENTED; section B's
+policy and sandbox implementation are PRESENT and unit-verified, including
+restart-safe daily budget enforcement, durable privacy-safe shadow receipts,
+and the executable staged-rollout/first-20 monitoring gate. The provider
+shadow and offline rollout evaluation now pass; gradual Mac enablement and
+redacted live benefit measurement remain open.**
+The implementation evidence is recorded in
+`docs/acceptance/memory-automation/STATUS.md` and the consolidated
+[`IMPLEMENTATION_STATUS.md`](../acceptance/IMPLEMENTATION_STATUS.md); the shared
+[`ACCEPTANCE_RUNBOOK.md`](../acceptance/ACCEPTANCE_RUNBOOK.md) defines the
+remaining Mac rollout evidence. This status does not certify the
+remaining deployment gates.
 
 Original plan: Claude, 2026-08-20, approved by Larry for implementation.
 September 17 amendment: automatic classification and maintenance, relevant
 recall, scoped corrections, minimal interruptions, and measurable user value.
 The historical specification and verification are retained below section B.
 
-## B — Automatic, useful memory (planned, 2026-09-17)
+## B — Automatic, useful memory (sandbox implementation complete; release gates open, 2026-09-18)
 
 Larry's direction: classification should happen automatically, with less
 asking him to administer memory; it should be seamless and add value.
 He requested these recommendations be added to this existing plan.
-**This section is a proposed implementation phase, not delivered behavior.**
+The deterministic policy, bounded queue, retrieval validity filters, scoped
+revision path and fail-closed classifier boundary are delivered in the
+release-review tree. Idle maintenance now commits its queue updates and
+recovers abandoned `running` claims through the bounded retry policy. Provider
+shadow evaluation and production enablement are still separate gates. Source
+role is enforced after provider decoding as well: assistant and quoted-document
+inputs retain their provenance and cannot be promoted into trusted user memory
+by a mislabelled classifier response.
 It supersedes A2/A3/A5's routine human classification and contradiction
 review policy, the startup-only restriction, and the blanket prohibition
 on automatically resolving any contradiction. The August implementation
@@ -127,7 +142,9 @@ rarely recalled. Retain reversible history for correction and audit.
 Unanswered, immaterial uncertainty can remain uncertain.
 
 Replace routine greeting-time review counts with quiet maintenance. Keep
-an optional activity/history view and concise explanations on request.
+an optional activity/history view and concise explanations on request. An
+open review must never be injected into the connect-time voice context; it is
+available only from the Memory panel or an explicit memory request.
 The native Memory tab and graph become inspection and correction tools:
 show provenance, scope, confidence/evidence, what superseded what, why a
 memory was used, and undo/forget controls. A dismissal is not corroborating
@@ -170,25 +187,194 @@ Do not declare success from a lower queue count or reduced prompt size alone.
 
 ### B6 — Delivery order and gates
 
-- [ ] Inventory current admission, classification, retrieval and review
+- [x] Inventory current admission, classification, retrieval and review
   behavior; capture baseline metrics and reconcile overlapping plan rules.
-- [ ] Specify backward-compatible metadata, evidence/version semantics,
+- [x] Specify backward-compatible metadata, evidence/version semantics,
   retry/idempotency, budgets, privacy boundaries and rollback.
-- [ ] Implement admission-time classification and the scoped correction
+- [x] Implement admission-time classification and the scoped correction
   policy in the sandbox, using synthetic fixtures and injected model clients.
-- [ ] Implement task-relevant retrieval and evidence-based validity checks;
+- [x] Implement task-relevant retrieval and evidence-based validity checks;
   preserve standing preferences and historical recall.
-- [ ] Add bounded idle maintenance and optional native inspection/undo;
+- [x] Add bounded idle maintenance and optional native inspection/undo;
   remove routine classification questions and greeting reminders.
-- [ ] Shadow existing memories without changing live values, prompts or
-  user-facing questions; evaluate against the recorded gates.
+- [x] Shadow existing memories without changing live values, prompts or
+  user-facing questions; durable receipts retain only bounded metadata and a
+  candidate digest for restart-safe evaluation.
+- [x] Run a provider-backed shadow evaluation against the recorded gates. The
+  2026-09-18 `claude-sonnet-5` receipt passes all 8 cases with zero regression;
+  it touches neither the live database nor production automation.
+- [x] Encode the staged rollout, numerical benefit/cost limits, reversible
+  first-20 review, and immediate-disable safety checks in the provider-agnostic
+  offline evaluator. The checked-in rollout receipt passes the gate without
+  credentials, SQLite access, or production writes.
 - [ ] Enable gradually with reversible writes and monitor benefit, errors,
   cost and interruptions. Revisit inferred confidence with observed evidence.
+
+**Inspection closure evidence, 2026-09-17:** the admin memory response now
+returns the B4 inspection fields (type, subject/scope, provenance,
+evidence/confidence, validity, source turn, revision/classifier version,
+supersession and bounded usage count). Native and web Memory panels render
+those fields with compatibility defaults for legacy rows. This closes the
+implementation/decoder portion of B4; gradual Mac enablement and benefit
+measurement remain the two runtime gates above.
 
 The approved recovery of 28 failed historical exchanges is separate release
 repair, not evidence that B is implemented. Back up first, replay only the
 verified failed pairs after deployment, preserve the live extraction cursor,
 and record results. Do not combine recovery with bulk reclassification.
+
+### B7 — Locked implementation contract
+
+Use the existing SQLite `memories` and `memory_reviews` tables. Add migration
+`0022_memory_automation` with nullable columns `subject`, `scope`, `memory_type`,
+`provenance`, `evidence_status`, `confidence`, `valid_from`, `valid_until`,
+`source_turn_id`, `content_revision NOT NULL DEFAULT 1`, `classifier_version`,
+`classified_at`, and `supersedes_id`. Closed values: scope
+`global|project|subject|session`; memory type
+`fact|explicit_preference|inferred_preference|decision|task_rule|temporary_context`;
+provenance `user|tool|assistant|quoted_document`; evidence
+`explicit|corroborated|tentative|disputed|unknown`. Existing rows map to
+`global/fact/user/unknown`, revision 1 and classifier `legacy-v1`; content is
+unchanged. Invalid enum values reject the write.
+
+Migration `0023_memory_classification_shadow` adds the restart-safe shadow
+receipt ledger. It stores bounded classification metadata and a candidate
+digest only; it never stores candidate content or changes live retrieval.
+
+The classifier interface is exactly
+`classify(candidates: list[Candidate], *, policy_version: str) -> list[Classification]`.
+It receives bounded redacted candidate text and source metadata, never tools or
+write authority, and returns one result per candidate. Each result has the
+closed fields above, confidence 0...1, at most eight source-turn IDs and a
+reason code `explicit|repeat_independent|scope_update|insufficient_evidence|
+quoted_content|invalid`. Missing/extra/malformed fields abstain the whole batch.
+One injected model call handles at most 20 candidates, 12,000 input characters
+and 2,000 output tokens; failures change no memory and queue a retry.
+
+Admission classifies after extraction and before durable write. Explicit user
+corrections may mechanically replace only the same normalized subject/scope
+with an explicit effective time: create a new revision, set `supersedes_id`,
+retain the old row, never delete. Inferences require two distinct source-turn
+IDs from separate sessions; repeated content hashes count once. Thresholds are
+fixed: explicit=1.0, corroborated>=0.80, tentative=0.50...0.79, otherwise
+unknown. Tentative/unknown values never enter standing context or authorize an
+action and are retrieved only for an explicit subject/project match.
+
+Retrieval is `retrieve_memory_context(query, *, subject=None, project=None,
+limit=20, max_chars=1600)`. Filter valid, non-disputed, non-forgotten rows and
+sort by scope match, evidence rank (explicit 4, corroborated 3, tentative 2,
+unknown 1), explicitness, recency, then ID, descending. Return memory ID,
+content, scope, type, provenance, evidence, source turn, superseded ID and
+`used_for`; record `used_for` only after insertion into the current prompt.
+
+Persist idle work in `memory_maintenance(id, memory_id, operation,
+content_revision, policy_version, attempts, next_attempt_at, status,
+last_error_code, created_at, updated_at)`. Operations are
+`classify|deduplicate|revalidate|stale_check`. One idle interval handles at
+most 20 candidates, one batch/model call or 30 seconds. Retry at most three
+times after 60/300/1800 seconds; daily UTC budget is 100 candidates and five
+model calls, persisted across restarts. Never run during an active voice turn
+or block audio. Idempotency key is memory/revision/policy/operation. Text or
+policy changes increment revision and enqueue work.
+
+Background model routing is independent from the voice Supervisor. Production
+extraction, consolidation and classification resolve `JARVIS_MEMORY_PROFILE`
+through `config/upgrade_models.yaml` (default `claude-sonnet-5`) and use that
+profile's provider, endpoint and credential variable. They never reuse
+`OPENAI_MODEL`, `OPENAI_BASE_URL` or the Supervisor credential as an implicit
+fallback. A missing or invalid memory profile fails closed for that background
+operation while preserving voice continuity. Provider-shadow acceptance uses
+the same explicit profile contract through
+`scripts/run_memory_provider_shadow.py --profile NAME`.
+
+The same separation applies to the other non-voice maintenance calls that
+touch the memory/knowledge surfaces. Knowledge-base session digests and
+procedure descriptions resolve `JARVIS_BACKGROUND_PROFILE` through the same
+registry helper; they never inherit `OPENAI_MODEL`, even when the voice
+Supervisor is running Haiku. This keeps the model choice configurable without
+making Haiku a hidden dependency of background work.
+
+**Route-boundary implementation status (2026-09-18):** `jarvis/kb_digest.py`
+and `jarvis/procedures.py` now use the shared background route helper in
+`jarvis/memory_model.py`; `jarvis/config.py` exposes
+`jarvis_background_profile`. The model-floor and architecture-reference tests
+pin that no registry profile resolves to Haiku and that missing background
+  credentials fail closed.
+
+**Runtime staged-admission amendment (2026-09-18):** the same rollout order is
+now enforced at the worker boundary by `JARVIS_MEMORY_AUTOMATION_STAGE`.
+`shadow` never changes live metadata; `explicit_preferences` admits only
+explicit preference classifications; `corroborated_inferences` additionally
+admits independently corroborated classifications. Non-admitted results still
+receive a bounded shadow receipt, and unknown stage values fail closed before
+the worker can claim production admission. This is implementation evidence;
+the Mac daily-driver and redacted live benefit/cost receipt remain open.
+
+### B8 — Complete manifest and sequence
+
+Modify `jarvis/memory.py`, `jarvis/memory_extraction.py`,
+`jarvis/memory_sweep.py`, `jarvis/db.py`, `jarvis/bot/pipeline.py`,
+`jarvis/agents/supervisor.py`, `jarvis/prompts.py`, `jarvis/config.py`,
+`jarvis/admin/server.py`, and `web/src/components/MemoryPanel.tsx`. Create
+`jarvis/memory_model.py`, `jarvis/memory_automation.py`,
+`tests/unit/test_memory_model.py`, `tests/unit/test_memory_automation.py`, and
+`tests/fixtures/memory_automation_cases.json`. Add default-off
+`JARVIS_MEMORY_AUTOMATION_ENABLED` and `JARVIS_MEMORY_AUTOMATION_SHADOW`.
+The acceptance implementation also includes `jarvis/memory_automation_eval.py`,
+`tests/unit/test_memory_automation_acceptance.py`,
+`tests/unit/test_memory_rollout_acceptance.py`,
+`tests/fixtures/memory_rollout_acceptance.json`, and the opt-in
+`scripts/run_memory_provider_shadow.py` and
+`scripts/run_memory_rollout_acceptance.py`; the runners send or inspect only
+checked-in synthetic data and never enable production automation or open the
+live DB.
+Sequence is fixed: typed schemas/migration; shadow queue; admission
+classification; task retrieval/usage; idle worker; inspection/undo; staged
+enablement. Every step needs its tests and receipt before the next. No new
+database, agent, provider, embedding system or daemon.
+
+The checked-in manifest is also guarded by
+`tests/unit/test_plan_manifests.py`, which verifies every B8 implementation,
+fixture, acceptance, provider-shadow and rollout-monitoring artifact is present
+before the plan can be reported as implemented.
+
+### B9 — Acceptance gates
+
+M0 captures baseline metrics and fixture hash: explicit-preference use,
+repeated questions, stale use, unnecessary interruptions, retrieval
+precision/coverage, latency, calls and cost. M1 proves migration round-trip,
+rollback, zero shadow writes/prompt changes and safe malformed-output abstention.
+M2 passes every B5 case: reversible corrections, scope/time coexistence,
+assistant/quoted content rejection, duplicate replay protection and relevant
+archived recall. M3 requires no regression in explicit use/relevant recall,
+improvement on failing interruption/stale cases, zero-error baselines remain
+zero, admission p95 <=200ms cache-hit / <=2s one bounded call, and budgets never
+exceed. M4 proves redaction/forget/delete across admission, retrieval, queue,
+usage records, inspection and undo. M5 proves no greeting chore, restart-safe
+queue, voice continuity and Larry's review of the first 20 decisions.
+
+The executable offline B9 gate is recorded in
+`docs/acceptance/memory-automation/rollout-monitoring-receipt.json`. It fixes
+the rollout order (shadow, explicit preferences, corroborated inferences),
+requires all first 20 decisions to be reviewed and reversible, and enforces
+the captured latency, daily budget, cost, privacy, duplicate and regression
+limits. This closes the sandbox acceptance definition; Mac daily-driver
+enablement and redacted live monitoring remain deployment evidence.
+
+Roll out shadow for one daily-driver day, then explicit preferences only, then
+corroborated inferences. Task rules remain tentative until the existing workflow
+confirmation path accepts them. Disable immediately on privacy regression,
+unauthorized scope, duplicate durable row, budget violation or stale-use
+regression. Recovery of the 28 failed exchanges remains separate.
+
+### B10 — Self-audit
+
+All cross-consumer schemas, lifecycle states, application owners, thresholds,
+retry budgets, rollout order and rollback are fixed above. SQLite is the sole
+durable owner; hidden views borrow it. Revision-keyed idempotency prevents
+replay drift. Unknown/failed states abstain visibly, and no prompt or model
+prose can grant permissions. The file manifest covers every created/modified
+path; any source drift blocks implementation pending amendment.
 
 ## Historical August implementation specification and evidence
 
@@ -290,11 +476,10 @@ Surfacing, two channels, both existing patterns:
   the conflicting facts with three actions: keep A (archive B), keep B
   (archive A), or rewrite (a text field that upserts a replacement and
   archives both). `POST /api/memory/reviews/{id}/resolve`.
-- **Voice**: the connect-time greeting path (`on_client_connected`)
-  appends one sentence when open reviews exist: "I have N memory
-  conflicts to resolve when you have a moment." Offered once per
-  connect, never blocking, never repeating in-session — the ambient
-  strip's dismiss-until-content-changes discipline.
+- **Voice (superseded by B4)**: the original A3 implementation appended a
+  one-sentence review offer at connect time. B4 retires that behavior: the
+  connect context contains only the time-aware greeting, while the queue stays
+  available in the Memory panel and through an explicit memory request.
 
 Dismissed ≠ resolved: a dismissed review never re-queues for the same
 pair (the cache holds), but the facts stay live — Larry saying "they're
@@ -430,7 +615,7 @@ converges to zero calls.
 
 - [x] A1 auto-consolidation (0.8 threshold, longest-content keep, cap 10)
 - [x] A2 contradiction detection via small-model pass, cached
-- [x] A3 review queue: Memory panel section + one-sentence voice offer
+- [x] A3 review queue: Memory panel section; voice offer retired under B4
 - [x] A4 system-tier auto-stale at 45 days
 - [x] A5 audience segmentation (interaction-only prompt; task-rules →
       workflows via existing classify pipeline; implemented → archive;
@@ -480,12 +665,11 @@ below (functionally equivalent, noted for anyone auditing against it):
   row offers keep-A/keep-B/rewrite (cluster/contradiction) or convert-
   to-workflow/archive-as-implemented/keep-as-is (audience), plus Dismiss
   on every kind.
-- **Voice**: `on_client_connected`'s greeting note in
-  `jarvis/bot/pipeline.py` appends one line when
-  `memory_sweep.open_review_count() > 0`, asking the model to mention it
-  briefly — same "offered once per connect, never repeating in-session"
-  shape as the plan specified (a fresh connect re-checks the count; the
-  offer never fires mid-session).
+- **Voice (B4 revision)**: `on_client_connected` now uses
+  `connection_greeting_note` and never reads or injects the open-review count.
+  The Memory panel and explicit memory requests remain available for
+  inspection and correction; maintenance state does not become a spoken
+  reconnect task.
 - **`extract_workflow`** (reused for the `convert_workflow` action)
   raises `SystemExit` for its CLI-error paths (no live fact, slug
   collision) — `resolve_review` translates that to `ValueError` so it

@@ -56,6 +56,8 @@ def test_valid_settings_load_with_defaults(clean_env):
         settings = load_settings(env_file=None)
     assert settings.openai_base_url == "https://api.openai.com/v1"
     assert settings.openai_model == "gpt-4.1-mini"
+    assert settings.jarvis_memory_profile == "claude-sonnet-5"
+    assert settings.jarvis_background_profile == "claude-sonnet-5"
     assert settings.jarvis_bot_port == 7860
     assert str(settings.db_path) == "data/jarvis.db"
 
@@ -122,3 +124,64 @@ def test_units_bridge_does_not_override_real_env_var(clean_env):
     clean_env.setenv("JARVIS_UNITS", "metric")  # a real override already present
     bridge_settings_to_env(settings)
     assert os.environ["JARVIS_UNITS"] == "metric"  # untouched, not overwritten
+
+
+def test_memory_automation_settings_are_bridged(clean_env):
+    from jarvis.config import bridge_settings_to_env
+
+    _set_required(clean_env)
+    clean_env.setenv("JARVIS_MEMORY_AUTOMATION_ENABLED", "true")
+    clean_env.setenv("JARVIS_MEMORY_AUTOMATION_SHADOW", "false")
+    settings = load_settings(env_file=None)
+    clean_env.delenv("JARVIS_MEMORY_AUTOMATION_ENABLED", raising=False)
+    clean_env.delenv("JARVIS_MEMORY_AUTOMATION_SHADOW", raising=False)
+
+    bridge_settings_to_env(settings)
+
+    assert os.environ["JARVIS_MEMORY_AUTOMATION_ENABLED"] == "true"
+    assert os.environ["JARVIS_MEMORY_AUTOMATION_SHADOW"] == "false"
+
+
+def test_memory_automation_bridge_preserves_real_env_override(clean_env):
+    from jarvis.config import bridge_settings_to_env
+
+    _set_required(clean_env)
+    settings = load_settings(env_file=None)
+    clean_env.setenv("JARVIS_MEMORY_AUTOMATION_ENABLED", "true")
+    bridge_settings_to_env(settings)
+
+    assert os.environ["JARVIS_MEMORY_AUTOMATION_ENABLED"] == "true"
+
+
+def test_memory_automation_stage_is_ordered_and_bridged(clean_env):
+    from jarvis.config import bridge_settings_to_env
+
+    _set_required(clean_env)
+    clean_env.setenv("JARVIS_MEMORY_AUTOMATION_STAGE", "explicit_preferences")
+    settings = load_settings(env_file=None)
+    assert settings.jarvis_memory_automation_stage == "explicit_preferences"
+    clean_env.delenv("JARVIS_MEMORY_AUTOMATION_STAGE", raising=False)
+    bridge_settings_to_env(settings)
+    assert os.environ["JARVIS_MEMORY_AUTOMATION_STAGE"] == "explicit_preferences"
+
+
+def test_memory_automation_stage_rejects_skip_to_unknown_stage(clean_env):
+    _set_required(clean_env)
+    clean_env.setenv("JARVIS_MEMORY_AUTOMATION_STAGE", "all_at_once")
+    with pytest.raises(RuntimeError, match="JARVIS_MEMORY_AUTOMATION_STAGE"):
+        load_settings(env_file=None)
+
+
+def test_shared_content_gate_cannot_enable_without_command_console(clean_env):
+    from jarvis.config import bridge_settings_to_env
+
+    _set_required(clean_env)
+    clean_env.setenv("JARVIS_SHARED_CONTENT_ENABLED", "true")
+    settings = load_settings(env_file=None)
+    clean_env.delenv("JARVIS_SHARED_CONTENT_ENABLED", raising=False)
+    clean_env.delenv("JARVIS_COMMAND_CONSOLE_ENABLED", raising=False)
+
+    bridge_settings_to_env(settings)
+
+    assert os.environ["JARVIS_COMMAND_CONSOLE_ENABLED"] == "false"
+    assert os.environ["JARVIS_SHARED_CONTENT_ENABLED"] == "false"

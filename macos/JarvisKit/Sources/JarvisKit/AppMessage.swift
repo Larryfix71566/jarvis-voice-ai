@@ -17,6 +17,15 @@ public enum AppMessage: Sendable, Equatable {
     case voiceCurrent(String)
     case speakerGate(SpeakerGate)
     case capability([CapabilityAgent])
+    case consoleHello(ConsoleHello)
+    case consoleRequest(ConsoleRequest)
+    case consoleResult(ConsoleResult)
+    case inputAccept(InputAccept)
+    case inputAck(InputAck)
+    case inputReady(InputReady)
+    case inputStatus(InputStatus)
+    case inputOffer(InputOffer)
+    case inputConsent(InputConsent)
     case unknown(type: String, raw: [String: JSONValue])
 }
 
@@ -37,6 +46,15 @@ extension AppMessage: CustomDebugStringConvertible {
         // the explicit closure picks String(Double) and compiles.
         case .speakerGate(let g): return "speakerGate(verdict: \(g.verdict), score: \(g.score.map { String($0) } ?? "nil"))"
         case .capability(let agents): return "capability(\(agents.count) agents)"
+        case .consoleRequest(let request): return "consoleRequest(\(request.action.rawValue))"
+        case .consoleHello(let hello): return "consoleHello(\(hello.actions.count) actions)"
+        case .consoleResult(let result): return "consoleResult(\(result.status), code: \(result.code))"
+        case .inputAccept(let accept): return "inputAccept(\(accept.transferID.uuidString))"
+        case .inputAck(let ack): return "inputAck(\(ack.attachmentID.uuidString), sequence: \(ack.sequence))"
+        case .inputReady(let ready): return "inputReady(\(ready.batchID.uuidString))"
+        case .inputStatus(let status): return "inputStatus(\(status.status), code: \(status.code))"
+        case .inputOffer(let offer): return "inputOffer(\(offer.batchID.uuidString))"
+        case .inputConsent(let consent): return "inputConsent(\(consent.batchID.uuidString), approved: \(consent.approved))"
         case .unknown(let type, _): return "unknown(type: \(type))"
         }
     }
@@ -138,6 +156,16 @@ public struct DisplayLink: Sendable, Equatable, Codable {
 /// against jarvis/bot/display.py:6-13 and the two direct-tool emitters
 /// in jarvis/bot/handoff_tools.py.
 public struct DisplayPayload: Sendable, Equatable, Decodable {
+    /// In-memory presentation of the assistant's existing transcript. This
+    /// creates no transport event, persistence, or additional model request.
+    public init(responseText: String, timestamp: Double) {
+        kind = "text"; title = "Mortimer response"; body = responseText
+        images = nil; basemapImages = nil; links = nil; agent = "Mortimer"
+        runID = nil; ts = timestamp; surface = .window; tool = nil
+        commands = nil; note = nil; expectOutput = nil; content = nil
+        chars = nil; truncated = nil
+    }
+
     public let kind: String?
     public let title: String?
     public let body: String?
@@ -145,6 +173,9 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
     public let basemapImages: [String]?
     public let links: [DisplayLink]?
     public let agent: String?
+    /// Agent run that produced this payload. Used only for presentation
+    /// grouping; it is never treated as content identity.
+    public let runID: String?
     /// Epoch SECONDS, not ms (displayResults.ts:28).
     public let ts: Double?
     /// Absent/unrecognised -> .drawer (display.py:60-92, App.tsx:238-240).
@@ -161,7 +192,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
     enum CodingKeys: String, CodingKey {
         case kind, title, body, images
         case basemapImages = "basemap_images"
-        case links, agent, ts, surface, tool, commands, note
+        case links, agent, runID = "run_id", ts, surface, tool, commands, note
         case expectOutput = "expect_output"
         case content, chars, truncated
     }
@@ -175,6 +206,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         basemapImages = try c.decodeIfPresent([String].self, forKey: .basemapImages)
         links = try c.decodeIfPresent([DisplayLink].self, forKey: .links)
         agent = try c.decodeIfPresent(String.self, forKey: .agent)
+        runID = try c.decodeIfPresent(String.self, forKey: .runID)
         ts = try c.decodeIfPresent(Double.self, forKey: .ts)
         // Two decoder rules (§3 N7): unrecognised keys (incl. a nested
         // "type") are ignored by construction (Codable only reads the
@@ -353,6 +385,24 @@ public extension AppMessage {
         case "capability":
             guard let a = p["agents"] else { return .capability([]) }
             return .capability(try dec.decode([CapabilityAgent].self, from: JSONEncoder().encode(a)))
+        case "console/request":
+            return .consoleRequest(try dec.decode(ConsoleRequest.self, from: payload))
+        case "console/hello":
+            return .consoleHello(try dec.decode(ConsoleHello.self, from: payload))
+        case "console/result":
+            return .consoleResult(try dec.decode(ConsoleResult.self, from: payload))
+        case "input/accept":
+            return .inputAccept(try dec.decode(InputAccept.self, from: payload))
+        case "input/ack":
+            return .inputAck(try dec.decode(InputAck.self, from: payload))
+        case "input/ready":
+            return .inputReady(try dec.decode(InputReady.self, from: payload))
+        case "input/status":
+            return .inputStatus(try dec.decode(InputStatus.self, from: payload))
+        case "input/offer":
+            return .inputOffer(try dec.decode(InputOffer.self, from: payload))
+        case "input/consent":
+            return .inputConsent(try dec.decode(InputConsent.self, from: payload))
         default:               return .unknown(type: kind, raw: p)
         }
     }

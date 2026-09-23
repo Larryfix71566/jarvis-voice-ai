@@ -30,6 +30,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from jarvis.config import bridge_settings_to_env, expand_env_vars
+from jarvis.bot.sensitive_turn import current_sensitive_turn
 from jarvis.runlog.context import get_run_id, get_run_logger
 from jarvis.toolresult import classify_tool_result
 
@@ -37,6 +38,13 @@ logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CALL_TIMEOUT = 30.0
+
+# These MCP servers can transmit task/argument content beyond the Mac. A
+# sensitive turn must fail closed before the child is invoked; local-only
+# servers (notes, memory, repo, git, time, etc.) remain available.
+EXTERNAL_TOOL_SERVERS = frozenset({
+    "mcp-web", "mcp-apps", "mcp-screen", "mcp-selfedit",
+})
 
 # Server entry "command: python" means "the interpreter running this
 # process" — guarantees the child uses the same environment.
@@ -333,6 +341,16 @@ class SkillRegistry:
         server, _tool = entry
         if server_names is not None and server not in set(server_names):
             return f"Tool '{tool_name}' is not available in this context."
+        holder = current_sensitive_turn.get()
+        if (server in EXTERNAL_TOOL_SERVERS and holder is not None
+                and holder.is_armed()):
+            # The current turn may contain financial/private material. Do not
+            # let an external MCP child receive it; the model gets a truthful
+            # tool failure and can choose a local-only alternative.
+            return (
+                f"{tool_name} failed: protected turn cannot call external "
+                "tool server."
+            )
         session = self._sessions[server]
         if tool_name in RUN_ID_INJECTED_TOOLS:
             arguments = {**arguments, "run_id": get_run_id() or ""}   # GL9: always overwrites

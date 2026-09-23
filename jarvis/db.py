@@ -479,6 +479,63 @@ INSERT OR IGNORE INTO memory_extraction_cursor
   VALUES (1, 0, '1970-01-01T00:00:00+00:00');
 """
 
+# Automated memory classification metadata and durable idle-maintenance queue
+# (MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md B7).  This is intentionally a
+# later migration: 0016 is already the extraction-v2 migration in production.
+MIGRATION_0022 = """
+ALTER TABLE memories ADD COLUMN subject TEXT;
+ALTER TABLE memories ADD COLUMN scope TEXT DEFAULT 'global';
+ALTER TABLE memories ADD COLUMN memory_type TEXT DEFAULT 'fact';
+ALTER TABLE memories ADD COLUMN evidence_status TEXT DEFAULT 'unknown';
+ALTER TABLE memories ADD COLUMN confidence REAL DEFAULT 0.0;
+ALTER TABLE memories ADD COLUMN valid_from TEXT;
+ALTER TABLE memories ADD COLUMN valid_until TEXT;
+ALTER TABLE memories ADD COLUMN source_turn_id TEXT;
+ALTER TABLE memories ADD COLUMN content_revision INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE memories ADD COLUMN classifier_version TEXT DEFAULT 'legacy-v1';
+ALTER TABLE memories ADD COLUMN classified_at TEXT;
+ALTER TABLE memories ADD COLUMN supersedes_id INTEGER;
+CREATE INDEX IF NOT EXISTS idx_memories_automation_scope ON memories(scope, memory_type);
+CREATE TABLE IF NOT EXISTS memory_maintenance (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL DEFAULT 'local',
+  memory_id INTEGER NOT NULL,
+  operation TEXT NOT NULL,
+  content_revision INTEGER NOT NULL,
+  policy_version TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued',
+  last_error_code TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(memory_id, content_revision, policy_version, operation)
+);
+CREATE INDEX IF NOT EXISTS idx_memory_maintenance_due
+  ON memory_maintenance(status, next_attempt_at);
+"""
+
+# Shadow classification evidence is deliberately separate from ``memories``:
+# it records what the classifier proposed without making that proposal part
+# of live retrieval. The table stores only bounded metadata and a digest of
+# the redacted candidate, never candidate text.
+MIGRATION_0023 = """
+CREATE TABLE IF NOT EXISTS memory_classification_shadow (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  maintenance_id INTEGER NOT NULL UNIQUE,
+  user_id TEXT NOT NULL DEFAULT 'local',
+  memory_id INTEGER NOT NULL,
+  content_revision INTEGER NOT NULL,
+  policy_version TEXT NOT NULL,
+  candidate_digest TEXT NOT NULL,
+  classification_json TEXT NOT NULL,
+  observed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_memory_classification_shadow_observed
+  ON memory_classification_shadow(observed_at);
+"""
+
+
 # MORTIMER_OPTIMIZATION_PLAN.md Phase 2, continued — a single global
 # cursor (migration 0016) cannot express "session X has an unresolved
 # trailing user turn" without one of two bad outcomes: block every OTHER
@@ -575,6 +632,29 @@ MIGRATION_0021_reminders_notified = """
 ALTER TABLE reminders ADD COLUMN notified_at TEXT;
 """
 
+MIGRATION_0024_model_route_preferences = """
+CREATE TABLE IF NOT EXISTS model_route_preferences (
+  workload TEXT PRIMARY KEY,
+  profile TEXT NOT NULL,
+  route TEXT NOT NULL,
+  privacy TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  user_id TEXT NOT NULL DEFAULT 'local'
+);
+CREATE TABLE IF NOT EXISTS model_route_drafts (
+  draft_id TEXT PRIMARY KEY,
+  workload TEXT NOT NULL,
+  profile TEXT NOT NULL,
+  route TEXT NOT NULL,
+  privacy TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  user_id TEXT NOT NULL DEFAULT 'local'
+);
+CREATE INDEX IF NOT EXISTS idx_model_route_drafts_expiry
+  ON model_route_drafts(expires_at);
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
@@ -598,6 +678,9 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0019_memory_recall_events", MIGRATION_0019),
     ("0020_user_id", MIGRATION_0020_user_id),  # GC8 (gap-closure plan, 2026-09-04)
     ("0021_reminders_notified", MIGRATION_0021_reminders_notified),  # GC9
+    ("0022_memory_automation", MIGRATION_0022),
+    ("0023_memory_classification_shadow", MIGRATION_0023),
+    ("0024_model_route_preferences", MIGRATION_0024_model_route_preferences),
 ]
 
 

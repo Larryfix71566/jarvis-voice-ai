@@ -36,8 +36,38 @@ final class ScreenPlacement {
     private var pending: DispatchWorkItem?
     private var topologyPending = false
     private var observers: [NSObjectProtocol] = []
+    /// Called when the fixed supporting-display scene loses its requested
+    /// physical screen. The app-owned WindowPlacement uses this to close the
+    /// scene so its content is immediately reparented into the main console;
+    /// placement itself remains the sole topology owner.
+    private var displayLostHandler: (@MainActor () -> Void)?
+    /// Last confirmed non-main screen for the supporting scene. AppKit can
+    /// rewrite the persisted record to the main display while a monitor is
+    /// disappearing; this cache preserves the identity needed to close the
+    /// scene before that rewrite hides the loss.
+    private var lastSupportingScreenID: String?
     private var seenWindows: [HostWindowKind: ObjectIdentifier] = [:]
     private var placedFrames: [HostWindowKind: CGRect] = [:]
+    /// Dynamic Command Console panels use stable value IDs rather than the
+    /// fixed HostWindowKind set. Keep their requested screen and recovery
+    /// frame in this same topology owner so unplug/reconnect cannot strand a
+    /// detached graph, result or Atlas window.
+    private final class DetachedPanelState {
+        let id: String
+        weak var window: NSWindow?
+        var screenID: String
+        var frame: CGRect
+        var manual = false
+        var recovery: PlacementRecovery?
+
+        init(id: String, window: NSWindow, screenID: String, frame: CGRect) {
+            self.id = id
+            self.window = window
+            self.screenID = screenID
+            self.frame = frame
+        }
+    }
+    private var detachedPanels: [String: DetachedPanelState] = [:]
     /// Closure C4.4 (gap G19): when the current topology change was first
     /// observed, and how long the last recovery took from that observation
     /// to its final `setFrame`. The hardware gate is ≤ 1 s.
@@ -87,6 +117,10 @@ final class ScreenPlacement {
     var records: [HostWindowKind: PlacementRecord] { policy.records }
     var placed: [HostWindowKind: CGRect] { placedFrames }
     var isApplying: Bool { applying }
+
+    func setDisplayLostHandler(_ handler: (@MainActor () -> Void)?) {
+        displayLostHandler = handler
+    }
 
     nonisolated static func isUserAdjusted(live: NSRect, placed: NSRect?, tolerance: CGFloat = frameTolerance) -> Bool {
         guard let placed else { return false }
@@ -159,11 +193,20 @@ final class ScreenPlacement {
     }
 
     private func windowChanged(_ notification: Notification, explicitResize: Bool = false) {
-        guard !applying, let window = notification.object as? NSWindow, let kind = kind(of: window), window.isVisible else { return }
+        guard !applying, let window = notification.object as? NSWindow, window.isVisible else { return }
         let event = NSApp.currentEvent
         let pointerDrag = NSEvent.pressedMouseButtons != 0 && event?.window === window
             && (event?.type == .leftMouseDragged || event?.type == .leftMouseDown)
         if explicitResize || window.inLiveResize || pointerDrag {
+            if let panel = detachedPanels.values.first(where: { $0.window === window }) {
+                guard let screen = DisplayPlacementPolicy.screen(for: window.frame, in: screenProvider()) else { return }
+                panel.screenID = screen.id
+                panel.frame = window.frame
+                panel.manual = true
+                panel.recovery = nil
+                return
+            }
+            guard let kind = kind(of: window) else { return }
             policy.noteManual(kind, frame: window.frame, screens: screenProvider())
             placedFrames[kind] = window.frame
             persist()
@@ -175,14 +218,19 @@ final class ScreenPlacement {
     /// across mixed-scale screens, so the scale is not captured (closure
     /// C4.2, gap G17 — field removed rather than used).
     static func liveScreens() -> [PlacementScreen] {
-        NSScreen.screens.compactMap { screen in
+        let mainDisplay: CGDirectDisplayID? = NSScreen.main.flatMap {
+            ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)
+                .map { CGDirectDisplayID($0.uint32Value) }
+        }
+        return NSScreen.screens.compactMap { screen -> PlacementScreen? in
             guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return nil }
             let display = CGDirectDisplayID(number.uint32Value)
             let mirrored = CGDisplayMirrorsDisplay(display)
             let identity = mirrored == kCGNullDirectDisplay ? display : mirrored
             let uuid = CGDisplayCreateUUIDFromDisplayID(identity)?.takeRetainedValue()
             let id = uuid.map { CFUUIDCreateString(nil, $0) as String } ?? "display-\(identity)"
-            return PlacementScreen(id: id, visibleFrame: screen.visibleFrame)
+            return PlacementScreen(id: id, visibleFrame: screen.visibleFrame,
+                                  isMain: identity == mainDisplay)
         }
     }
 
@@ -198,8 +246,55 @@ final class ScreenPlacement {
         policy.records = [:]
         placedFrames = [:]
         seenWindows = [:]
+        for panel in detachedPanels.values {
+            panel.manual = false
+            panel.recovery = nil
+            if let window = panel.window { panel.frame = window.frame }
+        }
         persist()
         reposition(topologyChanged: true)
+    }
+
+    /// Register a value-addressed panel with the same placement owner as the
+    /// fixed scenes. The requested screen is retained even while absent so a
+    /// later reconnect can restore the user's frame.
+    func registerDetachedPanel(_ window: NSWindow, id: String, screenID: String? = nil) {
+        guard !id.isEmpty else { return }
+        let screens = screenProvider()
+        let requested = screenID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let target = requested.flatMap { $0.isEmpty ? nil : $0 }
+            ?? DisplayPlacementPolicy.screen(for: window.frame, in: screens)?.id
+            ?? screens.first?.id
+        guard let target else { return }
+        if let existing = detachedPanels[id], existing.window === window {
+            if requested != nil { existing.screenID = target }
+            return
+        }
+        detachedPanels[id] = DetachedPanelState(id: id, window: window,
+                                                screenID: target, frame: window.frame)
+        scheduleReposition()
+    }
+
+    func unregisterDetachedPanel(id: String) {
+        detachedPanels.removeValue(forKey: id)
+    }
+
+    /// Place a value-addressed detachable panel on a requested display after
+    /// its SwiftUI scene has been created. Panel windows are intentionally
+    /// not added to the persisted HostWindowKind set: their content identity
+    /// is owned by ContentWindowRegistry, while this method reuses the same
+    /// validated screen frames and clamping rules as the fixed scenes.
+    func placeDetachedPanel(_ window: NSWindow, id: String? = nil, on screenID: String) {
+        let panelID = id ?? window.identifier?.rawValue ?? "detached-\(ObjectIdentifier(window))"
+        registerDetachedPanel(window, id: panelID, screenID: screenID)
+        guard let screen = screenProvider().first(where: { $0.id == screenID }) else { return }
+        let frame = DisplayPlacementPolicy.clamp(window.frame, to: screen.visibleFrame)
+        if let panel = detachedPanels[panelID] { panel.frame = frame }
+        guard Self.isUserAdjusted(live: window.frame, placed: frame) else { return }
+        applying = true
+        applyFrame(frame, to: window)
+        applying = false
+        placementLog.debug("detached panel placed on screen \(screenID, privacy: .public)")
     }
 
     /// `topologyChanged` prevents AppKit's own automatic recovery movement from
@@ -219,19 +314,47 @@ final class ScreenPlacement {
                 policy.noteManual(kind, frame: window.frame, screens: screens)
             }
         }
-        let primary = windows[.console].flatMap { DisplayPlacementPolicy.screen(for: $0.frame, in: screens)?.id } ?? screens.first?.id
+        if screens.count > 1,
+           let display = windows[.display],
+           let displayScreen = DisplayPlacementPolicy.screen(for: display.frame, in: screens),
+           !displayScreen.isMain {
+            lastSupportingScreenID = displayScreen.id
+        }
+        // A display scene is content, not a durable second owner. When its
+        // assigned monitor disappears, close the scene before policy moves
+        // the window frame to the primary screen. This makes the unplug path
+        // deterministic: the main workspace immediately owns the graph and
+        // response instead of leaving an off-screen supporting window open.
+        if screens.count <= 1,
+           windows[.display] != nil,
+           let assigned = lastSupportingScreenID ?? policy.records[.display]?.screenID,
+           !screens.contains(where: { $0.id == assigned }) {
+            displayLostHandler?()
+        }
+        // macOS's main display is the default console role. A persisted
+        // manual console record is the only override; using the live frame
+        // here would let a stale AppKit restoration silently invert the
+        // console and supporting-display roles.
+        let primary = policy.records[.console].flatMap { $0.manual ? $0.screenID : nil }
+            ?? screens.first(where: \.isMain)?.id
+            ?? windows[.console].flatMap { DisplayPlacementPolicy.screen(for: $0.frame, in: screens)?.id }
+            ?? screens.first?.id
         let frames = windows.mapValues(\.frame)
         let moves = policy.reconcile(windows: frames, screens: screens, primaryID: primary, restoring: restoring)
         var applied = 0
         applying = true
         for (kind, frame) in moves {
             guard let window = windows[kind], !window.styleMask.contains(.fullScreen) else { continue }
-            if Self.isUserAdjusted(live: window.frame, placed: frame) { window.setFrame(frame, display: true); applied += 1 }
+            if Self.isUserAdjusted(live: window.frame, placed: frame) {
+                applyFrame(frame, to: window)
+                applied += 1
+            }
             placedFrames[kind] = window.frame
             policy.records[kind]?.frame = window.frame
         }
         applying = false
         for (kind, window) in windows where placedFrames[kind] == nil { placedFrames[kind] = window.frame }
+        applied += repositionDetachedPanels(screens: screens, primaryID: primary)
         persist()
         if topologyChanged, let started = topologyObservedAt {
             let elapsed = now() - started
@@ -239,6 +362,67 @@ final class ScreenPlacement {
             lastTopologyRecoverySeconds = elapsed
             lastTopologyRecoveryMoves = applied
             placementLog.info("topology recovery: \(applied, privacy: .public) window(s) moved, \(Int(elapsed * 1000), privacy: .public) ms after the first signal")
+        }
+    }
+
+    /// Reconcile all live value-addressed panels. A missing target display is
+    /// a temporary recovery: move to the primary display while retaining the
+    /// original frame, then restore it when the target returns.
+    private func repositionDetachedPanels(screens: [PlacementScreen], primaryID: String?) -> Int {
+        var moved = 0
+        let primary = screens.first(where: { $0.id == primaryID }) ?? screens.first
+        for id in detachedPanels.keys.sorted() {
+            guard let panel = detachedPanels[id], let window = panel.window else {
+                detachedPanels.removeValue(forKey: id)
+                continue
+            }
+            guard let target = screens.first(where: { $0.id == panel.screenID }) else {
+                guard let fallback = primary else { continue }
+                if panel.recovery == nil {
+                    panel.recovery = PlacementRecovery(screenID: panel.screenID,
+                                                       frame: panel.frame,
+                                                       manualRevision: panel.manual ? 1 : 0)
+                }
+                let safe = DisplayPlacementPolicy.clamp(window.frame, to: fallback.visibleFrame)
+                applying = true
+                if Self.isUserAdjusted(live: window.frame, placed: safe) {
+                    applyFrame(safe, to: window)
+                    moved += 1
+                }
+                applying = false
+                panel.frame = window.frame
+                continue
+            }
+
+            let desired: CGRect
+            if let recovery = panel.recovery, recovery.screenID == target.id {
+                desired = recovery.frame
+                panel.recovery = nil
+            } else {
+                desired = panel.frame
+            }
+            let safe = DisplayPlacementPolicy.clamp(desired, to: target.visibleFrame)
+            applying = true
+            if Self.isUserAdjusted(live: window.frame, placed: safe) {
+                applyFrame(safe, to: window)
+                moved += 1
+            }
+            applying = false
+            panel.frame = window.frame
+        }
+        return moved
+    }
+
+    /// AppKit can nudge a window by a few points while it is restoring a
+    /// saved frame (notably a borderless test window at the top of a display).
+    /// Re-assert the origin once so the persisted placement contract matches
+    /// the visible frame used by the policy and its acceptance receipts.
+    private func applyFrame(_ frame: CGRect, to window: NSWindow) {
+        window.setFrame(frame, display: true)
+        let dx = abs(window.frame.minX - frame.minX)
+        let dy = abs(window.frame.minY - frame.minY)
+        if dx > Self.frameTolerance || dy > Self.frameTolerance {
+            window.setFrameOrigin(frame.origin)
         }
     }
 

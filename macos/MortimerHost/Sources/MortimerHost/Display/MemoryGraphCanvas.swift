@@ -3,9 +3,15 @@ import JarvisKit
 
 struct MemoryGraphCanvas: View {
     @Bindable var store: MemoryGraphStore
+    let coordinator: ConsoleActionCoordinator?
     @State private var dragCamera: GraphCamera?
     @State private var draggedNode: String?
     @State private var zoomStart: GraphCamera?
+
+    init(store: MemoryGraphStore, coordinator: ConsoleActionCoordinator? = nil) {
+        self._store = Bindable(store)
+        self.coordinator = coordinator
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -129,11 +135,18 @@ struct MemoryGraphCanvas: View {
             .contentShape(Rectangle())
             .gesture(SpatialTapGesture().onEnded { event in
                 if let node = nearestNode(event.location, nodes: nodes, positions: positions, camera: camera, size: geometry.size) {
-                    store.select(node.id)
+                    if let coordinator { _ = coordinator.executePointer(.graphSelect, target: node.id) }
+                    else { store.select(node.id) }
                 } else if let edge = edges.first(where: { edge in
                     guard let a = positions[edge.from], let b = positions[edge.to] else { return false }
                     return segmentDistance(event.location, camera.screenPoint(a, size: geometry.size), camera.screenPoint(b, size: geometry.size)) < 6
-                }) { store.select(edge: edge) }
+                }) {
+                    if let coordinator, let index = store.graph?.edges.firstIndex(of: edge) {
+                        _ = coordinator.executePointer(.graphSelectEdge, target: String(index))
+                    } else {
+                        store.select(edge: edge)
+                    }
+                }
             })
             .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { value in
                 if dragCamera == nil {

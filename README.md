@@ -1,5 +1,9 @@
 # Mortimer — Voice AI Agent Controller
 
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the maintained system
+map, model-route ownership and runtime verification commands. Implementation
+plans and acceptance evidence are under `docs/plans/` and `docs/acceptance/`.
+
 ## 1. What this is
 
 Mortimer is an Ironman-style voice assistant that runs entirely on your machine: you speak, it listens, thinks, acts, and answers out loud in a voice you choose. A single voice-facing **Supervisor** agent understands your intent and delegates specialist work to five text-only sub-agents — Scheduler, Librarian, Analyst, Systems, and Developer — whose skills live in separate MCP (Model Context Protocol) server processes. Everything persists to a local SQLite file, and the only cloud dependencies are the speech/LLM/search APIs (plus GitHub, if you enable app development).
@@ -60,17 +64,20 @@ Mortimer is an Ironman-style voice assistant that runs entirely on your machine:
 | Open-Meteo | no key | — | free, rate-limited | built-in |
 | openWakeWord (wake word) | no key — `pip install openwakeword` | `JARVIS_WAKEWORD_MODEL` (custom model file) | free, open source, fully local | Optional (stretch) |
 | GitHub (app development) | https://github.com/settings/tokens | `GITHUB_TOKEN`, `GITHUB_OWNER` | free | Optional (mcp-apps) |
-| Moonshot (Kimi) | https://platform.moonshot.ai | `MOONSHOT_API_KEY` | prepaid, low cost | Optional (default upgrade planner) |
-| Anthropic (Claude) | https://console.anthropic.com | `ANTHROPIC_API_KEY` | pay-as-you-go | Optional (upgrade planner) |
+| Moonshot (Kimi) | https://platform.moonshot.ai | `MOONSHOT_API_KEY` | prepaid, low cost | Optional (registry profiles) |
+| Anthropic (Claude) | https://console.anthropic.com | `ANTHROPIC_API_KEY` | pay-as-you-go | Optional (registry profiles and background routes) |
+| OpenRouter | https://openrouter.ai/keys | `OPENROUTER_API_KEY` | pay-as-you-go | Optional (registry profiles) |
 | GitHub (self-development) | https://github.com/settings/tokens | `JARVIS_GITHUB_TOKEN` | free | Optional (edit-mode PRs) |
 
-Any OpenAI-compatible Chat Completions endpoint works as the LLM (set
-`OPENAI_BASE_URL` / `OPENAI_MODEL`, e.g. Moonshot/Kimi
-`https://api.moonshot.ai/v1`, DeepSeek, or a local Ollama). The provider must
-support function/tool calling. Anthropic Claude also works through its
-OpenAI-compatibility layer (`https://api.anthropic.com/v1/`, model
-`claude-haiku-4-5` recommended for low latency) — ready-made blocks for all
-of these are commented in `.env.example`.
+Any OpenAI-compatible Chat Completions endpoint works for the voice
+Supervisor/orchestrator (set `OPENAI_BASE_URL` / `OPENAI_MODEL`, e.g.
+Moonshot/Kimi, DeepSeek, or a local Ollama). Anthropic Claude also works
+through its OpenAI-compatibility layer (`https://api.anthropic.com/v1/`, model
+`claude-haiku-4-5` is the low-latency Supervisor route). Other agents,
+planners, research, vision and background memory jobs resolve independently
+through `config/upgrade_models.yaml` and their profile environment variables;
+they do not inherit `OPENAI_MODEL`. Ready-made examples are commented in
+`.env.example`.
 
 ## 3. Quickstart
 
@@ -380,7 +387,7 @@ ls tests/acceptance/
 |---|---|---|
 | `OPENAI_API_KEY` | — | LLM provider key (required) |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Any OpenAI-compatible Chat Completions endpoint |
-| `OPENAI_MODEL` | `gpt-4.1-mini` | Model for Supervisor and all sub-agents |
+| `OPENAI_MODEL` | `gpt-4.1-mini` | Voice Supervisor/orchestrator model only |
 | `DEEPGRAM_API_KEY` | — | Speech-to-text key (required) |
 | `ELEVENLABS_API_KEY` | — | Text-to-speech key (required) |
 | `TAVILY_API_KEY` | — | Web search key (required for Analyst research) |
@@ -389,6 +396,11 @@ ls tests/acceptance/
 | `MOONSHOT_API_KEY` | — | Kimi upgrade planner profiles (`kimi-k3` default, `kimi-k2`) |
 | `ANTHROPIC_API_KEY` | — | Claude upgrade planner profile (`claude-opus`) |
 | `JARVIS_UPGRADE_PROFILE` | registry `default` | Override the default upgrade planner profile |
+| `JARVIS_PLANNING_PROFILE` | registry `default` | Research/planning profile |
+| `JARVIS_VISION_PROFILE` | first eligible registry profile | Screen/shared-content vision profile |
+| `JARVIS_MEMORY_PROFILE` | `claude-sonnet-5` | Memory extraction/consolidation/classification profile |
+| `JARVIS_MEMORY_AUTOMATION_STAGE` | `shadow` | Ordered memory rollout gate: `shadow`, `explicit_preferences`, or `corroborated_inferences` |
+| `JARVIS_BACKGROUND_PROFILE` | `claude-sonnet-5` | KB digest and procedure-maintenance profile |
 | `JARVIS_UPGRADE_MODELS` | `config/upgrade_models.yaml` | Point at an alternate planner registry file |
 | `JARVIS_GITHUB_TOKEN` | — | PAT for self-edit PRs (contents + pull requests on this repo only) |
 | `JARVIS_GITHUB_REPO` | `Larryfix71566/jarvis-voice-ai` | Repo the self-edit service targets |

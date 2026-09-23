@@ -65,12 +65,19 @@ final class NativeAudioTransportTests: XCTestCase {
         private var _capture: [Bool] = []
         private var _played: [(Data, Double, Int)] = []
         var startError: Error?
+        var startEntered: DispatchSemaphore?
+        var startGate: DispatchSemaphore?
         var started: Int { lock.withLock { _started } }
         var stopped: Int { lock.withLock { _stopped } }
         var flushes: Int { lock.withLock { _flushes } }
         var captureCalls: [Bool] { lock.withLock { _capture } }
         var played: [(Data, Double, Int)] { lock.withLock { _played } }
-        func start() throws { if let startError { throw startError }; lock.withLock { _started += 1 } }
+        func start() throws {
+            startEntered?.signal()
+            startGate?.wait()
+            if let startError { throw startError }
+            lock.withLock { _started += 1 }
+        }
         func stop() { lock.withLock { _stopped += 1 } }
         func setCaptureEnabled(_ enabled: Bool) { lock.withLock { _capture.append(enabled) } }
         func play(pcm: Data, sampleRate: Double, channels: Int) { lock.withLock { _played.append((pcm, sampleRate, channels)) } }
@@ -198,6 +205,120 @@ final class NativeAudioTransportTests: XCTestCase {
         XCTAssertEqual(recorder.disconnects.count, 0, "a client-initiated disconnect is not reported as a drop")
     }
 
+    func testSlowAudioStartDoesNotBlockSocketOpenCallback() async throws {
+        socketAutoOpens = false
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let transport = NativeAudioTransport(
+            makeSocket: { [unowned self] request in
+                let socket = StubSocket(request: request)
+                self.sockets.append(socket)
+                return socket
+            },
+            makeAudio: { [unowned self] in
+                let audio = StubAudio()
+                audio.startEntered = entered
+                audio.startGate = release
+                self.audios.append(audio)
+                return audio
+            })
+        transport.delegate = recorder
+
+        let connecting = Task { try await transport.connect(config: self.config) }
+        await awaitSocket(0)
+        XCTAssertEqual(entered.wait(timeout: .now() + 1), .success,
+                       "the test audio engine reached its blocking start")
+
+        // These callbacks must be serviced while start() is still blocked;
+        // otherwise a real CoreAudio device can leave the UI in CONNECTING.
+        openAndAnswer(0)
+        release.signal()
+        try await connecting.value
+        XCTAssertEqual(recorder.connects, 1)
+        await transport.disconnect()
+    }
+
+    func testHungAudioStartFailsWithinDeadlineAndLateCompletionCannotReviveSession() async throws {
+        let release = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        let failed = expectation(description: "startup deadline releases connect")
+        let transport = NativeAudioTransport(
+            makeSocket: { [unowned self] request in
+                let socket = StubSocket(request: request)
+                self.sockets.append(socket)
+                return socket
+            },
+            makeAudio: { [unowned self] in
+                let audio = StubAudio()
+                if self.audios.isEmpty { audio.startGate = release }
+                self.audios.append(audio)
+                return audio
+            }, audioStartDeadline: 0.1)
+        transport.delegate = recorder
+        let connecting = Task {
+            do {
+                try await transport.connect(config: self.config)
+                XCTFail("blocked audio startup cannot report ready")
+            } catch {
+                XCTAssertTrue(Self.message(error)?.contains("audio device startup timed out") == true)
+            }
+            failed.fulfill()
+        }
+        await fulfillment(of: [failed], timeout: 2)
+        XCTAssertFalse(transport.isSessionEstablished)
+        XCTAssertEqual(sockets[0].closedCount, 1)
+        // A new session must be usable before the old engine call returns.
+        try await transport.connect(config: config)
+        XCTAssertTrue(transport.isSessionEstablished)
+        release.signal()
+        await connecting.value
+        settle({ self.audios[0].stopped == 1 }, "late engine completion cleans up the orphan")
+        XCTAssertTrue(transport.isSessionEstablished, "old completion cannot close the replacement")
+        XCTAssertEqual(audios[1].stopped, 0)
+        await transport.disconnect()
+    }
+
+    /// JarvisClient.connect() runs on @MainActor. A CoreAudio start that
+    /// waits for device negotiation must therefore suspend that actor rather
+    /// than hold it synchronously, or the Command Console cannot repaint,
+    /// service accessibility, or expose the Connect/Cancel controls.
+    @MainActor
+    func testSlowAudioStartDoesNotBlockTheMainActor() async throws {
+        socketAutoOpens = false
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let transport = NativeAudioTransport(
+            makeSocket: { [unowned self] request in
+                let socket = StubSocket(request: request)
+                self.sockets.append(socket)
+                return socket
+            },
+            makeAudio: { [unowned self] in
+                let audio = StubAudio()
+                audio.startEntered = entered
+                audio.startGate = release
+                self.audios.append(audio)
+                return audio
+            })
+        transport.delegate = recorder
+
+        let connecting = Task { @MainActor in
+            try await transport.connect(config: self.config)
+        }
+        await awaitSocket(0)
+        XCTAssertEqual(entered.wait(timeout: .now() + 1), .success,
+                       "audio startup is running off the main actor")
+
+        // If connect held @MainActor in start(), this callback could not be
+        // delivered from the test's main-actor task. The transport queue must
+        // still be able to establish the socket while CoreAudio is blocked.
+        openAndAnswer(0)
+        release.signal()
+        try await connecting.value
+        XCTAssertEqual(recorder.connects, 1)
+        await transport.disconnect()
+    }
+
     func testOutboundQueueBeforeOpenIsBoundedOldestDropped() async throws {
         socketAutoOpens = false
         let transport = makeTransport()
@@ -230,7 +351,7 @@ final class NativeAudioTransportTests: XCTestCase {
         XCTAssertEqual(audios[1].stopped, 1)
     }
 
-    func testAnEngineThatCannotStartFailsConnectWithoutOpeningTheSocket() async {
+    func testAnEngineThatCannotStartClosesAnEarlySocketAndFailsConnect() async {
         let transport = makeTransport()
         // The engine is built inside connect; make it fail through the factory.
         let failing = NativeAudioTransport(
@@ -244,7 +365,8 @@ final class NativeAudioTransportTests: XCTestCase {
             XCTAssertEqual(error as? JarvisError, .transport("no input device"))
         }
         XCTAssertEqual(sockets.count, 1)
-        XCTAssertEqual(sockets[0].opened, 0, "socket never opened")
+        XCTAssertEqual(sockets[0].opened, 1, "the socket opens while CoreAudio initializes")
+        XCTAssertEqual(sockets[0].closedCount, 1, "an audio-start failure closes the early socket")
         _ = transport
     }
 

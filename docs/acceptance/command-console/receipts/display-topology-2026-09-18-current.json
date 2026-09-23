@@ -1,0 +1,48 @@
+{
+  "acceptance_effect": "current two-screen topology only; content-policy, role-stability and unplug/reconnect evidence remain open",
+  "command": "scripts/run_display_topology_probe.sh",
+  "recorded_at": "2026-09-18T16:59:47.270662Z",
+  "recorded_by": "DisplayTopologyProbe",
+  "screen_count": 2,
+  "screens": [
+    {
+      "backing_scale": 2,
+      "display_id": 1,
+      "frame": {
+        "height": 1107,
+        "width": 1710,
+        "x": 0,
+        "y": 0
+      },
+      "index": 0,
+      "is_main": false,
+      "localized_name": "Built-in Retina Display",
+      "visible_frame": {
+        "height": 1015,
+        "width": 1710,
+        "x": 0,
+        "y": 58
+      }
+    },
+    {
+      "backing_scale": 1,
+      "display_id": 3,
+      "frame": {
+        "height": 1440,
+        "width": 3440,
+        "x": 1710,
+        "y": -333
+      },
+      "index": 1,
+      "is_main": true,
+      "localized_name": "C34H89x",
+      "visible_frame": {
+        "height": 1410,
+        "width": 3440,
+        "x": 1710,
+        "y": -333
+      }
+    }
+  ],
+  "spaces_are_not_screens": true
+}

@@ -92,6 +92,38 @@ async def test_stop_before_start_is_safe():
     await watcher.stop()  # must not raise
 
 
+async def test_automation_maintenance_commits_before_idle_connection_closes(monkeypatch):
+    import jarvis.bot.memory_watcher as watcher_module
+
+    class FakeConnection:
+        def __init__(self):
+            self.commits = 0
+            self.closed = False
+
+        def commit(self):
+            self.commits += 1
+
+        def close(self):
+            self.closed = True
+
+    conn = FakeConnection()
+    called = {}
+    monkeypatch.setenv("JARVIS_MEMORY_AUTOMATION_ENABLED", "true")
+    monkeypatch.setattr(watcher_module, "get_conn", lambda: conn)
+
+    def fake_process(connection, **kwargs):
+        called["connection"] = connection
+        return {"claimed": 1, "applied": 1, "failed": 0}
+
+    monkeypatch.setattr(watcher_module, "process_classification_jobs", fake_process)
+    watcher = MemorySweepWatcher(_FakeSettings(), "sess-8", interval_s=999,
+                                 automation_handler=lambda *_args, **_kwargs: [])
+    await watcher.tick_once()
+
+    assert called["connection"] is conn
+    assert conn.commits == 1 and conn.closed
+
+
 # --- Phase 2 kill switch (MORTIMER_OPTIMIZATION_PLAN.md) -------------------
 
 

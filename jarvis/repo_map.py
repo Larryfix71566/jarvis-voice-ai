@@ -16,6 +16,7 @@ from pathlib import Path
 
 # One shared cap — was previously duplicated as SubAgent.REPO_MAP_MAX_CHARS.
 REPO_MAP_MAX_CHARS = 8000
+ARCHITECTURE_MAX_CHARS = 12000
 
 
 def load_repo_map_suffix(max_chars: int = REPO_MAP_MAX_CHARS) -> str:
@@ -39,4 +40,34 @@ def load_repo_map_suffix(max_chars: int = REPO_MAP_MAX_CHARS) -> str:
     return (
         "\n\nRepository map (maintained, may lag reality — "
         "verify with tools before writing):\n" + content
+    )
+
+
+def load_architecture_document(max_chars: int | None = None) -> tuple[str, bool]:
+    """Read the checked-in architecture reference for model/UI consumers.
+
+    The document is the source of truth for ownership, routing and trust
+    boundaries.  A missing file is an empty reference (fresh checkouts can
+    still boot); callers receive an explicit truncation flag so a UI never
+    presents a partial document as complete.
+    """
+    reference_path = Path(__file__).resolve().parents[1] / "docs" / "ARCHITECTURE.md"
+    try:
+        content = reference_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return "", False
+    if max_chars is None or len(content) <= max_chars:
+        return content, False
+    return content[:max_chars], True
+
+
+def load_architecture_suffix(max_chars: int = ARCHITECTURE_MAX_CHARS) -> str:
+    """Return the architecture contract as a bounded self-edit prompt suffix."""
+    content, truncated = load_architecture_document(max_chars)
+    if not content:
+        return ""
+    marker = " (truncated; verify the full file with tools)" if truncated else ""
+    return (
+        "\n\nArchitecture reference (checked-in contract; verify current files "
+        f"before writing{marker}):\n{content}"
     )

@@ -20,6 +20,7 @@ final class WorkspaceRenderingTests: XCTestCase {
             }
             if width > 1000 { workspace.compare(with: workspace.results.last!.id) }
             let view = NSHostingView(rootView: WorkspaceView().environment(workspace)
+                .environment(ShareCoordinator())
                 .environment(DisplayWindowStore()).environment(DrawerState()).environmentObject(client)
                 .foregroundStyle(AppTheme.text).preferredColorScheme(.dark))
             view.frame = NSRect(x: 0, y: 0, width: width, height: 450)

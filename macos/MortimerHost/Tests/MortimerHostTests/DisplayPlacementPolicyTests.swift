@@ -2,10 +2,20 @@ import XCTest
 @testable import MortimerHost
 
 final class DisplayPlacementPolicyTests: XCTestCase {
-    private let primary = PlacementScreen(id: "primary", visibleFrame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+    private let primary = PlacementScreen(id: "primary", visibleFrame: CGRect(x: 0, y: 0, width: 1440, height: 900), isMain: true)
     private let external = PlacementScreen(id: "external", visibleFrame: CGRect(x: 1440, y: 0, width: 1920, height: 1080))
     private let console = CGRect(x: 80, y: 80, width: 1000, height: 700)
     private let manual = CGRect(x: 1700, y: 200, width: 600, height: 500)
+
+    func testFreshConsoleDefaultsToMainDisplayWhenAppKitRestoredItOnAuxiliary() {
+        var policy = DisplayPlacementPolicy()
+        let auxiliaryConsole = CGRect(x: 1500, y: 100, width: 900, height: 600)
+        let moves = policy.reconcile(windows: [.console: auxiliaryConsole],
+                                     screens: [external, primary], primaryID: primary.id)
+        XCTAssertEqual(moves[.console], DisplayPlacementPolicy.clamp(auxiliaryConsole, to: primary.visibleFrame))
+        XCTAssertEqual(policy.records[.console]?.screenID, primary.id)
+        XCTAssertEqual(policy.records[.console]?.manual, false)
+    }
 
     func testManualWindowRecoversAfterUnplugEvenWhenAppKitAlreadyMovedIt() {
         var policy = DisplayPlacementPolicy()

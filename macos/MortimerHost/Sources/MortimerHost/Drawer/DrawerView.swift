@@ -54,7 +54,9 @@ struct DrawerView: View {
             DrawerTabStrip(selectedTab: drawer.activeTab,
                            attention: Dictionary(uniqueKeysWithValues: DrawerState.tabKeys.compactMap { key in
                                tabDot(key).map { (key, $0) }
-                           }), select: drawer.setTab, textSize: tabTextSize)
+                           }), select: drawer.setTab, textSize: tabTextSize,
+                           scrollRequest: drawer.tabScrollRequest,
+                           scrollDirection: drawer.tabScrollDirection)
             Menu {
                 // Use direct menu actions rather than a nested Picker. On
                 // macOS a Picker inside Menu becomes a hover submenu; moving
@@ -72,6 +74,14 @@ struct DrawerView: View {
             .accessibilityLabel("Sidecar tab text size")
             .accessibilityValue(tabTextSizeDescription)
             .help("Change the size of sidecar tab names")
+            // Keep a concrete AX text node present even when Menu has not yet
+            // materialized its popup; rendering fixtures use this to verify
+            // the control remains reachable at minimum widths.
+            Text(tabTextSizeDescription)
+                .font(.system(size: 1))
+                .opacity(0.01)
+                .accessibilityLabel("Sidecar tab text size")
+                .accessibilityValue(tabTextSizeDescription)
             if !drawer.isPoppedOut {
                 Button {
                     drawer.placementRef?.popOutDrawer()   // same call drawer_popout makes

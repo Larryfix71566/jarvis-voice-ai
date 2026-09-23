@@ -81,8 +81,9 @@ final class DisplayWindowStoreFitTests: XCTestCase {
 
     func testFitFillsTheViewportAndDropsTheCascadeOffset() throws {
         let store = DisplayWindowStore()
-        store.apply(try payload())
-        store.apply(try payload())   // second panel carries a cascade offset
+        let first = store.apply(try payload())
+        _ = store.pin(id: first)
+        _ = try XCTUnwrap(store.openAdditional(id: first)) // explicit second panel carries a cascade offset
         let second = try XCTUnwrap(store.panels.last)
         XCTAssertNotEqual(second.offset, .zero)
 

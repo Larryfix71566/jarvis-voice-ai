@@ -1,0 +1,26 @@
+{
+  "recorded_by": "DisplayTopologyProbe",
+  "recorded_at": "2026-09-18",
+  "command": "scripts/run_display_topology_probe.sh",
+  "screen_count": 2,
+  "screens": [
+    {
+      "display_id": 1,
+      "localized_name": "Built-in Retina Display",
+      "is_main": true,
+      "backing_scale": 2,
+      "frame": {"x": 0, "y": 0, "width": 1710, "height": 1107},
+      "visible_frame": {"x": 0, "y": 58, "width": 1710, "height": 1015}
+    },
+    {
+      "display_id": 3,
+      "localized_name": "C34H89x",
+      "is_main": false,
+      "backing_scale": 1,
+      "frame": {"x": -844, "y": 1107, "width": 3440, "height": 1440},
+      "visible_frame": {"x": -844, "y": 1107, "width": 3440, "height": 1410}
+    }
+  ],
+  "spaces_are_not_screens": true,
+  "acceptance_effect": "two-screen enumeration and topology evidence; panel exercise and unplug/reconnect remain open"
+}

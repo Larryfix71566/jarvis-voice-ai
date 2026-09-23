@@ -124,6 +124,9 @@ struct AmbientStripView: View {
             .background(Color.white.opacity(0.10))
         }
         .padding(.leading, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Current time")
+        .accessibilityValue(model.now.formatted(.dateTime.hour(.defaultDigits(amPM: .omitted)).minute()))
     }
 
     private var secondsFraction: Double {

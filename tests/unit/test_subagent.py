@@ -866,6 +866,29 @@ class TestRuntimeModelOverride:
         await agent.run("research radar", model_profile_override="fable")
         assert captured_models == ["claude-fable-5"]
 
+    async def test_enabled_confidential_workload_redacts_run_log(self, monkeypatch):
+        """MAR-D: route privacy applies even when the turn is unlabeled."""
+        settings = make_settings()
+        settings.jarvis_model_routing_enabled = True
+        agent = SubAgent(
+            name="librarian", display_name="Librarian", description="d",
+            mcp_servers=[], settings=settings, registry=FakeRegistry(),
+            client_factory=lambda _settings: FakeLLM([("text", "private result")]),
+        )
+        captured = []
+        import jarvis.agents.base as base_module
+
+        real_runlogger = base_module.RunLogger
+
+        class CapturingRunLogger(real_runlogger):
+            def __init__(self, *args, **kwargs):
+                captured.append(kwargs.get("sensitive"))
+                super().__init__(*args, **kwargs)
+
+        monkeypatch.setattr(base_module, "RunLogger", CapturingRunLogger)
+        await agent.run("summarize the private record")
+        assert captured == [True]
+
 
 # A3 — repo map injection.
 class TestRepoMapInjection:

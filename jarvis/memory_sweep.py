@@ -44,8 +44,6 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-from openai import AsyncOpenAI
-
 from jarvis.consolidate import propose_merges
 from jarvis.db import get_conn, now_iso
 from jarvis.memory import (
@@ -56,6 +54,7 @@ from jarvis.memory import (
 )
 from jarvis.procedures import _tokens
 from jarvis.usage_ledger import record_completion, provider_from_base_url
+from jarvis.memory_model import make_memory_async_client
 
 logger = logging.getLogger(__name__)
 
@@ -355,17 +354,15 @@ async def _merge_cluster(
     bad rewrite. Reuses the sweep's existing client-construction pattern
     (jarvis.memory_sweep._classify_batch)."""
     try:
-        client = (
-            client_factory(settings)
-            if client_factory is not None
-            else AsyncOpenAI(
-                api_key=settings.openai_api_key, base_url=settings.openai_base_url,
-            )
-        )
+        if client_factory is not None:
+            client = client_factory(settings)
+            model = getattr(settings, "openai_model", None)
+        else:
+            client, route = make_memory_async_client(settings)
+            model = route.model
         # `settings` may be None when a test-seam `client_factory` supplies
         # its own fake client — getattr rather than assume, so that seam
         # never has to fabricate a whole Settings object.
-        model = getattr(settings, "openai_model", None)
         facts_block = "\n".join(
             f"- {k}: {c}" for k, c in zip(proposal.keys, proposal.contents)
         )
@@ -701,13 +698,12 @@ async def _classify_batch(
 ) -> dict[str, dict]:
     if not pairs and not audience_candidates:
         return {"pairs": {}, "audiences": {}}
-    client = (
-        client_factory(settings)
-        if client_factory is not None
-        else AsyncOpenAI(
-            api_key=settings.openai_api_key, base_url=settings.openai_base_url,
-        )
-    )
+    if client_factory is not None:
+        client = client_factory(settings)
+        model = getattr(settings, "openai_model", None)
+    else:
+        client, route = make_memory_async_client(settings)
+        model = route.model
     payload = {
         "pairs": [
             {"a": a["key"], "a_content": a["content"], "b": b["key"], "b_content": b["content"]}
@@ -718,7 +714,7 @@ async def _classify_batch(
         ],
     }
     response = await client.chat.completions.create(
-        model=settings.openai_model,
+        model=model,
         messages=[
             {"role": "system", "content": CLASSIFY_PROMPT},
             {"role": "user", "content": json.dumps(payload)},
@@ -728,7 +724,7 @@ async def _classify_batch(
         record_completion(
             rung="memory_classify",
             provider=provider_from_base_url(str(client.base_url)),
-            model=settings.openai_model,
+            model=model,
             response=response,
         )
     except Exception:
@@ -742,6 +738,8 @@ def _apply_classification(
     pair_verdicts: dict[frozenset, str],
     audience_candidates: list[dict],
     audiences: dict[str, str],
+    *,
+    automated: bool = False,
 ) -> dict:
     contradictions_queued = 0
     for a, b in pairs:
@@ -774,6 +772,16 @@ def _apply_classification(
             )
             interaction_set += 1
         elif audience == "task-rule":
+            if automated:
+                # B phase: the typed automation queue owns routine audience
+                # decisions when enabled. Apply only presentation metadata;
+                # never create a workflow or archive content without an
+                # explicit user action.
+                conn.execute(
+                    "UPDATE memories SET audience = 'task-rule', memory_type = 'task_rule' "
+                    "WHERE key = ? AND kind = 'fact'", (f["key"],),
+                )
+                continue
             # Deliberately leaves memories.audience NULL — fail-open, so
             # the fact keeps reaching the prompt until Larry confirms the
             # conversion (resolve_review's "convert_workflow" action).
@@ -785,6 +793,12 @@ def _apply_classification(
             ):
                 task_rule_queued += 1
         elif audience == "implemented":
+            if automated:
+                conn.execute(
+                    "UPDATE memories SET audience = 'implemented' "
+                    "WHERE key = ? AND kind = 'fact'", (f["key"],),
+                )
+                continue
             if _queue_if_new(
                 conn, "audience", [f["key"]],
                 f"{f['key']} looks like a shipped feature request: "
@@ -969,6 +983,8 @@ async def run_sweep(
                 applied = _apply_classification(
                     conn, pairs, classification["pairs"],
                     audience_candidates, classification["audiences"],
+                    automated=os.environ.get("JARVIS_MEMORY_AUTOMATION_ENABLED", "false").lower()
+                    in {"1", "true", "yes"},
                 )
                 summary["contradictions"] += applied["contradictions_queued"]
                 summary["queued"] += (

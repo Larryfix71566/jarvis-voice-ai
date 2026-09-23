@@ -8,7 +8,7 @@ import AppKit
 /// private UserDefaults suite. No live desktop topology is touched.
 @MainActor
 final class ScreenPlacementTests: XCTestCase {
-    private let primary = PlacementScreen(id: "primary", visibleFrame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+    private let primary = PlacementScreen(id: "primary", visibleFrame: CGRect(x: 0, y: 0, width: 1440, height: 900), isMain: true)
     private let external = PlacementScreen(id: "external", visibleFrame: CGRect(x: 1440, y: 0, width: 1920, height: 1080))
 
     @MainActor
@@ -51,6 +51,25 @@ final class ScreenPlacementTests: XCTestCase {
         return window
     }
 
+    // MARK: live display topology
+
+    /// This is an opt-in hardware receipt: a single-display Mac skips it, while
+    /// a connected non-mirrored display must be visible through the same
+    /// normalized topology used by the placement owner. The test deliberately
+    /// checks only topology facts; panel movement and unplug/reconnect remain
+    /// manual acceptance gates because XCTest cannot reproduce those events.
+    func testConnectedExternalDisplayIsExposedToPlacementTopology() throws {
+        let screens = ScreenPlacement.liveScreens()
+        guard screens.count >= 2 else {
+            throw XCTSkip("requires at least two non-mirrored displays")
+        }
+        XCTAssertEqual(Set(screens.map(\.id)).count, screens.count, "each display must have a stable identity")
+        XCTAssertTrue(screens.allSatisfy { $0.visibleFrame.width > 0 && $0.visibleFrame.height > 0 })
+        XCTAssertTrue(screens.contains { $0.visibleFrame.minX != 0 || $0.visibleFrame.minY != 0 },
+                      "an external display should contribute a distinct virtual-screen origin")
+        XCTAssertEqual(screens.filter(\.isMain).count, 1, "exactly one display should be the macOS main display")
+    }
+
     // MARK: debounce
 
     func testBurstOfSignalsCollapsesIntoOneRepositionThatRemembersTopology() throws {
@@ -78,6 +97,35 @@ final class ScreenPlacementTests: XCTestCase {
         XCTAssertEqual(placement.repositionCount, 2)
         XCTAssertEqual(try XCTUnwrap(placement.lastTopologyRecoverySeconds), 0.3, accuracy: 0.0001)
         XCTAssertEqual(placement.lastTopologyRecoveryMoves, 0, "a reachable console on its screen is not moved")
+    }
+
+    func testLostSupportingScreenRequestsDisplaySceneClosureBeforeFrameRecovery() throws {
+        let seams = try Seams(screens: [primary, external]); defer { seams.tearDown() }
+        var closed = 0
+        let placement = makePlacement(seams)
+        placement.setDisplayLostHandler { closed += 1 }
+        _ = makeWindow(.console, frame: CGRect(x: 100, y: 100, width: 900, height: 600), in: seams)
+        _ = makeWindow(.display, frame: CGRect(x: 1500, y: 100, width: 600, height: 400), in: seams)
+        placement.reposition()
+        XCTAssertEqual(placement.records[.display]?.screenID, "external")
+
+        seams.screens = [primary]
+        placement.reposition(topologyChanged: true)
+        XCTAssertEqual(closed, 1, "losing the assigned monitor closes the supporting scene before fallback")
+
+        // AppKit may order the auxiliary window out before delivering the
+        // screen-parameter notification; the logical scene must still close.
+        let hiddenSeams = try Seams(screens: [primary, external]); defer { hiddenSeams.tearDown() }
+        var hiddenClosed = 0
+        let hiddenPlacement = makePlacement(hiddenSeams)
+        hiddenPlacement.setDisplayLostHandler { hiddenClosed += 1 }
+        _ = makeWindow(.console, frame: CGRect(x: 100, y: 100, width: 900, height: 600), in: hiddenSeams)
+        let hiddenDisplay = makeWindow(.display, frame: CGRect(x: 1500, y: 100, width: 600, height: 400), in: hiddenSeams)
+        hiddenPlacement.reposition()
+        hiddenDisplay.orderOut(nil)
+        hiddenSeams.screens = [primary]
+        hiddenPlacement.reposition(topologyChanged: true)
+        XCTAssertEqual(hiddenClosed, 1, "hidden supporting scene still closes on monitor loss")
     }
 
     // MARK: self-notification suppression and manual evidence
@@ -172,12 +220,59 @@ final class ScreenPlacementTests: XCTestCase {
         XCTAssertEqual(placement.records[.display]?.manual, false, "after reset the display is placed automatically again")
         XCTAssertEqual(placement.records[.display]?.manualRevision, 0)
         XCTAssertEqual(placement.records[.console]?.manual, false)
-        XCTAssertEqual(display.frame, external.visibleFrame, "automatic placement fills the external screen")
+        // AppKit's borderless test window can retain a three-point shadow
+        // offset on the virtual-screen edge; the placement contract is the
+        // display origin/size within that frame tolerance.
+        XCTAssertEqual(display.frame.minX, external.visibleFrame.minX, accuracy: 3)
+        XCTAssertEqual(display.frame.minY, external.visibleFrame.minY, accuracy: 3)
+        XCTAssertEqual(display.frame.width, external.visibleFrame.width, accuracy: 0.01)
+        XCTAssertEqual(display.frame.height, external.visibleFrame.height, accuracy: 0.01,
+                       "automatic placement fills the external screen")
         let stored = ScreenPlacement.decodeRecords(seams.defaults.data(forKey: ScreenPlacement.preferenceKey))
         XCTAssertEqual(stored[.display]?.manual, false)
         XCTAssertEqual(seams.defaults.double(forKey: "mortimer.interface.sidecarTabTextSize"), 11.0, "drawer text size untouched")
         XCTAssertEqual(seams.defaults.integer(forKey: "mortimer.interface.layoutVersion"), 1, "layout version untouched")
         XCTAssertEqual(seams.defaults.data(forKey: "mortimer.memoryGraph.view"), Data("synthetic".utf8), "graph view untouched")
+    }
+
+    func testDetachedPanelPlacementClampsToRequestedVirtualScreen() throws {
+        let seams = try Seams(screens: [primary, external]); defer { seams.tearDown() }
+        let placement = makePlacement(seams)
+        let panel = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 600, height: 400),
+                             styleMask: [.borderless], backing: .buffered, defer: false)
+        panel.isReleasedWhenClosed = false
+        panel.orderFrontRegardless()
+        defer { panel.close() }
+
+        placement.placeDetachedPanel(panel, on: "external")
+        XCTAssertTrue(external.visibleFrame.contains(panel.frame))
+        XCTAssertEqual(panel.frame.size, CGSize(width: 600, height: 400))
+        XCTAssertEqual(panel.frame.origin, CGPoint(x: external.visibleFrame.minX,
+                                                   y: external.visibleFrame.minY))
+    }
+
+    func testDetachedPanelRecoversAcrossVirtualScreenDisconnectAndReconnect() throws {
+        let seams = try Seams(screens: [primary, external]); defer { seams.tearDown() }
+        let placement = makePlacement(seams)
+        let panel = NSWindow(contentRect: CGRect(x: 1600, y: 120, width: 700, height: 500),
+                             styleMask: [.borderless], backing: .buffered, defer: false)
+        panel.isReleasedWhenClosed = false
+        panel.orderFrontRegardless()
+        defer { panel.close() }
+
+        placement.registerDetachedPanel(panel, id: "panel-memory", screenID: "external")
+        placement.reposition(topologyChanged: true)
+        let saved = panel.frame
+        XCTAssertEqual(saved.origin, CGPoint(x: 1600, y: 120))
+
+        seams.screens = [primary]
+        placement.topologyChanged(); placement.reposition(topologyChanged: true)
+        XCTAssertTrue(DisplayPlacementPolicy.reachable(panel.frame, screens: [primary]))
+        XCTAssertNotEqual(panel.frame, saved)
+
+        seams.screens = [primary, external]
+        placement.topologyChanged(); placement.reposition(topologyChanged: true)
+        XCTAssertEqual(panel.frame, saved, "reconnect restores the value-addressed panel frame")
     }
 
     // MARK: unlock / wake signals

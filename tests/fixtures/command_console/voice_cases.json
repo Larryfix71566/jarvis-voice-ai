@@ -1,0 +1,20 @@
+[
+  {"utterance": "show the knowledge atlas", "action": "view_set", "target": "atlas"},
+  {"utterance": "open the memory graph", "action": "view_set", "target": "memory"},
+  {"utterance": "return to conversation", "action": "view_set", "target": "conversation"},
+  {"utterance": "share this result", "action": "share_preview", "target": "result-a", "args": {"format": "text"}},
+  {"utterance": "Show the memory graph", "action": "view_set", "target": "memory"},
+  {"utterance": "Focus this node", "action": "graph_focus", "target": "node-a"},
+  {"utterance": "Show its sources", "action": "source_inspector", "target": "result-a", "args": {"open": true}},
+  {"utterance": "Put this research on the other screen", "action": "panel_move", "target": "panel-a", "args": {"screen_id": "screen-b"}},
+  {"utterance": "Bring everything back", "action": "panels_return_all", "target": null},
+  {"utterance": "Make the sidecar text larger", "action": "sidecar_text", "target": null, "args": {"size": 22}},
+  {"utterance": "Move that card to row two column one", "action": "atlas_move", "target": "card-a", "args": {"row": 2, "column": 1}},
+  {"utterance": "Copy the second paragraph", "action": "share_preview", "target": "result-a", "args": {"format": "text", "scope": "paragraph", "ordinal": 2}},
+  {"utterance": "Copy this graph as an image", "action": "share_preview", "target": "graph", "args": {"format": "png"}},
+  {"utterance": "Share this", "action": "share_preview", "target": "result-a", "args": {"format": "text"}},
+  {"utterance": "Paste my image", "action": "input_paste", "target": null, "args": {"format": "image"}},
+  {"utterance": "Use these two images to explain the difference", "action": "shared_content", "target": null, "args": {"attachment_ids": ["image-a", "image-b"], "question": "Explain the difference."}},
+  {"utterance": "Cancel that upload", "action": "input_cancel", "target": null},
+  {"utterance": "Clear shared content and start a fresh conversation", "action": "input_clear", "target": null, "follow_up_action": "input_new_conversation"}
+]

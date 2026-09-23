@@ -307,6 +307,20 @@ final class MemoryGraphStoreTests: XCTestCase {
         XCTAssertEqual(store.metadata.positions["fact:1"], manual)
     }
 
+    func testManualNodeMoveRejectsNonFiniteAndOutOfBoundsCoordinates() async throws {
+        let store = MemoryGraphStore(), graph = try GraphFixture.make()
+        await loaded(store, response: graph)
+        let before = store.metadata.positions["fact:1"]
+
+        XCTAssertFalse(store.moveNode("fact:1", to: CGPoint(x: CGFloat.infinity, y: 0)))
+        XCTAssertFalse(store.moveNode("fact:1", to: CGPoint(x: 1_000_001, y: 0)))
+        XCTAssertFalse(store.moveNode("fact:1", to: CGPoint(x: 0, y: -1_000_001)))
+        XCTAssertEqual(store.metadata.positions["fact:1"], before)
+
+        XCTAssertTrue(store.moveNode("fact:1", to: CGPoint(x: 1_000_000, y: -1_000_000)))
+        XCTAssertEqual(store.metadata.positions["fact:1"], CGPoint(x: 1_000_000, y: -1_000_000))
+    }
+
     func testManualCameraChangeSupersedesPendingLayoutReset() async throws {
         let store = MemoryGraphStore()
         await loaded(store, response: try GraphFixture.make())

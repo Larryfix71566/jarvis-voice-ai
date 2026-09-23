@@ -4,9 +4,17 @@ import JarvisKit
 struct MemoryGraphView: View {
     @Bindable var store: MemoryGraphStore
     let api: AdminAPI
+    let coordinator: ConsoleActionCoordinator?
     @State private var serverFocus = ""
     @State private var viewport = CGSize.zero
     @State private var showBrowser = false
+
+    init(store: MemoryGraphStore, api: AdminAPI,
+         coordinator: ConsoleActionCoordinator? = nil) {
+        self._store = Bindable(store)
+        self.api = api
+        self.coordinator = coordinator
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -26,13 +34,13 @@ struct MemoryGraphView: View {
             }
             if store.loading {
                 HStack { ProgressView().controlSize(.small); Text("Loading graph… Previous view retained.").font(.caption)
-                    Button("Cancel") { store.cancel() }
+                Button("Cancel") { store.cancel() }
                 }
             }
             if let error = store.error {
                 HStack(alignment: .top) {
                     Text(error).foregroundStyle(AppTheme.attn).textSelection(.enabled)
-                    Button("Retry") { store.load(api: api) }
+                    Button("Retry") { routed(.graphRetry) { store.load(api: api) } }
                 }
             }
             if let graph = store.graph {
@@ -54,7 +62,7 @@ struct MemoryGraphView: View {
                             Text("Current filters and the loaded subset limit the search.").font(.caption2).foregroundStyle(AppTheme.textDim)
                         }
                     } else { Text("Select a second node, then choose Trace to selected.").font(.caption) }
-                    Button("Clear path") { store.clearPath() }
+                    Button("Clear path") { routed(.graphPathClear) { store.clearPath() } }
                 }
             }
             GeometryReader { geometry in
@@ -83,8 +91,8 @@ struct MemoryGraphView: View {
 
     private var navigation: some View {
         HStack {
-            Button("Back") { store.back() }.disabled(!store.canGoBack)
-            Button("Refresh") { store.load(api: api) }.disabled(store.loading)
+            Button("Back") { routed(.graphBack) { store.back() } }.disabled(!store.canGoBack)
+            Button("Refresh") { routed(.graphRetry) { store.load(api: api) } }.disabled(store.loading)
             Button("Browse / filter") { showBrowser = true }
             Spacer(minLength: 0)
         }
@@ -92,11 +100,13 @@ struct MemoryGraphView: View {
 
     private var presentationControls: some View {
         HStack {
-            Button("−") { var camera = store.metadata.camera; camera.zoom(0.8); store.setCamera(camera) }.accessibilityLabel("Zoom out")
-            Button("+") { var camera = store.metadata.camera; camera.zoom(1.25); store.setCamera(camera) }.accessibilityLabel("Zoom in")
-            Button("Fit") { store.fit(size: viewport) }
-            Button("Reset layout") { store.resetLayout() }
-            Toggle("Image fallback", isOn: $store.usesImageFallback).toggleStyle(.button)
+            Button("−") { routed(.graphZoom, target: "out") { var camera = store.metadata.camera; camera.zoom(0.8); store.setCamera(camera) } }.accessibilityLabel("Zoom out")
+            Button("+") { routed(.graphZoom, target: "in") { var camera = store.metadata.camera; camera.zoom(1.25); store.setCamera(camera) } }.accessibilityLabel("Zoom in")
+            Button("Fit") { routed(.graphFit) { store.fit(size: viewport) } }
+            Button("Reset layout") { routed(.graphReset) { store.resetLayout() } }
+            Toggle("Image fallback", isOn: Binding(get: { store.usesImageFallback }, set: { value in
+                routed(.graphOriginal, args: ["enabled": .bool(value)]) { store.usesImageFallback = value }
+            })).toggleStyle(.button)
         }
     }
 
@@ -132,12 +142,14 @@ struct MemoryGraphView: View {
                         HStack {
                             ForEach(store.metadata.collapsedTypes.sorted(), id: \.self) { type in
                                 let count = store.filteredNodes.filter { $0.type == type }.count
-                                Button("Expand \(type) (\(count) loaded)") { store.toggleGroup(type) }
+                                Button("Expand \(type) (\(count) loaded)") {
+                                    routed(.graphGroup, target: type, args: ["collapsed": .bool(false)]) { store.toggleGroup(type) }
+                                }
                             }
                         }
                     }
                 }
-                MemoryGraphCanvas(store: store)
+                MemoryGraphCanvas(store: store, coordinator: coordinator)
                     .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
                         viewport = size
                         if store.needsFit { store.fit(size: size) }
@@ -163,20 +175,37 @@ struct MemoryGraphView: View {
                     ForEach(store.nodeTypes, id: \.self) { type in
                         HStack {
                             Circle().fill(graphColor(store.graph?.legend.nodeTypes[type])).frame(width: 9, height: 9)
-                            Toggle(type, isOn: Binding(get: { !store.metadata.hiddenNodeTypes.contains(type) }, set: { store.setNodeType(type, visible: $0) }))
-                            Button(store.metadata.collapsedTypes.contains(type) ? "Expand" : "Group") { store.toggleGroup(type) }
+                            Toggle(type, isOn: Binding(get: { !store.metadata.hiddenNodeTypes.contains(type) }, set: { value in
+                                routed(.graphFilter, target: type, args: ["kind": .string("node"), "visible": .bool(value)]) {
+                                    store.setNodeType(type, visible: value)
+                                }
+                            }))
+                            Button(store.metadata.collapsedTypes.contains(type) ? "Expand" : "Group") {
+                                routed(.graphGroup, target: type,
+                                       args: ["collapsed": .bool(!store.metadata.collapsedTypes.contains(type))]) {
+                                    store.toggleGroup(type)
+                                }
+                            }
                         }
                     }
                     Text("Relationship types").font(.headline)
                     ForEach(store.edgeTypes, id: \.self) { type in
                         Toggle("\(type) · \(store.graph?.legend.edgeTypes[type] ?? "solid")",
-                               isOn: Binding(get: { !store.metadata.hiddenEdgeTypes.contains(type) }, set: { store.setEdgeType(type, visible: $0) }))
+                               isOn: Binding(get: { !store.metadata.hiddenEdgeTypes.contains(type) }, set: { value in
+                                   routed(.graphFilter, target: type,
+                                          args: ["kind": .string("edge"), "visible": .bool(value)]) {
+                                       store.setEdgeType(type, visible: value)
+                                   }
+                               }))
                     }
                     Divider()
                     Text("\(store.matchingNodes.count) matching loaded nodes").font(.caption)
                     ForEach(store.matchingNodes) { node in
                         Button {
-                            store.select(node.id); store.centerSelection(); showBrowser = false
+                            routed(.graphCenter, target: node.id) {
+                                store.select(node.id); store.centerSelection()
+                            }
+                            showBrowser = false
                         } label: {
                             VStack(alignment: .leading) { Text(node.label); Text(node.id).font(.caption).foregroundStyle(AppTheme.textDim) }
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -208,12 +237,20 @@ struct MemoryGraphView: View {
                         }
                     }
                     Button("Focus / expand neighbors") {
+                        // This is a server re-query, whose explicit voice
+                        // counterpart is `graph_search`; keep the existing
+                        // focus semantics here rather than silently changing
+                        // it to local camera centering.
                         var query = store.metadata.query; query.focus = node.id
                         store.load(api: api, query: query, remember: true)
                     }
                     HStack {
                         Button("Start path") { store.traceFromSelection() }
-                        Button("Trace to selected") { store.traceToSelection() }.disabled(store.pathStart == nil)
+                        Button("Trace to selected") {
+                            if let start = store.pathStart {
+                                routed(.graphPath, target: start, secondaryTarget: node.id) { store.traceToSelection() }
+                            }
+                        }.disabled(store.pathStart == nil)
                     }
                     attributes(node.attrs)
                     if node.attrs["provenance"] == nil || node.attrs["provenance"] == .null {
@@ -231,7 +268,11 @@ struct MemoryGraphView: View {
                     Divider()
                     Text("Loaded connections").font(.headline)
                     ForEach(Array((store.graph?.edges ?? []).filter { $0.from == node.id || $0.to == node.id }.enumerated()), id: \.offset) { _, edge in
-                        Button("\(edge.type): \(edge.from) → \(edge.to)") { store.select(edge: edge) }
+                        Button("\(edge.type): \(edge.from) → \(edge.to)") {
+                            routed(.graphSelectEdge, target: String(edgeIndex(store: store, edge: edge))) {
+                                store.select(edge: edge)
+                            }
+                        }
                     }
                 } else {
                     Text("Select a node or relationship to inspect its supplied details.")
@@ -252,6 +293,21 @@ struct MemoryGraphView: View {
     private func focusServer() {
         var query = store.metadata.query; query.focus = serverFocus.trimmingCharacters(in: .whitespacesAndNewlines)
         store.load(api: api, query: query, remember: true)
+    }
+
+    private func routed(_ action: ConsoleAction, target: String? = nil,
+                        secondaryTarget: String? = nil,
+                        args: [String: JSONValue] = [:], fallback: () -> Void) {
+        if let coordinator {
+            _ = coordinator.executePointer(action, target: target,
+                                           secondaryTarget: secondaryTarget, args: args)
+        } else {
+            fallback()
+        }
+    }
+
+    private func edgeIndex(store: MemoryGraphStore, edge: MemoryGraphEdge) -> Int {
+        store.graph?.edges.firstIndex(of: edge) ?? 0
     }
 }
 

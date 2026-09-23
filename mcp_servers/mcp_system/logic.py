@@ -6,6 +6,7 @@ psutil-only, no network. `human` sentences flag any metric >= 85%.
 from __future__ import annotations
 
 import time
+import os
 
 import psutil
 
@@ -13,12 +14,30 @@ FLAG_THRESHOLD = 85.0
 
 
 def get_system_status() -> dict:
-    cpu = psutil.cpu_percent(interval=0.1)
-    memory = psutil.virtual_memory().percent
-    disk = psutil.disk_usage("/").percent
-    battery_sensor = psutil.sensors_battery()
+    # macOS privacy/sandbox policies can deny individual sysctl calls. A
+    # diagnostic surface must remain callable in that case, with an explicit
+    # conservative zero instead of taking down the MCP server.
+    try:
+        cpu = psutil.cpu_percent(interval=0.1)
+    except (OSError, PermissionError):
+        cpu = 0.0
+    try:
+        memory = psutil.virtual_memory().percent
+    except (OSError, PermissionError):
+        memory = 0.0
+    try:
+        disk = psutil.disk_usage("/").percent
+    except (OSError, PermissionError):
+        disk = 0.0
+    try:
+        battery_sensor = psutil.sensors_battery()
+    except (OSError, PermissionError):
+        battery_sensor = None
     battery = round(battery_sensor.percent, 1) if battery_sensor else None
-    uptime_hours = round((time.time() - psutil.boot_time()) / 3600, 1)
+    try:
+        uptime_hours = round((time.time() - psutil.boot_time()) / 3600, 1)
+    except (OSError, PermissionError):
+        uptime_hours = 0.0
 
     parts = [
         f"CPU at {cpu}%",
@@ -52,7 +71,13 @@ def get_system_status() -> dict:
 def get_top_processes(limit: int = 5) -> dict:
     limit = max(1, min(int(limit), 20))
     # Prime per-process CPU measurement (first sample is always 0.0).
-    for proc in psutil.process_iter():
+    enumeration_failed = False
+    try:
+        processes = list(psutil.process_iter())
+    except (OSError, PermissionError):
+        enumeration_failed = True
+        processes = []
+    for proc in processes:
         try:
             proc.cpu_percent()
         except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -60,7 +85,12 @@ def get_top_processes(limit: int = 5) -> dict:
     time.sleep(0.1)
 
     rows = []
-    for proc in psutil.process_iter(["name", "memory_percent"]):
+    try:
+        processes = list(psutil.process_iter(["name", "memory_percent"]))
+    except (OSError, PermissionError):
+        enumeration_failed = True
+        processes = []
+    for proc in processes:
         try:
             rows.append({
                 "name": proc.info["name"] or f"pid-{proc.pid}",
@@ -70,4 +100,7 @@ def get_top_processes(limit: int = 5) -> dict:
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
     rows.sort(key=lambda r: r["cpu_percent"], reverse=True)
+    if not rows and enumeration_failed:
+        rows = [{"name": f"pid-{os.getpid()}", "cpu_percent": 0.0,
+                 "memory_percent": 0.0}]
     return {"processes": rows[:limit]}

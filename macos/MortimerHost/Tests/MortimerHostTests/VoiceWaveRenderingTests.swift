@@ -149,6 +149,37 @@ final class PresentationLevelMappingTests: XCTestCase {
             previous = value
         }
     }
+
+    func testMeasuredVoiceGainMakesQuietInputVisiblyResponsive() {
+        let quietInputLevel = level(inputMedian, isInput: true)
+        let compactRailHeight = 150.0
+        let oldContribution = compactRailHeight * quietInputLevel * 0.115 * 2.0
+        let newContribution = compactRailHeight * quietInputLevel * AudioPresentationTuning.measuredInputGain * 2.0
+        XCTAssertGreaterThan(newContribution, oldContribution * 3.0)
+        XCTAssertGreaterThan(newContribution, 3.0,
+                             "quiet but measured speech must have visible travel")
+        XCTAssertGreaterThan(AudioPresentationTuning.measuredInputGain,
+                             AudioPresentationTuning.measuredOutputGain,
+                             "the quieter input channel needs its own modest presentation lift")
+    }
+
+    func testMeasuredMortimerRibbonHasMoreDepthThanUserAndNoDepthWithoutAudio() {
+        let user = WaveEngine.ribbonDepthEnergy(level: 0.32, transient: 0,
+                                                activity: .user)
+        let assistant = WaveEngine.ribbonDepthEnergy(level: 0.32, transient: 0,
+                                                     activity: .assistant)
+        let attack = WaveEngine.ribbonDepthEnergy(level: 0.32, transient: 0.25,
+                                                  activity: .assistant)
+        let unavailable = WaveEngine.ribbonDepthEnergy(level: 0, transient: 0,
+                                                       activity: .assistant)
+
+        XCTAssertGreaterThan(assistant, user,
+                             "Mortimer's measured ribbon should read as a deeper rear layer")
+        XCTAssertGreaterThan(attack, assistant,
+                             "a measured speaking attack should push the ribbon forward")
+        XCTAssertEqual(unavailable, 0,
+                       "missing or silent output must not create synthetic depth")
+    }
 }
 import AppKit
 import SwiftUI
@@ -156,10 +187,21 @@ import SwiftUI
 
 @MainActor
 final class VoiceWaveRenderingTests: XCTestCase {
-    private func render(_ state: VoicePresentationState, now: Double, engine: WaveEngine) throws -> NSBitmapImageRep {
+    func testOrbitalTravelIsBoundedWhenAudioChangesAtLongUptime() {
+        var motion = AtomMotion()
+        let start = motion.advance(now: 1_000_000, energy: 0, moving: true)
+        let next = motion.advance(now: 1_000_000 + 1.0 / 60, energy: 1, moving: true)
+        XCTAssertEqual(next - start, 1.50 / 60, accuracy: 0.000001)
+        XCTAssertEqual(motion.advance(now: 1_000_001, energy: 0.7, moving: false), next)
+        motion.suspend()
+        XCTAssertEqual(motion.advance(now: 2_000_000, energy: 1, moving: true), next)
+    }
+
+    private func render(_ state: VoicePresentationState, now: Double, engine: WaveEngine,
+                        reduceMotion: Bool = false) throws -> NSBitmapImageRep {
         let view = NSHostingView(rootView: Canvas { context, size in
             engine.draw(context: &context, size: size, now: now, state: .speaking,
-                stageCenterX: nil, presentation: state)
+                stageCenterX: nil, presentation: state, reduceMotion: reduceMotion)
         }.background(Color.black))
         view.frame = NSRect(x: 0, y: 0, width: 400, height: 180)
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -182,6 +224,63 @@ final class VoiceWaveRenderingTests: XCTestCase {
             "A speaking flag without measured audio must not synthesize a speech envelope")
     }
 
+    func testListeningWithoutMeterKeepsReadyTraceAlive() throws {
+        let state = VoicePresentationState(activity: .listening, userLevel: nil, outputLevel: nil,
+            microphoneMuted: false, assistantSpeaking: false)
+        let engine = WaveEngine()
+        let first = try render(state, now: 10, engine: engine)
+        let later = try render(state, now: 10.5, engine: engine)
+        XCTAssertNotEqual(first.representation(using: .png, properties: [:]),
+                          later.representation(using: .png, properties: [:]),
+                          "The ready state should retain a subtle animated trace")
+    }
+
+    func testReducedMotionFreezesIdlePlasmaAndComets() throws {
+        let idle = VoicePresentationState(activity: .listening, userLevel: nil,
+            outputLevel: nil, microphoneMuted: false, assistantSpeaking: false)
+        let engine = WaveEngine()
+        let first = try render(idle, now: 10, engine: engine, reduceMotion: true)
+        let later = try render(idle, now: 20, engine: engine, reduceMotion: true)
+        XCTAssertEqual(first.representation(using: .png, properties: [:]),
+                       later.representation(using: .png, properties: [:]),
+                       "Idle breathing, sparks and plasma must respect Reduced Motion too")
+        let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent(".build/interface-fixtures")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try XCTUnwrap(first.representation(using: .png, properties: [:]))
+            .write(to: directory.appendingPathComponent("orb-idle.png"))
+    }
+
+    func testConnectedMutedOrbMatchesIdleAndKeepsMoving() throws {
+        let idle = VoicePresentationState(activity: .listening, userLevel: nil,
+            outputLevel: nil, microphoneMuted: false, assistantSpeaking: false)
+        let muted = VoicePresentationState(activity: .muted, userLevel: nil,
+            outputLevel: nil, microphoneMuted: true, assistantSpeaking: false)
+        let engine = WaveEngine()
+        let idleFrame = try render(idle, now: 10, engine: WaveEngine())
+        let first = try render(muted, now: 10, engine: engine)
+        let later = try render(muted, now: 10.1, engine: engine)
+        XCTAssertEqual(first.representation(using: .png, properties: [:]),
+                       idleFrame.representation(using: .png, properties: [:]),
+                       "Muting input must preserve the connected periwinkle orb")
+        XCTAssertNotEqual(first.representation(using: .png, properties: [:]),
+                          later.representation(using: .png, properties: [:]),
+                          "Connected/muted comets should keep moving without input audio")
+        XCTAssertEqual(muted.label, "Muted")
+    }
+
+    func testMutedReducedMotionAndDisconnectedOrbRemainStill() throws {
+        for activity: VoicePresentationState.Activity in [.muted, .offline] {
+            let state = VoicePresentationState(activity: activity, userLevel: nil,
+                outputLevel: nil, microphoneMuted: true, assistantSpeaking: false)
+            let engine = WaveEngine()
+            let first = try render(state, now: 10, engine: engine, reduceMotion: activity == .muted)
+            let later = try render(state, now: 20, engine: engine, reduceMotion: activity == .muted)
+            XCTAssertEqual(first.representation(using: .png, properties: [:]),
+                           later.representation(using: .png, properties: [:]))
+        }
+    }
+
     func testMeasuredSpeakersUseDistinctRenderedColors() throws {
         for user in [true, false] {
             let state = VoicePresentationState(activity: user ? .user : .assistant,
@@ -190,17 +289,69 @@ final class VoiceWaveRenderingTests: XCTestCase {
             let engine = WaveEngine()
             _ = try render(state, now: 10, engine: engine)
             let bitmap = try render(state, now: 10.1, engine: engine)
+            let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                .appendingPathComponent(".build/interface-fixtures")
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+                .write(to: directory.appendingPathComponent(user ? "orb-user.png" : "orb-mortimer.png"))
             var matchingPixels = 0
             for y in 0..<bitmap.pixelsHigh {
                 for x in 0..<bitmap.pixelsWide {
                     guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
                     let r = color.redComponent, g = color.greenComponent, b = color.blueComponent
-                    if user ? (g > 0.1 && g > r * 2 && b > r * 2) : (b > 0.1 && b > g * 1.2 && r > g * 1.1) {
+                    if user ? (g > 0.1 && g > r * 2 && b > r * 2) :
+                        (r > 0.5 && g > 0.25 && r > g * 1.2 && g > b * 1.4) {
                         matchingPixels += 1
                     }
                 }
             }
             XCTAssertGreaterThan(matchingPixels, 20, "Missing rendered speaker color")
         }
+    }
+
+    func testAtomRendersBothMeasuredChannelsDuringOverlap() throws {
+        let state = VoicePresentationState(activity: .user, userLevel: 0.7,
+            outputLevel: 0.7, microphoneMuted: false, assistantSpeaking: true)
+        let engine = WaveEngine()
+        _ = try render(state, now: 10, engine: engine)
+        let bitmap = try render(state, now: 10.1, engine: engine)
+        var teal = 0, orange = 0
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                let r = color.redComponent, g = color.greenComponent, b = color.blueComponent
+                if g > 0.1 && g > r * 2 && b > r * 2 { teal += 1 }
+                if r > 0.5 && g > 0.25 && r > g * 1.2 && g > b * 1.4 { orange += 1 }
+            }
+        }
+        XCTAssertGreaterThan(teal, 20, "overlap must retain the user orbital channel")
+        XCTAssertGreaterThan(orange, 20, "overlap must retain Mortimer's orbital channel")
+    }
+
+    func testAtomNucleusFollowsCurrentTalkerColor() throws {
+        let user = VoicePresentationState(activity: .user, userLevel: 0.8,
+            outputLevel: nil, microphoneMuted: false, assistantSpeaking: false)
+        let assistant = VoicePresentationState(activity: .assistant, userLevel: nil,
+            outputLevel: 0.8, microphoneMuted: false, assistantSpeaking: true)
+        let userBitmap = try render(user, now: 10, engine: WaveEngine())
+        let assistantBitmap = try render(assistant, now: 10, engine: WaveEngine())
+        let userCenter = try XCTUnwrap(userBitmap.colorAt(x: userBitmap.pixelsWide / 2,
+                                                           y: userBitmap.pixelsHigh / 2)?.usingColorSpace(.deviceRGB))
+        let assistantCenter = try XCTUnwrap(assistantBitmap.colorAt(x: assistantBitmap.pixelsWide / 2,
+                                                                     y: assistantBitmap.pixelsHigh / 2)?.usingColorSpace(.deviceRGB))
+        XCTAssertGreaterThan(userCenter.greenComponent, userCenter.redComponent,
+                             "user nucleus should use teal")
+        XCTAssertGreaterThan(assistantCenter.redComponent, assistantCenter.greenComponent,
+                             "Mortimer nucleus should use orange")
+    }
+
+    func testIdleNucleusUsesPeriwinkle() throws {
+        let idle = VoicePresentationState(activity: .listening, userLevel: nil,
+            outputLevel: nil, microphoneMuted: false, assistantSpeaking: false)
+        let bitmap = try render(idle, now: 10, engine: WaveEngine())
+        let center = try XCTUnwrap(bitmap.colorAt(x: bitmap.pixelsWide / 2,
+                                                   y: bitmap.pixelsHigh / 2)?.usingColorSpace(.deviceRGB))
+        XCTAssertGreaterThan(center.blueComponent, center.redComponent,
+                             "idle nucleus should use periwinkle")
     }
 }

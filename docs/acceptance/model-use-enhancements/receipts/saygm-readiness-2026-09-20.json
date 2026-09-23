@@ -1,0 +1,225 @@
+{
+  "policy": "config/model_access.yaml",
+  "ready_issues": [
+    "saygm: SAYGM_API_KEY is not set",
+    "voice_supervisor: ANTHROPIC_API_KEY is not set",
+    "scheduler: ANTHROPIC_API_KEY is not set",
+    "librarian: ANTHROPIC_API_KEY is not set",
+    "analyst: ANTHROPIC_API_KEY is not set",
+    "systems: ANTHROPIC_API_KEY is not set",
+    "developer: ANTHROPIC_API_KEY is not set",
+    "app_builder: ANTHROPIC_API_KEY is not set",
+    "memory: ANTHROPIC_API_KEY is not set",
+    "background: ANTHROPIC_API_KEY is not set",
+    "council: ANTHROPIC_API_KEY is not set",
+    "planning: ANTHROPIC_API_KEY is not set",
+    "research_synthesis: ANTHROPIC_API_KEY is not set",
+    "vision: ANTHROPIC_API_KEY is not set"
+  ],
+  "routes": {
+    "codex_subscription": {
+      "adapter": "codex_subscription_runtime",
+      "api_credentials_stripped_before_launch": true,
+      "billing": "subscription",
+      "capabilities": [
+        "text"
+      ],
+      "command": "codex",
+      "credential_env": null,
+      "credential_present": false,
+      "installed": true,
+      "privacy": "approved_external"
+    },
+    "local": {
+      "adapter": "local_runtime",
+      "billing": "local",
+      "capabilities": [],
+      "credential_env": null,
+      "credential_present": false,
+      "privacy": "local_only"
+    },
+    "saygm": {
+      "adapter": "saygm_gateway",
+      "billing": "saygm_credit",
+      "capabilities": [
+        "text",
+        "tools"
+      ],
+      "credential_env": "SAYGM_API_KEY",
+      "credential_present": false,
+      "privacy": "approved_external"
+    },
+    "subscription": {
+      "adapter": "subscription_runtime",
+      "api_credentials_stripped_before_launch": true,
+      "billing": "subscription",
+      "capabilities": [
+        "text"
+      ],
+      "command": "claude",
+      "credential_env": null,
+      "credential_present": false,
+      "installed": true,
+      "privacy": "approved_external"
+    }
+  },
+  "routing_enabled": false,
+  "saygm_catalog": {
+    "error": "SAYGM_API_KEY is not set",
+    "ok": false
+  },
+  "subscription_probes": null,
+  "workloads": {
+    "analyst": {
+      "capabilities": [
+        "text",
+        "tools"
+      ],
+      "credential_env": "ANTHROPIC_API_KEY",
+      "credential_present": false,
+      "priority": "interactive",
+      "privacy": "approved_external",
+      "profile": "claude-sonnet-5",
+      "route": "direct_api"
+    },
+    "app_builder": {
+      "capabilities": [
+        "text",
+        "tools"
+      ],
+      "credential_env": "ANTHROPIC_API_KEY",
+      "credential_present": false,
+      "priority": "interactive",
+      "privacy": "approved_external",
+      "profile": "claude-opus",
+      "route": "direct_api"
+    },
+    "background": {
+      "capabilities": [
+        "text"
+      ],
+      "credential_env": "ANTHROPIC_API_KEY",
+      "credential_present": false,
+      "priority": "background",
+      "privacy": "confidential",
+      "profile": "claude-sonnet-5",
+      "route": "direct_api"
+    },
+    "council": {
+      "capabilities": [
+        "text"
+      ],
+      "credential_env": "ANTHROPIC_API_KEY",
+      "credential_present": false,
+      "priority": "background",
+      "privacy": "approved_external",
+      "profile": "claude-sonnet-5",
+      "route": "direct_api"
+    },
+    "developer": {
+      "capabilities": [
+        "text",
+        "tools"
+      ],
+      "credential_env": "ANTHROPIC_API_KEY",
+      "credential_present": false,
+      "priority": "interactive",
+      "privacy": "approved_external",
+      "profile": "claude-opus",
+      "route": "direct_api"
+    },
+    "librarian": {
+      "capabilities": [
+        "text",
+        "tools"
+      ],
+      "credential_env": "ANTHROPIC_API_KEY",
+      "credential_present": false,
+      "priority": "interactive",
+      "privacy": "confidential",
+      "profile": "claude-sonnet-5",
+      "route": "direct_api"
+    },
+    "memory": {
+      "capabilities": [
+        "text"
+      ],
+      "credential_env": "ANTHROPIC_API_KEY",
+      "credential_present": false,
+      "priority": "background",
+      "privacy": "confidential",
+      "profile": "claude-sonnet-5",
+      "route": "direct_api"
+    },
+    "planning": {
+      "capabilities": [
+        "text"
+      ],
+      "credential_env": "ANTHROPIC_API_KEY",
+      "credential_present": false,
+      "priority": "interactive",
+      "privacy": "approved_external",
+      "profile": "claude-fable-5",
+      "route": "direct_api"
+    },
+    "research_synthesis": {
+      "capabilities": [
+        "text"
+      ],
+      "credential_env": "ANTHROPIC_API_KEY",
+      "credential_present": false,
+      "priority": "interactive",
+      "privacy": "approved_external",
+      "profile": "claude-sonnet-5",
+      "route": "direct_api"
+    },
+    "scheduler": {
+      "capabilities": [
+        "text",
+        "tools"
+      ],
+      "credential_env": "ANTHROPIC_API_KEY",
+      "credential_present": false,
+      "priority": "interactive",
+      "privacy": "approved_external",
+      "profile": "claude-sonnet-5",
+      "route": "direct_api"
+    },
+    "systems": {
+      "capabilities": [
+        "text",
+        "tools"
+      ],
+      "credential_env": "ANTHROPIC_API_KEY",
+      "credential_present": false,
+      "priority": "interactive",
+      "privacy": "local_only",
+      "profile": "claude-sonnet-5",
+      "route": "direct_api"
+    },
+    "vision": {
+      "capabilities": [
+        "text",
+        "images"
+      ],
+      "credential_env": "ANTHROPIC_API_KEY",
+      "credential_present": false,
+      "priority": "interactive",
+      "privacy": "approved_external",
+      "profile": "claude-opus",
+      "route": "direct_api"
+    },
+    "voice_supervisor": {
+      "capabilities": [
+        "text",
+        "tools"
+      ],
+      "credential_env": "ANTHROPIC_API_KEY",
+      "credential_present": false,
+      "priority": "interactive",
+      "privacy": "approved_external",
+      "profile": "claude-haiku-4-5",
+      "route": "direct_api"
+    }
+  }
+}

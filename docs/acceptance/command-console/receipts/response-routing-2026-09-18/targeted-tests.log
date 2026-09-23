@@ -1,0 +1,266 @@
+Building for debugging...
+[Planning 1 / 127]
+[Planning deferred tasks]
+[10 / 40]
+[11 / 41] JarvisKit
+[13 / 43] JarvisKit
+[21 / 48] MortimerHost-product
+[32 / 70] MortimerHost-product
+[33 / 71] MortimerHost-product
+[34 / 71] MortimerHost-product
+[35 / 71] MortimerHost
+[39 / 71] MortimerHost
+[41 / 71] MortimerHost
+[42 / 71] MortimerHost
+[43 / 72] MortimerHost
+[45 / 72] MortimerHost
+[45 / 72] MortimerHost-product
+[55 / 74] MortimerHost
+[55 / 74] MortimerHost-product
+[57 / 74] MortimerHost
+[59 / 74] MortimerHost
+[61 / 72] MortimerHostTests-product
+[72 / 83] MortimerHostTests-product
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/CompactConversationTests.swift:11:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 9 |     func testSavedCompactPreferenceChangesNativeConversationPresentation() throws {
+10 |         _ = NSApplication.shared
+11 |         NSApplication.shared.accessibilitySetValue(true,
+   |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+12 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+13 |         let suite = "compact-conversation-" + UUID().uuidString
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:153:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+151 |     func testOverflowButtonsReachBothEndsWithoutChangingSelection() throws {
+152 |         _ = NSApplication.shared
+153 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+154 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+155 |         let selection = HeaderSelection()
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayAcceptanceTests.swift:71:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 69 |     func testReturningToOriginalPanelsPreservesResearchPinsAndReadingState() throws {
+ 70 |         _ = NSApplication.shared
+ 71 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 72 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ 73 |         let suite = "supporting-display-" + UUID().uuidString
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/DrawerViewMinimumWidthTests.swift:23:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+21 |     private func checkDrawer(poppedOut: Bool) throws {
+22 |         _ = NSApplication.shared
+23 |         NSApplication.shared.accessibilitySetValue(true,
+   |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+24 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+25 |         let suite = "drawer-min-width-" + UUID().uuidString
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/FullConsoleRenderingTests.swift:28:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+26 |     private func checkConsole(tabTextSize: Double, layoutVersion: Int = 1, startup: Bool = false) throws {
+27 |         _ = NSApplication.shared
+28 |         NSApplication.shared.accessibilitySetValue(true,
+   |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+29 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+30 |         let suite = "full-console-" + UUID().uuidString
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/AdaptiveInterfaceClosureC2Tests.swift:165:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+163 |     func testCompactRailRendersAgentActivityAffordance() throws {
+164 |         _ = NSApplication.shared
+165 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+166 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+167 |         let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/AdaptiveInterfaceClosureC2Tests.swift:190:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+188 |     func testCompactRailPinsClockAboveAgentActivity() throws {
+189 |         _ = NSApplication.shared
+190 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+191 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+192 |         let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripKeyboardTests.swift:13:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 11 |     func testArrowAndHomeEndKeysMoveSelectionAndRevealTheSelectedLabel() throws {
+ 12 |         _ = NSApplication.shared
+ 13 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 14 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ 15 |         let selection = KeyboardHeaderSelection()
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:11:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+  9 |     func testNarrowStripRevealsEntireSelectedLastTab() throws {
+ 10 |         _ = NSApplication.shared
+ 11 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 12 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ 13 |         let view = NSHostingView(rootView: DrawerTabStrip(selectedTab: "costs", attention: [:], select: { _ in })
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:53:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 51 |     func testNarrowMountedStripRevealsEverySelectionInBothDirections() throws {
+ 52 |         _ = NSApplication.shared
+ 53 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 54 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ 55 |         let selection = HeaderSelection()
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:100:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 98 |     func testLargeTextMountedStripRevealsEverySelection() throws {
+ 99 |         _ = NSApplication.shared
+100 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+101 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+102 |         let selection = HeaderSelection()
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:153:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+151 |     func testOverflowButtonsReachBothEndsWithoutChangingSelection() throws {
+152 |         _ = NSApplication.shared
+153 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+154 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+155 |         let selection = HeaderSelection()
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:203:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+201 |     func testWideHeaderExposesEveryLabel() throws {
+202 |         _ = NSApplication.shared
+203 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+204 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+205 |         let view = NSHostingView(rootView: DrawerTabStrip(selectedTab: "memory", attention: [:], select: { _ in })
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[76 / 82] MortimerHostTests-product
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/CompactConversationTests.swift:11:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 9 |     func testSavedCompactPreferenceChangesNativeConversationPresentation() throws {
+10 |         _ = NSApplication.shared
+11 |         NSApplication.shared.accessibilitySetValue(true,
+   |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+12 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+13 |         let suite = "compact-conversation-" + UUID().uuidString
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/MemoryGraphRenderingTests.swift:30:26: warning: instance method 'run' is unavailable from asynchronous contexts; run(until:) cannot be used from async contexts.; this is an error in the Swift 6 language mode
+28 |             defer { window.close() }
+29 |             window.layoutIfNeeded(); view.layoutSubtreeIfNeeded()
+30 |             RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+   |                          `- warning: instance method 'run' is unavailable from asynchronous contexts; run(until:) cannot be used from async contexts.; this is an error in the Swift 6 language mode
+31 |             let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+32 |             view.cacheDisplay(in: view.bounds, to: bitmap)
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk/System/Library/Frameworks/Foundation.framework/Headers/NSRunLoop.h:125:1: note: 'run(until:)' declared here
+123 | ///
+124 | /// If no input sources or timers are attached to the run loop, this method exits immediately; otherwise, it runs the receiver in the ``RunLoop/Mode/default`` mode by repeatedly invoking ``RunLoop/run(mode:before:)`` until the specified expiration date.
+125 | - (void)runUntilDate:(NSDate *)limitDate NS_SWIFT_UNAVAILABLE_FROM_ASYNC("run(until:) cannot be used from async contexts.");
+    | `- note: 'run(until:)' declared here
+126 | 
+127 | /// Runs the loop once, blocking for input in the specified mode until a given date.
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayAcceptanceTests.swift:13:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 11 |     func testPointerSelectedResultSharesStageOnConnectedDisplays() throws {
+ 12 |         _ = NSApplication.shared
+ 13 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 14 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ 15 |         let screens = NSScreen.screens
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayAcceptanceTests.swift:71:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 69 |     func testReturningToOriginalPanelsPreservesResearchPinsAndReadingState() throws {
+ 70 |         _ = NSApplication.shared
+ 71 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 72 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ 73 |         let suite = "supporting-display-" + UUID().uuidString
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[78 / 82] MortimerHostTests-product
+Build complete! (6.65 sec)
+Test Suite 'Selected tests' started at 2026-09-18 16:50:02.571.
+Test Suite 'MortimerHostTests.xctest' started at 2026-09-18 16:50:02.572.
+Test Suite 'ContentPanelTests' started at 2026-09-18 16:50:02.572.
+Test Case '-[MortimerHostTests.ContentPanelTests testAdditionalPanelRequiresExplicitPinAction]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testAdditionalPanelRequiresExplicitPinAction]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testAllVisibleResultsHaveLocatorsAndRepeatSelectionDoesNotDuplicate]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testAllVisibleResultsHaveLocatorsAndRepeatSelectionDoesNotDuplicate]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testClosedDisplayAlsoKeepsFallbackStageBounded]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testClosedDisplayAlsoKeepsFallbackStageBounded]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testDeveloperRunAppendsDistinctResultsIntoOneDisplayPanel]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testDeveloperRunAppendsDistinctResultsIntoOneDisplayPanel]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testDisplayPanelsKeepIdentityAndRespectBounds]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testDisplayPanelsKeepIdentityAndRespectBounds]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testExactRepeatReusesTheExistingWorkspaceOwnerButNewRunSectionDoesNot]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testExactRepeatReusesTheExistingWorkspaceOwnerButNewRunSectionDoesNot]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testFitRequiresMeasuredViewportAndPreservesReachablePanel]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testFitRequiresMeasuredViewportAndPreservesReachablePanel]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testLastSupportingPanelCanReturnOwnershipToMainWorkspace]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testLastSupportingPanelCanReturnOwnershipToMainWorkspace]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testMainLocatorRequiresALiveSupportingPanel]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testMainLocatorRequiresALiveSupportingPanel]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testOpeningSupportingDisplayPreservesBoundedUnpinnedPanelsAndPins]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testOpeningSupportingDisplayPreservesBoundedUnpinnedPanelsAndPins]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testPanelCapacityRetiresUnpinnedBeforePinnedContent]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testPanelCapacityRetiresUnpinnedBeforePinnedContent]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testPinnedPanelStaysOutsideStageWhenUnpinnedResultsRemain]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testPinnedPanelStaysOutsideStageWhenUnpinnedResultsRemain]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testPointerGraphSharesFullStageWithoutHidingDisplacedResult]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testPointerGraphSharesFullStageWithoutHidingDisplacedResult]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testSeparateDeveloperRunsRemainSeparateDisplayPanels]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testSeparateDeveloperRunsRemainSeparateDisplayPanels]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingDisplaySharesBoundedUnpinnedPresentations]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingDisplaySharesBoundedUnpinnedPresentations]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingStageCapsUnpinnedResultsAndKeepsNewestFocused]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingStageCapsUnpinnedResultsAndKeepsNewestFocused]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingStageLeavesPinnedCopiesAsExplicitExtras]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingStageLeavesPinnedCopiesAsExplicitExtras]' passed (0.000 seconds).
+Test Suite 'ContentPanelTests' passed at 2026-09-18 16:50:02.576.
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
+Test Suite 'ResponseResultRouterTests' started at 2026-09-18 16:50:02.576.
+Test Case '-[MortimerHostTests.ResponseResultRouterTests testAtlasGraphAndComparisonAreNotReplacedByReply]' started.
+Test Case '-[MortimerHostTests.ResponseResultRouterTests testAtlasGraphAndComparisonAreNotReplacedByReply]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ResponseResultRouterTests testClosingResponseOrTileIsNotUndoneByStreaming]' started.
+Test Case '-[MortimerHostTests.ResponseResultRouterTests testClosingResponseOrTileIsNotUndoneByStreaming]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ResponseResultRouterTests testEmptyAssistantDoesNotOpenResultsAndCaptionShowsLatestWords]' started.
+Test Case '-[MortimerHostTests.ResponseResultRouterTests testEmptyAssistantDoesNotOpenResultsAndCaptionShowsLatestWords]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.ResponseResultRouterTests testIdenticalAnswersToSeparateRequestsRemainSeparateAndFollowResponses]' started.
+Test Case '-[MortimerHostTests.ResponseResultRouterTests testIdenticalAnswersToSeparateRequestsRemainSeparateAndFollowResponses]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ResponseResultRouterTests testManyResponsesKeepStageBoundedAndHistoryAvailable]' started.
+Test Case '-[MortimerHostTests.ResponseResultRouterTests testManyResponsesKeepStageBoundedAndHistoryAvailable]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ResponseResultRouterTests testStreamingAndToolSubturnsUpdateOneResultWithoutLosingReadingState]' started.
+Test Case '-[MortimerHostTests.ResponseResultRouterTests testStreamingAndToolSubturnsUpdateOneResultWithoutLosingReadingState]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ResponseResultRouterTests testSupportingDisplayOwnsAnswerAndClosingReturnsItToMain]' started.
+Test Case '-[MortimerHostTests.ResponseResultRouterTests testSupportingDisplayOwnsAnswerAndClosingReturnsItToMain]' passed (0.000 seconds).
+Test Suite 'ResponseResultRouterTests' passed at 2026-09-18 16:50:02.579.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'WorkspaceStoreTests' started at 2026-09-18 16:50:02.579.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testArrivalPreservesReadingComparisonAndScroll]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testArrivalPreservesReadingComparisonAndScroll]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testCloseActivePromotesComparisonAndRemovesOnlyItsMetadata]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testCloseActivePromotesComparisonAndRemovesOnlyItsMetadata]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testClosingWorkspaceTabPreservesOutputHistoryAndSharedIdentity]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testClosingWorkspaceTabPreservesOutputHistoryAndSharedIdentity]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testConsoleInventoryJSONContainsBoundedTargetsWithoutResultBody]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testConsoleInventoryJSONContainsBoundedTargetsWithoutResultBody]' passed (0.081 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testConsoleInventoryRevisionTracksSelectionAndModeChanges]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testConsoleInventoryRevisionTracksSelectionAndModeChanges]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testExplicitConversationChoiceSurvivesNewResults]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testExplicitConversationChoiceSurvivesNewResults]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultDoesNotUndoReturnFromGraphToConversation]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultDoesNotUndoReturnFromGraphToConversation]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultStillOpensWorkspaceWithoutExplicitNavigation]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultStillOpensWorkspaceWithoutExplicitNavigation]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultWhileBrowsingGraphIsUnreadAndPreservesGraph]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultWhileBrowsingGraphIsUnreadAndPreservesGraph]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testGraphDisplayAssignmentReusesGraphOwnerAndKeepsCompactComparisonChoice]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testGraphDisplayAssignmentReusesGraphOwnerAndKeepsCompactComparisonChoice]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testIdenticalPayloadsAreDistinctButSameReceiptIsNotDuplicated]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testIdenticalPayloadsAreDistinctButSameReceiptIsNotDuplicated]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testOutputExpansionBelongsToHistoryAndDoesNotReopenCollapsedItems]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testOutputExpansionBelongsToHistoryAndDoesNotReopenCollapsedItems]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testPinLimitRefusesWithoutEviction]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testPinLimitRefusesWithoutEviction]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testSupportingResultSurvivesHistoryTrimmingWithoutChangingMainSelection]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testSupportingResultSurvivesHistoryTrimmingWithoutChangingMainSelection]' passed (0.000 seconds).
+Test Suite 'WorkspaceStoreTests' passed at 2026-09-18 16:50:02.662.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.083 (0.083) seconds
+Test Suite 'MortimerHostTests.xctest' passed at 2026-09-18 16:50:02.662.
+	 Executed 38 tests, with 0 failures (0 unexpected) in 0.089 (0.090) seconds
+Test Suite 'Selected tests' passed at 2026-09-18 16:50:02.662.
+	 Executed 38 tests, with 0 failures (0 unexpected) in 0.089 (0.091) seconds

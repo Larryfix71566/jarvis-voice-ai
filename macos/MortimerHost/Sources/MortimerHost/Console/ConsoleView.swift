@@ -9,13 +9,25 @@ import JarvisKit
 /// Keyboard: T toggles the Log tab (three-case), Escape closes the
 /// drawer (App.tsx:512-528), SPACE PTT lives in MicControlsView.
 struct ConsoleView: View {
-    // C9.5 / G30 — see MortimerHostApp for the default's provenance.
-    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 1
+    /// App-scoped coordinator shared by the visual and voice console paths.
+    /// Optional keeps previews and the legacy layout usable before app
+    /// startup has completed its one-shot router wiring.
+    let consoleCoordinator: ConsoleActionCoordinator?
+
+    init(consoleCoordinator: ConsoleActionCoordinator? = nil) {
+        self.consoleCoordinator = consoleCoordinator
+    }
+    // C9.5 / G30 — see MortimerHostApp for the default and one-time migration.
+    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 2
+    private var activeLayoutVersion: Int {
+        InterfaceLayoutVersion.resolve(layoutVersion)
+    }
     @EnvironmentObject private var client: JarvisClient
     @Environment(AgentRunStore.self) private var agentRuns
     @Environment(DisplayResultStore.self) private var displayResults
     @Environment(DisplayWindowStore.self) private var displayWindow
     @Environment(DrawerState.self) private var drawer
+    @Environment(WorkspaceStore.self) private var workspace
 
     private var voiceState: VoiceState {
         VoiceState.derive(state: client.state, botIsSpeaking: client.botIsSpeaking)
@@ -35,13 +47,13 @@ struct ConsoleView: View {
 
     private var visibleDrawerWidth: Double {
         let requested = dragWidth ?? drawer.width
-        return layoutVersion == 1 ? AdaptiveLayoutMetrics.drawerWidth(requested, windowWidth: windowWidth) : requested
+        return activeLayoutVersion >= 1 ? AdaptiveLayoutMetrics.drawerWidth(requested, windowWidth: windowWidth) : requested
     }
 
     var body: some View {
         ZStack {
             AppTheme.bg.ignoresSafeArea()
-            if layoutVersion != 1 {
+            if activeLayoutVersion == 0 {
             VoiceWaveView(voiceState: voiceState,
                           stageCenterX: stageCenterX,
                           wakePulse: client.wakePulse)
@@ -55,7 +67,11 @@ struct ConsoleView: View {
                 }
                 HStack(spacing: 0) {
                     ZStack {
-                        if layoutVersion == 1 {
+                        if activeLayoutVersion >= 2 {
+                            CommandConsoleView(voiceState: voiceState,
+                                              wideWindow: windowWidth >= AppTuning.wideLayoutMinWidth,
+                                              coordinator: consoleCoordinator)
+                        } else if activeLayoutVersion == 1 {
                             AdaptiveStageView(voiceState: voiceState, wideWindow: windowWidth >= AppTuning.wideLayoutMinWidth)
                         } else {
                         OrbFieldView(voiceState: voiceState)
@@ -100,6 +116,12 @@ struct ConsoleView: View {
             proxy.size
         } action: { size in
             windowWidth = size.width
+        }
+        .onChange(of: workspace.consoleRevision) { _, _ in
+            // Pointer actions mutate app-owned stores directly. Keep the
+            // server's target inventory revisioned even when no voice request
+            // caused the change.
+            consoleCoordinator?.publishInventory()
         }
         .onAppear(perform: installKeyMonitor)
         .onDisappear(perform: removeKeyMonitor)
@@ -172,7 +194,7 @@ struct ConsoleView: View {
                         // constrained without changing the saved preference.
                         if dragStartWidth == nil { dragStartWidth = visibleDrawerWidth }
                         let requested = (dragStartWidth ?? visibleDrawerWidth) - value.translation.width
-                        dragWidth = layoutVersion == 1
+                        dragWidth = activeLayoutVersion >= 1
                             ? AdaptiveLayoutMetrics.drawerWidth(requested, windowWidth: windowWidth)
                             : DrawerState.clampWidth(requested, windowWidth: windowWidth)
                         NSCursor.resizeLeftRight.set()

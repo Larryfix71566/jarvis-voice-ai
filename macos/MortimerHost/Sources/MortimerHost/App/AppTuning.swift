@@ -44,6 +44,11 @@ enum AppTuning {
     static let maxDisplayResults = 20
     /// displayWindow.ts MAX_OPEN_DISPLAY_PANELS (F4 — display window cap)
     static let maxDisplayWindowPanels = 15
+    /// Default number of result tiles that share the supporting-display stage.
+    /// This is deliberately smaller than the history/window cap; extra copies
+    /// require explicit pinning and remain reachable without crowding the
+    /// default presentation.
+    static let maxSupportingStagePanels = 4
     /// conversationFeed.ts:36 MAX_CONVERSATION_ENTRIES
     static let maxConversationEntries = 200
     /// SideDrawer.tsx DRAWER_DEFAULT_WIDTH_PX
@@ -114,11 +119,12 @@ enum AppTuning {
 }
 
 /// Interface plan §7 audio-presentation values, one place (closure C2.4).
-/// Colors are the plan's teal #2DD4BF (user) and violet #A78BFA (Mortimer);
+/// Colors are teal #2DD4BF (user) and warm orange #FFB454 (Mortimer);
 /// contrast verification against the actual theme is a C8 row.
 enum AudioPresentationTuning {
     static let userRGB: (Double, Double, Double) = (45, 212, 191)        // #2DD4BF
-    static let assistantRGB: (Double, Double, Double) = (167, 139, 250)  // #A78BFA
+    static let assistantRGB: (Double, Double, Double) = (224, 112, 32)   // #E07020
+    static let idleRGB: (Double, Double, Double) = (124, 140, 255)        // #7C8CFF
     static let neutralRGB: (Double, Double, Double) = (95, 130, 150)
     static var userColor: Color { Color(red: userRGB.0 / 255, green: userRGB.1 / 255, blue: userRGB.2 / 255) }
     static var assistantColor: Color { Color(red: assistantRGB.0 / 255, green: assistantRGB.1 / 255, blue: assistantRGB.2 / 255) }
@@ -128,19 +134,13 @@ enum AudioPresentationTuning {
 
     // MARK: - Level mapping (item 10, 2026-09-16)
     //
-    // The wave multiplies its level by 0.115, a constant calibrated against
+    // The wave multiplies its level by `measuredVoiceGain`, calibrated against
     // `simLevel()` — a simulated envelope with a 0.25 floor and a 1.0
     // ceiling. The adaptive path feeds it linear RMS instead, measured at a
-    // median of 0.0012 on the input channel: 6.6 px of trace where the
-    // legacy one never fell below 72 px.
-    //
-    // A gain constant cannot close that. Input speech spans 134x between
-    // its median and its p95, so any multiplier that lifts the median
-    // saturates everything above it — and `VoiceEnvelope.advance` refuses a
-    // target outside 0...1, so a large gain makes loud syllables vanish
-    // rather than clip. dBFS is the perceptual scale, and normalising a dB
-    // window to 0...1 puts the level back in the range `simLevel` occupied,
-    // which is what makes 0.115 correct rather than inherited.
+    // median of 0.0012 on the input channel. The old coefficient left that
+    // measured median at only a few pixels in the compact rail. dBFS is the
+    // perceptual scale, and normalising a dB window to 0...1 puts the level
+    // back in a stable range before the separate presentation gain is applied.
     //
     // Windows are per channel because the two measure about 40 dB apart
     // (input median -58.4 dBFS, playout -18.6). One shared window leaves
@@ -159,6 +159,28 @@ enum AudioPresentationTuning {
     static let inputCeilingDefault: Double = -10
     static let outputFloorDefault: Double = -25
     static let outputCeilingDefault: Double = -5
+
+    /// Gains applied after the channel-specific dB window. The input meter's
+    /// measured median is intentionally quiet (about 0.03 after mapping), so
+    /// it receives a modest extra lift in the compact rail. Output remains at
+    /// the calibrated shared gain because its measured channel is much hotter.
+    /// Both remain direct functions of measured audio; neither adds a
+    /// synthetic envelope when no level is present.
+    static let measuredInputGain: Double = 0.55
+    static let measuredOutputGain: Double = 0.42
+    /// Compatibility name for callers that refer to the output calibration.
+    static let measuredVoiceGain: Double = measuredOutputGain
+
+    // MARK: - Depth-ribbon presentation (2026-09-18)
+    //
+    // These values change geometry and light only. They never create an
+    // audio level. The ribbon's depth energy is derived from the measured
+    // envelope and its positive attack, so a missing level still renders the
+    // same honest static trace as before.
+    static let depthSpanFraction: Double = 0.12
+    static let depthLevelContribution: Double = 0.80
+    static let depthTransientContribution: Double = 1.15
+    static let assistantDepthScale: Double = 1.25
 
     /// A stored override, or the measured default. Rejects a non-finite or
     /// inverted value rather than dividing by zero in `presentationLevel`:

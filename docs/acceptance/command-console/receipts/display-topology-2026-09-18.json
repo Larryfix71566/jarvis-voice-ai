@@ -1,0 +1,18 @@
+{
+  "recorded_by": "DisplayTopologyProbe",
+  "recorded_at": "2026-09-18",
+  "command": "scripts/run_display_topology_probe.sh",
+  "screen_count": 1,
+  "screens": [
+    {
+      "display_id": 1,
+      "localized_name": "Built-in Retina Display",
+      "is_main": true,
+      "backing_scale": 2,
+      "frame": {"x": 0, "y": 0, "width": 1710, "height": 1107},
+      "visible_frame": {"x": 0, "y": 58, "width": 1710, "height": 1015}
+    }
+  ],
+  "spaces_are_not_screens": true,
+  "acceptance_effect": "single-display evidence only; multi-display and unplug/reconnect remain open"
+}

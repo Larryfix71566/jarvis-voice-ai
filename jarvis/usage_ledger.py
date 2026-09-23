@@ -308,6 +308,8 @@ def provider_from_base_url(base_url: str) -> str:
         return "moonshot"
     if "openai.com" in b:
         return "openai"
+    if b.startswith("subscription://"):
+        return "subscription"
     return "unknown"
 
 _CACHED_TOKEN_ALIASES = (

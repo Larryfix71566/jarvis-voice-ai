@@ -129,6 +129,40 @@ class Settings(BaseSettings):
     # tab) to at most one interval. A tuning knob, not a hardcoded value.
     jarvis_memory_sweep_interval_s: float = 300.0
 
+    # Automated memory classification/maintenance (MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md B).
+    # Shadow is deliberately independent so policy can be measured without writes.
+    jarvis_memory_automation_enabled: bool = False
+    jarvis_memory_automation_shadow: bool = True
+    # Ordered release gate: shadow -> explicit_preferences ->
+    # corroborated_inferences. Unknown values fail closed at validation time.
+    jarvis_memory_automation_stage: str = "shadow"
+    # Background extraction/classification must not inherit the voice
+    # Supervisor's OPENAI_MODEL. This profile is resolved through the single
+    # registry and its own credential variable by jarvis.memory_model.
+    jarvis_memory_profile: str = "claude-sonnet-5"
+    # Non-voice maintenance (KB digests and procedure descriptions) also has
+    # an explicit registry route. It must never inherit the Supervisor's
+    # OPENAI_MODEL, which is the only route allowed to use Haiku.
+    jarvis_background_profile: str = "claude-sonnet-5"
+
+    # Model Use Enhancements — route policy file and explicit route controls.
+    # Workload-specific JARVIS_MODEL_ROUTE_<WORKLOAD> and
+    # JARVIS_MODEL_PROFILE_<WORKLOAD> overrides are read by
+    # jarvis.model_routing; they never contain credential material.
+    jarvis_model_access_config: str = "config/model_access.yaml"
+    jarvis_model_route_voice_supervisor: str = "direct_api"
+    jarvis_model_route_memory: str = "direct_api"
+    jarvis_model_route_background: str = "direct_api"
+    # Staged rollout gate. False preserves existing provider behavior while
+    # route adapters and privacy policy are validated; true enables the shared
+    # model-access policy at background call sites.
+    jarvis_model_routing_enabled: bool = False
+
+    # Command Console / shared-content gates. Shared content is subordinate
+    # to the console gate and can never enable itself independently.
+    jarvis_command_console_enabled: bool = False
+    jarvis_shared_content_enabled: bool = False
+
     # Procedures-as-hints (MORTIMER_MEMORY_PROCEDURES_PLAN.md D20) — kill
     # switch. False makes match_procedure/learn_from_run no-ops: no hint is
     # ever injected, no candidate is ever created. Single enforcement point
@@ -188,6 +222,16 @@ class Settings(BaseSettings):
         if v not in ("imperial", "metric"):
             raise ValueError(
                 f"JARVIS_UNITS must be 'imperial' or 'metric', got {v!r}"
+            )
+        return v
+
+    @field_validator("jarvis_memory_automation_stage")
+    @classmethod
+    def _memory_rollout_stage_must_be_known(cls, v: str) -> str:
+        if v not in {"shadow", "explicit_preferences", "corroborated_inferences"}:
+            raise ValueError(
+                "JARVIS_MEMORY_AUTOMATION_STAGE must be shadow, "
+                "explicit_preferences, or corroborated_inferences"
             )
         return v
 
@@ -281,6 +325,31 @@ def bridge_settings_to_env(settings=None) -> None:
         os.environ.setdefault(
             "JARVIS_USER_ID", getattr(settings, "jarvis_user_id", "local")
         )
+        # Memory automation is consumed by the sweep and fact-upsert paths
+        # through the process environment. Bridge the typed setting once at
+        # startup so enabling it in Settings actually reaches those paths;
+        # a real environment override keeps precedence.
+        os.environ.setdefault(
+            "JARVIS_MEMORY_AUTOMATION_ENABLED",
+            "true" if getattr(settings, "jarvis_memory_automation_enabled", False) else "false",
+        )
+        os.environ.setdefault(
+            "JARVIS_MEMORY_AUTOMATION_SHADOW",
+            "true" if getattr(settings, "jarvis_memory_automation_shadow", True) else "false",
+        )
+        os.environ.setdefault(
+            "JARVIS_MEMORY_AUTOMATION_STAGE",
+            getattr(settings, "jarvis_memory_automation_stage", "shadow"),
+        )
+        os.environ.setdefault(
+            "JARVIS_COMMAND_CONSOLE_ENABLED",
+            "true" if getattr(settings, "jarvis_command_console_enabled", False) else "false",
+        )
+        os.environ.setdefault(
+            "JARVIS_SHARED_CONTENT_ENABLED",
+            "true" if (getattr(settings, "jarvis_command_console_enabled", False)
+                        and getattr(settings, "jarvis_shared_content_enabled", False)) else "false",
+        )
         if getattr(settings, "tavily_api_key", None):
             os.environ.setdefault("TAVILY_API_KEY", settings.tavily_api_key)
         return
@@ -297,6 +366,9 @@ def bridge_settings_to_env(settings=None) -> None:
         if name in (
             "JARVIS_DB_PATH", "JARVIS_TIMEZONE", "TAVILY_API_KEY",
             "JARVIS_UNITS", "JARVIS_USER_ID",
+            "JARVIS_MEMORY_AUTOMATION_ENABLED", "JARVIS_MEMORY_AUTOMATION_SHADOW",
+            "JARVIS_MEMORY_AUTOMATION_STAGE",
+            "JARVIS_COMMAND_CONSOLE_ENABLED", "JARVIS_SHARED_CONTENT_ENABLED",
         ):
             if value:
                 os.environ.setdefault(name, value)

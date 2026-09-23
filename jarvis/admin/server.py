@@ -51,6 +51,7 @@ Run: scripts/run_admin.sh  (binds 127.0.0.1:7861)
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 import re
@@ -73,6 +74,13 @@ from jarvis.agents.upgrade_agent import (
     available_models,
     load_model_registry,
     resolve_profile,
+)
+from jarvis.model_routing import available_routes, load_access_config
+from jarvis.model_preferences import (
+    ModelPreferenceError,
+    confirm_preference,
+    list_preferences,
+    stage_preference,
 )
 from jarvis.agents.workspace import AppWorkspace
 from jarvis.admin.reminder_notifier import ReminderNotifier
@@ -257,6 +265,17 @@ class AppBuildGoalIn(BaseModel):
     profile: str | None = None
     plan: str | None = None
     plan_path: str | None = None
+
+
+class ModelRouteStageIn(BaseModel):
+    workload: str
+    profile: str
+    route: str
+    privacy: str | None = None
+
+
+class ModelRouteConfirmIn(BaseModel):
+    draft_id: str
 
 
 # G2 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md) — stateful
@@ -1050,6 +1069,33 @@ def status() -> dict:
     return logic.git_status()
 
 
+@app.get("/api/architecture")
+def architecture_reference() -> dict:
+    """Expose the checked-in architecture contract to the native sidecar.
+
+    This is a read-only view of the repository document, not a second
+    architecture store.  The digest lets the UI identify exactly which
+    document the user is reading, while the bounded response protects the
+    local admin service if a future document grows unexpectedly.
+    """
+    root = Path(os.environ.get("JARVIS_REPO_ROOT", str(REPO_ROOT)))
+    path = root / "docs" / "ARCHITECTURE.md"
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {"ok": False, "error": f"architecture reference unavailable: {exc}"}
+    max_chars = 120_000
+    truncated = len(content) > max_chars
+    visible = content[:max_chars] if truncated else content
+    return {
+        "ok": True,
+        "path": "docs/ARCHITECTURE.md",
+        "content": visible,
+        "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        "truncated": truncated,
+    }
+
+
 @app.get("/api/git/log")
 def log(n: int = 5) -> dict:
     return logic.git_log(n)
@@ -1093,6 +1139,63 @@ def push(body: ActionIn) -> dict:
 @app.get("/api/selfedit/models")
 def selfedit_models() -> dict:
     return {"ok": True, "models": available_models()}
+
+
+@app.get("/api/model-routes")
+def model_routes() -> dict:
+    """Return route/workload policy metadata without credential material."""
+    try:
+        access = load_access_config()
+        registry = load_model_registry()
+        profiles = []
+        for name, profile in sorted((registry.get("profiles") or {}).items()):
+            routes = available_routes(profile)
+            profiles.append({
+                "name": name,
+                "identity": profile.get("identity", ""),
+                "provider": profile.get("provider", ""),
+                "model": profile.get("model", ""),
+                "tier": profile.get("tier"),
+                "routes": routes,
+                "api_key_env": profile.get("api_key_env"),
+                "key_present": bool(profile.get("api_key_env")
+                                     and os.environ.get(profile["api_key_env"])),
+            })
+        route_catalog = {}
+        for name, route in (access.get("routes") or {}).items():
+            route_catalog[name] = {
+                "adapter": route.get("adapter", name),
+                "billing": route.get("billing", name),
+                "privacy": route.get("privacy", "approved_external"),
+                "capabilities": list(route.get("capabilities") or []),
+                "credential_env": route.get("credential_env"),
+                "key_present": bool(route.get("credential_env")
+                                     and os.environ.get(route["credential_env"])),
+            }
+        return {"ok": True, "routes": route_catalog,
+                "workloads": access.get("workloads") or {},
+                "profiles": profiles, "preferences": list_preferences()}
+    except Exception as exc:  # noqa: BLE001 - read-only status boundary
+        logger.exception("model_routes_status_failed")
+        return {"ok": False, "error": str(exc)}
+
+
+@app.post("/api/model-routes/stage")
+def model_routes_stage(body: ModelRouteStageIn) -> dict:
+    """Draft a route choice; confirmation is a separate request by design."""
+    try:
+        return {"ok": True, **stage_preference(
+            body.workload, body.profile, body.route, body.privacy)}
+    except ModelPreferenceError as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@app.post("/api/model-routes/confirm")
+def model_routes_confirm(body: ModelRouteConfirmIn) -> dict:
+    try:
+        return {"ok": True, **confirm_preference(body.draft_id)}
+    except ModelPreferenceError as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 @app.get("/api/selfedit/status")

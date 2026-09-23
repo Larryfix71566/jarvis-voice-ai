@@ -21,11 +21,10 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
-from openai import AsyncOpenAI
-
 from jarvis.config import Settings
 from jarvis.db import get_conn
 from jarvis.memory import MAX_ROW_CHARS, MAX_TRANSCRIPT_ROWS, scan_memory_content
+from jarvis.memory_model import make_background_async_client
 from mcp_servers.mcp_kb import logic as kb
 from jarvis.usage_ledger import record_completion, provider_from_base_url
 
@@ -107,16 +106,15 @@ async def write_session_digest(
         transcript = "\n".join(
             f"{r['role'].upper()}: {r['content'][:MAX_ROW_CHARS]}" for r in rows
         )
-        client = (
-            client_factory(settings)
-            if client_factory is not None
-            else AsyncOpenAI(
-                api_key=settings.openai_api_key,
-                base_url=settings.openai_base_url,
-            )
-        )
+        if client_factory is not None:
+            # Test seam only; production uses JARVIS_BACKGROUND_PROFILE.
+            client = client_factory(settings)
+            model = settings.openai_model
+        else:
+            client, route = make_background_async_client(settings)
+            model = route.model
         response = await client.chat.completions.create(
-            model=settings.openai_model,
+            model=model,
             messages=[
                 {"role": "system", "content": DIGEST_SYSTEM_PROMPT},
                 {"role": "user", "content": f"Session transcript:\n{transcript}"},
@@ -126,7 +124,7 @@ async def write_session_digest(
             record_completion(
                 rung="kb_digest",
                 provider=provider_from_base_url(str(client.base_url)),
-                model=settings.openai_model,
+                model=model,
                 response=response,
                 session_id=session_id,
             )
@@ -215,4 +213,3 @@ async def write_session_digest(
         except Exception:  # noqa: BLE001
             pass
         return False
-

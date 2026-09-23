@@ -152,4 +152,33 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertNil(store.comparisonID)
         XCTAssertEqual(store.scrollOffsets[b.id], 70)
     }
+
+    func testConsoleInventoryRevisionTracksSelectionAndModeChanges() throws {
+        let store = WorkspaceStore()
+        let first = try result(), second = try result()
+        store.receive(first); store.receive(second)
+        let before = store.consoleRevision
+        store.select(second.id)
+        XCTAssertGreaterThan(store.consoleRevision, before)
+        let afterSelection = store.consoleRevision
+        store.openMemoryGraph()
+        XCTAssertGreaterThan(store.consoleRevision, afterSelection)
+        let inventory = store.consoleInventory
+        XCTAssertEqual(inventory["mode"] as? String, "memory")
+        XCTAssertEqual((inventory["results"] as? [[String: Any]])?.count, 2)
+    }
+
+    func testConsoleInventoryJSONContainsBoundedTargetsWithoutResultBody() throws {
+        let store = WorkspaceStore()
+        let item = try result()
+        store.receive(item)
+        guard case .object(let payload) = store.consoleInventoryJSON else {
+            return XCTFail("inventory must be a JSON object")
+        }
+        XCTAssertEqual(payload["active_result_id"]?.stringValue, item.id.uuidString)
+        let resultObject = try XCTUnwrap(payload["results"]?.arrayValue?.first?.objectValue)
+        XCTAssertEqual(resultObject["id"]?.stringValue, item.id.uuidString)
+        XCTAssertNil(resultObject["body"])
+        XCTAssertNil(payload["path"])
+    }
 }

@@ -48,9 +48,10 @@ from typing import Any, Callable
 import yaml
 
 from jarvis import effort, llm_client
-from jarvis.repo_map import load_repo_map_suffix
+from jarvis.repo_map import load_architecture_suffix, load_repo_map_suffix
 from jarvis.selfedit.service import SelfEditService
 from jarvis.usage_ledger import record_completion, provider_from_base_url
+from jarvis.model_routing import ModelRouteError, make_sync_route_client, resolve_model_route
 
 logger = logging.getLogger(__name__)
 
@@ -343,7 +344,11 @@ class UpgradeAgent:
         # edit session rediscovered the codebase from scratch every run.
         # `load_repo_map_suffix` is the SAME shared helper SubAgent uses
         # (jarvis/repo_map.py) — one read/cap/skip implementation, not two.
-        self._system_prompt += load_repo_map_suffix()
+        # Keep the repository map and the architecture contract together in
+        # the authoring context.  The latter is read-only guidance, not a
+        # second configuration source; the loop still verifies current files
+        # before proposing an edit.
+        self._system_prompt += load_repo_map_suffix() + load_architecture_suffix()
         # D7 — council rounds convened from this loop are tagged with the
         # workflow that started them ("selfedit" vs "appbuild"), so
         # compute_agreement (which excludes only workflow="planning") keeps
@@ -374,8 +379,22 @@ class UpgradeAgent:
             if "effort" in prof:
                 self.cfg["effort"] = prof["effort"]
             self._api_key_env = prof.get("api_key_env", "OPENAI_API_KEY")
+            self._resolved_route = None
+            if os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1":
+                workload = "app_builder" if config_section == "app_build" else "developer"
+                try:
+                    self._resolved_route = resolve_model_route(
+                        workload, explicit_profile=self.profile_name,
+                        registry_path=registry_path)
+                    self.cfg["provider"] = self._resolved_route.provider
+                    self.cfg["model"] = self._resolved_route.model
+                    self.cfg["base_url"] = self._resolved_route.base_url
+                    self._api_key_env = self._resolved_route.api_key_env or ""
+                except ModelRouteError as exc:
+                    self._resolved_route = exc
         else:
             self._api_key_env = "OPENAI_API_KEY"
+            self._resolved_route = None
 
         # Uniform attribute view for status lines and tests.
         self.model = self.cfg["model"]
@@ -403,7 +422,12 @@ class UpgradeAgent:
 
         # Defer client construction when the key is absent: run() fails fast
         # with a clear summary instead of the SDK raising at construction.
-        self._key_missing = client_factory is None and not os.environ.get(self._api_key_env)
+        self._key_missing = (
+            client_factory is None
+            and (isinstance(self._resolved_route, ModelRouteError)
+                 or not self._api_key_env
+                 or not os.environ.get(self._api_key_env))
+        )
         # Failover state (Larry 2026-08-22: "spin on a dead model is not a
         # great look"). Profiles that have already failed UNREACHABLY this
         # session are never selected again by _completion_with_failover.
@@ -413,7 +437,14 @@ class UpgradeAgent:
         self._client: Any = None
         if client_factory is not None:
             self._client = client_factory()
+        elif isinstance(self._resolved_route, ModelRouteError):
+            self._client = None
         elif not self._key_missing:
+            if self._resolved_route is not None:
+                self._client = make_sync_route_client(self._resolved_route,
+                                                       timeout=PLANNER_CALL_TIMEOUT_S,
+                                                       max_retries=0)
+                return
             self._client = self._build_client(
                 self._api_key_env, self.cfg["base_url"], self.cfg.get("provider"))
 

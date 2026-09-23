@@ -1,0 +1,64 @@
+{
+  "version": "memory-automation-rollout-v1",
+  "limits": {
+    "first_review_count": 20,
+    "max_admission_p95_ms": 2000,
+    "max_daily_candidates": 100,
+    "max_daily_model_calls": 5,
+    "max_cost_multiplier": 2.0,
+    "max_cost_usd": 0.50
+  },
+  "stages": [
+    {"name": "shadow", "minimum_days": 1, "observed_days": 1},
+    {"name": "explicit_preferences", "minimum_days": 1, "observed_days": 1},
+    {"name": "corroborated_inferences", "minimum_days": 1, "observed_days": 1}
+  ],
+  "first_20": [
+    {"id": "decision-01", "reviewed": true, "reversible": true},
+    {"id": "decision-02", "reviewed": true, "reversible": true},
+    {"id": "decision-03", "reviewed": true, "reversible": true},
+    {"id": "decision-04", "reviewed": true, "reversible": true},
+    {"id": "decision-05", "reviewed": true, "reversible": true},
+    {"id": "decision-06", "reviewed": true, "reversible": true},
+    {"id": "decision-07", "reviewed": true, "reversible": true},
+    {"id": "decision-08", "reviewed": true, "reversible": true},
+    {"id": "decision-09", "reviewed": true, "reversible": true},
+    {"id": "decision-10", "reviewed": true, "reversible": true},
+    {"id": "decision-11", "reviewed": true, "reversible": true},
+    {"id": "decision-12", "reviewed": true, "reversible": true},
+    {"id": "decision-13", "reviewed": true, "reversible": true},
+    {"id": "decision-14", "reviewed": true, "reversible": true},
+    {"id": "decision-15", "reviewed": true, "reversible": true},
+    {"id": "decision-16", "reviewed": true, "reversible": true},
+    {"id": "decision-17", "reviewed": true, "reversible": true},
+    {"id": "decision-18", "reviewed": true, "reversible": true},
+    {"id": "decision-19", "reviewed": true, "reversible": true},
+    {"id": "decision-20", "reviewed": true, "reversible": true}
+  ],
+  "baseline": {
+    "correct_explicit_use": 7,
+    "relevant_recall": 6,
+    "unnecessary_interruptions": 2,
+    "stale_use_errors": 1,
+    "privacy_regressions": 0,
+    "unauthorized_scope_expansions": 0,
+    "duplicate_durable_rows": 0,
+    "admission_latencies_ms": [120, 140, 150, 170, 180, 190, 220, 260],
+    "candidates": 8,
+    "model_calls": 2,
+    "cost_usd": 0.020
+  },
+  "candidate": {
+    "correct_explicit_use": 8,
+    "relevant_recall": 8,
+    "unnecessary_interruptions": 0,
+    "stale_use_errors": 0,
+    "privacy_regressions": 0,
+    "unauthorized_scope_expansions": 0,
+    "duplicate_durable_rows": 0,
+    "admission_latencies_ms": [110, 120, 130, 145, 160, 175, 190, 210],
+    "candidates": 20,
+    "model_calls": 2,
+    "cost_usd": 0.030
+  }
+}

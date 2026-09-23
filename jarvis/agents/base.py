@@ -38,13 +38,41 @@ from jarvis.agent_skills import match_skill
 from jarvis.procedures import match_procedure, mark_used
 from jarvis.workflows import match_workflow
 from jarvis.prompts import AGENT_DISCIPLINE, SUBAGENT_PROMPTS
-from jarvis.repo_map import REPO_MAP_MAX_CHARS, load_repo_map_suffix
+from jarvis.repo_map import (
+    REPO_MAP_MAX_CHARS,
+    load_architecture_suffix,
+    load_repo_map_suffix,
+)
 from jarvis.runlog import RunLogger, get_run_id, run_logger_scope
 from jarvis.bot.sensitive_turn import is_sensitive
 from jarvis.toolresult import classify_tool_result
 from jarvis.usage_ledger import record_completion, provider_from_base_url
+from jarvis.model_routing import (
+    ModelRouteError, make_route_client, resolve_model_route_checked,
+    resolve_policy,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _policy_requires_runlog_redaction(workload: str, *, enabled: bool) -> bool:
+    """Return whether this workload's route policy requires redacted logs.
+
+    Route policy is the authoritative privacy requirement for enabled-mode
+    agents.  The existing ``is_sensitive`` turn gate still covers ordinary
+    conversations; this additional check prevents a confidential/local-only
+    workload from writing tool payloads or its final answer into the normal
+    run log merely because the current turn was not marked sensitive.
+    """
+    if not enabled:
+        return False
+    try:
+        return resolve_policy(workload).privacy in {"confidential", "local_only"}
+    except (ModelRouteError, ValueError, OSError):
+        # A malformed or unavailable policy must never break a delegation.
+        # Route resolution itself remains fail-closed; this helper only
+        # decides whether to add the stronger run-log redaction layer.
+        return False
 
 MAX_TOOL_ITERATIONS = 5
 DEFAULT_TIMEOUT_S = 45.0
@@ -216,24 +244,35 @@ class SubAgent:
         # future non-Anthropic reassignment of this agent's profile
         # degrades safely without touching this file.
         self._effort: str | None = effort
+        routing_enabled = bool(
+            getattr(settings, "jarvis_model_routing_enabled", False)
+            or os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
+        )
         if client_factory is not None:
             self._client = client_factory(settings)
         elif model_profile:
             try:
-                registry_data = load_model_registry()
-                profile = resolve_profile(registry_data, model_profile)
-                key_env = profile.get("api_key_env", "OPENAI_API_KEY")
-                if not os.environ.get(key_env):
-                    raise UnknownModelProfileError(
-                        f"model profile {model_profile!r} needs {key_env}, which is unset"
+                if routing_enabled:
+                    resolved = resolve_model_route_checked(
+                        name, explicit_profile=model_profile)
+                    self._client = make_route_client(resolved)
+                    self._model = resolved.model
+                    self._api_key_env = resolved.api_key_env or ""
+                else:
+                    registry_data = load_model_registry()
+                    profile = resolve_profile(registry_data, model_profile)
+                    key_env = profile.get("api_key_env", "OPENAI_API_KEY")
+                    if not os.environ.get(key_env):
+                        raise UnknownModelProfileError(
+                            f"model profile {model_profile!r} needs {key_env}, which is unset"
+                        )
+                    self._client = llm_client.make_async_client(
+                        api_key=os.environ[key_env], base_url=profile["base_url"],
+                        provider=profile.get("provider"),
                     )
-                self._client = llm_client.make_async_client(
-                    api_key=os.environ[key_env], base_url=profile["base_url"],
-                    provider=profile.get("provider"),
-                )
-                self._model = profile["model"]
-                self._api_key_env = key_env
-            except UnknownModelProfileError as exc:
+                    self._model = profile["model"]
+                    self._api_key_env = key_env
+            except (UnknownModelProfileError, ModelRouteError) as exc:
                 self._model_fallback = True
                 # K5 — refuse mode, finally implemented. `warn` keeps the
                 # long-standing fail-soft behaviour (voice must boot on a
@@ -254,9 +293,12 @@ class SubAgent:
                     "subagent_model_profile_fallback agent=%s profile=%s mode=%s",
                     name, model_profile, on_profile_fallback,
                 )
-                self._client = llm_client.make_async_client(
-                    api_key=settings.openai_api_key, base_url=settings.openai_base_url,
-                )
+                if routing_enabled:
+                    self._client = None
+                else:
+                    self._client = llm_client.make_async_client(
+                        api_key=settings.openai_api_key, base_url=settings.openai_base_url,
+                    )
         else:
             self._client = llm_client.make_async_client(
                 api_key=settings.openai_api_key, base_url=settings.openai_base_url,
@@ -273,7 +315,10 @@ class SubAgent:
         # skip implementation (jarvis/repo_map.py) — UpgradeAgent uses the
         # same function so the two loops can never drift on this logic.
         if inject_repo_map:
-            self._repo_map_suffix = load_repo_map_suffix(REPO_MAP_MAX_CHARS)
+            self._repo_map_suffix = (
+                load_repo_map_suffix(REPO_MAP_MAX_CHARS)
+                + load_architecture_suffix()
+            )
             self._system_prompt += self._repo_map_suffix
 
     @property
@@ -375,6 +420,14 @@ class SubAgent:
         `chat.completions.create`), not a second source of truth.
         """
         try:
+            routing_enabled = bool(
+                getattr(self._settings, "jarvis_model_routing_enabled", False)
+                or os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
+            )
+            if routing_enabled:
+                resolved = resolve_model_route_checked(
+                    self.name, explicit_profile=profile_name)
+                return make_route_client(resolved), resolved.model, ""
             registry_data = load_model_registry()
             profile = resolve_profile(registry_data, profile_name)
             key_env = profile.get("api_key_env", "OPENAI_API_KEY")
@@ -387,7 +440,7 @@ class SubAgent:
                 provider=profile.get("provider"),
             )
             return client, profile["model"], ""
-        except UnknownModelProfileError as exc:
+        except (UnknownModelProfileError, ModelRouteError) as exc:
             reason = (
                 f"model profile {profile_name!r} could not be resolved "
                 f"({exc}) — this run was requested on that model "
@@ -453,7 +506,14 @@ class SubAgent:
                 return f"REFUSED: {refused_reason}"
             run_client, run_model = override_client, override_model
 
+        routing_enabled = bool(
+            getattr(self._settings, "jarvis_model_routing_enabled", False)
+            or os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
+        )
         resolved_run_id = run_id or str(uuid.uuid4())
+        route_policy_sensitive = _policy_requires_runlog_redaction(
+            self.name, enabled=routing_enabled
+        )
         runlog = RunLogger(
             resolved_run_id, self.name, self.display_name, task,
             session_id=session_id,
@@ -464,7 +524,10 @@ class SubAgent:
             # the OVERRIDE-resolved model when one was requested, never
             # self._model — the run log must record what actually ran.
             model=run_model,
-            sensitive=is_sensitive(),   # T4a K3 snapshot (review F6)
+            sensitive=(is_sensitive() or route_policy_sensitive),
+            # T4a K3 snapshot (review F6). Enabled-mode confidential and
+            # local-only workload policies add the same redaction guarantee
+            # even when the originating conversational turn was unlabeled.
         )
         runlog.start()
         try:

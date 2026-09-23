@@ -1,0 +1,465 @@
+Building for debugging...
+[1 / 7] JarvisKitTests-product
+Build complete! (0.19 sec)
+Test Suite 'All tests' started at 2026-09-18 16:43:11.654.
+Test Suite 'JarvisKitTests.xctest' started at 2026-09-18 16:43:11.654.
+Test Suite 'AdminAPITests' started at 2026-09-18 16:43:11.654.
+Test Case '-[JarvisKitTests.AdminAPITests testAdminRoutesBuildExpectedURLs]' started.
+Test Case '-[JarvisKitTests.AdminAPITests testAdminRoutesBuildExpectedURLs]' passed (0.013 seconds).
+Test Case '-[JarvisKitTests.AdminAPITests testBearerHeaderOnAdminRoute]' started.
+Test Case '-[JarvisKitTests.AdminAPITests testBearerHeaderOnAdminRoute]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AdminAPITests testResolveReviewUsesIntIdAndBodyKeys]' started.
+Test Case '-[JarvisKitTests.AdminAPITests testResolveReviewUsesIntIdAndBodyKeys]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AdminAPITests testSelfeditRunEncodesGoalInKeys]' started.
+Test Case '-[JarvisKitTests.AdminAPITests testSelfeditRunEncodesGoalInKeys]' passed (0.000 seconds).
+Test Suite 'AdminAPITests' passed at 2026-09-18 16:43:11.669.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.014 (0.015) seconds
+Test Suite 'AdminResponseDecodeTests' started at 2026-09-18 16:43:11.669.
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeArchitectureReference]' started.
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeArchitectureReference]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeCouncilRoster]' started.
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeCouncilRoster]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeCouncilRosterOlderRoundMissingFields]' started.
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeCouncilRosterOlderRoundMissingFields]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeGitStatus]' started.
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeGitStatus]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeKnowledge]' started.
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeKnowledge]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeMemoryFactMetadata]' started.
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeMemoryFactMetadata]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeMemoryOverview]' started.
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeMemoryOverview]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeMemoryReviews]' started.
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeMemoryReviews]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeOlderSidecarMissingField]' started.
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeOlderSidecarMissingField]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeRunDetail]' started.
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeRunDetail]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeRunsList]' started.
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeRunsList]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeSelfEditModels]' started.
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeSelfEditModels]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeSelfEditStatusBusy]' started.
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeSelfEditStatusBusy]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeSelfEditStatusReal]' started.
+Test Case '-[JarvisKitTests.AdminResponseDecodeTests testDecodeSelfEditStatusReal]' passed (0.000 seconds).
+Test Suite 'AdminResponseDecodeTests' passed at 2026-09-18 16:43:11.674.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
+Test Suite 'AppMessageTests' started at 2026-09-18 16:43:11.674.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeAgentActivityWithoutPlannerModel]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeAgentActivityWithoutPlannerModel]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeAgentActivityWithPlannerModel]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeAgentActivityWithPlannerModel]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeAgentDone]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeAgentDone]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeAgentDoneMissingOkDefaultsTrue]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeAgentDoneMissingOkDefaultsTrue]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeAgentTool]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeAgentTool]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeAgentWorking]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeAgentWorking]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeBarePayloadWithoutEnvelope]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeBarePayloadWithoutEnvelope]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeBotTranscription]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeBotTranscription]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeCapability]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeCapability]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeConsoleResultFromRTVIEnvelope]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeConsoleResultFromRTVIEnvelope]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeDisplayClipboardPayload]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeDisplayClipboardPayload]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeDisplayHandoffPayloadIgnoresInnerType]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeDisplayHandoffPayloadIgnoresInnerType]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeDisplayMissingSurfaceDefaultsToDrawer]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeDisplayMissingSurfaceDefaultsToDrawer]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeDisplayRadarBasemap]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeDisplayRadarBasemap]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeDisplayUnknownSurfaceDefaultsToDrawer]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeDisplayUnknownSurfaceDefaultsToDrawer]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeDisplayWindowSurface]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeDisplayWindowSurface]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeFrameWithoutTypeReturnsNil]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeFrameWithoutTypeReturnsNil]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeInputAcceptAndChunkAck]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeInputAcceptAndChunkAck]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeInputConsentPreservesSpokenDecisionIdentity]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeInputConsentPreservesSpokenDecisionIdentity]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeInputOfferPreservesBoundedApprovalMetadata]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeInputOfferPreservesBoundedApprovalMetadata]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeInputStatusKeepsTerminalCode]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeInputStatusKeepsTerminalCode]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeMalformedJSONThrows]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeMalformedJSONThrows]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeSignallingFrameReturnsNil]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeSignallingFrameReturnsNil]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeSpeakerGateNearThreshold]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeSpeakerGateNearThreshold]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeSpeakerGateNullScore]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeSpeakerGateNullScore]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeUICommandWithoutTab]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeUICommandWithoutTab]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeUICommandWithTab]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeUICommandWithTab]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeUnknownTypePreservesRaw]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeUnknownTypePreservesRaw]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeUserTranscription]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeUserTranscription]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeVoiceCatalog]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeVoiceCatalog]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeVoiceCurrent]' started.
+Test Case '-[JarvisKitTests.AppMessageTests testDecodeVoiceCurrent]' passed (0.000 seconds).
+Test Suite 'AppMessageTests' passed at 2026-09-18 16:43:11.678.
+	 Executed 31 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
+Test Suite 'AudioActivityObserverTests' started at 2026-09-18 16:43:11.678.
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testAChannelWithNoObservationsReportsZeroMagnitude]' started.
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testAChannelWithNoObservationsReportsZeroMagnitude]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testALevelSeenRepeatedlyCountsOnceOnArrivalAndEveryTickAsDisplayed]' started.
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testALevelSeenRepeatedlyCountsOnceOnArrivalAndEveryTickAsDisplayed]' passed (0.153 seconds).
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testANewSessionIsANewGeneration]' started.
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testANewSessionIsANewGeneration]' passed (0.307 seconds).
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testEndSessionStopsPublishingAndClearsTheSnapshot]' started.
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testEndSessionStopsPublishingAndClearsTheSnapshot]' passed (0.155 seconds).
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testInputMeasuredBeforeEligibilityBeganIsRefused]' started.
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testInputMeasuredBeforeEligibilityBeganIsRefused]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testLatencyReportsPercentilesOfBufferToPresentationDelay]' started.
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testLatencyReportsPercentilesOfBufferToPresentationDelay]' passed (0.156 seconds).
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testLevelMagnitudesAreCountedPerDistinctLevelNotPerTick]' started.
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testLevelMagnitudesAreCountedPerDistinctLevelNotPerTick]' passed (0.156 seconds).
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testMeasuredLevelsReachThePresentationWhileTheMicrophoneIsEligible]' started.
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testMeasuredLevelsReachThePresentationWhileTheMicrophoneIsEligible]' passed (0.156 seconds).
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testMutingDropsTheInputChannelButNotPlayout]' started.
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testMutingDropsTheInputChannelButNotPlayout]' passed (0.156 seconds).
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testSamplingIsCappedAtThirtyHertz]' started.
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testSamplingIsCappedAtThirtyHertz]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testTheMeterCanBeDisabledAtRuntime]' started.
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testTheMeterCanBeDisabledAtRuntime]' passed (0.027 seconds).
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testWithoutAMeasuredSourceNothingIsPublished]' started.
+Test Case '-[JarvisKitTests.AudioActivityObserverTests testWithoutAMeasuredSourceNothingIsPublished]' passed (0.026 seconds).
+Test Suite 'AudioActivityObserverTests' passed at 2026-09-18 16:43:12.972.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 1.292 (1.294) seconds
+Test Suite 'AudioActivityTests' started at 2026-09-18 16:43:12.972.
+Test Case '-[JarvisKitTests.AudioActivityTests testDuplicatesCannotExtendFreshnessAndResetRejectsOldSession]' started.
+Test Case '-[JarvisKitTests.AudioActivityTests testDuplicatesCannotExtendFreshnessAndResetRejectsOldSession]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AudioActivityTests testMalformedFutureAndAlreadyStaleSamplesNeverBecomeValid]' started.
+Test Case '-[JarvisKitTests.AudioActivityTests testMalformedFutureAndAlreadyStaleSamplesNeverBecomeValid]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AudioActivityTests testMuteClearsInputImmediatelyAndDoesNotSuppressPlayout]' started.
+Test Case '-[JarvisKitTests.AudioActivityTests testMuteClearsInputImmediatelyAndDoesNotSuppressPlayout]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AudioActivityTests testSilenceIsDistinctFromMissingAndExpiresWithoutCallbacks]' started.
+Test Case '-[JarvisKitTests.AudioActivityTests testSilenceIsDistinctFromMissingAndExpiresWithoutCallbacks]' passed (0.000 seconds).
+Test Suite 'AudioActivityTests' passed at 2026-09-18 16:43:12.974.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'AudioEngineIOTests' started at 2026-09-18 16:43:12.974.
+Test Case '-[JarvisKitTests.AudioEngineIOTests testCaptureConverterIsContinuousAcrossConsecutiveBuffers]' started.
+Test Case '-[JarvisKitTests.AudioEngineIOTests testCaptureConverterIsContinuousAcrossConsecutiveBuffers]' passed (0.014 seconds).
+Test Case '-[JarvisKitTests.AudioEngineIOTests testCaptureConverterProducesSixteenKilohertzMonoInt16FromEveryRealInputRate]' started.
+Test Case '-[JarvisKitTests.AudioEngineIOTests testCaptureConverterProducesSixteenKilohertzMonoInt16FromEveryRealInputRate]' passed (0.025 seconds).
+Test Case '-[JarvisKitTests.AudioEngineIOTests testFirstChannelTakesChannelZeroOfAMultiChannelTapBufferAndPassesMonoThrough]' started.
+Test Case '-[JarvisKitTests.AudioEngineIOTests testFirstChannelTakesChannelZeroOfAMultiChannelTapBufferAndPassesMonoThrough]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.AudioEngineIOTests testLevelMeterReportsRMSOnFloatAndInt16BuffersClampedToUnity]' started.
+Test Case '-[JarvisKitTests.AudioEngineIOTests testLevelMeterReportsRMSOnFloatAndInt16BuffersClampedToUnity]' passed (0.003 seconds).
+Test Case '-[JarvisKitTests.AudioEngineIOTests testPlayoutDecoderTurnsLittleEndianInt16IntoFloatFramesAtTheDeclaredRate]' started.
+Test Case '-[JarvisKitTests.AudioEngineIOTests testPlayoutDecoderTurnsLittleEndianInt16IntoFloatFramesAtTheDeclaredRate]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AudioEngineIOTests testPlayoutFlushDropsTheQueueAndIgnoresCompletionsFromBeforeIt]' started.
+Test Case '-[JarvisKitTests.AudioEngineIOTests testPlayoutFlushDropsTheQueueAndIgnoresCompletionsFromBeforeIt]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AudioEngineIOTests testPlayoutQueueIsPlayingExactlyWhileScheduledBuffersAreUnfinished]' started.
+Test Case '-[JarvisKitTests.AudioEngineIOTests testPlayoutQueueIsPlayingExactlyWhileScheduledBuffersAreUnfinished]' passed (0.000 seconds).
+Test Suite 'AudioEngineIOTests' passed at 2026-09-18 16:43:13.018.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.043 (0.044) seconds
+Test Suite 'AudioOutputTests' started at 2026-09-18 16:43:13.018.
+Test Case '-[JarvisKitTests.AudioOutputTests testDefaultOutputDeviceReadsWithoutThrowing]' started.
+Test Case '-[JarvisKitTests.AudioOutputTests testDefaultOutputDeviceReadsWithoutThrowing]' passed (0.044 seconds).
+Test Case '-[JarvisKitTests.AudioOutputTests testFollowAudioOutputIsOptIn]' started.
+Test Case '-[JarvisKitTests.AudioOutputTests testFollowAudioOutputIsOptIn]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AudioOutputTests testInputNoticeTextNamesTheRates]' started.
+Test Case '-[JarvisKitTests.AudioOutputTests testInputNoticeTextNamesTheRates]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AudioOutputTests testNoticeTextNamesBothDevices]' started.
+Test Case '-[JarvisKitTests.AudioOutputTests testNoticeTextNamesBothDevices]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AudioOutputTests testNoticeTextWithoutAPreviousDevice]' started.
+Test Case '-[JarvisKitTests.AudioOutputTests testNoticeTextWithoutAPreviousDevice]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AudioOutputTests testRateMismatchIsTrueOnlyWhenBothKnownAndDiffer]' started.
+Test Case '-[JarvisKitTests.AudioOutputTests testRateMismatchIsTrueOnlyWhenBothKnownAndDiffer]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AudioOutputTests testRestoreWithoutAReassignmentIsANoOp]' started.
+Test Case '-[JarvisKitTests.AudioOutputTests testRestoreWithoutAReassignmentIsANoOp]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.AudioOutputTests testStartAndStopAreIdempotent]' started.
+Test Case '-[JarvisKitTests.AudioOutputTests testStartAndStopAreIdempotent]' passed (0.000 seconds).
+Test Suite 'AudioOutputTests' passed at 2026-09-18 16:43:13.063.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.045 (0.045) seconds
+Test Suite 'ClientMessageTests' started at 2026-09-18 16:43:13.063.
+Test Case '-[JarvisKitTests.ClientMessageTests testNoopAcceptsExactly200Chars]' started.
+Test Case '-[JarvisKitTests.ClientMessageTests testNoopAcceptsExactly200Chars]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.ClientMessageTests testNoopRejectsEmpty]' started.
+Test Case '-[JarvisKitTests.ClientMessageTests testNoopRejectsEmpty]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.ClientMessageTests testNoopRejectsOver200Chars]' started.
+Test Case '-[JarvisKitTests.ClientMessageTests testNoopRejectsOver200Chars]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.ClientMessageTests testUiNoopEncodesRawShape]' started.
+Test Case '-[JarvisKitTests.ClientMessageTests testUiNoopEncodesRawShape]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.ClientMessageTests testVoiceSetEncodesRawShape]' started.
+Test Case '-[JarvisKitTests.ClientMessageTests testVoiceSetEncodesRawShape]' passed (0.000 seconds).
+Test Suite 'ClientMessageTests' passed at 2026-09-18 16:43:13.063.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ConfigAndAuthTests' started at 2026-09-18 16:43:13.063.
+Test Case '-[JarvisKitTests.ConfigAndAuthTests test401MapsToUnauthorized]' started.
+Test Case '-[JarvisKitTests.ConfigAndAuthTests test401MapsToUnauthorized]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.ConfigAndAuthTests test403MapsToForbidden]' started.
+Test Case '-[JarvisKitTests.ConfigAndAuthTests test403MapsToForbidden]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.ConfigAndAuthTests test500MapsToHTTP]' started.
+Test Case '-[JarvisKitTests.ConfigAndAuthTests test500MapsToHTTP]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testAuthDisabledFlagSuppressesToken]' started.
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testAuthDisabledFlagSuppressesToken]' passed (0.012 seconds).
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testBearerAttachedWhenTokenPresent]' started.
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testBearerAttachedWhenTokenPresent]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testConnectRereadsTokenFromKeychain]' started.
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testConnectRereadsTokenFromKeychain]' passed (0.011 seconds).
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testDefaultURLsAreLoopback]' started.
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testDefaultURLsAreLoopback]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testEnvironmentBeatsUserDefaults]' started.
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testEnvironmentBeatsUserDefaults]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testKeychainAccountDerivedFromBotURL]' started.
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testKeychainAccountDerivedFromBotURL]' passed (0.018 seconds).
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testNoAuthorizationHeaderWhenTokenNil]' started.
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testNoAuthorizationHeaderWhenTokenNil]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testNonLoopbackWithAuthFlagOffRefuses]' started.
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testNonLoopbackWithAuthFlagOffRefuses]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testNonLoopbackWithoutTokenRefuses]' started.
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testNonLoopbackWithoutTokenRefuses]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testNonLoopbackWithTokenConnects]' started.
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testNonLoopbackWithTokenConnects]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testUserDefaultsBeatsCompiledDefault]' started.
+Test Case '-[JarvisKitTests.ConfigAndAuthTests testUserDefaultsBeatsCompiledDefault]' passed (0.001 seconds).
+Test Suite 'ConfigAndAuthTests' passed at 2026-09-18 16:43:13.109.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.045 (0.046) seconds
+Test Suite 'ConsoleProtocolTests' started at 2026-09-18 16:43:13.109.
+Test Case '-[JarvisKitTests.ConsoleProtocolTests testClientConsoleRequestUsesRawLockedShape]' started.
+Test Case '-[JarvisKitTests.ConsoleProtocolTests testClientConsoleRequestUsesRawLockedShape]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.ConsoleProtocolTests testConsoleResultDecodesBoundedSummaryAndChoices]' started.
+Test Case '-[JarvisKitTests.ConsoleProtocolTests testConsoleResultDecodesBoundedSummaryAndChoices]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.ConsoleProtocolTests testHelloDecodesAndReadyUsesMatchingSessionGeneration]' started.
+Test Case '-[JarvisKitTests.ConsoleProtocolTests testHelloDecodesAndReadyUsesMatchingSessionGeneration]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.ConsoleProtocolTests testNativeInventoryUsesRevisionAndSafeJSONPayload]' started.
+Test Case '-[JarvisKitTests.ConsoleProtocolTests testNativeInventoryUsesRevisionAndSafeJSONPayload]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.ConsoleProtocolTests testProtocolFixtureRoundTripsIncludingSecondaryTarget]' started.
+Test Case '-[JarvisKitTests.ConsoleProtocolTests testProtocolFixtureRoundTripsIncludingSecondaryTarget]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.ConsoleProtocolTests testUnknownActionIsRejectedByClosedEnum]' started.
+Test Case '-[JarvisKitTests.ConsoleProtocolTests testUnknownActionIsRejectedByClosedEnum]' passed (0.000 seconds).
+Test Suite 'ConsoleProtocolTests' passed at 2026-09-18 16:43:13.110.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'DetachedPlayerTests' started at 2026-09-18 16:43:13.110.
+Test Case '-[JarvisKitTests.DetachedPlayerTests testPlayoutLevelIsNilAfterTheEngineStopsWhileTheMeterKeepsAsking]' started.
+Test Case '-[JarvisKitTests.DetachedPlayerTests testPlayoutLevelIsNilAfterTheEngineStopsWhileTheMeterKeepsAsking]' passed (0.003 seconds).
+Test Case '-[JarvisKitTests.DetachedPlayerTests testPlayoutLevelIsNilWhenThePlayerHasNoEngine]' started.
+Test Case '-[JarvisKitTests.DetachedPlayerTests testPlayoutLevelIsNilWhenThePlayerHasNoEngine]' passed (0.000 seconds).
+Test Suite 'DetachedPlayerTests' passed at 2026-09-18 16:43:13.114.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'DeviceSettlingTests' started at 2026-09-18 16:43:13.114.
+Test Case '-[JarvisKitTests.DeviceSettlingTests testADeviceThatNeverComesUpStillFails]' started.
+Test Case '-[JarvisKitTests.DeviceSettlingTests testADeviceThatNeverComesUpStillFails]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.DeviceSettlingTests testAHalfBuiltOutputIsWaitedForRatherThanRefused]' started.
+Test Case '-[JarvisKitTests.DeviceSettlingTests testAHalfBuiltOutputIsWaitedForRatherThanRefused]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.DeviceSettlingTests testUsableFormatsAreReturnedImmediately]' started.
+Test Case '-[JarvisKitTests.DeviceSettlingTests testUsableFormatsAreReturnedImmediately]' passed (0.000 seconds).
+Test Suite 'DeviceSettlingTests' passed at 2026-09-18 16:43:13.114.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'MemoryGraphAPITests' started at 2026-09-18 16:43:13.114.
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testAuthenticatedReadEncodesFocusAsOneQueryValue]' started.
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testAuthenticatedReadEncodesFocusAsOneQueryValue]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testDisabledGraphPreservesServerExplanation]' started.
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testDisabledGraphPreservesServerExplanation]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testDuplicateNodesAndDanglingEdgesAreRejected]' started.
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testDuplicateNodesAndDanglingEdgesAreRejected]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testEdgeLimitIsDisclosed]' started.
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testEdgeLimitIsDisclosed]' passed (0.005 seconds).
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testGraphReadBypassesAndDoesNotReplaceSharedCachedContent]' started.
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testGraphReadBypassesAndDoesNotReplaceSharedCachedContent]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testGraphSessionDoesNotUseSharedPersistenceStores]' started.
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testGraphSessionDoesNotUseSharedPersistenceStores]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testImageFallbackUsesAuthenticatedConfiguredOriginAndQuery]' started.
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testImageFallbackUsesAuthenticatedConfiguredOriginAndQuery]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testNodeLimitKeepsRequestedFocusAndDisclosesPartialView]' started.
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testNodeLimitKeepsRequestedFocusAndDisclosesPartialView]' passed (0.003 seconds).
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testUnknownTypesAndAbsentProvenanceRemainHonest]' started.
+Test Case '-[JarvisKitTests.MemoryGraphAPITests testUnknownTypesAndAbsentProvenanceRemainHonest]' passed (0.000 seconds).
+Test Suite 'MemoryGraphAPITests' passed at 2026-09-18 16:43:13.126.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.012 (0.012) seconds
+Test Suite 'MemoryGraphClosureC3Tests' started at 2026-09-18 16:43:13.126.
+Test Case '-[JarvisKitTests.MemoryGraphClosureC3Tests testAbsentOrPartialLegendStillDecodes]' started.
+Test Case '-[JarvisKitTests.MemoryGraphClosureC3Tests testAbsentOrPartialLegendStillDecodes]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.MemoryGraphClosureC3Tests testDepthIsOmittedUnlessTheUserChoseOne]' started.
+Test Case '-[JarvisKitTests.MemoryGraphClosureC3Tests testDepthIsOmittedUnlessTheUserChoseOne]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.MemoryGraphClosureC3Tests testGraphImageDataOnlyFetchesAdminOriginGraphImagesThroughTheTransientSender]' started.
+Test Case '-[JarvisKitTests.MemoryGraphClosureC3Tests testGraphImageDataOnlyFetchesAdminOriginGraphImagesThroughTheTransientSender]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.MemoryGraphClosureC3Tests testPersistedQueriesWithoutTheNewFieldStillDecode]' started.
+Test Case '-[JarvisKitTests.MemoryGraphClosureC3Tests testPersistedQueriesWithoutTheNewFieldStillDecode]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.MemoryGraphClosureC3Tests testServerShapedLegendDecodesAndDefinesDirectionalTypes]' started.
+Test Case '-[JarvisKitTests.MemoryGraphClosureC3Tests testServerShapedLegendDecodesAndDefinesDirectionalTypes]' passed (0.000 seconds).
+Test Suite 'MemoryGraphClosureC3Tests' passed at 2026-09-18 16:43:13.128.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'MessagePrivacyTests' started at 2026-09-18 16:43:13.128.
+Test Case '-[JarvisKitTests.MessagePrivacyTests testApprovalIsSessionScopedAndRevocable]' started.
+Test Case '-[JarvisKitTests.MessagePrivacyTests testApprovalIsSessionScopedAndRevocable]' passed (0.000 seconds).
+Test Suite 'MessagePrivacyTests' passed at 2026-09-18 16:43:13.128.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'NativeAudioTransportTests' started at 2026-09-18 16:43:13.128.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAFailureFromAPreviousSessionIsIgnored]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAFailureFromAPreviousSessionIsIgnored]' passed (0.153 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAnEngineThatCannotStartClosesAnEarlySocketAndFailsConnect]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAnEngineThatCannotStartClosesAnEarlySocketAndFailsConnect]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAnEngineThatGivesUpOnItsDeviceFailsTheSession]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAnEngineThatGivesUpOnItsDeviceFailsTheSession]' passed (0.007 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAnInboundFrameEstablishesTheSessionWithoutAPong]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAnInboundFrameEstablishesTheSessionWithoutAPong]' passed (0.322 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAnsweredPingsAloneNeverMakeTheSessionReady]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAnsweredPingsAloneNeverMakeTheSessionReady]' passed (0.619 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testASilentServerIsGivenTheReadyDeadlineBeforeTheStallWatchdogExists]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testASilentServerIsGivenTheReadyDeadlineBeforeTheStallWatchdogExists]' passed (1.213 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAudioFramesGoToPlayoutInterruptionFlushesAndTextFramesAreIgnored]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAudioFramesGoToPlayoutInterruptionFlushesAndTextFramesAreIgnored]' passed (0.013 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testBotIsSpeakingFollowsThePlayerNodeAndStopsAtDisconnect]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testBotIsSpeakingFollowsThePlayerNodeAndStopsAtDisconnect]' passed (0.055 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testCapturedPCMIsSentOnlyWhileOpenAndUnmuted]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testCapturedPCMIsSentOnlyWhileOpenAndUnmuted]' passed (0.019 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testCaptureMonitorHearsProcessedAudioWhileMutedAndDoesNotSurviveTheSession]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testCaptureMonitorHearsProcessedAudioWhileMutedAndDoesNotSurviveTheSession]' passed (0.064 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testConnectStartsCaptureOpensTheSocketAndReportsConnectedOnlyWhenTheBotAnswers]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testConnectStartsCaptureOpensTheSocketAndReportsConnectedOnlyWhenTheBotAnswers]' passed (0.007 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testEveryAppMessageFixtureDecodesTheSameThroughTheWebSocketAsOffTheDataChannel]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testEveryAppMessageFixtureDecodesTheSameThroughTheWebSocketAsOffTheDataChannel]' passed (0.008 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testHungAudioStartFailsWithinDeadlineAndLateCompletionCannotReviveSession]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testHungAudioStartFailsWithinDeadlineAndLateCompletionCannotReviveSession]' passed (0.109 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testKeepAlivePingsRunWhileOpen]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testKeepAlivePingsRunWhileOpen]' passed (1.005 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testOnceEstablishedSilenceBeyondTheStallThresholdTearsTheSessionDown]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testOnceEstablishedSilenceBeyondTheStallThresholdTearsTheSessionDown]' passed (0.309 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testOutboundQueueBeforeOpenIsBoundedOldestDropped]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testOutboundQueueBeforeOpenIsBoundedOldestDropped]' passed (0.007 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testReconnectTearsDownTheLiveSessionFirstAndOrphansItsCallbacks]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testReconnectTearsDownTheLiveSessionFirstAndOrphansItsCallbacks]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testServerCloseIsReportedOnceAndStopsTheEngine]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testServerCloseIsReportedOnceAndStopsTheEngine]' passed (0.006 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testSlowAudioStartDoesNotBlockSocketOpenCallback]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testSlowAudioStartDoesNotBlockSocketOpenCallback]' passed (0.007 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testSlowAudioStartDoesNotBlockTheMainActor]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testSlowAudioStartDoesNotBlockTheMainActor]' passed (0.007 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testSocketURLIsTheRunnersPlainWebSocketRouteWithTheSchemeMapped]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testSocketURLIsTheRunnersPlainWebSocketRouteWithTheSchemeMapped]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testTheReadyDeadlineFailsTheSessionWhenTheBotNeverAnswers]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testTheReadyDeadlineFailsTheSessionWhenTheBotNeverAnswers]' passed (0.405 seconds).
+Test Suite 'NativeAudioTransportTests' passed at 2026-09-18 16:43:17.463.
+	 Executed 22 tests, with 0 failures (0 unexpected) in 4.333 (4.335) seconds
+Test Suite 'PipecatFrameCodecTests' started at 2026-09-18 16:43:17.463.
+Test Case '-[JarvisKitTests.PipecatFrameCodecTests testClientAudioEncodesExactlyWhatPipecatDeserializesIntoInputAudioRawFrame]' started.
+Test Case '-[JarvisKitTests.PipecatFrameCodecTests testClientAudioEncodesExactlyWhatPipecatDeserializesIntoInputAudioRawFrame]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.PipecatFrameCodecTests testClientMessageEncodesExactlyWhatPipecatDeserializesIntoInputTransportMessageFrame]' started.
+Test Case '-[JarvisKitTests.PipecatFrameCodecTests testClientMessageEncodesExactlyWhatPipecatDeserializesIntoInputTransportMessageFrame]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.PipecatFrameCodecTests testInterruptionTextAndTranscriptionFramesDecode]' started.
+Test Case '-[JarvisKitTests.PipecatFrameCodecTests testInterruptionTextAndTranscriptionFramesDecode]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.PipecatFrameCodecTests testMalformedInputIsRefusedNotMisread]' started.
+Test Case '-[JarvisKitTests.PipecatFrameCodecTests testMalformedInputIsRefusedNotMisread]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.PipecatFrameCodecTests testServerAudioFrameDecodesWithIdAndNameSkipped]' started.
+Test Case '-[JarvisKitTests.PipecatFrameCodecTests testServerAudioFrameDecodesWithIdAndNameSkipped]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.PipecatFrameCodecTests testServerMessageFrameCarriesTheRtviEnvelopeJSONUnchanged]' started.
+Test Case '-[JarvisKitTests.PipecatFrameCodecTests testServerMessageFrameCarriesTheRtviEnvelopeJSONUnchanged]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.PipecatFrameCodecTests testVarintsAboveOneByteAndLargePayloadsRoundTrip]' started.
+Test Case '-[JarvisKitTests.PipecatFrameCodecTests testVarintsAboveOneByteAndLargePayloadsRoundTrip]' passed (0.001 seconds).
+Test Suite 'PipecatFrameCodecTests' passed at 2026-09-18 16:43:17.465.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'SessionLatencyHandoffTests' started at 2026-09-18 16:43:17.465.
+Test Case '-[JarvisKitTests.SessionLatencyHandoffTests testDisconnectKeepsTheFinalReadingForTheReport]' started.
+Test Case '-[JarvisKitTests.SessionLatencyHandoffTests testDisconnectKeepsTheFinalReadingForTheReport]' passed (0.000 seconds).
+Test Suite 'SessionLatencyHandoffTests' passed at 2026-09-18 16:43:17.465.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'SharedContentTransferTests' started at 2026-09-18 16:43:17.465.
+Test Case '-[JarvisKitTests.SharedContentTransferTests testApprovedInputSequenceUsesRawBoundedMessages]' started.
+Test Case '-[JarvisKitTests.SharedContentTransferTests testApprovedInputSequenceUsesRawBoundedMessages]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.SharedContentTransferTests testRoundTripPreservesApprovalAndEphemeralFlags]' started.
+Test Case '-[JarvisKitTests.SharedContentTransferTests testRoundTripPreservesApprovalAndEphemeralFlags]' passed (0.000 seconds).
+Test Suite 'SharedContentTransferTests' passed at 2026-09-18 16:43:17.466.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'SignallingTests' started at 2026-09-18 16:43:17.466.
+Test Case '-[JarvisKitTests.SignallingTests testOfferAnswerDecodes]' started.
+Test Case '-[JarvisKitTests.SignallingTests testOfferAnswerDecodes]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.SignallingTests testOfferRequestKeys]' started.
+Test Case '-[JarvisKitTests.SignallingTests testOfferRequestKeys]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.SignallingTests testOfferRequestWithPCID]' started.
+Test Case '-[JarvisKitTests.SignallingTests testOfferRequestWithPCID]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.SignallingTests testPatchRequestBatching]' started.
+Test Case '-[JarvisKitTests.SignallingTests testPatchRequestBatching]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.SignallingTests testPatchRequestCandidateKeys]' started.
+Test Case '-[JarvisKitTests.SignallingTests testPatchRequestCandidateKeys]' passed (0.000 seconds).
+Test Suite 'SignallingTests' passed at 2026-09-18 16:43:17.466.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'TransportSelectionTests' started at 2026-09-18 16:43:17.466.
+Test Case '-[JarvisKitTests.TransportSelectionTests testForceWebRTCHonoursTheEnvironmentTheWaySection9DocumentsIt]' started.
+Test Case '-[JarvisKitTests.TransportSelectionTests testForceWebRTCHonoursTheEnvironmentTheWaySection9DocumentsIt]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.TransportSelectionTests testForceWebRTCIsTheRollbackLeverForLoopback]' started.
+Test Case '-[JarvisKitTests.TransportSelectionTests testForceWebRTCIsTheRollbackLeverForLoopback]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.TransportSelectionTests testLoopbackBotsUseTheNativePathAndRemoteBotsKeepWebRTC]' started.
+Test Case '-[JarvisKitTests.TransportSelectionTests testLoopbackBotsUseTheNativePathAndRemoteBotsKeepWebRTC]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.TransportSelectionTests testTheEnvironmentWinsOverUserDefaultsLikeTheOtherFlags]' started.
+Test Case '-[JarvisKitTests.TransportSelectionTests testTheEnvironmentWinsOverUserDefaultsLikeTheOtherFlags]' passed (0.000 seconds).
+Test Suite 'TransportSelectionTests' passed at 2026-09-18 16:43:17.468.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'UICommandOwnershipTests' started at 2026-09-18 16:43:17.468.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testDisconnectPreservesVoicesAndTranscript]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testDisconnectPreservesVoicesAndTranscript]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testJarvisClientReflectsTransportSpeakingSignalVerbatim]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testJarvisClientReflectsTransportSpeakingSignalVerbatim]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testKeepAliveStallFailsTheSession]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testKeepAliveStallFailsTheSession]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testMicMuteWhenAlreadyMutedSendsNothing]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testMicMuteWhenAlreadyMutedSendsNothing]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testMicMuteWhenLiveMutes]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testMicMuteWhenLiveMutes]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testPeerLeftDisconnects]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testPeerLeftDisconnects]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testReconnectAfterDisconnectBuildsNewPeerConnection]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testReconnectAfterDisconnectBuildsNewPeerConnection]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testSpeakingHoldOffSuppressesInterWordGaps]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testSpeakingHoldOffSuppressesInterWordGaps]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testStreamBufferDropsOldest]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testStreamBufferDropsOldest]' passed (0.021 seconds).
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testSubscribeReturnsWorkingUnsubscribe]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testSubscribeReturnsWorkingUnsubscribe]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testSubscriptionDeinitUnsubscribes]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testSubscriptionDeinitUnsubscribes]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testTwoStreamsBothReceiveEveryMessage]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testTwoStreamsBothReceiveEveryMessage]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testUnauthorizedConnectDoesNotRetry]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testUnauthorizedConnectDoesNotRetry]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testUnownedUIActionIsForwardedNotApplied]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testUnownedUIActionIsForwardedNotApplied]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testWakeOffWhenAlreadyOffSendsExactNoop]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testWakeOffWhenAlreadyOffSendsExactNoop]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testWakeOnWhenAlreadyOnSendsExactNoop]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testWakeOnWhenAlreadyOnSendsExactNoop]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testWakeOnWhenUnavailableSendsExactNoop]' started.
+Test Case '-[JarvisKitTests.UICommandOwnershipTests testWakeOnWhenUnavailableSendsExactNoop]' passed (0.000 seconds).
+Test Suite 'UICommandOwnershipTests' passed at 2026-09-18 16:43:17.497.
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.028 (0.029) seconds
+Test Suite 'WakeExternalFeedTests' started at 2026-09-18 16:43:17.497.
+Test Case '-[JarvisKitTests.WakeExternalFeedTests testExternalStartOpensTheSidecarSocketWithoutAnEngineOfItsOwn]' started.
+Test Case '-[JarvisKitTests.WakeExternalFeedTests testExternalStartOpensTheSidecarSocketWithoutAnEngineOfItsOwn]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.WakeExternalFeedTests testFedAudioReachesTheSidecarAsWholeFramesOnly]' started.
+Test Case '-[JarvisKitTests.WakeExternalFeedTests testFedAudioReachesTheSidecarAsWholeFramesOnly]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.WakeExternalFeedTests testFeedIsIgnoredWhenPausedStoppedOrOwningItsOwnEngine]' started.
+Test Case '-[JarvisKitTests.WakeExternalFeedTests testFeedIsIgnoredWhenPausedStoppedOrOwningItsOwnEngine]' passed (0.000 seconds).
+Test Suite 'WakeExternalFeedTests' passed at 2026-09-18 16:43:17.497.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'WakeWordFramingTests' started at 2026-09-18 16:43:17.497.
+Test Case '-[JarvisKitTests.WakeWordFramingTests testNonWakeTextFrameIgnored]' started.
+Test Case '-[JarvisKitTests.WakeWordFramingTests testNonWakeTextFrameIgnored]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.WakeWordFramingTests testWakeFramerNeverEmitsPartial]' started.
+Test Case '-[JarvisKitTests.WakeWordFramingTests testWakeFramerNeverEmitsPartial]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.WakeWordFramingTests testWakeMessageDecodes]' started.
+Test Case '-[JarvisKitTests.WakeWordFramingTests testWakeMessageDecodes]' passed (0.000 seconds).
+Test Case '-[JarvisKitTests.WakeWordFramingTests testWakePCMFramesAreExactly2560Bytes]' started.
+Test Case '-[JarvisKitTests.WakeWordFramingTests testWakePCMFramesAreExactly2560Bytes]' passed (0.000 seconds).
+Test Suite 'WakeWordFramingTests' passed at 2026-09-18 16:43:17.498.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'JarvisKitTests.xctest' passed at 2026-09-18 16:43:17.498.
+	 Executed 190 tests, with 0 failures (0 unexpected) in 5.833 (5.844) seconds
+Test Suite 'All tests' passed at 2026-09-18 16:43:17.498.
+	 Executed 190 tests, with 0 failures (0 unexpected) in 5.833 (5.844) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

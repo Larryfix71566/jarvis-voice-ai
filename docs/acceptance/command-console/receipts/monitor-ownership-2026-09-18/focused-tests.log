@@ -1,0 +1,210 @@
+Building for debugging...
+[Starting]
+[3 / 15] MortimerHost-product
+[11 / 23] MortimerHost
+[16 / 41] MortimerHost-product
+[17 / 41] MortimerHost-product
+[18 / 41] MortimerHost-product
+[20 / 41] MortimerHost-product
+[21 / 41] MortimerHost
+[25 / 41] MortimerHost
+[27 / 41] MortimerHost
+[28 / 41] MortimerHost
+[29 / 41] MortimerHost
+[29 / 41] MortimerHost-product
+[35 / 48] MortimerHost-product
+[37 / 50] MortimerHost
+[37 / 50] MortimerHost-product
+[39 / 50] MortimerHost
+[42 / 47] MortimerHostTests-product
+[50 / 55] MortimerHostTests-product
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/FullConsoleRenderingTests.swift:28:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+26 |     private func checkConsole(tabTextSize: Double, layoutVersion: Int = 1, startup: Bool = false) throws {
+27 |         _ = NSApplication.shared
+28 |         NSApplication.shared.accessibilitySetValue(true,
+   |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+29 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+30 |         let suite = "full-console-" + UUID().uuidString
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayAcceptanceTests.swift:13:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 11 |     func testReturningToOriginalPanelsPreservesResearchPinsAndReadingState() throws {
+ 12 |         _ = NSApplication.shared
+ 13 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 14 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ 15 |         let suite = "supporting-display-" + UUID().uuidString
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/AdaptiveInterfaceClosureC2Tests.swift:165:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+163 |     func testCompactRailRendersAgentActivityAffordance() throws {
+164 |         _ = NSApplication.shared
+165 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+166 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+167 |         let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/AdaptiveInterfaceClosureC2Tests.swift:190:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+188 |     func testCompactRailPinsClockAboveAgentActivity() throws {
+189 |         _ = NSApplication.shared
+190 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+191 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+192 |         let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/CompactConversationTests.swift:11:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 9 |     func testSavedCompactPreferenceChangesNativeConversationPresentation() throws {
+10 |         _ = NSApplication.shared
+11 |         NSApplication.shared.accessibilitySetValue(true,
+   |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+12 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+13 |         let suite = "compact-conversation-" + UUID().uuidString
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:153:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+151 |     func testOverflowButtonsReachBothEndsWithoutChangingSelection() throws {
+152 |         _ = NSApplication.shared
+153 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+154 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+155 |         let selection = HeaderSelection()
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayAcceptanceTests.swift:13:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 11 |     func testReturningToOriginalPanelsPreservesResearchPinsAndReadingState() throws {
+ 12 |         _ = NSApplication.shared
+ 13 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 14 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ 15 |         let suite = "supporting-display-" + UUID().uuidString
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[56 / 60] MortimerHostTests-product
+Build complete! (7.46 sec)
+Test Suite 'Selected tests' started at 2026-09-18 16:37:20.858.
+Test Suite 'MortimerHostTests.xctest' started at 2026-09-18 16:37:20.860.
+Test Suite 'ContentPanelTests' started at 2026-09-18 16:37:20.860.
+Test Case '-[MortimerHostTests.ContentPanelTests testAdditionalPanelRequiresExplicitPinAction]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testAdditionalPanelRequiresExplicitPinAction]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testAllVisibleResultsHaveLocatorsAndRepeatSelectionDoesNotDuplicate]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testAllVisibleResultsHaveLocatorsAndRepeatSelectionDoesNotDuplicate]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testClosedDisplayAlsoKeepsFallbackStageBounded]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testClosedDisplayAlsoKeepsFallbackStageBounded]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testDeveloperRunAppendsDistinctResultsIntoOneDisplayPanel]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testDeveloperRunAppendsDistinctResultsIntoOneDisplayPanel]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testDisplayPanelsKeepIdentityAndRespectBounds]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testDisplayPanelsKeepIdentityAndRespectBounds]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testExactRepeatReusesTheExistingWorkspaceOwnerButNewRunSectionDoesNot]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testExactRepeatReusesTheExistingWorkspaceOwnerButNewRunSectionDoesNot]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testFitRequiresMeasuredViewportAndPreservesReachablePanel]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testFitRequiresMeasuredViewportAndPreservesReachablePanel]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testLastSupportingPanelCanReturnOwnershipToMainWorkspace]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testLastSupportingPanelCanReturnOwnershipToMainWorkspace]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testMainLocatorRequiresALiveSupportingPanel]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testMainLocatorRequiresALiveSupportingPanel]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testOpeningSupportingDisplayPreservesBoundedUnpinnedPanelsAndPins]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testOpeningSupportingDisplayPreservesBoundedUnpinnedPanelsAndPins]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testPanelCapacityRetiresUnpinnedBeforePinnedContent]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testPanelCapacityRetiresUnpinnedBeforePinnedContent]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testPinnedPanelStaysOutsideStageWhenUnpinnedResultsRemain]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testPinnedPanelStaysOutsideStageWhenUnpinnedResultsRemain]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testPointerGraphSharesFullStageWithoutHidingDisplacedResult]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testPointerGraphSharesFullStageWithoutHidingDisplacedResult]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testSeparateDeveloperRunsRemainSeparateDisplayPanels]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testSeparateDeveloperRunsRemainSeparateDisplayPanels]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingDisplaySharesBoundedUnpinnedPresentations]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingDisplaySharesBoundedUnpinnedPresentations]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingStageCapsUnpinnedResultsAndKeepsNewestFocused]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingStageCapsUnpinnedResultsAndKeepsNewestFocused]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingStageLeavesPinnedCopiesAsExplicitExtras]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingStageLeavesPinnedCopiesAsExplicitExtras]' passed (0.000 seconds).
+Test Suite 'ContentPanelTests' passed at 2026-09-18 16:37:20.865.
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
+Test Suite 'DisplayPlacementPolicyTests' started at 2026-09-18 16:37:20.865.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testCloseOrDockCancelsReconnectRecovery]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testCloseOrDockCancelsReconnectRecovery]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testFreshConsoleDefaultsToMainDisplayWhenAppKitRestoredItOnAuxiliary]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testFreshConsoleDefaultsToMainDisplayWhenAppKitRestoredItOnAuxiliary]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testManualMoveAfterRecoveryWinsOverReconnect]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testManualMoveAfterRecoveryWinsOverReconnect]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testManualWindowRecoversAfterUnplugEvenWhenAppKitAlreadyMovedIt]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testManualWindowRecoversAfterUnplugEvenWhenAppKitAlreadyMovedIt]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testMirroredDisplaysDoNotCreateAnExtendedAreaOrEmptyWindows]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testMirroredDisplaysDoNotCreateAnExtendedAreaOrEmptyWindows]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testOffscreenTitleBarIsRecoveredAndNegativeCoordinatesAreValid]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testOffscreenTitleBarIsRecoveredAndNegativeCoordinatesAreValid]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testOpeningSecondAuxiliaryUsesLegacySplitWithoutMovingManualWindow]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testOpeningSecondAuxiliaryUsesLegacySplitWithoutMovingManualWindow]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testReopenedManualWindowRestoresItsSavedFrame]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testReopenedManualWindowRestoresItsSavedFrame]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testResolutionShrinkClampsManualWindowAndRestoresWhenItFitsAgain]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testResolutionShrinkClampsManualWindowAndRestoresWhenItFitsAgain]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testStableDisplayRolesSurviveScreenArrayReordering]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testStableDisplayRolesSurviveScreenArrayReordering]' passed (0.000 seconds).
+Test Suite 'DisplayPlacementPolicyTests' passed at 2026-09-18 16:37:20.866.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ScreenPlacementTests' started at 2026-09-18 16:37:20.866.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testAppliedMovesAreNotRecordedAsManualButLiveResizeIs]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testAppliedMovesAreNotRecordedAsManualButLiveResizeIs]' passed (0.279 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementTests testBurstOfSignalsCollapsesIntoOneRepositionThatRemembersTopology]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testBurstOfSignalsCollapsesIntoOneRepositionThatRemembersTopology]' passed (0.003 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementTests testConnectedExternalDisplayIsExposedToPlacementTopology]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testConnectedExternalDisplayIsExposedToPlacementTopology]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementTests testDetachedPanelPlacementClampsToRequestedVirtualScreen]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testDetachedPanelPlacementClampsToRequestedVirtualScreen]' passed (0.007 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementTests testDetachedPanelRecoversAcrossVirtualScreenDisconnectAndReconnect]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testDetachedPanelRecoversAcrossVirtualScreenDisconnectAndReconnect]' passed (0.026 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementTests testPersistedRecordsDecodeOrAreRejectedFieldByField]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testPersistedRecordsDecodeOrAreRejectedFieldByField]' passed (0.009 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementTests testResetLayoutClearsOnlyPlacementState]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testResetLayoutClearsOnlyPlacementState]' passed (0.066 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementTests testWakeSessionScreensAndUnlockSignalsAllScheduleATopologyReposition]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testWakeSessionScreensAndUnlockSignalsAllScheduleATopologyReposition]' passed (0.181 seconds).
+Test Suite 'ScreenPlacementTests' passed at 2026-09-18 16:37:21.439.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.572 (0.573) seconds
+Test Suite 'SupportingDisplayAcceptanceTests' started at 2026-09-18 16:37:21.439.
+Test Case '-[MortimerHostTests.SupportingDisplayAcceptanceTests testFourResultStageRendersAVisibleBoundedGrid]' started.
+Test Case '-[MortimerHostTests.SupportingDisplayAcceptanceTests testFourResultStageRendersAVisibleBoundedGrid]' passed (1.036 seconds).
+Test Case '-[MortimerHostTests.SupportingDisplayAcceptanceTests testReturningToOriginalPanelsPreservesResearchPinsAndReadingState]' started.
+Test Case '-[MortimerHostTests.SupportingDisplayAcceptanceTests testReturningToOriginalPanelsPreservesResearchPinsAndReadingState]' passed (1.553 seconds).
+Test Suite 'SupportingDisplayAcceptanceTests' passed at 2026-09-18 16:37:24.028.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 2.589 (2.589) seconds
+Test Suite 'WorkspaceRenderingTests' started at 2026-09-18 16:37:24.028.
+Test Case '-[MortimerHostTests.WorkspaceRenderingTests testWorkspaceRendersAtMinimumReadableWidthAndInComparison]' started.
+Test Case '-[MortimerHostTests.WorkspaceRenderingTests testWorkspaceRendersAtMinimumReadableWidthAndInComparison]' passed (0.571 seconds).
+Test Suite 'WorkspaceRenderingTests' passed at 2026-09-18 16:37:24.600.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.571 (0.571) seconds
+Test Suite 'WorkspaceStoreTests' started at 2026-09-18 16:37:24.600.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testArrivalPreservesReadingComparisonAndScroll]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testArrivalPreservesReadingComparisonAndScroll]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testCloseActivePromotesComparisonAndRemovesOnlyItsMetadata]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testCloseActivePromotesComparisonAndRemovesOnlyItsMetadata]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testClosingWorkspaceTabPreservesOutputHistoryAndSharedIdentity]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testClosingWorkspaceTabPreservesOutputHistoryAndSharedIdentity]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testConsoleInventoryJSONContainsBoundedTargetsWithoutResultBody]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testConsoleInventoryJSONContainsBoundedTargetsWithoutResultBody]' passed (0.004 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testConsoleInventoryRevisionTracksSelectionAndModeChanges]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testConsoleInventoryRevisionTracksSelectionAndModeChanges]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testExplicitConversationChoiceSurvivesNewResults]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testExplicitConversationChoiceSurvivesNewResults]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultDoesNotUndoReturnFromGraphToConversation]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultDoesNotUndoReturnFromGraphToConversation]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultStillOpensWorkspaceWithoutExplicitNavigation]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultStillOpensWorkspaceWithoutExplicitNavigation]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultWhileBrowsingGraphIsUnreadAndPreservesGraph]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultWhileBrowsingGraphIsUnreadAndPreservesGraph]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testGraphDisplayAssignmentReusesGraphOwnerAndKeepsCompactComparisonChoice]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testGraphDisplayAssignmentReusesGraphOwnerAndKeepsCompactComparisonChoice]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testIdenticalPayloadsAreDistinctButSameReceiptIsNotDuplicated]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testIdenticalPayloadsAreDistinctButSameReceiptIsNotDuplicated]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testOutputExpansionBelongsToHistoryAndDoesNotReopenCollapsedItems]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testOutputExpansionBelongsToHistoryAndDoesNotReopenCollapsedItems]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testPinLimitRefusesWithoutEviction]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testPinLimitRefusesWithoutEviction]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testSupportingResultSurvivesHistoryTrimmingWithoutChangingMainSelection]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testSupportingResultSurvivesHistoryTrimmingWithoutChangingMainSelection]' passed (0.000 seconds).
+Test Suite 'WorkspaceStoreTests' passed at 2026-09-18 16:37:24.606.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.006 (0.006) seconds
+Test Suite 'MortimerHostTests.xctest' passed at 2026-09-18 16:37:24.606.
+	 Executed 52 tests, with 0 failures (0 unexpected) in 3.744 (3.746) seconds
+Test Suite 'Selected tests' passed at 2026-09-18 16:37:24.606.
+	 Executed 52 tests, with 0 failures (0 unexpected) in 3.744 (3.748) seconds

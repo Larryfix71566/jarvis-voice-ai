@@ -24,9 +24,9 @@ final class AdaptiveInterfaceClosureC2Tests: XCTestCase {
         XCTAssertEqual(AdaptiveLayoutMetrics.resultContentWidth, 480)
         XCTAssertEqual(AudioPresentationTuning.attackSeconds, 0.040)
         XCTAssertEqual(AudioPresentationTuning.releaseSeconds, 0.180)
-        // #2DD4BF and #A78BFA, the plan's teal and violet.
+        // #2DD4BF and #E07020, the plan's teal and warm orange.
         XCTAssertEqual([AudioPresentationTuning.userRGB.0, AudioPresentationTuning.userRGB.1, AudioPresentationTuning.userRGB.2], [45, 212, 191])
-        XCTAssertEqual([AudioPresentationTuning.assistantRGB.0, AudioPresentationTuning.assistantRGB.1, AudioPresentationTuning.assistantRGB.2], [167, 139, 250])
+        XCTAssertEqual([AudioPresentationTuning.assistantRGB.0, AudioPresentationTuning.assistantRGB.1, AudioPresentationTuning.assistantRGB.2], [224, 112, 32])
     }
 
     func testEnvelopeUsesTheTunedAttackAndRelease() {
@@ -130,9 +130,9 @@ final class AdaptiveInterfaceClosureC2Tests: XCTestCase {
         XCTAssertNil(VoicePresentationState(activity: .assistant, userLevel: nil, outputLevel: 0.5,
                                             microphoneMuted: false, assistantSpeaking: true).overlapLabel,
                      "the label is only for overlap, not ordinary assistant speech")
-        // Rendered truth: the label is drawn in the plan's violet, so the
-        // bitmap must contain violet pixels during overlap and none without.
-        func violetPixels(_ state: VoicePresentationState) throws -> Int {
+        // Rendered truth: the label is drawn in the plan's warm orange, so the
+        // bitmap must contain orange pixels during overlap and none without.
+        func orangePixels(_ state: VoicePresentationState) throws -> Int {
             let view = NSHostingView(rootView: VoiceOverlapLabel(presentation: state).padding(8).background(Color.black))
             view.frame = NSRect(x: 0, y: 0, width: 300, height: 40)
             let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -147,13 +147,13 @@ final class AdaptiveInterfaceClosureC2Tests: XCTestCase {
                 for x in 0..<bitmap.pixelsWide {
                     guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
                     let r = color.redComponent, g = color.greenComponent, b = color.blueComponent
-                    if b > 0.3 && b > g * 1.2 && r > g * 1.05 { count += 1 }
+                    if r > 0.5 && g > 0.25 && r > g * 1.2 && g > b * 1.4 { count += 1 }
                 }
             }
             return count
         }
-        XCTAssertGreaterThan(try violetPixels(overlap), 20, "overlap label must be rendered in violet")
-        XCTAssertEqual(try violetPixels(VoicePresentationState(activity: .assistant, userLevel: nil, outputLevel: 0.5,
+        XCTAssertGreaterThan(try orangePixels(overlap), 20, "overlap label must be rendered in warm orange")
+        XCTAssertEqual(try orangePixels(VoicePresentationState(activity: .assistant, userLevel: nil, outputLevel: 0.5,
                                                                microphoneMuted: false, assistantSpeaking: true)), 0,
                        "no label outside overlap")
     }
@@ -185,6 +185,35 @@ final class AdaptiveInterfaceClosureC2Tests: XCTestCase {
         XCTAssertTrue(labels.contains(where: { $0.hasPrefix("DEVELOPER") || $0 == "Developer" }), "satellite still present; tree: \(labels)")
     }
 
+    func testCompactRailPinsClockAboveAgentActivity() throws {
+        _ = NSApplication.shared
+        NSApplication.shared.accessibilitySetValue(true,
+            forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+        let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
+            adminURL: URL(string: "http://127.0.0.1:7861")!, wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: "synthetic"))
+        let runs = AgentRunStore()
+        runs.apply(try XCTUnwrap(try AppMessage.decode(frame: Data("""
+        {"type":"agent","name":"developer","display_name":"Developer","state":"working",
+         "run_id":"r-clock","task":"synthetic","model":"fixture","model_fallback":false}
+        """.utf8))))
+        let view = NSHostingView(rootView: OrbFieldView(voiceState: .listening, compactPresentation: true, hidesLettering: true)
+            .environmentObject(client).environment(runs).environment(DrawerState())
+            .environment(DisplayResultStore()).environment(ConversationStore()).environment(ConsoleNoticeState())
+            .frame(width: 220, height: 640))
+        view.frame = NSRect(x: 0, y: 0, width: 220, height: 640)
+        let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
+        defer { window.close() }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        let labels = accessibilityLabels(in: view)
+        let clockIndex = try XCTUnwrap(labels.firstIndex(of: "Current time"),
+                                       "clock accessibility element missing; tree: \(labels)")
+        let developerIndex = try XCTUnwrap(labels.firstIndex(of: "Developer working"),
+                                           "agent accessibility element missing; tree: \(labels)")
+        XCTAssertLessThan(clockIndex, developerIndex,
+                          "persistent clock must remain before the changing agent/status stack")
+    }
+
     private func accessibilityLabels(in view: NSView) -> [String] {
         var labels: [String] = []
         func visit(_ value: Any) {
@@ -203,4 +232,5 @@ final class AdaptiveInterfaceClosureC2Tests: XCTestCase {
         visit(view)
         return labels
     }
+
 }

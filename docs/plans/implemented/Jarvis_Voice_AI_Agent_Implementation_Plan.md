@@ -149,7 +149,7 @@ For multi-part requests ("check the weather AND remind me…"), the Supervisor c
 | Transport | SmallWebRTC (P2P) | `SmallWebRTCTransport` | No third-party WebRTC account needed; server-side via Pipecat dev runner |
 | STT | Deepgram Flux | `DeepgramFluxSTTService`, model `flux-general-en` | Built-in intelligent turn detection. Contingency: `DeepgramSTTService` with model `nova-3` (see §10) |
 | VAD | Silero | `SileroVADAnalyzer` via Pipecat | Used for interruptions and local VAD |
-| LLM provider | Any OpenAI-compatible API | Default: OpenAI, model `gpt-4.1-mini` | Configurable via `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL`. Sub-agents use the same provider/model |
+| LLM provider | Any OpenAI-compatible API | Default: OpenAI, model `gpt-4.1-mini` | `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` configure the voice Supervisor/orchestrator. Sub-agents and background jobs use the model registry; the original same-provider assumption is superseded by the model-routing plan. |
 | TTS | ElevenLabs | `ElevenLabsTTSService`, model `eleven_flash_v2_5` | Flash = ~75 ms synthesis latency, required for real-time feel |
 | MCP server SDK | Official MCP Python SDK | package `mcp[cli]`, `mcp.server.fastmcp.FastMCP` | stdio transport for all local servers |
 | MCP client (bot side) | Pipecat `MCPClient` | `pipecat.services.mcp_service.MCPClient` | Extra `pipecat-ai[mcp]` |
@@ -181,7 +181,7 @@ The system needs exactly **four cloud accounts** (all have free tiers sufficient
 | Tavily | https://app.tavily.com | `TAVILY_API_KEY` | 1,000 credits/month | **Yes** |
 | Open-Meteo | no key | — | free, rate-limited | built-in |
 
-**LLM provider alternatives (allowed, config-only):** any OpenAI-compatible Chat Completions endpoint may be used by setting `OPENAI_BASE_URL` and `OPENAI_MODEL` (e.g. Moonshot/Kimi `https://api.moonshot.ai/v1`, DeepSeek `https://api.deepseek.com/v1`, or a local Ollama `http://localhost:11434/v1`). The provider **must** support function/tool calling. If the chosen provider's tool calling proves unreliable at the Phase 2 gate, switch back to the OpenAI default — do not re-architect.
+**LLM provider alternatives for the voice Supervisor (allowed, config-only):** any OpenAI-compatible Chat Completions endpoint may be used by setting `OPENAI_BASE_URL` and `OPENAI_MODEL` (e.g. Moonshot/Kimi `https://api.moonshot.ai/v1`, DeepSeek `https://api.deepseek.com/v1`, or a local Ollama `http://localhost:11434/v1`). The provider **must** support function/tool calling. If the chosen provider's tool calling proves unreliable at the Phase 2 gate, switch back to the OpenAI default — do not re-architect. Other workloads resolve through the registry profiles described by the current architecture reference.
 
 **Voice selection:** ElevenLabs default library voices are sufficient for the core plan. Optionally, the user may create an Instant Voice Clone in the ElevenLabs web UI (Voice Lab) and paste the resulting voice ID into `config/voices.yaml` (Phase 5). Cloning requires only a few minutes of recorded audio and the owner's consent.
 

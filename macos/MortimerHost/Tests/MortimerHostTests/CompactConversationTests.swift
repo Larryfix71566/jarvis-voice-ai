@@ -48,6 +48,8 @@ final class CompactConversationTests: XCTestCase {
             }
             visit(view)
             XCTAssertTrue(labels.contains(compact ? "Expand voice" : "Keep voice compact"), "Missing mode control: \(labels)")
+            XCTAssertTrue(labels.contains("Voice activity — user teal, Mortimer orange"),
+                          "compact voice display must remain discoverable to VoiceOver: \(labels)")
             XCTAssertTrue(workspace.showsConversation)
             XCTAssertEqual(defaults.bool(forKey: "mortimer.interface.compactConversation"), compact)
             let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
