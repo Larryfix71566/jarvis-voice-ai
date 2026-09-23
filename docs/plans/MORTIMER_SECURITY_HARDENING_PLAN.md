@@ -2,7 +2,14 @@
 
 **Status:** **IMPLEMENTED (code), on `main` by 2026-09-04 — §8 VERIFICATION
 PARTIAL: V1 has historical passing evidence; V2–V6 remain unverified.
-V7's three deny entries ARE APPLIED on main (`25ab904d`), checked 2026-09-17.**
+V7's three deny entries ARE APPLIED on main, checked 2026-09-17.**
+*Reconciled 2026-09-22 against main `88b206f`:* the V7 deny entries were added
+by `e6f6f33` (2026-09-07, "T4a V7 … row W0-SEC") and are present at
+`88b206f`. The previously cited `25ab904d` (#74, 2026-09-15) has an empty diff
+against its parent `7c23de1` and is not the source. The merge-base check noted
+as "Not run" below now passes: `git merge-base --is-ancestor
+origin/feat/t4a-security-hardening main` exits 0 (branch tip `60e9f42`), so the
+T4a branch is fully contained in `main`. V2–V6 status is unchanged.
 The implementation inventory below was originally audited against
 `feat/graph-layer` (2c0ff5a), 2026-09-07. Implements roadmap
 track **T4a** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.4, "T4a — hardening,

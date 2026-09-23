@@ -7,132 +7,121 @@ Verify paths and the current branch before writing. Keep this map below the
 
 ## Top-level layout
 
-- `services/mortimer-vault/` — knowledge-base HTTP service, CLI and tests;
-  setup: `bash scripts/setup_kb.sh`. Documents remain at `MORTIMER_HOME`.
-- `jarvis/` — Python backend: bot pipeline, sub-agents, admin sidecar,
-  council, run log, self-edit. See below.
- - `mcp_servers/` — MCP skill servers, one directory per server, each
-   with `logic.py` (pure, testable) + `server.py` (FastMCP wiring) +
-   `skill.yaml` (manifest). `mcp_kb/` is read-only
-   (`kb_search`/`kb_read`/`kb_neighbors`); KB writes go through
-   `jarvis/kb_digest.py`, not MCP.
-- `macos/` — the native macOS client (Swift, SwiftPM). `JarvisKit/` is
-  the shared library, `MortimerHost/` the app that consumes it. This is
-  the live interface; `web/` is frozen. See below.
-- `web/` — the React/Vite console. FROZEN 2026-09-04 and not served:
-  interface work goes to `macos/MortimerHost`.
- - `sandbox/` — disposable macOS VMs, guarded files, verification, PRs.
-- `config/` — YAML/JSON routing and model config (agents, MCP servers,
-  voices, self-edit allowlist, upgrade models/agent bounds). Check here
-  first when a capability seems misrouted or over/under-permissioned.
-- `docs/` — `plans/` (+ `plans/implemented/`), `reviews/`, `acceptance/`.
-  This file.
+- `services/mortimer-vault/` — knowledge-base HTTP service, CLI, tests;
+  setup `bash scripts/setup_kb.sh`. Documents stay at `MORTIMER_HOME`.
+- `jarvis/` — Python backend (see below).
+- `mcp_servers/` — MCP skill servers, one directory each: `logic.py`
+  (pure) + `server.py` (FastMCP) + `skill.yaml`. `mcp_kb/` is read-only
+  (`kb_search`/`kb_read`/`kb_neighbors`); KB writes go through
+  `jarvis/kb_digest.py`, not MCP.
+- `skills/` — Agent Skills (`SKILL.md`), loaded by `jarvis/agent_skills.py`
+  only if enabled in `config/skills.yaml`; never executed.
+- `macos/` — native macOS client (SwiftPM), the live interface:
+  `JarvisKit/` library, `MortimerHost/` app, `VPIOBench/` echo bench.
+- `web/` — React/Vite console. FROZEN 2026-09-04; not started by
+  `mortimer.sh` (manual fallback `scripts/run_web.sh`).
+- `sandbox/` — disposable macOS VMs, guarded files, verification, PRs.
+- `config/` — routing/model YAML/JSON (agents, MCP servers, voices,
+  skills, self-edit allowlist, `upgrade_models.yaml` registry,
+  `model_access.yaml`). Check here first when a capability seems
+  misrouted or over/under-permissioned.
+- `docs/` — `plans/` (+ `implemented/`), `reviews/`, `acceptance/`,
+  `archive/` (superseded; history only). This file.
 - `tests/` — `unit/` (no external calls), `integration/` (MCP-over-stdio,
   registry, bot wiring), `evals/` (live routing eval), `acceptance/`
   (manual checklists, not run by pytest).
-- `scripts/` — run/setup/check scripts (`mortimer.sh`, `run_bot.sh`,
-  `run_admin.sh`, `init_db.py`, `check_env.py`), plus `cost_report.py`,
-  `pull_openrouter_activity.py`, `backup_db.py` (SQLite snapshots,
-  14 snapshots per database) and `launchd_gen.py` (the launchd plists that
-  supervise the bot/admin/reminder-notifier processes).
+- `scripts/` — run/setup/check (`mortimer.sh`, `run_bot.sh`,
+  `run_admin.sh`, `init_db.py`, `check_env.py`), `cost_report.py`,
+  `pull_openrouter_activity.py`, `backup_db.py` (SQLite snapshots, keeps
+  14 per database), `launchd_gen.py` (launchd plists: vault, bot,
+  extractor, admin, costs + nightly backup; the reminder notifier runs
+  inside the admin sidecar).
 - `data/` — gitignored: `jarvis.db`, `secrets.vault`,
   `app_workspaces/` (legacy metadata; code lives in VMs).
-- `logs/` — gitignored: per-run JSONL under `agents/<date>/`, council
-  rounds under `council/<date>/`.
+- `logs/` — gitignored: per-run JSONL `agents/<date>/`, council rounds
+  `council/<date>/`.
 
 ## `jarvis/` backend
 
-- `jarvis/bot/` — `pipeline.py` (Pipecat pipeline: STT → Supervisor LLM
-  → TTS), `display.py` (tool-result → UI surface routing),
-  `ui_control.py` (voice-controlled drawer/display/mic actions).
-- `jarvis/agents/` — `supervisor.py` (Orchestrator, delegate-only
-  brain), `base.py` (`SubAgent` — per-agent model/timeout/repo-map),
-  `delegate.py` (`delegate_task` tool + retry guard),
-  `upgrade_agent.py` (self-edit loop + model registry helpers),
-  `workspace.py` (workspace interface; adapter in `sandbox/workspace.py`).
-- `jarvis/admin/server.py` — the admin sidecar (`:7861`): self-edit,
-  planning, council, sandbox app-workspace endpoints; console Git/
-  Memory panels' backend.
+- `jarvis/bot/` — `bot.py` (entry: WebRTC `/api/offer` or native
+  WebSocket `/ws-client` via `ws_transport.py`), `pipeline.py` (STT →
+  Supervisor LLM → TTS), `display.py` (tool result → UI surface),
+  `ui_control.py` (voice drawer/display/mic actions),
+  `console_{protocol,session,actions}.py` (Command Console protocol),
+  `shared_content*.py` (approved text/image staging).
+- `jarvis/agents/` — `supervisor.py` (delegate-only Orchestrator),
+  `base.py` (`SubAgent`: model/timeout/repo-map), `delegate.py`
+  (`delegate_task` + retry guard), `upgrade_agent.py` (self-edit loop +
+  registry helpers), `workspace.py` (adapter in `sandbox/workspace.py`).
+- `jarvis/admin/server.py` — admin sidecar (`:7861`): self-edit,
+  planning, council, app workspaces; drawer panels' backend.
 - `jarvis/council/` — `council.py` (convene/draft_candidates),
-  `scoring.py`, `config.py` (tiers, timeouts, char caps),
-  `agreement.py` (judge-quality reporting).
-- `jarvis/runlog/` — `store.py` (RunLogger + read helpers), `cli.py`
+  `scoring.py`, `config.py` (tiers, timeouts, caps), `agreement.py`.
+- `jarvis/runlog/` — `store.py` (RunLogger + readers), `cli.py`
   (`python -m jarvis.runlog`).
-- `jarvis/graphs/` — derived, read-only relationship graphs (memory /
-  capability / execution / deliberation) + PNG/SVG renderer; served by the
-  sidecar's `/api/graph/*` and two voice tools (`memory_graph_view`,
-  `graph_view`). One implementation: nothing else derives an edge.
+- `jarvis/graphs/` — derived read-only graphs (memory / capability /
+  execution / deliberation) + PNG/SVG renderer; sidecar `/api/graph/*`
+  and voice tools `memory_graph_view`, `graph_view`. Nothing else
+  derives an edge.
 - `jarvis/selfedit/service.py` — sandbox facade: allowlist, validation, PRs.
-- `jarvis/skills/registry.py` — spawns MCP servers as subprocesses,
-  exposes their tools.
-- `jarvis/prompts.py` — single source of truth for every system prompt.
-- `jarvis/db.py` — SQLite schema + migrations (human-only, never
-  self-edited).
-- `jarvis/tenant.py` — `current_user_id()`: reads `JARVIS_USER_ID`,
-  defaults to `"local"` (GC8 — column added everywhere, nothing filters
-  reads/writes by it yet).
+- `jarvis/skills/registry.py` — spawns MCP servers, exposes their tools.
+- `jarvis/prompts.py` — single source of every system prompt.
+- `jarvis/db.py` — SQLite schema + migrations (human-only).
+- `jarvis/tenant.py` — `current_user_id()` from `JARVIS_USER_ID`,
+  default `"local"` (column exists; nothing filters by it yet).
 - `jarvis/vault.py` — encrypted credential store (CLI-only).
-- `jarvis/usage_ledger.py` — per-call LLM usage ledger, its own
-  `costs.db` (`llm_calls`) (MORTIMER_OPTIMIZATION_PLAN.md Phase 0).
-- `jarvis/costs_api.py` — HTTP surface over the cost ledger for the
-  admin sidecar (`GET /costs/summary`).
-- `jarvis/memory_extraction.py` — per-exchange candidate extraction/novelty gate.
-- `jarvis/memory_extraction_worker.py` — standalone async post-turn extractor.
+- `jarvis/usage_ledger.py` — per-call LLM usage ledger, `data/costs.db` (`llm_calls`).
+- `jarvis/costs_api.py` — sidecar HTTP over the ledger (`GET /costs/summary`).
+- `jarvis/memory_extraction.py` — per-exchange candidates/novelty gate.
+- `jarvis/memory_extraction_worker.py` — async post-turn extractor.
+- `jarvis/memory_automation.py` — memory classification/admission policy.
+- `jarvis/memory_model.py` — memory/background registry-profile routes.
 - `jarvis/kb_digest.py` — session-end knowledge-base digester.
 - `jarvis/effort.py` — native-Anthropic effort control.
 - `jarvis/anthropic_shim.py` — OpenAI-shaped native Messages client.
-- `jarvis/model_routing.py` — model/workload/route policy and fail-closed clients.
+- `jarvis/model_routing.py` — workload/route policy, fail-closed clients.
 - `jarvis/model_execution.py` — provider-neutral execution contract.
-- `jarvis/privacy_policy.py` — data-policy propagation and enforcement.
-- `jarvis/saygm.py` — SAYGM catalog and confidential-tier proof.
-- `jarvis/subscription.py` — gated Claude/Codex text adapters; strips API env.
-- `jarvis/sensitive.py` — financial-detail detection for sensitive turns.
-- `jarvis/bot/sensitive_turn.py` — per-turn sensitive ContextVar flag.
+- `jarvis/privacy_policy.py` — data-policy enforcement.
+- `jarvis/saygm.py` — SAYGM catalog, confidential-tier proof.
+- `jarvis/subscription.py` — gated Claude/Codex text adapters.
+- `jarvis/sensitive.py` — financial-detail detection.
+- `jarvis/bot/sensitive_turn.py` — per-turn sensitive flag.
 - `jarvis/bot/usage_watcher.py` — pipeline observer for the cost ledger.
-- `jarvis/bot/late_result.py` — strips a late/orphaned delegation's
-  internal "relay this to the user" wrapper text before speaking it.
-- `jarvis/bot/costs_tool.py` — the `cost_summary` direct Supervisor
-  tool (registered unconditionally, no kill switch).
-- `jarvis/procedures.py` — learned task-shape hints injected per run.
-- `jarvis/toolresult.py` — the one tool-success/failure classifier,
-  shared by the registry and the sub-agent loop.
+- `jarvis/bot/late_result.py` — strips a late delegation's internal
+  "relay this" wrapper before speaking.
+- `jarvis/bot/costs_tool.py` — `cost_summary` Supervisor tool (always
+  registered).
+- `jarvis/procedures.py` — learned task-shape hints per run.
+- `jarvis/toolresult.py` — the one tool success/failure classifier.
 
 ## `macos/` native client
 
-`MortimerHost` (the app) depends on `JarvisKit` by path, so a JarvisKit
-change rebuilds both. Self-edit may change the Swift **sources** below,
-gated by `swift build` + `swift test` in an independent VM and a PR flagged
-SWIFT CHANGE, inert until a human runs `MortimerHost/scripts/bundle.sh`.
+`MortimerHost` depends on `JarvisKit` by path; a JarvisKit change rebuilds
+both. Self-edit may change the Swift **sources** below, gated by
+`swift build` + `swift test` in an independent VM and a PR flagged SWIFT
+CHANGE, inert until a human runs `MortimerHost/scripts/bundle.sh`.
 Manifests, plists, entitlements, `scripts/`, `GlassSpike/`,
 `MortimerShell/` are human-only.
 
 - `JarvisKit/Sources/JarvisKit/` — `JarvisClient.swift` (voice session),
-  `AdminAPI.swift` (every sidecar call; Python side `jarvis/admin/server.py`),
-  `AppMessage.swift`/`ClientMessage.swift` (RTVI shapes — mirror the
-  backend's, change both together), transport (`RTVITransport` protocol;
-  `DirectWebRTCTransport` + `Signalling` remote, `NativeAudioTransport` +
-  `PipecatFrameCodec` same-Mac bot), audio (`AudioEngineIO` capture and
-  playout on the native path, `AudioActivityObserver` the measured levels
-  behind the wave), `WakeWordListener`, `KeychainStore`.
-- `MortimerHost/Sources/MortimerHost/App/` — `MortimerHostApp` (entry),
-  `AppMessageRouter` (app message → UI state), `UICommandRouter` (voice
-  `ui_control` dispatch), `AppTheme`/`AppTuning`/`Glass` (style and
-  tunables), `VoiceState`, `Sounds`.
-- `.../Console/` — `ConsoleView`, `AdaptiveStageView` (default layout since
-  2026-09-17; `layoutVersion` 0 is legacy), `OrbFieldView`/`VoiceWaveView`
-  (the orb), `WaveTuningView`, `AmbientStripView`, `TopBarView`,
-  `MicControlsView`, `SystemVitalsView`.
-- `.../Drawer/` — one file per tab: `DrawerView`,
-  `EditTab` (drives `/api/selfedit/*`), `RepoTab`, `AgentsTab`,
-  `RunsTab`, `MemoryTab`, `CostsTab`, `OutputTab`, `LogTab`, `TabState`.
-- `.../Display/` — the result window: `DisplayWindowView`,
-  `DisplayContentView`, `DisplayWindowStore`, `GraphImageView` (graph-layer
-  images).
+  `AdminAPI.swift` (sidecar calls), `AppMessage`/`ClientMessage` (RTVI
+  shapes; change with the backend), `ConsoleProtocol`, transports
+  (`RTVITransport`; `NativeAudioTransport` + `PipecatFrameCodec` for a
+  same-Mac bot, default; `DirectWebRTCTransport` + `Signalling` for remote
+  or `JARVIS_FORCE_WEBRTC`), `AudioEngineIO`, `AudioActivityObserver`,
+  `WakeWordListener`, `KeychainStore`.
+- `MortimerHost/Sources/MortimerHost/App/` — `MortimerHostApp`,
+  `AppMessageRouter`, `UICommandRouter` (voice `ui_control`),
+  `ConsoleAction*`, `AppTheme`/`AppTuning`/`Glass`, `VoiceState`, `Sounds`.
+- `.../Console/` — `ConsoleView` picks `layoutVersion`: 2
+  `CommandConsoleView` (default), 1 `AdaptiveStageView`, 0 legacy orb
+  (`OrbFieldView`/`VoiceWaveView`); `TopBarView`, `MicControlsView`, etc.
+- `.../Drawer/` — `DrawerView`, one file per tab (`EditTab` drives
+  `/api/selfedit/*`, `RepoTab`, `AgentsTab`, `RunsTab`, `MemoryTab`,
+  `CostsTab`, `OutputTab`, `LogTab`), `TabState`.
+- `.../Display/` — result window (`DisplayWindowView`, `DisplayWindowStore`),
+  `KnowledgeAtlasView`, `Workspace*`, `Share*`, `GraphImageView`.
 - `.../Placement/`, `.../Stores/` — placement; view stores.
-
-## `web/src/` console (frozen)
-
-Frozen 2026-09-04; interface work goes to `macos/MortimerHost`.
 
 ## Naming discipline (do not confuse these)
 

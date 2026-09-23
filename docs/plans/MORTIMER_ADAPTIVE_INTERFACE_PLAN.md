@@ -3,6 +3,14 @@
 **Status:** IMPLEMENTATION IN PROGRESS; NO RELEASE ACCEPTANCE. See `docs/acceptance/adaptive-interface/` for measured progress and open gates.
 
 **2026-09-17:** the adaptive layout is now the DEFAULT (`layoutVersion` 1, closure item C9.5 / gap G30). `Debug ▸ Use previous layout` is retained for one release. C8 acceptance is still unrun — its unexercised rows are accepted as known limitations in `docs/acceptance/adaptive-interface/C8-open-items.md` under Gate G-C8's written-acceptance route, which is not the same as acceptance having been performed.
+**Reconciled 2026-09-22 against main `88b206f`:** the two lines above and
+below are out of date. The default is now **layout `2` (Command Console)**,
+not `1`. PR #80 (`88b206f`, merged 2026-09-22) set every `layoutVersion`
+`@AppStorage` default to `2`, and `MortimerHostApp` migrates a
+missing/`1` preference to `2` once. The layout-1 flip described above
+landed on main in PR #78 (`af2d0cf`). PR #80 is merged, not under review.
+The Debug menu cycles 0 → 1 → 2 → 0, so the legacy layout is still one or
+two presses away.
 **Current reviewed application source:** `e6b34cf` on `main`, 2026-09-17
 (PR #76 merged). The release consolidation remains under review in PR #80.
 The running app's exact compiled revision is not established by that source
@@ -331,7 +339,7 @@ Keep a one-page preservation checklist with a row for each UI-1 function from P0
 
 ## 10. Rollout, rollback and stop rules
 
-Use a versioned local preference `mortimer.interface.layoutVersion` and a developer-accessible **Use previous layout** control while the redesign is being accepted. Missing/invalid preference selects the old layout until P6 acceptance. Both presentations share the same authoritative stores; reverting layout cannot resurrect stale data or reset a draft. Audio metering must have a separate runtime-disable path that retains truthful non-metered status and working audio. Do not add environment flags unless the existing configuration pattern requires one and it is declared/tested.
+Use a versioned local preference `mortimer.interface.layoutVersion` and a developer-accessible **Use previous layout** control while the redesign is being accepted. Missing/invalid preference selects the old layout until P6 acceptance. *(Reconciled 2026-09-22 against main `88b206f`: the code no longer does this. A missing preference is migrated to `2` (Command Console) by `MortimerHostApp`, and the `@AppStorage` default is `2`. An unknown stored value resolves to `1` (adaptive) in `InterfaceLayoutVersion.resolve`. Only an explicit `0` selects the old layout. The default moved before P6/C8 acceptance, on the G-C8 written-acceptance route (`docs/acceptance/adaptive-interface/C8-open-items.md`) for layout 1 and on PR #80 for layout 2. The rule as written above is kept as the original plan.)* Both presentations share the same authoritative stores; reverting layout cannot resurrect stale data or reset a draft. Audio metering must have a separate runtime-disable path that retains truthful non-metered status and working audio. Do not add environment flags unless the existing configuration pattern requires one and it is declared/tested.
 
 Preserve existing `mortimer.drawer.*` keys. New layout metadata is additive and schema-versioned. Rollback ignores newer optional metadata, restores reachable window positions, and retains underlying data. Keep old renderer paths until the replacement has passed P6; do not leave a permanently untested duplicate UI after acceptance. Removing the temporary fallback is a separate reviewed cleanup.
 

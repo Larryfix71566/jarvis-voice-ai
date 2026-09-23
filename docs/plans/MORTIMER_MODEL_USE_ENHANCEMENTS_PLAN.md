@@ -53,6 +53,22 @@ re-authentication, model capability evidence, and tool-preserving execution
 remain open. MAR-G
 through MAR-J remain open.
 
+**Reconciled 2026-09-22 against main `88b206f`.** This header and
+[the status file](../acceptance/model-use-enhancements/STATUS.md) now agree
+on what the committed receipts show. MAR-E and MAR-F remain **open**. The
+only committed SAYGM receipt (`saygm-readiness-2026-09-20.json`) failed
+closed with `SAYGM_API_KEY is not set`. The only committed subscription
+probe receipts (`subscription-probes-2026-09-20.md`,
+`subscription-readiness-2026-09-20.json`) record Codex returning
+`SUBSCRIPTION_PROBE_OK` and Claude `Not logged in`. The status file also
+describes a Claude login and successful probe on 2026-09-21 and a SAYGM
+catalog with 56 models on 2026-09-22. Those are user-reported, not in a
+committed receipt, and unverified. The "195" JarvisKit and "250-test"
+MortimerHost figures above are the static `func test` counts at `88b206f`.
+No committed receipt records those runs; the newest committed JarvisKit logs
+(2026-09-18) record 190/190. Likewise, no committed receipt records the
+2,644-test Python run.
+
 The implementation must follow the decisions below. Missing credentials,
 unavailable models, or unsupported provider features must produce a documented
 blocker—not an improvised architectural change.

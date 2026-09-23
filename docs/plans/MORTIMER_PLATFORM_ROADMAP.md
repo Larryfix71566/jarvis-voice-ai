@@ -2,6 +2,26 @@
 
 **Status:** APPROVED by Larry 2026-08-26 (was DRAFT); track plans written 2026-08-26/27.
 
+**Reconciled 2026-09-22 against main `88b206f`** (status notes only; the body
+below is unchanged history):
+- §8 items 3 and 4 still read "unwritten", but both
+  `MORTIMER_NATIVE_CLIENT_APP_PLAN.md` (T1.3) and
+  `MORTIMER_WEB_RETIREMENT_PLAN.md` (T1.4) exist, added in `12fd986`
+  (2026-08-27). T1.3's own header records it IMPLEMENTED (code) 2026-09-15
+  with hardware verification partial; T1.4 is still a DRAFT awaiting approval.
+  Items 9–13 remain unwritten (no such files on main).
+- §10's three approval boxes are unchecked, while this header records
+  approval on 2026-08-26. They are left unticked here; only Larry ticks them.
+- **Known deviation — G6(b).** G6(b) and T6 require a passing
+  rollback-on-failed-launch test before `macos/**` is allow-listed. `1f2cb04`
+  (2026-09-07, `ALLOWLIST_SEQUENCE.md` row W0-SWIFT) allow-listed
+  `macos/{JarvisKit,MortimerHost}/{Sources,Tests}/**`, gated by `swift build`
+  + `swift test`. No rollback-on-failed-launch test exists on main (grep of
+  `*.py`/`*.swift`/`*.sh` finds none). The mitigation relied on instead is
+  that a Swift PR is inert until a human runs `MortimerHost/scripts/bundle.sh`;
+  manifests, plists, entitlements and `scripts/` remain denied. G6(b) is
+  therefore not passed.
+
 **Scope addition, 2026-09-17:** Larry requested home automation integration,
 home surveillance interactions/automation, and investing assistance automation
 within the existing financial section. Added T7, T8 and financial subtrack T4c
@@ -705,6 +725,8 @@ Original ten track-plan entries below retain their historical statuses; three
 future plans were queued on 2026-09-17 (items 11–13). "written" = the plan
 document exists and has been reviewed;
 "unwritten" = queued, specified only by this roadmap so far.
+*(Reconciled 2026-09-22: items 3 and 4 were written in `12fd986`,
+2026-08-27 — see the header.)*
 
 1. `MORTIMER_SECURITY_HARDENING_PLAN.md` (T4a) — **written**. Smallest,
    unblocks T5, closes the every-key-everywhere exposure now.
@@ -755,6 +777,10 @@ document exists and has been reviewed;
 - [ ] Larry approves the track set, the sequence in §5, and the defaults in §7.
 - [ ] Open decisions O1–O7 answered (or defaults accepted).
 - [ ] Plan 1 in §8 (T4a hardening) authorized to be written.
+
+*(Reconciliation note 2026-09-22: the header records APPROVED by Larry
+2026-08-26, and plan 1 was written; these boxes were never ticked and are
+left for Larry to tick.)*
 
 **2026-09-17 scope additions (separate from the historical approval rows):**
 - [x] Larry requested T7 home automation, T8 home surveillance interactions/

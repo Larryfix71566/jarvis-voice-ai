@@ -6,6 +6,15 @@
 This is an implementation status record, not a claim that the rollout is
 complete.
 
+**Reconciled 2026-09-22 against main `88b206f`.** The committed receipts in
+[`receipts/`](receipts/) are dated 2026-09-20. Statements below about
+2026-09-21 and 2026-09-22 events are user-reported checks: a Claude Max login
+and successful Claude probe, a vault-backed rerun with both probes
+succeeding, and a SAYGM catalog with 56 models. They are **not recorded in a
+committed receipt and are unverified**. They are labelled where they appear,
+and no item is ticked on their strength. Test counts in this file that have
+no linked receipt are also unreceipted.
+
 ## Open items first
 
 - [ ] **MAR-A** — Reconcile the installed Mac checkout with the candidate
@@ -24,7 +33,20 @@ complete.
   The Mac vault credential and live catalog check are now verified; the
   catalog returned 56 models but advertised zero confidential models, so a
   catalog-confirmed confidential synthetic test remains open.
-- [x] **MAR-F** — Complete Claude re-authentication and capability evidence.
+  (Reconciled 2026-09-22: the live catalog result is user-reported and not
+  in a committed receipt. The only committed SAYGM receipt,
+  [`saygm-readiness-2026-09-20.json`](receipts/saygm-readiness-2026-09-20.json),
+  records `saygm_catalog.ok: false`, `SAYGM_API_KEY is not set`. The
+  vault-backed readiness receipt records the SAYGM route with
+  `credential_present: false`.)
+- [ ] **MAR-F** — Complete Claude re-authentication and capability evidence.
+  (Unticked 2026-09-22, reconciled against main `88b206f`. The only committed
+  probe evidence, [`subscription-probes-2026-09-20.md`](receipts/subscription-probes-2026-09-20.md)
+  and [`subscription-readiness-2026-09-20.json`](receipts/subscription-readiness-2026-09-20.json),
+  records Claude `Not logged in` (`subscription_probes.claude.ok: false`,
+  category `authentication`). The 2026-09-21 successful Claude probe below is
+  user-reported and unverified. Re-tick when a committed probe receipt shows
+  it.)
   Both Claude and Codex adapters are text-only and gated, and both
   subprocesses strip inherited provider API credentials and endpoint
   overrides before launch. Claude OAuth is currently not logged in and
@@ -39,6 +61,7 @@ complete.
   subscription authentication is kept outside the vault. On 2026-09-21 the
   refreshed Claude Max session passed the same noninteractive probe as Codex;
   both subscription routes now have live text capability evidence.
+  (User-reported; not recorded in a committed receipt.)
 - [ ] **MAR-G** — Migrate all non-voice call sites and prove no background
   workload inherits the voice route. Memory, extraction, sweep, procedure,
   digest, agent, council, upgrade, and shared-content vision paths now resolve
@@ -54,6 +77,15 @@ complete.
   memory pilot. The checked-in offline rollout fixture passes its monitoring
   gate without touching a live database; provider-backed shadow evidence is
   still credential-gated.
+  (Reconciled 2026-09-22: the memory provider shadow is no longer
+  credential-gated.
+  [`../memory-automation/provider-shadow-receipt.json`](../memory-automation/provider-shadow-receipt.json),
+  recorded 2026-09-18, shows profile `claude-sonnet-5` via the direct
+  Anthropic API route (`ANTHROPIC_API_KEY`), 8 synthetic cases, 8 calls,
+  `no_regression: true`, `live_database_touched: false` and
+  `production_automation_enabled: false`. That receipt did not go through
+  the model-routing layer or a confidential route, and it covers no research
+  or development workload. MAR-I stays open.)
 - [ ] **MAR-J** — Complete latency, quality, privacy, rollback, and deployed
   release evidence before changing defaults.
 
@@ -142,23 +174,31 @@ complete.
 
 - Full unit suite: **2,644 passed, 4 skipped**, 2026-09-20 (current checkout;
   2,648 collected and passed/skipped, plus 2 subtests). The repository-map
-  size correction is included in this passing run.
+  size correction is included in this passing run. (Not in a committed
+  receipt. At `88b206f` on Linux, `pytest tests/unit` gave 2,526 passed, run
+  by Claude on 2026-09-22.)
 - JarvisKit Swift suite: **195 passed**, 2026-09-20 (elevated compiler-cache
-  build required by the sandbox).
-- MortimerHost Swift build: **passed**, 2026-09-20. The full 250-test suite
+  build required by the sandbox). (Not in a committed receipt. 195 equals the
+  static `func test` count at `88b206f`. The newest committed JarvisKit logs,
+  2026-09-18, record 190/190.)
+- MortimerHost Swift build: **passed**, 2026-09-20 (not in a committed
+  receipt; 250 is the static `func test` count at `88b206f`). The full 250-test suite
   still has 3 environment-dependent skips and 8 failures in
   `WindowVisibilityTests` because the headless test process cannot create a
   visibly unoccluded macOS window; they are display-fixture failures observed
   in this headless run, not route UI compilation failures. Re-run those tests
   in an active GUI session before release sign-off.
 - Subscription probes (synthetic, read-only): Codex default model returned
-  `MORTIMER_SUBSCRIPTION_PROBE_OK`; Claude reports `Not logged in`. The
+  `SUBSCRIPTION_PROBE_OK` (the Mortimer adapter returned `ADAPTER_PROBE_OK`);
+  Claude reports `Not logged in`. (Token names corrected 2026-09-22 to match
+  the receipt; the earlier text said `MORTIMER_SUBSCRIPTION_PROBE_OK`.) The
   Mortimer Codex adapter now parses the current `item.completed` JSONL event
   shape. No project data was sent.
 - Detailed receipt: [`subscription-probes-2026-09-20.md`](receipts/subscription-probes-2026-09-20.md).
 - Claude adapter now permits the official OAuth/keychain path (while keeping
   session persistence off and tools denied); its next probe is gated on Larry
-  signing in to Claude Code.
+  signing in to Claude Code. (A 2026-09-21 sign-in and probe are
+  user-reported below. No committed receipt records them.)
 - Integration smoke: **52 passed**, `test_bot_wiring.py` and
   `test_planning_council.py`, 2026-09-20.
 - `git diff --check`: passed.
@@ -173,14 +213,14 @@ complete.
   pre-invocation sensitive-turn gate.
 - Architecture/plan-manifest regression subset: **65 passed** offline.
 - Fresh secret-free readiness receipt: [`route-readiness-2026-09-20.json`](receipts/route-readiness-2026-09-20.json). It confirms both subscription CLIs are installed, reports their declared text capability, and records API-environment isolation.
-- Historical synthetic subscription probe: [`subscription-readiness-2026-09-20.json`](receipts/subscription-readiness-2026-09-20.json). That receipt captured the pre-login Claude gate; the 2026-09-21 user-run rerun supersedes it with successful Claude and Codex probes.
+- Historical synthetic subscription probe: [`subscription-readiness-2026-09-20.json`](receipts/subscription-readiness-2026-09-20.json). That receipt captured the pre-login Claude gate; the 2026-09-21 user-run rerun supersedes it with successful Claude and Codex probes. (That rerun is not in a committed receipt, so this 2026-09-20 receipt is still the latest committed probe evidence.)
 - External-state recheck: the established Mac vault is present and decryptable
   with ten secret names, including `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`;
   no secret values were emitted. The candidate readiness command now accepts
   `JARVIS_VAULT_PATH` and injects that vault for its secret-free checks, so
   direct API credential readiness is no longer falsely reported as missing.
   That earlier recheck predates the refreshed Claude OAuth session.
-- Historical SAYGM readiness receipt: [`saygm-readiness-2026-09-20.json`](receipts/saygm-readiness-2026-09-20.json). It captured the pre-key fail-closed state; the 2026-09-22 user-run check supersedes it with a successful live catalog request.
+- Historical SAYGM readiness receipt: [`saygm-readiness-2026-09-20.json`](receipts/saygm-readiness-2026-09-20.json). It captured the pre-key fail-closed state; the 2026-09-22 user-run check supersedes it with a successful live catalog request. (That check is not in a committed receipt, so this receipt is still the latest committed SAYGM evidence.)
 - Current vault-backed readiness rerun: Codex and Claude subscription
   commands are installed; the vault-backed `SAYGM_API_KEY` is present; all direct Anthropic
   workloads see the vault-backed `ANTHROPIC_API_KEY`; the voice supervisor
@@ -189,18 +229,31 @@ complete.
   vault-backed rerun on 2026-09-21 returned `ready_issues: []` with both
   Claude and Codex probes successful. Subscription routing remains separately
   gated on enabling routing and completing the sandbox-preserving tool bridge.
+  Committed receipt:
+  [`vault-backed-route-readiness-2026-09-20.json`](receipts/vault-backed-route-readiness-2026-09-20.json).
+  (Reconciled 2026-09-22: the receipt shows `ready_issues: []`,
+  `routing_enabled: false`, `credential_present: true` for every workload
+  including `voice_supervisor` on `claude-haiku-4-5`, and both subscription
+  CLIs `installed: true`. It records the SAYGM route with
+  `credential_present: false` and has no `saygm_catalog` and no
+  `subscription_probes`. So "`SAYGM_API_KEY` is present" is not supported by
+  the committed receipt. The 2026-09-21 rerun with successful probes is
+  user-reported and unverified.)
 - User-run live provider verification on 2026-09-22: SAYGM authentication and
   catalog succeeded (`models: 56`, `credential_present: true`), Claude and
   Codex subscription probes both succeeded, and `ready_issues` was empty.
   SAYGM reported no catalog models classified as confidential; this is the
   remaining MAR-E acceptance gate rather than a credential failure.
+  (Not recorded in a committed receipt; unverified.)
 - Call-site inventory receipt: [`model-call-site-inventory-2026-09-20.json`](receipts/model-call-site-inventory-2026-09-20.json).
 - Offline memory rollout gate: **passed** with `live_database_touched=false`
   and `production_automation_enabled=false`; receipt:
   [`rollout-monitoring-receipt.json`](../memory-automation/rollout-monitoring-receipt.json).
 - SAYGM confidential-model attestation, subscription route enablement, and Mac
   deployment reconciliation remain incomplete. Claude re-authentication is
-  complete and has passed the live noninteractive probe.
+  complete and has passed the live noninteractive probe. (Reconciled
+  2026-09-22: that statement is user-reported. The committed probe receipts
+  still show Claude `Not logged in`, so MAR-F is open above.)
 
 ## Next exact handoff actions
 

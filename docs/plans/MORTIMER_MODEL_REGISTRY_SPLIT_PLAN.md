@@ -2,6 +2,23 @@
 
 Status: **plan, awaiting Larry's review.** Nothing implemented. Written 2026-09-13 after a live session in which the developer sub-agent was refused twice while trying to add new models ("The registry file is still locked to human review — it's in the deny list, so self-edits can't touch it", 17:01:45).
 
+*Reconciled 2026-09-22 against main `88b206f`:* still nothing implemented —
+no `config/model_endpoints.yaml`/`model_profiles.yaml`, and
+`config/upgrade_models.yaml` is still denied. #80 (`88b206f`) changed the
+ground the §2 inventory describes, without doing the split:
+- `config/model_access.yaml` (new) is a workload → route/profile policy layer
+  that names `upgrade_models.yaml` profiles; it is not the endpoint/profile
+  split.
+- `jarvis/model_routing.py` (new) parses `upgrade_models.yaml` directly
+  (`_load_model_registry`, `yaml.safe_load`, honouring `JARVIS_UPGRADE_MODELS`)
+  rather than through `load_model_registry()` — one more direct-parse site
+  that §2's "six sites", §5's changed-file list and §6 step 3 do not include.
+- The registry now has **14** profiles, not 13: `codex-subscription` was added
+  with no `base_url` or `api_key_env` (reachable only via the
+  `codex_subscription` route). The 13 endpoint-bearing profiles still span the
+  same 3 endpoints (8/3/2). The "13 profiles/models" in §2, §6 step 8 and §8,
+  and the endpoint map, must account for a profile with no endpoint.
+
 ## §0 Why this exists
 
 Sub-agent models go stale on the timescale of weeks, and today the only way to add one is Larry hand-editing a 258-line YAML file. The self-development loop cannot prepare that change, so the models the developer, analyst and librarian run on drift behind whatever shipped this month.

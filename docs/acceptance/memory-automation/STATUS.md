@@ -37,6 +37,20 @@ preserving the voice pipeline. Knowledge-base session digests and procedure
 descriptions use the separate `JARVIS_BACKGROUND_PROFILE` registry route and
 cannot inherit the Supervisor's Haiku route either.
 
+Classifier in use (reconciled 2026-09-22 against main `88b206f`): the running
+bot does not use a model for B1 admission classification. `jarvis/bot/pipeline.py`
+imports `heuristic_classifier` from `jarvis/memory_automation.py`. When
+memory automation is enabled, it passes that function as the idle watcher's
+`automation_handler` (read by `jarvis/bot/memory_watcher.py`) and uses it
+directly for the teardown drain.
+A model-backed admission classifier runs only in
+`scripts/run_memory_provider_shadow.py`, as the `candidate_classifier`
+compared against the heuristic baseline on the synthetic eight-case corpus.
+The `JARVIS_MEMORY_PROFILE` route above serves the model calls in memory
+extraction, session update and sweep consolidation/classification
+(`jarvis/memory_extraction.py`, `jarvis/memory.py`, `jarvis/memory_sweep.py`).
+It is not the B1 admission classifier.
+
 The local classifier baseline now recognizes explicit preference/fact language,
 project-key scope, tentative task rules, quoted content, and expiry-bearing
 temporary context without asking the user to label a memory. Classifier output
@@ -123,6 +137,14 @@ comparison, zero safety violations, and all 20 decisions marked reviewed and
 reversible. It is a sandbox acceptance artifact; it does not enable the Mac
 worker or satisfy the required daily-driver observation.
 
+Reconciled 2026-09-22 against main `88b206f`. The "first 20 decisions" are
+synthetic fixture rows. `tests/fixtures/memory_rollout_acceptance.json`
+`first_20` holds twenty entries (`decision-01`…`decision-20`) that are written
+with `reviewed: true, reversible: true`, and the receipt's `first_review_ok`
+checks those flags. This is not a record that Larry or anyone else reviewed
+real decisions. The review of the first 20 live decisions that the rollout
+requires is still open with the Mac staged enablement.
+
 The runtime gate now enforces the same order through
 `JARVIS_MEMORY_AUTOMATION_STAGE`: `shadow` writes only the privacy-safe shadow
 ledger, `explicit_preferences` admits only explicit preference classifications,
@@ -141,10 +163,16 @@ UV_CACHE_DIR=/private/tmp/jarvis-uv-cache uv run --with-requirements requirement
   pytest -q tests/unit/test_memory_automation.py \
   tests/unit/test_memory_automation_acceptance.py \
   tests/unit/test_memory_rollout_acceptance.py tests/unit/test_memory.py \
-  tests/unit/test_memory_sweep.py tests/unit/test_memory_watcher.py
+  tests/unit/test_memory_sweep.py tests/unit/test_memory_watcher.py \
+  tests/unit/test_plan_manifests.py
 ```
 The same focused command was rerun on 2026-09-18 and passed 196 tests; the
-plan-manifest verifier is included and now covers 4 checks. These results cover the sandbox policy
+plan-manifest verifier is included and now covers 4 checks. (Reconciled
+2026-09-22 against main `88b206f`: the command as previously written left out
+`tests/unit/test_plan_manifests.py`, which has been added above. That file
+contains 7 tests, not 4. The 196 figure has no committed receipt. At
+`88b206f` on Linux, run by Claude on 2026-09-22, the six memory files pass
+192 tests and the command above, with the manifest file, passes 199.) These results cover the sandbox policy
 and acceptance fixtures; the provider-backed shadow now also passes, while
 gradual Mac enablement remains open.
 

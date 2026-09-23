@@ -2,6 +2,17 @@
 
 Status: Rev 3.6 — 2026-09-18 (Background model-route separation clarified: Haiku is exclusive to the voice Supervisor/orchestrator; KB digest and procedure maintenance now use `JARVIS_BACKGROUND_PROFILE`, alongside the existing dedicated memory route. Rev 3.5: Interface Task: the council roster's premise corrected — `council_rounds.run_id` is NULL on all 35 rounds and nothing can populate it today, so the roster ships as its own section rather than a card attachment; Stage A landed, see that section. Rev 3.4: Phase 4 rewritten: its cost premise died when Phase 1 put the memory block inside the cached prefix — measured, see the Phase 4 section itself. Rev 3.3: Phase 3 reevaluated against the real ledger and council records; see "Rev 3.3 notes" at the end. Rev 3.2: Phase 1/1b rewritten: caching needs the native Messages API, the OpenAI-compat layer cannot carry it; see "Rev 3.2 resolutions" at the end. Rev 3.1: conflicts resolved + model-floor policy.)
 
+*Reconciled 2026-09-22 against main `88b206f`:* Rev 3.5's premise that
+`council_rounds.run_id` is NULL "and nothing can populate it today" was true
+when measured (2026-09-03) but is stale in code. GL9 (`0084d23`, 2026-09-05)
+added the seam: `convene()`/`draft_candidates()` in `jarvis/council/council.py`
+accept `run_id`; `UpgradeAgent` stores it and passes it to its convene calls
+(`jarvis/agents/upgrade_agent.py`); the sidecar's `_make_agent` and plan path
+forward it; `SkillRegistry.call()` injects the delegating run's `run_id` into
+`selfedit_start`/`plan_start`. Rounds convened that way can now carry a
+`run_id`; whether live rows do was not checked against the database. The
+roster-as-its-own-section decision stands as history.
+
 **Standing policy (Larry, 2026-09-01) — the model floor:** the ONLY agent that may run Haiku is the voice agent (Supervisor). Every other agent — the five specialists and the planner/executor loop — runs at Sonnet-or-equivalent or above. Cost work on those agents is caching, context slimming, effort, and choosing *among* Sonnet-class-and-up models; it is never dropping below the floor. This overrides the earlier "Haiku is correct for the conversational agents" stance in `config/agents.yaml` and CLAUDE.md, and it is bound in CONFIG plus a test (Phase 0b item 5), not stored as a memory fact — a fact only persuades a model, it cannot bind a tool's behaviour (the same lesson as `jarvis_units`).
 Scope: sub-agents and supervisor. Voice transport (STT/TTS/realtime) explicitly exempt — stays on native provider connections for latency.
 

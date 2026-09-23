@@ -6,7 +6,17 @@ proposals. Use `RELEASE_READINESS.md` for release gates. PR #76 is merged;
 the release consolidation remains under review in PR #80. This does not
 prove that the running services have loaded the release fixes.
 
-**Historical inventory at `1acd275`:**
+**Reconciled 2026-09-22 against main `88b206f`.** PR #80 is no longer under
+review. It merged as `88b206f` on 2026-09-22 (squash of branch head
+`1318f65`). PR #76's code reached main through PR #78 (`af2d0cf`); #76's own
+merge (`e6b34cf`) changed only `docs/REPO_MAP.md`. The commit hashes cited
+below as `1acd275`, `fabc349` and `2bc51dc` are branch commits and are not
+ancestors of main. Their content is on main via `af2d0cf` (checked by
+matching each commit's added lines against the tree at `af2d0cf`). Whether
+the running services have loaded `88b206f` is still not recorded.
+
+**Historical inventory at `1acd275`** (branch commit; content on main via
+`af2d0cf`):
 Fourteen
 items. Two are decisions,
 two are investigations, three need one hardware run each, one needs
@@ -153,6 +163,13 @@ clear that item." Default flipped to `1` in all three declarations
 (`MortimerHostApp`, `ConsoleView`, `DisplayWindowView` — they must agree or
 the app disagrees with itself about which layout it is in). `Debug ▸ Use
 previous layout` retained per L4, so the rollback is a menu press.
+*(Reconciled 2026-09-22 against main `88b206f`: the flip to `1` reached main
+in `af2d0cf` (PR #78). PR #80, `88b206f`, then moved the default to `2`
+(Command Console), with a one-time migration of missing/`1` preferences to
+`2` in `MortimerHostApp`. There are now more than three declarations: every
+`@AppStorage("mortimer.interface.layoutVersion")` defaults to `2`. The
+`ConsoleView.swift:88` citation below is now `:105`. See `C8-open-items.md`
+for the current line map.)*
 
 **C8 was NOT run**, and this closes on Gate G-C8's second route: every
 unexercised row named in `C8-open-items.md` with Larry's written acceptance.
@@ -337,7 +354,9 @@ Closed since this item was written: item 1 (step 7, resolved as a partial —
 D8 AMENDED), item 2 (`layoutVersion` default), item 6 (§3.4 latency parity,
 closed on the 32 native turns already on disk). The docs half of step 8 is
 also done — `CLAUDE.md:92` carries the native-audio section and
-`docs/REPO_MAP.md:116` names `NativeAudioTransport`.
+`docs/REPO_MAP.md:116` names `NativeAudioTransport` (at `88b206f` that
+line is `docs/REPO_MAP.md:113`; `CLAUDE.md:92` is unchanged — reconciled
+2026-09-22).
 
 Still blocking the unqualified word — **two**, both needing AirPods in hand
 (item 4 resolved 2026-09-17 by a code read: it was never a defect):
@@ -417,7 +436,8 @@ much.
   "the previous version". Ask before changing the layout; the numbers above
   are enough to fix amplitude without touching it.
 
-**CLOSED for amplitude, 2026-09-16 (`fabc349`).** Fixed by mapping the level
+**CLOSED for amplitude, 2026-09-16 (`fabc349`; branch commit, content on
+main via `af2d0cf`).** Fixed by mapping the level
 through its channel's dBFS window before the envelope, and by letting
 `dyn.base` and `dyn.speed` ease to their per-state targets instead of being
 pinned to `0.004` (the `.offline` value) and `0.45`. A gain constant was
@@ -459,7 +479,8 @@ an envelope when no measured level arrives. The fresh receipt recorded 403
 input arrivals and 84 playout arrivals, so the input path is now physically
 observed while the two-channel P2 arrival-count gate remains open.
 
-**WIDTH — CLOSED 2026-09-17 as a slider** (`1acd275`). Larry: "add a slider
+**WIDTH — CLOSED 2026-09-17 as a slider** (`1acd275`; branch commit,
+content on main via `af2d0cf`). Larry: "add a slider
 option like the amplitude so that it is customizable by the user."
 
 The `0.11` in the super-Gaussian window
@@ -970,7 +991,7 @@ checks this next: the cap is on **characters**, and `wc -c` reports 8096
 bytes for the same file because of 108 multi-byte em-dashes.
 
 **Item 10 shipped two defects, both caught 2026-09-17 and fixed in
-`2bc51dc`.** Item 10 is still closed — the amplitude Larry accepted on sight
+`2bc51dc`** (branch commit; content on main via `af2d0cf`). Item 10 is still closed — the amplitude Larry accepted on sight
 is unchanged — but its first commit was green only because the launcher
 lied, so the record belongs here.
 

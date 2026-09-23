@@ -1,6 +1,13 @@
 # Mortimer — Gate v2 (windowed scoring, honest drops) + Named-Model Delegation
 
 **Status:** APPROVED and IMPLEMENTED 2026-08-22 (F1–F11); §6 effectiveness protocol still unrun — gate off.
+*Reconciled 2026-09-22 against main `88b206f`:* the "§6 effectiveness
+protocol" above is `MORTIMER_VOICE_ISOLATION_TIER12_PLAN.md` §6 (step 0 there,
+the offline `verify --windowed` pass, was added 2026-09-03), not this plan's §6,
+which is its implementation status. This plan's own §4 acceptance has no
+recorded results in §6. The gate is still off by default:
+`JARVIS_SPEAKER_GATE_ENABLED` is unset → `enabled()` returns False
+(`jarvis/speaker.py`).
 Author: Claude (Fable), 2026-08-22. Requested by Larry after the 15:00
 live session review: *"many responses not what I would expect and many
 requests just ignored"* → six gaps found → *"ok create the implementation

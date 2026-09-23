@@ -22,7 +22,12 @@ feature gates and physical acceptance remain separate.
 Native share
 picker/provider journeys, physical display recovery, full voice parity and
 release acceptance remain open; no completion claim is made until those gates
-have evidence.
+have evidence. (Reconciled 2026-09-22 against main `88b206f`: physical
+display unplug/rehome and display reconnect restoration on one external
+monitor are recorded in the committed `candidate-monitor-*-2026-09-18.md`
+receipts. Still open are mirrored and three-display runs, the runbook §2
+capture/tile-ID/duplicate-fetch evidence, and voice/socket reconnect. See
+`docs/acceptance/command-console/STATUS.md`.)
 
 **Architecture visibility amendment, 2026-09-18:** `docs/ARCHITECTURE.md` is
 now a read-only shared reference for both sides of the product. The self-edit
@@ -61,13 +66,34 @@ alternative. Unaffected CC0–CC5 work can proceed under the existing sequence.
 This specific hold takes precedence over later statements that all privacy
 decisions are fixed. Adding these gates closes no existing requirement.
 
+**Reconciled 2026-09-22 against main `88b206f`:**
+
+- **UI2-01 hold is resolved.** The paragraph above is kept for history, but
+  the hold no longer applies. `RELEASE_READINESS.md` ticks UI2-01 with a
+  release decision of session-only temporary-content mode:
+  - staging is local and does not pause ordinary memory;
+  - an approved manifest arms the latch until reconnect;
+  - imported content and derived answers stay ephemeral;
+  - the user sees the pause notice.
+
+  The boundary is covered by
+  `tests/unit/test_shared_content.py::test_staging_does_not_pause_memory_but_approved_manifest_does`.
+  §6.4's pause is therefore the accepted behaviour, limited to approved
+  manifests, and not a draft proposal.
+- **Gate range.** The gates now run beyond UI2-20. UI2-21 and UI2-22 are
+  tracked in `docs/acceptance/command-console/STATUS.md`. UI2-21 is used for
+  two different items: Developer-run grouping in the Command Console status,
+  and the atom-style voice display in `RELEASE_READINESS.md`. Cite each by
+  title.
+
 This extends MORTIMER_ADAPTIVE_INTERFACE_PLAN.md and its closure plan. For
 layout version 2 it supersedes the left voice rail, large central conversation
 wave and single supporting-content slot. Versions 0 and 1 remain available.
 Existing C8, audio, security, daily-driver and automated-memory gates stay open
 until separately evidenced. Historical memory recovery does not implement Atlas.
 
-Source inspected: release-review tree, Git b224c84, September 17. Pre-existing
+Source inspected: release-review tree, Git b224c84 (a release-branch commit,
+not on `main`; its content is on `main` in `88b206f`), September 17. Pre-existing
 edits to C6-remaining.md and the adaptive-interface plan must be preserved.
 The deployment receipt names main 94a5641 and candidate fingerprint
 b57cd348b0d0c30359a6713f919732fe3fabef373a8ffe8be208c75fdc382fe8.
@@ -102,6 +128,39 @@ Verified anchors (repository-relative, line numbers from the inspected tree):
   explicit manual positioning and unplug/reconnect recovery.
 - mcp_servers/mcp_screen/logic.py:274/:314 resolve the configured vision profile
   and client. Image attachment analysis must not capture a screen as a shortcut.
+
+Anchor refresh (reconciled 2026-09-22 against main `88b206f`). The list above
+is the pre-implementation baseline and has drifted. `b224c84` is a
+release-branch commit that is not on `main`; its content reached `main` in
+the #80 squash `88b206f`. Several baseline descriptions are now superseded by
+this plan's own work. For example, `ClientMessage.swift` now also encodes the
+console/inventory and input transfer messages, and the default
+`layoutVersion` is 2. Current locations that were checked:
+
+- App/MortimerHostApp.swift:41 is the `@AppStorage` `layoutVersion` (default
+  2). :111 is the fixed `Window("Mortimer Display", id: "display")` scene.
+- Stores/WorkspaceStore.swift:10–11 is `WorkspaceResult`'s stable UUID. :22 is
+  `SupportingDisplayContent` (one result or the memory graph). :36–49 is
+  `WorkspaceStore`, which owns results, active/comparison selection, pins and
+  the memory-graph store. :167 is `receive(_:)`.
+- App/AppMessageRouter.swift:173 creates the `WorkspaceResult` identity.
+- Console/AdaptiveStageView.swift:51–56 is `mode(...)`, which chooses
+  conversation/rail/bottom. :109 is the `.bottom` presentation.
+- App/UICommandRouter.swift:10 is `DrawerState`. jarvis/bot/ui_control.py:25
+  is `UI_ACTIONS`.
+- macos/JarvisKit/Sources/JarvisKit/AppMessage.swift:226 is `UICommand`
+  (action/tab).
+- jarvis/bot/pipeline.py:561 is `_inject_silent_clipboard`.
+- Display/WorkspaceExportCoordinator.swift:60 creates the `NSSavePanel`.
+  Display/WorkspaceResultDetails.swift:43 omits clipboard content from
+  export.
+- Placement/WindowLookup.swift:18 is `HostWindowKind` (console, display,
+  drawer).
+- mcp_servers/mcp_screen/logic.py:265 is `_resolve_vision_profile`. :304 is
+  `_default_vision_client`.
+
+The pipeline.py:1301–1364 message-receive range and the
+MemoryGraphStore.swift:187–268 range were not re-verified.
 
 Short App/, Stores/, Console/, Display/, Drawer/, Placement/ paths below are
 under macos/MortimerHost/Sources/MortimerHost/. Other paths are repo-relative.
@@ -869,9 +928,14 @@ Create under MortimerHost:
 - Display/KnowledgeAtlasView.swift and Display/AtlasCardView.swift.
 - Display/ContentPanelView.swift — single UUID-addressed auxiliary scene root.
 - Display/ShareCoordinator.swift and Display/SharePreviewView.swift.
-- Display/AttachmentTrayView.swift and Display/AttachmentNormalizer.swift.
+- Console/AttachmentTrayView.swift and Console/AttachmentNormalizer.swift
+  (landed under Console/, not Display/; path corrected 2026-09-22).
 - Placement/ContentWindowRegistry.swift — window registration/focus callbacks,
-  no screen observer or placement algorithm of its own.
+  no screen observer or placement algorithm of its own. (Noted 2026-09-22: an
+  older, different copy also sits at
+  `macos/MortimerHost/Placement/ContentWindowRegistry.swift`, outside
+  `Sources/`. The `Sources/MortimerHost/Placement/` file is the one that
+  landed. See the Command Console status open items.)
 
 Modify under MortimerHost:
 
@@ -945,7 +1009,9 @@ Modify Python:
 Tests to create (Host prefix macos/MortimerHost/Tests/MortimerHostTests/;
 Kit prefix macos/JarvisKit/Tests/JarvisKitTests/):
 
-- Host: CommandConsoleRenderingTests.swift, ConsoleActionCoordinatorTests.swift,
+- Host: CommandConsoleRenderingTests.swift (landed as
+  FullConsoleRenderingTests.swift; see the manifest reconciliation below),
+  ConsoleActionCoordinatorTests.swift,
   KnowledgeAtlasTests.swift, ContentPanelTests.swift, ShareCoordinatorTests.swift,
   AttachmentStoreTests.swift, AttachmentNormalizerTests.swift.
 - Host response routing: `ResponseResultRouter.swift` and
