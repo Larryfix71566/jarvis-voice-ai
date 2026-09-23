@@ -3,7 +3,7 @@
 **Status index, reconciled 2026-09-17 against `e6b34cf`:** this file is a
 chronological investigation log, including resolved items and superseded
 proposals. Use `RELEASE_READINESS.md` for release gates. PR #76 is merged;
-the release consolidation remains under review in PR #79. This does not
+the release consolidation remains under review in PR #80. This does not
 prove that the running services have loaded the release fixes.
 
 **Historical inventory at `1acd275`:**

@@ -4,7 +4,7 @@
 
 **2026-09-17:** the adaptive layout is now the DEFAULT (`layoutVersion` 1, closure item C9.5 / gap G30). `Debug ▸ Use previous layout` is retained for one release. C8 acceptance is still unrun — its unexercised rows are accepted as known limitations in `docs/acceptance/adaptive-interface/C8-open-items.md` under Gate G-C8's written-acceptance route, which is not the same as acceptance having been performed.
 **Current reviewed application source:** `e6b34cf` on `main`, 2026-09-17
-(PR #76 merged). The release consolidation remains under review in PR #79.
+(PR #76 merged). The release consolidation remains under review in PR #80.
 The running app's exact compiled revision is not established by that source
 identity. See `docs/acceptance/adaptive-interface/RELEASE_READINESS.md` for
 separate merge, verification, deployment and acceptance evidence.
