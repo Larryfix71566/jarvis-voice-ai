@@ -46,9 +46,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Callable
 
-from openai import AsyncOpenAI
-
 from jarvis.db import get_conn, now_iso
+from jarvis.memory_model import make_background_async_client
 from jarvis.runlog import get_run
 from jarvis.usage_ledger import record_completion, provider_from_base_url
 
@@ -352,15 +351,15 @@ async def _describe_procedure(
     settings: Any,
     client_factory: Callable[[Any], Any] | None = None,
 ) -> tuple[str, str] | tuple[None, None]:
-    client = (
-        client_factory(settings)
-        if client_factory is not None
-        else AsyncOpenAI(
-            api_key=settings.openai_api_key, base_url=settings.openai_base_url,
-        )
-    )
+    if client_factory is not None:
+        # Test seam only; production uses JARVIS_BACKGROUND_PROFILE.
+        client = client_factory(settings)
+        model = settings.openai_model
+    else:
+        client, route = make_background_async_client(settings)
+        model = route.model
     response = await client.chat.completions.create(
-        model=settings.openai_model,
+        model=model,
         messages=[
             {"role": "system", "content": _DESCRIBE_PROMPT},
             {"role": "user", "content": f"Agent: {agent}\nTask: {task}"},
@@ -370,7 +369,7 @@ async def _describe_procedure(
         record_completion(
             rung="procedures_describe",
             provider=provider_from_base_url(str(client.base_url)),
-            model=settings.openai_model,
+            model=model,
             response=response,
         )
     except Exception:

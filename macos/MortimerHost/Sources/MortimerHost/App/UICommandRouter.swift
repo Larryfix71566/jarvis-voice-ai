@@ -43,6 +43,10 @@ final class DrawerState {
     /// viewed. The topbar toggle and the Output tab's strip dot both
     /// render from this one flag.
     var outputDot = false
+    /// Monotonic request token for voice/keyboard tab-strip scrolling. The
+    /// strip consumes this event without changing the selected tab.
+    private(set) var tabScrollRequest = 0
+    private(set) var tabScrollDirection: Int = 0
 
     /// Set once at app start; lets the docked drawer's own pop-out
     /// button call the same WindowPlacement.popOutDrawer() the voice
@@ -71,6 +75,19 @@ final class DrawerState {
         guard Self.tabKeys.contains(key) else { return }
         activeTab = key
         if key == "output" { outputDot = false }
+    }
+
+    @discardableResult
+    func scrollTabs(_ direction: String) -> Bool {
+        let delta: Int
+        switch direction.lowercased() {
+        case "left", "back": delta = -1
+        case "right", "forward": delta = 1
+        default: return false
+        }
+        tabScrollDirection = delta
+        tabScrollRequest &+= 1
+        return true
     }
 
     /// SideDrawer.tsx clampDrawerWidth — [300, min(720, 60% of the
@@ -119,6 +136,18 @@ final class ConsoleNoticeState {
     /// AUTO-FADES like the speaker-gate chip, no action.
     private(set) var audioInputNotice: String?
     private var inputClearTask: Task<Void, Never>?
+    /// Last bounded Command Console acknowledgement. Keeping the response in
+    /// app state lets voice and pointer paths surface the same truthful result
+    /// without treating transport receipt as completion.
+    private(set) var consoleResult: ConsoleResult?
+    /// Presentation toggles are app state so pointer and voice requests
+    /// produce the same visible console configuration.
+    var captionExpanded = true
+    var statusOpen = true
+
+    func showConsoleResult(_ result: ConsoleResult) {
+        consoleResult = result
+    }
 
     func showAudioInputNotice(_ text: String) {
         audioInputNotice = text
@@ -149,6 +178,12 @@ final class ConsoleOverlayState {
 final class WindowActions {
     var open: (String) -> Void = { _ in }
     var dismiss: (String) -> Void = { _ in }
+    var openPanel: (ConsolePanel) -> Void = { _ in }
+    var dismissPanel: (ConsolePanel) -> Void = { _ in }
+    var dismissAllPanels: () -> Void = {}
+    var openContentPanel: (ContentPanelID) -> Void = { _ in }
+    var dismissContentPanel: (ContentPanelID) -> Void = { _ in }
+    var dismissAllContentPanels: () -> Void = {}
 }
 
 /// APP plan §3 P15 / review F2, §5 step 5 — the second messageStream()

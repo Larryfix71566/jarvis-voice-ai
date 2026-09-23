@@ -210,9 +210,12 @@ extension AdminAPI {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue(components.path.hasSuffix(".svg") ? "image/svg+xml" : "image/png", forHTTPHeaderField: "Accept")
-        let (data, _) = try await JarvisHTTP.sendTransient(request, config: config, session: graphSession)
-        guard data.count <= 20_000_000 else { throw MemoryGraphError.invalidShape }
-        return data
+        let imageRequest = request
+        return try await graphImageRequests.data(at: url) {
+            let (data, _) = try await JarvisHTTP.sendTransient(imageRequest, config: config, session: graphSession)
+            guard data.count <= 20_000_000 else { throw MemoryGraphError.invalidShape }
+            return data
+        }
     }
 
     private func defaultPort(_ scheme: String?) -> Int? {

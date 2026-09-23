@@ -3,10 +3,25 @@ import { useCallback, useEffect, useState } from "react";
 const API = "http://localhost:7861";
 
 interface Fact {
+  id?: number;
   key: string;
   content: string;
   source_session_id: string | null;
   updated_at: string;
+  subject?: string;
+  scope?: string;
+  memory_type?: string;
+  provenance?: string;
+  evidence_status?: string;
+  confidence?: number;
+  valid_from?: string | null;
+  valid_until?: string | null;
+  source_turn_id?: string | null;
+  content_revision?: number;
+  classifier_version?: string;
+  classified_at?: string | null;
+  supersedes_id?: number | null;
+  used_for_count?: number;
 }
 
 interface ObservationGroup {
@@ -366,6 +381,21 @@ export default function MemoryPanel() {
               <div className="memory-fact-body">
                 <span className="memory-fact-content">{f.content}</span>
                 <span className="memory-fact-key">{f.key}</span>
+                <span className="memory-fact-key">
+                  {(f.memory_type ?? "fact")} · {(f.scope ?? "global")} · {(
+                    f.evidence_status ?? "unknown"
+                  )} · {Math.round(Math.max(0, Math.min(1, f.confidence ?? 0)) * 100)}% confidence
+                </span>
+                {(() => {
+                  const details = [
+                    f.provenance && f.provenance !== "user" ? f.provenance : null,
+                    f.used_for_count ? `used ${f.used_for_count}×` : null,
+                    f.supersedes_id ? `supersedes #${f.supersedes_id}` : null,
+                  ].filter(Boolean);
+                  return details.length > 0 ? (
+                    <span className="memory-fact-key">{details.join(" · ")}</span>
+                  ) : null;
+                })()}
               </div>
               <button
                 type="button"

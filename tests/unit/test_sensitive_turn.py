@@ -53,6 +53,14 @@ def test_clear_is_safe_when_never_armed(holder):
     assert is_sensitive() is False
 
 
+def test_temporary_content_latch_survives_turn_clear(holder):
+    holder.arm_temporary_content()
+    assert is_sensitive() is True
+    holder.clear()
+    assert is_sensitive() is True
+    assert holder.temporary_content_mode is True
+
+
 def test_ordinary_turn_never_arms(holder):
     assert arm_from_text("what's the weather in Birmingham") is False
     assert is_sensitive() is False
@@ -201,6 +209,41 @@ def test_real_frame_sequence_suppresses_assistant_row(holder, tmp_path, monkeypa
     # figure never landed anywhere.
     assert all("2,431.18" not in c for _, c in rows)
     assert not any(role == "assistant" and "2,431" in c for role, c in rows)
+
+
+def test_transcript_observer_consumes_exact_spoken_consent_before_persistence(tmp_path, monkeypatch):
+    import asyncio
+    from pipecat.frames.frames import UserStartedSpeakingFrame, UserStoppedSpeakingFrame, TranscriptionFrame
+    from pipecat.observers.base_observer import FramePushed
+    from pipecat.processors.frame_processor import FrameDirection
+    from jarvis.bot.transcript_log import TranscriptObserver
+    from jarvis.db import get_conn, run_migrations
+
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "consent.db"))
+    run_migrations()
+    seen = []
+
+    async def consent(text):
+        seen.append(text)
+        return text == "Send these items!"
+
+    observer = TranscriptObserver("s1", on_consent=consent)
+
+    async def drive():
+        async def push(frame):
+            await observer.on_push_frame(FramePushed(
+                source=None, destination=None, frame=frame,
+                direction=FrameDirection.DOWNSTREAM, timestamp=0))
+        await push(UserStartedSpeakingFrame())
+        frame = TranscriptionFrame("Send these items!", "u", "")
+        frame.finalized = True
+        await push(frame)
+        await push(UserStoppedSpeakingFrame())
+
+    asyncio.run(drive())
+    assert seen == ["Send these items!"]
+    with get_conn() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM conversations").fetchone()[0] == 0
 
 
 # --- P8/P9/P10/P12/P13: the run log --------------------------------------

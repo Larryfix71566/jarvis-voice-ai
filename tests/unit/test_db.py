@@ -11,6 +11,8 @@ EXPECTED_TABLES = {
     "observations", "conversations_fts", "agent_runs", "agent_events",
     "procedures", "procedures_fts", "council_rounds", "council_scores",
     "memory_reviews", "memory_extraction_cursor", "memory_extraction_pending",
+    "memory_classification_shadow",
+    "model_route_preferences", "model_route_drafts",
 }
 
 EXPECTED_MIGRATION_IDS = [
@@ -28,6 +30,9 @@ EXPECTED_MIGRATION_IDS = [
     "0019_memory_recall_events",
     "0020_user_id",
     "0021_reminders_notified",
+    "0022_memory_automation",
+    "0023_memory_classification_shadow",
+    "0024_model_route_preferences",
 ]
 
 

@@ -9,3 +9,14 @@
 - `reviews/` — model-authored reviews of plans/specs, adopted through
   the planning pathway's review mode. Each ends with an attribution
   footer naming its reviewer.
+
+# Documentation index
+
+- [Architecture reference](ARCHITECTURE.md) — current runtime ownership,
+  trust boundaries, model routes, deployment paths and verification pointers.
+- [Repository map](REPO_MAP.md) — source tree navigation for agents and
+  developers.
+- [Plans](plans/) — normative implementation plans.
+- [Acceptance](acceptance/) — dated evidence and remaining release gates.
+- [Interface research](interface-research/) — research findings and design feedback;
+  includes [Jev use cases and Mortimer feedback (2026-09-22)](interface-research/JEV_USE_CASES_AND_MORTIMER_FEEDBACK_2026-09-22.md).

@@ -1,0 +1,62 @@
+Building for debugging...
+[2 / 7] MortimerHostTests-product
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayAcceptanceTests.swift:13:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 11 |     func testPointerSelectedResultSharesStageOnConnectedDisplays() throws {
+ 12 |         _ = NSApplication.shared
+ 13 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 14 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ 15 |         let screens = NSScreen.screens
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayAcceptanceTests.swift:71:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 69 |     func testReturningToOriginalPanelsPreservesResearchPinsAndReadingState() throws {
+ 70 |         _ = NSApplication.shared
+ 71 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 72 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ 73 |         let suite = "supporting-display-" + UUID().uuidString
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[4 / 9] MortimerHostTests-product
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/CompactConversationTests.swift:11:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 9 |     func testSavedCompactPreferenceChangesNativeConversationPresentation() throws {
+10 |         _ = NSApplication.shared
+11 |         NSApplication.shared.accessibilitySetValue(true,
+   |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+12 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+13 |         let suite = "compact-conversation-" + UUID().uuidString
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:153:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+151 |     func testOverflowButtonsReachBothEndsWithoutChangingSelection() throws {
+152 |         _ = NSApplication.shared
+153 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+154 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+155 |         let selection = HeaderSelection()
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayAcceptanceTests.swift:71:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 69 |     func testReturningToOriginalPanelsPreservesResearchPinsAndReadingState() throws {
+ 70 |         _ = NSApplication.shared
+ 71 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 72 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ 73 |         let suite = "supporting-display-" + UUID().uuidString
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[9 / 13] MortimerHostTests-product
+Build complete! (1.40 sec)
+Test Suite 'Selected tests' started at 2026-09-18 16:38:55.460.
+Test Suite 'MortimerHostTests.xctest' started at 2026-09-18 16:38:55.461.
+Test Suite 'SupportingDisplayAcceptanceTests' started at 2026-09-18 16:38:55.461.
+Test Case '-[MortimerHostTests.SupportingDisplayAcceptanceTests testFourResultStageRendersAVisibleBoundedGrid]' started.
+Test Case '-[MortimerHostTests.SupportingDisplayAcceptanceTests testFourResultStageRendersAVisibleBoundedGrid]' passed (1.019 seconds).
+Test Case '-[MortimerHostTests.SupportingDisplayAcceptanceTests testPointerSelectedResultSharesStageOnConnectedDisplays]' started.
+Test Case '-[MortimerHostTests.SupportingDisplayAcceptanceTests testPointerSelectedResultSharesStageOnConnectedDisplays]' passed (1.039 seconds).
+Test Case '-[MortimerHostTests.SupportingDisplayAcceptanceTests testReturningToOriginalPanelsPreservesResearchPinsAndReadingState]' started.
+Test Case '-[MortimerHostTests.SupportingDisplayAcceptanceTests testReturningToOriginalPanelsPreservesResearchPinsAndReadingState]' passed (1.558 seconds).
+Test Suite 'SupportingDisplayAcceptanceTests' passed at 2026-09-18 16:38:59.078.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 3.617 (3.617) seconds
+Test Suite 'MortimerHostTests.xctest' passed at 2026-09-18 16:38:59.078.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 3.617 (3.617) seconds
+Test Suite 'Selected tests' passed at 2026-09-18 16:38:59.078.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 3.617 (3.618) seconds

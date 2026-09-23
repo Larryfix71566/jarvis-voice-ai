@@ -1,0 +1,120 @@
+# Workload access policies for Model Use Enhancements.
+# Profile names refer to config/upgrade_models.yaml; this file does not define
+# models. Routes are explicit so subscription exhaustion cannot become a paid
+# API fallback by accident.
+defaults:
+  route: direct_api
+  fallback_routes: []
+  capabilities: [text, tools]
+
+routes:
+  subscription:
+    adapter: subscription_runtime
+    billing: subscription
+    provider: claude
+    privacy: approved_external
+    capabilities: [text]
+  codex_subscription:
+    adapter: codex_subscription_runtime
+    billing: subscription
+    provider: codex
+    privacy: approved_external
+    capabilities: [text]
+  saygm:
+    adapter: saygm_gateway
+    billing: saygm_credit
+    credential_env: SAYGM_API_KEY
+    base_url: https://api.saygm.com/v1
+    privacy: approved_external
+    capabilities: [text, tools]
+  local:
+    adapter: local_runtime
+    billing: local
+    privacy: local_only
+
+workloads:
+  voice_supervisor:
+    profile: claude-haiku-4-5
+    route: direct_api
+    privacy: approved_external
+    priority: interactive
+    fallback_routes: []
+  scheduler:
+    profile: claude-sonnet-5
+    route: direct_api
+    privacy: approved_external
+    priority: interactive
+    fallback_routes: []
+  librarian:
+    profile: claude-sonnet-5
+    route: direct_api
+    privacy: confidential
+    priority: interactive
+    fallback_routes: []
+  analyst:
+    profile: claude-sonnet-5
+    route: direct_api
+    privacy: approved_external
+    priority: interactive
+    fallback_routes: []
+  systems:
+    profile: claude-sonnet-5
+    route: direct_api
+    privacy: local_only
+    priority: interactive
+    fallback_routes: []
+  developer:
+    profile: claude-opus
+    route: direct_api
+    privacy: approved_external
+    priority: interactive
+    fallback_routes: []
+  app_builder:
+    profile: claude-opus
+    route: direct_api
+    privacy: approved_external
+    priority: interactive
+    fallback_routes: []
+  memory:
+    profile: claude-sonnet-5
+    route: direct_api
+    privacy: confidential
+    priority: background
+    capabilities: [text]
+    fallback_routes: []
+  background:
+    profile: claude-sonnet-5
+    route: direct_api
+    privacy: confidential
+    priority: background
+    capabilities: [text]
+    fallback_routes: []
+  council:
+    profile: claude-sonnet-5
+    route: direct_api
+    privacy: approved_external
+    priority: background
+    capabilities: [text]
+    fallback_routes: []
+
+  planning:
+    profile: claude-fable-5
+    route: direct_api
+    privacy: approved_external
+    priority: interactive
+    capabilities: [text]
+    fallback_routes: []
+  research_synthesis:
+    profile: claude-sonnet-5
+    route: direct_api
+    privacy: approved_external
+    priority: interactive
+    capabilities: [text]
+    fallback_routes: []
+  vision:
+    profile: claude-opus
+    route: direct_api
+    privacy: approved_external
+    priority: interactive
+    capabilities: [text, images]
+    fallback_routes: []

@@ -6,6 +6,15 @@ import Foundation
 public enum ClientMessage: Sendable, Equatable {
     case voiceSet(voice: String)
     case uiNoop(reason: String)
+    case consoleRequest(ConsoleRequest)
+    case consoleResult(ConsoleResult)
+    case consoleReady(sessionID: UUID, generation: UUID, actions: [String], inputTypes: [String])
+    case consoleInventory(ConsoleInventory)
+    case inputManifest(InputManifest)
+    case inputChunk(InputChunk)
+    case inputCommit(InputCommit)
+    case inputAnalyze(InputAnalyze)
+    case inputCancel(InputCancel)
 
     /// `if not reason or len(reason) > 200` in pipeline.py drops empty/over-200 reasons.
     public static func noop(_ reason: String) -> ClientMessage? {
@@ -20,6 +29,17 @@ public enum ClientMessage: Sendable, Equatable {
         switch self {
         case .voiceSet(let v):  return try JSONEncoder().encode(["type": "voice/set", "voice": v])
         case .uiNoop(let r):    return try JSONEncoder().encode(["type": "ui/noop", "reason": r])
+        case .consoleRequest(let request): return try JSONEncoder().encode(request)
+        case .consoleResult(let result): return try JSONEncoder().encode(result)
+        case .consoleReady(let sessionID, let generation, let actions, let inputTypes):
+            return try JSONEncoder().encode(ConsoleReady(sessionID: sessionID,
+                generation: generation, actions: actions, inputTypes: inputTypes))
+        case .consoleInventory(let inventory): return try JSONEncoder().encode(inventory)
+        case .inputManifest(let message): return try JSONEncoder().encode(message)
+        case .inputChunk(let message): return try JSONEncoder().encode(message)
+        case .inputCommit(let message): return try JSONEncoder().encode(message)
+        case .inputAnalyze(let message): return try JSONEncoder().encode(message)
+        case .inputCancel(let message): return try JSONEncoder().encode(message)
         }
     }
 }

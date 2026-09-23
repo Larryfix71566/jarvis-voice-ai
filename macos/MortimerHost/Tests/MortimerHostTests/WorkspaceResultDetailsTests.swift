@@ -38,6 +38,17 @@ final class WorkspaceResultDetailsTests: XCTestCase {
         XCTAssertFalse(text.contains("PRIVATE_CLIPBOARD_FIXTURE"))
     }
 
+    func testScopedExportUsesOneBasedDeterministicSections() throws {
+        let item = try result()
+        let whole = try XCTUnwrap(WorkspaceResultExport.scopedText(item, scope: "whole", ordinal: nil))
+        XCTAssertTrue(whole.hasPrefix("Synthetic research"))
+        let second = try XCTUnwrap(WorkspaceResultExport.scopedText(item, scope: "section", ordinal: 2))
+        XCTAssertEqual(second, "Supplied findings\n")
+        XCTAssertNil(WorkspaceResultExport.scopedText(item, scope: "section", ordinal: 0))
+        XCTAssertNil(WorkspaceResultExport.scopedText(item, scope: "whole", ordinal: 1))
+        XCTAssertNil(WorkspaceResultExport.scopedText(item, scope: "section", ordinal: 999))
+    }
+
     func testOnlyWebSourceAddressesAreOpenable() {
         XCTAssertNotNil(WorkspaceResultExport.sourceURL("https://example.org/source?a=1"))
         for address in ["javascript:alert(1)", "file:///private/data", "relative/path", "https:"] {

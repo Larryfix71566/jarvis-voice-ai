@@ -38,12 +38,17 @@ class SensitiveTurn:
     the SAME instance and must see mutations.
     """
 
-    __slots__ = ("armed", "turn_id", "kind")
+    __slots__ = ("armed", "turn_id", "kind", "temporary_content_mode")
 
     def __init__(self) -> None:
         self.armed: bool = False
         self.turn_id: str | None = None
         self.kind: str | None = None
+        # Unlike the per-turn financial flag, this latch survives turn
+        # boundaries for the lifetime of the bot session. Imported content
+        # has already crossed the provider boundary; clearing it between
+        # turns would allow the next memory sweep to persist the context.
+        self.temporary_content_mode: bool = False
 
     def arm(self, kind: str, turn_id: str | None = None) -> None:
         """Mark the current turn sensitive. Idempotent within a turn."""
@@ -53,13 +58,17 @@ class SensitiveTurn:
             self.turn_id = turn_id or uuid.uuid4().hex[:8]
 
     def clear(self) -> None:
-        """End of turn. Always safe to call, armed or not."""
+        """End the current turn without resetting temporary-content mode."""
         self.armed = False
         self.turn_id = None
         self.kind = None
 
+    def arm_temporary_content(self) -> None:
+        """Pause memory persistence for the rest of this bot session."""
+        self.temporary_content_mode = True
+
     def is_armed(self) -> bool:
-        return self.armed
+        return self.armed or self.temporary_content_mode
 
 
 current_sensitive_turn: ContextVar[SensitiveTurn | None] = ContextVar(

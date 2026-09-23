@@ -19,6 +19,17 @@ def build(tool, data, args=None, result=None):
     )
 
 
+def build_with_run(tool, data, run_id, agent="developer", display_name="Developer", args=None):
+    return build_display_payload(
+        agent=agent,
+        display_name=display_name,
+        tool=tool,
+        arguments=args or {},
+        result_str=json.dumps(data),
+        run_id=run_id,
+    )
+
+
 class TestGuards:
     def test_unknown_tool_returns_none(self):
         assert build("git_status", {"branch": "main"}) is None
@@ -62,6 +73,10 @@ class TestWebSearch:
         # attention rule (draft-gated tools) and ambient weather cache
         # both key off which tool produced the payload.
         assert p["tool"] == "web_search"
+
+    def test_run_id_is_carried_for_presentation_grouping(self):
+        p = build_with_run("web_search", self.DATA, "run-42")
+        assert p["run_id"] == "run-42"
 
     def test_empty_result_returns_none(self):
         assert build("web_search", {"answer": "", "results": []}) is None

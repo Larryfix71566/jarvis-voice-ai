@@ -26,11 +26,40 @@ import uuid
 from typing import Any, Callable
 
 from jarvis.agents.base import EventCallback, SubAgent
+from jarvis.model_routing import resolve_policy
 from jarvis.procedures import _overlap_score, _tokens, learn_from_run
+from jarvis.sensitive import detect_financial
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_PARALLEL_DELEGATIONS = 3
+PROTECTED_TASK_EVENT = "<protected task>"
+
+
+def _task_for_event(agent_name: str, task: str) -> str:
+    """Keep protected delegation prompts out of stdout and UI events.
+
+    The agent still receives the complete task and its RunLogger applies the
+    same policy to durable storage. This copy is only the activity/status
+    surface, which previously printed the raw task before the run's privacy
+    policy was consulted.
+    """
+    # The live turn/run logger has its own fail-closed sensitive-turn context;
+    # this event surface cannot safely depend on that ContextVar because the
+    # delegation may be detached from the voice turn. Use the workload policy
+    # plus the shared financial detector for this bounded status copy.
+    try:
+        protected = resolve_policy(agent_name).privacy in {
+            "confidential", "local_only"
+        }
+    except Exception:  # noqa: BLE001 - status emission must never block work
+        protected = False
+    if not protected:
+        try:
+            protected = detect_financial(task) is not None
+        except Exception:  # noqa: BLE001 - status emission must never block work
+            protected = True
+    return PROTECTED_TASK_EVENT if protected else task
 
 # MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md A2 — the mechanical
 # half of the stop rule: the Supervisor prompt asks it not to retry a
@@ -432,7 +461,8 @@ def build_delegate_tool(
         run_id = str(uuid.uuid4())
         if on_event is not None:
             on_event({"type": "delegate_start", "agent": agent_name,
-                      "display_name": agent.display_name, "task": task,
+                      "display_name": agent.display_name,
+                      "task": _task_for_event(agent_name, task),
                       "run_id": run_id,
                       # Larry 2026-08-19 — the Agents tab card header shows
                       # which LLM is doing the work. Read from the agent
@@ -521,7 +551,11 @@ def build_delegate_tool(
                           "run_id": run_id,
                           # Failure reasons surface in the UI status card;
                           # successful output is spoken/displayed elsewhere.
-                          "detail": result[:300] if failed else ""})
+                          # Protected workloads keep the failure detail in
+                          # the specialist result/run log, never this UI
+                          # activity event.
+                          "detail": (_task_for_event(agent_name, result[:300])
+                                     if failed else "")})
             return result
 
         # Barge-in survival: the WORK runs in a detached task; only the

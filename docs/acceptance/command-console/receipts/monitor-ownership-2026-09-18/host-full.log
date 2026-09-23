@@ -1,0 +1,659 @@
+Building for debugging...
+[2 / 17] JarvisKit
+[4 / 19] JarvisKit
+[11 / 25] MortimerHost
+[15 / 28] JarvisKit
+[18 / 30] MortimerHost-product
+[20 / 30] MortimerHost
+[23 / 28] MortimerHostTests-product
+[26 / 29] MortimerHostTests-product
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/CompactConversationTests.swift:11:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 9 |     func testSavedCompactPreferenceChangesNativeConversationPresentation() throws {
+10 |         _ = NSApplication.shared
+11 |         NSApplication.shared.accessibilitySetValue(true,
+   |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+12 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+13 |         let suite = "compact-conversation-" + UUID().uuidString
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:153:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+151 |     func testOverflowButtonsReachBothEndsWithoutChangingSelection() throws {
+152 |         _ = NSApplication.shared
+153 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+154 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+155 |         let selection = HeaderSelection()
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayAcceptanceTests.swift:71:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 69 |     func testReturningToOriginalPanelsPreservesResearchPinsAndReadingState() throws {
+ 70 |         _ = NSApplication.shared
+ 71 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 72 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ 73 |         let suite = "supporting-display-" + UUID().uuidString
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+Build complete! (3.18 sec)
+Test Suite 'All tests' started at 2026-09-18 16:43:18.390.
+Test Suite 'MortimerHostTests.xctest' started at 2026-09-18 16:43:18.391.
+Test Suite 'AdaptiveInterfaceClosureC2Tests' started at 2026-09-18 16:43:18.391.
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testCompactRailPinsClockAboveAgentActivity]' started.
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testCompactRailPinsClockAboveAgentActivity]' passed (0.392 seconds).
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testCompactRailRendersAgentActivityAffordance]' started.
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testCompactRailRendersAgentActivityAffordance]' passed (0.312 seconds).
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testEnvelopeUsesTheTunedAttackAndRelease]' started.
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testEnvelopeUsesTheTunedAttackAndRelease]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testLargeWaveOnlyWhenReturnedToConversationAndReturnKeepsTheActiveResult]' started.
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testLargeWaveOnlyWhenReturnedToConversationAndReturnKeepsTheActiveResult]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testOverlapLabelIsDerivedAndRendered]' started.
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testOverlapLabelIsDerivedAndRendered]' passed (0.470 seconds).
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testProductionPinLimitOfTwentyRefusesTheTwentyFirstWithoutEviction]' started.
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testProductionPinLimitOfTwentyRefusesTheTwentyFirstWithoutEviction]' passed (0.002 seconds).
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testTransitionIsSuppressedUnderReduceMotion]' started.
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testTransitionIsSuppressedUnderReduceMotion]' passed (0.006 seconds).
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testTuningConstantsMatchInterfacePlanSection7]' started.
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testTuningConstantsMatchInterfacePlanSection7]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testWindowSurfaceResultsShareTheWorkspaceIdentity]' started.
+Test Case '-[MortimerHostTests.AdaptiveInterfaceClosureC2Tests testWindowSurfaceResultsShareTheWorkspaceIdentity]' passed (0.001 seconds).
+Test Suite 'AdaptiveInterfaceClosureC2Tests' passed at 2026-09-18 16:43:19.576.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 1.184 (1.185) seconds
+Test Suite 'AdaptiveLayoutMetricsTests' started at 2026-09-18 16:43:19.576.
+Test Case '-[MortimerHostTests.AdaptiveLayoutMetricsTests testComparisonThresholdPreservesBothReadablePanes]' started.
+Test Case '-[MortimerHostTests.AdaptiveLayoutMetricsTests testComparisonThresholdPreservesBothReadablePanes]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.AdaptiveLayoutMetricsTests testDrawerLeavesReadableResultsAtAllSupportedWindowSizes]' started.
+Test Case '-[MortimerHostTests.AdaptiveLayoutMetricsTests testDrawerLeavesReadableResultsAtAllSupportedWindowSizes]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.AdaptiveLayoutMetricsTests testRailThresholdIncludesResultPaddingAndDivider]' started.
+Test Case '-[MortimerHostTests.AdaptiveLayoutMetricsTests testRailThresholdIncludesResultPaddingAndDivider]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.AdaptiveLayoutMetricsTests testTemporaryConstraintDoesNotChangeSavedWidth]' started.
+Test Case '-[MortimerHostTests.AdaptiveLayoutMetricsTests testTemporaryConstraintDoesNotChangeSavedWidth]' passed (0.001 seconds).
+Test Suite 'AdaptiveLayoutMetricsTests' passed at 2026-09-18 16:43:19.577.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'AgentRunStoreTests' started at 2026-09-18 16:43:19.577.
+Test Case '-[MortimerHostTests.AgentRunStoreTests testActivityFallsBackToLiveRun]' started.
+Test Case '-[MortimerHostTests.AgentRunStoreTests testActivityFallsBackToLiveRun]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.AgentRunStoreTests testActivityMatchedByRunId]' started.
+Test Case '-[MortimerHostTests.AgentRunStoreTests testActivityMatchedByRunId]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.AgentRunStoreTests testDoneSetsOkAndDetail]' started.
+Test Case '-[MortimerHostTests.AgentRunStoreTests testDoneSetsOkAndDetail]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.AgentRunStoreTests testNonSelfEditReplaces]' started.
+Test Case '-[MortimerHostTests.AgentRunStoreTests testNonSelfEditReplaces]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.AgentRunStoreTests testPlannerModelSticks]' started.
+Test Case '-[MortimerHostTests.AgentRunStoreTests testPlannerModelSticks]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.AgentRunStoreTests testSelfEditRunsAppendAndCap]' started.
+Test Case '-[MortimerHostTests.AgentRunStoreTests testSelfEditRunsAppendAndCap]' passed (0.004 seconds).
+Test Case '-[MortimerHostTests.AgentRunStoreTests testWorkingInsertsRun]' started.
+Test Case '-[MortimerHostTests.AgentRunStoreTests testWorkingInsertsRun]' passed (0.000 seconds).
+Test Suite 'AgentRunStoreTests' passed at 2026-09-18 16:43:19.585.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.008 (0.008) seconds
+Test Suite 'AttachmentNormalizerTests' started at 2026-09-18 16:43:19.586.
+Test Case '-[MortimerHostTests.AttachmentNormalizerTests testImageTypeAndQuotaAreEnforced]' started.
+Test Case '-[MortimerHostTests.AttachmentNormalizerTests testImageTypeAndQuotaAreEnforced]' passed (0.007 seconds).
+Test Case '-[MortimerHostTests.AttachmentNormalizerTests testTextIsNormalizedAndBounded]' started.
+Test Case '-[MortimerHostTests.AttachmentNormalizerTests testTextIsNormalizedAndBounded]' passed (0.002 seconds).
+Test Suite 'AttachmentNormalizerTests' passed at 2026-09-18 16:43:19.594.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.009 (0.009) seconds
+Test Suite 'AttachmentStoreTests' started at 2026-09-18 16:43:19.594.
+Test Case '-[MortimerHostTests.AttachmentStoreTests testClearInvalidatesLateProviderCompletions]' started.
+Test Case '-[MortimerHostTests.AttachmentStoreTests testClearInvalidatesLateProviderCompletions]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.AttachmentStoreTests testSpokenConsentIsAcceptedOnlyForTheVisibleOffer]' started.
+Test Case '-[MortimerHostTests.AttachmentStoreTests testSpokenConsentIsAcceptedOnlyForTheVisibleOffer]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.AttachmentStoreTests testStagingApprovalRemovalAndClearAreBoundedAndEphemeral]' started.
+Test Case '-[MortimerHostTests.AttachmentStoreTests testStagingApprovalRemovalAndClearAreBoundedAndEphemeral]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.AttachmentStoreTests testVoiceOfferIsVisibleUntilExplicitApprovalOrCancellation]' started.
+Test Case '-[MortimerHostTests.AttachmentStoreTests testVoiceOfferIsVisibleUntilExplicitApprovalOrCancellation]' passed (0.000 seconds).
+Test Suite 'AttachmentStoreTests' passed at 2026-09-18 16:43:19.595.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'AudioMeterLatencyReportTests' started at 2026-09-18 16:43:19.596.
+Test Case '-[MortimerHostTests.AudioMeterLatencyReportTests testAChannelWithNoObservationsCannotPass]' started.
+Test Case '-[MortimerHostTests.AudioMeterLatencyReportTests testAChannelWithNoObservationsCannotPass]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.AudioMeterLatencyReportTests testAnArrivalP95OverTheGateFails]' started.
+Test Case '-[MortimerHostTests.AudioMeterLatencyReportTests testAnArrivalP95OverTheGateFails]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.AudioMeterLatencyReportTests testAPassingSessionRecordsTheNumbersAndTheVerdict]' started.
+Test Case '-[MortimerHostTests.AudioMeterLatencyReportTests testAPassingSessionRecordsTheNumbersAndTheVerdict]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.AudioMeterLatencyReportTests testAQuietBotDoesNotFailTheGate]' started.
+Test Case '-[MortimerHostTests.AudioMeterLatencyReportTests testAQuietBotDoesNotFailTheGate]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.AudioMeterLatencyReportTests testCoverageDescribesActivityAcrossTheSixtySecondWindow]' started.
+Test Case '-[MortimerHostTests.AudioMeterLatencyReportTests testCoverageDescribesActivityAcrossTheSixtySecondWindow]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.AudioMeterLatencyReportTests testHeldSnapshotsCannotTurnAShortSampleIntoAPass]' started.
+Test Case '-[MortimerHostTests.AudioMeterLatencyReportTests testHeldSnapshotsCannotTurnAShortSampleIntoAPass]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.AudioMeterLatencyReportTests testNoObservationsIsRecordedAsNoDataRatherThanZero]' started.
+Test Case '-[MortimerHostTests.AudioMeterLatencyReportTests testNoObservationsIsRecordedAsNoDataRatherThanZero]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.AudioMeterLatencyReportTests testTheReportLandsInTheAcceptanceDirectoryWhenRunFromTheWorkingCopy]' started.
+Test Case '-[MortimerHostTests.AudioMeterLatencyReportTests testTheReportLandsInTheAcceptanceDirectoryWhenRunFromTheWorkingCopy]' passed (0.000 seconds).
+Test Suite 'AudioMeterLatencyReportTests' passed at 2026-09-18 16:43:19.598.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'CompactConversationTests' started at 2026-09-18 16:43:19.598.
+Test Case '-[MortimerHostTests.CompactConversationTests testSavedCompactPreferenceChangesNativeConversationPresentation]' started.
+Test Case '-[MortimerHostTests.CompactConversationTests testSavedCompactPreferenceChangesNativeConversationPresentation]' passed (1.977 seconds).
+Test Suite 'CompactConversationTests' passed at 2026-09-18 16:43:21.575.
+	 Executed 1 test, with 0 failures (0 unexpected) in 1.977 (1.977) seconds
+Test Suite 'ConsoleActionCoordinatorTests' started at 2026-09-18 16:43:21.575.
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testAtlasGroupingAndOrderingAreDeterministic]' started.
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testAtlasGroupingAndOrderingAreDeterministic]' passed (0.002 seconds).
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testDynamicContentPanelUsesStableIdentityAndDoesNotDuplicate]' started.
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testDynamicContentPanelUsesStableIdentityAndDoesNotDuplicate]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testExtendedResultAtlasPanelAndSidecarActionsUseSharedState]' started.
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testExtendedResultAtlasPanelAndSidecarActionsUseSharedState]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testGraphActionsRejectUnknownIdentitiesAndOutOfBoundsCoordinates]' started.
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testGraphActionsRejectUnknownIdentitiesAndOutOfBoundsCoordinates]' passed (0.008 seconds).
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testInputAndPresentationActionsRemainBoundedAndTruthful]' started.
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testInputAndPresentationActionsRemainBoundedAndTruthful]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testInvalidTargetsNeverMutateState]' started.
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testInvalidTargetsNeverMutateState]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testPanelAndSidecarActionsUseExistingStateOwners]' started.
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testPanelAndSidecarActionsUseExistingStateOwners]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testPanelDetachAndMoveOpenValueAddressedWindow]' started.
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testPanelDetachAndMoveOpenValueAddressedWindow]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testPointerHelperUsesTheSameDispatcherAsVoiceRequests]' started.
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testPointerHelperUsesTheSameDispatcherAsVoiceRequests]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testReturnAllDismissesEveryValueAddressedPanelWindow]' started.
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testReturnAllDismissesEveryValueAddressedPanelWindow]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testSharePreviewAndCopyUseTheFrozenResult]' started.
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testSharePreviewAndCopyUseTheFrozenResult]' passed (0.002 seconds).
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testStaleRevisionAndUnknownArgumentsNeverMutateState]' started.
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testStaleRevisionAndUnknownArgumentsNeverMutateState]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testViewSetAndResultModeUseTheSharedWorkspaceOwner]' started.
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testViewSetAndResultModeUseTheSharedWorkspaceOwner]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testViewSetUsesTheCatalogModeArgumentWithoutRequiringATarget]' started.
+Test Case '-[MortimerHostTests.ConsoleActionCoordinatorTests testViewSetUsesTheCatalogModeArgumentWithoutRequiringATarget]' passed (0.000 seconds).
+Test Suite 'ConsoleActionCoordinatorTests' passed at 2026-09-18 16:43:21.593.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.016 (0.017) seconds
+Test Suite 'ConsoleActionRegistryTests' started at 2026-09-18 16:43:21.593.
+Test Case '-[MortimerHostTests.ConsoleActionRegistryTests testCatalogScalarTypesAreValidatedBeforeMutation]' started.
+Test Case '-[MortimerHostTests.ConsoleActionRegistryTests testCatalogScalarTypesAreValidatedBeforeMutation]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.ConsoleActionRegistryTests testDisabledActionCannotValidate]' started.
+Test Case '-[MortimerHostTests.ConsoleActionRegistryTests testDisabledActionCannotValidate]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ConsoleActionRegistryTests testIdentityDependentActionsRequireTheSameSecondaryTargetAsPython]' started.
+Test Case '-[MortimerHostTests.ConsoleActionRegistryTests testIdentityDependentActionsRequireTheSameSecondaryTargetAsPython]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ConsoleActionRegistryTests testRegistryEnumeratesEverySharedActionAndTargetRules]' started.
+Test Case '-[MortimerHostTests.ConsoleActionRegistryTests testRegistryEnumeratesEverySharedActionAndTargetRules]' passed (0.000 seconds).
+Test Suite 'ConsoleActionRegistryTests' passed at 2026-09-18 16:43:21.594.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'ContentPanelTests' started at 2026-09-18 16:43:21.594.
+Test Case '-[MortimerHostTests.ContentPanelTests testAdditionalPanelRequiresExplicitPinAction]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testAdditionalPanelRequiresExplicitPinAction]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testAllVisibleResultsHaveLocatorsAndRepeatSelectionDoesNotDuplicate]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testAllVisibleResultsHaveLocatorsAndRepeatSelectionDoesNotDuplicate]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testClosedDisplayAlsoKeepsFallbackStageBounded]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testClosedDisplayAlsoKeepsFallbackStageBounded]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testDeveloperRunAppendsDistinctResultsIntoOneDisplayPanel]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testDeveloperRunAppendsDistinctResultsIntoOneDisplayPanel]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testDisplayPanelsKeepIdentityAndRespectBounds]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testDisplayPanelsKeepIdentityAndRespectBounds]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testExactRepeatReusesTheExistingWorkspaceOwnerButNewRunSectionDoesNot]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testExactRepeatReusesTheExistingWorkspaceOwnerButNewRunSectionDoesNot]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testFitRequiresMeasuredViewportAndPreservesReachablePanel]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testFitRequiresMeasuredViewportAndPreservesReachablePanel]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testLastSupportingPanelCanReturnOwnershipToMainWorkspace]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testLastSupportingPanelCanReturnOwnershipToMainWorkspace]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testMainLocatorRequiresALiveSupportingPanel]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testMainLocatorRequiresALiveSupportingPanel]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testOpeningSupportingDisplayPreservesBoundedUnpinnedPanelsAndPins]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testOpeningSupportingDisplayPreservesBoundedUnpinnedPanelsAndPins]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testPanelCapacityRetiresUnpinnedBeforePinnedContent]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testPanelCapacityRetiresUnpinnedBeforePinnedContent]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testPinnedPanelStaysOutsideStageWhenUnpinnedResultsRemain]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testPinnedPanelStaysOutsideStageWhenUnpinnedResultsRemain]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testPointerGraphSharesFullStageWithoutHidingDisplacedResult]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testPointerGraphSharesFullStageWithoutHidingDisplacedResult]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testSeparateDeveloperRunsRemainSeparateDisplayPanels]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testSeparateDeveloperRunsRemainSeparateDisplayPanels]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingDisplaySharesBoundedUnpinnedPresentations]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingDisplaySharesBoundedUnpinnedPresentations]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingStageCapsUnpinnedResultsAndKeepsNewestFocused]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingStageCapsUnpinnedResultsAndKeepsNewestFocused]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingStageLeavesPinnedCopiesAsExplicitExtras]' started.
+Test Case '-[MortimerHostTests.ContentPanelTests testSupportingStageLeavesPinnedCopiesAsExplicitExtras]' passed (0.000 seconds).
+Test Suite 'ContentPanelTests' passed at 2026-09-18 16:43:21.599.
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
+Test Suite 'ContentWindowRegistryTests' started at 2026-09-18 16:43:21.599.
+Test Case '-[MortimerHostTests.ContentWindowRegistryTests testRegistrationIsValueAddressedAndLifecycleOperationsAreIdempotent]' started.
+Test Case '-[MortimerHostTests.ContentWindowRegistryTests testRegistrationIsValueAddressedAndLifecycleOperationsAreIdempotent]' passed (0.001 seconds).
+Test Suite 'ContentWindowRegistryTests' passed at 2026-09-18 16:43:21.600.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'DisplayPlacementPolicyTests' started at 2026-09-18 16:43:21.600.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testCloseOrDockCancelsReconnectRecovery]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testCloseOrDockCancelsReconnectRecovery]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testFreshConsoleDefaultsToMainDisplayWhenAppKitRestoredItOnAuxiliary]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testFreshConsoleDefaultsToMainDisplayWhenAppKitRestoredItOnAuxiliary]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testManualMoveAfterRecoveryWinsOverReconnect]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testManualMoveAfterRecoveryWinsOverReconnect]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testManualWindowRecoversAfterUnplugEvenWhenAppKitAlreadyMovedIt]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testManualWindowRecoversAfterUnplugEvenWhenAppKitAlreadyMovedIt]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testMirroredDisplaysDoNotCreateAnExtendedAreaOrEmptyWindows]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testMirroredDisplaysDoNotCreateAnExtendedAreaOrEmptyWindows]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testOffscreenTitleBarIsRecoveredAndNegativeCoordinatesAreValid]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testOffscreenTitleBarIsRecoveredAndNegativeCoordinatesAreValid]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testOpeningSecondAuxiliaryUsesLegacySplitWithoutMovingManualWindow]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testOpeningSecondAuxiliaryUsesLegacySplitWithoutMovingManualWindow]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testReopenedManualWindowRestoresItsSavedFrame]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testReopenedManualWindowRestoresItsSavedFrame]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testResolutionShrinkClampsManualWindowAndRestoresWhenItFitsAgain]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testResolutionShrinkClampsManualWindowAndRestoresWhenItFitsAgain]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testStableDisplayRolesSurviveScreenArrayReordering]' started.
+Test Case '-[MortimerHostTests.DisplayPlacementPolicyTests testStableDisplayRolesSurviveScreenArrayReordering]' passed (0.000 seconds).
+Test Suite 'DisplayPlacementPolicyTests' passed at 2026-09-18 16:43:21.602.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'DisplayWindowStoreFitTests' started at 2026-09-18 16:43:21.602.
+Test Case '-[MortimerHostTests.DisplayWindowStoreFitTests testFitFillsTheViewportAndDropsTheCascadeOffset]' started.
+Test Case '-[MortimerHostTests.DisplayWindowStoreFitTests testFitFillsTheViewportAndDropsTheCascadeOffset]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayWindowStoreFitTests testFitIsANoOpUntilTheViewportIsMeasured]' started.
+Test Case '-[MortimerHostTests.DisplayWindowStoreFitTests testFitIsANoOpUntilTheViewportIsMeasured]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayWindowStoreFitTests testFittedSizeIsNilWhenUnmeasuredOrTooSmall]' started.
+Test Case '-[MortimerHostTests.DisplayWindowStoreFitTests testFittedSizeIsNilWhenUnmeasuredOrTooSmall]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayWindowStoreFitTests testFittedSizeIsViewportMinusInsetOnEverySide]' started.
+Test Case '-[MortimerHostTests.DisplayWindowStoreFitTests testFittedSizeIsViewportMinusInsetOnEverySide]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DisplayWindowStoreFitTests testResizeHasAMinimumButNoMaximum]' started.
+Test Case '-[MortimerHostTests.DisplayWindowStoreFitTests testResizeHasAMinimumButNoMaximum]' passed (0.000 seconds).
+Test Suite 'DisplayWindowStoreFitTests' passed at 2026-09-18 16:43:21.603.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'DrawerModelsTests' started at 2026-09-18 16:43:21.603.
+Test Case '-[MortimerHostTests.DrawerModelsTests testDraftsAndModelIdentitySurviveSecondPresentationAndTokenRefresh]' started.
+Test Case '-[MortimerHostTests.DrawerModelsTests testDraftsAndModelIdentitySurviveSecondPresentationAndTokenRefresh]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.DrawerModelsTests testOutgoingPresentationCannotReleaseIncomingLease]' started.
+Test Case '-[MortimerHostTests.DrawerModelsTests testOutgoingPresentationCannotReleaseIncomingLease]' passed (0.000 seconds).
+Test Suite 'DrawerModelsTests' passed at 2026-09-18 16:43:21.604.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'DrawerScrollRestorationTests' started at 2026-09-18 16:43:21.604.
+Test Case '-[MortimerHostTests.DrawerScrollRestorationTests testScrollRestoresIntoReplacementNativeWindow]' started.
+Test Case '-[MortimerHostTests.DrawerScrollRestorationTests testScrollRestoresIntoReplacementNativeWindow]' passed (0.048 seconds).
+Test Suite 'DrawerScrollRestorationTests' passed at 2026-09-18 16:43:21.652.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.048 (0.048) seconds
+Test Suite 'DrawerScrollWriterTests' started at 2026-09-18 16:43:21.652.
+Test Case '-[MortimerHostTests.DrawerScrollWriterTests testOnlyTheMostRecentlyMountedPresentationRecordsScroll]' started.
+Test Case '-[MortimerHostTests.DrawerScrollWriterTests testOnlyTheMostRecentlyMountedPresentationRecordsScroll]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.DrawerScrollWriterTests testWriterLeasesAreIndependentPerTabAndRejectNonFiniteOffsets]' started.
+Test Case '-[MortimerHostTests.DrawerScrollWriterTests testWriterLeasesAreIndependentPerTabAndRejectNonFiniteOffsets]' passed (0.000 seconds).
+Test Suite 'DrawerScrollWriterTests' passed at 2026-09-18 16:43:21.653.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'DrawerTabStripKeyboardTests' started at 2026-09-18 16:43:21.653.
+Test Case '-[MortimerHostTests.DrawerTabStripKeyboardTests testArrowAndHomeEndKeysMoveSelectionAndRevealTheSelectedLabel]' started.
+Test Case '-[MortimerHostTests.DrawerTabStripKeyboardTests testArrowAndHomeEndKeysMoveSelectionAndRevealTheSelectedLabel]' passed (4.489 seconds).
+Test Suite 'DrawerTabStripKeyboardTests' passed at 2026-09-18 16:43:26.141.
+	 Executed 1 test, with 0 failures (0 unexpected) in 4.489 (4.489) seconds
+Test Suite 'DrawerTabStripRenderingTests' started at 2026-09-18 16:43:26.141.
+Test Case '-[MortimerHostTests.DrawerTabStripRenderingTests testLargeTextMountedStripRevealsEverySelection]' started.
+Test Case '-[MortimerHostTests.DrawerTabStripRenderingTests testLargeTextMountedStripRevealsEverySelection]' passed (6.038 seconds).
+Test Case '-[MortimerHostTests.DrawerTabStripRenderingTests testNarrowMountedStripRevealsEverySelectionInBothDirections]' started.
+Test Case '-[MortimerHostTests.DrawerTabStripRenderingTests testNarrowMountedStripRevealsEverySelectionInBothDirections]' passed (4.368 seconds).
+Test Case '-[MortimerHostTests.DrawerTabStripRenderingTests testNarrowStripRevealsEntireSelectedLastTab]' started.
+Test Case '-[MortimerHostTests.DrawerTabStripRenderingTests testNarrowStripRevealsEntireSelectedLastTab]' passed (0.278 seconds).
+Test Case '-[MortimerHostTests.DrawerTabStripRenderingTests testOverflowButtonsReachBothEndsWithoutChangingSelection]' started.
+Test Case '-[MortimerHostTests.DrawerTabStripRenderingTests testOverflowButtonsReachBothEndsWithoutChangingSelection]' passed (3.034 seconds).
+Test Case '-[MortimerHostTests.DrawerTabStripRenderingTests testWideHeaderExposesEveryLabel]' started.
+Test Case '-[MortimerHostTests.DrawerTabStripRenderingTests testWideHeaderExposesEveryLabel]' passed (0.181 seconds).
+Test Suite 'DrawerTabStripRenderingTests' passed at 2026-09-18 16:43:40.042.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 13.900 (13.901) seconds
+Test Suite 'DrawerViewMinimumWidthTests' started at 2026-09-18 16:43:40.042.
+Test Case '-[MortimerHostTests.DrawerViewMinimumWidthTests testDetachedDrawerAtMinimumWidthKeepsChromeAndEverySelectedLabelReachable]' started.
+Test Case '-[MortimerHostTests.DrawerViewMinimumWidthTests testDetachedDrawerAtMinimumWidthKeepsChromeAndEverySelectedLabelReachable]' passed (2.962 seconds).
+Test Case '-[MortimerHostTests.DrawerViewMinimumWidthTests testDockedDrawerAtMinimumWidthKeepsChromeAndEverySelectedLabelReachable]' started.
+Test Case '-[MortimerHostTests.DrawerViewMinimumWidthTests testDockedDrawerAtMinimumWidthKeepsChromeAndEverySelectedLabelReachable]' passed (2.929 seconds).
+Test Suite 'DrawerViewMinimumWidthTests' passed at 2026-09-18 16:43:45.933.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 5.891 (5.891) seconds
+Test Suite 'FullConsoleRenderingTests' started at 2026-09-18 16:43:45.933.
+Test Case '-[MortimerHostTests.FullConsoleRenderingTests testCommandConsoleStartsInConversationWithVoiceControls]' started.
+Test Case '-[MortimerHostTests.FullConsoleRenderingTests testCommandConsoleStartsInConversationWithVoiceControls]' passed (2.922 seconds).
+Test Case '-[MortimerHostTests.FullConsoleRenderingTests testEnlargedTabTextKeepsFullConsoleControlsReachable]' started.
+Test Case '-[MortimerHostTests.FullConsoleRenderingTests testEnlargedTabTextKeepsFullConsoleControlsReachable]' passed (2.978 seconds).
+Test Case '-[MortimerHostTests.FullConsoleRenderingTests testMinimumConsoleKeepsOutputAndMicrophoneControlsReachable]' started.
+Test Case '-[MortimerHostTests.FullConsoleRenderingTests testMinimumConsoleKeepsOutputAndMicrophoneControlsReachable]' passed (2.971 seconds).
+Test Case '-[MortimerHostTests.FullConsoleRenderingTests testUnknownPersistedLayoutFallsBackToAdaptive]' started.
+Test Case '-[MortimerHostTests.FullConsoleRenderingTests testUnknownPersistedLayoutFallsBackToAdaptive]' passed (0.000 seconds).
+Test Suite 'FullConsoleRenderingTests' passed at 2026-09-18 16:43:54.804.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 8.871 (8.871) seconds
+Test Suite 'GraphImageURLTests' started at 2026-09-18 16:43:54.804.
+Test Case '-[MortimerHostTests.GraphImageURLTests testIsGraphImageMatchesOnlyTheSidecarImageEndpoints]' started.
+Test Case '-[MortimerHostTests.GraphImageURLTests testIsGraphImageMatchesOnlyTheSidecarImageEndpoints]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.GraphImageURLTests testRequestSizeClampsToTheSidecarRange]' started.
+Test Case '-[MortimerHostTests.GraphImageURLTests testRequestSizeClampsToTheSidecarRange]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.GraphImageURLTests testRequestSizeIsNilUntilMeasured]' started.
+Test Case '-[MortimerHostTests.GraphImageURLTests testRequestSizeIsNilUntilMeasured]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.GraphImageURLTests testRequestSizeIsViewportTimesScaleMinusReserve]' started.
+Test Case '-[MortimerHostTests.GraphImageURLTests testRequestSizeIsViewportTimesScaleMinusReserve]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.GraphImageURLTests testSizedAppendsWAndHAndKeepsEveryOtherQueryItem]' started.
+Test Case '-[MortimerHostTests.GraphImageURLTests testSizedAppendsWAndHAndKeepsEveryOtherQueryItem]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.GraphImageURLTests testSizedReplacesRatherThanDuplicates]' started.
+Test Case '-[MortimerHostTests.GraphImageURLTests testSizedReplacesRatherThanDuplicates]' passed (0.000 seconds).
+Test Suite 'GraphImageURLTests' passed at 2026-09-18 16:43:54.805.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'KnowledgeAtlasTests' started at 2026-09-18 16:43:54.805.
+Test Case '-[MortimerHostTests.KnowledgeAtlasTests testAtlasSearchAndSelectionPreserveStableCardIdentity]' started.
+Test Case '-[MortimerHostTests.KnowledgeAtlasTests testAtlasSearchAndSelectionPreserveStableCardIdentity]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.KnowledgeAtlasTests testContextRefreshRetainsResultIdentityAndManualPlacement]' started.
+Test Case '-[MortimerHostTests.KnowledgeAtlasTests testContextRefreshRetainsResultIdentityAndManualPlacement]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.KnowledgeAtlasTests testStableContextIdentityIsRepeatableAndNamespaced]' started.
+Test Case '-[MortimerHostTests.KnowledgeAtlasTests testStableContextIdentityIsRepeatableAndNamespaced]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.KnowledgeAtlasTests testVoicePlacementSupportsExactGridAndCollisionSafeRelativeMoves]' started.
+Test Case '-[MortimerHostTests.KnowledgeAtlasTests testVoicePlacementSupportsExactGridAndCollisionSafeRelativeMoves]' passed (0.000 seconds).
+Test Suite 'KnowledgeAtlasTests' passed at 2026-09-18 16:43:54.806.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'MemoryGraphClosureC3Tests' started at 2026-09-18 16:43:54.806.
+Test Case '-[MortimerHostTests.MemoryGraphClosureC3Tests testDenseHubFixtureHasTheRequiredShapeAndABoundedFiniteLayout]' started.
+Test Case '-[MortimerHostTests.MemoryGraphClosureC3Tests testDenseHubFixtureHasTheRequiredShapeAndABoundedFiniteLayout]' passed (1.194 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphClosureC3Tests testNoPathWordingMatchesTheInterfacePlanExactly]' started.
+Test Case '-[MortimerHostTests.MemoryGraphClosureC3Tests testNoPathWordingMatchesTheInterfacePlanExactly]' passed (0.004 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphClosureC3Tests testSelectingAHiddenOrCollapsedNodeKeepsTheFilterAndRevealIsExplicit]' started.
+Test Case '-[MortimerHostTests.MemoryGraphClosureC3Tests testSelectingAHiddenOrCollapsedNodeKeepsTheFilterAndRevealIsExplicit]' passed (0.021 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphClosureC3Tests testURLSessionSharedIsOnlyUsedByJarvisHTTPAndTheWakeWordSocket]' started.
+Test Case '-[MortimerHostTests.MemoryGraphClosureC3Tests testURLSessionSharedIsOnlyUsedByJarvisHTTPAndTheWakeWordSocket]' passed (0.050 seconds).
+Test Suite 'MemoryGraphClosureC3Tests' passed at 2026-09-18 16:43:56.076.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1.270 (1.270) seconds
+Test Suite 'MemoryGraphFrameTimeTests' started at 2026-09-18 16:43:56.076.
+Test Case '-[MortimerHostTests.MemoryGraphFrameTimeTests testPanAndZoomFrameTimesOnTheDenseHubFixtureMeetTheP95Gate]' started.
+Test Case '-[MortimerHostTests.MemoryGraphFrameTimeTests testPanAndZoomFrameTimesOnTheDenseHubFixtureMeetTheP95Gate]' passed (17.194 seconds).
+Test Suite 'MemoryGraphFrameTimeTests' passed at 2026-09-18 16:44:13.270.
+	 Executed 1 test, with 0 failures (0 unexpected) in 17.194 (17.194) seconds
+Test Suite 'MemoryGraphImageStoreTests' started at 2026-09-18 16:44:13.270.
+Test Case '-[MortimerHostTests.MemoryGraphImageStoreTests testCancelledImageStaysStoppedUntilExplicitReload]' started.
+Test Case '-[MortimerHostTests.MemoryGraphImageStoreTests testCancelledImageStaysStoppedUntilExplicitReload]' passed (0.126 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphImageStoreTests testInvalidImageHasExplicitErrorAndCanRetry]' started.
+Test Case '-[MortimerHostTests.MemoryGraphImageStoreTests testInvalidImageHasExplicitErrorAndCanRetry]' passed (0.013 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphImageStoreTests testReparentingReusesImageAndStaleFocusCannotOverwriteIt]' started.
+Test Case '-[MortimerHostTests.MemoryGraphImageStoreTests testReparentingReusesImageAndStaleFocusCannotOverwriteIt]' passed (0.122 seconds).
+Test Suite 'MemoryGraphImageStoreTests' passed at 2026-09-18 16:44:13.532.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.262 (0.262) seconds
+Test Suite 'MemoryGraphLayoutTests' started at 2026-09-18 16:44:13.532.
+Test Case '-[MortimerHostTests.MemoryGraphLayoutTests testDeterministicLayoutAndExpansionPreserveExistingPositions]' started.
+Test Case '-[MortimerHostTests.MemoryGraphLayoutTests testDeterministicLayoutAndExpansionPreserveExistingPositions]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphLayoutTests testFitAndCameraRoundTripSupportNegativeCoordinates]' started.
+Test Case '-[MortimerHostTests.MemoryGraphLayoutTests testFitAndCameraRoundTripSupportNegativeCoordinates]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphLayoutTests testPathUsesUndirectedLoadedEdgesAndFiltersMatter]' started.
+Test Case '-[MortimerHostTests.MemoryGraphLayoutTests testPathUsesUndirectedLoadedEdgesAndFiltersMatter]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphLayoutTests testStressFixturesProduceFiniteBoundedLayout]' started.
+Test Case '-[MortimerHostTests.MemoryGraphLayoutTests testStressFixturesProduceFiniteBoundedLayout]' passed (1.458 seconds).
+Test Suite 'MemoryGraphLayoutTests' passed at 2026-09-18 16:44:14.992.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1.460 (1.460) seconds
+Test Suite 'MemoryGraphRenderingTests' started at 2026-09-18 16:44:14.992.
+Test Case '-[MortimerHostTests.MemoryGraphRenderingTests testGraphLayoutsRenderAtCompactAndWideSizes]' started.
+Test Case '-[MortimerHostTests.MemoryGraphRenderingTests testGraphLayoutsRenderAtCompactAndWideSizes]' passed (3.481 seconds).
+Test Suite 'MemoryGraphRenderingTests' passed at 2026-09-18 16:44:18.473.
+	 Executed 1 test, with 0 failures (0 unexpected) in 3.481 (3.481) seconds
+Test Suite 'MemoryGraphStoreTests' started at 2026-09-18 16:44:18.473.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testAmbiguousRefreshedRelationshipsDoNotInventSelectionIdentity]' started.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testAmbiguousRefreshedRelationshipsDoNotInventSelectionIdentity]' passed (0.013 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testBackRestoresCameraSelectionAndFilters]' started.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testBackRestoresCameraSelectionAndFilters]' passed (0.013 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testBackRestoresRelationshipPathSearchAndInspectorState]' started.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testBackRestoresRelationshipPathSearchAndInspectorState]' passed (0.013 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testFailedFullDetailCanRetryWithoutReselectingNode]' started.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testFailedFullDetailCanRetryWithoutReselectingNode]' passed (0.019 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testFirstSuccessfulLoadFitsAfterRestoringFailedVisit]' started.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testFirstSuccessfulLoadFitsAfterRestoringFailedVisit]' passed (0.028 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testGraphRefreshInvalidatesPreviouslyLoadedFullFact]' started.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testGraphRefreshInvalidatesPreviouslyLoadedFullFact]' passed (0.019 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testInitialFitWaitsForUsableViewportAndVisibleNodes]' started.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testInitialFitWaitsForUsableViewportAndVisibleNodes]' passed (0.007 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testLateDetailCannotReplaceNewSelection]' started.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testLateDetailCannotReplaceNewSelection]' passed (0.128 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testManualCameraChangeSupersedesPendingLayoutReset]' started.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testManualCameraChangeSupersedesPendingLayoutReset]' passed (0.114 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testManualNodeMoveRejectsNonFiniteAndOutOfBoundsCoordinates]' started.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testManualNodeMoveRejectsNonFiniteAndOutOfBoundsCoordinates]' passed (0.007 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testRefreshKeepsRelationshipSelectionAndUpdatesSuppliedAttributes]' started.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testRefreshKeepsRelationshipSelectionAndUpdatesSuppliedAttributes]' passed (0.020 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testRefreshPreservesNodeDraggedWhileRequestIsInFlight]' started.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testRefreshPreservesNodeDraggedWhileRequestIsInFlight]' passed (0.062 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testRestoredPopulatedViewKeepsManualCameraAfterReload]' started.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testRestoredPopulatedViewKeepsManualCameraAfterReload]' passed (0.015 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testSavedMetadataContainsNoNodeContentAndRejectsInvalidVersion]' started.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testSavedMetadataContainsNoNodeContentAndRejectsInvalidVersion]' passed (0.007 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testSearchGroupingAndRefreshDoNotInventOrLoseNodes]' started.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testSearchGroupingAndRefreshDoNotInventOrLoseNodes]' passed (0.013 seconds).
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testStaleRequestCannotReplaceNewerFocus]' started.
+Test Case '-[MortimerHostTests.MemoryGraphStoreTests testStaleRequestCannotReplaceNewerFocus]' passed (0.135 seconds).
+Test Suite 'MemoryGraphStoreTests' passed at 2026-09-18 16:44:19.089.
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.614 (0.616) seconds
+Test Suite 'PanelStoreTests' started at 2026-09-18 16:44:19.089.
+Test Case '-[MortimerHostTests.PanelStoreTests testContentPanelsFocusExistingAndRefuseTheSeventhWithoutEviction]' started.
+Test Case '-[MortimerHostTests.PanelStoreTests testContentPanelsFocusExistingAndRefuseTheSeventhWithoutEviction]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.PanelStoreTests testDetachReturnAndReturnAllAreIdempotent]' started.
+Test Case '-[MortimerHostTests.PanelStoreTests testDetachReturnAndReturnAllAreIdempotent]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.PanelStoreTests testReturningContentReleasesCapacityAndInventoryUsesStableIdentity]' started.
+Test Case '-[MortimerHostTests.PanelStoreTests testReturningContentReleasesCapacityAndInventoryUsesStableIdentity]' passed (0.000 seconds).
+Test Suite 'PanelStoreTests' passed at 2026-09-18 16:44:19.090.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'PresentationLevelMappingTests' started at 2026-09-18 16:44:19.090.
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testAbsentAndSilentAreDistinct]' started.
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testAbsentAndSilentAreDistinct]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testAStoredWindowOverridesTheMeasuredDefault]' started.
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testAStoredWindowOverridesTheMeasuredDefault]' passed (0.001 seconds).
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testInvalidWindowsPreserveTheDefaultChannelResponse]' started.
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testInvalidWindowsPreserveTheDefaultChannelResponse]' passed (0.002 seconds).
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testMeasuredMortimerRibbonHasMoreDepthThanUserAndNoDepthWithoutAudio]' started.
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testMeasuredMortimerRibbonHasMoreDepthThanUserAndNoDepthWithoutAudio]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testMeasuredVoiceGainMakesQuietInputVisiblyResponsive]' started.
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testMeasuredVoiceGainMakesQuietInputVisiblyResponsive]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testTheInputWindowSpreadsMeasuredSpeechAcrossItsRange]' started.
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testTheInputWindowSpreadsMeasuredSpeechAcrossItsRange]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testTheMappingIsClampedSoTheEnvelopeNeverRejectsIt]' started.
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testTheMappingIsClampedSoTheEnvelopeNeverRejectsIt]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testTheMappingIsMonotonic]' started.
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testTheMappingIsMonotonic]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testThePlayoutWindowKeepsMortimersVoiceMoving]' started.
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testThePlayoutWindowKeepsMortimersVoiceMoving]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testTheWidthFractionIsStoredClampedAndDefaulted]' started.
+Test Case '-[MortimerHostTests.PresentationLevelMappingTests testTheWidthFractionIsStoredClampedAndDefaulted]' passed (0.001 seconds).
+Test Suite 'PresentationLevelMappingTests' passed at 2026-09-18 16:44:19.099.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.008 (0.009) seconds
+Test Suite 'RunsRequestOwnershipTests' started at 2026-09-18 16:44:19.099.
+Test Case '-[MortimerHostTests.RunsRequestOwnershipTests testCancelledQueuedRefreshDoesNotStartAnotherRequest]' started.
+Test Case '-[MortimerHostTests.RunsRequestOwnershipTests testCancelledQueuedRefreshDoesNotStartAnotherRequest]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.RunsRequestOwnershipTests testDetailFailureIsVisibleInsteadOfAnEndlessSpinner]' started.
+Test Case '-[MortimerHostTests.RunsRequestOwnershipTests testDetailFailureIsVisibleInsteadOfAnEndlessSpinner]' passed (0.007 seconds).
+Test Case '-[MortimerHostTests.RunsRequestOwnershipTests testOldDetailCannotReplaceNewSelectionOrReopenClosedDetail]' started.
+Test Case '-[MortimerHostTests.RunsRequestOwnershipTests testOldDetailCannotReplaceNewSelectionOrReopenClosedDetail]' passed (0.233 seconds).
+Test Case '-[MortimerHostTests.RunsRequestOwnershipTests testOldFilterErrorCannotReplaceNewResults]' started.
+Test Case '-[MortimerHostTests.RunsRequestOwnershipTests testOldFilterErrorCannotReplaceNewResults]' passed (0.139 seconds).
+Test Suite 'RunsRequestOwnershipTests' passed at 2026-09-18 16:44:19.479.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.379 (0.380) seconds
+Test Suite 'ScreenPlacementTests' started at 2026-09-18 16:44:19.479.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testAppliedMovesAreNotRecordedAsManualButLiveResizeIs]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testAppliedMovesAreNotRecordedAsManualButLiveResizeIs]' passed (0.177 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementTests testBurstOfSignalsCollapsesIntoOneRepositionThatRemembersTopology]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testBurstOfSignalsCollapsesIntoOneRepositionThatRemembersTopology]' passed (0.011 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementTests testConnectedExternalDisplayIsExposedToPlacementTopology]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testConnectedExternalDisplayIsExposedToPlacementTopology]' passed (0.005 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementTests testDetachedPanelPlacementClampsToRequestedVirtualScreen]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testDetachedPanelPlacementClampsToRequestedVirtualScreen]' passed (0.004 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementTests testDetachedPanelRecoversAcrossVirtualScreenDisconnectAndReconnect]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testDetachedPanelRecoversAcrossVirtualScreenDisconnectAndReconnect]' passed (0.038 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementTests testPersistedRecordsDecodeOrAreRejectedFieldByField]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testPersistedRecordsDecodeOrAreRejectedFieldByField]' passed (0.010 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementTests testResetLayoutClearsOnlyPlacementState]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testResetLayoutClearsOnlyPlacementState]' passed (0.071 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementTests testWakeSessionScreensAndUnlockSignalsAllScheduleATopologyReposition]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementTests testWakeSessionScreensAndUnlockSignalsAllScheduleATopologyReposition]' passed (0.184 seconds).
+Test Suite 'ScreenPlacementTests' passed at 2026-09-18 16:44:19.980.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.500 (0.501) seconds
+Test Suite 'ScreenPlacementUserAdjustedTests' started at 2026-09-18 16:44:19.980.
+Test Case '-[MortimerHostTests.ScreenPlacementUserAdjustedTests testAMoveIsUserAdjusted]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementUserAdjustedTests testAMoveIsUserAdjusted]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementUserAdjustedTests testAPointOfAppKitRoundingIsNotUserAdjusted]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementUserAdjustedTests testAPointOfAppKitRoundingIsNotUserAdjusted]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementUserAdjustedTests testAResizeIsUserAdjusted]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementUserAdjustedTests testAResizeIsUserAdjusted]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementUserAdjustedTests testExactMatchIsNotUserAdjusted]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementUserAdjustedTests testExactMatchIsNotUserAdjusted]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ScreenPlacementUserAdjustedTests testNeverPlacedIsNotUserAdjusted]' started.
+Test Case '-[MortimerHostTests.ScreenPlacementUserAdjustedTests testNeverPlacedIsNotUserAdjusted]' passed (0.000 seconds).
+Test Suite 'ScreenPlacementUserAdjustedTests' passed at 2026-09-18 16:44:19.981.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ShareCoordinatorTests' started at 2026-09-18 16:44:19.981.
+Test Case '-[MortimerHostTests.ShareCoordinatorTests testFailedWriterIsNeverReportedAsSaved]' started.
+Test Case '-[MortimerHostTests.ShareCoordinatorTests testFailedWriterIsNeverReportedAsSaved]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ShareCoordinatorTests testPreviewIsAnImmutableSnapshot]' started.
+Test Case '-[MortimerHostTests.ShareCoordinatorTests testPreviewIsAnImmutableSnapshot]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.ShareCoordinatorTests testSaveReportsActualWriterOutcomeAndCancelClearsPreview]' started.
+Test Case '-[MortimerHostTests.ShareCoordinatorTests testSaveReportsActualWriterOutcomeAndCancelClearsPreview]' passed (0.000 seconds).
+Test Suite 'ShareCoordinatorTests' passed at 2026-09-18 16:44:19.982.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'SupportingDisplayAcceptanceTests' started at 2026-09-18 16:44:19.982.
+Test Case '-[MortimerHostTests.SupportingDisplayAcceptanceTests testFourResultStageRendersAVisibleBoundedGrid]' started.
+Test Case '-[MortimerHostTests.SupportingDisplayAcceptanceTests testFourResultStageRendersAVisibleBoundedGrid]' passed (0.919 seconds).
+Test Case '-[MortimerHostTests.SupportingDisplayAcceptanceTests testPointerSelectedResultSharesStageOnConnectedDisplays]' started.
+Test Case '-[MortimerHostTests.SupportingDisplayAcceptanceTests testPointerSelectedResultSharesStageOnConnectedDisplays]' passed (1.039 seconds).
+Test Case '-[MortimerHostTests.SupportingDisplayAcceptanceTests testReturningToOriginalPanelsPreservesResearchPinsAndReadingState]' started.
+Test Case '-[MortimerHostTests.SupportingDisplayAcceptanceTests testReturningToOriginalPanelsPreservesResearchPinsAndReadingState]' passed (1.599 seconds).
+Test Suite 'SupportingDisplayAcceptanceTests' passed at 2026-09-18 16:44:23.539.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 3.557 (3.557) seconds
+Test Suite 'TabStateTests' started at 2026-09-18 16:44:23.539.
+Test Case '-[MortimerHostTests.TabStateTests testEmptyListMapsToEmpty]' started.
+Test Case '-[MortimerHostTests.TabStateTests testEmptyListMapsToEmpty]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.TabStateTests testLoadedOtherwise]' started.
+Test Case '-[MortimerHostTests.TabStateTests testLoadedOtherwise]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.TabStateTests testOkFalseMapsToError]' started.
+Test Case '-[MortimerHostTests.TabStateTests testOkFalseMapsToError]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.TabStateTests testOkFalseWithNoErrorGetsDefaultCopy]' started.
+Test Case '-[MortimerHostTests.TabStateTests testOkFalseWithNoErrorGetsDefaultCopy]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.TabStateTests testThrowMapsToError]' started.
+Test Case '-[MortimerHostTests.TabStateTests testThrowMapsToError]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.TabStateTests testUnauthorizedNoRetry]' started.
+Test Case '-[MortimerHostTests.TabStateTests testUnauthorizedNoRetry]' passed (0.004 seconds).
+Test Suite 'TabStateTests' passed at 2026-09-18 16:44:23.544.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.005 (0.005) seconds
+Test Suite 'TabStripViewportTests' started at 2026-09-18 16:44:23.544.
+Test Case '-[MortimerHostTests.TabStripViewportTests testBackRevealsNearestHiddenTabRatherThanJumpingToStart]' started.
+Test Case '-[MortimerHostTests.TabStripViewportTests testBackRevealsNearestHiddenTabRatherThanJumpingToStart]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.TabStripViewportTests testFittingHeaderHasNoScrollControls]' started.
+Test Case '-[MortimerHostTests.TabStripViewportTests testFittingHeaderHasNoScrollControls]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.TabStripViewportTests testForwardRevealsFirstPartiallyHiddenTab]' started.
+Test Case '-[MortimerHostTests.TabStripViewportTests testForwardRevealsFirstPartiallyHiddenTab]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.TabStripViewportTests testSubpixelRoundingAndRubberBandingDoNotEnableEndArrow]' started.
+Test Case '-[MortimerHostTests.TabStripViewportTests testSubpixelRoundingAndRubberBandingDoNotEnableEndArrow]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.TabStripViewportTests testUnmeasuredTabsDoNotProduceInventedScrollTargets]' started.
+Test Case '-[MortimerHostTests.TabStripViewportTests testUnmeasuredTabsDoNotProduceInventedScrollTargets]' passed (0.000 seconds).
+Test Suite 'TabStripViewportTests' passed at 2026-09-18 16:44:23.545.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'UICommandRouterTests' started at 2026-09-18 16:44:23.545.
+Test Case '-[MortimerHostTests.UICommandRouterTests testDisplayCloseDismissesWindow]' started.
+Test Case '-[MortimerHostTests.UICommandRouterTests testDisplayCloseDismissesWindow]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.UICommandRouterTests testDisplayPopoutOpensDisplay]' started.
+Test Case '-[MortimerHostTests.UICommandRouterTests testDisplayPopoutOpensDisplay]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.UICommandRouterTests testDrawerCloseDismissesWindow]' started.
+Test Case '-[MortimerHostTests.UICommandRouterTests testDrawerCloseDismissesWindow]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.UICommandRouterTests testDrawerOpenOpensAndSetsTab]' started.
+Test Case '-[MortimerHostTests.UICommandRouterTests testDrawerOpenOpensAndSetsTab]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.UICommandRouterTests testDrawerOpenWithNoTabJustOpens]' started.
+Test Case '-[MortimerHostTests.UICommandRouterTests testDrawerOpenWithNoTabJustOpens]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.UICommandRouterTests testDrawerPopinRedocks]' started.
+Test Case '-[MortimerHostTests.UICommandRouterTests testDrawerPopinRedocks]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.UICommandRouterTests testDrawerPopoutCallsWindowPlacement]' started.
+Test Case '-[MortimerHostTests.UICommandRouterTests testDrawerPopoutCallsWindowPlacement]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.UICommandRouterTests testDrawerTabSwitchesActiveTab]' started.
+Test Case '-[MortimerHostTests.UICommandRouterTests testDrawerTabSwitchesActiveTab]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.UICommandRouterTests testMicActionsNotDoubleHandled]' started.
+Test Case '-[MortimerHostTests.UICommandRouterTests testMicActionsNotDoubleHandled]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.UICommandRouterTests testOverlayDismissClearsPanel]' started.
+Test Case '-[MortimerHostTests.UICommandRouterTests testOverlayDismissClearsPanel]' passed (0.000 seconds).
+Test Suite 'UICommandRouterTests' passed at 2026-09-18 16:44:23.547.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'VoicePresentationStateTests' started at 2026-09-18 16:44:23.547.
+Test Case '-[MortimerHostTests.VoicePresentationStateTests testDisconnectedAndConnectingIgnoreSpeakingObservations]' started.
+Test Case '-[MortimerHostTests.VoicePresentationStateTests testDisconnectedAndConnectingIgnoreSpeakingObservations]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.VoicePresentationStateTests testEnvelopeDependsOnElapsedTimeAndUnavailableClearsImmediately]' started.
+Test Case '-[MortimerHostTests.VoicePresentationStateTests testEnvelopeDependsOnElapsedTimeAndUnavailableClearsImmediately]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.VoicePresentationStateTests testLateSnapshotCannotRenewOriginalMeasurementDeadline]' started.
+Test Case '-[MortimerHostTests.VoicePresentationStateTests testLateSnapshotCannotRenewOriginalMeasurementDeadline]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.VoicePresentationStateTests testMuteDoesNotHideAssistantAndMissingLevelsStayUnavailable]' started.
+Test Case '-[MortimerHostTests.VoicePresentationStateTests testMuteDoesNotHideAssistantAndMissingLevelsStayUnavailable]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.VoicePresentationStateTests testOverlapPrioritizesUserWithoutInventingInterruption]' started.
+Test Case '-[MortimerHostTests.VoicePresentationStateTests testOverlapPrioritizesUserWithoutInventingInterruption]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.VoicePresentationStateTests testSilenceDoesNotInventThinkingAndStaleSessionCannotSpeak]' started.
+Test Case '-[MortimerHostTests.VoicePresentationStateTests testSilenceDoesNotInventThinkingAndStaleSessionCannotSpeak]' passed (0.000 seconds).
+Test Suite 'VoicePresentationStateTests' passed at 2026-09-18 16:44:23.548.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'VoiceWaveRenderingTests' started at 2026-09-18 16:44:23.548.
+Test Case '-[MortimerHostTests.VoiceWaveRenderingTests testListeningWithoutMeterKeepsReadyTraceAlive]' started.
+Test Case '-[MortimerHostTests.VoiceWaveRenderingTests testListeningWithoutMeterKeepsReadyTraceAlive]' passed (0.136 seconds).
+Test Case '-[MortimerHostTests.VoiceWaveRenderingTests testMeasuredSpeakersUseDistinctRenderedColors]' started.
+Test Case '-[MortimerHostTests.VoiceWaveRenderingTests testMeasuredSpeakersUseDistinctRenderedColors]' passed (1.146 seconds).
+Test Case '-[MortimerHostTests.VoiceWaveRenderingTests testUnavailableSpeechRendersIdenticallyAcrossTime]' started.
+Test Case '-[MortimerHostTests.VoiceWaveRenderingTests testUnavailableSpeechRendersIdenticallyAcrossTime]' passed (0.126 seconds).
+Test Suite 'VoiceWaveRenderingTests' passed at 2026-09-18 16:44:24.956.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 1.408 (1.408) seconds
+Test Suite 'WindowVisibilityTests' started at 2026-09-18 16:44:24.956.
+Test Case '-[MortimerHostTests.WindowVisibilityTests testActualWindowHideShowAndDetachUpdateVisibility]' started.
+Test Case '-[MortimerHostTests.WindowVisibilityTests testActualWindowHideShowAndDetachUpdateVisibility]' passed (1.504 seconds).
+Test Case '-[MortimerHostTests.WindowVisibilityTests testReducedMotionKeepsVisibleWaveStatic]' started.
+Test Case '-[MortimerHostTests.WindowVisibilityTests testReducedMotionKeepsVisibleWaveStatic]' passed (0.535 seconds).
+Test Case '-[MortimerHostTests.WindowVisibilityTests testStoppedObserverCannotDeliverQueuedState]' started.
+Test Case '-[MortimerHostTests.WindowVisibilityTests testStoppedObserverCannotDeliverQueuedState]' passed (0.114 seconds).
+Test Case '-[MortimerHostTests.WindowVisibilityTests testWaveStopsSamplingWhileWindowHiddenAndResumes]' started.
+Test Case '-[MortimerHostTests.WindowVisibilityTests testWaveStopsSamplingWhileWindowHiddenAndResumes]' passed (1.592 seconds).
+Test Suite 'WindowVisibilityTests' passed at 2026-09-18 16:44:28.701.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 3.744 (3.745) seconds
+Test Suite 'WorkspaceRenderingTests' started at 2026-09-18 16:44:28.701.
+Test Case '-[MortimerHostTests.WorkspaceRenderingTests testWorkspaceRendersAtMinimumReadableWidthAndInComparison]' started.
+Test Case '-[MortimerHostTests.WorkspaceRenderingTests testWorkspaceRendersAtMinimumReadableWidthAndInComparison]' passed (0.542 seconds).
+Test Suite 'WorkspaceRenderingTests' passed at 2026-09-18 16:44:29.243.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.542 (0.542) seconds
+Test Suite 'WorkspaceResultDetailsTests' started at 2026-09-18 16:44:29.243.
+Test Case '-[MortimerHostTests.WorkspaceResultDetailsTests testExportPreservesSuppliedFieldsButNeverIncludesClipboard]' started.
+Test Case '-[MortimerHostTests.WorkspaceResultDetailsTests testExportPreservesSuppliedFieldsButNeverIncludesClipboard]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceResultDetailsTests testExportSuccessFollowsActualWriteAndFailureIsNotReportedAsSaved]' started.
+Test Case '-[MortimerHostTests.WorkspaceResultDetailsTests testExportSuccessFollowsActualWriteAndFailureIsNotReportedAsSaved]' passed (0.002 seconds).
+Test Case '-[MortimerHostTests.WorkspaceResultDetailsTests testOnlyWebSourceAddressesAreOpenable]' started.
+Test Case '-[MortimerHostTests.WorkspaceResultDetailsTests testOnlyWebSourceAddressesAreOpenable]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceResultDetailsTests testScopedExportUsesOneBasedDeterministicSections]' started.
+Test Case '-[MortimerHostTests.WorkspaceResultDetailsTests testScopedExportUsesOneBasedDeterministicSections]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceResultDetailsTests testSourceInspectionSurvivesPresentationChangesWithoutChangingSelectionOrScroll]' started.
+Test Case '-[MortimerHostTests.WorkspaceResultDetailsTests testSourceInspectionSurvivesPresentationChangesWithoutChangingSelectionOrScroll]' passed (0.000 seconds).
+Test Suite 'WorkspaceResultDetailsTests' passed at 2026-09-18 16:44:29.246.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'WorkspaceSourcesRenderingTests' started at 2026-09-18 16:44:29.246.
+Test Case '-[MortimerHostTests.WorkspaceSourcesRenderingTests testSourceListAndWideInspectorRender]' started.
+Test Case '-[MortimerHostTests.WorkspaceSourcesRenderingTests testSourceListAndWideInspectorRender]' passed (0.479 seconds).
+Test Suite 'WorkspaceSourcesRenderingTests' passed at 2026-09-18 16:44:29.725.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.479 (0.479) seconds
+Test Suite 'WorkspaceStoreTests' started at 2026-09-18 16:44:29.725.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testArrivalPreservesReadingComparisonAndScroll]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testArrivalPreservesReadingComparisonAndScroll]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testCloseActivePromotesComparisonAndRemovesOnlyItsMetadata]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testCloseActivePromotesComparisonAndRemovesOnlyItsMetadata]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testClosingWorkspaceTabPreservesOutputHistoryAndSharedIdentity]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testClosingWorkspaceTabPreservesOutputHistoryAndSharedIdentity]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testConsoleInventoryJSONContainsBoundedTargetsWithoutResultBody]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testConsoleInventoryJSONContainsBoundedTargetsWithoutResultBody]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testConsoleInventoryRevisionTracksSelectionAndModeChanges]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testConsoleInventoryRevisionTracksSelectionAndModeChanges]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testExplicitConversationChoiceSurvivesNewResults]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testExplicitConversationChoiceSurvivesNewResults]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultDoesNotUndoReturnFromGraphToConversation]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultDoesNotUndoReturnFromGraphToConversation]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultStillOpensWorkspaceWithoutExplicitNavigation]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultStillOpensWorkspaceWithoutExplicitNavigation]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultWhileBrowsingGraphIsUnreadAndPreservesGraph]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testFirstResultWhileBrowsingGraphIsUnreadAndPreservesGraph]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testGraphDisplayAssignmentReusesGraphOwnerAndKeepsCompactComparisonChoice]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testGraphDisplayAssignmentReusesGraphOwnerAndKeepsCompactComparisonChoice]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testIdenticalPayloadsAreDistinctButSameReceiptIsNotDuplicated]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testIdenticalPayloadsAreDistinctButSameReceiptIsNotDuplicated]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testOutputExpansionBelongsToHistoryAndDoesNotReopenCollapsedItems]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testOutputExpansionBelongsToHistoryAndDoesNotReopenCollapsedItems]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testPinLimitRefusesWithoutEviction]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testPinLimitRefusesWithoutEviction]' passed (0.000 seconds).
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testSupportingResultSurvivesHistoryTrimmingWithoutChangingMainSelection]' started.
+Test Case '-[MortimerHostTests.WorkspaceStoreTests testSupportingResultSurvivesHistoryTrimmingWithoutChangingMainSelection]' passed (0.000 seconds).
+Test Suite 'WorkspaceStoreTests' passed at 2026-09-18 16:44:29.728.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'MortimerHostTests.xctest' passed at 2026-09-18 16:44:29.728.
+	 Executed 233 tests, with 0 failures (0 unexpected) in 71.319 (71.336) seconds
+Test Suite 'All tests' passed at 2026-09-18 16:44:29.728.
+	 Executed 233 tests, with 0 failures (0 unexpected) in 71.319 (71.337) seconds
+Charts: Custom UnitPoint values are not supported in AxisValueLabel's anchor property. Please use leading, topLeading, center, etc.
+P4 frame time: p50 8.561041664506774 ms, p95 9.782791668840218 ms, max 14.570375002222136 ms; control p50 4.818624998733867 ms; main thread p95 9.77420833078213 ms; test rasterize p50 820.9238333365647 ms → /Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/.build/interface-fixtures/P4-frame-time.json
+P4 layer: NSViewBackingLayer async=false bounds=1440x900
+P4 layer:  CALayer async=false bounds=1440x900
+P4 layer:  RBDrawingLayer async=false bounds=592x580
+P4 layer:   RBImageQueueLayer async=false bounds=0x0
+Graph layout fixture 50 nodes / 100 edges: 0.02109706401824951 seconds; not a frame-time measurement
+Graph layout fixture 200 nodes / 400 edges: 0.20124506950378418 seconds; not a frame-time measurement
+Graph layout fixture 500 nodes / 2000 edges: 1.2223299741744995 seconds; not a frame-time measurement
+Synthetic graph snapshot: /Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/.build/interface-fixtures/memory-graph-50.png
+Synthetic graph snapshot: /Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/.build/interface-fixtures/memory-graph-200.png
+Synthetic graph snapshot: /Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review/macos/MortimerHost/.build/interface-fixtures/memory-graph-500.png
+VISIBILITY_FIXTURE active=false screens=2 onSpace=true frame=(0.0, 57.0, 300.0, 192.0) occlusion=8194
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

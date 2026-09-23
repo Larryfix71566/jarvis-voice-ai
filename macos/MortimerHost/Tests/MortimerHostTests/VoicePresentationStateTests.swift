@@ -27,6 +27,20 @@ final class VoicePresentationStateTests: XCTestCase {
         XCTAssertTrue(state.audioLevelUnavailable)
     }
 
+    func testMutedInputPreservesMeasuredMortimerSpeech() {
+        let id = UUID(); var meter = AudioActivityAccumulator(generation: id)
+        meter.setMicrophoneEligible(true, at: 10)
+        meter.observe(.processedInput, level: 0.8, measuredAt: 10, now: 10, generation: id)
+        meter.observe(.actualPlayout, level: 0.6, measuredAt: 10, now: 10, generation: id)
+        let state = VoicePresentationState.derive(connection: .connected, microphoneEnabled: false,
+            botSpeaking: true, thinking: false, snapshot: meter.snapshot(at: 10), generation: id, now: 10)
+        XCTAssertEqual(state.activity, .assistant)
+        XCTAssertEqual(state.outputLevel, 0.6)
+        XCTAssertNil(state.userLevel, "Muted microphone samples must not drive the teal voice response")
+        XCTAssertTrue(state.microphoneMuted)
+        XCTAssertFalse(state.audioLevelUnavailable)
+    }
+
     func testSilenceDoesNotInventThinkingAndStaleSessionCannotSpeak() {
         let id = UUID(); var meter = AudioActivityAccumulator(generation: id)
         meter.setMicrophoneEligible(true, at: 10)

@@ -158,6 +158,28 @@ class TestHandler:
         assert types[-1] == "delegate_done"
         assert events[0]["agent"] == "analyst"
 
+    async def test_protected_workload_task_is_redacted_only_on_status_event(self):
+        """Confidential prompts may reach the specialist, never the UI/stdout
+        activity event that announces the delegation."""
+        events = []
+        agents = {"librarian": FakeSubAgent("librarian")}
+        _, handler = build_delegate_tool(agents, on_event=events.append)
+        private_task = "read the private customer record: SSN 123-45-6789"
+        await handler({"agent_name": "librarian", "task": private_task})
+
+        assert agents["librarian"].tasks == [private_task]
+        assert events[0]["task"] == "<protected task>"
+
+    async def test_protected_failure_detail_is_redacted_on_status_event(self):
+        agents = {"librarian": FakeSubAgent(
+            "librarian", result="FAILED: private document contents leaked here")}
+        events = []
+        _, handler = build_delegate_tool(agents, on_event=events.append)
+        result = await handler({"agent_name": "librarian", "task": "inspect private file"})
+
+        assert result.startswith("FAILED:")
+        assert events[-1]["detail"] == "<protected task>"
+
     async def test_delegate_start_carries_the_resolved_model(self):
         """Larry 2026-08-19 — the Agents tab card header shows which LLM
         is doing the work. It can only show what delegate_start carries."""

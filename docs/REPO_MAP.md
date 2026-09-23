@@ -1,5 +1,7 @@
 # Repository map
 
+See [ARCHITECTURE.md](ARCHITECTURE.md) for system ownership and model routes.
+
 Verify paths and the current branch before writing. Keep this map below the
 8,000-character prompt cap (`jarvis/repo_map.py`).
 
@@ -74,22 +76,19 @@ Verify paths and the current branch before writing. Keep this map below the
   `costs.db` (`llm_calls`) (MORTIMER_OPTIMIZATION_PLAN.md Phase 0).
 - `jarvis/costs_api.py` — HTTP surface over the cost ledger for the
   admin sidecar (`GET /costs/summary`).
-- `jarvis/memory_extraction.py` — Phase 2 per-exchange candidate
-  extraction + novelty gate ("Extraction Gate").
-- `jarvis/memory_extraction_worker.py` — standalone async post-turn
-  extraction service (own Procfile entry).
-- `jarvis/kb_digest.py` — session-end digester feeding the knowledge-
-  base service (mcp-kb / mortimer-vault).
-- `jarvis/effort.py` — `output_config.effort` control for native-
-  Anthropic (Path B) call sites.
-- `jarvis/anthropic_shim.py` — OpenAI-shaped client shim over
-  Anthropic's native Messages API (Path B).
-- `jarvis/sensitive.py` — financial-detail detection for the
-  sensitive-turn guard (T4a, contract K3), stdlib only.
-- `jarvis/bot/sensitive_turn.py` — the per-turn sensitive ContextVar
-  flag; `is_sensitive()` is FAIL-CLOSED when unset (T4a).
-- `jarvis/bot/usage_watcher.py` — pipeline observer hooking LLM calls
-  into the cost ledger (Phase 0).
+- `jarvis/memory_extraction.py` — per-exchange candidate extraction/novelty gate.
+- `jarvis/memory_extraction_worker.py` — standalone async post-turn extractor.
+- `jarvis/kb_digest.py` — session-end knowledge-base digester.
+- `jarvis/effort.py` — native-Anthropic effort control.
+- `jarvis/anthropic_shim.py` — OpenAI-shaped native Messages client.
+- `jarvis/model_routing.py` — model/workload/route policy and fail-closed clients.
+- `jarvis/model_execution.py` — provider-neutral execution contract.
+- `jarvis/privacy_policy.py` — data-policy propagation and enforcement.
+- `jarvis/saygm.py` — SAYGM catalog and confidential-tier proof.
+- `jarvis/subscription.py` — gated Claude/Codex text adapters; strips API env.
+- `jarvis/sensitive.py` — financial-detail detection for sensitive turns.
+- `jarvis/bot/sensitive_turn.py` — per-turn sensitive ContextVar flag.
+- `jarvis/bot/usage_watcher.py` — pipeline observer for the cost ledger.
 - `jarvis/bot/late_result.py` — strips a late/orphaned delegation's
   internal "relay this to the user" wrapper text before speaking it.
 - `jarvis/bot/costs_tool.py` — the `cost_summary` direct Supervisor

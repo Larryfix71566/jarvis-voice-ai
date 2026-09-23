@@ -1,0 +1,59 @@
+Building for debugging...
+[2 / 7] JarvisKitTests-product
+[4 / 9] JarvisKitTests-product
+[7 / 10] JarvisKitTests-product
+[9 / 13] JarvisKitTests-product
+Build complete! (1.13 sec)
+Test Suite 'Selected tests' started at 2026-09-18 16:42:55.589.
+Test Suite 'JarvisKitTests.xctest' started at 2026-09-18 16:42:55.590.
+Test Suite 'NativeAudioTransportTests' started at 2026-09-18 16:42:55.590.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAFailureFromAPreviousSessionIsIgnored]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAFailureFromAPreviousSessionIsIgnored]' passed (0.161 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAnEngineThatCannotStartClosesAnEarlySocketAndFailsConnect]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAnEngineThatCannotStartClosesAnEarlySocketAndFailsConnect]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAnEngineThatGivesUpOnItsDeviceFailsTheSession]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAnEngineThatGivesUpOnItsDeviceFailsTheSession]' passed (0.007 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAnInboundFrameEstablishesTheSessionWithoutAPong]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAnInboundFrameEstablishesTheSessionWithoutAPong]' passed (0.333 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAnsweredPingsAloneNeverMakeTheSessionReady]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAnsweredPingsAloneNeverMakeTheSessionReady]' passed (0.609 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testASilentServerIsGivenTheReadyDeadlineBeforeTheStallWatchdogExists]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testASilentServerIsGivenTheReadyDeadlineBeforeTheStallWatchdogExists]' passed (1.246 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAudioFramesGoToPlayoutInterruptionFlushesAndTextFramesAreIgnored]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testAudioFramesGoToPlayoutInterruptionFlushesAndTextFramesAreIgnored]' passed (0.014 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testBotIsSpeakingFollowsThePlayerNodeAndStopsAtDisconnect]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testBotIsSpeakingFollowsThePlayerNodeAndStopsAtDisconnect]' passed (0.060 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testCapturedPCMIsSentOnlyWhileOpenAndUnmuted]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testCapturedPCMIsSentOnlyWhileOpenAndUnmuted]' passed (0.020 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testCaptureMonitorHearsProcessedAudioWhileMutedAndDoesNotSurviveTheSession]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testCaptureMonitorHearsProcessedAudioWhileMutedAndDoesNotSurviveTheSession]' passed (0.066 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testConnectStartsCaptureOpensTheSocketAndReportsConnectedOnlyWhenTheBotAnswers]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testConnectStartsCaptureOpensTheSocketAndReportsConnectedOnlyWhenTheBotAnswers]' passed (0.007 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testEveryAppMessageFixtureDecodesTheSameThroughTheWebSocketAsOffTheDataChannel]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testEveryAppMessageFixtureDecodesTheSameThroughTheWebSocketAsOffTheDataChannel]' passed (0.019 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testHungAudioStartFailsWithinDeadlineAndLateCompletionCannotReviveSession]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testHungAudioStartFailsWithinDeadlineAndLateCompletionCannotReviveSession]' passed (0.109 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testKeepAlivePingsRunWhileOpen]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testKeepAlivePingsRunWhileOpen]' passed (1.022 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testOnceEstablishedSilenceBeyondTheStallThresholdTearsTheSessionDown]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testOnceEstablishedSilenceBeyondTheStallThresholdTearsTheSessionDown]' passed (0.312 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testOutboundQueueBeforeOpenIsBoundedOldestDropped]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testOutboundQueueBeforeOpenIsBoundedOldestDropped]' passed (0.006 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testReconnectTearsDownTheLiveSessionFirstAndOrphansItsCallbacks]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testReconnectTearsDownTheLiveSessionFirstAndOrphansItsCallbacks]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testServerCloseIsReportedOnceAndStopsTheEngine]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testServerCloseIsReportedOnceAndStopsTheEngine]' passed (0.007 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testSlowAudioStartDoesNotBlockSocketOpenCallback]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testSlowAudioStartDoesNotBlockSocketOpenCallback]' passed (0.007 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testSlowAudioStartDoesNotBlockTheMainActor]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testSlowAudioStartDoesNotBlockTheMainActor]' passed (0.006 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testSocketURLIsTheRunnersPlainWebSocketRouteWithTheSchemeMapped]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testSocketURLIsTheRunnersPlainWebSocketRouteWithTheSchemeMapped]' passed (0.001 seconds).
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testTheReadyDeadlineFailsTheSessionWhenTheBotNeverAnswers]' started.
+Test Case '-[JarvisKitTests.NativeAudioTransportTests testTheReadyDeadlineFailsTheSessionWhenTheBotNeverAnswers]' passed (0.405 seconds).
+Test Suite 'NativeAudioTransportTests' passed at 2026-09-18 16:43:00.014.
+	 Executed 22 tests, with 0 failures (0 unexpected) in 4.420 (4.424) seconds
+Test Suite 'JarvisKitTests.xctest' passed at 2026-09-18 16:43:00.014.
+	 Executed 22 tests, with 0 failures (0 unexpected) in 4.420 (4.424) seconds
+Test Suite 'Selected tests' passed at 2026-09-18 16:43:00.014.
+	 Executed 22 tests, with 0 failures (0 unexpected) in 4.420 (4.425) seconds

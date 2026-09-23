@@ -20,6 +20,66 @@ final class AppMessageTests: XCTestCase {
         XCTAssertEqual(w.task, "compare hosts")
     }
 
+    func testDecodeConsoleResultFromRTVIEnvelope() throws {
+        let json = """
+        {"id":"m","label":"rtvi-ai","type":"server-message","data":
+          {"type":"console/result","version":1,"session_id":"00000000-0000-4000-8000-000000000001","generation":"00000000-0000-4000-8000-000000000002","request_id":"00000000-0000-4000-8000-000000000003","status":"ok","code":"inventory","summary":"ready"}}
+        """
+        let message = try XCTUnwrap(try AppMessage.decode(frame: Data(json.utf8)))
+        guard case .consoleResult(let result) = message else { return XCTFail("expected .consoleResult") }
+        XCTAssertEqual(result.code, "inventory")
+    }
+
+    func testDecodeInputStatusKeepsTerminalCode() throws {
+        let json = """
+        {"type":"input/status","version":1,"status":"error","code":"cancelled","summary":"Shared content cancelled.","request_id":"00000000-0000-4000-8000-000000000003"}
+        """
+        let message = try XCTUnwrap(try AppMessage.decode(frame: Data(json.utf8)))
+        guard case .inputStatus(let status) = message else { return XCTFail("expected .inputStatus") }
+        XCTAssertEqual(status.code, "cancelled")
+        XCTAssertEqual(status.requestID?.uuidString, "00000000-0000-4000-8000-000000000003")
+    }
+
+    func testDecodeInputAcceptAndChunkAck() throws {
+        let acceptJSON = """
+        {"type":"input/accept","version":1,"session_id":"00000000-0000-4000-8000-000000000001","generation":"00000000-0000-4000-8000-000000000002","batch_id":"00000000-0000-4000-8000-000000000003","transfer_id":"00000000-0000-4000-8000-000000000004","temporary_content_mode":true,"max_chunk_bytes":16384}
+        """
+        let acceptMessage = try XCTUnwrap(try AppMessage.decode(frame: Data(acceptJSON.utf8)))
+        guard case .inputAccept(let accept) = acceptMessage else { return XCTFail("expected .inputAccept") }
+        XCTAssertTrue(accept.temporaryContentMode)
+        XCTAssertEqual(accept.maxChunkBytes, 16 * 1024)
+
+        let ackJSON = """
+        {"type":"input/ack","version":1,"transfer_id":"00000000-0000-4000-8000-000000000004","attachment_id":"00000000-0000-4000-8000-000000000005","sequence":2}
+        """
+        let ackMessage = try XCTUnwrap(try AppMessage.decode(frame: Data(ackJSON.utf8)))
+        guard case .inputAck(let ack) = ackMessage else { return XCTFail("expected .inputAck") }
+        XCTAssertEqual(ack.sequence, 2)
+    }
+
+    func testDecodeInputOfferPreservesBoundedApprovalMetadata() throws {
+        let json = """
+        {"type":"input/offer","version":1,"session_id":"00000000-0000-4000-8000-000000000001","generation":"00000000-0000-4000-8000-000000000002","request_id":"00000000-0000-4000-8000-000000000003","batch_id":"00000000-0000-4000-8000-000000000004","attachment_ids":["00000000-0000-4000-8000-000000000005"],"question":"Explain this.","profile":{"id":"vision","label":"Configured vision"}}
+        """
+        let message = try XCTUnwrap(try AppMessage.decode(frame: Data(json.utf8)))
+        guard case .inputOffer(let offer) = message else { return XCTFail("expected .inputOffer") }
+        XCTAssertEqual(offer.attachmentIDs.count, 1)
+        XCTAssertEqual(offer.profile.label, "Configured vision")
+    }
+
+    func testDecodeInputConsentPreservesSpokenDecisionIdentity() throws {
+        let session = UUID(), generation = UUID(), batch = UUID(), turn = UUID()
+        let data = try JSONEncoder().encode(InputConsent(sessionID: session,
+            generation: generation, batchID: batch, approved: true, userTurnID: turn))
+        let message = try XCTUnwrap(AppMessage.decode(frame: data))
+        guard case .inputConsent(let consent) = message else {
+            return XCTFail("expected input consent")
+        }
+        XCTAssertEqual(consent.batchID, batch)
+        XCTAssertEqual(consent.userTurnID, turn)
+        XCTAssertTrue(consent.approved)
+    }
+
     func testDecodeAgentDone() throws {
         let data = try fixture("agent_done")
         let message = try XCTUnwrap(try AppMessage.decode(frame: data))

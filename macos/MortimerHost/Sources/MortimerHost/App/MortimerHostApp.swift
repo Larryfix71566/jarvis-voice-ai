@@ -19,26 +19,44 @@ struct MortimerHostApp: App {
         // fix is the .app bundle (macos/MortimerHost/scripts/bundle.sh);
         // this is the belt to that suspenders.
         NSApplication.shared.setActivationPolicy(.regular)
+        // Command Console is the shipped default. Migrate an existing
+        // adaptive-default install once, while preserving any later explicit
+        // choice of the legacy layouts through the normal Debug menu.
+        let defaults = UserDefaults.standard
+        let layoutKey = "mortimer.interface.layoutVersion"
+        let migrationKey = "mortimer.interface.commandConsoleDefaultMigrated"
+        if defaults.object(forKey: migrationKey) == nil {
+            if defaults.object(forKey: layoutKey) == nil || defaults.integer(forKey: layoutKey) == 1 {
+                defaults.set(2, forKey: layoutKey)
+            }
+            defaults.set(true, forKey: migrationKey)
+        }
         DispatchQueue.main.async {
             NSApplication.shared.activate(ignoringOtherApps: true)
         }
     }
 
-    // C9.5 / G30 — default 1 since 2026-09-17: a fresh install gets the
-    // adaptive layout. `Debug ▸ Use previous layout` is retained (L4) so the
-    // rollback is a menu press, not a rebuild. C8 is unrun; its unexercised
-    // rows are accepted in docs/acceptance/adaptive-interface/C8-open-items.md
-    // under Gate G-C8's written-acceptance route.
-    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 1
+    // C9.5 / G30 — command console is the shipped default. The Debug menu
+    // retains a one-press rollback to the previous layouts.
+    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 2
+    private var activeLayoutVersion: Int {
+        InterfaceLayoutVersion.resolve(layoutVersion)
+    }
     @State private var agentRuns = AgentRunStore()
     @State private var displayResults = DisplayResultStore()
     @State private var workspace = WorkspaceStore()
+    @State private var atlas = AtlasStore()
+    @State private var panels = PanelStore()
+    @State private var attachments = AttachmentStore()
+    @State private var sharedMedia = SharedMediaStore()
+    @State private var sharing = ShareCoordinator()
     @State private var conversation = ConversationStore()
     @State private var displayWindow = DisplayWindowStore()
     @State private var drawer = DrawerState()
     @State private var drawerModels = DrawerModels()
     @State private var overlay = ConsoleOverlayState()
     @State private var notices = ConsoleNoticeState()
+    @State private var contentWindows = ContentWindowRegistry()
 
     // Non-Observable plumbing, created once for the app's lifetime
     // (@State so a re-initialized App struct cannot orphan the closures
@@ -47,22 +65,28 @@ struct MortimerHostApp: App {
     @State private var messageRouter = AppMessageRouter()
     @State private var placement: WindowPlacement?
     @State private var uiRouter: UICommandRouter?
+    @State private var consoleCoordinator: ConsoleActionCoordinator?
     @State private var started = false
 
     var body: some Scene {
         Window("Mortimer", id: "console") {
-            ConsoleView()
+            ConsoleView(consoleCoordinator: consoleCoordinator)
                 .environmentObject(client)
                 .environment(agentRuns)
                 .environment(displayResults)
                 .environment(workspace)
+                .environment(atlas)
+                .environment(panels)
+                .environment(attachments)
+                .environment(sharedMedia)
+                .environment(sharing)
                 .environment(conversation)
                 .environment(displayWindow)
                 .environment(drawer)
                 .environment(drawerModels)
                 .environment(overlay)
                 .environment(notices)
-                .background(WindowIdentifierSetter(identifier: "console"))
+                .background(WindowIdentifierSetter(identifier: "console", registry: contentWindows))
                 // C7.5: every session that ends writes its own evidence.
                 // The Debug menu item stays for an on-demand reading
                 // mid-session, but the gate no longer depends on anyone
@@ -74,7 +98,7 @@ struct MortimerHostApp: App {
                                                   native: client.isNativeAudio)
                 }
                 .onAppear(perform: startRoutersOnce)
-                .installWindowActions(windowActions)
+                .installWindowActions(windowActions, panels: panels)
         }
         // Titled + contentMinSize: the standard traffic lights (incl. the
         // green fullscreen button) and free edge-resizing — the web
@@ -88,14 +112,19 @@ struct MortimerHostApp: App {
             DisplayWindowView()
                 .environment(displayWindow)
                 .environment(workspace)
+                .environment(atlas)
+                .environment(panels)
+                .environment(attachments)
+                .environment(sharedMedia)
+                .environment(sharing)
                 .environment(drawer)
                 .environmentObject(client)
-                .background(WindowIdentifierSetter(identifier: "display"))
+                .background(WindowIdentifierSetter(identifier: "display", registry: contentWindows))
                 // The native form of the web's hasLivePopup poll: scene
                 // content on screen = window open. Drives the topbar's
                 // ⧉ Display active state + ↩︎ pop-in.
-                .onAppear { displayWindow.isWindowOpen = true }
-                .onDisappear { displayWindow.isWindowOpen = false }
+                .onAppear { displayWindow.setWindowOpen(true) }
+                .onDisappear { displayWindow.setWindowOpen(false) }
         }
         .windowResizability(.contentMinSize)
         .defaultSize(width: 900, height: 700)
@@ -106,10 +135,14 @@ struct MortimerHostApp: App {
                 .environment(agentRuns)
                 .environment(displayResults)
                 .environment(workspace)
+                .environment(atlas)
+                .environment(panels)
+                .environment(attachments)
+                .environment(sharedMedia)
                 .environment(conversation)
                 .environment(drawer)
                 .environment(drawerModels)
-                .background(WindowIdentifierSetter(identifier: "drawer"))
+                .background(WindowIdentifierSetter(identifier: "drawer", registry: contentWindows))
                 // A traffic-light close of the popped drawer must flip
                 // the console back to docked semantics (the web's
                 // heartbeat falling edge, S3) — restore the in-page
@@ -123,6 +156,72 @@ struct MortimerHostApp: App {
         }
         .windowResizability(.contentMinSize)
         .defaultSize(width: 440, height: 800)
+
+        // CC4 — value-addressed detachable content. Each panel keeps the
+        // same app-owned stores as the console and is identified by its
+        // stable legacy enum value rather than a title or screen position.
+        WindowGroup("Mortimer Panel", for: ConsolePanel.self) { $panel in
+            if let panel {
+                DetachedPanelView(panel: panel)
+                    .environmentObject(client)
+                    .environment(agentRuns)
+                    .environment(displayResults)
+                    .environment(workspace)
+                    .environment(atlas)
+                    .environment(panels)
+                    .environment(attachments)
+                    .environment(sharedMedia)
+                    .environment(sharing)
+                    .environment(conversation)
+                    .environment(displayWindow)
+                    .environment(drawer)
+                    .environment(drawerModels)
+                    .background(WindowIdentifierSetter(
+                        identifier: "panel-\(panel.rawValue)", registry: contentWindows))
+                    .onAppear { panels.detach(panel) }
+                    .onDisappear { panels.returnPanel(panel) }
+            }
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 900, height: 700)
+
+        // CC4 — bounded, value-addressed content panels. The UUID is the
+        // window identity; PanelStore owns the closed content record.
+        WindowGroup("Mortimer Content", for: ContentPanelID.self) { $panelID in
+            if let panelID {
+                ContentPanelSceneView(panelID: panelID)
+                    .environmentObject(client)
+                    .environment(agentRuns)
+                    .environment(displayResults)
+                    .environment(workspace)
+                    .environment(atlas)
+                    .environment(panels)
+                    .environment(attachments)
+                    .environment(sharedMedia)
+                    .environment(sharing)
+                    .environment(conversation)
+                    .environment(displayWindow)
+                    .environment(drawer)
+                    .environment(drawerModels)
+                    .background(WindowIdentifierSetter(
+                        identifier: "content-panel-\(panelID.rawValue.uuidString)", registry: contentWindows))
+                    .onAppear {
+                        panels.focusContent(panelID)
+                        placement?.registerContentPanel(panelID,
+                                                       screenID: panels.contentRecord(panelID)?.screenID)
+                    }
+                    .onDisappear {
+                        ScreenPlacement.shared.unregisterDetachedPanel(
+                            id: "content-panel-\(panelID.rawValue.uuidString)")
+                        if panels.contentRecord(panelID) != nil {
+                            panels.returnContent(panelID)
+                            workspace.noteConsoleMutation()
+                        }
+                    }
+            }
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 900, height: 700)
 
         Window("Message Log", id: "debug-log") {
             DebugLogView()
@@ -154,8 +253,8 @@ struct MortimerHostApp: App {
                 }
             }
             CommandMenu("Debug") {
-                Button(layoutVersion == 1 ? "Use previous layout" : "Preview adaptive layout") {
-                    layoutVersion = layoutVersion == 1 ? 0 : 1
+                Button(activeLayoutVersion == 0 ? "Preview adaptive layout" : (activeLayoutVersion == 1 ? "Preview Command Console" : "Use previous layout")) {
+                    layoutVersion = activeLayoutVersion == 0 ? 1 : (activeLayoutVersion == 1 ? 2 : 0)
                 }
                 Divider()
                 Button("Clear stored token") {
@@ -190,8 +289,14 @@ struct MortimerHostApp: App {
     private func startRoutersOnce() {
         guard !started else { return }
         started = true
-        let placement = WindowPlacement(drawer: drawer, windows: windowActions)
+        let placement = WindowPlacement(drawer: drawer, windows: windowActions,
+                                        contentWindows: contentWindows)
         self.placement = placement
+        self.consoleCoordinator = ConsoleActionCoordinator(workspace: workspace, display: displayWindow,
+                                                            placement: placement, atlas: atlas,
+                                                            panels: panels, drawer: drawer,
+                                                            sharing: sharing, attachments: attachments,
+                                                            client: client, notices: notices)
         let router = UICommandRouter(drawer: drawer, overlay: overlay, windows: windowActions,
                                      placement: placement, displayWindow: displayWindow)
         self.uiRouter = router
@@ -203,7 +308,9 @@ struct MortimerHostApp: App {
             workspace: workspace,
             conversation: conversation,
             drawer: drawer,
-            notices: notices
+            attachments: attachments,
+            notices: notices,
+            consoleCoordinator: consoleCoordinator
         )
         router.start(client: client)
         drawer.placementRef = placement
@@ -216,8 +323,9 @@ struct MortimerHostApp: App {
 /// the exact failure WindowLookup.swift documents — so we set it directly.
 struct WindowIdentifierSetter: NSViewRepresentable {
     let identifier: String
+    let registry: ContentWindowRegistry
     func makeNSView(context: Context) -> NSView {
-        WindowProbeView(identifier: identifier)
+        WindowProbeView(identifier: identifier, registry: registry)
     }
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
@@ -236,16 +344,19 @@ final class WindowProbeView: NSView {
     /// The scene id to stamp (named windowID: NSView already owns
     /// `identifier`, typed NSUserInterfaceItemIdentifier?).
     let windowID: String
+    let registry: ContentWindowRegistry
     private var configured = false
 
-    init(identifier: String) {
+    init(identifier: String, registry: ContentWindowRegistry) {
         self.windowID = identifier
+        self.registry = registry
         super.init(frame: .zero)
     }
 
     required init?(coder: NSCoder) { fatalError("unused") }
 
     private var updateObserver: NSObjectProtocol?
+    private var closeObserver: NSObjectProtocol?
     private var stripCount = 0
 
     override func viewDidMoveToWindow() {
@@ -253,8 +364,10 @@ final class WindowProbeView: NSView {
         guard let window, !configured else { return }
         configured = true
         window.identifier = NSUserInterfaceItemIdentifier(windowID)
+        registry.register(window, id: windowID)
         Self.log("attach", windowID, window)
-        Self.configure(window)
+        let isDisplayWindow = windowID == "display" || windowID.hasPrefix("display-")
+        Self.configure(window, keepsFullScreenPrimary: !isDisplayWindow)
         Self.log("configured", windowID, window)
         let id = windowID
         // MEASURED 2026-08-31 (logs/mortimerhost-window.log): the window is
@@ -268,7 +381,7 @@ final class WindowProbeView: NSView {
             forName: NSWindow.didUpdateNotification, object: window, queue: .main
         ) { [weak self, weak window] _ in
             guard let self, let window else { return }
-            if !window.collectionBehavior.contains(.fullScreenPrimary) {
+            if !isDisplayWindow && !window.collectionBehavior.contains(.fullScreenPrimary) {
                 window.collectionBehavior.insert(.fullScreenPrimary)
                 self.stripCount += 1
                 if self.stripCount <= 3 || self.stripCount % 100 == 0 {
@@ -276,11 +389,25 @@ final class WindowProbeView: NSView {
                 }
             }
         }
+        closeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: window, queue: .main
+        ) { _ in
+            Task { @MainActor in
+                ScreenPlacement.shared.unregisterDetachedPanel(id: id)
+            }
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak window] in
             guard let window else { return }
             Self.log("after-0.5s", id, window)
-            Self.configure(window)
+            Self.configure(window, keepsFullScreenPrimary: !isDisplayWindow)
             Self.log("reasserted", id, window)
+            // SwiftUI's delayed scene reconfiguration can move an auxiliary
+            // window back to the main display. Wait one more run-loop phase
+            // before reconciling so the placement owner, rather than scene
+            // defaults, wins the final frame.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                ScreenPlacement.shared.scheduleReposition()
+            }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak window] in
             guard let window else { return }
@@ -290,11 +417,23 @@ final class WindowProbeView: NSView {
 
     deinit {
         if let updateObserver { NotificationCenter.default.removeObserver(updateObserver) }
+        if let closeObserver { NotificationCenter.default.removeObserver(closeObserver) }
+        MainActor.assumeIsolated {
+            registry.unregister(id: windowID)
+        }
     }
 
-    static func configure(_ window: NSWindow) {
+    static func configure(_ window: NSWindow, keepsFullScreenPrimary: Bool = true) {
         window.styleMask.insert([.resizable, .titled, .closable, .miniaturizable])
-        window.collectionBehavior.insert(.fullScreenPrimary)
+        if keepsFullScreenPrimary {
+            window.collectionBehavior.insert(.fullScreenPrimary)
+        } else {
+            // A supporting display must stay on its assigned monitor. The
+            // primary collection behavior makes AppKit move it to the main
+            // display when SwiftUI reasserts the scene; the standard zoom
+            // button remains available without that behavior.
+            window.collectionBehavior.remove(.fullScreenPrimary)
+        }
         window.minSize = NSSize(width: 400, height: 300)
         // A maxSize equal to the current size is the one setting that
         // produces exactly "no resizing, no zoom" with a resizable mask.
@@ -361,6 +500,7 @@ final class WindowProbeView: NSView {
 /// into the app-scope WindowActions the routers use.
 private struct WindowActionsInstaller: ViewModifier {
     let actions: WindowActions
+    let panels: PanelStore
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
 
@@ -368,13 +508,23 @@ private struct WindowActionsInstaller: ViewModifier {
         content.onAppear {
             actions.open = { id in openWindow(id: id) }
             actions.dismiss = { id in dismissWindow(id: id) }
+            actions.openPanel = { panel in openWindow(value: panel) }
+            actions.dismissPanel = { panel in dismissWindow(value: panel) }
+            actions.dismissAllPanels = {
+                for panel in ConsolePanel.allCases { dismissWindow(value: panel) }
+            }
+            actions.openContentPanel = { panel in openWindow(value: panel) }
+            actions.dismissContentPanel = { panel in dismissWindow(value: panel) }
+            actions.dismissAllContentPanels = {
+                for panel in panels.contentRecords.keys { dismissWindow(value: panel) }
+            }
         }
     }
 }
 
 extension View {
-    func installWindowActions(_ actions: WindowActions) -> some View {
-        modifier(WindowActionsInstaller(actions: actions))
+    func installWindowActions(_ actions: WindowActions, panels: PanelStore) -> some View {
+        modifier(WindowActionsInstaller(actions: actions, panels: panels))
     }
 }
 

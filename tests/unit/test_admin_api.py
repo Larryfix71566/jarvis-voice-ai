@@ -45,6 +45,29 @@ def test_health(client):
     assert c.get("/api/health").json() == {"ok": True}
 
 
+def test_model_routes_exposes_policy_without_secret_values(client, monkeypatch):
+    c, _ = client
+    monkeypatch.setenv("SAYGM_API_KEY", "do-not-return")
+    body = c.get("/api/model-routes").json()
+    assert body["ok"] is True
+    assert body["routes"]["saygm"]["key_present"] is True
+    assert body["workloads"]["memory"]["privacy"] == "confidential"
+    assert "do-not-return" not in str(body)
+
+
+def test_model_routes_stage_and_confirm(client):
+    c, _ = client
+    draft = c.post("/api/model-routes/stage", json={
+        "workload": "developer", "profile": "claude-opus", "route": "direct_api",
+    }).json()
+    assert draft["ok"] is True
+    confirmed = c.post("/api/model-routes/confirm", json={
+        "draft_id": draft["draft_id"],
+    }).json()
+    assert confirmed["ok"] is True
+    assert any(item["workload"] == "developer" for item in c.get("/api/model-routes").json()["preferences"])
+
+
 def test_status_endpoint(client):
     c, _ = client
     body = c.get("/api/git/status").json()
@@ -172,13 +195,37 @@ class TestMemoryEndpoints:
     def test_memory_overview_lists_facts_and_summary(self, client):
         c, _ = client
         run_migrations()
+        from jarvis.db import now_iso
         with get_conn() as conn:
             upsert_fact(conn, "user.name", "Larry", "s1")
             set_summary(conn, "Discussed the upgrade plan.", "s1")
+            conn.execute(
+                "UPDATE memories SET subject=?, scope=?, memory_type=?, provenance=?, "
+                "evidence_status=?, confidence=?, source_turn_id=?, content_revision=?, "
+                "classifier_version=?, classified_at=?, supersedes_id=? WHERE key=?",
+                ("user", "global", "explicit_preference", "user", "explicit", 0.97,
+                 "turn-7", 2, "b1", now_iso(), 41, "user.name"),
+            )
+            conn.execute(
+                "INSERT INTO memory_recall_events(session_id, source_turn, key, outcome, created_at, user_id) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                ("s2", 8, "user.name", "used_for", now_iso(), "local"),
+            )
 
         body = c.get("/api/memory").json()
-        assert body["facts"][0]["key"] == "user.name"
-        assert body["facts"][0]["content"] == "Larry"
+        fact = body["facts"][0]
+        assert fact["key"] == "user.name"
+        assert fact["content"] == "Larry"
+        assert fact["scope"] == "global"
+        assert fact["memory_type"] == "explicit_preference"
+        assert fact["provenance"] == "user"
+        assert fact["evidence_status"] == "explicit"
+        assert fact["confidence"] == pytest.approx(0.97)
+        assert fact["source_turn_id"] == "turn-7"
+        assert fact["content_revision"] == 2
+        assert fact["classifier_version"] == "b1"
+        assert fact["supersedes_id"] == 41
+        assert fact["used_for_count"] == 1
         assert body["summary"] == "Discussed the upgrade plan."
         assert body["usage"]["fact_count"] == 1
 

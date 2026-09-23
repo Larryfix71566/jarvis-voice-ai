@@ -21,7 +21,7 @@ struct MemoryGraphMetadata: Codable {
         camera.offset.x = min(1_000_000, max(-1_000_000, camera.offset.x))
         camera.offset.y = min(1_000_000, max(-1_000_000, camera.offset.y))
         positions = Dictionary(uniqueKeysWithValues: positions.sorted { $0.key < $1.key }
-            .filter { $0.value.x.isFinite && $0.value.y.isFinite && abs($0.value.x) < 1_000_000 && abs($0.value.y) < 1_000_000 }
+            .filter { $0.value.x.isFinite && $0.value.y.isFinite && abs($0.value.x) <= 1_000_000 && abs($0.value.y) <= 1_000_000 }
             .prefix(MemoryGraphResponse.nodeLimit).map { ($0.key, $0.value) })
     }
 }
@@ -51,6 +51,7 @@ final class MemoryGraphStore {
     @ObservationIgnored private var request: Task<Void, Never>?
     @ObservationIgnored private var detailRequest: Task<Void, Never>?
     @ObservationIgnored private var resetRequest: Task<Void, Never>?
+    @ObservationIgnored private var lastFetch: (@Sendable (MemoryGraphQuery) async throws -> MemoryGraphResponse)?
     private struct HistoryEntry {
         let graph: MemoryGraphResponse?
         let metadata: MemoryGraphMetadata
@@ -111,6 +112,7 @@ final class MemoryGraphStore {
     /// Injectable read seam for cancellation and stale-response tests.
     func load(query: MemoryGraphQuery? = nil, remember: Bool = false,
               fetch: @escaping @Sendable (MemoryGraphQuery) async throws -> MemoryGraphResponse) {
+        lastFetch = fetch
         hasRequested = true
         if remember {
             history.append(HistoryEntry(graph: graph, metadata: metadata, selectedEdge: selectedEdge,
@@ -161,6 +163,15 @@ final class MemoryGraphStore {
         }
     }
 
+    /// Re-run the most recent graph request through the same injected API
+    /// closure. Retry is explicit and never fabricates a graph on failure.
+    @discardableResult
+    func retry() -> Bool {
+        guard let lastFetch else { return false }
+        load(query: metadata.query, remember: false, fetch: lastFetch)
+        return true
+    }
+
     func cancel() {
         imageFallback.cancel()
         generation += 1
@@ -190,6 +201,25 @@ final class MemoryGraphStore {
         selectedEdge = nil; fullDetail = nil; detailError = nil; showsInspector = true
         detailRequest?.cancel(); detailLoading = false
         persist()
+    }
+
+    /// Focus a loaded node and, when a depth is supplied, repeat the existing
+    /// authenticated graph request at that depth. The request closure is the
+    /// same one used for the current graph; no alternate data source is
+    /// invented for a voice command.
+    @discardableResult
+    func focus(_ id: String, depth: Int? = nil) -> Bool {
+        guard graph?.nodes.contains(where: { $0.id == id }) == true else { return false }
+        if let depth, !(1...4).contains(depth) { return false }
+        select(id)
+        centerSelection()
+        guard let depth, depth != metadata.query.depth else { return true }
+        guard let fetch = lastFetch else { return false }
+        var query = metadata.query
+        query.focus = id
+        query.setDepth(depth)
+        load(query: query, remember: true, fetch: fetch)
+        return true
     }
 
     func select(edge: MemoryGraphEdge) { selectedEdge = edge; showsInspector = true }
@@ -223,20 +253,41 @@ final class MemoryGraphStore {
     func traceToSelection() { pathEnd = metadata.selectedID }
     func clearPath() { pathStart = nil; pathEnd = nil }
 
-    func setNodeType(_ type: String, visible: Bool) {
+    @discardableResult
+    func setNodeType(_ type: String, visible: Bool) -> Bool {
+        guard graph?.nodes.contains(where: { $0.type == type }) == true else { return false }
         if visible { metadata.hiddenNodeTypes.remove(type) } else { metadata.hiddenNodeTypes.insert(type) }
         persist()
+        return true
     }
 
-    func setEdgeType(_ type: String, visible: Bool) {
+    @discardableResult
+    func setEdgeType(_ type: String, visible: Bool) -> Bool {
+        guard graph?.edges.contains(where: { $0.type == type }) == true else { return false }
         if visible { metadata.hiddenEdgeTypes.remove(type) } else { metadata.hiddenEdgeTypes.insert(type) }
         persist()
+        return true
     }
 
     func toggleGroup(_ type: String) {
         if metadata.collapsedTypes.contains(type) { metadata.collapsedTypes.remove(type) }
         else { metadata.collapsedTypes.insert(type) }
         persist()
+    }
+    @discardableResult
+    func setGroup(_ type: String, collapsed: Bool) -> Bool {
+        guard graph?.nodes.contains(where: { $0.type == type }) == true else { return false }
+        if collapsed { metadata.collapsedTypes.insert(type) }
+        else { metadata.collapsedTypes.remove(type) }
+        persist()
+        return true
+    }
+    @discardableResult
+    func setPath(start: String, end: String) -> Bool {
+        guard start != end, let nodes = graph?.nodes.map(\.id),
+              nodes.contains(start), nodes.contains(end) else { return false }
+        pathStart = start; pathEnd = end; persist()
+        return true
     }
 
     func setCamera(_ camera: GraphCamera, save: Bool = true) {
@@ -245,6 +296,38 @@ final class MemoryGraphStore {
         metadata.camera = camera; metadata.validate(); needsFit = false
         if save { persist() }
     }
+
+    /// Console adapters use the same camera and filter setters as pointer
+    /// gestures. Keeping these operations here prevents a second graph state
+    /// owner for voice commands.
+    func setSearch(_ value: String) { search = String(value.prefix(200)) }
+    @discardableResult
+    func zoom(_ direction: String) -> Bool {
+        var camera = metadata.camera
+        switch direction {
+        case "in": camera.zoom(1.25)
+        case "out": camera.zoom(0.8)
+        case "reset": camera = GraphCamera()
+        default: return false
+        }
+        setCamera(camera)
+        return true
+    }
+    @discardableResult
+    func pan(_ direction: String, amount: CGFloat = 80) -> Bool {
+        guard amount.isFinite, amount > 0 else { return false }
+        var camera = metadata.camera
+        switch direction {
+        case "up": camera.offset.y += amount
+        case "down": camera.offset.y -= amount
+        case "left": camera.offset.x += amount
+        case "right": camera.offset.x -= amount
+        default: return false
+        }
+        setCamera(camera)
+        return true
+    }
+    func setInspector(_ open: Bool) { showsInspector = open; persist() }
     func fit(size: CGSize) {
         // SwiftUI may report zero before layout, or all nodes may temporarily
         // be grouped/filtered. Neither consumes the pending initial fit.
@@ -256,13 +339,16 @@ final class MemoryGraphStore {
         setCamera(camera)
     }
     func saveView() { persist() }
-    func moveNode(_ id: String, to point: CGPoint, save: Bool = true) {
+    @discardableResult
+    func moveNode(_ id: String, to point: CGPoint, save: Bool = true) -> Bool {
         guard graph?.nodes.contains(where: { $0.id == id }) == true,
-              point.x.isFinite, point.y.isFinite else { return }
+              point.x.isFinite, point.y.isFinite,
+              abs(point.x) <= 1_000_000, abs(point.y) <= 1_000_000 else { return false }
         metadata.positions[id] = point
         layoutRevision += 1
         resetRequest?.cancel(); resetRequest = nil
         if save { persist() }
+        return true
     }
 
     func resetLayout() {

@@ -41,6 +41,26 @@ struct MemoryReviewResolveIn: Encodable {
     }
 }
 
+/// Typed request bodies for the draft-confirmed model route preference flow.
+public struct ModelRoutePreferenceStage: Encodable, Sendable {
+    public let workload: String
+    public let profile: String
+    public let route: String
+    public let privacy: String?
+    public init(workload: String, profile: String, route: String, privacy: String? = nil) {
+        self.workload = workload
+        self.profile = profile
+        self.route = route
+        self.privacy = privacy
+    }
+}
+
+public struct ModelRoutePreferenceConfirm: Encodable, Sendable {
+    public let draftId: String
+    public init(draftId: String) { self.draftId = draftId }
+    enum CodingKeys: String, CodingKey { case draftId = "draft_id" }
+}
+
 /// N14: a typed wrapper over exactly the routes the drawer tabs call
 /// today. Seventeen methods for seventeen routes (fourteen tab
 /// groupings, review F10). Response bodies are JSONValue (a deliberate,
@@ -51,6 +71,7 @@ struct MemoryReviewResolveIn: Encodable {
 /// them.
 public struct AdminAPI: Sendable {
     let config: JarvisConfig
+    let graphImageRequests = GraphImageRequests()
     // Internal read-test seam. Production creates its own transient session.
     let graphSession: URLSession?
     public init(config: JarvisConfig) { self.config = config; self.graphSession = nil }
@@ -94,6 +115,16 @@ public struct AdminAPI: Sendable {
     public func selfeditRun(goal: String?, profile: String?, plan: String?, stagingId: String?) async throws -> JSONValue {
         let body = GoalIn(goal: goal ?? "", profile: profile, plan: plan, stagingId: stagingId)
         return try await post("api/selfedit/run", body: body)
+    }
+
+    // MARK: Model access
+    /// Route metadata contains availability flags only; it never returns secrets.
+    public func modelRoutes() async throws -> JSONValue { try await get("api/model-routes") }
+    public func stageModelRoute(_ preference: ModelRoutePreferenceStage) async throws -> JSONValue {
+        try await post("api/model-routes/stage", body: preference)
+    }
+    public func confirmModelRoute(draftId: String) async throws -> JSONValue {
+        try await post("api/model-routes/confirm", body: ModelRoutePreferenceConfirm(draftId: draftId))
     }
 
     // MARK: Memory
@@ -198,6 +229,28 @@ public struct GitStatus: Codable, Sendable {
         changedFiles = try c.decodeIfPresent([String].self, forKey: .changedFiles) ?? []
         ahead = try c.decodeIfPresent(Int.self, forKey: .ahead) ?? 0
         behind = try c.decodeIfPresent(Int.self, forKey: .behind) ?? 0
+    }
+}
+
+/// The read-only checked-in architecture contract shown in the Repo sidecar.
+/// `sha256` identifies the exact document without exposing repository internals
+/// or creating a second source of truth in the native client.
+public struct ArchitectureReference: Codable, Sendable {
+    public let ok: Bool
+    public let path: String
+    public let content: String
+    public let sha256: String?
+    public let truncated: Bool
+    public let error: String?
+    enum CodingKeys: String, CodingKey { case ok, path, content, sha256, truncated, error }
+    public init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        ok = try c.decodeIfPresent(Bool.self, forKey: .ok) ?? false
+        path = try c.decodeIfPresent(String.self, forKey: .path) ?? "docs/ARCHITECTURE.md"
+        content = try c.decodeIfPresent(String.self, forKey: .content) ?? ""
+        sha256 = try c.decodeIfPresent(String.self, forKey: .sha256)
+        truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated) ?? false
+        error = try c.decodeIfPresent(String.self, forKey: .error)
     }
 }
 
@@ -307,24 +360,59 @@ public struct SelfEditStatus: Codable, Sendable {
 // MARK: Memory (P4)
 
 public struct MemoryFact: Codable, Sendable {
+    public let id: Int
     public let key: String
     public let content: String
     public let sourceSessionId: String?      // nullable in SQL
     public let updatedAt: String
     public let tier: String
     public let audience: String
+    public let subject: String
+    public let scope: String
+    public let memoryType: String
+    public let provenance: String
+    public let evidenceStatus: String
+    public let confidence: Double
+    public let validFrom: String?
+    public let validUntil: String?
+    public let sourceTurnId: String?
+    public let contentRevision: Int
+    public let classifierVersion: String
+    public let classifiedAt: String?
+    public let supersedesId: Int?
+    public let usedForCount: Int
     enum CodingKeys: String, CodingKey {
-        case key, content, tier, audience
+        case id, key, content, tier, audience, subject, scope, provenance, confidence
+        case memoryType = "memory_type", evidenceStatus = "evidence_status"
+        case validFrom = "valid_from", validUntil = "valid_until"
+        case sourceTurnId = "source_turn_id", contentRevision = "content_revision"
+        case classifierVersion = "classifier_version", classifiedAt = "classified_at"
+        case supersedesId = "supersedes_id", usedForCount = "used_for_count"
         case sourceSessionId = "source_session_id", updatedAt = "updated_at"
     }
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(Int.self, forKey: .id) ?? 0
         key = try c.decodeIfPresent(String.self, forKey: .key) ?? ""
         content = try c.decodeIfPresent(String.self, forKey: .content) ?? ""
         sourceSessionId = try c.decodeIfPresent(String.self, forKey: .sourceSessionId)
         updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt) ?? ""
         tier = try c.decodeIfPresent(String.self, forKey: .tier) ?? ""
         audience = try c.decodeIfPresent(String.self, forKey: .audience) ?? ""
+        subject = try c.decodeIfPresent(String.self, forKey: .subject) ?? ""
+        scope = try c.decodeIfPresent(String.self, forKey: .scope) ?? "global"
+        memoryType = try c.decodeIfPresent(String.self, forKey: .memoryType) ?? "fact"
+        provenance = try c.decodeIfPresent(String.self, forKey: .provenance) ?? "user"
+        evidenceStatus = try c.decodeIfPresent(String.self, forKey: .evidenceStatus) ?? "unknown"
+        confidence = try c.decodeIfPresent(Double.self, forKey: .confidence) ?? 0
+        validFrom = try c.decodeIfPresent(String.self, forKey: .validFrom)
+        validUntil = try c.decodeIfPresent(String.self, forKey: .validUntil)
+        sourceTurnId = try c.decodeIfPresent(String.self, forKey: .sourceTurnId)
+        contentRevision = try c.decodeIfPresent(Int.self, forKey: .contentRevision) ?? 1
+        classifierVersion = try c.decodeIfPresent(String.self, forKey: .classifierVersion) ?? "legacy-v1"
+        classifiedAt = try c.decodeIfPresent(String.self, forKey: .classifiedAt)
+        supersedesId = try c.decodeIfPresent(Int.self, forKey: .supersedesId)
+        usedForCount = try c.decodeIfPresent(Int.self, forKey: .usedForCount) ?? 0
     }
 }
 
@@ -774,6 +862,9 @@ public extension AdminAPI {
     // Repo (P2). Draft→confirm is TWO methods, never one (C4): the view
     // holds the returned actionId between the two explicit user actions.
     func gitStatusTyped() async throws -> GitStatus { try await getDecoded("api/git/status") }
+    func architectureReference() async throws -> ArchitectureReference {
+        try await getDecoded("api/architecture")
+    }
     func prepareCommit(message: String) async throws -> GitDraft {
         try await postDecoded("api/git/prepare-commit", body: MessageIn(message: message))
     }

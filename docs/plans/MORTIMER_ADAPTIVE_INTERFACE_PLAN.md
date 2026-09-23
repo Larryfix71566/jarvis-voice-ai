@@ -3,8 +3,8 @@
 **Status:** IMPLEMENTATION IN PROGRESS; NO RELEASE ACCEPTANCE. See `docs/acceptance/adaptive-interface/` for measured progress and open gates.
 
 **2026-09-17:** the adaptive layout is now the DEFAULT (`layoutVersion` 1, closure item C9.5 / gap G30). `Debug ▸ Use previous layout` is retained for one release. C8 acceptance is still unrun — its unexercised rows are accepted as known limitations in `docs/acceptance/adaptive-interface/C8-open-items.md` under Gate G-C8's written-acceptance route, which is not the same as acceptance having been performed.
-**Current reviewed application source:** `5faa2e6` on
-`docs/wave-and-agent-recovery`, 2026-09-17 (PR #76, still open at review).
+**Current reviewed application source:** `e6b34cf` on `main`, 2026-09-17
+(PR #76 merged). The release consolidation remains under review in PR #80.
 The running app's exact compiled revision is not established by that source
 identity. See `docs/acceptance/adaptive-interface/RELEASE_READINESS.md` for
 separate merge, verification, deployment and acceptance evidence.
@@ -14,6 +14,15 @@ layout. It must not be used to identify the current build. Later native
 sessions and the adaptive default decision are recorded in C6/C7 and
 `C8-open-items.md`; C8 itself remains unrun.
 **Scope:** Native MortimerHost interface, dual-speaker Silo feedback, central results, interactive memory graph, preserved sidecar, automatic monitor adaptation.
+
+**September 18 visual amendment:** the compact Command Center voice region now
+uses an atom-style treatment derived from the Silo signal: a shared luminous
+nucleus with two tilted orbital planes. Teal represents measured user input
+and warm orange represents measured Mortimer output; both channels remain
+independent during overlap. The legacy layered Silo renderer remains available
+through the rollback layouts. Missing audio stays static and truthful, and
+Reduce Motion disables orbital motion. The implementation and rendering
+receipt is `docs/acceptance/adaptive-interface/receipts/candidate-atom-wave-2026-09-18.md`.
 **Baseline inspected:** repository commit `2ccf66cd7e00b82cf9136d2cd00f42e9bddb90af` (PR #63), 2026-09-10. Recheck the actual starting commit before implementation.
 **Owner:** Larry. Implementation may be assigned to a coding model one phase at a time. This document authorizes no application-code change by itself.
 **Safety claim:** This plan reduces regression risk through explicit contracts, independent verification, staged rollout and rollback. It does not promise zero regressions. An unmeasured or untested requirement remains open.
@@ -26,7 +35,7 @@ Decisions, in precedence order:
 
 1. **Preserve every existing sidecar tab and its contents.** Larry's final clarification supersedes any earlier suggestion to replace the sidecar with a contextual inspector.
 2. **Fix the sidecar header:** horizontally scrollable labels at readable natural widths, overflow arrows, selected-tab visibility, and an unmistakable active state. Never squeeze, wrap, or shrink labels to fit.
-3. **One Silo wave, two speaker colors:** teal for Larry's microphone input; violet for Mortimer's spoken output. Status text supplements color. The waveform must indicate actual activity, not invented confirmation of understanding.
+3. **One Silo wave, two speaker colors:** teal for Larry's microphone input; warm orange for Mortimer's spoken output. Status text supplements color. The waveform must indicate actual activity, not invented confirmation of understanding.
 4. **Remove the decorative central M.O.R.T.I.M.E.R. lettering.** Keep a small Mortimer name near the wave or top bar. Do not invent an acronym.
 5. **Central results:** research, text, sources, images, documents, maps and memory exploration use the main area. Results remain available after speech ends. Support explicit comparison and pinning.
 6. **Contextual details complement the sidecar.** They show sources or selected graph items without replacing, closing, or switching the existing sidecar.
@@ -108,6 +117,25 @@ Conversation presentation uses a large wave only when the user has returned to c
 
 At compact widths, use a shallow bottom wave instead of a left rail if necessary to preserve a readable center. This is the responsive form of the same feature, not an alternate app. User can choose to keep the compact voice region even during conversation. Optional comparison uses two panes on wide windows and switchable A/B tabs when space is insufficient.
 
+**Startup presentation amendment (2026-09-17).** The compact conversation
+presentation is the default on launch; the user's expand/collapse choice is
+still persisted. Its bottom voice region remains shallow, but the waveform
+gets a responsive 220–280 point slot so the measured user/assistant lobe stays
+legible. When no fresh level is available, Mortimer speaking remains a static,
+truthful trace labelled unavailable; the connected listening-ready state keeps
+a low-energy motion so the interface does not appear frozen between turns.
+
+**Depth-ribbon amendment (2026-09-18).** The adaptive measured wave keeps the
+Silo sine silhouette but adds a shallow five-layer parallax ribbon: rear echoes,
+a primary trace, a foreground filament, a measured attack-driven forward push,
+and a restrained volumetric halo. Mortimer's warm orange output receives a modest
+depth multiplier so it reads as a distinct responding presence while Larry's
+teal input remains the immediate foreground signal. Depth is derived only from
+the smoothed measured envelope and its positive attack; missing or silent
+audio produces zero depth and remains the static truthful trace. The rollback
+layout retains its original three-layer geometry. Frequency-band analysis and
+full 3D/Metal rendering remain deferred until a later measured-audio phase.
+
 ### 4.2 Sidecar header
 
 Only the tab strip scrolls horizontally. Pop-out, close and overflow arrows occupy fixed header positions and cannot scroll out of reach. Labels have intrinsic width, one line and no text scaling/truncation. Trackpad, wheel and keyboard navigation work; arrow controls appear only when overflow exists and are disabled at their respective ends.
@@ -116,7 +144,7 @@ Selecting a tab by click, keyboard, restored preference or voice command brings 
 
 ### 4.3 Voice state and color
 
-Retain one recognizable Silo silhouette. Teal identifies user input; violet identifies Mortimer output. Labels, icons and actual transcript provide meaning independent of color. Exact palette values are proposed in §7 and require contrast verification.
+Retain one recognizable Silo silhouette. Teal identifies user input; warm orange identifies Mortimer output. Labels, icons and actual transcript provide meaning independent of color. Exact palette values are proposed in §7 and require contrast verification.
 
 Connection and microphone status are orthogonal to speaker activity:
 
@@ -124,10 +152,10 @@ Connection and microphone status are orthogonal to speaker activity:
 - Connecting: neutral connecting animation, not a speech envelope.
 - Connected, mic enabled, no activity: Listening; quiet neutral trace.
 - User input activity: teal, driven by measured eligible microphone level. Label **Hearing you**. This means audio detected, not transcription accepted or identity verified.
-- AI playback activity: violet, driven by measured output audio aligned with actual playout. Label **Mortimer speaking**.
+- AI playback activity: warm orange, driven by measured output audio aligned with actual playout. Label **Mortimer speaking**.
 - Simultaneous speech/barge-in: teal gets visual priority immediately while AI activity remains indicated by a small label until the actual interrupted/stopped event arrives. The visualizer does not trigger or suppress interruption itself.
-- Thinking: a gentle violet pulse only while the existing thinking/work state says processing is active and neither voice is active. Silence alone must never trigger Thinking. Background specialist work retains its own progress indicator.
-- Mic muted: user envelope is zero and Muted stays visible; AI speech can still animate violet. Wake-word armed status remains distinct from ordinary capture.
+- Thinking: a gentle warm orange pulse only while the existing thinking/work state says processing is active and neither voice is active. Silence alone must never trigger Thinking. Background specialist work retains its own progress indicator.
+- Mic muted: user envelope is zero and Muted stays visible; AI speech can still animate warm orange. Wake-word armed status remains distinct from ordinary capture.
 
 If metering is unavailable, use an honest static speaking/listening indicator with **Audio level unavailable** in its accessible detail. Never relabel the old random envelope as measured audio. This fallback is for runtime resilience; it does not count as implementing dual-speaker metering.
 
@@ -191,7 +219,7 @@ No server protocol change is assumed for central results or graph rendering. If 
 
 These are proposed design defaults/acceptance targets, **not measured baseline results**. Keep one source of truth in AppTuning or a dedicated audio-presentation tuning type. Validate with phase 0 measurements; if a target is infeasible, report the measured conflict and revise this plan explicitly. Do not silently loosen a gate.
 
-- User teal `#2DD4BF`, AI violet `#A78BFA`; verify text contrast on the actual theme and supply labels/icons. Do not recolor existing warning/error semantics.
+- User teal `#2DD4BF`, AI warm orange `#E07020`; verify text contrast on the actual theme and supply labels/icons. Do not recolor existing warning/error semantics.
 - Wide layout starts at 1,180 logical points; below it use compact voice placement. Initial left rail 200 points; minimum usable results width 480 points. Preserve the existing 900×600 app minimum; any smaller supported size is an additional tested case.
 - Inspector initial width 300 points only when it fits; otherwise overlay. Existing drawer width limits/preferences remain authoritative.
 - Tab label text initial 11 points (amended 2026-09-12 by MORTIMER_ADAPTIVE_INTERFACE_CLOSURE_PLAN C1.3: 11 pt is the Standard size Larry accepted live on 2026-09-11 with the Aa menu offering 16 and 22 pt; the baseline was 10 pt), minimum control height 32 points. Accessibility text scaling must scroll, not shrink. Existing labels remain intact.
@@ -287,7 +315,7 @@ Record screenshots and interaction outcomes for:
 
 With the same setup before and after: built-in speakers/mic, headphones, AirPods, available alternate input/output devices; muted and PTT; quiet/loud speech; TV/background noise; AI-only playback; user interruption while AI speaks; output-device switch; disconnect/reconnect; sleep/wake; mic permission denial.
 
-Pass requires measured timely teal/violet responses, no AI echo falsely presented as user speech in controlled echo-only trials, unchanged pitch/speed and intelligibility, preserved wake/mute/PTT and interruption behavior, no duplicate audio session and no new lost requests. User voice activation must still work during AI playback; suppressing all input while the AI speaks is a failure. Record perceived quality and timing results separately. Unavailable devices produce a pending hardware row, not a green check.
+Pass requires measured timely teal/orange responses, no AI echo falsely presented as user speech in controlled echo-only trials, unchanged pitch/speed and intelligibility, preserved wake/mute/PTT and interruption behavior, no duplicate audio session and no new lost requests. User voice activation must still work during AI playback; suppressing all input while the AI speaks is a failure. Record perceived quality and timing results separately. Unavailable devices produce a pending hardware row, not a green check.
 
 ### 9.4 Real monitor acceptance
 

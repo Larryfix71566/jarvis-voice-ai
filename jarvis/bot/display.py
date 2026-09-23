@@ -119,6 +119,7 @@ def build_display_payload(
     tool: str,
     arguments: dict[str, Any],
     result_str: str,
+    run_id: str | None = None,
 ) -> dict | None:
     """Format a tool result as a display payload, or None to stay voice-only."""
     if tool not in DISPLAY_TOOLS:
@@ -157,6 +158,7 @@ def build_display_payload(
         "basemap_images": basemap_images,
         "links": links,
         "agent": display_name or agent,
+        "run_id": run_id or None,
         "ts": time.time(),
         "surface": DISPLAY_SURFACE.get(tool, DEFAULT_DISPLAY_SURFACE),
         # MORTIMER_ENGAGEMENT_DESIGN_PLAN.md E1 — additive (same D36
@@ -492,7 +494,8 @@ class WeatherReportMerger:
         if not run_id or tool not in ("get_weather", "get_weather_radar"):
             return None
         slot = self._pending.setdefault(
-            run_id, {"agent": agent, "display_name": display_name})
+            run_id, {"agent": agent, "display_name": display_name,
+                     "run_id": run_id})
         try:
             data = json.loads(result_str)
         except (json.JSONDecodeError, TypeError):
@@ -522,4 +525,5 @@ class WeatherReportMerger:
         return build_display_payload(
             slot.get("agent", ""), slot.get("display_name", ""),
             "weather_report", {}, json.dumps({"weather": weather, "radar": radar}),
+            run_id=slot.get("run_id"),
         )

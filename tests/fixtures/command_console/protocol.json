@@ -1,0 +1,12 @@
+{
+  "type": "console/request",
+  "version": 1,
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "generation": "00000000-0000-4000-8000-000000000002",
+  "request_id": "00000000-0000-4000-8000-000000000003",
+  "revision": 0,
+  "action": "inventory",
+  "target": null,
+  "secondary_target": null,
+  "args": {}
+}

@@ -76,7 +76,7 @@ struct GraphImageView: View {
     /// `.task(id:)` below restarts (cancelling its debounce sleep) on
     /// every change, which is the debounce.
     private var settleKey: String {
-        "\(Int(viewport.width.rounded()))x\(Int(viewport.height.rounded()))|\(isResizing)"
+        "\(baseURL.absoluteString)|\(scale)|\(Int(viewport.width.rounded()))x\(Int(viewport.height.rounded()))|\(isResizing)"
     }
 
     var body: some View {
@@ -110,9 +110,9 @@ struct GraphImageView: View {
     private func settle() async {
         if isResizing { return }
         if viewport.width < 1 || viewport.height < 1 {
-            if targetURL == nil {
+            if targetURL != baseURL {
                 try? await Task.sleep(nanoseconds: 500_000_000)
-                guard !Task.isCancelled, targetURL == nil else { return }
+                guard !Task.isCancelled else { return }
                 targetURL = baseURL   // never measured: the sidecar's default size
             }
             return

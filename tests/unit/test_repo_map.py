@@ -5,7 +5,13 @@ UpgradeAgent use (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md G5).
 from __future__ import annotations
 
 import jarvis.repo_map as repo_map_module
-from jarvis.repo_map import REPO_MAP_MAX_CHARS, load_repo_map_suffix
+from jarvis.repo_map import (
+    ARCHITECTURE_MAX_CHARS,
+    REPO_MAP_MAX_CHARS,
+    load_architecture_document,
+    load_architecture_suffix,
+    load_repo_map_suffix,
+)
 
 
 def test_returns_empty_string_when_missing(tmp_path, monkeypatch):
@@ -39,6 +45,25 @@ def test_custom_max_chars_respected(tmp_path, monkeypatch):
     suffix = load_repo_map_suffix(max_chars=10)
     injected = suffix.split("verify with tools before writing):\n")[1]
     assert len(injected) == 10
+
+
+def test_architecture_reference_is_bounded_and_marks_truncation(tmp_path, monkeypatch):
+    (tmp_path / "docs").mkdir()
+    content = "# Architecture\n" + ("x" * (ARCHITECTURE_MAX_CHARS + 50))
+    (tmp_path / "docs" / "ARCHITECTURE.md").write_text(content)
+    monkeypatch.setattr(repo_map_module, "__file__", str(tmp_path / "jarvis" / "repo_map.py"))
+    visible, truncated = load_architecture_document(ARCHITECTURE_MAX_CHARS)
+    assert truncated is True
+    assert len(visible) == ARCHITECTURE_MAX_CHARS
+    suffix = load_architecture_suffix(ARCHITECTURE_MAX_CHARS)
+    assert "Architecture reference" in suffix
+    assert "truncated" in suffix
+
+
+def test_architecture_reference_missing_is_safe(tmp_path, monkeypatch):
+    monkeypatch.setattr(repo_map_module, "__file__", str(tmp_path / "jarvis" / "repo_map.py"))
+    assert load_architecture_document() == ("", False)
+    assert load_architecture_suffix() == ""
 
 
 def test_repo_map_under_cap_and_names_phase_modules():

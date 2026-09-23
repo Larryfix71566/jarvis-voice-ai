@@ -64,8 +64,6 @@ import json
 import logging
 from typing import Any, Callable
 
-from openai import AsyncOpenAI
-
 from jarvis.config import Settings
 from jarvis.consolidate import DUPLICATE_THRESHOLD
 from jarvis.db import get_conn, now_iso
@@ -80,6 +78,7 @@ from jarvis.memory import (
 )
 from jarvis.procedures import _overlap_score, _tokens
 from jarvis.usage_ledger import provider_from_base_url, record_completion
+from jarvis.memory_model import make_memory_async_client
 
 logger = logging.getLogger(__name__)
 
@@ -336,12 +335,15 @@ async def extract_from_exchange(
             f"USER: {user_content[:MAX_ROW_CHARS]}\n"
             f"MORTIMER: {assistant_content[:MAX_ROW_CHARS]}"
         )
-        client = (
-            client_factory(settings) if client_factory is not None
-            else AsyncOpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url)
-        )
+        if client_factory is not None:
+            # Test seam only; production uses JARVIS_MEMORY_PROFILE.
+            client = client_factory(settings)
+            model = settings.openai_model
+        else:
+            client, route = make_memory_async_client(settings)
+            model = route.model
         response = await client.chat.completions.create(
-            model=settings.openai_model,
+            model=model,
             messages=[
                 {"role": "system", "content": EXCHANGE_EXTRACTION_PROMPT},
                 {"role": "user", "content": exchange_text},
@@ -351,7 +353,7 @@ async def extract_from_exchange(
             record_completion(
                 rung="memory_extraction",
                 provider=provider_from_base_url(str(client.base_url)),
-                model=settings.openai_model,
+                model=model,
                 response=response,
                 session_id=session_id,
             )

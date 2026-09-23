@@ -25,16 +25,120 @@ import logging
 import os
 import re
 import sqlite3
+from datetime import datetime, timezone
 from typing import Any, Callable
-
-from openai import AsyncOpenAI
 
 from jarvis.config import Settings
 from jarvis.db import get_conn, now_iso
 from jarvis.sensitive import detect_financial
 from jarvis.usage_ledger import record_completion, provider_from_base_url
+from jarvis.memory_automation import Classification, EvidenceStatus, retrieval_rank, enqueue_maintenance
+from jarvis.tenant import current_user_id
+from jarvis.memory_model import make_memory_async_client
 
 logger = logging.getLogger(__name__)
+
+
+def apply_automation_classification(conn: sqlite3.Connection, memory_id: int,
+                                    classification: Classification,
+                                    *, policy_version: str,
+                                    source_turn_id: str | None = None) -> bool:
+    """Apply only validated presentation metadata; never changes content."""
+    if classification.evidence_status is EvidenceStatus.DISPUTED:
+        # Disputes are retained and excluded from retrieval; they are never
+        # silently archived or deleted.
+        pass
+    row = conn.execute("SELECT content_revision FROM memories WHERE id=? AND kind='fact'", (memory_id,)).fetchone()
+    if row is None:
+        return False
+    conn.execute(
+        """UPDATE memories SET subject=?, scope=?, memory_type=?, provenance=?,
+           evidence_status=?, confidence=?, source_turn_id=?,
+           classifier_version=?, classified_at=? WHERE id=?""",
+        (classification.subject, classification.scope.value,
+         classification.memory_type.value, classification.provenance.value,
+         classification.evidence_status.value, classification.confidence,
+         source_turn_id or (classification.evidence[0] if classification.evidence else None),
+         policy_version, now_iso(), memory_id),
+    )
+    return True
+
+
+def retrieve_automated_memory_context(conn: sqlite3.Connection, query: str, *,
+                                      subject: str | None = None,
+                                      project: str | None = None,
+                                      limit: int = 20,
+                                      max_chars: int = 1600,
+                                      session_id: str | None = None,
+                                      source_turn: int | None = None) -> list[dict]:
+    """Return relevant, non-disputed memories with stable policy ordering.
+
+    When a live session supplies ``session_id``, the selected IDs are also
+    recorded as ``used_for`` events. The event stores only the query label,
+    never the rendered prompt or attachment contents.
+    """
+    if not query or not 1 <= limit <= 20 or max_chars < 1:
+        return []
+    rows = conn.execute(
+        """SELECT id,key,content,scope,memory_type,provenance,evidence_status,
+           confidence,source_turn_id,supersedes_id,updated_at,valid_from,valid_until
+           FROM memories WHERE kind='fact' AND user_id=? AND COALESCE(archived_at,'')=''
+           AND COALESCE(evidence_status,'unknown') != 'disputed'"""
+        , (current_user_id(),)).fetchall()
+    now = datetime.now(timezone.utc)
+    q = set(query.lower().split())
+    ranked = []
+    for row in rows:
+        # Quoted external material is source content, never a standing
+        # instruction. Unknown/tentative entries may be inspected only when
+        # the caller names the exact subject or project; they cannot leak into
+        # unrelated task context while classification is still uncertain.
+        if row["provenance"] == "quoted_document":
+            continue
+        words = set(row["content"].lower().split()) | set((row["key"] or "").lower().split("."))
+        if row["valid_from"]:
+            try:
+                if datetime.fromisoformat(row["valid_from"].replace("Z", "+00:00")) > now:
+                    continue
+            except ValueError:
+                continue
+        if row["valid_until"]:
+            try:
+                if datetime.fromisoformat(row["valid_until"].replace("Z", "+00:00")) <= now:
+                    continue
+            except ValueError:
+                continue
+        explicit_scope_match = bool(subject and row["subject"] == subject) or bool(project and row["scope"] == "project")
+        if not q.intersection(words) and not explicit_scope_match:
+            continue
+        if (row["evidence_status"] in (None, "unknown", "tentative") and
+                not explicit_scope_match):
+            continue
+        scope_match = explicit_scope_match
+        evidence = EvidenceStatus(row["evidence_status"] or "unknown")
+        try:
+            recency = datetime.fromisoformat((row["updated_at"] or "1970-01-01").replace("Z", "+00:00")).timestamp()
+        except (ValueError, TypeError):
+            recency = 0.0
+        rank = retrieval_rank(scope_match=scope_match, evidence_status=evidence,
+                              explicit=evidence is EvidenceStatus.EXPLICIT,
+                              recency_epoch=recency, memory_id=row["id"])
+        ranked.append((rank, row))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    out, used = [], 0
+    for _, row in ranked[:limit]:
+        text = row["content"][:MAX_ROW_CHARS]
+        if used + len(text) > max_chars:
+            break
+        out.append({"memory_id": row["id"], "content": text, "scope": row["scope"],
+                    "memory_type": row["memory_type"], "provenance": row["provenance"],
+                    "evidence_status": row["evidence_status"], "source_turn_id": row["source_turn_id"],
+                    "supersedes_id": row["supersedes_id"], "used_for": query})
+        used += len(text)
+    if out and session_id:
+        mark_memory_used(conn, [item["memory_id"] for item in out],
+                         session_id=session_id, source_turn=source_turn)
+    return out
 
 MAX_FACT_CHARS = 200
 
@@ -453,7 +557,8 @@ def render_memory_context(
         # the prompt rather than silently vanishing while it waits for the
         # next sweep, which would be the worse failure.
         fact_rows = conn.execute(
-            "SELECT key, content, COALESCE(tier, ?) AS tier FROM memories "
+            "SELECT key, content, COALESCE(tier, ?) AS tier, "
+            "evidence_status, provenance, memory_type, valid_until, classifier_version FROM memories "
             "WHERE kind = 'fact' AND archived_at IS NULL "
             "AND COALESCE(tier, ?) IN (?, ?, ?) "
             "AND COALESCE(audience, 'interaction') = 'interaction' "
@@ -479,11 +584,36 @@ def render_memory_context(
     # does not consume a slot a real fact could have used.
     kept_rows = []
     firewalled: list[str] = []
+    now = datetime.now(timezone.utc)
+    automation_filtered: list[str] = []
     for row in fact_rows:
+        if row["classifier_version"] not in (None, "legacy-v1"):
+            # Automated metadata is advisory until it has explicit or
+            # independently corroborated evidence. Keep legacy NULL rows
+            # fail-open, but do not let tentative/unknown or quoted source
+            # content become standing instructions. Temporary rows remain in
+            # context only while their conservative expiry is in the future.
+            evidence = row["evidence_status"]
+            if evidence in {"tentative", "unknown", "disputed"} or row["provenance"] == "quoted_document":
+                automation_filtered.append(row["key"])
+                continue
+            if row["memory_type"] == "temporary_context" and row["valid_until"]:
+                try:
+                    if datetime.fromisoformat(row["valid_until"].replace("Z", "+00:00")) <= now:
+                        automation_filtered.append(row["key"])
+                        continue
+                except ValueError:
+                    automation_filtered.append(row["key"])
+                    continue
         if _is_capability_claim(row["key"], row["content"]):
             firewalled.append(row["key"])
         else:
             kept_rows.append(row)
+    if automation_filtered:
+        logger.info(
+            "memory_context_facts_dropped reason=automation_policy count=%d keys=%s",
+            len(automation_filtered), automation_filtered[:10],
+        )
     if firewalled:
         logger.warning(
             "memory_context_facts_dropped reason=capability_claim count=%d keys=%s",
@@ -668,16 +798,42 @@ def upsert_fact(
         )
         return
     now = now_iso()
-    conn.execute(
-        "INSERT INTO memories (kind, key, content, source_session_id, "
-        "created_at, updated_at, tier) VALUES ('fact', ?, ?, ?, ?, ?, ?) "
-        "ON CONFLICT(user_id, key) WHERE kind = 'fact' "  # GC8: tenant column contract
-        "DO UPDATE SET content = excluded.content, "
-        "source_session_id = excluded.source_session_id, "
-        "updated_at = excluded.updated_at, "
-        "tier = COALESCE(memories.tier, excluded.tier)",
-        (key, value[:MAX_FACT_CHARS], session_id, now, now, infer_tier(key)),
-    )
+    user_id = current_user_id()
+    existing = conn.execute(
+        "SELECT id, content, created_at, content_revision FROM memories "
+        "WHERE kind='fact' AND user_id=? AND key=? AND COALESCE(archived_at,'')=''",
+        (user_id, key),
+    ).fetchone()
+    if existing is None:
+        conn.execute(
+            "INSERT INTO memories (kind, key, content, source_session_id, "
+            "created_at, updated_at, tier, user_id, content_revision) VALUES "
+            "('fact', ?, ?, ?, ?, ?, ?, ?, 1)",
+            (key, value[:MAX_FACT_CHARS], session_id, now, now, infer_tier(key), user_id),
+        )
+    else:
+        changed = existing["content"] != value[:MAX_FACT_CHARS]
+        conn.execute(
+            "UPDATE memories SET content=?, source_session_id=?, updated_at=?, "
+            "tier=COALESCE(tier,?), content_revision=content_revision+? WHERE id=?",
+            (value[:MAX_FACT_CHARS], session_id, now, infer_tier(key), int(changed), existing["id"]),
+        )
+    if os.environ.get("JARVIS_MEMORY_AUTOMATION_ENABLED", "false").lower() in {"1", "true", "yes"}:
+        row = conn.execute("SELECT id, content_revision FROM memories WHERE kind='fact' AND user_id=? AND key=? AND COALESCE(archived_at,'')=''", (user_id, key)).fetchone()
+        if row is not None:
+            enqueue_maintenance(conn, memory_id=row["id"], revision=row["content_revision"],
+                                policy_version="b1", operation="classify", now_iso=now)
+
+
+def mark_memory_used(conn: sqlite3.Connection, memory_ids: list[int], *,
+                     session_id: str | None, source_turn: int | None = None) -> None:
+    """Record post-insertion usage without storing prompt text."""
+    stamp = now_iso()
+    for memory_id in memory_ids:
+        row = conn.execute("SELECT key FROM memories WHERE id=? AND user_id=?", (memory_id, current_user_id())).fetchone()
+        if row is not None:
+            conn.execute("INSERT INTO memory_recall_events(session_id,source_turn,key,outcome,created_at,user_id) VALUES (?,?,?,?,?,?)",
+                         (session_id, source_turn, row["key"], "used_for", stamp, current_user_id()))
 
 
 def set_summary(
@@ -779,11 +935,24 @@ def list_facts(conn: sqlite3.Connection | None = None) -> list[dict]:
     conn = conn or get_conn()
     try:
         rows = conn.execute(
-            "SELECT key, content, source_session_id, updated_at, "
-            "COALESCE(tier, 'project') AS tier, "
-            "COALESCE(audience, 'interaction') AS audience "
-            "FROM memories WHERE kind = 'fact' AND archived_at IS NULL "
-            "ORDER BY updated_at DESC"
+            "SELECT m.id, m.key, m.content, m.source_session_id, m.updated_at, "
+            "COALESCE(m.tier, 'project') AS tier, "
+            "COALESCE(m.audience, 'interaction') AS audience, "
+            "COALESCE(m.subject, '') AS subject, "
+            "COALESCE(m.scope, 'global') AS scope, "
+            "COALESCE(m.memory_type, 'fact') AS memory_type, "
+            "COALESCE(m.provenance, 'user') AS provenance, "
+            "COALESCE(m.evidence_status, 'unknown') AS evidence_status, "
+            "COALESCE(m.confidence, 0.0) AS confidence, "
+            "m.valid_from, m.valid_until, m.source_turn_id, "
+            "COALESCE(m.content_revision, 1) AS content_revision, "
+            "COALESCE(m.classifier_version, 'legacy-v1') AS classifier_version, "
+            "m.classified_at, m.supersedes_id, "
+            "(SELECT COUNT(*) FROM memory_recall_events r "
+            " WHERE r.key = m.key AND r.user_id = m.user_id "
+            "   AND r.outcome = 'used_for') AS used_for_count "
+            "FROM memories m WHERE m.kind = 'fact' AND m.archived_at IS NULL "
+            "ORDER BY m.updated_at DESC"
         ).fetchall()
         return [dict(row) for row in rows]
     finally:
@@ -998,17 +1167,16 @@ async def update_memory_from_session(
         transcript = "\n".join(
             f"{r['role'].upper()}: {r['content'][:MAX_ROW_CHARS]}" for r in rows
         )
-        client = (
-            client_factory(settings)
-            if client_factory is not None
-            else AsyncOpenAI(
-                api_key=settings.openai_api_key,
-                base_url=settings.openai_base_url,
-            )
-        )
+        if client_factory is not None:
+            # Test seam only; production uses JARVIS_MEMORY_PROFILE.
+            client = client_factory(settings)
+            model = settings.openai_model
+        else:
+            client, route = make_memory_async_client(settings)
+            model = route.model
         prompt = EXTRACTION_PROMPT if extract_facts_and_observations else SUMMARY_ONLY_PROMPT
         response = await client.chat.completions.create(
-            model=settings.openai_model,
+            model=model,
             messages=[
                 {"role": "system", "content": prompt},
                 {
@@ -1024,7 +1192,7 @@ async def update_memory_from_session(
             record_completion(
                 rung="memory_extraction",
                 provider=provider_from_base_url(str(client.base_url)),
-                model=settings.openai_model,
+                model=model,
                 response=response,
                 session_id=session_id,
             )

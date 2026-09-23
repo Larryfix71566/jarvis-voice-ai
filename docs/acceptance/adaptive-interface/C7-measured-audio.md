@@ -47,6 +47,41 @@ input device 71: buffer 512 frames, range 15…4096      ← the hardware was ne
 
 The report also learned to refuse a false pass: a session where one channel produced no observations now reads `incomplete`, because input passing at 25 ms while playout recorded nothing is not a passed gate.
 
+**Rendering follow-up (2026-09-18):** the adaptive wave applies separate
+measured-audio gains after the channel-specific dB normalization: `0.55` for
+the quieter input channel and `0.42` for playout. It now presents those levels
+as a five-layer depth ribbon with a bounded attack-driven parallax push and
+low-opacity measured halo; the rollback layout retains its original geometry.
+This makes Mortimer's output more legible without fabricating movement when a
+level is absent. The focused native rendering/mapping tests pass 13/13. The
+fresh hardware receipt records **403 input arrivals** (median `0.0012`, p95
+`0.0148`, peak `0.1961`) and **84 playout arrivals** (median `0.0935`, p95
+`0.2873`). Input is observed on the connected candidate; the two-channel P2
+gate remains incomplete because playout has not reached the required
+100-arrival floor.
+
+**Manual UI check (2026-09-18, release-review candidate):** the signed
+candidate reached `READY VOICE`; with the microphone muted the compact trace
+stayed at its quiet baseline. After enabling the microphone, the UI changed to
+`HEARING YOU` and the compact trace produced a visible measured lobe; disabling
+the microphone returned the UI to `MUTED`. This confirms the presentation path
+responds to live eligibility and input on the candidate. It does not replace
+the numerical P2 receipt or a complete two-channel active-speech sample, so the
+hardware gate below remains open.
+
+**Focused rerun (2026-09-18):** `PresentationLevelMappingTests` and
+`VoiceWaveRenderingTests` pass 13/13 after the channel-specific gain and
+depth-ribbon change. This verifies the mapping, no-level behavior, ready-state
+trace, distinct user/Mortimer rendering colors, and the bounded depth contract;
+it does not increase the hardware receipt's 84 playout arrivals.
+
+The rebuilt candidate's live UI sequence is recorded in
+[`receipts/candidate-wave-live-2026-09-18.md`](receipts/candidate-wave-live-2026-09-18.md):
+the default Conversation view connected to `READY VOICE`, enabling the
+microphone produced `HEARING YOU` with a visible measured input lobe, and
+disabling it returned the rail to `MUTED`. No user speech was injected during
+that inspection, so output-speech evidence remains open.
+
 ## Open
 
 - ~~§3.3 must be re-run on the D10 graph.~~ **Done, 2026-09-13, and it improved.** Built-in mic and speakers, quiet room, `c6-echo.log`: the bot's own playback lands **20.3 dB below the idle noise floor** (it was 6.0 dB below with the tap), echo reduction **50.1 dB** (was 39.2), Silero 0 speaking chunks and **0 user turns** with confidence max 0.105 (was 0.156), against a VPIO-off control raising 10 turns. `captureBuffers` 1135 in the same 11.6 s window versus 121 before — the sink node delivering ~94/s. Connecting a sink to the input node does not cost Voice Processing its cancellation; on this device it measures better, plausibly because VPIO sees the render quantum rather than 100 ms blocks. D10 is signed off on the built-in mic; the AirPods configurations still need their run.

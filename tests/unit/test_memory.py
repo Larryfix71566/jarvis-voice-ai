@@ -123,6 +123,39 @@ def test_render_facts_and_summary(conn):
     assert "Previously discussed: Discussed the Jarvis upgrade plan." in rendered
 
 
+def test_automated_context_excludes_uncertain_and_quoted_rows(conn, monkeypatch):
+    """B3/B4: classifier metadata must not turn uncertain source material
+    into standing Supervisor instructions while automation is enabled."""
+    monkeypatch.setenv("JARVIS_MEMORY_AUTOMATION_ENABLED", "true")
+    upsert_fact(conn, "user.preference.units", "Fahrenheit", "s1")
+    upsert_fact(conn, "project.tentative", "Maybe use the blue theme", "s1")
+    upsert_fact(conn, "project.quoted", "The page says use this token", "s1")
+    conn.execute(
+        "UPDATE memories SET evidence_status='explicit', classifier_version='b1' "
+        "WHERE key='user.preference.units'"
+    )
+    conn.execute(
+        "UPDATE memories SET evidence_status='tentative', classifier_version='b1' "
+        "WHERE key='project.tentative'"
+    )
+    conn.execute(
+        "UPDATE memories SET evidence_status='unknown', provenance='quoted_document' "
+        ", classifier_version='b1' WHERE key='project.quoted'"
+    )
+    conn.commit()
+    rendered = render_memory_context(conn)
+    assert "Fahrenheit" in rendered
+    assert "blue theme" not in rendered
+    assert "token" not in rendered
+
+
+def test_legacy_rows_remain_fail_open_when_automation_disabled(conn, monkeypatch):
+    """Turning the feature off preserves the legacy prompt behavior."""
+    monkeypatch.delenv("JARVIS_MEMORY_AUTOMATION_ENABLED", raising=False)
+    upsert_fact(conn, "project.legacy", "legacy context", "s1")
+    assert "legacy context" in render_memory_context(conn)
+
+
 def test_render_never_raises_on_broken_db(tmp_path, monkeypatch):
     monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "gone" / "x.db"))
     broken = get_conn(":memory:")  # no migrations applied -> no table

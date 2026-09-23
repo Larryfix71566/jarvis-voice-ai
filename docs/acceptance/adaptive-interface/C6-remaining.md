@@ -1,10 +1,10 @@
 # What is left, and what closes each
 
-**Status index, reconciled 2026-09-17 against `5faa2e6`:** this file is a
+**Status index, reconciled 2026-09-17 against `e6b34cf`:** this file is a
 chronological investigation log, including resolved items and superseded
-proposals. Use `RELEASE_READINESS.md` for release gates. PR #76 remains open;
-all five reported CI checks passed on its current head. This does not prove
-that the running services have loaded its fixes.
+proposals. Use `RELEASE_READINESS.md` for release gates. PR #76 is merged;
+the release consolidation remains under review in PR #80. This does not
+prove that the running services have loaded the release fixes.
 
 **Historical inventory at `1acd275`:**
 Fourteen
@@ -451,6 +451,13 @@ and 0.0046 on the second — a 4x spread, from how much inter-syllable silence
 falls inside the 60 s window. So the trace is livelier on continuous speech
 than on sparse speech by design; raising the floor toward −50 dB would
 compress that if it ever grates.
+
+**Compact-rail follow-up (2026-09-18):** the measured presentation now uses
+separate post-normalization gains for the two real channels: `0.55` for input
+and `0.42` for playout. This is a rendering correction only; it does not add
+an envelope when no measured level arrives. The fresh receipt recorded 403
+input arrivals and 84 playout arrivals, so the input path is now physically
+observed while the two-channel P2 arrival-count gate remains open.
 
 **WIDTH — CLOSED 2026-09-17 as a slider** (`1acd275`). Larry: "add a slider
 option like the amplitude so that it is customizable by the user."

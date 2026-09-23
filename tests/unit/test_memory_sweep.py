@@ -343,6 +343,21 @@ def test_task_rule_verdict_queues_never_acts(conn):
     assert reviews[0]["kind"] == "audience"
 
 
+def test_automated_audience_mode_stops_routine_review_prompts(conn):
+    _fact(conn, "user.preference.git_workflow",
+          "always run tests before committing changes", "preference")
+    conn.commit()
+    candidates = _select_audience_candidates(conn)
+    applied = _apply_classification(
+        conn, [], {}, candidates, {"user.preference.git_workflow": "task-rule"},
+        automated=True,
+    )
+    assert applied["task_rule_queued"] == 0
+    row = conn.execute("SELECT audience, memory_type FROM memories WHERE key='user.preference.git_workflow'").fetchone()
+    assert row["audience"] == "task-rule" and row["memory_type"] == "task_rule"
+    assert list_open_reviews(conn) == []
+
+
 def test_unclassified_audience_reaches_the_prompt(conn):
     """A5 fail-open: a fact with audience IS NULL (never classified, or
     classified 'task-rule'/'implemented' and therefore left NULL) still

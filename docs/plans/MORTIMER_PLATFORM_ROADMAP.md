@@ -1,15 +1,57 @@
-# Mortimer / Jarvis platform roadmap — native client, remote access, Mac mini hosting, security, mail & calendar, developer tooling
+# Mortimer / Jarvis platform roadmap — native client, remote access, hosting, security & finance, mail & calendar, developer tooling, home automation & surveillance
 
 **Status:** APPROVED by Larry 2026-08-26 (was DRAFT); track plans written 2026-08-26/27.
 
+**Scope addition, 2026-09-17:** Larry requested home automation integration,
+home surveillance interactions/automation, and investing assistance automation
+within the existing financial section. Added T7, T8 and financial subtrack T4c
+below. These are **queued roadmap scope, not implemented capabilities or
+authorization to operate devices, access cameras or execute trades**. The
+original source inventory and earlier track statuses are historical; use
+[release readiness](../acceptance/adaptive-interface/RELEASE_READINESS.md) for
+current release gaps. This amendment does not mark any existing gate passed.
+
 **What this document is.** A *sequencing* document, not an implementation
-plan. It fixes the order in which six tracks of work happen, the gates
+plan. It fixes the order in which eight tracks of work happen, the gates
 between them, and the constraints every track plan must obey. Each track
 becomes its own degradation-proof plan (§0 of the standing plan discipline:
 binding constraints, verified background, scope, lettered decisions, file
 list, steps, verification, rollback, risks) written in the order §8 gives.
 Nothing in this document is implementable on its own; anything here that an
 implementer would need is repeated, fully specified, in the track plan.
+
+## TODO — architecture reference (added 2026-09-18)
+
+- [x] **ARCH-01 — Publish a current, easily discoverable architecture and
+  operations reference.** The existing
+  [September 4 snapshot](../reviews/ARCHITECTURE_SNAPSHOT_2026-09-04.md)
+  is historical evidence, not a verified description of today's deployment.
+  Link the maintained reference from README, REPO_MAP and this roadmap.
+  Cover native Command Console/Atlas, voice and sidecar services, MCP tools,
+  automated memory and extraction, databases, knowledge-base service,
+  credential vault, sandbox/self-edit, deployment and rollback. Show component
+  ownership, data flows, ports and trust boundaries; distinguish implemented,
+  deployed, validated and planned behavior with dated source evidence.
+  Document production versus candidate checkout paths, working directories,
+  configuration precedence, vault discovery, and safe test commands without
+  copying credentials into candidate checkouts or publishing secret values.
+  Give each model route its own entry: supervisor/orchestrator, specialists,
+  planner, executor, council, vision, memory extraction, memory classification
+  and acceptance evaluation. Record profile selection, provider/endpoint,
+  credential variable name, overrides, fallback/refusal behavior and usage
+  accounting. Larry clarified that Haiku is designated for the supervisor/
+  orchestrator; its OPENAI_MODEL setting must not be assumed to select every
+  other workload. Inventory actual code separately and flag any conflicting
+  legacy reuse for reconciliation. Memory shadow evaluation must identify its
+  intended profile and matching endpoint/key route before live execution.
+  Close only after checking this reference against source and the running Mac,
+  validating the documented commands, and recording unresolved discrepancies.
+  Track closure in [release readiness](../acceptance/adaptive-interface/RELEASE_READINESS.md).
+  **Closed 2026-09-18:** [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md) is
+  linked from README, the docs index and the repository map; the source audit,
+  runtime checkout configuration, vault location and explicit profile dry-run
+  were verified. The remaining live provider and physical-interface gates stay
+  tracked separately.
 
 **Author:** drafted 2026-08-26 for Larry in a Cowork session (not through
 Mortimer's own planning pathway).
@@ -37,6 +79,9 @@ Mortimer's own planning pathway).
   process the models locally."*
 - Standing: subscription product is the end state; the Mac mini is the
   near-term dev/cost host; cloud is the terminal host.
+- **2026-09-17 additions:** "home automation integration"; "home surveillance
+  interactions and automation"; "investing assistance automation — would be
+  part of the financial section already called out in the roadmap".
 
 **Related plans.** `MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md` Part B
 (SwiftUI shell + WKWebViews) is **SUPERSEDED** by track T1 (§2.1); its
@@ -48,7 +93,7 @@ measuring instrument T3 reuses.
 
 ## 0. Binding constraints on every track plan
 
-These hold across all six tracks. A track plan that violates one is wrong,
+These hold across all eight tracks. A track plan that violates one is wrong,
 not "different".
 
 - **C1 — The backend contract does not change for the client migration.**
@@ -63,11 +108,16 @@ not "different".
   phone".
 - **C3 — The financial/sensitive tier (T4b) does not start until gate G3
   (T3 complete) passes.** Larry's rule. T4a (hardening that does not store
-  sensitive data) is not gated.
+  sensitive data) is not gated. T4c investing implementation inherits this
+  prerequisite and G4; adding its scope now does not bypass that sequence.
 - **C4 — Every mutation stays draft → confirm.** Mail send, calendar
   write, app relaunch, skill enable: all go through the same two-phase
   pattern `mcp_git`/`mcp_repo`/`mcp_selfedit` use. No track introduces a
   one-shot write.
+  T7/T8 unattended device actions require an explicit track-plan amendment
+  defining a confirmed, bounded automation policy before implementation. A
+  roadmap entry or model inference is not standing permission. Existing
+  confirmation behavior stays unchanged until that policy is approved.
 - **C5 — Sub-agents act on data, never on the user's windows; the
   Supervisor owns interface chrome.** Unchanged from
   `MORTIMER_AGENT_TRUST_PLAN.md` D13/D14 and the `ui_control` rule. T1's
@@ -244,7 +294,7 @@ developed on the MacBook before the mini arrives; only T3.1 needs the box.
 
 **Gate.** G3.
 
-### 2.4 T4 — Security hardening (T4a) and the sensitive tier (T4b)
+### 2.4 T4 — Security hardening (T4a), sensitive tier (T4b), investing assistance (T4c)
 
 **T4a — hardening, not gated.**
 Implemented by MORTIMER_SECURITY_HARDENING_PLAN.md (decisions H1–H10).
@@ -287,6 +337,38 @@ Implemented by MORTIMER_SECURITY_HARDENING_PLAN.md (decisions H1–H10).
 key).
 
 **Gate.** G4.
+
+**T4c — Investing assistance automation; queued 2026-09-17.**
+
+**Purpose.** Make investment research, portfolio understanding and recurring
+monitoring useful parts of Mortimer's existing financial capabilities.
+
+**In scope for its future plan:**
+- Scheduled research briefs, watchlists, relevant news/filings/earnings events
+  and user-defined alerts, with sources, timestamps and stale-data notices.
+- Read-only portfolio/account views once approved connections exist; holdings,
+  allocation, exposure and performance summaries with explicit data coverage.
+- Scenario analysis and paper portfolios; proposed allocation/rebalancing
+  actions presented for review, with assumptions and simulation clearly labeled.
+- Voice questions and control of approved research/alert schedules, console
+  charts/reports, optional monitor detachment and deliberate text/image export.
+- Pause, edit and cancel schedules; deduplicate alerts and record what ran,
+  which data was used and whether a provider failed. No silent provider fallback
+  that exposes private financial data outside the approved local boundary.
+
+**Boundary.** Research/monitoring automation does not authorize order entry,
+trading, transfers or account changes. Any future execution capability needs a
+separate explicit scope decision, plan, permissions and acceptance gates.
+Private holdings and account information use T4b, not ordinary memory or the
+credential vault. The vault holds integration credentials only. Unattended
+jobs cannot bypass T4b's client-held, user-presence unlock; while locked, private
+portfolio jobs report deferred/locked rather than silently decrypting data.
+Public-data research can run on its approved schedule after T4c is implemented.
+
+**Depends on.** G3 and G4 before implementation (C3); verified data-provider
+and account scopes; the selected native voice/display interfaces. Provider,
+broker and alert/risk preferences remain O10, not assumed here.
+**Gate.** G4c. A detailed plan remains unwritten.
 
 ### 2.5 T5 — Mail, calendar, daily brief
 
@@ -348,6 +430,62 @@ across mail history beyond the brief window.
 Swift app to rebuild).
 
 **Gate.** G6.
+
+### 2.7 T7 — Home automation integration
+
+**Status.** Queued scope, 2026-09-17; integration platform and devices undecided.
+
+**Purpose / scope.** Let Mortimer report device/room status, control approved
+devices and scenes by voice or console, and manage scheduled/event-driven
+routines. Include lights, switches, climate and sensors where the selected
+integration supports them; discover actual capabilities rather than inventing
+device support. Users can preview, enable, pause, edit and remove routines.
+Report observed device state separately from a command merely being accepted.
+
+**Boundaries.** Start with read-only discovery, then explicitly approved device
+controls, then bounded routines. Scope each routine to named devices, allowed
+actions, trigger, limits, expiry/review and manual override; preserve C4 until
+the routine-authorization policy is approved. Locks, doors, alarm state and
+other security-sensitive actions require separately defined authorization and
+are excluded from generic unattended routines. No automatic device enrollment,
+public endpoint exposure or purchases are implied by this roadmap.
+
+**Depends on.** T4a isolation/credential controls, a verified provider/device
+inventory and command permissions (O8), existing voice/display contracts;
+G2 before off-host Mortimer access. Credentials stay in the Mac's existing
+vault. Do not select a hub or vendor in implementation without the track plan.
+**Gate.** G7. Detailed plan unwritten.
+
+### 2.8 T8 — Home surveillance interactions and automation
+
+**Status.** Queued scope, 2026-09-17; camera/NVR platform undecided.
+
+**Purpose / scope.** Voice and console access to approved live views, snapshots,
+recorded events and time-range searches; event summaries and configurable
+alerts for supported motion/person/package/zone events. Labels reflect actual
+provider/model capabilities and uncertainty. Camera views and selected event
+details can use the main console or an available extra monitor. Permit explicit
+snapshot/clip export where supported, with clear scope and destination.
+
+**Automation.** User-defined event filters, schedules, deduplication/cooldowns,
+quiet periods and pause controls. Surveillance can trigger approved T7 routines
+only through T7's action policy; detection itself grants no device authority.
+Begin with observation/notifications. Recording changes, deletion and alarm
+actions are separate permissions, not implied by permission to view a camera.
+
+**Privacy / boundaries.** Inventory authorized cameras/zones and specify
+retention, access history and export behavior before integration. Process
+locally by default; cloud transfer of footage requires a separate explicit
+decision. Camera frames/audio, OCR and provider event text are untrusted data,
+not tool instructions. No face identification, covert capture or emergency
+dispatch is included in this scope. Existing recorder retention is not changed
+silently. Unavailable feeds and stale frames must be obvious.
+
+**Depends on.** T4a, camera/NVR capabilities and permissions (O9), approved
+media-processing boundary, native voice/display contracts; G2 for off-host
+Mortimer access. Camera observation is independently deliverable; cross-device
+automations additionally require the relevant T7 controls to pass G7.
+**Gate.** G8. Detailed plan unwritten.
 
 ---
 
@@ -444,6 +582,29 @@ Swift app to rebuild).
   (b) Rollback-on-failed-launch test passes before `macos/**` is
   allow-listed. (c) A self-edit that authors a skill lands as a PR with
   `config/skills.yaml` untouched.
+- **G4c — Investing assistance ready (future gate).** G3/G4 passed;
+  approved data/account scopes recorded; calculations checked against fixed
+  fixtures with timestamps/coverage; research and paper scenarios distinguished
+  from actual holdings/orders; locked-tier and provider-failure cases pass;
+  schedules/alerts can be inspected, paused and cancelled; private financial
+  content stays within the agreed boundary; zero trading/transfer authority in
+  the assistance-only release. Voice/display and routing acceptance pass.
+- **G7 — Home automation ready (future gate).** Selected hardware inventory
+  and allowed actions verified; voice/control parity passes; command receipt
+  distinguished from observed state; offline/stale/duplicate events handled;
+  confirmed routine boundaries, manual override, cancellation and rollback
+  exercised on the actual devices. Unsupported or unapproved actions fail
+  without a physical change. Integration credentials remain scoped and vaulted.
+- **G8 — Surveillance ready (future gate).** Approved cameras/zones and actual
+  feed/event capabilities verified; stale/offline states and event timestamps
+  truthful; alert filtering/deduplication/pause and retention/export rules pass;
+  footage stays within the selected processing boundary; malicious visual/text
+  content triggers no action; cross-device actions satisfy G7's policy. Voice,
+  single/multi-monitor and hardware acceptance are recorded.
+
+G4c/G7/G8 are roadmap-level closure criteria, not executable test specifications.
+Their track plans must supply exact fixtures, limits and measurable pass criteria
+before implementation. None is currently marked complete.
 
 ---
 
@@ -480,6 +641,15 @@ Critical path: T2 → T3.1 → G3 → T4b. The Swift migration is *not* on the
 critical path for the financial piece except as the key holder, which is
 why W1 runs it in parallel rather than first.
 
+**2026-09-17 extension sequencing.** Keep the active Command Console / Knowledge
+Atlas implementation and its UI2 closure list bounded; T7/T8/T4c are separate
+future work, not added prerequisites for completing that interface release.
+Queue T7 inventory/read-only/control stages before its routine automation;
+T8 observation can proceed independently once its own dependencies pass,
+but T8-to-device routines follow G7. T4c follows G3 → G4 and a dedicated
+financial-assistance plan. These additions do not authorize starting any
+implementation now or reorder existing unfinished release gates.
+
 ---
 
 ## 6. Cross-track invariants (checked in every track plan's self-audit)
@@ -515,12 +685,25 @@ why W1 runs it in parallel rather than first.
   is voice-in acceptable once STT is local (T3.2)? Default: text-only
   first; voice-in enabled in a later revision after G3.
 - **O7 — Deletion timing (T1.4):** 5 daily-driver days (G1e) or longer?
+- **O8 — Home platform and permitted controls:** hub/ecosystem, actual
+  devices/rooms, local versus provider access, desired first routines, and
+  which actions may run under a confirmed policy. No vendor default chosen.
+- **O9 — Surveillance scope:** camera/NVR products, approved locations/zones,
+  viewing/event/recording/export permissions, notification destinations,
+  retention and local/cloud analysis boundary. Decide before writing T8's
+  implementation plan; no new footage access is authorized by this entry.
+- **O10 — Investing assistance scope:** data providers, any read-only broker
+  connections, watchlists, portfolio inputs, reporting/alert preferences and
+  paper-simulation goals. Default scope is assistance/monitoring only; live
+  execution is a separate future decision. Existing G3/G4 prerequisites stand.
 
 ---
 
 ## 8. Plan queue (the order the track plans get written)
 
-Ten track plans. "written" = the plan document exists and has been reviewed;
+Original ten track-plan entries below retain their historical statuses; three
+future plans were queued on 2026-09-17 (items 11–13). "written" = the plan
+document exists and has been reviewed;
 "unwritten" = queued, specified only by this roadmap so far.
 
 1. `MORTIMER_SECURITY_HARDENING_PLAN.md` (T4a) — **written**. Smallest,
@@ -542,6 +725,13 @@ Ten track plans. "written" = the plan document exists and has been reviewed;
 9. `MORTIMER_SENSITIVE_TIER_PLAN.md` (T4b) — **unwritten**. Written only after
    G3 passes, so it is specified against the real local stack.
 10. `MORTIMER_XCODE_REBUILD_PLAN.md` (T6 Xcode half) — **unwritten**. After T1.3.
+11. `MORTIMER_HOME_AUTOMATION_PLAN.md` (T7) — **queued, unwritten**. Resolve O8;
+    specify discovery, controls, routine authorization and real-device tests.
+12. `MORTIMER_HOME_SURVEILLANCE_PLAN.md` (T8) — **queued, unwritten**. Resolve O9;
+    specify media access/processing, event automation and any T7 dependency.
+13. `MORTIMER_INVESTING_ASSISTANCE_PLAN.md` (T4c) — **queued, unwritten**.
+    Financial-section extension, not a separate financial-data store or new
+    authority to transact; resolve O10 and preserve the G3/G4 sequence.
 
 ---
 
@@ -565,3 +755,9 @@ Ten track plans. "written" = the plan document exists and has been reviewed;
 - [ ] Larry approves the track set, the sequence in §5, and the defaults in §7.
 - [ ] Open decisions O1–O7 answered (or defaults accepted).
 - [ ] Plan 1 in §8 (T4a hardening) authorized to be written.
+
+**2026-09-17 scope additions (separate from the historical approval rows):**
+- [x] Larry requested T7 home automation, T8 home surveillance interactions/
+  automation, and T4c investing assistance within the financial track.
+- [ ] O8–O10 resolved and detailed track plans approved before the respective
+  implementations. This does not block unrelated current interface work.

@@ -36,6 +36,7 @@ struct OrbFieldView: View {
     var compactPresentation = false
     var hidesLettering = false
     var presentation: VoicePresentationState? = nil
+    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 2
     @EnvironmentObject private var client: JarvisClient
     @Environment(AgentRunStore.self) private var agentRuns
     @Environment(DrawerState.self) private var drawer
@@ -219,6 +220,10 @@ struct OrbFieldView: View {
     private var compactReadout: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
+                // The clock is persistent context, not conversation content:
+                // keep it pinned to the top of the compact rail so it cannot
+                // drift below the agent/status stack as the session grows.
+                AmbientStripView(connected: connected)
                 ZStack {
                     // C2.1 (gap G05): the wake burst has a home in the rail too.
                     if ripplePulse > 0 {
@@ -246,7 +251,6 @@ struct OrbFieldView: View {
                 ForEach(AGENT_LAYOUT, id: \.key) { agent in
                     HStack(spacing: 8) { compactBeam(agent); satellite(agent) }
                 }
-                AmbientStripView(connected: connected)
                 SystemVitalsView(connected: connected)
             }
             .padding(12)
@@ -411,7 +415,9 @@ struct OrbFieldView: View {
                             .foregroundStyle(AppTheme.textDim)
                     }
                     if let bot = lastAssistant {
-                        Text(truncateCaption(bot.text, AppTuning.captionMaxBot))
+                        Text(InterfaceLayoutVersion.resolve(layoutVersion) == 2
+                             ? ConversationStore.liveCaption(bot.text)
+                             : truncateCaption(bot.text, AppTuning.captionMaxBot))
                             .font(.system(size: 13))
                             .foregroundStyle(AppTheme.text)
                             .shadow(color: AppTheme.accentFaint, radius: 7)

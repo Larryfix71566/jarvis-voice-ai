@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from pipecat.frames.frames import (
     Frame,
@@ -112,7 +112,8 @@ class TranscriptObserver(BaseObserver):
     TranscriptionFrame downstream.
     """
 
-    def __init__(self, session_id: str, only_from: Any = None):
+    def __init__(self, session_id: str, only_from: Any = None,
+                 on_consent: Callable[[str], Awaitable[bool] | bool] | None = None):
         """``only_from`` (Tier 2 speaker gate, 2026-08-21): when set to a
         pipeline processor, USER transcript lines are logged/persisted ONLY
         for TranscriptionFrames pushed BY that processor. The speaker
@@ -125,6 +126,7 @@ class TranscriptObserver(BaseObserver):
         super().__init__()
         self._session_id = session_id
         self._only_from = only_from
+        self._on_consent = on_consent
         self._turn_start: float | None = None
         self._audio_logged_for_turn = False
         self._user_buffer: list[str] = []
@@ -147,6 +149,15 @@ class TranscriptObserver(BaseObserver):
             text = " ".join(self._user_buffer).strip()
             self._user_buffer = []
             if text:
+                if self._on_consent is not None:
+                    try:
+                        consumed = self._on_consent(text)
+                        if hasattr(consumed, "__await__"):
+                            consumed = await consumed
+                        if bool(consumed):
+                            return
+                    except Exception:  # noqa: BLE001 — consent must not break voice
+                        pass
                 arm_from_text(text)          # arm on the FULL turn text
                 if is_sensitive():
                     # P6 (plan D-H6): no content to bot.log, no conversations row

@@ -1,0 +1,103 @@
+{
+  "call_sites": [
+    {
+      "file": "jarvis/agents/base.py",
+      "line": 669,
+      "owner": "agent_routed",
+      "rationale": "SubAgent route resolution and policy redaction",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/agents/supervisor.py",
+      "line": 174,
+      "owner": "voice_exempt",
+      "rationale": "Supervisor remains on the existing Haiku route",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/agents/upgrade_agent.py",
+      "line": 578,
+      "owner": "planner_routed",
+      "rationale": "Planner route resolution/failover",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/bot/pipeline.py",
+      "line": 1468,
+      "owner": "mixed_routed",
+      "rationale": "Voice supervisor plus validated shared-content vision route",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/council/council.py",
+      "line": 320,
+      "owner": "council_routed",
+      "rationale": "Council route and request-policy boundary",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/kb_digest.py",
+      "line": 116,
+      "owner": "background_routed",
+      "rationale": "Knowledge digest uses background route factory",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/memory.py",
+      "line": 1178,
+      "owner": "background_routed",
+      "rationale": "Memory fold-in uses memory route factory",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/memory_automation_eval.py",
+      "line": 328,
+      "owner": "fixture_only",
+      "rationale": "Offline evaluation helper; never production runtime",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/memory_extraction.py",
+      "line": 345,
+      "owner": "background_routed",
+      "rationale": "Memory extraction uses memory route factory",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/memory_sweep.py",
+      "line": 716,
+      "owner": "background_routed",
+      "rationale": "Maintenance sweep uses memory route factory",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/memory_sweep.py",
+      "line": 369,
+      "owner": "background_routed",
+      "rationale": "Maintenance sweep uses memory route factory",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/model_execution.py",
+      "line": 50,
+      "owner": "execution_boundary",
+      "rationale": "Provider-neutral policy execution boundary",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/procedures.py",
+      "line": 361,
+      "owner": "background_routed",
+      "rationale": "Procedure description uses background route factory",
+      "status": "covered"
+    }
+  ],
+  "counts": {
+    "covered": 13,
+    "review_required": 0,
+    "total": 13
+  },
+  "secret_free": true,
+  "source": "jarvis/",
+  "version": "model-call-site-inventory-v1"
+}

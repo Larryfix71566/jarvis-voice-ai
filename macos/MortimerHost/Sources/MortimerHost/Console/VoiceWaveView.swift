@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Silo's original layered sine geometry, with separate adaptive and rollback
-/// presentation paths. Adaptive amplitude uses only supplied measured levels;
-/// missing levels produce a static trace and accessible unavailable detail.
-/// The legacy layout retains its original simulated envelope for rollback.
-/// Wake flashes remain explicit wake-event feedback, never speech evidence.
+/// Silo's measured voice feedback with separate adaptive and rollback paths.
+/// The adaptive Command Center uses a compact two-channel atom; legacy layouts
+/// retain the original layered sine geometry and simulated envelope for
+/// rollback. Missing levels produce a static trace and accessible unavailable
+/// detail. Wake flashes remain explicit wake-event feedback, never speech
+/// evidence.
 struct VoiceWaveView: View {
     let voiceState: VoiceState
     /// Stage horizontal center in window coordinates; nil = window center.
@@ -20,6 +21,19 @@ struct VoiceWaveView: View {
     var body: some View {
         VoiceWaveAnimation(voiceState: voiceState, stageCenterX: stageCenterX,
             wakePulse: wakePulse, presentation: presentation, reduceMotion: reduceMotion)
+            // Canvas is not consistently exposed as an accessibility node in
+            // compact macOS layouts. Keep one stable host element so the
+            // visual channel mapping and current voice state remain discoverable.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Voice activity — user teal, Mortimer orange")
+            .accessibilityValue(accessibilityValue)
+    }
+
+    private var accessibilityValue: String {
+        let current = presentation?()
+        let state = current?.label ?? voiceState.label
+        guard current?.audioLevelUnavailable == true else { return state }
+        return "\(state); audio level unavailable"
     }
 }
 
@@ -81,7 +95,35 @@ struct VoiceWaveAnimation: View {
 
 /// Frame-to-frame mutable wave state (phases, eased dynamics, VU level) —
 /// a reference type so the Canvas closure can advance it.
+struct AtomMotion {
+    private(set) var phase = 0.0
+    private var lastTime: Double?
+
+    mutating func suspend() { lastTime = nil }
+
+    mutating func advance(now: Double, energy: Double, moving: Bool) -> Double {
+        guard now.isFinite else { lastTime = nil; return phase }
+        defer { lastTime = now }
+        guard moving, let previous = lastTime, now >= previous else { return phase }
+        // Bound resume/long-frame travel; audio changes velocity, never position.
+        let elapsed = min(now - previous, 0.1)
+        let level = energy.isFinite ? min(1, max(0, energy)) : 0
+        phase += elapsed * (0.60 + 0.90 * level)
+        return phase
+    }
+}
+
 final class WaveEngine {
+    private struct Layer {
+        let aMul: Double
+        let fMul: Double
+        let po: Double
+        let width: Double
+        /// Signed parallax position: negative is behind the main trace,
+        /// positive is in front of it.
+        let depth: Double
+    }
+
     private struct Dyn {
         var base: Double; var speed: Double; var alpha: Double; var glow: Double
         var cr: Double; var cg: Double; var cb: Double
@@ -107,11 +149,23 @@ final class WaveEngine {
 
     /// Global vertical scale (user-tuned: 2x) — AMP_SCALE.
     private static let ampScale = 2.0
-    /// Trace layers: main + two phase-offset echoes for the phosphor look.
-    private static let layers: [(aMul: Double, fMul: Double, po: Double, width: Double)] = [
-        (1, 1, 0, 2),
-        (0.45, 1.35, 0.9, 1.4),
-        (0.22, 0.72, -1.6, 1),
+    /// Rollback geometry: main + two phase-offset echoes for the phosphor
+    /// look. Keeping this separate makes the old layout a real rollback path.
+    private static let legacyLayers: [Layer] = [
+        Layer(aMul: 1, fMul: 1, po: 0, width: 2, depth: 0),
+        Layer(aMul: 0.45, fMul: 1.35, po: 0.9, width: 1.4, depth: 0),
+        Layer(aMul: 0.22, fMul: 0.72, po: -1.6, width: 1, depth: 0),
+    ]
+
+    /// Adaptive presentation geometry: the same sine silhouette becomes a
+    /// shallow ribbon with rear echoes and a foreground filament. The signed
+    /// depth is a visual parallax offset, not a second audio signal.
+    private static let depthLayers: [Layer] = [
+        Layer(aMul: 0.18, fMul: 0.68, po: 1.8, width: 0.9, depth: -1.00),
+        Layer(aMul: 0.34, fMul: 1.28, po: 0.9, width: 1.2, depth: -0.52),
+        Layer(aMul: 1.00, fMul: 1.00, po: 0, width: 2.1, depth: 0),
+        Layer(aMul: 0.38, fMul: 1.52, po: -0.9, width: 1.35, depth: 0.52),
+        Layer(aMul: 0.16, fMul: 0.74, po: -1.8, width: 0.85, depth: 1.00),
     ]
     private static let bootRampSeconds = 0.9   // E2 boot ramp
 
@@ -120,6 +174,11 @@ final class WaveEngine {
     private var p1 = 0.0, p2 = 0.0, p3 = 0.0
     private var level = 0.0
     private var measuredEnvelope = VoiceEnvelope()
+    private var userEnvelope = VoiceEnvelope()
+    private var outputEnvelope = VoiceEnvelope()
+    private var atomMotion = AtomMotion()
+    private var previousMeasuredLevel = 0.0
+    private var depthPulse = 0.0
     private var cxEased = -1.0
     private var last: Double?
     private var lastState: VoiceState = .offline
@@ -131,6 +190,11 @@ final class WaveEngine {
         last = nil
         level = 0
         measuredEnvelope = VoiceEnvelope()
+        userEnvelope = VoiceEnvelope()
+        outputEnvelope = VoiceEnvelope()
+        atomMotion.suspend()
+        previousMeasuredLevel = 0
+        depthPulse = 0
         wakeFlashStart = 0
     }
 
@@ -138,6 +202,21 @@ final class WaveEngine {
     /// ease-out. Called from the view on each wakePulse.
     func flashWake() {
         wakeFlashStart = -1   // armed; stamped with `now` on the next draw
+    }
+
+    /// Converts measured envelope and its positive attack into a bounded
+    /// visual depth value. A zero level produces zero depth, preserving the
+    /// rule that a missing/silent channel cannot look like speech.
+    static func ribbonDepthEnergy(level: Double, transient: Double,
+                                  activity: VoicePresentationState.Activity) -> Double {
+        guard activity == .user || activity == .assistant else { return 0 }
+        let level = min(1, max(0, level.isFinite ? level : 0))
+        let transient = min(1, max(0, transient.isFinite ? transient : 0))
+        let speakerScale = activity == .assistant
+            ? AudioPresentationTuning.assistantDepthScale : 1.0
+        return min(1, (level * AudioPresentationTuning.depthLevelContribution
+                       + transient * AudioPresentationTuning.depthTransientContribution)
+                      * speakerScale)
     }
 
     /// Simulated speech envelope — the web's own fallback (simLevel).
@@ -150,12 +229,36 @@ final class WaveEngine {
               state: VoiceState, stageCenterX: CGFloat?,
               presentation: VoicePresentationState? = nil, reduceMotion: Bool = false) {
         let staticTrace = presentation.map { value in
+            // Listening and connected/muted are ready states, not speech evidence:
+            // keep its low-energy idle motion so the compact interface does
+            // not look frozen between utterances. A missing level while
+            // Mortimer is speaking remains static and is labelled unavailable
+            // rather than synthesising speech.
             reduceMotion || (value.userLevel == nil && value.outputLevel == nil &&
-                value.activity != .thinking && value.activity != .connecting)
+                value.activity != .thinking && value.activity != .connecting &&
+                value.activity != .listening && value.activity != .muted)
         } ?? false
         let dt = staticTrace ? 0 : max(0, min(now - (last ?? now), 0.1))
         last = now
         let t = staticTrace ? 0 : now
+
+        // The adaptive Command Center uses the compact atom treatment. Each
+        // speaker has its own measured envelope and orbital plane, so overlap
+        // remains visible without inventing a second audio channel. The
+        // legacy path below stays intact for layouts 0/1 rollback.
+        if let presentation {
+            let userTarget = AudioPresentationTuning.presentationLevel(
+                rms: presentation.userLevel, isInput: true)
+            let outputTarget = AudioPresentationTuning.presentationLevel(
+                rms: presentation.outputLevel, isInput: false)
+            let userLevel = userEnvelope.advance(target: userTarget, now: now)
+            let outputLevel = outputEnvelope.advance(target: outputTarget, now: now)
+            drawAtom(context: &context, size: size, now: now,
+                     stageCenterX: stageCenterX, userLevel: userLevel,
+                     outputLevel: outputLevel, presentation: presentation,
+                     reduceMotion: reduceMotion, staticTrace: staticTrace)
+            return
+        }
 
         // E2 boot ramp: rises from flatline over 900ms when a connection
         // arrives (offline/connecting -> listening/speaking).
@@ -179,6 +282,26 @@ final class WaveEngine {
             let target = state == .speaking ? simLevel(t) : 0
             level = target > level ? level + (target - level) * 0.45
                                    : level + (target - level) * 0.06
+        }
+
+        // A positive envelope attack gives the ribbon a short forward push.
+        // It is deliberately derived after measured smoothing and is frozen
+        // when a speech level is unavailable, so it cannot synthesize output.
+        if let presentation, !staticTrace {
+            let attack = max(0, level - previousMeasuredLevel)
+            previousMeasuredLevel = level
+            let targetDepth = Self.ribbonDepthEnergy(
+                level: level,
+                transient: min(1, attack / 0.035),
+                activity: presentation.activity
+            )
+            let easing = targetDepth > depthPulse ? 0.28 : 0.08
+            depthPulse += (targetDepth - depthPulse) * easing
+        } else if presentation != nil {
+            previousMeasuredLevel = level
+            depthPulse = 0
+        } else {
+            depthPulse = 0
         }
 
         // --- ease dynamics + color toward the current state (0.06) ---
@@ -241,8 +364,17 @@ final class WaveEngine {
         let cy = h * 0.5
 
         let breath = presentation == nil ? (state == .listening ? 0.004 + 0.004 * sin(t * 0.9) : 0) :
-            (presentation?.activity == .thinking && !reduceMotion ? 0.004 * (1 + sin(t * 0.9)) : 0)
-        let voice = presentation == nil ? (state == .speaking ? level * 0.115 : 0) : level * 0.115
+            ((presentation?.activity == .thinking || presentation?.activity == .listening) && !reduceMotion
+                ? 0.004 * (1 + sin(t * 0.9)) : 0)
+        let voice: Double
+        if let presentation {
+            let gain = presentation.activity == .user
+                ? AudioPresentationTuning.measuredInputGain
+                : AudioPresentationTuning.measuredOutputGain
+            voice = level * gain
+        } else {
+            voice = state == .speaking ? level * AudioPresentationTuning.measuredOutputGain : 0
+        }
         var bootRamp = 1.0
         if bootStart > 0 {
             let p = min(1, (now - bootStart) / Self.bootRampSeconds)
@@ -262,6 +394,9 @@ final class WaveEngine {
         let amp = h * (dyn.base + breath + voice + 0.01 * flash) * Self.ampScale * bootRamp
         let alpha = min(1, dyn.alpha + 0.4 * flash)
         let glow = min(1, dyn.glow + flash)
+        let depthSpan = presentation == nil
+            ? 0
+            : h * AudioPresentationTuning.depthSpanFraction * depthPulse
 
         let r = dyn.cr, g = dyn.cg, b = dyn.cb
 
@@ -269,7 +404,8 @@ final class WaveEngine {
         // Wave level windows). The legacy rollback keeps the constant so it
         // stays the known quantity a rollback exists to be.
         let widthFraction = presentation == nil ? 0.11 : AudioPresentationTuning.waveWidthFraction
-        for layer in Self.layers {
+        let layers = presentation == nil ? Self.legacyLayers : Self.depthLayers
+        for layer in layers {
             var path = Path()
             var x = 0.0
             var first = true
@@ -277,10 +413,14 @@ final class WaveEngine {
                 // Super-Gaussian window: tight central plateau (middle
                 // ~10% of the width holds >=94% of peak at the default
                 // 0.11), fast falloff.
-                let env = exp(-pow((x - cx) / (widthFraction * w), 4))
+                let perspective = presentation == nil
+                    ? 1.0
+                    : 1.0 + layer.depth * 0.08 * depthPulse
+                let envWidth = max(1, widthFraction * w * perspective)
+                let env = exp(-pow((x - cx) / envWidth, 4))
                 // slow speech-like wobble along the trace
                 let mod = 0.65 + 0.35 * sin(0.012 * x * layer.fMul + t * 6.3 * dyn.speed + layer.po)
-                let y = cy + env * amp * layer.aMul * mod *
+                let y = cy + layer.depth * depthSpan + env * amp * layer.aMul * mod *
                     (0.55 * sin(0.04 * x * layer.fMul + p1 * layer.fMul + layer.po)
                      + 0.3 * sin(0.084 * x * layer.fMul + p2 * layer.fMul - layer.po)
                      + 0.15 * sin(0.172 * x * layer.fMul + p3 * layer.fMul + layer.po * 2))
@@ -293,21 +433,55 @@ final class WaveEngine {
                 .opacity(alpha * layer.aMul)
 
             // Phosphor glow: the canvas used shadowBlur 26*glow in
-            // accent cyan; approximated with blurred echo strokes.
-            if glow > 0.05 {
+            // accent cyan; approximated with blurred echo strokes. Front
+            // layers receive a small additional lift when measured audio
+            // has depth, while the no-level path remains unchanged.
+            let layerGlow = min(1, glow + depthPulse * (layer.depth > 0 ? 0.16 : 0.08))
+            if layerGlow > 0.05 {
                 var glowContext = context
-                glowContext.addFilter(.blur(radius: 13 * glow))
+                glowContext.addFilter(.blur(radius: 13 * layerGlow))
                 glowContext.stroke(
                     path,
                     with: .color(Color(red: presentation == nil ? 44 / 255 : r / 255,
                                        green: presentation == nil ? 201 / 255 : g / 255,
                                        blue: presentation == nil ? 1 : b / 255)
-                        .opacity(0.75 * glow * layer.aMul)),
-                    style: StrokeStyle(lineWidth: layer.width * 2, lineJoin: .round)
+                        .opacity(0.75 * layerGlow * layer.aMul)),
+                    style: StrokeStyle(lineWidth: layer.width * (2 + depthPulse * 0.35), lineJoin: .round)
+                )
+            }
+            // One broad, low-opacity halo creates the shallow volumetric
+            // read. It is driven by measured depthPulse, so idle/listening
+            // and unavailable speech do not gain a fake speaking glow.
+            if presentation != nil && !staticTrace && depthPulse > 0.03 {
+                var volumeContext = context
+                volumeContext.addFilter(.blur(radius: 18 + 8 * depthPulse))
+                volumeContext.stroke(
+                    path,
+                    with: .color(Color(red: r / 255, green: g / 255, blue: b / 255)
+                        .opacity(0.12 * depthPulse * layer.aMul)),
+                    style: StrokeStyle(lineWidth: layer.width * 3.0, lineJoin: .round)
                 )
             }
             context.stroke(path, with: .color(color),
-                           style: StrokeStyle(lineWidth: layer.width, lineJoin: .round))
+                           style: StrokeStyle(
+                            lineWidth: layer.width * (presentation == nil ? 1 : 1 + max(0, layer.depth) * depthPulse * 0.35),
+                            lineJoin: .round
+                           ))
         }
+    }
+
+    /// Audio state and easing stay in the shared engine. The adaptive renderer
+    /// draws the selected glass/plasma/comet treatment; rollback stays above.
+    private func drawAtom(context: inout GraphicsContext, size: CGSize, now: Double,
+                          stageCenterX: CGFloat?, userLevel: Double,
+                          outputLevel: Double, presentation: VoicePresentationState,
+                          reduceMotion: Bool, staticTrace: Bool) {
+        let userEnergy = min(1, max(0, userLevel * AudioPresentationTuning.measuredInputGain))
+        let outputEnergy = min(1, max(0, outputLevel * AudioPresentationTuning.measuredOutputGain))
+        let phase = atomMotion.advance(now: now, energy: max(userEnergy, outputEnergy),
+                                       moving: !reduceMotion && !staticTrace)
+        CometOrbRenderer.draw(context: &context, size: size, stageCenterX: stageCenterX,
+                              phase: phase, userEnergy: userEnergy,
+                              outputEnergy: outputEnergy, activity: presentation.activity)
     }
 }

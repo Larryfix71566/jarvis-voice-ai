@@ -13,10 +13,9 @@ that quietly puts a specialist back on the voice model fails CI rather
 than surfacing as a slowly-worsening answer quality nobody can explain.
 
 The Supervisor is exempt by construction — it is `settings.openai_model`,
-not an entry in agents.yaml — and so are the background maintenance rungs
-(memory sweep/classify/extraction, kb digest, procedure description):
-nobody delegates to them and they never speak to the user (Larry
-confirmed this reading 2026-09-01: "leave as is for now").
+not an entry in agents.yaml. Background maintenance has its own registry
+profiles as well; it may use a different provider or model, but it must not
+inherit the Supervisor route.
 """
 
 from __future__ import annotations
@@ -114,3 +113,15 @@ class TestTheFloorProfileItself:
         assert "or-sonnet-5" not in profiles_by_name, (
             "or-sonnet-5 must not coexist with claude-sonnet-5 (shared identity)"
         )
+
+
+def test_registry_has_no_haiku_profile_for_non_supervisor_routes(profiles_by_name):
+    """Haiku is a voice Supervisor route, never a registry background route."""
+    below = [
+        (name, field, value)
+        for name, profile in profiles_by_name.items()
+        for field in ("model", "identity")
+        for value in [str(profile.get(field, ""))]
+        if BELOW_FLOOR.search(value)
+    ]
+    assert not below, f"registry profiles must not resolve to Haiku: {below}"

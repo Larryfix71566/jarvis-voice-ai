@@ -17,6 +17,7 @@ import JarvisKit
 final class AppMessageRouter {
     private var task: Task<Void, Never>?
     private var transcriptSink: AnyCancellable?
+    private let responseRouter = ResponseResultRouter()
     private var stateSink: AnyCancellable?
     private var audioOutputSink: AnyCancellable?
     private var audioInputSink: AnyCancellable?
@@ -30,15 +31,23 @@ final class AppMessageRouter {
         workspace: WorkspaceStore? = nil,
         conversation: ConversationStore? = nil,
         drawer: DrawerState? = nil,
-        notices: ConsoleNoticeState? = nil
+        attachments: AttachmentStore? = nil,
+        notices: ConsoleNoticeState? = nil,
+        consoleCoordinator: ConsoleActionCoordinator? = nil
     ) {
         guard task == nil else { return }
         // ConversationStore mirrors JarvisClient.transcript (P8/P16) —
         // now live: JarvisClient aggregates the bot's own RTVI
         // user-transcription / bot-llm-text frames (2026-08-30).
-        if let conversation {
-            transcriptSink = client.$transcript.sink { entries in
-                conversation.set(entries)
+        transcriptSink = client.$transcript.sink { [weak self] entries in
+            conversation?.set(entries)
+            let layout = UserDefaults.standard.object(forKey: "mortimer.interface.layoutVersion") as? Int ?? 2
+            if InterfaceLayoutVersion.resolve(layout) == 2, let workspace {
+                let previousRevision = workspace.consoleRevision
+                self?.responseRouter.receive(entries, workspace: workspace, display: displayWindow)
+                if workspace.consoleRevision != previousRevision {
+                    consoleCoordinator?.publishInventory()
+                }
             }
         }
         // E3 sound hooks on connection transitions: boot on
@@ -84,12 +93,113 @@ final class AppMessageRouter {
                     if case .agentWorking = message { Sounds.play(.tick) }
                     if case .agentDone(let done) = message { Sounds.play(done.ok ? .done : .fail) }
                     agentRuns.apply(message)
+                case .consoleResult(let result):
+                    // Acknowledgement is retained for the shared console
+                    // surface. It is deliberately not converted to an
+                    // optimistic UI mutation; the coordinator applies state
+                    // only after validating the same request locally.
+                    notices?.showConsoleResult(result)
+                case .consoleHello(let hello):
+                    // Capability negotiation is explicit. The client echoes
+                    // only the bounded operations it understands and never
+                    // treats a server advertisement as user authority.
+                    client.send(.consoleReady(sessionID: hello.sessionID,
+                                               generation: hello.generation,
+                                               actions: hello.actions,
+                                               inputTypes: hello.inputTypes))
+                    client.setConsoleIdentity(sessionID: hello.sessionID, generation: hello.generation,
+                                               inputProfile: hello.inputProfile)
+                    consoleCoordinator?.publishInventory()
+                case .consoleRequest(let request):
+                    // A voice-issued console_action arrives as the same
+                    // versioned request used by pointer controls. Execute it
+                    // through the app-scoped coordinator and acknowledge the
+                    // actual local outcome; no view has a second dispatcher.
+                    guard client.consoleSessionID == request.sessionID,
+                          client.consoleGeneration == request.generation else {
+                        let stale = ConsoleResult(
+                            sessionID: request.sessionID, generation: request.generation,
+                            requestID: request.requestID, status: "error",
+                            code: "stale_session",
+                            summary: "This console session is no longer current.")
+                        notices?.showConsoleResult(stale)
+                        client.send(.consoleResult(stale))
+                        break
+                    }
+                    guard let consoleCoordinator else { break }
+                    let outcome = consoleCoordinator.execute(request)
+                    let status: String
+                    let code: String
+                    let summary: String
+                    switch outcome {
+                    case .applied: status = "ok"; code = "applied"; summary = "Console action applied."
+                    case .noop: status = "noop"; code = "no_change"; summary = "That console action changed nothing."
+                    case .pendingUser: status = "pending_user"; code = "user_action_required"; summary = "The requested system action is waiting for your choice."
+                    case .unsupported: status = "unsupported"; code = "unsupported"; summary = "That console action is unavailable here."
+                    case .capacity: status = "error"; code = "panel_limit"; summary = "Return a panel before opening another."
+                    case .invalid: status = "error"; code = "invalid_target"; summary = "That console target is no longer available."
+                    case .stale: status = "error"; code = "stale_selection"; summary = "The console changed; please choose the item again."
+                    }
+                    let result = ConsoleResult(sessionID: request.sessionID,
+                                                generation: request.generation,
+                                                requestID: request.requestID,
+                                                status: status, code: code,
+                                                summary: summary)
+                    notices?.showConsoleResult(result)
+                    client.send(.consoleResult(result))
+                    consoleCoordinator.publishInventory()
+                case .inputStatus(let status):
+                    // The staged tray is ephemeral. Clear it only after a
+                    // terminal analysis/cancel response; intermediate
+                    // manifest/chunk acknowledgements leave retryable UI in
+                    // place, and failures remain visible to the user.
+                    if status.code == "analysis_complete" || status.status == "cancelled" {
+                        attachments?.clear()
+                    } else if status.status == "error" {
+                        attachments?.stageError(status.summary)
+                    }
+                case .inputOffer(let offer):
+                    // Voice analysis offers are data-only until the user
+                    // approves them in the tray. Reject stale offers before
+                    // exposing the provider/question to the UI.
+                    guard client.consoleSessionID == offer.sessionID,
+                          client.consoleGeneration == offer.generation else { break }
+                    attachments?.presentOffer(offer)
+                case .inputConsent(let consent):
+                    guard client.consoleSessionID == consent.sessionID,
+                          client.consoleGeneration == consent.generation else { break }
+                    attachments?.presentConsent(consent)
                 case .display(let payload):
                     let result = WorkspaceResult(payload: payload)
-                    workspace?.receive(result)
+                    // Window-routed content has one renderer at a time. Keep
+                    // the workspace as the fallback when no supporting
+                    // display is open; while the display is live its view
+                    // yields through the locator in WorkspaceView.
                     switch payload.surface {
-                    case .window: displayWindow.apply(payload, workspaceID: result.id)
+                    case .window:
+                        // An exact repeat is already represented by the same
+                        // external renderer and workspace row. Reusing that
+                        // owner prevents repeated graph/display requests from
+                        // growing a second history while still allowing a
+                        // distinct file in one Developer run to append a new
+                        // section and workspace row.
+                        let existingID = displayWindow.presentedWorkspaceID(for: payload)
+                            .flatMap { id in workspace?.containsResult(id) == true ? id : nil }
+                        let workspaceID = existingID ?? result.id
+                        if existingID == nil { workspace?.receive(result) }
+                        let panelID = displayWindow.apply(payload, workspaceID: workspaceID)
+                        if let workspace {
+                            if Self.isMemoryGraphPayload(payload) {
+                                workspace.openMemoryGraph()
+                                _ = workspace.sendToDisplay(.memoryGraph)
+                            } else if let ownerID = displayWindow.workspaceID(for: panelID) {
+                                _ = workspace.sendToDisplay(.result(ownerID))
+                            } else {
+                                _ = workspace.sendToDisplay(.result(result.id))
+                            }
+                        }
                     case .drawer:
+                        workspace?.receive(result)
                         displayResults.apply(payload, workspaceID: result.id)
                         // D31's three-case auto-open rule (App.tsx:247-254),
                         // drawer-routed results only: closed → open on
@@ -104,6 +214,7 @@ final class AppMessageRouter {
                             }
                         }
                     }
+                    consoleCoordinator?.publishInventory()
                 case .speakerGate(let gate):
                     // F4 — a near-threshold drop (plausibly Larry, not the
                     // TV) surfaces a brief auto-fading chip; TV drops
@@ -116,6 +227,17 @@ final class AppMessageRouter {
                 }
             }
         }
+    }
+
+    private static func isMemoryGraphPayload(_ payload: DisplayPayload) -> Bool {
+        let values = [payload.kind, payload.title, payload.tool]
+            .compactMap { $0?.lowercased() }
+        if values.contains(where: { $0.contains("memory_graph") || $0.contains("memory graph") }) {
+            return true
+        }
+        return payload.images?.contains { image in
+            image.lowercased().contains("/graph/memory")
+        } == true
     }
 
     func stop() {

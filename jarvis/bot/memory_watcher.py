@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
 
 from jarvis.config import Settings
 from jarvis.memory import (
@@ -30,6 +31,8 @@ from jarvis.memory import (
     memory_extraction_v2_enabled,
     update_memory_from_session,
 )
+from jarvis.memory_automation import process_classification_jobs
+from jarvis.db import get_conn, now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +48,13 @@ class MemorySweepWatcher:
         settings: Settings,
         session_id: str,
         interval_s: float = DEFAULT_INTERVAL_S,
+        automation_handler=None,
     ):
         self._settings = settings
         self._session_id = session_id
         self._interval_s = interval_s
         self._task: asyncio.Task | None = None
+        self._automation_handler = automation_handler
 
     def start(self) -> None:
         self._task = asyncio.create_task(self._run())
@@ -86,6 +91,22 @@ class MemorySweepWatcher:
                 ),
                 timeout=MEMORY_EXTRACTION_TIMEOUT_S,
             )
+            if (self._automation_handler is not None and
+                    os.environ.get("JARVIS_MEMORY_AUTOMATION_ENABLED", "false").lower() in {"1", "true", "yes"}):
+                conn = get_conn()
+                try:
+                    process_classification_jobs(
+                        conn, now_iso=now_iso(), classifier=self._automation_handler,
+                        shadow=bool(getattr(self._settings, "jarvis_memory_automation_shadow", True)),
+                        rollout_stage=getattr(self._settings,
+                                              "jarvis_memory_automation_stage", "shadow"),
+                    )
+                    # Classification updates and maintenance status are
+                    # ordinary SQLite writes. Close must not roll them back:
+                    # the idle worker is the durable path, not just a probe.
+                    conn.commit()
+                finally:
+                    conn.close()
         except asyncio.TimeoutError:
             logger.warning(
                 "memory_sweep_timeout session=%s", self._session_id

@@ -10,7 +10,48 @@ final class WorkspaceExportCoordinator {
     private(set) var busy = false
     private(set) var resultID: UUID?
     private(set) var message: String?
+    private(set) var exportFolderURL: URL?
     @ObservationIgnored private var panel: NSSavePanel?
+
+    init() {
+        if let bookmark = UserDefaults.standard.data(forKey: "mortimer.export.folderBookmark") {
+            var stale = false
+            if let url = try? URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope], relativeTo: nil,
+                                  bookmarkDataIsStale: &stale), !stale {
+                exportFolderURL = url
+            }
+        }
+    }
+
+    /// Choose and retain only a security-scoped bookmark for the approved
+    /// export folder. No files are read, written, or deleted by this action.
+    func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.begin { [weak self] response in
+            guard let self, response == .OK, let url = panel.url else { return }
+            guard let bookmark = try? url.bookmarkData(options: .withSecurityScope,
+                                                       includingResourceValuesForKeys: nil,
+                                                       relativeTo: nil) else { return }
+            UserDefaults.standard.set(bookmark, forKey: "mortimer.export.folderBookmark")
+            self.exportFolderURL = url
+            self.message = "Export folder set to \(url.lastPathComponent)."
+        }
+    }
+
+    func clearFolder() {
+        UserDefaults.standard.removeObject(forKey: "mortimer.export.folderBookmark")
+        exportFolderURL = nil
+        message = "Export folder cleared."
+    }
+
+    func copy(text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        message = pasteboard.setString(text, forType: .string) ? "Copied result." : "Copy failed."
+    }
 
     func chooseDestination(for result: WorkspaceResult) {
         guard !busy else { return }

@@ -149,6 +149,15 @@ profiles:
     # the Phase 3 executor tier (JARVIS_UPGRADE_PROFILE / JARVIS_APPBUILD_
     # PROFILE point here once the baseline is taken).
 
+  - name: codex-subscription
+    label: "Codex subscription default — authenticated ChatGPT subscription runtime"
+    provider: openai
+    model: gpt-6-astra
+    identity: openai/gpt-6-astra
+    # No API credential: this profile is reachable only through the explicit
+    # codex_subscription route and authenticated Codex CLI runtime.
+    tier: frontier
+
   # ---- OPENROUTER PROFILES ------------------------------------------
   # Larry 2026-08-19. One key, many vendors. Added for the COUNCIL and
   # PLANNER tiers only — diversity of proposers and judges is the council's

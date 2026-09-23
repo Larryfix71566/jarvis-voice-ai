@@ -1,6 +1,6 @@
 # Mortimer Optimization Plan — Cost, Memory, and Model Routing
 
-Status: Rev 3.5 — 2026-09-03 (Interface Task: the council roster's premise corrected — `council_rounds.run_id` is NULL on all 35 rounds and nothing can populate it today, so the roster ships as its own section rather than a card attachment; Stage A landed, see that section. Rev 3.4: Phase 4 rewritten: its cost premise died when Phase 1 put the memory block inside the cached prefix — measured, see the Phase 4 section itself. Rev 3.3: Phase 3 reevaluated against the real ledger and council records; see "Rev 3.3 notes" at the end. Rev 3.2: Phase 1/1b rewritten: caching needs the native Messages API, the OpenAI-compat layer cannot carry it; see "Rev 3.2 resolutions" at the end. Rev 3.1: conflicts resolved + model-floor policy.)
+Status: Rev 3.6 — 2026-09-18 (Background model-route separation clarified: Haiku is exclusive to the voice Supervisor/orchestrator; KB digest and procedure maintenance now use `JARVIS_BACKGROUND_PROFILE`, alongside the existing dedicated memory route. Rev 3.5: Interface Task: the council roster's premise corrected — `council_rounds.run_id` is NULL on all 35 rounds and nothing can populate it today, so the roster ships as its own section rather than a card attachment; Stage A landed, see that section. Rev 3.4: Phase 4 rewritten: its cost premise died when Phase 1 put the memory block inside the cached prefix — measured, see the Phase 4 section itself. Rev 3.3: Phase 3 reevaluated against the real ledger and council records; see "Rev 3.3 notes" at the end. Rev 3.2: Phase 1/1b rewritten: caching needs the native Messages API, the OpenAI-compat layer cannot carry it; see "Rev 3.2 resolutions" at the end. Rev 3.1: conflicts resolved + model-floor policy.)
 
 **Standing policy (Larry, 2026-09-01) — the model floor:** the ONLY agent that may run Haiku is the voice agent (Supervisor). Every other agent — the five specialists and the planner/executor loop — runs at Sonnet-or-equivalent or above. Cost work on those agents is caching, context slimming, effort, and choosing *among* Sonnet-class-and-up models; it is never dropping below the floor. This overrides the earlier "Haiku is correct for the conversational agents" stance in `config/agents.yaml` and CLAUDE.md, and it is bound in CONFIG plus a test (Phase 0b item 5), not stored as a memory fact — a fact only persuades a model, it cannot bind a tool's behaviour (the same lesson as `jarvis_units`).
 Scope: sub-agents and supervisor. Voice transport (STT/TTS/realtime) explicitly exempt — stays on native provider connections for latency.
@@ -113,14 +113,15 @@ supersede several assumptions the original plan carried.
      rule as the units fact: once config binds it, a workflow that only
      persuades is dead weight, and under `MAX_INJECTED = 1` it can
      displace a workflow that still does something.
-   - **Interpretation, stated so it can be vetoed in one line:** the
-     floor is about AGENTS. The background maintenance rungs
-     (`memory_merge`, `memory_classify`, `memory_extraction`,
-     `kb_digest`, `procedures_describe`) are not agents — nobody
-     delegates to them, they never speak to the user — and stay eligible
-     for cheap/local models in Phases 3 and 5. If Larry means the floor
-     to cover them too, delete this bullet and the Phase 5 local-model
-     item narrows to the Supervisor alone.
+   - **Policy clarification (2026-09-18):** Haiku is exclusive to the
+     voice Supervisor/orchestrator. The background maintenance rungs
+     (`memory_merge`, `memory_classify`, `memory_extraction`, `kb_digest`,
+     `procedures_describe`) are not agents, so they may use different
+     providers and cheaper/local models after evaluation, but they still
+     resolve through explicit non-Supervisor registry routes and never
+     inherit `OPENAI_MODEL` or its credential. `JARVIS_MEMORY_PROFILE`
+     covers memory extraction/consolidation/classification; the shared
+     `JARVIS_BACKGROUND_PROFILE` covers KB digests and procedure descriptions.
    - Cost effect is expected and accepted: four agents move Haiku →
      Sonnet before the baseline is taken, so the baseline measures the
      policy-compliant system, not the one being retired. Patch the
@@ -184,7 +185,12 @@ supersede several assumptions the original plan carried.
 
 `JARVIS_ANTHROPIC_NATIVE`: unset or `"1"` → native on both paths; `"0"` → today's compat path everywhere. One variable, read at client construction, so rollback is a `.env` edit and a restart, never a code change. Both paths key on the route, never on the model string: Path A on `"api.anthropic.com" in settings.openai_base_url`, Path B on `profile["provider"] == "anthropic"` (every profile in `config/upgrade_models.yaml` declares `provider:`; `provider_from_base_url()` is the fallback for the settings client).
 
-**Out of scope, deliberately:** background rungs (`jarvis/memory.py:864`, `memory_sweep.py:352,646`, `kb_digest.py:113`, `procedures.py:358`) and the text-CLI `agents/supervisor.py:69` stay on compat — they run on the Supervisor's Haiku settings with prompts under the 4,096 floor, one-shot, no history; nothing to cache. Revisit in Phase 5 with the rest of the background tier. Non-Anthropic providers: Moonshot direct is automatic caching (nothing to send; task 5 verifies the usage field lands); OpenRouter is task 4.
+**Out of scope, deliberately:** background rungs use the compatibility client
+but no longer inherit the Supervisor's model. They resolve their explicit
+registry profiles through `jarvis/memory_model.py`; caching optimization for
+those one-shot calls remains deferred to Phase 5. Non-Anthropic providers:
+Moonshot direct is automatic caching (nothing to send; task 5 verifies the
+usage field lands); OpenRouter is task 4.
 
 ### Tasks
 
@@ -704,7 +710,8 @@ against the working tree on Larry's machine).
    Supervisor and background rungs, the two model-preference workflow
    drafts retired, and the savings-ledger prior for "down-tiering"
    reduced accordingly. One interpretation flagged for veto: background
-   maintenance rungs are not agents and stay below the floor.
+   maintenance rungs are not agents, but they still use explicit
+   non-Supervisor routes and may not inherit Haiku.
 
 Not changed, deliberately: the Phase order, the exit criteria, the
 Interface Task, Phases 2/4/5. Nothing there conflicted with the repo.
@@ -825,9 +832,8 @@ What the data said, after the planner/executor split landed (7e2503f):
 7. **What Phase 3's remaining work actually is under the floor:** the
    four specialists are already at the floor (nothing below to test); the
    one live agent comparison is developer SubAgent opus → sonnet; the
-   background rungs are already on Haiku, so their eval sets are Phase 5
-   prep — except `memory_extraction`, which may need to go UP (over-
+   background rungs now have explicit non-Supervisor routes, so their eval
+   sets are Phase 5 prep — except `memory_extraction`, which may need to go UP (over-
    admission risk) and whose data only started accumulating with Phase 2;
    the Supervisor already has `tests/evals/routing_eval.py` (68 cases,
    candidate-model swap via `EVAL_MODEL`/`EVAL_BASE_URL`/`EVAL_KEY_ENV`).
-

@@ -11,10 +11,24 @@ enum AdaptiveLayoutMode: Equatable { case conversation, rail, bottom }
 struct AdaptiveStageView: View {
     let voiceState: VoiceState
     let wideWindow: Bool
-    @AppStorage("mortimer.interface.compactConversation") private var compactConversation = false
+    /// Supplied by the command-console composition so navigation shares the
+    /// same dispatcher as voice actions. Nil preserves legacy previews.
+    let coordinator: ConsoleActionCoordinator?
+    /// Compact conversation is the startup presentation. The button below
+    /// still lets the user expand it and AppStorage preserves that choice.
+    @AppStorage("mortimer.interface.compactConversation") private var compactConversation = true
+    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 2
     @EnvironmentObject private var client: JarvisClient
     @Environment(WorkspaceStore.self) private var workspace
+    @Environment(ConversationStore.self) private var conversation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(voiceState: VoiceState, wideWindow: Bool,
+         coordinator: ConsoleActionCoordinator? = nil) {
+        self.voiceState = voiceState
+        self.wideWindow = wideWindow
+        self.coordinator = coordinator
+    }
 
     // Closure C7: measured levels from the native path's own taps, sampled
     // app-scoped at ≤30 Hz by JarvisClient's AudioActivityObserver (the
@@ -49,16 +63,38 @@ struct AdaptiveStageView: View {
             Group {
                 switch mode {
                 case .conversation:
-                    ZStack {
-                        VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse, presentation: voicePresentation)
-                        OrbFieldView(voiceState: voiceState, hidesLettering: true, presentation: voicePresentation())
-                        VStack {
-                            HStack {
-                                Spacer()
-                                conversationControls
-                            }
+                    VStack(spacing: 0) {
+                        HStack {
+                            Text("Command Center")
+                                .font(.system(size: 24, weight: .semibold))
                             Spacer()
-                        }.padding(16)
+                            conversationControls
+                        }
+                        .padding(.horizontal, AdaptiveLayoutMetrics.workspacePadding)
+                        .padding(.top, AdaptiveLayoutMetrics.workspacePadding)
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 10) {
+                                if conversation.entries.isEmpty {
+                                    ContentUnavailableView("Ready", systemImage: "waveform",
+                                        description: Text("Use the microphone controls to start a conversation."))
+                                } else {
+                                    ForEach(InterfaceLayoutVersion.resolve(layoutVersion) == 2 ? conversation.latestCaptions : conversation.entries) { entry in
+                                        Text(InterfaceLayoutVersion.resolve(layoutVersion) == 2 ? ConversationStore.liveCaption(entry.text) : entry.text)
+                                            .font(.system(size: 15))
+                                            .textSelection(.enabled)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .padding(12)
+                                            .background(AppTheme.panel.opacity(0.7))
+                                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    }
+                                }
+                            }
+                            .padding(AdaptiveLayoutMetrics.workspacePadding)
+                        }
+                        Divider()
+                        VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse,
+                                      presentation: voicePresentation)
+                            .frame(minHeight: 150, maxHeight: 220)
                     }
                 case .rail:
                     HStack(spacing: 0) {
@@ -76,7 +112,10 @@ struct AdaptiveStageView: View {
                         Divider()
                         HStack(spacing: 0) {
                             VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse, presentation: voicePresentation)
-                                .frame(width: 140)
+                                // Keep the compact rail shallow while giving
+                                // the measured lobe enough horizontal travel
+                                // to remain legible at the default width.
+                                .frame(minWidth: 220, idealWidth: 240, maxWidth: 280)
                             OrbFieldView(voiceState: voiceState, compactPresentation: true, hidesLettering: true, presentation: voicePresentation())
                         }.frame(height: 180)
                     }
@@ -91,9 +130,19 @@ struct AdaptiveStageView: View {
         Button(compactConversation ? "Expand voice" : "Keep voice compact") {
             compactConversation.toggle()
         }
-        Button("Memory graph") { workspace.openMemoryGraph() }
+        Button("Knowledge Atlas") {
+            if let coordinator { _ = coordinator.executePointer(.viewSet, target: "atlas") }
+            else { workspace.openAtlas() }
+        }
+        Button("Memory graph") {
+            if let coordinator { _ = coordinator.executePointer(.viewSet, target: "memory") }
+            else { workspace.openMemoryGraph() }
+        }
         if workspace.activeResult != nil || workspace.showsMemoryGraph {
-            Button("Return to workspace") { workspace.returnToWorkspace() }
+            Button("Return to workspace") {
+                if let coordinator { _ = coordinator.executePointer(.viewSet, target: "results") }
+                else { workspace.returnToWorkspace() }
+            }
         }
     }
 
@@ -110,7 +159,7 @@ struct AdaptiveStageView: View {
             }
             .padding(AdaptiveLayoutMetrics.workspacePadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        } else { WorkspaceView() }
+        } else { WorkspaceView(coordinator: coordinator) }
     }
 
 }

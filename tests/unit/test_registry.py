@@ -26,6 +26,14 @@ def make_registry() -> SkillRegistry:
     return registry
 
 
+def make_external_registry() -> SkillRegistry:
+    registry = SkillRegistry(config_path="unused.yaml")
+    registry._tools = {
+        "web_search": ("mcp-web", make_tool("web_search", "mcp-web")),
+    }
+    return registry
+
+
 class TestOpenaiTools:
     def test_converts_to_function_schema(self):
         tools = make_registry().openai_tools()
@@ -107,6 +115,23 @@ class TestCall:
         registry = make_registry()
         result = await registry.call("create_note", {}, server_names=["mcp-time"])
         assert "not available" in result
+
+    async def test_sensitive_turn_blocks_external_mcp_server_before_invocation(self):
+        from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
+
+        registry = make_external_registry()
+        session = FakeSession(result=ok_result(structured={"results": []}))
+        registry._sessions = {"mcp-web": session}
+        holder = SensitiveTurn()
+        holder.arm("financial")
+        token = current_sensitive_turn.set(holder)
+        try:
+            result = await registry.call("web_search", {"query": "private"})
+        finally:
+            current_sensitive_turn.reset(token)
+
+        assert "protected turn" in result
+        assert session.calls == []
 
     async def test_timeout_becomes_failure_string(self, monkeypatch):
         registry = make_registry()

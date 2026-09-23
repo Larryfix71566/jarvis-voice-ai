@@ -308,6 +308,22 @@ class TestRepoMapInjection:
         assert "Test map" in agent._system_prompt
         assert "delegate_task lives in jarvis/agents/delegate.py" in agent._system_prompt
 
+    def test_upgrade_agent_prompt_carries_architecture_reference(
+        self, service: SelfEditService, tmp_path, monkeypatch
+    ) -> None:
+        import jarvis.repo_map as repo_map_module
+
+        repo_root = tmp_path / "fake_repo"
+        (repo_root / "docs").mkdir(parents=True)
+        (repo_root / "docs" / "ARCHITECTURE.md").write_text(
+            "# Test architecture\n- Supervisor owns voice routing\n"
+        )
+        monkeypatch.setattr(repo_map_module, "__file__", str(repo_root / "jarvis" / "repo_map.py"))
+
+        agent = _agent(service, ScriptedClient([_msg(content="done")]))
+        assert "Architecture reference" in agent._system_prompt
+        assert "Supervisor owns voice routing" in agent._system_prompt
+
     def test_missing_repo_map_skipped_silently(
         self, service: SelfEditService, tmp_path, monkeypatch
     ) -> None:
