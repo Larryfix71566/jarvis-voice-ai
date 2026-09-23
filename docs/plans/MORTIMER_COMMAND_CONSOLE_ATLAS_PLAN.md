@@ -1284,7 +1284,7 @@ Existing repository documents:
 
 - [Adaptive interface plan](MORTIMER_ADAPTIVE_INTERFACE_PLAN.md).
 - [P0 preservation checklist](../acceptance/adaptive-interface/P0-preservation-checklist.md).
-- [Plan author conventions](PLAN_AUTHOR_BRIEF.md). Its older runtime/worktree
+- [Plan author conventions](../archive/plans/PLAN_AUTHOR_BRIEF.md). Its older runtime/worktree
   assumptions yield to CLAUDE.md's current sandbox execution update.
 - [Repository instructions](../../CLAUDE.md), especially the September 10
   sandbox update and existing audio/authorization invariants.

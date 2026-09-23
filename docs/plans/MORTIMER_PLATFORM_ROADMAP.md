@@ -24,7 +24,7 @@ implementer would need is repeated, fully specified, in the track plan.
 
 - [x] **ARCH-01 — Publish a current, easily discoverable architecture and
   operations reference.** The existing
-  [September 4 snapshot](../reviews/ARCHITECTURE_SNAPSHOT_2026-09-04.md)
+  [September 4 snapshot](../archive/reviews/ARCHITECTURE_SNAPSHOT_2026-09-04.md)
   is historical evidence, not a verified description of today's deployment.
   Link the maintained reference from README, REPO_MAP and this roadmap.
   Cover native Command Console/Atlas, voice and sidecar services, MCP tools,

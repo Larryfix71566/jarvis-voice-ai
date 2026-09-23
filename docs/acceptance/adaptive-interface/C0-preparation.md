@@ -43,7 +43,7 @@ The phases after C0 change Swift and must be compiled and tested by `swift test`
 ## Files produced (all untracked in the candidate)
 
 - `docs/acceptance/adaptive-interface/C0-preparation.md` (this file)
-- `docs/acceptance/adaptive-interface/production-local-patches/README.md` + five `.diff` files + `bundle.sh.production-vs-candidate.diff`
+- `docs/archive/acceptance/adaptive-interface/production-local-patches/README.md` + five `.diff` files + `bundle.sh.production-vs-candidate.diff`
 - `docs/acceptance/adaptive-interface/P0-preservation-checklist.md` (appended section)
-- `docs/acceptance/adaptive-interface/P2-additive-observation-design.md` (status line)
+- `docs/archive/acceptance/adaptive-interface/P2-additive-observation-design.md` (status line)
 - `docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSURE_PLAN.md`, `docs/reviews/MORTIMER_ADAPTIVE_INTERFACE_PLAN_REVIEW.md` (from earlier today)
