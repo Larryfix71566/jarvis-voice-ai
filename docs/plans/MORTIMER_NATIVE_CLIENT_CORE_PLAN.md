@@ -4,6 +4,8 @@
 
 **§8 status.** V1–V4 (build and unit gate) pass: `macos/JarvisKit` builds and runs **170 tests** green, `macos/MortimerHost` **154** green, `macos/VPIOBench` builds. G1(b)'s live-session items (V5 session, V6 audio never stops, V7a–c interruption scenarios) have been exercised repeatedly during the C6 native-audio work — full conversations with barge-in, on both transports — but were **not recorded case by case against V5/V6/V7**, so G1(b) is not claimed as formally passed. Doing so needs one session walked against that table.
 
+**Reconciled 2026-09-22 against main `88b206f`.** The 170 / 154 counts above are stale. Current **static** counts of `func test…` declarations, not test-run results: `macos/JarvisKit/Tests` **195**, `macos/MortimerHost/Tests` **250**. No Swift toolchain was available for this reconciliation, so no pass count is claimed for `88b206f`. The latest recorded run (`docs/acceptance/command-console/receipts/full-verification-2026-09-18.md`, on a pre-merge release-review worktree) has JarvisKit 190 passed and MortimerHost 244 executed with 0 failures and 3 display-dependent skips. G1(b) remains not formally passed.
+
 **Author / origin (Larry's words, quoted from the roadmap's origin section):**
 - *"The plan is to migrate away from the web part since it is holding us back from what we want to do related to multiscreen and transparent windows."*
 - *"the usefulness of the web interface has been lost since the integration of the swift wrapper — we have to rebuild the app with any changes anyway. I propose that we move away from the web portion of the interface and use swift for the UI."*

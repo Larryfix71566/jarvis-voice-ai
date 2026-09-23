@@ -15,6 +15,15 @@ JarvisKit 190 tests pass. MortimerHost builds and its focused
   Reconnect, sharing picker, VoiceOver, and five-day daily-driver
   evidence require a Mac acceptance session and remain open.
 
+Reconciled 2026-09-22 against main `88b206f`. Swift figures in this file are
+the counts recorded at the time of each receipt, not current pass counts.
+Static `func test` counts at `88b206f`: JarvisKit 195, MortimerHost 250,
+`ScreenPlacementTests` 9, `SupportingDisplayAcceptanceTests` 4,
+`NativeAudioTransportTests` 26, `KnowledgeAtlasTests` 4. No committed receipt
+records a run at those counts. Physical *display* reconnect restoration now
+has a committed receipt (see Open Mac evidence); voice/socket reconnect is
+still open.
+
 ## Automated evidence
 
 - Full Mortimer answers now use one streaming result per user request in layout 2,
@@ -78,7 +87,9 @@ remain open; see [response-routing receipt](receipts/response-routing-2026-09-18
 - Focused native verification on 2026-09-18 passed 42 tests covering the
   coordinator, action registry, attachment bounds, startup conversation view,
   and virtual-screen placement/recovery. This is implementation evidence for
-  UI2-03/UI2-06, not physical-monitor or full voice acceptance.
+  UI2-03/UI2-06, not physical-monitor or full voice acceptance. (Reconciled
+  2026-09-22: this 42-test run is not recorded in a committed receipt; treat
+  the count as unverified.)
 - The fresh candidate bundle now launches without the prior `PanelStore`
   environment crash. Native transport startup opens the WebSocket before
   CoreAudio and starts CoreAudio outside the socket callback queue; the
@@ -88,7 +99,14 @@ remain open; see [response-routing receipt](receipts/response-routing-2026-09-18
   was inspected in the logged-in Mac UI at `READY VOICE` with the compact
   Conversation view as the default. Output-speech and complete two-channel
   active-audio evidence remain separate open gates.
-- The eight `ScreenPlacementTests` include synthetic virtual-screen clamping,
+  (Reconciled 2026-09-22: the 21/21 run has no committed log. The committed
+  `receipts/monitor-ownership-2026-09-18/audio-start-deadline-tests.log`
+  records `NativeAudioTransportTests` 22/22 after the 30-second audio-start
+  deadline was added; the file now has 26 static tests. `READY VOICE` is
+  recorded in `receipts/candidate-live-response-display-2026-09-18.md`.)
+- The `ScreenPlacementTests` (eight at the time of this entry; nine static
+  tests at `88b206f`, 9/9 in `receipts/full-verification-2026-09-18.md`)
+  include synthetic virtual-screen clamping,
   manual-frame preservation, mirrored-screen handling, disconnect/reconnect
   recovery, and a live two-display topology check. That check passed on the
   connected Mac on 2026-09-18. A direct `NSScreen` probe on 2026-09-17
@@ -139,8 +157,12 @@ remain open; see [response-routing receipt](receipts/response-routing-2026-09-18
   consume a pending offer, emit one typed `input/consent`, and reuse the same
   native approval state machine. Non-matching speech remains an ordinary turn.
 - Existing graph p95 gate remains 33 ms; the latest clean measured p95 was
-  9.908 ms (2026-09-18 native run; max 13.147 ms), recorded by
-  `macos/MortimerHost/.build/interface-fixtures/P4-frame-time.json`.
+  9.908 ms (2026-09-18 native run; max 13.147 ms), recorded in the committed
+  [`receipts/response-routing-2026-09-18/P4-frame-time.json`](receipts/response-routing-2026-09-18/P4-frame-time.json).
+  (Reconciled 2026-09-22: this entry previously cited the uncommitted build
+  output `macos/MortimerHost/.build/interface-fixtures/P4-frame-time.json`.
+  The later full-verification receipt records p95 9.627 ms, max 12.743 ms,
+  but no JSON for that run is committed.)
 - Verification rerun on 2026-09-18 after the supporting-stage handoff fix:
   `PresentationLevelMappingTests|VoiceWaveRenderingTests` passed 13/13,
   `SupportingDisplayAcceptanceTests` passed 2/2 (including the four-result
@@ -148,6 +170,10 @@ remain open; see [response-routing receipt](receipts/response-routing-2026-09-18
   memory/console/manifest acceptance set passed 230 tests. These are current
   sandbox evidence; they do not close the physical display, provider, picker,
   accessibility, rollback or daily-driver gates below.
+  (Reconciled 2026-09-22: this rerun has no committed log. The committed
+  `receipts/response-routing-2026-09-18/render-tests.log` records
+  `SupportingDisplayAcceptanceTests` 4/4, which matches the four static tests
+  now in that file.)
 - The durable automated-run receipt is
 [`sandbox-verification-2026-09-18.md`](receipts/sandbox-verification-2026-09-18.md).
   It records the complete Python, JarvisKit, MortimerHost, plan-manifest and
@@ -155,7 +181,8 @@ remain open; see [response-routing receipt](receipts/response-routing-2026-09-18
 - The current focused native rerun is recorded in
   [`current-focused-native-2026-09-18.md`](receipts/current-focused-native-2026-09-18.md):
   ScreenPlacementTests 8/8 and the Command Center/rendering/ownership filter
-  39/39 passed.
+  39/39 passed. These are receipt-time counts. The later full-verification
+  receipt records ScreenPlacementTests 9/9.
 
 ## Open Mac evidence
 
@@ -172,7 +199,9 @@ session-local `GraphImageRequests` owner after validating the configured
 origin. It retains no completed response cache. Five concurrency tests cover
 one-fetch sharing, independent URL/owner isolation, cancelling one versus all
 waiters, fresh subsequent reads and retry after failure. The full JarvisKit
-suite passes 195/195. This closes the legacy path's concurrent-request
+suite passes 195/195 (reconciled 2026-09-22: no committed receipt records this
+run. The committed JarvisKit logs record 190/190. 195 is the static test
+count at `88b206f`, including the five `GraphImageRequestsTests`). This closes the legacy path's concurrent-request
 implementation gap; cross-surface/provider instrumentation and repeated live
 voice requests remain acceptance work.
 
@@ -219,6 +248,37 @@ using “Return here” removed the supporting window and left the graph usable 
 the main console. The physical unplug/rehome and reconnect-restoration gates
 are closed; voice-triggered repeat and provider/fetch instrumentation remain
 open.
+
+Reconciled 2026-09-22 against main `88b206f`. The three committed monitor
+receipts show the following:
+
+- [`candidate-monitor-unplug-2026-09-18.md`](receipts/candidate-monitor-unplug-2026-09-18.md):
+  after unplug the probe reported one display. The graph and response moved
+  to the main workspace when the user chose **Return here** (a manual
+  return). No duplicate window was created. The candidate was in
+  `ERROR VOICE` / `Socket is not connected`.
+- [`candidate-monitor-reconnect-2026-09-18.md`](receipts/candidate-monitor-reconnect-2026-09-18.md):
+  after replugging, the probe reported two screens. Reopening the display
+  restored one stage with the same two results. The receipt says it closes
+  "display topology and bounded-stage restoration only". The candidate was
+  still in `ERROR VOICE`.
+- [`candidate-monitor-auto-rehome-2026-09-18.md`](receipts/candidate-monitor-auto-rehome-2026-09-18.md):
+  unplugging without **Return here** removed the `Mortimer Display` window and
+  left the graph in the console. The receipt says this closes "the physical
+  unplug/rehome gate for the candidate".
+
+In summary, physical display unplug/rehome and display reconnect restoration
+are recorded as passing for this candidate on one external monitor. These
+are prose observation records. None of them includes a committed
+screenshot or accessibility capture, visible tile IDs, or duplicate-fetch
+instrumentation, all of which runbook §2 requires. Mirrored and three-display
+runs were not performed. Voice/socket reconnect failed in both the unplug and
+reconnect runs, so it remains open. The paragraph below about the manual
+reconnect describes only
+[`candidate-live-response-display-2026-09-18.md`](receipts/candidate-live-response-display-2026-09-18.md),
+which covers neither unplug nor reconnect. Its remark that physical
+unplug/reconnect was not closed means that receipt does not close it. The
+monitor receipts above cover it.
 The latest locked-session native rerun is recorded in
 [`native-rerun-locked-2026-09-18.md`](receipts/native-rerun-locked-2026-09-18.md):
 JarvisKit remained green, while the eight MortimerHost failures are the
@@ -258,7 +318,9 @@ active two-channel audio, or live spoken-response gates.
   pointer-selected legacy `WorkspaceStore.supportingContent` through the same
   single supporting stage as modern panels. The main surface keeps an
   `On the supporting display — Return here` locator. Focused supporting-display
-  acceptance is 1/1. The router now reuses the existing workspace owner for
+  acceptance is 1/1 (receipt-time count, no committed log. The committed
+  `response-routing-2026-09-18/render-tests.log` later records 4/4. Reconciled
+  2026-09-22). The router now reuses the existing workspace owner for
   an exact repeated window payload, while distinct sections from one
   Developer run still receive separate history rows;
 physical two-screen and return-locator behavior is now recorded in the
@@ -283,6 +345,10 @@ physical two-screen and return-locator behavior is now recorded in the
   for this session; three-display/mirrored-output behavior, provider/fetch
   instrumentation and voice-triggered repeat evidence remain open.
 - [ ] **UI2-21 — Developer-run result grouping and Liquid Glass consistency.**
+  (ID collision, noted 2026-09-22: `adaptive-interface/RELEASE_READINESS.md`
+  uses UI2-21 for a different, ticked item, "Atom-style compact voice display
+  (implementation)". The two UI2-21 entries are separate requirements. Cite
+  them by title until one is renumbered.)
   A single self-edit request may read several files and emit several
   window-routed results. The client must group those same-`run_id` Developer
   payloads into one outer result window with appended sections; separate runs,
@@ -302,3 +368,10 @@ physical two-screen and return-locator behavior is now recorded in the
   source kind and uses the shared Liquid Glass card treatment. The focused
   `KnowledgeAtlasTests` suite passes 4/4. Physical Atlas refresh/error,
   VoiceOver, and multi-display evidence remain part of the open Mac gates.
+- [ ] **Stray duplicate source file (housekeeping, noted 2026-09-22 against
+  main `88b206f`).** `macos/MortimerHost/Placement/ContentWindowRegistry.swift`
+  sits outside the package's `Sources/` tree. It is an older, different
+  version of the real
+  `macos/MortimerHost/Sources/MortimerHost/Placement/ContentWindowRegistry.swift`,
+  which is the file the plan manifest checks. Remove it or explain it in a
+  separate code change. This status update does not touch code.

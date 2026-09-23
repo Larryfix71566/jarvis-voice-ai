@@ -8,10 +8,27 @@ with candidate fingerprint
 This checklist distinguishes implementation, merge, verification, deployment
 and user acceptance. A pass in one category never implies the others.
 
+**Reconciled 2026-09-22 against main `88b206f`.** `main` has moved past the
+deployment record above: PR #80 (the release consolidation, squash of branch
+head `1318f65`) merged as `88b206f` on 2026-09-22. `94a5641` (PR #79) remains
+the last *recorded* deployment; whether `88b206f` has been built, installed or
+deployed is **not recorded** here and cannot be verified from the repository —
+a deployment receipt naming `88b206f` (artifact hash, loaded process paths)
+would verify it. `88b206f` changes the shipped default to layout 2 (Command
+Console): `@AppStorage` defaults are `2` and `MortimerHostApp` migrates a
+missing or `1` preference to `2` once; `94a5641` defaulted to layout 1 and
+carried no `CommandConsoleView`. Python at this HEAD: `pytest tests/unit`
+(Linux, Python 3.11, `requirements-lock.txt`) = 2,526 passed, 0 failed
+(run 2026-09-22); Swift suites were not run in this reconciliation.
+
 Scope augmented 2026-09-17 with the Command Console / Knowledge Atlas
 implementation closure gates below. The release identity above is the existing
 deployment record, not a claim that the proposed redesign is deployed. All 12
 previously open items and all 14 completed items retain their status.
+(Reconciled 2026-09-22 against main `88b206f`: the "remaining items" section
+now holds 11 open and 2 checked entries — ARCH-01 and the timing/focus item
+closed 2026-09-18 — and "Completed items" holds 14; the whole file is 30
+unchecked / 19 checked, as stated under "Coverage and counting rules".)
 
 The redesign now has sandbox implementation evidence: the Command Console
 composition (shipped as the default layout), Atlas/store primitives, bounded shared-content contracts, memory automation policy and native regression suites are present.
@@ -23,7 +40,8 @@ those release gates.
 Latest sandbox verification (2026-09-18): Python 2,611 passed / 4 skipped;
 JarvisKit 190 passed; MortimerHost 244 tests executed (3 display-dependent
 skips; 0 failures). See the current full-verification
-receipt in the Command Center acceptance directory.
+receipt in the Command Console acceptance directory:
+[`full-verification-2026-09-18.md`](../command-console/receipts/full-verification-2026-09-18.md).
 The live content-window registry
 and value-addressed panel scenes are wired into the console, display and drawer
 surfaces. Physical multi-monitor, sharing, accessibility and daily-driver gates
@@ -48,6 +66,10 @@ remain open.
   provider receipt and native physical acceptance gates remain separately open.
 - [ ] Publish a fresh status reconciliation to the repository after the
   remaining hardware and acceptance gates are recorded.
+  (2026-09-22: the documentation reconciliation against `88b206f` on branch
+  `docs/reconcile-status-88b206f` is this change; it stays unchecked until
+  that change merges, and it does not record the hardware gates, which remain
+  open.)
 - [ ] Obtain a fresh full-profile independent receipt for the deployed release
   revision; the current deployment receipt is operational evidence, not the
   complete preservation receipt.
@@ -57,6 +79,13 @@ remain open.
   display-dependent skips); the latest P4
   p95 is 9.678 ms (max 11.401 ms) in the current native receipt (the live run remains under
   the 33 ms gate).
+  (Reconciled 2026-09-22 against main `88b206f`: 9.678 / 11.401 ms match no
+  committed receipt and are unsourced. Committed values, all under the 33 ms
+  gate: `P4-frame-time.json` (recorded 2026-09-18T20:52:11Z) p95 9.908 ms, max
+  13.147 ms; `../command-console/receipts/full-verification-2026-09-18.md`
+  p95 9.627 ms, max 12.743 ms;
+  `../command-console/receipts/sandbox-verification-2026-09-18.md` p95
+  11.414 ms, max 25.842 ms.)
 - [ ] Earbud-removal rebuild-churn investigation.
 - [ ] Echo benches: AirPods both ways; AirPods output + built-in input.
 - [ ] Complete C8's five requirements and all P0 preservation rows. Existing
@@ -64,6 +93,8 @@ remain open.
 - [ ] Complete T1.3 V3–V8: tabs/workflows, output/log, display/multi-display
   and visual/accessibility acceptance. Record test case and evidence.
 - [ ] Complete T1.3 V9's five-day daily-driver period begun September 15.
+  (2026-09-22: no outcome is recorded anywhere on main `88b206f`; closing
+  this needs Larry's attestation.)
 - [ ] Settle model-registry split decisions before implementation (#71 is
   a merged plan, not delivered code).
 - [ ] Speaker-gate labeled effectiveness protocol; keep gate off until met.
@@ -139,7 +170,7 @@ sandbox evidence; all additions remain open as release-acceptance gates.
   proves automatic unplug/rehome and reconnect restoration: the supporting
   window closes without manual recovery and the graph remains usable in the
   main console. See
-  `command-console/receipts/candidate-monitor-auto-rehome-2026-09-18.md`.
+  [`candidate-monitor-auto-rehome-2026-09-18.md`](../command-console/receipts/candidate-monitor-auto-rehome-2026-09-18.md).
   The earlier socket errors corresponded to a logged five-minute backend idle
   timeout; native sampling separately found audio startup blocked in CoreAudio.
   Startup now times out with a usable Connect control, but successful live
@@ -266,19 +297,34 @@ by Atlas visualization, historical replay or the UI2-01 design decision.
 ## Completed items
 
 - [x] Main identified as `94a56412f065d7808ca5ad87825fbdd38df9ad36`.
+  (Reconciled 2026-09-22 against main `88b206f`: historical — main is now
+  `88b206fd1fb151c9fcdfb23f7774bca99dcc2243`, PR #80, merged 2026-09-22.)
 - [x] PRs #65–79 merged; native audio and adaptive foundation are present.
+  (2026-09-22: PR #80 has since merged as `88b206f`.)
 - [x] PR #76's waveform, delegation, interruption and extraction changes were
   reviewed, consolidated and deployed.
+  (Reconciled 2026-09-22: that code reached main through PR #78, `af2d0cf`,
+  which also flipped the layout default 0→1; PR #76's own merge, `e6b34cf`,
+  changed only `docs/REPO_MAP.md`. "Deployed" is the recorded deployment
+  claim for `94a5641`, not re-verified here.)
 - [x] Existing receipt `a56c192c20704ab5a7d59366a9e52d43` passes all 12 checks
   and desktop probe at `8c1fb5a`, with unchanged source. This is historical.
 - [x] Prepared image dependencies match `5faa2e6`; controller doctor passes;
   no other VM was running before this release task started.
+  (2026-09-22: `5faa2e6` is a branch commit, not on main; its content is on
+  main via `af2d0cf`. `requirements*.txt`, `web/package*.json` and every
+  `macos/*/Package.swift`/`Package.resolved` are identical at `5faa2e6`,
+  `94a5641` and `88b206f` by `git diff`; the prepared image itself was not
+  re-checked against `88b206f`.)
 - [x] Adaptive workspace, sidecar header, graph and placement code exists.
 - [x] Native capture/playout observation drives distinct user/AI feedback.
 - [x] Native audio live conversation, output switching, muted wake word and
   WebRTC rollback have recorded evidence (C6/C7).
 - [x] Audio-report minimum sample floor and explicit coverage field are in the
   deployed release.
+  (2026-09-22: in source since `94a5641` —
+  `AudioMeterLatencyReport.swift` `minimumArrivalsPerChannel = 100`,
+  `coverage_metric`, `activity_coverage_fraction`.)
 - [x] The pre-deployment mixed topology was inspected and the five local
   patches were preserved during reconciliation.
 - [x] A version-identifiable signed bundle was built from the release source.
@@ -291,6 +337,9 @@ by Atlas visualization, historical replay or the UI2-01 design decision.
   28/28 completed with zero errors, producing 24 facts and 12 observations.
   The live cursor remained at 3219. Receipt:
   `work/release-memory-replay-result.json`.
+  (Reconciled 2026-09-22: that file is not in the repository at `88b206f`;
+  it lives outside the repo in the Codex work directory and is unverified
+  here. The 28/28 result rests on that external file.)
 
 Remote access, local models/Mac mini, financial-data handling, mail/calendar
 and advanced skill authoring retain their own roadmap gates. Web retirement
@@ -305,6 +354,8 @@ decisions O8–O10 and future gates G7/G8/G4c remain there until detailed plans
 define implementation closure lists. They are not part of UI2, do not block
   completion of this interface release, and are excluded from the 31-open /
   15-complete release checklist count. T4c retains the G3/G4 prerequisites.
+  (Reconciled 2026-09-22 against main `88b206f`: the file's current count is
+  30 unchecked / 19 checked; 31 / 15 is the older figure.)
 
 **Memory automation additions, 2026-09-17 (reconciled 2026-09-18):** the
 automated classification and maintenance phase is specified in
@@ -314,6 +365,12 @@ staged-rollout gate (including limits and first-20-decision review) now pass;
 gradual Mac enablement and redacted live benefit/cost monitoring remain open
 and are tracked separately from UI2 and the original release count. Historical
 28-exchange replay does not satisfy these gates.
+(Reconciled 2026-09-22 against main `88b206f`: the "first-20-decision review"
+gate passes on a synthetic fixture. All 20 `first_20` decisions in
+`tests/fixtures/memory_rollout_acceptance.json` are hard-coded
+`"reviewed": true`, and `jarvis/memory_automation_eval.py` checks that flag
+(plus count, `reversible` and unique ids) as supplied. That proves the gate
+logic, not a human review of 20 real decisions, which is not recorded.)
 
 ## Evidence rules
 

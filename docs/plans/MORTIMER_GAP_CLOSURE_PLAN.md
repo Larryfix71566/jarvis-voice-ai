@@ -2,6 +2,12 @@
 
 **Status:** CODE IMPLEMENTED; autonomous gap re-audit verified 2026-09-10. User-dependent acceptance and deployment remain open (see current re-audit below).
 
+*Reconciled 2026-09-22 against main `88b206f`:* the "review/merge PR #63"
+item in the re-audit's remaining list is done — #63 was merged as `2ccf66c`
+(2026-09-10) and is on `main` (PR #62 as `2687fa4`). The other remaining
+items are not evidenced as done on `main`: `kimi-k3` is still `tier: mid` in
+`config/upgrade_models.yaml`, and the speaker gate is still opt-in.
+
 **Original status (2026-09-05):** **IMPLEMENTED (code) 2026-09-04 — §8 VERIFICATION ALL BUT COMPLETE, 2026-09-05.** All GC items are in the tree: GC1b (`VALIDATE_PYTEST_TIMEOUT_S` 900), GC2 (REPO_MAP), GC3 (ROADMAP), GC4 (web freeze — **scope amended 09-05, see below**), GC5 (`bot/pipeline.py:1130`), GC6 (judge error string, `temperature: null`, `agreement.py:188`), GC7 (`backup_db.py`, `launchd_gen.py`), GC8 (`jarvis/tenant.py`), GC9 (migration 0021 + `reminder_notifier.py` + `notify.py`), GC10 (root `.wav` gone).
 
 **§8 RESULTS (Larry's hardware, 2026-09-05).** §8.2 PASS. §8.4 **COMPLETE** — first backups ever, verified (`integrity_check ok`, 36/36 rounds, 414/414 runs); launchd live, five pids, both supervision proofs (`mortimer.sh` exits 3; killing the bot respawns it in <10 s); vault key exported off-machine. §8.5 **MEASURED** — voice $0.2239 vs LLM $0.3647, ratio **0.61**, so snapshot item 9 did NOT hold; but 09-03 measured 3-4x on a conversational workload, so it swings with the session and is n=1 both ways - do not buy hardware on it. §8.7 **COMPLETE** — `d6e0059b` replayed, five frontier judges, `superseded shadow rows: 20`, frontier abstention 0.4 -> 0.0. §8.8 **COMPLETE**. §8.9 **COMPLETE** — notified at +76 s while disconnected, spoken exactly once on reconnect. §8.10 **COMPLETE** — audit first: `git ls-files -- '*.wav'` returned nothing, so GC10's removal was already total and this step's `git rm --cached` had nothing to act on; cleared ~26 MB of `_to_delete` and `_to_delete_tarballs`, and added `Claude outputs/` to `.gitignore` since the desktop app writes downloads into the repo root on every save.

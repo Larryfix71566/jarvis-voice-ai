@@ -2,6 +2,18 @@
 
 **Status:** DRAFT for Larry's approval, 2026-08-26. Implements roadmap track **T1.4** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.1: *"T1.4 Deletion: `web/` and `macos/MortimerShell/` removed once T1.3 has passed gate G1 and run as daily driver for the period G1 names."*).
 
+*Reconciled 2026-09-22 against main `88b206f`:* still DRAFT, not approved or
+executed; `web/` and `macos/MortimerShell/` are both still in the tree. Two
+§1 rows are already discharged on `main` by earlier work: **R5** (the
+self-edit `npm ci` + `npm run build` gate and `BUILD_TIMEOUT_S`) was removed
+from `jarvis/selfedit/service.py` by `634d629` (2026-09-05, GC4 scope
+amendment), and **R8** (the `, frontend build` clause in `session_validate`'s
+description) was removed from `jarvis/agents/upgrade_agent.py` by `2c0ff5a`
+(2026-09-07). Steps 4 and 6 must skip those edits (their anchor text no
+longer exists). Count correction: `macos/MortimerShell/Sources/MortimerShell/`
+holds **10** `.swift` files; `find macos/MortimerShell -name '*.swift'`
+returns 11 only because it also counts `Package.swift`.
+
 **Author / origin:** Roadmap §2.1 T1.4 and §4 G1(e); `CROSS_PLAN_RESOLUTION.md` §C **F12** (*"`web/`'s retirement (T1.3/T1.4) is unowned though three plans discharge obligations onto T1.4… T1.4 is where CORS removal and the parity test land"*). This plan is the third of the three native-track plans named in F12: `MORTIMER_NATIVE_CLIENT_CORE_PLAN.md` (T1.1/T1.2, written), `MORTIMER_NATIVE_CLIENT_APP_PLAN.md` (T1.3, written in parallel), and this one (T1.4).
 
 **Roadmap constraints this plan is bound by:**

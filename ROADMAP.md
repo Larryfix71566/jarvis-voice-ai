@@ -53,6 +53,25 @@ model availability and provider limitations are explicit validation gates.
 
 ## Personal VAD — speaker-gated turn-taking (added 2026-08-16)
 
+**Status (2026-09-22): BUILT, gated OFF.** Shipped 2026-08-22 (`88d58bc`)
+as the Tier-2 speaker gate of `docs/plans/MORTIMER_VOICE_ISOLATION_TIER12_PLAN.md`,
+with windowed scoring added by `MORTIMER_GATE_V2_AND_MODEL_REQUEST_PLAN.md`:
+`jarvis/speaker.py` (local SpeechBrain ECAPA-TDNN embeddings, CPU, file-based
+`python -m jarvis.speaker enroll|verify|status`) and
+`jarvis/bot/speaker_gate.py` (`SpeakerTap`, `TranscriptGate`, and
+`SpeakerVerifiedMinWordsTurnStartStrategy`, which makes barge-in while the
+bot is speaking require a passing speaker score). `JARVIS_SPEAKER_GATE_ENABLED`
+defaults to false and stays off until the plan's §6 effectiveness protocol
+is run (`docs/acceptance/adaptive-interface/RELEASE_READINESS.md`). Still
+unbuilt from the scope below: wake-word follow-up gating (nothing in
+`jarvis/wakeword/` or `WakeWordListener.swift` consults the speaker
+profile); turn-END gating as such (an unknown voice can still open and close
+a turn while the bot is quiet — its transcript is dropped instead); and a
+calibration command — the threshold is a fixed default
+(`JARVIS_SPEAKER_THRESHOLD`, 0.40), with `JARVIS_SPEAKER_CAPTURE` recording
+turn audio only as a calibration aid. The text below is the original
+decision record.
+
 **What:** local speaker recognition (enroll ~30s of Larry's voice once;
 ECAPA-TDNN/resemblyzer-class embeddings, CPU, no cloud — same
 local-first pattern as openwakeword) used to GATE turn-taking

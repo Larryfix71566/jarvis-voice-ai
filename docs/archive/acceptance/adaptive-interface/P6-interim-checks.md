@@ -3,7 +3,7 @@
 Status: not final release acceptance. P2 audio, hardware, accessibility and
 other phase acceptance remain open. No merge or deployment.
 
-Latest follow-up: [reduced-motion scheduling correction](P2-reduced-motion-static.md)
+Latest follow-up: [reduced-motion scheduling correction](../../../acceptance/adaptive-interface/P2-reduced-motion-static.md)
 records the full-profile failure for `88e2f07`, its correction, and the subsequent
 125-test native pass. A fresh full-profile receipt is still required for that correction.
 

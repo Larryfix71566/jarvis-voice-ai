@@ -1,6 +1,14 @@
 # Mortimer — Voice Model Bench: a measured upgrade of the interface LLM
 
-**Status: APPROVED by Larry 2026-08-20 — IMPLEMENTED (§3/§4 infra; live runs pending)**
+**Status: APPROVED by Larry 2026-08-20 — IMPLEMENTED (§3/§4 infra). V1/V2 runs
+and the V3 adoption attempt COMPLETE 2026-08-20: FINAL VERDICT — latency gate failed, Haiku stays.
+Haiku live baseline passed all three targets 2026-08-22. Only the reopened
+Gemini-direct live trial (Larry, 2026-08-22) is pending; no results recorded.**
+*Reconciled 2026-09-22 against main `88b206f`:* header previously read "live
+runs pending", contradicting the recorded runs and verdict below. The final
+paragraph's lost lead-in ("What this plan permanently shipped regardless of the
+verdict:") was restored verbatim from `a65e336`; `5adfb9c` had dropped it when
+inserting the reopened-trial section.
 Author: Claude, 2026-08-20. Requested by Larry (*"revisit the selection and
 see if we can find a more capable LLM that passes our latency threshold …
 a more capable model for the interface could solve some of the issues
@@ -539,7 +547,9 @@ signature fix and GoogleLLMService routing are already shipped), several
 sessions of ≥15 turns at different hours, `latency_probe --budget` per
 session on a clean log slice, plus a count of 503/error turns. Compare
 against the Haiku baseline above. Revert is the same three lines as
-before. the
+before.
+
+**What this plan permanently shipped regardless of the verdict:** the
 10-case eval-corpus extension; `scripts/voice_model_bench.py`;
 `EVAL_MODEL`/`EVAL_BASE_URL`/`EVAL_KEY_ENV` overrides in the routing
 eval; the vendor-extras (thought-signature) round-trip in

@@ -21,7 +21,13 @@ npm run build --prefix web
 
 The current 2026-09-18 run produced 2,611 Python passes / 4 skips, 190 JarvisKit
 passes, and 242 MortimerHost tests executed (3 display-dependent skips; 0
-failures). Swift
+failures). (Reconciled 2026-09-22 against main `88b206f`: the committed
+[`full-verification-2026-09-18.md`](receipts/full-verification-2026-09-18.md)
+records 2,611 / 4, JarvisKit 190, and MortimerHost **244** executed (3
+skipped, 0 failures). No committed receipt records 242. These are
+receipt-time counts. At `88b206f` the static `func test` counts are JarvisKit
+195 and MortimerHost 250, and on Linux `pytest tests/unit` gave 2,526
+passed, run by Claude on 2026-09-22.) Swift
 runs require macOS;
 the Python command uses the locked dependency set. These commands are
 sandbox evidence, not substitutes for the physical display, OS picker,
@@ -55,6 +61,9 @@ outer stage instead of an empty window or nested information window. The
 focused supporting-display acceptance is 2/2, including the four-result
 visible-grid regression; the physical content-policy and
 the live provider/voice and duplicate-fetch gates remain open.
+(Reconciled 2026-09-22: 2/2 has no committed log. The committed
+`receipts/response-routing-2026-09-18/render-tests.log` records
+`SupportingDisplayAcceptanceTests` 4/4, the file's current static count.)
 
 The current candidate bundle launches cleanly after the `PanelStore`
 environment-injection fix. Native transport unit coverage is 21/21, including
@@ -62,3 +71,23 @@ the main-actor CoreAudio-start regression, and the
 live candidate reached the bot's WebSocket HTTP 101 handshake. The logged-in
 desktop still needs one unlocked visual run to close bot-ready state, voice
 exercise, and panel movement on the external display.
+
+Reconciled 2026-09-22 against main `88b206f`:
+
+- Transport tests: the 21/21 figure has no committed log. The committed
+  `receipts/monitor-ownership-2026-09-18/audio-start-deadline-tests.log`
+  records `NativeAudioTransportTests` 22/22. The file has 26 static tests at
+  `88b206f`.
+- Bot-ready state: the previous paragraph is superseded.
+  [`candidate-live-response-display-2026-09-18.md`](receipts/candidate-live-response-display-2026-09-18.md)
+  records the candidate at `READY VOICE` after a manual reconnect.
+- Panel movement: the same receipt records the memory graph moved to the
+  supporting display with a two-result stage and return locator.
+  [`candidate-monitor-auto-rehome-2026-09-18.md`](receipts/candidate-monitor-auto-rehome-2026-09-18.md)
+  records the graph on `Mortimer Display` on the external `C34H89x`.
+- Still open: a spoken voice exercise (a new spoken request with output speech
+  and both measured audio channels). The live-response receipt states that no
+  live spoken response was observed. `READY VOICE` was also not stable across
+  sessions: the unplug/reconnect receipts and
+  `candidate-reconnect-attempt-2026-09-18.md` record `ERROR VOICE` or no
+  settled ready state.

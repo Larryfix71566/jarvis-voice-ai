@@ -3,6 +3,7 @@
 **Status:** IMPLEMENTATION SPECIFICATION; NOT A CLAIM OF ACCEPTANCE. Supersedes nothing — it extends `docs/plans/MORTIMER_ADAPTIVE_INTERFACE_PLAN.md` (the "interface plan") and sequences `docs/plans/MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md` (the "native-audio plan") ahead of P2.
 
 **2026-09-17 — C9.5 closed, C8 not.** `layoutVersion` defaults to `1`. Gate G-C8 was satisfied by its written-acceptance route: `docs/acceptance/adaptive-interface/C8-open-items.md` names every unexercised row with Larry's acceptance, grouped by whether the flag can reach it at all (13 of 24 rows render from a `DrawerView` instantiated outside the `layoutVersion` branch). C8's five requirements remain open work.
+**Reconciled 2026-09-22 against main `88b206f`:** the default is no longer `1`. The layout-1 flip reached main in PR #78 (`af2d0cf`). PR #80 (`88b206f`, merged 2026-09-22) then made **layout `2` (Command Console)** the default: every `layoutVersion` `@AppStorage` default is `2`, and `MortimerHostApp` migrates a missing/`1` preference to `2` once. `InterfaceLayoutVersion.resolve` maps unknown stored values to `1`. The C8 written acceptance covers layout 1 only. Layout 2's preservation gates are `RELEASE_READINESS.md` UI2-02/UI2-13, which are still open.
 **Current release tracking (2026-09-17):** use
 `docs/acceptance/adaptive-interface/RELEASE_READINESS.md`. C1–C5 have
 implementation evidence; C6/C7 now have code and live evidence, with named
@@ -56,10 +57,10 @@ Every row is a finding from the review, the work item that closes it, and the ev
 | G24 | Observation generation is view `@State` (`AdaptiveStageView.swift:13`) — a UI-5 problem once a real adapter exists | C7.2 | Generation owned by the app-scoped audio observer |
 | G25 | No ≤30 Hz observation cap anywhere | C7.2 | Cap enforced in the observer; test |
 | G26 | Measured user/playout levels absent; §9.3 real-audio matrix not run | C6 + C7 + C8 | Native path levels drive the wave; §9.3 recorded |
-| G27 | Preservation checklist 0/22 rows checked | C8.1 | Every row checked with tester, date, viewport, screenshot/log |
+| G27 | Preservation checklist 0/24 rows checked (was written "0/22"; `P0-preservation-checklist.md` has 24 rows, none checked — reconciled 2026-09-22 against main `88b206f`) | C8.1 | Every row checked with tester, date, viewport, screenshot/log |
 | G28 | Rollback never exercised | C8.4 | Rollback record with synthetic state |
 | G29 | Five production local patches not reconciled | C0.2 / C10.2 | Per-file decision recorded; working tree clean after deployment |
-| G30 | Adaptive layout off by default (L4) | C9.5 | **CLOSED 2026-09-17** — default flipped to `1` on Gate G-C8's written-acceptance route (`C8-open-items.md`), C8 itself still unrun |
+| G30 | Adaptive layout off by default (L4) | C9.5 | **CLOSED 2026-09-17** — default flipped to `1` on Gate G-C8's written-acceptance route (`C8-open-items.md`), C8 itself still unrun. On main via `af2d0cf` (PR #78); superseded by the layout-`2` default in `88b206f` (PR #80) — reconciled 2026-09-22 |
 
 ## 3. Phase order and dependencies
 
@@ -224,15 +225,19 @@ Stop the phase and report when: the native-audio plan's §3 gate fails on any of
 ## 8. Completion checklist
 
 - [ ] C0 records present (`C0-preparation.md`, `production-local-patches/`); pending on Larry: fetch origin/main for the rebase check, per-file decisions on the four non-bundle.sh local patches, C0.4 baseline captures.
+  *Reconciled 2026-09-22 against main `88b206f`:* `production-local-patches/` now lives at `docs/archive/acceptance/adaptive-interface/production-local-patches/` (archived 2026-09-22). **The per-file decisions were made and merged in PR #79 (`94a5641`).** The C10 consolidation record (`docs/archive/acceptance/adaptive-interface/C10-consolidation-candidate.md`) carries the `progress_watcher.py`, `admin/server.py` and launchd-PATH patches. It records Larry's 2026-09-17 choice to keep the `prompts.py` same-turn preview/confirm behaviour, and `bundle.sh` follows L2. `_live_progress_for_run`, the `notice=%r` finish log and `/usr/sbin:/sbin` in the launchd template are all present at `94a5641`. The rebase check is moot now that #78–#80 are merged. **Still open:** C0.4 baseline captures (`C0-preparation.md` §C0.4 still reads "pending on Larry"). The row stays unticked for that reason.
 - [x] C1 keyboard navigation, 300 pt chrome, §7 typography, per-presentation offsets — tests green (`C1-p1-gaps.md`, host-c1.log 130/0).
 - [x] C2 rail parity, barge-in label, transition, tuning consolidation, large-wave rule, production-limit tests — green (`C2-p3-gaps.md`, host-c2c.log 138/0).
 - [x] C3 frame-time JSON ≤33 ms p95 (13.35 ms on Mac17,4); dense hub; legacy image fetch through JarvisHTTP; server-correspondence decode test; wording fixed. Record: `docs/acceptance/adaptive-interface/C3-p4-gaps.md`.
 - [x] C4 unlock observed (`screensDidWake` + distributed `com.apple.screenIsUnlocked`); `PlacementScreen.scale` removed; adapter seams + 5 `ScreenPlacementTests`; recovery timing instrumented (os_log `com.mortimer.host/placement`, hardware reading in C8). Record: `docs/acceptance/adaptive-interface/C4-p5-gaps.md`, host-c4b.log 148/0.
 - [x] C5 graphics-attached receipt passing for `6bf0270` (attempt `25d16062…`, 12/12 checks incl. candidate `native-app`; desktop probe bound into the receipt); receipt in `docs/acceptance/adaptive-interface/receipts/`. Record: `C5-verification-runner.md`. Re-run required on the commit that carries C1–C4 (C9).
 - [ ] C6 native-audio plan §3 gate recorded; transport implemented; its §7/§8 done; rollback lever proven.
-- [ ] C7 measured levels drive teal/violet on the native path; ≤30 Hz cap; app-owned generation; latency JSON ≤150 ms p95; meter disable path.
+  *Reconciled 2026-09-22 against main `88b206f`:* partial, so the row stays unticked. The transport is on main (PR #73, `3f0ea58`). The §3 gate is recorded in `C6-native-audio.md` (built-in mic). Rollback is recorded as proven in `C6-s8-live.md` (§9 rollback, 2026-09-15). §8 is not done: the AirPods echo benches (§3.3) and the earbud-removal rebuild-churn run are still open, per `MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md` and `RELEASE_READINESS.md`.
+- [ ] C7 measured levels drive teal/violet on the native path; ≤30 Hz cap; app-owned generation; latency JSON ≤50 ms p95 observer-arrival (corrected 2026-09-22 from "≤150 ms p95" to match C7.5 as amended 2026-09-15 and `P2-latency.json`'s `gate_p95_seconds: 0.05`); meter disable path.
+  *Reconciled 2026-09-22 against main `88b206f`:* the code elements are present. `AudioActivityObserver.sampleHz = 30` (G25), the generation is owned by the observer and read through `JarvisClient.audioActivityGeneration` (G24), `JARVIS_AUDIO_METER` gives the disable path, and `AdaptiveStageView` receives the observer snapshot. The latency gate is **not met**: the committed `P2-latency.json` verdict is "incomplete — fewer than 100 distinct arrivals on one or both channels" (input 50, playout 822; arrival p95 23.7 / 4.4 ms). The row stays unticked.
 - [ ] C8 all preservation rows positive or accepted in writing; §9.2–§9.4 recorded; rollback exercised.
 - [ ] C9 all PRs merged in order; default flipped in the last PR.
+  *Reconciled 2026-09-22 against main `88b206f`:* the work reached main through consolidated PRs, not the per-phase sequence above. The layout-1 default flip (C9.5) landed in PR #78 (`af2d0cf`, which also carried PR #76's code). The verified release followed in PR #79 (`94a5641`). PR #80 (`88b206f`, 2026-09-22) superseded the flip by making layout 2 (Command Console) the default. The per-phase ordering the row asks for did not happen, so the row stays unticked. The substantive merge state is recorded here.
 - [ ] C10 deployed; backend healthy; app persistent; working tree clean; known-good artifact retained.
 - [ ] C11 plan statuses updated.
 

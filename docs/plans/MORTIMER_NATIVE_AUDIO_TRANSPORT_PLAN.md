@@ -49,6 +49,13 @@ Evidence: `C6-native-audio.md`, `C7-measured-audio.md`, `C6-parity.md`,
   is what a duty cycle does and a rate does not. Details, plus the two
   reporting gaps it exposed (no minimum-sample floor on the gate verdict; no
   coverage field in the artefact), in `C6-remaining.md` item 4.
+  **Both reporting gaps are CLOSED** (reconciled 2026-09-22 against main
+  `88b206f`). Since PR #79 (`94a5641`), `AudioMeterLatencyReport.swift` sets
+  `minimumArrivalsPerChannel = 100` and reports the gate as incomplete below
+  it on either channel. It also writes `minimum_arrivals_per_channel`,
+  `coverage_metric` and a per-channel `activity_coverage_fraction` into the
+  artefact. The committed `P2-latency.json` shows both fields and an
+  "incomplete" verdict (input 50 arrivals).
 
 Supersedes the `AudioInputCoordinator` band-aid (2026-09-05, JarvisKit) on
 the native path only. The original text said the stopgap "was to be deleted

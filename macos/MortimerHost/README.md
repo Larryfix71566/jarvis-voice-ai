@@ -4,8 +4,8 @@
 native Mortimer app** — the three-window SwiftUI view port over
 `JarvisKit`: the console (voice wave, orb field, mic controls, topbar),
 the display window (`surface == "window"` payloads, parked on a second
-monitor), and the drawer with the seven tabs (Repo, Edit, Memory, Runs,
-Agents, Output, Log). The original G1(b) debug harness view lives on
+monitor), and the drawer with the eight tabs (Repo, Edit, Memory, Runs,
+Agents, Output, Log, Costs). The original G1(b) debug harness view lives on
 under **Debug ▸ Show message log**.
 
 ## Xcode settings (unchanged from the harness)

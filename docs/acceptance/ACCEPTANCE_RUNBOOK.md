@@ -38,6 +38,17 @@ Pass requires a screenshot or accessibility capture for each topology, the
 visible tile IDs, and no duplicate fetch/subscription event. A virtual-screen
 unit test is supporting evidence only; it cannot close this gate.
 
+Status (reconciled 2026-09-22 against main `88b206f`): committed prose
+receipts cover steps 3–4 on one external monitor:
+`command-console/receipts/candidate-monitor-unplug-2026-09-18.md`,
+`candidate-monitor-reconnect-2026-09-18.md` and
+`candidate-monitor-auto-rehome-2026-09-18.md`. They record unplug with manual
+and automatic rehome, and reconnect with the same two results restored in one
+stage. They do not include committed screenshot or accessibility captures,
+visible tile IDs, or duplicate-fetch evidence. Step 5 (mirrored and
+three-display) has not been run. This section's pass criteria are therefore
+not fully met.
+
 ## 3. Live voice and response routing
 
 Connect the candidate and confirm `READY VOICE`. Speak one request that returns
@@ -53,6 +64,12 @@ text and one that returns a research/display result. Verify:
 Record the request timestamp, result ID, visible tile count, and any audio
 startup/reconnect error. A `READY VOICE` label alone is not a spoken-response
 pass; output speech and both measured channels must be observed.
+
+Status (reconciled 2026-09-22 against main `88b206f`): `READY VOICE` and the
+live close-and-return path are recorded in
+`command-console/receipts/candidate-live-response-display-2026-09-18.md`.
+No spoken request or response has been recorded, so this section remains
+open.
 
 ## 4. Sharing and accessibility
 
@@ -87,6 +104,14 @@ the stage change in the same dated rollout receipt.
 
 The 28-exchange recovery is already a separate completed repair and must not be
 combined with rollout measurement.
+
+Status (reconciled 2026-09-22 against main `88b206f`): the provider shadow
+step has a committed receipt,
+`memory-automation/provider-shadow-receipt.json` (2026-09-18,
+`claude-sonnet-5`, 8/8 synthetic cases, no regression, no database or
+production writes). The staged daily-driver enablement has not been recorded.
+The committed rollout receipt's "first 20 reviewed decisions" are synthetic
+fixture rows, not a review of real decisions.
 
 ## 6. Closure record
 

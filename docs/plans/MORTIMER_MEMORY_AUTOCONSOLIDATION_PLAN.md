@@ -13,6 +13,28 @@ The implementation evidence is recorded in
 remaining Mac rollout evidence. This status does not certify the
 remaining deployment gates.
 
+*Reconciled 2026-09-22 against main `88b206f`* (header otherwise accurate;
+provider-shadow and rollout-monitoring receipts are present and passing).
+Caveats:
+- **Runtime classification is heuristic, not model-backed.** The live bot
+  passes `heuristic_classifier` (`jarvis/memory_automation.py`, no model
+  call) to the idle watcher (`jarvis/bot/pipeline.py`,
+  `jarvis/bot/memory_watcher.py`) when `JARVIS_MEMORY_AUTOMATION_ENABLED` is
+  set (default false). The model classifier (`ProviderClassifier`,
+  `jarvis/memory_automation_eval.py`) is used only by
+  `scripts/run_memory_provider_shadow.py`. B7's statement that production
+  classification resolves `JARVIS_MEMORY_PROFILE` holds for extraction,
+  consolidation and the sweep's August A2/A5 classification
+  (`jarvis/memory_sweep.py`), not for the B-section automation classifier.
+- **B7's locked names differ from the code.** B7 specifies
+  `retrieve_memory_context(query, *, subject, project, limit, max_chars)`;
+  the implementation is `retrieve_automated_memory_context(conn, query, *,
+  subject, project, limit=20, max_chars=1600, session_id, source_turn)` in
+  `jarvis/memory.py`. B7's `classify(candidates, *, policy_version)` is
+  implemented as `heuristic_classifier(candidates, *, policy_version="b1")`.
+  Migrations `0022_memory_automation` and `0023_memory_classification_shadow`
+  match B7.
+
 Original plan: Claude, 2026-08-20, approved by Larry for implementation.
 September 17 amendment: automatic classification and maintenance, relevant
 recall, scoped corrections, minimal interruptions, and measurable user value.

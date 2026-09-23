@@ -12,7 +12,7 @@
   this plan.
 
 **Self-edit eligibility** (2026-09-07,
-`docs/plans/MORTIMER_SELFEDIT_AUTHORING_PLAN.md` SE5). The Swift
+`docs/archive/plans/MORTIMER_SELFEDIT_AUTHORING_PLAN.md` SE5). The Swift
 **sources** of `JarvisKit/` and `MortimerHost/` are editable by self-edit
 as routine paths: a changed package is gated by `swift build` and
 `swift test` run in the session worktree, and the PR is flagged SWIFT
