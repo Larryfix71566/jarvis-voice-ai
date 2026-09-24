@@ -993,3 +993,14 @@ class TestRefuseMode:
         agent, _ = self._agent(tmp_path, monkeypatch, "refuse", profile="kimi-k2")
         assert agent.refuses == ""
         assert agent.model_is_fallback is False
+
+
+def test_librarian_budget_is_ten():
+    """T1.4 (2026-09-22): the 09-18 memory-graph run needed 13 tool calls
+    against the default 5 and ran out."""
+    from pathlib import Path
+    import yaml
+    root = Path(__file__).resolve().parents[2]
+    agents = yaml.safe_load((root / "config" / "agents.yaml").read_text())["sub_agents"]
+    librarian = next(a for a in agents if a["name"] == "librarian")
+    assert librarian["max_iterations"] == 10
