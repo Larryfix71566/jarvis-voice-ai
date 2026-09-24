@@ -140,7 +140,20 @@ class TestMemoryGraphView:
         assert out["image_url"].startswith("http://127.0.0.1:7861/api/graph/memory/image.png?")
         assert "focus=" in out["image_url"]
 
-    def test_memory_graph_view_error_passthrough(self, conn):
+    def test_memory_graph_unmatched_focus_falls_back_to_overview(self, conn):
+        # Status spec T4.6 replaces test_memory_graph_view_error_passthrough:
+        # an unknown memory topic shows the overview, flagged, not an error.
+        _fact(conn, "user.style.a", "short answers")
+        conn.commit()
         out = logic.memory_graph_view(focus="zzz-nothing")
-        assert out["ok"] is False
-        assert "no node matches" in out["error"]
+        assert out["ok"] is True
+        assert out["focus_miss"] == "zzz-nothing"
+        assert out["focus"] is None
+        assert "nodes" not in out
+        assert "focus=&" in out["image_url"]
+        assert out["summary"].endswith("of the whole graph; 0 of them archived.")
+
+    def test_memory_graph_matched_focus_has_no_focus_miss(self, conn):
+        _fact(conn, "user.style.a", "short answers")
+        conn.commit()
+        assert "focus_miss" not in logic.memory_graph_view(focus="user.style.a")

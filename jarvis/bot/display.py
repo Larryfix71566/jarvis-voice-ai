@@ -440,6 +440,8 @@ def _fmt_graph_view(args: dict, data: dict) -> tuple | None:
         return None
     title = f"{str(data.get('graph') or 'graph').capitalize()} graph — {data.get('focus') or 'whole graph'}"
     body = str(data.get("summary") or "")
+    if data.get("focus_miss"):
+        body = f"No memory matched '{data['focus_miss']}'; showing the overview.\n" + body
     if data.get("truncated"):
         body += f"\nTruncated: {data.get('truncated_reason') or 'guard'}."
     return ("image", title, body, [url], [])

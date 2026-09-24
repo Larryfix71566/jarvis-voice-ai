@@ -93,6 +93,15 @@ def build(name: str, conn, *, focus: str = "", depth: int | None = None,
     if focus.strip():
         focus_id = resolver(conn, graph, focus.strip())
         if focus_id is None:
+            if name == "memory":
+                # Status spec T4.6: an unknown topic in the memory graph shows
+                # the overview (flagged), never a dead end. Other graphs keep
+                # the error.
+                result = build(name, conn, focus="", depth=depth,
+                               edge_types=edge_types, since=since)
+                if result.get("ok"):
+                    result["focus_miss"] = focus.strip()
+                return result
             return {"ok": False, "error": f"no node matches '{focus.strip()}' in the {name} graph"}
     elif name == "execution":
         return {"ok": False, "error": EXECUTION_NEEDS_FOCUS}
@@ -160,7 +169,7 @@ def tool_result(result: dict, *, since: str | None = None) -> dict:
              "edge_types": ",".join(result["edge_types"])}
     if since is not None:
         query["since"] = since
-    return {
+    out = {
         "ok": True, "graph": result["graph"], "focus": result.get("focus"),
         "depth": result["depth"], "node_count": result["node_count"],
         "edge_count": result["edge_count"], "truncated": bool(result.get("truncated")),
@@ -168,3 +177,6 @@ def tool_result(result: dict, *, since: str | None = None) -> dict:
         "image_url": f"{admin_url}/api/graph/{result['graph']}/image.png?{urlencode(query)}",
         "summary": summary_line(result),
     }
+    if result.get("focus_miss"):
+        out["focus_miss"] = result["focus_miss"]  # T4.6: reaches the tool and the display
+    return out
