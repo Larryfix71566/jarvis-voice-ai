@@ -166,7 +166,7 @@ loaded-version evidence remain open gates.
 | Secrets | `jarvis/vault.py` | vault unit/integration tests and Mac status check |
 | Display topology | `ScreenPlacement`, `run_display_topology_probe.sh` | physical display receipt; Spaces are not `NSScreen`s |
 | Self-service status | `jarvis/status/`, `/api/status/*`, `status_tool.py`, `mcp_status/` | `test_status_*.py`, `test_admin_status.py`; P2/P4 live questions |
-| Sports scores | `mcp_web` `sports_scores` | `tests/fixtures/sports/` |
+| Sports scores | `mcp_web` | `tests/fixtures/sports/` |
 | Plan artifact integrity | `tests/unit/test_plan_manifests.py` | required plan artifacts exist (rendering-suite filename alias documented) |
 
 Superseded plans and snapshots (e.g. the 2026-09-04 architecture snapshot)
