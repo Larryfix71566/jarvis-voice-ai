@@ -250,3 +250,35 @@ def test_subscription_probe_route_has_no_key_material(client, monkeypatch):
     _assert_no_key(res)
     assert res.json()["probe"]["category"] == "authentication"
     Su.clear_cache_for_tests()
+
+
+def test_github_route_passes_parameters(client, monkeypatch):
+    from jarvis.status import github as Gh
+
+    seen = []
+
+    def fake(kind, *, state, limit, number):
+        seen.append((kind, state, limit, number))
+        return {"ok": True}
+
+    monkeypatch.setattr(Gh, "github_status", fake)
+    assert client.get("/api/status/github").json() == {"ok": True}
+    client.get("/api/status/github?kind=checks&number=81")
+    client.get("/api/status/github?kind=prs&state=all&limit=3")
+    assert seen == [("prs", "open", 10, None), ("checks", "open", 10, 81), ("prs", "all", 3, None)]
+    monkeypatch.setenv("JARVIS_STATUS_TOOLS_ENABLED", "off")
+    assert client.get("/api/status/github").json() == {"ok": False,
+                                                      "error": "status tools are disabled"}
+    assert not __import__("inspect").iscoroutinefunction(srv.status_github)
+
+
+def test_github_route_has_no_key_material(client, monkeypatch):
+    from mcp_servers.mcp_apps import github as gh
+
+    def leaky(self, method, url, **kwargs):
+        raise RuntimeError(f"refused {self.token}")
+
+    monkeypatch.setattr(gh.GitHubClient, "_request", leaky)
+    res = client.get("/api/status/github")
+    _assert_no_key(res)
+    assert res.json()["ok"] is False

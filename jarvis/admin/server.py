@@ -2140,6 +2140,18 @@ def status_subscription_probe(body: SubscriptionProbeBody) -> dict:
         body.which, body.model, force=body.force))
 
 
+@app.get("/api/status/github")
+def status_github(kind: str = "prs", state: str = "open", limit: int = 10,
+                  number: int | None = None) -> dict:
+    """Pull requests and their checks on Mortimer's own repository (status
+    spec T4.3). GET-only reads through mcp_apps' GitHubClient; the token
+    stays in this process."""
+    from jarvis.status import github as _gh
+
+    return _status_call("github", lambda: _gh.github_status(
+        kind, state=state, limit=limit, number=number))
+
+
 @app.post("/api/clipboard/clear")
 def clipboard_clear() -> dict:
     """MORTIMER_HANDOFF_LOOP_PLAN.md H4 — wipe the clipboard and arm a

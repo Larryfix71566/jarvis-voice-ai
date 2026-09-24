@@ -139,3 +139,49 @@ class GitHubClient:
         )
         self._raise_for_status(resp, f"write of {path} in {repo}")
         return resp.json()
+
+    # --------------------------------------------- reads (status spec T4.3)
+    # Read-only: both methods issue GET only. Used by jarvis/status/github.py
+    # (the admin sidecar's /api/status/github), never by mcp-apps' tools.
+
+    def list_pulls(self, repo: str, state: str = "open", limit: int = 10) -> list[dict]:
+        """Pull requests in `repo`, newest activity first as GitHub orders them."""
+        limit = max(1, min(int(limit), 100))
+        resp = self._request(
+            "GET", f"{API_BASE}/repos/{self._owner()}/{repo}/pulls",
+            params={"state": state, "per_page": limit},
+        )
+        self._raise_for_status(resp, f"list of pull requests in {repo}")
+        out = []
+        for pr in resp.json()[:limit]:
+            out.append({
+                "number": pr.get("number"),
+                "title": pr.get("title"),
+                "state": pr.get("state"),
+                "draft": bool(pr.get("draft")),
+                "head": (pr.get("head") or {}).get("ref"),
+                "base": (pr.get("base") or {}).get("ref"),
+                "updated_at": pr.get("updated_at"),
+                "html_url": pr.get("html_url"),
+            })
+        return out
+
+    def pull_checks(self, repo: str, number: int) -> dict:
+        """Check runs on pull request `number`'s head commit."""
+        owner = self._owner()
+        resp = self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/pulls/{int(number)}")
+        self._raise_for_status(resp, f"read of pull request #{int(number)} in {repo}")
+        sha = ((resp.json().get("head") or {}).get("sha")) or ""
+        if not sha:
+            raise GitHubError(f"pull request #{int(number)} in {repo} has no head commit")
+        resp = self._request(
+            "GET", f"{API_BASE}/repos/{owner}/{repo}/commits/{sha}/check-runs",
+            params={"per_page": 100},
+        )
+        self._raise_for_status(resp, f"check runs for {sha[:7]} in {repo}")
+        runs = resp.json().get("check_runs") or []
+        return {
+            "sha": sha,
+            "checks": [{"name": r.get("name"), "status": r.get("status"),
+                        "conclusion": r.get("conclusion")} for r in runs],
+        }
