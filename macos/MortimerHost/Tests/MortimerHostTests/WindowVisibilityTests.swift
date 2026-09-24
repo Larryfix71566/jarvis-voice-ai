@@ -97,17 +97,20 @@ final class WindowVisibilityTests: XCTestCase {
         defer { window.close() }
         window.contentView = view
         window.makeKeyAndOrderFront(nil)
+        pumpEvents(until: { window.occlusionState.contains(.visible) })
         pumpEvents(for: 0.3)
         let started = samples
         pumpEvents(for: 0.2)
         XCTAssertTrue(window.occlusionState.contains(.visible))
         XCTAssertGreaterThan(samples, started, "A visible active wave must sample new measured activity")
         window.orderOut(nil)
+        pumpEvents(until: { !window.occlusionState.contains(.visible) })
         pumpEvents(for: 0.3)
         let suspended = samples
         pumpEvents(for: 0.2)
         XCTAssertEqual(samples, suspended, "A hidden wave must stop requesting animation samples")
         window.makeKeyAndOrderFront(nil)
+        pumpEvents(until: { window.occlusionState.contains(.visible) })
         pumpEvents(for: 0.3)
         let resumed = samples
         pumpEvents(for: 0.2)
@@ -133,6 +136,7 @@ final class WindowVisibilityTests: XCTestCase {
         defer { window.close() }
         window.contentView = view
         window.makeKeyAndOrderFront(nil)
+        pumpEvents(until: { window.occlusionState.contains(.visible) })
         pumpEvents(for: 0.3)
         XCTAssertTrue(window.occlusionState.contains(.visible))
         XCTAssertGreaterThan(samples, 0, "The reduced-motion view must still present its initial state")

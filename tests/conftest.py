@@ -21,10 +21,11 @@ import pytest
 # real injection. test_vault.py's own autouse fixture overrides the path
 # per-test to exercise a real (temp) vault.
 if os.environ.get("RUN_LIVE") != "1":
-    os.environ.setdefault(
-        "JARVIS_VAULT_PATH",
-        os.path.join(tempfile.mkdtemp(prefix="mortimer-test-"), "no.vault"),
-    )
+    # Assigned, not setdefault (2026-09-23): an exported JARVIS_VAULT_PATH in
+    # the developer's shell won the setdefault, so the suite decrypted the
+    # real vault and two tests made real GitHub / council calls.
+    os.environ["JARVIS_VAULT_PATH"] = os.path.join(
+        tempfile.mkdtemp(prefix="mortimer-test-"), "no.vault")
 
 # Test isolation for the cost ledger (MORTIMER_OPTIMIZATION_PLAN.md Phase 0;
 # found 2026-09-03 while reevaluating Phase 3). jarvis.usage_ledger.DB_PATH
@@ -40,10 +41,9 @@ if os.environ.get("RUN_LIVE") != "1":
 # executor calls. Same RUN_LIVE exemption as the vault: live tests spend
 # real money and belong in the real ledger.
 if os.environ.get("RUN_LIVE") != "1":
-    os.environ.setdefault(
-        "JARVIS_COSTS_DB",
-        os.path.join(tempfile.mkdtemp(prefix="mortimer-test-"), "costs.db"),
-    )
+    # Assigned for the same reason as the vault path above.
+    os.environ["JARVIS_COSTS_DB"] = os.path.join(
+        tempfile.mkdtemp(prefix="mortimer-test-"), "costs.db")
 
 from jarvis.db import run_migrations
 
