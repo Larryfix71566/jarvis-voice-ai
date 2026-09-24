@@ -67,7 +67,7 @@ copied password out of long-term memory.
 
 - [ ] Drive an investigation through four handoffs. On the fourth,
       Mortimer states what it has established, what it still does not
-      know, and what the next command would settle.
+      know, and what information would settle it.
 - [ ] Continue past four. It keeps going — the notice is guidance, not a
       cap. `grep delegate_continuation logs/bot.log` shows increasing
       `depth=`.

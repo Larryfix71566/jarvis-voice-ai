@@ -660,8 +660,8 @@ def build_delegate_tool(
                 result += (
                     f"\n\n[This is handoff {depth} on this investigation. "
                     "Before asking for anything else, tell the user what you "
-                    "have established, what you still do not know, and what "
-                    "the next command would settle.]"
+                    "have established, what you still do not know, and "
+                    "what information would settle it.]"
                 )
             if on_event is not None:
                 on_event({"type": "delegate_done", "agent": agent_name,

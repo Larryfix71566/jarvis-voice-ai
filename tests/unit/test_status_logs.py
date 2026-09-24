@@ -137,3 +137,31 @@ def test_reads_at_most_last_5mb(repo, monkeypatch):
 def test_every_source_is_under_logs():
     for rel in LOG_SOURCES.values():
         assert rel.startswith("logs/") and ".." not in rel
+
+
+@pytest.mark.parametrize("line,secret", [
+    ("token=ghp_" + "a1B2c3D4e5" * 4, "a1B2c3D4e5" * 4),
+    ("using gho_" + "Z9y8X7w6V5" * 3 + " for oauth", "Z9y8X7w6V5" * 3),
+    ("ghs_" + "Qq11Ww22Ee33Rr44Tt55" + " app token", "Qq11Ww22Ee33Rr44Tt55"),
+    ("GITHUB_TOKEN=github_pat_11ABCDEFG0_" + "xYz123" * 4, "xYz123" * 4),
+    ("TAVILY_API_KEY=tvly-dev-AbC123xyz", "AbC123xyz"),
+    ("Authorization: token hunter2secret", "hunter2secret"),
+    ("authorization: Basic dXNlcjpwYXNz", "dXNlcjpwYXNz"),
+    ("fetching https://larry:s3cretPass@github.com/x/y.git", "s3cretPass"),
+    ("remote postgres://svc:pw-9876@db.local:5432/app", "pw-9876"),
+])
+def test_redact_covers_github_tavily_authorization_and_url_userinfo(line, secret):
+    """Review finding 6 (I1): each of these formats reached log_search
+    output verbatim."""
+    from jarvis.status.logs import redact
+
+    out = redact(line)
+    assert secret not in out, out
+    assert "<redacted>" in out or "sk-…" in out, out
+
+
+def test_redact_leaves_ordinary_urls_alone():
+    from jarvis.status.logs import redact
+
+    line = "GET https://api.github.com/repos/x/y/pulls?page=2 took 120ms"
+    assert redact(line) == line

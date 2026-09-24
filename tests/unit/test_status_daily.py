@@ -425,3 +425,54 @@ def test_real_endpoints_map_to_their_discovered_providers(tmp_path, monkeypatch)
             assert "skipped" in report[eid], eid
     assert set(_load(tmp_path / "generated")) == {e for e, v in layers["endpoints"].items()
                                                    if v.get("base_url")}
+
+
+def _voice_snap(anthropic_ids, voice_ids, *, base_urls=None, missing=()):
+    snap = {
+        "catalogs": [{"provider": "anthropic", "ok": True,
+                      "models": [{"id": i} for i in anthropic_ids]},
+                     {"provider": "voice", "ok": True,
+                      "models": [{"id": i} for i in voice_ids]}],
+        "comparison": {p: {"configured_available": ["claude-haiku-5"],
+                           "configured_missing": list(missing)}
+                       for p in ("anthropic", "voice")},
+        "subscriptions": {}, "key_health": {}, "coverage_gaps": [],
+    }
+    if base_urls is not None:
+        snap["base_urls"] = base_urls
+    return snap
+
+
+def test_voice_endpoint_on_the_same_api_is_not_reported_twice():
+    """Review finding 7: OPENAI_BASE_URL points the voice endpoint at the
+    Anthropic API, so both results offered the same new model and the daily
+    notice named it twice. The voice duplicate is skipped."""
+    same = {"anthropic": "https://api.anthropic.com/v1",
+            "voice": "https://api.anthropic.com/v1/"}
+    prev = _voice_snap(["claude-haiku-5"], ["claude-haiku-5"], base_urls=same)
+    cur = _voice_snap(["claude-haiku-5", "claude-opus-6"],
+                      ["claude-haiku-5", "claude-opus-6"], base_urls=same,
+                      missing=("claude-haiku-5",))
+    d = D.diff(prev, cur)
+    assert d["new_offered"] == {"anthropic": ["claude-opus-6"]}
+    assert d["newly_missing"] == {"anthropic": ["claude-haiku-5"]}
+    assert D.daily_notice_text(d).count("claude-opus-6") == 1
+
+    # Older snapshots carry no base URLs: an identical list is the same source.
+    d = D.diff(_voice_snap(["claude-haiku-5"], ["claude-haiku-5"]),
+               _voice_snap(["claude-haiku-5", "claude-opus-6"],
+                           ["claude-haiku-5", "claude-opus-6"]))
+    assert d["new_offered"] == {"anthropic": ["claude-opus-6"]}
+
+
+def test_voice_endpoint_on_its_own_api_is_still_reported():
+    urls = {"anthropic": "https://api.anthropic.com/v1",
+            "voice": "https://api.openai.com/v1"}
+    d = D.diff(_voice_snap(["claude-haiku-5"], ["gpt-6"], base_urls=urls),
+               _voice_snap(["claude-haiku-5"], ["gpt-6", "gpt-7"], base_urls=urls))
+    assert d["new_offered"] == {"voice": ["gpt-7"]}
+
+
+def test_snapshot_records_each_providers_base_url(tmp_path):
+    snap = D.collect(_deps(), now=NOW)
+    assert snap["base_urls"] == {"openrouter": "https://openrouter.ai/api/v1"}

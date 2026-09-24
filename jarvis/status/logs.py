@@ -36,6 +36,13 @@ _LLM_CONTEXT = "Generating chat from context"
 
 # Applied in this order.
 _REDACTIONS: tuple[tuple[re.Pattern[str], str], ...] = (
+    # Review finding 6 (I1): any auth scheme, GitHub and Tavily tokens, and
+    # credentials in a URL's userinfo.
+    (re.compile(r"(?i)(authorization:\s*)(?!bearer\b)(\S+)\s+\S+"), r"\1\2 <redacted>"),
+    (re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"), "<redacted>"),
+    (re.compile(r"github_pat_\S+"), "<redacted>"),
+    (re.compile(r"tvly-\S+"), "<redacted>"),
+    (re.compile(r"(://)[^/\s:@]+:[^/\s@]+@"), r"\1<redacted>@"),
     (re.compile(r"sk-[A-Za-z0-9_-]{8,}"), "sk-…"),
     (re.compile(r"(?i)(bearer|x-api-key)[:= ]+\S+"), r"\1 <redacted>"),
     (re.compile(r"[A-Za-z0-9+/]{40,}={0,2}"), "<redacted>"),  # 40+ hex or base64

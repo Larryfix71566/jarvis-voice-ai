@@ -294,8 +294,9 @@ class SubAgent:
                         f"model profile {model_profile!r} could not be "
                         f"resolved ({exc}). This agent is configured "
                         f"on_profile_fallback=refuse, so it will not run on "
-                        f"the voice model instead. Fix the credential "
-                        f"(python scripts/check_keys.py) and retry."
+                        f"the voice model instead. The key for this model "
+                        f"needs fixing (its state can be checked with the "
+                        f"status tools); then retry."
                     )
                 logger.warning(
                     "subagent_model_profile_fallback agent=%s profile=%s mode=%s",

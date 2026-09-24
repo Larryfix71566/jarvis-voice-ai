@@ -365,6 +365,15 @@ class TestDeveloperSections:
         assert text.endswith(sentence)
         assert text.count(sentence) == 1
 
+    def test_an_offline_sidecar_is_reported_without_a_command(self):
+        """Review finding 8 (L1): the user never gets a terminal command —
+        the section used to say to suggest ./scripts/mortimer.sh."""
+        from jarvis.prompts import DEVELOPER_SECTIONS
+        text = DEVELOPER_SECTIONS["self_development"]
+        assert "scripts/" not in text and ".sh" not in text
+        assert "the admin sidecar is not running" in text
+        assert "never give the user a command" in text
+
     def test_a_self_edit_task_gets_the_self_development_section(self):
         from jarvis.prompts import select_developer_sections as sel
         assert "self_development" in sel("implement the drawer plan in mortimer")

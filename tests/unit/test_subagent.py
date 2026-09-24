@@ -980,6 +980,9 @@ class TestRefuseMode:
         # "REFUSED:" is how the model ends up inventing one.
         assert "could not be resolved" in result
         assert "does-not-exist" in result
+        # Review finding 8 (L1): the user is never handed a terminal command.
+        assert "scripts/" not in result and "python " not in result
+        assert "status tools" in result
 
     async def test_warn_mode_still_falls_back_silently(
             self, tmp_path, monkeypatch):

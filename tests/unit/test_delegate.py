@@ -755,6 +755,9 @@ class TestHandoffDepth:
                                   "continuation": True})
         assert "This is handoff" in last
         assert "what you still do not know" in last
+        # Review finding 8 (L1): information, not a command for the user.
+        assert "command" not in last.split("This is handoff", 1)[1]
+        assert "what information would settle it" in last
 
     async def test_there_is_no_cap(self):
         """Ten handoffs must all be allowed — the notice is guidance."""
