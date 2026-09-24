@@ -24,7 +24,8 @@ enum CometOrbRenderer {
 
     static func draw(context: inout GraphicsContext, size: CGSize,
                      stageCenterX: CGFloat?, phase: Double, userEnergy: Double,
-                     outputEnergy: Double, activity: VoicePresentationState.Activity) {
+                     outputEnergy: Double, activity: VoicePresentationState.Activity,
+                     shell: OrbShell = .resolved) {
         let center = CGPoint(x: stageCenterX ?? size.width / 2, y: size.height / 2)
         // Give the sphere the prominence of the reference, with room for the
         // extended comet paths and bloom inside the existing compact bounds.
@@ -46,6 +47,16 @@ enum CometOrbRenderer {
         // Idle breathing is a ready cue; voice intensity uses only the measured
         // envelopes. All temporal terms use the pausable phase, never uptime.
         let breath = ambient ? 0.94 + 0.06 * sin(phase * 1.2) : 1
+
+        // docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md: the crystal shell
+        // replaces everything below this point; the legacy shell stays
+        // verbatim as the rollback (JARVIS_ORB_CRYSTAL=off).
+        if shell == .crystal {
+            drawCrystalShell(context: &context, center: center, radius: radius, phase: phase,
+                             userEnergy: userEnergy, outputEnergy: outputEnergy, tint: tint,
+                             strength: strength, breath: breath, energy: energy, ready: ready)
+            return
+        }
 
         // Split the orbits into back/front passes. The shell can tint rear
         // trails, while near comets stay sharp instead of looking pasted on.
@@ -271,6 +282,218 @@ enum CometOrbRenderer {
                     center: head.point, startRadius: 0, endRadius: headSize))
                 context.stroke(disc(head.point, headSize), with: .color(tint.opacity(brightness)), lineWidth: 0.8)
             }
+        }
+    }
+}
+// MARK: - Crystal shell (docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md, option A)
+//
+// Same file as the legacy shell on purpose: it calls the private `plasma`,
+// `comets`, `disc`, `color` and `ice` members unchanged. Every blurred group
+// is drawn as ONE layer through a context copy that carries the filter, so
+// the blur applies to the composited group (GraphicsContext.addFilter
+// filters each drawing operation, and a drawLayer call is one operation).
+extension CometOrbRenderer {
+    private static func drawCrystalShell(context: inout GraphicsContext, center: CGPoint,
+                                         radius: Double, phase: Double, userEnergy: Double,
+                                         outputEnergy: Double, tint: Color, strength: Double,
+                                         breath: Double, energy: Double, ready: Bool) {
+        typealias Rig = CrystalGlassRig
+        let sphere = disc(center, radius)
+
+        // 1. Plasma bloom just outside the glass; follows the voice state.
+        let haloRadius = radius * Rig.haloExtent
+        context.fill(disc(center, haloRadius), with: .radialGradient(
+            Gradient(stops: Rig.haloStops.map {
+                Gradient.Stop(color: tint.opacity($0.weight * Rig.haloOpacity * strength),
+                              location: $0.location)
+            }),
+            center: center, startRadius: 0, endRadius: haloRadius))
+
+        // 2. Back half of each orbit, drawn before the body so the glass dims it.
+        if ready {
+            comets(context: &context, center: center, radius: radius, phase: phase,
+                   userEnergy: userEnergy, outputEnergy: outputEnergy, front: false)
+        }
+
+        // 3. Glass body.
+        context.fill(sphere, with: .radialGradient(
+            Gradient(stops: Rig.bodyStops.map {
+                Gradient.Stop(color: color(Rig.inkRGB).opacity($0.opacity), location: $0.location)
+            }),
+            center: center, startRadius: 0, endRadius: radius))
+
+        // 4. Plasma, seen through the wall (plasma() itself is unchanged).
+        var inside = context
+        inside.clip(to: disc(center, radius * Rig.plasmaClipFraction))
+        plasma(context: &inside, center: center, radius: radius, phase: phase,
+               tint: tint, strength: strength * breath, energy: energy)
+
+        // 5. Plasma light carried in the wall, strongest opposite the key light.
+        var wall = context
+        wall.clip(to: sphere)
+        wall.blendMode = .plusLighter
+        wall.addFilter(.blur(radius: radius * Rig.wallGlowBlurFraction))
+        wall.drawLayer { layer in
+            var ring = Path()
+            ring.addEllipse(in: CGRect(x: center.x - radius * Rig.wallOuterFraction,
+                                       y: center.y - radius * Rig.wallOuterFraction,
+                                       width: radius * Rig.wallOuterFraction * 2,
+                                       height: radius * Rig.wallOuterFraction * 2))
+            ring.addEllipse(in: CGRect(x: center.x - radius * Rig.wallInnerFraction,
+                                       y: center.y - radius * Rig.wallInnerFraction,
+                                       width: radius * Rig.wallInnerFraction * 2,
+                                       height: radius * Rig.wallInnerFraction * 2))
+            layer.fill(ring, with: .linearGradient(
+                Gradient(colors: [tint.opacity(0), tint.opacity(Rig.wallGlowOpacity * strength)]),
+                startPoint: CGPoint(x: center.x + radius * Rig.wallGlowStart.x,
+                                    y: center.y + radius * Rig.wallGlowStart.y),
+                endPoint: CGPoint(x: center.x + radius * Rig.wallGlowEnd.x,
+                                  y: center.y + radius * Rig.wallGlowEnd.y)),
+                style: FillStyle(eoFill: true))
+        }
+
+        // 6. Wall thickness: dark inner-surface line, faint light line outside it.
+        context.stroke(disc(center, radius * Rig.wallLineFraction),
+                       with: .color(.black.opacity(Rig.wallLineOpacity)),
+                       lineWidth: max(Rig.wallLineMinWidth, radius * Rig.wallLineWidthFraction))
+        context.stroke(disc(center, radius * (Rig.wallLineFraction + Rig.wallHighlightOffset)),
+                       with: .color(ice.opacity(Rig.wallHighlightOpacity)),
+                       lineWidth: Rig.wallHighlightWidth)
+
+        // 7. Reflections of the room: one layer, screened onto the scene.
+        // Nothing in it depends on voice state or phase.
+        var room = context
+        room.blendMode = .screen
+        room.drawLayer { env in
+            drawCrystalReflections(into: &env, center: center, radius: radius)
+        }
+
+        // 8. Front half of each orbit.
+        if ready {
+            comets(context: &context, center: center, radius: radius, phase: phase,
+                   userEnergy: userEnergy, outputEnergy: outputEnergy, front: true)
+        }
+    }
+
+    private static func drawCrystalReflections(into env: inout GraphicsContext,
+                                               center: CGPoint, radius: Double) {
+        typealias Rig = CrystalGlassRig
+        let sphere = disc(center, radius)
+
+        // a. Room reflection: sky gradient masked by Fresnel reflectance.
+        // The 0.62 layer opacity is folded into the gradient's alpha, which
+        // is mathematically identical under destinationIn.
+        env.drawLayer { layer in
+            layer.fill(sphere, with: .linearGradient(
+                Gradient(stops: Rig.skyStops.map {
+                    Gradient.Stop(color: color(Rig.skyRGB).opacity($0.opacity * Rig.fresnelOpacity),
+                                  location: $0.location)
+                }),
+                startPoint: CGPoint(x: center.x, y: center.y - radius),
+                endPoint: CGPoint(x: center.x, y: center.y + radius)))
+            layer.blendMode = .destinationIn
+            layer.fill(sphere, with: .radialGradient(
+                Gradient(stops: Rig.fresnelStops.map {
+                    Gradient.Stop(color: Color.white.opacity($0.reflectance), location: $0.location)
+                }),
+                center: center, startRadius: 0, endRadius: radius))
+        }
+
+        // b. Caustic on the far inner wall.
+        let focus = CGPoint(x: center.x + radius * Rig.causticCenter.x,
+                            y: center.y + radius * Rig.causticCenter.y)
+        let focusRadius = radius * Rig.causticRadiusFraction
+        var caustic = env
+        caustic.clip(to: disc(center, radius * Rig.causticClipFraction))
+        caustic.addFilter(.blur(radius: radius * Rig.causticBlurFraction))
+        caustic.drawLayer { layer in
+            layer.fill(disc(focus, focusRadius), with: .radialGradient(
+                Gradient(stops: [
+                    .init(color: Color.white.opacity(Rig.causticOpacity), location: 0),
+                    .init(color: ice.opacity(Rig.causticOpacity * Rig.causticMidOpacityRatio), location: 0.5),
+                    .init(color: ice.opacity(0), location: 1),
+                ]),
+                center: focus, startRadius: 0, endRadius: focusRadius))
+        }
+
+        // c. Studio lights: the two-pane window key and the rim strip.
+        var lights = env
+        lights.addFilter(.blur(radius: max(Rig.lightsMinBlur, radius * Rig.lightsBlurFraction)))
+        lights.drawLayer { layer in
+            for pane in Rig.keyPanes {
+                fillLight(&layer, pane, center: center, radius: radius, opacity: Rig.keyOpacity)
+            }
+            fillLight(&layer, Rig.strip, center: center, radius: radius, opacity: Rig.stripOpacity)
+        }
+
+        // d. The window again, off the inside of the far wall: rotated a
+        // half turn about the center and scaled down.
+        var back = env
+        back.addFilter(.blur(radius: radius * Rig.backKeyBlurFraction))
+        back.drawLayer { layer in
+            layer.translateBy(x: center.x, y: center.y)
+            layer.rotate(by: .radians(Double.pi))
+            layer.scaleBy(x: Rig.backKeyScale, y: Rig.backKeyScale)
+            layer.translateBy(x: -center.x, y: -center.y)
+            for pane in Rig.keyPanes {
+                fillLight(&layer, pane, center: center, radius: radius, opacity: Rig.backKeyOpacity)
+            }
+        }
+
+        // e. Dispersion along the lit rim.
+        var dispersion = env
+        dispersion.addFilter(.blur(radius: Rig.dispersionBlur))
+        dispersion.drawLayer { layer in
+            strokeRimArc(&layer, center: center, radius: radius * Rig.dispersionCoolRadius,
+                         peak: Rig.dispersionCoolPeak, color: color(Rig.dispersionCoolRGB))
+            strokeRimArc(&layer, center: center, radius: radius * Rig.dispersionWarmRadius,
+                         peak: Rig.dispersionWarmPeak, color: color(Rig.dispersionWarmRGB))
+        }
+
+        // f. Silhouette hairline.
+        env.stroke(disc(center, radius * Rig.hairlineFraction),
+                   with: .color(Color.white.opacity(Rig.hairlineOpacity)),
+                   lineWidth: Rig.hairlineWidth)
+    }
+
+    /// Fills a light's reflection, brighter toward the rim.
+    private static func fillLight(_ layer: inout GraphicsContext, _ light: CrystalGlassRig.LightOutline,
+                                  center: CGPoint, radius: Double, opacity: Double) {
+        typealias Rig = CrystalGlassRig
+        var path = Path()
+        for (index, point) in light.points.enumerated() {
+            let p = CGPoint(x: center.x + point.x * radius, y: center.y + point.y * radius)
+            if index == 0 { path.move(to: p) } else { path.addLine(to: p) }
+        }
+        path.closeSubpath()
+        let length = hypot(light.mid.x, light.mid.y)
+        let norm = length > 0 ? length : 1
+        let ux = light.mid.x / norm, uy = light.mid.y / norm
+        layer.fill(path, with: .linearGradient(
+            Gradient(colors: [Color.white.opacity(opacity),
+                              Color.white.opacity(opacity * Rig.lightInnerOpacityRatio)]),
+            startPoint: CGPoint(x: center.x + ux * radius, y: center.y + uy * radius),
+            endPoint: CGPoint(x: center.x + ux * radius * Rig.lightGradientInnerFraction,
+                              y: center.y + uy * radius * Rig.lightGradientInnerFraction)))
+    }
+
+    /// One dispersion arc: short segments whose opacity rises and falls
+    /// as sin(pi * t)^1.6 along the arc.
+    private static func strokeRimArc(_ layer: inout GraphicsContext, center: CGPoint,
+                                     radius: Double, peak: Double, color: Color) {
+        typealias Rig = CrystalGlassRig
+        let count = Rig.arcSegmentCount
+        let start = Rig.dispersionStartRadians, end = Rig.dispersionEndRadians
+        for index in 0..<count {
+            let t0 = Double(index) / Double(count)
+            let t1 = Double(index + 1) / Double(count)
+            let alpha = peak * pow(sin(Double.pi * (t0 + t1) / 2), Rig.arcFalloffExponent)
+            let a0 = start + (end - start) * t0, a1 = start + (end - start) * t1
+            var segment = Path()
+            segment.move(to: CGPoint(x: center.x + cos(a0) * radius, y: center.y + sin(a0) * radius))
+            segment.addLine(to: CGPoint(x: center.x + cos(a1) * radius, y: center.y + sin(a1) * radius))
+            layer.stroke(segment, with: .color(color.opacity(alpha)),
+                         style: StrokeStyle(lineWidth: Rig.dispersionWidth, lineCap: .round))
         }
     }
 }
