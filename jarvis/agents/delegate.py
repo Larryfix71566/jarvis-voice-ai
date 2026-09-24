@@ -27,6 +27,7 @@ import uuid
 from typing import Any, Callable
 
 from jarvis.agents.base import EventCallback, SubAgent
+from jarvis.bot.sensitive_turn import current_sensitive_turn
 from jarvis.model_routing import resolve_policy
 from jarvis.procedures import _overlap_score, _tokens, learn_from_run
 from jarvis.sensitive import detect_financial
@@ -253,6 +254,24 @@ def foreground_delegation_count() -> int:
     return len(_foreground_delegations)
 
 
+# Status spec T3.2 (L12) — what the outbox keeps for a late result from a
+# protected (armed) turn: the fact that it finished, never its content, since
+# the notice is spoken in a LATER session whose turn is not protected.
+SENSITIVE_LATE_NOTICE = (
+    "A background task you asked for finished; ask me for its result."
+)
+
+
+def _to_outbox(source: str, text: str) -> int:
+    """T3.2 — queue an undeliverable late result in the notice outbox.
+
+    One seam so tests (tests/conftest.py) can keep the orphaned-delegation
+    path off the real database. jarvis.notices.add_notice never raises."""
+    from jarvis import notices
+
+    return notices.add_notice("late_result", source, text)
+
+
 def _spawn_background(coro) -> None:
     task = asyncio.create_task(coro)
     _background_tasks.add(task)
@@ -396,6 +415,10 @@ def build_delegate_tool(
         claims_continuation = bool(arguments.get("continuation"))
         findings_path = str(arguments.get("findings_path") or "").strip()
         model_profile = str(arguments.get("model_profile") or "").strip()
+        # T3.2 — captured at delegation start: a late result from a protected
+        # turn goes to the outbox redacted (SENSITIVE_LATE_NOTICE).
+        holder = current_sensitive_turn.get()
+        armed = bool(holder and holder.is_armed())
         agent = sub_agents.get(agent_name)
         if agent is None:
             # No agent, nothing ran — this path does not create a run
@@ -653,17 +676,35 @@ def build_delegate_tool(
                 agent_name, run_id,
             )
 
+            def _outbox(note: str, reason: str) -> None:
+                # T3.2 (L12): a result nobody can hear now is kept and
+                # spoken after the greeting at the next connect.
+                logger.warning(
+                    "delegate_late_result_undeliverable agent=%s "
+                    "run_id=%s reason=%s", agent_name, run_id, reason)
+                notice_id = _to_outbox(
+                    agent.display_name, SENSITIVE_LATE_NOTICE if armed else note)
+                logger.info("delegate_late_result_outboxed agent=%s run_id=%s "
+                            "notice_id=%s redacted=%s",
+                            agent_name, run_id, notice_id, armed)
+
+            async def _deliver_or_outbox(fn: Callable, note: str) -> None:
+                # The hook returns False when its session has ended
+                # (runtime.alive); the note then goes to the outbox.
+                try:
+                    delivered = await fn(note)
+                except Exception:  # noqa: BLE001 — never lose the result
+                    logger.exception("delegate_late_delivery_failed agent=%s "
+                                     "run_id=%s", agent_name, run_id)
+                    delivered = False
+                if delivered is False:
+                    _outbox(note, "session_ended")
+
             def _deliver(task: asyncio.Task) -> None:
                 if task.cancelled():
                     return
                 exc = task.exception()
                 outcome = f"FAILED: {exc}" if exc else task.result()
-                fn = (late_delivery or {}).get("fn")
-                if fn is None:
-                    logger.warning(
-                        "delegate_late_result_undeliverable agent=%s "
-                        "run_id=%s", agent_name, run_id)
-                    return
                 note = (
                     f"[system] Background update: the {agent.display_name} "
                     "task delegated earlier finished after the conversation "
@@ -672,7 +713,11 @@ def build_delegate_tool(
                     "later turns. If it prepared an action that needs their "
                     "confirmation, say so."
                 )
-                _spawn_background(fn(note))
+                fn = (late_delivery or {}).get("fn")
+                if fn is None:
+                    _outbox(note, "no_hook")
+                    return
+                _spawn_background(_deliver_or_outbox(fn, note))
 
             if run_task.done():
                 _deliver(run_task)

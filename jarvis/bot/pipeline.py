@@ -133,6 +133,7 @@ from jarvis.runlog import prune as prune_runlog
 from jarvis.runlog import reconcile_orphaned_runs
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 from jarvis.skills.shared import get_shared_registry, shared_enabled
+from jarvis import notices
 
 # Service imports are module-level names so tests can monkeypatch them.
 # D-004: pipecat 1.4.0 class locations/settings classes differ from the
@@ -181,6 +182,10 @@ class Runtime:
     # at construction time — same late-binding reason RemindersWatcher
     # takes inject= at run_session level.
     late_delivery: dict = field(default_factory=dict)
+    # Status spec T3.2 (L12): False from the first statement of teardown.
+    # inject_late_result checks it, so a result landing during or after
+    # teardown goes to the notice outbox instead of a dead pipeline.
+    alive: bool = True
     # Item 11 (2026-09-17): the detached delegation runs this session
     # started and has not seen finish. run_session drains it before
     # registry.stop(), because those runs call tools through this
@@ -1117,6 +1122,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 transport, runtime, client_messages=client_messages)
         else:
             pipeline, _llm, aggregators, pusher = build_pipeline(transport, runtime)
+        # Status spec T3.2 — found while testing the notice greeting: these
+        # two names are locals of build_pipeline, but on_client_connected,
+        # handle_console_ready and handle_console below read them here, so
+        # every connect raised NameError before the greeting (since 88b206f).
+        # Same sources build_pipeline uses; nothing else changes.
+        console_generation = runtime.console_generation
+        command_console_enabled = os.environ.get(
+            "JARVIS_COMMAND_CONSOLE_ENABLED", "false").strip().lower() in ("1", "true", "yes")
         async def inject_silent(text: str) -> None:
             # Phase 3: interruption notice. Unlike inject_context (greeting,
             # reminders), this does NOT call push_context_frame() — it only
@@ -1255,7 +1268,11 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # the user's local time, but keep background memory maintenance
             # silent; open reviews remain available from the Memory panel or
             # an explicit memory request.
-            greeting_note = connection_greeting_note(settings.jarvis_timezone)
+            # Status spec T3.2 (L12): notices queued while nobody was
+            # connected (late results, daily status) ride on the greeting,
+            # once — take_pending marks them delivered.
+            greeting_note = (connection_greeting_note(settings.jarvis_timezone)
+                             + notices.render_for_greeting(notices.take_pending()))
             aggregators.user().add_messages([{
                 "role": "user", "content": greeting_note,
             }])
@@ -1281,7 +1298,12 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             aggregators.user().add_messages([{"role": "user", "content": text}])
             await aggregators.user().push_context_frame()
 
-        async def inject_late_result(text: str) -> None:
+        async def inject_late_result(text: str) -> bool:
+            # Status spec T3.2: False — without touching the pipeline — once
+            # the session is tearing down; delegate.py then puts the result
+            # in the notice outbox. True once the note is in the context.
+            if not runtime.alive:
+                return False
             # MORTIMER_SESSION_MISSES_PLAN.md S6: same channel as
             # inject_context, but the note is registered with the
             # neutralizer so its imperative dies with the relay turn. The
@@ -1303,8 +1325,9 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                     "late_result_deferred_inflight delegations=%d",
                     foreground_delegation_count(),
                 )
-                return
+                return True
             await aggregators.user().push_context_frame()
+            return True
 
         # Barge-in survival — install the late-delivery hook the delegate
         # tool uses for results whose voice turn was cancelled. Same
@@ -1647,6 +1670,9 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
         try:
             await runner.run(task)
         finally:
+            # T3.2: first, before anything below can await — a late result
+            # landing from here on goes to the notice outbox.
+            runtime.alive = False
             shared_transfer.close()
             await watcher.stop()
             await memory_watcher.stop()

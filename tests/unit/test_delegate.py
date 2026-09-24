@@ -899,3 +899,115 @@ class TestBargeInSurvival:
             await turn
         await asyncio.sleep(0.1)
         assert agent.finished_at is not None
+
+
+class TestNoticeOutbox:
+    """Status spec T3.2 (L12): a late result nobody can hear now — no hook,
+    or a hook whose session has ended (inject_late_result returns False) —
+    goes to the notice outbox instead of being lost (fact 3.5)."""
+
+    @pytest.fixture
+    def outbox(self, monkeypatch):
+        calls: list[tuple[str, str]] = []
+
+        def record(source, text):
+            calls.append((source, text))
+            return len(calls)
+
+        monkeypatch.setattr("jarvis.agents.delegate._to_outbox", record)
+        return calls
+
+    @staticmethod
+    async def _orphan(handler, task="do the thing"):
+        turn = asyncio.create_task(handler({"agent_name": "developer", "task": task}))
+        await asyncio.sleep(0.01)
+        turn.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await turn
+        await asyncio.sleep(0.1)
+
+    async def test_undeliverable_late_result_goes_to_outbox(self, outbox, caplog):
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="audit: 3 findings")
+        _, handler = build_delegate_tool({"developer": agent})     # no hook
+        with caplog.at_level("INFO", logger="jarvis.agents.delegate"):
+            await self._orphan(handler)
+        assert len(outbox) == 1
+        source, text = outbox[0]
+        assert source == "Developer"
+        assert "Background update" in text and "audit: 3 findings" in text
+        assert "delegate_late_result_undeliverable" in caplog.text, "the log line stays"
+
+    async def test_dead_session_hook_returning_false_goes_to_outbox(self, outbox):
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="audit: 3 findings")
+        offered: list[str] = []
+
+        async def dead_hook(text):
+            offered.append(text)
+            return False                        # runtime.alive is False
+
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": dead_hook})
+        await self._orphan(handler)
+        assert len(offered) == 1
+        assert outbox == [("Developer", offered[0])]
+
+    @pytest.mark.parametrize("returned", [True, None])
+    async def test_a_delivered_result_is_not_outboxed(self, outbox, returned):
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="done late")
+
+        async def live_hook(text):
+            return returned
+
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": live_hook})
+        await self._orphan(handler)
+        assert outbox == []
+
+    async def test_a_hook_that_raises_goes_to_outbox(self, outbox):
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="done late")
+
+        async def broken_hook(text):
+            raise RuntimeError("pipeline gone")
+
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": broken_hook})
+        await self._orphan(handler)
+        assert len(outbox) == 1 and "done late" in outbox[0][1]
+
+    async def test_sensitive_late_result_is_redacted_in_outbox(self, outbox):
+        from jarvis.agents.delegate import SENSITIVE_LATE_NOTICE
+        from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
+
+        agent = SlowFakeSubAgent("developer", delay=0.05,
+                                 result="balance is 12,345.67 in account 9876")
+
+        async def dead_hook(text):
+            return False
+
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": dead_hook})
+        holder = SensitiveTurn()
+        holder.arm("financial")
+        token = current_sensitive_turn.set(holder)
+        try:
+            await self._orphan(handler)
+        finally:
+            current_sensitive_turn.reset(token)
+        assert outbox == [("Developer", SENSITIVE_LATE_NOTICE)]
+        assert SENSITIVE_LATE_NOTICE == (
+            "A background task you asked for finished; ask me for its result.")
+
+    async def test_outboxed_result_reaches_the_notices_table(self, fresh_db, monkeypatch):
+        """End to end through jarvis.notices, with the real table."""
+        from functools import partial
+
+        from jarvis import notices
+
+        monkeypatch.setattr("jarvis.agents.delegate._to_outbox",
+                            partial(notices.add_notice, "late_result"))
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="audit: 3 findings")
+        _, handler = build_delegate_tool({"developer": agent})
+        await self._orphan(handler)
+        (item,) = notices.take_pending()
+        assert item["kind"] == "late_result" and item["source"] == "Developer"
+        assert "audit: 3 findings" in item["text"]

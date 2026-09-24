@@ -71,6 +71,8 @@ Verify paths and the current branch before writing. Keep this map below the
 - `jarvis/skills/registry.py` — MCP servers, one owner task each,
   restarted on death; `shared.py` keeps one registry per process.
 - `jarvis/prompts.py` — single source of every system prompt.
+- `jarvis/notices.py` — notice outbox: late results, daily status;
+  spoken once after the next greeting.
 - `jarvis/db.py` — SQLite schema + migrations (human-only).
 - `jarvis/tenant.py` — `current_user_id()` from `JARVIS_USER_ID`,
   default `"local"` (column exists; nothing filters by it yet).

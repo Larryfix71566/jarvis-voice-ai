@@ -36,7 +36,8 @@ Transport: `jarvis/bot/bot.py` serves `/ws-client` (WebSocket,
 `JARVIS_FORCE_WEBRTC` is the rollback, and a remote bot uses WebRTC.
 
 The bot owns the voice session, Supervisor turn, tool registration, memory
-session lifecycle and speech output. `MortimerHost` owns native windows,
+session lifecycle and speech output; results that land after a session ends
+wait in the `notices` outbox for the next greeting. `MortimerHost` owns native windows,
 layout, drawer tabs, Atlas/graph state, display placement and content
 sharing. The admin sidecar owns self-edit, planning, run status and
 HTTP inspection. MCP servers are subprocesses with declared credentials and

@@ -88,3 +88,17 @@ def _stub_procedures_learning(monkeypatch):
     monkeypatch.setattr(
         "jarvis.agents.delegate.learn_from_run", _noop, raising=False
     )
+
+
+@pytest.fixture(autouse=True)
+def _stub_notice_outbox(monkeypatch):
+    """Status spec T3.2: a delegation orphaned with no live session writes
+    its result to the notice outbox (jarvis.notices -> JARVIS_DB_PATH, which
+    defaults to the REAL data/jarvis.db). Several tests drive exactly that
+    path (barge-in with no hook, the teardown drain tests), so the seam is
+    stubbed by default, like learn_from_run above. Tests of the outbox
+    itself re-patch jarvis.agents.delegate._to_outbox in their body."""
+    monkeypatch.setattr(
+        "jarvis.agents.delegate._to_outbox", lambda source, text: -1,
+        raising=False,
+    )
