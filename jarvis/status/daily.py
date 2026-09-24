@@ -6,7 +6,11 @@ tools can read on request, for EVERY configured provider (discovered from
 configuration, never a list kept here — L3):
 
 1. `discover_providers()`
-2. every model provider's catalog, forced (`fetch_all`)
+2. every model provider's catalog, forced (`fetch_all`), then — spec P5
+   A3, the split plan's §4a sync — one `model_catalog.<endpoint>.json` per
+   registry endpoint rendered from those lists into the IGNORED
+   `data/status/generated/` (never the tracked `config/generated/`, never
+   `model_endpoints.yaml`/`model_profiles.yaml`)
 3. the Claude and Codex subscription probes on their default models, forced
 4. `keyhealth.probe_all()`
 5. `model_access_status()` (for coverage gaps)
@@ -28,10 +32,10 @@ import json
 import logging
 import os
 import tempfile
-from dataclasses import asdict
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Callable
+from typing import IO, Any, Callable, Iterable
 
 from jarvis.status.logs import redact
 
@@ -39,9 +43,14 @@ logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STATUS_DIR = REPO_ROOT / "data" / "status"
+# The tracked catalogue baseline. The daily job never writes under it: a
+# tracked file changing every day would dirty the runtime checkout. Moving
+# rendered catalogues there is the §4a follow-on PR job (out of scope).
+TRACKED_CONFIG_DIR = REPO_ROOT / "config"
 KEEP_FILES = 30
 MAX_NOTICE_CHARS = 600
 PREFIX, SUFFIX = "daily-", ".json"
+GENERATED_DIRNAME = "generated"  # data/status/generated/model_catalog.<endpoint>.json
 SUBSCRIPTIONS = ("claude", "codex")
 
 # Spoken names only; which providers exist always comes from configuration.
@@ -70,8 +79,14 @@ def _default_deps() -> dict[str, Callable[..., Any]]:
 
         return load_model_registry()
 
+    def load_layers() -> dict:
+        from jarvis.agents.upgrade_agent import load_registry_layers
+
+        return load_registry_layers()
+
     return {
         "registry": load_registry,
+        "layers": load_layers,
         "discover": lambda registry: discover_providers(registry=registry),
         "fetch_all": lambda refs: catalog.fetch_all(catalog.catalog_refs(refs), force=True),
         "compare": catalog.compare_to_registry,
@@ -83,9 +98,11 @@ def _default_deps() -> dict[str, Callable[..., Any]]:
 
 
 def collect(deps: dict[str, Callable[..., Any]] | None = None, *,
-            now: datetime | None = None) -> dict[str, Any]:
+            now: datetime | None = None,
+            generated_dir: Path | None = None) -> dict[str, Any]:
     """One snapshot. Every step is guarded: a failure is recorded in
-    `errors` and the rest still run."""
+    `errors` and the rest still run. With `generated_dir`, the catalogs are
+    also rendered there per endpoint (`generated_catalogs` in the snapshot)."""
     d = {**_default_deps(), **(deps or {})}
     now = now or datetime.now(timezone.utc)
     snap: dict[str, Any] = {
@@ -110,9 +127,15 @@ def collect(deps: dict[str, Callable[..., Any]] | None = None, *,
     results: list = []
     try:
         results = list(d["fetch_all"](refs))
-        snap["catalogs"] = [asdict(r) for r in results]
+        snap["catalogs"] = [_as_payload(r) for r in results]
     except Exception as exc:  # noqa: BLE001
         snap["errors"].append(_err("catalogs", exc))
+    if generated_dir is not None:
+        try:
+            snap["generated_catalogs"] = render_endpoint_catalogs(
+                d["layers"](), refs, results, out_dir=generated_dir)
+        except Exception as exc:  # noqa: BLE001
+            snap["errors"].append(_err("generated_catalogs", exc))
     try:
         snap["comparison"] = d["compare"](results, registry)
     except Exception as exc:  # noqa: BLE001
@@ -142,14 +165,14 @@ def _files(status_dir: Path) -> list[Path]:
                   if p.name.startswith(PREFIX) and p.name.endswith(SUFFIX))
 
 
-def write_atomic(path: Path, payload: dict[str, Any]) -> None:
-    """Write JSON to a temp file in the same directory, then os.replace."""
+def _replace_atomic(path: Path, write: Callable[[IO[str]], None]) -> None:
+    """Write through `write` to a temp file in the same directory, then
+    os.replace: a reader sees the old file or the whole new one."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(payload, fh, indent=2, sort_keys=True)
-            fh.write("\n")
+            write(fh)
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmp, path)
@@ -159,6 +182,15 @@ def write_atomic(path: Path, payload: dict[str, Any]) -> None:
         except OSError:
             pass
         raise
+
+
+def write_atomic(path: Path, payload: dict[str, Any]) -> None:
+    """Write JSON to a temp file in the same directory, then os.replace."""
+    def _json(fh: IO[str]) -> None:
+        json.dump(payload, fh, indent=2, sort_keys=True)
+        fh.write("\n")
+
+    _replace_atomic(path, _json)
 
 
 def prune(status_dir: Path, keep: int = KEEP_FILES) -> list[Path]:
@@ -183,6 +215,148 @@ def load_previous(status_dir: Path, today_name: str) -> dict[str, Any] | None:
         except (OSError, ValueError):
             continue
     return None
+
+
+# ---- per-endpoint catalogues (spec P5 A3; split plan §4a) -------------------
+
+GENERATED_NOTE = (
+    "GENERATED by the daily status job (python -m jarvis.status.daily) - do not "
+    "hand-edit. What one registry endpoint's provider offered, joined to the "
+    "profile pool by identity (docs/plans/"
+    "MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md section 4a). Runtime data under the "
+    "ignored data/status/generated/; only the section 4a follow-on PR job moves "
+    "it into the tracked config/generated/.")
+
+
+def _as_payload(result: Any) -> dict[str, Any]:
+    from jarvis.status.catalog import as_payload
+
+    return as_payload(result)
+
+
+def _field(result: Any, name: str, default: Any = None) -> Any:
+    if isinstance(result, dict):
+        return result.get(name, default)
+    return getattr(result, name, default)
+
+
+def _per_mtok(value: Any) -> float | None:
+    """A provider's USD-per-token price (OpenRouter sends strings) as USD
+    per million tokens; None when absent, unparseable or negative (a
+    variable-price router)."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        per_token = Decimal(str(value).strip())
+    except (InvalidOperation, ValueError):
+        return None
+    if not per_token.is_finite() or per_token < 0:
+        return None
+    return float(per_token * 1_000_000)
+
+
+def _vendor(identities: Iterable[str], fallback: str) -> str:
+    """The identity vendor prefix this endpoint's profiles already use
+    (e.g. `moonshotai` on the moonshot endpoint), else the provider."""
+    counts: dict[str, int] = {}
+    for ident in identities:
+        if "/" in ident:
+            v = ident.split("/", 1)[0]
+            counts[v] = counts.get(v, 0) + 1
+    return min(counts, key=lambda v: (-counts[v], v)) if counts else fallback
+
+
+def catalog_entries(result: Any, profiles: list[dict[str, Any]], provider: str
+                    ) -> list[dict[str, Any]]:
+    """One endpoint's catalogue entries in the §4a schema (the loader's
+    CATALOG_ENTRY_KEYS, in order). `identity` is the configured profile's
+    when a profile on this endpoint uses the model string (so the join
+    holds exactly), the id itself when it is vendor-qualified, else
+    `<vendor>/<id>`. Price and context fields are filled when the provider
+    published them, otherwise null; nothing is invented."""
+    from jarvis.agents.upgrade_agent import CATALOG_ENTRY_KEYS
+
+    by_model = {str(p.get("model")): str(p.get("identity")) for p in profiles
+                if p.get("model") and p.get("identity")}
+    vendor = _vendor(by_model.values(), provider)
+    facts = _field(result, "facts") or {}
+    fetched_at, source = _field(result, "fetched_at"), _field(result, "source")
+    entries: dict[str, dict[str, Any]] = {}
+    for model in _field(result, "models") or ():
+        mid = str(model.get("id") or "").strip()
+        if not mid or mid in entries:
+            continue
+        found = facts.get(mid) or {}
+        pricing = found.get("pricing") or {}
+        entry = dict.fromkeys(CATALOG_ENTRY_KEYS)
+        entry.update(
+            identity=by_model.get(mid) or (mid if "/" in mid else f"{vendor}/{mid}"),
+            model=mid,
+            context_window=found.get("context_length"),
+            input_price_per_mtok=_per_mtok(pricing.get("prompt")),
+            output_price_per_mtok=_per_mtok(pricing.get("completion")),
+            fetched_at=fetched_at,
+            source=source,
+        )
+        entries[mid] = entry
+    return sorted(entries.values(), key=lambda e: (str(e["identity"]), str(e["model"])))
+
+
+def _norm_url(url: Any) -> str:
+    return str(url or "").strip().rstrip("/")
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def render_endpoint_catalogs(layers: dict[str, Any], refs: Iterable[Any],
+                             results: Iterable[Any], *, out_dir: Path
+                             ) -> dict[str, dict[str, Any]]:
+    """Write `model_catalog.<endpoint>.json` into `out_dir` for every
+    registry endpoint whose provider's list was fetched from that
+    endpoint's own base URL. An endpoint without a usable list (a
+    subscription, a failed fetch) is skipped and keeps yesterday's file, so
+    one provider down ages only its own entries (§4a.2). Returns endpoint ->
+    {"file", "models"} or {"skipped": reason}. Never writes anywhere under
+    the tracked config/ directory, and only files the loader's catalogue
+    naming produces."""
+    from jarvis.agents.upgrade_agent import catalog_path
+
+    if _is_within(out_dir, TRACKED_CONFIG_DIR):
+        raise ValueError("the daily job never writes under config/ (spec P5 A3)")
+    refs = list(refs)
+    by_provider = {str(_field(r, "provider")): r for r in results}
+    profiles = [p for p in layers.get("profiles") or [] if isinstance(p, dict)]
+    out: dict[str, dict[str, Any]] = {}
+    for eid, endpoint in sorted((layers.get("endpoints") or {}).items()):
+        mine = [p for p in profiles if str(p.get("endpoint")) == str(eid)]
+        names = {str(p.get("name")) for p in mine}
+        ref = next((r for r in refs if names & set(r.profiles)), None)
+        if ref is None:
+            out[eid] = {"skipped": "no discovered provider serves this endpoint"}
+            continue
+        base = _norm_url(endpoint.get("base_url"))
+        if base and _norm_url(ref.base_url) != base:
+            out[eid] = {"skipped": "the catalog was fetched from a different base URL"}
+            continue
+        result = by_provider.get(ref.id)
+        if result is None or not _field(result, "ok"):
+            why = _field(result, "error_category") if result is not None else None
+            out[eid] = {"skipped": f"no model list ({why or 'not fetched'})"}
+            continue
+        entries = catalog_entries(result, mine, str(endpoint.get("provider") or ref.id))
+        doc = {"_generated": GENERATED_NOTE, "schema": 1, "endpoint": eid,
+               "provider": endpoint.get("provider"), "models": entries}
+        text = json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
+        path = out_dir / catalog_path(eid).name  # the loader's naming, our directory
+        _replace_atomic(path, lambda fh, text=text: fh.write(text))
+        out[eid] = {"file": path.name, "models": len(entries)}
+    return out
 
 
 # ---- diff and notice (pure) -------------------------------------------------
@@ -273,7 +447,7 @@ def run(*, status_dir: Path = STATUS_DIR, deps: dict[str, Callable[..., Any]] | 
         notice: Callable[[str, str, str], int] | None = None) -> dict[str, Any]:
     """Collect, write, prune, diff, notify. Never raises."""
     now = now or datetime.now(timezone.utc)
-    snap = collect(deps, now=now)
+    snap = collect(deps, now=now, generated_dir=status_dir / GENERATED_DIRNAME)
     name = f"{PREFIX}{now.astimezone().date().isoformat()}{SUFFIX}"
     prev = load_previous(status_dir, name)
     change = diff(prev, snap)

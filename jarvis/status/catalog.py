@@ -26,7 +26,7 @@ import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, wait
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable, Mapping
 from urllib.parse import urljoin, urlparse
@@ -51,6 +51,13 @@ class CatalogResult:
     models: tuple[dict, ...]    # each {"id": str, "display_name": str|None, "created": str|None}
     error_category: str | None  # rejected|unfunded|unreachable|unsupported|not_configured|no_credential
     error: str | None           # sanitized, <= 200 chars, never contains a key or header
+    # Upstream facts some providers publish per model, keyed by model id:
+    # {"pricing": {"prompt": str, "completion": str}, "context_length": int},
+    # each part only when the provider returned it (OpenRouter's /models
+    # carries both; pricing is USD per token, as strings). Read only by the
+    # daily job's per-endpoint catalogue render (spec P5 A3); as_payload()
+    # leaves it out, so the status answers do not grow by a row per model.
+    facts: dict = field(default_factory=dict, compare=False, repr=False)
 
 
 class _HTTPStatus(Exception):
@@ -141,7 +148,27 @@ def _anthropic(base: str, key: str, http, timeout: float) -> list[dict]:
     return models
 
 
-def _openai(base: str, key: str, http, timeout: float) -> list[dict]:
+_PRICE_KEYS = ("prompt", "completion")
+
+
+def _upstream_facts(item: dict) -> dict:
+    """The published price and context size of one /models item, if any."""
+    out: dict[str, Any] = {}
+    pricing = item.get("pricing")
+    if isinstance(pricing, dict):
+        kept = {k: pricing[k] for k in _PRICE_KEYS
+                if isinstance(pricing.get(k), (str, int, float))
+                and not isinstance(pricing.get(k), bool)}
+        if kept:
+            out["pricing"] = kept
+    ctx = item.get("context_length")
+    if isinstance(ctx, int) and not isinstance(ctx, bool) and ctx > 0:
+        out["context_length"] = ctx
+    return out
+
+
+def _openai(base: str, key: str, http, timeout: float,
+            facts: dict | None = None) -> list[dict]:
     headers = {"Authorization": f"Bearer {key}", "User-Agent": USER_AGENT}
     first = f"{base.rstrip('/')}/models"
     host = urlparse(first).hostname
@@ -155,6 +182,9 @@ def _openai(base: str, key: str, http, timeout: float) -> list[dict]:
             models.append({"id": str(item["id"]),
                            "display_name": item.get("name"),
                            "created": _epoch_iso(item.get("created"))})
+            found = _upstream_facts(item)
+            if found and facts is not None:
+                facts[str(item["id"])] = found
         # OpenRouter (verified 2026-09-23): top-level `links.next` is a
         # pagination link, null when everything fits in one page. Followed
         # only on the SAME host, so the Bearer key never goes elsewhere.
@@ -170,9 +200,11 @@ def _openai(base: str, key: str, http, timeout: float) -> list[dict]:
 
 
 def _result(ref: ProviderRef, *, ok: bool, source: str, models: Iterable[dict] = (),
-            category: str | None = None, error: str | None = None) -> CatalogResult:
+            category: str | None = None, error: str | None = None,
+            facts: dict | None = None) -> CatalogResult:
     return CatalogResult(provider=ref.id, ok=ok, fetched_at=_now_iso(), source=source,
-                         models=tuple(models), error_category=category, error=error)
+                         models=tuple(models), error_category=category, error=error,
+                         facts=dict(facts or {}))
 
 
 def _source(ref: ProviderRef, path: str) -> str:
@@ -201,11 +233,12 @@ def _fetch_uncached(ref: ProviderRef, *, timeout: float, http, env: Mapping[str,
     if not key:
         return _result(ref, ok=False, source=source, category="no_credential",
                        error=f"{ref.credential_env or 'no credential'} is not set")
+    facts: dict[str, dict] = {}
     try:
         if adapter == "anthropic_models":
             models = _anthropic(base, key, http, timeout)
         elif adapter == "openai_models":
-            models = _openai(base, key, http, timeout)
+            models = _openai(base, key, http, timeout, facts)
         else:
             models = _saygm(ref, key, timeout)
     except _HTTPStatus as exc:
@@ -220,7 +253,7 @@ def _fetch_uncached(ref: ProviderRef, *, timeout: float, http, env: Mapping[str,
     except Exception as exc:  # noqa: BLE001 — network error is a result, not a crash
         return _result(ref, ok=False, source=source, category="unreachable",
                        error=_sanitize(f"{type(exc).__name__}: {exc}", key))
-    return _result(ref, ok=True, source=source, models=models)
+    return _result(ref, ok=True, source=source, models=models, facts=facts)
 
 
 def _saygm(ref: ProviderRef, key: str, timeout: float) -> list[dict]:
@@ -378,10 +411,14 @@ def catalog_status(provider: str = "all", *, force: bool = False, registry: dict
         "ok": True,
         "generated_at": _now_iso(),
         "source": "catalog",
-        "results": [_as_dict(r) for r in results],
+        "results": [as_payload(r) for r in results],
         "comparison": compare_to_registry(results, registry, env=env),
     }
 
 
-def _as_dict(result: CatalogResult) -> dict[str, Any]:
-    return asdict(result)
+def as_payload(result: CatalogResult) -> dict[str, Any]:
+    """A result as the status payloads and the daily snapshot carry it:
+    every field but the per-model upstream `facts`."""
+    out = asdict(result)
+    out.pop("facts", None)
+    return out

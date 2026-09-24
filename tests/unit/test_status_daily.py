@@ -215,3 +215,213 @@ def test_default_collectors_cover_every_configured_provider(monkeypatch):
     assert [r.id for r in refs] == [r.id for r in discover_providers() if r.kind == "llm"]
     assert {"anthropic", "openrouter", "moonshot", "saygm", "voice",
             "claude-subscription", "codex-subscription"} <= {r.id for r in refs}
+
+
+# ---- spec P5 A3: per-endpoint catalogues rendered into data/status/generated/
+
+from jarvis.agents import upgrade_agent as ua  # noqa: E402
+
+OR_URL = "https://openrouter.ai/api/v1"
+AN_URL = "https://api.anthropic.com/v1/"
+MS_URL = "https://api.moonshot.ai/v1"
+
+LAYERS = {
+    "shape": "split",
+    "endpoints": {
+        "anthropic": {"provider": "anthropic", "base_url": AN_URL, "api_key_env": "ANTHROPIC_API_KEY"},
+        "codex-subscription": {"provider": "openai", "kind": "subscription",
+                               "route": "codex_subscription"},
+        "moonshot": {"provider": "moonshot", "base_url": MS_URL, "api_key_env": "MOONSHOT_API_KEY"},
+        "openrouter": {"provider": "openrouter", "base_url": OR_URL,
+                       "api_key_env": "OPENROUTER_API_KEY"},
+    },
+    "profiles": [
+        {"name": "claude-opus", "endpoint": "anthropic", "identity": "anthropic/claude-opus-5",
+         "model": "claude-opus-5"},
+        {"name": "codex-subscription", "endpoint": "codex-subscription",
+         "identity": "openai/gpt-6-astra", "model": "gpt-6-astra"},
+        {"name": "kimi-k3", "endpoint": "moonshot", "identity": "moonshotai/kimi-k3",
+         "model": "kimi-k3"},
+        {"name": "or-grok-4.6", "endpoint": "openrouter", "identity": "x-ai/grok-4.6",
+         "model": "x-ai/grok-4.6"},
+    ],
+}
+
+REFS = [
+    ProviderRef("anthropic", "llm", "anthropic_models", AN_URL, "ANTHROPIC_API_KEY",
+                ("registry:claude-opus",), ("claude-opus",)),
+    ProviderRef("codex-subscription", "llm", "subscription_probe", "subscription://codex", None,
+                ("registry:codex-subscription",), ("codex-subscription",)),
+    ProviderRef("moonshot", "llm", "openai_models", MS_URL, "MOONSHOT_API_KEY",
+                ("registry:kimi-k3",), ("kimi-k3",)),
+    ProviderRef("openrouter", "llm", "openai_models", OR_URL, "OPENROUTER_API_KEY",
+                ("registry:or-grok-4.6",), ("or-grok-4.6",)),
+]
+
+OR_FACTS = {"x-ai/grok-4.6": {"pricing": {"prompt": "0.000003", "completion": "0.000015"},
+                              "context_length": 256000},
+            "openai/gpt-5.1": {"pricing": {"prompt": "0.00000125", "completion": "0.00001"}},
+            "openrouter/auto": {"pricing": {"prompt": "-1", "completion": "-1"}}}
+
+
+def _results(*, moonshot_ok=True):
+    anth = _res("anthropic", ["claude-opus-5", "claude-haiku-4-5"])
+    orr = CatalogResult(**{**_res("openrouter", ["x-ai/grok-4.6", "openai/gpt-5.1",
+                                                 "openrouter/auto"]).__dict__, "facts": OR_FACTS})
+    ms = _res("moonshot", ["kimi-k3", "kimi-k4"]) if moonshot_ok else \
+        _res("moonshot", [], ok=False, category="rejected")
+    codex = _res("codex-subscription", [], ok=False, category="unsupported")
+    return [anth, codex, ms, orr]
+
+
+def _load(out_dir):
+    """Read the rendered files back with the loader's own catalogue reader."""
+    return ua.load_upstream_catalogs(config_dir=out_dir.parent)
+
+
+def _tree_digest(root):
+    import hashlib
+
+    h = hashlib.sha256()
+    for p in sorted(root.rglob("*")):
+        if p.is_file():
+            h.update(p.relative_to(root).as_posix().encode())
+            h.update(p.read_bytes())
+    return h.hexdigest()
+
+
+def test_catalogues_render_per_endpoint_in_the_4a_schema(tmp_path):
+    out_dir = tmp_path / "generated"
+    report = D.render_endpoint_catalogs(LAYERS, REFS, _results(), out_dir=out_dir)
+    assert sorted(p.name for p in out_dir.iterdir()) == [
+        "model_catalog.anthropic.json", "model_catalog.moonshot.json",
+        "model_catalog.openrouter.json"]
+    assert report["codex-subscription"] == {"skipped": "no model list (unsupported)"}
+    assert report["openrouter"] == {"file": "model_catalog.openrouter.json", "models": 3}
+    catalogs = _load(out_dir)
+    for eid, cat in catalogs.items():
+        assert cat["provider"] == LAYERS["endpoints"][eid]["provider"]
+        assert "GENERATED" in cat["_generated"] and cat["schema"] == 1
+        for entry in cat["models"]:
+            assert tuple(entry) == ua.CATALOG_ENTRY_KEYS, entry
+            assert "/" in entry["identity"]
+            assert entry["fetched_at"] == "2026-09-23T10:30:00+00:00"
+            assert entry["source"] == f"{eid}:/v1/models"
+    by_model = {e["model"]: e for e in catalogs["openrouter"]["models"]}
+    assert by_model["x-ai/grok-4.6"] == {
+        "identity": "x-ai/grok-4.6", "model": "x-ai/grok-4.6", "context_window": 256000,
+        "input_price_per_mtok": 3.0, "output_price_per_mtok": 15.0, "input_modalities": None,
+        "deprecation": None, "fetched_at": "2026-09-23T10:30:00+00:00",
+        "source": "openrouter:/v1/models"}
+    assert (by_model["openai/gpt-5.1"]["input_price_per_mtok"],
+            by_model["openai/gpt-5.1"]["output_price_per_mtok"],
+            by_model["openai/gpt-5.1"]["context_window"]) == (1.25, 10.0, None)
+    # A variable-price router publishes -1: not a price.
+    assert by_model["openrouter/auto"]["input_price_per_mtok"] is None
+    # No published prices -> null, never invented.
+    anth = {e["model"]: e for e in catalogs["anthropic"]["models"]}
+    assert anth["claude-opus-5"]["identity"] == "anthropic/claude-opus-5"  # the profile's
+    assert anth["claude-haiku-4-5"]["identity"] == "anthropic/claude-haiku-4-5"
+    assert anth["claude-opus-5"]["input_price_per_mtok"] is None
+    # Identity vendor follows the endpoint's profiles, not the provider id.
+    ms = {e["model"]: e["identity"] for e in catalogs["moonshot"]["models"]}
+    assert ms == {"kimi-k3": "moonshotai/kimi-k3", "kimi-k4": "moonshotai/kimi-k4"}
+
+
+def test_an_endpoint_without_a_list_keeps_its_previous_file(tmp_path):
+    out_dir = tmp_path / "generated"
+    D.render_endpoint_catalogs(LAYERS, REFS, _results(), out_dir=out_dir)
+    before = (out_dir / "model_catalog.moonshot.json").read_text()
+    report = D.render_endpoint_catalogs(LAYERS, REFS, _results(moonshot_ok=False), out_dir=out_dir)
+    assert report["moonshot"] == {"skipped": "no model list (rejected)"}
+    assert (out_dir / "model_catalog.moonshot.json").read_text() == before
+
+
+def test_a_list_from_another_base_url_is_not_rendered_for_an_endpoint(tmp_path):
+    layers = {**LAYERS, "endpoints": {**LAYERS["endpoints"], "openrouter": {
+        **LAYERS["endpoints"]["openrouter"], "base_url": "https://eu.openrouter.ai/api/v1"}}}
+    report = D.render_endpoint_catalogs(layers, REFS, _results(), out_dir=tmp_path / "g")
+    assert report["openrouter"] == {"skipped": "the catalog was fetched from a different base URL"}
+    assert not (tmp_path / "g" / "model_catalog.openrouter.json").exists()
+
+
+def test_catalogue_render_is_atomic(tmp_path, monkeypatch):
+    out_dir = tmp_path / "generated"
+    swaps = []
+    real_replace = os.replace
+
+    def spy(src, dst):
+        text = open(src, encoding="utf-8").read()
+        assert json.loads(text)["endpoint"] in LAYERS["endpoints"]  # complete before the swap
+        swaps.append(os.path.basename(dst))
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(D.os, "replace", spy)
+    D.render_endpoint_catalogs(LAYERS, REFS, _results(), out_dir=out_dir)
+    assert sorted(swaps) == sorted(p.name for p in out_dir.iterdir())  # no temp left behind
+    # A failure mid-write leaves yesterday's file whole and no temp file.
+    before = (out_dir / "model_catalog.anthropic.json").read_text()
+    monkeypatch.setattr(D.os, "fsync", lambda fd: (_ for _ in ()).throw(OSError("disk full")))
+    with pytest.raises(OSError):
+        D.render_endpoint_catalogs(LAYERS, REFS, _results(), out_dir=out_dir)
+    assert (out_dir / "model_catalog.anthropic.json").read_text() == before
+    assert not [p for p in out_dir.iterdir() if p.name.startswith(".")]
+
+
+def test_catalogues_never_go_under_the_tracked_config_dir():
+    config = D.REPO_ROOT / "config"
+    before = _tree_digest(config)
+    for target in (config / "generated", config, config / "generated" / "x"):
+        with pytest.raises(ValueError, match="never writes under config"):
+            D.render_endpoint_catalogs(LAYERS, REFS, _results(), out_dir=target)
+    assert _tree_digest(config) == before
+
+
+def test_default_location_is_ignored_runtime_data():
+    assert D.STATUS_DIR / D.GENERATED_DIRNAME == D.REPO_ROOT / "data" / "status" / "generated"
+    ignored = (D.REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert "data/status/" in [line.strip() for line in ignored]
+
+
+def test_run_renders_catalogues_and_touches_no_tracked_file(tmp_path):
+    config = D.REPO_ROOT / "config"
+    before = _tree_digest(config)
+    snap = D.run(status_dir=tmp_path, now=NOW, notice=lambda *a: 1, deps=_deps(
+        layers=lambda: LAYERS, discover=lambda reg: REFS, fetch_all=lambda refs: _results()))
+    assert snap["generated_catalogs"]["openrouter"]["models"] == 3
+    written = sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*") if p.is_file())
+    assert written == [f"daily-{NOW.astimezone().date().isoformat()}.json",
+                       "generated/model_catalog.anthropic.json",
+                       "generated/model_catalog.moonshot.json",
+                       "generated/model_catalog.openrouter.json"]
+    assert _tree_digest(config) == before  # never model_endpoints/model_profiles/generated
+    daily = json.loads((tmp_path / written[0]).read_text())
+    assert daily["generated_catalogs"] == snap["generated_catalogs"]
+    assert all("facts" not in c for c in daily["catalogs"])  # the snapshot stays lean
+    # A failing render is recorded, never raised, and the rest still runs.
+    snap2 = D.run(status_dir=tmp_path, now=NOW, notice=lambda *a: 1,
+                  deps=_deps(layers=lambda: (_ for _ in ()).throw(RuntimeError("bad layers"))))
+    assert [e["step"] for e in snap2["errors"]] == ["generated_catalogs"]
+    assert set(snap2["subscriptions"]) == {"claude", "codex"}
+
+
+def test_real_endpoints_map_to_their_discovered_providers(tmp_path, monkeypatch):
+    """Against the real split registry: every endpoint with a base URL gets
+    its catalogue from the provider discovery found for it; the credential-
+    less codex-subscription endpoint has no list and is skipped."""
+    from jarvis.status.providers import discover_providers
+
+    monkeypatch.delenv(ua.REGISTRY_PATH_ENV, raising=False)
+    layers = ua.load_registry_layers()
+    refs = discover_providers(registry=ua.load_model_registry(), access={}, env={})
+    results = [_res(r.id, [f"{r.id}-model"]) if r.adapter in ("anthropic_models", "openai_models")
+               else _res(r.id, [], ok=False, category="unsupported") for r in refs]
+    report = D.render_endpoint_catalogs(layers, refs, results, out_dir=tmp_path / "generated")
+    assert set(report) == set(layers["endpoints"])
+    for eid, endpoint in layers["endpoints"].items():
+        if endpoint.get("base_url"):
+            assert report[eid] == {"file": f"model_catalog.{eid}.json", "models": 1}, eid
+        else:
+            assert "skipped" in report[eid], eid
+    assert set(_load(tmp_path / "generated")) == {e for e, v in layers["endpoints"].items()
+                                                   if v.get("base_url")}

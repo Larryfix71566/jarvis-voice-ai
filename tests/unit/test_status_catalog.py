@@ -417,3 +417,24 @@ def test_catalog_status_payload_and_unknown_provider():
     assert C.catalog_status("nope", registry=REGISTRY, access=access, env=ENV, http=http) == {
         "ok": False, "error": "unknown provider 'nope'"}
     assert KEY not in json.dumps(out)
+
+
+def test_published_prices_ride_in_facts_not_in_the_model_entries():
+    """Spec P5 A3: the daily job's catalogue render needs the price and
+    context size OpenRouter publishes; they are carried beside the model
+    list, and the status payloads (voice, MCP) leave them out."""
+    http = FakeHTTP({"https://openrouter.ai/api/v1/models": (200, OPENROUTER_PAGE)})
+    res = C.fetch_catalog(OPENROUTER, http=http, env=ENV)
+    assert res.facts == {
+        "x-ai/grok-5": {"pricing": {"prompt": "0.000003", "completion": "0.000015"},
+                        "context_length": 256000},
+        "openai/gpt-5.1": {"pricing": {"prompt": "0.00000125", "completion": "0.00001"},
+                           "context_length": 400000},
+    }
+    assert set(res.models[0]) == {"id", "display_name", "created"}
+    assert "facts" not in C.as_payload(res)
+    assert set(C.as_payload(res)) == {"provider", "ok", "fetched_at", "source", "models",
+                                      "error_category", "error"}
+    # Nothing published, nothing carried.
+    http2 = FakeHTTP(default=(200, {"data": [{"id": "kimi-k3", "created": 1760000000}]}))
+    assert C.fetch_catalog(MOONSHOT, http=http2, env=ENV).facts == {}
