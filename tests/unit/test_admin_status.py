@@ -198,3 +198,55 @@ def test_catalog_route_has_no_key_material(client, monkeypatch):
     assert {r["provider"] for r in body["results"]} >= {"anthropic", "openrouter", "moonshot"}
     assert all(not r["ok"] for r in body["results"])
     C.clear_cache_for_tests()
+
+
+def test_subscription_probe_route(client, monkeypatch):
+    from jarvis.status import subscriptions as Su
+
+    seen = []
+
+    def fake(which, model, *, force):
+        seen.append((which, model, force))
+        return {"ok": True, "probe": {"which": which}}
+
+    monkeypatch.setattr(Su, "subscription_status", fake)
+    res = client.post("/api/status/subscription/probe", json={"which": "codex"})
+    assert res.json() == {"ok": True, "probe": {"which": "codex"}}
+    client.post("/api/status/subscription/probe",
+                json={"which": "claude", "model": "claude-fable-5-1", "force": True})
+    assert seen == [("codex", None, False), ("claude", "claude-fable-5-1", True)]
+
+
+def test_subscription_probe_route_disabled_and_errors(client, monkeypatch):
+    from jarvis.status import subscriptions as Su
+
+    def boom(*a, **k):
+        raise RuntimeError("cli exploded")
+
+    monkeypatch.setattr(Su, "subscription_status", boom)
+    res = client.post("/api/status/subscription/probe", json={"which": "claude"})
+    assert res.json() == {"ok": False, "error": "cli exploded"}
+    assert "Traceback" not in res.text
+    monkeypatch.setenv("JARVIS_STATUS_TOOLS_ENABLED", "false")
+    res = client.post("/api/status/subscription/probe", json={"which": "claude"})
+    assert res.json() == {"ok": False, "error": "status tools are disabled"}
+    assert not __import__("inspect").iscoroutinefunction(srv.status_subscription_probe)
+
+
+def test_subscription_probe_route_has_no_key_material(client, monkeypatch):
+    import shutil
+
+    from jarvis.status import subscriptions as Su
+    from jarvis.subscription import SubscriptionRuntimeError
+
+    Su.clear_cache_for_tests()
+    monkeypatch.setattr(shutil, "which", lambda cmd, *a, **k: cmd)
+
+    def runner(model, messages, timeout):
+        raise SubscriptionRuntimeError(f"401 bad key {KEY}")
+
+    monkeypatch.setattr(Su, "_default_runner", lambda which: runner)
+    res = client.post("/api/status/subscription/probe", json={"which": "claude", "force": True})
+    _assert_no_key(res)
+    assert res.json()["probe"]["category"] == "authentication"
+    Su.clear_cache_for_tests()

@@ -2122,6 +2122,24 @@ def status_catalog(provider: str = "all", force: bool = False) -> dict:
     return _status_call("catalog", lambda: _c.catalog_status(provider, force=force))
 
 
+class SubscriptionProbeBody(BaseModel):
+    which: str
+    model: str | None = None
+    force: bool = False
+
+
+@app.post("/api/status/subscription/probe")
+def status_subscription_probe(body: SubscriptionProbeBody) -> dict:
+    """Try one exact model on the Claude or Codex subscription CLI (status
+    spec T4.2). The one status route that spends anything — a little
+    subscription quota — so it is rate-limited per (which, model) for 10
+    minutes unless `force` (I2)."""
+    from jarvis.status import subscriptions as _su
+
+    return _status_call("subscription", lambda: _su.subscription_status(
+        body.which, body.model, force=body.force))
+
+
 @app.post("/api/clipboard/clear")
 def clipboard_clear() -> dict:
     """MORTIMER_HANDOFF_LOOP_PLAN.md H4 — wipe the clipboard and arm a
