@@ -264,16 +264,19 @@ class TestAgentDiscipline:
 
         assert "size of the error does not fit your explanation" in R
 
-    def test_handoff_survived_and_still_names_the_marker(self):
-        """H2.1 — delegate.py reads this marker from the agent's OWN reply
-        to authorise a budget-resetting continuation. Changing the string
-        here breaks that; this pins the pair."""
-        from jarvis.agents.delegate import HANDOFF_MARKER
+    def test_missing_tool_replaces_the_command_handoff(self):
+        """T1.2 (2026-09-22) — a sub-agent without a tool names the gap
+        (MISSING-TOOL:) instead of handing the user a command; NEEDS-INPUT:
+        stays for choices only the user can make. delegate.py reads both
+        markers from the agent's OWN reply, so this pins the pairs."""
+        from jarvis.agents.delegate import HANDOFF_MARKER, MISSING_TOOL_MARKER
         from jarvis.prompts import AGENT_DISCIPLINE as R
 
         assert HANDOFF_MARKER in R
+        assert MISSING_TOOL_MARKER in R
         assert 'do not stop at "I cannot"' in R
-        assert "exact command" in R
+        assert "never a user command" in R
+        assert "exact command" not in R
 
     def test_search_discipline_survived(self):
         """H2.3 — run b74ed019 had every file it needed by round 8 and
@@ -306,6 +309,14 @@ class TestHandoffAddendum:
 
         assert "continuation" in HANDOFF_ADDENDUM
         assert "not a retry" in HANDOFF_ADDENDUM
+
+    def test_addendum_forbids_commands_by_default(self):
+        """T1.3 (Larry, 2026-09-22): assume the user is not technical."""
+        from jarvis.prompts import HANDOFF_ADDENDUM
+
+        assert "assume he does not use a terminal" in HANDOFF_ADDENDUM
+        assert "only when he explicitly asks" in HANDOFF_ADDENDUM
+        assert "MISSING-TOOL" in HANDOFF_ADDENDUM
 
 
 class TestDeveloperSections:
@@ -639,6 +650,11 @@ def test_the_missing_tool_case_is_still_reported_plainly():
     # named gap gets fixed; a worked-around gap stays broken forever.
     assert "MISSING TOOL" in SUPERVISOR_PROMPT
     assert "offer to have it added through self-development" in SUPERVISOR_PROMPT
+
+
+def test_rule_10_assumes_no_terminal():
+    # T1.3 — holds even when the clipboard switch removes HANDOFF_ADDENDUM.
+    assert "Assume the user does not use a terminal" in SUPERVISOR_PROMPT
 
 
 def test_rule_13_cites_golden_rule_1_not_the_numbered_rule_1():
