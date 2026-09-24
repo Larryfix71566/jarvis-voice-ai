@@ -342,6 +342,9 @@ class SkillRegistry:
         # tools answer "unavailable" rather than "Unknown tool".
         self._known_tools: dict[str, str] = {}
         self._restart_tasks: set[asyncio.Task] = set()
+        # Review finding 4: set for the whole of stop(), so a restart (or a
+        # revive) that resumes after stop() began creates nothing.
+        self._closing = False
 
     @property
     def server_names(self) -> list[str]:
@@ -355,6 +358,7 @@ class SkillRegistry:
         still raises ValueError (after stopping everything)."""
         if self._handles:
             return  # idempotent
+        self._closing = False
         # MORTIMER_ENV_BRIDGE_PLAN.md E1 — bridge Settings into os.environ
         # HERE, not at each caller. `.env` is a file; os.environ is a
         # process, and _start_server below expands ${VAR} against the
@@ -368,6 +372,15 @@ class SkillRegistry:
         handles = [_ServerHandle(name=entry["name"], entry=entry)
                    for entry in self._server_configs]
         self._handles = {h.name: h for h in handles}
+        try:
+            await self._start_owners(handles)
+        except asyncio.CancelledError:
+            # Review finding 4: a cancelled start() must not leave the owner
+            # tasks it spawned running.
+            await self.stop()
+            raise
+
+    async def _start_owners(self, handles: list[_ServerHandle]) -> None:
         for h in handles:
             h.task = asyncio.create_task(self._serve(h), name=f"mcp:{h.name}")
         # Review finding 3: bounded. shared.py holds its lock across start(),
@@ -404,6 +417,7 @@ class SkillRegistry:
         """Stop every owner task and clear state. Idempotent; never raises.
 
         Safe from any task: each owner task closes its own contexts."""
+        self._closing = True
         try:
             handles = list(self._handles.values())
             for h in handles:
@@ -715,7 +729,8 @@ class SkillRegistry:
         """Fire-and-forget restart of a down server, if backoff allows and
         no restart of it is already running. True when one was scheduled."""
         h = self._handles.get(server)
-        if h is None or h.lock.locked() or self._recent_restarts(h) >= RESTART_LIMIT:
+        if (self._closing or h is None or h.lock.locked()
+                or self._recent_restarts(h) >= RESTART_LIMIT):
             return False
         task = asyncio.create_task(self._restart(server, only_if_down=True), name=f"mcp-restart:{server}")
         self._restart_tasks.add(task)
@@ -730,6 +745,8 @@ class SkillRegistry:
         (RESTART_LIMIT per RESTART_WINDOW_S) is the rate limit: a refused
         server is skipped without spawning anything. Returns how many
         restarts were scheduled; 0 outside a running event loop."""
+        if self._closing:
+            return 0
         try:
             asyncio.get_running_loop()
         except RuntimeError:
@@ -756,6 +773,10 @@ class SkillRegistry:
         if h is None:
             return False
         async with h.lock:
+            # Review finding 4: checked after every await below — stop()
+            # may have run meanwhile, and nothing may be spawned after it.
+            if self._closing:
+                return False
             if only_if_down and h.state == "up":
                 return True
             if (failed_session is not None and h.state == "up"
@@ -780,6 +801,8 @@ class SkillRegistry:
                     logger.warning("mcp_server_stop_timeout name=%s", server)
                     h.task.cancel()
                     await asyncio.wait({h.task}, timeout=RESTART_STOP_TIMEOUT_S)
+            if self._closing:
+                return False
             h.stop = asyncio.Event()
             h.ready = asyncio.Event()
             h.gone = asyncio.Event()
@@ -795,6 +818,8 @@ class SkillRegistry:
                 h.last_error = f"restart timed out after {int(RESTART_READY_TIMEOUT_S)} s"
                 h.stop.set()
                 h.task.cancel()
+            if self._closing:
+                return False
             ok = h.state == "up"
             logger.info("mcp_server_restarted name=%s ok=%s", server, ok)
             logger.info("mcp_registry_status %s", json.dumps(self.status()))

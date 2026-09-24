@@ -484,3 +484,41 @@ async def test_a_hanging_server_cannot_block_start(tmp_path, monkeypatch):
         assert await _gone(hung), "the hung child outlived its cancelled owner"
     finally:
         await reg.stop()
+
+
+async def test_stop_during_an_in_flight_restart_resurrects_nothing(time_registry):
+    """Finding 4 (review race2.py): a restart waiting for the old owner task
+    to exit when stop() runs used to resume afterwards and spawn a new child
+    and tools into the stopped registry. It now returns False and creates
+    nothing."""
+    pids = _child_pids()
+    h = time_registry._handles["mcp-time"]
+    restart = asyncio.create_task(time_registry._restart("mcp-time"))
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert h.lock.locked(), "the restart is in flight"
+    await time_registry.stop()
+    assert await restart is False
+    await asyncio.sleep(1.0)
+    assert time_registry._tools == {} and time_registry._sessions == {}
+    assert time_registry._handles == {}
+    assert await _gone(pids)
+    assert _child_pids() == [], "a child was resurrected after stop()"
+    assert (await time_registry.call("get_current_time", {})).startswith("Unknown tool")
+
+
+async def test_a_cancelled_start_stops_what_it_spawned(tmp_path, monkeypatch):
+    """Finding 4: start() cancelled mid-wait (its session went away) stops
+    every owner task it created instead of leaving them running."""
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "cs.db"))
+    reg = SkillRegistry(_write_config(tmp_path, [TIME_ENTRY, HANG_ENTRY]))
+    start = asyncio.create_task(reg.start())
+    assert await _until(lambda: reg._handles.get("mcp-time") is not None
+                        and reg._handles["mcp-time"].state == "up")
+    hung = _child_pids(HANG_MODULE)
+    served = _child_pids()
+    start.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await start
+    assert reg._handles == {} and reg._tools == {} and reg._sessions == {}
+    assert await _gone(served + hung), "a child outlived the cancelled start()"
