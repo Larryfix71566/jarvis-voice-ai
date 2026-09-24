@@ -360,6 +360,13 @@ class SubAgent:
         return f"{base}\n{AGENT_DISCIPLINE}{self._repo_map_suffix}"
 
     @property
+    def api_key_env(self) -> str:
+        """The credential this agent's own model rides on ("" for the
+        voice-model path). Read-only; delegate.py reports a successful run
+        against it to jarvis.keyhealth.note_success (status spec T3.3)."""
+        return self._api_key_env
+
+    @property
     def model_unusable(self) -> bool:
         """True when this agent's model resolved fine but its credential was
         actively refused or could not be billed (K4).

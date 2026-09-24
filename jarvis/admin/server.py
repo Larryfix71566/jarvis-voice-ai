@@ -348,6 +348,9 @@ if os.environ.get("JARVIS_REMINDER_NOTIFICATIONS_ENABLED", "").strip().lower() n
 # process probes too (once, on a daemon thread, never blocking startup).
 # Honors JARVIS_KEY_HEALTH_ENABLED inside keyhealth.
 keyhealth.start_background_probe()
+# Status spec T3.3: and re-probes its bad keys every 10 minutes, so a key
+# that was fixed stops reading as rejected (per-process singleton).
+keyhealth.start_refresh_loop()
 
 # Single-run gate: one upgrade job at a time, ever.
 _run_lock = threading.Lock()

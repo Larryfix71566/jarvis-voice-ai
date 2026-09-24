@@ -129,3 +129,83 @@ class TestNoSecretLeak:
         assert "key=%s" in source          # the NAME is logged
         assert "%s\", key" not in source
         assert "key[:" not in source
+
+
+class TestRefresh:
+    """Status spec T3.3 — verdicts used to be measured once, at startup, and
+    never again: a key fixed mid-session stayed red until a restart."""
+
+    def test_refresh_loop_is_singleton(self):
+        first = keyhealth.start_refresh_loop(interval_s=3600)
+        second = keyhealth.start_refresh_loop(interval_s=3600)
+        assert first is not None and first is second
+        assert first.daemon, "a hung provider must never keep the process alive"
+        assert first.name == "key-health-refresh"
+
+    def test_refresh_loop_is_off_with_the_kill_switch(self, monkeypatch):
+        monkeypatch.setenv(keyhealth.KILL_SWITCH_ENV, "false")
+        assert keyhealth.start_refresh_loop(interval_s=3600) is None
+
+    def test_refresh_loop_runs_refresh_every_interval(self, monkeypatch):
+        import threading
+
+        ran = threading.Event()
+        monkeypatch.setattr(keyhealth, "refresh_bad_keys", lambda *a, **k: ran.set())
+        keyhealth.start_refresh_loop(interval_s=0.01)
+        assert ran.wait(2.0)
+
+    def test_refresh_reprobes_only_bad_keys(self, monkeypatch):
+        registry = {"profiles": {
+            name: {"api_key_env": f"KEY_{name.upper()}",
+                   "base_url": f"https://{name}.example/v1", "model": f"m-{name}"}
+            for name in ("ok", "rej", "unf", "unr", "unk")
+        }}
+        for name in ("ok", "rej", "unf", "unr", "unk"):
+            monkeypatch.setenv(f"KEY_{name.upper()}", "present")
+        first = _probe({
+            "https://rej.example/v1": ("rejected", "HTTP 401"),
+            "https://unf.example/v1": ("unfunded", "HTTP 402"),
+            "https://unr.example/v1": ("unreachable", "timeout"),
+        })
+        keyhealth.probe_all({"profiles": {k: v for k, v in registry["profiles"].items()
+                                          if k != "unk"}}, probe=first)
+
+        second = _probe({"https://unf.example/v1": ("unfunded", "HTTP 402")})
+        probed = keyhealth.refresh_bad_keys(registry, probe=second)
+
+        assert sorted(second.calls) == [
+            ("https://rej.example/v1", "m-rej"),
+            ("https://unf.example/v1", "m-unf"),
+            ("https://unr.example/v1", "m-unr"),
+        ], "ok and never-probed (unknown) keys are not re-probed"
+        assert probed == {"KEY_REJ": "ok", "KEY_UNF": "unfunded", "KEY_UNR": "ok"}
+        assert keyhealth.verdict("KEY_REJ") == "ok"
+        assert keyhealth.is_unusable("KEY_UNF") is True
+        assert keyhealth.verdict("KEY_UNK") == "unknown"
+
+    def test_refresh_with_nothing_bad_makes_no_calls(self):
+        keyhealth.probe_all(REGISTRY, probe=_probe({}))
+        second = _probe({})
+        assert keyhealth.refresh_bad_keys(REGISTRY, probe=second) == {}
+        assert second.calls == []
+
+    def test_note_success_recovers_verdict(self):
+        keyhealth.probe_all(REGISTRY, probe=_probe(
+            {"https://a.example/v1": ("rejected", "HTTP 401")}))
+        assert keyhealth.is_unusable("KEY_A") is True
+        keyhealth.note_success("KEY_A")
+        assert keyhealth.verdict("KEY_A") == "ok"
+        assert keyhealth.detail("KEY_A") == "recovered: a call succeeded"
+        assert keyhealth.is_unusable("KEY_A") is False
+
+    def test_note_success_leaves_an_ok_verdict_alone(self):
+        keyhealth.probe_all(REGISTRY, probe=_probe({}))
+        before = keyhealth.detail("KEY_C")
+        keyhealth.note_success("KEY_C")
+        assert keyhealth.detail("KEY_C") == before
+
+    def test_note_success_respects_the_kill_switch(self, monkeypatch):
+        monkeypatch.setenv(keyhealth.KILL_SWITCH_ENV, "false")
+        keyhealth.note_success("KEY_A")
+        assert keyhealth.verdict("KEY_A") == "unknown"
+        keyhealth.note_success("")

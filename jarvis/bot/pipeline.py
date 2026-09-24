@@ -1056,6 +1056,9 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
 
         if keyhealth.start_background_probe() is not None:
             _logger.info("key_health_probe_started")
+        # Status spec T3.3: re-probe keys that are not ok every 10 minutes.
+        # A process singleton, so every session after the first is a no-op.
+        keyhealth.start_refresh_loop()
     except Exception as exc:  # noqa: BLE001 — must never block startup
         _logger.warning("key_health_probe_start_failed error=%s", exc)
 

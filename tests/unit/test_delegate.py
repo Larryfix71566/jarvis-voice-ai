@@ -1011,3 +1011,64 @@ class TestNoticeOutbox:
         (item,) = notices.take_pending()
         assert item["kind"] == "late_result" and item["source"] == "Developer"
         assert "audit: 3 findings" in item["text"]
+
+
+class TestKeyHealthNoteSuccess:
+    """Status spec T3.3 — a run that did not fail recovers its agent's own
+    credential verdict (keyhealth.note_success), except under a per-run
+    model_profile override, which rode on a different credential."""
+
+    @pytest.fixture
+    def noted(self, monkeypatch):
+        calls: list[str] = []
+        monkeypatch.setattr("jarvis.keyhealth.note_success", calls.append)
+        return calls
+
+    @staticmethod
+    def _agent(result="done"):
+        agent = FakeSubAgent("developer", result=result)
+        agent.api_key_env = "ANTHROPIC_API_KEY"
+        return agent
+
+    async def test_success_notes_the_agents_key(self, noted):
+        _, handler = build_delegate_tool({"developer": self._agent()})
+        await handler({"agent_name": "developer", "task": "read the file"})
+        assert noted == ["ANTHROPIC_API_KEY"]
+
+    async def test_failure_notes_nothing(self, noted):
+        _, handler = build_delegate_tool({"developer": self._agent("FAILED: 401")})
+        await handler({"agent_name": "developer", "task": "read the file"})
+        assert noted == []
+
+    async def test_override_notes_nothing(self, noted):
+        _, handler = build_delegate_tool({"developer": self._agent()})
+        await handler({"agent_name": "developer", "task": "read the file",
+                       "model_profile": "fable"})
+        assert noted == []
+
+    async def test_a_fake_without_the_property_is_fine(self, noted):
+        _, handler = build_delegate_tool({"developer": FakeSubAgent("developer")})
+        assert await handler({"agent_name": "developer", "task": "x"}) == "done"
+        assert noted == []
+
+    async def test_the_real_verdict_recovers(self, monkeypatch):
+        from jarvis import keyhealth
+
+        keyhealth.reset_for_tests()
+        monkeypatch.delenv(keyhealth.KILL_SWITCH_ENV, raising=False)
+        with keyhealth._lock:
+            keyhealth._verdicts["ANTHROPIC_API_KEY"] = "rejected"
+        try:
+            _, handler = build_delegate_tool({"developer": self._agent()})
+            await handler({"agent_name": "developer", "task": "read the file"})
+            assert keyhealth.verdict("ANTHROPIC_API_KEY") == "ok"
+            assert keyhealth.detail("ANTHROPIC_API_KEY") == "recovered: a call succeeded"
+        finally:
+            keyhealth.reset_for_tests()
+
+
+def test_subagent_exposes_api_key_env_read_only():
+    from jarvis.agents.base import SubAgent
+
+    prop = SubAgent.__dict__["api_key_env"]
+    assert isinstance(prop, property) and prop.fset is None

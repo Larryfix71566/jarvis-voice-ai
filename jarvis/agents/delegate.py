@@ -26,6 +26,7 @@ import time
 import uuid
 from typing import Any, Callable
 
+from jarvis import keyhealth
 from jarvis.agents.base import EventCallback, SubAgent
 from jarvis.bot.sensitive_turn import current_sensitive_turn
 from jarvis.model_routing import resolve_policy
@@ -591,6 +592,16 @@ def build_delegate_tool(
             # redundantly.
             _spawn_background(learn_from_run(run_id, agent_name))
             failed = result.startswith("FAILED:")
+            # Status spec T3.3 — a run that did not fail proves the agent's
+            # own credential works right now, so a stale rejected/unfunded
+            # verdict recovers without waiting for the refresh loop. Not for
+            # a per-run override: that ran on a different credential. Not
+            # for REFUSED:, which made no model call at all. getattr keeps
+            # test fakes without the property working.
+            if not failed and not model_profile and not result.startswith("REFUSED:"):
+                key_env = getattr(agent, "api_key_env", "")
+                if key_env:
+                    keyhealth.note_success(key_env)
             # H1.1 — an exhausted iteration budget is NOT a failed approach,
             # it is an unfinished job; ITERATIONS_EXHAUSTED_MESSAGE says so
             # in those words. Arming the guard on it would refuse the one
