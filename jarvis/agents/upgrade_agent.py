@@ -538,6 +538,61 @@ def load_model_registry(path: str | os.PathLike[str] | None = None, *,
     return {"default": layers["default"], "profiles": profiles}
 
 
+# Split plan §4a: what each provider currently offers, one generated file per
+# endpoint, joined to profiles by `identity`. Written by the sync job (never
+# by hand); seeded from the pre-split registry with fetched_at null and
+# source "seeded" so the first sync reads as a diff.
+GENERATED_DIRNAME = "generated"
+CATALOG_PREFIX = "model_catalog."
+CATALOG_SUFFIX = ".json"
+#: Every catalogue entry carries these keys (price fields null when the
+#: provider publishes none), so a later price/deprecation migration is a
+#: deletion rather than a re-fetch (§4a.5).
+CATALOG_ENTRY_KEYS = (
+    "identity", "model", "context_window", "input_price_per_mtok",
+    "output_price_per_mtok", "input_modalities", "deprecation",
+    "fetched_at", "source",
+)
+
+
+def catalog_path(endpoint: str, *, config_dir: str | os.PathLike[str] | None = None) -> Path:
+    base = Path(config_dir) if config_dir is not None else DEFAULT_CONFIG_DIR
+    return base / GENERATED_DIRNAME / f"{CATALOG_PREFIX}{endpoint}{CATALOG_SUFFIX}"
+
+
+def load_upstream_catalogs(*, config_dir: str | os.PathLike[str] | None = None
+                           ) -> dict[str, dict[str, Any]]:
+    """Endpoint id -> parsed ``model_catalog.<endpoint>.json`` (§4a).
+
+    Read-only facts about what a provider offers. Never joined INTO the
+    profiles load_model_registry returns (that shape is fixed, D2/D6);
+    readers that want them (check_env's age and deprecation report, the
+    supervisor-pin test) ask for them here. A malformed file raises.
+    """
+    base = Path(config_dir) if config_dir is not None else DEFAULT_CONFIG_DIR
+    out: dict[str, dict[str, Any]] = {}
+    for path in sorted((base / GENERATED_DIRNAME).glob(f"{CATALOG_PREFIX}*{CATALOG_SUFFIX}")):
+        endpoint = path.name[len(CATALOG_PREFIX):-len(CATALOG_SUFFIX)]
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or data.get("endpoint") != endpoint \
+                or not isinstance(data.get("models"), list):
+            raise ModelRegistryError(f"{path}: not a model catalogue for {endpoint!r}")
+        out[endpoint] = data
+    return out
+
+
+def catalog_retirement(entry: dict[str, Any]) -> str | None:
+    """The ISO date a catalogue entry retires on, or None (§4a.3).
+
+    ``deprecation`` is null, an ISO date string, or a mapping carrying
+    ``retires_at``; whatever the sync job writes, this is the one reader.
+    """
+    dep = entry.get("deprecation")
+    if isinstance(dep, dict):
+        dep = dep.get("retires_at")
+    return str(dep)[:10] if dep else None
+
+
 def resolve_profile(registry: dict[str, Any], requested: str | None = None) -> dict[str, Any]:
     """Resolve which profile to use: explicit > env > registry default."""
     profiles: dict[str, dict[str, Any]] = registry.get("profiles", {})

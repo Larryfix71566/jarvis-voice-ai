@@ -13,6 +13,10 @@ Renders, next to each other in ``--config-dir`` (default ``config/``):
 - ``model_profiles.yaml`` — ROUTINE. The source file's text with each
   profile's ``provider``/``base_url``/``api_key_env`` lines replaced by one
   ``endpoint:`` line, so every comment and the profile order survive.
+- ``generated/model_catalog.<endpoint>.json`` — the upstream catalogue
+  baseline (§4a, step 8): one entry per profile on that endpoint, keyed by
+  ``identity``, every §4a field present and null except the model string,
+  ``fetched_at: null`` and ``source: "seeded"``.
 
 Mechanical and provably lossless: before writing anything the script joins
 what it rendered through the real loader and refuses unless the result
@@ -28,6 +32,7 @@ legacy acceptance for at least one release. Delete both together.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 import tempfile
@@ -217,6 +222,36 @@ def render_profiles(source_text: str, assignment: dict[str, str]) -> str:
     return "\n".join(out) + "\n"
 
 
+CATALOG_NOTE = (
+    "GENERATED - do not hand-edit; a pull request that changes this file by hand "
+    "is a mistake. Upstream facts for one endpoint, joined to "
+    "config/model_profiles.yaml by identity "
+    "(docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md section 4a). Seeded from "
+    "the pre-split registry by scripts/split_model_registry.py (fetched_at null, "
+    "source seeded) so the sync job's first run reads as a diff."
+)
+
+
+def render_catalogs(source: Path) -> dict[str, str]:
+    """Step 8: endpoint id -> seeded model_catalog.<endpoint>.json text."""
+    data = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
+    profiles = [p for p in data.get("profiles") or [] if isinstance(p, dict)]
+    endpoints, assignment = assign_endpoints(profiles)
+    out: dict[str, str] = {}
+    for eid, entry in endpoints.items():
+        models = []
+        for prof in sorted((p for p in profiles if assignment[str(p["name"])] == eid),
+                           key=lambda p: str(p["identity"])):
+            seeded = dict.fromkeys(ua.CATALOG_ENTRY_KEYS)
+            seeded.update(identity=str(prof["identity"]), model=str(prof["model"]),
+                          source="seeded")
+            models.append(seeded)
+        doc = {"_generated": CATALOG_NOTE, "schema": 1, "endpoint": eid,
+               "provider": entry["provider"], "models": models}
+        out[eid] = json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
+    return out
+
+
 def render(source: Path) -> tuple[str, str]:
     """-> (model_endpoints.yaml text, model_profiles.yaml text)."""
     text = source.read_text(encoding="utf-8")
@@ -261,6 +296,11 @@ def main(argv: list[str] | None = None) -> int:
     (args.config_dir / ua.ENDPOINTS_FILENAME).write_text(endpoints_text, encoding="utf-8")
     (args.config_dir / ua.PROFILES_FILENAME).write_text(profiles_text, encoding="utf-8")
     print(f"wrote {ua.ENDPOINTS_FILENAME} and {ua.PROFILES_FILENAME} in {args.config_dir}")
+    for eid, text in render_catalogs(args.source).items():
+        path = ua.catalog_path(eid, config_dir=args.config_dir)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        print(f"seeded {path.relative_to(args.config_dir)}")
     return 0
 
 

@@ -581,3 +581,149 @@ class TestSupervisorPin:
         assert planner["base_url"] == endpoint["base_url"]
         assert planner["api_key_env"] == endpoint["api_key_env"]
         assert planner["provider"] == endpoint["provider"]
+
+
+# --------------------------------------------------------------------------
+# Step 8: the generated upstream catalogue baseline (§4a).
+
+def _real_layers(monkeypatch) -> dict:
+    monkeypatch.delenv(ua.REGISTRY_PATH_ENV, raising=False)
+    return ua.load_registry_layers()
+
+
+class TestGeneratedCatalogue:
+    def test_one_catalogue_per_endpoint_and_no_strays(self, monkeypatch):
+        layers = _real_layers(monkeypatch)
+        assert set(ua.load_upstream_catalogs()) == set(layers["endpoints"])
+
+    def test_every_entry_carries_the_full_schema(self):
+        for endpoint, catalog in ua.load_upstream_catalogs().items():
+            assert catalog["provider"]
+            for entry in catalog["models"]:
+                assert tuple(entry) == ua.CATALOG_ENTRY_KEYS, (endpoint, entry)
+                assert "/" in entry["identity"]
+                if entry["source"] == "seeded":
+                    assert entry["fetched_at"] is None
+
+    def test_seeded_baseline_is_what_the_split_script_renders(self):
+        """Step 8: seeded from the split script, all 14 pre-split models,
+        fetched_at null and source "seeded". Skips once a sync has written
+        real entries (the baseline is then a diff, as intended)."""
+        catalogs = ua.load_upstream_catalogs()
+        if any(e["source"] != "seeded" for c in catalogs.values() for e in c["models"]):
+            pytest.skip("a sync has replaced the seeded baseline")
+        rendered = _split_script().render_catalogs(PRE_SPLIT_YAML)
+        assert set(rendered) == set(catalogs)
+        for endpoint, text in rendered.items():
+            assert ua.catalog_path(endpoint).read_text(encoding="utf-8") == text
+        identities = sorted(e["identity"] for c in catalogs.values() for e in c["models"])
+        expected = sorted(p["identity"] for p in _pre_split_registry()["profiles"].values())
+        assert identities == expected and len(identities) == 14
+
+    def test_the_pinned_planner_model_string_matches_the_catalogue(self, monkeypatch):
+        """D4, the half the load-time pin cannot see: rewriting the pinned
+        profile's `model` string (keeping its identity) would quietly
+        re-point the planner. The catalogue — generated, never hand-edited —
+        says which model string that identity is on that endpoint."""
+        monkeypatch.delenv(ua.PROFILE_ENV, raising=False)
+        pin = _real_layers(monkeypatch)["supervisor"]
+        entry = next(e for e in ua.load_upstream_catalogs()[pin["endpoint"]]["models"]
+                     if e["identity"] == pin["identity"])
+        planner = ua.resolve_profile(ua.load_model_registry())
+        assert planner["model"] == entry["model"]
+
+    def test_no_profile_uses_a_retired_model(self, monkeypatch):
+        """§4a.3: a warning in check_env while retirement is ahead, a failing
+        invariant in CI once the model is actually gone."""
+        import datetime
+
+        today = datetime.date.today().isoformat()
+        catalogs = ua.load_upstream_catalogs()
+        retired = []
+        for prof in _real_layers(monkeypatch)["profiles"]:
+            for entry in catalogs.get(prof["endpoint"], {}).get("models", []):
+                when = ua.catalog_retirement(entry)
+                if entry["identity"] == prof["identity"] and when and when <= today:
+                    retired.append(f"{prof['name']} ({entry['identity']}, {when})")
+        assert not retired, retired
+
+    @pytest.mark.parametrize("dep, expected", [
+        (None, None), ("2026-10-30", "2026-10-30"),
+        ({"retires_at": "2026-10-30T00:00:00Z"}, "2026-10-30"), ({}, None),
+    ])
+    def test_catalog_retirement_reader(self, dep, expected):
+        assert ua.catalog_retirement({"deprecation": dep}) == expected
+
+
+def _catalogue(endpoint: str, provider: str, *entries: dict) -> str:
+    models = []
+    for extra in entries:
+        entry = dict.fromkeys(ua.CATALOG_ENTRY_KEYS)
+        entry.update(extra)
+        models.append(entry)
+    return json.dumps({"schema": 1, "endpoint": endpoint, "provider": provider,
+                       "models": models})
+
+
+class TestCheckEnvCatalogueReport:
+    @pytest.fixture
+    def repo(self, tmp_path, monkeypatch):
+        monkeypatch.delenv(ua.REGISTRY_PATH_ENV, raising=False)
+        _write_split(tmp_path / "config")
+        (tmp_path / "config" / "generated").mkdir()
+        return tmp_path
+
+    def _write(self, repo: Path, endpoint: str, text: str) -> None:
+        ua.catalog_path(endpoint, config_dir=repo / "config").write_text(text, encoding="utf-8")
+
+    def _run(self, monkeypatch, repo, capsys) -> str:
+        check_env = _load_check_env(monkeypatch, repo)
+        check_env.check_model_catalog()
+        assert check_env.failures == []  # WARN-only, never a preflight failure
+        return capsys.readouterr().out
+
+    def test_seeded_and_missing_catalogues_are_visible(self, repo, monkeypatch, capsys):
+        self._write(repo, "anthropic", _catalogue(
+            "anthropic", "anthropic",
+            {"identity": "anthropic/claude-opus-5", "model": "claude-opus-5", "source": "seeded"}))
+        out = self._run(monkeypatch, repo, capsys)
+        assert ("[WARN] Model catalogue anthropic — 1 models, 1 never fetched "
+                "(seeded baseline)") in out
+        assert "[WARN] Model catalogue codex-subscription — no config/generated catalogue" in out
+
+    def test_a_fresh_catalogue_passes_and_a_stale_one_warns(self, repo, monkeypatch, capsys):
+        import datetime
+
+        fresh = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self._write(repo, "anthropic", _catalogue(
+            "anthropic", "anthropic",
+            {"identity": "anthropic/claude-opus-5", "model": "claude-opus-5",
+             "fetched_at": fresh, "source": "api"}))
+        self._write(repo, "codex-subscription", _catalogue(
+            "codex-subscription", "openai",
+            {"identity": "openai/gpt-6-astra", "model": "gpt-6-astra",
+             "fetched_at": "2026-01-02T00:00:00Z", "source": "api"}))
+        out = self._run(monkeypatch, repo, capsys)
+        assert "[PASS] Model catalogue anthropic — 1 models, oldest entry fetched" in out
+        assert "[WARN] Model catalogue codex-subscription — 1 models, oldest entry " \
+               "fetched 2026-01-02" in out and "STALE" in out
+
+    def test_profile_drift_and_retirement_warn(self, repo, monkeypatch, capsys):
+        self._write(repo, "anthropic", _catalogue(
+            "anthropic", "anthropic",
+            {"identity": "anthropic/claude-opus-5", "model": "claude-opus-5-renamed",
+             "deprecation": {"retires_at": "2000-01-01"}, "source": "seeded"}))
+        self._write(repo, "codex-subscription", _catalogue("codex-subscription", "openai"))
+        out = self._run(monkeypatch, repo, capsys)
+        assert "profile claude-opus — model 'claude-opus-5' differs from the catalogue's " \
+               "'claude-opus-5-renamed'" in out
+        assert "anthropic/claude-opus-5 RETIRED on 2000-01-01" in out
+        assert "profile codex-subscription — openai/gpt-6-astra is not in the " \
+               "codex-subscription catalogue" in out
+
+    def test_legacy_registry_reports_nothing(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.delenv(ua.REGISTRY_PATH_ENV, raising=False)
+        (tmp_path / "config").mkdir()
+        (tmp_path / "config" / ua.LEGACY_REGISTRY_FILENAME).write_text(LEGACY_YAML,
+                                                                       encoding="utf-8")
+        assert self._run(monkeypatch, tmp_path, capsys) == ""
