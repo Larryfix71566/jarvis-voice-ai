@@ -89,6 +89,7 @@ from jarvis.council import config as council_config
 from jarvis.council import council as council_mod
 from jarvis.db import get_conn, now_iso, run_migrations
 from jarvis import graphs
+from jarvis import keyhealth
 from jarvis.graphs import config as gcfg, render
 from jarvis.prompts import (
     PLAN_AUTHOR_PROMPT,
@@ -341,6 +342,12 @@ if os.environ.get("JARVIS_REMINDER_NOTIFICATIONS_ENABLED", "").strip().lower() n
     "0", "false", "no", "off",
 ):
     _reminder_notifier.start()
+
+# Status spec T2.2 (fact 3.6): the sidecar answers /api/status/models, and
+# key health verdicts live in memory in the process that probed — so this
+# process probes too (once, on a daemon thread, never blocking startup).
+# Honors JARVIS_KEY_HEALTH_ENABLED inside keyhealth.
+keyhealth.start_background_probe()
 
 # Single-run gate: one upgrade job at a time, ever.
 _run_lock = threading.Lock()
