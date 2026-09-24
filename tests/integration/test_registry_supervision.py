@@ -391,3 +391,63 @@ async def test_a_cancelled_caller_does_not_strand_the_restarted_server(time_regi
     assert status["restarts_last_60s"] == 1
     assert len(time_registry.openai_tools()) == 4
     assert "iso" in json.loads(await time_registry.call("get_current_time", {}))
+
+
+async def _exhaust_backoff(reg) -> None:
+    for _ in range(3):
+        _kill_children()
+        await reg.call("get_current_time", {})
+    _kill_children()
+    assert "could not be restarted" in await reg.call("get_current_time", {})
+    assert reg.status()["mcp-time"]["state"] == "down"
+
+
+async def test_a_down_server_comes_back_after_backoff_without_a_call(
+        time_registry, monkeypatch):
+    """Finding 2 (review idle.py): a down server's tools leave every menu,
+    so no call ever names them and nothing restarted it. Once the backoff
+    window clears, reading the menu (what every LLM turn does) revives it."""
+    import jarvis.skills.registry as registry_mod
+
+    await _exhaust_backoff(time_registry)
+    assert time_registry.openai_tools(["mcp-time"]) == []   # still inside backoff
+    await asyncio.sleep(0.3)
+    assert _child_pids() == [], "backoff held"
+
+    monkeypatch.setattr(registry_mod, "RESTART_WINDOW_S", 0.5)
+    await asyncio.sleep(0.6)
+    time_registry.openai_tools(["mcp-time"])                 # a menu read, no call
+    assert await _until(lambda: len(time_registry.openai_tools(["mcp-time"])) == 4), \
+        time_registry.status()
+    assert time_registry.status()["mcp-time"]["state"] == "up"
+    assert len(time_registry.tools_for(["mcp-time"])) == 4
+
+
+async def test_a_server_that_failed_its_first_start_is_revived_on_reuse(
+        tmp_path, monkeypatch):
+    """Finding 2, the other half: a server that failed at the first start()
+    never had its tools known, so not even a call could name it. Reusing the
+    shared registry (every new session) re-attempts its start."""
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "revive.db"))
+    flag = tmp_path / "ready.flag"
+    flaky = {"name": "mcp-flaky", "command": "python", "env": {}, "args": [
+        "-c",
+        "import os, runpy, sys\n"
+        f"os.path.exists({str(flag)!r}) or sys.exit(1)\n"
+        f"runpy.run_module({TIME_MODULE!r}, run_name='__main__')",
+    ]}
+    config = _write_config(tmp_path, [flaky])
+    shared._reset_for_tests()
+    try:
+        reg = await shared.get_shared_registry(config)
+        assert reg.status()["mcp-flaky"]["state"] == "down"
+        assert reg.openai_tools() == []
+        flag.write_text("ok")
+        again = await shared.get_shared_registry(config)     # the next session
+        assert again is reg
+        assert await _until(lambda: reg.status()["mcp-flaky"]["tools"] == 4), reg.status()
+        assert reg.status()["mcp-flaky"]["state"] == "up"
+        assert "iso" in json.loads(await reg.call("get_current_time", {}))
+    finally:
+        await shared.shutdown_shared_registry()
+        shared._reset_for_tests()

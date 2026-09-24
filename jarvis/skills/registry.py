@@ -424,7 +424,11 @@ class SkillRegistry:
         return out
 
     def openai_tools(self, server_names: list[str] | None = None) -> list[dict]:
-        """Discovered tools as OpenAI function schemas, optionally filtered."""
+        """Discovered tools as OpenAI function schemas, optionally filtered.
+
+        Reading the menu also revives down servers (revive_down), so a
+        server comes back once its backoff clears without any call."""
+        self.revive_down()
         allowed = set(server_names) if server_names is not None else None
         schemas = []
         for tool_name, (server, tool) in self._tools.items():
@@ -447,7 +451,8 @@ class SkillRegistry:
         return schemas
 
     def tools_for(self, server_names: list[str]) -> list[str]:
-        """Tool names owned by the given servers."""
+        """Tool names owned by the given servers (revives down ones too)."""
+        self.revive_down()
         allowed = set(server_names)
         return [name for name, (server, _) in self._tools.items() if server in allowed]
 
@@ -687,15 +692,38 @@ class SkillRegistry:
         h.restarts[:] = [t for t in h.restarts if now - t < RESTART_WINDOW_S]
         return len(h.restarts)
 
-    def _restart_in_background(self, server: str) -> None:
+    def _restart_in_background(self, server: str) -> bool:
         """Fire-and-forget restart of a down server, if backoff allows and
-        no restart of it is already running."""
+        no restart of it is already running. True when one was scheduled."""
         h = self._handles.get(server)
         if h is None or h.lock.locked() or self._recent_restarts(h) >= RESTART_LIMIT:
-            return
+            return False
         task = asyncio.create_task(self._restart(server, only_if_down=True), name=f"mcp-restart:{server}")
         self._restart_tasks.add(task)
         task.add_done_callback(self._restart_tasks.discard)
+        return True
+
+    def revive_down(self) -> int:
+        """Review finding 2: background-restart every server that is not up
+        and whose owner task has ended — down after a crash, after a refused
+        restart, or since a failed first start(). A down server's tools are
+        on no menu, so no call would ever name them. The backoff
+        (RESTART_LIMIT per RESTART_WINDOW_S) is the rate limit: a refused
+        server is skipped without spawning anything. Returns how many
+        restarts were scheduled; 0 outside a running event loop."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return 0
+        scheduled = 0
+        for name, h in list(self._handles.items()):
+            if h.state == "up" or (h.task is not None and not h.task.done()):
+                continue
+            if self._restart_in_background(name):
+                scheduled += 1
+        if scheduled:
+            logger.info("mcp_registry_revive scheduled=%d", scheduled)
+        return scheduled
 
     async def _restart(self, server: str, failed_session: Any = None,
                        only_if_down: bool = False) -> bool:

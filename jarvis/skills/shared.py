@@ -59,6 +59,12 @@ async def get_shared_registry(
             await registry.start()
             _shared, _shared_loop = registry, loop
             logger.info("registry_shared_started loop=%d", id(loop))
+        else:
+            # Review finding 2: every new session re-attempts servers that
+            # are down — including ones that failed the first start().
+            revive = getattr(_shared, "revive_down", None)
+            if revive is not None:
+                revive()
         return _shared
 
 

@@ -152,6 +152,45 @@ class TestCallSupervision:
         assert created == []
 
 
+class TestReviveDown:
+    """Review finding 2: down servers come back without a call naming them."""
+
+    async def test_only_down_servers_without_a_live_owner_are_revived(self, monkeypatch):
+        reg, down = registry_with(state="down")
+        up = _ServerHandle(name="mcp-notes", entry={"name": "mcp-notes"}, state="up")
+        reg._handles["mcp-notes"] = up
+        scheduled = []
+        monkeypatch.setattr(reg, "_restart_in_background",
+                            lambda name: scheduled.append(name) or True)
+        assert reg.revive_down() == 1
+        assert scheduled == ["mcp-time"]
+
+    async def test_menu_reads_revive(self, monkeypatch):
+        reg, _ = registry_with(state="down")
+        scheduled = []
+        monkeypatch.setattr(reg, "_restart_in_background",
+                            lambda name: scheduled.append(name) or True)
+        assert reg.openai_tools() == []
+        assert reg.tools_for(["mcp-time"]) == []
+        assert scheduled == ["mcp-time", "mcp-time"]
+
+    async def test_backoff_still_holds(self, monkeypatch):
+        import time
+        reg, h = registry_with(state="down")
+        h.restarts = [time.monotonic()] * 3
+        created = []
+        monkeypatch.setattr("asyncio.create_task", lambda *a, **k: created.append(a))
+        assert reg.revive_down() == 0
+        assert created == []
+
+    def test_no_running_loop_is_a_no_op(self, monkeypatch):
+        reg, _ = registry_with(state="down")
+        monkeypatch.setattr(reg, "_restart_in_background",
+                            lambda name: pytest.fail("needs a running loop"))
+        assert reg.revive_down() == 0
+        assert reg.openai_tools() == []
+
+
 class TestStatusAndStop:
     def test_status_shape(self):
         reg, h = registry_with(session=FakeSession())
@@ -181,6 +220,9 @@ class FakeRegistry:
     async def stop(self):
         self.stopped += 1
 
+    def revive_down(self):
+        self.revived = getattr(self, "revived", 0) + 1
+
 
 class TestShared:
     @pytest.fixture(autouse=True)
@@ -206,6 +248,7 @@ class TestShared:
         assert a is b
         assert len(FakeRegistry.instances) == 1
         assert a.started == 1 and a.stopped == 0
+        assert a.revived == 1, "review finding 2: a reuse revives down servers"
 
     async def test_a_failed_start_is_not_cached(self, tmp_path):
         class Collides(FakeRegistry):
