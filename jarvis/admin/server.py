@@ -2038,6 +2038,76 @@ def set_location(body: LocationBody) -> dict:
     return {"ok": True}
 
 
+# ---- Self-service status (status spec T2.4, L2) -------------------------
+#
+# Read-only status computed HERE, in the process that already holds the
+# vault's keys, the device location and the key-health verdicts. The voice
+# tool `system_status` and the `mcp-status` MCP server are thin HTTP
+# clients of these routes, so no secret enters an MCP child. Plain `def`
+# routes (FastAPI's threadpool): every one does blocking I/O. Each checks
+# the JARVIS_STATUS_TOOLS_ENABLED switch first (jarvis.status.status_enabled,
+# its one reader) and never returns a traceback.
+
+STATUS_DISABLED = {"ok": False, "error": "status tools are disabled"}
+
+
+def _status_call(topic: str, thunk) -> dict:
+    from jarvis.status import status_enabled
+
+    if not status_enabled():
+        return dict(STATUS_DISABLED)
+    try:
+        return thunk()
+    except Exception as exc:  # noqa: BLE001 — a status read must never 500
+        logger.warning("status_route_failed topic=%s error=%s",
+                       topic, type(exc).__name__)
+        return {"ok": False, "error": str(exc)}
+
+
+@app.get("/api/status/models")
+def status_models() -> dict:
+    from jarvis.status import models as _m
+
+    return _status_call("models", lambda: _m.model_access_status())
+
+
+@app.get("/api/status/services")
+def status_services() -> dict:
+    from jarvis.status import services as _s
+
+    return _status_call("services", lambda: _s.service_health())
+
+
+@app.get("/api/status/overview")
+def status_overview() -> dict:
+    from jarvis.status import overview as _o
+
+    return _status_call("overview", lambda: _o.system_overview())
+
+
+@app.get("/api/status/build")
+def status_build() -> dict:
+    from jarvis.status import build as _b
+
+    return _status_call("build", lambda: _b.app_build_status(REPO_ROOT))
+
+
+@app.get("/api/status/location")
+def status_location() -> dict:
+    from jarvis.status import location as _l
+
+    return _status_call("location", lambda: _l.current_location())
+
+
+@app.get("/api/status/logs")
+def status_logs(source: str = "", query: str = "", since_minutes: int = 60,
+                limit: int = 50) -> dict:
+    from jarvis.status import logs as _g
+
+    return _status_call("logs", lambda: _g.log_search(
+        source, query, since_minutes=since_minutes, limit=limit))
+
+
 @app.post("/api/clipboard/clear")
 def clipboard_clear() -> dict:
     """MORTIMER_HANDOFF_LOOP_PLAN.md H4 — wipe the clipboard and arm a
