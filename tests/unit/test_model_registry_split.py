@@ -79,3 +79,179 @@ def test_the_frozen_pre_split_file_still_loads_to_the_snapshot(snapshot_env):
     single-file registry, loaded through the same loader, is still exactly
     what it was."""
     assert ua.load_model_registry(PRE_SPLIT_YAML) == _pre_split_registry()
+
+
+# --------------------------------------------------------------------------
+# Step 2: the loader joins endpoints into profiles and accepts both shapes.
+
+ENDPOINTS_YAML = """
+endpoints:
+  anthropic:
+    provider: anthropic
+    base_url: https://api.anthropic.com/v1/
+    api_key_env: ANTHROPIC_API_KEY
+  codex-subscription: {provider: openai, kind: subscription, route: codex_subscription}
+"""
+
+PROFILES_YAML = """
+default: claude-opus
+profiles:
+  - name: claude-opus
+    label: Opus
+    endpoint: anthropic
+    model: claude-opus-5
+    identity: anthropic/claude-opus-5
+    temperature: null
+    tier: frontier
+    vision: true
+  - name: codex-subscription
+    label: Codex
+    endpoint: codex-subscription
+    model: gpt-6-astra
+    identity: openai/gpt-6-astra
+    tier: frontier
+"""
+
+LEGACY_YAML = """
+default: claude-opus
+profiles:
+  - name: claude-opus
+    label: Opus
+    provider: anthropic
+    model: claude-opus-5
+    identity: anthropic/claude-opus-5
+    base_url: https://api.anthropic.com/v1/
+    api_key_env: ANTHROPIC_API_KEY
+    temperature: null
+    tier: frontier
+    vision: true
+  - name: codex-subscription
+    label: Codex
+    provider: openai
+    model: gpt-6-astra
+    identity: openai/gpt-6-astra
+    tier: frontier
+"""
+
+
+def _write_split(directory: Path, endpoints: str = ENDPOINTS_YAML,
+                 profiles: str = PROFILES_YAML) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / ua.ENDPOINTS_FILENAME).write_text(endpoints, encoding="utf-8")
+    pool = directory / ua.PROFILES_FILENAME
+    pool.write_text(profiles, encoding="utf-8")
+    return pool
+
+
+class TestLoaderShapes:
+    @pytest.fixture(autouse=True)
+    def _no_env_override(self, monkeypatch):
+        monkeypatch.delenv(ua.REGISTRY_PATH_ENV, raising=False)
+
+    def test_split_pair_joins_to_the_legacy_shape(self, tmp_path):
+        pool = _write_split(tmp_path / "config")
+        legacy = tmp_path / "legacy.yaml"
+        legacy.write_text(LEGACY_YAML, encoding="utf-8")
+        assert ua.load_model_registry(pool) == ua.load_model_registry(legacy)
+
+    def test_join_drops_the_endpoint_key(self, tmp_path):
+        joined = ua.load_model_registry(_write_split(tmp_path / "config"))
+        assert all("endpoint" not in p for p in joined["profiles"].values())
+
+    def test_credential_less_endpoint_adds_no_credential_keys(self, tmp_path):
+        """A1: codex-subscription gets `provider` and nothing else."""
+        codex = ua.load_model_registry(
+            _write_split(tmp_path / "config"))["profiles"]["codex-subscription"]
+        assert codex["provider"] == "openai"
+        assert "base_url" not in codex and "api_key_env" not in codex
+        assert "kind" not in codex and "route" not in codex
+
+    def test_default_resolution_reads_the_split_pair(self, tmp_path):
+        _write_split(tmp_path / "config")
+        reg = ua.load_model_registry(config_dir=tmp_path / "config")
+        assert list(reg["profiles"]) == ["claude-opus", "codex-subscription"]
+        assert reg["profiles"]["claude-opus"]["base_url"] == "https://api.anthropic.com/v1/"
+
+    def test_env_override_still_wins(self, tmp_path, monkeypatch):
+        _write_split(tmp_path / "config")
+        legacy = tmp_path / "other.yaml"
+        legacy.write_text("default: x\nprofiles:\n  - name: x\n", encoding="utf-8")
+        monkeypatch.setenv(ua.REGISTRY_PATH_ENV, str(legacy))
+        assert list(ua.load_model_registry(config_dir=tmp_path / "config")["profiles"]) == ["x"]
+
+    def test_legacy_file_is_used_when_no_split_file_exists(self, tmp_path):
+        (tmp_path / ua.LEGACY_REGISTRY_FILENAME).write_text(LEGACY_YAML, encoding="utf-8")
+        reg = ua.load_model_registry(config_dir=tmp_path)
+        assert reg["profiles"]["claude-opus"]["api_key_env"] == "ANTHROPIC_API_KEY"
+
+    def test_nothing_at_all_is_the_empty_registry(self, tmp_path):
+        assert ua.load_model_registry(config_dir=tmp_path) == {"default": None, "profiles": {}}
+
+    def test_combined_single_file_is_the_rollback_shape(self, tmp_path):
+        """§9: concatenating the two files back into one still loads."""
+        combined = tmp_path / ua.LEGACY_REGISTRY_FILENAME
+        combined.write_text(ENDPOINTS_YAML + PROFILES_YAML, encoding="utf-8")
+        split = ua.load_model_registry(_write_split(tmp_path / "config"))
+        assert ua.load_model_registry(config_dir=tmp_path) == split
+
+    def test_missing_endpoints_file_fails_loudly(self, tmp_path):
+        """§3 item 3: never keyless profiles."""
+        config = tmp_path / "config"
+        _write_split(config)
+        (config / ua.ENDPOINTS_FILENAME).unlink()
+        with pytest.raises(ua.ModelRegistryError, match="does not exist"):
+            ua.load_model_registry(config_dir=config)
+        with pytest.raises(ua.ModelRegistryError, match="does not exist"):
+            ua.load_model_registry(config / ua.PROFILES_FILENAME)
+
+    def test_missing_profiles_file_fails_loudly(self, tmp_path):
+        config = tmp_path / "config"
+        _write_split(config)
+        (config / ua.PROFILES_FILENAME).unlink()
+        with pytest.raises(ua.ModelRegistryError, match="is missing"):
+            ua.load_model_registry(config_dir=config)
+
+    def test_split_and_legacy_side_by_side_is_ambiguous(self, tmp_path):
+        config = tmp_path / "config"
+        _write_split(config)
+        (config / ua.LEGACY_REGISTRY_FILENAME).write_text(LEGACY_YAML, encoding="utf-8")
+        with pytest.raises(ua.ModelRegistryError, match="will not guess"):
+            ua.load_model_registry(config_dir=config)
+
+    def test_unknown_endpoint_id_is_a_load_error(self, tmp_path):
+        pool = _write_split(tmp_path / "config",
+                            profiles=PROFILES_YAML.replace("endpoint: anthropic",
+                                                           "endpoint: anthropc"))
+        with pytest.raises(ua.ModelRegistryError, match="unknown endpoint 'anthropc'"):
+            ua.load_model_registry(pool)
+
+    def test_the_pool_never_loads_in_the_legacy_shape(self, tmp_path):
+        """A profiles file rewritten into the old single-file shape must not
+        quietly become a credential-bearing legacy registry."""
+        pool = _write_split(tmp_path / "config", profiles=LEGACY_YAML)
+        with pytest.raises(ua.ModelRegistryError):
+            ua.load_model_registry(pool)
+
+    def test_the_pool_may_not_carry_its_own_endpoints(self, tmp_path):
+        pool = _write_split(tmp_path / "config",
+                            profiles=ENDPOINTS_YAML + PROFILES_YAML)
+        with pytest.raises(ua.ModelRegistryError, match="may not declare"):
+            ua.load_model_registry(pool)
+
+    def test_duplicate_profile_names_are_a_load_error(self, tmp_path):
+        dup = PROFILES_YAML + """  - name: claude-opus
+    endpoint: anthropic
+    model: claude-opus-5
+    identity: anthropic/claude-opus-5-dup
+"""
+        with pytest.raises(ua.ModelRegistryError, match="declared twice"):
+            ua.load_model_registry(_write_split(tmp_path / "config", profiles=dup))
+
+    def test_endpoint_needs_a_credential_unless_it_is_a_subscription(self, tmp_path):
+        bad = ENDPOINTS_YAML.replace("    api_key_env: ANTHROPIC_API_KEY\n", "")
+        with pytest.raises(ua.ModelRegistryError, match="needs base_url and api_key_env"):
+            ua.load_model_registry(_write_split(tmp_path / "config", endpoints=bad))
+        sub = ENDPOINTS_YAML.replace("route: codex_subscription",
+                                     "route: codex_subscription, base_url: https://x.test/v1")
+        with pytest.raises(ua.ModelRegistryError, match="kind: subscription"):
+            ua.load_model_registry(_write_split(tmp_path / "config", endpoints=sub))
