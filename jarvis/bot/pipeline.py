@@ -163,6 +163,23 @@ from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
 _logger = logging.getLogger(__name__)
 
 
+def session_disconnect_line(session_id: str, duration_s: float,
+                            transport: str, client: Any) -> str:
+    """Status spec P7: the one ``session_disconnect`` log line.
+
+    ``close_code`` is the client's own ``close_code`` attribute when it is an
+    int, else ``unknown``. Neither transport exposes one today: pipecat's
+    FastAPI WebSocket iterator drops the ``websocket.disconnect`` message
+    (and its code) and Starlette's ``WebSocket`` keeps none, so the WebSocket
+    case logs ``unknown`` rather than adding a dependency to find it.
+    """
+    code = getattr(client, "close_code", None)
+    close_code = str(code) if isinstance(code, int) and not isinstance(code, bool) else "unknown"
+    return (f"session_disconnect session={session_id} "
+            f"duration_s={max(0.0, duration_s):.1f} transport={transport} "
+            f"close_code={close_code}")
+
+
 @dataclass
 class Runtime:
     """Per-session resources shared by the pipeline and event handlers."""
@@ -1293,6 +1310,10 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
         @transport.event_handler("on_client_disconnected")
         async def on_client_disconnected(transport: Any, client: Any) -> None:
             print("[session] client disconnected", flush=True)
+            # Status spec P7: reconnect-churn data, no behaviour change.
+            _logger.info("%s", session_disconnect_line(
+                runtime.session_id, time.monotonic() - session_started,
+                "webrtc" if webrtc_connection is not None else "ws", client))
             client_connected["value"] = False
             # End the pipeline task so `await runner.run(task)` returns and the
             # finally block below actually runs. Without this the task blocks

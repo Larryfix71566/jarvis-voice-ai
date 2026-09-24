@@ -9,6 +9,8 @@ Constructs the pipeline with mocked transport/STT/LLM and asserts:
 """
 
 import asyncio
+import logging
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -662,7 +664,7 @@ class HandlerCapturingTransport(FakeTransport):
         return deco
 
 
-async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_path):
+async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_path, caplog):
     """Regression: a client disconnect must end the PipelineTask.
 
     `run_session` blocks on `await runner.run(task)` and does its cleanup in the
@@ -790,11 +792,19 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
         await transport.handlers["on_client_disconnected"](transport, None)
 
     # Without `await task.cancel()` in the handler this never returns.
+    caplog.set_level(logging.INFO, logger=bp.__name__)
     await asyncio.wait_for(
         asyncio.gather(bp.run_session(transport), fire_disconnect()), timeout=10
     )
 
     assert cancelled == [True], "disconnect handler must cancel the PipelineTask"
+    # Status spec P7: one session_disconnect line; WebSocket case, no code.
+    lines = [r.getMessage() for r in caplog.records
+             if r.getMessage().startswith("session_disconnect ")]
+    assert len(lines) == 1, lines
+    assert re.fullmatch(r"session_disconnect session=[0-9a-f-]{36} "
+                        r"duration_s=\d+\.\d transport=ws close_code=unknown",
+                        lines[0]), lines[0]
     assert folded, "memory fold-in did not run for the disconnected session"
     assert watcher_stopped, "RemindersWatcher was not stopped (leaks per connection)"
     assert memory_watcher_stopped, "MemorySweepWatcher was not stopped (leaks per connection)"

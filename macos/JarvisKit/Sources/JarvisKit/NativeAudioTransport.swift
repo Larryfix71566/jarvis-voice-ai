@@ -3,6 +3,15 @@ import os
 
 private let nativeLog = Logger(subsystem: "com.mortimer.jarviskit", category: "native-transport")
 
+/// Status spec P7 (reconnect instrumentation, logging only): the close code
+/// and reason wherever the WebSocket task ends.
+private let transportLog = Logger(subsystem: "com.mortimer.host", category: "transport")
+
+private func logWebSocketEnd(_ event: String, code: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+    let text = reason.map { String(String(decoding: $0, as: UTF8.self).prefix(120)) } ?? ""
+    transportLog.notice("websocket \(event, privacy: .public): closeCode=\(code.rawValue, privacy: .public) reason=\(text, privacy: .public)")
+}
+
 // MARK: - Seams (plan §7: lifecycle tests run against a stub socket and a stub engine)
 
 /// One WebSocket to the bot. The real one wraps `URLSessionWebSocketTask`;
@@ -731,11 +740,16 @@ final class URLSessionSocket: NSObject, NativeSocket, URLSessionWebSocketDelegat
 
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask,
                     didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+        logWebSocketEnd("closed", code: closeCode, reason: reason)
         finish(error: closeCode == .normalClosure || closeCode == .goingAway ? nil
                : JarvisError.transport("WebSocket closed with code \(closeCode.rawValue)"))
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let webSocketTask = task as? URLSessionWebSocketTask {
+            logWebSocketEnd(error == nil ? "completed" : "failed",
+                            code: webSocketTask.closeCode, reason: webSocketTask.closeReason)
+        }
         finish(error: error)
     }
 }
