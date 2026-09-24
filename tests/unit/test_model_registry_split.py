@@ -478,3 +478,106 @@ def test_check_env_reports_an_unsafe_registry_instead_of_crashing(tmp_path, monk
     out = capsys.readouterr().out
     assert "[WARN] Model registry — could not parse the model registry" in out
     assert "does not exist" in out
+
+
+# --------------------------------------------------------------------------
+# Step 5: the credential boundary is structural (D3) and the planner is
+# pinned in the denied file (D4).
+
+def _profile_with(extra: str) -> str:
+    """PROFILES_YAML with `extra` (4-space-indented YAML) added to claude-opus."""
+    return PROFILES_YAML.replace("    vision: true\n", "    vision: true\n" + extra, 1)
+
+
+class TestCredentialBoundary:
+    @pytest.fixture(autouse=True)
+    def _no_env_override(self, monkeypatch):
+        monkeypatch.delenv(ua.REGISTRY_PATH_ENV, raising=False)
+
+    @pytest.mark.parametrize("extra", [
+        "    base_url: https://attacker.example/v1\n",
+        "    api_key_env: ANTHROPIC_API_KEY\n",
+        "    provider: openrouter\n",
+        "    api_key: not-a-real-key\n",
+        "    credential_env: ANTHROPIC_API_KEY\n",
+        "    routes:\n      direct_api:\n        credential_env: ANTHROPIC_API_KEY\n",
+        "    headers: {X-Forward: yes}\n",
+        "    extra:\n      proxy: https://attacker.example/v1\n",
+    ])
+    def test_a_profile_declaring_endpoint_vocabulary_is_a_load_error(self, tmp_path, extra):
+        """D3: the routine file cannot express "send this key elsewhere"."""
+        pool = _write_split(tmp_path / "config", profiles=_profile_with(extra))
+        with pytest.raises(ua.ModelRegistryError, match="claude-opus"):
+            ua.load_model_registry(pool)
+
+    def test_the_legacy_shape_in_the_pool_is_refused_for_its_vocabulary(self, tmp_path):
+        pool = _write_split(tmp_path / "config", profiles=LEGACY_YAML)
+        with pytest.raises(ua.ModelRegistryError, match=r"base_url.*\(D3\)"):
+            ua.load_model_registry(pool)
+
+    def test_the_real_pool_uses_only_profile_vocabulary(self):
+        layers = ua.load_registry_layers()
+        assert layers["shape"] == "split"
+        assert layers["source"] == ROOT / "config" / ua.PROFILES_FILENAME
+        for prof in layers["profiles"]:
+            assert not set(prof) & ua.PROFILE_FORBIDDEN_KEYS, prof["name"]
+
+
+PINNED_ENDPOINTS = ENDPOINTS_YAML + """
+supervisor:
+  identity: anthropic/claude-opus-5
+  endpoint: anthropic
+"""
+
+
+class TestSupervisorPin:
+    @pytest.fixture(autouse=True)
+    def _no_env_override(self, monkeypatch):
+        monkeypatch.delenv(ua.REGISTRY_PATH_ENV, raising=False)
+        monkeypatch.delenv(ua.PROFILE_ENV, raising=False)
+
+    def test_a_default_matching_the_pin_loads(self, tmp_path):
+        pool = _write_split(tmp_path / "config", endpoints=PINNED_ENDPOINTS)
+        assert ua.load_model_registry(pool)["default"] == "claude-opus"
+
+    def test_re_pointing_the_default_is_a_load_error(self, tmp_path):
+        """D4: a routine edit of `default` cannot move the planner."""
+        pool = _write_split(
+            tmp_path / "config", endpoints=PINNED_ENDPOINTS,
+            profiles=PROFILES_YAML.replace("default: claude-opus",
+                                           "default: codex-subscription"))
+        with pytest.raises(ua.ModelRegistryError, match="supervisor pin"):
+            ua.load_model_registry(pool)
+
+    def test_re_identifying_the_pinned_profile_is_a_load_error(self, tmp_path):
+        pool = _write_split(
+            tmp_path / "config", endpoints=PINNED_ENDPOINTS,
+            profiles=PROFILES_YAML.replace("identity: anthropic/claude-opus-5",
+                                           "identity: anthropic/claude-haiku-4-5"))
+        with pytest.raises(ua.ModelRegistryError, match="supervisor pin"):
+            ua.load_model_registry(pool)
+
+    def test_moving_the_pinned_profile_to_another_endpoint_is_a_load_error(self, tmp_path):
+        endpoints = PINNED_ENDPOINTS.replace(
+            "  codex-subscription:",
+            "  other:\n    provider: anthropic\n    base_url: https://api.anthropic.com/v1/\n"
+            "    api_key_env: OTHER_KEY\n  codex-subscription:")
+        pool = _write_split(
+            tmp_path / "config", endpoints=endpoints,
+            profiles=PROFILES_YAML.replace("endpoint: anthropic", "endpoint: other"))
+        with pytest.raises(ua.ModelRegistryError, match="supervisor pin"):
+            ua.load_model_registry(pool)
+
+    def test_the_real_pin_matches_the_resolved_planner_profile(self):
+        """D4 on the real config: the planner that resolve_profile() picks
+        with no per-session or env choice is the pinned identity, reached
+        through the pinned endpoint's host and key."""
+        layers = ua.load_registry_layers()
+        pin = layers["supervisor"]
+        assert pin, "config/model_endpoints.yaml must pin the supervisor"
+        planner = ua.resolve_profile(ua.load_model_registry())
+        endpoint = layers["endpoints"][pin["endpoint"]]
+        assert planner["identity"] == pin["identity"]
+        assert planner["base_url"] == endpoint["base_url"]
+        assert planner["api_key_env"] == endpoint["api_key_env"]
+        assert planner["provider"] == endpoint["provider"]

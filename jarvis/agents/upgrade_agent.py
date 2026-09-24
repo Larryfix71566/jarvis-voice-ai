@@ -268,6 +268,18 @@ class ModelRegistryError(ValueError):
     """
 
 
+# Split plan D3 — the credential boundary is VOCABULARY. A profile in the
+# routine file may not say where a request goes or which key it carries;
+# those come only from its endpoint in the denied file. `provider` is
+# joined from the endpoint too (D2), and `routes` is refused because
+# jarvis.model_routing reads a per-profile route's own base_url and
+# credential_env. Checked at every depth, together with any value that
+# looks like a URL, so a nested map cannot carry a host either.
+PROFILE_FORBIDDEN_KEYS = frozenset({
+    "base_url", "api_base", "api_key", "api_key_env", "credential_env",
+    "host", "url", "headers", "default_headers", "extra_headers",
+    "provider", "routes",
+})
 #: The only keys an endpoint entry may carry (the denied file is strict so
 #: that a typo is a load error, not a silently ignored field).
 ENDPOINT_KEYS = frozenset({"provider", "kind", "base_url", "api_key_env", "route", "label"})
@@ -311,6 +323,24 @@ def registry_source(path: str | os.PathLike[str] | None = None, *,
                 "will not guess which is authoritative")
         return profiles
     return legacy
+
+
+def _host_bearing(node: Any, trail: str) -> list[str]:
+    """Every forbidden key or URL-looking value under ``node`` (D3)."""
+    found: list[str] = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            where = f"{trail}.{key}" if trail else str(key)
+            if str(key) in PROFILE_FORBIDDEN_KEYS:
+                found.append(where)
+            else:
+                found.extend(_host_bearing(value, where))
+    elif isinstance(node, list):
+        for i, value in enumerate(node):
+            found.extend(_host_bearing(value, f"{trail}[{i}]"))
+    elif isinstance(node, str) and "://" in node:
+        found.append(trail)
+    return found
 
 
 def _validate_endpoints(raw: Any, source: Path) -> dict[str, dict[str, Any]]:
@@ -413,6 +443,11 @@ def load_registry_layers(path: str | os.PathLike[str] | None = None, *,
         if name in seen:
             raise ModelRegistryError(f"{where} is declared twice")
         seen.add(name)
+        bad = _host_bearing(prof, "")
+        if bad:
+            raise ModelRegistryError(
+                f"{where} declares {', '.join(bad)} — endpoints, hosts and keys "
+                f"belong in {ENDPOINTS_FILENAME}, never in a profile (D3)")
         endpoint = prof.get("endpoint")
         if not endpoint:
             raise ModelRegistryError(f"{where} names no endpoint")
@@ -437,6 +472,19 @@ def load_registry_layers(path: str | os.PathLike[str] | None = None, *,
             raise ModelRegistryError(
                 f"{endpoints_src}: supervisor pins unknown endpoint "
                 f"{supervisor['endpoint']!r}")
+        # D4: the planner's brain is pinned in the denied file. The routine
+        # `default` must name the pinned identity on the pinned endpoint;
+        # re-pointing the planner is a human PR against both files. (Its
+        # model STRING is checked against the generated catalogue by
+        # tests/unit/test_model_registry_split.py.)
+        planner = next((p for p in profiles if str(p["name"]) == str(default)), None)
+        if planner is None or (
+                str(planner.get("identity")) != str(supervisor["identity"])
+                or str(planner.get("endpoint")) != str(supervisor["endpoint"])):
+            raise ModelRegistryError(
+                f"{src}: default {default!r} does not match the supervisor pin "
+                f"{supervisor['identity']!r} on {supervisor['endpoint']!r} "
+                f"({endpoints_src.name}) — changing the planner is a human PR")
     return {"shape": "split", "source": src, "endpoints_source": endpoints_src,
             "default": default, "profiles": profiles, "endpoints": endpoints,
             "supervisor": dict(supervisor) if supervisor else None}
