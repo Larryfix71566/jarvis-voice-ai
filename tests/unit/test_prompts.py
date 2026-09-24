@@ -5,6 +5,7 @@ import pytest
 from jarvis.prompts import (
     HANDOFF_ADDENDUM,
     SCREEN_VISION_ADDENDUM,
+    STATUS_ADDENDUM,
     SUBAGENT_PROMPTS,
     SUPERVISOR_PROMPT,
     UI_CONTROL_ADDENDUM,
@@ -523,6 +524,7 @@ def test_the_default_production_call_matches_the_expression_it_replaced():
         ("ui_control", UI_CONTROL_ADDENDUM),
         ("screen", SCREEN_VISION_ADDENDUM),
         ("clipboard", HANDOFF_ADDENDUM),
+        ("status", STATUS_ADDENDUM),
     ],
 )
 def test_each_flag_appends_exactly_its_own_addendum(flag, addendum):
@@ -538,6 +540,27 @@ def test_a_disabled_addendum_leaves_no_trace_in_the_prompt():
     assert UI_CONTROL_ADDENDUM not in off
     assert SCREEN_VISION_ADDENDUM not in off
     assert HANDOFF_ADDENDUM not in off
+
+
+def test_status_addendum_follows_ui_control():
+    full = build_supervisor_prompt(
+        **_FMT, voice=True, ui_control=True, screen=True, clipboard=True, status=True
+    )
+    assert full.index(UI_CONTROL_ADDENDUM) < full.index(STATUS_ADDENDUM) < full.index(
+        SCREEN_VISION_ADDENDUM)
+    assert STATUS_ADDENDUM not in build_supervisor_prompt(
+        **_FMT, voice=True, ui_control=True, screen=True, clipboard=True)
+
+
+def test_status_addendum_is_the_spec_text():
+    assert STATUS_ADDENDUM == (
+        "Your own status: for questions about your models, what a provider or "
+        "subscription offers, your services, configuration, the Mac app build, or "
+        "where the user is, call system_status yourself — never delegate these and "
+        "never hand the user a command. The model registry lists what is configured, "
+        "not what an account offers: answer whether a model is available only from a "
+        "catalog or subscription result, and say which source and when."
+    )
 
 
 def test_addenda_keep_the_order_pipeline_py_used():

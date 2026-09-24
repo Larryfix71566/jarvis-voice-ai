@@ -85,6 +85,12 @@ VOICE_ADDENDUM = """You are speaking aloud through a voice interface. Output pla
 UI_CONTROL_ADDENDUM = """UI control: when a ui_control call returns "ok", say nothing about it — the visible change is the confirmation; continue with at most the answer to whatever else the user asked. When it returns "ok-muted", give a one-phrase sign-off (e.g. "Going quiet."). When it returns an error sentence, relay it in one short sentence. Never narrate UI actions you were not asked to perform, and never call ui_control unless the user asked for a UI change. Opening, closing, or switching panels, windows, the transcript, the mic, or the wake word is ui_control; changing how the interface is built or behaves is the developer specialist. Use drawer_popout to send the panels themselves to the display screen, and drawer_popin to bring them back in-page."""
 
 
+# Self-service status (status spec T2.5, L1/L8) — appended only when the
+# system_status tool is registered (JARVIS_STATUS_TOOLS_ENABLED, read by
+# jarvis.status.status_enabled at the pipeline.py registration site).
+STATUS_ADDENDUM = """Your own status: for questions about your models, what a provider or subscription offers, your services, configuration, the Mac app build, or where the user is, call system_status yourself — never delegate these and never hand the user a command. The model registry lists what is configured, not what an account offers: answer whether a model is available only from a catalog or subscription result, and say which source and when."""
+
+
 # Screen vision (MORTIMER_SHELL_FIX_AND_SCREEN_VISION_PLAN.md V6) —
 # appended to the Supervisor prompt only when JARVIS_SCREEN_ENABLED is
 # on, same registration-site gating as UI_CONTROL_ADDENDUM above.
@@ -516,6 +522,7 @@ def build_supervisor_prompt(
     ui_control: bool = False,
     screen: bool = False,
     clipboard: bool = False,
+    status: bool = False,
 ) -> str:
     """Assemble the Supervisor system prompt for one configuration.
 
@@ -537,6 +544,7 @@ def build_supervisor_prompt(
     for enabled, addendum in (
         (voice, VOICE_ADDENDUM),
         (ui_control, UI_CONTROL_ADDENDUM),
+        (status, STATUS_ADDENDUM),
         (screen, SCREEN_VISION_ADDENDUM),
         (clipboard, HANDOFF_ADDENDUM),
     ):

@@ -294,7 +294,8 @@ def test_six_functions_registered(runtime, fakes):
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
         "clear_clipboard", "cost_summary", "delegate_task", "list_screens", "read_clipboard",
-        "remember", "set_voice", "show_commands", "ui_control", "view_screen",
+        "remember", "set_voice", "show_commands", "system_status", "ui_control",
+        "view_screen",
     ]
     assert llm.kwargs == {"api_key": "sk", "base_url": "http://llm", "model": "m"}
 
@@ -307,8 +308,32 @@ def test_ui_control_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
         "clear_clipboard", "cost_summary", "delegate_task", "list_screens", "read_clipboard",
-        "remember", "set_voice", "show_commands", "view_screen",
+        "remember", "set_voice", "show_commands", "system_status", "view_screen",
     ]
+
+
+def test_status_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
+    """Status spec T2.5 / R9: JARVIS_STATUS_TOOLS_ENABLED=false removes
+    system_status from the registered functions, the schema list and the
+    prompt addendum — off means absent."""
+    from jarvis.prompts import STATUS_ADDENDUM
+
+    monkeypatch.setenv("JARVIS_STATUS_TOOLS_ENABLED", "false")
+    _, llm, aggregators, _ = build_pipeline(FakeTransport(), runtime)
+    assert sorted(llm.functions) == [
+        "clear_clipboard", "cost_summary", "delegate_task", "list_screens", "read_clipboard",
+        "remember", "set_voice", "show_commands", "ui_control", "view_screen",
+    ]
+    assert STATUS_ADDENDUM not in _system_prompt_of(aggregators)
+
+
+def test_status_tool_ships_with_its_addendum(runtime, fakes, monkeypatch):
+    from jarvis.prompts import STATUS_ADDENDUM
+
+    monkeypatch.delenv("JARVIS_STATUS_TOOLS_ENABLED", raising=False)
+    _, llm, aggregators, _ = build_pipeline(FakeTransport(), runtime)
+    assert "system_status" in llm.functions
+    assert STATUS_ADDENDUM in _system_prompt_of(aggregators)
 
 
 def test_screen_vision_kill_switch_unregisters_tools(runtime, fakes, monkeypatch):
@@ -318,7 +343,7 @@ def test_screen_vision_kill_switch_unregisters_tools(runtime, fakes, monkeypatch
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
         "clear_clipboard", "cost_summary", "delegate_task", "read_clipboard", "remember",
-        "set_voice", "show_commands", "ui_control",
+        "set_voice", "show_commands", "system_status", "ui_control",
     ]
 
 

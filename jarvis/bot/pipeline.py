@@ -59,6 +59,7 @@ from jarvis.bot.progress_watcher import ProgressWatcher, SpeakingStateTracker
 from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.remember_tool import build_remember_tool
 from jarvis.bot.costs_tool import build_cost_summary_tool
+from jarvis.bot.status_tool import build_system_status_tool
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.ui_control import build_ui_control_tool
@@ -104,6 +105,7 @@ from jarvis.memory import (
     render_memory_context,
     update_memory_from_session,
 )
+from jarvis.status import status_enabled as jarvis_status_enabled
 from jarvis.memory_automation import (
     heuristic_classifier,
     memory_automation_enabled,
@@ -497,6 +499,7 @@ def build_pipeline(
     _, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
     _, remember_handler = build_remember_tool(runtime.session_id)
     _, cost_summary_handler = build_cost_summary_tool()
+    _, system_status_handler = build_system_status_tool()
 
     # MORTIMER_VOICE_UI_PLAN.md U1/U6 — voice control of the console's UI
     # chrome. Kill switch read here, at the single registration site (same
@@ -504,6 +507,10 @@ def build_pipeline(
     # registered and not in the schema list, so the Supervisor cannot call
     # what it cannot see, and the prompt addendum is omitted to match.
     ui_control_enabled = ui_control_flag_enabled()
+    # Status spec T2.5 — system_status is a direct tool behind
+    # JARVIS_STATUS_TOOLS_ENABLED; read once here and passed explicitly to
+    # the menu and the prompt so the three can never disagree (R9).
+    status_enabled = jarvis_status_enabled()
     # V3/V4: screen vision is a DIRECT Supervisor tool (like set_voice /
     # ui_control), never a delegation. Same kill-switch-at-registration
     # pattern as ui_control above.
@@ -630,6 +637,7 @@ def build_pipeline(
         # U5/U6: the addendum ships only when the tool does — a prompt
         # describing an unregistered tool would invite hallucinated calls.
         ui_control=ui_control_enabled,
+        status=status_enabled,
         screen=screen_enabled,
         # H3/H6 — show_commands is always registered; the clipboard half
         # of the addendum only makes sense when its tools are.
@@ -737,6 +745,8 @@ def build_pipeline(
     register_supervisor_tool(llm, "set_voice", set_voice_handler)
     register_supervisor_tool(llm, "remember", remember_handler)
     register_supervisor_tool(llm, "cost_summary", cost_summary_handler)
+    if status_enabled:
+        register_supervisor_tool(llm, "system_status", system_status_handler)
     if ui_control_enabled:
         register_supervisor_tool(llm, "ui_control", ui_control_handler)
     if screen_enabled:
@@ -797,6 +807,7 @@ def build_pipeline(
             clipboard=clipboard_enabled,
             command_console=command_console_enabled,
             shared_content=shared_content_enabled,
+            status=status_enabled,
         )
     ]
     context = LLMContext(
