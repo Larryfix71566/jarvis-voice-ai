@@ -31,10 +31,10 @@ flowchart LR
   KB[Separate mortimer-vault :8484] --> AGENTS
 ```
 
-Transport: `jarvis/bot/bot.py` serves `/ws-client` (WebSocket,
-`ws_transport.py`) and `/api/offer` (SmallWebRTC). For a loopback bot
-`JarvisClient` defaults to `NativeAudioTransport` over `/ws-client`;
-`JARVIS_FORCE_WEBRTC` is the rollback, and a remote bot uses WebRTC.
+Transport: `jarvis/bot/bot.py` serves `/ws-client` (WebSocket) and
+`/api/offer` (SmallWebRTC). A loopback `JarvisClient` uses
+`NativeAudioTransport` over `/ws-client`; `JARVIS_FORCE_WEBRTC` is the
+rollback, and a remote bot uses WebRTC.
 
 The bot owns the voice session, Supervisor turn, tool registration, memory
 session lifecycle and speech output; results that land after a session ends
@@ -98,10 +98,10 @@ No single project-wide model setting exists. `OPENAI_MODEL`/`OPENAI_BASE_URL`
   shadow calls reject a route that fails a stricter `data_policy`; enabled
   confidential/local-only policies also redact the run log.
 - `claude-haiku-4-5` is a voice-only built-in route, absent from the registry.
-- The registry is `config/model_profiles.yaml` (routine; each profile names an
-  `endpoint:`) joined with `config/model_endpoints.yaml` (deny; hosts, key
-  names, `supervisor:` planner pin) only by `load_model_registry`. A profile
-  carrying a host or key fails the load.
+- Registry: `config/model_profiles.yaml` (routine; profiles name an
+  `endpoint:`) + `config/model_endpoints.yaml` (deny; hosts, key names,
+  planner pin), joined only by `load_model_registry`; a profile with a host
+  or key fails the load. Daily catalogues: `data/status/generated/`.
 - Claude/Codex subscription adapters are text-only (tool calls rejected);
   `jarvis/subscription.py` strips inherited API keys and endpoints before the
   CLI launches, so subscription traffic cannot become paid API traffic.
@@ -126,8 +126,8 @@ No single project-wide model setting exists. `OPENAI_MODEL`/`OPENAI_BASE_URL`
 Haiku is reserved for the voice Supervisor; no profile in a background row
 may resolve to it. Each background family is independently selectable. Provider
 shadow receipt: `docs/acceptance/memory-automation/provider-shadow-receipt.json`
-(2026-09-18, profile `claude-sonnet-5`, 8/8 cases, no regression, live
-database untouched, production automation disabled). To re-run it, dry-run
+(2026-09-18, `claude-sonnet-5`, 8/8 cases, no regression, live database
+untouched). To re-run it, dry-run
 first (no credentials read, no provider call):
 
 ```sh
@@ -137,7 +137,7 @@ UV_CACHE_DIR=/private/tmp/jarvis-uv-cache uv run \
 ```
 
 A live run drops `--dry-run`, from the runtime checkout or with its vault
-passed explicitly; never copy the vault into the release-review checkout.
+passed explicitly; never copy the vault into a review checkout.
 
 ## Configuration and deployment paths
 
@@ -154,9 +154,8 @@ revision, deployment fingerprint, test receipt and rollback target; a passing
 source test does not prove the Mac runs that candidate. The observed launchd
 bot ran from the runtime checkout with its own database and vault; its
 2026-09-17 log shows the live Supervisor is `claude-haiku-4-5` but not that the
-candidate's Command Console or memory route is loaded. A Codex-shell display
-probe saw zero `NSScreen`s (headless, not a physical result). Deployment and
-loaded-version evidence remain open gates.
+candidate's Command Console or memory route is loaded. Deployment and
+loaded-version evidence are open gates.
 
 ## Where to verify each surface
 
@@ -171,10 +170,9 @@ loaded-version evidence remain open gates.
 | Display topology | `ScreenPlacement`, `run_display_topology_probe.sh` | physical display receipt; Spaces are not `NSScreen`s |
 | Self-service status | `jarvis/status/`, `/api/status/*`, `status_tool.py`, `mcp_status/` | `test_status_*.py`, `test_admin_status.py`; P2/P4 live questions |
 | Sports scores | `mcp_web` | `tests/fixtures/sports/` |
-| Plan artifact integrity | `tests/unit/test_plan_manifests.py` | required plan artifacts exist (rendering-suite filename alias documented) |
+| Plan artifact integrity | `tests/unit/test_plan_manifests.py` | required plan artifacts exist |
 
-Superseded plans and snapshots (e.g. the 2026-09-04 architecture snapshot)
-are history in `docs/archive/`.
+Superseded plans and snapshots are history in `docs/archive/`.
 
 ## Known open gates
 

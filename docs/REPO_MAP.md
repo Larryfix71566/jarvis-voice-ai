@@ -23,8 +23,8 @@ Verify paths and the current branch before writing. Keep this map below the
   `mortimer.sh` (manual fallback `scripts/run_web.sh`).
 - `sandbox/` — disposable macOS VMs, guarded files, verification, PRs.
 - `config/` — routing/model YAML/JSON (agents, MCP servers, voices,
-  skills, self-edit allowlist, model registry = `model_endpoints.yaml`
-  (deny) + `model_profiles.yaml` (routine) + `generated/` catalogues,
+  skills, self-edit allowlist, registry `model_endpoints.yaml` (deny) +
+  `model_profiles.yaml` (routine) + `generated/` catalogues,
   `model_access.yaml`). Check here first when a capability seems
   misrouted or over/under-permissioned.
 - `docs/` — `plans/` (+ `implemented/`), `reviews/`, `acceptance/`,
@@ -38,8 +38,8 @@ Verify paths and the current branch before writing. Keep this map below the
   14 per database), `launchd_gen.py` (launchd plists: vault, bot,
   extractor, admin, costs + nightly backup; the reminder notifier runs
   inside the admin sidecar).
-- `data/` — gitignored: `jarvis.db`, `secrets.vault`,
-  `app_workspaces/` (legacy metadata; code lives in VMs).
+- `data/` — gitignored: `jarvis.db`, `secrets.vault`, `status/` (daily
+  snapshots, `generated/` catalogues), `app_workspaces/` (legacy).
 - `logs/` — gitignored: per-run JSONL `agents/<date>/`, council rounds
   `council/<date>/`.
 
@@ -76,11 +76,11 @@ Verify paths and the current branch before writing. Keep this map below the
 - `jarvis/notices.py` — notice outbox: late results, daily status;
   spoken once after the next greeting.
 - `jarvis/db.py` — SQLite schema + migrations (human-only).
-- `jarvis/tenant.py` — `current_user_id()` from `JARVIS_USER_ID`,
-  default `"local"` (column exists; nothing filters by it yet).
+- `jarvis/tenant.py` — `current_user_id()` (`JARVIS_USER_ID`, default
+  `"local"`; nothing filters by it yet).
 - `jarvis/vault.py` — encrypted credential store (CLI-only).
-- `jarvis/usage_ledger.py` — per-call LLM usage ledger, `data/costs.db` (`llm_calls`).
-- `jarvis/costs_api.py` — sidecar HTTP over the ledger (`GET /costs/summary`).
+- `jarvis/usage_ledger.py` — per-call LLM usage ledger (`data/costs.db`).
+- `jarvis/costs_api.py` — ledger HTTP (`GET /costs/summary`).
 - `jarvis/memory_extraction.py` — per-exchange candidates/novelty gate.
 - `jarvis/memory_extraction_worker.py` — async post-turn extractor.
 - `jarvis/memory_automation.py` — memory classification/admission policy.
@@ -95,11 +95,9 @@ Verify paths and the current branch before writing. Keep this map below the
 - `jarvis/subscription.py` — gated Claude/Codex text adapters.
 - `jarvis/sensitive.py` — financial-detail detection.
 - `jarvis/bot/sensitive_turn.py` — per-turn sensitive flag.
-- `jarvis/bot/usage_watcher.py` — pipeline observer for the cost ledger.
-- `jarvis/bot/late_result.py` — strips a late delegation's internal
-  "relay this" wrapper before speaking.
-- `jarvis/bot/costs_tool.py` — `cost_summary` Supervisor tool (always
-  registered).
+- `jarvis/bot/usage_watcher.py` — cost-ledger pipeline observer.
+- `jarvis/bot/late_result.py` — strips a late result's "relay this" wrapper.
+- `jarvis/bot/costs_tool.py` — `cost_summary` Supervisor tool.
 - `jarvis/procedures.py` — learned task-shape hints per run.
 - `jarvis/toolresult.py` — the one tool success/failure classifier.
 

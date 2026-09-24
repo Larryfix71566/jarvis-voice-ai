@@ -1,8 +1,9 @@
 """Provider discovery and catalog coverage (spec T2.1, locked decision L3).
 
 Every provider, route and credential Mortimer is configured with is
-DERIVED from configuration — `config/upgrade_models.yaml` (through the one
-registry loader), the route keys of `config/model_access.yaml`, the voice
+DERIVED from configuration — the model registry (`config/model_endpoints.yaml`
+joined with `config/model_profiles.yaml` by the one loader,
+`load_model_registry`), the route keys of `config/model_access.yaml`, the voice
 `OPENAI_BASE_URL` setting and the fixed service credentials below — never
 from a hand-maintained provider list. A provider that no catalog adapter
 covers is reported as a coverage gap, and
