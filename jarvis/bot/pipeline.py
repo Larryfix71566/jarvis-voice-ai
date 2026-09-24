@@ -164,6 +164,14 @@ class Runtime:
     # Capability generation shared by the pipeline's app-message handlers and
     # the inbound content transfer. Set by build_pipeline for this session.
     console_generation: str = ""
+    # Command Console state is created per pipeline in build_pipeline() and
+    # read by run_session()'s message handlers. It lives here because the
+    # two functions share no scope: #80 read these as build_pipeline locals
+    # from run_session, a NameError on every connect (2026-09-23).
+    command_console_enabled: bool = False
+    console_ready: dict = field(default_factory=lambda: {"value": False})
+    console_inventory_revision: dict = field(default_factory=lambda: {"value": 0})
+    console_waiters: dict = field(default_factory=dict)
     # Barge-in survival (Larry 2026-08-21: "me continuing to talk should
     # not kill existing work"): late-bound delivery hook for delegation
     # results whose voice turn was cancelled mid-flight. build_pipeline
@@ -460,6 +468,9 @@ def build_pipeline(
     # for the native client to apply the request, so voice cannot report
     # success merely because a frame was queued.
     console_waiters: dict[str, asyncio.Future[dict[str, Any]]] = {}
+    runtime.console_ready = console_ready
+    runtime.console_inventory_revision = console_inventory_revision
+    runtime.console_waiters = console_waiters
 
     async def await_console_result(request_id: str) -> dict[str, Any] | None:
         loop = asyncio.get_running_loop()
@@ -515,6 +526,7 @@ def build_pipeline(
 
     _, ui_control_handler = build_ui_control_tool(_send_ui_message)
     command_console_enabled = os.environ.get("JARVIS_COMMAND_CONSOLE_ENABLED", "false").strip().lower() in ("1", "true", "yes")
+    runtime.command_console_enabled = command_console_enabled
     shared_content_enabled = command_console_enabled and os.environ.get(
         "JARVIS_SHARED_CONTENT_ENABLED", "false").strip().lower() in ("1", "true", "yes")
     _, console_action_handler = build_console_action_tool(
@@ -1088,6 +1100,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 transport, runtime, client_messages=client_messages)
         else:
             pipeline, _llm, aggregators, pusher = build_pipeline(transport, runtime)
+        # The console handlers below must use the very objects build_pipeline()
+        # created: its console tool waits on console_waiters and reads
+        # console_ready / console_inventory_revision, which these handlers set.
+        console_generation = runtime.console_generation
+        command_console_enabled = runtime.command_console_enabled
+        console_ready = runtime.console_ready
+        console_inventory_revision = runtime.console_inventory_revision
+        console_waiters = runtime.console_waiters
         async def inject_silent(text: str) -> None:
             # Phase 3: interruption notice. Unlike inject_context (greeting,
             # reminders), this does NOT call push_context_frame() — it only
