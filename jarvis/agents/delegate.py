@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 import uuid
 from typing import Any, Callable
@@ -113,6 +114,35 @@ def _shares_long_identifier(a: set[str], b: set[str]) -> bool:
         for t in (a & b)
     )
 
+
+# MORTIMER_SELF_SERVICE_ACCESS_IMPLEMENTATION_SPEC.md T1.1 (2026-09-22): the
+# guard refused a CORRECTED input — "weather for Alfreda, Georgia" failed,
+# and "weather for Alpharetta, Georgia" (Larry's correction) was refused
+# twice at overlap 0.75, leaving the analyst unusable for two minutes. A
+# single-word substitution is new input, not a reworded retry: a reworded
+# retry either keeps every content word (a superset) or rewords several.
+# Checked against every existing refusal fixture in test_delegate.py — all
+# still refused.
+RETRY_GUARD_CONTENT_TOKEN_MIN_LEN = 4
+RETRY_GUARD_SUBSTITUTION_ENV = "JARVIS_RETRY_GUARD_SUBSTITUTION_ENABLED"
+
+
+def _is_input_substitution(failed: set[str], new: set[str]) -> bool:
+    """True when the new task drops EXACTLY ONE content token of the failed
+    task and adds at least one content token the failed task lacked. A
+    content token has len >= RETRY_GUARD_CONTENT_TOKEN_MIN_LEN. A corrected
+    input (Alfreda -> Alpharetta) drops one word; a reworded retry either
+    keeps every word (a superset) or rewords several (drops two or more)."""
+    dropped = {t for t in failed - new if len(t) >= RETRY_GUARD_CONTENT_TOKEN_MIN_LEN}
+    added = {t for t in new - failed if len(t) >= RETRY_GUARD_CONTENT_TOKEN_MIN_LEN}
+    return len(dropped) == 1 and bool(added)
+
+
+def _substitution_exemption_enabled() -> bool:
+    """Single enforcement point for the T1.1 kill switch (default on)."""
+    value = os.environ.get(RETRY_GUARD_SUBSTITUTION_ENV, "")
+    return value.strip().lower() not in ("false", "0", "no")
+
 # MORTIMER_HANDOFF_LOOP_PLAN.md H1/H2.
 #
 # The marker a sub-agent puts in its reply when it needs something only the
@@ -121,6 +151,18 @@ def _shares_long_identifier(a: set[str], b: set[str]) -> bool:
 # prompt than the Supervisor's, which is what makes it usable as
 # authorization: the Supervisor cannot forge permission for its own retry.
 HANDOFF_MARKER = "NEEDS-INPUT:"
+
+# T1.2 (2026-09-22) — the marker a sub-agent writes when no tool of its own
+# can get what the task needs. It is a capability gap, not a failed approach
+# and not a question for the user: it never arms the retry guard, never marks
+# the agent as awaiting the user, and the Supervisor is told to name the gap
+# (rule 10) instead of handing the user a command.
+MISSING_TOOL_MARKER = "MISSING-TOOL:"
+MISSING_TOOL_NOTE = (
+    "\n\n[The specialist has no tool for this. Say so plainly per rule 10 "
+    "and offer to have it added through self-development. Do not show or "
+    "speak commands.]"
+)
 
 # H1.1 — matches ITERATIONS_EXHAUSTED_MESSAGE's opening. An exhausted
 # budget is an unfinished job, not a failed approach, so it must not arm
@@ -407,6 +449,13 @@ def build_delegate_tool(
                         "delegate_retry_guard_exempted_shared_id agent=%s "
                         "overlap=%.2f", agent_name, overlap,
                     )
+                elif (overlap >= RETRY_GUARD_OVERLAP
+                        and _substitution_exemption_enabled()
+                        and _is_input_substitution(prior_tokens, task_tokens)):
+                    logger.info(
+                        "delegate_retry_guard_exempted_substitution agent=%s "
+                        "overlap=%.2f", agent_name, overlap,
+                    )
                 elif overlap >= RETRY_GUARD_OVERLAP:
                     logger.info(
                         "delegate_retry_guard_refused agent=%s overlap=%.2f",
@@ -422,7 +471,10 @@ def build_delegate_tool(
                         "carries no other cause — relay this reason to the "
                         "user in your own words, but do not attribute the "
                         "refusal to an expired, invalid, or unrecognized "
-                        "ID, or any other cause not stated here. If you "
+                        "ID, or any other cause not stated here. Never "
+                        "tell the user to wait; waiting changes nothing. "
+                        "Change the approach or the input, or ask the user "
+                        "what to change. If you "
                         "obtain NEW information the agent asked for (the "
                         "output of a command it gave the user), include it "
                         "in the task and set continuation to true; that is "
@@ -524,9 +576,15 @@ def build_delegate_tool(
             # author, so a Supervisor cannot forge the authorization for its
             # own retry.
             awaiting_user[agent_name] = HANDOFF_MARKER in result or exhausted
+            # T1.2 — a missing tool is a capability gap: it overrides the
+            # failed handling below whether or not the reply starts FAILED:.
+            missing_tool = MISSING_TOOL_MARKER in result
+            if missing_tool:
+                awaiting_user[agent_name] = False
+                result += MISSING_TOOL_NOTE
             # A2 — a failure arms the guard for this agent; a success clears
             # it (the agent is demonstrably working again).
-            if failed and not exhausted:
+            if failed and not exhausted and not missing_tool:
                 last_failure[agent_name] = (_tokens(task), time.monotonic())
             else:
                 last_failure.pop(agent_name, None)

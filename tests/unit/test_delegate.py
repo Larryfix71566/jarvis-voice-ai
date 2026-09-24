@@ -453,6 +453,90 @@ class TestRetryGuard:
         assert result == "done"
 
 
+class TestRetryGuardInputSubstitution:
+    """T1.1 (2026-09-22): a single-word correction is new input, not a
+    reworded retry. The Alfreda/Alpharetta tasks are the exact ones the
+    guard refused live at 21:53 (delegate_retry_guard_refused overlap=0.75)."""
+
+    FAILED = "Get current weather for Alfreda, Georgia."
+
+    async def _fail_then(self, second_task, monkeypatch=None):
+        agents = {"analyst": FakeSubAgent("analyst", result="FAILED: no such place")}
+        _, handler = build_delegate_tool(agents)
+        assert await handler({"agent_name": "analyst", "task": self.FAILED}) == "FAILED: no such place"
+        return agents, await handler({"agent_name": "analyst", "task": second_task})
+
+    async def test_corrected_place_name_is_not_a_retry(self):
+        agents, second = await self._fail_then("Get current weather for Alpharetta, Georgia.")
+        assert not second.startswith("REFUSED:")
+        assert len(agents["analyst"].tasks) == 2
+
+    async def test_longer_corrected_request_is_not_a_retry(self):
+        agents, second = await self._fail_then(
+            "Retrieve current weather conditions for Alpharetta in Fulton County, "
+            "Georgia, including temperature, conditions, humidity")
+        assert not second.startswith("REFUSED:")
+        assert len(agents["analyst"].tasks) == 2
+
+    async def test_superset_rewording_is_still_refused(self):
+        agents, second = await self._fail_then("Get current weather for Alfreda, Georgia, try harder")
+        assert second.startswith("REFUSED:")
+        assert len(agents["analyst"].tasks) == 1
+
+    def test_multi_word_rewording_is_not_a_substitution(self):
+        from jarvis.agents.delegate import _is_input_substitution
+        from jarvis.procedures import _tokens
+        failed = _tokens("find the upper left updates display component and add a close button")
+        new = _tokens("locate the upper left status panel and add a dismiss button to it")
+        assert _is_input_substitution(failed, new) is False
+
+    async def test_substitution_exemption_kill_switch(self, monkeypatch):
+        monkeypatch.setenv("JARVIS_RETRY_GUARD_SUBSTITUTION_ENABLED", "false")
+        agents, second = await self._fail_then("Get current weather for Alpharetta, Georgia.")
+        assert second.startswith("REFUSED:")
+
+    async def test_refusal_forbids_telling_user_to_wait(self):
+        _, second = await self._fail_then("Get current weather for Alfreda, Georgia, try harder")
+        assert "Never tell the user to wait" in second
+
+
+class TestMissingTool:
+    """T1.2 (2026-09-22): MISSING-TOOL is a capability gap, not a failed
+    approach and not a question for the user."""
+
+    GAP = "FAILED: MISSING-TOOL: read live provider model catalogs"
+
+    async def test_missing_tool_does_not_arm_the_guard(self):
+        agents = {"developer": FakeSubAgent("developer", result=self.GAP)}
+        _, handler = build_delegate_tool(agents)
+        await handler({"agent_name": "developer", "task": "list the models openrouter offers today"})
+        second = await handler({"agent_name": "developer", "task": "list the models openrouter offers now please"})
+        assert not second.startswith("REFUSED:")
+        assert len(agents["developer"].tasks) == 2
+
+    async def test_missing_tool_note_appended(self):
+        agents = {"developer": FakeSubAgent("developer", result=self.GAP)}
+        _, handler = build_delegate_tool(agents)
+        result = await handler({"agent_name": "developer", "task": "list openrouter models"})
+        assert result.startswith(self.GAP)
+        assert "no tool for this" in result
+        assert "Do not show or speak commands" in result
+
+    async def test_missing_tool_is_not_awaiting_user(self, caplog):
+        """A continuation claim after MISSING-TOOL is unearned: nothing was
+        asked of the user, so it must not be honoured as a handoff."""
+        import logging
+        agents = {"developer": FakeSubAgent(
+            "developer", result="NEEDS-INPUT: MISSING-TOOL: read the vault")}
+        _, handler = build_delegate_tool(agents)
+        await handler({"agent_name": "developer", "task": "read the vault key list"})
+        with caplog.at_level(logging.INFO, logger="jarvis.agents.delegate"):
+            await handler({"agent_name": "developer", "task": "read the vault key list",
+                           "continuation": True})
+        assert "delegate_continuation_unearned" in caplog.text
+        assert "delegate_continuation agent=" not in caplog.text
+
+
 class TestRetryGuardSharedIdentifierExemption:
     """2026-08-25 — a live incident (staging_id 469bff19ef49) showed the
     guard refusing the LEGITIMATE confirm-half of a two-phase flow: a
