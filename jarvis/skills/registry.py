@@ -628,6 +628,18 @@ class SkillRegistry:
         self._tools = {tool: entry for tool, entry in self._tools.items()
                        if entry[0] != name}
 
+    def _install_server_tools(self, h: _ServerHandle) -> None:
+        """Put an up server's tools on the menu; a name another server
+        already owns is logged and skipped (start() raises on it instead)."""
+        self._drop_server_tools(h.name)
+        for tool_name, tool in h.tools.items():
+            other = self._tools.get(tool_name)
+            if other is not None:
+                logger.error("mcp_server_tool_collision tool=%s servers=%s,%s",
+                             tool_name, other[0], h.name)
+                continue
+            self._tools[tool_name] = (h.name, tool)
+
     async def _serve(self, h: _ServerHandle) -> None:
         """Owner task for one server: the ONLY task that enters and exits its
         stdio_client/ClientSession contexts (fact 3.4c). Never re-raises."""
@@ -637,6 +649,7 @@ class SkillRegistry:
             async with AsyncExitStack() as stack:
                 _OWNER_STACK.set(stack)   # this task's context only
                 session, discovered = await self._start_server(h.entry)
+                old_tools = set(h.tools)
                 h.session = session
                 h.tools = {tool.name: tool for tool in discovered}
                 for tool in discovered:
@@ -644,6 +657,15 @@ class SkillRegistry:
                 self._sessions[h.name] = session
                 h.state = "up"
                 h.last_error = ""
+                # Review finding 1: the owner registers its own tools, so a
+                # restart whose caller was cancelled mid-wait still puts them
+                # back on the menu (start() rebuilds and checks collisions
+                # once every server has answered).
+                if old_tools and set(h.tools) != old_tools:
+                    logger.warning("mcp_server_tools_changed name=%s added=%s removed=%s",
+                                   h.name, sorted(set(h.tools) - old_tools),
+                                   sorted(old_tools - set(h.tools)))
+                self._install_server_tools(h)
                 h.ready.set()
                 logger.info("mcp_server_started name=%s tools=%d",
                             h.name, len(discovered))
@@ -702,7 +724,6 @@ class SkillRegistry:
                 logger.warning("mcp_server_restart_backoff name=%s restarts=%d",
                                server, len(h.restarts))
                 return False
-            old_tools = set(h.tools)
             h.stop.set()
             if h.task is not None and not h.task.done():
                 # asyncio.wait, not wait_for: it neither cancels the owner
@@ -716,6 +737,10 @@ class SkillRegistry:
             h.ready = asyncio.Event()
             h.gone = asyncio.Event()
             h.state = "starting"
+            # Review finding 1: counted with the spawn, not after the ready
+            # wait, so a cancelled caller cannot skip the backoff bookkeeping
+            # (and the new owner registers its own tools when it is up).
+            h.restarts.append(time.monotonic())
             h.task = asyncio.create_task(self._serve(h), name=f"mcp:{server}")
             try:
                 await asyncio.wait_for(h.ready.wait(), RESTART_READY_TIMEOUT_S)
@@ -723,20 +748,6 @@ class SkillRegistry:
                 h.last_error = f"restart timed out after {int(RESTART_READY_TIMEOUT_S)} s"
                 h.stop.set()
                 h.task.cancel()
-            if h.state == "up":
-                if set(h.tools) != old_tools:
-                    logger.warning("mcp_server_tools_changed name=%s added=%s removed=%s",
-                                   server, sorted(set(h.tools) - old_tools),
-                                   sorted(old_tools - set(h.tools)))
-                self._drop_server_tools(server)
-                for tool_name, tool in h.tools.items():
-                    other = self._tools.get(tool_name)
-                    if other is not None:
-                        logger.error("mcp_server_tool_collision tool=%s servers=%s,%s",
-                                     tool_name, other[0], server)
-                        continue
-                    self._tools[tool_name] = (server, tool)
-            h.restarts.append(time.monotonic())
             ok = h.state == "up"
             logger.info("mcp_server_restarted name=%s ok=%s", server, ok)
             logger.info("mcp_registry_status %s", json.dumps(self.status()))

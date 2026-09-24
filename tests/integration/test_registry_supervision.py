@@ -354,3 +354,40 @@ async def test_children_exit_when_the_parent_is_terminated(tmp_path):
         if proc.returncode is None:
             proc.kill()
             await proc.wait()
+
+
+# --------------------------------------------------------------------------- #
+# Review findings on the supervised registry (2026-09-23)
+# --------------------------------------------------------------------------- #
+
+async def _until(predicate, timeout: float = 20.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        await asyncio.sleep(0.05)
+    return predicate()
+
+
+async def test_a_cancelled_caller_does_not_strand_the_restarted_server(time_registry):
+    """Finding 1 (review cancel.py): the call that triggered a restart is
+    cancelled (barge-in, teardown) while the new child is coming up. The new
+    child must still put its tools back on the menu and count the restart;
+    before the fix it came up with 0 tools forever, and `only_if_down` then
+    short-circuited every later restart ("unavailable (up)")."""
+    _kill_children()
+    await _settle()
+    h = time_registry._handles["mcp-time"]
+    call = asyncio.create_task(time_registry.call("get_current_time", {}))
+    assert await _until(lambda: h.state == "starting", timeout=5.0)
+    call.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await call
+
+    assert await _until(lambda: time_registry.status()["mcp-time"]["tools"] == 4), \
+        time_registry.status()
+    status = time_registry.status()["mcp-time"]
+    assert status["state"] == "up"
+    assert status["restarts_last_60s"] == 1
+    assert len(time_registry.openai_tools()) == 4
+    assert "iso" in json.loads(await time_registry.call("get_current_time", {}))
