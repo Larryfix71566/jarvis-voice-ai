@@ -30,6 +30,7 @@ def _flag_readers() -> dict[str, Callable[[], bool]]:
     from jarvis.bot.ui_control import ui_control_enabled
     from jarvis.council.council import _council_enabled
     from jarvis.memory_automation import memory_automation_enabled
+    from jarvis.skills.shared import shared_enabled
     from jarvis.status import status_enabled
     from mcp_servers.mcp_screen.logic import screen_enabled
 
@@ -44,6 +45,7 @@ def _flag_readers() -> dict[str, Callable[[], bool]]:
         "JARVIS_GRAPHS_ENABLED": graphs.graphs_enabled,
         "JARVIS_COUNCIL_ENABLED": _council_enabled,
         "JARVIS_STATUS_TOOLS_ENABLED": status_enabled,
+        "JARVIS_REGISTRY_SHARED_ENABLED": shared_enabled,
     }
 
 

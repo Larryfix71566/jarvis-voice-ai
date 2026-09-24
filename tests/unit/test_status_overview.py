@@ -12,6 +12,7 @@ FLAG_NAMES = [
     "JARVIS_SPEAKER_GATE_ENABLED", "JARVIS_MEMORY_AUTOMATION_ENABLED",
     "JARVIS_MODEL_ROUTING_ENABLED", "JARVIS_KEY_HEALTH_ENABLED", "JARVIS_GRAPHS_ENABLED",
     "JARVIS_COUNCIL_ENABLED", "JARVIS_STATUS_TOOLS_ENABLED",
+    "JARVIS_REGISTRY_SHARED_ENABLED",
 ]
 
 
@@ -46,6 +47,7 @@ def test_flag_defaults():
     assert f["JARVIS_MEMORY_AUTOMATION_ENABLED"] == "off"
     assert f["JARVIS_MODEL_ROUTING_ENABLED"] == "off"
     assert f["JARVIS_STATUS_TOOLS_ENABLED"] == "on"
+    assert f["JARVIS_REGISTRY_SHARED_ENABLED"] == "on"
 
 
 @pytest.mark.parametrize("name,value,expected", [
@@ -57,6 +59,7 @@ def test_flag_defaults():
     ("JARVIS_MODEL_ROUTING_ENABLED", "true", "off"),      # base.py's exact rule
     ("JARVIS_STATUS_TOOLS_ENABLED", "false", "off"),
     ("JARVIS_GRAPHS_ENABLED", "off", "off"),
+    ("JARVIS_REGISTRY_SHARED_ENABLED", "false", "off"),
 ])
 def test_flags_follow_existing_rules(monkeypatch, name, value, expected):
     monkeypatch.setenv(name, value)

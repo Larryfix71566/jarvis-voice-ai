@@ -758,6 +758,8 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
     monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
     monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
     monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    # T3.1: the per-session registry, so registry_stopped stays meaningful.
+    monkeypatch.setenv("JARVIS_REGISTRY_SHARED_ENABLED", "false")
     monkeypatch.setattr(
         bp, "load_voice_catalog",
         lambda: {"default": "rachel",
@@ -901,6 +903,8 @@ async def test_keyhealth_notice_kill_switch(monkeypatch, tmp_path, env_value, ex
     monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
     monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
     monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    # T3.1: the per-session registry, so registry_stopped stays meaningful.
+    monkeypatch.setenv("JARVIS_REGISTRY_SHARED_ENABLED", "false")
     monkeypatch.setattr(
         bp, "load_voice_catalog",
         lambda: {"default": "rachel",
@@ -1015,6 +1019,8 @@ async def test_stt_row_written_at_teardown(monkeypatch, tmp_path):
     monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
     monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
     monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    # T3.1: the per-session registry, so registry_stopped stays meaningful.
+    monkeypatch.setenv("JARVIS_REGISTRY_SHARED_ENABLED", "false")
     monkeypatch.setattr(
         bp, "load_voice_catalog",
         lambda: {"default": "rachel",
@@ -1061,6 +1067,130 @@ async def test_stt_row_written_at_teardown(monkeypatch, tmp_path):
     assert row["session_id"]
     # No token kwargs on a voice row.
     assert "input_tokens" not in row
+
+
+@pytest.mark.asyncio
+async def test_shared_registry_survives_session_teardown(monkeypatch, tmp_path):
+    """Status spec T3.1 (L11): with JARVIS_REGISTRY_SHARED_ENABLED on (the
+    default), two sessions in a row share ONE registry — started by the
+    first, reused by the second, stopped by neither. Built through the
+    factory, so bp.SkillRegistry is still what gets constructed."""
+    from jarvis.skills import shared
+
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "session.db"))
+    monkeypatch.delenv("JARVIS_REGISTRY_SHARED_ENABLED", raising=False)
+    settings = SimpleNamespace(
+        deepgram_api_key="dg", openai_api_key="sk", openai_base_url="http://llm",
+        openai_model="m", elevenlabs_api_key="el", jarvis_name="Jarvis",
+        jarvis_user_name="Boss", jarvis_timezone="America/New_York",
+        jarvis_units="imperial",
+        jarvis_interruption_notice_enabled=True,
+        jarvis_late_result_neutralize_enabled=True,
+        jarvis_memory_sweep_interval_s=300.0,
+    )
+    constructed, started, stopped, seen = [], [], [], []
+
+    class FakeTask:
+        def __init__(self, pipeline, observers=None, params=None):
+            self._ended = asyncio.Event()
+
+        async def cancel(self):
+            self._ended.set()
+
+        async def wait_ended(self):
+            await self._ended.wait()
+
+    class FakeRunner:
+        async def run(self, task):
+            await task.wait_ended()
+
+    class FakeQuiet:
+        def __init__(self, *a, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        async def stop(self):
+            pass
+
+    class FakeRegistry:
+        def __init__(self, *a, **kw):
+            constructed.append(self)
+
+        async def start(self):
+            started.append(self)
+
+        async def stop(self):
+            stopped.append(self)
+
+    class FakeAggregators:
+        def user(self):
+            return SimpleNamespace()
+
+        def assistant(self):
+            return SimpleNamespace()
+
+    class FakePusher:
+        def bind(self, task):
+            pass
+
+    async def fake_fold(settings_arg, session_id, **kwargs):
+        return True
+
+    async def fake_digest(settings_arg, session_id):
+        return False
+
+    def fake_build_pipeline(transport, runtime):
+        seen.append(runtime.registry)
+        return FakePipeline([]), FakeLLM("k", "u", "m"), FakeAggregators(), FakePusher()
+
+    monkeypatch.setattr(bp, "load_settings", lambda: settings)
+    monkeypatch.setattr(bp, "bridge_settings_to_env", lambda s: None)
+    monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    monkeypatch.setattr(
+        bp, "load_voice_catalog",
+        lambda: {"default": "rachel",
+                 "voices": [{"id": "rachel", "label": "Rachel",
+                             "elevenlabs_voice_id": "vid"}]},
+    )
+    monkeypatch.setattr(bp, "build_pipeline", fake_build_pipeline)
+    monkeypatch.setattr(bp, "PipelineTask", FakeTask)
+    monkeypatch.setattr(bp, "PipelineRunner", FakeRunner)
+    monkeypatch.setattr(bp, "RemindersWatcher", FakeQuiet)
+    monkeypatch.setattr(bp, "MemorySweepWatcher", FakeQuiet)
+    monkeypatch.setattr(bp, "update_memory_from_session", fake_fold)
+    monkeypatch.setattr(bp, "write_session_digest", fake_digest)
+    monkeypatch.setattr(bp, "record_call", lambda **kw: None)
+
+    async def one_session():
+        transport = HandlerCapturingTransport()
+
+        async def fire_disconnect():
+            for _ in range(500):
+                if "on_client_disconnected" in transport.handlers:
+                    break
+                await asyncio.sleep(0.01)
+            else:
+                raise AssertionError("on_client_disconnected was never registered")
+            await transport.handlers["on_client_disconnected"](transport, None)
+
+        await asyncio.wait_for(
+            asyncio.gather(bp.run_session(transport), fire_disconnect()), timeout=10
+        )
+
+    shared._reset_for_tests()
+    try:
+        await one_session()
+        await one_session()
+        assert len(constructed) == 1, "one registry per process"
+        assert len(started) == 1, "started by the first session only"
+        assert stopped == [], "session teardown never stops the shared registry"
+        assert seen == [constructed[0], constructed[0]]
+    finally:
+        shared._reset_for_tests()
 
 
 @pytest.mark.asyncio
@@ -1152,6 +1282,8 @@ async def test_late_result_hook_arms_the_neutralizer(monkeypatch, tmp_path, flag
     monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
     monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
     monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    # T3.1: the per-session registry, so registry_stopped stays meaningful.
+    monkeypatch.setenv("JARVIS_REGISTRY_SHARED_ENABLED", "false")
     monkeypatch.setattr(
         bp, "load_voice_catalog",
         lambda: {"default": "rachel",

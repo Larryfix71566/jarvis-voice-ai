@@ -216,11 +216,13 @@ async def drain_detached(in_flight: set, timeout: float) -> int:
 
     Barge-in survival keeps a sub-agent running after the voice turn that
     started it is cancelled -- and after the whole session ends, since
-    nothing cancels the detached task at shutdown either. The registry those
-    runs call tools through is per-session, and stopping it under a live run
-    turns every remaining tool call into "Unknown tool ... Available: none"
-    (measured 2026-09-16 11:45:33, a developer run eight seconds after the
-    client disconnected). Teardown therefore drains first.
+    nothing cancels the detached task at shutdown either. When the registry
+    those runs call tools through is per-session (JARVIS_REGISTRY_SHARED_
+    ENABLED=false; process-scoped by default since status spec T3.1),
+    stopping it under a live run turns every remaining tool call into
+    "Unknown tool ... Available: none" (measured 2026-09-16 11:45:33, a
+    developer run eight seconds after the client disconnected). Teardown
+    therefore drains first.
 
     Returns how many runs were still going at the deadline, so the caller
     can log that the teardown is about to fail them.

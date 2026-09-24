@@ -40,7 +40,7 @@ session lifecycle and speech output. `MortimerHost` owns native windows,
 layout, drawer tabs, Atlas/graph state, display placement and content
 sharing. The admin sidecar owns self-edit, planning, run status and
 HTTP inspection. MCP servers are subprocesses with declared credentials and
-no UI state. SQLite durably owns conversations, memories, jobs, receipts and
+no UI state, held by one supervised registry per bot process. SQLite durably owns conversations, memories, jobs, receipts and
 run metadata.
 
 Layout 2 (`CommandConsoleView`) is the default. Layouts 0/1 and the frozen

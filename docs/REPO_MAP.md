@@ -68,7 +68,8 @@ Verify paths and the current branch before writing. Keep this map below the
   (models, services, overview, build, location, logs, summaries); voice
   tool `jarvis/bot/status_tool.py` (`system_status`).
 - `jarvis/selfedit/service.py` — sandbox facade: allowlist, validation, PRs.
-- `jarvis/skills/registry.py` — spawns MCP servers, exposes their tools.
+- `jarvis/skills/registry.py` — MCP servers, one owner task each,
+  restarted on death; `shared.py` keeps one registry per process.
 - `jarvis/prompts.py` — single source of every system prompt.
 - `jarvis/db.py` — SQLite schema + migrations (human-only).
 - `jarvis/tenant.py` — `current_user_id()` from `JARVIS_USER_ID`,

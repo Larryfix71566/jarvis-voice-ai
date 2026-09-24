@@ -132,6 +132,7 @@ from jarvis.council.prune import prune as prune_council
 from jarvis.runlog import prune as prune_runlog
 from jarvis.runlog import reconcile_orphaned_runs
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry
+from jarvis.skills.shared import get_shared_registry, shared_enabled
 
 # Service imports are module-level names so tests can monkeypatch them.
 # D-004: pipecat 1.4.0 class locations/settings classes differ from the
@@ -1081,8 +1082,22 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
     except Exception as exc:  # noqa: BLE001 — must never block startup
         _logger.warning("memory_sweep_start_failed error=%s", exc)
 
-    registry = SkillRegistry(REPO_ROOT / "config" / "mcp_servers.yaml")
-    await registry.start()
+    # Status spec T3.1 Step 0 — TEMPORARY: the process-scoped registry is
+    # valid only if every session runs on the same event loop. Compare this
+    # line across two connects on the Mac; remove once Step 0 is recorded.
+    _logger.info("session_loop_id id=%d", id(asyncio.get_running_loop()))
+    # Status spec T3.1 (L11): one registry per PROCESS. The first session
+    # starts it; later sessions reuse it, so a reconnect no longer respawns
+    # every MCP child and a detached run never loses its tools to teardown.
+    # `SkillRegistry` is this module's name so tests that monkeypatch
+    # bp.SkillRegistry still control what gets built.
+    registry_is_shared = shared_enabled()
+    if registry_is_shared:
+        registry = await get_shared_registry(
+            REPO_ROOT / "config" / "mcp_servers.yaml", factory=SkillRegistry)
+    else:
+        registry = SkillRegistry(REPO_ROOT / "config" / "mcp_servers.yaml")
+        await registry.start()
     runtime = Runtime(settings=settings, registry=registry,
                       session_id=str(uuid.uuid4()))
     print(f"[session] {runtime.session_id}", flush=True)
@@ -1748,4 +1763,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 "session_teardown_under_detached_runs session=%s runs=%d",
                 runtime.session_id, still,
             )
-        await registry.stop()
+        # T3.1: the shared registry outlives the session; only a per-session
+        # one (JARVIS_REGISTRY_SHARED_ENABLED=false) is stopped here.
+        if not registry_is_shared:
+            await registry.stop()

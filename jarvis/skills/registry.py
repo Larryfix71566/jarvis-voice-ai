@@ -10,11 +10,16 @@ Locked behavior:
 - Tool-name collision across servers -> ValueError at start() naming both.
 - call() never raises: failures return "<tool> failed: <reason>" strings.
   Per-call timeout: 30 s.
+- Supervision (status spec T3.1, L11): one owner task per server holds its
+  contexts; a server that fails to start is marked down without stopping
+  the others; a dead child is restarted (backoff: 3 per 60 s) and the
+  failing call retried once; a down server's tools answer "unavailable".
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import copy
 import json
 import logging
@@ -22,12 +27,16 @@ import os
 import sys
 import time
 from contextlib import AsyncExitStack
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
 
+import anyio
 import yaml
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.shared.exceptions import McpError
+from mcp.types import Tool
 
 from jarvis.config import bridge_settings_to_env, expand_env_vars
 from jarvis.bot.sensitive_turn import current_sensitive_turn
@@ -234,9 +243,10 @@ def build_child_env(entry: dict[str, Any]) -> dict[str, str]:
     # produces a precise user-facing error naming the key it wanted.
     #
     # review F16: an unrecognised source raises inside _resolve_dynamic_env;
-    # SkillRegistry.start() wraps _start_server in `except: stop(); raise`,
-    # so an unguarded raise here would bring the whole voice loop down for a
-    # single skill.yaml typo. Catch it, log at ERROR, and degrade to
+    # SkillRegistry.start() used to wrap _start_server in `except: stop();
+    # raise`, so an unguarded raise here brought the whole voice loop down for
+    # a single skill.yaml typo (since T3.1 it would take that one server
+    # down instead — still wrong for a typo). Catch it, log at ERROR, and degrade to
     # base+required+optional — the same "degraded server beats a dead voice
     # loop" posture as the missing-variable case. The typo is still caught
     # loudly at check-time by scripts/check_skills.py (Step 1d).
@@ -256,21 +266,91 @@ def build_child_env(entry: dict[str, Any]) -> dict[str, str]:
     return env
 
 
+#: Status spec T3.1 (L11, fact 3.4a): after an MCP child dies,
+#: ClientSession.call_tool raises one of these FOREVER — nothing in the SDK
+#: reconnects. call() treats them as "the server stopped", restarts it once
+#: and retries the call. McpError counts only for "Connection closed".
+_TRANSPORT_ERRORS = (
+    anyio.ClosedResourceError, anyio.BrokenResourceError, anyio.EndOfStream,
+    McpError,
+)
+
+#: Restart backoff: at most RESTART_LIMIT restarts per server inside
+#: RESTART_WINDOW_S; past that the server stays down (its tools answer
+#: "unavailable") until the window clears.
+RESTART_WINDOW_S = 60.0
+RESTART_LIMIT = 3
+RESTART_STOP_TIMEOUT_S = 10.0
+RESTART_READY_TIMEOUT_S = 30.0
+STOP_TIMEOUT_S = 10.0
+
+#: The AsyncExitStack of the owner task currently running `_serve`. Set
+#: inside the owner task only (each asyncio task has its own context), so
+#: `_start_server` can only ever enter contexts into the stack of the task
+#: that will also exit them (fact 3.4c).
+_OWNER_STACK: contextvars.ContextVar[AsyncExitStack | None] = contextvars.ContextVar(
+    "mcp_owner_stack", default=None)
+
+
+def _is_transport_error(exc: BaseException) -> bool:
+    if isinstance(exc, McpError):
+        return "Connection closed" in str(exc)
+    return isinstance(exc, _TRANSPORT_ERRORS)
+
+
+@dataclass
+class _ServerHandle:
+    """One MCP server and the owner task that holds its contexts (T3.1)."""
+
+    name: str
+    entry: dict
+    state: str = "starting"          # starting | up | down
+    session: ClientSession | None = None
+    tools: dict[str, Tool] = field(default_factory=dict)
+    last_error: str = ""
+    restarts: list[float] = field(default_factory=list)   # monotonic times
+    stop: asyncio.Event = field(default_factory=asyncio.Event)
+    ready: asyncio.Event = field(default_factory=asyncio.Event)
+    # Set when this generation's owner task ends, so a call already in
+    # flight learns the child is gone instead of waiting out CALL_TIMEOUT.
+    gone: asyncio.Event = field(default_factory=asyncio.Event)
+    task: asyncio.Task | None = None
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+
 class SkillRegistry:
+    """Supervised MCP client manager (status spec T3.1, L11).
+
+    Each server lives in its own OWNER TASK (`_serve`), which is the only
+    task that enters and exits that server's stdio/ClientSession contexts —
+    exiting them from any other task logs "Attempted to exit cancel scope in
+    a different task" and leaks the child (fact 3.4c). A server that fails
+    to start is marked down without stopping the others; a server whose
+    child dies is restarted once per failing call, with backoff.
+    """
+
     def __init__(self, config_path: Path):
         self._config_path = Path(config_path)
         self._server_configs: list[dict[str, Any]] = []
-        self._stack: AsyncExitStack | None = None
+        self._handles: dict[str, _ServerHandle] = {}
         self._sessions: dict[str, ClientSession] = {}
         self._tools: dict[str, tuple[str, Any]] = {}  # tool -> (server, Tool)
+        # tool -> server, from every listing ever seen, so a down server's
+        # tools answer "unavailable" rather than "Unknown tool".
+        self._known_tools: dict[str, str] = {}
+        self._restart_tasks: set[asyncio.Task] = set()
 
     @property
     def server_names(self) -> list[str]:
         return [entry["name"] for entry in self._server_configs]
 
     async def start(self) -> None:
-        """Spawn all servers, initialize sessions, discover tools."""
-        if self._stack is not None:
+        """Spawn every server in its own owner task and discover tools.
+
+        A server that fails to start is logged and left down; it never
+        stops the others. A tool name offered by two servers that are up
+        still raises ValueError (after stopping everything)."""
+        if self._handles:
             return  # idempotent
         # MORTIMER_ENV_BRIDGE_PLAN.md E1 — bridge Settings into os.environ
         # HERE, not at each caller. `.env` is a file; os.environ is a
@@ -282,24 +362,63 @@ class SkillRegistry:
         bridge_settings_to_env()
         config = yaml.safe_load(self._config_path.read_text())
         self._server_configs = list(config["servers"])
-        self._stack = AsyncExitStack()
+        handles = [_ServerHandle(name=entry["name"], entry=entry)
+                   for entry in self._server_configs]
+        self._handles = {h.name: h for h in handles}
+        for h in handles:
+            h.task = asyncio.create_task(self._serve(h), name=f"mcp:{h.name}")
+        await asyncio.gather(*(h.ready.wait() for h in handles))
         try:
-            for entry in self._server_configs:
-                await self._start_server(entry)
-        except Exception:
+            self._rebuild_tools()
+        except ValueError:
             await self.stop()
             raise
+        for h in handles:
+            if h.state != "up":
+                logger.warning("mcp_server_start_failed name=%s error=%s",
+                               h.name, h.last_error)
 
     async def stop(self) -> None:
-        """Terminate all child processes. Idempotent; never raises."""
-        stack, self._stack = self._stack, None
-        self._sessions = {}
-        self._tools = {}
-        if stack is not None:
-            try:
-                await stack.aclose()
-            except Exception as exc:  # shutdown noise must not propagate
-                logger.warning("registry_stop_error: %s", exc)
+        """Stop every owner task and clear state. Idempotent; never raises.
+
+        Safe from any task: each owner task closes its own contexts."""
+        try:
+            handles = list(self._handles.values())
+            for h in handles:
+                h.stop.set()
+            for task in list(self._restart_tasks):
+                task.cancel()
+            tasks = {h.task for h in handles
+                     if h.task is not None and not h.task.done()}
+            if tasks:  # asyncio.wait raises on an empty set
+                _done, pending = await asyncio.wait(tasks, timeout=STOP_TIMEOUT_S)
+                for task in pending:
+                    logger.warning("registry_stop_straggler task=%s", task.get_name())
+                    task.cancel()
+                if pending:
+                    await asyncio.wait(pending, timeout=STOP_TIMEOUT_S)
+        except Exception as exc:  # shutdown noise must not propagate
+            logger.warning("registry_stop_error: %s", exc)
+        finally:
+            self._sessions = {}
+            self._tools = {}
+            self._handles = {}
+            self._known_tools = {}
+
+    def status(self) -> dict[str, dict]:
+        """{server: {state, last_error, restarts_last_60s, tools}}."""
+        now = time.monotonic()
+        out: dict[str, dict] = {}
+        for name, h in self._handles.items():
+            out[name] = {
+                "state": h.state,
+                "last_error": h.last_error,
+                "restarts_last_60s": sum(
+                    1 for t in h.restarts if now - t < RESTART_WINDOW_S),
+                "tools": sum(1 for server, _ in self._tools.values()
+                             if server == name),
+            }
+        return out
 
     def openai_tools(self, server_names: list[str] | None = None) -> list[dict]:
         """Discovered tools as OpenAI function schemas, optionally filtered."""
@@ -338,10 +457,13 @@ class SkillRegistry:
         """Invoke a tool. Returns plain text (JSON for dict results) or a
         one-line failure string. Never raises."""
         entry = self._tools.get(tool_name)
-        if entry is None:
-            available = ", ".join(sorted(self._tools)) or "none"
-            return f"Unknown tool '{tool_name}'. Available: {available}."
-        server, _tool = entry
+        if entry is not None:
+            server = entry[0]
+        else:
+            server = self._known_tools.get(tool_name, "")
+            if server not in self._handles:
+                available = ", ".join(sorted(self._tools)) or "none"
+                return f"Unknown tool '{tool_name}'. Available: {available}."
         if server_names is not None and server not in set(server_names):
             return f"Tool '{tool_name}' is not available in this context."
         holder = current_sensitive_turn.get()
@@ -354,7 +476,15 @@ class SkillRegistry:
                 f"{tool_name} failed: protected turn cannot call external "
                 "tool server."
             )
-        session = self._sessions[server]
+        session = self._sessions.get(server)
+        if entry is None or session is None:
+            # T3.1: the tool's server is down. Say so truthfully (never
+            # "Unknown tool", which invites the model to invent another
+            # name) and let a background restart bring it back.
+            h = self._handles[server]
+            self._restart_in_background(server)
+            return (f"{tool_name} failed: {server} is unavailable "
+                    f"({h.last_error or h.state}); it restarts automatically.")
         if tool_name in RUN_ID_INJECTED_TOOLS:
             arguments = {**arguments, "run_id": get_run_id() or ""}   # GL9: always overwrites
         # Run-logging plan D3/D18/§5.6: record one mcp_call event with the
@@ -363,10 +493,42 @@ class SkillRegistry:
         # Skipped entirely when there is no active run (e.g. a direct
         # Supervisor tool call) — this is the normal case, not a warning.
         runlog = get_run_logger()
+        return await self._invoke(tool_name, server, session, arguments,
+                                  runlog, allow_restart=True)
+
+    async def _call_watching(self, server: str, session: Any,
+                             tool_name: str, arguments: dict) -> Any:
+        """session.call_tool, raced against the owner task's end.
+
+        A write to a child that just died crashes the stdio task group and
+        ends the owner task, but the request already handed to the session
+        never gets an answer or an error — measured: the call sat until
+        CALL_TIMEOUT. The owner's `gone` event turns that into the same
+        transport error a call after the crash gets."""
+        h = self._handles.get(server)
+        if h is None or h.session is not session:
+            return await session.call_tool(tool_name, arguments)
+        gone = h.gone
+        call = asyncio.ensure_future(session.call_tool(tool_name, arguments))
+        watch = asyncio.ensure_future(gone.wait())
+        try:
+            await asyncio.wait({call, watch}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            watch.cancel()
+            if not call.done():
+                call.cancel()
+        if call.done() and not call.cancelled():
+            return call.result()
+        raise anyio.ClosedResourceError(f"{server} owner task ended during the call")
+
+    async def _invoke(self, tool_name: str, server: str, session: Any,
+                      arguments: dict, runlog: Any, *,
+                      allow_restart: bool) -> str:
         call_start = time.perf_counter()
         try:
             result = await asyncio.wait_for(
-                session.call_tool(tool_name, arguments), timeout=CALL_TIMEOUT
+                self._call_watching(server, session, tool_name, arguments),
+                timeout=CALL_TIMEOUT,
             )
         except asyncio.TimeoutError:
             latency_ms = int((time.perf_counter() - call_start) * 1000)
@@ -376,6 +538,28 @@ class SkillRegistry:
                                  latency_ms=latency_ms, error=error)
             return f"{tool_name} failed: {error}."
         except Exception as exc:
+            if _is_transport_error(exc) and server in self._handles:
+                # T3.1 (fact 3.4a): the child is gone. Restart it and retry
+                # ONCE; the runlog event records the final outcome only.
+                h = self._handles[server]
+                h.last_error = f"{type(exc).__name__}: {exc}"[:200]
+                logger.warning("mcp_server_transport_error name=%s tool=%s error=%s",
+                               server, tool_name, h.last_error)
+                ok = False
+                if allow_restart:
+                    ok = await self._restart(server, failed_session=session)
+                new_session = self._sessions.get(server)
+                if ok and tool_name in self._tools and new_session is not None:
+                    return await self._invoke(tool_name, server, new_session,
+                                              arguments, runlog,
+                                              allow_restart=False)
+                latency_ms = int((time.perf_counter() - call_start) * 1000)
+                if runlog is not None:
+                    runlog.mcp_call(tool_name, server, ok=False,
+                                     latency_ms=latency_ms,
+                                     error=type(exc).__name__)
+                return (f"{tool_name} failed: {server} stopped and could not "
+                        f"be restarted ({h.last_error}).")
             latency_ms = int((time.perf_counter() - call_start) * 1000)
             error = type(exc).__name__
             logger.warning("tool_call_failed tool=%s error=%s run_id=%s",
@@ -418,7 +602,146 @@ class SkillRegistry:
             )
         return text_result
 
-    async def _start_server(self, entry: dict[str, Any]) -> None:
+    # ------------------------------------------------------------------ #
+    # Supervision (status spec T3.1)
+    # ------------------------------------------------------------------ #
+
+    def _rebuild_tools(self) -> None:
+        """self._tools from the handles that are up, in config order."""
+        tools: dict[str, tuple[str, Any]] = {}
+        for h in self._handles.values():
+            if h.state != "up":
+                continue
+            for tool_name, tool in h.tools.items():
+                if tool_name in tools:
+                    raise ValueError(
+                        f"Tool name collision: '{tool_name}' is provided by both "
+                        f"'{tools[tool_name][0]}' and '{h.name}'."
+                    )
+                tools[tool_name] = (h.name, tool)
+        self._tools = tools
+
+    def _drop_server_tools(self, name: str) -> None:
+        self._tools = {tool: entry for tool, entry in self._tools.items()
+                       if entry[0] != name}
+
+    async def _serve(self, h: _ServerHandle) -> None:
+        """Owner task for one server: the ONLY task that enters and exits its
+        stdio_client/ClientSession contexts (fact 3.4c). Never re-raises."""
+        session: Any = None
+        gone = h.gone
+        try:
+            async with AsyncExitStack() as stack:
+                _OWNER_STACK.set(stack)   # this task's context only
+                session, discovered = await self._start_server(h.entry)
+                h.session = session
+                h.tools = {tool.name: tool for tool in discovered}
+                for tool in discovered:
+                    self._known_tools[tool.name] = h.name
+                self._sessions[h.name] = session
+                h.state = "up"
+                h.last_error = ""
+                h.ready.set()
+                logger.info("mcp_server_started name=%s tools=%d",
+                            h.name, len(discovered))
+                await h.stop.wait()
+        except Exception as exc:  # noqa: BLE001 — a dead server never escapes
+            h.last_error = f"{type(exc).__name__}: {exc}"[:200]
+            logger.warning("mcp_server_down name=%s error=%s", h.name, h.last_error)
+        finally:
+            h.state = "down"
+            h.session = None
+            if session is None or self._sessions.get(h.name) is session:
+                self._sessions.pop(h.name, None)
+            self._drop_server_tools(h.name)
+            h.ready.set()
+            gone.set()
+
+    def _recent_restarts(self, h: _ServerHandle) -> int:
+        now = time.monotonic()
+        h.restarts[:] = [t for t in h.restarts if now - t < RESTART_WINDOW_S]
+        return len(h.restarts)
+
+    def _restart_in_background(self, server: str) -> None:
+        """Fire-and-forget restart of a down server, if backoff allows and
+        no restart of it is already running."""
+        h = self._handles.get(server)
+        if h is None or h.lock.locked() or self._recent_restarts(h) >= RESTART_LIMIT:
+            return
+        task = asyncio.create_task(self._restart(server, only_if_down=True), name=f"mcp-restart:{server}")
+        self._restart_tasks.add(task)
+        task.add_done_callback(self._restart_tasks.discard)
+
+    async def _restart(self, server: str, failed_session: Any = None,
+                       only_if_down: bool = False) -> bool:
+        """Restart one server's owner task. True when it is up afterwards.
+
+        `failed_session` is the session a caller saw fail: if the server is
+        already up on a DIFFERENT session, a concurrent caller restarted it
+        and this one only needs to retry. `only_if_down` (background
+        restarts) skips a server that came back up meanwhile."""
+        h = self._handles.get(server)
+        if h is None:
+            return False
+        async with h.lock:
+            if only_if_down and h.state == "up":
+                return True
+            if (failed_session is not None and h.state == "up"
+                    and h.session is not None and h.session is not failed_session):
+                return True   # a concurrent caller already restarted it
+            if self._recent_restarts(h) >= RESTART_LIMIT:
+                h.state = "down"
+                h.stop.set()
+                self._sessions.pop(server, None)
+                self._drop_server_tools(server)
+                h.last_error = (f"restart limit reached: {RESTART_LIMIT} restarts "
+                                f"in {int(RESTART_WINDOW_S)} s")
+                logger.warning("mcp_server_restart_backoff name=%s restarts=%d",
+                               server, len(h.restarts))
+                return False
+            old_tools = set(h.tools)
+            h.stop.set()
+            if h.task is not None and not h.task.done():
+                # asyncio.wait, not wait_for: it neither cancels the owner
+                # task if THIS caller is cancelled nor re-raises its outcome.
+                done, _ = await asyncio.wait({h.task}, timeout=RESTART_STOP_TIMEOUT_S)
+                if not done:
+                    logger.warning("mcp_server_stop_timeout name=%s", server)
+                    h.task.cancel()
+                    await asyncio.wait({h.task}, timeout=RESTART_STOP_TIMEOUT_S)
+            h.stop = asyncio.Event()
+            h.ready = asyncio.Event()
+            h.gone = asyncio.Event()
+            h.state = "starting"
+            h.task = asyncio.create_task(self._serve(h), name=f"mcp:{server}")
+            try:
+                await asyncio.wait_for(h.ready.wait(), RESTART_READY_TIMEOUT_S)
+            except asyncio.TimeoutError:
+                h.last_error = f"restart timed out after {int(RESTART_READY_TIMEOUT_S)} s"
+                h.stop.set()
+                h.task.cancel()
+            if h.state == "up":
+                if set(h.tools) != old_tools:
+                    logger.warning("mcp_server_tools_changed name=%s added=%s removed=%s",
+                                   server, sorted(set(h.tools) - old_tools),
+                                   sorted(old_tools - set(h.tools)))
+                self._drop_server_tools(server)
+                for tool_name, tool in h.tools.items():
+                    other = self._tools.get(tool_name)
+                    if other is not None:
+                        logger.error("mcp_server_tool_collision tool=%s servers=%s,%s",
+                                     tool_name, other[0], server)
+                        continue
+                    self._tools[tool_name] = (server, tool)
+            h.restarts.append(time.monotonic())
+            ok = h.state == "up"
+            logger.info("mcp_server_restarted name=%s ok=%s", server, ok)
+            logger.info("mcp_registry_status %s", json.dumps(self.status()))
+            return ok
+
+    async def _start_server(self, entry: dict[str, Any]) -> tuple[Any, list[Any]]:
+        """Open one server's contexts on the CALLING owner task's stack and
+        return (session, tools). Called only from `_serve`."""
         name = entry["name"]
         env = build_child_env(entry)
         for key, value in (entry.get("env") or {}).items():
@@ -452,18 +775,11 @@ class SkillRegistry:
         except TypeError:  # older SDKs lack cwd; repo root is inherited cwd
             params = StdioServerParameters(**kwargs)
 
-        assert self._stack is not None
-        read, write = await self._stack.enter_async_context(stdio_client(params))
-        session = await self._stack.enter_async_context(ClientSession(read, write))
+        stack = _OWNER_STACK.get()
+        if stack is None:
+            raise RuntimeError("_start_server must run inside an owner task (_serve)")
+        read, write = await stack.enter_async_context(stdio_client(params))
+        session = await stack.enter_async_context(ClientSession(read, write))
         await session.initialize()
         discovered = (await session.list_tools()).tools
-        self._sessions[name] = session
-        for tool in discovered:
-            if tool.name in self._tools:
-                other = self._tools[tool.name][0]
-                raise ValueError(
-                    f"Tool name collision: '{tool.name}' is provided by both "
-                    f"'{other}' and '{name}'."
-                )
-            self._tools[tool.name] = (name, tool)
-        logger.info("mcp_server_started name=%s tools=%d", name, len(discovered))
+        return session, list(discovered)
