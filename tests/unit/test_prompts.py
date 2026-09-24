@@ -354,6 +354,17 @@ class TestDeveloperSections:
             assert "two-phase" in text or "plan_start" in text, name
             assert text.strip() == text
 
+    def test_self_development_offers_plan_on_core_refusal(self):
+        """Status spec T4.8: a core-tier refusal becomes an offer to write
+        the plan, then a restart with its plan_path — not a dead end."""
+        from jarvis.prompts import DEVELOPER_SECTIONS
+        text = DEVELOPER_SECTIONS["self_development"]
+        sentence = ("If selfedit_start refuses because a core file needs a plan, offer to "
+                    "write one with plan_start for the same goal, and after the user adopts "
+                    "it, start again with that plan_path.")
+        assert text.endswith(sentence)
+        assert text.count(sentence) == 1
+
     def test_a_self_edit_task_gets_the_self_development_section(self):
         from jarvis.prompts import select_developer_sections as sel
         assert "self_development" in sel("implement the drawer plan in mortimer")
