@@ -451,3 +451,36 @@ async def test_a_server_that_failed_its_first_start_is_revived_on_reuse(
     finally:
         await shared.shutdown_shared_registry()
         shared._reset_for_tests()
+
+
+HANG_MODULE = "import time; time.sleep(3600)"
+HANG_ENTRY = {"name": "mcp-hang", "command": "python",
+              "args": ["-c", HANG_MODULE], "env": {}}
+
+
+async def test_a_hanging_server_cannot_block_start(tmp_path, monkeypatch):
+    """Finding 3 (review hang.py): start() gathered every ready wait with no
+    timeout, and get_shared_registry holds its lock across start(), so one
+    child that never answers `initialize` blocked every session. Now start()
+    waits RESTART_READY_TIMEOUT_S; the straggler is stopped and marked down,
+    and the other servers are up."""
+    import jarvis.skills.registry as registry_mod
+
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "hang.db"))
+    monkeypatch.setattr(registry_mod, "RESTART_READY_TIMEOUT_S", 8.0)
+    reg = SkillRegistry(_write_config(tmp_path, [TIME_ENTRY, HANG_ENTRY]))
+    started = time.monotonic()
+    try:
+        await asyncio.wait_for(reg.start(), 30)
+        elapsed = time.monotonic() - started
+        assert elapsed < 20, elapsed
+        status = reg.status()
+        assert status["mcp-hang"]["state"] == "down"
+        assert status["mcp-hang"]["last_error"] == "start timed out"
+        assert status["mcp-time"]["state"] == "up"
+        assert status["mcp-time"]["tools"] == 4
+        assert "iso" in json.loads(await reg.call("get_current_time", {}))
+        hung = _child_pids(HANG_MODULE)
+        assert await _gone(hung), "the hung child outlived its cancelled owner"
+    finally:
+        await reg.stop()

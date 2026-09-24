@@ -370,7 +370,26 @@ class SkillRegistry:
         self._handles = {h.name: h for h in handles}
         for h in handles:
             h.task = asyncio.create_task(self._serve(h), name=f"mcp:{h.name}")
-        await asyncio.gather(*(h.ready.wait() for h in handles))
+        # Review finding 3: bounded. shared.py holds its lock across start(),
+        # so one child that never answers `initialize` must not block every
+        # session; the straggler is stopped and left down (revive_down
+        # retries it later, under the backoff).
+        waits = {asyncio.ensure_future(h.ready.wait()): h for h in handles}
+        try:
+            _done, pending = await asyncio.wait(
+                waits, timeout=RESTART_READY_TIMEOUT_S)
+        finally:
+            for wait in waits:
+                wait.cancel()
+        for wait in pending:
+            h = waits[wait]
+            logger.warning("mcp_server_start_timeout name=%s timeout_s=%d",
+                           h.name, int(RESTART_READY_TIMEOUT_S))
+            h.stop.set()
+            if h.task is not None:
+                h.task.cancel()
+            h.state = "down"
+            h.last_error = "start timed out"
         try:
             self._rebuild_tools()
         except ValueError:
