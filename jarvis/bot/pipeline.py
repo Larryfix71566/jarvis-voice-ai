@@ -1302,6 +1302,9 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # once — take_pending marks them delivered.
             greeting_note = (connection_greeting_note(settings.jarvis_timezone)
                              + notices.render_for_greeting(notices.take_pending()))
+            # Review finding 5(b): this session now receives late results
+            # whose own session has ended.
+            notices.set_live_session(runtime.session_id, inject_late_result)
             aggregators.user().add_messages([{
                 "role": "user", "content": greeting_note,
             }])
@@ -1309,6 +1312,10 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
 
         @transport.event_handler("on_client_disconnected")
         async def on_client_disconnected(transport: Any, client: Any) -> None:
+            # Review finding 5(a): first, before anything can await — a late
+            # result landing from here on must not reach this pipeline.
+            runtime.alive = False
+            notices.clear_live_session(runtime.session_id)
             print("[session] client disconnected", flush=True)
             # Status spec P7: reconnect-churn data, no behaviour change.
             _logger.info("%s", session_disconnect_line(
@@ -1704,8 +1711,10 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             await runner.run(task)
         finally:
             # T3.2: first, before anything below can await — a late result
-            # landing from here on goes to the notice outbox.
+            # landing from here on goes to the notice outbox. (Also set at
+            # the top of on_client_disconnected; this covers every other end.)
             runtime.alive = False
+            notices.clear_live_session(runtime.session_id)
             shared_transfer.close()
             await watcher.stop()
             await memory_watcher.stop()

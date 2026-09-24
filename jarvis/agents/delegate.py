@@ -273,6 +273,31 @@ def _to_outbox(source: str, text: str) -> int:
     return notices.add_notice("late_result", source, text)
 
 
+def _live_session_hook():
+    """Review finding 5(b) — the process's current live session's hook."""
+    from jarvis import notices
+
+    return notices.live_session_hook()
+
+
+def _late_note(display_name: str, outcome: str) -> str:
+    """The context note a live session's model relays."""
+    return (
+        f"[system] Background update: the {display_name} "
+        "task delegated earlier finished after the conversation "
+        f"moved on. Result: {outcome}\nRelay this to the user once, "
+        "in one or two short sentences, and do not repeat it in "
+        "later turns. If it prepared an action that needs their "
+        "confirmation, say so."
+    )
+
+
+def _outbox_text(display_name: str, outcome: str) -> str:
+    """Review finding 5(c): what the outbox keeps — the result, not the
+    relay instructions, so the 600-char notice budget holds the result."""
+    return f"The {display_name} task finished: {outcome}"
+
+
 def _spawn_background(coro) -> None:
     task = asyncio.create_task(coro)
     _background_tasks.add(task)
@@ -687,48 +712,57 @@ def build_delegate_tool(
                 agent_name, run_id,
             )
 
-            def _outbox(note: str, reason: str) -> None:
+            def _outbox(outcome: str, reason: str) -> None:
                 # T3.2 (L12): a result nobody can hear now is kept and
                 # spoken after the greeting at the next connect.
                 logger.warning(
                     "delegate_late_result_undeliverable agent=%s "
                     "run_id=%s reason=%s", agent_name, run_id, reason)
                 notice_id = _to_outbox(
-                    agent.display_name, SENSITIVE_LATE_NOTICE if armed else note)
+                    agent.display_name,
+                    SENSITIVE_LATE_NOTICE if armed
+                    else _outbox_text(agent.display_name, outcome))
                 logger.info("delegate_late_result_outboxed agent=%s run_id=%s "
                             "notice_id=%s redacted=%s",
                             agent_name, run_id, notice_id, armed)
 
-            async def _deliver_or_outbox(fn: Callable, note: str) -> None:
-                # The hook returns False when its session has ended
-                # (runtime.alive); the note then goes to the outbox.
+            async def _offer(fn: Callable, note: str) -> bool:
                 try:
-                    delivered = await fn(note)
+                    return await fn(note) is not False
                 except Exception:  # noqa: BLE001 — never lose the result
                     logger.exception("delegate_late_delivery_failed agent=%s "
                                      "run_id=%s", agent_name, run_id)
-                    delivered = False
-                if delivered is False:
-                    _outbox(note, "session_ended")
+                    return False
+
+            async def _deliver_or_outbox(fn: Callable | None, note: str,
+                                         outcome: str) -> None:
+                # The hook returns False when its session has ended
+                # (runtime.alive). Review finding 5(b): the session connected
+                # NOW is tried next; only then does the result go to the
+                # outbox.
+                if fn is not None and await _offer(fn, note):
+                    return
+                live = _live_session_hook()
+                if live is not None and live is not fn:
+                    # Another, unprotected session: an armed turn's result
+                    # is redacted there exactly as in the outbox.
+                    elsewhere = (_late_note(agent.display_name, SENSITIVE_LATE_NOTICE)
+                                 if armed else note)
+                    if await _offer(live, elsewhere):
+                        logger.info("delegate_late_result_redirected agent=%s "
+                                    "run_id=%s redacted=%s",
+                                    agent_name, run_id, armed)
+                        return
+                _outbox(outcome, "no_hook" if fn is None else "session_ended")
 
             def _deliver(task: asyncio.Task) -> None:
                 if task.cancelled():
                     return
                 exc = task.exception()
                 outcome = f"FAILED: {exc}" if exc else task.result()
-                note = (
-                    f"[system] Background update: the {agent.display_name} "
-                    "task delegated earlier finished after the conversation "
-                    f"moved on. Result: {outcome}\nRelay this to the user once, "
-                    "in one or two short sentences, and do not repeat it in "
-                    "later turns. If it prepared an action that needs their "
-                    "confirmation, say so."
-                )
+                note = _late_note(agent.display_name, outcome)
                 fn = (late_delivery or {}).get("fn")
-                if fn is None:
-                    _outbox(note, "no_hook")
-                    return
-                _spawn_background(_deliver_or_outbox(fn, note))
+                _spawn_background(_deliver_or_outbox(fn, note, outcome))
 
             if run_task.done():
                 _deliver(run_task)

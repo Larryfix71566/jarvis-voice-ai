@@ -934,7 +934,7 @@ class TestNoticeOutbox:
         assert len(outbox) == 1
         source, text = outbox[0]
         assert source == "Developer"
-        assert "Background update" in text and "audit: 3 findings" in text
+        assert text == "The Developer task finished: audit: 3 findings"
         assert "delegate_late_result_undeliverable" in caplog.text, "the log line stays"
 
     async def test_dead_session_hook_returning_false_goes_to_outbox(self, outbox):
@@ -949,7 +949,8 @@ class TestNoticeOutbox:
             {"developer": agent}, late_delivery={"fn": dead_hook})
         await self._orphan(handler)
         assert len(offered) == 1
-        assert outbox == [("Developer", offered[0])]
+        assert "audit: 3 findings" in offered[0]
+        assert outbox == [("Developer", "The Developer task finished: audit: 3 findings")]
 
     @pytest.mark.parametrize("returned", [True, None])
     async def test_a_delivered_result_is_not_outboxed(self, outbox, returned):
@@ -996,6 +997,120 @@ class TestNoticeOutbox:
         assert outbox == [("Developer", SENSITIVE_LATE_NOTICE)]
         assert SENSITIVE_LATE_NOTICE == (
             "A background task you asked for finished; ask me for its result.")
+
+    async def test_outboxed_text_is_the_result_not_the_relay_boilerplate(self, outbox):
+        """Review finding 5(c): the 600-char notice budget holds the result;
+        the "[system] Background update ... Relay this ..." wrapper was
+        written for a live model and used a third of it."""
+        from jarvis.notices import MAX_NOTICE_CHARS
+
+        result = "R" * 560
+        agent = SlowFakeSubAgent("developer", delay=0.05, result=result)
+        _, handler = build_delegate_tool({"developer": agent})
+        await self._orphan(handler)
+        ((_, text),) = outbox
+        assert "[system]" not in text and "Relay this" not in text
+        assert result in text[:MAX_NOTICE_CHARS]
+
+    async def test_a_dead_session_result_reaches_the_current_live_session(self, outbox):
+        """Review finding 5(b): the originating session is gone but another
+        one is connected — say it there instead of waiting for a reconnect."""
+        from jarvis import notices
+
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="audit: 3 findings")
+        live: list[str] = []
+
+        async def dead_hook(text):
+            return False
+
+        async def live_hook(text):
+            live.append(text)
+            return True
+
+        notices.set_live_session("s2", live_hook)
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": dead_hook})
+        await self._orphan(handler)
+        assert outbox == []
+        assert len(live) == 1 and "audit: 3 findings" in live[0]
+        assert "Relay this to the user once" in live[0]
+
+    async def test_no_hook_also_tries_the_live_session(self, outbox):
+        from jarvis import notices
+
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="audit: 3 findings")
+        live: list[str] = []
+
+        async def live_hook(text):
+            live.append(text)
+            return True
+
+        notices.set_live_session("s2", live_hook)
+        _, handler = build_delegate_tool({"developer": agent})
+        await self._orphan(handler)
+        assert outbox == [] and len(live) == 1
+
+    async def test_the_live_session_is_not_retried_when_it_is_the_dead_hook(self, outbox):
+        from jarvis import notices
+
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="audit: 3 findings")
+        offered: list[str] = []
+
+        async def dead_hook(text):
+            offered.append(text)
+            return False
+
+        notices.set_live_session("s1", dead_hook)
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": dead_hook})
+        await self._orphan(handler)
+        assert len(offered) == 1
+        assert len(outbox) == 1
+
+    async def test_a_live_session_that_refuses_falls_through_to_the_outbox(self, outbox):
+        from jarvis import notices
+
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="audit: 3 findings")
+
+        async def refuses(text):
+            return False
+
+        notices.set_live_session("s2", refuses)
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": refuses})
+        await self._orphan(handler)
+        assert outbox == [("Developer", "The Developer task finished: audit: 3 findings")]
+
+    async def test_an_armed_result_reaches_another_session_redacted(self, outbox):
+        from jarvis import notices
+        from jarvis.agents.delegate import SENSITIVE_LATE_NOTICE
+        from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
+
+        agent = SlowFakeSubAgent("developer", delay=0.05,
+                                 result="balance is 12,345.67 in account 9876")
+        live: list[str] = []
+
+        async def dead_hook(text):
+            return False
+
+        async def live_hook(text):
+            live.append(text)
+            return True
+
+        notices.set_live_session("s2", live_hook)
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": dead_hook})
+        holder = SensitiveTurn()
+        holder.arm("financial")
+        token = current_sensitive_turn.set(holder)
+        try:
+            await self._orphan(handler)
+        finally:
+            current_sensitive_turn.reset(token)
+        assert outbox == []
+        assert len(live) == 1
+        assert SENSITIVE_LATE_NOTICE in live[0]
+        assert "12,345.67" not in live[0] and "9876" not in live[0]
 
     async def test_outboxed_result_reaches_the_notices_table(self, fresh_db, monkeypatch):
         """End to end through jarvis.notices, with the real table."""

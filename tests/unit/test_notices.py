@@ -86,3 +86,36 @@ def test_render_for_greeting_golden():
         " While they were away: The developer finished the audit. / All model "
         "keys work. Mention these in one or two short sentences after greeting."
     )
+
+
+class TestLiveSession:
+    """Review finding 5(b): the process's current live session, so a late
+    result whose own session ended reaches whoever is connected now."""
+
+    @pytest.fixture(autouse=True)
+    def _clean(self):
+        notices._reset_live_session_for_tests()
+        yield
+        notices._reset_live_session_for_tests()
+
+    def test_set_get_clear(self):
+        async def hook(text):
+            return True
+
+        assert notices.live_session_hook() is None
+        notices.set_live_session("s1", hook)
+        assert notices.live_session_hook() is hook
+        notices.clear_live_session("s1")
+        assert notices.live_session_hook() is None
+
+    def test_an_old_session_cannot_clear_a_newer_one(self):
+        async def old(text):
+            return True
+
+        async def new(text):
+            return True
+
+        notices.set_live_session("old", old)
+        notices.set_live_session("new", new)       # reconnect before old teardown
+        notices.clear_live_session("old")
+        assert notices.live_session_hook() is new

@@ -102,3 +102,8 @@ def _stub_notice_outbox(monkeypatch):
         "jarvis.agents.delegate._to_outbox", lambda source, text: -1,
         raising=False,
     )
+    # Review finding 5(b): a session left "live" by one test must not
+    # receive another test's late results.
+    from jarvis import notices
+
+    notices._reset_live_session_for_tests()

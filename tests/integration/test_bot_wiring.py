@@ -1365,12 +1365,15 @@ async def test_notices_ride_the_greeting_and_a_dead_session_refuses_late_results
         jarvis_memory_sweep_interval_s=300.0,
     )
     captured: dict = {}
+    alive_at_cancel: list[bool] = []
+    notices._reset_live_session_for_tests()
 
     class FakeTask:
         def __init__(self, pipeline, observers=None, params=None):
             self._ended = asyncio.Event()
 
         async def cancel(self):
+            alive_at_cancel.append(captured["runtime"].alive)
             self._ended.set()
 
         async def wait_ended(self):
@@ -1460,10 +1463,20 @@ async def test_notices_ride_the_greeting_and_a_dead_session_refuses_late_results
         else:
             raise AssertionError("run_session never installed its handlers")
         await transport.handlers["on_client_connected"](transport, None)
+        # Review finding 5(b): the connected session is the process's live
+        # late-delivery target until it disconnects.
+        live_hooks.append(notices.live_session_hook())
         outcomes.append(await captured["runtime"].late_delivery["fn"]("while alive"))
         await transport.handlers["on_client_disconnected"](transport, None)
+        live_hooks.append(notices.live_session_hook())
 
+    live_hooks: list = []
     await asyncio.wait_for(asyncio.gather(bp.run_session(transport), drive()), timeout=10)
+    # Review finding 5(a): not alive from the top of on_client_disconnected,
+    # before the pipeline is cancelled (not only from the teardown finally).
+    assert alive_at_cancel == [False]
+    assert live_hooks[0] is captured["runtime"].late_delivery["fn"]
+    assert live_hooks[1] is None
 
     greeting = user_agg.messages[0]["content"]
     assert greeting.endswith(

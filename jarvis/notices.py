@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Awaitable, Callable
 
 from jarvis.db import get_conn, now_iso
 
@@ -98,3 +99,32 @@ def render_for_greeting(items: list[dict]) -> str:
     texts = [str(item.get("text", "")) for item in items]
     return (" While they were away: " + " / ".join(texts)
             + " Mention these in one or two short sentences after greeting.")
+
+
+# Review finding 5(b): the process's CURRENT live session's late-delivery
+# hook (run_session's inject_late_result). A late result whose own session
+# has ended is offered here before the outbox, so a user who reconnected
+# hears it now rather than at the next connect. Set on connect; cleared on
+# disconnect only by the session that set it, so a slow teardown cannot
+# clear a newer session's hook.
+_live_session: tuple[str, Callable[[str], Awaitable[bool]]] | None = None
+
+
+def set_live_session(session_id: str, hook: Callable[[str], Awaitable[bool]]) -> None:
+    global _live_session
+    _live_session = (str(session_id), hook)
+
+
+def clear_live_session(session_id: str) -> None:
+    global _live_session
+    if _live_session is not None and _live_session[0] == str(session_id):
+        _live_session = None
+
+
+def live_session_hook() -> Callable[[str], Awaitable[bool]] | None:
+    return _live_session[1] if _live_session is not None else None
+
+
+def _reset_live_session_for_tests() -> None:
+    global _live_session
+    _live_session = None
