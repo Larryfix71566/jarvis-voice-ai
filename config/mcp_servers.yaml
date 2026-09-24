@@ -89,3 +89,11 @@ servers:
     # key is needed depends on which profile config/upgrade_models.yaml
     # resolves to.
     env: {}
+  # Status spec T2.6 (L2/L8): Mortimer's own live status for the systems
+  # and developer agents. A thin HTTP client of the admin sidecar's
+  # /api/status/* routes; JARVIS_ADMIN_URL is in BASE_ENV_KEYS, and no
+  # secret ever reaches this child.
+  - name: mcp-status
+    command: python
+    args: ["-m", "mcp_servers.mcp_status.server"]
+    env: {}

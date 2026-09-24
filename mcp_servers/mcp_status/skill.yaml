@@ -1,0 +1,9 @@
+name: mcp-status
+version: 0.1.0
+class: standard
+tools: [status_models, status_services, status_overview, status_build, log_search]
+requires_env: []
+optional_env: []
+requires_keychain: []
+scopes: []
+test: "python3 -m pytest tests/unit/test_mcp_status_logic.py -q"

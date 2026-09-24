@@ -44,6 +44,9 @@ CALL_TIMEOUT = 30.0
 # servers (notes, memory, repo, git, time, etc.) remain available.
 EXTERNAL_TOOL_SERVERS = frozenset({
     "mcp-web", "mcp-apps", "mcp-screen", "mcp-selfedit",
+    # Status spec I3/T2.6: its P4 tools (catalogs, subscription probes,
+    # GitHub reads) leave the machine.
+    "mcp-status",
 })
 
 # Server entry "command: python" means "the interpreter running this
