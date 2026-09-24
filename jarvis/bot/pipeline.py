@@ -624,7 +624,8 @@ def build_pipeline(
             _logger.warning("clipboard_sidecar_unreachable path=%s error=%s", path, exc)
             return {"ok": False,
                     "error": "The admin sidecar isn't running, so I can't reach "
-                             "the clipboard. Start it with ./scripts/mortimer.sh start."}
+                             "the clipboard. It comes back when Mortimer's services "
+                             "are restarted."}
 
     _, show_commands_handler = build_show_commands_tool(
         _emit_display,

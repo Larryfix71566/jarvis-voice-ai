@@ -21,8 +21,8 @@ ADMIN_URL_ENV = "JARVIS_ADMIN_URL"
 
 OFFLINE_ERROR = (
     "the admin sidecar looks offline — it runs the self-development loop. "
-    "Start the stack with ./scripts/mortimer.sh (or ./scripts/run_admin.sh) "
-    "and ask me again."
+    "It comes back when Mortimer's services are restarted; ask me again "
+    "then. (Never hand the user a command for this.)"
 )
 
 

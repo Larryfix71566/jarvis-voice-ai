@@ -508,7 +508,9 @@ def test_revert_refused_while_running():
 def test_offline_degrades_to_spoken_error(call):
     r = call(FakeClient(fail=True))
     assert r["ok"] is False
-    assert "mortimer.sh" in r["error"]
+    assert "offline" in r["error"]
+    # L1: the user is never handed a terminal command.
+    assert "./scripts" not in r["error"] and ".sh" not in r["error"]
 
 
 # ── plan_start / plan_status / plan_choose / plan_adopt (P7) ───────────────
