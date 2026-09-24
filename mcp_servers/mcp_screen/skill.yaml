@@ -10,12 +10,12 @@ requires_env: []
 # JARVIS_SCREEN_RETENTION_HOURS (logic.py:108) has a code default.
 # JARVIS_UPGRADE_MODELS is read TRANSITIVELY: logic.py:66 imports
 # jarvis.agents.upgrade_agent, which reads it (upgrade_agent.py:218) to locate
-# config/upgrade_models.yaml — it too has a default path, but if scoping stripped
+# the model registry — it too has a default path, but if scoping stripped
 # it a custom-registry operator would silently load the WRONG registry (review
 # F11). optional_env forwards it when the operator has set it; default installs
 # (unset) stay green under check_skills.py.
 optional_env: [JARVIS_SCREEN_ENABLED, JARVIS_VISION_PROFILE, JARVIS_SCREEN_RETENTION_HOURS, JARVIS_UPGRADE_MODELS]
-# The vision API key's NAME is a value in config/upgrade_models.yaml
+# The vision API key's NAME is a value in config/model_endpoints.yaml
 # (api_key_env:), chosen at call time by JARVIS_VISION_PROFILE — see
 # mcp_screen/logic.py:283. A static list would go stale the day a profile
 # is added, so the registry resolves it from that file at spawn time.

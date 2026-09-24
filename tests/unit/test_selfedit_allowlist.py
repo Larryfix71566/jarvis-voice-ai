@@ -34,6 +34,11 @@ def allowlist() -> Allowlist:
     "mcp_servers/mcp_memory/logic.py",
     "config/agents.yaml",
     "config/mcp_servers.yaml",
+    # Model registry split (docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md
+    # D1/D5): the profile POOL is routine via config/** — the loop may add a
+    # model on an existing endpoint — because it cannot express a host or a
+    # key (D3, a load error). The endpoint map below stays human-only.
+    "config/model_profiles.yaml",
 ])
 def test_allowed_paths(allowlist: Allowlist, path: str) -> None:
     assert allowlist.is_allowed(path), path
@@ -72,8 +77,10 @@ def test_allowed_paths(allowlist: Allowlist, path: str) -> None:
     "Makefile",
     # still denied even though mcp_servers/config opened up (2026-08-21):
     # the agent's own brain, the enable gate for agent skills, and the
-    # allowlist itself remain human-only.
-    "config/upgrade_models.yaml",
+    # allowlist itself remain human-only. The brain's credential half is
+    # config/model_endpoints.yaml since the registry split (D5 — it replaced
+    # config/upgrade_models.yaml here, which no longer exists).
+    "config/model_endpoints.yaml",
     "config/skills.yaml",
     # no Swift gate exists, so a self-edit here would be unvalidated
     "macos/MortimerHost/Package.swift",

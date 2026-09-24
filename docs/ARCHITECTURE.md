@@ -98,6 +98,10 @@ No single project-wide model setting exists. `OPENAI_MODEL`/`OPENAI_BASE_URL`
   shadow calls reject a route that fails a stricter `data_policy`; enabled
   confidential/local-only policies also redact the run log.
 - `claude-haiku-4-5` is a voice-only built-in route, absent from the registry.
+- The registry is `config/model_profiles.yaml` (routine; each profile names an
+  `endpoint:`) joined with `config/model_endpoints.yaml` (deny; hosts, key
+  names, `supervisor:` planner pin) only by `load_model_registry`. A profile
+  carrying a host or key fails the load.
 - Claude/Codex subscription adapters are text-only (tool calls rejected);
   `jarvis/subscription.py` strips inherited API keys and endpoints before the
   CLI launches, so subscription traffic cannot become paid API traffic.
@@ -108,7 +112,7 @@ No single project-wide model setting exists. `OPENAI_MODEL`/`OPENAI_BASE_URL`
 | Workload | Source of selection | Current policy | Credential/endpoint behavior |
 | --- | --- | --- | --- |
 | Voice Supervisor/orchestrator | `OPENAI_MODEL`, `OPENAI_BASE_URL`, `jarvis/bot/pipeline.py` | Haiku dispatcher; delegates, never builds | Voice configuration and its provider key |
-| Scheduler, Librarian, Analyst, Systems | `config/agents.yaml` → `claude-sonnet-5` | Refuse on missing profile/key; no Supervisor fallback | `config/upgrade_models.yaml` profile route |
+| Scheduler, Librarian, Analyst, Systems | `config/agents.yaml` → `claude-sonnet-5` | Refuse on missing profile/key; no Supervisor fallback | Registry profile route |
 | Developer, App Builder | `config/agents.yaml` → `claude-opus` | Refuse on missing profile/key; build-grade model | Registry profile route |
 | Optional Codex subscription workload | explicit `codex-subscription` profile + `codex_subscription` route | Text-only until tools are validated; no API-key fallback | Authenticated Codex CLI subscription |
 | Planner/self-edit executor | `JARVIS_UPGRADE_PROFILE` / `JARVIS_APPBUILD_PROFILE`, registry default per plan | Profile and refusal/fallback recorded in the sidecar | Registry profile route |

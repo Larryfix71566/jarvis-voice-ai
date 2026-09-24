@@ -17,12 +17,16 @@ acceptance suite for the agent's brain):
 
 Planner model
 -------------
-Which model does the planning comes from the registry in
-``config/upgrade_models.yaml`` (override path via ``JARVIS_UPGRADE_MODELS``).
+Which model does the planning comes from the model registry:
+``config/model_profiles.yaml`` (the routine profile pool) joined with
+``config/model_endpoints.yaml`` (the human-only endpoint/credential map) by
+:func:`load_model_registry` — the one loader (override path via
+``JARVIS_UPGRADE_MODELS``; docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md).
 Selection order: an explicit per-session ``profile`` argument >
-``JARVIS_UPGRADE_PROFILE`` env > the registry's ``default`` key. Profiles are
-OpenAI-compatible endpoints; the API key comes from the profile's
-``api_key_env`` — keys live in the environment, never in config. A profile
+``JARVIS_UPGRADE_PROFILE`` env > the registry's ``default`` key, which
+``supervisor:`` pins in the endpoints file. Profiles are OpenAI-compatible
+endpoints; the API key comes from the endpoint's ``api_key_env`` — keys
+live in the environment, never in config. A profile
 with ``temperature: null`` OMITS the parameter entirely (DEVIATIONS.md D-003:
 kimi-k2.x rejects any value other than 1).
 
@@ -101,7 +105,9 @@ Jarvis interface by proposing code edits, under these NON-NEGOTIABLE rules:
 1. `main` changes only via a human merging a pull request on GitHub. You can
    only open PRs. You can never merge, force-push, or touch main.
 2. You may only read and edit files on the self-edit allowlist. Routine
-   (Tier A): UI sources under web/src and web/public, non-secret config,
+   (Tier A): UI sources under web/src and web/public, non-secret config
+   (including the model PROFILE pool, config/model_profiles.yaml: a profile
+   names an endpoint id and may never carry a base_url or key),
    jarvis/prompts.py, jarvis/skills, jarvis/services, mcp_servers, tests,
    docs. Core (Tier B): the rest of jarvis/ — the voice pipeline
    (jarvis/bot), the agents (jarvis/agents), memory, wake word, scripts —
@@ -110,7 +116,8 @@ Jarvis interface by proposing code edits, under these NON-NEGOTIABLE rules:
    decline a core goal because it is "not UI" — do it, carefully, in
    small self-contained edits. Human-only (Tier 0), decline that part:
    the self-edit machinery itself (jarvis/selfedit, jarvis/admin,
-   upgrade_agent.py), the allowlist and model registry, jarvis/db.py
+   upgrade_agent.py), the allowlist, the model ENDPOINTS file
+   (config/model_endpoints.yaml: hosts and keys), jarvis/db.py
    migrations, the vault and .env, CI, dependency manifests, and under
    macos/: Package.swift, Package.resolved, plists, entitlements,
    scripts/, GlassSpike/ and MortimerShell/. The Swift SOURCES of
@@ -231,7 +238,7 @@ def load_agent_config(path: str | Path | None = None, section: str | None = None
     top-level provider/model/base_url/temperature defaults — those stay
     self-edit's legacy fallback values either way; the registry profile
     resolution in UpgradeAgent.__init__ overrides them for both workflows
-    whenever config/upgrade_models.yaml has profiles, which it does. A
+    whenever the model registry has profiles, which it does. A
     missing section falls back to the top-level (self-edit) loop bounds,
     so an app_build section left unconfigured degrades gracefully rather
     than raising."""
@@ -637,7 +644,7 @@ class UpgradeAgent:
                 # null means: omit the parameter entirely (D-003)
                 self.cfg["temperature"] = prof["temperature"]
             # Phase 1b (effort control) -- optional per-profile
-            # output_config.effort override (upgrade_models.yaml); absent
+            # output_config.effort override (model_profiles.yaml); absent
             # means self.cfg.get("effort") stays None, and
             # extra_body_for() emits nothing, exactly like an agents.yaml
             # entry with no `effort:` field.

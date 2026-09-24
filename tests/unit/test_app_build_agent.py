@@ -179,7 +179,7 @@ def test_env_profile_fallback_is_appbuild_specific(
     monkeypatch.delenv("JARVIS_UPGRADE_PROFILE", raising=False)
     client = ScriptedClient([_msg(content="done")])
     # No registry_path given -> load_model_registry falls back to the
-    # default config/upgrade_models.yaml, which DOES have profiles in this
+    # default registry (config/model_profiles.yaml), which DOES have profiles in this
     # repo, so pass a path to a nonexistent registry to force legacy mode
     # and isolate this test from the real registry contents.
     agent = AppBuildAgent(

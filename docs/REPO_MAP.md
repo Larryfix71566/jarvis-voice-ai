@@ -23,7 +23,8 @@ Verify paths and the current branch before writing. Keep this map below the
   `mortimer.sh` (manual fallback `scripts/run_web.sh`).
 - `sandbox/` — disposable macOS VMs, guarded files, verification, PRs.
 - `config/` — routing/model YAML/JSON (agents, MCP servers, voices,
-  skills, self-edit allowlist, `upgrade_models.yaml` registry,
+  skills, self-edit allowlist, model registry = `model_endpoints.yaml`
+  (deny) + `model_profiles.yaml` (routine) + `generated/` catalogues,
   `model_access.yaml`). Check here first when a capability seems
   misrouted or over/under-permissioned.
 - `docs/` — `plans/` (+ `implemented/`), `reviews/`, `acceptance/`,

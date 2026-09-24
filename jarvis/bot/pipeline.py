@@ -467,7 +467,7 @@ class FramePusher:
 # Deepgram Flux keyterm boosting — proper nouns this vocabulary-heavy
 # console actually needs recognized. Static by design: deriving these
 # from the model registry at boot would couple STT config to
-# upgrade_models.yaml for marginal benefit. Observed failure this fixes:
+# the model registry for marginal benefit. Observed failure this fixes:
 # "Fable 5" -> "table five" -> "Clyde's frontier model" (2026-08-17).
 STT_KEYTERMS = [
     "Mortimer", "Jarvis", "Fable", "Claude", "Opus", "Kimi",

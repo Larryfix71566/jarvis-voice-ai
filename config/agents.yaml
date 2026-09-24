@@ -149,7 +149,7 @@ sub_agents:
     # model (Haiku) is a dispatcher, never a design/build model. The
     # developer is the one sub-agent that does real implementation work,
     # so it gets a build-grade model from the registry
-    # (config/upgrade_models.yaml). Change the profile name here to
+    # (config/model_profiles.yaml). Change the profile name here to
     # reassign; resolution failures fall back to the voice model with a
     # logged warning.
     # Larry 2026-08-19 — moved from kimi-k3 (direct Moonshot) to a

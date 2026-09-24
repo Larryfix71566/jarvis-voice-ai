@@ -18,8 +18,10 @@ not useful"):
 - ``deny`` — Tier 0, human-only. The precise definition: files whose
   corruption the loop CANNOT recover from because they ARE the loop — the
   self-edit service, the sidecar that runs it, the allowlist, the validation
-  gates (CI), the model registry it plans with, the vault/.env, dependency
-  manifests. A broken Tier-0 file cannot be repaired by the next self-edit.
+  gates (CI), the model endpoint/credential map it plans with
+  (config/model_endpoints.yaml — the profile pool beside it is routine since
+  the registry split, because it cannot name a host or a key), the
+  vault/.env, dependency manifests. A broken Tier-0 file cannot be repaired by the next self-edit.
 - ``core`` — Tier B, allowed with ceremony. The product core (jarvis/bot,
   jarvis/agents, …). A bad change here breaks voice — but it lives on a
   sandbox branch in an isolated worktree that Mortimer can never merge, so
