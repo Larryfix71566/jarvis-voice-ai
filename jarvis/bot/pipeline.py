@@ -173,6 +173,12 @@ class Runtime:
     # Capability generation shared by the pipeline's app-message handlers and
     # the inbound content transfer. Set by build_pipeline for this session.
     console_generation: str = ""
+    # Console readiness, inventory revision and acknowledgement futures.
+    # build_pipeline creates these; run_session's console handlers read the
+    # SAME objects through the runtime (they are not in its scope otherwise).
+    console_ready: dict = field(default_factory=lambda: {"value": False})
+    console_inventory_revision: dict = field(default_factory=lambda: {"value": 0})
+    console_waiters: dict = field(default_factory=dict)
     # Barge-in survival (Larry 2026-08-21: "me continuing to talk should
     # not kill existing work"): late-bound delivery hook for delegation
     # results whose voice turn was cancelled mid-flight. build_pipeline
@@ -467,12 +473,12 @@ def build_pipeline(
     pusher = pusher or FramePusher()
     console_generation = str(uuid.uuid4())
     runtime.console_generation = console_generation
-    console_ready = {"value": False}
-    console_inventory_revision = {"value": 0}
+    console_ready = runtime.console_ready
+    console_inventory_revision = runtime.console_inventory_revision
     # One bounded acknowledgement future per request. The console tool waits
     # for the native client to apply the request, so voice cannot report
     # success merely because a frame was queued.
-    console_waiters: dict[str, asyncio.Future[dict[str, Any]]] = {}
+    console_waiters: dict[str, asyncio.Future[dict[str, Any]]] = runtime.console_waiters
 
     async def await_console_result(request_id: str) -> dict[str, Any] | None:
         loop = asyncio.get_running_loop()
@@ -1131,6 +1137,9 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
         # every connect raised NameError before the greeting (since 88b206f).
         # Same sources build_pipeline uses; nothing else changes.
         console_generation = runtime.console_generation
+        console_ready = runtime.console_ready
+        console_inventory_revision = runtime.console_inventory_revision
+        console_waiters = runtime.console_waiters
         command_console_enabled = os.environ.get(
             "JARVIS_COMMAND_CONSOLE_ENABLED", "false").strip().lower() in ("1", "true", "yes")
         async def inject_silent(text: str) -> None:
