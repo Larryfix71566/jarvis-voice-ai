@@ -53,6 +53,14 @@ jobs:
       - name: Unit tests
         run: pytest tests/unit -q
 
+      # Gate 3a: integration tests (added 2026-09-24). #84 merged green while
+      # breaking nine tests in tests/integration/test_bot_wiring.py, because
+      # this workflow ran tests/unit only; #85 fixed them. Tests marked `live`
+      # still skip here (tests/conftest.py skips them unless RUN_LIVE=1, and
+      # CI has no keys).
+      - name: Integration tests
+        run: pytest tests/integration -q
+
       # Gate 3b: sub-agent quality evals (plan Phase 2b).
       - name: Sub-agent evals
         run: pytest tests/evals/sub_agent_evals.py -q
