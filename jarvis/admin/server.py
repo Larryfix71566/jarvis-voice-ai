@@ -2111,6 +2111,17 @@ def status_logs(source: str = "", query: str = "", since_minutes: int = 60,
         source, query, since_minutes=since_minutes, limit=limit))
 
 
+@app.get("/api/status/catalog")
+def status_catalog(provider: str = "all", force: bool = False) -> dict:
+    """What each configured provider offers right now (status spec T4.1):
+    live `/models` reads with the vault's keys, cached an hour unless
+    `force`. Leaves the machine, so the voice tool refuses it on a
+    protected turn (I3)."""
+    from jarvis.status import catalog as _c
+
+    return _status_call("catalog", lambda: _c.catalog_status(provider, force=force))
+
+
 @app.post("/api/clipboard/clear")
 def clipboard_clear() -> dict:
     """MORTIMER_HANDOFF_LOOP_PLAN.md H4 — wipe the clipboard and arm a

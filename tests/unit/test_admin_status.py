@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 import jarvis.admin.server as srv
 from jarvis import ambient_weather, keyhealth
 from jarvis.status import build as B
+from jarvis.status import catalog as C
 from jarvis.status import location as Loc
 from jarvis.status import logs as Lg
 from jarvis.status import models as M
@@ -26,6 +27,7 @@ ROUTES = {
     "/api/status/build": (B, "app_build_status"),
     "/api/status/location": (Loc, "current_location"),
     "/api/status/logs?source=bot&query=x&since_minutes=5&limit=3": (Lg, "log_search"),
+    "/api/status/catalog?provider=all&force=false": (C, "catalog_status"),
 }
 
 
@@ -158,5 +160,41 @@ def test_status_routes_are_sync_defs():
     import inspect
 
     for fn in (srv.status_models, srv.status_services, srv.status_overview,
-               srv.status_build, srv.status_location, srv.status_logs):
+               srv.status_build, srv.status_location, srv.status_logs,
+               srv.status_catalog):
         assert not inspect.iscoroutinefunction(fn)
+
+
+def test_catalog_route_passes_parameters(client, monkeypatch):
+    seen = []
+
+    def fake(provider, *, force):
+        seen.append((provider, force))
+        return {"ok": True, "results": []}
+
+    monkeypatch.setattr(C, "catalog_status", fake)
+    assert client.get("/api/status/catalog").json() == {"ok": True, "results": []}
+    client.get("/api/status/catalog?provider=openrouter&force=true")
+    assert seen == [("all", False), ("openrouter", True)]
+
+
+def test_catalog_route_has_no_key_material(client, monkeypatch):
+    """Real catalog_status with a fake transport that echoes the key back."""
+    C.clear_cache_for_tests()
+
+    def echo(url, headers, timeout):
+        raise OSError(f"refused: {headers}")
+
+    monkeypatch.setattr(C, "_default_http", echo)
+    from jarvis import saygm
+
+    monkeypatch.setenv("SAYGM_API_KEY", KEY)
+    monkeypatch.setattr(saygm, "fetch_catalog", lambda **kw: (_ for _ in ()).throw(
+        saygm.SayGMError(f"refused with {kw.get('api_key')}")))
+    res = client.get("/api/status/catalog?force=true")
+    _assert_no_key(res)
+    body = res.json()
+    assert body["ok"] is True
+    assert {r["provider"] for r in body["results"]} >= {"anthropic", "openrouter", "moonshot"}
+    assert all(not r["ok"] for r in body["results"])
+    C.clear_cache_for_tests()
