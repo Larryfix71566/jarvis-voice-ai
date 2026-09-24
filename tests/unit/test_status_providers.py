@@ -30,6 +30,31 @@ def test_real_config_has_no_coverage_gaps():
         assert r.adapter in ADAPTERS
 
 
+def test_real_config_is_the_split_registry_and_has_no_coverage_gaps(monkeypatch):
+    """Spec P5 A5: the L3 tripwire holds against the JOINED view of the
+    split registry (model_endpoints.yaml + model_profiles.yaml), read by the
+    default loader path — not a legacy file or an env override — and every
+    profile lands on the provider its endpoint names."""
+    from jarvis.agents import upgrade_agent as ua
+
+    monkeypatch.delenv(ua.REGISTRY_PATH_ENV, raising=False)
+    layers = ua.load_registry_layers()
+    assert layers["shape"] == "split"
+    assert ua.registry_source().name == ua.PROFILES_FILENAME
+    refs = discover_providers(env={})
+    assert coverage_gaps(refs) == []
+    served = {name: r for r in refs for name in r.profiles}
+    assert set(served) == {p["name"] for p in layers["profiles"]}
+    for prof in layers["profiles"]:
+        endpoint = layers["endpoints"][prof["endpoint"]]
+        ref = served[prof["name"]]
+        if endpoint.get("base_url"):
+            assert ref.base_url == endpoint["base_url"], prof["name"]
+            assert ref.credential_env == endpoint["api_key_env"], prof["name"]
+        else:  # A1: the credential-less subscription endpoint
+            assert (ref.id, ref.adapter) == ("codex-subscription", "subscription_probe")
+
+
 def test_unknown_provider_is_reported_as_gap():
     registry = {"default": "x", "profiles": {
         "newco": {"name": "newco", "base_url": "https://api.newco.ai/v1",
