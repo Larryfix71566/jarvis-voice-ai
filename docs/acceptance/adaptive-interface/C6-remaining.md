@@ -3,7 +3,7 @@
 **Status index, reconciled 2026-09-17 against `e6b34cf`:** this file is a
 chronological investigation log, including resolved items and superseded
 proposals. Use `RELEASE_READINESS.md` for release gates. PR #76 is merged;
-the release consolidation remains under review in PR #80. This does not
+the release consolidation merged as PR #80 (`88b206f`, 2026-09-22). This does not
 prove that the running services have loaded the release fixes.
 
 **Reconciled 2026-09-22 against main `88b206f`.** PR #80 is no longer under
@@ -379,7 +379,33 @@ the supervisor pin lives (`model_endpoints.yaml` vs the already-denied
 Tier 0. Both shape the implementation, so they want answering before anyone
 starts it.
 
-## 10. The wave lost its amplitude and width — CLOSED (both), 2026-09-17
+## 10. The wave lost its amplitude and width — ARCHIVED 2026-09-23 (replaced by the atom display)
+
+**Archived 2026-09-23 — the wave is no longer drawn.** Larry, 2026-09-23: *"the
+wave has been replaced by a new visual representation of the AI so that can be
+removed or archived in the plan."* Checked against `main` at `88b206f` (no Swift
+source changed in `ce797a3`): `WaveEngine.draw` calls `drawAtom` and returns
+whenever a measured presentation is supplied, which is layouts 1 and 2. The
+wave is drawn only on the legacy layout 0, with its original simulated
+envelope, not the measured wave this item tuned. What this item produced now
+splits two ways:
+
+- **Still live — it feeds the atom (UI2-21).** `AudioPresentationTuning.presentationLevel`,
+  its four per-channel dB windows and their sliders under `Debug ▸ Wave level
+  windows`, the crossed-window fallback, and the 0…1 clamp. `drawAtom` reads
+  both channels through it. `PresentationLevelMappingTests`, including the
+  shared-window relation, still test the atom's input, and
+  `testUnavailableSpeechRendersIdenticallyAcrossTime` now guards the atom
+  staying still when nothing arrives.
+- **Unreachable on every layout.** The 10b width slider (`waveWidthFraction` is
+  read only on the measured-wave path, after the atom's `return`), the
+  `staticTrace` easing freeze from `2bc51dc` (reached only when there is no
+  presentation, where `staticTrace` is always false), and the wave's depth
+  layers. Removing them, and renaming the Debug window now that it tunes the
+  atom, is a code change with its own build and test run; it is not part of
+  this archive.
+
+The record below is kept as history.
 
 **What it is.** Larry, 2026-09-16: "the sine wave for voice interaction lost
 its amplitude and width from the previous version, I want that back."
