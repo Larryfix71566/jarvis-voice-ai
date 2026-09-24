@@ -1,20 +1,26 @@
-# Upgrade Agent model registry (the planner brain of the self-development loop).
+# Model PROFILES — the pool Mortimer's agents, planner and council draw on.
 #
-# Selection order when a session starts:
-#   1. explicit per-session choice (Edit Mode dropdown, or a spoken "use Claude Opus")
+# ROUTINE (Tier A, via `config/**` in config/self_edit_allowlist.json): the
+# self-edit loop may add, retire or retune a profile here, and a human still
+# merges the PR. What this file CANNOT say is where a request goes or which
+# key it carries: each profile names an `endpoint:` id from
+# config/model_endpoints.yaml (human-only), and the one loader,
+# jarvis.agents.upgrade_agent.load_model_registry, joins provider/base_url/
+# api_key_env in from there. A profile declaring base_url, api_key_env,
+# provider, routes or any URL is a LOAD ERROR (split plan D3), as is an
+# unknown endpoint id. Upstream facts (context window, prices, deprecation)
+# are written daily into config/generated/model_catalog.<endpoint>.json by
+# the sync job and joined by `identity`; never hand-edit those.
+#
+# Selection order when a planner session starts:
+#   1. explicit per-session choice (Edit panel, or a spoken "use Claude Opus")
 #   2. JARVIS_UPGRADE_PROFILE environment variable
-#   3. the `default` below
+#   3. the `default` below — pinned by `supervisor:` in
+#      config/model_endpoints.yaml; changing it is a human PR there.
 #
-# Each profile points at an OpenAI-compatible Chat Completions endpoint with
-# tool calling. The API key comes from the profile's api_key_env — keys live in
-# .env, never in this file.
-#
-# temperature: set to null to OMIT the parameter entirely. Moonshot's kimi-k2.x
-# family rejects any temperature other than 1 (DEVIATIONS.md D-003), so all
-# Moonshot profiles omit it.
-#
-# This file is NOT on the self-edit allowlist: the agent cannot re-point its
-# own brain. Changes land via the normal human PR process.
+# temperature: set to null to OMIT the parameter entirely. Moonshot's
+# kimi-k2.x family rejects any temperature other than 1 (DEVIATIONS.md
+# D-003), so all Moonshot profiles omit it.
 #
 # vision: true — MORTIMER_SHELL_FIX_AND_SCREEN_VISION_PLAN.md V2. Marks a
 # profile whose model can read IMAGES, making it eligible to answer
@@ -32,10 +38,11 @@
 # identity: REQUIRED, and it is not decorative (Larry 2026-08-19). It is the
 # canonical vendor/model string — the thing that identifies the MODEL, as
 # distinct from `name` (this profile) or `model` (the string this endpoint
-# wants). Two profiles may legitimately differ in name, base_url, key and
-# model string while being the same underlying model: `openai/gpt-5.1`
-# reached through OpenRouter and a direct OpenAI `gpt-5.1` are one model
-# wearing two profile names.
+# wants). It is also the join key into the generated catalogue. Two
+# profiles may legitimately differ in name, endpoint and model string while
+# being the same underlying model: `openai/gpt-5.1` reached through
+# OpenRouter and a direct OpenAI `gpt-5.1` are one model wearing two
+# profile names.
 #
 # That is a correctness problem, not tidiness. The council's founding rule
 # is that a model never scores its own proposal, and resolve_members'
@@ -69,11 +76,9 @@ profiles:
 
   - name: kimi-k3
     label: "Kimi K3 — flagship, 1M context, always-on thinking"
-    provider: moonshot
+    endpoint: moonshot
     model: kimi-k3
     identity: moonshotai/kimi-k3
-    base_url: https://api.moonshot.ai/v1
-    api_key_env: MOONSHOT_API_KEY
     temperature: null
     tier: mid
     # 2026-09-01 — K3 is always-on thinking: probed 39 completion tokens to
@@ -89,21 +94,17 @@ profiles:
 
   - name: kimi-k2
     label: "Kimi K2.7 Code — coding-tuned K2 family, 256K context"
-    provider: moonshot
+    endpoint: moonshot
     model: kimi-k2.7-code
     identity: moonshotai/kimi-k2.7-code
-    base_url: https://api.moonshot.ai/v1
-    api_key_env: MOONSHOT_API_KEY
     temperature: null
     tier: economy
 
   - name: claude-opus
     label: "Claude Opus 5 — Anthropic Opus tier, 1M context"
-    provider: anthropic
+    endpoint: anthropic
     model: claude-opus-5
     identity: anthropic/claude-opus-5
-    base_url: https://api.anthropic.com/v1/
-    api_key_env: ANTHROPIC_API_KEY
     # temperature: null (D-003) — claude-opus-5 REJECTS the parameter
     # outright: "`temperature` is deprecated for this model" (HTTP 400,
     # measured 2026-08-22 via scripts/probe_planner.py). This was 0.2, so
@@ -116,11 +117,9 @@ profiles:
 
   - name: claude-fable-5
     label: "Claude Fable 5 — Anthropic Mythos-class, above Opus"
-    provider: anthropic
+    endpoint: anthropic
     model: claude-fable-5
     identity: anthropic/claude-fable-5
-    base_url: https://api.anthropic.com/v1/
-    api_key_env: ANTHROPIC_API_KEY
     # Same D-003 fix as claude-opus above: a current-generation Anthropic
     # model rejects `temperature` outright. Changed together because they
     # share the failure mode, though only claude-opus was measured 400ing
@@ -131,11 +130,9 @@ profiles:
 
   - name: claude-sonnet-5
     label: "Claude Sonnet 5 — direct Anthropic; the agent floor / executor tier"
-    provider: anthropic
+    endpoint: anthropic
     model: claude-sonnet-5
     identity: anthropic/claude-sonnet-5
-    base_url: https://api.anthropic.com/v1/
-    api_key_env: ANTHROPIC_API_KEY
     # D-003, same family as claude-opus/claude-fable-5 above: omit
     # temperature rather than risk the 400.
     temperature: null
@@ -151,7 +148,7 @@ profiles:
 
   - name: codex-subscription
     label: "Codex subscription default — authenticated ChatGPT subscription runtime"
-    provider: openai
+    endpoint: codex-subscription
     model: gpt-6-astra
     identity: openai/gpt-6-astra
     # No API credential: this profile is reachable only through the explicit
@@ -182,51 +179,41 @@ profiles:
 
   - name: or-gpt-5-mini
     label: "GPT-5 mini (OpenRouter) — cheap OpenAI-family proposer, 400K"
-    provider: openrouter
+    endpoint: openrouter
     model: openai/gpt-5-mini
     identity: openai/gpt-5-mini
-    base_url: https://openrouter.ai/api/v1
-    api_key_env: OPENROUTER_API_KEY
     temperature: null
     tier: economy
 
   - name: or-gemini-flash
     label: "Gemini 3.7 Flash (OpenRouter) — Google-family proposer, 1M"
-    provider: openrouter
+    endpoint: openrouter
     model: google/gemini-3.7-flash
     identity: google/gemini-3.7-flash
-    base_url: https://openrouter.ai/api/v1
-    api_key_env: OPENROUTER_API_KEY
     temperature: null
     tier: economy
 
   - name: or-deepseek
     label: "DeepSeek V3.2 (OpenRouter) — independent lineage, 163K"
-    provider: openrouter
+    endpoint: openrouter
     model: deepseek/deepseek-v3.2
     identity: deepseek/deepseek-v3.2
-    base_url: https://openrouter.ai/api/v1
-    api_key_env: OPENROUTER_API_KEY
     temperature: null
     tier: economy
 
   - name: or-gpt-5.1
     label: "GPT-5.1 (OpenRouter) — mid-tier judge, 400K"
-    provider: openrouter
+    endpoint: openrouter
     model: openai/gpt-5.1
     identity: openai/gpt-5.1
-    base_url: https://openrouter.ai/api/v1
-    api_key_env: OPENROUTER_API_KEY
     temperature: null
     tier: mid
 
   - name: or-grok-4.3
     label: "Grok 4.3 (OpenRouter) — mid-tier judge, separate lineage, 1M"
-    provider: openrouter
+    endpoint: openrouter
     model: x-ai/grok-4.3
     identity: x-ai/grok-4.3
-    base_url: https://openrouter.ai/api/v1
-    api_key_env: OPENROUTER_API_KEY
     temperature: null
     tier: mid
 
@@ -238,30 +225,24 @@ profiles:
   # family also keeps tier-2's fan-out from doubling up on OpenAI.
   - name: or-codex-max
     label: "GPT-5.1 Codex Max (OpenRouter) — coding-tuned frontier, 400K"
-    provider: openrouter
+    endpoint: openrouter
     model: openai/gpt-5.1-codex-max
     identity: openai/gpt-5.1-codex-max
-    base_url: https://openrouter.ai/api/v1
-    api_key_env: OPENROUTER_API_KEY
     temperature: null
     tier: frontier
 
   - name: or-grok-4.6
     label: "Grok 4.6 (OpenRouter) — frontier, 500K"
-    provider: openrouter
+    endpoint: openrouter
     model: x-ai/grok-4.6
     identity: x-ai/grok-4.6
-    base_url: https://openrouter.ai/api/v1
-    api_key_env: OPENROUTER_API_KEY
     temperature: null
     tier: frontier
 
   - name: or-deepseek-v4-pro
     label: "DeepSeek V4 Pro (OpenRouter) — frontier, 1M"
-    provider: openrouter
+    endpoint: openrouter
     model: deepseek/deepseek-v4-pro
     identity: deepseek/deepseek-v4-pro
-    base_url: https://openrouter.ai/api/v1
-    api_key_env: OPENROUTER_API_KEY
     temperature: null
     tier: frontier

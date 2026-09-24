@@ -15,10 +15,22 @@ The frozen inputs live in ``tests/unit/fixtures/model_registry/``:
 ``upgrade_models.pre_split.yaml`` is the last single-file registry verbatim,
 ``registry.pre_split.json`` and ``available_models.pre_split.json`` are what
 the pre-split code returned for it.
+
+Those two real-config comparisons pin the MIGRATION: they hold while
+``config/model_endpoints.yaml`` and ``config/model_profiles.yaml`` are
+byte-for-byte what the migration commit wrote (``MIGRATED_SHA256``). The
+first routine pool change (split plan §6 step 7 adds a profile) is by
+definition no longer the pre-split registry, so from then on they skip,
+saying why, and the permanent proofs are the two that do not depend on the
+pool's contents: the split script re-run over the frozen pre-split file is
+lossless (D6), and the committed files concatenated back into one file
+load identically (§9 rollback).
 """
 
 from __future__ import annotations
 
+import hashlib
+import importlib.util
 import json
 from pathlib import Path
 
@@ -31,6 +43,12 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures" / "model_registry"
 PRE_SPLIT_YAML = FIXTURES / "upgrade_models.pre_split.yaml"
 PRE_SPLIT_REGISTRY = FIXTURES / "registry.pre_split.json"
 PRE_SPLIT_AVAILABLE = FIXTURES / "available_models.pre_split.json"
+
+# sha256 of the two split files exactly as the migration wrote them.
+MIGRATED_SHA256 = {
+    "model_endpoints.yaml": "11ec8ecd439ef594ef6f74de629264350f9bc9b6709b0caa6a2bbcb042a4e7a9",
+    "model_profiles.yaml": "fc74fc6813adc8cb9d41f42d7a0b4d1818354c3a5ea81d84dbb372acd946acbf",
+}
 
 # The key-presence pattern the snapshot was taken with. `key_present` is
 # part of the console contract, so it is pinned too, not stripped.
@@ -51,13 +69,33 @@ def _pre_split_registry() -> dict:
     return json.loads(PRE_SPLIT_REGISTRY.read_text(encoding="utf-8"))
 
 
-def test_available_models_is_byte_identical(snapshot_env):
+@pytest.fixture
+def as_migrated():
+    """Skip (never pass vacuously) once the pool has legitimately changed."""
+    changed = [name for name, digest in MIGRATED_SHA256.items()
+               if hashlib.sha256((ROOT / "config" / name).read_bytes()).hexdigest() != digest]
+    if changed:
+        pytest.skip(f"{', '.join(changed)} changed since the migration commit, so the "
+                    "registry is no longer the pre-split one; D6 is carried by "
+                    "test_split_script_is_lossless_on_the_pre_split_registry and "
+                    "test_concatenated_rollback_loads_identically")
+
+
+def _split_script():
+    spec = importlib.util.spec_from_file_location(
+        "split_model_registry_under_test", ROOT / "scripts" / "split_model_registry.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_available_models_is_byte_identical(snapshot_env, as_migrated):
     """§7: the console contract. Serialised exactly as the snapshot was."""
     rendered = json.dumps(ua.available_models(), indent=2) + "\n"
     assert rendered == PRE_SPLIT_AVAILABLE.read_text(encoding="utf-8")
 
 
-def test_joined_registry_equals_the_pre_split_registry(snapshot_env):
+def test_joined_registry_equals_the_pre_split_registry(snapshot_env, as_migrated):
     """D6, on the real config: profile-for-profile, key-for-key, same order.
 
     Includes ``codex-subscription``, which must come back with NO
@@ -79,6 +117,52 @@ def test_the_frozen_pre_split_file_still_loads_to_the_snapshot(snapshot_env):
     single-file registry, loaded through the same loader, is still exactly
     what it was."""
     assert ua.load_model_registry(PRE_SPLIT_YAML) == _pre_split_registry()
+
+
+def test_split_script_is_lossless_on_the_pre_split_registry(snapshot_env, tmp_path):
+    """D6, permanently: the one-shot script, run over the frozen pre-split
+    file, renders a pair whose join equals the pre-split registry exactly —
+    every profile, every key, same order, codex-subscription with no
+    credential keys."""
+    split = _split_script()
+    endpoints_text, profiles_text = split.render(PRE_SPLIT_YAML)
+    pool = _write_split(tmp_path / "config", endpoints_text, profiles_text)
+    joined = ua.load_model_registry(pool)
+    expected = _pre_split_registry()
+    assert list(joined["profiles"]) == list(expected["profiles"])
+    assert joined == expected
+    codex = joined["profiles"]["codex-subscription"]
+    assert "base_url" not in codex and "api_key_env" not in codex
+    assert ua.available_models(pool) == json.loads(
+        PRE_SPLIT_AVAILABLE.read_text(encoding="utf-8"))
+
+
+def test_committed_split_files_are_what_the_script_renders(as_migrated):
+    """The committed pair is the script's output, not a hand edit."""
+    endpoints_text, profiles_text = _split_script().render(PRE_SPLIT_YAML)
+    assert (ROOT / "config" / ua.ENDPOINTS_FILENAME).read_text(encoding="utf-8") == endpoints_text
+    assert (ROOT / "config" / ua.PROFILES_FILENAME).read_text(encoding="utf-8") == profiles_text
+
+
+def test_concatenated_rollback_loads_identically(snapshot_env, tmp_path):
+    """§9: "concatenate the two files back into config/upgrade_models.yaml;
+    the loader accepts that shape throughout". Done here with the REAL
+    committed files, so it keeps holding as the pool changes."""
+    config = ROOT / "config"
+    combined = tmp_path / ua.LEGACY_REGISTRY_FILENAME
+    combined.write_text(
+        (config / ua.ENDPOINTS_FILENAME).read_text(encoding="utf-8") + "\n"
+        + (config / ua.PROFILES_FILENAME).read_text(encoding="utf-8"),
+        encoding="utf-8")
+    rolled_back = ua.load_model_registry(config_dir=tmp_path)
+    current = ua.load_model_registry()
+    assert list(rolled_back["profiles"]) == list(current["profiles"])
+    assert rolled_back == current
+
+
+def test_the_legacy_single_file_is_gone():
+    """Step 4 deletes it; its presence beside the split pair is refused."""
+    assert not (ROOT / "config" / ua.LEGACY_REGISTRY_FILENAME).exists()
 
 
 # --------------------------------------------------------------------------
