@@ -18,7 +18,6 @@ final class PresentationLevelMappingTests: XCTestCase {
     private static let keys = [
         AudioPresentationTuning.inputFloorKey, AudioPresentationTuning.inputCeilingKey,
         AudioPresentationTuning.outputFloorKey, AudioPresentationTuning.outputCeilingKey,
-        AudioPresentationTuning.waveWidthKey,
     ]
     private var saved: [String: Any?] = [:]
 
@@ -61,21 +60,6 @@ final class PresentationLevelMappingTests: XCTestCase {
                 XCTAssertEqual(level(0, isInput: isInput), 0)
             }
         }
-    }
-
-    /// Item 10b. The width slider reads back exactly, clamps a stray
-    /// `defaults write`, and never lets a non-finite value reach the
-    /// window's division.
-    func testTheWidthFractionIsStoredClampedAndDefaulted() {
-        XCTAssertEqual(AudioPresentationTuning.waveWidthFraction, 0.11, "the constant the draw used before")
-        UserDefaults.standard.set(0.25, forKey: AudioPresentationTuning.waveWidthKey)
-        XCTAssertEqual(AudioPresentationTuning.waveWidthFraction, 0.25)
-        UserDefaults.standard.set(0.0, forKey: AudioPresentationTuning.waveWidthKey)
-        XCTAssertEqual(AudioPresentationTuning.waveWidthFraction, 0.04, "a zero-width lobe would divide by zero")
-        UserDefaults.standard.set(3.0, forKey: AudioPresentationTuning.waveWidthKey)
-        XCTAssertEqual(AudioPresentationTuning.waveWidthFraction, 0.45)
-        UserDefaults.standard.set(Double.nan, forKey: AudioPresentationTuning.waveWidthKey)
-        XCTAssertEqual(AudioPresentationTuning.waveWidthFraction, 0.11)
     }
 
     func testAStoredWindowOverridesTheMeasuredDefault() {
@@ -161,24 +145,6 @@ final class PresentationLevelMappingTests: XCTestCase {
         XCTAssertGreaterThan(AudioPresentationTuning.measuredInputGain,
                              AudioPresentationTuning.measuredOutputGain,
                              "the quieter input channel needs its own modest presentation lift")
-    }
-
-    func testMeasuredMortimerRibbonHasMoreDepthThanUserAndNoDepthWithoutAudio() {
-        let user = WaveEngine.ribbonDepthEnergy(level: 0.32, transient: 0,
-                                                activity: .user)
-        let assistant = WaveEngine.ribbonDepthEnergy(level: 0.32, transient: 0,
-                                                     activity: .assistant)
-        let attack = WaveEngine.ribbonDepthEnergy(level: 0.32, transient: 0.25,
-                                                  activity: .assistant)
-        let unavailable = WaveEngine.ribbonDepthEnergy(level: 0, transient: 0,
-                                                       activity: .assistant)
-
-        XCTAssertGreaterThan(assistant, user,
-                             "Mortimer's measured ribbon should read as a deeper rear layer")
-        XCTAssertGreaterThan(attack, assistant,
-                             "a measured speaking attack should push the ribbon forward")
-        XCTAssertEqual(unavailable, 0,
-                       "missing or silent output must not create synthetic depth")
     }
 }
 import AppKit

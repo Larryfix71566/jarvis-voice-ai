@@ -146,7 +146,7 @@ enum AudioPresentationTuning {
     // (input median -58.4 dBFS, playout -18.6). One shared window leaves
     // the playout trace pinned near its ceiling with no motion left.
     // Measured 2026-09-17T00:06Z, P2-latency.json.
-    // Tunable from Debug ▸ Wave level windows, because which window reads
+    // Tunable from Debug ▸ Voice level windows, because which window reads
     // best is a perceptual judgement and not something the measurement can
     // settle on its own. The measured values below are the fallbacks; a
     // slider that has never been touched reads exactly them.
@@ -171,17 +171,6 @@ enum AudioPresentationTuning {
     /// Compatibility name for callers that refer to the output calibration.
     static let measuredVoiceGain: Double = measuredOutputGain
 
-    // MARK: - Depth-ribbon presentation (2026-09-18)
-    //
-    // These values change geometry and light only. They never create an
-    // audio level. The ribbon's depth energy is derived from the measured
-    // envelope and its positive attack, so a missing level still renders the
-    // same honest static trace as before.
-    static let depthSpanFraction: Double = 0.12
-    static let depthLevelContribution: Double = 0.80
-    static let depthTransientContribution: Double = 1.15
-    static let assistantDepthScale: Double = 1.25
-
     /// A stored override, or the measured default. Rejects a non-finite or
     /// inverted value rather than dividing by zero in `presentationLevel`:
     /// `defaults write` is a supported way in, so the value cannot be
@@ -196,22 +185,6 @@ enum AudioPresentationTuning {
     static var inputLevelCeilingDb: Double { storedDb(inputCeilingKey, default: inputCeilingDefault) }
     static var outputLevelFloorDb: Double { storedDb(outputFloorKey, default: outputFloorDefault) }
     static var outputLevelCeilingDb: Double { storedDb(outputCeilingKey, default: outputCeilingDefault) }
-
-    // Item 10b (2026-09-17) — the lobe's half-width as a fraction of the
-    // frame: the 0.11 in VoiceWaveView's super-Gaussian window,
-    // exp(-((x - cx) / (fraction * w))^4). Tunable for the same reason the
-    // dB windows are. The clamp keeps a `defaults write` from producing a
-    // zero-width lobe (division by zero in the window) or one wider than
-    // the frame can show.
-    static let waveWidthKey = "mortimer.wave.widthFraction"
-    static let waveWidthDefault: Double = 0.11
-    static let waveWidthRange: ClosedRange<Double> = 0.04 ... 0.45
-
-    static var waveWidthFraction: Double {
-        guard let raw = UserDefaults.standard.object(forKey: waveWidthKey) as? Double,
-              raw.isFinite else { return waveWidthDefault }
-        return min(waveWidthRange.upperBound, max(waveWidthRange.lowerBound, raw))
-    }
 
     /// Linear RMS (0…1 full scale) to a 0…1 presentation level, through the
     /// channel's dB window. `nil` in, `nil` out: an absent level is not a

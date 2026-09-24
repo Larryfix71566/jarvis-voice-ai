@@ -391,8 +391,9 @@ envelope, not the measured wave this item tuned. What this item produced now
 splits two ways:
 
 - **Still live — it feeds the atom (UI2-21).** `AudioPresentationTuning.presentationLevel`,
-  its four per-channel dB windows and their sliders under `Debug ▸ Wave level
-  windows`, the crossed-window fallback, and the 0…1 clamp. `drawAtom` reads
+  its four per-channel dB windows and their sliders under `Debug ▸ Voice level
+  windows` (named `Wave level windows` until 2026-09-24), the crossed-window
+  fallback, and the 0…1 clamp. `drawAtom` reads
   both channels through it. `PresentationLevelMappingTests`, including the
   shared-window relation, still test the atom's input, and
   `testUnavailableSpeechRendersIdenticallyAcrossTime` now guards the atom
@@ -404,6 +405,20 @@ splits two ways:
   layers. Removing them, and renaming the Debug window now that it tunes the
   atom, is a code change with its own build and test run; it is not part of
   this archive.
+- **Removed 2026-09-24.** All three are deleted, with the two tests that
+  covered only them (`testTheWidthFractionIsStoredClampedAndDefaulted`,
+  `testMeasuredMortimerRibbonHasMoreDepthThanUserAndNoDepthWithoutAudio`).
+  The bot's `wave_tuning_set` no longer accepts `width`; its test now sets
+  `input_floor` and checks `width` is refused. The Debug window is renamed
+  `Voice level windows`; its id, the action names and the stored `mortimer.wave.*`
+  keys are unchanged, so tuned values survive. Before commit, the same fixed
+  sequence of frames (the layout-0 wave through every state, boot ramp, wake
+  flash, stage move and suspend, plus the atom) was rendered on `main` twice
+  and on the change once. `main` does not render byte-identically to itself
+  (anti-aliasing noise of a level or two out of 255), so the gate was that no
+  frame of the change differs from either `main` run by more than the two
+  `main` runs differ from each other. It passed; the measured numbers are in
+  the PR.
 
 The record below is kept as history.
 

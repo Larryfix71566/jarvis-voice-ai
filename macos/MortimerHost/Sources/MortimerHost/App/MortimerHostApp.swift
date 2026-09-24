@@ -228,8 +228,9 @@ struct MortimerHostApp: App {
                 .environmentObject(client)
         }
 
-        // Item 10: the wave's dB windows, dragged while talking.
-        Window("Wave Levels", id: "wave-tuning") {
+        // Item 10: the voice-level dB windows that feed the atom, dragged
+        // while talking. The id keeps its old name: wave_tuning_open uses it.
+        Window("Voice Levels", id: "wave-tuning") {
             WaveTuningView()
         }
         .windowResizability(.contentSize)
@@ -263,7 +264,7 @@ struct MortimerHostApp: App {
                 Button("Show message log") {
                     windowActions.open("debug-log")
                 }
-                Button("Wave level windows") {
+                Button("Voice level windows") {
                     windowActions.open("wave-tuning")
                 }
                 Divider()
