@@ -35,6 +35,7 @@ EXPECTED_TOOLS = {
     "mcp_servers.mcp_web.server": {
         "web_search", "get_weather", "get_weather_radar",
         "research_compare_start", "research_status", "research_save",
+        "sports_scores",  # status spec P6 (2026-09-23)
     },
     "mcp_servers.mcp_system.server": {"get_system_status", "get_top_processes"},
     "mcp_servers.mcp_repo.server": {

@@ -38,6 +38,12 @@ def get_weather_radar(city: str) -> dict:
 
 
 @mcp.tool()
+def sports_scores(league: str, date: str = "") -> dict:
+    """Game scores and schedule for one league on one day, from a structured source. LEAGUE: "nfl" or "mlb" (any other league returns an error — then search the web). DATE: YYYY-MM-DD in the user's timezone; empty means today. Each game has away/home, scores (null until played), status (scheduled, in_progress, final, or the source's own words) and start_local."""
+    return logic.sports_scores(league, date)
+
+
+@mcp.tool()
 def research_compare_start(urls: list, focus: str = "", confirm: bool = False) -> dict:
     """Start a deep comparison of TWO websites' content (not a quick search) — crawls each site and writes a comparison review. Two-phase: confirm=false previews the cost and asks; only after the user explicitly agrees, call again with confirm=true. FOCUS optionally steers what the comparison is about (e.g. "pricing and support"). Runs in the background for a few minutes — use research_status for progress."""
     return logic.research_compare_start(_get_admin_client(), urls, focus, confirm)
