@@ -13,8 +13,6 @@ from typing import Any
 
 import yaml
 
-REGISTRY_PATH_ENV = "JARVIS_UPGRADE_MODELS"
-DEFAULT_REGISTRY_PATH = Path(__file__).resolve().parents[1] / "config" / "upgrade_models.yaml"
 
 ROUTES = {"local", "subscription", "codex_subscription", "direct_api", "saygm"}
 PRIVACY_LEVELS = {"local_only", "confidential", "approved_external"}
@@ -29,15 +27,16 @@ class ModelRouteError(RuntimeError):
 
 
 def _load_model_registry(path: str | os.PathLike[str] | None = None) -> dict[str, Any]:
-    selected = Path(path or os.environ.get(REGISTRY_PATH_ENV) or DEFAULT_REGISTRY_PATH)
-    if not selected.exists():
-        return {"default": None, "profiles": {}}
-    data = yaml.safe_load(selected.read_text(encoding="utf-8")) or {}
-    profiles = {
-        str(item["name"]): item for item in data.get("profiles", []) or []
-        if isinstance(item, dict) and item.get("name")
-    }
-    return {"default": data.get("default"), "profiles": profiles}
+    """The joined model registry, through the ONE loader (spec I6/A2).
+
+    This used to parse the registry YAML itself, which after the split
+    (docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md) would have read the
+    profile pool without its endpoints. Imported lazily: upgrade_agent
+    imports this module at load time.
+    """
+    from jarvis.agents.upgrade_agent import load_model_registry
+
+    return load_model_registry(path or None)
 
 
 def _resolve_model_profile(registry: dict[str, Any], requested: str, *,

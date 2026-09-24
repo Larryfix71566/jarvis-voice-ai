@@ -255,3 +255,142 @@ class TestLoaderShapes:
                                      "route: codex_subscription, base_url: https://x.test/v1")
         with pytest.raises(ua.ModelRegistryError, match="kind: subscription"):
             ua.load_model_registry(_write_split(tmp_path / "config", endpoints=sub))
+
+
+# --------------------------------------------------------------------------
+# Step 3: every reader goes through the one loader (D2, spec I6 / A2).
+
+_PATH_NAMES = (ua.LEGACY_REGISTRY_FILENAME, ua.PROFILES_FILENAME, ua.ENDPOINTS_FILENAME)
+# The loader itself, and the one-shot migration script that writes the files.
+_ALLOWED_PARSERS = {
+    "jarvis/agents/upgrade_agent.py",
+    "scripts/split_model_registry.py",
+}
+
+
+def test_no_module_outside_the_loader_names_a_registry_file_path():
+    """§10: "if a reader bypasses the loader, the split makes things worse
+    than the status quo by appearing safe". A registry file path as a string
+    literal anywhere else is a second reader in the making."""
+    import ast
+
+    offenders = []
+    for top in ("jarvis", "scripts", "mcp_servers", "sandbox", "services"):
+        for py in sorted((ROOT / top).rglob("*.py")):
+            rel = py.relative_to(ROOT).as_posix()
+            if rel in _ALLOWED_PARSERS or "/node_modules/" in rel:
+                continue
+            tree = ast.parse(py.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                        and not any(c.isspace() for c in node.value)
+                        and node.value.endswith(_PATH_NAMES)):
+                    offenders.append(f"{rel}:{node.lineno} {node.value!r}")
+    assert not offenders, offenders
+
+
+@pytest.fixture
+def split_config(tmp_path, monkeypatch):
+    """A small split pair under tmp_path/config, selected via the env
+    override so every default-path reader sees it."""
+    pool = _write_split(tmp_path / "config")
+    monkeypatch.setenv(ua.REGISTRY_PATH_ENV, str(pool))
+    return pool
+
+
+def test_model_routing_reads_the_joined_registry(split_config):
+    """A2: jarvis.model_routing._load_model_registry is the loader."""
+    from jarvis import model_routing
+
+    assert model_routing._load_model_registry() == ua.load_model_registry(split_config)
+    assert model_routing._load_model_registry(split_config)["profiles"]["claude-opus"][
+        "base_url"] == "https://api.anthropic.com/v1/"
+
+
+def test_model_catalog_reads_the_joined_registry(split_config):
+    from jarvis.model_catalog import load_profiles
+
+    profiles = load_profiles(split_config)
+    assert [p["name"] for p in profiles] == ["claude-opus", "codex-subscription"]
+    assert profiles[0]["provider"] == "anthropic"  # joined from the endpoint
+
+
+def test_mcp_child_key_names_come_from_the_joined_registry(split_config):
+    """requires_env_dynamic `upgrade_models_api_keys`: after the split the
+    key names live in the endpoints file, and a child that is not handed
+    them cannot reach its vision model."""
+    from jarvis.skills.registry import _resolve_dynamic_env
+
+    names = _resolve_dynamic_env("mcp-screen", [{"source": "upgrade_models_api_keys"}])
+    assert names == ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
+
+
+def test_real_mcp_child_key_names_are_unchanged(monkeypatch):
+    monkeypatch.delenv(ua.REGISTRY_PATH_ENV, raising=False)
+    from jarvis.skills.registry import _resolve_dynamic_env
+
+    names = _resolve_dynamic_env("mcp-screen", [{"source": "upgrade_models_api_keys"}])
+    assert names == ["ANTHROPIC_API_KEY", "MOONSHOT_API_KEY",
+                     "OPENAI_API_KEY", "OPENROUTER_API_KEY"]
+
+
+def test_vault_verify_groups_by_joined_key_and_endpoint(monkeypatch, capsys):
+    """§3 item 4: `python -m jarvis.vault verify` groups by (key, endpoint)
+    from the JOINED view. Nothing is in the (fake) vault, so nothing is
+    probed; each group prints once with the profiles it serves."""
+    import argparse
+
+    from jarvis import vault
+
+    monkeypatch.delenv(ua.REGISTRY_PATH_ENV, raising=False)
+    monkeypatch.setattr(vault, "load_secrets", lambda: {})
+    assert vault._cmd_verify(argparse.Namespace()) == 0
+    lines = sorted(" ".join(line.split()) for line in capsys.readouterr().out.splitlines()
+                   if "not in the vault" in line)
+    assert lines == [
+        "-- ANTHROPIC_API_KEY not in the vault (claude-opus, claude-fable-5, claude-sonnet-5)",
+        "-- MOONSHOT_API_KEY not in the vault (kimi-k3, kimi-k2)",
+        "-- OPENAI_API_KEY not in the vault (codex-subscription)",
+        "-- OPENROUTER_API_KEY not in the vault (or-gpt-5-mini, or-gemini-flash, "
+        "or-deepseek, or-gpt-5.1, or-grok-4.3, or-codex-max, or-grok-4.6, "
+        "or-deepseek-v4-pro)",
+    ]
+
+
+def _load_check_env(monkeypatch, repo_root: Path):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "check_env_under_test_split", ROOT / "scripts" / "check_env.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "REPO_ROOT", repo_root)
+    return module
+
+
+def test_check_env_reads_the_split_pair(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv(ua.REGISTRY_PATH_ENV, raising=False)
+    monkeypatch.delenv("JARVIS_VISION_PROFILE", raising=False)
+    monkeypatch.delenv("JARVIS_SCREEN_ENABLED", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    _write_split(tmp_path / "config")
+    check_env = _load_check_env(monkeypatch, tmp_path)
+    check_env.check_model_registry()
+    check_env.check_screen_vision()
+    out = capsys.readouterr().out
+    assert "Model profile claude-opus (registry default) — ANTHROPIC_API_KEY present" in out
+    assert "Model profile codex-subscription — OPENAI_API_KEY missing" in out
+    assert "Screen vision — will use profile claude-opus" in out
+
+
+def test_check_env_reports_an_unsafe_registry_instead_of_crashing(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv(ua.REGISTRY_PATH_ENV, raising=False)
+    config = tmp_path / "config"
+    _write_split(config)
+    (config / ua.ENDPOINTS_FILENAME).unlink()
+    check_env = _load_check_env(monkeypatch, tmp_path)
+    check_env.check_model_registry()
+    out = capsys.readouterr().out
+    assert "[WARN] Model registry — could not parse the model registry" in out
+    assert "does not exist" in out

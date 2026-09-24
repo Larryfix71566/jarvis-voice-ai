@@ -151,12 +151,15 @@ def _resolve_dynamic_env(server_name: str, dynamic: list[dict]) -> list[str]:
                 "requires_env_dynamic source 'vault_names' is not available "
                 "before T4b (MORTIMER_SECURITY_HARDENING_PLAN.md D-H2)"
             )
-        # upgrade_models_api_keys
+        # upgrade_models_api_keys (the source keeps its historical name; it
+        # means "every api_key_env in the model registry"). Read through the
+        # ONE loader so the key names come from the JOINED view — after the
+        # registry split they live in config/model_endpoints.yaml, not in the
+        # profile file (docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md D2).
         names.add("OPENAI_API_KEY")  # mcp_screen/logic.py:282 default
         try:
-            with open(REPO_ROOT / "config" / "upgrade_models.yaml", "r",
-                      encoding="utf-8") as fh:
-                registry = yaml.safe_load(fh) or {}
+            from jarvis.agents.upgrade_agent import load_model_registry
+            registry = load_model_registry()
         except Exception as exc:  # noqa: BLE001 — degrade to the default only
             logger.warning("upgrade_models_unreadable server=%s error=%s",
                            server_name, exc)
@@ -169,8 +172,8 @@ def _resolve_dynamic_env(server_name: str, dynamic: list[dict]) -> list[str]:
 def _walk_api_key_envs(node: Any) -> Iterator[str]:
     """Yield every `api_key_env` value anywhere in a parsed YAML tree.
 
-    Walks rather than assuming a shape, because config/upgrade_models.yaml
-    groups profiles under keys this module has no business knowing about.
+    Walks rather than assuming a shape, because the model registry groups
+    profiles under keys this module has no business knowing about.
     """
     if isinstance(node, dict):
         value = node.get("api_key_env")
