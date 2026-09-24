@@ -74,3 +74,54 @@ def log_search(source: str, query: str = "", since_minutes: int = 60, limit: int
     params = {"source": source, "query": query, "since_minutes": since_minutes,
               "limit": limit}
     return _get(lambda: c.get("/api/status/logs", params=params))
+
+
+# ---- P4 (status spec T4.4): these leave the machine through the sidecar.
+
+def _trim_catalog(payload: Any) -> Any:
+    """status_catalog's lists are nested (one model list per provider):
+    cap each at MAX_LIST_ITEMS, recording the provider's full count."""
+    out = _trim(payload)
+    if not isinstance(out, dict) or not isinstance(out.get("results"), list):
+        return out
+    results = []
+    for r in out["results"]:
+        models = r.get("models") if isinstance(r, dict) else None
+        if isinstance(models, list) and len(models) > MAX_LIST_ITEMS:
+            r = {**r, "models": models[:MAX_LIST_ITEMS], "models_total": len(models)}
+        results.append(r)
+    return {**out, "results": results}
+
+
+def status_catalog(provider: str = "all", force: bool = False,
+                   client: Any = None) -> dict[str, Any]:
+    c = _client(client, EXTERNAL_TIMEOUT_S)
+    params = {"provider": provider or "all", "force": "true" if force else "false"}
+    try:
+        return _trim_catalog(c.get("/api/status/catalog", params=params))
+    except Exception:  # noqa: BLE001
+        return dict(SIDECAR_DOWN)
+
+
+def status_subscription(which: str, model: str = "", force: bool = False,
+                        client: Any = None) -> dict[str, Any]:
+    c = _client(client, EXTERNAL_TIMEOUT_S)
+    body: dict[str, Any] = {"which": which, "force": bool(force)}
+    if model:
+        body["model"] = model  # exactly as given: no alias mapping
+    try:
+        return _trim(c.post("/api/status/subscription/probe", json=body))
+    except Exception:  # noqa: BLE001
+        return dict(SIDECAR_DOWN)
+
+
+def github_prs(state: str = "open", limit: int = 10, client: Any = None) -> dict[str, Any]:
+    c = _client(client)
+    params = {"kind": "prs", "state": state, "limit": limit}
+    return _get(lambda: c.get("/api/status/github", params=params))
+
+
+def github_pr_checks(number: int, client: Any = None) -> dict[str, Any]:
+    c = _client(client)
+    params = {"kind": "checks", "number": number}
+    return _get(lambda: c.get("/api/status/github", params=params))

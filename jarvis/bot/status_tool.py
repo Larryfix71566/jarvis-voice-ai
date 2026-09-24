@@ -54,10 +54,11 @@ TOPIC_PATHS = {
     "build": "/api/status/build",
     "location": "/api/status/location",
 }
-# Leave the machine, so refused on a protected turn (I3). They exist in the
-# enum from P2 so the schema does not change twice; the endpoints ship in P4.
+# Leave the machine (provider APIs, the subscription CLIs), so refused on a
+# protected turn (I3). Wired to the sidecar in P4 (status spec T4.4).
 EXTERNAL_TOPICS = frozenset({"catalog", "subscription"})
-NOT_YET = {"ok": False, "error": "not available until the catalog phase ships"}
+CATALOG_PATH = "/api/status/catalog"
+SUBSCRIPTION_PATH = "/api/status/subscription/probe"
 
 EXTERNAL_TIMEOUT_S = 30.0
 DEFAULT_TIMEOUT_S = 10.0
@@ -90,19 +91,29 @@ def build_system_status_tool(
     factory = client_factory or _default_client
 
     async def handler(arguments: dict) -> str:
-        topic = str((arguments or {}).get("topic") or "").strip()
-        if topic in EXTERNAL_TOPICS:
-            if _turn_is_protected():
-                return PROTECTED_TURN_REFUSAL
-            return summarize(topic, NOT_YET)
-        path = TOPIC_PATHS.get(topic)
-        if path is None:
+        args = arguments or {}
+        topic = str(args.get("topic") or "").strip()
+        if topic in EXTERNAL_TOPICS and _turn_is_protected():
+            return PROTECTED_TURN_REFUSAL
+        if topic not in TOPIC_PATHS and topic not in EXTERNAL_TOPICS:
             return f"system_status failed: unknown topic {topic!r}."
         base = admin_url or os.environ.get(ADMIN_URL_ENV) or DEFAULT_ADMIN_URL
         timeout = EXTERNAL_TIMEOUT_S if topic in EXTERNAL_TOPICS else DEFAULT_TIMEOUT_S
+        force = bool(args.get("force"))
         try:
             async with factory(base, timeout) as client:
-                resp = await client.get(path)
+                if topic == "catalog":
+                    provider = str(args.get("provider") or "all").strip() or "all"
+                    resp = await client.get(CATALOG_PATH, params={
+                        "provider": provider, "force": "true" if force else "false"})
+                elif topic == "subscription":
+                    body: dict[str, Any] = {"which": str(args.get("which") or ""),
+                                            "force": force}
+                    if args.get("model"):
+                        body["model"] = str(args["model"])  # exactly as given
+                    resp = await client.post(SUBSCRIPTION_PATH, json=body)
+                else:
+                    resp = await client.get(TOPIC_PATHS[topic])
         except Exception:  # noqa: BLE001 — transport failure, never raised into the turn
             return SIDECAR_DOWN
         try:

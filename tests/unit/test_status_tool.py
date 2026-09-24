@@ -102,12 +102,55 @@ async def test_sensitive_turn_refusal(topic):
     assert calls == []
 
 
-@pytest.mark.parametrize("topic", ["catalog", "subscription"])
-async def test_p4_topics_not_available_yet(topic):
-    handler, calls, _ = _tool()
-    out = await handler({"topic": topic})
-    assert out == "system_status failed: not available until the catalog phase ships."
-    assert calls == []
+class RecordingClient(FakeClient):
+    """Records (method, path, params/json) for the P4 topics."""
+
+    async def get(self, path, params=None):
+        self.calls.append(("GET", path, params))
+        return FakeResponse(self.payload, self.status_code)
+
+    async def post(self, path, json=None):
+        self.calls.append(("POST", path, json))
+        return FakeResponse(self.payload, self.status_code)
+
+
+def _recording_tool(payload):
+    calls, factories = [], []
+
+    def factory(base_url, timeout):
+        factories.append((base_url, timeout))
+        return RecordingClient(calls, payload)
+
+    _, handler = build_system_status_tool("http://sidecar:1", client_factory=factory)
+    return handler, calls, factories
+
+
+# T4.4 replaces T2.5's placeholder (test_p4_topics_not_available_yet): the
+# spec had catalog/subscription answer "not available until the catalog
+# phase ships" only until P4.
+async def test_catalog_topic_calls_the_catalog_endpoint():
+    handler, calls, factories = _recording_tool({"ok": True, "results": [], "comparison": {}})
+    out = await handler({"topic": "catalog"})
+    assert calls == [("GET", "/api/status/catalog", {"provider": "all", "force": "false"})]
+    assert factories == [("http://sidecar:1", 30.0)]
+    assert out.startswith("Source: live provider catalogs")
+    await handler({"topic": "catalog", "provider": "openrouter", "force": True})
+    assert calls[1] == ("GET", "/api/status/catalog", {"provider": "openrouter", "force": "true"})
+
+
+async def test_subscription_topic_posts_the_exact_model():
+    payload = {"ok": True, "probe": {"which": "claude", "model": "Fable 5.1", "ok": False,
+                                     "category": "model_unavailable",
+                                     "probed_at": "2026-09-23T10:30:00+00:00"}}
+    handler, calls, factories = _recording_tool(payload)
+    out = await handler({"topic": "subscription", "which": "claude", "model": "Fable 5.1"})
+    assert calls == [("POST", "/api/status/subscription/probe",
+                      {"which": "claude", "force": False, "model": "Fable 5.1"})]
+    assert factories == [("http://sidecar:1", 30.0)]
+    assert "Model tried: Fable 5.1" in out
+    assert "small amount of your Claude subscription" in out
+    await handler({"topic": "subscription", "which": "codex", "force": True})
+    assert calls[1] == ("POST", "/api/status/subscription/probe", {"which": "codex", "force": True})
 
 
 async def test_local_topics_still_answer_on_a_protected_turn():

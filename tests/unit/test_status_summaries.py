@@ -67,6 +67,43 @@ OVERVIEW = {
 }
 
 
+CATALOG = {
+    "ok": True, "generated_at": "2026-09-23T10:31:00+00:00", "source": "catalog",
+    "results": [
+        {"provider": "anthropic", "ok": True, "fetched_at": "2026-09-23T06:30:00+00:00",
+         "source": "anthropic:/v1/models", "error_category": None, "error": None,
+         "models": [{"id": "claude-opus-5"}, {"id": "claude-new-6"}, {"id": "claude-haiku-4-5"}]},
+        {"provider": "openrouter", "ok": True, "fetched_at": "2026-09-23T10:30:00+00:00",
+         "source": "openrouter:/api/v1/models", "error_category": None, "error": None,
+         "models": [{"id": f"m{i}"} for i in range(459)]},
+        {"provider": "moonshot", "ok": False, "fetched_at": "2026-09-23T10:30:00+00:00",
+         "source": "moonshot:/v1/models", "models": [], "error_category": "rejected",
+         "error": "HTTP 401: the key was refused"},
+        {"provider": "codex-subscription", "ok": False, "fetched_at": "2026-09-23T10:30:00+00:00",
+         "source": "codex-subscription:subscription_probe", "models": [],
+         "error_category": "unsupported",
+         "error": "no model list API; use the subscription probe"},
+    ],
+    "comparison": {
+        "anthropic": {"configured_available": ["claude-opus"],
+                      "configured_missing": ["claude-fable"],
+                      "offered_not_configured_count": 2,
+                      "offered_not_configured_sample": ["claude-new-6", "claude-haiku-4-5"]},
+        "openrouter": {"configured_available": ["or-grok"], "configured_missing": [],
+                       "offered_not_configured_count": 458,
+                       "offered_not_configured_sample": ["x-ai/grok-5", "a/b", "c/d", "e/f",
+                                                         "g/h", "i/j", "k/l"]},
+    },
+}
+
+SUBSCRIPTION = {
+    "ok": True, "source": "probe:claude@2026-09-23T10:30:00+00:00",
+    "probe": {"which": "claude", "model": "claude-fable-5-1", "ok": False,
+              "response_present": False, "category": "model_unavailable", "installed": True,
+              "command": "claude", "probed_at": "2026-09-23T10:30:00+00:00", "cached": False},
+}
+
+
 @pytest.fixture(autouse=True)
 def _utc(monkeypatch):
     monkeypatch.setenv("TZ", "UTC")
@@ -108,6 +145,23 @@ GOLDEN = {
         "2 agents: scheduler (claude-sonnet-5), developer (claude-opus).\n"
         "3 MCP servers.\n"
         "Switches off: JARVIS_SPEAKER_GATE_ENABLED, JARVIS_MODEL_ROUTING_ENABLED."
+    )),
+    "catalog": (CATALOG, (
+        "Source: live provider catalogs — what each account offers now, not the registry "
+        "(time fetched shown per provider).\n"
+        "anthropic (catalog:anthropic@06:30): 3 models offered. Configured but NOT offered: "
+        "claude-fable. 2 offered but not configured, newest first: claude-new-6, "
+        "claude-haiku-4-5.\n"
+        "openrouter (catalog:openrouter@10:30): 459 models offered. Every configured model is "
+        "offered. 458 offered but not configured, newest first: x-ai/grok-5, a/b, c/d, e/f, g/h.\n"
+        "moonshot: rejected (HTTP 401: the key was refused).\n"
+        "codex-subscription: unsupported (no model list API; use the subscription probe)."
+    )),
+    "subscription": (SUBSCRIPTION, (
+        "Source: a live probe of the Claude subscription at 10:30 (probe:claude).\n"
+        "Model tried: claude-fable-5-1 (exactly as named).\n"
+        "Result: failed — that model is not available on this subscription (model_unavailable).\n"
+        "This check used a small amount of your Claude subscription."
     )),
 }
 
@@ -176,3 +230,29 @@ def test_failure_payloads():
 def test_no_key_material_is_invented():
     for topic, (payload, _) in GOLDEN.items():
         assert KEY not in summarize(topic, payload)
+
+
+def test_subscription_variants():
+    ok = dict(SUBSCRIPTION, probe=dict(SUBSCRIPTION["probe"], ok=True, category=None,
+                                        response_present=True, which="codex",
+                                        model="gpt-6-astra", cached=True))
+    assert summarize("subscription", ok) == (
+        "Source: a live probe of the Codex subscription at 10:30 (probe:codex); reused, since "
+        "one probe per model is allowed every 10 minutes.\n"
+        "Model tried: gpt-6-astra (exactly as named).\n"
+        "Result: it answered — the model is available on this subscription.\n"
+        "This check used a small amount of your Codex subscription.")
+    missing = dict(SUBSCRIPTION, probe=dict(SUBSCRIPTION["probe"], category="not_installed",
+                                             installed=False))
+    out = summarize("subscription", missing)
+    assert "command is not installed" in out and out.endswith("No subscription quota was used.")
+    odd = dict(SUBSCRIPTION, probe=dict(SUBSCRIPTION["probe"], category=None,
+                                         response_present=True))
+    assert "not with the expected check text" in summarize("subscription", odd)
+
+
+def test_catalog_summary_is_capped_with_many_providers():
+    many = dict(CATALOG, results=[dict(CATALOG["results"][1], provider=f"p{i}-" + "x" * 40)
+                                  for i in range(40)])
+    out = summarize("catalog", many)
+    assert len(out) <= MAX_CHARS and out.startswith("Source: live provider catalogs")

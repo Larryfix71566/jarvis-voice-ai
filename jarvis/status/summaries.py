@@ -129,12 +129,82 @@ def _overview(p: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+_CATALOG_SAMPLE = 5
+
+
+def _catalog(p: dict[str, Any]) -> str:
+    lines = ["Source: live provider catalogs — what each account offers now, "
+             "not the registry (time fetched shown per provider)."]
+    comparison = p.get("comparison") or {}
+    for r in p.get("results") or []:
+        pid = str(r.get("provider"))
+        if not r.get("ok"):
+            why = str(r.get("error") or "").rstrip(".")
+            lines.append(f"{pid}: {r.get('error_category') or 'failed'}"
+                         + (f" ({why})." if why else "."))
+            continue
+        when = _clock(r.get("fetched_at"))
+        text = f"{pid} (catalog:{pid}@{when or 'unknown time'}): {len(r.get('models') or [])} models offered."
+        cmp_ = comparison.get(pid)
+        if cmp_:
+            missing = cmp_.get("configured_missing") or []
+            if missing:
+                text += " Configured but NOT offered: " + ", ".join(missing) + "."
+            elif cmp_.get("configured_available"):
+                text += " Every configured model is offered."
+            count = int(cmp_.get("offered_not_configured_count") or 0)
+            if count:
+                sample = (cmp_.get("offered_not_configured_sample") or [])[:_CATALOG_SAMPLE]
+                text += f" {count} offered but not configured"
+                text += (", newest first: " + ", ".join(sample) + ".") if sample else "."
+        lines.append(text)
+    return "\n".join(lines)
+
+
+_PROBE_CATEGORIES = {
+    "authentication": "not signed in, or the login was refused (authentication)",
+    "model_unavailable": "that model is not available on this subscription (model_unavailable)",
+    "timeout": "it timed out (timeout)",
+    "runtime_environment": "the command could not run in this environment (runtime_environment)",
+    "runtime_error": "the command failed (runtime_error)",
+}
+
+
+def _subscription(p: dict[str, Any]) -> str:
+    probe = p.get("probe") or {}
+    which = str(probe.get("which") or "unknown")
+    name = which.capitalize()
+    when = _clock(probe.get("probed_at")) or "an unknown time"
+    head = f"Source: a live probe of the {name} subscription at {when} (probe:{which})"
+    if probe.get("cached"):
+        head += "; reused, since one probe per model is allowed every 10 minutes"
+    lines = [head + ".", f"Model tried: {probe.get('model')} (exactly as named)."]
+    category = probe.get("category")
+    if category == "not_installed":
+        lines.append(f"Result: the {probe.get('command') or which} command is not installed "
+                     "where Mortimer's services run, so nothing was tried.")
+        lines.append("No subscription quota was used.")
+        return "\n".join(lines)
+    if probe.get("ok"):
+        lines.append("Result: it answered — the model is available on this subscription.")
+    elif category:
+        lines.append("Result: failed — " + _PROBE_CATEGORIES.get(str(category), str(category)) + ".")
+    elif probe.get("response_present"):
+        lines.append("Result: it answered, but not with the expected check text.")
+    else:
+        lines.append("Result: no answer came back.")
+    lines.append(f"This check used a small amount of your {name} subscription.")
+    return "\n".join(lines)
+
+
 _TOPICS = {
     "models": _models,
     "services": _services,
     "build": _build,
     "location": _location,
     "overview": _overview,
+    "catalog": _catalog,
+    "subscription": _subscription,
 }
 
 
