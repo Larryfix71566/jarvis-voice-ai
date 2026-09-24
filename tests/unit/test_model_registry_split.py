@@ -373,6 +373,106 @@ def test_no_module_outside_the_loader_names_a_registry_file_path():
     assert not offenders, offenders
 
 
+# Spec P5 amendment A2 (second bullet): every jarvis/status/* reader gets
+# the registry through load_model_registry. The names a status module may
+# import from the loader's module: the joined view, the unjoined layers
+# (the daily job needs endpoint ids to name its catalogue files, A3), and
+# the catalogue file naming/schema. Nothing that resolves or parses a path.
+_STATUS_LOADER_NAMES = {
+    "load_model_registry", "load_registry_layers", "catalog_path", "CATALOG_ENTRY_KEYS",
+}
+_STATUS_FORBIDDEN_TEXT = (
+    "upgrade_models", "model_endpoints", "model_profiles", ua.REGISTRY_PATH_ENV,
+    ua.CATALOG_PREFIX,
+)
+
+
+def _docstring_nodes(tree) -> set[int]:
+    import ast
+
+    ids = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = getattr(node, "body", [])
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+                    and isinstance(body[0].value.value, str):
+                ids.add(id(body[0].value))
+    return ids
+
+
+def test_status_modules_parse_no_registry_file_themselves():
+    """A2: no module under jarvis/status/ names a registry file, the
+    registry path variable or a catalogue file name outside its docstrings,
+    and none imports anything from the loader's module except the public
+    readers — so none can parse model_endpoints/model_profiles/
+    upgrade_models YAML itself."""
+    import ast
+
+    status_dir = ROOT / "jarvis" / "status"
+    modules = sorted(status_dir.glob("*.py"))
+    assert len(modules) >= 10  # the package exists (P2/P4)
+    offenders = []
+    for py in modules:
+        rel = py.relative_to(ROOT).as_posix()
+        tree = ast.parse(py.read_text(encoding="utf-8"))
+        docstrings = _docstring_nodes(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) \
+                    and id(node) not in docstrings \
+                    and any(t in node.value for t in _STATUS_FORBIDDEN_TEXT):
+                offenders.append(f"{rel}:{node.lineno} names {node.value!r}")
+            elif isinstance(node, ast.ImportFrom) and node.module == "jarvis.agents.upgrade_agent":
+                bad = [a.name for a in node.names if a.name not in _STATUS_LOADER_NAMES]
+                if bad:
+                    offenders.append(f"{rel}:{node.lineno} imports {bad}")
+            elif isinstance(node, ast.ImportFrom) and node.module == "jarvis.agents" \
+                    and any(a.name == "upgrade_agent" for a in node.names):
+                offenders.append(f"{rel}:{node.lineno} imports the loader module whole")
+            elif isinstance(node, ast.Import) \
+                    and any(a.name.startswith("jarvis.agents.upgrade_agent") for a in node.names):
+                offenders.append(f"{rel}:{node.lineno} imports the loader module whole")
+    assert not offenders, offenders
+
+
+def test_every_status_registry_reader_calls_load_model_registry(monkeypatch):
+    """A2, dynamically: each status entry point that defaults its registry
+    (provider discovery, model access, catalog status, the codex probe
+    model, the daily job) asks load_model_registry for it — a reader that
+    parsed the real files instead would not see the sentinel profiles."""
+    import copy
+
+    sentinel = {"default": None, "profiles": {
+        "codex-subscription": {"name": "codex-subscription", "provider": "openai",
+                               "model": "gpt-sentinel", "identity": "openai/gpt-sentinel"},
+        "sentinel": {"name": "sentinel", "provider": "sentinel", "model": "s-1",
+                     "identity": "sentinel/s-1", "base_url": "https://api.sentinel.example/v1",
+                     "api_key_env": "SENTINEL_API_KEY"},
+    }}
+    calls: list[tuple] = []
+
+    def spy(*args, **kwargs):
+        calls.append((args, kwargs))
+        return copy.deepcopy(sentinel)
+
+    monkeypatch.setattr(ua, "load_model_registry", spy)
+    from jarvis.status import catalog, daily, models, providers, subscriptions
+
+    def no_http(*_a, **_k):
+        raise AssertionError("no request without a credential")
+
+    catalog.clear_cache_for_tests()
+    refs = {r.id: r for r in providers.discover_providers(access={}, env={})}
+    assert refs["unknown:api.sentinel.example"].profiles == ("sentinel",)
+    assert refs["codex-subscription"].profiles == ("codex-subscription",)
+    status = models.model_access_status(access={}, env={})
+    assert {p["name"] for p in status["profiles"]} == {"codex-subscription", "sentinel"}
+    payload = catalog.catalog_status(access={}, env={}, http=no_http)
+    assert "unknown:api.sentinel.example" in {r["provider"] for r in payload["results"]}
+    assert subscriptions.default_probe_model("codex") == "gpt-sentinel"
+    assert daily._default_deps()["registry"]() == sentinel
+    assert len(calls) == 5 and all(c == ((), {}) for c in calls)
+
+
 @pytest.fixture
 def split_config(tmp_path, monkeypatch):
     """A small split pair under tmp_path/config, selected via the env
