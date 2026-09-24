@@ -538,14 +538,12 @@ final class ConsoleActionCoordinator {
         let ranges: [String: ClosedRange<Double>] = [
             "input_floor": -80 ... -30, "input_ceiling": -40 ... 0,
             "output_floor": -60 ... -10, "output_ceiling": -25 ... 0,
-            "width": AudioPresentationTuning.waveWidthRange,
         ]
         guard let range = ranges[key], range.contains(value) else { return false }
         let keys = ["input_floor": AudioPresentationTuning.inputFloorKey,
                     "input_ceiling": AudioPresentationTuning.inputCeilingKey,
                     "output_floor": AudioPresentationTuning.outputFloorKey,
-                    "output_ceiling": AudioPresentationTuning.outputCeilingKey,
-                    "width": AudioPresentationTuning.waveWidthKey]
+                    "output_ceiling": AudioPresentationTuning.outputCeilingKey]
         guard let defaultsKey = keys[key] else { return false }
         UserDefaults.standard.set(value, forKey: defaultsKey)
         return true

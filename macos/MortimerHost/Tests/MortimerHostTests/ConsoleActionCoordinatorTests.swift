@@ -280,8 +280,21 @@ final class ConsoleActionCoordinatorTests: XCTestCase {
         XCTAssertFalse(notices.statusOpen)
         XCTAssertEqual(routed.execute(request(.appearanceSet, target: "2")), .applied)
         XCTAssertEqual(UserDefaults.standard.integer(forKey: "mortimer.interface.layoutVersion"), 2)
-        XCTAssertEqual(routed.execute(request(.waveTuningSet, args: ["key": .string("width"), "value": .number(0.2)])), .applied)
-        XCTAssertEqual(routed.execute(request(.waveTuningSet, args: ["key": .string("width"), "value": .number(4)])), .invalid)
+        // The width slider went with the wave it shaped (2026-09-24), so the
+        // dB windows are what this action sets. Whatever was stored before is
+        // put back rather than left at the test's value.
+        let floorKey = AudioPresentationTuning.inputFloorKey
+        let storedFloor = UserDefaults.standard.object(forKey: floorKey)
+        defer {
+            if let storedFloor { UserDefaults.standard.set(storedFloor, forKey: floorKey) }
+            else { UserDefaults.standard.removeObject(forKey: floorKey) }
+        }
+        XCTAssertEqual(routed.execute(request(.waveTuningSet, args: ["key": .string("input_floor"), "value": .number(-45)])), .applied)
+        XCTAssertEqual(UserDefaults.standard.double(forKey: floorKey), -45)
+        XCTAssertEqual(routed.execute(request(.waveTuningSet, args: ["key": .string("input_floor"), "value": .number(-5)])), .invalid)
+        XCTAssertEqual(UserDefaults.standard.double(forKey: floorKey), -45, "a rejected value must not be written")
+        XCTAssertEqual(routed.execute(request(.waveTuningSet, args: ["key": .string("width"), "value": .number(0.2)])), .invalid,
+                       "width is no longer a tuning key")
         attachments.clear()
     }
 }
