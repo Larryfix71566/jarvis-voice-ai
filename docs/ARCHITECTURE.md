@@ -23,6 +23,7 @@ flowchart LR
   HOST --> DISPLAY[NSScreen placement]
   HOST --> SIDE[Admin sidecar :7861]
   SIDE --> EDIT[Sandbox/self-edit and planning]
+  SIDE --> STATUS[jarvis/status: /api/status/* for system_status and mcp-status]
   SIDE --> DB
   VAULT[Mac Keychain + data/secrets.vault] -. injects process env .-> BOT
   VAULT -.-> SIDE
@@ -100,7 +101,7 @@ No single project-wide model setting exists. `OPENAI_MODEL`/`OPENAI_BASE_URL`
   CLI launches, so subscription traffic cannot become paid API traffic.
   Protected delegation text is masked in activity events and native UI.
 - With the per-turn sensitive latch armed, the MCP registry refuses external
-  web, app, screen-vision and self-edit servers; local tools stay usable.
+  web, app, screen-vision, self-edit and status servers; local tools stay usable.
 
 | Workload | Source of selection | Current policy | Credential/endpoint behavior |
 | --- | --- | --- | --- |
@@ -162,6 +163,7 @@ loaded-version evidence remain open gates.
 | Self-edit sandbox | `sandbox/`, `jarvis/selfedit/`, admin sidecar | adaptive-interface release readiness |
 | Secrets | `jarvis/vault.py` | vault unit/integration tests and Mac status check |
 | Display topology | `ScreenPlacement`, `run_display_topology_probe.sh` | physical display receipt; Spaces are not `NSScreen`s |
+| Self-service status | `jarvis/status/`, sidecar `/api/status/*`, `jarvis/bot/status_tool.py`, `mcp_servers/mcp_status/` | `tests/unit/test_status_*.py`, `test_admin_status.py`; P2 live questions |
 | Plan artifact integrity | `tests/unit/test_plan_manifests.py` | required plan artifacts exist (rendering-suite filename alias documented) |
 
 Superseded plans and snapshots (e.g. the 2026-09-04 architecture snapshot)

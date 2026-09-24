@@ -13,7 +13,8 @@ Verify paths and the current branch before writing. Keep this map below the
 - `mcp_servers/` — MCP skill servers, one directory each: `logic.py`
   (pure) + `server.py` (FastMCP) + `skill.yaml`. `mcp_kb/` is read-only
   (`kb_search`/`kb_read`/`kb_neighbors`); KB writes go through
-  `jarvis/kb_digest.py`, not MCP.
+  `jarvis/kb_digest.py`, not MCP. `mcp_status/` — systems/developer
+  status + `log_search`, a thin client of the sidecar's `/api/status/*`.
 - `skills/` — Agent Skills (`SKILL.md`), loaded by `jarvis/agent_skills.py`
   only if enabled in `config/skills.yaml`; never executed.
 - `macos/` — native macOS client (SwiftPM), the live interface:
@@ -63,6 +64,9 @@ Verify paths and the current branch before writing. Keep this map below the
   execution / deliberation) + PNG/SVG renderer; sidecar `/api/graph/*`
   and voice tools `memory_graph_view`, `graph_view`. Nothing else
   derives an edge.
+- `jarvis/status/` — self-service status computed in the sidecar
+  (models, services, overview, build, location, logs, summaries); voice
+  tool `jarvis/bot/status_tool.py` (`system_status`).
 - `jarvis/selfedit/service.py` — sandbox facade: allowlist, validation, PRs.
 - `jarvis/skills/registry.py` — spawns MCP servers, exposes their tools.
 - `jarvis/prompts.py` — single source of every system prompt.
