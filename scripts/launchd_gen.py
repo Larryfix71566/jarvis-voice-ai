@@ -14,6 +14,11 @@ import xml.sax.saxutils as saxutils
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# `python scripts/launchd_gen.py` puts scripts/ on sys.path, not the repo.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from jarvis.status.services import launchd_state  # noqa: E402  (after the path fix)
 TEMPLATE_PATH = ROOT / "scripts" / "launchd" / "com.mortimer.template.plist"
 
 # service -> shell command run inside `bash -c "cd <repo> && <cmd>"`
@@ -107,21 +112,10 @@ def uninstall() -> None:
 
 
 def status() -> dict[str, str]:
-    out: dict[str, str] = {}
-    for svc in ALL_SERVICES:
-        target = f"gui/{_uid()}/com.mortimer.{svc}"
-        proc = subprocess.run(["launchctl", "print", target], check=False, capture_output=True, text=True)
-        if proc.returncode != 0:
-            out[svc] = "not loaded"
-            continue
-        pid = None
-        for line in proc.stdout.splitlines():
-            line = line.strip()
-            if line.startswith("pid ="):
-                pid = line.split("=", 1)[1].strip()
-                break
-        out[svc] = f"loaded (pid {pid})" if pid else "loaded (idle)"
-    return out
+    # The per-service `launchctl print` parse lives in
+    # jarvis/status/services.py:launchd_state (status spec T2.3, R8), so
+    # this CLI and the status tools can never disagree.
+    return {svc: launchd_state(svc) for svc in ALL_SERVICES}
 
 
 def main(argv: list[str] | None = None) -> int:

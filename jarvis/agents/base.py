@@ -55,6 +55,14 @@ from jarvis.model_routing import (
 logger = logging.getLogger(__name__)
 
 
+def model_routing_env_enabled() -> bool:
+    """JARVIS_MODEL_ROUTING_ENABLED: on only if the value is exactly "1".
+    Extracted from SubAgent's inline checks (status spec T2.3) so they and
+    jarvis.status.overview read ONE rule (R8). The Settings field
+    `jarvis_model_routing_enabled` is OR-ed in by the callers, unchanged."""
+    return os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
+
+
 def _policy_requires_runlog_redaction(workload: str, *, enabled: bool) -> bool:
     """Return whether this workload's route policy requires redacted logs.
 
@@ -246,7 +254,7 @@ class SubAgent:
         self._effort: str | None = effort
         routing_enabled = bool(
             getattr(settings, "jarvis_model_routing_enabled", False)
-            or os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
+            or model_routing_env_enabled()
         )
         if client_factory is not None:
             self._client = client_factory(settings)
@@ -422,7 +430,7 @@ class SubAgent:
         try:
             routing_enabled = bool(
                 getattr(self._settings, "jarvis_model_routing_enabled", False)
-                or os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
+                or model_routing_env_enabled()
             )
             if routing_enabled:
                 resolved = resolve_model_route_checked(
@@ -508,7 +516,7 @@ class SubAgent:
 
         routing_enabled = bool(
             getattr(self._settings, "jarvis_model_routing_enabled", False)
-            or os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
+            or model_routing_env_enabled()
         )
         resolved_run_id = run_id or str(uuid.uuid4())
         route_policy_sensitive = _policy_requires_runlog_redaction(

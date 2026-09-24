@@ -62,6 +62,7 @@ from jarvis.bot.costs_tool import build_cost_summary_tool
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.ui_control import build_ui_control_tool
+from jarvis.bot.ui_control import ui_control_enabled as ui_control_flag_enabled
 from jarvis.bot.console_session import ConsoleSession
 from jarvis.bot.console_protocol import (ALLOWED_ACTIONS, hello as console_hello,
                                          validate_inventory, validate_ready)
@@ -103,7 +104,11 @@ from jarvis.memory import (
     render_memory_context,
     update_memory_from_session,
 )
-from jarvis.memory_automation import heuristic_classifier, process_classification_jobs
+from jarvis.memory_automation import (
+    heuristic_classifier,
+    memory_automation_enabled,
+    process_classification_jobs,
+)
 from jarvis.kb_digest import write_session_digest
 from jarvis.model_catalog import render_model_catalog
 from jarvis.prompts import (
@@ -498,9 +503,7 @@ def build_pipeline(
     # env-first pattern as the council's): false = the tool is not
     # registered and not in the schema list, so the Supervisor cannot call
     # what it cannot see, and the prompt addendum is omitted to match.
-    ui_control_enabled = os.environ.get(
-        "JARVIS_UI_CONTROL_ENABLED", ""
-    ).strip().lower() not in ("false", "0", "no")
+    ui_control_enabled = ui_control_flag_enabled()
     # V3/V4: screen vision is a DIRECT Supervisor tool (like set_voice /
     # ui_control), never a delegation. Same kill-switch-at-registration
     # pattern as ui_control above.
@@ -1666,8 +1669,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # connection. This is best-effort and runs only during teardown;
             # it cannot block an active voice turn or alter stored content.
             if (getattr(settings, "jarvis_memory_automation_enabled", False)
-                    and os.environ.get("JARVIS_MEMORY_AUTOMATION_ENABLED", "false").lower()
-                    in {"1", "true", "yes"}):
+                    and memory_automation_enabled()):
                 try:
                     with get_conn() as conn:
                         result = process_classification_jobs(

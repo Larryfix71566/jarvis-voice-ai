@@ -176,7 +176,11 @@ def get_device_location() -> Optional[dict]:
 
 
 def _resolve_location(fetch: Callable[[str], Any]) -> Optional[dict]:
-    """{"lat": float, "lon": float, "label": str} or None."""
+    """{"lat": float, "lon": float, "label": str, "source": str} or None.
+
+    `source` is "env" | "device" | "ip" (status spec T2.3), and a device
+    location also carries "age_s". Additive: existing callers read only
+    lat/lon/label and ignore the extra keys."""
     lat_env = os.environ.get("JARVIS_WEATHER_LAT", "").strip()
     lon_env = os.environ.get("JARVIS_WEATHER_LON", "").strip()
     if lat_env and lon_env:
@@ -185,12 +189,15 @@ def _resolve_location(fetch: Callable[[str], Any]) -> Optional[dict]:
                 "lat": float(lat_env),
                 "lon": float(lon_env),
                 "label": os.environ.get("JARVIS_WEATHER_LABEL", "").strip(),
+                "source": "env",
             }
         except ValueError:
             pass  # malformed override — fall through
     device = get_device_location()
     if device is not None:
-        return {"lat": device["lat"], "lon": device["lon"], "label": device["label"]}
+        return {"lat": device["lat"], "lon": device["lon"], "label": device["label"],
+                "source": "device",
+                "age_s": max(0, int(time.monotonic() - device["at"]))}
     try:
         geo = fetch(GEO_URL)
         if geo.get("status") != "success":
@@ -199,6 +206,7 @@ def _resolve_location(fetch: Callable[[str], Any]) -> Optional[dict]:
             "lat": float(geo["lat"]),
             "lon": float(geo["lon"]),
             "label": str(geo.get("city") or ""),
+            "source": "ip",
         }
     except Exception:
         return None

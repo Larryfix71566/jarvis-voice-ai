@@ -14,6 +14,7 @@ import sqlite3
 import json
 import re
 import math
+import os
 
 
 class Scope(StrEnum):
@@ -53,6 +54,15 @@ class RolloutStage(StrEnum):
     SHADOW = "shadow"
     EXPLICIT_PREFERENCES = "explicit_preferences"
     CORROBORATED_INFERENCES = "corroborated_inferences"
+
+
+def memory_automation_enabled() -> bool:
+    """JARVIS_MEMORY_AUTOMATION_ENABLED: on only if the value is 1/true/yes.
+    Extracted from run_session's teardown check in jarvis/bot/pipeline.py
+    (status spec T2.3) so that site and jarvis.status.overview read ONE
+    rule (R8)."""
+    return os.environ.get("JARVIS_MEMORY_AUTOMATION_ENABLED", "false").lower() in {
+        "1", "true", "yes"}
 
 
 EVIDENCE_RANK = {
