@@ -517,7 +517,7 @@ def check_screen_vision() -> None:
         report(None, "Screen vision", "disabled (JARVIS_SCREEN_ENABLED=false)")
         return
     try:
-        import yaml
+        import yaml  # noqa: F401 — availability guard; keeps this report's output unchanged (D7)
     except ImportError:
         report(None, "Screen vision", "PyYAML not installed — skipped")
         return
