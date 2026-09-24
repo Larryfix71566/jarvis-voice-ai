@@ -69,7 +69,31 @@ async def bot(runner_args: RunnerArguments):
     )
 
 
-if __name__ == "__main__":
-    from pipecat.runner.run import main
+def _runner_main_preserving_env(importer=None):
+    """Import pipecat's runner without letting its .env override the shell.
 
-    main()
+    ``pipecat.runner.run`` calls ``load_dotenv(override=True)`` at import
+    time, finding a .env by walking up from site-packages. That silently
+    replaced an exported JARVIS_DB_PATH on 2026-09-13..16 and three days of
+    conversations went to another checkout's database (C6 item 12). The rule
+    everywhere else is that the exported environment wins over .env
+    (jarvis/config.py), so restore any variable the import changed and say so.
+    Variables the import merely adds are kept.
+    """
+    import importlib
+    import logging
+    import os
+
+    before = dict(os.environ)
+    module = (importer or (lambda: importlib.import_module("pipecat.runner.run")))()
+    reverted = sorted(k for k, v in before.items() if os.environ.get(k) != v)
+    for key in reverted:
+        os.environ[key] = before[key]
+    if reverted:
+        logging.getLogger(__name__).warning(
+            "pipecat_dotenv_override_reverted keys=%s", ",".join(reverted))
+    return module.main
+
+
+if __name__ == "__main__":
+    _runner_main_preserving_env()()

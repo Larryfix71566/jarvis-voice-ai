@@ -151,6 +151,8 @@ from pipecat.processors.aggregators.llm_response_universal import (
 )
 from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
 
+from jarvis.bot.connect_greeting import ConnectGreeting  # noqa: E402
+
 _logger = logging.getLogger(__name__)
 
 
@@ -1222,6 +1224,28 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
 
         client_connected = {"value": False}
 
+        # The greeting waits for the pipeline to start as well as for the
+        # client (jarvis/bot/connect_greeting.py): pushed from
+        # on_client_connected alone it arrived before the StartFrame and was
+        # dropped on every connect since at least 2026-09-11.
+        async def _send_greeting() -> None:
+            # D-008: pipecat 1.4 has add_messages (plural) and requires an
+            # explicit push_context_frame() to trigger the LLM run. Include
+            # the user's local time, but keep background memory maintenance
+            # silent; open reviews remain available from the Memory panel or
+            # an explicit memory request.
+            aggregators.user().add_messages([{
+                "role": "user",
+                "content": connection_greeting_note(settings.jarvis_timezone),
+            }])
+            await aggregators.user().push_context_frame()
+
+        greeting = ConnectGreeting(_send_greeting)
+
+        @task.event_handler("on_pipeline_started")
+        async def _on_pipeline_started(_task: Any, _frame: Any) -> None:
+            await greeting.pipeline_started()
+
         @transport.event_handler("on_client_connected")
         async def on_client_connected(transport: Any, client: Any) -> None:
             print("[session] client connected", flush=True)
@@ -1241,16 +1265,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                         if shared_content_enabled else None
                     ),
                 ))
-            # D-008: pipecat 1.4 has add_messages (plural) and requires an
-            # explicit push_context_frame() to trigger the LLM run. Include
-            # the user's local time, but keep background memory maintenance
-            # silent; open reviews remain available from the Memory panel or
-            # an explicit memory request.
-            greeting_note = connection_greeting_note(settings.jarvis_timezone)
-            aggregators.user().add_messages([{
-                "role": "user", "content": greeting_note,
-            }])
-            await aggregators.user().push_context_frame()
+            await greeting.client_connected()
 
         @transport.event_handler("on_client_disconnected")
         async def on_client_disconnected(transport: Any, client: Any) -> None:
