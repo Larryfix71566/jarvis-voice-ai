@@ -675,6 +675,14 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
         async def wait_ended(self):
             await self._ended.wait()
 
+        def event_handler(self, name):
+            # Real PipelineTask API (pipecat BaseObject.event_handler):
+            # run_session registers on_pipeline_started for the greeting.
+            def register(fn):
+                self.__dict__.setdefault("handlers", {})[name] = fn
+                return fn
+            return register
+
     class FakeRunner:
         async def run(self, task):
             # Real PipelineRunner.run returns when the task ends; blocking here
@@ -812,6 +820,14 @@ async def test_keyhealth_notice_kill_switch(monkeypatch, tmp_path, env_value, ex
         async def wait_ended(self):
             await self._ended.wait()
 
+        def event_handler(self, name):
+            # Real PipelineTask API (pipecat BaseObject.event_handler):
+            # run_session registers on_pipeline_started for the greeting.
+            def register(fn):
+                self.__dict__.setdefault("handlers", {})[name] = fn
+                return fn
+            return register
+
     class FakeRunner:
         async def run(self, task):
             await task.wait_ended()
@@ -947,6 +963,14 @@ async def test_stt_row_written_at_teardown(monkeypatch, tmp_path):
         async def wait_ended(self):
             await self._ended.wait()
 
+        def event_handler(self, name):
+            # Real PipelineTask API (pipecat BaseObject.event_handler):
+            # run_session registers on_pipeline_started for the greeting.
+            def register(fn):
+                self.__dict__.setdefault("handlers", {})[name] = fn
+                return fn
+            return register
+
     class FakeRunner:
         async def run(self, task):
             await task.wait_ended()
@@ -1070,6 +1094,14 @@ async def test_late_result_hook_arms_the_neutralizer(monkeypatch, tmp_path, flag
 
         async def wait_ended(self):
             await self._ended.wait()
+
+        def event_handler(self, name):
+            # Real PipelineTask API (pipecat BaseObject.event_handler):
+            # run_session registers on_pipeline_started for the greeting.
+            def register(fn):
+                self.__dict__.setdefault("handlers", {})[name] = fn
+                return fn
+            return register
 
     class FakeRunner:
         async def run(self, task):
