@@ -43,13 +43,14 @@
   the tool name and call ID, not arguments.
 
 At the `4acb4dc` source baseline, no production call site used
-`ModelExecutionRequest`/`execute_chat`. The `kb_digest` family now uses the
-boundary whenever its existing background route resolves through model
-routing. Procedure description, per-exchange extraction, and whole-session
-memory fold-in also use the boundary when their background routes resolve.
-All four retain their legacy direct-client paths while routing is disabled
-and for their injected test seams. The other production call families have
-not been migrated.
+`ModelExecutionRequest`/`execute_chat`. Six background production call sites
+now use the boundary when their existing route resolves: `kb_digest`,
+procedure description, per-exchange extraction, whole-session memory fold-in,
+capacity merge, and memory classification. Each retains its legacy direct-
+client path while routing is disabled and its injected test seam. Four
+production targets remain: delegated agent, planner, mixed voice/vision
+pipeline, and council. The supervisor voice route is an explicit exception;
+the offline evaluation helper is not a production caller.
 
 ## Validation and limitations
 
@@ -65,20 +66,20 @@ not been migrated.
   execution metadata stores route/billing/duration/response ID, and the cost
   report groups subscription and API sources. This is a targeted database
   check, not the unit suite.
-- Focused pytest files for the ledger and `kb_digest` migration were added but
-  could not run here. This worktree's isolated Python lacks pytest, PyYAML,
-  Pydantic and jsonschema; importing `jarvis.kb_digest` fails at the missing
-  Pydantic dependency. Their files compile, but the production-call migration
-  still needs the locked test environment before acceptance.
+- Focused pytest files for the ledger, `kb_digest`, procedure descriptions,
+  memory extraction/fold-in, and memory-sweep migrations were added but could
+  not run here. This worktree's isolated Python lacks pytest, PyYAML, Pydantic
+  and jsonschema; importing production modules that require Pydantic fails.
+  Changed source and tests compile, but these migrations still need the locked
+  test environment before acceptance.
 - A full offline sync of `requirements-lock.txt` could not complete because
   the cache lacks `torch==2.13.0`; installing the minimal test requirements
   offline also failed on uncached `Pygments` and PyYAML artifacts. No network
   dependency was fetched.
-- One production family (`kb_digest`) now crosses the execution boundary only
-  when the model-routing feature is enabled and the resolved route passes the
-  privacy gate. The legacy path remains when routing is disabled. No provider
-  route choices, runtime feature flags, prompts or tool execution policy were
-  changed.
+- The six migrated background call sites cross the execution boundary only
+  when model routing is enabled and their resolved route passes the privacy
+  gate. Legacy paths remain when routing is disabled. No provider route
+  choices, runtime feature flags, prompts or tool execution policy changed.
 - A second family (`procedures_describe`) now crosses the same boundary under
   the resolved background route, with the existing JSON response parser and
   compatibility/test path retained. Source compiles; its focused pytest file
@@ -99,12 +100,24 @@ not been migrated.
   when the existing memory route resolves. Its prompt, output trimming,
   compatibility path, and reversible archive policy remain unchanged. Source
   compiles; focused pytest cannot run because this environment lacks pytest
-  and runtime dependencies. Six of the 11 production call sites remain to
-  migrate; supervisor voice traffic stays on its explicit legacy exception.
+  and runtime dependencies.
+- The batched `memory_classify` call now uses the boundary when its memory
+  route resolves. The two-message prompt and abstaining JSON parser remain
+  unchanged, so the model still only labels possible contradictions and
+  audiences; it does not resolve or apply those labels. Source compiles;
+  focused pytest cannot run because this environment lacks pytest and runtime
+  dependencies.
+
+The static inventory has 11 non-boundary production call sites: six migrated
+background call sites, four remaining migration targets, and the supervisor's
+intentional voice-path exception. The offline evaluation fixture and the
+execution boundary itself account for the other two inventory entries. The
+four remaining migration targets are the delegated agent, planner, mixed voice
+and vision pipeline, and council.
 
 ## Still required for GC24-02
 
-Still migrate the remaining 6 production call sites/families; propagate
+Still migrate the remaining four production targets; propagate
 cancellation/timeout through their callers and prevent late UI/database writes;
 add idempotent tool reconciliation; complete streaming progress/text/artifact
 and tool-result events; and run focused and whole-project tests in the locked

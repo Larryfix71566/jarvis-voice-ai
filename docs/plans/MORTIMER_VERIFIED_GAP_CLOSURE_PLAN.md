@@ -231,7 +231,7 @@ source owner, unsupported completion claim or change to historical receipts.
 **Primary files:** `jarvis/model_execution.py`, `jarvis/model_routing.py`,
 `jarvis/llm_client.py`, `jarvis/memory_model.py`,
 `jarvis/memory_extraction.py`, `jarvis/memory.py`, `jarvis/usage_ledger.py`,
-`scripts/cost_report.py`; affected callers identified by
+`jarvis/memory_sweep.py`, `scripts/cost_report.py`; affected callers identified by
 `scripts/audit_model_call_sites.py` (first migrated family:
 `jarvis/kb_digest.py`). Tests in `tests/unit/test_model_execution.py`,
 `tests/unit/test_usage_ledger.py`, `tests/unit/test_kb_digest.py`,
@@ -744,13 +744,15 @@ do all independent preparation before seeking the user's action.
   schema-checked tool requests without executing them; and reports ordered
   policy-carrying lifecycle events with known usage metadata. Twenty-two focused
   cases pass only in a stubbed direct harness, not pytest. `kb_digest` and
-  procedure description, per-exchange extraction, and whole-session memory
-  fold-in and capacity `memory_merge` now use this boundary when model routing
-  is enabled; the usage ledger
-  separately records unknown counts, billing source, route,
-  duration and response ID. A real SQLite exercise passed. See the
+  procedure description, per-exchange extraction, whole-session memory
+  fold-in, and both memory-sweep model calls now use this boundary when model
+  routing is enabled; the usage ledger separately records unknown counts,
+  billing source, route, duration and response ID. A real SQLite exercise
+  passed. See the
   [GC24-02 progress receipt](../acceptance/verified-gap-closure/GC24-02-execution-input-progress-2026-09-25.md).
-  This does not close GC24-02: the remaining 6 production callers,
-  streaming/tool-result/artifact events, downstream cancellation, idempotent
+  This does not close GC24-02: four production migration targets remain
+  (delegated agent, planner, mixed voice/vision pipeline, and council), with
+  the supervisor voice path explicitly exempt. Streaming/tool-result/artifact
+  events, downstream cancellation, idempotent
   tool reconciliation, locked-environment verification and prevention of late
   durable writes remain.

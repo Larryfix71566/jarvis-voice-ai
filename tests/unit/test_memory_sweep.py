@@ -25,6 +25,7 @@ from jarvis.memory_sweep import (
     STAGING_EXPIRY_DAYS,
     SWEEP_MAX_ARCHIVES,
     _apply_classification,
+    _classify_batch,
     _merge_cluster,
     _parse_classification,
     _select_audience_candidates,
@@ -112,6 +113,67 @@ async def test_routed_memory_merge_uses_shared_execution_boundary(monkeypatch):
         ),
     }]
     assert recorded and recorded[0][0][0] == "memory_merge"
+
+
+@pytest.mark.asyncio
+async def test_routed_memory_classification_uses_shared_execution_boundary(monkeypatch):
+    payload = json.dumps({
+        "pairs": [{"a": "user.preference.a", "b": "user.preference.b", "verdict": "duplicate"}],
+        "audiences": [{"key": "user.preference.a", "audience": "interaction"}],
+    })
+
+    class RoutedClient:
+        def __init__(self):
+            self.chat = self
+            self.completions = self
+            self.request = None
+
+        async def create(self, **kwargs):
+            self.request = kwargs
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=payload))],
+                usage=None,
+                id="memory-classify-response",
+            )
+
+    client = RoutedClient()
+    resolved = ResolvedModelRoute(
+        workload="background", profile_name="test", model="model",
+        provider="saygm", base_url="https://gateway.example/v1/",
+        route=AccessRoute(
+            "saygm", "saygm_gateway", "saygm_credit", None, "confidential",
+            capabilities=("text",),
+        ),
+        api_key_env=None, identity="saygm/model", priority="background",
+    )
+    monkeypatch.setattr(memory_sweep_module, "_PROCESS_ADMISSION", ModelAdmissionController())
+    monkeypatch.setattr(
+        memory_sweep_module, "make_memory_async_client",
+        lambda settings: (client, SimpleNamespace(model="model", resolved=resolved)),
+    )
+    recorded = []
+    monkeypatch.setattr(
+        memory_sweep_module, "record_execution_result",
+        lambda *args, **kwargs: recorded.append((args, kwargs)),
+    )
+    pair = (
+        {"key": "user.preference.a", "content": "prefers concise answers"},
+        {"key": "user.preference.b", "content": "prefers brief replies"},
+    )
+    candidates = [{"key": "user.preference.a", "content": "prefers concise answers"}]
+
+    result = await _classify_batch([pair], candidates, object())
+
+    assert result["pairs"] == {frozenset(("user.preference.a", "user.preference.b")): "duplicate"}
+    assert result["audiences"] == {"user.preference.a": "interaction"}
+    assert client.request["messages"] == [
+        {"role": "system", "content": memory_sweep_module.CLASSIFY_PROMPT},
+        {"role": "user", "content": json.dumps({
+            "pairs": [{"a": "user.preference.a", "a_content": "prefers concise answers", "b": "user.preference.b", "b_content": "prefers brief replies"}],
+            "facts": [{"key": "user.preference.a", "content": "prefers concise answers"}],
+        })},
+    ]
+    assert recorded and recorded[0][0][0] == "memory_classify"
 
 
 # --- A1: auto-consolidation ---------------------------------------------

@@ -55,7 +55,7 @@ from jarvis.memory import (
 )
 from jarvis.procedures import _tokens
 from jarvis.memory_model import make_memory_async_client
-from jarvis.model_execution import ModelExecutionRequest, execute_chat
+from jarvis.model_execution import ModelContextMessage, ModelExecutionRequest, execute_chat
 from jarvis.privacy_policy import DataPolicy
 from jarvis.usage_ledger import (
     provider_from_base_url,
@@ -728,9 +728,11 @@ async def _classify_batch(
     if client_factory is not None:
         client = client_factory(settings)
         model = getattr(settings, "openai_model", None)
+        resolved = None
     else:
         client, route = make_memory_async_client(settings)
         model = route.model
+        resolved = route.resolved
     payload = {
         "pairs": [
             {"a": a["key"], "a_content": a["content"], "b": b["key"], "b_content": b["content"]}
@@ -740,23 +742,48 @@ async def _classify_batch(
             {"key": f["key"], "content": f["content"]} for f in audience_candidates
         ],
     }
-    response = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": CLASSIFY_PROMPT},
-            {"role": "user", "content": json.dumps(payload)},
-        ],
-    )
-    try:
-        record_completion(
-            rung="memory_classify",
-            provider=provider_from_base_url(str(client.base_url)),
-            model=model,
-            response=response,
+    user_prompt = json.dumps(payload)
+    if resolved is not None:
+        request_id = f"memory-classify:{uuid.uuid4().hex}"
+        execution = await execute_chat(
+            ModelExecutionRequest(
+                workload=resolved.workload,
+                task_id=request_id,
+                parent_request_id=request_id,
+                instructions=user_prompt,
+                context=(ModelContextMessage(
+                    "system", CLASSIFY_PROMPT,
+                    DataPolicy("confidential", "memory-classification-prompt"),
+                ),),
+                data_policy=DataPolicy("confidential", "memory-classification-input"),
+                timeout_s=30.0,
+            ),
+            resolved,
+            client_factory=lambda _: client,
         )
-    except Exception:
-        pass
-    return _parse_classification(response.choices[0].message.content or "")
+        record_execution_result("memory_classify", execution)
+        result_text = execution.text
+    else:
+        # Compatibility path while model routing is disabled and for the
+        # injected test seam; preserve the two-message prompt shape.
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": CLASSIFY_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        try:
+            record_completion(
+                rung="memory_classify",
+                provider=provider_from_base_url(str(client.base_url)),
+                model=model,
+                response=response,
+            )
+        except Exception:
+            pass
+        result_text = response.choices[0].message.content or ""
+    return _parse_classification(result_text)
 
 
 def _apply_classification(
