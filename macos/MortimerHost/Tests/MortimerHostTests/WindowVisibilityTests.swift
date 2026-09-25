@@ -28,6 +28,21 @@ final class WindowVisibilityTests: XCTestCase {
         repeat { pumpEvents(for: 0.05) } while !condition() && Date() < deadline
     }
 
+    /// Puts a fixture window in front of every other app's windows. These
+    /// tests read visibility from the window server, so any other window over
+    /// the fixture (the Terminal running `swift test`, the Mortimer app) makes
+    /// them fail for a reason that is not the code under test. On 24 Sep main
+    /// failed 2 of 4 isolated runs (a restored wave did not resume within
+    /// 0.5 s; a deminiaturized window was not reported visible within 3 s),
+    /// and a full-suite run saw the fixture itself report not visible 0.3 s
+    /// after appearing. The assertions are unchanged; only the fixture is
+    /// raised above other apps' windows.
+    private func show(_ window: NSWindow) {
+        window.level = .floating
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+    }
+
     func testActualWindowHideShowAndDetachUpdateVisibility() throws {
         _ = NSApplication.shared
         let originalPolicy = NSApp.activationPolicy()
@@ -42,7 +57,7 @@ final class WindowVisibilityTests: XCTestCase {
         window.isReleasedWhenClosed = false
         defer { window.close() }
         window.contentView = view
-        window.makeKeyAndOrderFront(nil)
+        show(window)
         pumpEvents(until: { reports.last == true })
         print("VISIBILITY_FIXTURE active=\(NSApp.isActive) screens=\(NSScreen.screens.count) onSpace=\(window.isOnActiveSpace) frame=\(window.frame) occlusion=\(window.occlusionState.rawValue)")
         XCTAssertTrue(window.isVisible)
@@ -51,7 +66,7 @@ final class WindowVisibilityTests: XCTestCase {
         window.orderOut(nil)
         pumpEvents(until: { reports.last == false })
         XCTAssertEqual(reports.last, false, "Ordering the window out must suspend animation")
-        window.makeKeyAndOrderFront(nil)
+        show(window)
         pumpEvents(until: { reports.last == true })
         XCTAssertEqual(reports.last, true)
         window.miniaturize(nil)
@@ -59,7 +74,7 @@ final class WindowVisibilityTests: XCTestCase {
         XCTAssertTrue(window.isMiniaturized, "The fixture must actually minimize the window")
         XCTAssertEqual(reports.last, false)
         window.deminiaturize(nil)
-        window.makeKeyAndOrderFront(nil)
+        show(window)
         pumpEvents(until: { !window.isMiniaturized && reports.last == true })
         XCTAssertFalse(window.isMiniaturized)
         XCTAssertEqual(reports.last, true)
@@ -96,7 +111,7 @@ final class WindowVisibilityTests: XCTestCase {
         window.isReleasedWhenClosed = false
         defer { window.close() }
         window.contentView = view
-        window.makeKeyAndOrderFront(nil)
+        show(window)
         pumpEvents(until: { window.occlusionState.contains(.visible) })
         pumpEvents(for: 0.3)
         let started = samples
@@ -109,7 +124,7 @@ final class WindowVisibilityTests: XCTestCase {
         let suspended = samples
         pumpEvents(for: 0.2)
         XCTAssertEqual(samples, suspended, "A hidden wave must stop requesting animation samples")
-        window.makeKeyAndOrderFront(nil)
+        show(window)
         pumpEvents(until: { window.occlusionState.contains(.visible) })
         pumpEvents(for: 0.3)
         let resumed = samples
@@ -135,7 +150,7 @@ final class WindowVisibilityTests: XCTestCase {
         window.isReleasedWhenClosed = false
         defer { window.close() }
         window.contentView = view
-        window.makeKeyAndOrderFront(nil)
+        show(window)
         pumpEvents(until: { window.occlusionState.contains(.visible) })
         pumpEvents(for: 0.3)
         XCTAssertTrue(window.occlusionState.contains(.visible))
