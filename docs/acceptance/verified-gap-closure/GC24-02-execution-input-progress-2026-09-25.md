@@ -83,22 +83,28 @@ not been migrated.
   the resolved background route, with the existing JSON response parser and
   compatibility/test path retained. Source compiles; its focused pytest file
   cannot run because this environment lacks pytest and runtime dependencies.
-  The remaining 11 production call sites were not migrated at this checkpoint.
+  Nine of the 11 production call sites remained at this checkpoint.
 - Per-exchange `memory_extraction` now crosses the boundary under its resolved
   memory route. The existing strict JSON parser and durable novelty-gated
   writes remain after a successful response. Source compiles; focused pytest
   cannot run because this environment lacks pytest and runtime dependencies.
-  The remaining 10 production call sites remained at this checkpoint.
+  Eight of the 11 production call sites remained at this checkpoint.
 - Whole-session `memory.update_memory_from_session` now crosses the same
   boundary behind its resolved memory route. Prompt selection (including the
   extraction-v2 kill switch), strict parser, and persistence behavior remain
   unchanged. Source compiles; focused pytest cannot run because this
-  environment lacks pytest and runtime dependencies. The remaining 9
-  production call sites are not yet migrated.
+  environment lacks pytest and runtime dependencies. Seven of the 11
+  production call sites remained at this checkpoint.
+- The capacity-enforcement `memory_merge` call now uses the shared boundary
+  when the existing memory route resolves. Its prompt, output trimming,
+  compatibility path, and reversible archive policy remain unchanged. Source
+  compiles; focused pytest cannot run because this environment lacks pytest
+  and runtime dependencies. Six of the 11 production call sites remain to
+  migrate; supervisor voice traffic stays on its explicit legacy exception.
 
 ## Still required for GC24-02
 
-Still migrate the remaining 9 production call sites/families; propagate
+Still migrate the remaining 6 production call sites/families; propagate
 cancellation/timeout through their callers and prevent late UI/database writes;
 add idempotent tool reconciliation; complete streaming progress/text/artifact
 and tool-result events; and run focused and whole-project tests in the locked

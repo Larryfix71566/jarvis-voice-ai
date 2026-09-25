@@ -41,6 +41,7 @@ import json
 import logging
 import os
 import threading
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
@@ -53,8 +54,14 @@ from jarvis.memory import (
     upsert_fact,
 )
 from jarvis.procedures import _tokens
-from jarvis.usage_ledger import record_completion, provider_from_base_url
 from jarvis.memory_model import make_memory_async_client
+from jarvis.model_execution import ModelExecutionRequest, execute_chat
+from jarvis.privacy_policy import DataPolicy
+from jarvis.usage_ledger import (
+    provider_from_base_url,
+    record_completion,
+    record_execution_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -357,31 +364,51 @@ async def _merge_cluster(
         if client_factory is not None:
             client = client_factory(settings)
             model = getattr(settings, "openai_model", None)
+            resolved = None
         else:
             client, route = make_memory_async_client(settings)
             model = route.model
+            resolved = route.resolved
         # `settings` may be None when a test-seam `client_factory` supplies
         # its own fake client — getattr rather than assume, so that seam
         # never has to fabricate a whole Settings object.
         facts_block = "\n".join(
             f"- {k}: {c}" for k, c in zip(proposal.keys, proposal.contents)
         )
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "user", "content": MERGE_PROMPT.format(facts=facts_block)},
-            ],
-        )
-        try:
-            record_completion(
-                rung="memory_merge",
-                provider=provider_from_base_url(str(client.base_url)),
-                model=model,
-                response=response,
+        prompt = MERGE_PROMPT.format(facts=facts_block)
+        if resolved is not None:
+            request_id = f"memory-merge:{uuid.uuid4().hex}"
+            execution = await execute_chat(
+                ModelExecutionRequest(
+                    workload=resolved.workload,
+                    task_id=request_id,
+                    parent_request_id=request_id,
+                    instructions=prompt,
+                    data_policy=DataPolicy("confidential", "memory-merge-facts"),
+                    timeout_s=30.0,
+                ),
+                resolved,
+                client_factory=lambda _: client,
             )
-        except Exception:
-            pass
-        text = (response.choices[0].message.content or "").strip()
+            record_execution_result("memory_merge", execution)
+            text = execution.text.strip()
+        else:
+            # Compatibility path while model routing is disabled and for the
+            # injected test seam; preserve the legacy user-message request.
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            try:
+                record_completion(
+                    rung="memory_merge",
+                    provider=provider_from_base_url(str(client.base_url)),
+                    model=model,
+                    response=response,
+                )
+            except Exception:
+                pass
+            text = (response.choices[0].message.content or "").strip()
         return text or None
     except Exception:  # noqa: BLE001 — a failed merge falls through to age-out
         logger.warning(

@@ -80,7 +80,7 @@ no linked receipt are also unreceipted.
   (GC24-02 progress: `kb_digest`, procedure description, per-exchange memory
   extraction, and whole-session memory fold-in now use the shared execution
   boundary when their existing model route resolves under the routing gate;
-  the old paths remain when routing is disabled. The other 9 production call
+  the old paths remain when routing is disabled. The other 6 production call
   sites have not yet been migrated.)
 - [ ] **MAR-H** — Add persistent route/workload controls to the existing
   native console and voice command path. The sidecar draft/confirm API and

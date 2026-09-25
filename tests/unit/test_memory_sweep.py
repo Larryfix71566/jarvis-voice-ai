@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
+from jarvis import memory_sweep as memory_sweep_module
 from jarvis.db import get_conn, now_iso, run_migrations
 from jarvis.memory import (
     MAX_CONTEXT_CHARS,
@@ -23,6 +25,7 @@ from jarvis.memory_sweep import (
     STAGING_EXPIRY_DAYS,
     SWEEP_MAX_ARCHIVES,
     _apply_classification,
+    _merge_cluster,
     _parse_classification,
     _select_audience_candidates,
     _select_contradiction_pairs,
@@ -35,6 +38,8 @@ from jarvis.memory_sweep import (
     run_sweep,
     run_stale_sweep,
 )
+from jarvis.model_execution import ModelAdmissionController
+from jarvis.model_routing import AccessRoute, ResolvedModelRoute
 from tests.unit.test_memory import _factory
 
 
@@ -53,6 +58,60 @@ def _fact(conn, key, content, tier=None):
         "VALUES ('fact', ?, ?, ?, ?, ?)",
         (key, content, now_iso(), now_iso(), tier),
     )
+
+
+@pytest.mark.asyncio
+async def test_routed_memory_merge_uses_shared_execution_boundary(monkeypatch):
+    class RoutedClient:
+        def __init__(self):
+            self.chat = self
+            self.completions = self
+            self.request = None
+
+        async def create(self, **kwargs):
+            self.request = kwargs
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="Merged fact."))],
+                usage=None,
+                id="memory-merge-response",
+            )
+
+    client = RoutedClient()
+    resolved = ResolvedModelRoute(
+        workload="background", profile_name="test", model="model",
+        provider="saygm", base_url="https://gateway.example/v1/",
+        route=AccessRoute(
+            "saygm", "saygm_gateway", "saygm_credit", None, "confidential",
+            capabilities=("text",),
+        ),
+        api_key_env=None, identity="saygm/model", priority="background",
+    )
+    monkeypatch.setattr(memory_sweep_module, "_PROCESS_ADMISSION", ModelAdmissionController())
+    monkeypatch.setattr(
+        memory_sweep_module, "make_memory_async_client",
+        lambda settings: (client, SimpleNamespace(model="model", resolved=resolved)),
+    )
+    recorded = []
+    monkeypatch.setattr(
+        memory_sweep_module, "record_execution_result",
+        lambda *args, **kwargs: recorded.append((args, kwargs)),
+    )
+    proposal = SimpleNamespace(
+        keys=("user.preference.a", "user.preference.b"),
+        contents=("prefers concise answers", "prefers brief replies"),
+        tier="preference",
+    )
+
+    result = await _merge_cluster(proposal, object())
+
+    assert result == "Merged fact."
+    assert client.request["messages"] == [{
+        "role": "user",
+        "content": memory_sweep_module.MERGE_PROMPT.format(
+            facts="- user.preference.a: prefers concise answers\n- user.preference.b: prefers brief replies"
+        ),
+    }]
+    assert recorded and recorded[0][0][0] == "memory_merge"
 
 
 # --- A1: auto-consolidation ---------------------------------------------

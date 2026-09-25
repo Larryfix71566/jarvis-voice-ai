@@ -745,11 +745,12 @@ do all independent preparation before seeking the user's action.
   policy-carrying lifecycle events with known usage metadata. Twenty-two focused
   cases pass only in a stubbed direct harness, not pytest. `kb_digest` and
   procedure description, per-exchange extraction, and whole-session memory
-  fold-in now use this boundary when model routing is enabled; the usage ledger
+  fold-in and capacity `memory_merge` now use this boundary when model routing
+  is enabled; the usage ledger
   separately records unknown counts, billing source, route,
   duration and response ID. A real SQLite exercise passed. See the
   [GC24-02 progress receipt](../acceptance/verified-gap-closure/GC24-02-execution-input-progress-2026-09-25.md).
-  This does not close GC24-02: the remaining 9 production callers,
+  This does not close GC24-02: the remaining 6 production callers,
   streaming/tool-result/artifact events, downstream cancellation, idempotent
   tool reconciliation, locked-environment verification and prevention of late
   durable writes remain.
