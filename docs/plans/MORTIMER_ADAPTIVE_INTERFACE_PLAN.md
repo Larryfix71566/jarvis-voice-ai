@@ -31,6 +31,18 @@ independent during overlap. The legacy layered Silo renderer remains available
 through the rollback layouts. Missing audio stays static and truthful, and
 Reduce Motion disables orbital motion. The implementation and rendering
 receipt is `docs/acceptance/adaptive-interface/receipts/candidate-atom-wave-2026-09-18.md`.
+
+**September 23 visual amendment:** the atom's glass shell is replaced by
+option A ("Crystal") from the orb glass comparison: a clear, thick-walled
+globe with a Fresnel-weighted room reflection, a two-pane window and rim
+strip placed by mirror-sphere geometry, a caustic and a faint rim
+dispersion. Reflections no longer fade with voice strength, so the glass
+stays visible in standby. Plasma, comets, colors, measured-level behavior
+and Reduce Motion are unchanged. `JARVIS_ORB_CRYSTAL=off` restores the
+previous shell without a rebuild. Plan:
+`docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`; receipt:
+`docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-24.md`.
+
 **Baseline inspected:** repository commit `2ccf66cd7e00b82cf9136d2cd00f42e9bddb90af` (PR #63), 2026-09-10. Recheck the actual starting commit before implementation.
 **Owner:** Larry. Implementation may be assigned to a coding model one phase at a time. This document authorizes no application-code change by itself.
 **Safety claim:** This plan reduces regression risk through explicit contracts, independent verification, staged rollout and rollback. It does not promise zero regressions. An unmeasured or untested requirement remains open.

@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Mortimer Glass Orb</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Single dark look on purpose: the orb lives on MortimerHost's graphite stage (AppTheme.bg #15191D). */
+  :root {
+    color-scheme: dark;
+    --page: #0E1114;
+    --stage: #15191D;
+    --panel: #12171B;
+    --line: #2A343D;
+    --line-soft: #1F272E;
+    --text: #E2F1F9;
+    --dim: #8FA8B8;
+    --faint: #62778A;
+    --accent: #2CC9FF;
+    --amber: #FFB454;
+    --teal: #2DD4BF;
+    --orange: #E07020;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  html { background: var(--page); }
+  body { background: var(--page); color: var(--text); font: 15px/1.6 var(--sans); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 36px 72px; display: grid; gap: 40px; }
+
+  .eyebrow, .tag, .label, .chip, .seg label, .meta { font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.18em; }
+  header { display: grid; gap: 12px; max-width: 70ch; }
+  .eyebrow { font-size: 11px; color: var(--accent); }
+  h1 { font-weight: 500; font-size: clamp(28px, 4.4vw, 40px); line-height: 1.1; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+  .lede { color: var(--dim); margin: 0; font-size: 16px; }
+
+  /* Controls */
+  .controls {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+    background: color-mix(in srgb, var(--page) 88%, transparent);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border-block: 1px solid var(--line-soft);
+    padding-block: 12px;
+    display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center;
+  }
+  .ctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .label { font-size: 10px; color: var(--faint); }
+  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg label { font-size: 10.5px; letter-spacing: 0.12em; color: var(--dim); padding: 7px 11px; cursor: pointer; border-right: 1px solid var(--line); user-select: none; }
+  .seg label:last-of-type { border-right: 0; }
+  .seg input:checked + label { background: rgba(44, 201, 255, 0.12); color: var(--text); }
+  .seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .seg label .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  input[type=range] { width: 140px; accent-color: var(--accent); }
+  input[type=range]:disabled { opacity: 0.35; }
+  .readout { font: 12px var(--mono); color: var(--dim); min-width: 3.2em; font-variant-numeric: tabular-nums; }
+  .btn { font: 500 10.5px var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Option grid */
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+  .opt { margin: 0; background: var(--panel); border: 1px solid var(--line-soft); border-radius: 10px; padding: 16px; display: grid; gap: 12px; align-content: start; }
+  .opt.is-now { border-style: dashed; }
+  .opt-head { display: flex; align-items: baseline; gap: 12px; }
+  .tag { font-size: 10px; color: var(--accent); border: 1px solid rgba(44, 201, 255, 0.35); border-radius: 4px; padding: 2px 7px; letter-spacing: 0.16em; }
+  .is-now .tag { color: var(--dim); border-color: var(--line); }
+  .opt h2 { font-size: 17px; font-weight: 500; margin: 0; }
+  .stage { background: var(--stage); border-radius: 8px; display: grid; place-items: center; padding: 10px; border: 1px solid #1B2126; }
+  .stage canvas { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; }
+  .desc { margin: 0; color: var(--dim); font-size: 14px; }
+  .cues { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13.5px; }
+  .cues li { padding-left: 16px; position: relative; }
+  .cues li::before { content: ""; position: absolute; left: 2px; top: 0.62em; width: 6px; height: 1px; background: var(--accent); }
+  .is-now .cues li::before { background: var(--amber); }
+  .meta { font-size: 10px; letter-spacing: 0.12em; color: var(--faint); border-top: 1px solid var(--line-soft); padding-top: 10px; }
+  .meta b { color: var(--dim); font-weight: 500; }
+
+  /* Prose sections */
+  section { display: grid; gap: 14px; max-width: 76ch; }
+  section h3 { font-weight: 500; font-size: 20px; margin: 0; text-wrap: balance; }
+  section p { margin: 0; color: var(--dim); }
+  ol.findings { margin: 0; padding-left: 22px; display: grid; gap: 10px; }
+  ol.findings li { padding-left: 4px; }
+  ol.findings li::marker { font-family: var(--mono); color: var(--amber); font-size: 12px; }
+  code { font-family: var(--mono); font-size: 0.86em; color: var(--text); background: #1A2026; border: 1px solid var(--line-soft); border-radius: 4px; padding: 1px 5px; }
+  .t { font-family: var(--mono); font-size: 11px; color: var(--amber); letter-spacing: 0.04em; }
+  ul.plain { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+  .foot { font-size: 13px; color: var(--faint); max-width: 80ch; border-top: 1px solid var(--line-soft); padding-top: 16px; }
+
+  @media (max-width: 760px) {
+    .grid { grid-template-columns: minmax(0, 1fr); }
+    .wrap { padding-inline: 16px; gap: 32px; }
+    .controls { gap: 12px 18px; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">MortimerHost · CometOrbRenderer.swift</div>
+    <h1>Mortimer Glass Orb</h1>
+    <p class="lede">Three glass shells for the voice orb, drawn next to the current one. Plasma, comets, colors and orbit timing are the same code in all four panels; only the shell around them changes.</p>
+  </header>
+
+  <div class="controls" role="group" aria-label="Preview controls">
+    <div class="ctl">
+      <span class="label" id="lbl-state">State</span>
+      <div class="seg" role="radiogroup" aria-labelledby="lbl-state">
+        <input type="radio" name="state" id="st-listening" value="listening"><label for="st-listening"><span class="dot" style="background:#7C8CFF"></span>Listening</label>
+        <input type="radio" name="state" id="st-user" value="user"><label for="st-user"><span class="dot" style="background:#2DD4BF"></span>You</label>
+        <input type="radio" name="state" id="st-assistant" value="assistant" checked><label for="st-assistant"><span class="dot" style="background:#E07020"></span>Mortimer</label>
+        <input type="radio" name="state" id="st-overlap" value="overlap"><label for="st-overlap">Overlap</label>
+        <input type="radio" name="state" id="st-thinking" value="thinking"><label for="st-thinking">Thinking</label>
+        <input type="radio" name="state" id="st-offline" value="offline"><label for="st-offline">Standby</label>
+      </div>
+    </div>
+    <div class="ctl">
+      <label class="label" for="level">Voice level</label>
+      <input type="range" id="level" min="0" max="1" step="0.01" value="0.8">
+      <span class="readout" id="level-out">0.80</span>
+    </div>
+    <div class="ctl">
+      <span class="label" id="lbl-size">Size</span>
+      <div class="seg" role="radiogroup" aria-labelledby="lbl-size">
+        <input type="radio" name="size" id="sz-app" value="app" checked><label for="sz-app">Actual</label>
+        <input type="radio" name="size" id="sz-inspect" value="inspect"><label for="sz-inspect">2× inspect</label>
+      </div>
+    </div>
+    <button class="btn" id="play" type="button" aria-pressed="true">Pause motion</button>
+  </div>
+
+  <div class="grid">
+    <figure class="opt is-now" data-style="current">
+      <figcaption class="opt-head"><span class="tag">Now</span><h2>Current shell</h2></figcaption>
+      <div class="stage"><canvas aria-label="Current orb shell, rendered from a port of CometOrbRenderer.swift"></canvas></div>
+      <p class="desc">Rim ring, four broken arcs and one soft highlight over a near-transparent fill.</p>
+      <ul class="cues">
+        <li>Body fill peaks at 6% opacity, so there is no glass mass</li>
+        <li>Highlight is a blurred 40% disc, not a specular</li>
+        <li>Rim, arcs and highlight fade with voice strength (16% in standby)</li>
+      </ul>
+      <div class="meta"><b>10</b> blurred layers per frame (baseline)</div>
+    </figure>
+
+    <figure class="opt" data-style="crystal">
+      <figcaption class="opt-head"><span class="tag">A</span><h2>Crystal</h2></figcaption>
+      <div class="stage"><canvas aria-label="Option A, crystal glass shell"></canvas></div>
+      <p class="desc">Clear, thick-walled globe lit by a studio window. The most literal glass of the three.</p>
+      <ul class="cues">
+        <li>Two-pane window and rim-strip reflections placed by mirror-sphere geometry</li>
+        <li>A softer second window reflection off the inside of the far wall</li>
+        <li>Edge reflectance from Schlick's Fresnel curve for glass (R₀ = 0.04)</li>
+        <li>Visible wall thickness; plasma light pools in the wall on the far side</li>
+        <li>Back half of each orbit dimmed by the glass body</li>
+        <li>Faint cyan/amber dispersion on the lit rim</li>
+      </ul>
+      <div class="meta"><b>+4</b> blurred layers per frame, <b>+0</b> if static reflections are cached</div>
+    </figure>
+
+    <figure class="opt" data-style="liquid">
+      <figcaption class="opt-head"><span class="tag">B</span><h2>Liquid Glass</h2></figcaption>
+      <div class="stage"><canvas aria-label="Option B, Liquid Glass style shell"></canvas></div>
+      <p class="desc">Follows the macOS 26 material your panels already use through <code>.glassEffect(.regular)</code>: a lens with a bright bent edge.</p>
+      <ul class="cues">
+        <li>Refraction band at the edge, brightest upper-left and lower-right</li>
+        <li>Specular line that runs along the rim instead of a hotspot</li>
+        <li>Frosted body; plasma magnified 1.06× by the lens</li>
+        <li>Soft contact shadow under the orb</li>
+      </ul>
+      <div class="meta"><b>+2</b> blurred layers per frame, <b>+0</b> if static reflections are cached</div>
+    </figure>
+
+    <figure class="opt" data-style="smoked">
+      <figcaption class="opt-head"><span class="tag">C</span><h2>Smoked</h2></figcaption>
+      <div class="stage"><canvas aria-label="Option C, smoked glass shell"></canvas></div>
+      <p class="desc">Dark tinted glass. The plasma glows from inside a denser body, and reflections read the strongest.</p>
+      <ul class="cues">
+        <li>Reflected studio horizon, computed for a camera 12° above the orb</li>
+        <li>Tint absorbs more toward the edge, where the light path is longer</li>
+        <li>Same window and rim strip as A, at higher contrast</li>
+        <li>Nucleus stays bright; outer filaments sink into the glass</li>
+      </ul>
+      <div class="meta"><b>+2</b> blurred layers per frame, <b>+0</b> if static reflections are cached</div>
+    </figure>
+  </div>
+
+  <section>
+    <h3>Why the current shell reads as light, not glass</h3>
+    <ol class="findings">
+      <li>The sphere fill runs 2.5% → 6% opacity from center to 65% radius. Without body, the eye sees a ring drawn around the plasma rather than an object holding it.</li>
+      <li>The only highlight is a disc 0.25 × radius wide at 40% peak opacity, then blurred. Glass speculars are small, sharp-edged and close to full white.</li>
+      <li>The rim band, arcs and highlight are all multiplied by <code>strength</code>, which drops to 0.16 in standby. A physical globe keeps its reflections when the light inside turns off; this one mostly vanishes.</li>
+      <li>Edge brightness comes from one ice band at 97.5% radius. Real glass reflectance climbs smoothly toward the silhouette: about 4% face-on, about 50% at 99% radius, 100% at the edge.</li>
+      <li>The back half of each comet orbit is drawn under a sphere fill that stays at or below 6% across the inner two-thirds, so it shows through at nearly full brightness. Nothing tells the eye there is glass in the way.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h3>What changes in the Swift</h3>
+    <ul class="plain">
+      <li>Only the shell part of <code>CometOrbRenderer.draw</code> changes: the halo, sphere fill, broken arcs and reflection block. <code>plasma(…)</code>, <code>comets(…)</code>, <code>AtomMotion</code> and the color tokens are untouched.</li>
+      <li>A small static rig computes the light outlines once per radius from the mirror-sphere mapping (surface normal = normalize(light + view)). Option C adds the horizon outline the same way.</li>
+      <li>Every primitive used here exists on <code>GraphicsContext</code>: radial, linear and conic gradients, <code>clip(to:options: .inverse)</code>, even-odd fills, <code>.blur</code>, and the <code>.screen</code>, <code>.plusLighter</code> and <code>.destinationIn</code> blend modes.</li>
+      <li>The existing rendering tests check the nucleus hue at the center pixel, teal and orange pixel counts, and stillness under Reduced Motion and in standby. The options keep every highlight off-center and all motion on the shared phase, so they should pass. <span class="t">[untested until swift test runs on the Mac]</span></li>
+      <li>Reflections do not depend on voice state, so they can be drawn once per size and reused; that keeps every option at the current blur count per frame. Frame time on the Mac is not measured yet. <span class="t">[untested]</span></li>
+    </ul>
+  </section>
+
+  <p class="foot">Preview renderer: a JavaScript port of <code>CometOrbRenderer.swift</code>. The plasma, comets and current shell follow the Swift line for line, except that comet bloom is merged into one blur layer per pass for browser speed. Voice levels are a simulated speech envelope passed through the app's 40 ms attack / 180 ms release smoothing and its 0.55 input and 0.42 output gains. Canvas and SwiftUI interpolate gradients and size blurs slightly differently, so the Swift build is the final word on the look.</p>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const TAU = Math.PI * 2;
+  const DPR = Math.min(2, window.devicePixelRatio || 1);
+
+  // ---- Tokens (AppTuning.swift / CometOrbRenderer.swift) ----
+  const RGB = { user: [45, 212, 191], assistant: [224, 112, 32], idle: [124, 140, 255], neutral: [95, 130, 150] };
+  const BLUE = [0.24 * 255, 0.60 * 255, 255];
+  const ICE = [0.74 * 255, 0.91 * 255, 255];
+  const WHITE = [255, 255, 255];
+  const INK = [6, 10, 14];
+  const SMOKE = [5, 9, 15];
+  const FROST = [222, 236, 250];
+  const SKY = [206, 228, 255];
+  const STAGE_BG = '#15191D';
+  const GAIN_IN = 0.55, GAIN_OUT = 0.42;
+
+  const clamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
+  const rgba = (c, a) => `rgba(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])},${clamp01(a).toFixed(4)})`;
+  function noise(i) { const n = Math.sin(i * 127.1 + 311.7) * 43758.5453; return n - Math.floor(n); }
+
+  // ---- Blur support (Canvas filter, with a downsample fallback) ----
+  const FILTER_OK = (() => {
+    try {
+      const a = document.createElement('canvas'); a.width = a.height = 9;
+      const ac = a.getContext('2d'); ac.fillStyle = '#fff'; ac.fillRect(4, 4, 1, 1);
+      const b = document.createElement('canvas'); b.width = b.height = 9;
+      const bc = b.getContext('2d'); bc.filter = 'blur(2px)'; bc.drawImage(a, 0, 0);
+      return bc.getImageData(1, 4, 1, 1).data[3] > 0;
+    } catch (e) { return false; }
+  })();
+  const tmp = document.createElement('canvas');
+  function blurDraw(ctx, src, px) {
+    if (px <= 0.05) { ctx.drawImage(src, 0, 0); return; }
+    if (FILTER_OK) { ctx.filter = `blur(${px}px)`; ctx.drawImage(src, 0, 0); ctx.filter = 'none'; return; }
+    const f = Math.max(1, px / 1.2);
+    tmp.width = Math.max(1, Math.round(src.width / f)); tmp.height = Math.max(1, Math.round(src.height / f));
+    const tc = tmp.getContext('2d'); tc.imageSmoothingEnabled = true; tc.imageSmoothingQuality = 'high';
+    tc.clearRect(0, 0, tmp.width, tmp.height); tc.drawImage(src, 0, 0, tmp.width, tmp.height);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(tmp, 0, 0, src.width, src.height);
+  }
+
+  class Pool {
+    constructor() { this.free = []; this.w = 0; this.h = 0; }
+    size(w, h) { if (w !== this.w || h !== this.h) { this.free = []; this.w = w; this.h = h; } }
+    get() { const c = this.free.pop() || document.createElement('canvas'); if (c.width !== this.w || c.height !== this.h) { c.width = this.w; c.height = this.h; } return c; }
+    put(c) { this.free.push(c); }
+  }
+
+  // GraphicsContext.drawLayer + addFilter(.blur): content drawn into its own
+  // layer, blurred as a whole, then composited under the parent's clip.
+  function layer(pool, ctx, blurPts, draw, opt) {
+    const L = pool.get(); const lc = L.getContext('2d');
+    lc.setTransform(1, 0, 0, 1, 0, 0); lc.globalAlpha = 1; lc.globalCompositeOperation = 'source-over'; lc.filter = 'none';
+    lc.clearRect(0, 0, L.width, L.height);
+    lc.setTransform(ctx.getTransform());
+    draw(lc);
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (opt && opt.blend) ctx.globalCompositeOperation = opt.blend;
+    if (opt && opt.alpha != null) ctx.globalAlpha = opt.alpha;
+    blurDraw(ctx, L, blurPts * DPR);
+    ctx.restore();
+    pool.put(L);
+  }
+
+  const disc = (ctx, c, r) => { ctx.beginPath(); ctx.arc(c.x, c.y, Math.max(0, r), 0, TAU); };
+  function fillDisc(ctx, c, r, style) { disc(ctx, c, r); ctx.fillStyle = style; ctx.fill(); }
+  function radial(ctx, c, r, stops) {
+    const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, Math.max(1e-4, r));
+    for (const s of stops) g.addColorStop(clamp01(s[0]), rgba(s[1], s[2]));
+    return g;
+  }
+  const even = list => list.map((s, i) => [list.length === 1 ? 0 : i / (list.length - 1), s[0], s[1]]);
+  function annulus(ctx, c, r0, r1) { ctx.beginPath(); ctx.arc(c.x, c.y, r1, 0, TAU); ctx.moveTo(c.x + r0, c.y); ctx.arc(c.x, c.y, r0, 0, TAU); }
+
+  // ---- Shared frame parameters (CometOrbRenderer.draw preamble) ----
+  function tintFor(a) {
+    if (a === 'user') return RGB.user;
+    if (a === 'assistant' || a === 'thinking') return RGB.assistant;
+    if (a === 'listening' || a === 'muted') return RGB.idle;
+    return RGB.neutral;
+  }
+  function frameParams(W, H, st) {
+    const center = { x: W / 2, y: H / 2 };
+    const extent = Math.min(H, 2 * Math.min(center.x, W - center.x));
+    const radius = extent * 0.255;
+    const energy = Math.max(st.uE, st.oE);
+    const ambient = st.activity === 'listening' || st.activity === 'muted';
+    const ready = ambient || st.activity === 'user' || st.activity === 'assistant' || st.activity === 'thinking';
+    return {
+      center, radius, energy, ambient, ready, tint: tintFor(st.activity),
+      strength: ready ? 0.52 + energy * 0.48 : 0.16,
+      breath: ambient ? 0.94 + 0.06 * Math.sin(st.phase * 1.2) : 1,
+    };
+  }
+
+  // ---- plasma(...) — unchanged in every option ----
+  function plasma(ctx, pool, c, radius, phase, tint, s, energy) {
+    const reach = radius * 0.75;
+    fillDisc(ctx, c, reach, radial(ctx, c, reach, [[0, tint, 0.90 * s], [0.27, tint, 0.38 * s], [0.70, tint, 0.09 * s], [1, tint, 0]]));
+    ctx.save(); disc(ctx, c, reach); ctx.clip();
+    for (let cloud = 0; cloud < 7; cloud++) {
+      const angle = cloud * 2.39996 + phase * 0.09;
+      const dist = reach * (0.18 + noise(cloud + 88) * 0.37);
+      const p = { x: c.x + Math.cos(angle) * dist, y: c.y + Math.sin(angle) * dist };
+      const cr = reach * (0.28 + noise(cloud + 92) * 0.28);
+      fillDisc(ctx, p, cr, radial(ctx, p, cr, even([[tint, 0.13 * s], [tint, 0.045 * s], [tint, 0]])));
+    }
+    ctx.restore();
+    const fil = [];
+    for (let strand = 0; strand < 16; strand++) {
+      const seed = strand;
+      const turn = seed * 2.39996 + phase * (strand % 2 === 0 ? 0.14 : -0.11);
+      const k = 3.1 + noise(strand + 15) * 2.9;
+      const rBase = reach * (0.30 + noise(strand + 5) * 0.65);
+      const yScale = 0.36 + noise(strand + 31) * 0.60;
+      const ox = reach * 0.10 * Math.sin(seed * 3), oy = reach * 0.10 * Math.cos(seed * 2);
+      const ct = Math.cos(turn), sn = Math.sin(turn);
+      const path = new Path2D();
+      for (let step = 0; step <= 72; step++) {
+        const t = step / 72 * k + seed;
+        const wave = 0.79 + 0.085 * Math.sin(t * 3 + seed + phase * 0.25) + 0.05 * Math.sin(t * 7 - seed * 2) + 0.018 * Math.sin(t * 17 + seed);
+        const rr = rBase * wave;
+        const x = Math.cos(t) * rr + ox, y = Math.sin(t) * rr * yScale + oy;
+        const px = c.x + x * ct - y * sn, py = c.y + x * sn + y * ct;
+        if (step === 0) path.moveTo(px, py); else path.lineTo(px, py);
+      }
+      fil.push([path, 0.10 + noise(strand + 72) * 0.25]);
+    }
+    layer(pool, ctx, radius * 0.035, lc => {
+      lc.lineWidth = radius * 0.042; lc.lineCap = 'butt'; lc.lineJoin = 'miter';
+      for (const [p, a] of fil) { lc.strokeStyle = rgba(tint, a * s * 0.7); lc.stroke(p); }
+    });
+    ctx.lineWidth = Math.max(0.35, radius * 0.009); ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    for (const [p, a] of fil) { ctx.strokeStyle = rgba(tint, a * s); ctx.stroke(p); }
+    for (let i = 0; i < 85; i++) {
+      const angle = noise(i + 100) * TAU + phase * 0.10;
+      const rr = reach * Math.sqrt(noise(i + 250));
+      const p = { x: c.x + Math.cos(angle) * rr, y: c.y + Math.sin(angle) * rr * 0.91 };
+      fillDisc(ctx, p, 0.25 + noise(i + 400) * 0.40, rgba(tint, (0.12 + noise(i + 550) * 0.40) * s));
+    }
+    const core = radius * (0.17 + energy * 0.055);
+    fillDisc(ctx, c, core * 1.8, radial(ctx, c, core * 1.8, [[0, WHITE, 0.98 * s], [0.30, tint, 0.95 * s], [0.50, tint, 0.30 * s], [1, tint, 0]]));
+    for (let index = 0; index < 7; index++) {
+      const angle = index * 2.39996 + 0.3;
+      const len = core * (1.0 + noise(index + 900) * 1.6);
+      const e = { x: c.x + Math.cos(angle) * len, y: c.y + Math.sin(angle) * len };
+      const g = ctx.createLinearGradient(c.x, c.y, e.x, e.y);
+      g.addColorStop(0, rgba(tint, 0.6 * s)); g.addColorStop(1, rgba(tint, 0));
+      ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(e.x, e.y); ctx.strokeStyle = g; ctx.lineWidth = 0.65; ctx.stroke();
+    }
+  }
+
+  // ---- comets(...) — unchanged in every option ----
+  function comets(ctx, pool, c, radius, st, front) {
+    const list = [];
+    for (let channel = 0; channel < 2; channel++) {
+      const level = channel === 0 ? st.uE : st.oE;
+      const tint = channel === 0 ? RGB.user : RGB.assistant;
+      const brightness = 0.48 + 0.52 * level;
+      const tilt = channel === 0 ? -0.48 : 0.56;
+      const dir = channel === 0 ? 1 : -1;
+      const ct = Math.cos(tilt), sn = Math.sin(tilt);
+      const pos = a => {
+        const x = Math.cos(a) * radius * 1.53, y = Math.sin(a) * radius * 1.17;
+        return { x: c.x + x * ct - y * sn, y: c.y + x * sn + y * ct, depth: Math.sin(a) * 0.64 };
+      };
+      for (let comet = 0; comet < 2; comet++) {
+        const head = dir * st.phase + comet * Math.PI + (channel === 0 ? 3.9 : 0.45);
+        const span = 2.05 + 0.15 * level;
+        const steps = 64, strokes = [];
+        for (let i = 0; i < steps; i++) {
+          const age = i / steps;
+          const p = pos(head - dir * span * age);
+          if ((p.depth >= 0) !== front) continue;
+          const nx = pos(head - dir * span * (i + 1) / steps);
+          const fade = Math.pow(1 - age, 1.45);
+          strokes.push([p, nx, fade * (0.70 + 0.30 * p.depth), Math.max(0.22, radius * 0.052 * fade)]);
+        }
+        list.push({ channel, comet, level, tint, brightness, dir, pos, head, span, strokes });
+      }
+    }
+    // Bloom: merged into one layer per pass (Swift uses one per comet).
+    layer(pool, ctx, radius * 0.055, lc => {
+      lc.lineCap = 'round';
+      for (const k of list) for (const [a, b, fade, w] of k.strokes) {
+        lc.beginPath(); lc.moveTo(a.x, a.y); lc.lineTo(b.x, b.y);
+        lc.strokeStyle = rgba(k.tint, fade * k.brightness * 0.36); lc.lineWidth = w * 3; lc.stroke();
+      }
+    });
+    for (const k of list) {
+      ctx.lineCap = 'round';
+      for (const [a, b, fade, w] of k.strokes) {
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+        ctx.strokeStyle = rgba(k.tint, fade * k.brightness * 0.92); ctx.lineWidth = w; ctx.stroke();
+      }
+      ctx.lineCap = 'butt';
+      for (let i = 0; i < 100; i++) {
+        const seed = i + k.channel * 317 + k.comet * 613;
+        const age = noise(seed + 40);
+        const p = k.pos(k.head - k.dir * k.span * age);
+        if ((p.depth >= 0) !== front) continue;
+        const scatter = radius * (0.018 + age * 0.08);
+        const pt = { x: p.x + (noise(seed + 740) - 0.5) * scatter * 2, y: p.y + (noise(seed + 1040) - 0.5) * scatter * 2 };
+        fillDisc(ctx, pt, 0.28 + noise(seed + 1340) * 0.65, rgba(i % 5 === 0 ? ICE : k.tint, Math.pow(1 - age, 1.25) * k.brightness));
+      }
+      const h = k.pos(k.head);
+      if ((h.depth >= 0) !== front) continue;
+      const hs = radius * (0.075 + k.level * 0.012) * (0.91 + h.depth * 0.17);
+      fillDisc(ctx, h, hs * 3.4, radial(ctx, h, hs * 3.4, even([[k.tint, k.brightness * 0.85], [k.tint, 0.15 * k.brightness], [k.tint, 0]])));
+      fillDisc(ctx, h, hs, radial(ctx, h, hs, even([[WHITE, 0.95], [ICE, 0.88], [k.tint, 0.85]])));
+      disc(ctx, h, hs); ctx.strokeStyle = rgba(k.tint, k.brightness); ctx.lineWidth = 0.8; ctx.stroke();
+    }
+  }
+
+  // ---- Current shell: CometOrbRenderer.draw, line for line ----
+  function drawCurrent(ctx, pool, W, H, st) {
+    const P = frameParams(W, H, st); if (P.radius <= 0) return;
+    const c = P.center, r = P.radius, s = P.strength;
+    if (P.ready) comets(ctx, pool, c, r, st, false);
+    fillDisc(ctx, c, r * 1.15, radial(ctx, c, r * 1.15, [[0.74, BLUE, 0], [0.85, BLUE, 0.11 * s], [1, BLUE, 0]]));
+    fillDisc(ctx, c, r, radial(ctx, c, r, [[0, BLUE, 0.025], [0.65, BLUE, 0.06], [0.91, BLUE, 0.25 * s], [0.975, ICE, 0.38 * s], [1, BLUE, 0.12]]));
+    ctx.save(); disc(ctx, c, r * 0.94); ctx.clip();
+    plasma(ctx, pool, c, r, st.phase, P.tint, s * P.breath, P.energy);
+    ctx.restore();
+    for (const [start, len, op, w] of [[3.45, 1.25, 0.76, 1.5], [0.05, 0.90, 0.54, 1.1], [1.65, 0.48, 0.30, 0.8], [4.9, 0.34, 0.42, 0.7]]) {
+      ctx.beginPath();
+      for (let i = 0; i <= 40; i++) {
+        const t = i / 40, th = start + t * len, rr = r * (0.966 + 0.007 * Math.sin(t * Math.PI));
+        const x = c.x + Math.cos(th) * rr, y = c.y + Math.sin(th) * rr;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = rgba(ICE, op * s); ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
+    ctx.save(); disc(ctx, c, r); ctx.clip();
+    const hl = { x: c.x - r * 0.49, y: c.y - r * 0.64 };
+    layer(pool, ctx, r * 0.035, lc => fillDisc(lc, hl, r * 0.25, radial(lc, hl, r * 0.25, even([[ICE, 0.40 * s], [ICE, 0.05], [ICE, 0]]))));
+    ctx.restore();
+    if (P.ready) comets(ctx, pool, c, r, st, true);
+  }
+
+  // ---- Glass rig: static geometry, computed once per radius ----
+  const nrm = v => { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; };
+  const crs = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  // Camera space: x right, y down, z toward the viewer. A distant light in
+  // direction d reflects to the viewer where the surface normal is the half
+  // vector normalize(d + view); its screen position is (n.x, n.y) * radius.
+  const mirrorPoint = d => { const n = nrm([d[0], d[1], d[2] + 1]); return [n[0], n[1]]; };
+  // A flat rounded-rectangle light (superellipse, exponent p) facing the
+  // globe along L; u0 offsets it sideways so two panes make a window.
+  function lightShape(L, w, h, p, u0 = 0, n = 96) {
+    L = nrm(L); const T1 = nrm(crs(L, [0, -1, 0])); const T2 = crs(T1, L);
+    const at = (u, v) => nrm([L[0] + u * T1[0] + v * T2[0], L[1] + u * T1[1] + v * T2[1], L[2] + u * T1[2] + v * T2[2]]);
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const t = i / n * TAU, cu = Math.cos(t), su = Math.sin(t);
+      const u = u0 + w * Math.sign(cu) * Math.pow(Math.abs(cu), 2 / p);
+      const v = h * Math.sign(su) * Math.pow(Math.abs(su), 2 / p);
+      pts.push(mirrorPoint(at(u, v)));
+    }
+    return { pts, mid: mirrorPoint(at(u0, 0)) };
+  }
+  // Sky cap: surface points whose reflected ray points above the horizon,
+  // for a camera pitched down by `deg`. Star-shaped around the center.
+  function skyShape(deg, n = 180) {
+    const a = deg * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
+    const f = (x, y) => { const nz = Math.sqrt(Math.max(0, 1 - x * x - y * y)); return -2 * nz * y * ca + (2 * nz * nz - 1) * sa; };
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const th = i / n * TAU, dx = Math.cos(th), dy = Math.sin(th);
+      let lo = 0, hi = 1;
+      for (let it = 0; it < 40; it++) { const m = (lo + hi) / 2; if (f(dx * m, dy * m) > 0) lo = m; else hi = m; }
+      pts.push([dx * lo, dy * lo]);
+    }
+    return pts;
+  }
+  // Schlick's approximation for glass: F = R0 + (1 - R0)(1 - cos θ)^5, R0 = 0.04.
+  const FRESNEL = [0, 0.3, 0.5, 0.65, 0.75, 0.82, 0.87, 0.9, 0.93, 0.95, 0.965, 0.975, 0.985, 0.992, 0.997, 1]
+    .map(r => [r, 0.04 + 0.96 * Math.pow(1 - Math.sqrt(Math.max(0, 1 - r * r)), 5)]);
+  // Key light: a two-pane window up and to the left, slightly behind the
+  // globe, so its reflection sits near the rim and curves with it.
+  const KEY_L = [-0.74, -0.70, -0.10];
+  const KEY = [lightShape(KEY_L, 0.12, 0.21, 6, -0.14), lightShape(KEY_L, 0.12, 0.21, 6, 0.14)];
+  const STRIP = lightShape([0.80, 0.50, -0.30], 0.10, 0.55, 6);
+  const SKYCAP = skyShape(12);
+
+  const STYLE = {
+    crystal: {
+      halo: 0.035,
+      body: [[0, INK, 0.04], [0.7, INK, 0.09], [0.88, INK, 0.22], [0.965, INK, 0.34], [1, INK, 0.18]],
+      plasmaClip: 0.885, plasmaScale: 1,
+      wall: 0.84, wallGlow: [0, 0.46],
+      wallLine: 0.885,
+      env: { fresnel: 0.62, key: 0.95, strip: 0.45, backKey: 0.22, hair: 0.20, caustic: 0.24, dispersion: true },
+    },
+    liquid: {
+      shadow: true, halo: 0.03,
+      body: [[0, FROST, 0.035], [0.7, FROST, 0.05], [1, FROST, 0.10]],
+      plasmaClip: 0.95, plasmaScale: 1.06,
+      wall: 0.78, wallGlow: [0.05, 0.24],
+      env: { fresnel: 0.22, hair: 0.26, lens: true, rimSpec: true },
+    },
+    smoked: {
+      halo: 0.03,
+      body: [[0, INK, 0.34], [1, INK, 0.34]],
+      plasmaClip: 0.93, plasmaScale: 1,
+      smoke: [[0, SMOKE, 0.14], [0.4, SMOKE, 0.28], [0.75, SMOKE, 0.56], [0.93, SMOKE, 0.82], [1, SMOKE, 0.72]],
+      wall: 0.88, wallGlow: [0, 0.24],
+      env: { fresnel: 0.85, sky: 0.38, key: 0.95, strip: 0.55, hair: 0.28, caustic: 0.10 },
+    },
+  };
+
+  function polyPath(ctx, c, r, pts) {
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => { const px = c.x + x * r, py = c.y + y * r; if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
+    ctx.closePath();
+  }
+  function arcSegments(ctx, c, rr, a0, a1, peak, width, color) {
+    const n = 48; ctx.lineCap = 'round'; ctx.lineWidth = width;
+    for (let i = 0; i < n; i++) {
+      const t0 = i / n, t1 = (i + 1) / n, tm = (t0 + t1) / 2;
+      const alpha = peak * Math.pow(Math.sin(Math.PI * tm), 1.6);
+      const b0 = a0 + (a1 - a0) * t0, b1 = a0 + (a1 - a0) * t1;
+      ctx.beginPath(); ctx.moveTo(c.x + Math.cos(b0) * rr, c.y + Math.sin(b0) * rr); ctx.lineTo(c.x + Math.cos(b1) * rr, c.y + Math.sin(b1) * rr);
+      ctx.strokeStyle = rgba(color, alpha); ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
+  }
+  function fillLight(ctx, c, r, shape, alpha) {
+    polyPath(ctx, c, r, shape.pts);
+    const m = shape.mid, len = Math.hypot(m[0], m[1]) || 1, ux = m[0] / len, uy = m[1] / len;
+    const g = ctx.createLinearGradient(c.x + ux * r, c.y + uy * r, c.x + ux * r * 0.35, c.y + uy * r * 0.35);
+    g.addColorStop(0, rgba(WHITE, alpha)); g.addColorStop(1, rgba(WHITE, alpha * 0.55));
+    ctx.fillStyle = g; ctx.fill();
+  }
+
+  // Everything that reflects the room: independent of voice state, so it is
+  // cached per size here. (In Swift these are a handful of fills per frame.)
+  function buildEnv(style, W, H) {
+    const cv = document.createElement('canvas'); cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    const ctx = cv.getContext('2d'); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const pool = new Pool(); pool.size(cv.width, cv.height);
+    const P = frameParams(W, H, { uE: 0, oE: 0, activity: 'offline', phase: 0 });
+    const c = P.center, r = P.radius, e = STYLE[style].env;
+
+    // 1. Fresnel-weighted room: brighter above, darker below.
+    layer(pool, ctx, 0, lc => {
+      const g = lc.createLinearGradient(c.x, c.y - r, c.x, c.y + r);
+      g.addColorStop(0, rgba(SKY, 1)); g.addColorStop(0.45, rgba(SKY, 0.55)); g.addColorStop(0.6, rgba(SKY, 0.22)); g.addColorStop(1, rgba(SKY, 0.10));
+      disc(lc, c, r); lc.fillStyle = g; lc.fill();
+      lc.globalCompositeOperation = 'destination-in';
+      fillDisc(lc, c, r, radial(lc, c, r, FRESNEL.map(([p, f]) => [p, WHITE, f])));
+    }, { alpha: e.fresnel });
+
+    // 2. Reflected sky with a crisp horizon line.
+    if (e.sky) layer(pool, ctx, 0, lc => {
+      polyPath(lc, c, r, SKYCAP);
+      const g = lc.createLinearGradient(c.x, c.y - r, c.x, c.y + r * 0.12);
+      g.addColorStop(0, rgba(SKY, 0.5)); g.addColorStop(1, rgba(SKY, 1));
+      lc.fillStyle = g; lc.fill();
+      lc.globalCompositeOperation = 'destination-in';
+      fillDisc(lc, c, r, radial(lc, c, r, [[0, WHITE, 0.18], [0.5, WHITE, 0.22], [0.8, WHITE, 0.40], [0.92, WHITE, 0.7], [1, WHITE, 1]]));
+    }, { alpha: e.sky });
+
+    // 3. Caustic: key light focused through the globe onto the far inner wall.
+    if (e.caustic) {
+      ctx.save(); disc(ctx, c, r * 0.985); ctx.clip();
+      const p = { x: c.x + r * 0.50, y: c.y + r * 0.58 };
+      layer(pool, ctx, r * 0.05, lc => fillDisc(lc, p, r * 0.26, radial(lc, p, r * 0.26, [[0, WHITE, e.caustic], [0.5, ICE, e.caustic * 0.4], [1, ICE, 0]])));
+      ctx.restore();
+    }
+
+    // 4. Liquid Glass lens band: bent edge, strongest upper-left and lower-right.
+    if (e.lens) layer(pool, ctx, 0, lc => {
+      annulus(lc, c, r * 0.72, r);
+      lc.fillStyle = radial(lc, c, r, [[0.72, WHITE, 0], [0.86, WHITE, 0.07], [0.94, WHITE, 0.20], [0.985, WHITE, 0.44], [1, WHITE, 0.2]]);
+      lc.fill('evenodd');
+      lc.globalCompositeOperation = 'destination-in';
+      const g = lc.createConicGradient(-3 * Math.PI / 4, c.x, c.y);
+      g.addColorStop(0, rgba(WHITE, 1)); g.addColorStop(0.25, rgba(WHITE, 0.2)); g.addColorStop(0.5, rgba(WHITE, 0.85)); g.addColorStop(0.75, rgba(WHITE, 0.2)); g.addColorStop(1, rgba(WHITE, 1));
+      lc.fillStyle = g; lc.fillRect(c.x - r * 1.1, c.y - r * 1.1, r * 2.2, r * 2.2);
+    });
+
+    // 5. Studio lights: window key and rim strip (edges barely softened).
+    if (e.key || e.strip) layer(pool, ctx, Math.max(0.35, r * 0.010), lc => {
+      if (e.key) KEY.forEach(k => fillLight(lc, c, r, k, e.key));
+      if (e.strip) fillLight(lc, c, r, STRIP, e.strip);
+    });
+    // Window seen again off the inside of the far wall: smaller, softer,
+    // on the opposite side (crystal only).
+    if (e.backKey) layer(pool, ctx, r * 0.03, lc => {
+      lc.translate(c.x, c.y); lc.rotate(Math.PI); lc.scale(0.74, 0.74); lc.translate(-c.x, -c.y);
+      KEY.forEach(k => fillLight(lc, c, r, k, e.backKey));
+    });
+
+    // 6. Liquid Glass rim speculars.
+    if (e.rimSpec) {
+      const w = Math.max(1, r * 0.03), rr = r * 0.972;
+      layer(pool, ctx, r * 0.03, lc => {
+        arcSegments(lc, c, rr, -172 * Math.PI / 180, -98 * Math.PI / 180, 0.5, w * 3, WHITE);
+        arcSegments(lc, c, rr, 12 * Math.PI / 180, 78 * Math.PI / 180, 0.28, w * 3, WHITE);
+      });
+      arcSegments(ctx, c, rr, -172 * Math.PI / 180, -98 * Math.PI / 180, 0.95, w, WHITE);
+      arcSegments(ctx, c, rr, 12 * Math.PI / 180, 78 * Math.PI / 180, 0.55, w * 0.85, WHITE);
+    }
+
+    // 7. Dispersion on the lit rim (crystal).
+    if (e.dispersion) layer(pool, ctx, 0.3, lc => {
+      arcSegments(lc, c, r * 1.0, -175 * Math.PI / 180, -95 * Math.PI / 180, 0.34, 0.9, [110, 215, 255]);
+      arcSegments(lc, c, r * 0.982, -175 * Math.PI / 180, -95 * Math.PI / 180, 0.24, 0.9, [255, 165, 110]);
+    });
+
+    // 8. Silhouette hairline.
+    disc(ctx, c, r * 0.996); ctx.strokeStyle = rgba(WHITE, e.hair); ctx.lineWidth = 0.7; ctx.stroke();
+    return cv;
+  }
+
+  function drawGlass(style, ctx, pool, W, H, st, env) {
+    const P = frameParams(W, H, st); if (P.radius <= 0) return;
+    const c = P.center, r = P.radius, s = P.strength, tint = P.tint, cfg = STYLE[style];
+
+    if (cfg.shadow) {
+      const p = { x: c.x, y: c.y + r * 0.18 };
+      layer(pool, ctx, r * 0.12, lc => {
+        lc.save(); lc.translate(p.x, p.y); lc.scale(1, 0.86);
+        fillDisc(lc, { x: 0, y: 0 }, r * 0.98, radial(lc, { x: 0, y: 0 }, r * 0.98, [[0, [0, 0, 0], 0.55], [0.8, [0, 0, 0], 0.4], [1, [0, 0, 0], 0]]));
+        lc.restore();
+      });
+    }
+    // Plasma bloom outside the glass: follows the voice state.
+    fillDisc(ctx, c, r * 1.2, radial(ctx, c, r * 1.2, [[0.80, tint, 0], [0.86, tint, cfg.halo * s], [1, tint, 0]]));
+    if (P.ready) comets(ctx, pool, c, r, st, false);
+    // Glass body: absorbs, and dims the back half of each orbit.
+    fillDisc(ctx, c, r, radial(ctx, c, r, cfg.body));
+    // Plasma, seen through the wall.
+    ctx.save(); disc(ctx, c, r * cfg.plasmaClip); ctx.clip();
+    if (cfg.plasmaScale !== 1) { ctx.translate(c.x, c.y); ctx.scale(cfg.plasmaScale, cfg.plasmaScale); ctx.translate(-c.x, -c.y); }
+    plasma(ctx, pool, c, r, st.phase, tint, s * P.breath, P.energy);
+    ctx.restore();
+    if (cfg.smoke) fillDisc(ctx, c, r, radial(ctx, c, r, cfg.smoke));
+    // Plasma light carried in the wall, strongest opposite the key light.
+    ctx.save(); disc(ctx, c, r); ctx.clip();
+    layer(pool, ctx, r * 0.035, lc => {
+      const g = lc.createLinearGradient(c.x - r * 0.2, c.y - r * 0.2, c.x + r * 0.75, c.y + r * 0.75);
+      g.addColorStop(0, rgba(tint, cfg.wallGlow[0] * s)); g.addColorStop(1, rgba(tint, cfg.wallGlow[1] * s));
+      annulus(lc, c, r * cfg.wall, r * 1.02); lc.fillStyle = g; lc.fill('evenodd');
+    }, { blend: 'lighter' });
+    ctx.restore();
+    // Wall thickness: the inner surface of a thick wall reads as a dark line.
+    if (cfg.wallLine) {
+      disc(ctx, c, r * cfg.wallLine); ctx.strokeStyle = 'rgba(0,0,0,0.38)'; ctx.lineWidth = Math.max(0.8, r * 0.022); ctx.stroke();
+      disc(ctx, c, r * (cfg.wallLine + 0.018)); ctx.strokeStyle = rgba(ICE, 0.10); ctx.lineWidth = 0.6; ctx.stroke();
+    }
+    // Reflections of the room.
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'screen'; ctx.drawImage(env, 0, 0); ctx.restore();
+    if (P.ready) comets(ctx, pool, c, r, st, true);
+  }
+
+  // ---- Panels ----
+  class Panel {
+    constructor(fig) {
+      this.style = fig.dataset.style;
+      this.canvas = fig.querySelector('canvas');
+      this.ctx = this.canvas.getContext('2d');
+      this.pool = new Pool();
+      this.visible = true;
+    }
+    setSize(W, H) {
+      this.W = W; this.H = H;
+      this.canvas.width = Math.round(W * DPR); this.canvas.height = Math.round(H * DPR);
+      this.canvas.style.maxWidth = W + 'px';
+      this.pool.size(this.canvas.width, this.canvas.height);
+      this.env = this.style === 'current' ? null : buildEnv(this.style, W, H);
+    }
+    render(st) {
+      const ctx = this.ctx;
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.filter = 'none';
+      ctx.fillStyle = STAGE_BG; ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      if (this.style === 'current') drawCurrent(ctx, this.pool, this.W, this.H, st);
+      else drawGlass(this.style, ctx, this.pool, this.W, this.H, st, this.env);
+    }
+  }
+
+  const panels = [...document.querySelectorAll('.opt')].map(f => new Panel(f));
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver(es => es.forEach(e => {
+      const p = panels.find(x => x.canvas === e.target); if (p) p.visible = e.isIntersecting;
+    }), { rootMargin: '80px' });
+    panels.forEach(p => io.observe(p.canvas));
+  }
+
+  // ---- Simulation: VoicePresentationState + AtomMotion ----
+  const STATES = {
+    listening: { activity: 'listening', u: false, o: false },
+    user: { activity: 'user', u: true, o: false },
+    assistant: { activity: 'assistant', u: false, o: true },
+    overlap: { activity: 'user', u: true, o: true },
+    thinking: { activity: 'thinking', u: false, o: false },
+    offline: { activity: 'offline', u: false, o: false },
+  };
+  const SIZES = { app: [240, 180], inspect: [480, 360] };
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ui = { state: 'assistant', level: 0.8, size: 'app', playing: !reduce };
+  const sim = { phase: 0, uEnv: 0, oEnv: 0, t: 0 };
+  function speech(t, seed) {
+    const syl = 0.5 + 0.5 * Math.sin(TAU * 3.6 * t + seed + 1.4 * Math.sin(TAU * 0.7 * t + seed));
+    const phrase = 0.5 + 0.5 * Math.sin(TAU * 0.21 * t + seed * 2);
+    return phrase > 0.16 ? 0.35 + 0.65 * Math.pow(syl, 1.4) : 0;
+  }
+  function envelope(cur, target, dt) {
+    const tau = target > cur ? 0.040 : 0.180;
+    return cur + (target - cur) * (1 - Math.exp(-dt / tau));
+  }
+  function step(dt) {
+    const S = STATES[ui.state];
+    if (ui.playing) sim.t += dt;
+    const uT = S.u ? ui.level * speech(sim.t, 0.3) : 0;
+    const oT = S.o ? ui.level * speech(sim.t + 0.37, 2.1) : 0;
+    if (ui.playing) { sim.uEnv = envelope(sim.uEnv, uT, dt); sim.oEnv = envelope(sim.oEnv, oT, dt); }
+    else { sim.uEnv = S.u ? ui.level * 0.8 : 0; sim.oEnv = S.o ? ui.level * 0.8 : 0; }
+    const uE = clamp01(sim.uEnv * GAIN_IN), oE = clamp01(sim.oEnv * GAIN_OUT);
+    const staticTrace = !ui.playing || (!S.u && !S.o && !['thinking', 'connecting', 'listening', 'muted'].includes(S.activity));
+    if (!staticTrace) sim.phase += Math.min(dt, 0.1) * (0.60 + 0.90 * Math.max(uE, oE));
+    return { activity: S.activity, uE, oE, phase: sim.phase };
+  }
+
+  function applySize() { const [W, H] = SIZES[ui.size]; panels.forEach(p => p.setSize(W, H)); }
+  let dirty = true, last = performance.now() / 1000;
+  function frame(ms) {
+    const now = ms / 1000, dt = Math.max(0, Math.min(0.1, now - last)); last = now;
+    if (ui.playing || dirty) {
+      const st = step(dt);
+      for (const p of panels) if (p.visible || dirty) p.render(st);
+      dirty = false;
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // ---- Controls ----
+  const level = document.getElementById('level'), levelOut = document.getElementById('level-out'), play = document.getElementById('play');
+  function syncLevel() {
+    const S = STATES[ui.state];
+    level.disabled = !(S.u || S.o);
+    levelOut.textContent = level.disabled ? '—' : ui.level.toFixed(2);
+  }
+  function syncPlay() { play.textContent = ui.playing ? 'Pause motion' : 'Play motion'; play.setAttribute('aria-pressed', String(ui.playing)); }
+  document.querySelectorAll('input[name=state]').forEach(el => el.addEventListener('change', () => { ui.state = el.value; syncLevel(); dirty = true; }));
+  document.querySelectorAll('input[name=size]').forEach(el => el.addEventListener('change', () => { ui.size = el.value; applySize(); dirty = true; }));
+  level.addEventListener('input', () => { ui.level = parseFloat(level.value); syncLevel(); dirty = true; });
+  play.addEventListener('click', () => { ui.playing = !ui.playing; syncPlay(); dirty = true; });
+  document.addEventListener('visibilitychange', () => { last = performance.now() / 1000; });
+
+  // Test hook for headless verification (no effect on viewers).
+  window.__orb = { panels, ui, sim, STATES, render(stateKey, lvl, phase, size) {
+    ui.state = stateKey; ui.level = lvl; ui.playing = false; ui.size = size || ui.size; applySize();
+    sim.phase = phase; const st = step(0); panels.forEach(p => p.render(st)); return st;
+  } };
+
+  syncLevel(); syncPlay(); applySize();
+  sim.phase = 1.2;
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
