@@ -1,5 +1,13 @@
 # Implementation and acceptance status
 
+**New closure plan (2026-09-24):**
+[Verified Gap Closure](../plans/MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md) maps the
+source gaps inspected at `96aaf7a` to implementation and acceptance increments.
+It is planning only; it does not close the rows below. Its baseline and status
+reconciliation steps explicitly distinguish heuristic admission from a
+production model-backed classifier, text-only adapters from full execution,
+and historical receipts from current deployment evidence.
+
 Updated September 18, 2026 from the release-review worktree; verification
 counts reconciled and a model-use section added 2026-09-22 against main
 `88b206f`. This matrix
