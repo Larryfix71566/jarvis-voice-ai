@@ -54,59 +54,30 @@ the offline evaluation helper is not a production caller.
 
 ## Validation and limitations
 
-- `py_compile` passed for the changed execution, routing, and test modules
-  under the isolated CPython 3.12 environment.
-- Twenty-two execution cases passed by direct invocation in an isolated
-  harness. The harness supplied minimal pytest, YAML and JSON Schema stubs;
-  therefore it does not validate compatibility with the actual locked
-  `jsonschema` runtime and is **not** a pytest run. It does not substitute for
-  the locked test environment.
+- `py_compile` passed for all changed source and test modules under isolated
+  CPython 3.12.
+- **254 focused pytest tests passed** across model execution, usage ledger,
+  cost reporting, `kb_digest`, procedure description, memory extraction,
+  whole-session memory fold-in, and memory sweep. The isolated venv received
+  the pinned pytest/runtime packages needed for these tests; the complete
+  `requirements-lock.txt` environment and full repository suite were not run.
+- Twenty-two execution cases also passed earlier in a direct harness with
+  stubbed pytest/YAML/JSON Schema. That harness is superseded by the real
+  focused pytest result for the covered boundary cases.
 - A real SQLite exercise verified unknown usage remains marked unknown with
   no computed zero cost, cache reads/writes split correctly, normalized
   execution metadata stores route/billing/duration/response ID, and the cost
   report groups subscription and API sources. This is a targeted database
   check, not the unit suite.
-- Focused pytest files for the ledger, `kb_digest`, procedure descriptions,
-  memory extraction/fold-in, and memory-sweep migrations were added but could
-  not run here. This worktree's isolated Python lacks pytest, PyYAML, Pydantic
-  and jsonschema; importing production modules that require Pydantic fails.
-  Changed source and tests compile, but these migrations still need the locked
-  test environment before acceptance.
-- A full offline sync of `requirements-lock.txt` could not complete because
-  the cache lacks `torch==2.13.0`; installing the minimal test requirements
-  offline also failed on uncached `Pygments` and PyYAML artifacts. No network
-  dependency was fetched.
-- The six migrated background call sites cross the execution boundary only
-  when model routing is enabled and their resolved route passes the privacy
-  gate. Legacy paths remain when routing is disabled. No provider route
-  choices, runtime feature flags, prompts or tool execution policy changed.
-- A second family (`procedures_describe`) now crosses the same boundary under
-  the resolved background route, with the existing JSON response parser and
-  compatibility/test path retained. Source compiles; its focused pytest file
-  cannot run because this environment lacks pytest and runtime dependencies.
-  Nine of the 11 production call sites remained at this checkpoint.
-- Per-exchange `memory_extraction` now crosses the boundary under its resolved
-  memory route. The existing strict JSON parser and durable novelty-gated
-  writes remain after a successful response. Source compiles; focused pytest
-  cannot run because this environment lacks pytest and runtime dependencies.
-  Eight of the 11 production call sites remained at this checkpoint.
-- Whole-session `memory.update_memory_from_session` now crosses the same
-  boundary behind its resolved memory route. Prompt selection (including the
-  extraction-v2 kill switch), strict parser, and persistence behavior remain
-  unchanged. Source compiles; focused pytest cannot run because this
-  environment lacks pytest and runtime dependencies. Seven of the 11
-  production call sites remained at this checkpoint.
-- The capacity-enforcement `memory_merge` call now uses the shared boundary
-  when the existing memory route resolves. Its prompt, output trimming,
-  compatibility path, and reversible archive policy remain unchanged. Source
-  compiles; focused pytest cannot run because this environment lacks pytest
-  and runtime dependencies.
-- The batched `memory_classify` call now uses the boundary when its memory
-  route resolves. The two-message prompt and abstaining JSON parser remain
-  unchanged, so the model still only labels possible contradictions and
-  audiences; it does not resolve or apply those labels. Source compiles;
-  focused pytest cannot run because this environment lacks pytest and runtime
-  dependencies.
+- All six migrated background call sites cross the boundary only when model
+  routing is enabled and the resolved route passes the privacy gate. Legacy
+  paths, injected test seams, existing prompt text/order, and current durable
+  write/archive behavior remain in place. No route choices, feature flags, or
+  tool execution policies changed.
+- The static call-site audit reports 13/13 entries covered and zero
+  review-required entries. This includes six migrated background calls, four
+  remaining targets, the intentionally exempt supervisor voice path, one
+  offline evaluation fixture, and the shared execution boundary itself.
 
 The static inventory has 11 non-boundary production call sites: six migrated
 background call sites, four remaining migration targets, and the supervisor's

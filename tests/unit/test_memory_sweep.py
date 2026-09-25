@@ -87,7 +87,9 @@ async def test_routed_memory_merge_uses_shared_execution_boundary(monkeypatch):
         ),
         api_key_env=None, identity="saygm/model", priority="background",
     )
-    monkeypatch.setattr(memory_sweep_module, "_PROCESS_ADMISSION", ModelAdmissionController())
+    monkeypatch.setattr(
+        "jarvis.model_execution._PROCESS_ADMISSION", ModelAdmissionController()
+    )
     monkeypatch.setattr(
         memory_sweep_module, "make_memory_async_client",
         lambda settings: (client, SimpleNamespace(model="model", resolved=resolved)),
@@ -146,7 +148,9 @@ async def test_routed_memory_classification_uses_shared_execution_boundary(monke
         ),
         api_key_env=None, identity="saygm/model", priority="background",
     )
-    monkeypatch.setattr(memory_sweep_module, "_PROCESS_ADMISSION", ModelAdmissionController())
+    monkeypatch.setattr(
+        "jarvis.model_execution._PROCESS_ADMISSION", ModelAdmissionController()
+    )
     monkeypatch.setattr(
         memory_sweep_module, "make_memory_async_client",
         lambda settings: (client, SimpleNamespace(model="model", resolved=resolved)),

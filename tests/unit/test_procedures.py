@@ -134,7 +134,7 @@ async def test_routed_procedure_description_uses_shared_execution_boundary(monke
         priority="background",
     )
     monkeypatch.setattr(
-        procedures_module, "_PROCESS_ADMISSION", ModelAdmissionController()
+        "jarvis.model_execution._PROCESS_ADMISSION", ModelAdmissionController()
     )
     monkeypatch.setattr(
         procedures_module, "make_background_async_client",

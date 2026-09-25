@@ -262,7 +262,9 @@ async def test_enabled_memory_route_uses_execution_boundary(conn, monkeypatch):
         ),
         api_key_env=None, identity="saygm/model", priority="background",
     )
-    monkeypatch.setattr(memory_module, "_PROCESS_ADMISSION", ModelAdmissionController())
+    monkeypatch.setattr(
+        "jarvis.model_execution._PROCESS_ADMISSION", ModelAdmissionController()
+    )
     monkeypatch.setattr(
         memory_module, "make_memory_async_client",
         lambda settings: (client, SimpleNamespace(model="model", resolved=resolved)),

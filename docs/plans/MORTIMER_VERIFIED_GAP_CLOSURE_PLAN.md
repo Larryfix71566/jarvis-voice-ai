@@ -742,8 +742,10 @@ do all independent preparation before seeking the user's action.
   resolved workload priority; enforces two-slot interactive/background
   admission; validates bounded output and caller-provided tool schemas; returns
   schema-checked tool requests without executing them; and reports ordered
-  policy-carrying lifecycle events with known usage metadata. Twenty-two focused
-  cases pass only in a stubbed direct harness, not pytest. `kb_digest` and
+  policy-carrying lifecycle events with known usage metadata. The 254 focused
+  execution, ledger, reporting, and migrated-caller pytest cases pass under the
+  isolated targeted dependency set; the full project suite remains unrun.
+  `kb_digest` and
   procedure description, per-exchange extraction, whole-session memory
   fold-in, and both memory-sweep model calls now use this boundary when model
   routing is enabled; the usage ledger separately records unknown counts,

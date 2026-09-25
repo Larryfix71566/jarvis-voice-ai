@@ -371,7 +371,7 @@ class TestExtractFromExchange:
             api_key_env=None, identity="saygm/model", priority="background",
         )
         monkeypatch.setattr(
-            memory_extraction_module, "_PROCESS_ADMISSION", ModelAdmissionController()
+            "jarvis.model_execution._PROCESS_ADMISSION", ModelAdmissionController()
         )
         monkeypatch.setattr(
             memory_extraction_module, "make_memory_async_client",
