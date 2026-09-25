@@ -22,6 +22,7 @@ def test_policy_selection_is_deterministic_and_explicit_override_wins(monkeypatc
     assert route.profile_name == "claude-opus"
     assert route.route.name == "direct_api"
     assert route.identity == "anthropic/claude-opus-5"
+    assert route.priority == "interactive"
 
 
 def test_voice_haiku_is_resolved_as_voice_only_builtin(monkeypatch):
@@ -79,6 +80,7 @@ def test_confidential_memory_requires_catalog_proof(monkeypatch):
     route = resolve_model_route("memory", explicit_route="saygm",
                                saygm_model=catalog[0])
     assert route.route.privacy == "confidential"
+    assert route.priority == "background"
 
 
 def test_checked_route_fetches_catalog_only_for_confidential_saygm(monkeypatch):

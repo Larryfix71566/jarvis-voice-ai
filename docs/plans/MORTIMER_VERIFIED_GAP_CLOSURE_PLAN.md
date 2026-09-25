@@ -3,7 +3,7 @@
 **Authored:** 2026-09-24, Codex, from repository inspection.
 **Status:** Planned. This document does not claim implementation, deployment,
 provider verification, or release acceptance.
-**Inspected source:** `8bd5e7e58272962dfab4454850c8961515286904` (main PR #89).
+**Inspected source:** `4acb4dc2827f292f1236155e3c445d4ec4e9e5a0` (main PR #90).
 **Working branch:** `codex/isolated-20260924`.
 **Working directory:**
 `/Users/larryfix/Documents/Codex/2026-09-09/can/work/codex-isolated-20260924`.
@@ -94,11 +94,14 @@ configuration are different facts. GC24-00 establishes each.
   owner. One bounded supporting stage shares space between results; preserve
   its existing one-to-four tile policy, pins and return locators. Never create
   nested result windows or duplicate full renderers for the same result.
-- Retain the current orb/comet concept, translucent blue shell, user/Mortimer
-  color distinction, and connected idle animation even when the mic is muted.
-  Speech intensity comes from measured input/output. Idle motion is not a
-  fabricated voice level. Do not resurrect deleted wave paths or obsolete
-  sliders. Reconcile Claude's visual changes before touching renderer files.
+- Retain the selected atom/comet layout with Crystal option A's glass shell:
+  the paired panes, strip light and softer second window, dark wall line,
+  speaker-colored wall glow, and visible shell at standby. Keep user/Mortimer
+  color distinction and connected idle animation even when the mic is muted.
+  Speech intensity comes from measured input/output; idle motion is not a
+  fabricated voice level. PR #90 implements and Larry accepted the selected
+  shell. Do not resurrect deleted wave paths or obsolete sliders, and do not
+  edit Crystal renderer code under this plan.
 - Voice, pointer and keyboard invoke the same validated actions. Extend the
   existing settings/results surfaces, typography and Liquid Glass treatment.
   Do not add a competing console or a second audio-input tap.
@@ -718,8 +721,23 @@ do all independent preparation before seeking the user's action.
   clean at that revision. The inspected-source fingerprint above is updated;
   [GC24-00 receipt](../acceptance/verified-gap-closure/GC24-00-baseline-2026-09-25.md)
   records the runtime inspection limit and remaining unknowns.
+- **2026-09-25 — Concurrent PR #90 merged.** Current inspected main is
+  `4acb4dc`; its accepted Crystal option A shell replaces the former shell
+  while preserving the orb contract. The updated baseline and remaining live
+  Crystal checks are recorded in
+  [GC24-00 follow-up](../acceptance/verified-gap-closure/GC24-00-main-refresh-2026-09-25.md).
 - **Document validation:** all plan links resolve, the eleven closure IDs are
   unique and ordered, code fences/whitespace pass, and all seven existing
   standalone `test_plan_manifests.py` assertions pass by direct invocation.
   This is documentation validation, not a pytest application-suite run or a
   runtime acceptance receipt.
+- **2026-09-25 — GC24-02 implementation slice.** The unused execution boundary
+  now validates ordered context, ephemeral text/image attachments, source
+  policies, workload/capability matches and a cancellable deadline; snapshots
+  resolved workload priority; enforces two-slot interactive/background
+  admission; and emits ordered start/terminal events. Fourteen focused cases
+  pass by a direct harness, not pytest. See the
+  [GC24-02 progress receipt](../acceptance/verified-gap-closure/GC24-02-execution-input-progress-2026-09-25.md).
+  This does not close GC24-02: typed output/tool contracts, production callers,
+  streaming/tool/artifact events, downstream cancellation and prevention of
+  late durable writes remain.

@@ -3,13 +3,13 @@
 Consolidated requirement matrix: [`../IMPLEMENTATION_STATUS.md`](../IMPLEMENTATION_STATUS.md).
 Remaining Mac procedures: [`../ACCEPTANCE_RUNBOOK.md`](../ACCEPTANCE_RUNBOOK.md).
 
-**Reconciled 2026-09-25 against main `8bd5e7e` (#89).** The only source change
-since the previous `88b206f` reconciliation is the `WindowVisibilityTests`
-fixture ordering adjustment. PR #89 reports Python 2,773 passed / 4 skipped
-and MortimerHost 248 executed / 3 skipped / 0 failures; these are recorded
-commit results, not a rerun here. Installed candidate and live service identity
-remain unverified. See
-[`../verified-gap-closure/GC24-00-baseline-2026-09-25.md`](../verified-gap-closure/GC24-00-baseline-2026-09-25.md).
+**Reconciled 2026-09-25 against main `4acb4dc` (#90).** PR #90 updates the
+accepted orb shell; the Command Console/Atlas implementation and open live
+acceptance gates remain as listed below. The merge commit reports MortimerHost
+258 executed / 3 skipped / 0 failures, JarvisKit 199 passed, and Crystal p95
+13.59 ms at 1440×220. These are commit results, not reruns here. Installed
+candidate and live service identity remain unverified. See the
+[`GC24-00 main refresh`](../verified-gap-closure/GC24-00-main-refresh-2026-09-25.md).
 
 Updated 2026-09-18. The implementation is present in the release-review
 worktree and ships with Command Console layout version 2 as the default;

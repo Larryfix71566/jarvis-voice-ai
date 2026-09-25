@@ -3,13 +3,14 @@
 **As of:** 2026-09-20
 **Plan:** [Model Use Enhancements](../../plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md)
 
-**Reconciled 2026-09-25 against main `8bd5e7e` (#89).** The only intervening
-product-tree change is the native window-visibility test fixture. PR #89
-reports Python 2,773 passed / 4 skipped and MortimerHost 248 executed /
-3 skipped / 0 failures; these counts were not rerun here. They do not change
-the existing route/privacy, subscription-capability or deployment gates.
-Runtime identity/effective settings remain unverified. See
-[`../verified-gap-closure/GC24-00-baseline-2026-09-25.md`](../verified-gap-closure/GC24-00-baseline-2026-09-25.md).
+**Reconciled 2026-09-25 against main `4acb4dc` (#90).** PR #90 changes the
+accepted orb shell and does not change model execution, privacy, subscription
+capability, memory admission, or route gates. Its commit reports MortimerHost
+258 executed / 3 skipped / 0 failures, JarvisKit 199 passed, and Crystal p95
+13.59 ms at 1440×220; these counts were not rerun here. Runtime identity and
+effective settings remain unverified. See the
+[`GC24-00 main refresh`](../verified-gap-closure/GC24-00-main-refresh-2026-09-25.md)
+and the [verified gap-closure plan](../../plans/MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md).
 
 This is an implementation status record, not a claim that the rollout is
 complete.
@@ -104,6 +105,15 @@ no linked receipt are also unreceipted.
   privacy requirement, capabilities, credential reference, and billing source.
 - [x] **MAR-C foundation** — `jarvis/model_execution.py` defines the
   provider-neutral request/result contract and preserves parent request IDs.
+  (GC24-02 progress, 2026-09-25: context messages and normalized text/image
+  attachments now retain order and source policy; external attachments require
+  approval bound to exact route/model. Malformed, duplicate, unsupported-image
+  and route/workload-mismatch requests fail before client creation. An async
+  deadline cancels the awaited call. Two-slot interactive/background
+  admission and start/terminal events are implemented in the boundary but lack
+  locked-environment pytest evidence. The boundary still has no production
+  call sites; tool/output contracts, streamed lifecycle/tool events, and
+  downstream cancellation remain open. See the linked GC24-02 progress receipt.)
 - [x] **MAR-D foundation** — `jarvis/privacy_policy.py` enforces strictest
   data policy before execution.
 - [x] **MAR-E foundation** — `jarvis/saygm.py` parses catalog tiers and only

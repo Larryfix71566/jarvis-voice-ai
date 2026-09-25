@@ -1,21 +1,23 @@
 # Implementation and acceptance status
 
-**New closure plan (2026-09-24):**
+**Model-ready execution plan (refreshed 2026-09-25):**
 [Verified Gap Closure](../plans/MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md) maps the
-source gaps inspected at `8bd5e7e` to implementation and acceptance increments.
-It is planning only; it does not close the rows below. Its baseline and status
-reconciliation steps explicitly distinguish heuristic admission from a
-production model-backed classifier, text-only adapters from full execution,
-and historical receipts from current deployment evidence.
+verified implementation and release gaps inspected at main `4acb4dc` (#90) to
+ordered implementation and acceptance increments. It specifies locked design
+decisions, dependencies, file ownership, test requirements, privacy and
+rollback boundaries, and acceptance evidence for each increment. It remains a
+plan; it does not close the rows below.
 
-**Reconciled 2026-09-25 against main `8bd5e7e` (#89).** The only product-tree
-change since `88b206f` is the native `WindowVisibilityTests` fixture ordering
-fix. PR #89's commit message records 2,773 Python passes / 4 skips and 248
-MortimerHost tests executed / 3 skipped / 0 failures. These are the results
-reported by that commit, not a fresh run in this Codex worktree. The commit
-does not establish the installed app or service revision; runtime inspection
-was denied in this environment. See
-[`verified-gap-closure/GC24-00-baseline-2026-09-25.md`](verified-gap-closure/GC24-00-baseline-2026-09-25.md).
+**Reconciled 2026-09-25 against main `4acb4dc` (#90).** PR #90 updates the
+accepted orb shell; it does not change the model execution, privacy, memory
+admission, or Atlas lifecycle gaps in the closure plan. Its commit reports
+MortimerHost 258 executed / 3 skipped / 0 failures, JarvisKit 199 passed, and
+Crystal p95 13.59 ms at 1440×220. These are commit-reported results, not a
+fresh test run in this Codex worktree. Installed app/service identity and
+effective runtime settings remain unverified. See the
+[`GC24-00 main refresh`](verified-gap-closure/GC24-00-main-refresh-2026-09-25.md)
+and original
+[`GC24-00 baseline`](verified-gap-closure/GC24-00-baseline-2026-09-25.md).
 
 Updated September 18, 2026 from the release-review worktree; verification
 counts reconciled and a model-use section added 2026-09-22 against main
@@ -53,11 +55,15 @@ provider journey, or an observation period.
 
 ## Current automated verification
 
-The latest complete test counts are those reported in PR #89's merge commit
-(`8bd5e7e`): Python 2,773 passed / 4 skipped and MortimerHost 248 executed /
-3 skipped / 0 failures. These are commit-message results, not a rerun here.
-PR #89 did not report a new JarvisKit suite count. The receipt-time and
-`88b206f` comparisons below are historical and remain labelled as such.
+The latest test evidence is mixed by suite and source: PR #90's merge commit
+(`4acb4dc`) reports MortimerHost 258 executed / 3 skipped / 0 failures and
+JarvisKit 199 passed / 0 failures. Its Crystal measurement reports p95
+13.59 ms at 1440×220. These are commit-reported results, not reruns here. The
+latest available Python count remains the PR #89 commit report
+(`8bd5e7e`): 2,773 passed / 4 skipped; PR #90 did not report a Python run.
+None of these counts establish the installed app or current runtime settings.
+The receipt-time and `88b206f` comparisons below are historical and remain
+labelled as such.
 
 Reconciled 2026-09-22 against main `88b206f`. The figures below are the
 counts recorded in the committed 2026-09-18 receipts (Mac, release-review

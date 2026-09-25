@@ -149,6 +149,9 @@ class ResolvedModelRoute:
     route: AccessRoute
     api_key_env: str | None
     identity: str
+    # Snapshot admission priority together with model/route selection so a
+    # later preference edit cannot reclassify an in-flight request.
+    priority: str = "interactive"
 
 
 def load_access_config(path: str | os.PathLike[str] | None = None) -> dict[str, Any]:
@@ -297,6 +300,7 @@ def resolve_model_route(workload: str, *, explicit_profile: str | None = None,
         route=route,
         api_key_env=route.credential_env,
         identity=str(profile.get("identity") or ""),
+        priority=policy.priority,
     )
 
 
