@@ -77,6 +77,10 @@ no linked receipt are also unreceipted.
   through the routing gate. The static inventory now covers all 13 production
   completion call sites with zero review-required entries; enabled-mode runtime
   evidence remains open.
+  (GC24-02 progress: `kb_digest` now uses the shared execution boundary when
+  its existing model route is resolved under the routing gate; the old path
+  remains when routing is disabled. The other 12 call-site records have not
+  yet been migrated.)
 - [ ] **MAR-H** — Add persistent route/workload controls to the existing
   native console and voice command path. The sidecar draft/confirm API and
   SQLite persistence are now landed; native-console wiring is landed in the
@@ -147,8 +151,10 @@ no linked receipt are also unreceipted.
   Command Console are enabled; it never invokes a provider or bypasses the
   confirmation boundary.
 - [x] **Billing identity foundation** — subscription clients use the distinct
-  `subscription://` ledger provider, so subscription usage cannot be confused
-  with direct API spend even when token pricing is unavailable.
+  `subscription://` ledger provider. GC24-02 adds persisted billing-source,
+  route, usage-known, cache-breakdown-known and duration metadata to new ledger
+  rows; legacy rows remain explicitly unknown where those fields were not
+  recorded.
 - [x] **Background client bridge** — memory/background factories preserve the
   resolved route object and use the subscription/SAYGM adapter when routing is
   enabled instead of assuming every background route has an API key.

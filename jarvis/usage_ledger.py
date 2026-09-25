@@ -6,7 +6,8 @@ Anthropic / OpenAI / OpenRouter response shapes.
 
 Design decisions (agreed 2026-09-01):
 - SQLite at data/costs.db (billing-period queries are a DB workload)
-- Raw token counts always stored; computed_cost derived from a versioned
+- Reported token counts always stored; missing usage is explicitly marked
+  unknown (never treated as zero); computed_cost derives from a versioned
   price map (config/model_prices.yaml) so provider price changes are a
   config edit with an effective date, not a code change
 - OpenRouter reported cost stored as ground truth when present
@@ -83,6 +84,11 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     output_tokens INTEGER NOT NULL DEFAULT 0,
     cache_write_tokens INTEGER NOT NULL DEFAULT 0,
     cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+    usage_known INTEGER,
+    cache_breakdown_known INTEGER,
+    billing_source TEXT,
+    route_name TEXT,
+    duration_ms REAL,
     reported_cost REAL,               -- provider-reported USD (OpenRouter); NULL for native
     computed_cost REAL,               -- from price map; NULL if model missing from map
     gen_id TEXT,                      -- OpenRouter generation id, for later enrichment
@@ -203,6 +209,18 @@ def _conn() -> sqlite3.Connection:
     # the columns above; costs.db has no migration runner of its own.
     if "user_id" not in cols:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local'")
+    # GC24-02 — preserve unavailable usage as unknown and identify whether a
+    # row was billed through API, subscription or another explicit route.
+    if "usage_known" not in cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN usage_known INTEGER")
+    if "cache_breakdown_known" not in cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN cache_breakdown_known INTEGER")
+    if "billing_source" not in cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN billing_source TEXT")
+    if "route_name" not in cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN route_name TEXT")
+    if "duration_ms" not in cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN duration_ms REAL")
     return conn
 
 
@@ -219,7 +237,12 @@ def record_call(rung: str,
                 ts: Optional[datetime] = None,
                 plan_state: Optional[str] = None,
                 quantity: Optional[float] = None,
-                unit: Optional[str] = None) -> None:
+                unit: Optional[str] = None,
+                usage_known: bool = True,
+                cache_breakdown_known: bool = True,
+                billing_source: str | None = None,
+                route_name: str | None = None,
+                duration_ms: float | None = None) -> None:
     """Write one call to the ledger. Never raises — cost logging must not
     take down the pipeline. Failures go to stderr.
 
@@ -245,19 +268,24 @@ def record_call(rung: str,
                   file=sys.stderr)
         ts = ts or datetime.now(timezone.utc)
         month = ts.strftime("%Y-%m")
-        computed = compute_cost(provider, model, input_tokens, output_tokens,
-                                cache_write_tokens, cache_read_tokens,
-                                quantity=quantity, unit=unit)
+        computed = (
+            compute_cost(provider, model, input_tokens, output_tokens,
+                         cache_write_tokens, cache_read_tokens,
+                         quantity=quantity, unit=unit)
+            if usage_known or quantity is not None else None
+        )
         with _lock, _conn() as conn:
             conn.execute(
                 "INSERT INTO llm_calls (ts, month, session_id, rung, provider,"
                 " model, input_tokens, output_tokens, cache_write_tokens,"
-                " cache_read_tokens, reported_cost, computed_cost, gen_id,"
-                " plan_state, quantity, unit)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " cache_read_tokens, usage_known, cache_breakdown_known,"
+                " billing_source, route_name, duration_ms, reported_cost, computed_cost,"
+                " gen_id, plan_state, quantity, unit)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (ts.isoformat(), month, session_id, rung, provider, model,
                  input_tokens, output_tokens, cache_write_tokens,
-                 cache_read_tokens, reported_cost, computed, gen_id,
+                 cache_read_tokens, int(usage_known), int(cache_breakdown_known),
+                 billing_source, route_name, duration_ms, reported_cost, computed, gen_id,
                  plan_state, quantity, unit),
             )
     except Exception as exc:  # pragma: no cover
@@ -335,13 +363,13 @@ def _get(obj: Any, key: str, default=None):
     return getattr(obj, key, default)
 
 
-def _find_first(usage: Any, aliases) -> int:
+def _find_first_optional(usage: Any, aliases) -> int | None:
     for container_key, field in aliases:
         container = _get(usage, container_key) if container_key else usage
-        val = _get(container, field)
-        if val is not None:
-            return val
-    return 0
+        value = _get(container, field)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            return value
+    return None
 
 
 def record_completion(rung: str,
@@ -351,7 +379,9 @@ def record_completion(rung: str,
                       session_id: Optional[str] = None,
                       gen_id: Optional[str] = None,
                       reported_cost: Optional[float] = None,
-                      plan_state: Optional[str] = None) -> None:
+                      plan_state: Optional[str] = None,
+                      billing_source: str | None = None,
+                      route_name: str | None = None) -> None:
     """The one adapter for every call site in this repo — all are
     chat.completions.create via AsyncOpenAI regardless of upstream vendor.
 
@@ -369,10 +399,16 @@ def record_completion(rung: str,
         print(f"usage_ledger DEBUG rung={rung} provider={provider} "
               f"model={model} raw_usage={u!r}", file=sys.stderr)
 
-    prompt = _get(u, "prompt_tokens") or 0
-    completion = _get(u, "completion_tokens") or 0
-    cached = _find_first(u, _CACHED_TOKEN_ALIASES)
-    cache_write = _find_first(u, _CACHE_WRITE_ALIASES)
+    prompt_value = _get(u, "prompt_tokens")
+    completion_value = _get(u, "completion_tokens")
+    prompt_known = isinstance(prompt_value, int) and not isinstance(prompt_value, bool) and prompt_value >= 0
+    completion_known = isinstance(completion_value, int) and not isinstance(completion_value, bool) and completion_value >= 0
+    prompt = prompt_value if prompt_known else 0
+    completion = completion_value if completion_known else 0
+    cached_value = _find_first_optional(u, _CACHED_TOKEN_ALIASES)
+    cache_write_value = _find_first_optional(u, _CACHE_WRITE_ALIASES)
+    cached = cached_value if cached_value is not None else 0
+    cache_write = cache_write_value if cache_write_value is not None else 0
 
     record_call(
         rung=rung, provider=provider, model=model, session_id=session_id,
@@ -390,4 +426,33 @@ def record_completion(rung: str,
         reported_cost=reported_cost,
         gen_id=gen_id or _get(response, "id"),
         plan_state=plan_state,
+        usage_known=prompt_known and completion_known,
+        cache_breakdown_known=(cached_value is not None and cache_write_value is not None),
+        billing_source=billing_source,
+        route_name=route_name,
+    )
+
+
+def record_execution_result(rung: str, result: Any,
+                            session_id: str | None = None) -> None:
+    """Record normalized executor metadata without turning unknown into zero."""
+    prompt = getattr(result, "prompt_tokens", None)
+    completion = getattr(result, "completion_tokens", None)
+    cache_read = getattr(result, "cache_read_tokens", None)
+    cache_write = getattr(result, "cache_write_tokens", None)
+    record_call(
+        rung=rung,
+        provider=str(getattr(result, "provider", "unknown")),
+        model=str(getattr(result, "model", "unknown")),
+        input_tokens=max((prompt or 0) - (cache_read or 0) - (cache_write or 0), 0),
+        output_tokens=completion or 0,
+        cache_write_tokens=cache_write or 0,
+        cache_read_tokens=cache_read or 0,
+        gen_id=getattr(result, "response_id", None),
+        session_id=session_id,
+        usage_known=(prompt is not None and completion is not None),
+        cache_breakdown_known=(cache_read is not None and cache_write is not None),
+        billing_source=str(getattr(result, "billing", "unknown")),
+        route_name=str(getattr(result, "route", "unknown")),
+        duration_ms=getattr(result, "duration_ms", None),
     )

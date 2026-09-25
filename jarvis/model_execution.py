@@ -216,6 +216,7 @@ class ModelExecutionResult:
     task_id: str
     parent_request_id: str
     model: str
+    provider: str
     route: str
     billing: str
     text: str
@@ -227,6 +228,7 @@ class ModelExecutionResult:
     cache_read_tokens: int | None = None
     cache_write_tokens: int | None = None
     duration_ms: float = 0.0
+    response_id: str | None = None
 
 
 def _validated_inputs(request: ModelExecutionRequest,
@@ -560,10 +562,14 @@ async def execute_chat(request: ModelExecutionRequest,
                 for call in tool_calls:
                     await emit_tool_request(call)
                 usage = _field(response, "usage")
+                response_id = _field(response, "id")
+                if not isinstance(response_id, str) or len(response_id) > 256:
+                    response_id = None
                 result = ModelExecutionResult(
                     task_id=request.task_id,
                     parent_request_id=request.parent_request_id,
                     model=resolved.model,
+                    provider=resolved.provider,
                     route=resolved.route.name,
                     billing=resolved.route.billing,
                     text=text,
@@ -581,6 +587,7 @@ async def execute_chat(request: ModelExecutionRequest,
                         "prompt_tokens_details.cache_write_tokens",
                     ),
                     duration_ms=(time.monotonic() - started_at) * 1000.0,
+                    response_id=response_id,
                 )
                 await emit("completed")
                 return result

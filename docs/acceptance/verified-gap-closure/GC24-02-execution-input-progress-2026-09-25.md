@@ -42,10 +42,12 @@
   owner; this module never invokes a tool. Tool lifecycle events expose only
   the tool name and call ID, not arguments.
 
-The repository search at the source baseline found no production call site for
-`ModelExecutionRequest`/`execute_chat`; this code currently fixes the boundary
-contract only. It does not yet put existing direct-API model traffic through
-this boundary.
+At the `4acb4dc` source baseline, no production call site used
+`ModelExecutionRequest`/`execute_chat`. The `kb_digest` family now uses the
+boundary whenever its existing background route resolves through model
+routing. The legacy direct-client path remains unchanged while routing is
+disabled and for the existing injected test seam. The other production call
+families have not been migrated.
 
 ## Validation and limitations
 
@@ -56,20 +58,31 @@ this boundary.
   therefore it does not validate compatibility with the actual locked
   `jsonschema` runtime and is **not** a pytest run. It does not substitute for
   the locked test environment.
+- A real SQLite exercise verified unknown usage remains marked unknown with
+  no computed zero cost, cache reads/writes split correctly, normalized
+  execution metadata stores route/billing/duration/response ID, and the cost
+  report groups subscription and API sources. This is a targeted database
+  check, not the unit suite.
+- Focused pytest files for the ledger and `kb_digest` migration were added but
+  could not run here. This worktree's isolated Python lacks pytest, PyYAML,
+  Pydantic and jsonschema; importing `jarvis.kb_digest` fails at the missing
+  Pydantic dependency. Their files compile, but the production-call migration
+  still needs the locked test environment before acceptance.
 - A full offline sync of `requirements-lock.txt` could not complete because
   the cache lacks `torch==2.13.0`; installing the minimal test requirements
   offline also failed on uncached `Pygments` and PyYAML artifacts. No network
   dependency was fetched.
-- No production model call sites, prompts, tool loops, provider route
-  selections or runtime settings changed. The resolved route now carries the
-  admission-priority snapshot, but traffic is not yet migrated through this
-  boundary.
+- One production family (`kb_digest`) now crosses the execution boundary only
+  when the model-routing feature is enabled and the resolved route passes the
+  privacy gate. The legacy path remains when routing is disabled. No provider
+  route choices, runtime feature flags, prompts or tool execution policy were
+  changed. The remaining 12 production completion sites are not yet migrated.
 
 ## Still required for GC24-02
 
-Still connect the executor to production call sites; propagate
-cancellation/timeout through callers and prevent late UI/database writes; add
-idempotent tool reconciliation; complete streaming progress/text/artifact and
-tool-result events; and run focused and whole-project tests in the locked
+Still migrate the remaining production call families; propagate
+cancellation/timeout through their callers and prevent late UI/database writes;
+add idempotent tool reconciliation; complete streaming progress/text/artifact
+and tool-result events; and run focused and whole-project tests in the locked
 isolated environment. GC24-03 remains a prerequisite for enabling a new route
 with protected data.

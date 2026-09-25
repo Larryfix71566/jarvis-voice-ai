@@ -229,9 +229,13 @@ source owner, unsupported completion claim or change to historical receipts.
 ## 7. GC24-02 — Complete execution without losing input or lifecycle
 
 **Primary files:** `jarvis/model_execution.py`, `jarvis/model_routing.py`,
-`jarvis/llm_client.py`, `jarvis/memory_model.py`; affected callers identified by
-`scripts/audit_model_call_sites.py`; tests in `tests/unit/test_model_execution.py`
-and the existing routing, call-site, subagent and integration suites.
+`jarvis/llm_client.py`, `jarvis/memory_model.py`, `jarvis/usage_ledger.py`,
+`scripts/cost_report.py`; affected callers identified by
+`scripts/audit_model_call_sites.py` (first migrated family:
+`jarvis/kb_digest.py`). Tests in `tests/unit/test_model_execution.py`,
+`tests/unit/test_usage_ledger.py`, `tests/unit/test_kb_digest.py`,
+`tests/unit/test_cost_report.py`, and the existing routing, call-site,
+subagent and integration suites.
 
 Lock the following contract before migrating callers:
 
@@ -738,8 +742,12 @@ do all independent preparation before seeking the user's action.
   admission; validates bounded output and caller-provided tool schemas; returns
   schema-checked tool requests without executing them; and reports ordered
   policy-carrying lifecycle events with known usage metadata. Twenty-two focused
-  cases pass only in a stubbed direct harness, not pytest. See the
+  cases pass only in a stubbed direct harness, not pytest. `kb_digest` now uses
+  this boundary when model routing is enabled; the usage ledger separately
+  records unknown counts, billing source, route, duration and response ID. A
+  real SQLite exercise passed. See the
   [GC24-02 progress receipt](../acceptance/verified-gap-closure/GC24-02-execution-input-progress-2026-09-25.md).
-  This does not close GC24-02: production callers, streaming/tool-result/
-  artifact events, downstream cancellation, idempotent tool reconciliation,
-  locked-environment verification and prevention of late durable writes remain.
+  This does not close GC24-02: the remaining 12 production callers,
+  streaming/tool-result/artifact events, downstream cancellation, idempotent
+  tool reconciliation, locked-environment verification and prevention of late
+  durable writes remain.
