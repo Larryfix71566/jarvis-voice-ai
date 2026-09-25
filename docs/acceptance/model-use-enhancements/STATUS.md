@@ -3,6 +3,14 @@
 **As of:** 2026-09-20
 **Plan:** [Model Use Enhancements](../../plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md)
 
+**Reconciled 2026-09-25 against main `8bd5e7e` (#89).** The only intervening
+product-tree change is the native window-visibility test fixture. PR #89
+reports Python 2,773 passed / 4 skipped and MortimerHost 248 executed /
+3 skipped / 0 failures; these counts were not rerun here. They do not change
+the existing route/privacy, subscription-capability or deployment gates.
+Runtime identity/effective settings remain unverified. See
+[`../verified-gap-closure/GC24-00-baseline-2026-09-25.md`](../verified-gap-closure/GC24-00-baseline-2026-09-25.md).
+
 This is an implementation status record, not a claim that the rollout is
 complete.
 

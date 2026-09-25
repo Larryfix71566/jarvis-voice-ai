@@ -3,6 +3,15 @@
 Consolidated requirement matrix: [`../IMPLEMENTATION_STATUS.md`](../IMPLEMENTATION_STATUS.md).
 Remaining Mac procedures: [`../ACCEPTANCE_RUNBOOK.md`](../ACCEPTANCE_RUNBOOK.md).
 
+**Reconciled 2026-09-25 against main `8bd5e7e` (#89).** The only intervening
+product-tree change is the native window-visibility test fixture. PR #89
+reports Python 2,773 passed / 4 skipped and MortimerHost 248 executed /
+3 skipped / 0 failures; these counts were not rerun here. The source/status
+finding that the production B1 watcher uses `heuristic_classifier`, while
+model classification runs only in synthetic provider shadow, remains open.
+Live runtime stage and Mac benefit/cost evidence remain unverified. See
+[`../verified-gap-closure/GC24-00-baseline-2026-09-25.md`](../verified-gap-closure/GC24-00-baseline-2026-09-25.md).
+
 ## User-facing maintenance behavior
 
 The connect-time voice path is now silent about open review rows. Background

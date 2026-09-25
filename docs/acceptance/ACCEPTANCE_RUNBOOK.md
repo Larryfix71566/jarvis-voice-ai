@@ -5,12 +5,19 @@ Command Center plans. It does not change code, enable a provider, or alter the
 database. Run it against the signed candidate whose executable hash is recorded
 in the active receipt.
 
+The candidate checkout must be the exact source used to build the signed
+candidate. Do not assume the historical `release-review` path still contains
+that source. The current deployment baseline and its inspection limits are
+recorded in
+[`verified-gap-closure/GC24-00-baseline-2026-09-25.md`](verified-gap-closure/GC24-00-baseline-2026-09-25.md).
+
 ## 1. Freeze the candidate
 
-From the release-review checkout:
+From the verified candidate checkout, set `CANDIDATE_ROOT` to its repository
+root before running:
 
 ```sh
-cd /Users/larryfix/Documents/Codex/2026-09-09/can/work/release-review
+cd "$CANDIDATE_ROOT"
 shasum -a 256 macos/MortimerHost/.build/MortimerHost.app/Contents/MacOS/MortimerHost
 git rev-parse HEAD
 git status --short

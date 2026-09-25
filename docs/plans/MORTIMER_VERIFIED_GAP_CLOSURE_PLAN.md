@@ -133,7 +133,10 @@ open at authorship. Checked completion requires the evidence described in
 section 15; passing implementation tests alone cannot close a live gate.
 
 - [ ] **GC24-00 — Establish source, runtime and acceptance baseline.** First.
-- [ ] **GC24-01 — Reconcile status and remove ambiguous ownership.** After 00.
+- [x] **GC24-01 — Reconcile status and remove ambiguous ownership.** Closed
+  2026-09-25 after source audit, status/ID reconciliation, duplicate-source
+  removal, and manifest/documentation checks. See the
+  [GC24-01 receipt](../acceptance/verified-gap-closure/GC24-01-status-reconciliation-2026-09-25.md).
 - [ ] **GC24-02 — Complete the shared execution contract.** After 00.
 - [ ] **GC24-03 — Enforce policy through every transmission and result sink.**
   After 02; blocks enabling new routes for protected content.

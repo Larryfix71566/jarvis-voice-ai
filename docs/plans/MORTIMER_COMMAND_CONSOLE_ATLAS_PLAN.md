@@ -83,8 +83,9 @@ decisions are fixed. Adding these gates closes no existing requirement.
 - **Gate range.** The gates now run beyond UI2-20. UI2-21 and UI2-22 are
   tracked in `docs/acceptance/command-console/STATUS.md`. UI2-21 is used for
   two different items: Developer-run grouping in the Command Console status,
-  and the atom-style voice display in `RELEASE_READINESS.md`. Cite each by
-  title.
+  and the atom-style voice display in `RELEASE_READINESS.md`. This collision
+  was resolved on 2026-09-25: the atom display keeps UI2-21 and developer-run
+  grouping is UI2-23. Cite earlier UI2-21 records by title.
 
 This extends MORTIMER_ADAPTIVE_INTERFACE_PLAN.md and its closure plan. For
 layout version 2 it supersedes the left voice rail, large central conversation
@@ -931,11 +932,9 @@ Create under MortimerHost:
 - Console/AttachmentTrayView.swift and Console/AttachmentNormalizer.swift
   (landed under Console/, not Display/; path corrected 2026-09-22).
 - Placement/ContentWindowRegistry.swift — window registration/focus callbacks,
-  no screen observer or placement algorithm of its own. (Noted 2026-09-22: an
-  older, different copy also sits at
-  `macos/MortimerHost/Placement/ContentWindowRegistry.swift`, outside
-  `Sources/`. The `Sources/MortimerHost/Placement/` file is the one that
-  landed. See the Command Console status open items.)
+  no screen observer or placement algorithm of its own. The obsolete copy
+  outside `Sources/` was removed in GC24-01; the package-owned path is the
+  sole implementation.
 
 Modify under MortimerHost:
 
