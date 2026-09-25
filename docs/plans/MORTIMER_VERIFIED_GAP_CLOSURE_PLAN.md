@@ -742,12 +742,12 @@ do all independent preparation before seeking the user's action.
   admission; validates bounded output and caller-provided tool schemas; returns
   schema-checked tool requests without executing them; and reports ordered
   policy-carrying lifecycle events with known usage metadata. Twenty-two focused
-  cases pass only in a stubbed direct harness, not pytest. `kb_digest` now uses
-  this boundary when model routing is enabled; the usage ledger separately
-  records unknown counts, billing source, route, duration and response ID. A
-  real SQLite exercise passed. See the
+  cases pass only in a stubbed direct harness, not pytest. `kb_digest` and
+  procedure description now use this boundary when model routing is enabled;
+  the usage ledger separately records unknown counts, billing source, route,
+  duration and response ID. A real SQLite exercise passed. See the
   [GC24-02 progress receipt](../acceptance/verified-gap-closure/GC24-02-execution-input-progress-2026-09-25.md).
-  This does not close GC24-02: the remaining 12 production callers,
+  This does not close GC24-02: the remaining 11 production callers,
   streaming/tool-result/artifact events, downstream cancellation, idempotent
   tool reconciliation, locked-environment verification and prevention of late
   durable writes remain.

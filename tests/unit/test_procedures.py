@@ -3,16 +3,21 @@
 """
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
+from jarvis import procedures as procedures_module
 from jarvis.db import get_conn, now_iso, run_migrations
+from jarvis.model_execution import ModelAdmissionController
+from jarvis.model_routing import AccessRoute, ResolvedModelRoute
 from jarvis.procedures import (
     MAX_SOURCE_RUN_IDS,
     PROCEDURE_DEPRECATE_AFTER,
     PROCEDURE_PROMOTE_AFTER,
     _calibrate_populations,
     _cli_main,
+    _describe_procedure,
     _explain,
     _load_successful_runs,
     _percentile,
@@ -96,6 +101,60 @@ def _insert_procedure(
 WEATHER_TASK = "look up the current weather conditions in tokyo japan"
 WEATHER_LABEL = "weather lookup"
 WEATHER_DESC = "used get_weather to check current weather conditions for a city"
+
+
+@pytest.mark.asyncio
+async def test_routed_procedure_description_uses_shared_execution_boundary(monkeypatch):
+    class Client:
+        def __init__(self):
+            self.chat = self
+            self.completions = self
+            self.request = None
+
+        async def create(self, **kwargs):
+            self.request = kwargs
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(
+                    content='{"label":"weather lookup","description":"Use the weather tool."}'
+                ))],
+                usage=None,
+                id="procedure-response",
+            )
+
+    client = Client()
+    resolved = ResolvedModelRoute(
+        workload="background", profile_name="test", model="model",
+        provider="saygm", base_url="https://gateway.example/v1/",
+        identity="saygm/model",
+        route=AccessRoute(
+            "saygm", "saygm_gateway", "saygm_credit", None, "confidential",
+            capabilities=("text",),
+        ),
+        api_key_env=None,
+        priority="background",
+    )
+    monkeypatch.setattr(
+        procedures_module, "_PROCESS_ADMISSION", ModelAdmissionController()
+    )
+    monkeypatch.setattr(
+        procedures_module, "make_background_async_client",
+        lambda settings: (client, SimpleNamespace(model="model", resolved=resolved)),
+    )
+    recorded = []
+    monkeypatch.setattr(
+        procedures_module, "record_execution_result",
+        lambda *args, **kwargs: recorded.append((args, kwargs)),
+    )
+
+    result = await _describe_procedure("analyst", "check Tokyo weather", object())
+
+    assert result == ("weather lookup", "Use the weather tool.")
+    assert client.request["model"] == "model"
+    assert client.request["messages"] == [
+        {"role": "system", "content": procedures_module._DESCRIBE_PROMPT},
+        {"role": "user", "content": "Agent: analyst\nTask: check Tokyo weather"},
+    ]
+    assert recorded and recorded[0][0][0] == "procedures_describe"
 
 
 # --- match_procedure ------------------------------------------------------

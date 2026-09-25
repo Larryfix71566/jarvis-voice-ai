@@ -43,13 +43,20 @@ import json
 import logging
 import re
 import sqlite3
+import uuid
 from pathlib import Path
 from typing import Any, Callable
 
 from jarvis.db import get_conn, now_iso
 from jarvis.memory_model import make_background_async_client
+from jarvis.model_execution import ModelContextMessage, ModelExecutionRequest, execute_chat
+from jarvis.privacy_policy import DataPolicy
 from jarvis.runlog import get_run
-from jarvis.usage_ledger import record_completion, provider_from_base_url
+from jarvis.usage_ledger import (
+    record_completion,
+    record_execution_result,
+    provider_from_base_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -355,26 +362,52 @@ async def _describe_procedure(
         # Test seam only; production uses JARVIS_BACKGROUND_PROFILE.
         client = client_factory(settings)
         model = settings.openai_model
+        resolved = None
     else:
         client, route = make_background_async_client(settings)
         model = route.model
-    response = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": _DESCRIBE_PROMPT},
-            {"role": "user", "content": f"Agent: {agent}\nTask: {task}"},
-        ],
-    )
-    try:
-        record_completion(
-            rung="procedures_describe",
-            provider=provider_from_base_url(str(client.base_url)),
-            model=model,
-            response=response,
+        resolved = route.resolved
+    if resolved is not None:
+        request_id = f"procedure-description:{uuid.uuid4().hex}"
+        execution = await execute_chat(
+            ModelExecutionRequest(
+                workload=resolved.workload,
+                task_id=request_id,
+                parent_request_id=request_id,
+                instructions=f"Agent: {agent}\nTask: {task}",
+                context=(ModelContextMessage(
+                    "system", _DESCRIBE_PROMPT,
+                    DataPolicy("confidential", "procedure-description-prompt"),
+                ),),
+                data_policy=DataPolicy("confidential", "successful-agent-task"),
+                timeout_s=30.0,
+            ),
+            resolved,
+            client_factory=lambda _: client,
         )
-    except Exception:
-        pass
-    return _parse_label_description(response.choices[0].message.content or "")
+        record_execution_result("procedures_describe", execution)
+        result_text = execution.text
+    else:
+        # Compatibility path while model routing is disabled and for the
+        # existing injected test seam. Preserve the provider request shape.
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": _DESCRIBE_PROMPT},
+                {"role": "user", "content": f"Agent: {agent}\nTask: {task}"},
+            ],
+        )
+        try:
+            record_completion(
+                rung="procedures_describe",
+                provider=provider_from_base_url(str(client.base_url)),
+                model=model,
+                response=response,
+            )
+        except Exception:
+            pass
+        result_text = response.choices[0].message.content or ""
+    return _parse_label_description(result_text)
 
 
 async def learn_from_run(

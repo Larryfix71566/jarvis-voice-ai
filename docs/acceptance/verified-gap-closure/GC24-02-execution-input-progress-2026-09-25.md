@@ -45,9 +45,10 @@
 At the `4acb4dc` source baseline, no production call site used
 `ModelExecutionRequest`/`execute_chat`. The `kb_digest` family now uses the
 boundary whenever its existing background route resolves through model
-routing. The legacy direct-client path remains unchanged while routing is
-disabled and for the existing injected test seam. The other production call
-families have not been migrated.
+routing. The procedure-description family also uses the boundary when its
+background route resolves. Both retain their legacy direct-client paths while
+routing is disabled and for their injected test seams. The other production
+call families have not been migrated.
 
 ## Validation and limitations
 
@@ -76,11 +77,16 @@ families have not been migrated.
   when the model-routing feature is enabled and the resolved route passes the
   privacy gate. The legacy path remains when routing is disabled. No provider
   route choices, runtime feature flags, prompts or tool execution policy were
-  changed. The remaining 12 production completion sites are not yet migrated.
+  changed.
+- A second family (`procedures_describe`) now crosses the same boundary under
+  the resolved background route, with the existing JSON response parser and
+  compatibility/test path retained. Source compiles; its focused pytest file
+  cannot run because this environment lacks pytest and runtime dependencies.
+  The remaining 11 production call sites are not yet migrated.
 
 ## Still required for GC24-02
 
-Still migrate the remaining production call families; propagate
+Still migrate the remaining 11 production call sites/families; propagate
 cancellation/timeout through their callers and prevent late UI/database writes;
 add idempotent tool reconciliation; complete streaming progress/text/artifact
 and tool-result events; and run focused and whole-project tests in the locked
