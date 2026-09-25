@@ -25,16 +25,23 @@ import logging
 import os
 import re
 import sqlite3
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable
 
 from jarvis.config import Settings
 from jarvis.db import get_conn, now_iso
 from jarvis.sensitive import detect_financial
-from jarvis.usage_ledger import record_completion, provider_from_base_url
 from jarvis.memory_automation import Classification, EvidenceStatus, retrieval_rank, enqueue_maintenance
 from jarvis.tenant import current_user_id
 from jarvis.memory_model import make_memory_async_client
+from jarvis.model_execution import ModelContextMessage, ModelExecutionRequest, execute_chat
+from jarvis.privacy_policy import DataPolicy
+from jarvis.usage_ledger import (
+    provider_from_base_url,
+    record_completion,
+    record_execution_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1171,34 +1178,58 @@ async def update_memory_from_session(
             # Test seam only; production uses JARVIS_MEMORY_PROFILE.
             client = client_factory(settings)
             model = settings.openai_model
+            resolved = None
         else:
             client, route = make_memory_async_client(settings)
             model = route.model
+            resolved = route.resolved
         prompt = EXTRACTION_PROMPT if extract_facts_and_observations else SUMMARY_ONLY_PROMPT
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": prompt},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Previous summary:\n{previous_summary or '(none)'}\n\n"
-                        f"Session transcript:\n{transcript}"
-                    ),
-                },
-            ],
+        user_prompt = (
+            f"Previous summary:\n{previous_summary or '(none)'}\n\n"
+            f"Session transcript:\n{transcript}"
         )
-        try:
-            record_completion(
-                rung="memory_extraction",
-                provider=provider_from_base_url(str(client.base_url)),
-                model=model,
-                response=response,
-                session_id=session_id,
+        if resolved is not None:
+            request_id = uuid.uuid4().hex
+            execution = await execute_chat(
+                ModelExecutionRequest(
+                    workload=resolved.workload,
+                    task_id=f"memory-fold:{request_id}",
+                    parent_request_id=f"memory-fold:{request_id}",
+                    instructions=user_prompt,
+                    context=(ModelContextMessage(
+                        "system", prompt,
+                        DataPolicy("confidential", "memory-fold-system-prompt"),
+                    ),),
+                    data_policy=DataPolicy("confidential", "session-transcript"),
+                    timeout_s=30.0,
+                ),
+                resolved,
+                client_factory=lambda _: client,
             )
-        except Exception:
-            pass
-        update = _parse_update(response.choices[0].message.content or "")
+            record_execution_result("memory_extraction", execution, session_id=session_id)
+            result_text = execution.text
+        else:
+            # Compatibility path while model routing is disabled and for the
+            # injected test seam; preserve the legacy provider request shape.
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+            try:
+                record_completion(
+                    rung="memory_extraction",
+                    provider=provider_from_base_url(str(client.base_url)),
+                    model=model,
+                    response=response,
+                    session_id=session_id,
+                )
+            except Exception:
+                pass
+            result_text = response.choices[0].message.content or ""
+        update = _parse_update(result_text)
         if update is None:
             logger.warning("memory_update_unparseable session=%s", session_id)
             return False

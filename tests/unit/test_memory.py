@@ -2,10 +2,14 @@
 
 import json
 import os
+from types import SimpleNamespace
 
 import pytest
 
+from jarvis import memory as memory_module
 from jarvis.db import get_conn, now_iso, run_migrations
+from jarvis.model_execution import ModelAdmissionController
+from jarvis.model_routing import AccessRoute, ResolvedModelRoute
 from jarvis.memory import (
     EMPTY_CONTEXT,
     FINANCIAL_REJECTION,
@@ -223,6 +227,62 @@ async def test_update_from_session_applies_facts_and_summary(conn):
         "SELECT content FROM memories WHERE key = 'user.name'"
     ).fetchone()["content"] == "Larry"
     assert "Larry" in render_memory_context(conn)
+
+
+@pytest.mark.asyncio
+async def test_enabled_memory_route_uses_execution_boundary(conn, monkeypatch):
+    _add_turn(conn, "s-routed", "user", "My name is Larry.")
+    _add_turn(conn, "s-routed", "assistant", "Noted.")
+    payload = json.dumps({
+        "facts": [{"key": "user.name", "value": "Larry"}],
+        "summary": "The user's name is Larry.",
+    })
+
+    class RoutedClient:
+        def __init__(self):
+            self.chat = self
+            self.completions = self
+            self.request = None
+
+        async def create(self, **kwargs):
+            self.request = kwargs
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=payload))],
+                usage=None,
+                id="memory-fold-response",
+            )
+
+    client = RoutedClient()
+    resolved = ResolvedModelRoute(
+        workload="background", profile_name="test", model="model",
+        provider="saygm", base_url="https://gateway.example/v1/",
+        route=AccessRoute(
+            "saygm", "saygm_gateway", "saygm_credit", None, "confidential",
+            capabilities=("text",),
+        ),
+        api_key_env=None, identity="saygm/model", priority="background",
+    )
+    monkeypatch.setattr(memory_module, "_PROCESS_ADMISSION", ModelAdmissionController())
+    monkeypatch.setattr(
+        memory_module, "make_memory_async_client",
+        lambda settings: (client, SimpleNamespace(model="model", resolved=resolved)),
+    )
+    recorded = []
+    monkeypatch.setattr(
+        memory_module, "record_execution_result",
+        lambda *args, **kwargs: recorded.append((args, kwargs)),
+    )
+
+    assert await update_memory_from_session(_FakeSettings(), "s-routed") is True
+    assert client.request["model"] == "model"
+    assert client.request["messages"] == [
+        {"role": "system", "content": memory_module.EXTRACTION_PROMPT},
+        {"role": "user", "content": "Previous summary:\n(none)\n\nSession transcript:\nUSER: My name is Larry.\nASSISTANT: Noted."},
+    ]
+    assert recorded and recorded[0][0][0] == "memory_extraction"
+    assert conn.execute(
+        "SELECT content FROM memories WHERE key='user.name'"
+    ).fetchone()["content"] == "Larry"
 
 
 @pytest.mark.asyncio

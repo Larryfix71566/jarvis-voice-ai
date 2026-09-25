@@ -77,11 +77,11 @@ no linked receipt are also unreceipted.
   through the routing gate. The static inventory now covers all 13 production
   completion call sites with zero review-required entries; enabled-mode runtime
   evidence remains open.
-  (GC24-02 progress: `kb_digest`, procedure description, and per-exchange
-  memory extraction now use the shared execution boundary when their existing
-  model route resolves under the routing gate; the old paths remain when
-  routing is disabled. The other 10 production call sites have not yet been
-  migrated.)
+  (GC24-02 progress: `kb_digest`, procedure description, per-exchange memory
+  extraction, and whole-session memory fold-in now use the shared execution
+  boundary when their existing model route resolves under the routing gate;
+  the old paths remain when routing is disabled. The other 9 production call
+  sites have not yet been migrated.)
 - [ ] **MAR-H** — Add persistent route/workload controls to the existing
   native console and voice command path. The sidecar draft/confirm API and
   SQLite persistence are now landed; native-console wiring is landed in the
