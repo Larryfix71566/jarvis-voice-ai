@@ -64,6 +64,7 @@ async def test_execution_preserves_parent_request_and_route_metadata():
         ModelExecutionRequest("developer", "task-1", "parent-1", "hello"),
         route,
         client_factory=lambda _: client,
+        admission=ModelAdmissionController(),
     )
     assert result.text == "ok"
     assert result.parent_request_id == "parent-1"
@@ -106,7 +107,10 @@ async def test_tool_reference_is_forwarded_and_result_is_validated_without_execu
                 function=SimpleNamespace(name="kb_search", arguments='{"query":"orb"}'),
             )],
         ))],
-        usage=SimpleNamespace(prompt_tokens=12, completion_tokens=5, total_tokens=17),
+        usage=SimpleNamespace(
+            prompt_tokens=12, completion_tokens=5, total_tokens=17,
+            prompt_tokens_details=SimpleNamespace(cached_tokens=3, cache_write_tokens=1),
+        ),
     )
     client = FakeClient(response=response)
     events = []
@@ -129,6 +133,7 @@ async def test_tool_reference_is_forwarded_and_result_is_validated_without_execu
     assert result.tool_calls[0].arguments == {"query": "orb"}
     assert result.prompt_tokens == 12 and result.completion_tokens == 5
     assert result.total_tokens == 17 and result.duration_ms >= 0
+    assert result.cache_read_tokens == 3 and result.cache_write_tokens == 1
     assert [event.event_type for event in events] == [
         "queued", "started", "tool_request", "completed"
     ]
@@ -309,7 +314,8 @@ async def test_execution_preserves_context_order_and_image_attachment():
         context=(ModelContextMessage("system", "Be concise."), "Earlier user context."),
         attachments=(attachment,),
     )
-    await execute_chat(request, route, client_factory=lambda _: client)
+    await execute_chat(request, route, client_factory=lambda _: client,
+                       admission=ModelAdmissionController())
     messages = client.completions.kwargs["messages"]
     assert messages[:2] == [
         {"role": "system", "content": "Be concise."},
@@ -334,7 +340,8 @@ async def test_text_and_image_attachments_keep_their_input_order():
             ModelAttachment(normalize_shared_content(kind="text", text="third")),
         ),
     )
-    await execute_chat(request, resolved_route(), client_factory=lambda _: client)
+    await execute_chat(request, resolved_route(), client_factory=lambda _: client,
+                       admission=ModelAdmissionController())
     blocks = client.completions.kwargs["messages"][-1]["content"]
     assert [block["type"] for block in blocks] == ["text", "image_url", "text"]
     assert blocks[1]["image_url"]["url"].startswith("data:image/webp;base64,")
@@ -356,7 +363,8 @@ async def test_text_attachment_is_transmitted_and_its_policy_is_enforced():
         attachments=(attachment,),
         data_policy=DataPolicy("approved_external", "approved-task"),
     )
-    result = await execute_chat(request, route, client_factory=lambda _: client)
+    result = await execute_chat(request, route, client_factory=lambda _: client,
+                                admission=ModelAdmissionController())
     assert "source text" in client.completions.kwargs["messages"][-1]["content"]
     assert result.data_policy.level == "approved_external"
 
@@ -380,7 +388,8 @@ async def test_external_attachment_requires_approval_for_exact_route_and_model()
         )
         with pytest.raises(ModelExecutionInputError, match="approval"):
             await execute_chat(request, route,
-                               client_factory=lambda _: client_created.append(True))
+                               client_factory=lambda _: client_created.append(True),
+                               admission=ModelAdmissionController())
         assert client_created == []
 
 
@@ -521,3 +530,19 @@ async def test_deadline_includes_admission_wait_and_does_not_create_client():
     release_slot.set()
     await asyncio.wait_for(holder, timeout=1)
     assert admission.active_counts == (0, 0)
+
+
+@pytest.mark.asyncio
+async def test_process_admission_controller_rejects_a_second_event_loop():
+    admission = ModelAdmissionController()
+    async with admission.slot("interactive"):
+        pass
+
+    def use_from_new_loop():
+        async def acquire():
+            async with admission.slot("interactive"):
+                pass
+        asyncio.run(acquire())
+
+    with pytest.raises(RuntimeError, match="another event loop"):
+        await asyncio.to_thread(use_from_new_loop)

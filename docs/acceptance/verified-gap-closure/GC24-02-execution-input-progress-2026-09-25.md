@@ -30,7 +30,8 @@
 - Admits non-voice calls through a shared process controller: two total slots,
   at most one background slot, with waiting interactive work prioritized. The
   resolved route snapshots workload priority so later preference changes do
-  not reclassify an in-flight request.
+  not reclassify an in-flight request. The controller rejects a second event
+  loop instead of silently splitting its process capacity limit.
 - Accepts bounded output requirements and forwards a max-token limit only to
   adapters that can enforce it. Results carry token counts when the provider
   reports them; unavailable usage remains `null`, not zero.
@@ -50,7 +51,7 @@ this boundary.
 
 - `py_compile` passed for the changed execution, routing, and test modules
   under the isolated CPython 3.12 environment.
-- Twenty-one execution cases passed by direct invocation in an isolated
+- Twenty-two execution cases passed by direct invocation in an isolated
   harness. The harness supplied minimal pytest, YAML and JSON Schema stubs;
   therefore it does not validate compatibility with the actual locked
   `jsonschema` runtime and is **not** a pytest run. It does not substitute for
@@ -59,8 +60,10 @@ this boundary.
   the cache lacks `torch==2.13.0`; installing the minimal test requirements
   offline also failed on uncached `Pygments` and PyYAML artifacts. No network
   dependency was fetched.
-- No production call sites, prompts, tool loops, route choices or runtime
-  settings changed. Context was not yet migrated through the boundary.
+- No production model call sites, prompts, tool loops, provider route
+  selections or runtime settings changed. The resolved route now carries the
+  admission-priority snapshot, but traffic is not yet migrated through this
+  boundary.
 
 ## Still required for GC24-02
 

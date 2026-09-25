@@ -737,7 +737,7 @@ do all independent preparation before seeking the user's action.
   resolved workload priority; enforces two-slot interactive/background
   admission; validates bounded output and caller-provided tool schemas; returns
   schema-checked tool requests without executing them; and reports ordered
-  policy-carrying lifecycle events with known usage metadata. Twenty-one focused
+  policy-carrying lifecycle events with known usage metadata. Twenty-two focused
   cases pass only in a stubbed direct harness, not pytest. See the
   [GC24-02 progress receipt](../acceptance/verified-gap-closure/GC24-02-execution-input-progress-2026-09-25.md).
   This does not close GC24-02: production callers, streaming/tool-result/

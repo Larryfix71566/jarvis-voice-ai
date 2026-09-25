@@ -12,6 +12,7 @@ import inspect
 import json
 import math
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 from contextlib import asynccontextmanager
@@ -108,6 +109,8 @@ class ModelAdmissionController:
         self._max_active = max_active
         self._max_background = max_background
         self._condition = asyncio.Condition()
+        self._owner_guard = threading.Lock()
+        self._owner_loop: asyncio.AbstractEventLoop | None = None
         self._active_interactive = 0
         self._active_background = 0
         self._waiting_interactive = 0
@@ -137,6 +140,14 @@ class ModelAdmissionController:
     async def slot(self, priority: str) -> AsyncIterator[None]:
         if priority not in {"interactive", "background"}:
             raise ModelExecutionInputError("priority must be interactive or background")
+        current_loop = asyncio.get_running_loop()
+        with self._owner_guard:
+            if self._owner_loop is None:
+                self._owner_loop = current_loop
+            elif self._owner_loop is not current_loop:
+                raise RuntimeError(
+                    "model admission controller is already owned by another event loop"
+                )
         acquired = False
         async with self._condition:
             if priority == "interactive":
@@ -213,6 +224,8 @@ class ModelExecutionResult:
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
+    cache_read_tokens: int | None = None
+    cache_write_tokens: int | None = None
     duration_ms: float = 0.0
 
 
@@ -409,7 +422,9 @@ def _contains_schema_ref(value: Any) -> bool:
 
 def _usage_count(usage: Any, *names: str) -> int | None:
     for name in names:
-        value = _field(usage, name)
+        value = usage
+        for component in name.split("."):
+            value = _field(value, component)
         if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
             return value
     return None
@@ -429,7 +444,8 @@ def _validated_tool_calls(message: Any,
         function = _field(raw, "function")
         name = _field(function, "name")
         arguments = _field(function, "arguments")
-        if not isinstance(call_id, str) or not call_id.strip() or call_id in call_ids:
+        if (not isinstance(call_id, str) or not call_id.strip()
+                or len(call_id) > 256 or call_id in call_ids):
             raise ModelExecutionOutputError("provider returned an invalid tool-call identity")
         if not isinstance(name, str) or name not in validators:
             raise ModelExecutionOutputError("provider requested a tool outside the allowlist")
@@ -556,6 +572,14 @@ async def execute_chat(request: ModelExecutionRequest,
                     prompt_tokens=_usage_count(usage, "prompt_tokens", "input_tokens"),
                     completion_tokens=_usage_count(usage, "completion_tokens", "output_tokens"),
                     total_tokens=_usage_count(usage, "total_tokens"),
+                    cache_read_tokens=_usage_count(
+                        usage, "prompt_tokens_details.cached_tokens",
+                        "cache_read_input_tokens", "cached_tokens",
+                    ),
+                    cache_write_tokens=_usage_count(
+                        usage, "cache_creation_input_tokens",
+                        "prompt_tokens_details.cache_write_tokens",
+                    ),
                     duration_ms=(time.monotonic() - started_at) * 1000.0,
                 )
                 await emit("completed")
