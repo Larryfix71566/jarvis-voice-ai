@@ -735,9 +735,11 @@ do all independent preparation before seeking the user's action.
   now validates ordered context, ephemeral text/image attachments, source
   policies, workload/capability matches and a cancellable deadline; snapshots
   resolved workload priority; enforces two-slot interactive/background
-  admission; and emits ordered start/terminal events. Fourteen focused cases
-  pass by a direct harness, not pytest. See the
+  admission; validates bounded output and caller-provided tool schemas; returns
+  schema-checked tool requests without executing them; and reports ordered
+  policy-carrying lifecycle events with known usage metadata. Twenty-one focused
+  cases pass only in a stubbed direct harness, not pytest. See the
   [GC24-02 progress receipt](../acceptance/verified-gap-closure/GC24-02-execution-input-progress-2026-09-25.md).
-  This does not close GC24-02: typed output/tool contracts, production callers,
-  streaming/tool/artifact events, downstream cancellation and prevention of
-  late durable writes remain.
+  This does not close GC24-02: production callers, streaming/tool-result/
+  artifact events, downstream cancellation, idempotent tool reconciliation,
+  locked-environment verification and prevention of late durable writes remain.

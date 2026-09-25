@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +12,9 @@ from jarvis.model_execution import (
     ModelExecutionEvent,
     ModelExecutionInputError,
     ModelExecutionRequest,
+    ModelExecutionOutputError,
+    ModelOutputRequirements,
+    ModelToolReference,
     execute_chat,
 )
 from jarvis.model_routing import AccessRoute, ModelRouteError, ResolvedModelRoute
@@ -18,10 +22,11 @@ from jarvis.privacy_policy import DataPolicy
 
 
 class FakeCompletions:
-    def __init__(self, *, delay=0):
+    def __init__(self, *, delay=0, response=None):
         self.kwargs = None
         self.delay = delay
         self.cancelled = False
+        self.response = response
 
     async def create(self, **kwargs):
         self.kwargs = kwargs
@@ -31,13 +36,13 @@ class FakeCompletions:
             except asyncio.CancelledError:
                 self.cancelled = True
                 raise
-        return SimpleNamespace(choices=[SimpleNamespace(
+        return self.response or SimpleNamespace(choices=[SimpleNamespace(
             message=SimpleNamespace(content="ok"))])
 
 
 class FakeClient:
-    def __init__(self, *, delay=0):
-        self.completions = FakeCompletions(delay=delay)
+    def __init__(self, *, delay=0, response=None):
+        self.completions = FakeCompletions(delay=delay, response=response)
         self.chat = SimpleNamespace(completions=self.completions)
 
 
@@ -89,6 +94,150 @@ async def test_execution_emits_ordered_policy_carrying_lifecycle_events():
         ("task-event", "parent-event")
     }
     assert all(event.data_policy.level == "confidential" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_tool_reference_is_forwarded_and_result_is_validated_without_execution():
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(
+            content=None,
+            tool_calls=[SimpleNamespace(
+                id="call-1",
+                function=SimpleNamespace(name="kb_search", arguments='{"query":"orb"}'),
+            )],
+        ))],
+        usage=SimpleNamespace(prompt_tokens=12, completion_tokens=5, total_tokens=17),
+    )
+    client = FakeClient(response=response)
+    events = []
+    reference = ModelToolReference(
+        "kb_search", {"type": "object", "properties": {"query": {"type": "string"}}},
+        "Search the local knowledge base",
+    )
+    result = await execute_chat(
+        ModelExecutionRequest(
+            "developer", "task-tools", "parent-tools", "Find prior work.",
+            tools=(reference,), output=ModelOutputRequirements(max_tokens=300),
+        ),
+        resolved_route(capabilities=("text", "tools")),
+        client_factory=lambda _: client, event_sink=events.append,
+        admission=ModelAdmissionController(),
+    )
+    sent = client.completions.kwargs
+    assert sent["max_tokens"] == 300
+    assert sent["tools"][0]["function"]["name"] == "kb_search"
+    assert result.tool_calls[0].arguments == {"query": "orb"}
+    assert result.prompt_tokens == 12 and result.completion_tokens == 5
+    assert result.total_tokens == 17 and result.duration_ms >= 0
+    assert [event.event_type for event in events] == [
+        "queued", "started", "tool_request", "completed"
+    ]
+    assert events[2].tool_call_id == "call-1" and events[2].tool_name == "kb_search"
+    assert not hasattr(events[2], "arguments")
+
+
+@pytest.mark.asyncio
+async def test_provider_cannot_return_a_tool_outside_the_caller_allowlist():
+    response = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
+        content=None,
+        tool_calls=[SimpleNamespace(
+            id="call-forged",
+            function=SimpleNamespace(name="repo_commit_write", arguments="{}"),
+        )],
+    ))])
+    client = FakeClient(response=response)
+    events = []
+    allowed = ModelToolReference("kb_search", {"type": "object"})
+    with pytest.raises(ModelExecutionOutputError, match="allowlist"):
+        await execute_chat(
+            ModelExecutionRequest(
+                "developer", "task-forged", "parent-forged", "Search.",
+                tools=(allowed,),
+            ),
+            resolved_route(capabilities=("text", "tools")),
+            client_factory=lambda _: client, event_sink=events.append,
+            admission=ModelAdmissionController(),
+        )
+    assert [event.event_type for event in events] == ["queued", "started", "failed"]
+    assert events[-1].error_code == "ModelExecutionOutputError"
+
+
+@pytest.mark.asyncio
+async def test_provider_tool_arguments_must_match_registered_schema():
+    response = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
+        content=None,
+        tool_calls=[SimpleNamespace(
+            id="call-invalid-args",
+            function=SimpleNamespace(name="kb_search", arguments='{"query":42}'),
+        )],
+    ))])
+    client = FakeClient(response=response)
+    reference = ModelToolReference(
+        "kb_search", {
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+    )
+    with pytest.raises(ModelExecutionOutputError, match="registered schema"):
+        await execute_chat(
+            ModelExecutionRequest(
+                "developer", "task-invalid-args", "parent-invalid-args", "Search.",
+                tools=(reference,),
+            ),
+            resolved_route(capabilities=("text", "tools")),
+            client_factory=lambda _: client,
+            admission=ModelAdmissionController(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_tools_fail_before_client_creation_when_route_lacks_tools_capability():
+    created = []
+    reference = ModelToolReference("kb_search", {"type": "object"})
+    request = ModelExecutionRequest(
+        "developer", "task-no-tools", "parent-no-tools", "Search.", tools=(reference,)
+    )
+    with pytest.raises(ModelRouteError, match="tools"):
+        await execute_chat(
+            request, resolved_route(capabilities=("text",)),
+            client_factory=lambda _: created.append(True),
+            admission=ModelAdmissionController(),
+        )
+    assert created == []
+
+
+@pytest.mark.asyncio
+async def test_output_requirements_fail_closed_when_route_cannot_enforce_them():
+    created = []
+    route = resolved_route()
+    route = replace(route, route=replace(route.route, adapter="subscription_runtime"))
+    request = ModelExecutionRequest(
+        "developer", "task-output", "parent-output", "hello",
+        output=ModelOutputRequirements(max_tokens=200),
+    )
+    with pytest.raises(ModelRouteError, match="cannot enforce"):
+        await execute_chat(request, route, client_factory=lambda _: created.append(True))
+    assert created == []
+
+
+@pytest.mark.asyncio
+async def test_required_text_output_rejects_empty_and_non_text_provider_content():
+    for content in (None, {"unexpected": "object"}):
+        response = SimpleNamespace(choices=[SimpleNamespace(
+            message=SimpleNamespace(content=content)
+        )])
+        with pytest.raises(ModelExecutionOutputError):
+            await execute_chat(
+                ModelExecutionRequest(
+                    "developer", "task-empty", "parent-empty", "hello",
+                    output=ModelOutputRequirements(require_nonempty_text=True),
+                ),
+                resolved_route(capabilities=("text",)),
+                client_factory=lambda _, r=response: FakeClient(response=r),
+                admission=ModelAdmissionController(),
+            )
 
 
 @pytest.mark.asyncio

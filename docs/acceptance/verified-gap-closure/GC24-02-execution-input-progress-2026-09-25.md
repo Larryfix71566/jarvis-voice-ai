@@ -31,6 +31,15 @@
   at most one background slot, with waiting interactive work prioritized. The
   resolved route snapshots workload priority so later preference changes do
   not reclassify an in-flight request.
+- Accepts bounded output requirements and forwards a max-token limit only to
+  adapters that can enforce it. Results carry token counts when the provider
+  reports them; unavailable usage remains `null`, not zero.
+- Accepts JSON-Schema-validated tool references from the trusted caller,
+  forwards only those schemas, and rejects unrequested names, malformed
+  arguments or arguments that fail the registered schema. It returns the
+  provider call identity and arguments for the existing permission/sandbox
+  owner; this module never invokes a tool. Tool lifecycle events expose only
+  the tool name and call ID, not arguments.
 
 The repository search at the source baseline found no production call site for
 `ModelExecutionRequest`/`execute_chat`; this code currently fixes the boundary
@@ -41,12 +50,11 @@ this boundary.
 
 - `py_compile` passed for the changed execution, routing, and test modules
   under the isolated CPython 3.12 environment.
-- Fifteen execution cases passed by direct invocation in an isolated harness. The
-  harness supplied the minimal `pytest.mark.asyncio`/`pytest.raises` behavior
-  and an unused YAML-import stub because this environment's package cache lacks
-  PyYAML, pytest's Pygments dependency and the locked PyTorch wheel. This is
-  **not** a pytest run and does not substitute for running the test file with
-  the locked project environment.
+- Twenty-one execution cases passed by direct invocation in an isolated
+  harness. The harness supplied minimal pytest, YAML and JSON Schema stubs;
+  therefore it does not validate compatibility with the actual locked
+  `jsonschema` runtime and is **not** a pytest run. It does not substitute for
+  the locked test environment.
 - A full offline sync of `requirements-lock.txt` could not complete because
   the cache lacks `torch==2.13.0`; installing the minimal test requirements
   offline also failed on uncached `Pygments` and PyYAML artifacts. No network
@@ -56,10 +64,9 @@ this boundary.
 
 ## Still required for GC24-02
 
-Still add typed tool references/output requirements; connect the executor to
-production call sites; propagate cancellation/timeout through callers and
-prevent late UI/database writes; add idempotent tool reconciliation; and run
-focused and whole-project tests in the locked isolated environment. Lifecycle
-events currently report request start and terminal outcome, not streamed text,
-progress, tool events or artifacts. GC24-03 remains a prerequisite for
-enabling a new route with protected data.
+Still connect the executor to production call sites; propagate
+cancellation/timeout through callers and prevent late UI/database writes; add
+idempotent tool reconciliation; complete streaming progress/text/artifact and
+tool-result events; and run focused and whole-project tests in the locked
+isolated environment. GC24-03 remains a prerequisite for enabling a new route
+with protected data.

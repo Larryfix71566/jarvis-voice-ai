@@ -9,10 +9,14 @@ from __future__ import annotations
 import asyncio
 import base64
 import inspect
+import json
 import math
+import re
+import time
 from dataclasses import dataclass, field
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Callable, Literal
+from collections.abc import Mapping
 
 from jarvis.bot.shared_content import (
     MAX_ATTACHMENTS,
@@ -30,6 +34,10 @@ from jarvis.privacy_policy import (
 
 class ModelExecutionInputError(ValueError):
     """The request contains unsupported or malformed model input."""
+
+
+class ModelExecutionOutputError(RuntimeError):
+    """The provider returned output outside the caller's declared contract."""
 
 
 ExecutionEventType = Literal[
@@ -53,6 +61,36 @@ class ModelExecutionEvent:
     event_type: ExecutionEventType
     data_policy: DataPolicy
     error_code: str | None = None
+    tool_call_id: str | None = None
+    tool_name: str | None = None
+
+
+@dataclass(frozen=True)
+class ModelToolReference:
+    """Model-visible schema copied from Mortimer's trusted tool registry.
+
+    This is a reference, not execution permission. The caller must still use
+    Mortimer's existing permission and sandbox executor for every invocation.
+    """
+
+    name: str
+    parameters: Mapping[str, Any]
+    description: str = ""
+
+
+@dataclass(frozen=True)
+class ModelToolCall:
+    """Validated provider request for a caller-owned registered tool."""
+
+    tool_call_id: str
+    name: str
+    arguments: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
+class ModelOutputRequirements:
+    max_tokens: int | None = None
+    require_nonempty_text: bool = False
 
 
 class ModelAdmissionController:
@@ -156,6 +194,8 @@ class ModelExecutionRequest:
     instructions: str
     context: tuple[ModelContextMessage | str, ...] = ()
     attachments: tuple[ModelAttachment, ...] = ()
+    tools: tuple[ModelToolReference, ...] = ()
+    output: ModelOutputRequirements = field(default_factory=ModelOutputRequirements)
     data_policy: DataPolicy = field(default_factory=DataPolicy)
     timeout_s: float = 60.0
 
@@ -169,11 +209,18 @@ class ModelExecutionResult:
     billing: str
     text: str
     data_policy: DataPolicy
+    tool_calls: tuple[ModelToolCall, ...] = ()
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    duration_ms: float = 0.0
 
 
 def _validated_inputs(request: ModelExecutionRequest,
                       resolved: ResolvedModelRoute
-                      ) -> tuple[list[dict[str, Any]], DataPolicy]:
+                      ) -> tuple[
+                          list[dict[str, Any]], DataPolicy, list[dict[str, Any]], dict[str, Any]
+                      ]:
     if (not isinstance(request.workload, str) or not request.workload
             or request.workload != resolved.workload):
         raise ModelExecutionInputError("request workload does not match resolved route")
@@ -188,6 +235,19 @@ def _validated_inputs(request: ModelExecutionRequest,
         raise ModelExecutionInputError("timeout must be a positive finite number")
     if not isinstance(request.data_policy, DataPolicy):
         raise ModelExecutionInputError("request data policy is invalid")
+    if not isinstance(request.output, ModelOutputRequirements):
+        raise ModelExecutionInputError("output requirements are invalid")
+    max_tokens = request.output.max_tokens
+    if max_tokens is not None and (
+            isinstance(max_tokens, bool) or not isinstance(max_tokens, int)
+            or not 1 <= max_tokens <= 32_000):
+        raise ModelExecutionInputError("max_tokens must be an integer from 1 to 32000")
+    if not isinstance(request.output.require_nonempty_text, bool):
+        raise ModelExecutionInputError("require_nonempty_text must be boolean")
+    if max_tokens is not None and resolved.route.adapter not in {
+            "openai_compatible", "saygm_gateway"}:
+        raise ModelRouteError(
+            f"route {resolved.route.name!r} cannot enforce max_tokens")
     if not isinstance(request.context, tuple):
         raise ModelExecutionInputError("context must be an immutable tuple")
 
@@ -273,9 +333,125 @@ def _validated_inputs(request: ModelExecutionRequest,
         })
 
     messages.append({"role": "user", "content": user_content})
+
+    if not isinstance(request.tools, tuple):
+        raise ModelExecutionInputError("tools must be an immutable tuple")
+    if len(request.tools) > 32:
+        raise ModelExecutionInputError("at most 32 registered tool references are supported")
+    tool_schemas: list[dict[str, Any]] = []
+    tool_names: set[str] = set()
+    tool_validators: dict[str, Any] = {}
+    if request.tools and "tools" not in resolved.route.capabilities:
+        raise ModelRouteError(f"route {resolved.route.name!r} lacks required capability: tools")
+    for tool in request.tools:
+        if not isinstance(tool, ModelToolReference):
+            raise ModelExecutionInputError("tools must be trusted registered references")
+        if (not isinstance(tool.name, str)
+                or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", tool.name)):
+            raise ModelExecutionInputError("tool reference name is invalid")
+        if tool.name in tool_names:
+            raise ModelExecutionInputError("duplicate tool reference name")
+        if not isinstance(tool.parameters, Mapping):
+            raise ModelExecutionInputError("tool parameters must be a JSON schema mapping")
+        try:
+            encoded_schema = json.dumps(
+                dict(tool.parameters), ensure_ascii=False, allow_nan=False,
+                separators=(",", ":"),
+            )
+            schema = json.loads(encoded_schema)
+        except (TypeError, ValueError) as exc:
+            raise ModelExecutionInputError("tool schema must contain JSON values") from exc
+        if len(encoded_schema) > 32_768 or schema.get("type") != "object":
+            raise ModelExecutionInputError("tool schema must be a bounded object schema")
+        if not isinstance(tool.description, str) or len(tool.description) > 2_000:
+            raise ModelExecutionInputError("tool description is invalid or exceeds quota")
+        if _contains_schema_ref(schema):
+            raise ModelExecutionInputError("external tool-schema references are not supported")
+        try:
+            from jsonschema import Draft202012Validator
+            Draft202012Validator.check_schema(schema)
+            tool_validators[tool.name] = Draft202012Validator(schema)
+        except ImportError as exc:
+            raise ModelExecutionInputError(
+                "JSON Schema validation is unavailable; refusing tool references"
+            ) from exc
+        except Exception as exc:
+            raise ModelExecutionInputError("tool parameters contain an invalid JSON schema") from exc
+        tool_names.add(tool.name)
+        tool_schemas.append({
+            "type": "function",
+            "function": {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": schema,
+            },
+        })
+
     effective_policy = strictest(*policies)
     assert_route_allowed(resolved.route, effective_policy)
-    return messages, effective_policy
+    return messages, effective_policy, tool_schemas, tool_validators
+
+
+def _field(value: Any, name: str) -> Any:
+    if isinstance(value, Mapping):
+        return value.get(name)
+    return getattr(value, name, None)
+
+
+def _contains_schema_ref(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        return any(key == "$ref" or _contains_schema_ref(item)
+                   for key, item in value.items())
+    if isinstance(value, list):
+        return any(_contains_schema_ref(item) for item in value)
+    return False
+
+
+def _usage_count(usage: Any, *names: str) -> int | None:
+    for name in names:
+        value = _field(usage, name)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            return value
+    return None
+
+
+def _validated_tool_calls(message: Any,
+                          validators: Mapping[str, Any]) -> tuple[ModelToolCall, ...]:
+    raw_calls = _field(message, "tool_calls") or ()
+    if not isinstance(raw_calls, (list, tuple)):
+        raise ModelExecutionOutputError("provider tool-call output is malformed")
+    if len(raw_calls) > 16:
+        raise ModelExecutionOutputError("provider returned too many tool calls")
+    calls: list[ModelToolCall] = []
+    call_ids: set[str] = set()
+    for raw in raw_calls:
+        call_id = _field(raw, "id")
+        function = _field(raw, "function")
+        name = _field(function, "name")
+        arguments = _field(function, "arguments")
+        if not isinstance(call_id, str) or not call_id.strip() or call_id in call_ids:
+            raise ModelExecutionOutputError("provider returned an invalid tool-call identity")
+        if not isinstance(name, str) or name not in validators:
+            raise ModelExecutionOutputError("provider requested a tool outside the allowlist")
+        if not isinstance(arguments, str) or len(arguments) > 16_384:
+            raise ModelExecutionOutputError("provider returned invalid or oversized tool arguments")
+        try:
+            parsed = json.loads(arguments)
+        except json.JSONDecodeError as exc:
+            raise ModelExecutionOutputError("provider returned malformed tool arguments") from exc
+        if not isinstance(parsed, dict):
+            raise ModelExecutionOutputError("tool arguments must be a JSON object")
+        try:
+            validators[name].validate(parsed)
+        except Exception as exc:
+            raise ModelExecutionOutputError(
+                "provider tool arguments do not match the registered schema"
+            ) from exc
+        call_ids.add(call_id)
+        calls.append(ModelToolCall(call_id, name, parsed))
+    if calls and not validators:
+        raise ModelExecutionOutputError("provider requested tools when none were permitted")
+    return tuple(calls)
 
 
 async def execute_chat(request: ModelExecutionRequest,
@@ -290,7 +466,7 @@ async def execute_chat(request: ModelExecutionRequest,
     prevents late results from being returned to callers. Tool loops remain
     owned by their existing agent boundary.
     """
-    messages, effective_policy = _validated_inputs(request, resolved)
+    messages, effective_policy, tools, tool_validators = _validated_inputs(request, resolved)
     controller = admission or _PROCESS_ADMISSION
     sequence = 0
 
@@ -316,6 +492,28 @@ async def execute_chat(request: ModelExecutionRequest,
             # into a failure or obscure the original provider exception.
             return
 
+    async def emit_tool_request(call: ModelToolCall) -> None:
+        nonlocal sequence
+        sequence += 1
+        if event_sink is None:
+            return
+        event = ModelExecutionEvent(
+            task_id=request.task_id,
+            parent_request_id=request.parent_request_id,
+            sequence=sequence,
+            event_type="tool_request",
+            data_policy=effective_policy,
+            tool_call_id=call.tool_call_id,
+            tool_name=call.name,
+        )
+        try:
+            observed = event_sink(event)
+            if inspect.isawaitable(observed):
+                await observed
+        except Exception:
+            return
+
+    started_at = time.monotonic()
     await emit("queued")
     try:
         # The deadline includes time spent queued for capacity; a saturated
@@ -325,11 +523,27 @@ async def execute_chat(request: ModelExecutionRequest,
                 await emit("started")
                 client = (client_factory(resolved) if client_factory is not None
                           else make_route_client(resolved, timeout=request.timeout_s))
-                response = await client.chat.completions.create(
-                    model=resolved.model,
-                    messages=messages,
-                )
-                text = response.choices[0].message.content or ""
+                completion_args: dict[str, Any] = {
+                    "model": resolved.model,
+                    "messages": messages,
+                }
+                if tools:
+                    completion_args["tools"] = tools
+                if request.output.max_tokens is not None:
+                    completion_args["max_tokens"] = request.output.max_tokens
+                response = await client.chat.completions.create(**completion_args)
+                message = response.choices[0].message
+                text = message.content
+                if text is None:
+                    text = ""
+                elif not isinstance(text, str):
+                    raise ModelExecutionOutputError("provider returned non-text message content")
+                if request.output.require_nonempty_text and not text.strip():
+                    raise ModelExecutionOutputError("provider returned empty text")
+                tool_calls = _validated_tool_calls(message, tool_validators)
+                for call in tool_calls:
+                    await emit_tool_request(call)
+                usage = _field(response, "usage")
                 result = ModelExecutionResult(
                     task_id=request.task_id,
                     parent_request_id=request.parent_request_id,
@@ -338,6 +552,11 @@ async def execute_chat(request: ModelExecutionRequest,
                     billing=resolved.route.billing,
                     text=text,
                     data_policy=inherit_result_policy(effective_policy),
+                    tool_calls=tool_calls,
+                    prompt_tokens=_usage_count(usage, "prompt_tokens", "input_tokens"),
+                    completion_tokens=_usage_count(usage, "completion_tokens", "output_tokens"),
+                    total_tokens=_usage_count(usage, "total_tokens"),
+                    duration_ms=(time.monotonic() - started_at) * 1000.0,
                 )
                 await emit("completed")
                 return result

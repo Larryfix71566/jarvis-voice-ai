@@ -109,11 +109,13 @@ no linked receipt are also unreceipted.
   attachments now retain order and source policy; external attachments require
   approval bound to exact route/model. Malformed, duplicate, unsupported-image
   and route/workload-mismatch requests fail before client creation. An async
-  deadline cancels the awaited call. Two-slot interactive/background
-  admission and start/terminal events are implemented in the boundary but lack
-  locked-environment pytest evidence. The boundary still has no production
-  call sites; tool/output contracts, streamed lifecycle/tool events, and
-  downstream cancellation remain open. See the linked GC24-02 progress receipt.)
+  deadline includes queue time and cancels the awaited call. Two-slot
+  interactive/background admission, bounded output requirements, usage
+  metadata and allowlisted/schema-validated tool-call results are implemented
+  in the boundary but lack locked-environment pytest evidence. The boundary
+  still has no production call sites; streamed lifecycle/tool-result events
+  and downstream cancellation remain open. See the linked GC24-02 progress
+  receipt.)
 - [x] **MAR-D foundation** — `jarvis/privacy_policy.py` enforces strictest
   data policy before execution.
 - [x] **MAR-E foundation** — `jarvis/saygm.py` parses catalog tiers and only
