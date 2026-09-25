@@ -7,10 +7,14 @@ conventions so the two extraction paths' test suites read the same way.
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
+from jarvis import memory_extraction as memory_extraction_module
 from jarvis.db import get_conn, run_migrations
+from jarvis.model_execution import ModelAdmissionController
+from jarvis.model_routing import AccessRoute, ResolvedModelRoute
 from jarvis.memory_extraction import (
     _parse_candidates,
     _touch_recurrence,
@@ -339,6 +343,62 @@ class TestTouchRecurrence:
 
 class TestExtractFromExchange:
     @pytest.mark.asyncio
+    async def test_enabled_model_route_uses_execution_boundary(self, conn, monkeypatch):
+        payload = json.dumps({"facts": [{"key": "user.name", "value": "Larry"}], "observations": []})
+
+        class RoutedClient:
+            def __init__(self):
+                self.chat = self
+                self.completions = self
+                self.request = None
+
+            async def create(self, **kwargs):
+                self.request = kwargs
+                return SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content=payload))],
+                    usage=None,
+                    id="memory-extraction-response",
+                )
+
+        client = RoutedClient()
+        resolved = ResolvedModelRoute(
+            workload="background", profile_name="test", model="model",
+            provider="saygm", base_url="https://gateway.example/v1/",
+            route=AccessRoute(
+                "saygm", "saygm_gateway", "saygm_credit", None, "confidential",
+                capabilities=("text",),
+            ),
+            api_key_env=None, identity="saygm/model", priority="background",
+        )
+        monkeypatch.setattr(
+            memory_extraction_module, "_PROCESS_ADMISSION", ModelAdmissionController()
+        )
+        monkeypatch.setattr(
+            memory_extraction_module, "make_memory_async_client",
+            lambda settings: (client, SimpleNamespace(model="model", resolved=resolved)),
+        )
+        recorded = []
+        monkeypatch.setattr(
+            memory_extraction_module, "record_execution_result",
+            lambda *args, **kwargs: recorded.append((args, kwargs)),
+        )
+
+        result = await extract_from_exchange(
+            _FakeSettings(), "s-route", "My name is Larry.", "Noted.", 12
+        )
+
+        assert result["facts"] == 1
+        assert client.request["model"] == "model"
+        assert client.request["messages"] == [
+            {"role": "system", "content": memory_extraction_module.EXCHANGE_EXTRACTION_PROMPT},
+            {"role": "user", "content": "USER: My name is Larry.\nMORTIMER: Noted."},
+        ]
+        assert recorded and recorded[0][0][0] == "memory_extraction"
+        assert conn.execute(
+            "SELECT content FROM memories WHERE key='user.name'"
+        ).fetchone()["content"] == "Larry"
+
+    @pytest.mark.asyncio
     async def test_admits_facts_and_observations(self, conn):
         payload = json.dumps(
             {
@@ -497,4 +557,3 @@ def test_memory_usage_reports_the_rate_pair(conn):
     usage = memory_usage(conn)
     assert usage["restated_7d"] == 1
     assert usage["sessions_7d"] == 1
-

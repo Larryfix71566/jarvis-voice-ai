@@ -45,10 +45,10 @@
 At the `4acb4dc` source baseline, no production call site used
 `ModelExecutionRequest`/`execute_chat`. The `kb_digest` family now uses the
 boundary whenever its existing background route resolves through model
-routing. The procedure-description family also uses the boundary when its
-background route resolves. Both retain their legacy direct-client paths while
-routing is disabled and for their injected test seams. The other production
-call families have not been migrated.
+routing. Procedure description and per-exchange memory extraction also use the
+boundary when their background routes resolve. All three retain their legacy
+direct-client paths while routing is disabled and for their injected test
+seams. The other production call families have not been migrated.
 
 ## Validation and limitations
 
@@ -82,11 +82,16 @@ call families have not been migrated.
   the resolved background route, with the existing JSON response parser and
   compatibility/test path retained. Source compiles; its focused pytest file
   cannot run because this environment lacks pytest and runtime dependencies.
-  The remaining 11 production call sites are not yet migrated.
+  The remaining 11 production call sites were not migrated at this checkpoint.
+- Per-exchange `memory_extraction` now crosses the boundary under its resolved
+  memory route. The existing strict JSON parser and durable novelty-gated
+  writes remain after a successful response. Source compiles; focused pytest
+  cannot run because this environment lacks pytest and runtime dependencies.
+  The remaining 10 production call sites are not yet migrated.
 
 ## Still required for GC24-02
 
-Still migrate the remaining 11 production call sites/families; propagate
+Still migrate the remaining 10 production call sites/families; propagate
 cancellation/timeout through their callers and prevent late UI/database writes;
 add idempotent tool reconciliation; complete streaming progress/text/artifact
 and tool-result events; and run focused and whole-project tests in the locked

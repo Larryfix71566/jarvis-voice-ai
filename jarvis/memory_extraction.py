@@ -62,6 +62,7 @@ from __future__ import annotations
 
 import json
 import logging
+import hashlib
 from typing import Any, Callable
 
 from jarvis.config import Settings
@@ -77,8 +78,14 @@ from jarvis.memory import (
     upsert_fact,
 )
 from jarvis.procedures import _overlap_score, _tokens
-from jarvis.usage_ledger import provider_from_base_url, record_completion
 from jarvis.memory_model import make_memory_async_client
+from jarvis.model_execution import ModelContextMessage, ModelExecutionRequest, execute_chat
+from jarvis.privacy_policy import DataPolicy
+from jarvis.usage_ledger import (
+    provider_from_base_url,
+    record_completion,
+    record_execution_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -339,28 +346,58 @@ async def extract_from_exchange(
             # Test seam only; production uses JARVIS_MEMORY_PROFILE.
             client = client_factory(settings)
             model = settings.openai_model
+            resolved = None
         else:
             client, route = make_memory_async_client(settings)
             model = route.model
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": EXCHANGE_EXTRACTION_PROMPT},
-                {"role": "user", "content": exchange_text},
-            ],
-        )
-        try:
-            record_completion(
-                rung="memory_extraction",
-                provider=provider_from_base_url(str(client.base_url)),
-                model=model,
-                response=response,
-                session_id=session_id,
+            resolved = route.resolved
+        if resolved is not None:
+            request_id = hashlib.sha256(
+                f"{session_id}:{source_turn}".encode("utf-8")
+            ).hexdigest()[:24]
+            execution = await execute_chat(
+                ModelExecutionRequest(
+                    workload=resolved.workload,
+                    task_id=f"memory-extraction:{request_id}",
+                    parent_request_id=f"memory-extraction:{request_id}",
+                    instructions=exchange_text,
+                    context=(ModelContextMessage(
+                        "system", EXCHANGE_EXTRACTION_PROMPT,
+                        DataPolicy("confidential", "memory-extraction-prompt"),
+                    ),),
+                    data_policy=DataPolicy("confidential", "conversation-exchange"),
+                    timeout_s=30.0,
+                ),
+                resolved,
+                client_factory=lambda _: client,
             )
-        except Exception:
-            pass
+            record_execution_result(
+                "memory_extraction", execution, session_id=session_id
+            )
+            result_text = execution.text
+        else:
+            # Compatibility path while model routing is disabled and for the
+            # injected test seam; preserve its request and parsing semantics.
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": EXCHANGE_EXTRACTION_PROMPT},
+                    {"role": "user", "content": exchange_text},
+                ],
+            )
+            try:
+                record_completion(
+                    rung="memory_extraction",
+                    provider=provider_from_base_url(str(client.base_url)),
+                    model=model,
+                    response=response,
+                    session_id=session_id,
+                )
+            except Exception:
+                pass
+            result_text = response.choices[0].message.content or ""
 
-        parsed = _parse_candidates(response.choices[0].message.content or "")
+        parsed = _parse_candidates(result_text)
         if parsed is None:
             logger.warning(
                 "memory_extraction_unparseable session=%s source_turn=%s",
