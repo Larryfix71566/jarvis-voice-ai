@@ -1,6 +1,6 @@
 # Mortimer Workflow Viewer: Handoff Plan
 
-**Status:** DECIDED and BUILT in the VM, 2026-09-25 (Larry chose the recommended option for D-V1, D-V2 and D-V3; §3). Branch `viewer`; patch `closure-checks/viewer-on-phase4.patch`. The Python half is tested. The Swift half is written but not compiled (no Swift toolchain in the VM); the first Mac check run compiles it (§8).
+**Status:** DECIDED and BUILT in the VM, 2026-09-25 (Larry chose the recommended option for D-V1, D-V2 and D-V3; §3). Branch `viewer`; patch `closure-checks/viewer-on-phase4.patch`. The Python half is tested in the VM. The Swift half compiled and passed on the Mac in check run 2 (2026-09-25 18:06; §8).
 **Author:** Claude (Cowork), 2026-09-25 · **Approver:** Larry
 **Parent:** `MORTIMER_VOICE_WORKFLOWS_PLAN.md` §12 (layout C chosen 2026-09-25). This is the handoff plan §12 asked for.
 **Builds on:** branch `phase4` (Phases 1–4 + #86). It is a new branch `viewer` on top, and a sixth patch, `viewer-on-phase4.patch`, tested at the same end-of-project run.
@@ -153,5 +153,9 @@ Each is one memory fact copied into `when` and `steps`, with no finish test. Non
   - JarvisKit: 206 tests, 0 failures, including the two new decode tests.
   - Python: 4,018 passed, 4 skipped.
   - MortimerHost: the app sources compiled, but the test target did not. There was one error: `WorkflowsViewerTests.swift:35`, a default argument (`= sample()`) that calls a static method of the `@MainActor` test class. The review had judged this "at worst a warning"; the Mac compiler made it an error.
-  - Fixed: the sample data moved to a nonisolated `enum WorkflowFixtures` outside the class. Run 2 is pending.
+  - Fixed: the sample data moved to a nonisolated `enum WorkflowFixtures` outside the class.
+- **Mac check, run 2 (2026-09-25 18:06; same script, all six patches, trees matched): ALL PASSED.**
+  - JarvisKit: 206 tests, 0 failures.
+  - MortimerHost: 275 tests, 3 skipped, 0 failures; all 14 `WorkflowsViewerTests` passed.
+  - Python: 4,018 passed, 4 skipped.
 - **D-V3 restore:** tested on a production copy. Restoring the four puts the project tier at 10 of its cap of 8. With no merge, capacity enforcement then ages out `project.model_registry.blocker` and `user.memory.fleetback_atlanta` (reproduced). Both stay restorable.

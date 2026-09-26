@@ -1,6 +1,6 @@
 # Mortimer Voice Workflows — Implementation Plan
 
-**Status:** Phase 1 READY FOR HANDOFF (patch against `main`) · Phases 2–4 BUILT in the VM (§11) · Workflow viewer BUILT in the VM; its Swift compiles first on the Mac (§12)
+**Status:** Phase 1 READY FOR HANDOFF (patch against `main`) · Phases 2–4 BUILT in the VM (§11) · Workflow viewer BUILT; Mac check passed (§12) · #80 privacy fix BUILT in the VM (§13)
 **Author:** Claude (Cowork), 2026-09-24 · **Approver:** Larry
 **Source review:** "Mortimer Failure Review — Candidate Workflows" (Claude Doc, 2026-09-24)
 **Reference package:** `docs/plans/voice_workflows_p1/` (apply script plus every new file, verified; see §7.0)
@@ -22,6 +22,7 @@
 | 1.12 | 2026-09-25 | Larry's Phase 4 decisions: **W10 age-aware memory**, **W12 option B**, **W9 one approval** at `app_build_start`, **D1 replay** once at the end run. All four **built in the VM** (branch `phase4`, second commit; §11). Rule 12's timer clause retires with W12 (D14, §10). An adversarial review found nine defects in the first cut; each now has a test that fails on it. **Correction:** the W10 replay shown with the choice (no_lookups archived, clarity and research_display both kept) is not what the built rule is sure to do (§11 W10). **New, for Larry:** D1b, a pre-existing write lock held across the sweep's model calls. Unit 3,851 passed, integration 135 passed and 4 skipped. |
 | 1.13 | 2026-09-25 | Larry: "proceed" on the three recommendations. **D1b built:** the sweep and capacity enforcement commit before every model call; two tests reproduce the lock without the change. `user.style.status_interval` joins `user.style.status` on the end-run archive list (the command was tested on a production copy). **Workflow viewer handoff plan written** (`MORTIMER_WORKFLOW_VIEWER_PLAN.md`), with D-V1 (drafts), D-V2 (usage counts) and the new D-V3 (six memories archived as workflows whose files do not exist) open. Unit 3,853 passed, integration 135 passed and 4 skipped. |
 | 1.14 | 2026-09-25 | Larry chose the recommended option for **D-V1** (`draft: true`), **D-V2** (no usage counts) and **D-V3** (restore the four lost memories). **Workflow viewer built in the VM** (branch `viewer`, patch `viewer-on-phase4.patch`, the sixth in the Mac check). The Python half is tested: unit 3,862 passed, integration 135 passed and 4 skipped. The Swift half is not compiled, because the VM has no toolchain. A second agent reviewed it and found four defects, all fixed with tests. Found: voice entry needs `JARVIS_COMMAND_CONSOLE_ENABLED`, which production doesn't set. D-V3's restore would push the project tier to 10 of its cap of 8. |
+| 1.15 | 2026-09-25 | Mac check run 2 passed at 18:06: JarvisKit 206, MortimerHost 275 (3 skipped, 0 failures), Python 4,018 passed and 4 skipped; all six patches' trees matched. Larry's landing decisions: **one PR with a merge commit**, **console on** at the end run (`JARVIS_COMMAND_CONSOLE_ENABLED=true`), **#80 fixed in this landing**, **#86's files merged as is**. **#80 privacy fix built in the VM** (branch `privacy`, patch `privacy-on-viewer.patch`, the seventh in the Mac check; §13). Unit 3,866 passed, integration 135 passed and 4 skipped. |
 
 ## Progress (read first)
 
@@ -458,7 +459,7 @@ Each phase gets its own handoff-ready plan, written after Phase 1's T5 audit. It
 
 This is the one UI item in this plan. It's outside Phase 1's scope (C5), and like Phases 2–4 it gets its own handoff-ready plan. It is built after Phase 4 and before the end-of-project run, so the same Mac run tests it.
 
-**Built in the VM 2026-09-25 (rev 1.14).** Larry chose D-V1 A, D-V2 A and D-V3 A; `MORTIMER_WORKFLOW_VIEWER_PLAN.md` §8 has the build record. Two findings from the build:
+**Built in the VM 2026-09-25 (rev 1.14); Mac check run 2 passed 18:06 (rev 1.15).** Larry chose D-V1 A, D-V2 A and D-V3 A; `MORTIMER_WORKFLOW_VIEWER_PLAN.md` §8 has the build record. Two findings from the build:
 - **Voice entry is off in production.** `console_action` is registered only with `JARVIS_COMMAND_CONSOLE_ENABLED=true`, which production's `.env` doesn't set. The buttons and the Display menu work regardless.
 - **D-V3's restore displaces two facts.** It takes the project tier from 7 to 10 of its cap of 8. With no merge, the next sweep ages out the two least recently seen project facts; on a copy, those were `project.model_registry.blocker` and `user.memory.fleetback_atlanta`. They stay restorable.
 
@@ -509,3 +510,26 @@ This is the one UI item in this plan. It's outside Phase 1's scope (C5), and lik
 **Open decisions.**
 - **D-V1 (before or alongside the viewer).** The five REVIEW ME drafts from commit d74e40d are loaded as live policy. `load_workflows()` has no draft filter, and production has workflows on: there is no `JARVIS_WORKFLOWS_ENABLED` in `.env`, and there were injections as recently as 2026-09-18. None of the five has fired in the logs retained since 2026-08-22. `user-interface-analyst-visibility` and `user-style-ui-requirement` are near-duplicates, and `user-task-website-comparison` is a session note. The options are to review, delete, or add a `draft: true` field that the loader skips.
 - **D-V2.** Whether to include usage counts in v1.
+
+## §13 #80 privacy fix (built in the VM 2026-09-25, rev 1.15)
+
+Larry, 2026-09-25: fix it in this landing, as a seventh patch through the same Mac check.
+
+**The hole (reproduced 2026-09-25 on a scratch database).** #80 (`88b206f`) added model route preferences (`jarvis/model_preferences.py`). `_validate_choice` checked that the route could carry the privacy level the preference named, but not that the level was at least the workload's configured one. Staging `approved_external` for `librarian` (configured `confidential`) or `systems` (configured `local_only`) was accepted on `direct_api`, `saygm` and `local`. Confirming it made `resolve_policy(workload).privacy` return `approved_external`. Two things read that level:
+- the run-log redaction for confidential and local-only workloads (`jarvis/agents/base.py` `_policy_requires_runlog_redaction`, active only with `JARVIS_MODEL_ROUTING_ENABLED=1`);
+- the delegation status masking (`jarvis/agents/delegate.py`), active always.
+
+With routing enabled, the lowered level also lets `resolve_model_route` send the workload over an external route: on a scratch database with the old code, a confirmed `librarian` preference for `direct_api` at `approved_external` resolved to `direct_api` (approved_external).
+
+**Exposure.** Production has no preference rows and no drafts (read from a copy of `data/jarvis.db`, 2026-09-25). Routing is off there: `JARVIS_MODEL_ROUTING_ENABLED` is absent from `.env` and from the launchd template, and the Settings default is `False`. Nothing saved is affected.
+
+**The fix.** `_validate_choice` refuses a level below the configured one: a preference may keep or raise a workload's privacy, never lower it. The `policy` it compares against is resolved with `include_preferences=False`, so it is the configured level. `confirm_preference` re-validates, so a lowering draft staged by the old code is refused at confirm too. The module's set of privacy levels and its ordering are now one `PRIVACY_ORDER`.
+
+**Tests** (`tests/unit/test_model_preferences.py`):
+- `test_a_preference_can_never_lower_a_workloads_privacy` (librarian and systems, all three routes);
+- `test_a_draft_staged_before_the_fix_is_refused_at_confirm`;
+- `test_keeping_or_raising_privacy_is_still_allowed`.
+
+The first three cases fail with the old `_validate_choice` and pass with the new one. Unit 3,866 passed, integration 135 passed and 4 skipped, CI 9, sandbox 113, sub-agent evals 13.
+
+**Found alongside, not changed.** With the shipped `config/model_access.yaml`, `librarian`, `systems`, `memory` and `background` cannot resolve a route when routing is enabled. Their configured route is `direct_api`, which provides only `approved_external`, and `resolve_model_route` refuses it (run 2026-09-25). Routing is off in production, so nothing fails today. Turning routing on would need a `confidential` or `local_only` route for those four first. Before this fix, a lowering preference was one way to make them resolve; now it is refused.
