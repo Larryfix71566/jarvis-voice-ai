@@ -463,6 +463,12 @@ async def run_capacity_enforcement(
                             tier, exc_info=True,
                         )
                         break
+                # D1b (MORTIMER_VOICE_WORKFLOWS_PLAN.md): never hold the
+                # write lock across a model call. Earlier tiers, earlier
+                # merges and run_sweep's A1 may have written on this
+                # connection; each is self-contained and reversible, so
+                # committing it here only ends the lock sooner.
+                conn.commit()
                 rewritten = await _merge_cluster(proposal, settings, client_factory)
                 if not rewritten:
                     merge_skipped = True
@@ -1279,6 +1285,9 @@ async def run_sweep(
 ) -> dict:
     """A1 + A2 + A4 + A5 in one pass. Never raises — best-effort, exactly
     the discipline every other startup pass in this codebase follows
+    (D1b, 2026-09-25: it commits before every model call, so a failure
+    later in the pass keeps the steps already done — each is
+    self-contained and reversible through `became`)
     (key-health probe, runlog prune, screen-log prune)."""
     if not enabled():
         return {"enabled": False}
@@ -1314,6 +1323,7 @@ async def run_sweep(
                     from jarvis.config import load_settings
 
                     settings = load_settings()
+                conn.commit()   # D1b: no write lock across the model call
                 classification = await _classify_batch(
                     pairs, audience_candidates, settings, client_factory,
                 )
@@ -1329,10 +1339,10 @@ async def run_sweep(
                 )
 
             # W10: settle open contradictions (including any queued just
-            # above) correct-first. Commit first: settle awaits a model
-            # call, and a write lock held across it blocks the extractor,
-            # the greeting's notices and the transcript (the 2026-09-16
-            # "database is locked" failure).
+            # above) correct-first. Commit first (D1b): settle awaits a
+            # model call, and a write lock held across it blocks the
+            # extractor, the greeting's notices and the transcript (the
+            # 2026-09-16 "database is locked" failure).
             conn.commit()
             settled = await settle_open_reviews(conn, settings, client_factory)
             summary["settled"] = settled["settled"]
