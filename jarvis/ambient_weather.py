@@ -175,6 +175,40 @@ def get_device_location() -> Optional[dict]:
     return _device_location
 
 
+class LocationLookupError(Exception):
+    """ip_location failed. `reason` is "offline" (no connection reached
+    ip-api) or "lookup_failed" (it answered, but not with a location)."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def ip_location(fetch: Callable[[str], Any] | None = None) -> dict:
+    """IP geolocation alone: {"lat", "lon", "label", "source": "ip"}.
+    Raises LocationLookupError. MORTIMER_VOICE_WORKFLOWS_PLAN.md D-L6 asks
+    "where am I" to try this only after the device, and to say why it
+    failed, so unlike _resolve_location it reports the failure."""
+    fetch = fetch or _fetch_json
+    try:
+        geo = fetch(GEO_URL)
+    except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+        raise LocationLookupError("offline") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise LocationLookupError("lookup_failed") from exc
+    if not isinstance(geo, dict) or geo.get("status") != "success":
+        raise LocationLookupError("lookup_failed")
+    try:
+        return {
+            "lat": float(geo["lat"]),
+            "lon": float(geo["lon"]),
+            "label": str(geo.get("city") or ""),
+            "source": "ip",
+        }
+    except (KeyError, TypeError, ValueError) as exc:
+        raise LocationLookupError("lookup_failed") from exc
+
+
 def _resolve_location(fetch: Callable[[str], Any]) -> Optional[dict]:
     """{"lat": float, "lon": float, "label": str, "source": str} or None.
 
@@ -199,16 +233,8 @@ def _resolve_location(fetch: Callable[[str], Any]) -> Optional[dict]:
                 "source": "device",
                 "age_s": max(0, int(time.monotonic() - device["at"]))}
     try:
-        geo = fetch(GEO_URL)
-        if geo.get("status") != "success":
-            return None
-        return {
-            "lat": float(geo["lat"]),
-            "lon": float(geo["lon"]),
-            "label": str(geo.get("city") or ""),
-            "source": "ip",
-        }
-    except Exception:
+        return ip_location(fetch)
+    except LocationLookupError:
         return None
 
 

@@ -4,13 +4,15 @@
 # has no refusal or hand-off sentence, show_commands was not called, and
 # either a listed specialist was delegated to, `or_tool` was called, or the
 # reply is the sanctioned "isn't something I have a tool for yet".
+# A `require_tool` case (Phase 2 D4, D-L6) fails unless that tool was called:
+# location is answered by system_status, never from memory or a specialist.
 # An `explicit_ask` case (D-L5, Larry 2026-09-25) passes only when
 # show_commands WAS called and nothing was refused.
 # 21 cases: 18 replayed failures, 1 capability-question exemption,
 # 1 explicit ask, 1 control.
 
-- {from: 3535, input: "Can you not check my Internet connection for a location?", expect_any: [systems, analyst, scheduler, developer]}
-- {from: 126, input: "Can you see my location?", expect_any: [systems, analyst, scheduler, developer]}
+- {from: 3535, input: "Can you not check my Internet connection for a location?", require_tool: system_status}
+- {from: 126, input: "Can you see my location?", require_tool: system_status}
 - {from: 1170, input: "Can you show me current radar for Spartanburg?", expect_any: [analyst]}
 - {from: 3173, input: "Give me a rundown of all the baseball games tonight.", expect_any: [analyst]}
 - {from: 911, input: "Tell me if there are any NFL football games tonight.", expect_any: [analyst]}

@@ -1552,3 +1552,61 @@ async def test_notices_ride_the_greeting_and_a_dead_session_refuses_late_results
     with get_conn() as conn:
         row = conn.execute("SELECT delivered_at FROM notices").fetchone()
     assert row["delivered_at"]
+
+
+async def test_location_asks_this_sessions_client_first(runtime, fakes, monkeypatch):
+    """Phase 2 D4 (D-L6): system_status topic "location" asks the client on
+    this session's own channel; with a fix, IP is never called."""
+    from jarvis import ambient_weather
+
+    transport = FakeTransport()
+    _, llm, _, _ = build_pipeline(transport, runtime)
+    ip_calls = []
+    monkeypatch.setattr(ambient_weather, "ip_location",
+                        lambda *a, **k: ip_calls.append(True) or {})
+    device = runtime.device_location
+    assert device is not None and device.supported is False
+    device.handle_message({"type": "location/hello", "version": 1, "authorization": "authorized"})
+
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+        asyncio.get_running_loop().call_soon(device.handle_message, {
+            "type": "location/result", "version": 1, "request_id": message["request_id"],
+            "ok": True, "lat": 34.0754, "lon": -84.2941, "accuracy_m": 65, "age_s": 3,
+            "label": "Alpharetta, GA"})
+    device._send = send
+
+    delivered = []
+
+    class FakeParams:
+        def __init__(self, arguments):
+            self.arguments = arguments
+
+        async def result_callback(self, result):
+            delivered.append(result)
+
+    await llm.functions["system_status"](FakeParams({"topic": "location"}))
+    assert delivered == ["Location: Alpharetta, GA (from this device's own location, accurate to about 60 m)."]
+    assert sent[0]["type"] == "location/request" and ip_calls == []
+
+
+async def test_location_without_a_client_falls_back_to_ip(runtime, fakes, monkeypatch):
+    from jarvis import ambient_weather
+
+    _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
+    monkeypatch.setattr(ambient_weather, "ip_location",
+                        lambda *a, **k: {"lat": 33.7, "lon": -84.4, "label": "Atlanta", "source": "ip"})
+    delivered = []
+
+    class FakeParams:
+        def __init__(self, arguments):
+            self.arguments = arguments
+
+        async def result_callback(self, result):
+            delivered.append(result)
+
+    await llm.functions["system_status"](FakeParams({"topic": "location"}))
+    assert delivered[0].startswith("Location: approximately Atlanta (from the internet connection, "
+                                   "city-level; the app you're talking through hasn't shared a location)")

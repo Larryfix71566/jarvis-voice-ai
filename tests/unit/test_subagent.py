@@ -1007,3 +1007,44 @@ def test_librarian_budget_is_ten():
     agents = yaml.safe_load((root / "config" / "agents.yaml").read_text())["sub_agents"]
     librarian = next(a for a in agents if a["name"] == "librarian")
     assert librarian["max_iterations"] == 10
+
+
+class TestClock:
+    """Phase 2 D5 (MORTIMER_VOICE_WORKFLOWS_PLAN.md): live-data agents get
+    the date, time and timezone on every run."""
+
+    def test_clock_note_names_date_time_and_zone(self):
+        from datetime import datetime, timezone
+
+        from jarvis.agents.base import clock_note
+
+        note = clock_note("America/New_York", datetime(2026, 9, 25, 1, 40, tzinfo=timezone.utc))
+        assert note.startswith("Now: Thursday, 24 September 2026, 9:40 PM EDT (America/New_York).")
+        assert '"tonight" mean this date' in note
+
+    def test_bad_timezone_falls_back_to_utc(self):
+        from datetime import datetime, timezone
+
+        from jarvis.agents.base import clock_note
+
+        assert "(UTC)" in clock_note("Not/AZone", datetime(2026, 9, 5, 13, 5, tzinfo=timezone.utc))
+
+    async def test_clock_agent_gets_the_note_just_before_the_task(self):
+        agent, completions = make_agent([("text", "ok")], name="analyst", clock=True)
+        await agent.run("any NFL games tonight")
+        messages = completions.requests[0]["messages"]
+        assert messages[-1] == {"role": "user", "content": "any NFL games tonight"}
+        assert messages[-2]["role"] == "system" and messages[-2]["content"].startswith("Now: ")
+
+    async def test_agents_without_clock_are_unchanged(self):
+        agent, completions = make_agent([("text", "ok")])
+        await agent.run("what time")
+        assert not any(m["content"].startswith("Now: ")
+                       for m in completions.requests[0]["messages"] if m["role"] == "system")
+
+    def test_analyst_has_the_clock_and_mcp_time(self):
+        agents = load_sub_agents(make_settings(), FakeRegistry(),
+                                 client_factory=lambda s: FakeLLM([]))
+        assert agents["analyst"].clock is True
+        assert agents["analyst"].mcp_servers == ["mcp-web", "mcp-screen", "mcp-time"]
+        assert [n for n, a in agents.items() if a.clock] == ["analyst"]

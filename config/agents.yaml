@@ -51,7 +51,12 @@ sub_agents:
     description: "Long-term memory: store and recall facts, notes, preferences. Also resolves flagged memory conflicts and cleanup items awaiting review: list them, keep one side, rewrite, dismiss, convert to a workflow, or archive as implemented. Archived facts (merged or aged out by capacity enforcement, never deleted) are still searchable with memory_search — use it before telling the user something is forgotten. Also searches a separate knowledge base of longer curated project documents and session digests (kb_search/kb_read/kb_neighbors) — distinct from the keyed facts above; use this when the user asks about something more like a document, decision record, or past session's details rather than a short preference or fact. Also draws a picture of how memories relate around a topic (memory_graph_view)."
   - name: analyst
     display_name: Analyst
-    mcp_servers: [mcp-web, mcp-screen]
+    # Phase 2 D5 (MORTIMER_VOICE_WORKFLOWS_PLAN.md): mcp-time for date math,
+    # and `clock: true` stamps date, time and timezone on every run. Turn
+    # 911 (2026-08-20) "couldn't determine today's date"; 3173 (2026-09-17)
+    # could not tell tonight's games from stale results.
+    mcp_servers: [mcp-web, mcp-screen, mcp-time]
+    clock: true
     # Larry 2026-08-25 — measured, not guessed: six analyst runs died on
     # ITERATIONS_EXHAUSTED the same evening (462da350, 97d5cecc, 9bd877dc,
     # d125f5a3, fd13d883, 06e6ad89), all at the base default (5 rounds,

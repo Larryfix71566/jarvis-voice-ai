@@ -11,11 +11,12 @@ user_triggers:
   voice-do-it-dont-hand-off: {priority: 10, pattern: "\\b(run (?:the|that|this|a) (?:command|curl)|curl|terminal|clipboard|copy|paste|git |commit|push|pull|branch|merge|kill|vault|provision|api keys?|do (?:it|that) (?:for me|yourself)|you do (?:it|that)|i (?:don't|do not) (?:want|wanna) to do it|by myself|manually)\\b"}
   voice-check-before-cant: {priority: 20, pattern: "\\b(can you(?: not)?|could you|are you (?:not )?able|do you have (?:access|a way|the ability)|you (?:should|already) (?:be able|have)|why (?:can't|can you not|won't|couldn't|didn't) you|is there (?:a|any) way|find another way|look it up|see my|my location|where am i|access to)\\b"}
   voice-explain-failure: {priority: 30, pattern: "\\b(why (?:did|didn't|does|doesn't|is|isn't|was|wasn't|won't|can't)|what (?:happened|went wrong|failed|error)|fail(?:ed|ing|ure)?|error|broken|not working|stuck|logs?\\b|investigate|look into|diagnos)"}
+  voice-where-am-i: {priority: 15, pattern: "\\b(where am i|where i am|my (?:current )?location|(?:for|get|find) (?:a|my) location|what (?:city|town|state) am i|near me|nearby|around here)\\b"}
 failure_cases:
   - {id: 117, date: 2026-08-13, clusters: ["W13"], guard: miss, user_trigger: "voice-check-before-cant",
      user: "Yeah. The radar map looks like it's there, but it doesn't display correctly. Can you take a look at that?",
      reply: "Developer couldn't complete that investigation. The radar map URL came from the analyst and should be valid, but there may be a rendering issue on the interface side. Can you tell me what you're seeing—is the image loading but cut off, not showing at all, or giving an error?"}
-  - {id: 126, date: 2026-08-13, clusters: ["W1", "W4"], guard: fire, user_trigger: "voice-check-before-cant",
+  - {id: 126, date: 2026-08-13, clusters: ["W1", "W4"], guard: fire, user_trigger: "voice-where-am-i",
      user: "Can you see my location?",
      reply: "No, I don't have access to your location. You told me your timezone is America/New_York, and you asked about weather in Spartanburg, but I can't see where you actually are. Why do you ask?"}
   - {id: 152, date: 2026-08-13, clusters: ["W13"], guard: miss, user_trigger: null,
@@ -87,7 +88,7 @@ failure_cases:
   - {id: 565, date: 2026-08-18, clusters: ["W1", "W3"], guard: fire, user_trigger: "voice-do-it-dont-hand-off",
      user: "So you don't have access to the vault to see what's provisioned?",
      reply: "Correct—I can't read the vault from here. The developer can see what profiles are registered in the config, but checking which API keys are actually provisioned requires vault access that I don't have in this context. That's a systems or security boundary I can't cross directly."}
-  - {id: 573, date: 2026-08-18, clusters: ["W13"], guard: miss, user_trigger: "voice-check-before-cant",
+  - {id: 573, date: 2026-08-18, clusters: ["W13"], guard: miss, user_trigger: "voice-where-am-i",
      user: "What's on the screen is in Celsius. What you're telling me verbally is in Fahrenheit. Uh, my location obviously dictates Fahrenheit, so I'd like to... what's printed on the screen to to match what is common for the location.",
      reply: "The developer couldn't complete that without more context. Where is the weather display code—is it in the Mortimer repo, or in a separate weather service module?"}
   - {id: 619, date: 2026-08-18, clusters: ["W2"], guard: fire, user_trigger: null,
@@ -261,7 +262,7 @@ failure_cases:
   - {id: 2911, date: 2026-09-13, clusters: ["W1", "W4"], guard: fire, user_trigger: "voice-check-before-cant",
      user: "Can you not look it up?",
      reply: "I don't have access to your location through GPS or IP detection in this session. I'll need you to tell me your city so I can fetch the weather for you."}
-  - {id: 2921, date: 2026-09-13, clusters: ["W1", "W4"], guard: fire, user_trigger: "voice-check-before-cant",
+  - {id: 2921, date: 2026-09-13, clusters: ["W1", "W4"], guard: fire, user_trigger: "voice-where-am-i",
      user: "I'm not actually in New York. Can you not get my location to tell me where I am?",
      reply: "I don't have a tool that reads your device's location. I only know your timezone because it's set in your configuration—America/New_York. To tell you where you actually are, you'd need to share that with me, or I'd need a location permission I don't have access to. What's your actual location?"}
   - {id: 2989, date: 2026-09-13, clusters: ["W5"], guard: miss, user_trigger: null,
@@ -288,7 +289,7 @@ failure_cases:
   - {id: 3486, date: 2026-09-23, clusters: ["W1", "W3"], guard: fire, user_trigger: "voice-check-before-cant",
      user: "Can you not check to see what's actually available through the subscriptions that you have access to?",
      reply: "I can't query the registry directly myself—that's something the developer specialist does. I read from the static model list I was given at startup. Want me to ask the developer to check what's actually available through your subscriptions right now?"}
-  - {id: 3535, date: 2026-09-24, clusters: ["W1", "W4"], guard: fire, user_trigger: "voice-check-before-cant",
+  - {id: 3535, date: 2026-09-24, clusters: ["W1", "W4"], guard: fire, user_trigger: "voice-where-am-i",
      user: "Can you not check my Internet connection for a location?",
      reply: "I don't have a tool to detect device location from your connection. You'll need to tell me where you are, Boss."}
 accepted_false_positives:

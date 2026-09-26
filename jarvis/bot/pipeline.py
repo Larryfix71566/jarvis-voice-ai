@@ -28,6 +28,7 @@ import base64
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -65,6 +66,8 @@ from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.remember_tool import build_remember_tool
 from jarvis.bot.costs_tool import build_cost_summary_tool
 from jarvis.bot.status_tool import build_system_status_tool
+from jarvis.bot.device_location import DeviceLocation, resolve_location, summarize_location
+from jarvis import ambient_weather
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.ui_control import build_ui_control_tool
@@ -226,6 +229,10 @@ class Runtime:
     # registry.stop(), because those runs call tools through this
     # session's registry and outlive the session by design.
     detached_runs: set = field(default_factory=set)
+    # MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 2 D4 (D-L6): this session's
+    # client location channel. build_pipeline creates it (it needs the
+    # transport); run_session's app-message handlers feed it.
+    device_location: Any = None
     # MORTIMER_VOICE_WORKFLOWS_PLAN.md D5/D10 — per-session voice-workflow
     # turn state (injector + reply guard) and the show_commands gate that
     # the delegate result hook stamps on every NEEDS-INPUT.
@@ -491,6 +498,41 @@ STT_KEYTERMS = [
     "geolocation", "self-edit",
 ]
 
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 2 W4 (2026-09-25). Place names Larry
+# uses are boosted too, read from his durable place memories rather than
+# written into code. Turn 3513 (2026-09-23): "Alfreda, Georgia" for
+# Alpharetta, one minute after 3508 heard it correctly; the analyst failed on
+# "Alfreda" and the retry guard refused the correction (fixed by #86 T1.1).
+PLACE_KEYTERM_KEYS = (
+    "user.location.home", "user.location.work",
+    "user.location.primary", "user.location.secondary",
+)
+PLACE_KEYTERM_MAX = 12
+_PLACE_WORD_RE = re.compile(r"\b[A-Z][a-z]{3,}\b")
+
+
+def place_keyterms(facts: list[dict]) -> list[str]:
+    """Capitalized place words from Larry's durable place facts, in key
+    order, de-duplicated, capped. Never the current location (D-L6)."""
+    by_key = {f.get("key"): str(f.get("content") or "") for f in facts}
+    out: list[str] = []
+    for key in PLACE_KEYTERM_KEYS:
+        for word in _PLACE_WORD_RE.findall(by_key.get(key, "")):
+            if word not in out and word not in STT_KEYTERMS:
+                out.append(word)
+    return out[:PLACE_KEYTERM_MAX]
+
+
+def stt_keyterms() -> list[str]:
+    """STT_KEYTERMS plus place_keyterms; the static list alone on any error."""
+    try:
+        from jarvis.memory import list_facts
+
+        return STT_KEYTERMS + place_keyterms(list_facts())
+    except Exception:  # noqa: BLE001 — STT must start even if memory can't be read
+        _logger.warning("stt_place_keyterms_unavailable", exc_info=True)
+        return list(STT_KEYTERMS)
+
 
 def build_pipeline(
     transport: Any, runtime: Runtime, pusher: FramePusher | None = None,
@@ -541,6 +583,8 @@ def build_pipeline(
         # result into the conversation.
         late_delivery=runtime.late_delivery,
         in_flight=runtime.detached_runs,
+        # Phase 2 W5: Larry's current turn, for the named-source exemption.
+        user_text=lambda: runtime.voice_state.user_text,
     )
     # MORTIMER_VOICE_WORKFLOWS_PLAN.md D16 — getattr with the production
     # defaults, because tests build this pipeline from SimpleNamespace
@@ -560,7 +604,17 @@ def build_pipeline(
     _, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
     _, remember_handler = build_remember_tool(runtime.session_id)
     _, cost_summary_handler = build_cost_summary_tool()
-    _, system_status_handler = build_system_status_tool()
+    # Phase 2 D4 (D-L6): "where am I" asks THIS session's client first.
+    runtime.device_location = DeviceLocation(
+        lambda message: send_app_message(transport, message))
+
+    async def _location_answer(protected: bool) -> str:
+        result = await resolve_location(
+            runtime.device_location, protected=protected,
+            ip_lookup=lambda: asyncio.to_thread(ambient_weather.ip_location))
+        return summarize_location(result)
+
+    _, system_status_handler = build_system_status_tool(location=_location_answer)
 
     # MORTIMER_VOICE_UI_PLAN.md U1/U6 — voice control of the console's UI
     # chrome. Kill switch read here, at the single registration site (same
@@ -727,7 +781,7 @@ def build_pipeline(
     stt = DeepgramFluxSTTService(
         api_key=settings.deepgram_api_key,
         settings=DeepgramFluxSTTSettings(
-            model="flux-general-en", keyterm=STT_KEYTERMS,
+            model="flux-general-en", keyterm=stt_keyterms(),
         ),
         # was True (plan Phase 5, D-004) until 2026-08-22. With
         # should_interrupt=True, Flux broadcasts an interruption on EVERY
@@ -1665,6 +1719,11 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                     "data": msg.get("data") if isinstance(msg.get("data"), dict) else None,
                 })
 
+        async def handle_location(message: Any) -> None:
+            """Phase 2 D4: location/hello and location/result from the client."""
+            if runtime.device_location is not None:
+                runtime.device_location.handle_message(_unwrap_client_message(message))
+
         async def handle_console_ready(message: Any) -> None:
             """Accept readiness only from the hello's session/generation."""
             msg = _unwrap_client_message(message)
@@ -1775,13 +1834,15 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 await handle_console_ready(message)
                 await handle_console(message)
                 await handle_shared_content(message)
+                await handle_location(message)
         elif client_messages is not None:
             # WebSocket transport (native-audio plan §3.2 findings): no
             # connection object and no on_app_message event — the same two
             # handlers run from the pipeline processor instead.
             client_messages.bind(handle_voice_set, handle_ui_noop,
                                   handle_console_result, handle_console_ready,
-                                  handle_console, handle_shared_content)
+                                  handle_console, handle_shared_content,
+                                  handle_location)
 
         runner = PipelineRunner()
         try:

@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import time
 import uuid
 from typing import Any, Callable
@@ -143,6 +144,39 @@ def _is_input_substitution(failed: set[str], new: set[str]) -> bool:
 def _substitution_exemption_enabled() -> bool:
     """Single enforcement point for the T1.1 kill switch (default on)."""
     value = os.environ.get(RETRY_GUARD_SUBSTITUTION_ENV, "")
+    return value.strip().lower() not in ("false", "0", "no")
+
+
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 2 W5 (2026-09-25). On 2026-09-13
+# the analyst failed "all NFL game scores from today" twice (agent_runs
+# 22:44 and 22:50); Larry then said "Can you do anything for me at spn dot
+# com?" (turn 2998, speech-to-text for ESPN) and the guard refused the
+# delegation as "too similar" to the failed search. A source Larry names
+# in his own turn is new input, not the Supervisor rewording a failed
+# approach, so it passes when the delegated task names a source too. It
+# does not require the two to match: speech-to-text heard "spn" for ESPN.
+NAMED_SOURCE_RE = re.compile(
+    r"\b(?:https?://)?(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|gov|edu|io|tv|co|us)\b"
+    r"|\b[a-z0-9-]+\s+dot\s+(?:com|org|net|gov|edu|io|tv)\b",
+    re.I,
+)
+RETRY_GUARD_NAMED_SOURCE_ENV = "JARVIS_RETRY_GUARD_NAMED_SOURCE_ENABLED"
+
+
+def names_source(text: str | None) -> bool:
+    """True when the text names a website (espn.com, "espn dot com")."""
+    return bool(NAMED_SOURCE_RE.search(text or ""))
+
+
+def _safe_user_text(user_text: Callable[[], str]) -> str:
+    try:
+        return str(user_text() or "")
+    except Exception:  # noqa: BLE001 — the guard must never raise
+        return ""
+
+
+def _named_source_exemption_enabled() -> bool:
+    value = os.environ.get(RETRY_GUARD_NAMED_SOURCE_ENV, "")
     return value.strip().lower() not in ("false", "0", "no")
 
 # MORTIMER_HANDOFF_LOOP_PLAN.md H1/H2.
@@ -336,8 +370,12 @@ def build_delegate_tool(
     session_id: str | None = None,
     late_delivery: dict | None = None,
     in_flight: set | None = None,
+    user_text: Callable[[], str] | None = None,
 ) -> tuple[dict, Callable[[dict], Any]]:
     """Return (openai_tool_schema, async_handler) for delegate_task.
+
+    `user_text` returns Larry's current turn (pipeline.py passes the voice
+    state's); the retry guard uses it for the W5 named-source exemption.
 
     Barge-in survival (Larry 2026-08-21: "me continuing to talk should not
     kill existing work" — observed live that morning: 5 of 9 developer runs
@@ -505,6 +543,15 @@ def build_delegate_tool(
                         and _is_input_substitution(prior_tokens, task_tokens)):
                     logger.info(
                         "delegate_retry_guard_exempted_substitution agent=%s "
+                        "overlap=%.2f", agent_name, overlap,
+                    )
+                elif (overlap >= RETRY_GUARD_OVERLAP
+                        and user_text is not None
+                        and _named_source_exemption_enabled()
+                        and names_source(task)
+                        and names_source(_safe_user_text(user_text))):
+                    logger.info(
+                        "delegate_retry_guard_exempted_named_source agent=%s "
                         "overlap=%.2f", agent_name, overlap,
                     )
                 elif overlap >= RETRY_GUARD_OVERLAP:

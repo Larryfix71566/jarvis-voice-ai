@@ -61,6 +61,11 @@ def grade(case: dict, reply: str, delegated: list[str], tools_called: list[str])
         return False, f"spoken {kind}: {sentence!r}"
     if "show_commands" in tools_called:
         return False, "called show_commands"
+    # Phase 2 D4 (D-L6): location questions must be answered by the tool,
+    # never from memory, so a reply without the call fails outright.
+    required = case.get("require_tool")
+    if required and required not in tools_called:
+        return False, f"did not call {required}"
     or_tool = case.get("or_tool")
     if or_tool and or_tool in tools_called:
         return True, f"called {or_tool}"
@@ -92,11 +97,14 @@ async def run_eval() -> tuple[int, int]:
     async def _stub(_arguments: dict) -> str:
         return "ok"
 
+    from jarvis.status import status_enabled
+
+    status_on = status_enabled()
     extra_tools = [
         (schema, _stub)
         for schema in supervisor_tool_schemas(
             None, ui_control=flags["ui_control"], screen=flags["screen"],
-            clipboard=flags["clipboard"],
+            clipboard=flags["clipboard"], status=status_on,
         )
     ] if show_tools else []
     voice_catalog = catalog_summary(load_voice_catalog()) if flags["voice"] else None
@@ -122,7 +130,8 @@ async def run_eval() -> tuple[int, int]:
                     tools_called.append(event["tool"])
 
             orch = Orchestrator(settings, registry, str(uuid.uuid4()), on_event=on_event,
-                                extra_tools=extra_tools, voice_catalog=voice_catalog, **flags)
+                                extra_tools=extra_tools, voice_catalog=voice_catalog,
+                                status=status_on and show_tools, **flags)
             orch._history.extend(dict(m) for m in case.get("prior") or [])
             try:
                 reply = await orch.chat(case["input"])

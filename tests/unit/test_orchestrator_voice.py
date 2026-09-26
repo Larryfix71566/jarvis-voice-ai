@@ -55,7 +55,8 @@ class TestUserHook:
         last = calls.requests[0]["messages"][-1]
         assert last["role"] == "user"
         assert last["content"].startswith("[system] Larry's standing instruction")
-        assert "voice-check-before-cant" in last["content"]
+        # Phase 2 D4 (D-L6): location questions get voice-where-am-i.
+        assert "voice-where-am-i" in last["content"]
 
     async def test_next_turn_tombstones_the_note(self, fresh_db):
         orch, calls = _orch([("text", "You're in Spartanburg."), ("text", "Sure.")])

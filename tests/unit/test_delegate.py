@@ -453,6 +453,70 @@ class TestRetryGuard:
         assert result == "done"
 
 
+class TestRetryGuardNamedSource:
+    """Phase 2 W5 (2026-09-25): a source Larry names in his own turn is new
+    input. FAILED is the analyst's exact failed task from agent_runs
+    (2026-09-13 22:50:18); Larry's next turn was 2998, "Can you do anything
+    for me at spn dot com?" (speech-to-text for ESPN)."""
+
+    FAILED = ("Search the web for NFL scores from September 13, 2026. Try ESPN.com, "
+              "Sports-Reference, or other sports news sites that display live and final "
+              "scores. Find all games played today with final scores and any currently "
+              "in progress with current scores and quarter information.")
+    RETRY = "Get NFL scores for September 13, 2026 from espn.com: final scores and games in progress."
+    LARRY = "Can you do anything for me at spn dot com?"
+
+    async def _fail_then(self, second_task, user_text):
+        agents = {"analyst": FakeSubAgent("analyst", result="FAILED: fragments only")}
+        _, handler = build_delegate_tool(agents, user_text=user_text)
+        await handler({"agent_name": "analyst", "task": self.FAILED})
+        return agents, await handler({"agent_name": "analyst", "task": second_task})
+
+    async def test_source_larry_names_is_not_a_retry(self):
+        agents, second = await self._fail_then(self.RETRY, lambda: self.LARRY)
+        assert not second.startswith("REFUSED:")
+        assert len(agents["analyst"].tasks) == 2
+
+    async def test_same_task_without_larry_naming_a_source_is_refused(self):
+        # Overlap 1.0: the guard's own case. "Give it all to him!" (turn
+        # 2989) names nothing, so the refusal stands.
+        _, second = await self._fail_then(self.RETRY, lambda: "Give it all to him!")
+        assert second.startswith("REFUSED:")
+
+    async def test_no_user_text_keeps_the_old_behaviour(self):
+        _, second = await self._fail_then(self.RETRY, None)
+        assert second.startswith("REFUSED:")
+
+    async def test_larry_names_a_source_but_the_task_does_not(self):
+        _, second = await self._fail_then(
+            "Search the web again for NFL scores from September 13, 2026, final and in progress.",
+            lambda: self.LARRY)
+        assert second.startswith("REFUSED:")
+
+    async def test_kill_switch(self, monkeypatch):
+        monkeypatch.setenv("JARVIS_RETRY_GUARD_NAMED_SOURCE_ENABLED", "false")
+        _, second = await self._fail_then(self.RETRY, lambda: self.LARRY)
+        assert second.startswith("REFUSED:")
+
+    async def test_a_raising_user_text_never_breaks_the_guard(self):
+        def boom():
+            raise RuntimeError("no state")
+        _, second = await self._fail_then(self.RETRY, boom)
+        assert second.startswith("REFUSED:")
+
+    @pytest.mark.parametrize("text,expected", [
+        ("Can you do anything for me at spn dot com?", True),
+        ("look on NFL dot com", True),
+        ("Try ESPN.com", True),
+        ("https://www.mlb.com/scores", True),
+        ("Give it all to him!", False),
+        ("Find another way.", False),
+    ])
+    def test_names_source(self, text, expected):
+        from jarvis.agents.delegate import names_source
+        assert names_source(text) is expected
+
+
 class TestRetryGuardInputSubstitution:
     """T1.1 (2026-09-22): a single-word correction is new input, not a
     reworded retry. The Alfreda/Alpharetta tasks are the exact ones the

@@ -50,13 +50,25 @@ class TestInjector:
         inj = VoiceWorkflowInjector(state)
         pushed = _capture(inj)
         ctx = LLMContext(messages=[{"role": "system", "content": "sys"}])
-        ctx.add_message({"role": "user", "content": "Can you not check my Internet connection for a location?"})
+        # Logged turn 2911. (The location question this test used before
+        # Phase 2, turn 3535, now gets voice-where-am-i: see the next test.)
+        ctx.add_message({"role": "user", "content": "Can you not look it up?"})
         await inj.process_frame(LLMContextFrame(context=ctx), DOWN)
         msgs = ctx.get_messages()
         assert msgs[-1]["content"].startswith("[system] Larry's standing instruction")
         assert "voice-check-before-cant" in msgs[-1]["content"]
-        assert state.user_text.startswith("Can you not check")
+        assert state.user_text.startswith("Can you not look")
         assert len(state.notes) == 1 and len(pushed) == 1
+
+    async def test_location_question_gets_where_am_i(self):
+        # Phase 2 D4 (D-L6), logged turn 3535.
+        state = VoiceTurnState()
+        inj = VoiceWorkflowInjector(state)
+        _capture(inj)
+        ctx = LLMContext(messages=[{"role": "user", "content": "Can you not check my Internet connection for a location?"}])
+        await inj.process_frame(LLMContextFrame(context=ctx), DOWN)
+        note = ctx.get_messages()[-1]["content"]
+        assert "voice-where-am-i" in note and "system_status" in note and "memory" in note
 
     async def test_tool_rerun_in_same_turn_does_not_inject_again(self):
         state = VoiceTurnState()

@@ -399,3 +399,43 @@ class TestAuthFailureIsNamed:
         result = self._run(RuntimeError("model is overloaded"))
         assert "auth_rejected" not in result
         assert "Vision model call failed" in result["error"]
+
+
+# --- D3: find the macOS tools even when launchd's PATH misses /usr/sbin ----
+
+class TestMacosTool:
+    def test_path_hit_wins(self, monkeypatch):
+        monkeypatch.setattr(logic.shutil, "which", lambda name: f"/opt/x/{name}")
+        assert logic.macos_tool("screencapture") == "/opt/x/screencapture"
+
+    def test_falls_back_to_usr_sbin_when_path_misses_it(self, monkeypatch, tmp_path):
+        # The 2026-09-08 failure: PATH without /usr/sbin.
+        fake = tmp_path / "screencapture"
+        fake.write_text("#!/bin/sh\n")
+        fake.chmod(0o755)
+        monkeypatch.setattr(logic.shutil, "which", lambda name: None)
+        monkeypatch.setattr(logic, "MACOS_TOOL_DIRS", (str(tmp_path / "missing"), str(tmp_path)))
+        assert logic.macos_tool("screencapture") == str(fake)
+
+    def test_not_found_names_where_it_looked(self, monkeypatch):
+        monkeypatch.setattr(logic.shutil, "which", lambda name: None)
+        monkeypatch.setattr(logic, "MACOS_TOOL_DIRS", ("/nonexistent-a",))
+        with pytest.raises(FileNotFoundError, match="screencapture not found on PATH or in /nonexistent-a"):
+            logic.macos_tool("screencapture")
+
+    def test_capture_uses_the_resolved_path(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(logic, "macos_tool", lambda name: f"/usr/sbin/{name}")
+        monkeypatch.setattr(logic.subprocess, "run", lambda args, **kw: calls.append(args))
+        path = logic._capture_screenshot(2)
+        try:
+            assert calls[0][:4] == ["/usr/sbin/screencapture", "-x", "-D", "2"]
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_template_path_keeps_usr_sbin(self):
+        # #79's fix, pinned where the services get their PATH.
+        from pathlib import Path as _P
+        tpl = (_P(__file__).resolve().parents[2] / "scripts" / "launchd" / "com.mortimer.template.plist").read_text()
+        assert ":/usr/sbin:" in tpl
+

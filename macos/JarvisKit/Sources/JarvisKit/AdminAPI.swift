@@ -148,6 +148,12 @@ public struct AdminAPI: Sendable {
     // MARK: Ambient
     public func ambient() async throws -> JSONValue { try await get("api/ambient") }
 
+    /// Phase 2 D4: the device fix also feeds the weather chip, through the
+    /// sidecar's existing POST /api/location (lat, lon, label).
+    public func reportDeviceLocation(lat: Double, lon: Double, label: String) async throws -> JSONValue {
+        try await post("api/location", body: DeviceLocationBody(lat: lat, lon: lon, label: label))
+    }
+
     // MARK: Council
     public func councilJob() async throws -> JSONValue { try await get("api/council/job") }
     public func councilRounds() async throws -> JSONValue { try await get("api/council/rounds") }
@@ -985,4 +991,10 @@ public struct AmbientResponse: Codable, Sendable, Equatable {
         weather = try c.decodeIfPresent(AmbientWeather.self, forKey: .weather)
         system = try c.decodeIfPresent(AmbientSystem.self, forKey: .system)
     }
+}
+
+struct DeviceLocationBody: Encodable {
+    let lat: Double
+    let lon: Double
+    let label: String
 }
