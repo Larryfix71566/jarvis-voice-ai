@@ -186,9 +186,12 @@ def test_pipeline_processor_order_locked(runtime, fakes):
         else:  # context aggregators user()/assistant()
             kinds.append(type(p).__name__)
     # Locked Phase 5 order: input -> VAD -> STT -> user -> LLM -> transcript
-    # -> TTS -> output -> assistant
+    # -> TTS -> output -> assistant, plus MORTIMER_VOICE_WORKFLOWS_PLAN.md
+    # D5/D6: the voice-workflow injector right before the LLM and the reply
+    # guard right after it, so nothing reaches the transcript or TTS unchecked.
     assert kinds == [
-        "TRANSPORT_INPUT", "VAD", "STT", "LLMUserAggregator", "LLM",
+        "TRANSPORT_INPUT", "VAD", "STT", "LLMUserAggregator",
+        "VoiceWorkflowInjector", "LLM", "ReplyGuard",
         "TRANSCRIPT", "TTS", "TRANSPORT_OUTPUT", "LLMAssistantAggregator",
     ]
 
@@ -207,7 +210,7 @@ def test_websocket_case_puts_the_client_message_processor_right_after_input(runt
     assert pipeline.processors[0] == "TRANSPORT_INPUT"
     assert pipeline.processors[1] is processor
     assert isinstance(pipeline.processors[2], FakeVAD)
-    assert len(pipeline.processors) == 10
+    assert len(pipeline.processors) == 12   # the order above plus this processor
 
 
 def test_anthropic_base_url_builds_native_service_with_caching(runtime, fakes, monkeypatch):

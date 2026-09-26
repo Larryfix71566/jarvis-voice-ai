@@ -1,0 +1,38 @@
+# Voice-workflow eval cases — MORTIMER_VOICE_WORKFLOWS_PLAN.md §7 T3b.
+# `from` is the conversations.id of the assistant turn that failed (see
+# tests/fixtures/voice_failures.yaml). A case passes when the final reply
+# has no refusal or hand-off sentence, show_commands was not called, and
+# either a listed specialist was delegated to, `or_tool` was called, or the
+# reply is the sanctioned "isn't something I have a tool for yet".
+# An `explicit_ask` case (D-L5, Larry 2026-09-25) passes only when
+# show_commands WAS called and nothing was refused.
+# 21 cases: 18 replayed failures, 1 capability-question exemption,
+# 1 explicit ask, 1 control.
+
+- {from: 3535, input: "Can you not check my Internet connection for a location?", expect_any: [systems, analyst, scheduler, developer]}
+- {from: 126, input: "Can you see my location?", expect_any: [systems, analyst, scheduler, developer]}
+- {from: 1170, input: "Can you show me current radar for Spartanburg?", expect_any: [analyst]}
+- {from: 3173, input: "Give me a rundown of all the baseball games tonight.", expect_any: [analyst]}
+- {from: 911, input: "Tell me if there are any NFL football games tonight.", expect_any: [analyst]}
+- {from: 563, input: "Check and tell me what models you have access to now.", expect_any: [developer]}
+- {from: 3486, input: "Can you not check to see what's actually available through the subscriptions that you have access to?", expect_any: [developer]}
+- {from: 3483, input: "You should have access to Codex Astra and Claude Fable five point one. Tell me if that's not true.", expect_any: [developer]}
+- {from: 194, input: "Can you look in the logs to see the error that the developer got?", expect_any: [developer]}
+- {from: 2717, input: "Why is screen capture not working?", expect_any: [developer, systems]}
+- {from: 356, input: "Tell me about the uncommitted changes.", expect_any: [developer]}
+- {from: 718, input: "Give me a list of the current branches.", expect_any: [developer]}
+- {from: 1433, input: "Can you kill that call to Kimi for me?", expect_any: [developer]}
+- {from: 1865, input: "Check progress every thirty seconds.", expect_any: [scheduler, developer]}
+- {from: 346, input: "Can you open a sidecar?", or_tool: ui_control, expect_any: [developer]}
+- {from: 2657, input: "Show me the memory graph.", expect_any: [librarian]}
+- {from: 2394, input: "Why is your voice not coming through Bluetooth?", expect_any: [systems]}
+- from: 3478
+  input: "No. You do that for me."
+  prior:
+    - {role: user, content: "Check which model keys are actually loaded."}
+    - {role: assistant, content: "To see which credentials are actually loaded, run this command and copy the output back."}
+  expect_any: [developer, systems]
+- {from: 3461, input: "Give me a rundown of your capabilities.", capability_question: true}
+# Explicit ask: Larry's wording from user turn 764; the prior context is synthetic.
+- {explicit_ask: true, input: "Give me the command to do that.", prior: [{role: user, content: "How do I see which Python version this Mac has?"}, {role: assistant, content: "One moment while I check."}]}
+- {control: true, input: "What's the weather in Alpharetta?", expect_any: [analyst]}

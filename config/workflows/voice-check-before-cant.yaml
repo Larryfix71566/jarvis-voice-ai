@@ -1,0 +1,22 @@
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 1 (D1-D4). Voice agent only: `agents: [supervisor]`
+# keeps it out of every specialist run. triggers.user patterns are pinned by
+# tests/fixtures/voice_failures.yaml -- edit only with the fixture test green.
+name: voice-check-before-cant
+when: Larry asks whether Mortimer can do, see, reach, or access something, or pushes back after a refusal
+agents:
+- supervisor
+priority: 20
+triggers:
+  user:
+  - '\b(can you(?: not)?|could you|are you (?:not )?able|do you have (?:access|a way|the ability)|you (?:should|already) (?:be able|have)|why (?:can''t|can you not|won''t|couldn''t|didn''t) you|is there (?:a|any) way|find another way|look it up|see my|my location|where am i|access to)\b'
+  result:
+  - missing_tool
+  - limitation
+  reply:
+  - refusal
+steps:
+- A specialist's abilities are yours. Before saying you can't do, see, reach, or access something, delegate it to the specialist whose area covers it.
+- Only a specialist's own MISSING TOOL or no-tool report means the tool doesn't exist. Then say it isn't something you have a tool for yet, and offer to have it added.
+- Never say "I can't", "I don't have access", or "I don't have a tool" on your own judgment.
+done_when:
+- A specialist was asked in this conversation, or one reported that it has no tool for this request.

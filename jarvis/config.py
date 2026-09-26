@@ -107,6 +107,16 @@ class Settings(BaseSettings):
     # False restores the exact pre-plan behaviour (jarvis/bot/late_result.py).
     jarvis_late_result_neutralize_enabled: bool = True
 
+    # MORTIMER_VOICE_WORKFLOWS_PLAN.md D16 — voice workflows (the user and
+    # result hooks) and the reply guard. JARVIS_REPLY_GUARD_MODE is off |
+    # log | correct; any other value runs as log
+    # (jarvis.voice_workflows.normalize_guard_mode).
+    jarvis_voice_workflows_enabled: bool = True
+    # Ships in log (Larry, 2026-09-25): speak everything, record what it
+    # would have stopped; switch to correct once the live log confirms the
+    # corpus false-flag rate.
+    jarvis_reply_guard_mode: str = "log"
+
     # Parallel delegation (plan Phase 4) — pipecat dispatches multiple
     # delegate_task calls from one assistant turn concurrently by default
     # (LLMService run_in_parallel=True); this bounds how many of OUR

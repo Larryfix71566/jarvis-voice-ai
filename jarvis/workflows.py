@@ -71,6 +71,10 @@ class Workflow:
     done_when: list[str] = field(default_factory=list)
     agents: list[str] = field(default_factory=list)
     source: str = ""
+    # MORTIMER_VOICE_WORKFLOWS_PLAN.md D1/D4 — read only by
+    # jarvis/voice_workflows.py; the specialist matcher above ignores both.
+    triggers: dict[str, list[str]] = field(default_factory=dict)
+    priority: int = 100
 
     def as_prompt(self) -> str:
         """Render as guidance. Wording matters: this is stated as the
@@ -122,7 +126,28 @@ def parse_workflow(data: dict, source: str = "") -> Workflow | None:
         done_when=_coerce_list(data.get("done_when")),
         agents=[a.lower() for a in _coerce_list(data.get("agents"))],
         source=source,
+        triggers=_coerce_triggers(data.get("triggers")),
+        priority=_coerce_priority(data.get("priority")),
     )
+
+
+def _coerce_triggers(value) -> dict[str, list[str]]:
+    """MORTIMER_VOICE_WORKFLOWS_PLAN.md D3 — {user, result, reply} lists.
+    Unknown keys are dropped; a non-dict is treated as no triggers."""
+    if not isinstance(value, dict):
+        return {}
+    return {
+        key: _coerce_list(value.get(key))
+        for key in ("user", "result", "reply")
+        if value.get(key) is not None
+    }
+
+
+def _coerce_priority(value) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 100
 
 
 def load_workflows(directory: Path | None = None) -> list[Workflow]:

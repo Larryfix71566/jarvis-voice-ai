@@ -5,10 +5,12 @@ Locked processor order (Phase 5):
       -> VADProcessor(SileroVADAnalyzer)          # D-004: VAD is a processor in pipecat 1.4
       -> DeepgramFluxSTTService (flux-general-en) # should_interrupt=False; interruptions come from the turn-start strategy
       -> context_aggregator.user()
+      -> VoiceWorkflowInjector               # MORTIMER_VOICE_WORKFLOWS_PLAN.md D5
       -> OpenAILLMService (or GoogleLLMService / AnthropicLLMService --
          provider-routed off settings.openai_base_url, see the LLM
          service block below; MORTIMER_OPTIMIZATION_PLAN.md Phase 1 Path
          A wires AnthropicLLMService with native prompt caching on)
+      -> ReplyGuard                          # MORTIMER_VOICE_WORKFLOWS_PLAN.md D6
       -> TranscriptLogger
       -> ElevenLabsTTSService (eleven_flash_v2_5)
       -> transport.output()
@@ -52,6 +54,9 @@ from jarvis.anthropic_shim import native_base_url
 from jarvis.bot.display import WeatherReportMerger, build_display_payload
 from jarvis.bot.interruption import InterruptionNotifier
 from jarvis.bot.late_result import LateResultNeutralizer
+from jarvis.bot.sensitive_turn import is_sensitive as _voice_is_sensitive
+from jarvis.bot.voice_guidance import ReplyGuard, VoiceTurnState, VoiceWorkflowInjector
+from jarvis.voice_workflows import wrap_delegate_handler
 from jarvis.bot.memory_watcher import MemorySweepWatcher
 from jarvis.bot.plan_watcher import PlanWatcher
 from jarvis.bot.research_watcher import ResearchWatcher
@@ -188,6 +193,11 @@ class Runtime:
     # registry.stop(), because those runs call tools through this
     # session's registry and outlive the session by design.
     detached_runs: set = field(default_factory=set)
+    # MORTIMER_VOICE_WORKFLOWS_PLAN.md D5/D10 — per-session voice-workflow
+    # turn state (injector + reply guard) and the show_commands gate that
+    # the delegate result hook stamps on every NEEDS-INPUT.
+    voice_state: VoiceTurnState = field(default_factory=VoiceTurnState)
+    handoff_gate: dict = field(default_factory=dict)
     # Tier 2 (2026-08-21): the live TranscriptGate instance when the
     # speaker gate is active, else None. run_session hands it to
     # TranscriptObserver so persisted USER lines match what the LLM
@@ -502,6 +512,21 @@ def build_pipeline(
         late_delivery=runtime.late_delivery,
         in_flight=runtime.detached_runs,
     )
+    # MORTIMER_VOICE_WORKFLOWS_PLAN.md D16 — getattr with the production
+    # defaults, because tests build this pipeline from SimpleNamespace
+    # settings that predate these two fields.
+    voice_workflows_on = bool(getattr(settings, "jarvis_voice_workflows_enabled", True))
+    reply_guard_mode = getattr(settings, "jarvis_reply_guard_mode", "log")
+    # MORTIMER_VOICE_WORKFLOWS_PLAN.md D9 — the result hook. Stamps
+    # runtime.handoff_gate on NEEDS-INPUT, logs capability gaps, appends the
+    # matched voice workflow's guidance to the result the Supervisor reads.
+    delegate_handler = wrap_delegate_handler(
+        delegate_handler,
+        gate=runtime.handoff_gate,
+        session_id=runtime.session_id,
+        enabled=lambda: voice_workflows_on,
+        is_sensitive=_voice_is_sensitive,
+    )
     _, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
     _, remember_handler = build_remember_tool(runtime.session_id)
     _, cost_summary_handler = build_cost_summary_tool()
@@ -604,6 +629,7 @@ def build_pipeline(
     _, show_commands_handler = build_show_commands_tool(
         _emit_display,
         lambda: _clipboard_call("/api/clipboard/clear", post=True),
+        gate=runtime.handoff_gate,   # MORTIMER_VOICE_WORKFLOWS_PLAN.md D10
     )
     _, clear_clipboard_handler = build_clear_clipboard_tool(
         lambda: _clipboard_call("/api/clipboard/clear", post=True),
@@ -877,6 +903,35 @@ def build_pipeline(
     # above. Set here because the tools are registered before this line.
     _context_holder["user"] = aggregators.user()
 
+    # MORTIMER_VOICE_WORKFLOWS_PLAN.md D5/D6 — the user hook and the reply
+    # guard. The correction note uses the same silent-append channel as
+    # inject_late_result, including its in-flight deferral: a context push
+    # mid-delegation makes the model answer around a hole (2026-09-05).
+    async def _reply_guard_correction(note_text: str) -> None:
+        message = {"role": "user", "content": note_text}
+        runtime.voice_state.notes.append(message)
+        aggregators.user().add_messages([message])
+        if foreground_delegation_count():
+            _logger.info("reply_guard_correction_deferred_inflight delegations=%d",
+                         foreground_delegation_count())
+            return
+        await aggregators.user().push_context_frame()
+
+    voice_injector = VoiceWorkflowInjector(
+        runtime.voice_state,
+        inject_enabled=voice_workflows_on,
+        gate=runtime.handoff_gate,   # D-L5: an explicit ask opens show_commands
+    )
+    reply_guard = ReplyGuard(
+        runtime.voice_state,
+        mode=reply_guard_mode,
+        on_correct=_reply_guard_correction,
+        session_id=runtime.session_id,
+        is_sensitive=_voice_is_sensitive,
+    )
+    _logger.info("voice_workflows enabled=%s reply_guard=%s",
+                 voice_workflows_on, reply_guard.mode)
+
     # F3 — now that `aggregators` exists, finish constructing the gate:
     # its honest-drop note appends to the SAME shared context
     # inject_silent (below, in run_session) uses — a plain
@@ -925,7 +980,9 @@ def build_pipeline(
         pipeline_steps.append(speaker_transcript_gate)
     pipeline_steps.extend([
         aggregators.user(),
+        voice_injector,
         llm,
+        reply_guard,
         transcript,
         tts,
         transport.output(),

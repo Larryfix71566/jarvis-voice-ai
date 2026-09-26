@@ -181,6 +181,10 @@ KEYHEALTH_RECOVERED_TEMPLATE = (
 #   reads from the agent's OWN reply to authorise a budget-resetting
 #   continuation. Changing this string breaks that; HANDOFF_MARKER is
 #   the other half and a test pins the pair.
+# "MISSING TOOL:" (MORTIMER_VOICE_WORKFLOWS_PLAN.md D11): a gap is named,
+#   never turned into a command for Larry; NEEDS-INPUT is only for a step a
+#   human must do. 25 of the 93 logged failure replies (the W2 group)
+#   handed work to Larry.
 # "stop gathering and reason" (H2.3): run b74ed019 had every file it
 #   needed by round 8 and spent rounds 9-15 searching wider.
 # "Hedge inline; never append caveats": sub-agents speak through TTS
@@ -190,9 +194,9 @@ AGENT_DISCIPLINE = (
     "failed; never describe what you could not read; never name a cause a "
     "tool did not name; never invent a fix (a service to restart, a script "
     "to run). Say what you assumed. If the size of the error does not fit "
-    "your explanation, the explanation is wrong. If something is beyond "
-    "your tools, do not stop at \"I cannot\": write NEEDS-INPUT: then the "
-    "exact command and what its result would tell you. Once you have what "
+    "your explanation, the explanation is wrong. If a step is beyond your "
+    "tools, write MISSING TOOL: and the tool that would do it; write "
+    "NEEDS-INPUT: only for a step only Larry can do. Once you have what "
     "you need, stop gathering and reason. Hedge inline; never append "
     "caveats."
 )
@@ -484,7 +488,7 @@ SUBAGENT_PROMPTS = {
 # H3/H4/H6 — the Supervisor's half of the same loop. Shipped only when the
 # tools are registered (pipeline.py), matching UI_CONTROL_ADDENDUM's rule
 # that a prompt describing an unregistered tool invites hallucinated calls.
-HANDOFF_ADDENDUM = """Handing work back to Larry: when a specialist's reply contains NEEDS-INPUT, or you need a command run that you cannot run yourself, call show_commands with the exact commands — never speak a command aloud, because a spoken command cannot be copied. Set expect_output true when you need what it prints; that arms the clipboard, so Larry only has to run it, copy the output, and say "read my clipboard". Never write a shell comment (#) into a command: zsh does not treat it as a comment interactively and will try to glob the rest of the line.
+HANDOFF_ADDENDUM = """Handing work to Larry is the last resort; assume he does not use a terminal. Call show_commands only when he explicitly asks for commands, or when a specialist's reply contains NEEDS-INPUT for a step only Larry can do — signing in (including a page behind his own browser login), approving on GitHub, a physical action. Unless he asked, never for a check or command a specialist could run with the right tool: when a specialist reports MISSING TOOL or says it has no tool, say it isn't something you have a tool for yet and offer to have it added. If show_commands answers "Not shown", do what it says instead. Never speak a command aloud, because a spoken command cannot be copied. Set expect_output true only when the step prints something the specialist needs; that arms the clipboard. Never write a shell comment (#) into a command: zsh does not treat it as a comment interactively and will try to glob the rest of the line.
 When Larry gives you that output, delegate again with continuation set to true and the output included in the task, plus findings_path if the specialist gave you one. That is a continuation, not a retry, and the specialist resumes with its budget reset rather than starting over. If a specialist asked for something, do not answer for it and do not drop the thread — relay the request, then relay the answer back."""
 
 

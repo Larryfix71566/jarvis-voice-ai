@@ -1,0 +1,19 @@
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 1 (D1-D4). Voice agent only: `agents: [supervisor]`
+# keeps it out of every specialist run. triggers.user patterns are pinned by
+# tests/fixtures/voice_failures.yaml -- edit only with the fixture test green.
+name: voice-explain-failure
+when: a delegated task failed, or Larry asks why something failed or what went wrong
+agents:
+- supervisor
+priority: 30
+triggers:
+  user:
+  - \b(why (?:did|didn't|does|doesn't|is|isn't|was|wasn't|won't|can't)|what (?:happened|went wrong|failed|error)|fail(?:ed|ing|ure)?|error|broken|not working|stuck|logs?\b|investigate|look into|diagnos)
+  result:
+  - failed
+steps:
+- Say what failed and the reason the result gave, in one or two sentences, without naming a specialist.
+- 'If the result gave no reason, or Larry asks why, delegate to developer: read the run log for the most recent run of that task and report the failing tool call and its exact error.'
+- Never guess a cause, and never ask Larry to describe an error the run log already holds.
+done_when:
+- The reply names the failing step and its logged error, or says the run log recorded no reason.

@@ -272,8 +272,10 @@ class TestAgentDiscipline:
         from jarvis.prompts import AGENT_DISCIPLINE as R
 
         assert HANDOFF_MARKER in R
-        assert 'do not stop at "I cannot"' in R
-        assert "exact command" in R
+        # MORTIMER_VOICE_WORKFLOWS_PLAN.md D11 — a missing tool is named,
+        # not handed to Larry as a command.
+        assert "MISSING TOOL:" in R
+        assert "only for a step only Larry can do" in R
 
     def test_search_discipline_survived(self):
         """H2.3 — run b74ed019 had every file it needed by round 8 and
@@ -300,6 +302,15 @@ class TestHandoffAddendum:
         from jarvis.prompts import HANDOFF_ADDENDUM
 
         assert "zsh" in HANDOFF_ADDENDUM
+
+    def test_addendum_allows_an_explicit_ask(self):
+        """D-L5 (Larry, 2026-09-25): commands when he explicitly asks, or
+        for a NEEDS-INPUT step only he can do; never assume a terminal."""
+        from jarvis.prompts import HANDOFF_ADDENDUM
+
+        assert "assume he does not use a terminal" in HANDOFF_ADDENDUM
+        assert "only when he explicitly asks for commands" in HANDOFF_ADDENDUM
+        assert "NEEDS-INPUT for a step only Larry can do" in HANDOFF_ADDENDUM
 
     def test_the_addendum_explains_continuation(self):
         from jarvis.prompts import HANDOFF_ADDENDUM

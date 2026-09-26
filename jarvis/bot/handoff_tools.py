@@ -34,6 +34,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+import time
 from typing import Any, Awaitable, Callable
 
 logger = logging.getLogger(__name__)
@@ -45,11 +47,86 @@ PREVIEW_CHARS = 60
 
 MAX_COMMANDS = 10
 
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md D10 — show_commands is the LAST resort.
+# With a gate dict supplied (pipeline.py passes runtime.handoff_gate, which
+# jarvis.voice_workflows.wrap_delegate_handler stamps on every NEEDS-INPUT
+# result), a command reaches Larry only when (1) it does not delete or
+# discard work, and (2) either Larry explicitly asked for a command in the
+# last NEEDS_INPUT_WINDOW_S seconds (D-L5, Larry 2026-09-25; the voice
+# injector stamps `explicit_ask_at`), or a specialist wrote NEEDS-INPUT in
+# that window and it is not a read-only check a specialist should have run.
+# Order matters: destructive is refused even when asked or with a
+# NEEDS-INPUT, so the unsafe-advice case (turn 737, `git reset --hard
+# HEAD`) can never be shown. gate=None keeps the exact pre-plan behaviour
+# (tests, CLI).
+NEEDS_INPUT_WINDOW_S = 600.0
+DESTRUCTIVE_COMMAND_RE = re.compile(
+    r"(?:\bgit\s+reset\s+--hard\b"
+    r"|\bgit\s+clean\s+-\w*f"
+    r"|\bgit\s+checkout\s+--\s"
+    r"|\bgit\s+checkout\s+\.(?:\s|$)"
+    r"|\bgit\s+restore\b(?![^\n]*--staged)"
+    r"|\bgit\s+push\b[^\n]*(?:--force\b|--force-with-lease\b|\s-f\b)"
+    r"|\bgit\s+branch\s+-D\b"
+    r"|\brm\s"
+    r"|\bsudo\b"
+    r"|\bdd\s+if="
+    r"|\bmkfs"
+    r"|\bkill\s+-9\b"
+    r"|\bkillall\b"
+    r"|\bpkill\b)",
+    re.I,
+)
+READ_ONLY_COMMAND_RE = re.compile(
+    r"^\s*(?:curl|wget|cat|less|head|tail|grep|rg|find|ls|ps|lsof|which|echo"
+    r"|env|printenv|pwd|ping|dig|nslookup|netstat|sw_vers|system_profiler|open"
+    r"|git\s+(?:status|log|diff|branch|show|remote|rev-parse))\b",
+    re.I,
+)
+REFUSED_DESTRUCTIVE = (
+    "Not shown. That command deletes or discards work. Never suggest it; "
+    "ask the developer for a safe way instead."
+)
+REFUSED_NO_NEEDS_INPUT = (
+    "Not shown. Commands go to Larry only when he explicitly asked for "
+    "them, or when a specialist wrote NEEDS-INPUT for a step only he can "
+    "do. Give this step to the "
+    "specialist that can do it, or say it isn't something you have a tool "
+    "for yet and offer to have it added."
+)
+REFUSED_READ_ONLY = (
+    "Not shown. That is a read-only check a specialist should run. Say it "
+    "isn't something you have a tool for yet and offer to have it added."
+)
+
+
+def command_gate_refusal(
+    commands: list[str], gate: dict | None, now: float | None = None,
+) -> str | None:
+    """D10 — the refusal text for show_commands, or None to allow."""
+    if gate is None:
+        return None
+    if any(DESTRUCTIVE_COMMAND_RE.search(c) for c in commands):
+        return REFUSED_DESTRUCTIVE
+    now = time.monotonic() if now is None else now
+    asked = gate.get("explicit_ask_at")
+    if asked is not None and now - asked <= NEEDS_INPUT_WINDOW_S:
+        return None                      # D-L5: he asked for it
+    stamped = gate.get("needs_input_at")
+    if stamped is None or now - stamped > NEEDS_INPUT_WINDOW_S:
+        return REFUSED_NO_NEEDS_INPUT
+    if any(READ_ONLY_COMMAND_RE.search(c) for c in commands):
+        return REFUSED_READ_ONLY
+    return None
+
 SHOW_COMMANDS_SCHEMA = {
     "type": "function",
     "function": {
         "name": "show_commands",
         "description": (
+            "LAST RESORT (MORTIMER_VOICE_WORKFLOWS_PLAN.md D10): only when "
+            "the user explicitly asked for a command, or for a step a "
+            "specialist marked NEEDS-INPUT that only the user can do. "
             "Put one or more commands the USER must run themselves into the "
             "display window, where they can be read and copied. Use this "
             "instead of speaking a command aloud — a spoken command cannot "
@@ -122,6 +199,7 @@ def build_show_commands_tool(
     arm_clipboard: Callable[[], dict],
     *,
     hint_state: dict | None = None,
+    gate: dict | None = None,
 ) -> tuple[dict, Callable[[dict], Any]]:
     """H3 — commands go to the display window, never to spoken text.
 
@@ -139,6 +217,11 @@ def build_show_commands_tool(
         commands = [str(c).strip() for c in raw if str(c).strip()][:MAX_COMMANDS]
         if not commands:
             return "I had no command to show."
+        refusal = command_gate_refusal(commands, gate)
+        if refusal is not None:
+            logger.info("show_commands_refused title=%s reason=%s", title,
+                        refusal.split(".")[1].strip()[:40])
+            return refusal
         note = str(arguments.get("note", "")).strip()
         expect_output = bool(arguments.get("expect_output"))
 
