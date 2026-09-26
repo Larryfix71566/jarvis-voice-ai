@@ -498,3 +498,94 @@ def test_memory_usage_reports_the_rate_pair(conn):
     assert usage["restated_7d"] == 1
     assert usage["sessions_7d"] == 1
 
+
+
+# --------------- D-L7 (Larry, 2026-09-25): the Spartanburg loop
+
+from jarvis.memory_extraction import (  # noqa: E402
+    EXCHANGE_EXTRACTION_PROMPT,
+    echoes_reply,
+    extractor_rejection,
+)
+
+# The logged shape (turn 2403): the user only said hello; Mortimer's
+# greeting read the location out of memory.
+GREETING_USER = "Hello?"
+GREETING_REPLY = "Hey Larry. It's two fifteen PM here in Spartanburg. You've got two memory items."
+
+
+class TestEchoGuard:
+    def test_greeting_location_is_an_echo(self):
+        assert echoes_reply("User is located in Spartanburg", GREETING_USER, GREETING_REPLY) is True
+
+    def test_greeting_name_is_an_echo(self):
+        assert echoes_reply("Larry", GREETING_USER, GREETING_REPLY) is True
+
+    def test_what_the_user_said_is_not_an_echo(self):
+        assert echoes_reply("Prefers short answers", "I prefer short answers.", "Got it, short answers.") is False
+
+    def test_word_forms_still_count_as_the_users(self):
+        # Logged turn 3486: "available" / "subscriptions" vs the fact's
+        # "availability" / "subscription".
+        assert echoes_reply(
+            "User prefers Mortimer to check real subscription availability rather than static startup data",
+            "Can you not check to see what's actually available through the subscriptions that you have access to?",
+            "I read from the static model list I was given at startup.",
+        ) is False
+
+    def test_a_fact_in_neither_line_is_not_an_echo(self):
+        assert echoes_reply("Enjoys hiking", "Hello?", "Hi Larry.") is False
+
+    def test_current_location_keys_are_rejected_even_when_the_user_said_it(self):
+        assert extractor_rejection(
+            "user.location.current", "Spartanburg, SC", "I'm in Spartanburg today.", "Noted.",
+        ) == "current_location"
+        assert extractor_rejection(
+            "user.location", "User is located in Spartanburg", "I'm in Spartanburg.", "Noted.",
+        ) == "current_location"
+
+    def test_durable_places_the_user_states_are_kept(self):
+        assert extractor_rejection(
+            "user.location.work", "Office is in Alpharetta", "My office is in Alpharetta.", "Noted.",
+        ) is None
+
+    def test_kill_switch(self, monkeypatch):
+        monkeypatch.setenv("JARVIS_MEMORY_ECHO_GUARD", "false")
+        assert extractor_rejection("user.location", "Spartanburg", GREETING_USER, GREETING_REPLY) is None
+
+    def test_prompt_states_both_rules(self):
+        assert "Only the USER line is evidence" in EXCHANGE_EXTRACTION_PROMPT
+        assert "Never record where the user is right now" in EXCHANGE_EXTRACTION_PROMPT
+
+
+class TestEchoGuardInExtraction:
+    async def test_greeting_echo_is_rejected_and_not_counted(self, conn):
+        # The loop itself: user.location exists, a greeting echoes it, and
+        # neither the fact nor its recurrence count may move.
+        assert admit_fact_candidate(conn, "user.name", "Larry", "s0", 1) == "inserted"
+        payload = json.dumps({"facts": [
+            {"key": "user.name", "value": "Larry"},
+            {"key": "user.location.home", "value": "User is located in Spartanburg"},
+        ], "observations": []})
+        before = conn.execute(
+            "SELECT recurrence_count FROM memories WHERE key='user.name'").fetchone()[0]
+        result = await extract_from_exchange(
+            _FakeSettings(), "s1", GREETING_USER, GREETING_REPLY, 2403,
+            client_factory=_factory(payload),
+        )
+        assert ("fact", "user.name", "rejected") in result["outcomes"]
+        assert ("fact", "user.location.home", "rejected") in result["outcomes"]
+        assert conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE key='user.location.home'").fetchone()[0] == 0
+        assert conn.execute(
+            "SELECT recurrence_count FROM memories WHERE key='user.name'").fetchone()[0] == before
+        assert _events(conn) == []
+
+    async def test_user_stated_fact_still_admitted(self, conn):
+        payload = json.dumps({"facts": [{"key": "user.location.work", "value": "Office is in Alpharetta"}],
+                              "observations": []})
+        result = await extract_from_exchange(
+            _FakeSettings(), "s1", "My office is in Alpharetta.", "Noted.", 9,
+            client_factory=_factory(payload),
+        )
+        assert ("fact", "user.location.work", "inserted") in result["outcomes"]

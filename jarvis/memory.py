@@ -241,6 +241,10 @@ Rules:
   ("I prefer short answers", "stop doing that", "always ask me first")
   is a fact with a user.style.* key — record it immediately in facts,
   not observations. Explicit statements override everything inferred.
+- Only the user's own lines are evidence. Never record something only the
+  assistant said: its greetings and summaries repeat what memory already
+  holds. Never record where the user is right now; that comes from the
+  device.
 - Observations are INFERRED behavioral tendencies: how the user phrases
   requests, what they react well or badly to, formats they pick,
   pacing, tone. Keys are "user.style.<pattern>". Observations are
