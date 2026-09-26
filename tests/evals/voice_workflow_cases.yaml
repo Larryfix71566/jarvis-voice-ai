@@ -12,7 +12,7 @@
 # proposal, so the apply command belongs on screen. `must_say` /
 # `must_not_say` also check the reply's words. A replayed `tool` message
 # gets the guidance the live result hook would append.
-# 24 cases: 18 replayed failures, 1 capability-question exemption,
+# 26 cases: 20 replayed failures, 1 capability-question exemption,
 # 1 explicit ask, 2 human-only proposal steps, 1 merge (turn 2752), 1 control.
 
 - {from: 3535, input: "Can you not check my Internet connection for a location?", require_tool: system_status}
@@ -28,7 +28,12 @@
 - {from: 356, input: "Tell me about the uncommitted changes.", expect_any: [developer]}
 - {from: 718, input: "Give me a list of the current branches.", expect_any: [developer]}
 - {from: 1433, input: "Can you kill that call to Kimi for me?", expect_any: [developer]}
-- {from: 1865, input: "Check progress every thirty seconds.", expect_any: [scheduler, developer]}
+# W12 (Phase 4, option B): asking for timed updates or a delayed check now
+# has a tool that does it; the logged replies claimed there was none (1456,
+# 1865) or claimed to wait without any way to (1344).
+- {from: 1865, input: "Check progress every thirty seconds.", require_tool: progress_updates}
+- {from: 1456, input: "Status updates to twenty seconds.", require_tool: progress_updates}
+- {from: 1344, input: "Yeah. Wait for sixty seconds then check poll again.", require_tool: follow_up, prior: [{role: assistant, content: "Still in planning. No proposals yet. Want to wait a bit longer or move on to something else?"}]}
 - {from: 346, input: "Can you open a sidecar?", or_tool: ui_control, expect_any: [developer]}
 - {from: 2657, input: "Show me the memory graph.", expect_any: [librarian]}
 - {from: 2394, input: "Why is your voice not coming through Bluetooth?", expect_any: [systems]}

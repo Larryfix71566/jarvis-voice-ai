@@ -298,9 +298,9 @@ def test_six_functions_registered(runtime, fakes):
     # the handoff loop: show a command, Larry runs it, read the output back)
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "cost_summary", "delegate_task", "list_screens", "read_clipboard",
-        "remember", "set_voice", "show_commands", "system_status", "ui_control",
-        "view_screen",
+        "clear_clipboard", "cost_summary", "delegate_task", "follow_up", "list_screens",
+        "progress_updates", "read_clipboard", "remember", "set_voice", "show_commands",
+        "system_status", "ui_control", "view_screen",
     ]
     assert llm.kwargs == {"api_key": "sk", "base_url": "http://llm", "model": "m"}
 
@@ -312,8 +312,9 @@ def test_ui_control_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
     monkeypatch.setenv("JARVIS_UI_CONTROL_ENABLED", "false")
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "cost_summary", "delegate_task", "list_screens", "read_clipboard",
-        "remember", "set_voice", "show_commands", "system_status", "view_screen",
+        "clear_clipboard", "cost_summary", "delegate_task", "follow_up", "list_screens",
+        "progress_updates", "read_clipboard", "remember", "set_voice", "show_commands",
+        "system_status", "view_screen",
     ]
 
 
@@ -326,8 +327,9 @@ def test_status_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
     monkeypatch.setenv("JARVIS_STATUS_TOOLS_ENABLED", "false")
     _, llm, aggregators, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "cost_summary", "delegate_task", "list_screens", "read_clipboard",
-        "remember", "set_voice", "show_commands", "ui_control", "view_screen",
+        "clear_clipboard", "cost_summary", "delegate_task", "follow_up", "list_screens",
+        "progress_updates", "read_clipboard", "remember", "set_voice", "show_commands",
+        "ui_control", "view_screen",
     ]
     assert STATUS_ADDENDUM not in _system_prompt_of(aggregators)
 
@@ -347,9 +349,31 @@ def test_screen_vision_kill_switch_unregisters_tools(runtime, fakes, monkeypatch
     monkeypatch.setenv("JARVIS_SCREEN_ENABLED", "false")
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "cost_summary", "delegate_task", "read_clipboard", "remember",
-        "set_voice", "show_commands", "system_status", "ui_control",
+        "clear_clipboard", "cost_summary", "delegate_task", "follow_up",
+        "progress_updates", "read_clipboard", "remember", "set_voice", "show_commands",
+        "system_status", "ui_control",
     ]
+
+
+@pytest.mark.parametrize("env, tool, addendum_name", [
+    ("JARVIS_PROGRESS_UPDATES_ENABLED", "progress_updates", "PROGRESS_ADDENDUM"),
+    ("JARVIS_FOLLOW_UPS_ENABLED", "follow_up", "FOLLOW_UP_ADDENDUM"),
+])
+def test_timing_tool_kill_switches(runtime, fakes, monkeypatch, env, tool, addendum_name):
+    """W12 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4): each timing tool is
+    registered, listed and described together, and its switch removes all
+    three."""
+    import jarvis.prompts as prompts
+
+    addendum = getattr(prompts, addendum_name)
+    monkeypatch.delenv(env, raising=False)
+    _, llm, aggregators, _ = build_pipeline(FakeTransport(), runtime)
+    assert tool in llm.functions
+    assert addendum in _system_prompt_of(aggregators)
+    monkeypatch.setenv(env, "false")
+    _, llm, aggregators, _ = build_pipeline(FakeTransport(), runtime)
+    assert tool not in llm.functions
+    assert addendum not in _system_prompt_of(aggregators)
 
 
 def _system_prompt_of(aggregators) -> str:
@@ -974,6 +998,141 @@ async def test_keyhealth_notice_kill_switch(monkeypatch, tmp_path, env_value, ex
         assert constructed == [True], "KeyHealthNotice must be constructed when the switch is on"
     else:
         assert constructed == [], "KeyHealthNotice must not be constructed when the switch is off"
+
+
+@pytest.mark.asyncio
+async def test_timing_tools_are_bound_for_the_session_and_released_at_teardown(
+        monkeypatch, tmp_path):
+    """W12: build_pipeline registers progress_updates and follow_up before
+    the things they drive exist; run_session binds the session's
+    ProgressWatcher and FollowUps into runtime.timing, delivers follow-ups
+    through inject_late_result, and clears and stops both at teardown.
+    Same disconnect scaffold as test_keyhealth_notice_kill_switch."""
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "session.db"))
+    monkeypatch.delenv("JARVIS_PROGRESS_UPDATES_ENABLED", raising=False)
+    monkeypatch.delenv("JARVIS_FOLLOW_UPS_ENABLED", raising=False)
+    settings = SimpleNamespace(
+        deepgram_api_key="dg", openai_api_key="sk", openai_base_url="http://llm",
+        openai_model="m", elevenlabs_api_key="el", jarvis_name="Jarvis",
+        jarvis_user_name="Boss", jarvis_timezone="America/New_York",
+        jarvis_units="imperial",
+        jarvis_interruption_notice_enabled=True,
+        jarvis_late_result_neutralize_enabled=True,
+        jarvis_memory_sweep_interval_s=300.0,
+    )
+    seen: dict = {}
+
+    class FakeTask:
+        def __init__(self, pipeline, observers=None, params=None):
+            self._ended = asyncio.Event()
+
+        async def cancel(self):
+            self._ended.set()
+
+        async def wait_ended(self):
+            await self._ended.wait()
+
+        def event_handler(self, name):
+            def register(fn):
+                return fn
+            return register
+
+    class FakeRunner:
+        async def run(self, task):
+            await task.wait_ended()
+
+    class Quiet:
+        def __init__(self, *a, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        async def stop(self):
+            pass
+
+    class FakeProgressWatcher(Quiet):
+        stopped = False
+
+        async def stop(self):
+            FakeProgressWatcher.stopped = True
+
+    class FakeFollowUps:
+        stopped = False
+
+        def __init__(self, deliver, is_speaking):
+            seen["deliver"] = deliver
+            seen["is_speaking"] = is_speaking
+
+        async def stop(self):
+            FakeFollowUps.stopped = True
+
+    class FakeRegistry(Quiet):
+        async def start(self):
+            pass
+
+    class FakePusher:
+        def bind(self, task):
+            pass
+
+    class FakeAggregators:
+        def user(self):
+            return SimpleNamespace()
+
+        def assistant(self):
+            return SimpleNamespace()
+
+    async def fake_fold(settings_arg, session_id, **kwargs):
+        return True
+
+    def fake_build(transport, runtime):
+        seen["runtime"] = runtime
+        return FakePipeline([]), FakeLLM("k", "u", "m"), FakeAggregators(), FakePusher()
+
+    monkeypatch.setattr(bp, "load_settings", lambda: settings)
+    monkeypatch.setattr(bp, "bridge_settings_to_env", lambda s: None)
+    monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    monkeypatch.setenv("JARVIS_REGISTRY_SHARED_ENABLED", "false")
+    monkeypatch.setattr(
+        bp, "load_voice_catalog",
+        lambda: {"default": "rachel",
+                 "voices": [{"id": "rachel", "label": "Rachel",
+                             "elevenlabs_voice_id": "vid"}]},
+    )
+    monkeypatch.setattr(bp, "build_pipeline", fake_build)
+    monkeypatch.setattr(bp, "PipelineTask", FakeTask)
+    monkeypatch.setattr(bp, "PipelineRunner", FakeRunner)
+    monkeypatch.setattr(bp, "RemindersWatcher", Quiet)
+    monkeypatch.setattr(bp, "MemorySweepWatcher", Quiet)
+    monkeypatch.setattr(bp, "KeyHealthNotice", Quiet)
+    monkeypatch.setattr(bp, "ProgressWatcher", FakeProgressWatcher)
+    monkeypatch.setattr(bp, "FollowUps", FakeFollowUps)
+    monkeypatch.setattr(bp, "update_memory_from_session", fake_fold)
+
+    transport = HandlerCapturingTransport()
+
+    async def fire_disconnect():
+        for _ in range(500):
+            if "on_client_disconnected" in transport.handlers:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            raise AssertionError("on_client_disconnected was never registered")
+        timing = seen["runtime"].timing
+        seen["during"] = {k: type(v).__name__ for k, v in timing.items()}
+        await transport.handlers["on_client_disconnected"](transport, None)
+
+    await asyncio.wait_for(
+        asyncio.gather(bp.run_session(transport), fire_disconnect()), timeout=10
+    )
+
+    assert seen["during"] == {"progress": "FakeProgressWatcher", "follow_ups": "FakeFollowUps"}
+    assert seen["deliver"] is seen["runtime"].late_delivery["fn"]
+    assert seen["deliver"].__name__ == "inject_late_result"
+    assert seen["runtime"].timing == {}
+    assert FakeProgressWatcher.stopped and FakeFollowUps.stopped
 
 
 @pytest.mark.asyncio

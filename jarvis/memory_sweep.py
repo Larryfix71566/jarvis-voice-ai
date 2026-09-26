@@ -313,14 +313,18 @@ def _tier_count(conn, tier: str) -> int:
 
 def _age_out_oldest(conn, tier: str, n: int) -> list[str]:
     """Rung (c) — the mechanical backstop that holds M1's invariant even
-    with no API key. Archives the `n` oldest live facts in `tier`,
-    oldest-`updated_at`-first. Never touches identity (not a valid `tier`
-    argument from this module's own caller)."""
+    with no API key. Archives the `n` least recently seen live facts in
+    `tier`: COALESCE(last_seen_at, updated_at), oldest first. W10: a fact
+    Larry just restored (restore_fact stamps last_seen_at) or restated in
+    other words (a near-duplicate sighting stamps it) is not the first to
+    go. Never touches identity (not a valid `tier` argument from this
+    module's own caller)."""
     if n <= 0:
         return []
     rows = conn.execute(
         "SELECT key FROM memories WHERE kind = 'fact' AND archived_at IS NULL "
-        "AND COALESCE(tier, 'project') = ? ORDER BY updated_at ASC LIMIT ?",
+        "AND COALESCE(tier, 'project') = ? "
+        "ORDER BY COALESCE(last_seen_at, updated_at) ASC, updated_at ASC LIMIT ?",
         (tier, n),
     ).fetchall()
     archived: list[str] = []
@@ -932,6 +936,338 @@ def resolve_review(
 
 
 # --------------------------------------------------------------------- #
+# W10 — settle open contradictions correct-first
+# --------------------------------------------------------------------- #
+#
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md W10 (Larry 2026-09-25, "age-aware
+# memory"): open contradiction reviews are settled by the sweep instead of
+# waiting for a spoken choice. Correct-first: a memory built from
+# Mortimer's own words loses; two memories that can both be true are both
+# kept; a real conflict keeps the newer and archives the older. Every
+# archive is reversible (memory_restore) and announced once as a notice.
+# The model only answers three yes/no questions per review; the decision
+# is made here, and anything it cannot answer is left open.
+
+AUTO_SETTLE_ENV = "JARVIS_MEMORY_AUTO_SETTLE"
+# Reviews settled per sweep: one model call covers them all.
+SETTLE_BATCH_CAP = 10
+# A fact with more recorded exchanges than this is judged on what can be
+# shown, so it can never be archived as "not stated" (see _fact_evidence).
+SETTLE_MAX_EXCHANGES = 3
+SETTLE_EXCHANGE_CHARS = 800
+NOT_STATED_PREFIX = "not-stated"
+
+SETTLE_PROMPT = """You check the long-term memory of a personal AI \
+assistant named Mortimer, belonging to a user named Larry. Each review \
+holds two remembered facts, a and b, that were flagged as possibly \
+contradicting each other. With each fact you get the conversation \
+exchange(s) it was recorded from: what Larry said and what Mortimer \
+replied.
+
+For each review answer three questions:
+- "a_stated": true if Larry himself said fact a, or plainly agreed to it, \
+in his own words in at least one of its exchanges; false if its substance \
+comes only from Mortimer's reply or is not supported by what Larry said; \
+null if no exchange is given or you cannot tell.
+- "b_stated": the same for fact b.
+- "both_hold": true if both facts can be true at the same time (they \
+cover different situations, or one narrows the other); false only if \
+following one means breaking the other.
+
+Respond with STRICT JSON only, one entry per review you were given:
+{"reviews": [{"id": <id>, "a_stated": true|false|null, "b_stated": true|false|null, "both_hold": true|false}]}
+No markdown, no commentary."""
+
+
+def auto_settle_enabled() -> bool:
+    value = os.environ.get(AUTO_SETTLE_ENV, "")
+    return value.strip().lower() not in ("false", "0", "no", "off")
+
+
+def _fact_evidence(conn, key: str) -> dict | None:
+    """The live fact plus every exchange it is known to come from, or None
+    when no live fact has this key (the review went stale).
+
+    `complete` is False unless every sighting's exchange is available:
+    source_turn keeps only the LATEST sighting and memory_recall_events
+    records updates, so a fact seen more often than it has recorded turns
+    lost its first exchange — and "Larry never said it" cannot be concluded
+    from a partial record."""
+    from jarvis.memory_extraction import source_exchange
+
+    row = conn.execute(
+        "SELECT key, content, updated_at, last_seen_at, source_turn, "
+        "COALESCE(recurrence_count, 1) AS seen FROM memories "
+        "WHERE kind = 'fact' AND key = ? AND archived_at IS NULL",
+        (key,),
+    ).fetchone()
+    if row is None:
+        return None
+    # The words must still be the exchange's own. upsert_fact clears
+    # source_turn when anything but extraction rewrites a fact; a merge
+    # from before that rule is found by what was folded into it.
+    folded_in = conn.execute(
+        "SELECT 1 FROM memories WHERE kind = 'fact' AND archived_at IS NOT NULL AND ("
+        "became IN (?, ?, ?, ?)) LIMIT 1",
+        (f"merged:{key}", f"consolidated:{key}", f"auto-consolidated:{key}",
+         f"reviewed:rewritten:{key}"),
+    ).fetchone() is not None
+    turns = {row["source_turn"]} if row["source_turn"] is not None else set()
+    turns |= {
+        r["source_turn"] for r in conn.execute(
+            "SELECT DISTINCT source_turn FROM memory_recall_events WHERE key = ? "
+            "AND outcome IN ('exact_update', 'near_duplicate') "
+            "AND source_turn IS NOT NULL", (key,),
+        )
+    }
+    exchanges = [e for e in (source_exchange(conn, t) for t in sorted(turns)) if e]
+    complete = (row["source_turn"] is not None and not folded_in
+                and bool(exchanges) and len(exchanges) == len(turns)
+                and len(turns) >= row["seen"] and len(exchanges) <= SETTLE_MAX_EXCHANGES)
+    # When Larry last said it: a restatement in other words (near-duplicate)
+    # moves last_seen_at, not updated_at.
+    said = max(v for v in (row["updated_at"], row["last_seen_at"]) if v) if (
+        row["updated_at"] or row["last_seen_at"]) else None
+    return {
+        "key": row["key"], "content": row["content"], "updated_at": row["updated_at"],
+        "said_at": said, "complete": complete,
+        "exchanges": [
+            {"larry": e["user"][:SETTLE_EXCHANGE_CHARS],
+             "mortimer": e["assistant"][:SETTLE_EXCHANGE_CHARS]}
+            for e in exchanges[-SETTLE_MAX_EXCHANGES:]
+        ],
+    }
+
+
+def _stamp(value: str | None) -> datetime | None:
+    try:
+        stamp = datetime.fromisoformat((value or "").replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
+
+
+def _parse_settlement(text: str) -> dict[int, dict]:
+    """Strict-JSON parse; an entry with a missing or malformed answer is
+    dropped, which leaves its review open. Never raises."""
+    candidate = (text or "").strip()
+    if candidate.startswith("```"):
+        candidate = candidate.strip("`")
+        if candidate.startswith("json"):
+            candidate = candidate[4:]
+    try:
+        data = json.loads(candidate)
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    out: dict[int, dict] = {}
+    for item in data.get("reviews") or []:
+        if not isinstance(item, dict):
+            continue
+        review_id = item.get("id")
+        if isinstance(review_id, bool) or not isinstance(review_id, int):
+            continue
+        a, b, both = item.get("a_stated"), item.get("b_stated"), item.get("both_hold")
+        # `1 in (True, False, None)` is True in Python: check the type.
+        if not all(v is None or isinstance(v, bool) for v in (a, b)):
+            continue
+        if not isinstance(both, bool):
+            continue
+        out[review_id] = {"a_stated": a, "b_stated": b, "both_hold": both}
+    return out
+
+
+def _settle_decision(review_id: int, a: dict, b: dict, answer: dict) -> dict | None:
+    """What correct-first does with one review, or None to leave it open.
+
+    {"outcome": "not_stated"|"both_hold"|"newer_kept", "archive": [(key, became)]}"""
+    not_stated = [
+        fact for fact, stated in ((a, answer["a_stated"]), (b, answer["b_stated"]))
+        if stated is False and fact["complete"]
+    ]
+    if not_stated:
+        return {"outcome": "not_stated",
+                "archive": [(f["key"], f"{NOT_STATED_PREFIX}:review-{review_id}")
+                            for f in not_stated]}
+    if answer["both_hold"]:
+        return {"outcome": "both_hold", "archive": []}
+    when_a, when_b = _stamp(a["said_at"]), _stamp(b["said_at"])
+    if when_a is None or when_b is None or when_a == when_b:
+        return None  # no way to tell which is newer
+    newer, older = (a, b) if when_a > when_b else (b, a)
+    return {"outcome": "newer_kept",
+            "archive": [(older["key"], f"reviewed:kept:{newer['key']}")],
+            "kept": newer["key"]}
+
+
+def _settle_notice(archived: list[tuple[str, str, str]], kept_both: int) -> str:
+    """One short notice for the next greeting; "" when nothing changed.
+
+    Always within notices.MAX_NOTICE_CHARS (add_notice cuts longer text
+    mid-word): items that do not fit become "and N more", and the restore
+    sentence is always kept."""
+    from jarvis.notices import MAX_NOTICE_CHARS
+
+    if not archived:
+        return ""
+    head = "Memory tidy-up: I archived "
+    tail = ""
+    if kept_both:
+        tail += f" {kept_both} other flagged pair{'s' if kept_both != 1 else ''} can both be true, so I kept both."
+    tail += " Any of them comes back if you ask me to restore it."
+    parts: list[str] = []
+    for i, (key, content, why) in enumerate(archived):
+        part = f"{key} (\"{content[:60]}\") — {why}"
+        rest = len(archived) - i - 1
+        more = f"; and {rest} more" if rest else ""
+        if len(head + "; ".join(parts + [part]) + more + "." + tail) > MAX_NOTICE_CHARS:
+            break
+        parts.append(part)
+    left = len(archived) - len(parts)
+    body = "; ".join(parts) if parts else f"{len(archived)} memories"
+    if parts and left:
+        body += f"; and {left} more"
+    return head + body + "." + tail
+
+
+async def settle_open_reviews(
+    conn,
+    settings: Any | None,
+    client_factory: Callable[[Any], Any] | None = None,
+) -> dict:
+    """Settle open contradiction reviews correct-first (W10). Cluster and
+    audience reviews are not touched. Never raises; a model failure leaves
+    every review open. Returns counts plus `notice`, the text to queue once
+    the caller has committed (a second connection writing while this one
+    holds the write lock is the 2026-09-16 "database is locked" failure)."""
+    result = {"settled": 0, "archived": [], "kept_both": 0, "left_open": 0,
+              "stale_closed": 0, "notice": "", "decisions": []}
+    if not auto_settle_enabled():
+        result["enabled"] = False
+        return result
+    rows = conn.execute(
+        "SELECT id, keys_json FROM memory_reviews WHERE status = 'open' "
+        "AND kind = 'contradiction' ORDER BY created_at, id LIMIT ?",
+        (SETTLE_BATCH_CAP,),
+    ).fetchall()
+    now = now_iso()
+    items: list[tuple[int, dict, dict]] = []
+    stale: list[int] = []
+    for row in rows:
+        try:
+            keys = json.loads(row["keys_json"])
+        except (json.JSONDecodeError, TypeError):
+            keys = []
+        if len(keys) != 2:
+            result["left_open"] += 1
+            continue
+        a, b = _fact_evidence(conn, keys[0]), _fact_evidence(conn, keys[1])
+        if a is None or b is None:
+            stale.append(row["id"])   # one side is gone: nothing left to conflict
+            continue
+        items.append((row["id"], a, b))
+
+    def close_stale() -> None:
+        # Written only after the model call: nothing here may hold the
+        # write lock across an await.
+        for review_id in stale:
+            conn.execute(
+                "UPDATE memory_reviews SET status = 'resolved', resolved_at = ? "
+                "WHERE id = ?", (now, review_id),
+            )
+            result["stale_closed"] += 1
+            result["decisions"].append((review_id, "closed: one side is no longer in memory", []))
+
+    if not items:
+        close_stale()
+        return result
+
+    try:
+        if settings is None:
+            from jarvis.config import load_settings
+
+            settings = load_settings()
+        if client_factory is not None:
+            client = client_factory(settings)
+            model = getattr(settings, "openai_model", None)
+        else:
+            client, route = make_memory_async_client(settings)
+            model = route.model
+        payload = {"reviews": [
+            {"id": review_id,
+             "a": {"key": a["key"], "content": a["content"], "exchanges": a["exchanges"]},
+             "b": {"key": b["key"], "content": b["content"], "exchanges": b["exchanges"]}}
+            for review_id, a, b in items
+        ]}
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": SETTLE_PROMPT},
+                {"role": "user", "content": json.dumps(payload)},
+            ],
+        )
+        try:
+            record_completion(
+                rung="memory_settle",
+                provider=provider_from_base_url(str(client.base_url)),
+                model=model,
+                response=response,
+            )
+        except Exception:  # noqa: BLE001 — accounting never blocks the sweep
+            pass
+        answers = _parse_settlement(response.choices[0].message.content or "")
+    except Exception as exc:  # noqa: BLE001 — a failed check leaves reviews open
+        logger.warning("memory_settle_failed reviews=%d error=%s", len(items), exc)
+        result["left_open"] += len(items)
+        close_stale()
+        return result
+    close_stale()
+
+    reasons = {"not_stated": "it came from my own words, not yours",
+               "newer_kept": "newer memory {kept} says otherwise"}
+    for review_id, a, b in items:
+        answer = answers.get(review_id)
+        still_live = all(
+            conn.execute("SELECT 1 FROM memories WHERE kind = 'fact' AND key = ? "
+                         "AND archived_at IS NULL", (f["key"],)).fetchone()
+            for f in (a, b))
+        if not still_live:
+            # An earlier review in this batch archived one side.
+            conn.execute(
+                "UPDATE memory_reviews SET status = 'resolved', resolved_at = ? "
+                "WHERE id = ?", (now, review_id),
+            )
+            result["stale_closed"] += 1
+            result["decisions"].append((review_id, "closed: one side already archived", []))
+            continue
+        decision = _settle_decision(review_id, a, b, answer) if answer else None
+        if decision is None:
+            result["left_open"] += 1
+            result["decisions"].append(
+                (review_id, "left open: " + ("no usable answer" if not answer else "cannot tell which is newer"), []))
+            continue
+        result["decisions"].append((review_id, decision["outcome"], [k for k, _ in decision["archive"]]))
+        contents = {a["key"]: a["content"], b["key"]: b["content"]}
+        for key, became in decision["archive"]:
+            if archive_fact(conn, key, became):
+                why = reasons[decision["outcome"]].format(kept=decision.get("kept", ""))
+                result["archived"].append((key, contents[key], why))
+        status = "dismissed" if decision["outcome"] == "both_hold" else "resolved"
+        conn.execute(
+            "UPDATE memory_reviews SET status = ?, resolved_at = ? WHERE id = ?",
+            (status, now, review_id),
+        )
+        if decision["outcome"] == "both_hold":
+            result["kept_both"] += 1
+        result["settled"] += 1
+        logger.info("memory_review_settled id=%d outcome=%s archived=%s",
+                    review_id, decision["outcome"], [k for k, _ in decision["archive"]])
+    result["notice"] = _settle_notice(result["archived"], result["kept_both"])
+    return result
+
+
+# --------------------------------------------------------------------- #
 # Entry point + background thread
 # --------------------------------------------------------------------- #
 
@@ -949,8 +1285,9 @@ async def run_sweep(
 
     summary = {
         "archived": 0, "queued": 0, "contradictions": 0, "stale_archived": 0,
-        "capacity_enforced": 0, "staging_expired": 0,
+        "capacity_enforced": 0, "staging_expired": 0, "settled": 0,
     }
+    settle_notice = ""
     try:
         conn = get_conn(db_path)
         try:
@@ -991,6 +1328,17 @@ async def run_sweep(
                     applied["task_rule_queued"] + applied["implemented_queued"]
                 )
 
+            # W10: settle open contradictions (including any queued just
+            # above) correct-first. Commit first: settle awaits a model
+            # call, and a write lock held across it blocks the extractor,
+            # the greeting's notices and the transcript (the 2026-09-16
+            # "database is locked" failure).
+            conn.commit()
+            settled = await settle_open_reviews(conn, settings, client_factory)
+            summary["settled"] = settled["settled"]
+            summary["archived"] += len(settled["archived"])
+            settle_notice = settled["notice"]
+
             stale = run_stale_sweep(conn)
             summary["stale_archived"] = len(stale)
 
@@ -1004,12 +1352,18 @@ async def run_sweep(
         logger.exception("memory_sweep_failed")
         return summary
 
+    if settle_notice:
+        # After commit and close: the notice outbox opens its own
+        # connection, which must not wait on this sweep's write lock.
+        from jarvis import notices
+
+        notices.add_notice("memory_review", "memory_sweep", settle_notice)
     logger.info(
         "memory_sweep archived=%d queued=%d contradictions=%d "
-        "stale_archived=%d capacity_enforced=%d staging_expired=%d",
+        "stale_archived=%d capacity_enforced=%d staging_expired=%d settled=%d",
         summary["archived"], summary["queued"], summary["contradictions"],
         summary["stale_archived"], summary["capacity_enforced"],
-        summary["staging_expired"],
+        summary["staging_expired"], summary["settled"],
     )
     return summary
 
@@ -1076,6 +1430,34 @@ async def _run_enforce_cli() -> dict:
     return report
 
 
+async def _run_settle_preview(db_path: str) -> dict:
+    """`python -m jarvis.memory_sweep --settle-preview COPY.db` — W10's
+    correct-first check on a COPY of the database, printed and rolled back.
+    Refuses the live database: the preview holds a write transaction
+    across the model call, which the running bot must never wait on."""
+    from pathlib import Path
+
+    from jarvis.db import _default_db_path
+
+    if Path(db_path).resolve() == _default_db_path().resolve():
+        raise SystemExit("refusing the live database: copy it first, e.g. "
+                         "cp data/jarvis.db /tmp/settle-preview.db")
+    conn = get_conn(db_path)
+    try:
+        result = await settle_open_reviews(conn, None)
+    finally:
+        conn.rollback()
+        conn.close()
+    print("Memory settle preview (nothing was written):\n")
+    for review_id, outcome, archived in result["decisions"]:
+        print(f"  review {review_id}: {outcome}" + (f" -> archive {', '.join(archived)}" if archived else ""))
+    print(f"\nsettled {result['settled']}, kept both {result['kept_both']}, "
+          f"left open {result['left_open']}, closed as stale {result['stale_closed']}")
+    if result["notice"]:
+        print(f"\nnotice: {result['notice']}")
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
@@ -1085,8 +1467,16 @@ def main(argv: list[str] | None = None) -> int:
         help="run the full per-tier capacity enforcement ladder now, "
              "ignoring the per-boot archive cap (M5)",
     )
+    p.add_argument(
+        "--settle-preview", metavar="COPY_DB",
+        help="W10: show what the correct-first settle would do to the open "
+             "contradiction reviews in a COPY of the database; writes nothing",
+    )
     args = p.parse_args(argv)
 
+    if args.settle_preview:
+        asyncio.run(_run_settle_preview(args.settle_preview))
+        return 0
     if args.enforce:
         asyncio.run(_run_enforce_cli())
         return 0

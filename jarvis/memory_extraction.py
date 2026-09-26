@@ -162,6 +162,44 @@ def _stems(text: str) -> set[str]:
     return {t[:ECHO_STEM_CHARS] for t in _tokens(text)}
 
 
+def source_exchange(conn, assistant_turn_id: int | None) -> dict | None:
+    """The exchange a fact was extracted from, as the worker paired it.
+
+    `source_turn` on a fact (and on a memory_recall_events row) is the id
+    of the ASSISTANT row that closed the exchange (memory_extraction_worker
+    passes row["id"] of the assistant turn). Its user half is the latest
+    user row of the same session before it, provided no other assistant
+    row came in between (that reply would have consumed it). Returns
+    {"session_id", "user_turn", "assistant_turn", "user", "assistant"}, or
+    None when the turn is missing, is not an assistant row, or has no user
+    half. Read-only; used by the W10 settle check and the D1 replay."""
+    if assistant_turn_id is None:
+        return None
+    reply = conn.execute(
+        "SELECT id, session_id, role, content FROM conversations WHERE id = ?",
+        (int(assistant_turn_id),),
+    ).fetchone()
+    if reply is None or reply["role"] != "assistant":
+        return None
+    user = conn.execute(
+        "SELECT id, content FROM conversations WHERE session_id = ? AND id < ? "
+        "AND role = 'user' ORDER BY id DESC LIMIT 1",
+        (reply["session_id"], reply["id"]),
+    ).fetchone()
+    if user is None:
+        return None
+    between = conn.execute(
+        "SELECT 1 FROM conversations WHERE session_id = ? AND id > ? AND id < ? "
+        "AND role = 'assistant' LIMIT 1",
+        (reply["session_id"], user["id"], reply["id"]),
+    ).fetchone()
+    if between is not None:
+        return None
+    return {"session_id": reply["session_id"], "user_turn": user["id"],
+            "assistant_turn": reply["id"], "user": user["content"],
+            "assistant": reply["content"]}
+
+
 def echoes_reply(value: str, user_content: str, assistant_content: str) -> bool:
     """D-L7 — True when the fact's words come from Mortimer, not the user."""
     words = _stems(value)
@@ -372,6 +410,49 @@ def admit_observation_candidate(conn, key: str, value: str, session_id: str | No
     return "inserted"
 
 
+async def extract_candidates(
+    settings: Settings,
+    session_id: str,
+    user_content: str,
+    assistant_content: str,
+    client_factory: Callable[[Settings], Any] | None = None,
+) -> dict | None:
+    """The model half of extract_from_exchange: the candidates one
+    exchange yields, or None when the reply is unparseable. Writes nothing
+    to memory. Raises on a failed model call (the caller decides). Split
+    out for scripts/replay_extraction.py (MORTIMER_VOICE_WORKFLOWS_PLAN.md
+    D1), which must decide the writes itself."""
+    exchange_text = (
+        f"USER: {user_content}\n"
+        f"MORTIMER: {assistant_content}"
+    )
+    if client_factory is not None:
+        # Test seam only; production uses JARVIS_MEMORY_PROFILE.
+        client = client_factory(settings)
+        model = settings.openai_model
+    else:
+        client, route = make_memory_async_client(settings)
+        model = route.model
+    response = await client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": EXCHANGE_EXTRACTION_PROMPT},
+            {"role": "user", "content": exchange_text},
+        ],
+    )
+    try:
+        record_completion(
+            rung="memory_extraction",
+            provider=provider_from_base_url(str(client.base_url)),
+            model=model,
+            response=response,
+            session_id=session_id,
+        )
+    except Exception:
+        pass
+    return _parse_candidates(response.choices[0].message.content or "")
+
+
 async def extract_from_exchange(
     settings: Settings,
     session_id: str,
@@ -392,36 +473,8 @@ async def extract_from_exchange(
     try:
         user_content = (user_content or "")[:MAX_ROW_CHARS]
         assistant_content = (assistant_content or "")[:MAX_ROW_CHARS]
-        exchange_text = (
-            f"USER: {user_content}\n"
-            f"MORTIMER: {assistant_content}"
-        )
-        if client_factory is not None:
-            # Test seam only; production uses JARVIS_MEMORY_PROFILE.
-            client = client_factory(settings)
-            model = settings.openai_model
-        else:
-            client, route = make_memory_async_client(settings)
-            model = route.model
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": EXCHANGE_EXTRACTION_PROMPT},
-                {"role": "user", "content": exchange_text},
-            ],
-        )
-        try:
-            record_completion(
-                rung="memory_extraction",
-                provider=provider_from_base_url(str(client.base_url)),
-                model=model,
-                response=response,
-                session_id=session_id,
-            )
-        except Exception:
-            pass
-
-        parsed = _parse_candidates(response.choices[0].message.content or "")
+        parsed = await extract_candidates(
+            settings, session_id, user_content, assistant_content, client_factory)
         if parsed is None:
             logger.warning(
                 "memory_extraction_unparseable session=%s source_turn=%s",

@@ -315,7 +315,8 @@ def app_build_start(
             "summary": (
                 f"Ready to build in '{app}'{seeded}: “{goal}”. This runs in "
                 "the background and can take a while; I can check progress "
-                "anytime. Say yes to start."
+                "anytime. Say yes to start — that yes also covers opening the "
+                "draft pull request once validation passes; merging stays with you."
             ),
             "app": app, "goal": goal, "profile": profile or None,
         }
@@ -379,15 +380,21 @@ def app_build_status(client) -> dict:
         if not proposals:
             parts.append("The saved app workspace is open with no proposed edits yet.")
         if status.get("validated_ok"):
-            parts.append("Validation has passed — say the word and I'll submit the pull request.")
+            parts.append("Validation has passed — the draft pull request is next.")
     elif not parts:
         parts.append("No app-build run or session is active right now.")
     return {"ok": True, "summary": " ".join(parts), "job": job, "active": bool(status.get("active"))}
 
 
 def app_build_submit(client, confirm: bool = False) -> dict:
-    """Two-phase PR submission for the active app-build session, same
-    convention as mcp_selfedit.logic.selfedit_submit."""
+    """Open the draft pull request for the active app-build session.
+
+    W9 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4, Larry 2026-09-25: "one
+    approval at app_build_start covers through the draft PR"): no second
+    yes. It still refuses until validation has passed, and the PR is a
+    draft that only Larry merges. `confirm` is accepted and ignored, so an
+    older caller that still passes it keeps working."""
+    del confirm
     try:
         status_resp = client.get("/api/appbuild/job")
     except Exception as exc:  # noqa: BLE001
@@ -403,17 +410,6 @@ def app_build_submit(client, confirm: bool = False) -> dict:
         return _err("no edits have been proposed yet.")
     if not sess.get("validated_ok"):
         return _err("validation hasn't passed — the build agent must validate before this can be called.")
-    if not confirm:
-        files = ", ".join(p["path"] for p in sess["proposals"])
-        return {
-            "ok": True,
-            "needs_confirmation": True,
-            "summary": (
-                f"Ready to open a pull request with these edits: {files}. "
-                "I cannot merge it — merging always stays with you on GitHub. "
-                "Say ‘submit the PR’ to proceed."
-            ),
-        }
     try:
         resp = client.post("/api/appbuild/submit")
     except Exception as exc:  # noqa: BLE001

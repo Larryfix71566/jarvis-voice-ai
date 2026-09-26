@@ -62,6 +62,13 @@ from jarvis.bot.memory_watcher import MemorySweepWatcher
 from jarvis.bot.plan_watcher import PlanWatcher
 from jarvis.bot.research_watcher import ResearchWatcher
 from jarvis.bot.progress_watcher import ProgressWatcher, SpeakingStateTracker
+from jarvis.bot.follow_up import (
+    FollowUps,
+    build_follow_up_tool,
+    build_progress_updates_tool,
+    follow_ups_enabled,
+    progress_updates_enabled,
+)
 from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.remember_tool import build_remember_tool
 from jarvis.bot.costs_tool import build_cost_summary_tool
@@ -238,6 +245,12 @@ class Runtime:
     # the delegate result hook stamps on every NEEDS-INPUT.
     voice_state: VoiceTurnState = field(default_factory=VoiceTurnState)
     handoff_gate: dict = field(default_factory=dict)
+    # W12 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4): the progress_updates
+    # and follow_up tools are registered in build_pipeline, but what they
+    # drive — the ProgressWatcher ("progress") and the session's FollowUps
+    # ("follow_ups") — can only exist in run_session. Same late binding as
+    # late_delivery above.
+    timing: dict = field(default_factory=dict)
     # Tier 2 (2026-08-21): the live TranscriptGate instance when the
     # speaker gate is active, else None. run_session hands it to
     # TranscriptObserver so persisted USER lines match what the LLM
@@ -615,6 +628,12 @@ def build_pipeline(
         return summarize_location(result)
 
     _, system_status_handler = build_system_status_tool(location=_location_answer)
+    # W12 — both read their kill switch once, here, and pass it to the menu,
+    # the prompt and registration, so the three cannot disagree.
+    progress_enabled = progress_updates_enabled()
+    follow_up_enabled = follow_ups_enabled()
+    _, progress_updates_handler = build_progress_updates_tool(runtime.timing)
+    _, follow_up_handler = build_follow_up_tool(runtime.timing)
 
     # MORTIMER_VOICE_UI_PLAN.md U1/U6 — voice control of the console's UI
     # chrome. Kill switch read here, at the single registration site (same
@@ -760,6 +779,8 @@ def build_pipeline(
         # H3/H6 — show_commands is always registered; the clipboard half
         # of the addendum only makes sense when its tools are.
         clipboard=clipboard_enabled,
+        progress=progress_enabled,
+        follow_up=follow_up_enabled,
     )
 
     # Phase 4 Rev 3.4 Stage A2 — see memory_stats above. Logged with the
@@ -883,6 +904,10 @@ def build_pipeline(
     if clipboard_enabled:
         register_supervisor_tool(llm, "clear_clipboard", clear_clipboard_handler)
         register_supervisor_tool(llm, "read_clipboard", read_clipboard_handler)
+    if progress_enabled:
+        register_supervisor_tool(llm, "progress_updates", progress_updates_handler)
+    if follow_up_enabled:
+        register_supervisor_tool(llm, "follow_up", follow_up_handler)
     tts = ElevenLabsTTSService(
         api_key=settings.elevenlabs_api_key,
         settings=ElevenLabsTTSSettings(
@@ -926,6 +951,8 @@ def build_pipeline(
             command_console=command_console_enabled,
             shared_content=shared_content_enabled,
             status=status_enabled,
+            progress=progress_enabled,
+            follow_up=follow_up_enabled,
         )
     ]
     context = LLMContext(
@@ -1507,6 +1534,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
         # initiative, exactly like a due reminder — once (S6-S8).
         runtime.late_delivery["fn"] = inject_late_result
 
+        # W12 — one-shot follow-ups come due through the same channel as a
+        # late result: deferred while a delegation is in flight, neutralized
+        # once relayed, refused (False) once the session is tearing down.
+        follow_ups = None
+        if follow_ups_enabled():
+            follow_ups = FollowUps(inject_late_result, speaking_tracker.is_busy)
+            runtime.timing["follow_ups"] = follow_ups
+
         watcher = RemindersWatcher(
             runtime.registry,
             inject=inject_context,
@@ -1590,9 +1625,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
         # self-edit run is in flight. Kill switch:
         # JARVIS_PROGRESS_UPDATES_ENABLED=false.
         progress_watcher = None
-        if os.environ.get("JARVIS_PROGRESS_UPDATES_ENABLED", "").strip().lower() not in (
-            "false", "0", "no",
-        ):
+        if progress_updates_enabled():
             async def _speak_progress(text: str) -> None:
                 from pipecat.frames.frames import TTSSpeakFrame
                 await pusher.push(TTSSpeakFrame(text=text))
@@ -1604,6 +1637,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 session_id=runtime.session_id,
             )
             progress_watcher.start()
+            runtime.timing["progress"] = progress_watcher  # W12: progress_updates
 
         voice_state = {"current": catalog["default"]}
 
@@ -1864,6 +1898,9 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 await research_watcher.stop()
             if progress_watcher is not None:
                 await progress_watcher.stop()
+            runtime.timing.clear()
+            if follow_ups is not None:
+                await follow_ups.stop()
             # U2.5: fold this session into long-term memory. Best-effort,
             # hard-capped — memory work must never delay shutdown.
             #

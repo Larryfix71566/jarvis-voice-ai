@@ -150,10 +150,32 @@ def test_rule_11_authorizes_reporting_an_absent_reason():
 
 def test_rule_12_single_selfedit_slot_and_no_wait_primitive():
     """G9/G10 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): no
-    parallel self-edit slot exists and there is no wait/timer capability —
-    the Supervisor must say so rather than imply either."""
+    parallel self-edit slot exists, and waiting is never claimed. W12
+    (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4, option B) retired the flat
+    "There is no wait or timer capability": follow_up and progress_updates
+    now wait, so the rule says only a tool can, which holds with or
+    without them registered."""
     assert "Only one self-edit runs at a time" in SUPERVISOR_PROMPT
-    assert "There is no wait or timer capability" in SUPERVISOR_PROMPT
+    assert "There is no wait or timer capability" not in SUPERVISOR_PROMPT
+    assert ("Only a tool can wait: never say you are waiting or will check back unless "
+            "a tool call in this turn actually set that up.") in SUPERVISOR_PROMPT
+    assert "if they want a reminder — delegate that to scheduler" in SUPERVISOR_PROMPT
+    # Tool-neutral: the base prompt names neither timing tool.
+    assert "follow_up" not in SUPERVISOR_PROMPT and "progress_updates" not in SUPERVISOR_PROMPT
+
+
+def test_the_timing_addenda_ship_only_with_their_tools():
+    from jarvis.prompts import FOLLOW_UP_ADDENDUM, PROGRESS_ADDENDUM, build_supervisor_prompt
+
+    kwargs = dict(jarvis_name="M", user_name="L", timezone="UTC", units="imperial",
+                  agent_catalog="", model_catalog="", voice_catalog="", memory_context="")
+    bare = build_supervisor_prompt(**kwargs)
+    assert PROGRESS_ADDENDUM not in bare and FOLLOW_UP_ADDENDUM not in bare
+    both = build_supervisor_prompt(**kwargs, progress=True, follow_up=True)
+    assert both == bare + "\n" + PROGRESS_ADDENDUM + "\n" + FOLLOW_UP_ADDENDUM
+    assert "call progress_updates" in PROGRESS_ADDENDUM
+    assert "call follow_up" in FOLLOW_UP_ADDENDUM and "[follow-up due]" in FOLLOW_UP_ADDENDUM
+    assert "belongs to scheduler, not follow_up" in FOLLOW_UP_ADDENDUM
 
 
 def test_developer_prompt_forbids_unwritten_commit_claims():
@@ -634,7 +656,7 @@ def test_a_specialists_records_are_not_self_knowledge():
     assert "A specialist's records are not things you know" in GOLDEN_RULES
     assert "reporting any of it without asking" in GOLDEN_RULES
     # The boundary against the memory block, which says the opposite about
-    # memories ("things you already know").
+    # memories ("what you already know, as of when each was written").
     assert "a specialist's data never is" in GOLDEN_RULES
 
 
@@ -790,3 +812,41 @@ def test_selfedit_previews_then_starts_without_an_extra_spoken_confirmation():
     assert "only after explicit confirmation in a new turn" not in text
     # Larry's self-edit decision does not silently change new-app creation.
     assert "only after the user explicitly confirms in a new turn" in DEVELOPER_SECTIONS["app_development"]
+
+
+def test_memories_about_things_that_change_are_checked_before_use():
+    # W10 (MORTIMER_VOICE_WORKFLOWS_PLAN.md, Larry 2026-09-25: "I prefer the
+    # correct info, so knowing how old a memory is would tell us if we need
+    # to refresh it before answering"). Every memory line carries its age
+    # (jarvis.memory.fact_age); the prompt must say what the age is for.
+    from jarvis.prompts import GOLDEN_RULES
+    assert "Each memory shows how long ago it was written." in SUPERVISOR_PROMPT
+    assert "is an old observation, not a current fact" in SUPERVISOR_PROMPT
+    assert "find it out the way you would if you had no memory of it" in SUPERVISOR_PROMPT
+    assert "if nothing can check it, say how old the memory is" in SUPERVISOR_PROMPT
+    # Stable facts still come from memory, never from a delegation.
+    assert "answer from memory and never delegate to recall it" in SUPERVISOR_PROMPT
+    # The old blanket "already known" wording is gone from both places.
+    assert "things you already know" not in SUPERVISOR_PROMPT
+    assert "they are already known" not in SUPERVISOR_PROMPT
+    assert "as of when each was written" in GOLDEN_RULES
+    # No tool is named: the paragraph ships whether or not system_status
+    # is registered (a prompt naming an unregistered tool invites
+    # hallucinated calls).
+    start = SUPERVISOR_PROMPT.index("Long-term memory")
+    paragraph = SUPERVISOR_PROMPT[start:SUPERVISOR_PROMPT.index("\n\nWhen the user explicitly", start)]
+    assert "system_status" not in paragraph
+
+
+def test_app_build_submit_needs_no_second_yes():
+    # W9 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4, Larry 2026-09-25): one
+    # approval at app_build_start covers through the draft PR; app_create
+    # keeps its own confirmation.
+    from jarvis.prompts import SUBAGENT_PROMPTS
+    import jarvis.prompts as prompts
+
+    source = open(prompts.__file__, encoding="utf-8").read()
+    assert "app_build_submit (also two-phase" not in source
+    assert "the user's yes to app_build_start already covers it, so never ask again" in source
+    assert "covered by the yes to app_build_start: never ask again" in SUBAGENT_PROMPTS["app_builder"]
+    assert "call app_create with confirm set to false" in source

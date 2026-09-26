@@ -123,11 +123,17 @@ async def run_eval() -> tuple[int, int]:
     from jarvis.status import status_enabled
 
     status_on = status_enabled()
+    # W12: the timing tools ship behind their own switches, read the way
+    # pipeline.py reads them, so the eval scores the menu production shows.
+    from jarvis.bot.follow_up import follow_ups_enabled, progress_updates_enabled
+
+    timing = {"progress": progress_updates_enabled() and show_tools,
+              "follow_up": follow_ups_enabled() and show_tools}
     extra_tools = [
         (schema, _stub)
         for schema in supervisor_tool_schemas(
             None, ui_control=flags["ui_control"], screen=flags["screen"],
-            clipboard=flags["clipboard"], status=status_on,
+            clipboard=flags["clipboard"], status=status_on, **timing,
         )
     ] if show_tools else []
     voice_catalog = catalog_summary(load_voice_catalog()) if flags["voice"] else None
@@ -154,7 +160,7 @@ async def run_eval() -> tuple[int, int]:
 
             orch = Orchestrator(settings, registry, str(uuid.uuid4()), on_event=on_event,
                                 extra_tools=extra_tools, voice_catalog=voice_catalog,
-                                status=status_on and show_tools, **flags)
+                                status=status_on and show_tools, **timing, **flags)
             orch._history.extend(_hooked(m, settings) for m in case.get("prior") or [])
             try:
                 reply = await orch.chat(case["input"])

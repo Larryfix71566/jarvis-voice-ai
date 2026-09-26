@@ -20,7 +20,7 @@ from typing import Any
 
 from jarvis.db import get_conn, run_migrations
 from jarvis import graphs
-from jarvis.memory import search_facts
+from jarvis.memory import restore_fact, search_facts
 from jarvis.memory_sweep import list_open_reviews, resolve_review
 
 # Actions a review supports, by kind — mirrored from resolve_review's
@@ -86,6 +86,23 @@ def memory_search(query: str, limit: int = 10) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 — a tool returns, never raises
         return {"ok": False, "error": f"could not search memory: {exc}"}
     return {"ok": True, "query": query, "count": len(results), "results": results}
+
+
+def memory_restore(key: str) -> dict[str, Any]:
+    """W10 (MORTIMER_VOICE_WORKFLOWS_PLAN.md) — bring one archived fact back
+    into memory. Thin over jarvis.memory.restore_fact."""
+    try:
+        run_migrations()
+        conn = get_conn()
+        try:
+            result = restore_fact(conn, key)
+            if result.get("ok"):
+                conn.commit()
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001 — a tool returns, never raises
+        return {"ok": False, "error": f"could not restore {key}: {exc}"}
+    return result
 
 
 def memory_graph_view(focus: str = "", depth: int = 2, edge_types: str = "") -> dict[str, Any]:

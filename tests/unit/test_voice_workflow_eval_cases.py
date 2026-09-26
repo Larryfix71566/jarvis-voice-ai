@@ -14,7 +14,7 @@ OFF = SimpleNamespace(jarvis_voice_workflows_enabled=False)
 
 
 def test_every_case_has_input_and_well_formed_prior():
-    assert len(CASES) == 24
+    assert len(CASES) == 26
     for case in CASES:
         assert case["input"].strip()
         for message in case.get("prior") or []:
@@ -38,3 +38,17 @@ def test_the_phase3_graders():
     assert not ev.grade(yes, "Done.", [], [])[0]
     assert ev.grade(merged, "Merged; deploy with DEPLOY-MAIN when you're ready.", [], [])[0]
     assert not ev.grade(merged, "Merged. Deploy with DEPLOY-MAIN, then run bundle.sh.", [], [])[0]
+
+
+def test_the_w12_cases_grade_on_the_timing_tools():
+    # Phase 4 W12: the logged "there's no timer or wait capability" replies
+    # fail, and so does a bare claim to wait that no tool set up.
+    by_from = {c.get("from"): c for c in CASES}
+    for turn, tool in ((1865, "progress_updates"), (1456, "progress_updates"), (1344, "follow_up")):
+        case = by_from[turn]
+        assert case["require_tool"] == tool
+        assert ev.grade(case, "Done — every thirty seconds.", [], [tool])[0]
+        assert not ev.grade(case, "Waiting sixty seconds, then checking.", [], [])[0]
+    logged = by_from[1456]
+    assert not ev.grade(logged, "I can't set automatic status updates — there's no timer or "
+                                "wait capability.", [], [])[0]

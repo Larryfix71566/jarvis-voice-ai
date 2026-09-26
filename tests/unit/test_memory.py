@@ -82,6 +82,46 @@ def test_upsert_fact_replaces_by_key(conn):
     assert rows[0]["content"] == "Lawrence"
 
 
+def test_restating_an_archived_fact_brings_it_back(conn):
+    # W10: idx_memories_fact_key is UNIQUE(user_id, key) over archived rows
+    # too, so this raised IntegrityError and failed the whole exchange.
+    from jarvis.memory import archive_fact
+    upsert_fact(conn, "user.name", "Larry", "s1")
+    assert archive_fact(conn, "user.name", "reviewed:kept:user.other")
+    upsert_fact(conn, "user.name", "Lawrence", "s2")
+    rows = [dict(r) for r in conn.execute(
+        "SELECT content, archived_at, became, source_session_id FROM memories WHERE key = 'user.name'")]
+    assert rows == [{"content": "Lawrence", "archived_at": None, "became": None,
+                     "source_session_id": "s2"}]
+    assert "- user.name (today): Lawrence" in render_memory_context(conn)
+
+
+def test_restore_fact_undoes_an_archive_and_keeps_the_age(conn):
+    from jarvis.memory import archive_fact, restore_fact
+    upsert_fact(conn, "user.style.no_lookups", "prefers no lookups", "s1")
+    conn.execute("UPDATE memories SET updated_at = datetime('now', '-10 days') "
+                 "WHERE key = 'user.style.no_lookups'")
+    archive_fact(conn, "user.style.no_lookups", "not-stated:review-112")
+    assert "no_lookups" not in render_memory_context(conn)
+    out = restore_fact(conn, "user.style.no_lookups")
+    assert out == {"ok": True, "key": "user.style.no_lookups", "content": "prefers no lookups",
+                   "was": "not-stated:review-112", "age": "10 days ago"}
+    assert "- user.style.no_lookups (10 days ago): prefers no lookups" in render_memory_context(conn)
+    again = restore_fact(conn, "user.style.no_lookups")
+    assert again["ok"] is False and "already in memory" in again["error"]
+
+
+def test_restore_fact_miss_offers_close_archived_keys(conn):
+    from jarvis.memory import archive_fact, restore_fact
+    upsert_fact(conn, "user.style.no_lookups", "prefers no lookups", "s1")
+    upsert_fact(conn, "user.style.brief", "short replies", "s1")
+    archive_fact(conn, "user.style.no_lookups", "deleted:stale")
+    out = restore_fact(conn, "no_lookups")
+    assert out["ok"] is False
+    assert out["error"] == "no archived memory is named no_lookups"
+    assert out["candidates"] == ["user.style.no_lookups"]   # live user.style.brief is not offered
+
+
 def test_upsert_fact_conflict_still_updates_with_default_user(conn):
     """GC8 (gap-closure plan, 2026-09-04): idx_memories_fact_key's conflict
     target moved from (key) to (user_id, key) so a future per-tenant filter
@@ -119,8 +159,40 @@ def test_render_facts_and_summary(conn):
     upsert_fact(conn, "user.name", "Larry", "s1")
     set_summary(conn, "Discussed the Jarvis upgrade plan.", "s1")
     rendered = render_memory_context(conn)
-    assert "- user.name: Larry" in rendered
+    assert "- user.name (today): Larry" in rendered
     assert "Previously discussed: Discussed the Jarvis upgrade plan." in rendered
+
+
+def test_fact_age_phrases():
+    # W10 (Larry 2026-09-25, age-aware memory): the Supervisor has no clock,
+    # so each fact carries a relative age it can speak and reason about.
+    from datetime import datetime, timezone
+    from jarvis.memory import fact_age
+    now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
+    assert fact_age("2026-09-25T01:00:00+00:00", now) == "today"
+    assert fact_age("2026-09-24T11:00:00+00:00", now) == "yesterday"
+    assert fact_age("2026-09-20T12:00:00+00:00", now) == "5 days ago"
+    assert fact_age("2026-09-11T12:00:01+00:00", now) == "13 days ago"
+    assert fact_age("2026-09-11T12:00:00+00:00", now) == "2 weeks ago"
+    assert fact_age("2026-07-28T12:00:00+00:00", now) == "8 weeks ago"
+    assert fact_age("2026-07-27T12:00:00+00:00", now) == "2 months ago"
+    assert fact_age("2026-09-20T12:00:00Z", now) == "5 days ago"
+    assert fact_age("2026-09-20T12:00:00", now) == "5 days ago"  # naive = UTC
+    assert fact_age("2026-09-26T12:00:00+00:00", now) == "today"  # clock skew
+    assert fact_age(None, now) == "undated"
+    assert fact_age("not a date", now) == "undated"
+
+
+def test_rendered_facts_carry_their_age(conn):
+    # An old observation reads as old in the prompt, a fresh one as fresh.
+    upsert_fact(conn, "user.name", "Larry", "s1")
+    upsert_fact(conn, "user.location", "Alpharetta", "s1")
+    conn.execute("UPDATE memories SET updated_at = datetime('now', '-40 days') "
+                 "WHERE key = 'user.location'")
+    conn.commit()
+    rendered = render_memory_context(conn)
+    assert "- user.name (today): Larry" in rendered
+    assert "- user.location (5 weeks ago): Alpharetta" in rendered
 
 
 def test_automated_context_excludes_uncertain_and_quoted_rows(conn, monkeypatch):
@@ -580,8 +652,8 @@ class TestCapacityHandling:
             upsert_fact(conn, f"user.style.thing{i:02d}", "x" * 150, "s1")
 
         rendered = render_memory_context(conn)
-        assert "user.name: Larry" in rendered
-        assert "user.location: Alpharetta" in rendered
+        assert "user.name (today): Larry" in rendered
+        assert "user.location (today): Alpharetta" in rendered
 
     def test_infer_tier_agrees_with_the_migration_heuristic(self):
         from jarvis.memory import infer_tier
@@ -612,7 +684,7 @@ class TestCapacityHandling:
             upsert_fact(conn, f"project.item{i:02d}", f"detail {i}", "s1")
 
         rendered = render_memory_context(conn)
-        assert "user.name: Larry" in rendered
+        assert "user.name (today): Larry" in rendered
 
     def test_user_facts_all_ordered_before_non_user_facts(self, conn):
         upsert_fact(conn, "project.old", "old detail", "s0")
@@ -755,7 +827,7 @@ def test_observation_promotes_at_threshold(conn):
     promoted = promote_observations(conn)
     assert promoted == ["user.style.brevity"]
     rendered = render_memory_context(conn)
-    assert "- user.style.brevity:" in rendered
+    assert "- user.style.brevity (today):" in rendered
 
 
 def test_promotion_requires_distinct_sessions(conn):
@@ -808,7 +880,7 @@ async def test_update_stores_observations_and_promotes(conn):
     )
     assert ok is True
     rendered = render_memory_context(conn)
-    assert "- user.style.brevity:" in rendered  # promoted by the third sighting
+    assert "- user.style.brevity (today):" in rendered  # promoted by the third sighting
 
 
 def test_parse_update_tolerates_missing_observations_key():
@@ -834,7 +906,7 @@ def test_capability_claim_filtered_from_render(conn):
     rendered = render_memory_context(conn)
     assert "mortimer.limitations" not in rendered
     assert "Cannot access" not in rendered
-    assert "- user.name: Larry" in rendered  # unrelated facts unaffected
+    assert "- user.name (today): Larry" in rendered  # unrelated facts unaffected
 
 
 def test_capability_claim_detector():

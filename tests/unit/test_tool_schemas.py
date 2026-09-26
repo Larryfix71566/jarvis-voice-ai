@@ -79,6 +79,8 @@ def test_show_commands_ships_even_with_every_switch_off():
         ("screen", ["view_screen", "list_screens"]),
         ("clipboard", ["clear_clipboard", "read_clipboard"]),
         ("status", ["system_status"]),
+        ("progress", ["progress_updates"]),
+        ("follow_up", ["follow_up"]),
     ],
 )
 def test_each_switch_adds_exactly_its_own_tools(flag, added):
@@ -145,3 +147,22 @@ def test_system_status_sits_right_after_cost_summary():
     assert supervisor_tool_schemas(DELEGATE, status=True)[3] is COST_SUMMARY_SCHEMA
     schema, _handler = build_system_status_tool()
     assert schema is SYSTEM_STATUS_SCHEMA
+
+
+def test_the_w12_timing_tools_come_last_and_are_the_factories_schemas():
+    # MORTIMER_VOICE_WORKFLOWS_PLAN.md W12: appended after everything else,
+    # so every menu that existed before keeps its order byte for byte.
+    from jarvis.bot.follow_up import (
+        FOLLOW_UP_SCHEMA,
+        PROGRESS_UPDATES_SCHEMA,
+        build_follow_up_tool,
+        build_progress_updates_tool,
+    )
+
+    everything = dict(ui_control=True, screen=True, clipboard=True, status=True,
+                      command_console=True, shared_content=True)
+    before = supervisor_tool_schemas(DELEGATE, **everything)
+    after = supervisor_tool_schemas(DELEGATE, **everything, progress=True, follow_up=True)
+    assert after == before + [PROGRESS_UPDATES_SCHEMA, FOLLOW_UP_SCHEMA]
+    assert build_progress_updates_tool({})[0] is PROGRESS_UPDATES_SCHEMA
+    assert build_follow_up_tool({})[0] is FOLLOW_UP_SCHEMA

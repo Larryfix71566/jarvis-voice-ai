@@ -157,3 +157,31 @@ class TestMemoryGraphView:
         _fact(conn, "user.style.a", "short answers")
         conn.commit()
         assert "focus_miss" not in logic.memory_graph_view(focus="user.style.a")
+
+
+class TestMemoryRestore:
+    """W10 (MORTIMER_VOICE_WORKFLOWS_PLAN.md): restore any archived memory
+    by voice. Thin over jarvis.memory.restore_fact."""
+
+    def test_restores_an_archived_fact_and_commits(self, conn, tmp_path):
+        _fact(conn, "user.style.no_lookups", "prefers no lookups")
+        conn.execute("UPDATE memories SET archived_at = ?, became = 'not-stated:review-112' "
+                     "WHERE key = 'user.style.no_lookups'", (now_iso(),))
+        conn.commit()
+        out = logic.memory_restore("user.style.no_lookups")
+        assert out["ok"] is True and out["was"] == "not-stated:review-112"
+        # A fresh connection sees it live: the tool committed.
+        fresh = get_conn(tmp_path / "mem.db")
+        try:
+            row = fresh.execute("SELECT archived_at, became FROM memories "
+                                "WHERE key = 'user.style.no_lookups'").fetchone()
+            assert row["archived_at"] is None and row["became"] is None
+        finally:
+            fresh.close()
+
+    def test_a_live_or_unknown_key_is_refused(self, conn):
+        _fact(conn, "user.name", "Larry")
+        conn.commit()
+        assert "already in memory" in logic.memory_restore("user.name")["error"]
+        miss = logic.memory_restore("user.nothing")
+        assert miss["ok"] is False and miss["candidates"] == []

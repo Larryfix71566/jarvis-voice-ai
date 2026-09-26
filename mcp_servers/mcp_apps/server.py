@@ -102,12 +102,13 @@ def app_build_status() -> dict:
 
 @mcp.tool()
 def app_build_submit(confirm: bool = False) -> dict:
-    """Open a pull request with the validated app-build edits.
+    """Open the draft pull request with the validated app-build edits.
 
-    Two-phase: confirm=false previews; confirm=true submits. Call with
-    confirm=true ONLY after validation has passed AND the user has
-    explicitly asked to submit in a new turn. The PR is never merged by
-    the agent — merging always stays with the human on GitHub."""
+    Call it once app_build_status reports that validation has passed: the
+    user's yes to app_build_start already covers this step, so do not ask
+    again (confirm is ignored). It refuses before validation passes. The
+    PR is never merged by the agent — merging always stays with the human
+    on GitHub."""
     return logic.app_build_submit(_get_admin_client(), confirm)
 
 

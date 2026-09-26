@@ -673,6 +673,28 @@ UPDATE actions
  WHERE status = 'pending';
 """
 
+# W10 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4): the memory sweep settles
+# open contradictions itself and says what it archived once, as a notice
+# (jarvis/memory_sweep.settle_open_reviews). SQLite cannot alter a CHECK
+# constraint, so the table is rebuilt with the new kind; rows, ids and the
+# index carry over unchanged.
+MIGRATION_0027_notice_memory_review = """
+CREATE TABLE notices_0027 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('late_result','daily_status','memory_review')),
+  source TEXT NOT NULL,
+  text TEXT NOT NULL,
+  delivered_at TEXT,
+  user_id TEXT NOT NULL DEFAULT 'local'
+);
+INSERT INTO notices_0027 (id, created_at, kind, source, text, delivered_at, user_id)
+  SELECT id, created_at, kind, source, text, delivered_at, user_id FROM notices;
+DROP TABLE notices;
+ALTER TABLE notices_0027 RENAME TO notices;
+CREATE INDEX IF NOT EXISTS idx_notices_pending ON notices(delivered_at, created_at);
+"""
+
 MIGRATION_0025_notices = """
 CREATE TABLE IF NOT EXISTS notices (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -714,6 +736,7 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0024_model_route_preferences", MIGRATION_0024_model_route_preferences),
     ("0025_notices", MIGRATION_0025_notices),  # status spec T3.2
     ("0026_expire_retired_actions", MIGRATION_0026_expire_retired_actions),  # W9
+    ("0027_notice_memory_review", MIGRATION_0027_notice_memory_review),  # W10
 ]
 
 

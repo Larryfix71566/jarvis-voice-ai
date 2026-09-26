@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 MAX_NOTICE_CHARS = 600
 MAX_DELIVERED_PER_CONNECT = 5
 NOTICES_ENABLED_ENV = "JARVIS_NOTICES_ENABLED"
-KINDS = ("late_result", "daily_status")
+KINDS = ("late_result", "daily_status", "memory_review")  # memory_review: W10 (migration 0027)
 
 
 def _enabled() -> bool:

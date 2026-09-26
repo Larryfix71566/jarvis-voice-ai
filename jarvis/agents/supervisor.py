@@ -77,6 +77,8 @@ class Orchestrator:
         screen: bool = False,
         clipboard: bool = False,
         status: bool = False,
+        progress: bool = False,
+        follow_up: bool = False,
     ):
         self._settings = settings
         self._registry = registry
@@ -158,6 +160,9 @@ class Orchestrator:
             # Phase 2 D4: the system_status addendum, so the voice-workflow
             # eval can score location questions against what ships.
             status=status,
+            # W12: the progress_updates / follow_up addenda, same reason.
+            progress=progress,
+            follow_up=follow_up,
         )
         self._history: list[dict] = []
         # MORTIMER_VOICE_WORKFLOWS_PLAN.md D15 — the same three hooks

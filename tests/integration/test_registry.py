@@ -24,7 +24,7 @@ ALL_SERVERS = [
 # kb_neighbors; kb_write/kb_delete/kb_flush are logic.py-only, called
 # directly by jarvis/kb_digest.py, never exposed as MCP tools) — shipped
 # without this list or TOTAL_TOOLS being updated (gap-closure plan GC1).
-TOTAL_TOOLS = 80  # ...+2 (2026-08-21: mcp-memory's memory_review_list/_resolve)
+TOTAL_TOOLS = 81  # ...+2 (2026-08-21: mcp-memory's memory_review_list/_resolve)
                   # ...+2 (MORTIMER_GRAPH_LAYER_PLAN.md GL12, 2026-09-04:
                   #   mcp-memory's memory_graph_view, mcp-runlog's graph_view)
                   # ...+1 (B2: mcp-selfedit's selfedit_verify_appearance)
@@ -44,6 +44,8 @@ TOTAL_TOOLS = 80  # ...+2 (2026-08-21: mcp-memory's memory_review_list/_resolve)
                   #   github_pr_checks)
                   # ...+1 (status spec P6, 2026-09-23: mcp-web's
                   #   sports_scores)
+                  # ...+1 (MORTIMER_VOICE_WORKFLOWS_PLAN.md W10, 2026-09-25:
+                  #   mcp-memory's memory_restore)
 
 
 @pytest.fixture

@@ -36,6 +36,7 @@ EXPECTED_MIGRATION_IDS = [
     "0024_model_route_preferences",
     "0025_notices",
     "0026_expire_retired_actions",
+    "0027_notice_memory_review",
 ]
 
 
@@ -384,4 +385,40 @@ def test_migration_0026_expires_only_the_pending_actions(tmp_path):
     assert all(r["resolved_at"] and "retired on 2026-09-10" in r["result"] for r in got[:2])
     assert got[2]["result"] == "ok" and got[3]["resolved_at"] == "2026-08-30T21:41:00+00:00"
     assert conn.execute("SELECT COUNT(*) FROM actions WHERE status = 'pending'").fetchone()[0] == 0
+    conn.close()
+
+
+def test_migration_0027_rebuilds_notices_with_the_memory_review_kind(tmp_path):
+    """W10 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4): the sweep's settle
+    notice needs a new kind, and SQLite cannot alter a CHECK constraint, so
+    0027 rebuilds the table. Every existing row keeps its id and fields."""
+    from jarvis.db import MIGRATION_0025_notices
+
+    conn = get_conn(tmp_path / "notices.db")
+    run_migrations(conn)
+    # Put the table back the way 0025 left it, with rows in it.
+    conn.executescript("DROP TABLE notices;" + MIGRATION_0025_notices)
+    conn.execute("INSERT INTO notices (id, created_at, kind, source, text, delivered_at) "
+                 "VALUES (7, '2026-09-24T10:00:00+00:00', 'late_result', 'Developer', 'done', "
+                 "'2026-09-24T11:00:00+00:00')")
+    conn.execute("INSERT INTO notices (id, created_at, kind, source, text) "
+                 "VALUES (9, '2026-09-25T06:30:00+00:00', 'daily_status', 'daily', 'ok')")
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO notices (created_at, kind, source, text) "
+                     "VALUES ('x', 'memory_review', 's', 't')")
+    conn.execute("DELETE FROM migrations WHERE id = '0027_notice_memory_review'")
+    conn.commit()
+    assert run_migrations(conn) == ["0027_notice_memory_review"]
+    rows = [tuple(r) for r in conn.execute(
+        "SELECT id, kind, source, text, delivered_at, user_id FROM notices ORDER BY id")]
+    assert rows == [(7, "late_result", "Developer", "done", "2026-09-24T11:00:00+00:00", "local"),
+                    (9, "daily_status", "daily", "ok", None, "local")]
+    conn.execute("INSERT INTO notices (created_at, kind, source, text) "
+                 "VALUES ('2026-09-25T07:00:00+00:00', 'memory_review', 'memory_sweep', 't')")
+    assert conn.execute("SELECT MAX(id) FROM notices").fetchone()[0] == 10
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO notices (created_at, kind, source, text) "
+                     "VALUES ('x', 'anything_else', 's', 't')")
+    assert conn.execute("SELECT name FROM sqlite_master WHERE type = 'index' "
+                        "AND name = 'idx_notices_pending'").fetchone() is not None
     conn.close()
