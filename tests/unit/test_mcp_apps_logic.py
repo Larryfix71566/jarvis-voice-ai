@@ -264,7 +264,10 @@ def test_app_build_submit_refused_before_validation():
     assert "validation" in result["error"]
 
 
-def test_app_build_submit_previews_then_confirms():
+@pytest.mark.parametrize("confirm", [False, True])
+def test_app_build_submit_opens_the_draft_without_a_second_yes(confirm):
+    # W9 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4, Larry 2026-09-25): the
+    # yes to app_build_start covers through the draft PR; confirm is ignored.
     admin = FakeAdminClient(
         get_responses={
             "/api/appbuild/job": {"ok": True, "job": {"state": "done"}, "status": {
@@ -274,10 +277,17 @@ def test_app_build_submit_previews_then_confirms():
         },
         post_responses={"/api/appbuild/submit": {"ok": True, "pr_url": "https://example.invalid/pr/1"}},
     )
-    preview = logic.app_build_submit(admin, confirm=False)
-    assert preview["ok"] and preview["needs_confirmation"]
-    confirmed = logic.app_build_submit(admin, confirm=True)
-    assert confirmed["ok"] and confirmed["pr_url"] == "https://example.invalid/pr/1"
+    result = logic.app_build_submit(admin, confirm=confirm)
+    assert result["ok"] and result["pr_url"] == "https://example.invalid/pr/1"
+    assert "needs_confirmation" not in result
+    assert "I cannot merge it myself" in result["summary"]
+
+
+def test_app_build_start_preview_says_the_yes_covers_the_draft():
+    preview = logic.app_build_start(FakeAdminClient(), app="weather-app", goal="add a chart")
+    assert preview["needs_confirmation"] is True
+    assert "that yes also covers opening the draft pull request" in preview["summary"]
+    assert "merging stays with you" in preview["summary"]
 
 
 def test_app_submit_reports_background_work_without_a_fabricated_pr_url():

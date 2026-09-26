@@ -53,6 +53,7 @@ RUNGS = frozenset({
     # different rung: that is the build step, this is the specialist.
     "app_builder",
     "memory_merge", "memory_classify", "memory_extraction", "kb_digest",
+    "memory_settle",  # W10 (MORTIMER_VOICE_WORKFLOWS_PLAN.md): the sweep's settle check
     "procedures_describe",
     "planning", "council",
     "selfedit_executor", "appbuild_executor",

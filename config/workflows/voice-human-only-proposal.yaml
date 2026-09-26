@@ -1,0 +1,22 @@
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 3 W8 (Larry's decision, 2026-09-25:
+# option A, a proposal pull request plus one approval). Voice agent only.
+# Fires on a specialist result carrying the HUMAN-ONLY PROPOSAL sentence
+# that jarvis/selfedit/service.py writes when a pull request only proposes
+# a change to a human-only file. The apply command is the one command the
+# show_commands gate lets through without NEEDS-INPUT (handoff_tools.py).
+name: voice-human-only-proposal
+when: a self-edit pull request carries a proposal for a human-only file
+agents:
+- supervisor
+priority: 8
+triggers:
+  result:
+  - proposal
+steps:
+- The pull request proposes a change to a human-only file. Mortimer never changes those files; Larry approves the change and applies it himself.
+- In one or two sentences, say which file it changes and what the change does. Then ask "approve?".
+- Do not show the command until Larry says yes. On yes, call show_commands with exactly the apply command from the result. Say it shows him the exact change first and pushes nothing until he types y.
+- On no, say the pull request stays open for him to review or close, and nothing changed.
+- Never tell him to merge the proposal pull request itself.
+done_when:
+- Larry approved or declined, and the apply command was shown only after he said yes.

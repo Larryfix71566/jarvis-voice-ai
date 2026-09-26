@@ -28,6 +28,8 @@ struct DisplayWindowView: View {
                     }
                     if workspace.supportingContent == .memoryGraph {
                         MemoryGraphView(store: workspace.memoryGraph, api: client.admin)
+                    } else if workspace.supportingContent == .workflows {
+                        WorkflowsView(store: workspace.workflows, api: client.admin)
                     } else if let result = workspace.supportingResult {
                         WorkspaceResultPane(result: result, onSupportingDisplay: true)
                     }
@@ -92,6 +94,8 @@ private struct LegacySupportingDisplayStage: View {
                 switch content {
                 case .memoryGraph:
                     MemoryGraphView(store: workspace.memoryGraph, api: client.admin)
+                case .workflows:
+                    WorkflowsView(store: workspace.workflows, api: client.admin)
                 case .result(let id):
                     if let result = workspace.results.first(where: { $0.id == id }) {
                         WorkspaceResultPane(result: result, onSupportingDisplay: true)
@@ -111,6 +115,7 @@ private struct LegacySupportingDisplayStage: View {
     private var title: String {
         switch content {
         case .memoryGraph: return "Memory graph"
+        case .workflows: return "Workflows"
         case .result(let id): return workspace.results.first(where: { $0.id == id })?.payload.title ?? "Result"
         }
     }

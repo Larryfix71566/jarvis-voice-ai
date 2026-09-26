@@ -24,6 +24,7 @@ from jarvis.bot.handoff_tools import (
 )
 from jarvis.bot.remember_tool import REMEMBER_SCHEMA
 from jarvis.bot.screen_tool import LIST_SCREENS_SCHEMA, VIEW_SCREEN_SCHEMA
+from jarvis.bot.status_tool import SYSTEM_STATUS_SCHEMA, build_system_status_tool
 from jarvis.bot.tool_schemas import supervisor_tool_schemas
 from jarvis.bot.ui_control import UI_CONTROL_SCHEMA
 from jarvis.bot.voice_switch import SET_VOICE_SCHEMA
@@ -46,13 +47,15 @@ def test_everything_on_reproduces_the_list_pipeline_py_built():
     # Transcribed from the literal pipeline.py used to build. Order is
     # load-bearing: a reordered tool list is a different prompt to the
     # model even when the contents match.
+    # Status spec T2.5: system_status sits immediately after cost_summary.
     assert supervisor_tool_schemas(
-        DELEGATE, ui_control=True, screen=True, clipboard=True
+        DELEGATE, ui_control=True, screen=True, clipboard=True, status=True
     ) == [
         DELEGATE,
         SET_VOICE_SCHEMA,
         REMEMBER_SCHEMA,
         COST_SUMMARY_SCHEMA,
+        SYSTEM_STATUS_SCHEMA,
         UI_CONTROL_SCHEMA,
         VIEW_SCREEN_SCHEMA,
         LIST_SCREENS_SCHEMA,
@@ -75,6 +78,9 @@ def test_show_commands_ships_even_with_every_switch_off():
         ("ui_control", ["ui_control"]),
         ("screen", ["view_screen", "list_screens"]),
         ("clipboard", ["clear_clipboard", "read_clipboard"]),
+        ("status", ["system_status"]),
+        ("progress", ["progress_updates"]),
+        ("follow_up", ["follow_up"]),
     ],
 )
 def test_each_switch_adds_exactly_its_own_tools(flag, added):
@@ -84,23 +90,23 @@ def test_each_switch_adds_exactly_its_own_tools(flag, added):
 
 def test_a_disabled_tool_is_absent_not_merely_last():
     # The model cannot call what it cannot see; "off" has to mean gone.
-    off = _names(ui_control=False, screen=False, clipboard=False)
+    off = _names(ui_control=False, screen=False, clipboard=False, status=False)
     for name in ("ui_control", "view_screen", "list_screens",
-                 "clear_clipboard", "read_clipboard"):
+                 "clear_clipboard", "read_clipboard", "system_status"):
         assert name not in off
 
 
 def test_every_combination_keeps_a_stable_relative_order():
     canonical = supervisor_tool_schemas(
-        DELEGATE, ui_control=True, screen=True, clipboard=True
+        DELEGATE, ui_control=True, screen=True, clipboard=True, status=True
     )
     rank = {id(s): i for i, s in enumerate(canonical)}
-    for u, sc, c in itertools.product([False, True], repeat=3):
+    for u, sc, c, st in itertools.product([False, True], repeat=4):
         got = supervisor_tool_schemas(
-            DELEGATE, ui_control=u, screen=sc, clipboard=c
+            DELEGATE, ui_control=u, screen=sc, clipboard=c, status=st
         )
         ranks = [rank[id(s)] for s in got]
-        assert ranks == sorted(ranks), (u, sc, c)
+        assert ranks == sorted(ranks), (u, sc, c, st)
 
 
 def test_the_menu_holds_the_object_the_factory_returns():
@@ -132,3 +138,31 @@ def test_omitting_delegate_task_changes_nothing_else_about_the_order():
     without = supervisor_tool_schemas(None, ui_control=True, screen=True,
                                       clipboard=True)
     assert without == with_it[1:]
+
+
+def test_system_status_sits_right_after_cost_summary():
+    names = _names(status=True)
+    assert names[names.index("cost_summary") + 1] == "system_status"
+    # The index pin above still holds with status on.
+    assert supervisor_tool_schemas(DELEGATE, status=True)[3] is COST_SUMMARY_SCHEMA
+    schema, _handler = build_system_status_tool()
+    assert schema is SYSTEM_STATUS_SCHEMA
+
+
+def test_the_w12_timing_tools_come_last_and_are_the_factories_schemas():
+    # MORTIMER_VOICE_WORKFLOWS_PLAN.md W12: appended after everything else,
+    # so every menu that existed before keeps its order byte for byte.
+    from jarvis.bot.follow_up import (
+        FOLLOW_UP_SCHEMA,
+        PROGRESS_UPDATES_SCHEMA,
+        build_follow_up_tool,
+        build_progress_updates_tool,
+    )
+
+    everything = dict(ui_control=True, screen=True, clipboard=True, status=True,
+                      command_console=True, shared_content=True)
+    before = supervisor_tool_schemas(DELEGATE, **everything)
+    after = supervisor_tool_schemas(DELEGATE, **everything, progress=True, follow_up=True)
+    assert after == before + [PROGRESS_UPDATES_SCHEMA, FOLLOW_UP_SCHEMA]
+    assert build_progress_updates_tool({})[0] is PROGRESS_UPDATES_SCHEMA
+    assert build_follow_up_tool({})[0] is FOLLOW_UP_SCHEMA

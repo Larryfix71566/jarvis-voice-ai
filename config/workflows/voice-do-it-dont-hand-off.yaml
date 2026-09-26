@@ -1,0 +1,22 @@
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 1 (D1-D4). Voice agent only: `agents: [supervisor]`
+# keeps it out of every specialist run. triggers.user patterns are pinned by
+# tests/fixtures/voice_failures.yaml -- edit only with the fixture test green.
+name: voice-do-it-dont-hand-off
+when: Larry would otherwise be asked to run a command, copy output, paste, or edit a file himself
+agents:
+- supervisor
+priority: 10
+triggers:
+  user:
+  - \b(run (?:the|that|this|a) (?:command|curl)|curl|terminal|clipboard|copy|paste|git |commit|push|pull|branch|merge|kill|vault|provision|api keys?|do (?:it|that) (?:for me|yourself)|you do (?:it|that)|i (?:don't|do not) (?:want|wanna) to do it|by myself|manually)\b
+  result:
+  - needs_input
+  reply:
+  - handoff
+steps:
+- Larry does not run commands, copy output, paste, or edit files unless he explicitly asks to be given the command. Otherwise give the step to the specialist that can do it.
+- If no specialist has a tool for it, say in one sentence that it isn't something you have a tool for yet and offer to have it added. Do not show a command instead.
+- Use show_commands only when Larry explicitly asked for the command, or when a specialist wrote NEEDS-INPUT for a step only Larry can do, such as signing in or approving on GitHub, and say what he must do in one sentence.
+- Never suggest a command that deletes, resets, or discards work.
+done_when:
+- Larry was not asked to run, copy, paste, or edit anything, unless he explicitly asked for the command or a specialist wrote NEEDS-INPUT for a step only he can do.

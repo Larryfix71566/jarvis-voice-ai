@@ -49,6 +49,13 @@ class FakeSession:
         self._path(path)
         if path not in self.files: raise SandboxError('No such file')
         return {'ok':True,'path':path,'content':self.files[path]}
+    def baseline_text(self, path):
+        # Mirrors sandbox.session.Session.baseline_text: the base snapshot,
+        # no workspace policy, secrets and runtime data refused.
+        if not source_path_allowed(path): raise SandboxError('Path is outside the source snapshot')
+        if self.state['phase'] in {'reverted','cancelled'}: raise SandboxError('This session has ended')
+        if path not in self.runtime.baseline: return {'ok':True,'path':path,'exists':False,'content':''}
+        return {'ok':True,'path':path,'exists':True,'content':self.runtime.baseline[path],'mode':0o644}
     def propose_edit(self, path, content, rationale, visual_intent=''):
         self._path(path)
         old=self.runtime.baseline.get(path,'')

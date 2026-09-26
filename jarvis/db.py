@@ -655,6 +655,59 @@ CREATE INDEX IF NOT EXISTS idx_model_route_drafts_expiry
   ON model_route_drafts(expires_at);
 """
 
+# Status spec T3.2 (L12): the notice outbox — late delegation results and
+# daily-status findings, spoken once after the greeting at the next connect
+# (jarvis/notices.py). user_id: tests/unit/test_tenant_columns.py's contract
+# (GC8) that every table carries it.
+# W9 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4). Every tool that created or
+# confirmed an action was retired on 2026-09-10 (8b9dd59): commit, push and
+# repo_commit_write refuse even an old action id. The 21 rows still
+# 'pending' (2026-08-13 .. 09-07) can therefore never resolve, yet
+# list_actions('pending') still offered them. Nothing creates an action any
+# more, so one pass settles them for good.
+MIGRATION_0026_expire_retired_actions = """
+UPDATE actions
+   SET status = 'expired',
+       resolved_at = COALESCE(resolved_at, strftime('%Y-%m-%dT%H:%M:%S+00:00', 'now')),
+       result = COALESCE(result, 'expired: direct repository writes were retired on 2026-09-10; changes go through the self-edit sandbox')
+ WHERE status = 'pending';
+"""
+
+# W10 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4): the memory sweep settles
+# open contradictions itself and says what it archived once, as a notice
+# (jarvis/memory_sweep.settle_open_reviews). SQLite cannot alter a CHECK
+# constraint, so the table is rebuilt with the new kind; rows, ids and the
+# index carry over unchanged.
+MIGRATION_0027_notice_memory_review = """
+CREATE TABLE notices_0027 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('late_result','daily_status','memory_review')),
+  source TEXT NOT NULL,
+  text TEXT NOT NULL,
+  delivered_at TEXT,
+  user_id TEXT NOT NULL DEFAULT 'local'
+);
+INSERT INTO notices_0027 (id, created_at, kind, source, text, delivered_at, user_id)
+  SELECT id, created_at, kind, source, text, delivered_at, user_id FROM notices;
+DROP TABLE notices;
+ALTER TABLE notices_0027 RENAME TO notices;
+CREATE INDEX IF NOT EXISTS idx_notices_pending ON notices(delivered_at, created_at);
+"""
+
+MIGRATION_0025_notices = """
+CREATE TABLE IF NOT EXISTS notices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('late_result','daily_status')),
+  source TEXT NOT NULL,
+  text TEXT NOT NULL,
+  delivered_at TEXT,
+  user_id TEXT NOT NULL DEFAULT 'local'
+);
+CREATE INDEX IF NOT EXISTS idx_notices_pending ON notices(delivered_at, created_at);
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
@@ -681,6 +734,9 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0022_memory_automation", MIGRATION_0022),
     ("0023_memory_classification_shadow", MIGRATION_0023),
     ("0024_model_route_preferences", MIGRATION_0024_model_route_preferences),
+    ("0025_notices", MIGRATION_0025_notices),  # status spec T3.2
+    ("0026_expire_retired_actions", MIGRATION_0026_expire_retired_actions),  # W9
+    ("0027_notice_memory_review", MIGRATION_0027_notice_memory_review),  # W10
 ]
 
 

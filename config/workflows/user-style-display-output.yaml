@@ -1,6 +1,9 @@
 # Extracted from memory fact 'user.style.display_output' on conversion (K6.2).
 # REVIEW ME: `when` decides what this matches and `done_when` is
 # what makes it more than a note. Both are drafts.
+# draft: true — listed in the workflow viewer, never matched
+# (MORTIMER_WORKFLOW_VIEWER_PLAN.md D-V1, Larry 2026-09-25).
+draft: true
 name: user-style-display-output
 when: "One display window per specialist per request with summarized HTML output, CSS-formatted for readability and adjustability"
 steps:

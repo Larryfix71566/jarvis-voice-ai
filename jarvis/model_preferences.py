@@ -11,6 +11,9 @@ from jarvis.model_routing import (
 )
 
 DRAFT_TTL_S = 600
+# Least to most private. A route must provide at least the chosen level, and
+# the chosen level must be at least the workload's configured one.
+PRIVACY_ORDER = {"approved_external": 1, "confidential": 2, "local_only": 3}
 
 
 class ModelPreferenceError(ModelRouteError):
@@ -52,15 +55,26 @@ def _validate_choice(workload: str, profile: str, route: str,
     if not model_profile_exists(profile, workload=workload):
         raise ModelPreferenceError(f"unknown model profile {profile!r}")
     selected_privacy = privacy or policy.privacy
-    if selected_privacy not in {"local_only", "confidential", "approved_external"}:
+    if selected_privacy not in PRIVACY_ORDER:
         raise ModelPreferenceError(f"unknown privacy level {selected_privacy!r}")
+    # A preference may keep or raise a workload's privacy, never lower it.
+    # From #80 (88b206f) until this check, staging "approved_external" for the
+    # confidential librarian or the local_only systems workload was accepted,
+    # and confirming it replaced the configured level in resolve_policy, which
+    # the run-log redaction and the delegation status masking both read.
+    # `policy` here is the configured one: inspect_route_choice resolves it
+    # with include_preferences=False.
+    if PRIVACY_ORDER[selected_privacy] < PRIVACY_ORDER[policy.privacy]:
+        raise ModelPreferenceError(
+            f"{selected_privacy!r} is below workload {workload!r}'s configured "
+            f"{policy.privacy!r} privacy; a preference may keep or raise it, never lower it"
+        )
     missing = set(policy.required_capabilities) - set(route_record.capabilities)
     if missing:
         raise ModelPreferenceError(
             f"route {route!r} lacks required capabilities: {', '.join(sorted(missing))}"
         )
-    privacy_order = {"approved_external": 1, "confidential": 2, "local_only": 3}
-    if privacy_order[route_record.privacy] < privacy_order[selected_privacy]:
+    if PRIVACY_ORDER[route_record.privacy] < PRIVACY_ORDER[selected_privacy]:
         raise ModelPreferenceError(
             f"route {route!r} provides {route_record.privacy!r}, "
             f"but {selected_privacy!r} privacy is required"

@@ -11,7 +11,7 @@ from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 ALL_SERVERS = [
     "mcp-time", "mcp-notes", "mcp-memory", "mcp-kb", "mcp-reminders",
     "mcp-web", "mcp-system", "mcp-git", "mcp-apps", "mcp-repo", "mcp-runlog",
-    "mcp-selfedit", "mcp-screen",
+    "mcp-selfedit", "mcp-screen", "mcp-status",
 ]
 # time 4, notes 7, reminders 5, web 3, system 2, git 8, apps 5, repo 5,
 # selfedit 5. notes went 6 -> 7 when search_sessions (FTS5 conversation
@@ -24,7 +24,7 @@ ALL_SERVERS = [
 # kb_neighbors; kb_write/kb_delete/kb_flush are logic.py-only, called
 # directly by jarvis/kb_digest.py, never exposed as MCP tools) — shipped
 # without this list or TOTAL_TOOLS being updated (gap-closure plan GC1).
-TOTAL_TOOLS = 70  # ...+2 (2026-08-21: mcp-memory's memory_review_list/_resolve)
+TOTAL_TOOLS = 81  # ...+2 (2026-08-21: mcp-memory's memory_review_list/_resolve)
                   # ...+2 (MORTIMER_GRAPH_LAYER_PLAN.md GL12, 2026-09-04:
                   #   mcp-memory's memory_graph_view, mcp-runlog's graph_view)
                   # ...+1 (B2: mcp-selfedit's selfedit_verify_appearance)
@@ -36,6 +36,16 @@ TOTAL_TOOLS = 70  # ...+2 (2026-08-21: mcp-memory's memory_review_list/_resolve)
                   #   2026-09-07: mcp-selfedit gains selfedit_read/_write/
                   #   _finish and loses selfedit_validate/_submit, which
                   #   could never complete under registry CALL_TIMEOUT=30 s)
+                  # ...+5 (status spec T2.6, 2026-09-23: mcp-status's
+                  #   status_models/_services/_overview/_build, log_search;
+                  #   P4 adds four more -> 79)
+                  # ...+4 (status spec T4.4, 2026-09-23: mcp-status's
+                  #   status_catalog, status_subscription, github_prs,
+                  #   github_pr_checks)
+                  # ...+1 (status spec P6, 2026-09-23: mcp-web's
+                  #   sports_scores)
+                  # ...+1 (MORTIMER_VOICE_WORKFLOWS_PLAN.md W10, 2026-09-25:
+                  #   mcp-memory's memory_restore)
 
 
 @pytest.fixture

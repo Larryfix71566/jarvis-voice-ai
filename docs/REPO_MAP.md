@@ -13,7 +13,8 @@ Verify paths and the current branch before writing. Keep this map below the
 - `mcp_servers/` — MCP skill servers, one directory each: `logic.py`
   (pure) + `server.py` (FastMCP) + `skill.yaml`. `mcp_kb/` is read-only
   (`kb_search`/`kb_read`/`kb_neighbors`); KB writes go through
-  `jarvis/kb_digest.py`, not MCP.
+  `jarvis/kb_digest.py`, not MCP. `mcp_status/` — systems/developer
+  status, catalogs, probes, PRs, `log_search`; thin sidecar client.
 - `skills/` — Agent Skills (`SKILL.md`), loaded by `jarvis/agent_skills.py`
   only if enabled in `config/skills.yaml`; never executed.
 - `macos/` — native macOS client (SwiftPM), the live interface:
@@ -22,7 +23,8 @@ Verify paths and the current branch before writing. Keep this map below the
   `mortimer.sh` (manual fallback `scripts/run_web.sh`).
 - `sandbox/` — disposable macOS VMs, guarded files, verification, PRs.
 - `config/` — routing/model YAML/JSON (agents, MCP servers, voices,
-  skills, self-edit allowlist, `upgrade_models.yaml` registry,
+  skills, self-edit allowlist, registry `model_endpoints.yaml` (deny) +
+  `model_profiles.yaml` (routine) + `generated/` catalogues,
   `model_access.yaml`). Check here first when a capability seems
   misrouted or over/under-permissioned.
 - `docs/` — `plans/` (+ `implemented/`), `reviews/`, `acceptance/`,
@@ -36,8 +38,8 @@ Verify paths and the current branch before writing. Keep this map below the
   14 per database), `launchd_gen.py` (launchd plists: vault, bot,
   extractor, admin, costs + nightly backup; the reminder notifier runs
   inside the admin sidecar).
-- `data/` — gitignored: `jarvis.db`, `secrets.vault`,
-  `app_workspaces/` (legacy metadata; code lives in VMs).
+- `data/` — gitignored: `jarvis.db`, `secrets.vault`, `status/` (daily
+  snapshots, `generated/` catalogues), `app_workspaces/` (legacy).
 - `logs/` — gitignored: per-run JSONL `agents/<date>/`, council rounds
   `council/<date>/`.
 
@@ -63,15 +65,22 @@ Verify paths and the current branch before writing. Keep this map below the
   execution / deliberation) + PNG/SVG renderer; sidecar `/api/graph/*`
   and voice tools `memory_graph_view`, `graph_view`. Nothing else
   derives an edge.
+- `jarvis/status/` — self-service status computed in the sidecar
+  (models, services, overview, build, location, logs, catalogs,
+  subscription probes, GitHub, summaries; `daily.py` = launchd job);
+  voice tool `jarvis/bot/status_tool.py` (`system_status`).
 - `jarvis/selfedit/service.py` — sandbox facade: allowlist, validation, PRs.
-- `jarvis/skills/registry.py` — spawns MCP servers, exposes their tools.
+- `jarvis/skills/registry.py` — MCP servers, one owner task each,
+  restarted on death; `shared.py` keeps one registry per process.
 - `jarvis/prompts.py` — single source of every system prompt.
+- `jarvis/notices.py` — notice outbox: late results, daily status;
+  spoken once after the next greeting.
 - `jarvis/db.py` — SQLite schema + migrations (human-only).
-- `jarvis/tenant.py` — `current_user_id()` from `JARVIS_USER_ID`,
-  default `"local"` (column exists; nothing filters by it yet).
+- `jarvis/tenant.py` — `current_user_id()` (`JARVIS_USER_ID`, default
+  `"local"`; nothing filters by it yet).
 - `jarvis/vault.py` — encrypted credential store (CLI-only).
-- `jarvis/usage_ledger.py` — per-call LLM usage ledger, `data/costs.db` (`llm_calls`).
-- `jarvis/costs_api.py` — sidecar HTTP over the ledger (`GET /costs/summary`).
+- `jarvis/usage_ledger.py` — per-call LLM usage ledger (`data/costs.db`).
+- `jarvis/costs_api.py` — ledger HTTP (`GET /costs/summary`).
 - `jarvis/memory_extraction.py` — per-exchange candidates/novelty gate.
 - `jarvis/memory_extraction_worker.py` — async post-turn extractor.
 - `jarvis/memory_automation.py` — memory classification/admission policy.
@@ -86,11 +95,9 @@ Verify paths and the current branch before writing. Keep this map below the
 - `jarvis/subscription.py` — gated Claude/Codex text adapters.
 - `jarvis/sensitive.py` — financial-detail detection.
 - `jarvis/bot/sensitive_turn.py` — per-turn sensitive flag.
-- `jarvis/bot/usage_watcher.py` — pipeline observer for the cost ledger.
-- `jarvis/bot/late_result.py` — strips a late delegation's internal
-  "relay this" wrapper before speaking.
-- `jarvis/bot/costs_tool.py` — `cost_summary` Supervisor tool (always
-  registered).
+- `jarvis/bot/usage_watcher.py` — cost-ledger pipeline observer.
+- `jarvis/bot/late_result.py` — strips a late result's "relay this" wrapper.
+- `jarvis/bot/costs_tool.py` — `cost_summary` Supervisor tool.
 - `jarvis/procedures.py` — learned task-shape hints per run.
 - `jarvis/toolresult.py` — the one tool success/failure classifier.
 

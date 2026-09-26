@@ -73,6 +73,14 @@ logger = logging.getLogger(__name__)
 # Fixed, no backoff — a deliberate, simple judgment call (see the plan's
 # self-audit): Larry asked for "every 30 seconds", not a tapering cadence.
 PROGRESS_UPDATE_INTERVAL_S = 30.0
+# W12 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4, Larry 2026-09-25: option
+# B). The interval is adjustable by voice for the rest of a conversation
+# (jarvis/bot/follow_up.py's progress_updates tool): 0 turns the lines off,
+# otherwise MIN..MAX seconds. Asked for on 2026-08-23 ("status updates to
+# twenty seconds") and 2026-08-30 ("check progress every thirty seconds"),
+# both answered "there's no timer or wait capability".
+MIN_PROGRESS_INTERVAL_S = 10
+MAX_PROGRESS_INTERVAL_S = 300
 
 SpeakFn = Callable[[str], Awaitable[None]]
 ConnectedFn = Callable[[], bool]
@@ -236,6 +244,24 @@ class ProgressWatcher:
             lambda: _default_fetch_selfedit_job(self._admin_url)
         )
         self._task: asyncio.Task | None = None
+        self._interval_changed = asyncio.Event()
+
+    @property
+    def interval_s(self) -> float:
+        return self._interval_s
+
+    def set_interval(self, seconds: float) -> None:
+        """W12: 0 = off; otherwise MIN..MAX seconds. The wait restarts
+        from now, so a changed interval takes effect at once rather than
+        after the old one runs out. Raises ValueError out of range."""
+        seconds = float(seconds)
+        if seconds != 0 and not MIN_PROGRESS_INTERVAL_S <= seconds <= MAX_PROGRESS_INTERVAL_S:
+            raise ValueError(
+                f"every_seconds must be 0 (off) or {MIN_PROGRESS_INTERVAL_S} to "
+                f"{MAX_PROGRESS_INTERVAL_S}")
+        self._interval_s = seconds
+        self._interval_changed.set()
+        logger.info("progress_updates_interval seconds=%s", seconds)
 
     def start(self) -> None:
         self._task = asyncio.create_task(self._run())
@@ -249,7 +275,15 @@ class ProgressWatcher:
 
     async def _run(self) -> None:
         while True:
-            await asyncio.sleep(self._interval_s)
+            self._interval_changed.clear()
+            if self._interval_s <= 0:
+                await self._interval_changed.wait()   # off until set again
+                continue
+            try:
+                await asyncio.wait_for(self._interval_changed.wait(), self._interval_s)
+                continue                               # changed: restart the wait
+            except asyncio.TimeoutError:
+                pass
             await self.tick_once()
 
     async def tick_once(self) -> None:

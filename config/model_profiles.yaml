@@ -1,0 +1,248 @@
+# Model PROFILES — the pool Mortimer's agents, planner and council draw on.
+#
+# ROUTINE (Tier A, via `config/**` in config/self_edit_allowlist.json): the
+# self-edit loop may add, retire or retune a profile here, and a human still
+# merges the PR. What this file CANNOT say is where a request goes or which
+# key it carries: each profile names an `endpoint:` id from
+# config/model_endpoints.yaml (human-only), and the one loader,
+# jarvis.agents.upgrade_agent.load_model_registry, joins provider/base_url/
+# api_key_env in from there. A profile declaring base_url, api_key_env,
+# provider, routes or any URL is a LOAD ERROR (split plan D3), as is an
+# unknown endpoint id. Upstream facts (context window, prices, deprecation)
+# are written daily into config/generated/model_catalog.<endpoint>.json by
+# the sync job and joined by `identity`; never hand-edit those.
+#
+# Selection order when a planner session starts:
+#   1. explicit per-session choice (Edit panel, or a spoken "use Claude Opus")
+#   2. JARVIS_UPGRADE_PROFILE environment variable
+#   3. the `default` below — pinned by `supervisor:` in
+#      config/model_endpoints.yaml; changing it is a human PR there.
+#
+# temperature: set to null to OMIT the parameter entirely. Moonshot's
+# kimi-k2.x family rejects any temperature other than 1 (DEVIATIONS.md
+# D-003), so all Moonshot profiles omit it.
+#
+# vision: true — MORTIMER_SHELL_FIX_AND_SCREEN_VISION_PLAN.md V2. Marks a
+# profile whose model can read IMAGES, making it eligible to answer
+# view_screen questions (resolution order: JARVIS_VISION_PROFILE, then
+# the first key-present vision profile in this file's order). Set it
+# only for models actually confirmed multimodal — do not set it
+# speculatively; an unset profile is simply never chosen for vision.
+#
+# tier: economy | mid | frontier — MORTIMER_LLM_COUNCIL_PLAN.md D4. Which
+# escalation tier's proposer/judge pool a profile belongs to. Read by
+# jarvis.agents.upgrade_agent.available_models() and jarvis.council.config,
+# so the council and the console picker (D9) share one source of truth for
+# "what tier is this model."
+#
+# identity: REQUIRED, and it is not decorative (Larry 2026-08-19). It is the
+# canonical vendor/model string — the thing that identifies the MODEL, as
+# distinct from `name` (this profile) or `model` (the string this endpoint
+# wants). It is also the join key into the generated catalogue. Two
+# profiles may legitimately differ in name, endpoint and model string while
+# being the same underlying model: `openai/gpt-5.1` reached through
+# OpenRouter and a direct OpenAI `gpt-5.1` are one model wearing two
+# profile names.
+#
+# That is a correctness problem, not tidiness. The council's founding rule
+# is that a model never scores its own proposal, and resolve_members'
+# `exclude` enforces it on PROFILE NAMES — so a duplicate underlying model
+# would let a model judge itself while the guarantee still read as enforced.
+# tests/unit/test_model_registry.py fails if two profiles share an identity.
+#
+# The rule when adding an OpenRouter profile: if you can already reach that
+# model directly, do not add it. Pick a different one — the whole value of a
+# second route is a model you did not already have.
+
+# 2026-09-01 — kimi-k3 retired as the registry default
+# (MORTIMER_OPTIMIZATION_PLAN.md Phase 0b): its always-on thinking made the
+# default brain the slowest thinker in the registry (see the timeout_s note
+# on its profile), and frontier-for-planning is now standing policy. This
+# key is the final fallback for FOUR paths — the UpgradeAgent/AppBuildAgent
+# edit loop, the planning pathway, the site-research writer and the Edit
+# panel picker — so it is set to planning quality; the EXECUTOR tier is
+# selected by JARVIS_UPGRADE_PROFILE / JARVIS_APPBUILD_PROFILE (Phase 3),
+# never by pointing this at a cheaper model. K3 stays in the registry and
+# the council pool.
+default: claude-fable-5
+
+profiles:
+  # ---- DIRECT PROVIDER PROFILES -------------------------------------
+  # Reached with that vendor's own key. The developer agent and the voice
+  # model both live here deliberately: voice is latency-critical and wants
+  # no proxy hop, and the developer lives on tool calling, where a known-good
+  # direct route beats a proxy that may route the same slug to upstreams of
+  # differing tool fidelity.
+
+  - name: kimi-k3
+    label: "Kimi K3 — flagship, 1M context, always-on thinking"
+    endpoint: moonshot
+    model: kimi-k3
+    identity: moonshotai/kimi-k3
+    temperature: null
+    tier: mid
+    # 2026-09-01 — K3 is always-on thinking: probed 39 completion tokens to
+    # answer "OK", 36s on a 2.3K-token judge task; real judge workloads
+    # (8-15K tokens) project to 90-180s+ against COUNCIL_MEMBER_TIMEOUT_S
+    # (120s). Round e48cfbe1: all four K3 judge calls timed out
+    # (asyncio.TimeoutError stringifies empty, hence the blank abstain
+    # reasons). Per-profile rope honoured by council._call_profile as
+    # max(caller floor, this) — a profile can buy MORE time, never less, and
+    # other members do not inflate every round's wall time. Accepted trade:
+    # an escalation round with K3 judging can run ~4 min.
+    timeout_s: 240
+
+  - name: kimi-k2
+    label: "Kimi K2.7 Code — coding-tuned K2 family, 256K context"
+    endpoint: moonshot
+    model: kimi-k2.7-code
+    identity: moonshotai/kimi-k2.7-code
+    temperature: null
+    tier: economy
+
+  - name: claude-opus
+    label: "Claude Opus 5 — Anthropic Opus tier, 1M context"
+    endpoint: anthropic
+    model: claude-opus-5
+    identity: anthropic/claude-opus-5
+    # temperature: null (D-003) — claude-opus-5 REJECTS the parameter
+    # outright: "`temperature` is deprecated for this model" (HTTP 400,
+    # measured 2026-08-22 via scripts/probe_planner.py). This was 0.2, so
+    # EVERY self-edit run on this profile died in ~38ms; admin.log shows
+    # state=running -> state=error 38ms apart at 21:13:14. SubAgent was
+    # unaffected because it never sends temperature at all.
+    temperature: null
+    tier: frontier
+    vision: true
+
+  - name: claude-fable-5
+    label: "Claude Fable 5 — Anthropic Mythos-class, above Opus"
+    endpoint: anthropic
+    model: claude-fable-5
+    identity: anthropic/claude-fable-5
+    # Same D-003 fix as claude-opus above: a current-generation Anthropic
+    # model rejects `temperature` outright. Changed together because they
+    # share the failure mode, though only claude-opus was measured 400ing
+    # (claude-fable-5 is unverified — see the plan note).
+    temperature: null
+    tier: frontier
+    vision: true
+
+  - name: claude-sonnet-5
+    label: "Claude Sonnet 5 — direct Anthropic; the agent floor / executor tier"
+    endpoint: anthropic
+    model: claude-sonnet-5
+    identity: anthropic/claude-sonnet-5
+    # D-003, same family as claude-opus/claude-fable-5 above: omit
+    # temperature rather than risk the 400.
+    temperature: null
+    tier: mid
+    # 2026-09-01 (MORTIMER_OPTIMIZATION_PLAN.md Phase 0b item 5) — REPLACES
+    # or-sonnet-5: same identity, same tier, only the route changes, so the
+    # council's mid judge pool is exactly as deep as before (no backfill).
+    # Registry rule honoured: a model reachable directly does not keep an
+    # OpenRouter route. This is the model-floor profile — every agent other
+    # than the voice Supervisor runs here or above (Larry 2026-09-01) — and
+    # the Phase 3 executor tier (JARVIS_UPGRADE_PROFILE / JARVIS_APPBUILD_
+    # PROFILE point here once the baseline is taken).
+
+  - name: codex-subscription
+    label: "Codex subscription default — authenticated ChatGPT subscription runtime"
+    endpoint: codex-subscription
+    model: gpt-6-astra
+    identity: openai/gpt-6-astra
+    # No API credential: this profile is reachable only through the explicit
+    # codex_subscription route and authenticated Codex CLI runtime.
+    tier: frontier
+
+  # ---- OPENROUTER PROFILES ------------------------------------------
+  # Larry 2026-08-19. One key, many vendors. Added for the COUNCIL and
+  # PLANNER tiers only — diversity of proposers and judges is the council's
+  # entire product, and before this every tier was thin: economy had one
+  # working model (gpt-4.1-mini had no credential — OPENAI_API_KEY holds an
+  # Anthropic key in this deployment), mid had exactly one, and frontier was
+  # two profiles behind a SINGLE Anthropic key, so one outage took tier-2
+  # proposers and judges to zero simultaneously.
+  #
+  # temperature is null on every one of these, deliberately. OpenRouter may
+  # route a slug to different upstream providers, and several of these
+  # families reject a temperature other than 1 (DEVIATIONS.md D-003, first
+  # hit with Moonshot). Omitting the parameter can never error; a rejected
+  # request during a council fan-out silently costs a proposer, which is the
+  # failure this whole section exists to prevent.
+  #
+  # No `vision: true` on any of them. Several are certainly multimodal, but
+  # the registry's own rule is not to set that flag speculatively, and the
+  # listing used to pick these filtered on TOOL support, not image support.
+  # Verify a candidate before flagging it — screen vision depending on a
+  # single Anthropic key is a real gap, but an unverified flag is worse.
+
+  - name: or-gpt-5-mini
+    label: "GPT-5 mini (OpenRouter) — cheap OpenAI-family proposer, 400K"
+    endpoint: openrouter
+    model: openai/gpt-5-mini
+    identity: openai/gpt-5-mini
+    temperature: null
+    tier: economy
+
+  - name: or-gemini-flash
+    label: "Gemini 3.7 Flash (OpenRouter) — Google-family proposer, 1M"
+    endpoint: openrouter
+    model: google/gemini-3.7-flash
+    identity: google/gemini-3.7-flash
+    temperature: null
+    tier: economy
+
+  - name: or-deepseek
+    label: "DeepSeek V3.2 (OpenRouter) — independent lineage, 163K"
+    endpoint: openrouter
+    model: deepseek/deepseek-v3.2
+    identity: deepseek/deepseek-v3.2
+    temperature: null
+    tier: economy
+
+  - name: or-gpt-5.1
+    label: "GPT-5.1 (OpenRouter) — mid-tier judge, 400K"
+    endpoint: openrouter
+    model: openai/gpt-5.1
+    identity: openai/gpt-5.1
+    temperature: null
+    tier: mid
+
+  - name: or-grok-4.3
+    label: "Grok 4.3 (OpenRouter) — mid-tier judge, separate lineage, 1M"
+    endpoint: openrouter
+    model: x-ai/grok-4.3
+    identity: x-ai/grok-4.3
+    temperature: null
+    tier: mid
+
+  # Larry 2026-08-19 — the developer's build model, and a frontier council
+  # proposer. Chosen over a general frontier model (gpt-5.2) rather than
+  # alongside it: a coding-tuned model is exactly what an E1 escalation
+  # wants proposing, since that council convenes only after a self-edit's
+  # validation has already failed twice. Keeping ONE profile per vendor
+  # family also keeps tier-2's fan-out from doubling up on OpenAI.
+  - name: or-codex-max
+    label: "GPT-5.1 Codex Max (OpenRouter) — coding-tuned frontier, 400K"
+    endpoint: openrouter
+    model: openai/gpt-5.1-codex-max
+    identity: openai/gpt-5.1-codex-max
+    temperature: null
+    tier: frontier
+
+  - name: or-grok-4.6
+    label: "Grok 4.6 (OpenRouter) — frontier, 500K"
+    endpoint: openrouter
+    model: x-ai/grok-4.6
+    identity: x-ai/grok-4.6
+    temperature: null
+    tier: frontier
+
+  - name: or-deepseek-v4-pro
+    label: "DeepSeek V4 Pro (OpenRouter) — frontier, 1M"
+    endpoint: openrouter
+    model: deepseek/deepseek-v4-pro
+    identity: deepseek/deepseek-v4-pro
+    temperature: null
+    tier: frontier

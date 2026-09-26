@@ -37,6 +37,18 @@ from jarvis.prompts import build_supervisor_prompt, render_agent_catalog
 from jarvis.memory import render_memory_context
 from jarvis.bot.sensitive_turn import arm_from_text, is_sensitive
 from jarvis.usage_ledger import record_completion, provider_from_base_url
+from jarvis.voice_workflows import (
+    TOMBSTONE,
+    correction_note,
+    is_capability_question,
+    is_explicit_command_ask,
+    log_capability_gap,
+    match_voice_workflow,
+    normalize_guard_mode,
+    render_guidance,
+    reply_violations,
+    wrap_delegate_handler,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +76,9 @@ class Orchestrator:
         ui_control: bool = False,
         screen: bool = False,
         clipboard: bool = False,
+        status: bool = False,
+        progress: bool = False,
+        follow_up: bool = False,
     ):
         self._settings = settings
         self._registry = registry
@@ -142,8 +157,28 @@ class Orchestrator:
             ui_control=ui_control,
             screen=screen,
             clipboard=clipboard,
+            # Phase 2 D4: the system_status addendum, so the voice-workflow
+            # eval can score location questions against what ships.
+            status=status,
+            # W12: the progress_updates / follow_up addenda, same reason.
+            progress=progress,
+            follow_up=follow_up,
         )
         self._history: list[dict] = []
+        # MORTIMER_VOICE_WORKFLOWS_PLAN.md D15 — the same three hooks
+        # pipeline.py runs, so the routing and voice-workflow evals score
+        # what ships. getattr defaults are OFF so a bare settings object
+        # (tests/unit/test_orchestrator.py make_settings) keeps the pre-plan
+        # behaviour byte for byte; load_settings() defaults are ON.
+        self._voice_enabled = bool(getattr(settings, "jarvis_voice_workflows_enabled", False))
+        self._guard_mode = normalize_guard_mode(
+            getattr(settings, "jarvis_reply_guard_mode", "off"))
+        self._voice_notes: list[dict] = []
+        if self._voice_enabled and self._delegate_handler is not None:
+            self._delegate_handler = wrap_delegate_handler(
+                self._delegate_handler, session_id=session_id,
+                is_sensitive=is_sensitive,
+            )
 
     @property
     def session_id(self) -> str:
@@ -166,6 +201,71 @@ class Orchestrator:
         if not is_sensitive():
             self._persist("user", user_text)
 
+        # MORTIMER_VOICE_WORKFLOWS_PLAN.md D15 — user hook, same rule as
+        # VoiceWorkflowInjector: tombstone last turn's notes, then inject.
+        for note in self._voice_notes:
+            note["content"] = TOMBSTONE
+        self._voice_notes.clear()
+        if self._voice_enabled:
+            wf = match_voice_workflow(user_text=user_text)
+            if wf is not None:
+                note = {"role": "user", "content": render_guidance(wf)}
+                self._history.append(note)
+                self._voice_notes.append(note)
+                logger.info("voice_workflow_injected hook=user name=%s", wf.name)
+
+        reply, tool_calls_total = await self._tool_loop()
+
+        # D15 — reply guard, same rule as ReplyGuard at whole-reply
+        # granularity: one correction per turn; the rejected reply never
+        # enters history; a second violation is returned and logged.
+        if self._guard_mode != "off" and not is_capability_question(user_text):
+            # D-L5 — on a turn where Larry explicitly asked for a command, a
+            # hand-off sentence is what he asked for; refusals still count.
+            asked = is_explicit_command_ask(user_text)
+
+            def _violations(text: str) -> list[tuple[str, str]]:
+                return [v for v in reply_violations(text)
+                        if not (asked and v[1] == "handoff")]
+
+            violations = _violations(reply)
+            if violations and self._guard_mode == "log":
+                logger.info("reply_guard action=logged kind=%s", violations[0][1])
+            elif violations:
+                sentence, kind = violations[0]
+                logger.info("reply_guard action=suppressed kind=%s", kind)
+                note = {"role": "user", "content": correction_note(
+                    kind, sentence, match_voice_workflow(reply_kinds=[kind]))}
+                self._history.append(note)
+                self._voice_notes.append(note)
+                reply, more_calls = await self._tool_loop()
+                tool_calls_total += more_calls
+                again = _violations(reply)
+                if again:
+                    logger.info("reply_guard action=allowed_after_retry kind=%s", again[0][1])
+                    log_capability_gap(
+                        source="reply_guard", kind=again[0][1], text=again[0][0],
+                        user_text=user_text, session_id=self._session_id,
+                        sensitive=is_sensitive(),
+                    )
+
+        self._history.append({"role": "assistant", "content": reply})
+        arm_from_text(reply)                    # T4a K3 (P5), review F2
+        if not is_sensitive():
+            self._persist("assistant", reply)
+        self._trim_history()
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        logger.info(
+            "turn_complete user_len=%d latency_ms=%d tool_calls=%d",
+            len(user_text), latency_ms, tool_calls_total,
+        )
+        return reply
+
+    async def _tool_loop(self) -> tuple[str, int]:
+        """One completion/tool loop — moved verbatim out of chat()
+        (MORTIMER_VOICE_WORKFLOWS_PLAN.md D15) so the reply guard can
+        run it a second time. Returns (reply, tool calls made)."""
+        tool_calls_total = 0
         reply = STUCK_MESSAGE
         for _ in range(MAX_TOOL_ITERATIONS):
             extra: dict[str, Any] = {}
@@ -213,18 +313,7 @@ class Orchestrator:
                     "tool_call_id": tool_call.id,
                     "content": result,
                 })
-
-        self._history.append({"role": "assistant", "content": reply})
-        arm_from_text(reply)                    # T4a K3 (P5), review F2
-        if not is_sensitive():
-            self._persist("assistant", reply)
-        self._trim_history()
-        latency_ms = int((time.perf_counter() - start) * 1000)
-        logger.info(
-            "turn_complete user_len=%d latency_ms=%d tool_calls=%d",
-            len(user_text), latency_ms, tool_calls_total,
-        )
-        return reply
+        return reply, tool_calls_total
 
     def _messages(self) -> list[dict]:
         return [{"role": "system", "content": self._system_prompt}, *self._history]

@@ -337,14 +337,21 @@ class TestSpeakingStateTracker:
 
 
 async def test_kill_switch_env_read_at_pipeline_construction_site():
-    """The kill switch lives in jarvis/bot/pipeline.py's run_session, same
-    pattern as JARVIS_PLAN_WATCHER_ENABLED — this module itself has no
-    env-reading logic to test in isolation."""
-    import jarvis.bot.pipeline as pipeline_module
+    """The kill switch is read where the watcher is built, in
+    jarvis/bot/pipeline.py's run_session. W12 moved the reading into
+    jarvis.bot.follow_up.progress_updates_enabled, which build_pipeline also
+    uses to decide the progress_updates tool, so the watcher and the tool
+    cannot disagree (the reading itself: tests/unit/test_follow_up.py)."""
+    import inspect
 
-    assert "JARVIS_PROGRESS_UPDATES_ENABLED" in pipeline_module.__loader__.get_source(
-        pipeline_module.__name__
-    )
+    import jarvis.bot.pipeline as pipeline_module
+    from jarvis.bot import follow_up
+
+    assert follow_up.PROGRESS_UPDATES_ENV == "JARVIS_PROGRESS_UPDATES_ENABLED"
+    run_session = inspect.getsource(pipeline_module.run_session)
+    assert "if progress_updates_enabled():" in run_session
+    assert "progress_enabled = progress_updates_enabled()" in inspect.getsource(
+        pipeline_module.build_pipeline)
 
 
 def test_live_progress_uses_completed_events_not_the_unfinished_run_counter(tmp_path):
@@ -362,3 +369,49 @@ def test_live_progress_uses_completed_events_not_the_unfinished_run_counter(tmp_
     assert _live_progress_for_run("active", db) == (2, "repo_search")
     assert _live_progress_for_run("missing", db) == (0, None)
     assert _live_progress_for_run("active", tmp_path / "uninitialized.db") == (0, None)
+
+
+# ------------------------------------------------ W12: adjustable interval
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4 (Larry 2026-09-25, option B):
+# "status updates to twenty seconds" / "stop the updates" by voice.
+
+
+def test_set_interval_accepts_off_and_the_range_only():
+    import jarvis.bot.progress_watcher as pw
+
+    w = _watcher(_Recorder())
+    for ok in (0, pw.MIN_PROGRESS_INTERVAL_S, 20, pw.MAX_PROGRESS_INTERVAL_S):
+        w.set_interval(ok)
+        assert w.interval_s == ok
+    for bad in (-1, pw.MIN_PROGRESS_INTERVAL_S - 1, pw.MAX_PROGRESS_INTERVAL_S + 1):
+        with pytest.raises(ValueError, match="0 \\(off\\) or 10 to 300"):
+            w.set_interval(bad)
+    assert w.interval_s == pw.MAX_PROGRESS_INTERVAL_S  # a refused value changes nothing
+
+
+async def test_a_new_interval_applies_at_once_and_zero_stops_the_lines(monkeypatch):
+    import asyncio
+
+    import jarvis.bot.progress_watcher as pw
+
+    monkeypatch.setattr(pw, "MIN_PROGRESS_INTERVAL_S", 0.01)
+    rec = _Recorder()
+    w = _watcher(rec, delegations=[{"display_name": "Developer", "tool_count": 1}])
+    w._interval_s = 1000.0          # the old interval would never fire in this test
+    w.start()
+    try:
+        await asyncio.sleep(0.05)
+        assert rec.spoken == []
+        w.set_interval(0.02)        # restarts the wait from now
+        await asyncio.sleep(0.15)
+        assert len(rec.spoken) >= 3
+        w.set_interval(0)           # off
+        await asyncio.sleep(0.03)   # a tick already past its wait may still land
+        stopped_at = len(rec.spoken)
+        await asyncio.sleep(0.15)
+        assert len(rec.spoken) == stopped_at
+        w.set_interval(0.02)        # and back on
+        await asyncio.sleep(0.15)
+        assert len(rec.spoken) > stopped_at
+    finally:
+        await w.stop()

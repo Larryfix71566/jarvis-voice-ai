@@ -142,6 +142,36 @@ def retrieve_automated_memory_context(conn: sqlite3.Connection, query: str, *,
 
 MAX_FACT_CHARS = 200
 
+
+def fact_age(updated_at: str | None, now: datetime | None = None) -> str:
+    """W10 (MORTIMER_VOICE_WORKFLOWS_PLAN.md, Larry 2026-09-25: age-aware
+    memory) — how long ago a fact was last written, as the Supervisor sees
+    it: "today", "yesterday", "5 days ago", "3 weeks ago", "2 months ago".
+
+    Relative rather than a date because the Supervisor prompt carries no
+    clock (rule 3: dates come from specialists), so a bare date could not
+    be turned into an age. The prompt is rebuilt per session, so the phrase
+    is exact to the day for that session. `updated_at` is the last write:
+    a restatement refreshes it, and so does a sweep merge, so for a merged
+    fact the phrase can be younger than the statements behind it.
+    Unreadable timestamps say "undated" rather than guess."""
+    try:
+        written = datetime.fromisoformat((updated_at or "").replace("Z", "+00:00"))
+    except ValueError:
+        return "undated"
+    if written.tzinfo is None:
+        written = written.replace(tzinfo=timezone.utc)
+    days = ((now or datetime.now(timezone.utc)) - written).days
+    if days <= 0:
+        return "today"
+    if days == 1:
+        return "yesterday"
+    if days < 14:
+        return f"{days} days ago"
+    if days < 60:
+        return f"{days // 7} weeks ago"
+    return f"{days // 30} months ago"
+
 # K1 (MORTIMER_KNOWLEDGE_FRAMEWORK_PLAN.md) — memory tiers, by DURABILITY.
 #
 # The flat pool was the defect: measured 2026-08-18, the store held 180
@@ -241,6 +271,10 @@ Rules:
   ("I prefer short answers", "stop doing that", "always ask me first")
   is a fact with a user.style.* key — record it immediately in facts,
   not observations. Explicit statements override everything inferred.
+- Only the user's own lines are evidence. Never record something only the
+  assistant said: its greetings and summaries repeat what memory already
+  holds. Never record where the user is right now; that comes from the
+  device.
 - Observations are INFERRED behavioral tendencies: how the user phrases
   requests, what they react well or badly to, formats they pick,
   pacing, tone. Keys are "user.style.<pattern>". Observations are
@@ -558,7 +592,8 @@ def render_memory_context(
         # next sweep, which would be the worse failure.
         fact_rows = conn.execute(
             "SELECT key, content, COALESCE(tier, ?) AS tier, "
-            "evidence_status, provenance, memory_type, valid_until, classifier_version FROM memories "
+            "evidence_status, provenance, memory_type, valid_until, classifier_version, updated_at "
+            "FROM memories "
             "WHERE kind = 'fact' AND archived_at IS NULL "
             "AND COALESCE(tier, ?) IN (?, ?, ?) "
             "AND COALESCE(audience, 'interaction') = 'interaction' "
@@ -647,7 +682,10 @@ def render_memory_context(
     lines: list[str] = []
     budget_dropped: list[str] = []
     for i, row in enumerate(capped_rows):
-        line = f"- {row['key']}: {row['content'][:MAX_FACT_CHARS]}"
+        # W10: every fact carries its age, so the Supervisor can tell a
+        # standing preference from an old observation of something that
+        # changes (the prompt's Long-term memory paragraph says what to do).
+        line = f"- {row['key']} ({fact_age(row['updated_at'], now)}): {row['content'][:MAX_FACT_CHARS]}"
         # K1: identity is exempt — it is ordered first and is a handful of
         # rows, and silently losing the user's name or location to a char
         # budget is the worst outcome this function can produce.
@@ -699,6 +737,54 @@ def archive_fact(conn, key: str, became: str) -> bool:
         (now_iso(), became, key),
     )
     return cur.rowcount > 0
+
+
+def restore_fact(conn, key: str) -> dict:
+    """W10 (MORTIMER_VOICE_WORKFLOWS_PLAN.md, Larry 2026-09-25: "restore any
+    archived memory by voice") — the inverse of archive_fact.
+
+    The row comes back as it was archived: same content, and the same
+    updated_at, so its age still says when it was last written rather than
+    when it was restored. last_seen_at is set to now, so capacity age-out
+    (least recently seen first) does not archive it again at the next
+    sweep. Its `became` is returned (and cleared) so the caller can say
+    why it had been archived. Never raises."""
+    key = (key or "").strip()
+    try:
+        live = conn.execute(
+            "SELECT 1 FROM memories WHERE kind = 'fact' AND key = ? AND archived_at IS NULL",
+            (key,),
+        ).fetchone()
+        if live is not None:
+            return {"ok": False, "error": f"{key} is not archived; it is already in memory"}
+        row = conn.execute(
+            "SELECT id, content, became, updated_at FROM memories "
+            "WHERE kind = 'fact' AND key = ? AND archived_at IS NOT NULL",
+            (key,),
+        ).fetchone()
+        if row is None:
+            candidates = [
+                r["key"] for r in conn.execute(
+                    "SELECT key FROM memories WHERE kind = 'fact' AND archived_at IS NOT NULL "
+                    "AND (key LIKE ? OR content LIKE ?) ORDER BY archived_at DESC LIMIT 5",
+                    (f"%{key}%", f"%{key}%"),
+                )
+            ]
+            return {"ok": False, "error": f"no archived memory is named {key}",
+                    "candidates": candidates}
+        # last_seen_at, not updated_at: the age still says when the fact
+        # was written, while capacity age-out (least recently seen first)
+        # does not take back what Larry just asked for.
+        conn.execute(
+            "UPDATE memories SET archived_at = NULL, became = NULL, last_seen_at = ? "
+            "WHERE id = ?", (now_iso(), row["id"]),
+        )
+    except Exception as exc:  # noqa: BLE001 — memory must never break a caller
+        logger.exception("memory_restore_failed key=%s", key)
+        return {"ok": False, "error": f"could not restore {key}: {exc}"}
+    logger.info("memory_fact_restored key=%s was=%s", key, row["became"])
+    return {"ok": True, "key": key, "content": row["content"], "was": row["became"],
+            "age": fact_age(row["updated_at"])}
 
 
 MAX_SEARCH_RESULTS = 25
@@ -804,7 +890,26 @@ def upsert_fact(
         "WHERE kind='fact' AND user_id=? AND key=? AND COALESCE(archived_at,'')=''",
         (user_id, key),
     ).fetchone()
-    if existing is None:
+    # W10 (MORTIMER_VOICE_WORKFLOWS_PLAN.md): idx_memories_fact_key is
+    # UNIQUE(user_id, key) over archived rows too, so restating a fact whose
+    # key had been archived raised IntegrityError on the INSERT below and
+    # failed that whole exchange's extraction. The user saying it again is
+    # new evidence: the archived row comes back live with the new content.
+    archived = None if existing is not None else conn.execute(
+        "SELECT id, became FROM memories WHERE kind='fact' AND user_id=? AND key=? "
+        "AND COALESCE(archived_at,'')!=''",
+        (user_id, key),
+    ).fetchone()
+    if archived is not None:
+        conn.execute(
+            "UPDATE memories SET content=?, source_session_id=?, updated_at=?, "
+            "archived_at=NULL, became=NULL, tier=COALESCE(tier,?), source_turn=NULL, "
+            "content_revision=content_revision+1 WHERE id=?",
+            (value[:MAX_FACT_CHARS], session_id, now, infer_tier(key), archived["id"]),
+        )
+        logger.info("memory_fact_revived key=%s was=%s session=%s",
+                    key, archived["became"], session_id)
+    elif existing is None:
         conn.execute(
             "INSERT INTO memories (kind, key, content, source_session_id, "
             "created_at, updated_at, tier, user_id, content_revision) VALUES "
@@ -813,10 +918,17 @@ def upsert_fact(
         )
     else:
         changed = existing["content"] != value[:MAX_FACT_CHARS]
+        # W10: source_turn names the exchange whose words the fact holds
+        # (the memory graph's stated_in edge, the settle check's evidence).
+        # New words from anywhere but that exchange — the remember tool, a
+        # capacity merge, a review rewrite — clear it; the extraction path
+        # sets it again right after (memory_extraction._touch_recurrence).
         conn.execute(
             "UPDATE memories SET content=?, source_session_id=?, updated_at=?, "
-            "tier=COALESCE(tier,?), content_revision=content_revision+? WHERE id=?",
-            (value[:MAX_FACT_CHARS], session_id, now, infer_tier(key), int(changed), existing["id"]),
+            "tier=COALESCE(tier,?), content_revision=content_revision+?, "
+            "source_turn=CASE WHEN ? THEN NULL ELSE source_turn END WHERE id=?",
+            (value[:MAX_FACT_CHARS], session_id, now, infer_tier(key), int(changed),
+             int(changed), existing["id"]),
         )
     if os.environ.get("JARVIS_MEMORY_AUTOMATION_ENABLED", "false").lower() in {"1", "true", "yes"}:
         row = conn.execute("SELECT id, content_revision FROM memories WHERE kind='fact' AND user_id=? AND key=? AND COALESCE(archived_at,'')=''", (user_id, key)).fetchone()

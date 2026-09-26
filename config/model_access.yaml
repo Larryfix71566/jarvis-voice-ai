@@ -1,5 +1,5 @@
 # Workload access policies for Model Use Enhancements.
-# Profile names refer to config/upgrade_models.yaml; this file does not define
+# Profile names refer to config/model_profiles.yaml; this file does not define
 # models. Routes are explicit so subscription exhaustion cannot become a paid
 # API fallback by accident.
 defaults:

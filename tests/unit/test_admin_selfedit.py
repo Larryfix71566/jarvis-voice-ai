@@ -632,7 +632,7 @@ def reset_finish_job():
     with srv._finish_lock:
         srv._finish_job.update(
             state="idle", cancel_requested=False, checks=None, pr_url=None, notice=None, run_id=None,
-            started_at=None, finished_at=None,
+            started_at=None, finished_at=None, human_only=None, apply_command=None,
         )
     yield
 
@@ -847,13 +847,48 @@ class TestAuthoringRoutes:
     def test_the_write_route_honours_the_allowlist(
         self, registry_file, monkeypatch, tmp_path,
     ):
-        """SE2 changes WHO writes, never WHAT may be written."""
+        """SE2 changes WHO writes, never WHAT may be written. W8 (Larry
+        2026-09-25, option A): a human-only file is still never written;
+        the write is saved as a proposal patch, and says so."""
+        from jarvis.selfedit import proposals
         c = TestClient(app)
-        self._open(c, monkeypatch, tmp_path)
+        svc = self._open(c, monkeypatch, tmp_path)
         res = c.post("/api/selfedit/write", json={
             "path": "jarvis/vault.py", "content": "x\n", "rationale": "r",
         }).json()
-        assert res["ok"] is False and "workspace policy" in res["error"]
+        assert res["ok"] is True and res["proposal"] is True, res
+        session = svc.test_runtime.current
+        assert "jarvis/vault.py" not in session.files
+        assert [p["path"] for p in session.state["proposals"]] == [
+            proposals.proposal_path("jarvis/vault.py")]
+        outside = c.post("/api/selfedit/write", json={
+            "path": "scripts/x.sh", "content": "x\n", "rationale": "r",
+        }).json()
+        assert outside["ok"] is False and "workspace policy" in outside["error"]
+
+    def test_finish_carries_the_proposal_and_its_apply_command(
+        self, registry_file, monkeypatch, tmp_path,
+    ):
+        c = TestClient(app)
+        svc = self._open(c, monkeypatch, tmp_path)
+        c.post("/api/selfedit/write", json={
+            "path": "jarvis/vault.py", "content": "x\n", "rationale": "r"})
+        monkeypatch.setattr(svc, "validate", lambda: {"ok": True, "checks": []})
+        monkeypatch.setattr(svc, "submit", lambda: {
+            "ok": True, "pr_url": "https://example.invalid/pr/5", "notice": "HUMAN-ONLY PROPOSAL: …",
+            "human_only": ["jarvis/vault.py"], "apply_command": "cd /r && .venv/bin/python scripts/apply_proposal.py 5 3f9c2a1b7d4e",
+        })
+        c.post("/api/selfedit/finish", json={})
+        finish = _wait_for_finish(c, "done")
+        assert finish["human_only"] == ["jarvis/vault.py"]
+        assert finish["apply_command"].endswith("apply_proposal.py 5 3f9c2a1b7d4e")
+        # A later finish with no proposal must not inherit this one's.
+        monkeypatch.setattr(svc, "submit", lambda: {
+            "ok": True, "pr_url": "https://example.invalid/pr/6", "notice": "Review and merge"})
+        assert c.post("/api/selfedit/finish", json={}).json()["ok"] is True
+        again = _wait_for_finish(c, "done")
+        assert again["pr_url"].endswith("/6")
+        assert again["human_only"] is None and again["apply_command"] is None
 
     def test_the_read_route_honours_the_allowlist(
         self, registry_file, monkeypatch, tmp_path,
@@ -1013,12 +1048,26 @@ def test_stage_classifies_target_paths_not_the_prose(registry_file, monkeypatch,
     assert staged["core_change"] is False
 
 
-def test_stage_refuses_a_tier0_goal_before_staging(registry_file, monkeypatch, tmp_path):
+def test_stage_names_a_human_only_goal_instead_of_refusing_it(registry_file, monkeypatch, tmp_path):
+    """W8 (2026-09-25): a human-only target used to be refused here. It is
+    now staged and named, so the spoken preview can say it becomes a
+    proposal Larry approves."""
     _preflight_service(monkeypatch, tmp_path)
     c = TestClient(app)
     res = c.post("/api/selfedit/stage", json={"goal": "rotate keys in jarvis/vault.py"}).json()
-    assert res["ok"] is False
-    assert "jarvis/vault.py" in res["error"] and "human-only" in res["error"]
+    assert res["ok"] is True, res
+    assert res["human_only"] == ["jarvis/vault.py"]
+
+
+def test_stage_still_refuses_secrets_before_staging(registry_file, monkeypatch, tmp_path):
+    from jarvis.selfedit.allowlist import Allowlist
+    svc = _preflight_service(monkeypatch, tmp_path)
+    svc.allowlist = Allowlist(allow=["web/src/**"], core=["jarvis/**"],
+                              deny=["jarvis/vault.py", "**/.env", "data/**"])
+    c = TestClient(app)
+    for target in (".env", "data/jarvis.db"):
+        res = c.post("/api/selfedit/stage", json={"goal": "fix it", "target_paths": [target]}).json()
+        assert res["ok"] is False and target in res["error"] and "secrets" in res["error"], res
     assert c.get("/api/selfedit/run").json()["stagings"] == []
 
 

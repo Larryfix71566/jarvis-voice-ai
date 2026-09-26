@@ -393,6 +393,21 @@ def _cmd_list(_args: argparse.Namespace) -> int:
     return 0
 
 
+
+def _joined_model_registry() -> dict:
+    """The model registry as the ONE loader joins it (spec I6).
+
+    `verify` groups probes by (key, ENDPOINT), and after the registry split
+    (docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md §3 item 4) both of
+    those live in config/model_endpoints.yaml — reading the profile file
+    directly would collapse every profile into one keyless group. Imported
+    lazily: this module is imported at startup, long before any registry
+    read is needed.
+    """
+    from jarvis.agents.upgrade_agent import load_model_registry
+
+    return load_model_registry()
+
 def _cmd_verify(_args: argparse.Namespace) -> int:
     """MORTIMER_KEY_VALIDITY_PLAN.md K3 — do the stored model credentials
     actually WORK?
@@ -423,10 +438,7 @@ def _cmd_verify(_args: argparse.Namespace) -> int:
     spec.loader.exec_module(check_env)
 
     try:
-        import yaml
-        registry = yaml.safe_load(
-            (repo_root / "config" / "upgrade_models.yaml").read_text(
-                encoding="utf-8")) or {}
+        registry = _joined_model_registry()
     except Exception as exc:  # noqa: BLE001
         print(f"could not read the model registry: {exc}")
         return 1
@@ -436,7 +448,7 @@ def _cmd_verify(_args: argparse.Namespace) -> int:
     # endpoints, and a verdict is only meaningful against the endpoint that
     # produced it.
     groups: dict[tuple[str, str], dict] = {}
-    for prof in registry.get("profiles") or []:
+    for prof in (registry.get("profiles") or {}).values():
         if not isinstance(prof, dict):
             continue
         key_env = str(prof.get("api_key_env", "OPENAI_API_KEY"))

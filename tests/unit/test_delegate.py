@@ -453,6 +453,154 @@ class TestRetryGuard:
         assert result == "done"
 
 
+class TestRetryGuardNamedSource:
+    """Phase 2 W5 (2026-09-25): a source Larry names in his own turn is new
+    input. FAILED is the analyst's exact failed task from agent_runs
+    (2026-09-13 22:50:18); Larry's next turn was 2998, "Can you do anything
+    for me at spn dot com?" (speech-to-text for ESPN)."""
+
+    FAILED = ("Search the web for NFL scores from September 13, 2026. Try ESPN.com, "
+              "Sports-Reference, or other sports news sites that display live and final "
+              "scores. Find all games played today with final scores and any currently "
+              "in progress with current scores and quarter information.")
+    RETRY = "Get NFL scores for September 13, 2026 from espn.com: final scores and games in progress."
+    LARRY = "Can you do anything for me at spn dot com?"
+
+    async def _fail_then(self, second_task, user_text):
+        agents = {"analyst": FakeSubAgent("analyst", result="FAILED: fragments only")}
+        _, handler = build_delegate_tool(agents, user_text=user_text)
+        await handler({"agent_name": "analyst", "task": self.FAILED})
+        return agents, await handler({"agent_name": "analyst", "task": second_task})
+
+    async def test_source_larry_names_is_not_a_retry(self):
+        agents, second = await self._fail_then(self.RETRY, lambda: self.LARRY)
+        assert not second.startswith("REFUSED:")
+        assert len(agents["analyst"].tasks) == 2
+
+    async def test_same_task_without_larry_naming_a_source_is_refused(self):
+        # Overlap 1.0: the guard's own case. "Give it all to him!" (turn
+        # 2989) names nothing, so the refusal stands.
+        _, second = await self._fail_then(self.RETRY, lambda: "Give it all to him!")
+        assert second.startswith("REFUSED:")
+
+    async def test_no_user_text_keeps_the_old_behaviour(self):
+        _, second = await self._fail_then(self.RETRY, None)
+        assert second.startswith("REFUSED:")
+
+    async def test_larry_names_a_source_but_the_task_does_not(self):
+        _, second = await self._fail_then(
+            "Search the web again for NFL scores from September 13, 2026, final and in progress.",
+            lambda: self.LARRY)
+        assert second.startswith("REFUSED:")
+
+    async def test_kill_switch(self, monkeypatch):
+        monkeypatch.setenv("JARVIS_RETRY_GUARD_NAMED_SOURCE_ENABLED", "false")
+        _, second = await self._fail_then(self.RETRY, lambda: self.LARRY)
+        assert second.startswith("REFUSED:")
+
+    async def test_a_raising_user_text_never_breaks_the_guard(self):
+        def boom():
+            raise RuntimeError("no state")
+        _, second = await self._fail_then(self.RETRY, boom)
+        assert second.startswith("REFUSED:")
+
+    @pytest.mark.parametrize("text,expected", [
+        ("Can you do anything for me at spn dot com?", True),
+        ("look on NFL dot com", True),
+        ("Try ESPN.com", True),
+        ("https://www.mlb.com/scores", True),
+        ("Give it all to him!", False),
+        ("Find another way.", False),
+    ])
+    def test_names_source(self, text, expected):
+        from jarvis.agents.delegate import names_source
+        assert names_source(text) is expected
+
+
+class TestRetryGuardInputSubstitution:
+    """T1.1 (2026-09-22): a single-word correction is new input, not a
+    reworded retry. The Alfreda/Alpharetta tasks are the exact ones the
+    guard refused live at 21:53 (delegate_retry_guard_refused overlap=0.75)."""
+
+    FAILED = "Get current weather for Alfreda, Georgia."
+
+    async def _fail_then(self, second_task, monkeypatch=None):
+        agents = {"analyst": FakeSubAgent("analyst", result="FAILED: no such place")}
+        _, handler = build_delegate_tool(agents)
+        assert await handler({"agent_name": "analyst", "task": self.FAILED}) == "FAILED: no such place"
+        return agents, await handler({"agent_name": "analyst", "task": second_task})
+
+    async def test_corrected_place_name_is_not_a_retry(self):
+        agents, second = await self._fail_then("Get current weather for Alpharetta, Georgia.")
+        assert not second.startswith("REFUSED:")
+        assert len(agents["analyst"].tasks) == 2
+
+    async def test_longer_corrected_request_is_not_a_retry(self):
+        agents, second = await self._fail_then(
+            "Retrieve current weather conditions for Alpharetta in Fulton County, "
+            "Georgia, including temperature, conditions, humidity")
+        assert not second.startswith("REFUSED:")
+        assert len(agents["analyst"].tasks) == 2
+
+    async def test_superset_rewording_is_still_refused(self):
+        agents, second = await self._fail_then("Get current weather for Alfreda, Georgia, try harder")
+        assert second.startswith("REFUSED:")
+        assert len(agents["analyst"].tasks) == 1
+
+    def test_multi_word_rewording_is_not_a_substitution(self):
+        from jarvis.agents.delegate import _is_input_substitution
+        from jarvis.procedures import _tokens
+        failed = _tokens("find the upper left updates display component and add a close button")
+        new = _tokens("locate the upper left status panel and add a dismiss button to it")
+        assert _is_input_substitution(failed, new) is False
+
+    async def test_substitution_exemption_kill_switch(self, monkeypatch):
+        monkeypatch.setenv("JARVIS_RETRY_GUARD_SUBSTITUTION_ENABLED", "false")
+        agents, second = await self._fail_then("Get current weather for Alpharetta, Georgia.")
+        assert second.startswith("REFUSED:")
+
+    async def test_refusal_forbids_telling_user_to_wait(self):
+        _, second = await self._fail_then("Get current weather for Alfreda, Georgia, try harder")
+        assert "Never tell the user to wait" in second
+
+
+class TestMissingTool:
+    """T1.2 (2026-09-22): MISSING-TOOL is a capability gap, not a failed
+    approach and not a question for the user."""
+
+    GAP = "FAILED: MISSING-TOOL: read live provider model catalogs"
+
+    async def test_missing_tool_does_not_arm_the_guard(self):
+        agents = {"developer": FakeSubAgent("developer", result=self.GAP)}
+        _, handler = build_delegate_tool(agents)
+        await handler({"agent_name": "developer", "task": "list the models openrouter offers today"})
+        second = await handler({"agent_name": "developer", "task": "list the models openrouter offers now please"})
+        assert not second.startswith("REFUSED:")
+        assert len(agents["developer"].tasks) == 2
+
+    async def test_missing_tool_note_appended(self):
+        agents = {"developer": FakeSubAgent("developer", result=self.GAP)}
+        _, handler = build_delegate_tool(agents)
+        result = await handler({"agent_name": "developer", "task": "list openrouter models"})
+        assert result.startswith(self.GAP)
+        assert "no tool for this" in result
+        assert "Do not show or speak commands" in result
+
+    async def test_missing_tool_is_not_awaiting_user(self, caplog):
+        """A continuation claim after MISSING-TOOL is unearned: nothing was
+        asked of the user, so it must not be honoured as a handoff."""
+        import logging
+        agents = {"developer": FakeSubAgent(
+            "developer", result="NEEDS-INPUT: MISSING-TOOL: read the vault")}
+        _, handler = build_delegate_tool(agents)
+        await handler({"agent_name": "developer", "task": "read the vault key list"})
+        with caplog.at_level(logging.INFO, logger="jarvis.agents.delegate"):
+            await handler({"agent_name": "developer", "task": "read the vault key list",
+                           "continuation": True})
+        assert "delegate_continuation_unearned" in caplog.text
+        assert "delegate_continuation agent=" not in caplog.text
+
+
 class TestRetryGuardSharedIdentifierExemption:
     """2026-08-25 — a live incident (staging_id 469bff19ef49) showed the
     guard refusing the LEGITIMATE confirm-half of a two-phase flow: a
@@ -671,6 +819,9 @@ class TestHandoffDepth:
                                   "continuation": True})
         assert "This is handoff" in last
         assert "what you still do not know" in last
+        # Review finding 8 (L1): information, not a command for the user.
+        assert "command" not in last.split("This is handoff", 1)[1]
+        assert "what information would settle it" in last
 
     async def test_there_is_no_cap(self):
         """Ten handoffs must all be allowed — the notice is guidance."""
@@ -815,3 +966,291 @@ class TestBargeInSurvival:
             await turn
         await asyncio.sleep(0.1)
         assert agent.finished_at is not None
+
+
+class TestNoticeOutbox:
+    """Status spec T3.2 (L12): a late result nobody can hear now — no hook,
+    or a hook whose session has ended (inject_late_result returns False) —
+    goes to the notice outbox instead of being lost (fact 3.5)."""
+
+    @pytest.fixture
+    def outbox(self, monkeypatch):
+        calls: list[tuple[str, str]] = []
+
+        def record(source, text):
+            calls.append((source, text))
+            return len(calls)
+
+        monkeypatch.setattr("jarvis.agents.delegate._to_outbox", record)
+        return calls
+
+    @staticmethod
+    async def _orphan(handler, task="do the thing"):
+        turn = asyncio.create_task(handler({"agent_name": "developer", "task": task}))
+        await asyncio.sleep(0.01)
+        turn.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await turn
+        await asyncio.sleep(0.1)
+
+    async def test_undeliverable_late_result_goes_to_outbox(self, outbox, caplog):
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="audit: 3 findings")
+        _, handler = build_delegate_tool({"developer": agent})     # no hook
+        with caplog.at_level("INFO", logger="jarvis.agents.delegate"):
+            await self._orphan(handler)
+        assert len(outbox) == 1
+        source, text = outbox[0]
+        assert source == "Developer"
+        assert text == "The Developer task finished: audit: 3 findings"
+        assert "delegate_late_result_undeliverable" in caplog.text, "the log line stays"
+
+    async def test_dead_session_hook_returning_false_goes_to_outbox(self, outbox):
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="audit: 3 findings")
+        offered: list[str] = []
+
+        async def dead_hook(text):
+            offered.append(text)
+            return False                        # runtime.alive is False
+
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": dead_hook})
+        await self._orphan(handler)
+        assert len(offered) == 1
+        assert "audit: 3 findings" in offered[0]
+        assert outbox == [("Developer", "The Developer task finished: audit: 3 findings")]
+
+    @pytest.mark.parametrize("returned", [True, None])
+    async def test_a_delivered_result_is_not_outboxed(self, outbox, returned):
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="done late")
+
+        async def live_hook(text):
+            return returned
+
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": live_hook})
+        await self._orphan(handler)
+        assert outbox == []
+
+    async def test_a_hook_that_raises_goes_to_outbox(self, outbox):
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="done late")
+
+        async def broken_hook(text):
+            raise RuntimeError("pipeline gone")
+
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": broken_hook})
+        await self._orphan(handler)
+        assert len(outbox) == 1 and "done late" in outbox[0][1]
+
+    async def test_sensitive_late_result_is_redacted_in_outbox(self, outbox):
+        from jarvis.agents.delegate import SENSITIVE_LATE_NOTICE
+        from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
+
+        agent = SlowFakeSubAgent("developer", delay=0.05,
+                                 result="balance is 12,345.67 in account 9876")
+
+        async def dead_hook(text):
+            return False
+
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": dead_hook})
+        holder = SensitiveTurn()
+        holder.arm("financial")
+        token = current_sensitive_turn.set(holder)
+        try:
+            await self._orphan(handler)
+        finally:
+            current_sensitive_turn.reset(token)
+        assert outbox == [("Developer", SENSITIVE_LATE_NOTICE)]
+        assert SENSITIVE_LATE_NOTICE == (
+            "A background task you asked for finished; ask me for its result.")
+
+    async def test_outboxed_text_is_the_result_not_the_relay_boilerplate(self, outbox):
+        """Review finding 5(c): the 600-char notice budget holds the result;
+        the "[system] Background update ... Relay this ..." wrapper was
+        written for a live model and used a third of it."""
+        from jarvis.notices import MAX_NOTICE_CHARS
+
+        result = "R" * 560
+        agent = SlowFakeSubAgent("developer", delay=0.05, result=result)
+        _, handler = build_delegate_tool({"developer": agent})
+        await self._orphan(handler)
+        ((_, text),) = outbox
+        assert "[system]" not in text and "Relay this" not in text
+        assert result in text[:MAX_NOTICE_CHARS]
+
+    async def test_a_dead_session_result_reaches_the_current_live_session(self, outbox):
+        """Review finding 5(b): the originating session is gone but another
+        one is connected — say it there instead of waiting for a reconnect."""
+        from jarvis import notices
+
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="audit: 3 findings")
+        live: list[str] = []
+
+        async def dead_hook(text):
+            return False
+
+        async def live_hook(text):
+            live.append(text)
+            return True
+
+        notices.set_live_session("s2", live_hook)
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": dead_hook})
+        await self._orphan(handler)
+        assert outbox == []
+        assert len(live) == 1 and "audit: 3 findings" in live[0]
+        assert "Relay this to the user once" in live[0]
+
+    async def test_no_hook_also_tries_the_live_session(self, outbox):
+        from jarvis import notices
+
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="audit: 3 findings")
+        live: list[str] = []
+
+        async def live_hook(text):
+            live.append(text)
+            return True
+
+        notices.set_live_session("s2", live_hook)
+        _, handler = build_delegate_tool({"developer": agent})
+        await self._orphan(handler)
+        assert outbox == [] and len(live) == 1
+
+    async def test_the_live_session_is_not_retried_when_it_is_the_dead_hook(self, outbox):
+        from jarvis import notices
+
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="audit: 3 findings")
+        offered: list[str] = []
+
+        async def dead_hook(text):
+            offered.append(text)
+            return False
+
+        notices.set_live_session("s1", dead_hook)
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": dead_hook})
+        await self._orphan(handler)
+        assert len(offered) == 1
+        assert len(outbox) == 1
+
+    async def test_a_live_session_that_refuses_falls_through_to_the_outbox(self, outbox):
+        from jarvis import notices
+
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="audit: 3 findings")
+
+        async def refuses(text):
+            return False
+
+        notices.set_live_session("s2", refuses)
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": refuses})
+        await self._orphan(handler)
+        assert outbox == [("Developer", "The Developer task finished: audit: 3 findings")]
+
+    async def test_an_armed_result_reaches_another_session_redacted(self, outbox):
+        from jarvis import notices
+        from jarvis.agents.delegate import SENSITIVE_LATE_NOTICE
+        from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
+
+        agent = SlowFakeSubAgent("developer", delay=0.05,
+                                 result="balance is 12,345.67 in account 9876")
+        live: list[str] = []
+
+        async def dead_hook(text):
+            return False
+
+        async def live_hook(text):
+            live.append(text)
+            return True
+
+        notices.set_live_session("s2", live_hook)
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": dead_hook})
+        holder = SensitiveTurn()
+        holder.arm("financial")
+        token = current_sensitive_turn.set(holder)
+        try:
+            await self._orphan(handler)
+        finally:
+            current_sensitive_turn.reset(token)
+        assert outbox == []
+        assert len(live) == 1
+        assert SENSITIVE_LATE_NOTICE in live[0]
+        assert "12,345.67" not in live[0] and "9876" not in live[0]
+
+    async def test_outboxed_result_reaches_the_notices_table(self, fresh_db, monkeypatch):
+        """End to end through jarvis.notices, with the real table."""
+        from functools import partial
+
+        from jarvis import notices
+
+        monkeypatch.setattr("jarvis.agents.delegate._to_outbox",
+                            partial(notices.add_notice, "late_result"))
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="audit: 3 findings")
+        _, handler = build_delegate_tool({"developer": agent})
+        await self._orphan(handler)
+        (item,) = notices.take_pending()
+        assert item["kind"] == "late_result" and item["source"] == "Developer"
+        assert "audit: 3 findings" in item["text"]
+
+
+class TestKeyHealthNoteSuccess:
+    """Status spec T3.3 — a run that did not fail recovers its agent's own
+    credential verdict (keyhealth.note_success), except under a per-run
+    model_profile override, which rode on a different credential."""
+
+    @pytest.fixture
+    def noted(self, monkeypatch):
+        calls: list[str] = []
+        monkeypatch.setattr("jarvis.keyhealth.note_success", calls.append)
+        return calls
+
+    @staticmethod
+    def _agent(result="done"):
+        agent = FakeSubAgent("developer", result=result)
+        agent.api_key_env = "ANTHROPIC_API_KEY"
+        return agent
+
+    async def test_success_notes_the_agents_key(self, noted):
+        _, handler = build_delegate_tool({"developer": self._agent()})
+        await handler({"agent_name": "developer", "task": "read the file"})
+        assert noted == ["ANTHROPIC_API_KEY"]
+
+    async def test_failure_notes_nothing(self, noted):
+        _, handler = build_delegate_tool({"developer": self._agent("FAILED: 401")})
+        await handler({"agent_name": "developer", "task": "read the file"})
+        assert noted == []
+
+    async def test_override_notes_nothing(self, noted):
+        _, handler = build_delegate_tool({"developer": self._agent()})
+        await handler({"agent_name": "developer", "task": "read the file",
+                       "model_profile": "fable"})
+        assert noted == []
+
+    async def test_a_fake_without_the_property_is_fine(self, noted):
+        _, handler = build_delegate_tool({"developer": FakeSubAgent("developer")})
+        assert await handler({"agent_name": "developer", "task": "x"}) == "done"
+        assert noted == []
+
+    async def test_the_real_verdict_recovers(self, monkeypatch):
+        from jarvis import keyhealth
+
+        keyhealth.reset_for_tests()
+        monkeypatch.delenv(keyhealth.KILL_SWITCH_ENV, raising=False)
+        with keyhealth._lock:
+            keyhealth._verdicts["ANTHROPIC_API_KEY"] = "rejected"
+        try:
+            _, handler = build_delegate_tool({"developer": self._agent()})
+            await handler({"agent_name": "developer", "task": "read the file"})
+            assert keyhealth.verdict("ANTHROPIC_API_KEY") == "ok"
+            assert keyhealth.detail("ANTHROPIC_API_KEY") == "recovered: a call succeeded"
+        finally:
+            keyhealth.reset_for_tests()
+
+
+def test_subagent_exposes_api_key_env_read_only():
+    from jarvis.agents.base import SubAgent
+
+    prop = SubAgent.__dict__["api_key_env"]
+    assert isinstance(prop, property) and prop.fset is None

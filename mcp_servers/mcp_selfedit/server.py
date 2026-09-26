@@ -73,13 +73,15 @@ def selfedit_read(path: str) -> dict:
     Use this after selfedit_start(confirm=true) reports a session, to see
     the current content of each file you are about to change. Reading the
     live checkout with repo_read_file instead risks writing a change based
-    on a version the session does not have."""
+    on a version the session does not have. A human-only (Tier 0) file
+    comes back read-only (`human_only: true`), as the session's base holds
+    it."""
     return logic.selfedit_read(_get_client(), path)
 
 
 @mcp.tool()
 def selfedit_write(path: str, content: str, rationale: str,
-                   visual_intent: str = "") -> dict:
+                   visual_intent: str = "", proposal: bool = False) -> dict:
     """Write one file in the OPEN self-edit session's worktree.
 
     `content` is the COMPLETE new file, not a patch or a fragment — read
@@ -87,13 +89,17 @@ def selfedit_write(path: str, content: str, rationale: str,
     applied. `rationale` is one line saying why, and appears in the pull
     request. Set `visual_intent` for a change to the native app's interface
     (macos/MortimerHost): one sentence saying what should look different,
-    which is what "check your appearance" verifies after the rebuild.
+    which is what "check your appearance" verifies once it is deployed.
 
-    The allowlist applies exactly as it does to any self-edit: a denied
-    path is refused here, not silently written. Nothing is committed —
-    call selfedit_finish when the whole change is written."""
+    A human-only (Tier 0) file is never written: the change is saved as a
+    PROPOSAL (a patch under docs/proposals/) that Larry approves and
+    applies himself, and the result says `proposal: true`. Set `proposal`
+    true only for a test under tests/ that needs that human-only change to
+    pass; it joins the proposal instead of the session. Secrets and runtime
+    data are refused outright. Nothing is committed — call selfedit_finish
+    when the whole change is written."""
     return logic.selfedit_write(_get_client(), path, content, rationale,
-                                visual_intent)
+                                visual_intent, proposal)
 
 
 @mcp.tool()

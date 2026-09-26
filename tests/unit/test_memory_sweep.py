@@ -669,3 +669,87 @@ async def test_run_sweep_end_to_end_with_fake_model(conn, monkeypatch, tmp_path)
     )
     assert result.get("enabled") is not False
     assert "archived" in result
+
+
+# --- D1b (MORTIMER_VOICE_WORKFLOWS_PLAN.md, 2026-09-25): no write lock held
+# across a model call. Reproduced before the fix: after A1 archived one
+# duplicate, a second connection writing during the classification call got
+# "database is locked"; the extractor and transcript writers wait only 5 s.
+
+
+def _probing_factory(db_path, probe: list[str], reply_for):
+    import sqlite3
+
+    class _Completions:
+        async def create(self, **kwargs):
+            other = sqlite3.connect(db_path, timeout=0.3)
+            try:
+                other.execute("INSERT INTO conversations (session_id, role, content, created_at) "
+                              "VALUES ('live', 'user', 'hi', 'x')")
+                other.commit()
+                probe.append("ok")
+            except sqlite3.OperationalError as exc:
+                probe.append(str(exc))
+            finally:
+                other.close()
+            msg = type("M", (), {"content": reply_for(kwargs)})()
+            return type("R", (), {"choices": [type("C", (), {"message": msg})()]})()
+
+    client = type("Client", (), {"chat": type("Chat", (), {"completions": _Completions()})(),
+                                 "base_url": "http://unused"})()
+    return lambda _settings: client
+
+
+class _LockSettings:
+    openai_api_key = "k"
+    openai_base_url = "http://unused"
+    openai_model = "fake-model"
+
+
+@pytest.mark.asyncio
+async def test_classification_call_holds_no_write_lock_after_a1(tmp_path, monkeypatch):
+    db_path = tmp_path / "d1b.db"
+    monkeypatch.setenv("JARVIS_DB_PATH", str(db_path))
+    c = get_conn(db_path)
+    run_migrations(c)
+    _fact(c, "user.preference.conciseness", "Larry prefers short answers", "preference")
+    _fact(c, "user.preference.verbosity",
+          "Larry prefers short, terse, direct answers with minimal detail", "preference")
+    c.commit()
+    c.close()
+    probe: list[str] = []
+    summary = await run_sweep(
+        db_path=str(db_path), settings=_LockSettings(),
+        client_factory=_probing_factory(db_path, probe,
+                                        lambda _kw: json.dumps({"pairs": [], "audiences": []})),
+    )
+    assert summary["archived"] >= 1          # A1 wrote before the model call
+    assert probe and set(probe) == {"ok"}
+
+
+@pytest.mark.asyncio
+async def test_capacity_merge_call_holds_no_write_lock(tmp_path, monkeypatch):
+    db_path = tmp_path / "d1b-merge.db"
+    monkeypatch.setenv("JARVIS_DB_PATH", str(db_path))
+    c = get_conn(db_path)
+    run_migrations(c)
+    # The fixture test_preference_still_merges_when_model_available uses.
+    _fact(c, "user.preference.conciseness", "Larry prefers short answers", "preference")
+    _fact(c, "user.preference.verbosity",
+          "Larry prefers short, terse, direct answers with minimal detail", "preference")
+    for i in range(MAX_PREFERENCE_FACTS - 1):
+        _unique_tokens_fact(c, f"user.preference.fill{i:02d}", "preference", i)
+    c.commit()
+    probe: list[str] = []
+    # A write on this connection first, as A1 or an earlier merge would leave.
+    c.execute("INSERT INTO conversations (session_id, role, content, created_at) "
+              "VALUES ('sweep', 'user', 'x', 'x')")
+    report = await run_capacity_enforcement(
+        c, _LockSettings(),
+        _probing_factory(db_path, probe, lambda _kw: "Larry prefers short, terse, direct spoken answers."),
+        ignore_boot_cap=True,
+    )
+    c.commit()
+    c.close()
+    assert report["preference"]["merged"] >= 1
+    assert probe and set(probe) == {"ok"}

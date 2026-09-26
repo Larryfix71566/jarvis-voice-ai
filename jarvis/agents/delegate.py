@@ -21,11 +21,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import re
 import time
 import uuid
 from typing import Any, Callable
 
+from jarvis import keyhealth
 from jarvis.agents.base import EventCallback, SubAgent
+from jarvis.bot.sensitive_turn import current_sensitive_turn
 from jarvis.model_routing import resolve_policy
 from jarvis.procedures import _overlap_score, _tokens, learn_from_run
 from jarvis.sensitive import detect_financial
@@ -113,6 +117,68 @@ def _shares_long_identifier(a: set[str], b: set[str]) -> bool:
         for t in (a & b)
     )
 
+
+# MORTIMER_SELF_SERVICE_ACCESS_IMPLEMENTATION_SPEC.md T1.1 (2026-09-22): the
+# guard refused a CORRECTED input — "weather for Alfreda, Georgia" failed,
+# and "weather for Alpharetta, Georgia" (Larry's correction) was refused
+# twice at overlap 0.75, leaving the analyst unusable for two minutes. A
+# single-word substitution is new input, not a reworded retry: a reworded
+# retry either keeps every content word (a superset) or rewords several.
+# Checked against every existing refusal fixture in test_delegate.py — all
+# still refused.
+RETRY_GUARD_CONTENT_TOKEN_MIN_LEN = 4
+RETRY_GUARD_SUBSTITUTION_ENV = "JARVIS_RETRY_GUARD_SUBSTITUTION_ENABLED"
+
+
+def _is_input_substitution(failed: set[str], new: set[str]) -> bool:
+    """True when the new task drops EXACTLY ONE content token of the failed
+    task and adds at least one content token the failed task lacked. A
+    content token has len >= RETRY_GUARD_CONTENT_TOKEN_MIN_LEN. A corrected
+    input (Alfreda -> Alpharetta) drops one word; a reworded retry either
+    keeps every word (a superset) or rewords several (drops two or more)."""
+    dropped = {t for t in failed - new if len(t) >= RETRY_GUARD_CONTENT_TOKEN_MIN_LEN}
+    added = {t for t in new - failed if len(t) >= RETRY_GUARD_CONTENT_TOKEN_MIN_LEN}
+    return len(dropped) == 1 and bool(added)
+
+
+def _substitution_exemption_enabled() -> bool:
+    """Single enforcement point for the T1.1 kill switch (default on)."""
+    value = os.environ.get(RETRY_GUARD_SUBSTITUTION_ENV, "")
+    return value.strip().lower() not in ("false", "0", "no")
+
+
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 2 W5 (2026-09-25). On 2026-09-13
+# the analyst failed "all NFL game scores from today" twice (agent_runs
+# 22:44 and 22:50); Larry then said "Can you do anything for me at spn dot
+# com?" (turn 2998, speech-to-text for ESPN) and the guard refused the
+# delegation as "too similar" to the failed search. A source Larry names
+# in his own turn is new input, not the Supervisor rewording a failed
+# approach, so it passes when the delegated task names a source too. It
+# does not require the two to match: speech-to-text heard "spn" for ESPN.
+NAMED_SOURCE_RE = re.compile(
+    r"\b(?:https?://)?(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|gov|edu|io|tv|co|us)\b"
+    r"|\b[a-z0-9-]+\s+dot\s+(?:com|org|net|gov|edu|io|tv)\b",
+    re.I,
+)
+RETRY_GUARD_NAMED_SOURCE_ENV = "JARVIS_RETRY_GUARD_NAMED_SOURCE_ENABLED"
+
+
+def names_source(text: str | None) -> bool:
+    """True when the text names a website (espn.com, "espn dot com")."""
+    return bool(NAMED_SOURCE_RE.search(text or ""))
+
+
+def _safe_user_text(user_text: Callable[[], str]) -> str:
+    try:
+        return str(user_text() or "")
+    except Exception:  # noqa: BLE001 — the guard must never raise
+        return ""
+
+
+def _named_source_exemption_enabled() -> bool:
+    value = os.environ.get(RETRY_GUARD_NAMED_SOURCE_ENV, "")
+    return value.strip().lower() not in ("false", "0", "no")
+
 # MORTIMER_HANDOFF_LOOP_PLAN.md H1/H2.
 #
 # The marker a sub-agent puts in its reply when it needs something only the
@@ -121,6 +187,18 @@ def _shares_long_identifier(a: set[str], b: set[str]) -> bool:
 # prompt than the Supervisor's, which is what makes it usable as
 # authorization: the Supervisor cannot forge permission for its own retry.
 HANDOFF_MARKER = "NEEDS-INPUT:"
+
+# T1.2 (2026-09-22) — the marker a sub-agent writes when no tool of its own
+# can get what the task needs. It is a capability gap, not a failed approach
+# and not a question for the user: it never arms the retry guard, never marks
+# the agent as awaiting the user, and the Supervisor is told to name the gap
+# (rule 10) instead of handing the user a command.
+MISSING_TOOL_MARKER = "MISSING-TOOL:"
+MISSING_TOOL_NOTE = (
+    "\n\n[The specialist has no tool for this. Say so plainly per rule 10 "
+    "and offer to have it added through self-development. Do not show or "
+    "speak commands.]"
+)
 
 # H1.1 — matches ITERATIONS_EXHAUSTED_MESSAGE's opening. An exhausted
 # budget is an unfinished job, not a failed approach, so it must not arm
@@ -174,11 +252,13 @@ async def drain_detached(in_flight: set, timeout: float) -> int:
 
     Barge-in survival keeps a sub-agent running after the voice turn that
     started it is cancelled -- and after the whole session ends, since
-    nothing cancels the detached task at shutdown either. The registry those
-    runs call tools through is per-session, and stopping it under a live run
-    turns every remaining tool call into "Unknown tool ... Available: none"
-    (measured 2026-09-16 11:45:33, a developer run eight seconds after the
-    client disconnected). Teardown therefore drains first.
+    nothing cancels the detached task at shutdown either. When the registry
+    those runs call tools through is per-session (JARVIS_REGISTRY_SHARED_
+    ENABLED=false; process-scoped by default since status spec T3.1),
+    stopping it under a live run turns every remaining tool call into
+    "Unknown tool ... Available: none" (measured 2026-09-16 11:45:33, a
+    developer run eight seconds after the client disconnected). Teardown
+    therefore drains first.
 
     Returns how many runs were still going at the deadline, so the caller
     can log that the teardown is about to fail them.
@@ -207,6 +287,49 @@ def foreground_delegation_count() -> int:
     the model answer with a hole where the result belongs.
     """
     return len(_foreground_delegations)
+
+
+# Status spec T3.2 (L12) — what the outbox keeps for a late result from a
+# protected (armed) turn: the fact that it finished, never its content, since
+# the notice is spoken in a LATER session whose turn is not protected.
+SENSITIVE_LATE_NOTICE = (
+    "A background task you asked for finished; ask me for its result."
+)
+
+
+def _to_outbox(source: str, text: str) -> int:
+    """T3.2 — queue an undeliverable late result in the notice outbox.
+
+    One seam so tests (tests/conftest.py) can keep the orphaned-delegation
+    path off the real database. jarvis.notices.add_notice never raises."""
+    from jarvis import notices
+
+    return notices.add_notice("late_result", source, text)
+
+
+def _live_session_hook():
+    """Review finding 5(b) — the process's current live session's hook."""
+    from jarvis import notices
+
+    return notices.live_session_hook()
+
+
+def _late_note(display_name: str, outcome: str) -> str:
+    """The context note a live session's model relays."""
+    return (
+        f"[system] Background update: the {display_name} "
+        "task delegated earlier finished after the conversation "
+        f"moved on. Result: {outcome}\nRelay this to the user once, "
+        "in one or two short sentences, and do not repeat it in "
+        "later turns. If it prepared an action that needs their "
+        "confirmation, say so."
+    )
+
+
+def _outbox_text(display_name: str, outcome: str) -> str:
+    """Review finding 5(c): what the outbox keeps — the result, not the
+    relay instructions, so the 600-char notice budget holds the result."""
+    return f"The {display_name} task finished: {outcome}"
 
 
 def _spawn_background(coro) -> None:
@@ -247,8 +370,12 @@ def build_delegate_tool(
     session_id: str | None = None,
     late_delivery: dict | None = None,
     in_flight: set | None = None,
+    user_text: Callable[[], str] | None = None,
 ) -> tuple[dict, Callable[[dict], Any]]:
     """Return (openai_tool_schema, async_handler) for delegate_task.
+
+    `user_text` returns Larry's current turn (pipeline.py passes the voice
+    state's); the retry guard uses it for the W5 named-source exemption.
 
     Barge-in survival (Larry 2026-08-21: "me continuing to talk should not
     kill existing work" — observed live that morning: 5 of 9 developer runs
@@ -352,6 +479,10 @@ def build_delegate_tool(
         claims_continuation = bool(arguments.get("continuation"))
         findings_path = str(arguments.get("findings_path") or "").strip()
         model_profile = str(arguments.get("model_profile") or "").strip()
+        # T3.2 — captured at delegation start: a late result from a protected
+        # turn goes to the outbox redacted (SENSITIVE_LATE_NOTICE).
+        holder = current_sensitive_turn.get()
+        armed = bool(holder and holder.is_armed())
         agent = sub_agents.get(agent_name)
         if agent is None:
             # No agent, nothing ran — this path does not create a run
@@ -407,6 +538,22 @@ def build_delegate_tool(
                         "delegate_retry_guard_exempted_shared_id agent=%s "
                         "overlap=%.2f", agent_name, overlap,
                     )
+                elif (overlap >= RETRY_GUARD_OVERLAP
+                        and _substitution_exemption_enabled()
+                        and _is_input_substitution(prior_tokens, task_tokens)):
+                    logger.info(
+                        "delegate_retry_guard_exempted_substitution agent=%s "
+                        "overlap=%.2f", agent_name, overlap,
+                    )
+                elif (overlap >= RETRY_GUARD_OVERLAP
+                        and user_text is not None
+                        and _named_source_exemption_enabled()
+                        and names_source(task)
+                        and names_source(_safe_user_text(user_text))):
+                    logger.info(
+                        "delegate_retry_guard_exempted_named_source agent=%s "
+                        "overlap=%.2f", agent_name, overlap,
+                    )
                 elif overlap >= RETRY_GUARD_OVERLAP:
                     logger.info(
                         "delegate_retry_guard_refused agent=%s overlap=%.2f",
@@ -422,7 +569,10 @@ def build_delegate_tool(
                         "carries no other cause — relay this reason to the "
                         "user in your own words, but do not attribute the "
                         "refusal to an expired, invalid, or unrecognized "
-                        "ID, or any other cause not stated here. If you "
+                        "ID, or any other cause not stated here. Never "
+                        "tell the user to wait; waiting changes nothing. "
+                        "Change the approach or the input, or ask the user "
+                        "what to change. If you "
                         "obtain NEW information the agent asked for (the "
                         "output of a command it gave the user), include it "
                         "in the task and set continuation to true; that is "
@@ -514,6 +664,16 @@ def build_delegate_tool(
             # redundantly.
             _spawn_background(learn_from_run(run_id, agent_name))
             failed = result.startswith("FAILED:")
+            # Status spec T3.3 — a run that did not fail proves the agent's
+            # own credential works right now, so a stale rejected/unfunded
+            # verdict recovers without waiting for the refresh loop. Not for
+            # a per-run override: that ran on a different credential. Not
+            # for REFUSED:, which made no model call at all. getattr keeps
+            # test fakes without the property working.
+            if not failed and not model_profile and not result.startswith("REFUSED:"):
+                key_env = getattr(agent, "api_key_env", "")
+                if key_env:
+                    keyhealth.note_success(key_env)
             # H1.1 — an exhausted iteration budget is NOT a failed approach,
             # it is an unfinished job; ITERATIONS_EXHAUSTED_MESSAGE says so
             # in those words. Arming the guard on it would refuse the one
@@ -524,9 +684,15 @@ def build_delegate_tool(
             # author, so a Supervisor cannot forge the authorization for its
             # own retry.
             awaiting_user[agent_name] = HANDOFF_MARKER in result or exhausted
+            # T1.2 — a missing tool is a capability gap: it overrides the
+            # failed handling below whether or not the reply starts FAILED:.
+            missing_tool = MISSING_TOOL_MARKER in result
+            if missing_tool:
+                awaiting_user[agent_name] = False
+                result += MISSING_TOOL_NOTE
             # A2 — a failure arms the guard for this agent; a success clears
             # it (the agent is demonstrably working again).
-            if failed and not exhausted:
+            if failed and not exhausted and not missing_tool:
                 last_failure[agent_name] = (_tokens(task), time.monotonic())
             else:
                 last_failure.pop(agent_name, None)
@@ -541,8 +707,8 @@ def build_delegate_tool(
                 result += (
                     f"\n\n[This is handoff {depth} on this investigation. "
                     "Before asking for anything else, tell the user what you "
-                    "have established, what you still do not know, and what "
-                    "the next command would settle.]"
+                    "have established, what you still do not know, and "
+                    "what information would settle it.]"
                 )
             if on_event is not None:
                 on_event({"type": "delegate_done", "agent": agent_name,
@@ -593,26 +759,57 @@ def build_delegate_tool(
                 agent_name, run_id,
             )
 
+            def _outbox(outcome: str, reason: str) -> None:
+                # T3.2 (L12): a result nobody can hear now is kept and
+                # spoken after the greeting at the next connect.
+                logger.warning(
+                    "delegate_late_result_undeliverable agent=%s "
+                    "run_id=%s reason=%s", agent_name, run_id, reason)
+                notice_id = _to_outbox(
+                    agent.display_name,
+                    SENSITIVE_LATE_NOTICE if armed
+                    else _outbox_text(agent.display_name, outcome))
+                logger.info("delegate_late_result_outboxed agent=%s run_id=%s "
+                            "notice_id=%s redacted=%s",
+                            agent_name, run_id, notice_id, armed)
+
+            async def _offer(fn: Callable, note: str) -> bool:
+                try:
+                    return await fn(note) is not False
+                except Exception:  # noqa: BLE001 — never lose the result
+                    logger.exception("delegate_late_delivery_failed agent=%s "
+                                     "run_id=%s", agent_name, run_id)
+                    return False
+
+            async def _deliver_or_outbox(fn: Callable | None, note: str,
+                                         outcome: str) -> None:
+                # The hook returns False when its session has ended
+                # (runtime.alive). Review finding 5(b): the session connected
+                # NOW is tried next; only then does the result go to the
+                # outbox.
+                if fn is not None and await _offer(fn, note):
+                    return
+                live = _live_session_hook()
+                if live is not None and live is not fn:
+                    # Another, unprotected session: an armed turn's result
+                    # is redacted there exactly as in the outbox.
+                    elsewhere = (_late_note(agent.display_name, SENSITIVE_LATE_NOTICE)
+                                 if armed else note)
+                    if await _offer(live, elsewhere):
+                        logger.info("delegate_late_result_redirected agent=%s "
+                                    "run_id=%s redacted=%s",
+                                    agent_name, run_id, armed)
+                        return
+                _outbox(outcome, "no_hook" if fn is None else "session_ended")
+
             def _deliver(task: asyncio.Task) -> None:
                 if task.cancelled():
                     return
                 exc = task.exception()
                 outcome = f"FAILED: {exc}" if exc else task.result()
+                note = _late_note(agent.display_name, outcome)
                 fn = (late_delivery or {}).get("fn")
-                if fn is None:
-                    logger.warning(
-                        "delegate_late_result_undeliverable agent=%s "
-                        "run_id=%s", agent_name, run_id)
-                    return
-                note = (
-                    f"[system] Background update: the {agent.display_name} "
-                    "task delegated earlier finished after the conversation "
-                    f"moved on. Result: {outcome}\nRelay this to the user once, "
-                    "in one or two short sentences, and do not repeat it in "
-                    "later turns. If it prepared an action that needs their "
-                    "confirmation, say so."
-                )
-                _spawn_background(fn(note))
+                _spawn_background(_deliver_or_outbox(fn, note, outcome))
 
             if run_task.done():
                 _deliver(run_task)

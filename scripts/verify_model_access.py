@@ -23,7 +23,8 @@ sys.path.insert(0, str(ROOT))
 
 from jarvis.model_routing import load_access_config, model_profile_for_workload, resolve_policy
 from jarvis.saygm import SayGMError, fetch_catalog
-from jarvis.subscription import SubscriptionRuntimeError, _run_claude, _run_codex
+from jarvis.status.subscriptions import probe_subscription
+from jarvis.subscription import SubscriptionRuntimeError, _run_claude, _run_codex  # noqa: F401 - SubscriptionRuntimeError re-exported for callers/tests
 from jarvis.vault import VaultError, inject_env
 
 
@@ -38,29 +39,18 @@ def _command(name: str) -> dict[str, Any]:
     return {"command": command, "installed": path is not None}
 
 
-def _probe_subscription(name: str, runner) -> dict[str, Any]:
-    try:
-        text = runner("gpt-6-astra" if name == "codex" else "claude-sonnet-5",
-                      [{"role": "user", "content":
-                        "Reply with exactly MORTIMER_SUBSCRIPTION_PROBE_OK and do not use tools."}],
-                      45.0)
-        return {"ok": text.strip() == "MORTIMER_SUBSCRIPTION_PROBE_OK",
-                "response_present": bool(text.strip())}
-    except SubscriptionRuntimeError as exc:
-        message = str(exc).lower()
-        if ("401" in message or "revoked" in message or "authenticate" in message
-                or "not logged in" in message or "login" in message):
-            category = "authentication"
-        elif "not found" in message or "unsupported" in message or "model" in message:
-            category = "model_unavailable"
-        elif "timed out" in message or "timeout" in message:
-            category = "timeout"
-        elif ("operation not permitted" in message or "permission denied" in message
-              or "readonly database" in message or "read-only" in message):
-            category = "runtime_environment"
-        else:
-            category = "runtime_error"
-        return {"ok": False, "category": category}
+def _script_probe(name: str, runner) -> dict[str, Any]:
+    """This report's view of the one subscription probe
+    (jarvis.status.subscriptions.probe_subscription, status spec T4.2): the
+    same {"ok", "response_present"} / {"ok": False, "category"} JSON as
+    before, the script's own 45 s timeout, and no not-installed
+    short-circuit — a missing CLI surfaces through the runner's failure,
+    exactly as it did before the probe moved."""
+    result = probe_subscription(name, force=True, timeout=45.0, runner=runner,
+                                check_installed=False)
+    if result["category"] is None:
+        return {"ok": result["ok"], "response_present": result["response_present"]}
+    return {"ok": False, "category": result["category"]}
 
 
 def build_report(*, check_saygm: bool = False,
@@ -120,8 +110,8 @@ def build_report(*, check_saygm: bool = False,
             report["saygm_catalog"] = {"ok": False, "error": str(exc)}
     if probe_subscriptions:
         report["subscription_probes"] = {
-            "claude": _probe_subscription("claude", _run_claude),
-            "codex": _probe_subscription("codex", _run_codex),
+            "claude": _script_probe("claude", _run_claude),
+            "codex": _script_probe("codex", _run_codex),
         }
     return report
 

@@ -1,0 +1,81 @@
+# Voice-workflow eval cases — MORTIMER_VOICE_WORKFLOWS_PLAN.md §7 T3b.
+# `from` is the conversations.id of the assistant turn that failed (see
+# tests/fixtures/voice_failures.yaml). A case passes when the final reply
+# has no refusal or hand-off sentence, show_commands was not called, and
+# either a listed specialist was delegated to, `or_tool` was called, or the
+# reply is the sanctioned "isn't something I have a tool for yet".
+# A `require_tool` case (Phase 2 D4, D-L6) fails unless that tool was called:
+# location is answered by system_status, never from memory or a specialist.
+# An `explicit_ask` case (D-L5, Larry 2026-09-25) passes only when
+# show_commands WAS called and nothing was refused. An `approve_proposal`
+# case (Phase 3 W8) grades the same way: Larry said yes to a human-only
+# proposal, so the apply command belongs on screen. `must_say` /
+# `must_not_say` also check the reply's words. A replayed `tool` message
+# gets the guidance the live result hook would append.
+# 26 cases: 20 replayed failures, 1 capability-question exemption,
+# 1 explicit ask, 2 human-only proposal steps, 1 merge (turn 2752), 1 control.
+
+- {from: 3535, input: "Can you not check my Internet connection for a location?", require_tool: system_status}
+- {from: 126, input: "Can you see my location?", require_tool: system_status}
+- {from: 1170, input: "Can you show me current radar for Spartanburg?", expect_any: [analyst]}
+- {from: 3173, input: "Give me a rundown of all the baseball games tonight.", expect_any: [analyst]}
+- {from: 911, input: "Tell me if there are any NFL football games tonight.", expect_any: [analyst]}
+- {from: 563, input: "Check and tell me what models you have access to now.", or_tool: system_status, expect_any: [developer]}
+- {from: 3486, input: "Can you not check to see what's actually available through the subscriptions that you have access to?", or_tool: system_status, expect_any: [developer]}
+- {from: 3483, input: "You should have access to Codex Astra and Claude Fable five point one. Tell me if that's not true.", or_tool: system_status, expect_any: [developer]}
+- {from: 194, input: "Can you look in the logs to see the error that the developer got?", expect_any: [developer]}
+- {from: 2717, input: "Why is screen capture not working?", expect_any: [developer, systems]}
+- {from: 356, input: "Tell me about the uncommitted changes.", expect_any: [developer]}
+- {from: 718, input: "Give me a list of the current branches.", expect_any: [developer]}
+- {from: 1433, input: "Can you kill that call to Kimi for me?", expect_any: [developer]}
+# W12 (Phase 4, option B): asking for timed updates or a delayed check now
+# has a tool that does it; the logged replies claimed there was none (1456,
+# 1865) or claimed to wait without any way to (1344).
+- {from: 1865, input: "Check progress every thirty seconds.", require_tool: progress_updates}
+- {from: 1456, input: "Status updates to twenty seconds.", require_tool: progress_updates}
+- {from: 1344, input: "Yeah. Wait for sixty seconds then check poll again.", require_tool: follow_up, prior: [{role: assistant, content: "Still in planning. No proposals yet. Want to wait a bit longer or move on to something else?"}]}
+- {from: 346, input: "Can you open a sidecar?", or_tool: ui_control, expect_any: [developer]}
+- {from: 2657, input: "Show me the memory graph.", expect_any: [librarian]}
+- {from: 2394, input: "Why is your voice not coming through Bluetooth?", expect_any: [systems]}
+- from: 3478
+  input: "No. You do that for me."
+  prior:
+    - {role: user, content: "Check which model keys are actually loaded."}
+    - {role: assistant, content: "To see which credentials are actually loaded, run this command and copy the output back."}
+  expect_any: [developer, systems]
+- {from: 3461, input: "Give me a rundown of your capabilities.", capability_question: true}
+# Explicit ask: Larry's wording from user turn 764; the prior context is synthetic.
+- {explicit_ask: true, input: "Give me the command to do that.", prior: [{role: user, content: "How do I see which Python version this Mac has?"}, {role: assistant, content: "One moment while I check."}]}
+# Phase 3 W8 (Larry 2026-09-25, option A). The specialist result is synthetic;
+# its HUMAN-ONLY PROPOSAL sentence is the one jarvis/selfedit/service.py writes.
+- input: "What does it need from me?"
+  must_say: "approve"
+  prior:
+    - {role: user, content: "Add httpx 0.28 to requirements.txt."}
+    - role: assistant
+      content: ""
+      tool_calls: [{id: call_w8, type: function, function: {name: delegate_task, arguments: "{\"agent_name\": \"developer\", \"task\": \"Add httpx 0.28 to requirements.txt\"}"}}]
+    - role: tool
+      tool_call_id: call_w8
+      content: "Pull request 57 is open. HUMAN-ONLY PROPOSAL: pull request 57 changes nothing in requirements.txt by itself; it carries the exact change for Larry to approve. Ask him “approve?” and show this command only after he says yes: cd /Users/larryfix/jarvis-voice-ai-clean && .venv/bin/python scripts/apply_proposal.py 57 3f9c2a1b7d4e — it shows him the exact change and pushes nothing until he types y, then opens the change as his own pull request for CI and closes this one. Do not merge this pull request as it is. The change adds the line httpx==0.28.1."
+    - {role: assistant, content: "Pull request 57 is open."}
+- input: "Yes."
+  approve_proposal: true
+  prior:
+    - {role: user, content: "Add httpx 0.28 to requirements.txt."}
+    - role: assistant
+      content: ""
+      tool_calls: [{id: call_w8, type: function, function: {name: delegate_task, arguments: "{\"agent_name\": \"developer\", \"task\": \"Add httpx 0.28 to requirements.txt\"}"}}]
+    - role: tool
+      tool_call_id: call_w8
+      content: "Pull request 57 is open. HUMAN-ONLY PROPOSAL: pull request 57 changes nothing in requirements.txt by itself; it carries the exact change for Larry to approve. Ask him “approve?” and show this command only after he says yes: cd /Users/larryfix/jarvis-voice-ai-clean && .venv/bin/python scripts/apply_proposal.py 57 3f9c2a1b7d4e — it shows him the exact change and pushes nothing until he types y, then opens the change as his own pull request for CI and closes this one. Do not merge this pull request as it is. The change adds the line httpx==0.28.1."
+    - {role: assistant, content: "Pull request 57 is open."}
+    - {role: user, content: "What does it need from me?"}
+    - {role: assistant, content: "It adds httpx 0.28.1 to requirements.txt, a human-only file that only you change. Approve?"}
+# Self-rebuild (option B): Larry's words from user turn 2752; the prior context is synthetic.
+- input: "Okay. It looks merged."
+  from: 2753
+  must_say: "DEPLOY-MAIN"
+  must_not_say: "bundle|swift build"
+  prior: [{role: user, content: "Is pull request 49 ready?"}, {role: assistant, content: "Validation passed. Pull request 49 is open."}]
+- {control: true, input: "What's the weather in Alpharetta?", expect_any: [analyst]}

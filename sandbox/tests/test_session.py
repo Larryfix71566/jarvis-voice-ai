@@ -109,6 +109,24 @@ class SessionTests(unittest.TestCase):
         with self.assertRaises(SandboxError): reopened.propose_edit('secret.env', 'data', 'denied')
         self.assertFalse((self.root / 'app.py').exists())
 
+    def test_baseline_text_reads_the_base_snapshot_without_the_guest_or_the_policy(self):
+        # W8: a human-only file is outside the edit policy, yet its base
+        # bytes are needed to show it read-only and to draft a proposal.
+        self.session.propose_edit('app.py', 'edited in the guest', 'change')
+        denied = Session(self.c, self, self, self.profile, lambda p: False, self.session.id)
+        calls = len(self.events)
+        with patch.object(self.c, 'rpc', side_effect=AssertionError('guest consulted')):
+            base = denied.baseline_text('app.py')
+            missing = denied.baseline_text('docs/new.md')
+            with self.assertRaises(SandboxError): denied.baseline_text('.env')
+            with self.assertRaises(SandboxError): denied.baseline_text('data/jarvis.db')
+        self.assertEqual((base['exists'], base['content'], base['mode']), (True, 'original', 0o644))
+        self.assertEqual((missing['exists'], missing['content']), (False, ''))
+        self.assertEqual(len(self.events), calls)
+        with self.assertRaises(SandboxError): denied.read_file('app.py')
+        self.session.revert()
+        with self.assertRaises(SandboxError): denied.baseline_text('app.py')
+
     def test_cancel_interrupts_validation_without_waiting_for_session_lock(self):
         self.cancel_in_check = True
         with self.assertRaises(SandboxError): self.session.validate()

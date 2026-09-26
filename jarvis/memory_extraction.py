@@ -62,6 +62,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any, Callable
 
 from jarvis.config import Settings
@@ -95,6 +96,15 @@ Rules:
   the user's name, preferences, people, projects, standing decisions.
   Keys are lowercase dotted paths, e.g. "user.name", "user.preference.music",
   "project.jarvis". Resend a key with a new value to correct it.
+- Only the USER line is evidence. MORTIMER's reply is there to help you
+  understand the user; never record something only Mortimer said. His
+  greetings, summaries and status reports repeat what memory already
+  holds, and recording them turns an old fact into a "new" one.
+- Never record where the user is right now (user.location,
+  user.location.current): the location comes from the user's device.
+  Asking about a place (its weather, news or time) does not mean the user
+  is there. Durable places the user states (home, office) are fine under
+  their own keys.
 - Anything the user EXPLICITLY states about how they want things done
   ("I prefer short answers", "stop doing that", "always ask me first")
   is a fact with a user.style.* key — record it immediately in facts,
@@ -119,6 +129,93 @@ Rules:
 - If this exchange has nothing worth remembering, return
   {"facts": [], "observations": []}.
 - Output JSON only. No markdown, no commentary."""
+
+
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md D-L7 (Larry, 2026-09-25) — the
+# Spartanburg loop. Mortimer's greeting read "here in Spartanburg" from
+# the identity memory user.location; the extractor then took that greeting
+# as the user restating it. 8 of the 10 recorded rewrites of user.location
+# (memory_recall_events) came from exchanges where "Spartanburg" was only
+# in Mortimer's reply ("Hello?" -> "Hey Larry. It's two fifteen PM here in
+# Spartanburg."), and 83 refreshes of user.name the same way. The prompt
+# rule above asks the model not to; this check makes it hold regardless.
+# A fact is an echo when its words appear in the reply and none appear in
+# the user's line. Words match on their first ECHO_STEM_CHARS characters,
+# so "availability" still counts as the user's "available". Replayed over
+# the 150 logged extractions with a known source turn (2026-09-25), the
+# echo check alone rejects 102: 95 greeting echoes (user.name,
+# user.location, user.location.timezone) and 7 facts built from Mortimer's
+# own status reports or explanations. With CURRENT_LOCATION_KEYS as well,
+# 104 are rejected (93 echoes + all 11 user.location rows) and 46 admitted.
+ECHO_STEM_CHARS = 5
+# D-L6: where the user is right now comes from the device, never memory.
+CURRENT_LOCATION_KEYS = frozenset({"user.location", "user.location.current"})
+
+
+def echo_guard_enabled() -> bool:
+    """Kill switch (env-only rollback), default on."""
+    raw = os.environ.get("JARVIS_MEMORY_ECHO_GUARD", "true").strip().lower()
+    return raw not in ("false", "0", "no", "off")
+
+
+def _stems(text: str) -> set[str]:
+    return {t[:ECHO_STEM_CHARS] for t in _tokens(text)}
+
+
+def source_exchange(conn, assistant_turn_id: int | None) -> dict | None:
+    """The exchange a fact was extracted from, as the worker paired it.
+
+    `source_turn` on a fact (and on a memory_recall_events row) is the id
+    of the ASSISTANT row that closed the exchange (memory_extraction_worker
+    passes row["id"] of the assistant turn). Its user half is the latest
+    user row of the same session before it, provided no other assistant
+    row came in between (that reply would have consumed it). Returns
+    {"session_id", "user_turn", "assistant_turn", "user", "assistant"}, or
+    None when the turn is missing, is not an assistant row, or has no user
+    half. Read-only; used by the W10 settle check and the D1 replay."""
+    if assistant_turn_id is None:
+        return None
+    reply = conn.execute(
+        "SELECT id, session_id, role, content FROM conversations WHERE id = ?",
+        (int(assistant_turn_id),),
+    ).fetchone()
+    if reply is None or reply["role"] != "assistant":
+        return None
+    user = conn.execute(
+        "SELECT id, content FROM conversations WHERE session_id = ? AND id < ? "
+        "AND role = 'user' ORDER BY id DESC LIMIT 1",
+        (reply["session_id"], reply["id"]),
+    ).fetchone()
+    if user is None:
+        return None
+    between = conn.execute(
+        "SELECT 1 FROM conversations WHERE session_id = ? AND id > ? AND id < ? "
+        "AND role = 'assistant' LIMIT 1",
+        (reply["session_id"], user["id"], reply["id"]),
+    ).fetchone()
+    if between is not None:
+        return None
+    return {"session_id": reply["session_id"], "user_turn": user["id"],
+            "assistant_turn": reply["id"], "user": user["content"],
+            "assistant": reply["content"]}
+
+
+def echoes_reply(value: str, user_content: str, assistant_content: str) -> bool:
+    """D-L7 — True when the fact's words come from Mortimer, not the user."""
+    words = _stems(value)
+    return bool(words & _stems(assistant_content)) and not (words & _stems(user_content))
+
+
+def extractor_rejection(key: str, value: str, user_content: str,
+                        assistant_content: str) -> str | None:
+    """The reason this exchange may not produce this fact, or None."""
+    if not echo_guard_enabled():
+        return None
+    if (key or "").strip().lower() in CURRENT_LOCATION_KEYS:
+        return "current_location"
+    if echoes_reply(value, user_content, assistant_content):
+        return "echo_of_reply"
+    return None
 
 
 def _parse_candidates(text: str) -> dict | None:
@@ -313,6 +410,49 @@ def admit_observation_candidate(conn, key: str, value: str, session_id: str | No
     return "inserted"
 
 
+async def extract_candidates(
+    settings: Settings,
+    session_id: str,
+    user_content: str,
+    assistant_content: str,
+    client_factory: Callable[[Settings], Any] | None = None,
+) -> dict | None:
+    """The model half of extract_from_exchange: the candidates one
+    exchange yields, or None when the reply is unparseable. Writes nothing
+    to memory. Raises on a failed model call (the caller decides). Split
+    out for scripts/replay_extraction.py (MORTIMER_VOICE_WORKFLOWS_PLAN.md
+    D1), which must decide the writes itself."""
+    exchange_text = (
+        f"USER: {user_content}\n"
+        f"MORTIMER: {assistant_content}"
+    )
+    if client_factory is not None:
+        # Test seam only; production uses JARVIS_MEMORY_PROFILE.
+        client = client_factory(settings)
+        model = settings.openai_model
+    else:
+        client, route = make_memory_async_client(settings)
+        model = route.model
+    response = await client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": EXCHANGE_EXTRACTION_PROMPT},
+            {"role": "user", "content": exchange_text},
+        ],
+    )
+    try:
+        record_completion(
+            rung="memory_extraction",
+            provider=provider_from_base_url(str(client.base_url)),
+            model=model,
+            response=response,
+            session_id=session_id,
+        )
+    except Exception:
+        pass
+    return _parse_candidates(response.choices[0].message.content or "")
+
+
 async def extract_from_exchange(
     settings: Settings,
     session_id: str,
@@ -331,36 +471,10 @@ async def extract_from_exchange(
     {"facts": n, "observations": n, "outcomes": [...], "promoted": [...]}
     (or {"error": True} alongside zeroed counts on failure)."""
     try:
-        exchange_text = (
-            f"USER: {user_content[:MAX_ROW_CHARS]}\n"
-            f"MORTIMER: {assistant_content[:MAX_ROW_CHARS]}"
-        )
-        if client_factory is not None:
-            # Test seam only; production uses JARVIS_MEMORY_PROFILE.
-            client = client_factory(settings)
-            model = settings.openai_model
-        else:
-            client, route = make_memory_async_client(settings)
-            model = route.model
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": EXCHANGE_EXTRACTION_PROMPT},
-                {"role": "user", "content": exchange_text},
-            ],
-        )
-        try:
-            record_completion(
-                rung="memory_extraction",
-                provider=provider_from_base_url(str(client.base_url)),
-                model=model,
-                response=response,
-                session_id=session_id,
-            )
-        except Exception:
-            pass
-
-        parsed = _parse_candidates(response.choices[0].message.content or "")
+        user_content = (user_content or "")[:MAX_ROW_CHARS]
+        assistant_content = (assistant_content or "")[:MAX_ROW_CHARS]
+        parsed = await extract_candidates(
+            settings, session_id, user_content, assistant_content, client_factory)
         if parsed is None:
             logger.warning(
                 "memory_extraction_unparseable session=%s source_turn=%s",
@@ -372,6 +486,14 @@ async def extract_from_exchange(
         conn = get_conn()
         try:
             for key, value in parsed["facts"]:
+                reason = extractor_rejection(key, value, user_content, assistant_content)
+                if reason is not None:
+                    logger.warning(
+                        "memory_write_rejected kind=fact key=%s reason=%s session=%s "
+                        "source_turn=%s", key, reason, session_id, source_turn,
+                    )
+                    outcomes.append(("fact", key, "rejected"))
+                    continue
                 outcomes.append(
                     ("fact", key, admit_fact_candidate(conn, key, value, session_id, source_turn))
                 )

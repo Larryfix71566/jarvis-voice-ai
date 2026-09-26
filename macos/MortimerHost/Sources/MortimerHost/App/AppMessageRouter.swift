@@ -22,6 +22,8 @@ final class AppMessageRouter {
     private var audioOutputSink: AnyCancellable?
     private var audioInputSink: AnyCancellable?
     private var lastState: JarvisClient.ConnectionState = .offline
+    // Phase 2 D4 (D-L6): answers the bot's location/request for this session.
+    private let locator = DeviceLocator()
 
     func start(
         client: JarvisClient,
@@ -85,6 +87,7 @@ final class AppMessageRouter {
             }
         }
         #endif
+        let locator = self.locator
         task = Task {
             for await message in client.messageStream() {
                 switch message {
@@ -93,6 +96,19 @@ final class AppMessageRouter {
                     if case .agentWorking = message { Sounds.play(.tick) }
                     if case .agentDone(let done) = message { Sounds.play(done.ok ? .done : .fail) }
                     agentRuns.apply(message)
+                case .voiceCatalog:
+                    // The bot sends voice/catalog on every connect, so the
+                    // channel is open: announce that this client can answer
+                    // location requests (the bot never asks otherwise).
+                    locator.start()
+                    client.send(.locationHello(LocationHello(authorization: locator.authorization)))
+                case .locationRequest(let request):
+                    locator.answer(request) { result in
+                        client.send(.locationResult(result))
+                        guard result.ok, let lat = result.lat, let lon = result.lon else { return }
+                        Task { _ = try? await client.admin.reportDeviceLocation(
+                            lat: lat, lon: lon, label: result.label ?? "") }
+                    }
                 case .consoleResult(let result):
                     // Acknowledgement is retained for the shared console
                     // surface. It is deliberately not converted to an

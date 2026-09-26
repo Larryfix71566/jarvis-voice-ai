@@ -138,6 +138,10 @@ struct AdaptiveStageView: View {
             if let coordinator { _ = coordinator.executePointer(.viewSet, target: "memory") }
             else { workspace.openMemoryGraph() }
         }
+        Button("Workflows") {
+            if let coordinator { _ = coordinator.executePointer(.viewSet, target: "workflows") }
+            else { workspace.openWorkflows() }
+        }
         if workspace.activeResult != nil || workspace.showsMemoryGraph {
             Button("Return to workspace") {
                 if let coordinator { _ = coordinator.executePointer(.viewSet, target: "results") }

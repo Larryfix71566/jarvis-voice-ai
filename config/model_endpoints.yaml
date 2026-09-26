@@ -1,0 +1,53 @@
+# Model ENDPOINTS — where requests go and which credential they carry.
+#
+# Tier 0 (deny) in config/self_edit_allowlist.json: human-only, merged by
+# Larry. This is the credential boundary of the model registry
+# (docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md D1/D3). Nothing in the
+# codebase validates a host, so an edit that keeps a key variable and swaps
+# a base_url would send that key to someone else's server on the next run.
+# That is why hosts and key NAMES live only here, and why
+# config/model_profiles.yaml — which the self-edit loop may change — cannot
+# even express them: a profile that declares base_url, api_key_env or any
+# other host-bearing key is a load error, and so is a profile naming an
+# endpoint id that is not below.
+#
+# Key VALUES never live in config: api_key_env names an environment/vault
+# variable (python -m jarvis.vault).
+#
+# `kind: subscription` is an endpoint with no API credential, reachable only
+# through the named access route (config/model_access.yaml); its profiles
+# carry no base_url or api_key_env at all.
+#
+# `supervisor:` pins the planner's own brain — the registry default the
+# self-edit loop, the planning pathway, site research and the Edit panel
+# fall back to. The loader refuses a model_profiles.yaml whose `default`
+# is not this identity on this endpoint, and
+# tests/unit/test_model_registry_split.py checks its model string against
+# the seeded catalogue, so a routine edit cannot re-point the planner.
+# Changing it is a human PR against this file (and the profile's default).
+#
+# Adding a PROVIDER or endpoint is always a human change here. Adding a
+# MODEL on an existing endpoint is a routine change in
+# config/model_profiles.yaml.
+
+endpoints:
+  moonshot:
+    provider: moonshot
+    base_url: https://api.moonshot.ai/v1
+    api_key_env: MOONSHOT_API_KEY
+  anthropic:
+    provider: anthropic
+    base_url: https://api.anthropic.com/v1/
+    api_key_env: ANTHROPIC_API_KEY
+  codex-subscription:
+    provider: openai
+    kind: subscription
+    route: codex_subscription
+  openrouter:
+    provider: openrouter
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+
+supervisor:
+  identity: anthropic/claude-fable-5
+  endpoint: anthropic

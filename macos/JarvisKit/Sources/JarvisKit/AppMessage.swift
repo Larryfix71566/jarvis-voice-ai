@@ -26,6 +26,7 @@ public enum AppMessage: Sendable, Equatable {
     case inputStatus(InputStatus)
     case inputOffer(InputOffer)
     case inputConsent(InputConsent)
+    case locationRequest(LocationRequest)
     case unknown(type: String, raw: [String: JSONValue])
 }
 
@@ -55,6 +56,7 @@ extension AppMessage: CustomDebugStringConvertible {
         case .inputStatus(let status): return "inputStatus(\(status.status), code: \(status.code))"
         case .inputOffer(let offer): return "inputOffer(\(offer.batchID.uuidString))"
         case .inputConsent(let consent): return "inputConsent(\(consent.batchID.uuidString), approved: \(consent.approved))"
+        case .locationRequest(let request): return "locationRequest(\(request.requestID))"
         case .unknown(let type, _): return "unknown(type: \(type))"
         }
     }
@@ -403,6 +405,8 @@ public extension AppMessage {
             return .inputOffer(try dec.decode(InputOffer.self, from: payload))
         case "input/consent":
             return .inputConsent(try dec.decode(InputConsent.self, from: payload))
+        case "location/request":
+            return .locationRequest(try dec.decode(LocationRequest.self, from: payload))
         default:               return .unknown(type: kind, raw: p)
         }
     }

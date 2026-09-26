@@ -1,0 +1,314 @@
+"""MORTIMER_VOICE_WORKFLOWS_PLAN.md §7 T1 — detectors and matcher pinned
+against the logged corpus (tests/fixtures/voice_failures.yaml)."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+from pathlib import Path
+
+import pytest
+import yaml
+
+from jarvis import voice_workflows as vw
+from jarvis import workflows as wfmod
+
+REPO = Path(__file__).resolve().parents[2]
+FIXTURE = yaml.safe_load((REPO / "tests" / "fixtures" / "voice_failures.yaml").read_text(encoding="utf-8"))
+WF_DIR = REPO / "config" / "workflows"
+
+
+@pytest.fixture(scope="module")
+def voice_wfs():
+    return vw.voice_workflows(wfmod.load_workflows(WF_DIR))
+
+
+class TestRegexesArePinned:
+    def test_code_regexes_equal_fixture(self):
+        assert vw.REFUSE_RE.pattern == FIXTURE["guard_regex"]["refuse"]
+        assert vw.HANDOFF_RE.pattern == FIXTURE["guard_regex"]["handoff"]
+        assert vw.ALLOWED_RE.pattern == FIXTURE["guard_regex"]["allowed"]
+        assert vw.LIMITATION_RE.pattern == FIXTURE["limitation_regex"]
+
+    def test_yaml_user_triggers_equal_fixture(self, voice_wfs):
+        by_name = {wf.name: wf for wf in voice_wfs}
+        for name, pin in FIXTURE["user_triggers"].items():
+            assert by_name[name].priority == pin["priority"], name
+            assert by_name[name].triggers["user"] == [pin["pattern"]], name
+
+
+class TestReplyGuardDetector:
+    @pytest.mark.parametrize("case", FIXTURE["failure_cases"], ids=lambda c: str(c["id"]))
+    def test_failure_cases(self, case):
+        fired = bool(vw.reply_violations(case["reply"]))
+        assert fired == (case["guard"] == "fire")
+
+    @pytest.mark.parametrize("case", FIXTURE["accepted_false_positives"], ids=lambda c: str(c["id"]))
+    def test_accepted_false_positives_still_fire(self, case):
+        # Pinned so the accepted false-positive count cannot grow silently.
+        assert bool(vw.reply_violations(case["reply"])) == (case["guard"] == "fire")
+
+    @pytest.mark.parametrize("case", FIXTURE["negative_sample"], ids=lambda c: str(c["id"]))
+    def test_negative_sample_does_not_fire(self, case):
+        assert case["guard"] == "no_fire"
+        assert vw.reply_violations(case["reply"]) == []
+
+    def test_sanctioned_missing_tool_sentence_is_allowed(self):
+        assert vw.sentence_violation(
+            "That isn't something I have a tool for yet. Want me to have it added?") is None
+
+    def test_refusal_is_checked_before_handoff(self):
+        assert vw.sentence_violation("I can't do that, you'll need to run it.") == "refusal"
+
+    def test_destructive_advice_is_a_handoff(self):
+        # Turn 737 (2026-08-18): the unsafe-advice case D10 names.
+        assert vw.sentence_violation("Try this: run `git reset --hard HEAD`.") == "handoff"
+
+
+class TestResultKinds:
+    @pytest.mark.parametrize("case", FIXTURE["result_cases"], ids=lambda c: c["run_id"])
+    def test_result_cases(self, case):
+        assert vw.result_kinds(case["result"]) == case["kinds"]
+
+    def test_missing_tool_marker(self):
+        assert vw.result_kinds("MISSING-TOOL: an HTTP fetch tool") == ["missing_tool", "limitation"]
+
+    def test_missing_tool_marker_old_spelling(self):
+        assert vw.result_kinds("MISSING TOOL: an HTTP fetch tool") == ["missing_tool", "limitation"]
+
+    def test_missing_tool_marker_matches_delegate(self):
+        # One marker for both readers: delegate.py (#86 T1.2) and the result hook.
+        from jarvis.agents.delegate import MISSING_TOOL_MARKER
+        assert vw.MISSING_TOOL_MARKER == MISSING_TOOL_MARKER
+        assert vw.MISSING_TOOL_RE.search(MISSING_TOOL_MARKER)
+
+    def test_non_string_result(self):
+        assert vw.result_kinds(None) == []
+
+
+class TestExplicitCommandAsk:
+    """D-L5 (Larry, 2026-09-25): an explicit ask for a command lets
+    Mortimer show one. Pinned to Larry's own words from the log."""
+
+    @pytest.mark.parametrize("text", [
+        "Give me the command to do that.",                                  # 764
+        "So that's one... Give me the commands again.",                     # 831
+        "They're closer creating an error for the commands. Give me the commands without quotes.",  # 833
+        "What's the exact command?",
+        "Show me the git command.",
+        "Just give me the curl command.",
+        "I'll run it myself.",
+    ])
+    def test_asks(self, text):
+        assert vw.is_explicit_command_ask(text) is True
+
+    @pytest.mark.parametrize("text", [
+        "Are you unable to run that command yourself?",                     # 2865
+        "So you don't have access to the terminal?",                        # 828
+        "No. You do that for me.",                                          # 3478
+        "Don't give me commands, do it yourself.",
+        "Do not give me the command, just fix it.",
+        "I don't want to run the command.",
+        "Run the command yourself.",
+        "I ran the command.",
+        "Can you give me a rundown of the games?",
+        "",
+        None,
+    ])
+    def test_not_asks(self, text):
+        assert vw.is_explicit_command_ask(text) is False
+
+    def test_no_logged_failure_is_an_ask(self):
+        # Every one of the 93 logged failures is a turn where Larry did NOT
+        # want a command; none may open the gate.
+        assert [c["id"] for c in FIXTURE["failure_cases"]
+                if vw.is_explicit_command_ask(c["user"])] == []
+
+
+class TestVoiceMatcher:
+    @pytest.mark.parametrize("case", FIXTURE["failure_cases"], ids=lambda c: str(c["id"]))
+    def test_user_hook_matches_pinned_workflow(self, case, voice_wfs):
+        wf = vw.match_voice_workflow(user_text=case["user"], workflows=voice_wfs)
+        assert (wf.name if wf else None) == case["user_trigger"]
+
+    @pytest.mark.parametrize("kinds,expected", [
+        (["failed"], "voice-explain-failure"),
+        (["needs_input"], "voice-do-it-dont-hand-off"),
+        (["missing_tool"], "voice-check-before-cant"),
+        (["limitation"], "voice-check-before-cant"),
+        (["needs_input", "limitation"], "voice-do-it-dont-hand-off"),
+        (["failed", "needs_input"], "voice-do-it-dont-hand-off"),
+        ([], None),
+    ])
+    def test_result_hook_priority(self, kinds, expected, voice_wfs):
+        wf = vw.match_voice_workflow(result_kinds=kinds, workflows=voice_wfs)
+        assert (wf.name if wf else None) == expected
+
+    @pytest.mark.parametrize("kind,expected", [
+        ("refusal", "voice-check-before-cant"),
+        ("handoff", "voice-do-it-dont-hand-off"),
+    ])
+    def test_reply_hook(self, kind, expected, voice_wfs):
+        assert vw.match_voice_workflow(reply_kinds=[kind], workflows=voice_wfs).name == expected
+
+    def test_exactly_one_hook_argument(self, voice_wfs):
+        with pytest.raises(ValueError):
+            vw.match_voice_workflow(user_text="x", result_kinds=["failed"], workflows=voice_wfs)
+        with pytest.raises(ValueError):
+            vw.match_voice_workflow(workflows=voice_wfs)
+
+    def test_voice_workflows_never_reach_specialists(self, voice_wfs):
+        for agent in ("scheduler", "librarian", "analyst", "systems", "developer", "app_builder"):
+            for case in FIXTURE["failure_cases"]:
+                assert wfmod.match_workflow(agent, case["user"], workflows=voice_wfs) is None
+
+    def test_bad_regex_is_skipped_not_raised(self):
+        bad = wfmod.Workflow(name="x", when="x", agents=["supervisor"],
+                             triggers={"user": ["(unclosed"]}, source="bad.yaml")
+        assert vw.match_voice_workflow(user_text="anything", workflows=[bad]) is None
+
+
+class TestGuidanceAndGapLog:
+    def test_guidance_is_a_system_note(self, voice_wfs):
+        text = vw.render_guidance(voice_wfs[0])
+        assert text.startswith("[system] Larry's standing instruction")
+
+    def test_correction_note_names_the_sentence_and_appends_workflow(self, voice_wfs):
+        wf = vw.match_voice_workflow(reply_kinds=["handoff"], workflows=voice_wfs)
+        note = vw.correction_note("handoff", "Run that command locally.", wf)
+        assert note.startswith("[system] Your last reply was cut off")
+        assert "\"Run that command locally.\"" in note
+        assert "voice-do-it-dont-hand-off" in note
+
+    def test_gap_log_writes_one_json_line(self, tmp_path):
+        path = tmp_path / "gaps.jsonl"
+        vw.log_capability_gap(source="result", kind="limitation", text="I have no HTTP tool",
+                              session_id="s1", agent="developer", path=path)
+        record = json.loads(path.read_text().strip())
+        assert record["kind"] == "limitation" and record["agent"] == "developer"
+
+    def test_gap_log_redacts_sensitive(self, tmp_path):
+        path = tmp_path / "gaps.jsonl"
+        vw.log_capability_gap(source="reply_guard", kind="refusal", text="secret",
+                              user_text="secret", sensitive=True, path=path)
+        record = json.loads(path.read_text().strip())
+        assert record["text"] == "[sensitive]" and record["user_text"] == "[sensitive]"
+
+    def test_gap_log_never_raises(self, tmp_path):
+        blocker = tmp_path / "file"
+        blocker.write_text("x")
+        vw.log_capability_gap(source="result", kind="limitation", text="t",
+                              path=blocker / "sub" / "gaps.jsonl")
+
+
+class TestResultWrapper:
+    def _run(self, handler, **kw):
+        return asyncio.run(vw.wrap_delegate_handler(handler, **kw)({"agent_name": "developer", "task": "t"}))
+
+    def test_clean_result_is_unchanged(self, tmp_path):
+        async def h(_):
+            return "Current time in America/New_York: 9:03 PM."
+        assert self._run(h, gap_log_path=tmp_path / "g.jsonl") == "Current time in America/New_York: 9:03 PM."
+
+    def test_needs_input_stamps_gate_and_appends_guidance(self, tmp_path, monkeypatch, voice_wfs):
+        monkeypatch.setattr(vw, "load_workflows", lambda: voice_wfs)
+        gate: dict = {}
+
+        async def h(_):
+            return "NEEDS-INPUT: I have no network tool. Run: curl -s https://example"
+        out = self._run(h, gate=gate, gap_log_path=tmp_path / "g.jsonl")
+        assert "needs_input_at" in gate
+        assert out.startswith("NEEDS-INPUT:")
+        assert "voice-do-it-dont-hand-off" in out
+        assert (tmp_path / "g.jsonl").exists()
+
+    def test_disabled_still_stamps_gate_but_adds_nothing(self, tmp_path):
+        gate: dict = {}
+
+        async def h(_):
+            return "NEEDS-INPUT: sign in on GitHub"
+        out = self._run(h, gate=gate, enabled=lambda: False, gap_log_path=tmp_path / "g.jsonl")
+        assert out == "NEEDS-INPUT: sign in on GitHub" and "needs_input_at" in gate
+
+    def test_handler_exception_propagates_unchanged(self):
+        async def h(_):
+            raise RuntimeError("boom")
+        with pytest.raises(RuntimeError):
+            self._run(h)
+
+
+class TestPhase3:
+    """MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 3 (Larry, 2026-09-25): W8
+    option A (a proposal PR plus one approval) and self-rebuild option B
+    (the deploy stays his one command)."""
+
+    def test_the_proposal_marker_is_the_services(self):
+        from jarvis.selfedit.proposals import MARKER
+        assert vw.PROPOSAL_MARKER == MARKER
+
+    def test_a_proposal_result_gets_the_approve_first_workflow(self, voice_wfs):
+        result = ("Pull request 57 is open. HUMAN-ONLY PROPOSAL: pull request 57 changes nothing "
+                  "in requirements.txt by itself. NEEDS-INPUT: Larry's approval.")
+        kinds = vw.result_kinds(result)
+        assert kinds == ["needs_input", "proposal"]
+        wf = vw.match_voice_workflow(result_kinds=kinds, workflows=voice_wfs)
+        assert wf.name == "voice-human-only-proposal"
+        text = wf.as_prompt()
+        assert '"approve?"' in text and "only after he said yes" in text
+        assert "pushes nothing until he types y" in text
+        assert "Never tell him to merge the proposal pull request itself" in text
+
+    def test_no_logged_result_is_a_proposal(self):
+        assert not [c for c in FIXTURE["result_cases"] if "proposal" in vw.result_kinds(c["result"])]
+
+    @pytest.mark.parametrize("turn, text", [
+        (2667, "I I merged the PR request. How come that didn't take effect?"),
+        (2695, "So is there another PR waiting to be merged, or do we need to create a new one?"),
+        (2752, "Okay. It looks merged."),
+        (2756, "Okay. That's been ran. Can you see if it's been rebuilt?"),
+    ])
+    def test_the_merged_turns_get_the_deploy_workflow(self, voice_wfs, turn, text):
+        # The 4 of 1,525 logged user turns the trigger matches.
+        assert vw.match_voice_workflow(user_text=text, workflows=voice_wfs).name == "voice-merged-deploy"
+
+    def test_the_deploy_workflow_names_deploy_main_and_forbids_build_commands(self, voice_wfs):
+        wf = next(w for w in voice_wfs if w.name == "voice-merged-deploy")
+        text = wf.as_prompt()
+        assert "merged; deploy with DEPLOY-MAIN when you're ready" in text
+        assert "Never suggest scripts/bundle.sh" in text and "system_status, topic build" in text
+
+    @pytest.mark.parametrize("sentence", [
+        "Merged; deploy with DEPLOY-MAIN when you're ready.",
+        "Pull request 57 proposes a change to requirements.txt, a human-only file: it adds httpx. Approve?",
+        "It's on screen: it shows you the exact change first, and nothing is pushed until you type y.",
+    ])
+    def test_the_sanctioned_sentences_pass_the_reply_guard(self, sentence):
+        assert vw.reply_violations(sentence) == []
+
+
+class TestPhase4ModelAvailability:
+    """MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4 W3: model questions go to
+    system_status (#86's models / catalog / subscription topics)."""
+
+    @pytest.mark.parametrize("turn, text", [
+        (561, "Check and tell me what models you have access to now."),
+        (2858, "Do you have access to Kimi k three?"),
+        (3481, "Give me an overview of what models you actually have access to."),
+        (3483, "Yeah. You should have access to Codex Astra and Claude Fable five point one. Tell me if that's not true."),
+        (3485, "Can you not check to see what's actually available through the subscriptions that you have access to?"),
+    ])
+    def test_logged_model_questions_get_the_workflow(self, voice_wfs, turn, text):
+        assert vw.match_voice_workflow(user_text=text, workflows=voice_wfs).name == "voice-model-availability"
+
+    @pytest.mark.parametrize("text", [
+        "Start a self edit to add a line to docs slash repo map describing what model catalog does.",  # 2484
+        "Do you know which model, uh, the developer is using for this plan?",                         # 588
+        "What's the weather in Alpharetta?",
+    ])
+    def test_other_turns_do_not(self, voice_wfs, text):
+        wf = vw.match_voice_workflow(user_text=text, workflows=voice_wfs)
+        assert wf is None or wf.name != "voice-model-availability"
+
+    def test_it_answers_from_system_status_and_never_hands_off(self, voice_wfs):
+        text = next(w for w in voice_wfs if w.name == "voice-model-availability").as_prompt()
+        assert "Answer from system_status" in text and "Never ask Larry to run a command" in text

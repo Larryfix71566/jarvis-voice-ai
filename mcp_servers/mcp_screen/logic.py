@@ -56,6 +56,7 @@ import base64
 import json
 import logging
 import os
+import shutil
 import subprocess
 import tempfile
 import time
@@ -183,6 +184,31 @@ def _retain_failed_capture(image_bytes: bytes, display: int,
 # --- screen_list -------------------------------------------------------
 
 
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 2 D3. screen_view failed 4 of 4
+# calls on 2026-09-08/09 with "[Errno 2] No such file or directory:
+# 'screencapture'": launchd supervision (17cee9e, 2026-09-04) started the
+# services with PATH=/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin, and
+# both tools live in /usr/sbin. #79 (2026-09-17) added /usr/sbin:/sbin to
+# the template, but an installed plist is only rewritten when launchd_gen
+# runs, so resolve the tools here as well instead of trusting PATH.
+MACOS_TOOL_DIRS = ("/usr/sbin", "/usr/bin")
+
+
+def macos_tool(name: str) -> str:
+    """Absolute path of a macOS command-line tool, PATH first, then the
+    system directories launchd's PATH has been known to miss."""
+    found = shutil.which(name)
+    if found:
+        return found
+    for directory in MACOS_TOOL_DIRS:
+        candidate = os.path.join(directory, name)
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    raise FileNotFoundError(
+        f"{name} not found on PATH or in {', '.join(MACOS_TOOL_DIRS)}"
+    )
+
+
 def _system_profiler_displays() -> list[dict]:
     """Real backend for screen_list: shells out to `system_profiler
     SPDisplaysDataType -json` and returns a best-effort list of
@@ -197,7 +223,7 @@ def _system_profiler_displays() -> list[dict]:
     """
     try:
         proc = subprocess.run(
-            ["system_profiler", "SPDisplaysDataType", "-json"],
+            [macos_tool("system_profiler"), "SPDisplaysDataType", "-json"],
             capture_output=True, text=True, timeout=PROFILER_TIMEOUT_S, check=True,
         )
         data = json.loads(proc.stdout)
@@ -252,7 +278,7 @@ def _capture_screenshot(display: int) -> Path:
     os.close(fd)
     path = Path(path_str)
     subprocess.run(
-        ["screencapture", "-x", "-D", str(display), str(path)],
+        [macos_tool("screencapture"), "-x", "-D", str(display), str(path)],
         check=True, timeout=CAPTURE_TIMEOUT_S,
     )
     return path
@@ -277,7 +303,7 @@ def _resolve_vision_profile(registry: dict[str, Any] | None = None) -> dict[str,
         if prof is None or not prof.get("vision"):
             raise NoVisionProfileError(
                 f"{VISION_PROFILE_ENV}={requested!r} is not a known "
-                "vision-capable profile in config/upgrade_models.yaml."
+                "vision-capable profile in config/model_profiles.yaml."
             )
         key_env = prof.get("api_key_env", "OPENAI_API_KEY")
         if not os.environ.get(key_env):
@@ -296,8 +322,8 @@ def _resolve_vision_profile(registry: dict[str, Any] | None = None) -> dict[str,
 
     raise NoVisionProfileError(
         "No vision-capable model profile has its API key set. Add "
-        "`vision: true` to a profile in config/upgrade_models.yaml with "
-        "a present api_key_env, or set JARVIS_VISION_PROFILE."
+        "`vision: true` to a profile in config/model_profiles.yaml whose "
+        "endpoint's key is set, or set JARVIS_VISION_PROFILE."
     )
 
 

@@ -8,7 +8,8 @@ This is policy, bound in CONFIG rather than stored as a memory fact or a
 workflow, because a fact only persuades a model — it cannot bind which
 model a delegation actually runs on (the `jarvis_units` lesson). These
 tests are the mechanical backstop: they read the real
-`config/agents.yaml` and `config/upgrade_models.yaml`, so a future edit
+`config/agents.yaml` and the model registry (joined by `load_model_registry`
+from `config/model_profiles.yaml` + `config/model_endpoints.yaml`), so a future edit
 that quietly puts a specialist back on the voice model fails CI rather
 than surfacing as a slowly-worsening answer quality nobody can explain.
 
@@ -27,7 +28,6 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-REGISTRY_PATH = ROOT / "config" / "upgrade_models.yaml"
 AGENTS_PATH = ROOT / "config" / "agents.yaml"
 
 # Anything matching this is BELOW the floor. Case-insensitive on purpose:
@@ -37,8 +37,14 @@ BELOW_FLOOR = re.compile(r"haiku", re.IGNORECASE)
 
 @pytest.fixture(scope="module")
 def profiles_by_name() -> dict[str, dict]:
-    reg = yaml.safe_load(REGISTRY_PATH.read_text(encoding="utf-8")) or {}
-    return {p["name"]: p for p in reg.get("profiles") or [] if isinstance(p, dict)}
+    # The JOINED view, through the one loader — the floor is about which
+    # model and endpoint an agent reaches, and after the registry split the
+    # endpoint half lives in config/model_endpoints.yaml.
+    from jarvis.agents.upgrade_agent import REGISTRY_PATH_ENV, load_model_registry
+    with pytest.MonkeyPatch.context() as mp:
+        mp.delenv(REGISTRY_PATH_ENV, raising=False)
+        reg = load_model_registry(config_dir=ROOT / "config")
+    return {p["name"]: p for p in reg["profiles"].values() if isinstance(p, dict)}
 
 
 @pytest.fixture(scope="module")

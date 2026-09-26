@@ -9,7 +9,7 @@ import re
 import time
 import uuid
 
-from sandbox.artifacts import SandboxError
+from sandbox.artifacts import SandboxError, source_path_allowed
 from sandbox.durable import atomic_json
 from sandbox.files import WorkspaceFiles
 
@@ -148,6 +148,31 @@ class Session:
             except UnicodeError:
                 raise SandboxError("File is binary; use the artifact workflow") from None
             return {"ok": True, "path": path, "content": content}
+
+    def baseline_text(self, path: str) -> dict:
+        """One file as the session's BASE revision holds it, read from the
+        host's inert source snapshot; the guest is not consulted.
+
+        The workspace policy does not apply because nothing is written or
+        executed: the self-edit service uses this to show a human-only file
+        read-only and to draft a proposal against the exact bytes the pull
+        request is based on (MORTIMER_VOICE_WORKFLOWS_PLAN.md W8). Paths
+        the snapshot never carries (secrets, runtime data) are refused."""
+        if not source_path_allowed(path):
+            raise SandboxError("Path is outside the source snapshot")
+        state = self._read()
+        if (self.directory / "cancelled.json").exists() or state.get("phase") in {"reverted", "cancelled", "setup_failed"}:
+            raise SandboxError("This session has ended")
+        file = next((item for item in self._files(state).baseline.files if item.path == path), None)
+        if file is None:
+            return {"ok": True, "path": path, "exists": False, "content": ""}
+        if len(file.data) > MAX_EDITOR_BYTES:
+            raise SandboxError("File is too large for the text editor")
+        try:
+            content = file.data.decode("utf-8")
+        except UnicodeError:
+            raise SandboxError("File is binary; use the artifact workflow") from None
+        return {"ok": True, "path": path, "exists": True, "content": content, "mode": file.mode}
 
     def propose_edit(self, path: str, content: str, rationale: str, visual_intent: str = "") -> dict:
         if not isinstance(content, str) or len(content.encode("utf-8")) > MAX_EDITOR_BYTES:

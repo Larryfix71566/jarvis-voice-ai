@@ -131,3 +131,74 @@ def test_mortimer_sh_logs_follow_the_files_launchd_writes():
                 / "com.mortimer.template.plist").read_text(encoding="utf-8")
     assert "logs/__SVC__.launchd.log" in template
     assert "logs/bot.launchd.log" in src
+
+
+# ---- status spec T4.5: calendar-job table. Goldens captured from the
+# pre-refactor render() (backup special case) so the table changes nothing.
+
+BACKUP_GOLDEN_AMP = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+    '<plist version="1.0"><dict>\n'
+    '  <key>Label</key><string>com.mortimer.backup</string>\n'
+    '  <key>ProgramArguments</key><array><string>/usr/bin/python3</string><string>scripts/backup_db.py</string></array>\n'
+    '  <key>WorkingDirectory</key><string>/Users/larry/jarvis &amp; co</string>\n'
+    '  <key>EnvironmentVariables</key><dict><key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>\n'
+    '  <key>StandardOutPath</key><string>/Users/larry/jarvis &amp; co/logs/backup.launchd.log</string>\n'
+    '  <key>StandardErrorPath</key><string>/Users/larry/jarvis &amp; co/logs/backup.launchd.log</string>\n'
+    '  <key>StartCalendarInterval</key><dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>15</integer></dict>\n'
+    '</dict></plist>\n'
+)
+BACKUP_GOLDEN_0430 = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+    '<plist version="1.0"><dict>\n'
+    '  <key>Label</key><string>com.mortimer.backup</string>\n'
+    '  <key>ProgramArguments</key><array><string>/usr/bin/python3</string><string>scripts/backup_db.py</string></array>\n'
+    '  <key>WorkingDirectory</key><string>/repo</string>\n'
+    '  <key>EnvironmentVariables</key><dict><key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>\n'
+    '  <key>StandardOutPath</key><string>/repo/logs/backup.launchd.log</string>\n'
+    '  <key>StandardErrorPath</key><string>/repo/logs/backup.launchd.log</string>\n'
+    '  <key>StartCalendarInterval</key><dict><key>Hour</key><integer>4</integer><key>Minute</key><integer>30</integer></dict>\n'
+    '</dict></plist>\n'
+)
+DAEMON_SHA256 = {
+    "vault": "820b81e2e5ef04f47cd648b76bb395602bd597fe30d05281a892656d201e0c03",
+    "bot": "016ad396c68f380854cf949fba83db1779d627582c98259de40bda894632151e",
+    "extractor": "5fc93ffa6bd97f7cdc27291cf146beef2968851bc8b4a856578f0862af57424b",
+    "admin": "7c3106dbb8f151d9e3c5aa22f6160e5c1c04923774ad7249cef608368afe1639",
+    "costs": "b43c6fa408d56cec31f742622f5366b3b1b40022608461951eb057fcf7b9e862",
+}
+
+
+def test_backup_plist_is_byte_identical_to_before():
+    assert launchd_gen.render("backup", Path("/Users/larry/jarvis & co")) == BACKUP_GOLDEN_AMP
+    assert launchd_gen.render("backup", Path("/repo"), 4, 30) == BACKUP_GOLDEN_0430
+
+
+def test_daemon_plists_are_byte_identical_to_before():
+    import hashlib
+
+    for svc, digest in DAEMON_SHA256.items():
+        rendered = launchd_gen.render(svc, Path("/repo"))
+        assert hashlib.sha256(rendered.encode()).hexdigest() == digest, svc
+
+
+def test_status_daily_plist_argv_and_schedule():
+    xml = launchd_gen.render("status-daily", Path("/Users/larry/jarvis & co"))
+    parsed = plistlib.loads(xml.encode("utf-8"))
+    assert parsed["Label"] == "com.mortimer.status-daily"
+    assert parsed["ProgramArguments"] == [
+        "/bin/bash", "-c",
+        "cd /Users/larry/jarvis & co && set -a && . ./.env && set +a && "
+        "exec .venv/bin/python -m jarvis.status.daily"]
+    assert parsed["StartCalendarInterval"] == {"Hour": 6, "Minute": 30}
+    assert "KeepAlive" not in parsed and "RunAtLoad" not in parsed
+    assert parsed["StandardOutPath"] == "/Users/larry/jarvis & co/logs/status-daily.launchd.log"
+
+
+def test_hour_minute_flags_apply_to_backup_only():
+    xml = launchd_gen.render("status-daily", Path("/repo"), hour=4, minute=45)
+    assert plistlib.loads(xml.encode())["StartCalendarInterval"] == {"Hour": 6, "Minute": 30}
+    assert launchd_gen.ALL_SERVICES == (*launchd_gen.SERVICES, "backup", "status-daily")
+    assert launchd_gen.CALENDAR_JOBS["backup"] == (["/usr/bin/python3", "scripts/backup_db.py"], 3, 15)

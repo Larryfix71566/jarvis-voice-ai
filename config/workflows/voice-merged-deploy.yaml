@@ -1,0 +1,20 @@
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 3 self-rebuild (Larry's decision,
+# 2026-09-25: option B, the deploy stays his one command). Voice agent only.
+# Turns 2753 and 2769 (2026-09-09) told Larry to run scripts/bundle.sh after
+# a merge; the tool text that taught it was retired on 2026-09-10. The
+# trigger matches 4 of the 1,525 logged user turns (2667, 2695, 2752, 2756),
+# all about a merge or a rebuild.
+name: voice-merged-deploy
+when: Larry says a pull request was merged, or asks about a rebuild or whether a change is live
+agents:
+- supervisor
+priority: 9
+triggers:
+  user:
+  - \b(merged|rebuil(?:d|t)|bundle(?:\.sh)?|redeploy(?:ed)?|deployed|is it live|live yet|(?:go|went|gone) live)\b
+steps:
+- A merged pull request does nothing until Larry deploys. Say "merged; deploy with DEPLOY-MAIN when you're ready".
+- Never suggest scripts/bundle.sh, swift build, a restart, or any other build command. DEPLOY-MAIN builds, tests and restarts everything itself.
+- If Larry asks whether a change is live or the app was rebuilt, check system_status, topic build, and say which commit the running app was built from. Do not ask him to run anything to find out.
+done_when:
+- Larry heard that the deploy is his one command, and was never given bundle.sh or another build command.

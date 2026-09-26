@@ -50,7 +50,7 @@ BUCKETS = {
     "sub_agents": {"scheduler", "librarian", "analyst", "systems",
                    "developer", "app_builder"},
     "background": {"memory_merge", "memory_classify", "memory_extraction",
-                   "kb_digest", "procedures_describe"},
+                   "memory_settle", "kb_digest", "procedures_describe"},
     "planner":    {"planning", "council"},
     "executor":   {"selfedit_executor", "appbuild_executor"},
     "research":   {"research"},

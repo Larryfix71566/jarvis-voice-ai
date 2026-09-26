@@ -542,3 +542,223 @@ class TestGetWeatherRadar:
             raise httpx.ConnectError("down")
         monkeypatch.setattr(logic.httpx, "get", fake_get)
         assert logic.get_weather_radar("Tokyo")["error"].startswith("Radar data failed")
+
+
+# ------------------------------------------------------------ sports scores
+# Status spec P6. Fixtures are real responses captured 2026-09-23 through
+# Larry's browser (Step 0) and trimmed to the fields used, EXCEPT
+# nfl_2026-09-20_in_progress_DERIVED.json: ESPN's "in" state was not observed
+# live, so that file is the final fixture hand-edited to an assumed
+# in-progress shape (its "_derived" key says so). Tests using it are named
+# *_derived and prove only that the parser handles that assumed shape.
+
+import json as _json
+from datetime import datetime as _dt, timezone as _tz_utc
+from pathlib import Path as _Path
+
+SPORTS_FIXTURES = _Path(__file__).resolve().parents[1] / "fixtures" / "sports"
+
+
+def _sports_fixture(name):
+    return _json.loads((SPORTS_FIXTURES / name).read_text())
+
+
+def _fetch_returning(payload, calls=None):
+    def fetch(url, params):
+        if calls is not None:
+            calls.append((url, params))
+        return payload
+    return fetch
+
+
+@pytest.fixture
+def eastern(monkeypatch):
+    monkeypatch.setenv("JARVIS_TIMEZONE", "America/New_York")
+
+
+class TestSportsScoresMLB:
+    def test_final_fixture_parsed(self, eastern):
+        calls = []
+        r = logic.sports_scores(
+            "mlb", "2026-09-20",
+            fetch=_fetch_returning(_sports_fixture("mlb_2026-09-20_final.json"), calls))
+        assert r["ok"] is True
+        assert r["league"] == "mlb" and r["date"] == "2026-09-20"
+        assert r["source"] == "statsapi.mlb.com"
+        assert r["fetched_at"]
+        assert r["games"] == [
+            {"away": "Philadelphia Phillies", "home": "New York Mets",
+             "away_score": 7, "home_score": 2, "status": "final",
+             "start_local": "2026-09-20T13:10-04:00"},
+            {"away": "Kansas City Royals", "home": "Pittsburgh Pirates",
+             "away_score": 3, "home_score": 4, "status": "final",
+             "start_local": "2026-09-20T13:35-04:00"},
+        ]
+        assert calls == [(logic.MLB_SCHEDULE_URL,
+                          {"sportId": 1, "date": "2026-09-20", "hydrate": "linescore"})]
+
+    def test_mixed_fixture_live_and_game_over(self, eastern):
+        r = logic.sports_scores(
+            "mlb", "2026-09-23",
+            fetch=_fetch_returning(_sports_fixture("mlb_2026-09-23_mixed.json")))
+        got = [(g["away"], g["away_score"], g["home_score"], g["status"]) for g in r["games"]]
+        assert got == [
+            ("Washington Nationals", 4, 2, "final"),
+            ("Tampa Bay Rays", 2, 9, "in_progress"),       # Live|In Progress|I
+            ("Cleveland Guardians", 0, 1, "final"),        # Final|Game Over|O
+        ]
+        assert r["games"][1]["start_local"] == "2026-09-23T19:05-04:00"
+
+    def test_scheduled_fixture_has_no_scores(self, eastern):
+        r = logic.sports_scores(
+            "mlb", "2026-09-25",
+            fetch=_fetch_returning(_sports_fixture("mlb_2026-09-25_scheduled.json")))
+        assert r["games"] == [
+            {"away": "Chicago Cubs", "home": "Boston Red Sox",
+             "away_score": None, "home_score": None, "status": "scheduled",
+             "start_local": "2026-09-25T13:05-04:00"},
+        ]
+
+
+class TestSportsScoresNFL:
+    def test_final_fixture_parsed_scores_are_ints(self, eastern):
+        calls = []
+        r = logic.sports_scores(
+            "nfl", "2026-09-20",
+            fetch=_fetch_returning(_sports_fixture("nfl_2026-09-20_final.json"), calls))
+        assert r["ok"] is True and r["source"] == "site.api.espn.com"
+        assert r["games"] == [
+            {"away": "Carolina Panthers", "home": "Atlanta Falcons",
+             "away_score": 34, "home_score": 3, "status": "final",
+             "start_local": "2026-09-20T13:00-04:00"},
+        ]
+        assert calls == [(logic.ESPN_NFL_SCOREBOARD_URL, {"dates": "20260920"})]
+
+    def test_scheduled_zero_scores_reported_as_null(self, eastern):
+        r = logic.sports_scores(
+            "nfl", "2026-10-04",
+            fetch=_fetch_returning(_sports_fixture("nfl_2026-10-04_scheduled.json")))
+        assert r["games"] == [
+            {"away": "Indianapolis Colts", "home": "Washington Commanders",
+             "away_score": None, "home_score": None, "status": "scheduled",
+             "start_local": "2026-10-04T09:30-04:00"},
+        ]
+
+    def test_in_progress_derived(self, eastern):
+        payload = _sports_fixture("nfl_2026-09-20_in_progress_DERIVED.json")
+        assert "DERIVED" in payload["_derived"]
+        r = logic.sports_scores("nfl", "2026-09-20", fetch=_fetch_returning(payload))
+        g = r["games"][0]
+        assert (g["status"], g["away_score"], g["home_score"]) == ("in_progress", 20, 3)
+
+
+class TestSportsStatusMapping:
+    @pytest.mark.parametrize("abstract,detailed,expected", [
+        ("Final", "Final", "final"),
+        ("Final", "Game Over", "final"),
+        ("Live", "In Progress", "in_progress"),
+        ("Live", "Warmup", "in_progress"),
+        ("Preview", "Scheduled", "scheduled"),
+    ])
+    def test_mlb_observed_states(self, abstract, detailed, expected):
+        status = {"abstractGameState": abstract, "detailedState": detailed}
+        assert logic.mlb_status(status, has_scores=True) == expected
+
+    def test_mlb_unknown_state_keeps_source_words(self):
+        assert logic.mlb_status(
+            {"abstractGameState": "Other", "detailedState": "Delayed Start"},
+            has_scores=False) == "Delayed Start"
+
+    def test_mlb_final_without_scores_is_not_claimed_final(self):
+        # e.g. a postponement (not observed in Step 0): never guess "final".
+        assert logic.mlb_status(
+            {"abstractGameState": "Final", "detailedState": "Postponed"},
+            has_scores=False) == "Postponed"
+
+    @pytest.mark.parametrize("state,completed,expected", [
+        ("pre", False, "scheduled"),
+        ("in", False, "in_progress"),   # derived — not observed live
+        ("post", True, "final"),
+    ])
+    def test_espn_states(self, state, completed, expected):
+        assert logic.espn_status(
+            {"state": state, "completed": completed, "description": "x"}) == expected
+
+    def test_espn_unknown_state_keeps_description(self):
+        assert logic.espn_status(
+            {"state": "delayed", "name": "STATUS_DELAYED",
+             "description": "Delayed"}) == "Delayed"
+
+    def test_espn_post_not_completed_is_not_final(self):
+        assert logic.espn_status(
+            {"state": "post", "completed": False, "name": "STATUS_POSTPONED",
+             "description": "Postponed"}) == "Postponed"
+
+
+class TestSportsScoresEdges:
+    def test_unsupported_league(self):
+        def never(*a):
+            raise AssertionError("must not fetch")
+        assert logic.sports_scores("nba", fetch=never) == {
+            "ok": False, "error": "no structured source for nba"}
+
+    def test_league_is_case_insensitive(self, eastern):
+        r = logic.sports_scores(
+            " MLB ", "2026-09-25",
+            fetch=_fetch_returning(_sports_fixture("mlb_2026-09-25_scheduled.json")))
+        assert r["ok"] is True and r["league"] == "mlb"
+
+    def test_bad_date(self):
+        r = logic.sports_scores("mlb", "09/20/2026", fetch=_fetch_returning({}))
+        assert r == {"ok": False, "error": "date must be YYYY-MM-DD"}
+
+    def test_empty_date_means_today_in_configured_zone(self, eastern):
+        calls = []
+        # 02:30 UTC on the 21st is still the 20th in New York.
+        now = _dt(2026, 9, 21, 2, 30, tzinfo=_tz_utc.utc)
+        r = logic.sports_scores("nfl", fetch=_fetch_returning({"events": []}, calls), now=now)
+        assert r["date"] == "2026-09-20" and r["games"] == []
+        assert calls[0][1] == {"dates": "20260920"}
+
+    def test_unresolved_timezone_falls_back_to_utc(self, monkeypatch):
+        monkeypatch.setenv("JARVIS_TIMEZONE", "${JARVIS_TIMEZONE}")
+        r = logic.sports_scores(
+            "nfl", "2026-09-20",
+            fetch=_fetch_returning(_sports_fixture("nfl_2026-09-20_final.json")))
+        assert r["games"][0]["start_local"] == "2026-09-20T17:00+00:00"
+
+    def test_http_error(self):
+        def fetch(url, params):
+            FakeResponse({}, 503).raise_for_status()
+        r = logic.sports_scores("mlb", "2026-09-20", fetch=fetch)
+        assert r == {"ok": False, "error": "statsapi.mlb.com failed (HTTP 503)."}
+
+    def test_network_error(self):
+        def fetch(url, params):
+            raise httpx.ConnectError("down")
+        r = logic.sports_scores("nfl", "2026-09-20", fetch=fetch)
+        assert r == {"ok": False, "error": "site.api.espn.com failed: ConnectError."}
+
+    def test_unexpected_shape_is_an_error_not_a_crash(self):
+        r = logic.sports_scores("mlb", "2026-09-20",
+                                fetch=_fetch_returning({"dates": "nope"}))
+        assert r["ok"] is False and "unexpected shape" in r["error"]
+
+    def test_default_fetch_uses_httpx_get(self, monkeypatch):
+        seen = {}
+
+        def fake_get(url, params=None, timeout=None):
+            seen.update(url=url, params=params, timeout=timeout)
+            return FakeResponse({"events": []})
+
+        monkeypatch.setattr(logic.httpx, "get", fake_get)
+        r = logic.sports_scores("nfl", "2026-09-20")
+        assert r["ok"] is True
+        assert seen == {"url": logic.ESPN_NFL_SCOREBOARD_URL,
+                        "params": {"dates": "20260920"}, "timeout": logic.TIMEOUT}
+
+    def test_analyst_is_told_to_use_it_first(self):
+        from jarvis.prompts import SUBAGENT_PROMPTS
+        p = SUBAGENT_PROMPTS["analyst"]
+        assert "For game scores or schedules call sports_scores first" in p
+        assert "say the result is unconfirmed" in p

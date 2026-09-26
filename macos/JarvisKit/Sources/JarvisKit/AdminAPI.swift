@@ -148,6 +148,12 @@ public struct AdminAPI: Sendable {
     // MARK: Ambient
     public func ambient() async throws -> JSONValue { try await get("api/ambient") }
 
+    /// Phase 2 D4: the device fix also feeds the weather chip, through the
+    /// sidecar's existing POST /api/location (lat, lon, label).
+    public func reportDeviceLocation(lat: Double, lon: Double, label: String) async throws -> JSONValue {
+        try await post("api/location", body: DeviceLocationBody(lat: lat, lon: lon, label: label))
+    }
+
     // MARK: Council
     public func councilJob() async throws -> JSONValue { try await get("api/council/job") }
     public func councilRounds() async throws -> JSONValue { try await get("api/council/rounds") }
@@ -570,6 +576,75 @@ public struct KnowledgeSkills: Codable, Sendable {
     }
 }
 
+/// MORTIMER_WORKFLOW_VIEWER_PLAN.md piece 4 — one workflow in full, from
+/// `GET /api/workflows`, for the read-only viewer. Lenient like every other
+/// admin struct: a missing field decodes to its empty value.
+public struct WorkflowDetail: Codable, Sendable, Equatable, Identifiable {
+    public let name: String
+    public let when: String
+    public let steps: [String]
+    public let doneWhen: [String]
+    public let agents: [String]
+    public let source: String
+    /// Hook names only ("user", "result", "reply"); the regexes stay server-side.
+    public let triggers: [String]
+    public let priority: Int
+    /// "voice" (a Supervisor workflow) or "rule" (a specialist's standing rule).
+    public let kind: String
+    /// D-V1: an unreviewed draft — listed here, never matched.
+    public let draft: Bool
+    /// The file, not the name: load_workflows() does not reject two files
+    /// that share a `name:`, and the viewer must still tell them apart.
+    public var id: String { source.isEmpty ? name : source }
+    public var isVoice: Bool { kind == "voice" }
+    enum CodingKeys: String, CodingKey {
+        case name, when, steps, agents, source, triggers, priority, kind, draft
+        case doneWhen = "done_when"
+    }
+    public init(name: String, when: String, steps: [String] = [], doneWhen: [String] = [],
+                agents: [String] = [], source: String = "", triggers: [String] = [],
+                priority: Int = 100, kind: String = "rule", draft: Bool = false) {
+        self.name = name; self.when = when; self.steps = steps; self.doneWhen = doneWhen
+        self.agents = agents; self.source = source; self.triggers = triggers
+        self.priority = priority; self.kind = kind; self.draft = draft
+    }
+    public init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        when = try c.decodeIfPresent(String.self, forKey: .when) ?? ""
+        steps = try c.decodeIfPresent([String].self, forKey: .steps) ?? []
+        doneWhen = try c.decodeIfPresent([String].self, forKey: .doneWhen) ?? []
+        agents = try c.decodeIfPresent([String].self, forKey: .agents) ?? []
+        source = try c.decodeIfPresent(String.self, forKey: .source) ?? ""
+        triggers = try c.decodeIfPresent([String].self, forKey: .triggers) ?? []
+        priority = try c.decodeIfPresent(Int.self, forKey: .priority) ?? 100
+        kind = try c.decodeIfPresent(String.self, forKey: .kind) ?? "rule"
+        draft = try c.decodeIfPresent(Bool.self, forKey: .draft) ?? false
+    }
+}
+
+/// `GET /api/workflows`. `enabled` is false when JARVIS_WORKFLOWS_ENABLED is
+/// off, and the list is then empty.
+public struct WorkflowsResponse: Codable, Sendable {
+    public let ok: Bool
+    public let enabled: Bool
+    public let matchThreshold: Double
+    public let workflows: [WorkflowDetail]
+    public let error: String?
+    enum CodingKeys: String, CodingKey {
+        case ok, enabled, workflows, error
+        case matchThreshold = "match_threshold"
+    }
+    public init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        ok = try c.decodeIfPresent(Bool.self, forKey: .ok) ?? false
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        matchThreshold = try c.decodeIfPresent(Double.self, forKey: .matchThreshold) ?? 0.35
+        workflows = try c.decodeIfPresent([WorkflowDetail].self, forKey: .workflows) ?? []
+        error = try c.decodeIfPresent(String.self, forKey: .error)
+    }
+}
+
 public struct KnowledgeWorkflow: Codable, Sendable {
     public let name: String
     public let source: String
@@ -888,6 +963,8 @@ public extension AdminAPI {
     func memoryOverview() async throws -> MemoryOverview { try await getDecoded("api/memory") }
     func memoryReviewsTyped() async throws -> MemoryReviews { try await getDecoded("api/memory/reviews") }
     func knowledgeTyped() async throws -> KnowledgeOverview { try await getDecoded("api/knowledge") }
+    /// MORTIMER_WORKFLOW_VIEWER_PLAN.md piece 4.
+    func workflows() async throws -> WorkflowsResponse { try await getDecoded("api/workflows") }
 
     // Runs (P5). Filters ride as query params, exactly the web's
     // `?agent=&status=` (RunsPanel.tsx:111-116) — server-side filtering,
@@ -985,4 +1062,10 @@ public struct AmbientResponse: Codable, Sendable, Equatable {
         weather = try c.decodeIfPresent(AmbientWeather.self, forKey: .weather)
         system = try c.decodeIfPresent(AmbientSystem.self, forKey: .system)
     }
+}
+
+struct DeviceLocationBody: Encodable {
+    let lat: Double
+    let lon: Double
+    let label: String
 }

@@ -22,6 +22,8 @@ struct WorkspaceResult: Identifiable, Equatable, Sendable {
 enum SupportingDisplayContent: Equatable {
     case result(UUID)
     case memoryGraph
+    /// MORTIMER_WORKFLOW_VIEWER_PLAN.md — the read-only workflow gallery.
+    case workflows
 }
 
 enum WorkspaceComparisonSide: String, Sendable {
@@ -42,11 +44,15 @@ final class WorkspaceStore {
     private(set) var showsConversation = true
     private(set) var showsMemoryGraph = false
     private(set) var showsAtlas = false
+    /// MORTIMER_WORKFLOW_VIEWER_PLAN.md: the fourth main view, handled like
+    /// showsAtlas everywhere (cleared wherever showsAtlas is cleared).
+    private(set) var showsWorkflows = false
     private(set) var supportingContent: SupportingDisplayContent?
     var showComparisonOnCompact = false
     private(set) var comparisonSide: WorkspaceComparisonSide = .a
     let exporter = WorkspaceExportCoordinator()
     let memoryGraph = MemoryGraphStore(persistenceKey: "mortimer.interface.memoryGraph.view")
+    let workflows = WorkflowsStore()
     @ObservationIgnored private var presentations: [UUID: WorkspaceResultPresentation] = [:]
     @ObservationIgnored private var resultGraphs: [UUID: MemoryGraphStore] = [:]
     private(set) var scrollOffsets: [UUID: Double] = [:]
@@ -74,7 +80,7 @@ final class WorkspaceStore {
     /// session; the count is a conservative revision for inventory checks.
     var consoleInventory: [String: Any] {
         ["revision": inventoryRevision,
-         "mode": showsConversation ? "conversation" : (showsMemoryGraph ? "memory" : (showsAtlas ? "atlas" : "results")),
+         "mode": showsConversation ? "conversation" : (showsMemoryGraph ? "memory" : (showsAtlas ? "atlas" : (showsWorkflows ? "workflows" : "results"))),
          "active_result_id": activeID?.uuidString as Any,
          "focused_panel_id": NSNull(),
          "results": results.enumerated().map { index, result in
@@ -125,6 +131,7 @@ final class WorkspaceStore {
         if showsConversation { mode = "conversation" }
         else if showsMemoryGraph { mode = "memory" }
         else if showsAtlas { mode = "atlas" }
+        else if showsWorkflows { mode = "workflows" }
         else { mode = "results" }
         let activeValue: JSONValue = activeID.map { .string($0.uuidString) } ?? .null
         let comparisonValue: JSONValue = comparisonID.map { .string($0.uuidString) } ?? .null
@@ -197,6 +204,7 @@ final class WorkspaceStore {
         if comparisonID == id { comparisonID = activeID }
         activeID = id
         showsAtlas = false
+        showsWorkflows = false
         showsConversation = false
         showsMemoryGraph = false
         unreadIDs.remove(id)
@@ -216,6 +224,7 @@ final class WorkspaceStore {
     func returnToConversation() {
         hasChosenPresentation = true
         showsAtlas = false
+        showsWorkflows = false
         showsConversation = true
         inventoryRevision += 1
     }
@@ -223,12 +232,23 @@ final class WorkspaceStore {
         hasChosenPresentation = true
         showsMemoryGraph = true
         showsAtlas = false
+        showsWorkflows = false
         showsConversation = false
         inventoryRevision += 1
     }
     func openAtlas() {
         hasChosenPresentation = true
         showsAtlas = true
+        showsWorkflows = false
+        showsMemoryGraph = false
+        showsConversation = false
+        inventoryRevision += 1
+    }
+    /// MORTIMER_WORKFLOW_VIEWER_PLAN.md — view_set mode "workflows".
+    func openWorkflows() {
+        hasChosenPresentation = true
+        showsWorkflows = true
+        showsAtlas = false
         showsMemoryGraph = false
         showsConversation = false
         inventoryRevision += 1
@@ -236,6 +256,7 @@ final class WorkspaceStore {
     func returnToWorkspace() {
         hasChosenPresentation = true
         showsAtlas = false
+        showsWorkflows = false
         showsConversation = false
         inventoryRevision += 1
     }
@@ -293,6 +314,7 @@ final class WorkspaceStore {
         unreadIDs.remove(id)
         showsConversation = false
         showsMemoryGraph = false
+        showsWorkflows = false   // the comparison must be visible
         inventoryRevision += 1
         return true
     }
@@ -377,7 +399,9 @@ final class WorkspaceStore {
             comparisonID = nil
         }
         if comparisonID == id { comparisonID = nil }
-        if activeID == nil && !showsMemoryGraph { showsConversation = true }
+        // Like the memory graph, the workflow viewer stays open when the
+        // last result tab closes (closing a result says nothing about it).
+        if activeID == nil && !showsMemoryGraph && !showsWorkflows { showsConversation = true }
     }
 
     private func remove(_ id: UUID) {

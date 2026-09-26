@@ -77,6 +77,10 @@ cat > "$APP/Contents/Info.plist" << PLIST
   <key>NSHighResolutionCapable</key><true/>
   <key>NSMicrophoneUsageDescription</key>
   <string>Mortimer listens to you through the microphone for voice conversation and the wake word.</string>
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>Mortimer uses this Mac's location to answer where you are and for local weather.</string>
+  <key>NSLocationUsageDescription</key>
+  <string>Mortimer uses this Mac's location to answer where you are and for local weather.</string>
   <key>NSSupportsAutomaticTermination</key><false/>
   <key>NSSupportsSuddenTermination</key><false/>
 </dict>

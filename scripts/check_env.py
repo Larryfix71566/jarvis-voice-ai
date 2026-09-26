@@ -197,6 +197,30 @@ def secret_source(name: str, pre_vault_env: dict[str, str],
     return "vault" if os.environ.get(name, "").strip() else "not set"
 
 
+def _load_model_registry() -> dict:
+    """The joined model registry under REPO_ROOT, through the ONE loader.
+
+    docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md step 3: this script
+    used to parse config/upgrade_models.yaml itself in three places. After
+    the split, the keys and endpoints live in config/model_endpoints.yaml
+    and only jarvis.agents.upgrade_agent.load_model_registry joins them.
+
+    Raises FileNotFoundError when there is no registry at all (the three
+    callers keep their own "not found" wording), ImportError when the
+    loader cannot be imported (a fresh checkout before dependencies are
+    installed), and the loader's own error for a malformed or unsafe one.
+    """
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from jarvis.agents.upgrade_agent import load_model_registry, registry_source
+
+    config_dir = REPO_ROOT / "config"
+    source = registry_source(config_dir=config_dir)
+    if not source.exists():
+        raise FileNotFoundError(str(source))
+    return load_model_registry(config_dir=config_dir)
+
+
 def check_model_keys(env: dict[str, str], pre_vault_env: set[str],
                      vault_names: set[str]) -> None:
     """One live probe per distinct (api_key_env, base_url) — per KEY and
@@ -209,18 +233,16 @@ def check_model_keys(env: dict[str, str], pre_vault_env: set[str],
     returns 401 meaning only "not an OpenAI key." Grouping by key alone
     made exactly that mistake and produced a false "renew this key."
     """
-    registry_path = REPO_ROOT / "config" / "upgrade_models.yaml"
-    if not registry_path.exists():
-        return
     try:
-        import yaml
-        registry = yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}
+        registry = _load_model_registry()
+    except FileNotFoundError:
+        return
     except Exception as exc:  # noqa: BLE001
         report(None, "Model key validity", f"could not read registry: {exc}")
         return
 
     groups: dict[tuple[str, str], dict] = {}
-    for prof in registry.get("profiles") or []:
+    for prof in registry["profiles"].values():
         if not isinstance(prof, dict):
             continue
         key_env = str(prof.get("api_key_env", "OPENAI_API_KEY"))
@@ -317,7 +339,7 @@ def check_github(env: dict[str, str], env_file_values: dict[str, str]) -> None:
 
 def check_model_registry() -> None:
     """H2 (MORTIMER_CONFIRMATION_AND_CAPABILITY_PLAN.md): report which
-    model profiles in config/upgrade_models.yaml actually have their API
+    model profiles in the model registry actually have their API
     key present, then cross-reference config/agents.yaml so a sub-agent
     pinned to a profile whose key is missing is visible BEFORE a
     delegation fails. WARN-only by design — a missing planner key must
@@ -331,17 +353,19 @@ def check_model_registry() -> None:
         report(None, "Model registry", "PyYAML not installed — skipped")
         return
 
-    registry_path = REPO_ROOT / "config" / "upgrade_models.yaml"
-    if not registry_path.exists():
-        report(None, "Model registry", f"file not found ({registry_path})")
-        return
     try:
-        registry = yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}
+        registry = _load_model_registry()
+    except FileNotFoundError as exc:
+        report(None, "Model registry", f"file not found ({exc})")
+        return
+    except ImportError as exc:
+        report(None, "Model registry", f"registry loader unavailable ({exc}) — skipped")
+        return
     except Exception as exc:
-        report(None, "Model registry", f"could not parse upgrade_models.yaml: {exc}")
+        report(None, "Model registry", f"could not parse the model registry: {exc}")
         return
 
-    profiles = registry.get("profiles") or []
+    profiles = list(registry["profiles"].values())
     default_name = registry.get("default")
     by_name = {}
     for profile in profiles:
@@ -393,6 +417,92 @@ def check_model_registry() -> None:
                    f"{key_env} missing — {name} will silently fall back to the voice model")
 
 
+# Split plan §4a.2: the sync job runs daily, so an entry older than this has
+# missed more than a couple of runs and must not be silently trusted.
+CATALOG_STALE_AFTER_DAYS = 3
+
+
+def check_model_catalog() -> None:
+    """docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md step 8 (§4a.2/§4a.3):
+    report each endpoint's generated upstream catalogue — its oldest entry,
+    or that it is still the seeded baseline — and warn when a profile's
+    identity is missing from its endpoint's catalogue, disagrees with it on
+    the model string, or is marked for retirement. WARN-only: a stale or
+    seeded catalogue is visible, never a preflight failure. Silent for a
+    legacy single-file registry, which has no endpoints to catalogue.
+    """
+    try:
+        if str(REPO_ROOT) not in sys.path:
+            sys.path.insert(0, str(REPO_ROOT))
+        from jarvis.agents.upgrade_agent import (
+            catalog_retirement, load_registry_layers, load_upstream_catalogs)
+
+        config_dir = REPO_ROOT / "config"
+        layers = load_registry_layers(config_dir=config_dir)
+        catalogs = load_upstream_catalogs(config_dir=config_dir)
+    except ImportError as exc:
+        report(None, "Model catalogue", f"registry loader unavailable ({exc}) — skipped")
+        return
+    except Exception as exc:  # noqa: BLE001
+        report(None, "Model catalogue", f"could not read: {exc}")
+        return
+    if layers["shape"] != "split":
+        return
+
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    for endpoint in layers["endpoints"]:
+        label = f"Model catalogue {endpoint}"
+        catalog = catalogs.get(endpoint)
+        if catalog is None:
+            report(None, label, "no config/generated catalogue — upstream facts unknown")
+            continue
+        entries = [e for e in catalog.get("models") or [] if isinstance(e, dict)]
+        unfetched = sum(1 for e in entries if not e.get("fetched_at"))
+        if not entries:
+            report(None, label, "empty")
+        elif unfetched:
+            report(None, label,
+                   f"{len(entries)} models, {unfetched} never fetched (seeded baseline) "
+                   "— upstream facts not yet verified by a sync")
+        else:
+            oldest = min(datetime.fromisoformat(str(e["fetched_at"]).replace("Z", "+00:00"))
+                         for e in entries)
+            if oldest.tzinfo is None:
+                oldest = oldest.replace(tzinfo=timezone.utc)
+            age = (now - oldest).days
+            detail = f"{len(entries)} models, oldest entry fetched {oldest:%Y-%m-%d}"
+            if age > CATALOG_STALE_AFTER_DAYS:
+                report(None, label, f"{detail} ({age} days ago) — STALE, not refreshed")
+            else:
+                report(True, label, detail)
+
+    today = now.date().isoformat()
+    for prof in layers["profiles"]:
+        catalog = catalogs.get(str(prof["endpoint"]))
+        if catalog is None:
+            continue
+        name, identity = prof["name"], prof["identity"]
+        entry = next((e for e in catalog.get("models") or []
+                      if isinstance(e, dict) and e.get("identity") == identity), None)
+        label = f"Model catalogue: profile {name}"
+        if entry is None:
+            report(None, label,
+                   f"{identity} is not in the {prof['endpoint']} catalogue — added since "
+                   "the last sync, or gone upstream")
+            continue
+        if entry.get("model") != prof.get("model"):
+            report(None, label,
+                   f"model {prof.get('model')!r} differs from the catalogue's "
+                   f"{entry.get('model')!r} for {identity}")
+        retires = catalog_retirement(entry)
+        if retires:
+            state = "RETIRED on" if retires <= today else "retires on"
+            report(None, label, f"{identity} {state} {retires} — propose a replacement "
+                   "on the same endpoint in config/model_profiles.yaml")
+
+
 def check_screen_vision() -> None:
     """V5 (MORTIMER_SHELL_FIX_AND_SCREEN_VISION_PLAN.md): report whether
     screen vision is on and which vision profile would answer a
@@ -407,21 +517,23 @@ def check_screen_vision() -> None:
         report(None, "Screen vision", "disabled (JARVIS_SCREEN_ENABLED=false)")
         return
     try:
-        import yaml
+        import yaml  # noqa: F401 — availability guard; keeps this report's output unchanged (D7)
     except ImportError:
         report(None, "Screen vision", "PyYAML not installed — skipped")
         return
-    registry_path = REPO_ROOT / "config" / "upgrade_models.yaml"
-    if not registry_path.exists():
-        report(None, "Screen vision", "config/upgrade_models.yaml not found")
-        return
     try:
-        registry = yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}
+        registry = _load_model_registry()
+    except FileNotFoundError as exc:
+        report(None, "Screen vision", f"model registry not found ({exc})")
+        return
+    except ImportError as exc:
+        report(None, "Screen vision", f"registry loader unavailable ({exc}) — skipped")
+        return
     except Exception as exc:
-        report(None, "Screen vision", f"could not parse upgrade_models.yaml: {exc}")
+        report(None, "Screen vision", f"could not parse the model registry: {exc}")
         return
 
-    vision = [p for p in (registry.get("profiles") or [])
+    vision = [p for p in registry["profiles"].values()
               if isinstance(p, dict) and p.get("vision")]
     named = os.environ.get("JARVIS_VISION_PROFILE", "").strip()
     chosen = None
@@ -593,6 +705,7 @@ def main() -> int:
     # K1/K2 — presence is checked above; this is the only thing here that
     # asks whether the credentials actually WORK.
     check_model_keys(env, pre_vault_env, vault_names)
+    check_model_catalog()
     check_screen_vision()
 
     print()
