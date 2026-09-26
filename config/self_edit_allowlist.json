@@ -37,6 +37,7 @@
     "scripts/mortimer.sh",
     "scripts/run_admin.sh",
     "scripts/apply_proposal.py",
+    "scripts/deploy_main.sh",
     "requirements*.txt",
     "web/package.json",
     "web/package-lock.json",

@@ -1,6 +1,6 @@
 # Mortimer Voice Workflows — Implementation Plan
 
-**Status:** Phase 1 READY FOR HANDOFF (patch against `main`) · Phases 2–4 BUILT in the VM (§11) · Workflow viewer BUILT; Mac check passed (§12) · #80 privacy fix BUILT in the VM (§13)
+**Status:** Phase 1 READY FOR HANDOFF (patch against `main`) · Phases 2–4 BUILT in the VM (§11) · Workflow viewer BUILT; Mac check passed (§12) · #80 privacy fix BUILT; Mac check passed (§13) · DEPLOY-MAIN moves into the repo (§14)
 **Author:** Claude (Cowork), 2026-09-24 · **Approver:** Larry
 **Source review:** "Mortimer Failure Review — Candidate Workflows" (Claude Doc, 2026-09-24)
 **Reference package:** `docs/plans/voice_workflows_p1/` (apply script plus every new file, verified; see §7.0)
@@ -23,6 +23,7 @@
 | 1.13 | 2026-09-25 | Larry: "proceed" on the three recommendations. **D1b built:** the sweep and capacity enforcement commit before every model call; two tests reproduce the lock without the change. `user.style.status_interval` joins `user.style.status` on the end-run archive list (the command was tested on a production copy). **Workflow viewer handoff plan written** (`MORTIMER_WORKFLOW_VIEWER_PLAN.md`), with D-V1 (drafts), D-V2 (usage counts) and the new D-V3 (six memories archived as workflows whose files do not exist) open. Unit 3,853 passed, integration 135 passed and 4 skipped. |
 | 1.14 | 2026-09-25 | Larry chose the recommended option for **D-V1** (`draft: true`), **D-V2** (no usage counts) and **D-V3** (restore the four lost memories). **Workflow viewer built in the VM** (branch `viewer`, patch `viewer-on-phase4.patch`, the sixth in the Mac check). The Python half is tested: unit 3,862 passed, integration 135 passed and 4 skipped. The Swift half is not compiled, because the VM has no toolchain. A second agent reviewed it and found four defects, all fixed with tests. Found: voice entry needs `JARVIS_COMMAND_CONSOLE_ENABLED`, which production doesn't set. D-V3's restore would push the project tier to 10 of its cap of 8. |
 | 1.15 | 2026-09-25 | Mac check run 2 passed at 18:06: JarvisKit 206, MortimerHost 275 (3 skipped, 0 failures), Python 4,018 passed and 4 skipped; all six patches' trees matched. Larry's landing decisions: **one PR with a merge commit**, **console on** at the end run (`JARVIS_COMMAND_CONSOLE_ENABLED=true`), **#80 fixed in this landing**, **#86's files merged as is**. **#80 privacy fix built in the VM** (branch `privacy`, patch `privacy-on-viewer.patch`, the seventh in the Mac check; §13). Unit 3,866 passed, integration 135 passed and 4 skipped. |
+| 1.16 | 2026-09-26 | Mac check run 3 passed (started 21:32 on 25 Sep): all seven patches with the tested trees, JarvisKit 206, MortimerHost 275 (3 skipped, 0 failures), Python 4,022 passed and 4 skipped. Larry chose to move `DEPLOY-MAIN.sh` into the repo as the landing's eleventh commit, `scripts/deploy_main.sh` (§14). It was built from the Mac's files while the VM's shell was down, and its tests passed in a reduced tree; the full suites run in the landing itself. |
 
 ## Progress (read first)
 
@@ -395,7 +396,7 @@ Each phase gets its own handoff-ready plan, written after Phase 1's T5 audit. It
   - **Evidence.** 2026-09-18 17:53: `selfedit_start` refused at preview for `jarvis/admin/server.py`, and the developer dropped that file. W8 cases 1951, 2620 and 2873–2889 were files that have since become routine (`jarvis/bot/display.py` is core, Swift sources are routine, and the registry split moved the profile pool out of Tier 0).
 - **Self-rebuild (option B).** The deploy stays Larry's one command.
   - The 2026-09-09 hand-offs (2751, 2753, 2769) repeated the tool text of that day: `selfedit_status` results 5153 and 5414 said "cd macos/MortimerHost && scripts/bundle.sh". The sandbox rewrite of 2026-09-10 (cf4a5f6) removed it, and no assistant turn names `bundle.sh` after 2026-09-09.
-  - Now the self_development section, the finish notices and the planner prompt say a merged change is live after "deploy with DEPLOY-MAIN" and never name a build script. Voice workflow `voice-merged-deploy` (supervisor, priority 9) matches 4 of the 1,525 logged user turns (2667, 2695, 2752, 2756), all about a merge or a rebuild. Asked whether a change is live, Mortimer checks `system_status`, topic build. `DEPLOY-MAIN.sh` lives in the git-ignored `closure-checks/`; at the end run it moves into the repo as `scripts/deploy_main.sh` (Tier 0), so the name Mortimer gives keeps pointing at something (Larry, 2026-09-25).
+  - Now the self_development section, the finish notices and the planner prompt say a merged change is live after "deploy with DEPLOY-MAIN" and never name a build script. Voice workflow `voice-merged-deploy` (supervisor, priority 9) matches 4 of the 1,525 logged user turns (2667, 2695, 2752, 2756), all about a merge or a rebuild. Asked whether a change is live, Mortimer checks `system_status`, topic build. `DEPLOY-MAIN.sh` lived in the git-ignored `closure-checks/`. It moves into the repo as `scripts/deploy_main.sh` (Tier 0) in the landing (§14), so the name Mortimer gives points at a tracked file (Larry, 2026-09-25).
 - **W6 tool-server health: covered by #86, no code.** The registry supervisor restarts a dead MCP child and retries the call (`tests/integration/test_registry_supervision.py`, e.g. `test_dead_child_is_restarted_and_call_succeeds`, `test_restart_backoff_marks_down_after_three`). The "./scripts/mortimer.sh" sentence is already gone from self_development (pinned by `test_an_offline_sidecar_is_reported_without_a_command`).
 - **W7 self-edit recovery: superseded, no code.** Since 2026-09-10 a session publishes through the GitHub API from a frozen VM candidate onto a fresh branch, so there is no local branch to fall behind. The logged git failures (1878 and 1931 on 08-30, 2699 on 09-09) all predate it. Expired-staging errors: 2, both on 09-07, and none in the 21 `selfedit_start` calls of 09-17/18.
 - **D6 tier check: confirmed, no code.** The `target_paths` rule (2026-09-07, F5) is pinned by `test_stage_classifies_target_paths_not_the_prose`; no preview has been refused for a file it only mentioned since.
@@ -530,6 +531,27 @@ With routing enabled, the lowered level also lets `resolve_model_route` send the
 - `test_a_draft_staged_before_the_fix_is_refused_at_confirm`;
 - `test_keeping_or_raising_privacy_is_still_allowed`.
 
-The first three cases fail with the old `_validate_choice` and pass with the new one. Unit 3,866 passed, integration 135 passed and 4 skipped, CI 9, sandbox 113, sub-agent evals 13.
+The first three cases fail with the old `_validate_choice` and pass with the new one. Unit 3,866 passed, integration 135 passed and 4 skipped, CI 9, sandbox 113, sub-agent evals 13. Mac check run 3 (25 Sep, 21:32) passed with this patch: Python 4,022, run 2's 4,018 plus these four cases.
 
 **Found alongside, not changed.** With the shipped `config/model_access.yaml`, `librarian`, `systems`, `memory` and `background` cannot resolve a route when routing is enabled. Their configured route is `direct_api`, which provides only `approved_external`, and `resolve_model_route` refuses it (run 2026-09-25). Routing is off in production, so nothing fails today. Turning routing on would need a `confidential` or `local_only` route for those four first. Before this fix, a lowering preference was one way to make them resolve; now it is refused.
+
+## §14 DEPLOY-MAIN in the repo (the landing's eleventh commit, rev 1.16)
+
+Larry decided the move on 2026-09-25, and on 2026-09-26 chose to make it an eleventh commit in the landing PR. Mortimer says "deploy with DEPLOY-MAIN" after every merge (Phase 3), and the script lived only in the git-ignored `closure-checks/`.
+
+**What changed from `closure-checks/DEPLOY-MAIN.sh`.**
+- **Where it runs.** `scripts/deploy_main.sh` runs from any checkout, production included: `bash scripts/deploy_main.sh [--reuse-verification]`.
+- **Where it writes.** Logs, test output and receipts go to `~/MortimerRollback/logs/`, and the verification worktree to `~/MortimerRollback/deploy-verify-<sha>`. Before, they went to `closure-checks/logs/` and a sibling of `active-repo`. `--reuse-verification` reads the new log folder, so logs from the old location are not reused.
+- **It survives replacing itself.** Phase C checks production out at the target. Run from production, that replaces the running file, and bash reads a script as it goes. The whole script is now one function called on its last line, so bash has parsed all of it before anything runs.
+- **Human-only.** It is in the allowlist's `deny` tier, next to `scripts/apply_proposal.py`.
+- **Unchanged.** Every phase, gate and message; the three here-documents are byte-identical.
+
+**Tests** (`tests/unit/test_deploy_main.py`, plus one entry in `test_selfedit_allowlist.py`'s forbidden paths):
+- the deny tier;
+- `bash -n`;
+- a control, where a plain script whose file is replaced mid-run executes the replacement;
+- the real script, whose file is replaced by a stand-in `git fetch` mid-run. It never executes the replacement, stops at its first refusal, and logs under `~/MortimerRollback/logs`.
+
+**Evidence and gaps.** The VM's shell was down (its disk filled with the launcher test copies), so this was built in the cloud workspace. The allowlist, its test and this plan were rebuilt from production's `4acb4dc` copies plus the landing patches; each result matches the blob the patches name. In a reduced tree holding only what these tests import, all 58 tests passed with bash 5.2. With the function removed, the real-script test fails on the injected line. With the deny entry removed, both deny tests fail. Not yet run: the full suites on this tree, and bash 3.2 (macOS). The landing runs all three suites on the Mac before it pushes anything.
+
+**This deploy.** The end run deploys with the new script, from a throwaway worktree at the merged `main`, so its first live use is supervised. If it stops before phase C, production is unchanged, and `closure-checks/DEPLOY-MAIN.sh` is still there.

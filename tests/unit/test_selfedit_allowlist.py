@@ -61,6 +61,8 @@ def test_allowed_paths(allowlist: Allowlist, path: str) -> None:
     "scripts/mortimer.sh",
     "scripts/run_admin.sh",
     "scripts/check_allowlist.py",
+    # the deploy script builds, tests and restarts production (2026-09-26)
+    "scripts/deploy_main.sh",
     # dependency changes stay human-driven
     "requirements.txt",
     "requirements-lock.txt",
