@@ -73,6 +73,14 @@ struct WorkspaceView: View {
                 } else { MemoryGraphView(store: workspace.memoryGraph, api: client.admin, coordinator: coordinator) }
             } else if workspace.showsAtlas {
                 KnowledgeAtlasView(coordinator: coordinator)
+            } else if workspace.showsWorkflows {
+                if isOnSupportingDisplay(.workflows) {
+                    ContentUnavailableView {
+                        Label("Workflows are on the supporting display", systemImage: "display")
+                    } actions: {
+                        Button("Return here") { drawer.placementRef?.closeDisplay() }
+                    }
+                } else { WorkflowsView(store: workspace.workflows, api: client.admin) }
             } else if let active = workspace.activeResult {
                 GeometryReader { geometry in
                     if let comparison = workspace.comparisonResult {
@@ -140,8 +148,13 @@ struct WorkspaceView: View {
             if let coordinator { _ = coordinator.executePointer(.viewSet, target: "memory") }
             else { workspace.openMemoryGraph() }
         }
+        Button("Workflows") {
+            if let coordinator { _ = coordinator.executePointer(.viewSet, target: "workflows") }
+            else { workspace.openWorkflows() }
+        }
         Menu("Display") {
             Button("Show memory graph") { sendToDisplay(.memoryGraph) }
+            Button("Show workflows") { sendToDisplay(.workflows) }
             if let active = workspace.activeResult {
                 Button("Show active result") { sendToDisplay(.result(active.id)) }
             }

@@ -92,6 +92,7 @@ final class ConsoleActionCoordinator {
             case "memory": workspace.openMemoryGraph(); return .applied
             case "results": workspace.returnToWorkspace(); return .applied
             case "atlas": workspace.openAtlas(); return .applied
+            case "workflows": workspace.openWorkflows(); return .applied   // MORTIMER_WORKFLOW_VIEWER_PLAN.md
             default: return .invalid
             }
         case .resultSelect:

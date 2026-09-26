@@ -11,13 +11,27 @@ import uuid
 import inspect
 import json
 
+from pathlib import Path
+
 from jarvis.bot.console_protocol import validate_request, response
+
+# MORTIMER_WORKFLOW_VIEWER_PLAN.md piece 3: the view_set modes, from the one
+# file MortimerHost's coordinator test also reads. Until 2026-09-25 nothing
+# the Supervisor saw named them, so "show me the workflows" could not be
+# resolved to a mode by voice.
+VIEW_MODES_PATH = Path(__file__).resolve().parents[2] / "config" / "console_view_modes.json"
+VIEW_SET_MODES: tuple[str, ...] = tuple(json.loads(VIEW_MODES_PATH.read_text(encoding="utf-8"))["view_set"])
 
 CONSOLE_ACTION_SCHEMA = {
     "type": "function",
     "function": {
         "name": "console_action",
-        "description": "Change the visible Mortimer Command Console view or result selection.",
+        "description": (
+            "Change the visible Mortimer Command Console view or result selection. "
+            "action view_set switches the main view: args.mode is one of "
+            + ", ".join(VIEW_SET_MODES)
+            + " (workflows is the read-only gallery of Larry's workflows)."
+        ),
         "parameters": {
             "type": "object",
             "properties": {

@@ -1,0 +1,10 @@
+{
+  "_comment": "The Command Console's view_set modes. Read by jarvis/bot/console_actions.py (the console_action tool description, pinned by tests/unit/test_workflows_viewer.py) and by MortimerHost's WorkflowsViewerTests.testEveryModeVoiceIsToldAboutIsAccepted, so the modes voice is told about and the modes the app accepts cannot drift apart. MORTIMER_WORKFLOW_VIEWER_PLAN.md piece 3.",
+  "view_set": [
+    "conversation",
+    "results",
+    "atlas",
+    "memory",
+    "workflows"
+  ]
+}

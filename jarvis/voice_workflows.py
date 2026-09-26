@@ -158,7 +158,8 @@ def is_explicit_command_ask(user_text: str | None) -> bool:
 
 def voice_workflows(workflows: list[Workflow] | None = None) -> list[Workflow]:
     candidates = load_workflows() if workflows is None else workflows
-    return [wf for wf in candidates if SUPERVISOR in wf.agents]
+    # MORTIMER_WORKFLOW_VIEWER_PLAN.md D-V1: a draft is never matched.
+    return [wf for wf in candidates if SUPERVISOR in wf.agents and not wf.draft]
 
 
 def _user_patterns(wf: Workflow) -> list[re.Pattern]:

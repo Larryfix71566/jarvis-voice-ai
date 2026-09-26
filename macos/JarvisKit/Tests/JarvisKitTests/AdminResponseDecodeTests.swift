@@ -119,6 +119,38 @@ final class AdminResponseDecodeTests: XCTestCase {
         }
     }
 
+    /// MORTIMER_WORKFLOW_VIEWER_PLAN.md piece 4 — the fixture was captured
+    /// through the sidecar app over the repo's config/workflows (README).
+    func testDecodeWorkflows() throws {
+        let response = try JSONDecoder().decode(WorkflowsResponse.self, from: fixture("workflows"))
+        XCTAssertTrue(response.ok)
+        XCTAssertTrue(response.enabled)
+        XCTAssertEqual(response.matchThreshold, 0.35, accuracy: 0.0001)
+        XCTAssertEqual(response.workflows.count, 23)
+        XCTAssertEqual(response.workflows.filter(\.isVoice).count, 7)
+        XCTAssertEqual(response.workflows.filter(\.draft).count, 5)
+        let models = try XCTUnwrap(response.workflows.first { $0.name == "voice-model-availability" })
+        XCTAssertEqual(models.priority, 14)
+        XCTAssertEqual(models.triggers, ["user"])
+        XCTAssertEqual(models.agents, ["supervisor"])
+        XCTAssertEqual(models.steps.map(\.count).max(), 325)
+        XCTAssertFalse(models.doneWhen.isEmpty)
+    }
+
+    func testDecodeWorkflowDetailIsLenient() throws {
+        let detail = try JSONDecoder().decode(WorkflowDetail.self, from: Data(#"{"name":"x"}"#.utf8))
+        XCTAssertEqual(detail.name, "x")
+        XCTAssertEqual(detail.steps, [])
+        XCTAssertEqual(detail.doneWhen, [])
+        XCTAssertEqual(detail.priority, 100)
+        XCTAssertEqual(detail.kind, "rule")
+        XCTAssertFalse(detail.draft)
+        let off = try JSONDecoder().decode(WorkflowsResponse.self,
+                                           from: Data(#"{"ok":true,"enabled":false,"workflows":[]}"#.utf8))
+        XCTAssertFalse(off.enabled)
+        XCTAssertTrue(off.workflows.isEmpty)
+    }
+
     func testDecodeRunsList() throws {
         let list = try JSONDecoder().decode(RunsList.self, from: fixture("runs"))
         XCTAssertTrue(list.ok)

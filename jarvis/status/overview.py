@@ -89,6 +89,34 @@ def _workloads() -> dict[str, dict[str, Any]]:
     }
 
 
+def workflows_detail() -> dict:
+    """MORTIMER_WORKFLOW_VIEWER_PLAN.md piece 1 — every workflow in full, for
+    the read-only viewer (`GET /api/workflows`). Voice trigger regexes are
+    not sent, only which hooks a workflow has. Never raises."""
+    try:
+        from jarvis.voice_workflows import SUPERVISOR
+        from jarvis.workflows import MATCH_THRESHOLD, load_workflows, workflows_enabled
+
+        enabled = workflows_enabled()
+        items = [
+            {
+                "name": w.name, "when": w.when, "steps": list(w.steps),
+                "done_when": list(w.done_when), "agents": list(w.agents),
+                "source": w.source,
+                "triggers": [hook for hook in ("user", "result", "reply") if w.triggers.get(hook)],
+                "priority": w.priority,
+                "kind": "voice" if SUPERVISOR in w.agents else "rule",
+                "draft": w.draft,
+            }
+            for w in (load_workflows() if enabled else [])
+        ]
+    except Exception:  # noqa: BLE001 — a panel must never break the sidecar
+        logger.exception("workflows_detail_read_failed")
+        return {"ok": False, "error": "could not read the workflows"}
+    return {"ok": True, "enabled": enabled, "match_threshold": MATCH_THRESHOLD,
+            "workflows": items}
+
+
 def knowledge_overview() -> dict:
     """K5 (MORTIMER_KNOWLEDGE_FRAMEWORK_PLAN.md) — the four layers, with
     counts, in one read-only call.

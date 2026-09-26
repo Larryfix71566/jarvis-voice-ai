@@ -108,6 +108,8 @@ final class DisplayWindowStore {
             return containsMemoryGraph() ? nil : selection
         case .result(let id):
             return containsWorkspaceResult(id) ? nil : selection
+        case .workflows:
+            return selection   // no transport panel ever carries the viewer
         }
     }
 
@@ -129,6 +131,8 @@ final class DisplayWindowStore {
             return visible.contains { $0.allPayloads.contains(where: Self.isMemoryGraphPayload) }
         case .result(let id):
             return visible.contains { $0.allWorkspaceIDs.contains(id) }
+        case .workflows:
+            return false   // only ever the supplemental tile, handled above
         }
     }
 

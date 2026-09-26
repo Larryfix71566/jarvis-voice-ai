@@ -1960,6 +1960,16 @@ def knowledge_overview() -> dict:
     return _knowledge()
 
 
+@app.get("/api/workflows")
+def workflows_detail() -> dict:
+    """MORTIMER_WORKFLOW_VIEWER_PLAN.md piece 1 — every workflow in full for
+    the read-only viewer. Body in jarvis/status/overview.py, beside the
+    knowledge overview."""
+    from jarvis.status.overview import workflows_detail as _workflows
+
+    return _workflows()
+
+
 @app.get("/api/ambient")
 def ambient() -> dict:
     """Engagement plan E4 — the console's idle ambient strip. Read-only:

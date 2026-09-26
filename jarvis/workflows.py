@@ -75,6 +75,9 @@ class Workflow:
     # jarvis/voice_workflows.py; the specialist matcher above ignores both.
     triggers: dict[str, list[str]] = field(default_factory=dict)
     priority: int = 100
+    # MORTIMER_WORKFLOW_VIEWER_PLAN.md D-V1 (Larry 2026-09-25): an unreviewed
+    # draft is listed (the viewer, the knowledge overview) but never matched.
+    draft: bool = False
 
     def as_prompt(self) -> str:
         """Render as guidance. Wording matters: this is stated as the
@@ -128,6 +131,7 @@ def parse_workflow(data: dict, source: str = "") -> Workflow | None:
         source=source,
         triggers=_coerce_triggers(data.get("triggers")),
         priority=_coerce_priority(data.get("priority")),
+        draft=data.get("draft") is True,
     )
 
 
@@ -201,6 +205,8 @@ def match_workflow(
     agent_l = (agent or "").lower()
     best: tuple[float, Workflow] | None = None
     for wf in candidates:
+        if wf.draft:
+            continue   # D-V1: listed, never matched
         if wf.agents and agent_l not in wf.agents:
             continue
         score = _overlap_score(_tokens(wf.when), task_tokens)
