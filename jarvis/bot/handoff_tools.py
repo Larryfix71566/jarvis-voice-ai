@@ -34,8 +34,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
+import shlex
 import time
+from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 logger = logging.getLogger(__name__)
@@ -77,6 +80,34 @@ DESTRUCTIVE_COMMAND_RE = re.compile(
     r"|\bpkill\b)",
     re.I,
 )
+# W8 (Larry 2026-09-25, option A) — the one command that applies a
+# human-only proposal Larry approved, exactly as
+# jarvis.selfedit.proposals.apply_command builds it (a test pins the two
+# together). Showing it needs no NEEDS-INPUT stamp and no time window: the
+# approval can come long after the pull request opened, the command runs
+# only when Larry runs it, under his identity, and the script refuses any
+# pull request that is not an open Mortimer proposal. The path is absolute
+# and either single-quoted (printable ASCII, no quote) or made of
+# shlex.quote's safe characters, so nothing in it expands and nothing in it
+# can hide text on screen.
+APPLY_PROPOSAL_COMMAND_RE = re.compile(
+    r"cd (?:'/[ -&(-~]*'|/[A-Za-z0-9_@%+=:,./-]*) && \.venv/bin/python scripts/apply_proposal\.py [1-9][0-9]{0,6} [0-9a-f]{12}",
+    re.ASCII)
+
+
+def repo_root() -> Path:
+    """This checkout, by the same rule jarvis/selfedit/service.py uses for
+    the apply command it builds: JARVIS_REPO_ROOT, else the tree this file
+    is in. The command must `cd` here and nowhere else."""
+    return Path(os.environ.get("JARVIS_REPO_ROOT") or Path(__file__).resolve().parents[2])
+
+
+def is_apply_proposal_command(command: str) -> bool:
+    command = command.strip()
+    return (bool(APPLY_PROPOSAL_COMMAND_RE.fullmatch(command))
+            and command.startswith(f"cd {shlex.quote(str(repo_root()))} && "))
+
+
 READ_ONLY_COMMAND_RE = re.compile(
     r"^\s*(?:curl|wget|cat|less|head|tail|grep|rg|find|ls|ps|lsof|which|echo"
     r"|env|printenv|pwd|ping|dig|nslookup|netstat|sw_vers|system_profiler|open"
@@ -108,6 +139,8 @@ def command_gate_refusal(
         return None
     if any(DESTRUCTIVE_COMMAND_RE.search(c) for c in commands):
         return REFUSED_DESTRUCTIVE
+    if commands and all(is_apply_proposal_command(c) for c in commands):
+        return None                      # W8: an approved human-only proposal
     now = time.monotonic() if now is None else now
     asked = gate.get("explicit_ask_at")
     if asked is not None and now - asked <= NEEDS_INPUT_WINDOW_S:
@@ -125,8 +158,10 @@ SHOW_COMMANDS_SCHEMA = {
         "name": "show_commands",
         "description": (
             "LAST RESORT (MORTIMER_VOICE_WORKFLOWS_PLAN.md D10): only when "
-            "the user explicitly asked for a command, or for a step a "
-            "specialist marked NEEDS-INPUT that only the user can do. "
+            "the user explicitly asked for a command, for a step a "
+            "specialist marked NEEDS-INPUT that only the user can do, or "
+            "for the apply command of a HUMAN-ONLY PROPOSAL after the user "
+            "said yes to it. "
             "Put one or more commands the USER must run themselves into the "
             "display window, where they can be read and copied. Use this "
             "instead of speaking a command aloud — a spoken command cannot "

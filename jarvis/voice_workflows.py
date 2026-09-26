@@ -62,9 +62,12 @@ EXPLICIT_ASK_NEGATION_RE = re.compile(
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 SENTENCE_END_RE = re.compile(r"[.!?]\s")
 
-RESULT_KINDS = ("failed", "needs_input", "missing_tool", "limitation")
+RESULT_KINDS = ("failed", "needs_input", "missing_tool", "limitation", "proposal")
 REPLY_KINDS = ("refusal", "handoff")
 NEEDS_INPUT_MARKER = "NEEDS-INPUT:"   # == jarvis.agents.delegate.HANDOFF_MARKER
+# W8 — a self-edit pull request that only PROPOSES a human-only change
+# (== jarvis.selfedit.proposals.MARKER; the developer copies its sentence).
+PROPOSAL_MARKER = "HUMAN-ONLY PROPOSAL"
 MISSING_TOOL_MARKER = "MISSING-TOOL:"  # == jarvis.agents.delegate.MISSING_TOOL_MARKER
 # Either spelling counts: Phase 1 prompts first taught "MISSING TOOL:"; #86
 # (T1.2) settled on "MISSING-TOOL:", which is what delegate.py reads.
@@ -138,6 +141,8 @@ def result_kinds(result: Any) -> list[str]:
         kinds.append("missing_tool")
     if LIMITATION_RE.search(result):
         kinds.append("limitation")
+    if PROPOSAL_MARKER in result:
+        kinds.append("proposal")
     return kinds
 
 

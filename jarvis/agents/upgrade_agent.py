@@ -114,7 +114,7 @@ Jarvis interface by proposing code edits, under these NON-NEGOTIABLE rules:
    is EDITABLE too, with ceremony: a core edit runs an extra import gate
    and its PR is flagged CORE CHANGE for a human run before merge. Do not
    decline a core goal because it is "not UI" — do it, carefully, in
-   small self-contained edits. Human-only (Tier 0), decline that part:
+   small self-contained edits. Human-only (Tier 0), never written:
    the self-edit machinery itself (jarvis/selfedit, jarvis/admin,
    upgrade_agent.py), the allowlist, the model ENDPOINTS file
    (config/model_endpoints.yaml: hosts and keys), jarvis/db.py
@@ -123,10 +123,13 @@ Jarvis interface by proposing code edits, under these NON-NEGOTIABLE rules:
    scripts/, GlassSpike/ and MortimerShell/. The Swift SOURCES of
    macos/JarvisKit and macos/MortimerHost ARE editable (routine): a
    changed Swift package is gated by `swift build` and `swift test` in
-   the session worktree, and its PR is flagged SWIFT CHANGE because the
-   human must rebuild the app before the change does anything.
-   A file_read/edit_propose on a Tier-0 path is refused by the tool — if
-   that happens, decline that part with the path named.
+   the session worktree, and its PR is flagged SWIFT CHANGE because it
+   reaches the app only when Larry deploys (DEPLOY-MAIN rebuilds it).
+   file_read shows a Tier-0 file read-only, and an edit_propose to one is
+   saved as a PROPOSAL (a patch under docs/proposals/) that Larry approves
+   and applies himself; say so in your summary, naming the file. Vault
+   files (*.vault), .env and runtime data (data/) are refused outright:
+   decline that part with the path named.
 3. Your only tools are file_read, edit_propose, session_validate,
    session_submit. There is no shell and no git tool.
 4. Propose edits with edit_propose, then call session_validate, and only if

@@ -3,10 +3,11 @@ import json
 from pathlib import Path
 from unittest.mock import Mock, patch
 import pytest
+from jarvis.selfedit import proposals
 from jarvis.selfedit.service import SelfEditService, BASE_REF_ENV, is_swift_path, swift_packages_for
 from tests.sandbox_fakes import FakeRuntime
 
-ALLOWLIST = {'allow':['docs/**','web/src/**','macos/**','config/agents.yaml','mcp_servers/**'],
+ALLOWLIST = {'allow':['docs/**','web/src/**','macos/**','config/agents.yaml','mcp_servers/**','tests/**'],
     'core':['jarvis/**'], 'deny':['jarvis/wakeword.py','jarvis/selfedit/**','.github/**','sandbox/**','**/.env*']}
 
 @pytest.fixture
@@ -43,9 +44,88 @@ def test_reopened_service_resumes_same_session(service):
 
 def test_policy_and_frozen_web_are_enforced_on_actual_edits(service):
     service.start_session('Update docs')
-    for path in ['../outside','.env','jarvis/wakeword.py','sandbox/control.py','.github/workflows/evil.yml','web/src/App.tsx']:
+    for path in ['../outside','.env','web/src/App.tsx','docs/proposals/x.patch']:
         assert not service.propose_edit(path,'change','denied')['ok'],path
+    assert 'secrets' in service.propose_edit('.env','K=1\n','why')['error']
     assert service.propose_edit('docs/new.md','new\n','allowed')['ok']
+    assert [p['path'] for p in service.proposals]==['docs/new.md']
+
+HUMAN_ONLY=['jarvis/wakeword.py','sandbox/control.py','.github/workflows/evil.yml']
+
+def test_a_human_only_write_becomes_a_proposal_and_the_file_is_never_written(service):
+    """W8 (Larry 2026-09-25, option A): Mortimer never writes a human-only
+    file. The change is saved as a patch against the session's base."""
+    service.test_runtime.baseline['jarvis/wakeword.py']='MODEL = "a"\n'
+    service.start_session('Tighten the wake word and CI')
+    for path in HUMAN_ONLY:
+        res=service.propose_edit(path,'MODEL = "b"\n','why '+path)
+        assert res['ok'] and res['proposal'] and res['path']==path, res
+        assert res['proposal_file']==proposals.proposal_path(path)
+        assert 'NOT changed' in res['summary'] and res['diff'].startswith('diff --git')
+    session=service.test_runtime.current
+    assert [p['path'] for p in session.state['proposals']]==[proposals.proposal_path(p) for p in HUMAN_ONLY]
+    assert session.files['jarvis/wakeword.py']=='MODEL = "a"\n'
+    assert 'sandbox/control.py' not in session.files and '.github/workflows/evil.yml' not in session.files
+    changed=proposals.parse(session.files[proposals.proposal_path('jarvis/wakeword.py')])
+    assert changed['target']=='jarvis/wakeword.py' and changed['base']==proposals.git_blob_sha(b'MODEL = "a"\n')
+    assert changed['result']==proposals.git_blob_sha(b'MODEL = "b"\n')
+    created=proposals.parse(session.files[proposals.proposal_path('.github/workflows/evil.yml')])
+    assert created['base']==proposals.NEW_FILE
+    assert service.human_only_targets()==HUMAN_ONLY
+    again=service.propose_edit('jarvis/wakeword.py','MODEL = "c"\n','second thought')
+    assert again['ok'] and len(service.proposals)==3, 'a second write replaces that proposal'
+    assert not service.propose_edit('jarvis/wakeword.py','MODEL = "a"\n','no-op')['ok']
+
+def test_a_human_only_file_reads_read_only_from_the_base(service):
+    service.test_runtime.baseline['jarvis/wakeword.py']='MODEL = "a"\n'
+    service.start_session('Look at the wake word')
+    read=service.read_file('jarvis/wakeword.py')
+    assert read['ok'] and read['human_only'] and read['content']=='MODEL = "a"\n'
+    assert 'proposal' in read['note']
+    assert not service.read_file('sandbox/control.py')['ok']   # not in the base
+    assert not service.read_file('.env')['ok']                  # secrets are never shown
+
+def test_a_test_that_needs_the_proposal_joins_it_and_never_both(service):
+    service.test_runtime.baseline['jarvis/wakeword.py']='MODEL = "a"\n'
+    service.start_session('Wake word with a test')
+    assert service.propose_edit('jarvis/wakeword.py','MODEL = "b"\n','new model')['ok']
+    joined=service.propose_edit('tests/unit/test_wake.py','def test_b(): pass\n','covers it',proposal=True)
+    assert joined['ok'] and joined['proposal'], joined
+    assert 'tests/unit/test_wake.py' not in service.test_runtime.current.files
+    both=service.propose_edit('tests/unit/test_wake.py','x\n','direct too')
+    assert not both['ok'] and 'proposal=true' in both['error']
+    assert not service.propose_edit('docs/new.md','x\n','why',proposal=True)['ok']
+    assert service.propose_edit('tests/unit/test_other.py','x\n','direct')['ok']
+    after=service.propose_edit('tests/unit/test_other.py','y\n','now proposed',proposal=True)
+    assert not after['ok'] and 'already written directly' in after['error']
+
+def test_a_proposal_pr_says_approve_then_apply_and_never_merge(service):
+    service.test_runtime.baseline['jarvis/wakeword.py']='MODEL = "a"\n'
+    service.start_session('Wake word model')
+    service.propose_edit('jarvis/wakeword.py','MODEL = "b"\n','new model')
+    service.propose_edit('macos/MortimerHost/Sources/MortimerHost/View.swift','new\n','view')
+    service.validate()
+    result=service.submit()
+    assert result['ok'] and result['human_only']==['jarvis/wakeword.py']
+    digest=service.proposal_set_digest(service.test_runtime.current.state['proposals'])
+    command=proposals.apply_command(service.repo_root,42,digest)
+    assert result['apply_command']==command
+    assert result['notice'].startswith(proposals.MARKER)
+    assert command in result['notice'] and 'approve?' in result['notice'] and 'Do not merge' in result['notice']
+    assert 'pushes nothing until he types y' in result['notice']
+    assert 'Review and merge' not in result['notice']
+    body=service.test_runtime.events[-1][2]
+    assert proposals.MARKER+' — do not merge this pull request as it is' in body
+    assert proposals.APPLY_SCRIPT in body and 'jarvis/wakeword.py' in body and 'until he types y' in body
+
+def test_an_ordinary_pr_says_deploy_with_deploy_main_and_names_no_build_script(service):
+    service.start_session('Native view')
+    service.propose_edit('macos/MortimerHost/Sources/MortimerHost/View.swift','new\n','view')
+    service.validate()
+    result=service.submit()
+    assert 'human_only' not in result
+    assert 'DEPLOY-MAIN' in result['notice'] and 'bundle' not in result['notice']
+    assert proposals.MARKER not in service.test_runtime.events[-1][2]
 
 def test_edits_and_failed_checks_invalidate_submission(service):
     service.start_session('Update docs')
@@ -111,11 +191,18 @@ class TestPreflight:
     """The preview refuses what the planner would only discover after
     confirm + staging + a run (2026-08-30: three such runs)."""
 
-    def test_tier0_goal_is_refused_naming_the_file(self, service: SelfEditService) -> None:
+    def test_a_human_only_goal_passes_and_names_the_file(self, service: SelfEditService) -> None:
+        # W8 (2026-09-25): until then a Tier-0 goal was refused here. Its
+        # change now becomes a proposal, and the preview names the file.
         res = service.preflight("rewrite jarvis/wakeword.py to use a new model", has_plan=True)
+        assert res["ok"] is True, res
+        assert res["human_only"] == ["jarvis/wakeword.py"]
+
+    def test_a_secrets_goal_is_refused_naming_the_file(self, service: SelfEditService) -> None:
+        res = service.preflight("rotate the key", has_plan=False, target_paths=[".env"])
         assert res["ok"] is False
-        assert "jarvis/wakeword.py" in res["error"]
-        assert "human-only" in res["error"]
+        assert ".env" in res["error"] and "secrets" in res["error"]
+        assert res["human_only"] == []
 
     def test_core_goal_without_plan_is_refused(self, service: SelfEditService) -> None:
         res = service.preflight("merge results in jarvis/bot/display.py", has_plan=False)
@@ -165,8 +252,8 @@ class TestPreflightTargetPaths:
             "make the wake word detector feel snappier", has_plan=False,
             target_paths=["jarvis/wakeword.py"],
         )
-        assert res["ok"] is False
-        assert "jarvis/wakeword.py" in res["error"]
+        assert res["ok"] is True, res
+        assert res["human_only"] == ["jarvis/wakeword.py"]
 
     def test_blank_target_paths_fall_back_to_the_prose(self, service) -> None:
         res = service.preflight("tidy docs/README.md spacing", has_plan=False,

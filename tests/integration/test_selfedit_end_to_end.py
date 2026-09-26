@@ -22,7 +22,7 @@ def reset_jobs():
             started_at=None, finished_at=None, submitted=False, pr_url=None)
     with srv._finish_lock:
         srv._finish_job.update(state='idle', cancel_requested=False, checks=None, pr_url=None, notice=None,
-            run_id=None, started_at=None, finished_at=None)
+            run_id=None, started_at=None, finished_at=None, human_only=None, apply_command=None)
     with srv._staging_lock:
         srv._selfedit_stagings.clear()
     yield
@@ -109,9 +109,23 @@ def test_a_failed_check_blocks_publication_and_allows_repair(service):
     assert not (service.repo_root/path).exists()
 
 def test_denied_path_never_reaches_the_workspace(service):
+    """W8 (Larry 2026-09-25, option A): a human-only write is saved as a
+    proposal patch — the file itself still never reaches the workspace —
+    and the pull request says to approve and apply it, not to merge it."""
+    from jarvis.selfedit import proposals
     client=TestClient(app)
     open_session(client)
     result=client.post('/api/selfedit/write',json={'path':'jarvis/vault.py',
-        'content':'KEY = 1\n','rationale':'denied'}).json()
-    assert not result['ok'] and 'workspace policy' in result['error']
+        'content':'KEY = 1\n','rationale':'rotate'}).json()
+    assert result['ok'] and result['proposal'], result
     assert 'jarvis/vault.py' not in service.test_runtime.current.files
+    assert [p['path'] for p in service.test_runtime.current.state['proposals']]==[proposals.proposal_path('jarvis/vault.py')]
+    outside=client.post('/api/selfedit/write',json={'path':'.env','content':'K=1\n','rationale':'x'}).json()
+    assert not outside['ok'] and 'workspace policy' in outside['error']
+    done=finish(client,'done')
+    assert done['human_only']==['jarvis/vault.py']
+    digest=service.proposal_set_digest(service.test_runtime.current.state['proposals'])
+    assert done['apply_command']==proposals.apply_command(service.repo_root,42,digest)
+    assert done['notice'].startswith(proposals.MARKER) and done['apply_command'] in done['notice']
+    body=[e for e in service.test_runtime.events if e[0]=='submit'][0][2]
+    assert 'do not merge this pull request as it is' in body

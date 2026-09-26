@@ -386,6 +386,17 @@ class TestDeveloperSections:
         assert "the admin sidecar is not running" in text
         assert "never give the user a command" in text
 
+    def test_self_development_routes_human_only_files_and_names_the_deploy(self):
+        """Phase 3 (Larry, 2026-09-25): W8 option A and self-rebuild option
+        B. Turns 2753/2769 told Larry to run a build script after a merge."""
+        from jarvis.prompts import DEVELOPER_SECTIONS
+        text = DEVELOPER_SECTIONS["self_development"]
+        assert "merged; deploy with DEPLOY-MAIN when you're ready" in text
+        assert "never name a build script" in text and "bundle" not in text
+        assert "A human-only (Tier 0) file is never written" in text
+        assert "HUMAN-ONLY PROPOSAL, copy that sentence into your reply word for word" in text
+        assert "rebuild the app" not in text
+
     def test_a_self_edit_task_gets_the_self_development_section(self):
         from jarvis.prompts import select_developer_sections as sel
         assert "self_development" in sel("implement the drawer plan in mortimer")

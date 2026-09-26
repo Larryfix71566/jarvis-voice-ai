@@ -438,4 +438,3 @@ class TestMacosTool:
         from pathlib import Path as _P
         tpl = (_P(__file__).resolve().parents[2] / "scripts" / "launchd" / "com.mortimer.template.plist").read_text()
         assert ":/usr/sbin:" in tpl
-

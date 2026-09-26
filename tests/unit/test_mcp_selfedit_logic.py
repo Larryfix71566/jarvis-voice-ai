@@ -413,7 +413,25 @@ def test_write_posts_the_whole_file_and_reports_the_diff():
     assert "selfedit_finish" in r["summary"]
     assert c.posts == [("/api/selfedit/write", {
         "path": "docs/x.md", "content": "hi\n", "rationale": "note it",
-        "visual_intent": "looks blue"})]
+        "visual_intent": "looks blue", "proposal": False})]
+
+
+def test_a_human_only_write_reports_the_proposal_not_a_write():
+    """W8: the sidecar saved a proposal; the summary must not say the file
+    changed."""
+    c = _client({("POST", "/api/selfedit/write"): {
+        "ok": True, "path": "requirements.txt", "proposal": True,
+        "proposal_file": "docs/proposals/requirements-txt-1a2b3c4d.patch", "diff": "diff --git",
+        "summary": "requirements.txt was NOT changed. The change is saved as a proposal."}})
+    r = logic.selfedit_write(c, "requirements.txt", "a==1\n", "pin a")
+    assert r["ok"] and r["proposal"] and r["proposal_file"].startswith("docs/proposals/")
+    assert "NOT changed" in r["summary"] and "selfedit_finish" in r["summary"]
+
+
+def test_a_test_joins_the_proposal_when_asked():
+    c = _client({("POST", "/api/selfedit/write"): {"ok": True, "path": "tests/unit/t.py", "proposal": True}})
+    logic.selfedit_write(c, "tests/unit/t.py", "x\n", "covers it", proposal=True)
+    assert c.posts[0][1]["proposal"] is True
 
 
 def test_write_relays_an_allowlist_refusal_unchanged():
@@ -463,6 +481,31 @@ def test_status_speaks_the_finish_job_states():
     errored = logic.selfedit_status(status_with({
         "state": "error", "notice": "push rejected"}))
     assert "push rejected" in errored["summary"]
+
+
+def test_a_proposal_pr_is_spoken_without_merging_is_yours():
+    """W8: Mortimer's proposal PR must not be merged as it is; the notice
+    carries the approve-then-apply sentence and the command, verbatim."""
+    notice = ("HUMAN-ONLY PROPOSAL: pull request 5 changes nothing in requirements.txt by itself; "
+              "… show this command only after he says yes: cd /r && .venv/bin/python scripts/apply_proposal.py 5 3f9c2a1b7d4e …")
+    c = _client({("GET", "/api/selfedit/run"): {
+        "ok": True, "job": {"state": "idle"}, "status": {"active": False},
+        "finish": {"state": "done", "pr_url": "https://x/pull/5", "notice": notice,
+                   "human_only": ["requirements.txt"],
+                   "apply_command": "cd /r && .venv/bin/python scripts/apply_proposal.py 5 3f9c2a1b7d4e"}}})
+    summary = logic.selfedit_status(c)["summary"]
+    assert notice in summary and "https://x/pull/5" in summary
+    assert "merging is yours" not in summary
+
+
+def test_the_preview_says_a_human_only_file_becomes_a_proposal():
+    c = _client({("POST", "/api/selfedit/stage"): {
+        "ok": True, "staging_id": "stg-fake", "expires_in_s": 600.0,
+        "tiers": {"core": []}, "human_only": ["requirements.txt"]}})
+    r = logic.selfedit_start(c, "pin httpx in requirements.txt", target_paths=["requirements.txt"])
+    assert r["ok"] and r["human_only"] == ["requirements.txt"]
+    assert "requirements.txt is human-only: I won't change it" in r["summary"]
+    assert "proposal" in r["summary"] and "one command" in r["summary"]
 
 
 def test_status_says_nothing_about_a_finish_that_never_ran():

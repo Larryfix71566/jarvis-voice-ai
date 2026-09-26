@@ -129,3 +129,55 @@ async def test_handler_without_gate_is_unchanged():
     handler, shown = _tool(None)
     out = await handler({"commands": ["curl -s https://example.com"]})
     assert out == "Shown in the display window." and len(shown) == 1
+
+
+# ---------------------------------------------------------------- W8 apply
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 3 W8 (Larry 2026-09-25, option A):
+# the one command that applies a human-only proposal Larry approved.
+
+def test_the_apply_command_the_service_builds_is_the_one_the_gate_allows(monkeypatch):
+    from jarvis.selfedit.proposals import apply_command
+    for root in ("/Users/larryfix/jarvis-voice-ai-clean", "/Users/larry fix/jarvis"):
+        monkeypatch.setenv("JARVIS_REPO_ROOT", root)
+        command = apply_command(root, 57, "3f9c2a1b7d4e")
+        assert ht.is_apply_proposal_command(command), command
+        # No NEEDS-INPUT stamp and no window: the yes can come much later.
+        assert ht.command_gate_refusal([command], {}) is None
+        assert ht.command_gate_refusal([command], {"needs_input_at": time.monotonic() - 99_999}) is None
+
+
+def test_the_apply_command_must_run_in_this_checkout(monkeypatch):
+    from jarvis.selfedit.proposals import apply_command
+    monkeypatch.setenv("JARVIS_REPO_ROOT", "/Users/larryfix/jarvis-voice-ai-clean")
+    elsewhere = apply_command("/tmp/other-checkout", 57, "3f9c2a1b7d4e")
+    assert ht.APPLY_PROPOSAL_COMMAND_RE.fullmatch(elsewhere)
+    assert not ht.is_apply_proposal_command(elsewhere)
+    assert ht.command_gate_refusal([elsewhere], {}) == ht.REFUSED_NO_NEEDS_INPUT
+
+
+@pytest.mark.parametrize("cmd", [
+    "cd /r && .venv/bin/python scripts/apply_proposal.py 57 3f9c2a1b7d4e; rm -rf ~",
+    "cd /r && .venv/bin/python scripts/apply_proposal.py 57 3f9c2a1b7d4e && git push --force",
+    "cd $(reboot) && .venv/bin/python scripts/apply_proposal.py 57 3f9c2a1b7d4e",
+    "cd `id` && .venv/bin/python scripts/apply_proposal.py 57 3f9c2a1b7d4e",
+    "cd /r && python scripts/apply_proposal.py 57 3f9c2a1b7d4e",
+    "cd /r && .venv/bin/python scripts/apply_proposal.py 0 3f9c2a1b7d4e",
+    "cd /r && .venv/bin/python scripts/other.py 57 3f9c2a1b7d4e",
+    "cd r && .venv/bin/python scripts/apply_proposal.py 57 3f9c2a1b7d4e",                 # not absolute
+    "cd =python && .venv/bin/python scripts/apply_proposal.py 57 3f9c2a1b7d4e",           # zsh =cmd expansion
+    "cd '/r\r\x1b[2K' && .venv/bin/python scripts/apply_proposal.py 57 3f9c2a1b7d4e",     # hides text on screen
+    "cd /r\u00e9 && .venv/bin/python scripts/apply_proposal.py 57 3f9c2a1b7d4e",           # non-ASCII
+    "cd /r && .venv/bin/python scripts/apply_proposal.py 57 3f9c2a1b7d4e\ngit status",    # a second line
+    "cd /r && .venv/bin/python scripts/apply_proposal.py 57",                    # no digest
+    "cd /r && .venv/bin/python scripts/apply_proposal.py 57 3F9C2A1B7D4E",          # not the service's form
+])
+def test_anything_but_the_exact_apply_command_gets_no_exemption(cmd, monkeypatch):
+    monkeypatch.setenv("JARVIS_REPO_ROOT", "/r")
+    assert not ht.is_apply_proposal_command(cmd)
+    assert ht.command_gate_refusal([cmd], {}) is not None
+
+
+def test_an_apply_command_does_not_carry_another_command_through():
+    from jarvis.selfedit.proposals import apply_command
+    refused = ht.command_gate_refusal([apply_command(ht.repo_root(), 5, "3f9c2a1b7d4e"), "brew install x"], {})
+    assert refused == ht.REFUSED_NO_NEEDS_INPUT

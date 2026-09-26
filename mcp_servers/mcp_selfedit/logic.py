@@ -193,6 +193,15 @@ def selfedit_start(
             f"the PR will be flagged CORE CHANGE and needs a real run before merging."
             if core_paths else ""
         )
+        # W8 — a human-only file is never written: say so before the yes.
+        human_only = stage_resp.get("human_only") or []
+        if human_only:
+            core_note += (
+                f" {', '.join(human_only)} {'is' if len(human_only) == 1 else 'are'} "
+                f"human-only: I won't change {'it' if len(human_only) == 1 else 'them'}. "
+                f"That part becomes a proposal in the pull request; you approve it, "
+                f"then apply it with one command."
+            )
         return {
             "ok": True,
             "needs_confirmation": True,
@@ -205,6 +214,7 @@ def selfedit_start(
             "profile": chosen,
             "staging_id": sid,
             "core_change": bool(core_paths),
+            "human_only": human_only,
         }
 
     # Deprecated fallback: confirm=true with no staging_id, goal restated.
@@ -259,8 +269,12 @@ def selfedit_read(client, path: str) -> dict[str, Any]:
 
 
 def selfedit_write(client, path: str, content: str, rationale: str = "",
-                   visual_intent: str = "") -> dict[str, Any]:
-    """Write one file in the open session's worktree (whole-file content)."""
+                   visual_intent: str = "", proposal: bool = False) -> dict[str, Any]:
+    """Write one file in the open session's worktree (whole-file content).
+
+    W8: a human-only file is never written — the sidecar saves the change
+    as a proposal instead, and says so. `proposal=True` routes a TEST that
+    needs that human-only change into the proposal too."""
     path = (path or "").strip()
     if not path:
         return {"ok": False, "error": "which file? selfedit_write needs a repo path"}
@@ -269,10 +283,20 @@ def selfedit_write(client, path: str, content: str, rationale: str = "",
                 "error": "selfedit_write needs a rationale — one line saying why"}
     resp = _call(lambda: client.post("/api/selfedit/write", json={
         "path": path, "content": content, "rationale": rationale,
-        "visual_intent": visual_intent,
+        "visual_intent": visual_intent, "proposal": bool(proposal),
     }))
     if not resp.get("ok"):
         return resp
+    if resp.get("proposal"):
+        return {
+            "ok": True,
+            "path": resp.get("path", path),
+            "proposal": True,
+            "proposal_file": resp.get("proposal_file"),
+            "diff": resp.get("diff", ""),
+            "summary": (f"{resp.get('summary', '')} Keep writing the rest, then "
+                        f"call selfedit_finish.").strip(),
+        }
     return {
         "ok": True,
         "path": resp.get("path", path),
@@ -314,6 +338,10 @@ def _describe_finish(finish: dict[str, Any]) -> str:
     if state == "done":
         notice = (finish.get("notice") or "").strip()
         pr = finish.get("pr_url") or ""
+        if finish.get("human_only"):
+            # W8 — this PR must NOT be merged as it is; the notice carries
+            # the approve-then-apply instruction and the exact command.
+            return f"{notice} Pull request: {pr}."
         return (f"{notice} Pull request: {pr} — merging is yours on GitHub."
                 if notice else
                 f"Pull request: {pr} — merging is yours on GitHub.")

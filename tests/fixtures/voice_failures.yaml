@@ -12,6 +12,7 @@ user_triggers:
   voice-check-before-cant: {priority: 20, pattern: "\\b(can you(?: not)?|could you|are you (?:not )?able|do you have (?:access|a way|the ability)|you (?:should|already) (?:be able|have)|why (?:can't|can you not|won't|couldn't|didn't) you|is there (?:a|any) way|find another way|look it up|see my|my location|where am i|access to)\\b"}
   voice-explain-failure: {priority: 30, pattern: "\\b(why (?:did|didn't|does|doesn't|is|isn't|was|wasn't|won't|can't)|what (?:happened|went wrong|failed|error)|fail(?:ed|ing|ure)?|error|broken|not working|stuck|logs?\\b|investigate|look into|diagnos)"}
   voice-where-am-i: {priority: 15, pattern: "\\b(where am i|where i am|my (?:current )?location|(?:for|get|find) (?:a|my) location|what (?:city|town|state) am i|near me|nearby|around here)\\b"}
+  voice-merged-deploy: {priority: 9, pattern: "\\b(merged|rebuil(?:d|t)|bundle(?:\\.sh)?|redeploy(?:ed)?|deployed|is it live|live yet|(?:go|went|gone) live)\\b"}
 failure_cases:
   - {id: 117, date: 2026-08-13, clusters: ["W13"], guard: miss, user_trigger: "voice-check-before-cant",
      user: "Yeah. The radar map looks like it's there, but it doesn't display correctly. Can you take a look at that?",

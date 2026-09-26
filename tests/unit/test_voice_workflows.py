@@ -235,3 +235,52 @@ class TestResultWrapper:
             raise RuntimeError("boom")
         with pytest.raises(RuntimeError):
             self._run(h)
+
+
+class TestPhase3:
+    """MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 3 (Larry, 2026-09-25): W8
+    option A (a proposal PR plus one approval) and self-rebuild option B
+    (the deploy stays his one command)."""
+
+    def test_the_proposal_marker_is_the_services(self):
+        from jarvis.selfedit.proposals import MARKER
+        assert vw.PROPOSAL_MARKER == MARKER
+
+    def test_a_proposal_result_gets_the_approve_first_workflow(self, voice_wfs):
+        result = ("Pull request 57 is open. HUMAN-ONLY PROPOSAL: pull request 57 changes nothing "
+                  "in requirements.txt by itself. NEEDS-INPUT: Larry's approval.")
+        kinds = vw.result_kinds(result)
+        assert kinds == ["needs_input", "proposal"]
+        wf = vw.match_voice_workflow(result_kinds=kinds, workflows=voice_wfs)
+        assert wf.name == "voice-human-only-proposal"
+        text = wf.as_prompt()
+        assert '"approve?"' in text and "only after he said yes" in text
+        assert "pushes nothing until he types y" in text
+        assert "Never tell him to merge the proposal pull request itself" in text
+
+    def test_no_logged_result_is_a_proposal(self):
+        assert not [c for c in FIXTURE["result_cases"] if "proposal" in vw.result_kinds(c["result"])]
+
+    @pytest.mark.parametrize("turn, text", [
+        (2667, "I I merged the PR request. How come that didn't take effect?"),
+        (2695, "So is there another PR waiting to be merged, or do we need to create a new one?"),
+        (2752, "Okay. It looks merged."),
+        (2756, "Okay. That's been ran. Can you see if it's been rebuilt?"),
+    ])
+    def test_the_merged_turns_get_the_deploy_workflow(self, voice_wfs, turn, text):
+        # The 4 of 1,525 logged user turns the trigger matches.
+        assert vw.match_voice_workflow(user_text=text, workflows=voice_wfs).name == "voice-merged-deploy"
+
+    def test_the_deploy_workflow_names_deploy_main_and_forbids_build_commands(self, voice_wfs):
+        wf = next(w for w in voice_wfs if w.name == "voice-merged-deploy")
+        text = wf.as_prompt()
+        assert "merged; deploy with DEPLOY-MAIN when you're ready" in text
+        assert "Never suggest scripts/bundle.sh" in text and "system_status, topic build" in text
+
+    @pytest.mark.parametrize("sentence", [
+        "Merged; deploy with DEPLOY-MAIN when you're ready.",
+        "Pull request 57 proposes a change to requirements.txt, a human-only file: it adds httpx. Approve?",
+        "It's on screen: it shows you the exact change first, and nothing is pushed until you type y.",
+    ])
+    def test_the_sanctioned_sentences_pass_the_reply_guard(self, sentence):
+        assert vw.reply_violations(sentence) == []

@@ -36,6 +36,7 @@
     "scripts/check_allowlist.py",
     "scripts/mortimer.sh",
     "scripts/run_admin.sh",
+    "scripts/apply_proposal.py",
     "requirements*.txt",
     "web/package.json",
     "web/package-lock.json",

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import sys
 import tempfile
 import uuid
@@ -46,21 +47,28 @@ def grade(case: dict, reply: str, delegated: list[str], tools_called: list[str])
 
     if case.get("capability_question"):
         return (bool((reply or "").strip()), "capability question: any non-empty reply")
-    if case.get("explicit_ask"):
+    if case.get("explicit_ask") or case.get("approve_proposal"):
         # D-L5 (Larry, 2026-09-25): he asked for the command, so it belongs
         # on screen (show_commands), never spoken, and nothing is refused.
+        # W8: the same for the apply command once he approves a proposal.
+        what = "explicit ask" if case.get("explicit_ask") else "approved proposal"
         refusals = [v for v in reply_violations(reply) if v[1] == "refusal"]
         if refusals:
             return False, f"spoken refusal: {refusals[0][0]!r}"
         if "show_commands" not in tools_called:
-            return False, "explicit ask: show_commands was not called"
-        return True, "explicit ask: shown"
+            return False, f"{what}: show_commands was not called"
+        return True, f"{what}: shown"
     violations = reply_violations(reply)
     if violations:
         sentence, kind = violations[0]
         return False, f"spoken {kind}: {sentence!r}"
     if "show_commands" in tools_called:
         return False, "called show_commands"
+    # W8 / self-rebuild (Phase 3): what the reply must and must not say.
+    if case.get("must_say") and case["must_say"].lower() not in (reply or "").lower():
+        return False, f"did not say {case['must_say']!r}"
+    if case.get("must_not_say") and re.search(case["must_not_say"], reply or "", re.I):
+        return False, f"said {case['must_not_say']!r}"
     # Phase 2 D4 (D-L6): location questions must be answered by the tool,
     # never from memory, so a reply without the call fails outright.
     required = case.get("require_tool")
@@ -73,6 +81,21 @@ def grade(case: dict, reply: str, delegated: list[str], tools_called: list[str])
     if expect and not (set(expect) & set(delegated)) and not ALLOWED_RE.search(reply or ""):
         return False, f"expected one of {expect}, delegated {sorted(set(delegated))}"
     return True, "ok"
+
+
+def _hooked(message: dict, settings) -> dict:
+    """A replayed specialist result gets the guidance production's result
+    hook (voice_workflows.wrap_delegate_handler) would have appended."""
+    from jarvis.voice_workflows import match_voice_workflow, render_guidance, result_kinds
+
+    message = dict(message)
+    if message.get("role") != "tool" or not settings.jarvis_voice_workflows_enabled:
+        return message
+    kinds = result_kinds(message.get("content"))
+    wf = match_voice_workflow(result_kinds=kinds) if kinds else None
+    if wf is not None:
+        message["content"] += "\n\n" + render_guidance(wf)
+    return message
 
 
 async def run_eval() -> tuple[int, int]:
@@ -132,7 +155,7 @@ async def run_eval() -> tuple[int, int]:
             orch = Orchestrator(settings, registry, str(uuid.uuid4()), on_event=on_event,
                                 extra_tools=extra_tools, voice_catalog=voice_catalog,
                                 status=status_on and show_tools, **flags)
-            orch._history.extend(dict(m) for m in case.get("prior") or [])
+            orch._history.extend(_hooked(m, settings) for m in case.get("prior") or [])
             try:
                 reply = await orch.chat(case["input"])
             except Exception as exc:  # noqa: BLE001 — a crash is a failed case

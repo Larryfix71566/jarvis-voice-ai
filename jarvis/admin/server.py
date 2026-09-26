@@ -406,6 +406,10 @@ _finish_job: dict[str, Any] = {
     "checks": None,
     "pr_url": None,
     "notice": None,
+    # W8 — the human-only files this PR only PROPOSES, and the one command
+    # Larry runs once he approves (None when the PR proposes nothing).
+    "human_only": None,
+    "apply_command": None,
     "run_id": None,
     "started_at": None,
     "finished_at": None,
@@ -744,6 +748,8 @@ def _run_finish() -> None:
                 _finish_job.update(
                     state="done", pr_url=submitted.get("pr_url"),
                     notice=submitted.get("notice"), finished_at=time.time(),
+                    human_only=submitted.get("human_only"),
+                    apply_command=submitted.get("apply_command"),
                 )
             else:
                 _finish_job.update(
@@ -1259,6 +1265,8 @@ def selfedit_stage(body: SelfEditStageIn) -> dict:
         # The tool's spoken preview names core files so the user hears
         # "this touches the voice core" before saying yes.
         "tiers": flight["tiers"],
+        # W8 — and the human-only files, whose change becomes a proposal.
+        "human_only": flight.get("human_only") or [],
         "core_change": bool(flight["tiers"]["core"]),
     }
 
@@ -1444,6 +1452,9 @@ class SelfEditWriteIn(BaseModel):
     content: str
     rationale: str = ""
     visual_intent: str = ""
+    # W8 — route a TEST that needs a human-only change into that proposal.
+    # A human-only path is always routed; this flag never widens a write.
+    proposal: bool = False
 
 
 @app.post("/api/selfedit/write")
@@ -1464,6 +1475,7 @@ def selfedit_write(body: SelfEditWriteIn) -> dict:
         return {"ok": False, "error": "validation is running — wait for it to finish, then edit"}
     return _selfedit_service.propose_edit(
         body.path, body.content, body.rationale, body.visual_intent,
+        proposal=body.proposal,
     )
 
 
@@ -1485,6 +1497,10 @@ def _save_document_to_sandbox(path: str, content: str, rationale: str = "") -> d
         return {"ok": False, "code": "sandbox_session_required",
                 "error": "Open a self-edit sandbox session for saving this document, then retry the save. The generated document is still available.",
                 "path": path}
+    if _selfedit_service.is_human_only(path):
+        # W8 routes a human-only write into a proposal; a generated
+        # document is never one — refuse, as before.
+        return {"ok": False, "error": f"{path} is human-only; save the document under another name."}
     result = selfedit_write(SelfEditWriteIn(path=path, content=content, rationale=rationale))
     if not result.get("ok"):
         return result
@@ -1515,6 +1531,7 @@ def selfedit_finish() -> dict:
                     "error": "a run is already in progress — ask for status instead"}
         _finish_job.update(
             state="validating", checks=None, pr_url=None, notice=None, cancel_requested=False,
+            human_only=None, apply_command=None,
             run_id=_selfedit_service.run_id, started_at=time.time(), finished_at=None,
         )
     logger.info("selfedit_state_transition state=finish_validating run_id=%s",
