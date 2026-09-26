@@ -121,6 +121,38 @@ def test_resolve_focus_order(conn):
     assert resolve_memory_focus(conn, g, "zzz-nothing") is None
 
 
+def test_spoken_topics_resolve_to_memory_nodes(conn):
+    """W11 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4): the five logged
+    misses of 2026-09-09..18, each against the shape of production memory
+    that made it miss."""
+    _insert_fact(conn, "user.interest.cooking", "Enjoys smoking brisket")
+    _insert_fact(conn, "user.interest.cars", "Follows the Corvette ZR1")
+    _insert_fact(conn, "user.preference.communication_style", "Terse, direct commands")
+    _insert_fact(conn, "user.preference.display", "Results in the display window")
+    _insert_fact(conn, "user.style.interruption", "Stop talking when interrupted")
+    _insert_fact(conn, "user.style.commands.brief", "Prefers terse commands",
+                 archived_at="2026-08-20T00:00:00Z", became="consolidated:user.preference.communication_style")
+    _insert_fact(conn, "user.style.answer_length", "Short answers",
+                 archived_at="2026-08-20T00:00:00Z", became="consolidated:user.preference.answer_style")
+    _insert_fact(conn, "user.preference.answer_style", "Short answers",
+                 archived_at="2026-09-01T00:00:00Z", became="aged-out")
+    g = build_memory_graph(conn)
+    r = lambda focus: resolve_memory_focus(conn, g, focus)
+    assert r("interests") == "prefix:user.interest"                  # plural of a group
+    assert r("my interests") == "prefix:user.interest"
+    assert r("preferences") == "prefix:user.preference"
+    # An archived match stands for the live fact it was folded into; one
+    # whose successor also aged out (answer_style) is skipped.
+    assert r("brief_answers") == "fact:user.preference.communication_style"
+    # A dotted key that does not exist: look under its deepest prefix.
+    assert r("user.style.brief_answers") == "fact:user.preference.communication_style"
+    assert r("user.style.nothing_like_this") == "prefix:user.style"
+    # Two topics at once: the prefix both sit under.
+    assert r("user.preference,user.style") == "prefix:user"
+    assert r("interests and preferences") == "prefix:user"
+    assert r("zzz-nothing") is None
+
+
 def test_row_guard_truncates_by_updated_at(conn, monkeypatch):
     monkeypatch.setattr(gcfg, "GRAPH_MEMORY_MAX_FACTS", 3)
     for i in range(5):

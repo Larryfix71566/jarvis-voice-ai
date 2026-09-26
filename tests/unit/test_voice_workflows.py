@@ -284,3 +284,31 @@ class TestPhase3:
     ])
     def test_the_sanctioned_sentences_pass_the_reply_guard(self, sentence):
         assert vw.reply_violations(sentence) == []
+
+
+class TestPhase4ModelAvailability:
+    """MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4 W3: model questions go to
+    system_status (#86's models / catalog / subscription topics)."""
+
+    @pytest.mark.parametrize("turn, text", [
+        (561, "Check and tell me what models you have access to now."),
+        (2858, "Do you have access to Kimi k three?"),
+        (3481, "Give me an overview of what models you actually have access to."),
+        (3483, "Yeah. You should have access to Codex Astra and Claude Fable five point one. Tell me if that's not true."),
+        (3485, "Can you not check to see what's actually available through the subscriptions that you have access to?"),
+    ])
+    def test_logged_model_questions_get_the_workflow(self, voice_wfs, turn, text):
+        assert vw.match_voice_workflow(user_text=text, workflows=voice_wfs).name == "voice-model-availability"
+
+    @pytest.mark.parametrize("text", [
+        "Start a self edit to add a line to docs slash repo map describing what model catalog does.",  # 2484
+        "Do you know which model, uh, the developer is using for this plan?",                         # 588
+        "What's the weather in Alpharetta?",
+    ])
+    def test_other_turns_do_not(self, voice_wfs, text):
+        wf = vw.match_voice_workflow(user_text=text, workflows=voice_wfs)
+        assert wf is None or wf.name != "voice-model-availability"
+
+    def test_it_answers_from_system_status_and_never_hands_off(self, voice_wfs):
+        text = next(w for w in voice_wfs if w.name == "voice-model-availability").as_prompt()
+        assert "Answer from system_status" in text and "Never ask Larry to run a command" in text

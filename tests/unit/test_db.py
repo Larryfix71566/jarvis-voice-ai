@@ -35,6 +35,7 @@ EXPECTED_MIGRATION_IDS = [
     "0023_memory_classification_shadow",
     "0024_model_route_preferences",
     "0025_notices",
+    "0026_expire_retired_actions",
 ]
 
 
@@ -359,3 +360,28 @@ def test_migration_0021_notified_at(tmp_path):
         assert row["notified_at"] is None
     finally:
         conn.close()
+
+
+def test_migration_0026_expires_only_the_pending_actions(tmp_path):
+    """W9 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4): the tools that could
+    confirm an action were retired on 2026-09-10, so a pending row can never
+    resolve. The migration settles those and leaves every other row alone."""
+    conn = get_conn(tmp_path / "actions.db")
+    run_migrations(conn)
+    rows = [("git_commit", "pending", None, None), ("repo_write", "pending", None, None),
+            ("git_push", "committed", "2026-08-20T02:31:00+00:00", "ok"),
+            ("git_push", "failed", "2026-08-30T21:41:00+00:00", "rejected")]
+    for tool, status, resolved_at, result in rows:
+        conn.execute(
+            "INSERT INTO actions (tool, action_class, draft_payload, summary, status, created_at, resolved_at, result)"
+            " VALUES (?, 'privileged', '{}', 's', ?, '2026-08-13T00:39:00+00:00', ?, ?)",
+            (tool, status, resolved_at, result))
+    conn.execute("DELETE FROM migrations WHERE id = '0026_expire_retired_actions'")
+    conn.commit()
+    assert run_migrations(conn) == ["0026_expire_retired_actions"]
+    got = [dict(r) for r in conn.execute("SELECT tool, status, resolved_at, result FROM actions ORDER BY id")]
+    assert [r["status"] for r in got] == ["expired", "expired", "committed", "failed"]
+    assert all(r["resolved_at"] and "retired on 2026-09-10" in r["result"] for r in got[:2])
+    assert got[2]["result"] == "ok" and got[3]["resolved_at"] == "2026-08-30T21:41:00+00:00"
+    assert conn.execute("SELECT COUNT(*) FROM actions WHERE status = 'pending'").fetchone()[0] == 0
+    conn.close()

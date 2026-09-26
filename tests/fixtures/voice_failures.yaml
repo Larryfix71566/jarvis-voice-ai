@@ -13,6 +13,7 @@ user_triggers:
   voice-explain-failure: {priority: 30, pattern: "\\b(why (?:did|didn't|does|doesn't|is|isn't|was|wasn't|won't|can't)|what (?:happened|went wrong|failed|error)|fail(?:ed|ing|ure)?|error|broken|not working|stuck|logs?\\b|investigate|look into|diagnos)"}
   voice-where-am-i: {priority: 15, pattern: "\\b(where am i|where i am|my (?:current )?location|(?:for|get|find) (?:a|my) location|what (?:city|town|state) am i|near me|nearby|around here)\\b"}
   voice-merged-deploy: {priority: 9, pattern: "\\b(merged|rebuil(?:d|t)|bundle(?:\\.sh)?|redeploy(?:ed)?|deployed|is it live|live yet|(?:go|went|gone) live)\\b"}
+  voice-model-availability: {priority: 14, pattern: "\\b(what models? (?:do )?you (?:have|can use|actually have)|models? you (?:actually )?have access to|(?:do|does|should) (?:you|he|it) have access to (?:kimi|opus|sonnet|haiku|codex|gpt|gemini|claude|fable|astra)|you (?:should )?have access to (?:kimi|opus|sonnet|haiku|codex|gpt|gemini|claude|fable|astra)|what(?:'s| is) (?:actually )?(?:available|provisioned)|available (?:through|on|via) (?:my |the |your )?subscriptions?|(?:query|check) (?:the |my |your )?subscriptions?|what (?:models? )?(?:can you|you can) access)"}
 failure_cases:
   - {id: 117, date: 2026-08-13, clusters: ["W13"], guard: miss, user_trigger: "voice-check-before-cant",
      user: "Yeah. The radar map looks like it's there, but it doesn't display correctly. Can you take a look at that?",
@@ -248,7 +249,7 @@ failure_cases:
   - {id: 2866, date: 2026-09-13, clusters: ["W2", "W3"], guard: fire, user_trigger: "voice-do-it-dont-hand-off",
      user: "I think almond chips get ham for -- Are you unable to run that command yourself?",
      reply: "I can't run commands on your machine — that's something you'll need to do. Run the curl command from the display window, copy its output, and then say \"read my clipboard\" so I can see what models OpenRouter has available."}
-  - {id: 2873, date: 2026-09-13, clusters: ["W8"], guard: fire, user_trigger: null,
+  - {id: 2873, date: 2026-09-13, clusters: ["W8"], guard: fire, user_trigger: "voice-model-availability",
      user: "Yeah. We wanna keep the registry updated with the newest models available, so let's... let those in the registry, and then let's come up with a plan to update what is available from open router on a daily basis so that we don't miss new significant improvements in.",
      reply: "The registry file is locked to human PRs only, so you'd need to review and merge those model additions on GitHub yourself. But the developer has a plan ready for the daily sync automation. Want to review that plan now, or should we get the registry update to you first as a manual PR?"}
   - {id: 2877, date: 2026-09-13, clusters: ["W8"], guard: fire, user_trigger: null,
@@ -287,7 +288,7 @@ failure_cases:
   - {id: 3478, date: 2026-09-23, clusters: ["W2", "W3"], guard: fire, user_trigger: "voice-do-it-dont-hand-off",
      user: "No. You do that for me.",
      reply: "The developer can't execute curl directly. You'll need to run that command locally—it checks which model keys are loaded. Copy the output back and I'll parse it for you."}
-  - {id: 3486, date: 2026-09-23, clusters: ["W1", "W3"], guard: fire, user_trigger: "voice-check-before-cant",
+  - {id: 3486, date: 2026-09-23, clusters: ["W1", "W3"], guard: fire, user_trigger: "voice-model-availability",
      user: "Can you not check to see what's actually available through the subscriptions that you have access to?",
      reply: "I can't query the registry directly myself—that's something the developer specialist does. I read from the static model list I was given at startup. Want me to ask the developer to check what's actually available through your subscriptions right now?"}
   - {id: 3535, date: 2026-09-24, clusters: ["W1", "W4"], guard: fire, user_trigger: "voice-where-am-i",

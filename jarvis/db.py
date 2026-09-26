@@ -659,6 +659,20 @@ CREATE INDEX IF NOT EXISTS idx_model_route_drafts_expiry
 # daily-status findings, spoken once after the greeting at the next connect
 # (jarvis/notices.py). user_id: tests/unit/test_tenant_columns.py's contract
 # (GC8) that every table carries it.
+# W9 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4). Every tool that created or
+# confirmed an action was retired on 2026-09-10 (8b9dd59): commit, push and
+# repo_commit_write refuse even an old action id. The 21 rows still
+# 'pending' (2026-08-13 .. 09-07) can therefore never resolve, yet
+# list_actions('pending') still offered them. Nothing creates an action any
+# more, so one pass settles them for good.
+MIGRATION_0026_expire_retired_actions = """
+UPDATE actions
+   SET status = 'expired',
+       resolved_at = COALESCE(resolved_at, strftime('%Y-%m-%dT%H:%M:%S+00:00', 'now')),
+       result = COALESCE(result, 'expired: direct repository writes were retired on 2026-09-10; changes go through the self-edit sandbox')
+ WHERE status = 'pending';
+"""
+
 MIGRATION_0025_notices = """
 CREATE TABLE IF NOT EXISTS notices (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -699,6 +713,7 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0023_memory_classification_shadow", MIGRATION_0023),
     ("0024_model_route_preferences", MIGRATION_0024_model_route_preferences),
     ("0025_notices", MIGRATION_0025_notices),  # status spec T3.2
+    ("0026_expire_retired_actions", MIGRATION_0026_expire_retired_actions),  # W9
 ]
 
 

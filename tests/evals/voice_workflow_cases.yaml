@@ -20,9 +20,9 @@
 - {from: 1170, input: "Can you show me current radar for Spartanburg?", expect_any: [analyst]}
 - {from: 3173, input: "Give me a rundown of all the baseball games tonight.", expect_any: [analyst]}
 - {from: 911, input: "Tell me if there are any NFL football games tonight.", expect_any: [analyst]}
-- {from: 563, input: "Check and tell me what models you have access to now.", expect_any: [developer]}
-- {from: 3486, input: "Can you not check to see what's actually available through the subscriptions that you have access to?", expect_any: [developer]}
-- {from: 3483, input: "You should have access to Codex Astra and Claude Fable five point one. Tell me if that's not true.", expect_any: [developer]}
+- {from: 563, input: "Check and tell me what models you have access to now.", or_tool: system_status, expect_any: [developer]}
+- {from: 3486, input: "Can you not check to see what's actually available through the subscriptions that you have access to?", or_tool: system_status, expect_any: [developer]}
+- {from: 3483, input: "You should have access to Codex Astra and Claude Fable five point one. Tell me if that's not true.", or_tool: system_status, expect_any: [developer]}
 - {from: 194, input: "Can you look in the logs to see the error that the developer got?", expect_any: [developer]}
 - {from: 2717, input: "Why is screen capture not working?", expect_any: [developer, systems]}
 - {from: 356, input: "Tell me about the uncommitted changes.", expect_any: [developer]}

@@ -1,6 +1,7 @@
 """GL7 *memory* — the only place memory nodes and edges are derived."""
 from __future__ import annotations
 
+import re
 import sqlite3
 
 from jarvis.graphs import config as gcfg
@@ -101,6 +102,106 @@ def build_memory_graph(conn: sqlite3.Connection) -> Graph:
     return g
 
 
+# W11 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4): a spoken topic is not a
+# node id. The logged misses (2026-09-09 to 09-18): "interests",
+# "brief_answers", "user.style.brief_answers" (no such key) and
+# "user.preference,user.style" (two topics at once).
+_TOPIC_STOPWORDS = frozenset({
+    "a", "about", "all", "an", "and", "fact", "facts", "for", "graph", "i", "in", "know",
+    "me", "memories", "memory", "my", "of", "on", "remember", "show", "the", "to", "what", "you",
+})
+_TOPIC_SPLIT = re.compile(r"\s*(?:,|;|&|\band\b)\s*", re.I)
+
+
+def _singular(word: str) -> str:
+    if len(word) > 4 and word.endswith("ies"):
+        return word[:-3] + "y"
+    if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+    return word
+
+
+def _topic_words(text: str) -> list[str]:
+    return [_singular(w) for w in re.split(r"[^a-z0-9]+", text.lower()) if w and w not in _TOPIC_STOPWORDS]
+
+
+def _last_segment(node_id: str) -> str:
+    return _singular(node_id.split(":", 1)[1].rsplit(".", 1)[-1].lower())
+
+
+def _common_prefix(graph: Graph, node_ids: list[str]) -> str | None:
+    """The deepest prefix node every one of `node_ids` sits under."""
+    split = [nid.split(":", 1)[1].split(".") for nid in node_ids]
+    common: list[str] = []
+    for segments in zip(*split):
+        if len(set(segments)) != 1:
+            break
+        common.append(segments[0])
+    while common:
+        cand = "prefix:" + ".".join(common)
+        if cand in graph.nodes:
+            return cand
+        common.pop()
+    return None
+
+
+def _group_named(graph: Graph, words: list[str]) -> str | None:
+    """A prefix node whose last segment IS the topic ("interests" ->
+    prefix:user.interest); the shallowest wins, then alphabetical."""
+    wanted = "_".join(words)
+    hits = sorted((nid for nid in graph.nodes if nid.startswith("prefix:") and _last_segment(nid) == wanted),
+                  key=lambda nid: (nid.count("."), nid))
+    return hits[0] if hits else None
+
+
+def _successor(became: str | None) -> str | None:
+    """The live key an archived fact was folded into, when its `became`
+    names one (merged:/consolidated:/reviewed:kept:)."""
+    head, _, tail = (became or "").partition(":")
+    if head in ("merged", "consolidated") and tail:
+        return tail
+    if head == "reviewed" and tail.startswith("kept:"):
+        return tail[len("kept:"):]
+    return None
+
+
+def _fact_by_key_words(conn: sqlite3.Connection, graph: Graph, words: list[str], scope: str = "") -> str | None:
+    """The live fact whose key names the most topic words (all of them
+    beats some); a live match beats an archived one, then the shorter key
+    wins. An archived fact stands for the live fact it was folded into
+    ("brief" -> user.style.commands.brief, consolidated into
+    user.preference.communication_style); one with no live successor is
+    skipped. `scope` limits the search to keys under one prefix."""
+    rows = conn.execute("SELECT key, archived_at, became FROM memories WHERE kind = 'fact'").fetchall()
+    archived = {key: became for key, archived_at, became in rows if archived_at is not None}
+    live = {key for key, archived_at, _ in rows if archived_at is None}
+
+    def live_successor(key: str) -> str | None:
+        for _ in range(5):                 # a fold chain, never a loop
+            if key in live:
+                return key
+            key = _successor(archived.get(key))
+            if key is None:
+                return None
+        return None
+
+    best: tuple[int, int, int, str, str] | None = None
+    for key, archived_at, _became in rows:
+        if scope and not key.startswith(scope + "."):
+            continue
+        key_words = {_singular(w) for w in re.split(r"[^a-z0-9]+", key[len(scope):].lower()) if w}
+        score = sum(w in key_words for w in words)
+        if not score:
+            continue
+        target = live_successor(key)
+        if target is None or f"fact:{target}" not in graph.nodes:
+            continue
+        rank = (-score, 0 if archived_at is None else 1, len(key), key, target)
+        if best is None or rank < best:
+            best = rank
+    return f"fact:{best[4]}" if best else None
+
+
 def resolve_memory_focus(conn: sqlite3.Connection, graph: Graph, focus: str) -> str | None:
     typed, hit = typed_lookup(graph, focus)
     if typed:
@@ -108,8 +209,29 @@ def resolve_memory_focus(conn: sqlite3.Connection, graph: Graph, focus: str) -> 
     for cand in (f"fact:{focus}", f"prefix:{focus}"):
         if cand in graph.nodes:
             return cand
+    parts = [part for part in _TOPIC_SPLIT.split(focus) if part.strip()]
+    if len(parts) > 1:
+        hits = [h for h in (resolve_memory_focus(conn, graph, part.strip()) for part in parts) if h]
+        if not hits:
+            return None
+        return hits[0] if len(set(hits)) == 1 else (_common_prefix(graph, hits) or hits[0])
+    if "." in focus:
+        # A dotted name that isn't a key ("user.style.brief_answers"): look
+        # under its deepest existing prefix for the rest, else show that prefix.
+        segments = focus.split(".")
+        for cut in range(len(segments) - 1, 0, -1):
+            scope = ".".join(segments[:cut])
+            if f"prefix:{scope}" in graph.nodes:
+                rest = _topic_words(" ".join(segments[cut:]))
+                return (_fact_by_key_words(conn, graph, rest, scope) if rest else None) or f"prefix:{scope}"
+    words = _topic_words(focus)
+    if not words:
+        return None
+    hit = _group_named(graph, words) or _fact_by_key_words(conn, graph, words)
+    if hit:
+        return hit
     from jarvis.memory import search_facts
-    hits = search_facts(conn, focus, 1)
-    if hits and f"fact:{hits[0]['key']}" in graph.nodes:
-        return f"fact:{hits[0]['key']}"
+    found = search_facts(conn, " ".join(words), 1)
+    if found and f"fact:{found[0]['key']}" in graph.nodes:
+        return f"fact:{found[0]['key']}"
     return None

@@ -1,0 +1,22 @@
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4 W3 ("What models can I use").
+# Voice agent only. #86's status tools answer this directly: system_status
+# topic models (what is configured, and whether each key works), catalog
+# (what a provider offers right now) and subscription (tries one exact model
+# through the Claude or Codex CLI). The logged failures (3475, 3478, 3486 on
+# 2026-09-23) asked Larry to run a curl command or answered from the static
+# list. The trigger matches 10 of the 1,525 logged user turns, all about
+# which models Mortimer can use.
+name: voice-model-availability
+when: Larry asks which models Mortimer has, whether a model or subscription is available, or what a provider offers
+agents:
+- supervisor
+priority: 14
+triggers:
+  user:
+  - \b(what models? (?:do )?you (?:have|can use|actually have)|models? you (?:actually )?have access to|(?:do|does|should) (?:you|he|it) have access to (?:kimi|opus|sonnet|haiku|codex|gpt|gemini|claude|fable|astra)|you (?:should )?have access to (?:kimi|opus|sonnet|haiku|codex|gpt|gemini|claude|fable|astra)|what(?:'s| is) (?:actually )?(?:available|provisioned)|available (?:through|on|via) (?:my |the |your )?subscriptions?|(?:query|check) (?:the |my |your )?subscriptions?|what (?:models? )?(?:can you|you can) access)
+steps:
+- Answer from system_status, never from the model list you were given or from memory. Topic models says what is configured and whether each key works. Topic catalog says what a provider offers right now. Topic subscription tries one exact model on the Claude or Codex subscription; use the model name Larry said, as he said it.
+- Say which check you ran and what it returned. If a check failed, say that and the reason it gave.
+- Never ask Larry to run a command or copy output to find this out.
+done_when:
+- The answer names the check that was run and its result, or says the check failed and why.
