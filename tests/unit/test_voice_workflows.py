@@ -71,7 +71,16 @@ class TestResultKinds:
         assert vw.result_kinds(case["result"]) == case["kinds"]
 
     def test_missing_tool_marker(self):
+        assert vw.result_kinds("MISSING-TOOL: an HTTP fetch tool") == ["missing_tool", "limitation"]
+
+    def test_missing_tool_marker_old_spelling(self):
         assert vw.result_kinds("MISSING TOOL: an HTTP fetch tool") == ["missing_tool", "limitation"]
+
+    def test_missing_tool_marker_matches_delegate(self):
+        # One marker for both readers: delegate.py (#86 T1.2) and the result hook.
+        from jarvis.agents.delegate import MISSING_TOOL_MARKER
+        assert vw.MISSING_TOOL_MARKER == MISSING_TOOL_MARKER
+        assert vw.MISSING_TOOL_RE.search(MISSING_TOOL_MARKER)
 
     def test_non_string_result(self):
         assert vw.result_kinds(None) == []

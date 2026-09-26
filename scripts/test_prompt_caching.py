@@ -35,10 +35,10 @@ always does, pass or fail).
 
 Models probed, and why these three specifically: they are the only
 Anthropic-direct models this deployment actually assigns to a rung today
-(config/agents.yaml, config/upgrade_models.yaml) —
+(config/agents.yaml, config/model_profiles.yaml) —
   - the Supervisor's own model (Haiku 4.5, via `jarvis.config.
     load_settings()` — the voice-model client), the 4,096-token case;
-  - `claude-sonnet-5` and `claude-fable-5` (`config/upgrade_models.yaml`
+  - `claude-sonnet-5` and `claude-fable-5` (`config/model_profiles.yaml`
     profiles — sub-agents/executor/council all resolve through the same
     registry), the 1,024/512-token cases.
 `claude-opus` is deliberately not probed here — same registry, same

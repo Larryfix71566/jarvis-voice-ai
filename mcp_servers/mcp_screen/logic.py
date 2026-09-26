@@ -277,7 +277,7 @@ def _resolve_vision_profile(registry: dict[str, Any] | None = None) -> dict[str,
         if prof is None or not prof.get("vision"):
             raise NoVisionProfileError(
                 f"{VISION_PROFILE_ENV}={requested!r} is not a known "
-                "vision-capable profile in config/upgrade_models.yaml."
+                "vision-capable profile in config/model_profiles.yaml."
             )
         key_env = prof.get("api_key_env", "OPENAI_API_KEY")
         if not os.environ.get(key_env):
@@ -296,8 +296,8 @@ def _resolve_vision_profile(registry: dict[str, Any] | None = None) -> dict[str,
 
     raise NoVisionProfileError(
         "No vision-capable model profile has its API key set. Add "
-        "`vision: true` to a profile in config/upgrade_models.yaml with "
-        "a present api_key_env, or set JARVIS_VISION_PROFILE."
+        "`vision: true` to a profile in config/model_profiles.yaml whose "
+        "endpoint's key is set, or set JARVIS_VISION_PROFILE."
     )
 
 

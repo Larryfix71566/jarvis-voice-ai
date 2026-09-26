@@ -39,7 +39,7 @@ SUPERVISOR = "supervisor"
 REFUSE_RE = re.compile(r"""\b(?:I (?:can(?:no|')t|cannot|am unable to|'m unable to|am not able to|'m not able to|don't have (?:a tool|a way|access|the ability|any way)|do not have (?:a tool|a way|access)|have no (?:tool|way))|(?:that's|that is|it's) (?:outside|beyond) (?:what I|my)|isn't something I (?:can|have))""", re.I)
 HANDOFF_RE = re.compile(r"""\b(?:you(?:'ll| will)? need to (?:run|open|check|edit|drag|kill|create|copy|tell|do|scroll|merge|pull|share)|you'd need to|run (?:this|that|the) (?:curl )?command|run the curl|copy (?:its|the) output|copy it(?:,| and)|say \"?read my clipboard|in your terminal|manually)|\brun `""", re.I)
 ALLOWED_RE = re.compile(r"""isn't something I have a tool for yet""", re.I)
-LIMITATION_RE = re.compile(r"""(?:\bMISSING TOOL:|\bI (?:have no|don't have (?:a|any)|do not have (?:a|any))\b[^.\n]{0,40}?\b(?:tool|way|access)\b|\bno tool (?:that|to|for)\b|\bisn't available to me\b|\bI cannot (?:query|run|execute|reach|access)\b|\bcan't execute\b)""", re.I)
+LIMITATION_RE = re.compile(r"""(?:\bMISSING[- ]TOOL:|\bI (?:have no|don't have (?:a|any)|do not have (?:a|any))\b[^.\n]{0,40}?\b(?:tool|way|access)\b|\bno tool (?:that|to|for)\b|\bisn't available to me\b|\bI cannot (?:query|run|execute|reach|access)\b|\bcan't execute\b)""", re.I)
 CAPABILITY_QUESTION_RE = re.compile(
     r"\b(?:capabilit\w*|what can you do|what are you able to do)\b", re.I)
 # D-L5 (Larry, 2026-09-25): when Larry explicitly asks to be given a command,
@@ -65,7 +65,10 @@ SENTENCE_END_RE = re.compile(r"[.!?]\s")
 RESULT_KINDS = ("failed", "needs_input", "missing_tool", "limitation")
 REPLY_KINDS = ("refusal", "handoff")
 NEEDS_INPUT_MARKER = "NEEDS-INPUT:"   # == jarvis.agents.delegate.HANDOFF_MARKER
-MISSING_TOOL_MARKER = "MISSING TOOL:"
+MISSING_TOOL_MARKER = "MISSING-TOOL:"  # == jarvis.agents.delegate.MISSING_TOOL_MARKER
+# Either spelling counts: Phase 1 prompts first taught "MISSING TOOL:"; #86
+# (T1.2) settled on "MISSING-TOOL:", which is what delegate.py reads.
+MISSING_TOOL_RE = re.compile(r"\bMISSING[- ]TOOL:")
 
 GUIDANCE_PREFIX = "[system] "
 TOMBSTONE = "[system] (Guidance for an earlier request was here; it no longer applies.)"
@@ -78,7 +81,7 @@ CORRECTION_TEMPLATE = (
     "because it {phrase}: \"{sentence}\". Answer the same request again. "
     "If any specialist in your list covers it, delegate it now with "
     "delegate_task and deliver the result. If a specialist has already "
-    "reported MISSING TOOL for it, say in one sentence that it isn't "
+    "reported MISSING-TOOL for it, say in one sentence that it isn't "
     "something you have a tool for yet and offer to have it added. Do not "
     "ask Larry to run a command, copy output, or edit a file."
 )
@@ -131,7 +134,7 @@ def result_kinds(result: Any) -> list[str]:
         kinds.append("failed")
     if NEEDS_INPUT_MARKER in result:
         kinds.append("needs_input")
-    if MISSING_TOOL_MARKER in result:
+    if MISSING_TOOL_RE.search(result):
         kinds.append("missing_tool")
     if LIMITATION_RE.search(result):
         kinds.append("limitation")

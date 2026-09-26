@@ -89,6 +89,7 @@ from jarvis.council import config as council_config
 from jarvis.council import council as council_mod
 from jarvis.db import get_conn, now_iso, run_migrations
 from jarvis import graphs
+from jarvis import keyhealth
 from jarvis.graphs import config as gcfg, render
 from jarvis.prompts import (
     PLAN_AUTHOR_PROMPT,
@@ -341,6 +342,15 @@ if os.environ.get("JARVIS_REMINDER_NOTIFICATIONS_ENABLED", "").strip().lower() n
     "0", "false", "no", "off",
 ):
     _reminder_notifier.start()
+
+# Status spec T2.2 (fact 3.6): the sidecar answers /api/status/models, and
+# key health verdicts live in memory in the process that probed — so this
+# process probes too (once, on a daemon thread, never blocking startup).
+# Honors JARVIS_KEY_HEALTH_ENABLED inside keyhealth.
+keyhealth.start_background_probe()
+# Status spec T3.3: and re-probes its bad keys every 10 minutes, so a key
+# that was fixed stops reading as rejected (per-process singleton).
+keyhealth.start_refresh_loop()
 
 # Single-run gate: one upgrade job at a time, ever.
 _run_lock = threading.Lock()
@@ -1925,99 +1935,12 @@ def memory_overview() -> dict:
 @app.get("/api/knowledge")
 def knowledge_overview() -> dict:
     """K5 (MORTIMER_KNOWLEDGE_FRAMEWORK_PLAN.md) — the four layers, with
-    counts, in one read-only call.
+    counts, in one read-only call. The body lives in
+    jarvis/status/overview.py (status spec T2.3) so this endpoint and
+    system_overview() share one implementation (R8); response unchanged."""
+    from jarvis.status.overview import knowledge_overview as _knowledge
 
-    The specific thing this exists to prevent: on 2026-08-18 the store
-    held 180 facts and ~14 reached the Supervisor, and that was
-    discoverable ONLY by reading a `memory_context_facts_dropped` log
-    line. Truncation must be visible in the console, not archaeology.
-    `dropped` is computed by rendering the context and comparing — the
-    same code path the prompt uses, so the number cannot drift from
-    reality."""
-    run_migrations()
-    import logging as _logging
-
-    from jarvis.db import get_conn as _get_conn
-
-    tiers: dict[str, int] = {}
-    archived = 0
-    live = 0
-    try:
-        with _get_conn() as conn:
-            for tier, n in conn.execute(
-                "SELECT COALESCE(tier,'project'), COUNT(*) FROM memories "
-                "WHERE kind='fact' AND archived_at IS NULL GROUP BY 1"
-            ):
-                tiers[str(tier)] = int(n)
-            live = sum(tiers.values())
-            archived = conn.execute(
-                "SELECT COUNT(*) FROM memories WHERE kind='fact' "
-                "AND archived_at IS NOT NULL"
-            ).fetchone()[0]
-            procedures = {
-                str(st): int(n)
-                for st, n in conn.execute(
-                    "SELECT status, COUNT(*) FROM procedures GROUP BY 1"
-                )
-            }
-    except Exception:  # noqa: BLE001 — a panel must never break the sidecar
-        logger.exception("knowledge_overview_read_failed")
-        return {"ok": False, "error": "could not read the knowledge store"}
-
-    # How many facts actually reach the prompt right now.
-    _logging.disable(_logging.WARNING)
-    try:
-        rendered = memory_module.render_memory_context()
-    finally:
-        _logging.disable(_logging.NOTSET)
-    reaching = len([l for l in rendered.splitlines() if l.startswith("- ")])
-
-    try:
-        from jarvis.workflows import load_workflows
-
-        workflows = [
-            {"name": w.name, "source": w.source, "has_done_when": bool(w.done_when)}
-            for w in load_workflows()
-        ]
-    except Exception:  # noqa: BLE001
-        workflows = []
-
-    # K3 skills. Both numbers matter and they are deliberately separate:
-    # `on_disk` is what has been imported, `enabled` is what has been
-    # reviewed and is actually loaded. A large gap is the normal, safe
-    # state after importing a community pack — not a defect to fix.
-    try:
-        from jarvis.agent_skills import discover, enabled_names, load_skills
-
-        found = discover()
-        skills = {
-            "on_disk": len(found),
-            "invalid": len([1 for _, s, _ in found if s is None]),
-            "registered": len(enabled_names()),
-            "enabled": [
-                {"name": s.name, "has_scripts": s.has_scripts}
-                for s in load_skills()
-            ],
-        }
-    except Exception:  # noqa: BLE001
-        skills = {"on_disk": 0, "invalid": 0, "registered": 0, "enabled": []}
-
-    return {
-        "ok": True,
-        "memory": {
-            "live": live,
-            "archived": archived,
-            "tiers": tiers,
-            "reaching_prompt": reaching,
-            # The honest number: facts stored that the Supervisor never
-            # sees, because `system` is excluded and the rest are capped.
-            "not_reaching_prompt": max(0, live - reaching),
-            "context_chars": len(rendered),
-        },
-        "procedures": procedures,
-        "skills": skills,
-        "workflows": workflows,
-    }
+    return _knowledge()
 
 
 @app.get("/api/ambient")
@@ -2116,6 +2039,117 @@ def set_location(body: LocationBody) -> dict:
 
     set_device_location(body.lat, body.lon, body.label)
     return {"ok": True}
+
+
+# ---- Self-service status (status spec T2.4, L2) -------------------------
+#
+# Read-only status computed HERE, in the process that already holds the
+# vault's keys, the device location and the key-health verdicts. The voice
+# tool `system_status` and the `mcp-status` MCP server are thin HTTP
+# clients of these routes, so no secret enters an MCP child. Plain `def`
+# routes (FastAPI's threadpool): every one does blocking I/O. Each checks
+# the JARVIS_STATUS_TOOLS_ENABLED switch first (jarvis.status.status_enabled,
+# its one reader) and never returns a traceback.
+
+STATUS_DISABLED = {"ok": False, "error": "status tools are disabled"}
+
+
+def _status_call(topic: str, thunk) -> dict:
+    from jarvis.status import status_enabled
+
+    if not status_enabled():
+        return dict(STATUS_DISABLED)
+    try:
+        return thunk()
+    except Exception as exc:  # noqa: BLE001 — a status read must never 500
+        logger.warning("status_route_failed topic=%s error=%s",
+                       topic, type(exc).__name__)
+        return {"ok": False, "error": str(exc)}
+
+
+@app.get("/api/status/models")
+def status_models() -> dict:
+    from jarvis.status import models as _m
+
+    return _status_call("models", lambda: _m.model_access_status())
+
+
+@app.get("/api/status/services")
+def status_services() -> dict:
+    from jarvis.status import services as _s
+
+    return _status_call("services", lambda: _s.service_health())
+
+
+@app.get("/api/status/overview")
+def status_overview() -> dict:
+    from jarvis.status import overview as _o
+
+    return _status_call("overview", lambda: _o.system_overview())
+
+
+@app.get("/api/status/build")
+def status_build() -> dict:
+    from jarvis.status import build as _b
+
+    return _status_call("build", lambda: _b.app_build_status(REPO_ROOT))
+
+
+@app.get("/api/status/location")
+def status_location() -> dict:
+    from jarvis.status import location as _l
+
+    return _status_call("location", lambda: _l.current_location())
+
+
+@app.get("/api/status/logs")
+def status_logs(source: str = "", query: str = "", since_minutes: int = 60,
+                limit: int = 50) -> dict:
+    from jarvis.status import logs as _g
+
+    return _status_call("logs", lambda: _g.log_search(
+        source, query, since_minutes=since_minutes, limit=limit))
+
+
+@app.get("/api/status/catalog")
+def status_catalog(provider: str = "all", force: bool = False) -> dict:
+    """What each configured provider offers right now (status spec T4.1):
+    live `/models` reads with the vault's keys, cached an hour unless
+    `force`. Leaves the machine, so the voice tool refuses it on a
+    protected turn (I3)."""
+    from jarvis.status import catalog as _c
+
+    return _status_call("catalog", lambda: _c.catalog_status(provider, force=force))
+
+
+class SubscriptionProbeBody(BaseModel):
+    which: str
+    model: str | None = None
+    force: bool = False
+
+
+@app.post("/api/status/subscription/probe")
+def status_subscription_probe(body: SubscriptionProbeBody) -> dict:
+    """Try one exact model on the Claude or Codex subscription CLI (status
+    spec T4.2). The one status route that spends anything — a little
+    subscription quota — so it is rate-limited per (which, model) for 10
+    minutes unless `force` (I2)."""
+    from jarvis.status import subscriptions as _su
+
+    return _status_call("subscription", lambda: _su.subscription_status(
+        body.which, body.model, force=body.force))
+
+
+@app.get("/api/status/github")
+def status_github(kind: str = "prs", state: str = "open", limit: int = 10,
+                  number: int | None = None) -> dict:
+    """Pull requests and their checks on Mortimer's own repository (status
+    spec T4.3). GET-only reads through mcp_apps' GitHubClient; the token
+    stays in this process."""
+    from jarvis.status import github as _gh
+
+    return _status_call("github", lambda: _gh.github_status(
+        kind, state=state, limit=limit, number=number))
 
 
 @app.post("/api/clipboard/clear")

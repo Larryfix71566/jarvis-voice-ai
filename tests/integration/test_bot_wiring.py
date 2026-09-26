@@ -9,6 +9,8 @@ Constructs the pipeline with mocked transport/STT/LLM and asserts:
 """
 
 import asyncio
+import logging
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -297,7 +299,8 @@ def test_six_functions_registered(runtime, fakes):
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
         "clear_clipboard", "cost_summary", "delegate_task", "list_screens", "read_clipboard",
-        "remember", "set_voice", "show_commands", "ui_control", "view_screen",
+        "remember", "set_voice", "show_commands", "system_status", "ui_control",
+        "view_screen",
     ]
     assert llm.kwargs == {"api_key": "sk", "base_url": "http://llm", "model": "m"}
 
@@ -310,8 +313,32 @@ def test_ui_control_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
         "clear_clipboard", "cost_summary", "delegate_task", "list_screens", "read_clipboard",
-        "remember", "set_voice", "show_commands", "view_screen",
+        "remember", "set_voice", "show_commands", "system_status", "view_screen",
     ]
+
+
+def test_status_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
+    """Status spec T2.5 / R9: JARVIS_STATUS_TOOLS_ENABLED=false removes
+    system_status from the registered functions, the schema list and the
+    prompt addendum — off means absent."""
+    from jarvis.prompts import STATUS_ADDENDUM
+
+    monkeypatch.setenv("JARVIS_STATUS_TOOLS_ENABLED", "false")
+    _, llm, aggregators, _ = build_pipeline(FakeTransport(), runtime)
+    assert sorted(llm.functions) == [
+        "clear_clipboard", "cost_summary", "delegate_task", "list_screens", "read_clipboard",
+        "remember", "set_voice", "show_commands", "ui_control", "view_screen",
+    ]
+    assert STATUS_ADDENDUM not in _system_prompt_of(aggregators)
+
+
+def test_status_tool_ships_with_its_addendum(runtime, fakes, monkeypatch):
+    from jarvis.prompts import STATUS_ADDENDUM
+
+    monkeypatch.delenv("JARVIS_STATUS_TOOLS_ENABLED", raising=False)
+    _, llm, aggregators, _ = build_pipeline(FakeTransport(), runtime)
+    assert "system_status" in llm.functions
+    assert STATUS_ADDENDUM in _system_prompt_of(aggregators)
 
 
 def test_screen_vision_kill_switch_unregisters_tools(runtime, fakes, monkeypatch):
@@ -321,7 +348,7 @@ def test_screen_vision_kill_switch_unregisters_tools(runtime, fakes, monkeypatch
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
         "clear_clipboard", "cost_summary", "delegate_task", "read_clipboard", "remember",
-        "set_voice", "show_commands", "ui_control",
+        "set_voice", "show_commands", "system_status", "ui_control",
     ]
 
 
@@ -640,7 +667,7 @@ class HandlerCapturingTransport(FakeTransport):
         return deco
 
 
-async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_path):
+async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_path, caplog):
     """Regression: a client disconnect must end the PipelineTask.
 
     `run_session` blocks on `await runner.run(task)` and does its cleanup in the
@@ -744,6 +771,8 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
     monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
     monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
     monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    # T3.1: the per-session registry, so registry_stopped stays meaningful.
+    monkeypatch.setenv("JARVIS_REGISTRY_SHARED_ENABLED", "false")
     monkeypatch.setattr(
         bp, "load_voice_catalog",
         lambda: {"default": "rachel",
@@ -774,11 +803,19 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
         await transport.handlers["on_client_disconnected"](transport, None)
 
     # Without `await task.cancel()` in the handler this never returns.
+    caplog.set_level(logging.INFO, logger=bp.__name__)
     await asyncio.wait_for(
         asyncio.gather(bp.run_session(transport), fire_disconnect()), timeout=10
     )
 
     assert cancelled == [True], "disconnect handler must cancel the PipelineTask"
+    # Status spec P7: one session_disconnect line; WebSocket case, no code.
+    lines = [r.getMessage() for r in caplog.records
+             if r.getMessage().startswith("session_disconnect ")]
+    assert len(lines) == 1, lines
+    assert re.fullmatch(r"session_disconnect session=[0-9a-f-]{36} "
+                        r"duration_s=\d+\.\d transport=ws close_code=unknown",
+                        lines[0]), lines[0]
     assert folded, "memory fold-in did not run for the disconnected session"
     assert watcher_stopped, "RemindersWatcher was not stopped (leaks per connection)"
     assert memory_watcher_stopped, "MemorySweepWatcher was not stopped (leaks per connection)"
@@ -895,6 +932,8 @@ async def test_keyhealth_notice_kill_switch(monkeypatch, tmp_path, env_value, ex
     monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
     monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
     monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    # T3.1: the per-session registry, so registry_stopped stays meaningful.
+    monkeypatch.setenv("JARVIS_REGISTRY_SHARED_ENABLED", "false")
     monkeypatch.setattr(
         bp, "load_voice_catalog",
         lambda: {"default": "rachel",
@@ -1017,6 +1056,8 @@ async def test_stt_row_written_at_teardown(monkeypatch, tmp_path):
     monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
     monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
     monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    # T3.1: the per-session registry, so registry_stopped stays meaningful.
+    monkeypatch.setenv("JARVIS_REGISTRY_SHARED_ENABLED", "false")
     monkeypatch.setattr(
         bp, "load_voice_catalog",
         lambda: {"default": "rachel",
@@ -1063,6 +1104,138 @@ async def test_stt_row_written_at_teardown(monkeypatch, tmp_path):
     assert row["session_id"]
     # No token kwargs on a voice row.
     assert "input_tokens" not in row
+
+
+@pytest.mark.asyncio
+async def test_shared_registry_survives_session_teardown(monkeypatch, tmp_path):
+    """Status spec T3.1 (L11): with JARVIS_REGISTRY_SHARED_ENABLED on (the
+    default), two sessions in a row share ONE registry — started by the
+    first, reused by the second, stopped by neither. Built through the
+    factory, so bp.SkillRegistry is still what gets constructed."""
+    from jarvis.skills import shared
+
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "session.db"))
+    monkeypatch.delenv("JARVIS_REGISTRY_SHARED_ENABLED", raising=False)
+    settings = SimpleNamespace(
+        deepgram_api_key="dg", openai_api_key="sk", openai_base_url="http://llm",
+        openai_model="m", elevenlabs_api_key="el", jarvis_name="Jarvis",
+        jarvis_user_name="Boss", jarvis_timezone="America/New_York",
+        jarvis_units="imperial",
+        jarvis_interruption_notice_enabled=True,
+        jarvis_late_result_neutralize_enabled=True,
+        jarvis_memory_sweep_interval_s=300.0,
+    )
+    constructed, started, stopped, seen = [], [], [], []
+
+    class FakeTask:
+        def __init__(self, pipeline, observers=None, params=None):
+            self._ended = asyncio.Event()
+
+        async def cancel(self):
+            self._ended.set()
+
+        async def wait_ended(self):
+            await self._ended.wait()
+
+        def event_handler(self, name):
+            # Real PipelineTask API (pipecat BaseObject.event_handler):
+            # run_session registers on_pipeline_started for the greeting.
+            def register(fn):
+                self.__dict__.setdefault("handlers", {})[name] = fn
+                return fn
+            return register
+
+    class FakeRunner:
+        async def run(self, task):
+            await task.wait_ended()
+
+    class FakeQuiet:
+        def __init__(self, *a, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        async def stop(self):
+            pass
+
+    class FakeRegistry:
+        def __init__(self, *a, **kw):
+            constructed.append(self)
+
+        async def start(self):
+            started.append(self)
+
+        async def stop(self):
+            stopped.append(self)
+
+    class FakeAggregators:
+        def user(self):
+            return SimpleNamespace()
+
+        def assistant(self):
+            return SimpleNamespace()
+
+    class FakePusher:
+        def bind(self, task):
+            pass
+
+    async def fake_fold(settings_arg, session_id, **kwargs):
+        return True
+
+    async def fake_digest(settings_arg, session_id):
+        return False
+
+    def fake_build_pipeline(transport, runtime):
+        seen.append(runtime.registry)
+        return FakePipeline([]), FakeLLM("k", "u", "m"), FakeAggregators(), FakePusher()
+
+    monkeypatch.setattr(bp, "load_settings", lambda: settings)
+    monkeypatch.setattr(bp, "bridge_settings_to_env", lambda s: None)
+    monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    monkeypatch.setattr(
+        bp, "load_voice_catalog",
+        lambda: {"default": "rachel",
+                 "voices": [{"id": "rachel", "label": "Rachel",
+                             "elevenlabs_voice_id": "vid"}]},
+    )
+    monkeypatch.setattr(bp, "build_pipeline", fake_build_pipeline)
+    monkeypatch.setattr(bp, "PipelineTask", FakeTask)
+    monkeypatch.setattr(bp, "PipelineRunner", FakeRunner)
+    monkeypatch.setattr(bp, "RemindersWatcher", FakeQuiet)
+    monkeypatch.setattr(bp, "MemorySweepWatcher", FakeQuiet)
+    monkeypatch.setattr(bp, "update_memory_from_session", fake_fold)
+    monkeypatch.setattr(bp, "write_session_digest", fake_digest)
+    monkeypatch.setattr(bp, "record_call", lambda **kw: None)
+
+    async def one_session():
+        transport = HandlerCapturingTransport()
+
+        async def fire_disconnect():
+            for _ in range(500):
+                if "on_client_disconnected" in transport.handlers:
+                    break
+                await asyncio.sleep(0.01)
+            else:
+                raise AssertionError("on_client_disconnected was never registered")
+            await transport.handlers["on_client_disconnected"](transport, None)
+
+        await asyncio.wait_for(
+            asyncio.gather(bp.run_session(transport), fire_disconnect()), timeout=10
+        )
+
+    shared._reset_for_tests()
+    try:
+        await one_session()
+        await one_session()
+        assert len(constructed) == 1, "one registry per process"
+        assert len(started) == 1, "started by the first session only"
+        assert stopped == [], "session teardown never stops the shared registry"
+        assert seen == [constructed[0], constructed[0]]
+    finally:
+        shared._reset_for_tests()
 
 
 @pytest.mark.asyncio
@@ -1162,6 +1335,8 @@ async def test_late_result_hook_arms_the_neutralizer(monkeypatch, tmp_path, flag
     monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
     monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
     monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    # T3.1: the per-session registry, so registry_stopped stays meaningful.
+    monkeypatch.setenv("JARVIS_REGISTRY_SHARED_ENABLED", "false")
     monkeypatch.setattr(
         bp, "load_voice_catalog",
         lambda: {"default": "rachel",
@@ -1206,3 +1381,174 @@ async def test_late_result_hook_arms_the_neutralizer(monkeypatch, tmp_path, flag
         # Disabled: the note still reaches the aggregator (pre-plan behaviour
         # exactly), and nothing is held to rewrite.
         assert neutralizers[0].pending_count == 0
+
+
+@pytest.mark.asyncio
+async def test_notices_ride_the_greeting_and_a_dead_session_refuses_late_results(
+        monkeypatch, tmp_path):
+    """Status spec T3.2 (L12), the pipeline half. A pending notice is spoken
+    after the greeting, once (take_pending marks it delivered). While the
+    session is alive inject_late_result appends and returns True; from the
+    first statement of teardown it returns False WITHOUT touching the
+    pipeline, which is what sends a late result to the outbox."""
+    from jarvis import notices
+    from jarvis.db import get_conn, run_migrations
+
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "session.db"))
+    monkeypatch.delenv("JARVIS_NOTICES_ENABLED", raising=False)
+    run_migrations()
+    notices.add_notice("late_result", "Developer", "The repo audit finished: 3 findings.")
+    settings = SimpleNamespace(
+        deepgram_api_key="dg", openai_api_key="sk", openai_base_url="http://llm",
+        openai_model="m", elevenlabs_api_key="el", jarvis_name="Jarvis",
+        jarvis_user_name="Boss", jarvis_timezone="America/New_York",
+        jarvis_units="imperial",
+        jarvis_interruption_notice_enabled=True,
+        jarvis_late_result_neutralize_enabled=True,
+        jarvis_memory_sweep_interval_s=300.0,
+    )
+    captured: dict = {}
+    alive_at_cancel: list[bool] = []
+    notices._reset_live_session_for_tests()
+
+    class FakeTask:
+        def __init__(self, pipeline, observers=None, params=None):
+            self._ended = asyncio.Event()
+            self.handlers: dict = {}
+            captured["task"] = self
+
+        async def cancel(self):
+            alive_at_cancel.append(captured["runtime"].alive)
+            self._ended.set()
+
+        async def wait_ended(self):
+            await self._ended.wait()
+
+        def event_handler(self, name):
+            # Real PipelineTask API (pipecat BaseObject.event_handler):
+            # run_session registers on_pipeline_started for the greeting.
+            def register(fn):
+                self.handlers[name] = fn
+                return fn
+            return register
+
+    class FakeRunner:
+        async def run(self, task):
+            await task.wait_ended()
+
+    class FakeQuiet:
+        def __init__(self, *a, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        async def stop(self):
+            pass
+
+    class FakeRegistry(FakeQuiet):
+        async def start(self):
+            pass
+
+    class FakeUserAggregator:
+        def __init__(self):
+            self.messages: list[dict] = []
+            self.pushes = 0
+
+        def add_messages(self, messages):
+            self.messages.extend(messages)
+
+        async def push_context_frame(self, *a, **kw):
+            self.pushes += 1
+
+    user_agg = FakeUserAggregator()
+
+    class FakeAggregators:
+        def user(self):
+            return user_agg
+
+        def assistant(self):
+            return SimpleNamespace()
+
+    class FakePusher:
+        def bind(self, task):
+            pass
+
+    async def fake_fold(settings_arg, session_id, **kwargs):
+        return True
+
+    async def fake_digest(settings_arg, session_id):
+        return False
+
+    def fake_build_pipeline(transport, runtime):
+        captured["runtime"] = runtime
+        return FakePipeline([]), FakeLLM("k", "u", "m"), FakeAggregators(), FakePusher()
+
+    monkeypatch.setattr(bp, "load_settings", lambda: settings)
+    monkeypatch.setattr(bp, "bridge_settings_to_env", lambda s: None)
+    monkeypatch.setattr(bp, "run_migrations", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "setup_logging", lambda *a, **kw: None)
+    monkeypatch.setattr(bp, "SkillRegistry", FakeRegistry)
+    monkeypatch.setenv("JARVIS_REGISTRY_SHARED_ENABLED", "false")
+    monkeypatch.setattr(
+        bp, "load_voice_catalog",
+        lambda: {"default": "rachel",
+                 "voices": [{"id": "rachel", "label": "Rachel",
+                             "elevenlabs_voice_id": "vid"}]},
+    )
+    monkeypatch.setattr(bp, "build_pipeline", fake_build_pipeline)
+    monkeypatch.setattr(bp, "PipelineTask", FakeTask)
+    monkeypatch.setattr(bp, "PipelineRunner", FakeRunner)
+    monkeypatch.setattr(bp, "RemindersWatcher", FakeQuiet)
+    monkeypatch.setattr(bp, "MemorySweepWatcher", FakeQuiet)
+    monkeypatch.setattr(bp, "update_memory_from_session", fake_fold)
+    monkeypatch.setattr(bp, "write_session_digest", fake_digest)
+    monkeypatch.setattr(bp, "record_call", lambda **kw: None)
+
+    transport = HandlerCapturingTransport()
+    outcomes: list[bool] = []
+
+    async def drive():
+        for _ in range(500):
+            if "on_client_connected" in transport.handlers and "runtime" in captured:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            raise AssertionError("run_session never installed its handlers")
+        # The greeting waits for the pipeline to start as well as the client
+        # (jarvis/bot/connect_greeting.py, main); a real PipelineTask fires this.
+        await captured["task"].handlers["on_pipeline_started"](captured["task"], None)
+        await transport.handlers["on_client_connected"](transport, None)
+        # Review finding 5(b): the connected session is the process's live
+        # late-delivery target until it disconnects.
+        live_hooks.append(notices.live_session_hook())
+        outcomes.append(await captured["runtime"].late_delivery["fn"]("while alive"))
+        await transport.handlers["on_client_disconnected"](transport, None)
+        live_hooks.append(notices.live_session_hook())
+
+    live_hooks: list = []
+    await asyncio.wait_for(asyncio.gather(bp.run_session(transport), drive()), timeout=10)
+    # Review finding 5(a): not alive from the top of on_client_disconnected,
+    # before the pipeline is cancelled (not only from the teardown finally).
+    assert alive_at_cancel == [False]
+    assert live_hooks[0] is captured["runtime"].late_delivery["fn"]
+    assert live_hooks[1] is None
+
+    greeting = user_agg.messages[0]["content"]
+    assert greeting.endswith(
+        " While they were away: The repo audit finished: 3 findings. Mention "
+        "these in one or two short sentences after greeting.")
+    assert outcomes == [True]
+    assert user_agg.messages[-1] == {"role": "user", "content": "while alive"}
+
+    runtime = captured["runtime"]
+    assert runtime.alive is False
+    before = (list(user_agg.messages), user_agg.pushes)
+    assert await runtime.late_delivery["fn"]("after teardown") is False
+    assert (user_agg.messages, user_agg.pushes) == before, "the dead pipeline was not touched"
+
+    # Delivered once: a second connect finds nothing pending.
+    assert notices.take_pending() == []
+    with get_conn() as conn:
+        row = conn.execute("SELECT delivered_at FROM notices").fetchone()
+    assert row["delivered_at"]

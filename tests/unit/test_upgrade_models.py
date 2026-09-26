@@ -1,4 +1,6 @@
-"""Unit tests for the upgrade planner model registry (config/upgrade_models.yaml)."""
+"""Unit tests for the upgrade planner model registry (config/model_profiles.yaml
+joined with config/model_endpoints.yaml; these fixtures use the legacy
+single-file shape, which the loader still accepts)."""
 
 from __future__ import annotations
 

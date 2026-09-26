@@ -380,7 +380,7 @@ def native_base_url(base_url: str | None) -> str | None:
     `/v1/messages` (verified against the installed anthropic==0.125.0's
     `_base_client._prepare_url` -- string concatenation, not `urljoin`
     replacement). Every `base_url` this repo actually configures already
-    ends in `/v1/` (the OpenAI-compat convention -- `config/upgrade_models
+    ends in `/v1/` (the OpenAI-compat convention -- `config/model_endpoints
     .yaml`, `.env`'s `OPENAI_BASE_URL`) -- forwarding that unchanged would
     concatenate to `/v1/v1/messages` and 404 every request. Stripping the
     suffix here, once, is what lets the shim accept the exact same

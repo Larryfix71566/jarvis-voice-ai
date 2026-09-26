@@ -454,7 +454,7 @@ async def _gather_proposals(
     Returned proposals carry `label=""`; `_convene_inner` is the single
     site that assigns real labels, after a deterministic per-round
     shuffle (so registry order — knowable to anyone who reads
-    config/upgrade_models.yaml — never leaks into label order) and after
+    config/model_profiles.yaml — never leaks into label order) and after
     any V1 carried proposal has been appended.
 
     V9 — the return type's second element is

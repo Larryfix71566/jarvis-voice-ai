@@ -1,0 +1,41 @@
+{
+  "_generated": "GENERATED - do not hand-edit; a pull request that changes this file by hand is a mistake. Upstream facts for one endpoint, joined to config/model_profiles.yaml by identity (docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md section 4a). Seeded from the pre-split registry by scripts/split_model_registry.py (fetched_at null, source seeded) so the sync job's first run reads as a diff.",
+  "schema": 1,
+  "endpoint": "anthropic",
+  "provider": "anthropic",
+  "models": [
+    {
+      "identity": "anthropic/claude-fable-5",
+      "model": "claude-fable-5",
+      "context_window": null,
+      "input_price_per_mtok": null,
+      "output_price_per_mtok": null,
+      "input_modalities": null,
+      "deprecation": null,
+      "fetched_at": null,
+      "source": "seeded"
+    },
+    {
+      "identity": "anthropic/claude-opus-5",
+      "model": "claude-opus-5",
+      "context_window": null,
+      "input_price_per_mtok": null,
+      "output_price_per_mtok": null,
+      "input_modalities": null,
+      "deprecation": null,
+      "fetched_at": null,
+      "source": "seeded"
+    },
+    {
+      "identity": "anthropic/claude-sonnet-5",
+      "model": "claude-sonnet-5",
+      "context_window": null,
+      "input_price_per_mtok": null,
+      "output_price_per_mtok": null,
+      "input_modalities": null,
+      "deprecation": null,
+      "fetched_at": null,
+      "source": "seeded"
+    }
+  ]
+}

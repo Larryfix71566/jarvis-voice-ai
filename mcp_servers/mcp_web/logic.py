@@ -594,3 +594,203 @@ def research_save(client, path: str | None = None, confirm: bool = False) -> dic
         f"Saved the comparison at {resp.get('path')} in the sandbox. "
         "Use selfedit_finish to verify it and prepare a draft PR; it is not published yet."
     )}
+
+
+# ------------------------------------------------------------- sports scores
+# Status spec P6 (L7). Two UNOFFICIAL, undocumented public endpoints, accepted
+# by Larry 2026-09-23 and verified that day from his browser (Step 0; the
+# captured, trimmed responses are tests/fixtures/sports/*.json):
+#   MLB: statsapi.mlb.com schedule -> dates[].games[]; state field
+#        status.abstractGameState (Preview | Live | Final); a scheduled game
+#        has no teams.*.score key; gameDate is UTC ("...Z").
+#   NFL: ESPN site/v2 scoreboard -> events[]; state field status.type.state
+#        (pre | in | post); competitor score is a STRING and a scheduled game
+#        carries "0", which is reported as None, never as a 0-0 score.
+#        "in" was NOT observed live (no game in progress at capture time).
+# A state this code does not recognise is reported with the source's own
+# description, never mapped to a guess: "final" in particular is claimed only
+# when the source says the game is over AND gives a score (ESPN: completed).
+
+MLB_SCHEDULE_URL = "https://statsapi.mlb.com/api/v1/schedule"
+ESPN_NFL_SCOREBOARD_URL = (
+    "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+)
+SPORTS_LEAGUES = ("nfl", "mlb")
+
+MLB_STATE_MAP = {"Preview": "scheduled", "Live": "in_progress", "Final": "final"}
+ESPN_STATE_MAP = {"pre": "scheduled", "in": "in_progress", "post": "final"}
+
+
+def _sports_get_json(url: str, params: dict):
+    resp = httpx.get(url, params=params, timeout=TIMEOUT)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _sports_tz():
+    """JARVIS_TIMEZONE (a BASE_ENV_KEYS variable, so it reaches this child),
+    or UTC when it is unset, an unresolved "${...}" literal, or not a zone —
+    the same defence mcp_reminders' _tz() applies. Never raises."""
+    from zoneinfo import ZoneInfo
+
+    value = os.environ.get("JARVIS_TIMEZONE", "").strip()
+    if value and "${" not in value:
+        try:
+            return ZoneInfo(value)
+        except Exception:  # noqa: BLE001 — a bad zone must not kill the tool
+            pass
+    return ZoneInfo("UTC")
+
+
+def _start_local(utc_text, tz) -> str | None:
+    """ISO start time in the configured zone, minute precision. Accepts both
+    MLB's "2026-09-20T17:10:00Z" and ESPN's "2026-09-20T17:00Z"."""
+    from datetime import datetime, timezone
+
+    if not isinstance(utc_text, str) or not utc_text.strip():
+        return None
+    text = utc_text.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(tz).isoformat(timespec="minutes")
+
+
+def _int_or_none(value):
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+        return int(value.strip())
+    return None
+
+
+def mlb_status(status: dict, has_scores: bool) -> str:
+    """Map an MLB game's status block. Unknown abstract states, and a "Final"
+    with no score (e.g. a postponement, not observed in Step 0), keep the
+    source's own words rather than being guessed."""
+    status = status or {}
+    abstract = status.get("abstractGameState")
+    mapped = MLB_STATE_MAP.get(abstract)
+    described = status.get("detailedState") or abstract or "unknown"
+    if mapped is None or (mapped == "final" and not has_scores):
+        return described
+    return mapped
+
+
+def espn_status(status_type: dict) -> str:
+    """Map an ESPN event's status.type. "post" counts as final only when the
+    source also says completed; anything unrecognised keeps its description."""
+    status_type = status_type or {}
+    mapped = ESPN_STATE_MAP.get(status_type.get("state"))
+    described = (status_type.get("description") or status_type.get("name")
+                 or status_type.get("state") or "unknown")
+    if mapped is None or (mapped == "final" and status_type.get("completed") is not True):
+        return described
+    return mapped
+
+
+def parse_mlb_schedule(payload: dict, tz) -> list[dict]:
+    games = []
+    for day in (payload or {}).get("dates") or []:
+        for game in day.get("games") or []:
+            teams = game.get("teams") or {}
+            away, home = teams.get("away") or {}, teams.get("home") or {}
+            away_score = _int_or_none(away.get("score"))
+            home_score = _int_or_none(home.get("score"))
+            status = mlb_status(game.get("status") or {},
+                                away_score is not None and home_score is not None)
+            if status == "scheduled":
+                away_score = home_score = None
+            games.append({
+                "away": (away.get("team") or {}).get("name") or "",
+                "home": (home.get("team") or {}).get("name") or "",
+                "away_score": away_score,
+                "home_score": home_score,
+                "status": status,
+                "start_local": _start_local(game.get("gameDate"), tz),
+            })
+    return games
+
+
+def parse_espn_scoreboard(payload: dict, tz) -> list[dict]:
+    games = []
+    for event in (payload or {}).get("events") or []:
+        comps = event.get("competitions") or [{}]
+        sides = {c.get("homeAway"): c for c in (comps[0].get("competitors") or [])}
+        away, home = sides.get("away") or {}, sides.get("home") or {}
+        status = espn_status((event.get("status") or {}).get("type") or {})
+        if status == "scheduled":
+            # A scheduled ESPN game carries score "0": no score, not 0-0.
+            away_score = home_score = None
+        else:
+            away_score = _int_or_none(away.get("score"))
+            home_score = _int_or_none(home.get("score"))
+        games.append({
+            "away": (away.get("team") or {}).get("displayName") or "",
+            "home": (home.get("team") or {}).get("displayName") or "",
+            "away_score": away_score,
+            "home_score": home_score,
+            "status": status,
+            "start_local": _start_local(event.get("date") or comps[0].get("date"), tz),
+        })
+    return games
+
+
+def sports_scores(league: str, date: str = "", fetch=None, now=None) -> dict:
+    """Scores or schedule for one league on one day (spec P6).
+
+    LEAGUE is "nfl" or "mlb"; DATE is YYYY-MM-DD in JARVIS_TIMEZONE, empty
+    for today. FETCH(url, params) -> parsed JSON is the injected HTTP getter
+    (tests pass fixtures; the server uses httpx); NOW is an injectable
+    aware datetime for "today". Never raises."""
+    from datetime import datetime, timezone
+
+    league = (league or "").strip().lower()
+    if league not in SPORTS_LEAGUES:
+        return {"ok": False, "error": f"no structured source for {league or '(none)'}"}
+    tz = _sports_tz()
+    date = (date or "").strip()
+    if date:
+        try:
+            day = datetime.strptime(date, "%Y-%m-%d").date()
+        except ValueError:
+            return {"ok": False, "error": "date must be YYYY-MM-DD"}
+    else:
+        day = (now or datetime.now(timezone.utc)).astimezone(tz).date()
+    fetch = fetch or _sports_get_json
+
+    if league == "mlb":
+        source, url = "statsapi.mlb.com", MLB_SCHEDULE_URL
+        params = {"sportId": 1, "date": day.isoformat(), "hydrate": "linescore"}
+        parse = parse_mlb_schedule
+    else:
+        source, url = "site.api.espn.com", ESPN_NFL_SCOREBOARD_URL
+        params = {"dates": day.strftime("%Y%m%d")}
+        parse = parse_espn_scoreboard
+
+    try:
+        payload = fetch(url, params)
+    except httpx.HTTPStatusError as exc:
+        return {"ok": False, "error": f"{source} failed (HTTP {exc.response.status_code})."}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"{source} failed: {type(exc).__name__}."}
+    try:
+        games = parse(payload, tz)
+    except Exception as exc:  # noqa: BLE001 — shape drift on an unofficial API
+        return {"ok": False,
+                "error": f"{source} returned an unexpected shape ({type(exc).__name__})."}
+    return {
+        "ok": True,
+        "league": league,
+        "date": day.isoformat(),
+        "source": source,
+        "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "games": games,
+    }

@@ -1,0 +1,30 @@
+{
+  "_generated": "GENERATED - do not hand-edit; a pull request that changes this file by hand is a mistake. Upstream facts for one endpoint, joined to config/model_profiles.yaml by identity (docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md section 4a). Seeded from the pre-split registry by scripts/split_model_registry.py (fetched_at null, source seeded) so the sync job's first run reads as a diff.",
+  "schema": 1,
+  "endpoint": "moonshot",
+  "provider": "moonshot",
+  "models": [
+    {
+      "identity": "moonshotai/kimi-k2.7-code",
+      "model": "kimi-k2.7-code",
+      "context_window": null,
+      "input_price_per_mtok": null,
+      "output_price_per_mtok": null,
+      "input_modalities": null,
+      "deprecation": null,
+      "fetched_at": null,
+      "source": "seeded"
+    },
+    {
+      "identity": "moonshotai/kimi-k3",
+      "model": "kimi-k3",
+      "context_window": null,
+      "input_price_per_mtok": null,
+      "output_price_per_mtok": null,
+      "input_modalities": null,
+      "deprecation": null,
+      "fetched_at": null,
+      "source": "seeded"
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import pytest
 from jarvis.prompts import (
     HANDOFF_ADDENDUM,
     SCREEN_VISION_ADDENDUM,
+    STATUS_ADDENDUM,
     SUBAGENT_PROMPTS,
     SUPERVISOR_PROMPT,
     UI_CONTROL_ADDENDUM,
@@ -264,18 +265,22 @@ class TestAgentDiscipline:
 
         assert "size of the error does not fit your explanation" in R
 
-    def test_handoff_survived_and_still_names_the_marker(self):
-        """H2.1 — delegate.py reads this marker from the agent's OWN reply
-        to authorise a budget-resetting continuation. Changing the string
-        here breaks that; this pins the pair."""
-        from jarvis.agents.delegate import HANDOFF_MARKER
+    def test_missing_tool_replaces_the_command_handoff(self):
+        """T1.2 (2026-09-22) — a sub-agent without a tool names the gap
+        (MISSING-TOOL:) instead of handing the user a command; NEEDS-INPUT:
+        stays for choices only the user can make. delegate.py reads both
+        markers from the agent's OWN reply, so this pins the pairs."""
+        from jarvis.agents.delegate import HANDOFF_MARKER, MISSING_TOOL_MARKER
         from jarvis.prompts import AGENT_DISCIPLINE as R
 
         assert HANDOFF_MARKER in R
-        # MORTIMER_VOICE_WORKFLOWS_PLAN.md D11 — a missing tool is named,
-        # not handed to Larry as a command.
-        assert "MISSING TOOL:" in R
-        assert "only for a step only Larry can do" in R
+        assert MISSING_TOOL_MARKER in R
+        assert 'do not stop at "I cannot"' in R
+        assert "never a user command" in R
+        assert "exact command" not in R
+        # MORTIMER_VOICE_WORKFLOWS_PLAN.md D11 — NEEDS-INPUT also covers a
+        # step only Larry can do (the show_commands gate keys on it).
+        assert "NEEDS-INPUT: only for what only Larry can do" in R
 
     def test_search_discipline_survived(self):
         """H2.3 — run b74ed019 had every file it needed by round 8 and
@@ -318,6 +323,14 @@ class TestHandoffAddendum:
         assert "continuation" in HANDOFF_ADDENDUM
         assert "not a retry" in HANDOFF_ADDENDUM
 
+    def test_addendum_forbids_commands_by_default(self):
+        """T1.3 (Larry, 2026-09-22): assume the user is not technical."""
+        from jarvis.prompts import HANDOFF_ADDENDUM
+
+        assert "assume he does not use a terminal" in HANDOFF_ADDENDUM
+        assert "only when he explicitly asks" in HANDOFF_ADDENDUM
+        assert "MISSING-TOOL" in HANDOFF_ADDENDUM
+
 
 class TestDeveloperSections:
     """MORTIMER_DEVELOPER_SECTIONS_AND_VISUAL_VERIFY_PLAN.md Part A.
@@ -352,6 +365,26 @@ class TestDeveloperSections:
         for name, text in DEVELOPER_SECTIONS.items():
             assert "two-phase" in text or "plan_start" in text, name
             assert text.strip() == text
+
+    def test_self_development_offers_plan_on_core_refusal(self):
+        """Status spec T4.8: a core-tier refusal becomes an offer to write
+        the plan, then a restart with its plan_path — not a dead end."""
+        from jarvis.prompts import DEVELOPER_SECTIONS
+        text = DEVELOPER_SECTIONS["self_development"]
+        sentence = ("If selfedit_start refuses because a core file needs a plan, offer to "
+                    "write one with plan_start for the same goal, and after the user adopts "
+                    "it, start again with that plan_path.")
+        assert text.endswith(sentence)
+        assert text.count(sentence) == 1
+
+    def test_an_offline_sidecar_is_reported_without_a_command(self):
+        """Review finding 8 (L1): the user never gets a terminal command —
+        the section used to say to suggest ./scripts/mortimer.sh."""
+        from jarvis.prompts import DEVELOPER_SECTIONS
+        text = DEVELOPER_SECTIONS["self_development"]
+        assert "scripts/" not in text and ".sh" not in text
+        assert "the admin sidecar is not running" in text
+        assert "never give the user a command" in text
 
     def test_a_self_edit_task_gets_the_self_development_section(self):
         from jarvis.prompts import select_developer_sections as sel
@@ -523,6 +556,7 @@ def test_the_default_production_call_matches_the_expression_it_replaced():
         ("ui_control", UI_CONTROL_ADDENDUM),
         ("screen", SCREEN_VISION_ADDENDUM),
         ("clipboard", HANDOFF_ADDENDUM),
+        ("status", STATUS_ADDENDUM),
     ],
 )
 def test_each_flag_appends_exactly_its_own_addendum(flag, addendum):
@@ -538,6 +572,27 @@ def test_a_disabled_addendum_leaves_no_trace_in_the_prompt():
     assert UI_CONTROL_ADDENDUM not in off
     assert SCREEN_VISION_ADDENDUM not in off
     assert HANDOFF_ADDENDUM not in off
+
+
+def test_status_addendum_follows_ui_control():
+    full = build_supervisor_prompt(
+        **_FMT, voice=True, ui_control=True, screen=True, clipboard=True, status=True
+    )
+    assert full.index(UI_CONTROL_ADDENDUM) < full.index(STATUS_ADDENDUM) < full.index(
+        SCREEN_VISION_ADDENDUM)
+    assert STATUS_ADDENDUM not in build_supervisor_prompt(
+        **_FMT, voice=True, ui_control=True, screen=True, clipboard=True)
+
+
+def test_status_addendum_is_the_spec_text():
+    assert STATUS_ADDENDUM == (
+        "Your own status: for questions about your models, what a provider or "
+        "subscription offers, your services, configuration, the Mac app build, or "
+        "where the user is, call system_status yourself — never delegate these and "
+        "never hand the user a command. The model registry lists what is configured, "
+        "not what an account offers: answer whether a model is available only from a "
+        "catalog or subscription result, and say which source and when."
+    )
 
 
 def test_addenda_keep_the_order_pipeline_py_used():
@@ -650,6 +705,11 @@ def test_the_missing_tool_case_is_still_reported_plainly():
     # named gap gets fixed; a worked-around gap stays broken forever.
     assert "MISSING TOOL" in SUPERVISOR_PROMPT
     assert "offer to have it added through self-development" in SUPERVISOR_PROMPT
+
+
+def test_rule_10_assumes_no_terminal():
+    # T1.3 — holds even when the clipboard switch removes HANDOFF_ADDENDUM.
+    assert "Assume the user does not use a terminal" in SUPERVISOR_PROMPT
 
 
 def test_rule_13_cites_golden_rule_1_not_the_numbered_rule_1():

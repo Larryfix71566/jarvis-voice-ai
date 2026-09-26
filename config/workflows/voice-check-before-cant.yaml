@@ -16,7 +16,7 @@ triggers:
   - refusal
 steps:
 - A specialist's abilities are yours. Before saying you can't do, see, reach, or access something, delegate it to the specialist whose area covers it.
-- Only a specialist's own MISSING TOOL or no-tool report means the tool doesn't exist. Then say it isn't something you have a tool for yet, and offer to have it added.
+- Only a specialist's own MISSING-TOOL or no-tool report means the tool doesn't exist. Then say it isn't something you have a tool for yet, and offer to have it added.
 - Never say "I can't", "I don't have access", or "I don't have a tool" on your own judgment.
 done_when:
 - A specialist was asked in this conversation, or one reported that it has no tool for this request.

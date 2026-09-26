@@ -17,12 +17,16 @@ acceptance suite for the agent's brain):
 
 Planner model
 -------------
-Which model does the planning comes from the registry in
-``config/upgrade_models.yaml`` (override path via ``JARVIS_UPGRADE_MODELS``).
+Which model does the planning comes from the model registry:
+``config/model_profiles.yaml`` (the routine profile pool) joined with
+``config/model_endpoints.yaml`` (the human-only endpoint/credential map) by
+:func:`load_model_registry` — the one loader (override path via
+``JARVIS_UPGRADE_MODELS``; docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md).
 Selection order: an explicit per-session ``profile`` argument >
-``JARVIS_UPGRADE_PROFILE`` env > the registry's ``default`` key. Profiles are
-OpenAI-compatible endpoints; the API key comes from the profile's
-``api_key_env`` — keys live in the environment, never in config. A profile
+``JARVIS_UPGRADE_PROFILE`` env > the registry's ``default`` key, which
+``supervisor:`` pins in the endpoints file. Profiles are OpenAI-compatible
+endpoints; the API key comes from the endpoint's ``api_key_env`` — keys
+live in the environment, never in config. A profile
 with ``temperature: null`` OMITS the parameter entirely (DEVIATIONS.md D-003:
 kimi-k2.x rejects any value other than 1).
 
@@ -58,9 +62,18 @@ logger = logging.getLogger(__name__)
 DEFAULT_CONFIG_PATH = (
     Path(__file__).resolve().parents[2] / "config" / "upgrade_agent.yaml"
 )
-DEFAULT_REGISTRY_PATH = (
-    Path(__file__).resolve().parents[2] / "config" / "upgrade_models.yaml"
-)
+DEFAULT_CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
+# The model registry is two files joined by load_model_registry()
+# (docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md): the DENIED endpoint /
+# credential map and the ROUTINE profile pool. The legacy single file is
+# still read when neither split file exists (rollback, §9) and whenever a
+# test or script points at one explicitly (§3 item 2).
+ENDPOINTS_FILENAME = "model_endpoints.yaml"
+PROFILES_FILENAME = "model_profiles.yaml"
+LEGACY_REGISTRY_FILENAME = "upgrade_models.yaml"
+DEFAULT_ENDPOINTS_PATH = DEFAULT_CONFIG_DIR / ENDPOINTS_FILENAME
+DEFAULT_PROFILES_PATH = DEFAULT_CONFIG_DIR / PROFILES_FILENAME
+DEFAULT_REGISTRY_PATH = DEFAULT_CONFIG_DIR / LEGACY_REGISTRY_FILENAME
 REGISTRY_PATH_ENV = "JARVIS_UPGRADE_MODELS"
 PROFILE_ENV = "JARVIS_UPGRADE_PROFILE"
 
@@ -92,7 +105,9 @@ Jarvis interface by proposing code edits, under these NON-NEGOTIABLE rules:
 1. `main` changes only via a human merging a pull request on GitHub. You can
    only open PRs. You can never merge, force-push, or touch main.
 2. You may only read and edit files on the self-edit allowlist. Routine
-   (Tier A): UI sources under web/src and web/public, non-secret config,
+   (Tier A): UI sources under web/src and web/public, non-secret config
+   (including the model PROFILE pool, config/model_profiles.yaml: a profile
+   names an endpoint id and may never carry a base_url or key),
    jarvis/prompts.py, jarvis/skills, jarvis/services, mcp_servers, tests,
    docs. Core (Tier B): the rest of jarvis/ — the voice pipeline
    (jarvis/bot), the agents (jarvis/agents), memory, wake word, scripts —
@@ -101,7 +116,8 @@ Jarvis interface by proposing code edits, under these NON-NEGOTIABLE rules:
    decline a core goal because it is "not UI" — do it, carefully, in
    small self-contained edits. Human-only (Tier 0), decline that part:
    the self-edit machinery itself (jarvis/selfedit, jarvis/admin,
-   upgrade_agent.py), the allowlist and model registry, jarvis/db.py
+   upgrade_agent.py), the allowlist, the model ENDPOINTS file
+   (config/model_endpoints.yaml: hosts and keys), jarvis/db.py
    migrations, the vault and .env, CI, dependency manifests, and under
    macos/: Package.swift, Package.resolved, plists, entitlements,
    scripts/, GlassSpike/ and MortimerShell/. The Swift SOURCES of
@@ -222,7 +238,7 @@ def load_agent_config(path: str | Path | None = None, section: str | None = None
     top-level provider/model/base_url/temperature defaults — those stay
     self-edit's legacy fallback values either way; the registry profile
     resolution in UpgradeAgent.__init__ overrides them for both workflows
-    whenever config/upgrade_models.yaml has profiles, which it does. A
+    whenever the model registry has profiles, which it does. A
     missing section falls back to the top-level (self-edit) loop bounds,
     so an app_build section left unconfigured degrades gracefully rather
     than raising."""
@@ -249,21 +265,332 @@ class UnknownModelProfileError(ValueError):
     """Raised when a requested planner profile is not in the registry."""
 
 
-def load_model_registry(path: str | os.PathLike[str] | None = None) -> dict[str, Any]:
-    """Load the planner model registry.
+class ModelRegistryError(ValueError):
+    """The model registry is unsafe or inconsistent and must not be used.
 
-    Path precedence: explicit ``path`` > ``JARVIS_UPGRADE_MODELS`` env >
-    ``config/upgrade_models.yaml``. A missing file returns the empty registry
-    ``{"default": None, "profiles": {}}`` so callers fall back to legacy mode.
+    Raised, never logged-and-continued: a registry that silently loads
+    with a profile dropped, an endpoint missing, or a credential key in
+    the routine file is worse than one that refuses to load (split plan
+    D3, §3 item 3, §10).
+    """
+
+
+# Split plan D3 — the credential boundary is VOCABULARY. A profile in the
+# routine file may not say where a request goes or which key it carries;
+# those come only from its endpoint in the denied file. `provider` is
+# joined from the endpoint too (D2), and `routes` is refused because
+# jarvis.model_routing reads a per-profile route's own base_url and
+# credential_env. Checked at every depth, together with any value that
+# looks like a URL, so a nested map cannot carry a host either.
+PROFILE_FORBIDDEN_KEYS = frozenset({
+    "base_url", "api_base", "api_key", "api_key_env", "credential_env",
+    "host", "url", "headers", "default_headers", "extra_headers",
+    "provider", "routes",
+})
+#: The only keys an endpoint entry may carry (the denied file is strict so
+#: that a typo is a load error, not a silently ignored field).
+ENDPOINT_KEYS = frozenset({"provider", "kind", "base_url", "api_key_env", "route", "label"})
+#: What the join copies from an endpoint into each of its profiles (D2).
+#: Only keys the endpoint actually has, so a credential-less endpoint
+#: (A1: codex-subscription) yields a profile with NO base_url/api_key_env
+#: keys, exactly as before the split.
+JOINED_ENDPOINT_KEYS = ("provider", "base_url", "api_key_env")
+
+
+def _read_yaml_mapping(path: Path) -> dict[str, Any]:
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict):
+        raise ModelRegistryError(f"{path}: the model registry must be a mapping")
+    return data
+
+
+def registry_source(path: str | os.PathLike[str] | None = None, *,
+                    config_dir: str | os.PathLike[str] | None = None) -> Path:
+    """The file :func:`load_model_registry` reads first (it may not exist).
+
+    Precedence: explicit ``path`` > ``JARVIS_UPGRADE_MODELS`` > the default
+    under ``config_dir`` (``config/`` unless given). The default is the
+    split profile pool whenever EITHER split file exists — so a missing
+    endpoints file is an error rather than a silent fall back — and the
+    legacy ``upgrade_models.yaml`` only when neither does (rollback, §9).
     """
     if path is None:
-        path = os.environ.get(REGISTRY_PATH_ENV) or DEFAULT_REGISTRY_PATH
-    p = Path(path)
-    if not p.exists():
-        return {"default": None, "profiles": {}}
-    data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    profiles = {prof["name"]: prof for prof in data.get("profiles", []) or []}
-    return {"default": data.get("default"), "profiles": profiles}
+        path = os.environ.get(REGISTRY_PATH_ENV) or None
+    if path is not None:
+        return Path(path)
+    base = Path(config_dir) if config_dir is not None else DEFAULT_CONFIG_DIR
+    endpoints = base / ENDPOINTS_FILENAME
+    profiles = base / PROFILES_FILENAME
+    legacy = base / LEGACY_REGISTRY_FILENAME
+    if endpoints.exists() or profiles.exists():
+        if legacy.exists():
+            raise ModelRegistryError(
+                f"both the split registry ({endpoints.name}, {profiles.name}) and "
+                f"the legacy {legacy} exist in {base}; remove one — the loader "
+                "will not guess which is authoritative")
+        return profiles
+    return legacy
+
+
+def _host_bearing(node: Any, trail: str) -> list[str]:
+    """Every forbidden key or URL-looking value under ``node`` (D3)."""
+    found: list[str] = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            where = f"{trail}.{key}" if trail else str(key)
+            if str(key) in PROFILE_FORBIDDEN_KEYS:
+                found.append(where)
+            else:
+                found.extend(_host_bearing(value, where))
+    elif isinstance(node, list):
+        for i, value in enumerate(node):
+            found.extend(_host_bearing(value, f"{trail}[{i}]"))
+    elif isinstance(node, str) and "://" in node:
+        found.append(trail)
+    return found
+
+
+def _validate_endpoints(raw: Any, source: Path) -> dict[str, dict[str, Any]]:
+    if not isinstance(raw, dict) or not raw:
+        raise ModelRegistryError(f"{source}: `endpoints:` must be a non-empty mapping")
+    endpoints: dict[str, dict[str, Any]] = {}
+    for eid, entry in raw.items():
+        where = f"{source}: endpoint {eid!r}"
+        if not isinstance(entry, dict):
+            raise ModelRegistryError(f"{where} must be a mapping")
+        unknown = sorted(set(map(str, entry)) - ENDPOINT_KEYS)
+        if unknown:
+            raise ModelRegistryError(f"{where} has unknown keys {unknown}")
+        if not entry.get("provider"):
+            raise ModelRegistryError(f"{where} names no provider")
+        kind = entry.get("kind", "api")
+        if kind == "api":
+            if not entry.get("base_url") or not entry.get("api_key_env"):
+                raise ModelRegistryError(
+                    f"{where} needs base_url and api_key_env (or kind: subscription)")
+        elif kind == "subscription":
+            if "base_url" in entry or "api_key_env" in entry:
+                raise ModelRegistryError(
+                    f"{where} is kind: subscription and may not carry base_url/api_key_env")
+        else:
+            raise ModelRegistryError(f"{where} has unknown kind {kind!r}")
+        endpoints[str(eid)] = dict(entry)
+    return endpoints
+
+
+def load_registry_layers(path: str | os.PathLike[str] | None = None, *,
+                         config_dir: str | os.PathLike[str] | None = None
+                         ) -> dict[str, Any]:
+    """Parse and validate the registry WITHOUT joining it.
+
+    The first half of :func:`load_model_registry`, exposed for the readers
+    that need the layers themselves (``check_env``'s catalogue report, the
+    split invariants). Returns ``{"shape", "source", "endpoints_source",
+    "default", "profiles", "endpoints", "supervisor"}`` where ``shape`` is
+    ``"split"``, ``"legacy"`` or ``"missing"`` and ``profiles`` is the raw
+    list in file order.
+
+    Shapes (§3 item 2): a file with an ``endpoints:`` section is a whole
+    split registry in one file (the §9 rollback concatenation); a file
+    named ``model_profiles.yaml``, or whose profiles name an ``endpoint:``,
+    is the profile pool and its endpoints come from ``model_endpoints.yaml``
+    beside it; anything else is a legacy single-file registry, used as is.
+    The profile pool can never be read in the legacy shape and never
+    carries its own endpoints — that would put the credential map back in
+    the routine file.
+    """
+    explicit = path is not None or bool(os.environ.get(REGISTRY_PATH_ENV))
+    src = registry_source(path, config_dir=config_dir)
+    empty = {"shape": "missing", "source": None, "endpoints_source": None,
+             "default": None, "profiles": [], "endpoints": {}, "supervisor": None}
+    if not src.exists():
+        if not explicit and src.name == PROFILES_FILENAME:
+            raise ModelRegistryError(
+                f"{src} is missing but {src.parent / ENDPOINTS_FILENAME} exists")
+        return empty
+    data = _read_yaml_mapping(src)
+    raw_profiles = data.get("profiles") or []
+    if not isinstance(raw_profiles, list):
+        raise ModelRegistryError(f"{src}: `profiles:` must be a list")
+    is_pool = src.name == PROFILES_FILENAME
+    names_endpoint = any(isinstance(p, dict) and "endpoint" in p for p in raw_profiles)
+
+    if is_pool and ("endpoints" in data or "supervisor" in data):
+        raise ModelRegistryError(
+            f"{src} may not declare `endpoints:` or `supervisor:` — they live only "
+            f"in {ENDPOINTS_FILENAME}, which is human-only")
+    if "endpoints" in data:
+        endpoints_doc, endpoints_src = data, src
+    elif is_pool or names_endpoint:
+        endpoints_src = src.parent / ENDPOINTS_FILENAME
+        if not endpoints_src.exists():
+            raise ModelRegistryError(
+                f"{src} names endpoints but {endpoints_src} does not exist — "
+                "refusing to load profiles without their endpoints")
+        endpoints_doc = _read_yaml_mapping(endpoints_src)
+        if "profiles" in endpoints_doc or "default" in endpoints_doc:
+            raise ModelRegistryError(
+                f"{endpoints_src} may not declare profiles or a default")
+    else:
+        # Legacy single file: today's shape, today's semantics.
+        return {"shape": "legacy", "source": src, "endpoints_source": None,
+                "default": data.get("default"),
+                "profiles": [p for p in raw_profiles
+                             if isinstance(p, dict) and p.get("name")],
+                "endpoints": {}, "supervisor": None}
+
+    endpoints = _validate_endpoints(endpoints_doc.get("endpoints"), endpoints_src)
+    profiles: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for i, prof in enumerate(raw_profiles):
+        if not isinstance(prof, dict) or not prof.get("name"):
+            raise ModelRegistryError(f"{src}: profile #{i + 1} has no name")
+        name = str(prof["name"])
+        where = f"{src}: profile {name!r}"
+        if name in seen:
+            raise ModelRegistryError(f"{where} is declared twice")
+        seen.add(name)
+        bad = _host_bearing(prof, "")
+        if bad:
+            raise ModelRegistryError(
+                f"{where} declares {', '.join(bad)} — endpoints, hosts and keys "
+                f"belong in {ENDPOINTS_FILENAME}, never in a profile (D3)")
+        endpoint = prof.get("endpoint")
+        if not endpoint:
+            raise ModelRegistryError(f"{where} names no endpoint")
+        if str(endpoint) not in endpoints:
+            raise ModelRegistryError(
+                f"{where} names unknown endpoint {endpoint!r}; known: "
+                f"{', '.join(sorted(endpoints))}")
+        if not prof.get("identity"):
+            raise ModelRegistryError(f"{where} has no identity (the join key)")
+        profiles.append(prof)
+
+    default = data.get("default")
+    if default is not None and str(default) not in seen:
+        raise ModelRegistryError(f"{src}: default {default!r} is not a profile")
+    supervisor = endpoints_doc.get("supervisor")
+    if supervisor is not None:
+        if (not isinstance(supervisor, dict) or not supervisor.get("identity")
+                or not supervisor.get("endpoint")):
+            raise ModelRegistryError(
+                f"{endpoints_src}: `supervisor:` must pin identity and endpoint")
+        if str(supervisor["endpoint"]) not in endpoints:
+            raise ModelRegistryError(
+                f"{endpoints_src}: supervisor pins unknown endpoint "
+                f"{supervisor['endpoint']!r}")
+        # D4: the planner's brain is pinned in the denied file. The routine
+        # `default` must name the pinned identity on the pinned endpoint;
+        # re-pointing the planner is a human PR against both files. (Its
+        # model STRING is checked against the generated catalogue by
+        # tests/unit/test_model_registry_split.py.)
+        planner = next((p for p in profiles if str(p["name"]) == str(default)), None)
+        if planner is None or (
+                str(planner.get("identity")) != str(supervisor["identity"])
+                or str(planner.get("endpoint")) != str(supervisor["endpoint"])):
+            raise ModelRegistryError(
+                f"{src}: default {default!r} does not match the supervisor pin "
+                f"{supervisor['identity']!r} on {supervisor['endpoint']!r} "
+                f"({endpoints_src.name}) — changing the planner is a human PR")
+    return {"shape": "split", "source": src, "endpoints_source": endpoints_src,
+            "default": default, "profiles": profiles, "endpoints": endpoints,
+            "supervisor": dict(supervisor) if supervisor else None}
+
+
+def _join_profile(profile: dict[str, Any], endpoint: dict[str, Any]) -> dict[str, Any]:
+    """One profile with its endpoint's provider/base_url/api_key_env merged
+    in where ``endpoint:`` stood, and the ``endpoint`` key itself dropped —
+    the joined profile has exactly the pre-split keys (D2, D6)."""
+    joined: dict[str, Any] = {}
+    for key, value in profile.items():
+        if key == "endpoint":
+            for ekey in JOINED_ENDPOINT_KEYS:
+                if ekey in endpoint:
+                    joined[ekey] = endpoint[ekey]
+        else:
+            joined[key] = value
+    return joined
+
+
+def load_model_registry(path: str | os.PathLike[str] | None = None, *,
+                        config_dir: str | os.PathLike[str] | None = None
+                        ) -> dict[str, Any]:
+    """Load the model registry — the ONE loader (spec I6, split plan D2).
+
+    Path precedence: explicit ``path`` > ``JARVIS_UPGRADE_MODELS`` env >
+    the default under ``config/`` (``model_profiles.yaml`` joined with
+    ``model_endpoints.yaml``; the legacy ``upgrade_models.yaml`` only when
+    neither exists). See :func:`load_registry_layers` for the shapes.
+
+    Returns exactly the pre-split shape, ``{"default", "profiles": {name:
+    profile}}`` in file order, with each split profile's endpoint joined in,
+    so no caller changes semantics. A missing file returns the empty
+    registry ``{"default": None, "profiles": {}}`` so callers fall back to
+    legacy mode; an unsafe or inconsistent one raises ModelRegistryError.
+    """
+    layers = load_registry_layers(path, config_dir=config_dir)
+    if layers["shape"] == "legacy":
+        profiles = {prof["name"]: prof for prof in layers["profiles"]}
+    else:
+        endpoints = layers["endpoints"]
+        profiles = {prof["name"]: _join_profile(prof, endpoints[str(prof["endpoint"])])
+                    for prof in layers["profiles"]}
+    return {"default": layers["default"], "profiles": profiles}
+
+
+# Split plan §4a: what each provider currently offers, one generated file per
+# endpoint, joined to profiles by `identity`. Written by the sync job (never
+# by hand); seeded from the pre-split registry with fetched_at null and
+# source "seeded" so the first sync reads as a diff.
+GENERATED_DIRNAME = "generated"
+CATALOG_PREFIX = "model_catalog."
+CATALOG_SUFFIX = ".json"
+#: Every catalogue entry carries these keys (price fields null when the
+#: provider publishes none), so a later price/deprecation migration is a
+#: deletion rather than a re-fetch (§4a.5).
+CATALOG_ENTRY_KEYS = (
+    "identity", "model", "context_window", "input_price_per_mtok",
+    "output_price_per_mtok", "input_modalities", "deprecation",
+    "fetched_at", "source",
+)
+
+
+def catalog_path(endpoint: str, *, config_dir: str | os.PathLike[str] | None = None) -> Path:
+    base = Path(config_dir) if config_dir is not None else DEFAULT_CONFIG_DIR
+    return base / GENERATED_DIRNAME / f"{CATALOG_PREFIX}{endpoint}{CATALOG_SUFFIX}"
+
+
+def load_upstream_catalogs(*, config_dir: str | os.PathLike[str] | None = None
+                           ) -> dict[str, dict[str, Any]]:
+    """Endpoint id -> parsed ``model_catalog.<endpoint>.json`` (§4a).
+
+    Read-only facts about what a provider offers. Never joined INTO the
+    profiles load_model_registry returns (that shape is fixed, D2/D6);
+    readers that want them (check_env's age and deprecation report, the
+    supervisor-pin test) ask for them here. A malformed file raises.
+    """
+    base = Path(config_dir) if config_dir is not None else DEFAULT_CONFIG_DIR
+    out: dict[str, dict[str, Any]] = {}
+    for path in sorted((base / GENERATED_DIRNAME).glob(f"{CATALOG_PREFIX}*{CATALOG_SUFFIX}")):
+        endpoint = path.name[len(CATALOG_PREFIX):-len(CATALOG_SUFFIX)]
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or data.get("endpoint") != endpoint \
+                or not isinstance(data.get("models"), list):
+            raise ModelRegistryError(f"{path}: not a model catalogue for {endpoint!r}")
+        out[endpoint] = data
+    return out
+
+
+def catalog_retirement(entry: dict[str, Any]) -> str | None:
+    """The ISO date a catalogue entry retires on, or None (§4a.3).
+
+    ``deprecation`` is null, an ISO date string, or a mapping carrying
+    ``retires_at``; whatever the sync job writes, this is the one reader.
+    """
+    dep = entry.get("deprecation")
+    if isinstance(dep, dict):
+        dep = dep.get("retires_at")
+    return str(dep)[:10] if dep else None
 
 
 def resolve_profile(registry: dict[str, Any], requested: str | None = None) -> dict[str, Any]:
@@ -372,7 +699,7 @@ class UpgradeAgent:
                 # null means: omit the parameter entirely (D-003)
                 self.cfg["temperature"] = prof["temperature"]
             # Phase 1b (effort control) -- optional per-profile
-            # output_config.effort override (upgrade_models.yaml); absent
+            # output_config.effort override (model_profiles.yaml); absent
             # means self.cfg.get("effort") stays None, and
             # extra_body_for() emits nothing, exactly like an agents.yaml
             # entry with no `effort:` field.

@@ -58,6 +58,8 @@ _to_delete/
 
 # Self-edit session worktrees (jarvis/selfedit/service.py) — never part of the user's checkout
 data/selfedit_worktrees/
+# Daily status snapshots (status spec T4.5): runtime data, keeps the checkout clean.
+data/status/
 _to_delete_tarballs/
 
 # GC10 (gap-closure plan, 2026-09-04) hygiene

@@ -655,6 +655,23 @@ CREATE INDEX IF NOT EXISTS idx_model_route_drafts_expiry
   ON model_route_drafts(expires_at);
 """
 
+# Status spec T3.2 (L12): the notice outbox — late delegation results and
+# daily-status findings, spoken once after the greeting at the next connect
+# (jarvis/notices.py). user_id: tests/unit/test_tenant_columns.py's contract
+# (GC8) that every table carries it.
+MIGRATION_0025_notices = """
+CREATE TABLE IF NOT EXISTS notices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('late_result','daily_status')),
+  source TEXT NOT NULL,
+  text TEXT NOT NULL,
+  delivered_at TEXT,
+  user_id TEXT NOT NULL DEFAULT 'local'
+);
+CREATE INDEX IF NOT EXISTS idx_notices_pending ON notices(delivered_at, created_at);
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
@@ -681,6 +698,7 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0022_memory_automation", MIGRATION_0022),
     ("0023_memory_classification_shadow", MIGRATION_0023),
     ("0024_model_route_preferences", MIGRATION_0024_model_route_preferences),
+    ("0025_notices", MIGRATION_0025_notices),  # status spec T3.2
 ]
 
 

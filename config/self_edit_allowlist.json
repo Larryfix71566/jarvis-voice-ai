@@ -30,7 +30,7 @@
     "jarvis/vault.py",
     "config/self_edit_allowlist.json",
     "config/upgrade_agent.yaml",
-    "config/upgrade_models.yaml",
+    "config/model_endpoints.yaml",
     "config/skills.yaml",
     "skills/**",
     "scripts/check_allowlist.py",

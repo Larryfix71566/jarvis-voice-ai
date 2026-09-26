@@ -55,6 +55,9 @@ EXPECTED = {
                       {}),
     # logic.py supplies localhost:8484; an explicit URL still reaches the child.
     "mcp-kb":        ([], ["KB_BASE_URL"], {}),
+    # Status spec T2.6: a thin sidecar client; JARVIS_ADMIN_URL is in
+    # BASE_ENV_KEYS, and no secret ever reaches this child.
+    "mcp-status":    ([], [], {}),
 }
 
 

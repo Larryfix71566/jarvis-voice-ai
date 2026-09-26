@@ -59,7 +59,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", required=True,
                         help="explicit memory-evaluation profile from the model registry")
-    parser.add_argument("--registry", type=Path, default=ROOT / "config/upgrade_models.yaml")
+    parser.add_argument("--registry", type=Path, default=None,
+                        help="explicit registry file (default: the joined "
+                             "config/model_profiles.yaml + model_endpoints.yaml)")
     parser.add_argument("--vault-path", type=Path,
                         help="existing credential vault; never copied or modified")
     parser.add_argument("--dry-run", action="store_true",

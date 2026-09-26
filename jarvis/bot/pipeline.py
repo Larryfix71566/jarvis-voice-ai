@@ -64,9 +64,11 @@ from jarvis.bot.progress_watcher import ProgressWatcher, SpeakingStateTracker
 from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.remember_tool import build_remember_tool
 from jarvis.bot.costs_tool import build_cost_summary_tool
+from jarvis.bot.status_tool import build_system_status_tool
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.ui_control import build_ui_control_tool
+from jarvis.bot.ui_control import ui_control_enabled as ui_control_flag_enabled
 from jarvis.bot.console_session import ConsoleSession
 from jarvis.bot.console_protocol import (ALLOWED_ACTIONS, hello as console_hello,
                                          validate_inventory, validate_ready)
@@ -108,7 +110,12 @@ from jarvis.memory import (
     render_memory_context,
     update_memory_from_session,
 )
-from jarvis.memory_automation import heuristic_classifier, process_classification_jobs
+from jarvis.status import status_enabled as jarvis_status_enabled
+from jarvis.memory_automation import (
+    heuristic_classifier,
+    memory_automation_enabled,
+    process_classification_jobs,
+)
 from jarvis.kb_digest import write_session_digest
 from jarvis.model_catalog import render_model_catalog
 from jarvis.prompts import (
@@ -130,6 +137,8 @@ from jarvis.council.prune import prune as prune_council
 from jarvis.runlog import prune as prune_runlog
 from jarvis.runlog import reconcile_orphaned_runs
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry
+from jarvis.skills.shared import get_shared_registry, shared_enabled
+from jarvis import notices
 
 # Service imports are module-level names so tests can monkeypatch them.
 # D-004: pipecat 1.4.0 class locations/settings classes differ from the
@@ -161,6 +170,23 @@ from jarvis.bot.connect_greeting import ConnectGreeting  # noqa: E402
 _logger = logging.getLogger(__name__)
 
 
+def session_disconnect_line(session_id: str, duration_s: float,
+                            transport: str, client: Any) -> str:
+    """Status spec P7: the one ``session_disconnect`` log line.
+
+    ``close_code`` is the client's own ``close_code`` attribute when it is an
+    int, else ``unknown``. Neither transport exposes one today: pipecat's
+    FastAPI WebSocket iterator drops the ``websocket.disconnect`` message
+    (and its code) and Starlette's ``WebSocket`` keeps none, so the WebSocket
+    case logs ``unknown`` rather than adding a dependency to find it.
+    """
+    code = getattr(client, "close_code", None)
+    close_code = str(code) if isinstance(code, int) and not isinstance(code, bool) else "unknown"
+    return (f"session_disconnect session={session_id} "
+            f"duration_s={max(0.0, duration_s):.1f} transport={transport} "
+            f"close_code={close_code}")
+
+
 @dataclass
 class Runtime:
     """Per-session resources shared by the pipeline and event handlers."""
@@ -176,6 +202,9 @@ class Runtime:
     # two functions share no scope: #80 read these as build_pipeline locals
     # from run_session, a NameError on every connect (2026-09-23).
     command_console_enabled: bool = False
+    # Console readiness, inventory revision and acknowledgement futures.
+    # build_pipeline creates these; run_session's console handlers read the
+    # SAME objects through the runtime (they are not in its scope otherwise).
     console_ready: dict = field(default_factory=lambda: {"value": False})
     console_inventory_revision: dict = field(default_factory=lambda: {"value": 0})
     console_waiters: dict = field(default_factory=dict)
@@ -188,6 +217,10 @@ class Runtime:
     # at construction time — same late-binding reason RemindersWatcher
     # takes inject= at run_session level.
     late_delivery: dict = field(default_factory=dict)
+    # Status spec T3.2 (L12): False from the first statement of teardown.
+    # inject_late_result checks it, so a result landing during or after
+    # teardown goes to the notice outbox instead of a dead pipeline.
+    alive: bool = True
     # Item 11 (2026-09-17): the detached delegation runs this session
     # started and has not seen finish. run_session drains it before
     # registry.stop(), because those runs call tools through this
@@ -451,7 +484,7 @@ class FramePusher:
 # Deepgram Flux keyterm boosting — proper nouns this vocabulary-heavy
 # console actually needs recognized. Static by design: deriving these
 # from the model registry at boot would couple STT config to
-# upgrade_models.yaml for marginal benefit. Observed failure this fixes:
+# the model registry for marginal benefit. Observed failure this fixes:
 # "Fable 5" -> "table five" -> "Clyde's frontier model" (2026-08-17).
 STT_KEYTERMS = [
     "Mortimer", "Jarvis", "Fable", "Claude", "Opus", "Kimi",
@@ -474,15 +507,12 @@ def build_pipeline(
     pusher = pusher or FramePusher()
     console_generation = str(uuid.uuid4())
     runtime.console_generation = console_generation
-    console_ready = {"value": False}
-    console_inventory_revision = {"value": 0}
+    console_ready = runtime.console_ready
+    console_inventory_revision = runtime.console_inventory_revision
     # One bounded acknowledgement future per request. The console tool waits
     # for the native client to apply the request, so voice cannot report
     # success merely because a frame was queued.
-    console_waiters: dict[str, asyncio.Future[dict[str, Any]]] = {}
-    runtime.console_ready = console_ready
-    runtime.console_inventory_revision = console_inventory_revision
-    runtime.console_waiters = console_waiters
+    console_waiters: dict[str, asyncio.Future[dict[str, Any]]] = runtime.console_waiters
 
     async def await_console_result(request_id: str) -> dict[str, Any] | None:
         loop = asyncio.get_running_loop()
@@ -530,15 +560,18 @@ def build_pipeline(
     _, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
     _, remember_handler = build_remember_tool(runtime.session_id)
     _, cost_summary_handler = build_cost_summary_tool()
+    _, system_status_handler = build_system_status_tool()
 
     # MORTIMER_VOICE_UI_PLAN.md U1/U6 — voice control of the console's UI
     # chrome. Kill switch read here, at the single registration site (same
     # env-first pattern as the council's): false = the tool is not
     # registered and not in the schema list, so the Supervisor cannot call
     # what it cannot see, and the prompt addendum is omitted to match.
-    ui_control_enabled = os.environ.get(
-        "JARVIS_UI_CONTROL_ENABLED", ""
-    ).strip().lower() not in ("false", "0", "no")
+    ui_control_enabled = ui_control_flag_enabled()
+    # Status spec T2.5 — system_status is a direct tool behind
+    # JARVIS_STATUS_TOOLS_ENABLED; read once here and passed explicitly to
+    # the menu and the prompt so the three can never disagree (R9).
+    status_enabled = jarvis_status_enabled()
     # V3/V4: screen vision is a DIRECT Supervisor tool (like set_voice /
     # ui_control), never a delegation. Same kill-switch-at-registration
     # pattern as ui_control above.
@@ -624,7 +657,8 @@ def build_pipeline(
             _logger.warning("clipboard_sidecar_unreachable path=%s error=%s", path, exc)
             return {"ok": False,
                     "error": "The admin sidecar isn't running, so I can't reach "
-                             "the clipboard. Start it with ./scripts/mortimer.sh start."}
+                             "the clipboard. It comes back when Mortimer's services "
+                             "are restarted."}
 
     _, show_commands_handler = build_show_commands_tool(
         _emit_display,
@@ -667,6 +701,7 @@ def build_pipeline(
         # U5/U6: the addendum ships only when the tool does — a prompt
         # describing an unregistered tool would invite hallucinated calls.
         ui_control=ui_control_enabled,
+        status=status_enabled,
         screen=screen_enabled,
         # H3/H6 — show_commands is always registered; the clipboard half
         # of the addendum only makes sense when its tools are.
@@ -774,6 +809,8 @@ def build_pipeline(
     register_supervisor_tool(llm, "set_voice", set_voice_handler)
     register_supervisor_tool(llm, "remember", remember_handler)
     register_supervisor_tool(llm, "cost_summary", cost_summary_handler)
+    if status_enabled:
+        register_supervisor_tool(llm, "system_status", system_status_handler)
     if ui_control_enabled:
         register_supervisor_tool(llm, "ui_control", ui_control_handler)
     if screen_enabled:
@@ -834,6 +871,7 @@ def build_pipeline(
             clipboard=clipboard_enabled,
             command_console=command_console_enabled,
             shared_content=shared_content_enabled,
+            status=status_enabled,
         )
     ]
     context = LLMContext(
@@ -1107,6 +1145,9 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
 
         if keyhealth.start_background_probe() is not None:
             _logger.info("key_health_probe_started")
+        # Status spec T3.3: re-probe keys that are not ok every 10 minutes.
+        # A process singleton, so every session after the first is a no-op.
+        keyhealth.start_refresh_loop()
     except Exception as exc:  # noqa: BLE001 — must never block startup
         _logger.warning("key_health_probe_start_failed error=%s", exc)
 
@@ -1138,8 +1179,22 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
     except Exception as exc:  # noqa: BLE001 — must never block startup
         _logger.warning("memory_sweep_start_failed error=%s", exc)
 
-    registry = SkillRegistry(REPO_ROOT / "config" / "mcp_servers.yaml")
-    await registry.start()
+    # Status spec T3.1 Step 0 — TEMPORARY: the process-scoped registry is
+    # valid only if every session runs on the same event loop. Compare this
+    # line across two connects on the Mac; remove once Step 0 is recorded.
+    _logger.info("session_loop_id id=%d", id(asyncio.get_running_loop()))
+    # Status spec T3.1 (L11): one registry per PROCESS. The first session
+    # starts it; later sessions reuse it, so a reconnect no longer respawns
+    # every MCP child and a detached run never loses its tools to teardown.
+    # `SkillRegistry` is this module's name so tests that monkeypatch
+    # bp.SkillRegistry still control what gets built.
+    registry_is_shared = shared_enabled()
+    if registry_is_shared:
+        registry = await get_shared_registry(
+            REPO_ROOT / "config" / "mcp_servers.yaml", factory=SkillRegistry)
+    else:
+        registry = SkillRegistry(REPO_ROOT / "config" / "mcp_servers.yaml")
+        await registry.start()
     runtime = Runtime(settings=settings, registry=registry,
                       session_id=str(uuid.uuid4()))
     print(f"[session] {runtime.session_id}", flush=True)
@@ -1291,9 +1346,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # the user's local time, but keep background memory maintenance
             # silent; open reviews remain available from the Memory panel or
             # an explicit memory request.
+            # Status spec T3.2 (L12, #86): notices queued while nobody was
+            # connected (late results, daily status) ride on the greeting,
+            # once — take_pending marks them delivered, so it runs here,
+            # when the greeting is actually sent.
+            greeting_note = (connection_greeting_note(settings.jarvis_timezone)
+                             + notices.render_for_greeting(notices.take_pending()))
             aggregators.user().add_messages([{
-                "role": "user",
-                "content": connection_greeting_note(settings.jarvis_timezone),
+                "role": "user", "content": greeting_note,
             }])
             await aggregators.user().push_context_frame()
 
@@ -1322,11 +1382,22 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                         if shared_content_enabled else None
                     ),
                 ))
+            # Review finding 5(b) (#86): this session now receives late
+            # results whose own session has ended.
+            notices.set_live_session(runtime.session_id, inject_late_result)
             await greeting.client_connected()
 
         @transport.event_handler("on_client_disconnected")
         async def on_client_disconnected(transport: Any, client: Any) -> None:
+            # Review finding 5(a): first, before anything can await — a late
+            # result landing from here on must not reach this pipeline.
+            runtime.alive = False
+            notices.clear_live_session(runtime.session_id)
             print("[session] client disconnected", flush=True)
+            # Status spec P7: reconnect-churn data, no behaviour change.
+            _logger.info("%s", session_disconnect_line(
+                runtime.session_id, time.monotonic() - session_started,
+                "webrtc" if webrtc_connection is not None else "ws", client))
             client_connected["value"] = False
             # End the pipeline task so `await runner.run(task)` returns and the
             # finally block below actually runs. Without this the task blocks
@@ -1344,7 +1415,12 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             aggregators.user().add_messages([{"role": "user", "content": text}])
             await aggregators.user().push_context_frame()
 
-        async def inject_late_result(text: str) -> None:
+        async def inject_late_result(text: str) -> bool:
+            # Status spec T3.2: False — without touching the pipeline — once
+            # the session is tearing down; delegate.py then puts the result
+            # in the notice outbox. True once the note is in the context.
+            if not runtime.alive:
+                return False
             # MORTIMER_SESSION_MISSES_PLAN.md S6: same channel as
             # inject_context, but the note is registered with the
             # neutralizer so its imperative dies with the relay turn. The
@@ -1366,8 +1442,9 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                     "late_result_deferred_inflight delegations=%d",
                     foreground_delegation_count(),
                 )
-                return
+                return True
             await aggregators.user().push_context_frame()
+            return True
 
         # Barge-in survival — install the late-delivery hook the delegate
         # tool uses for results whose voice turn was cancelled. Same
@@ -1710,6 +1787,11 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
         try:
             await runner.run(task)
         finally:
+            # T3.2: first, before anything below can await — a late result
+            # landing from here on goes to the notice outbox. (Also set at
+            # the top of on_client_disconnected; this covers every other end.)
+            runtime.alive = False
+            notices.clear_live_session(runtime.session_id)
             shared_transfer.close()
             await watcher.stop()
             await memory_watcher.stop()
@@ -1758,8 +1840,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # connection. This is best-effort and runs only during teardown;
             # it cannot block an active voice turn or alter stored content.
             if (getattr(settings, "jarvis_memory_automation_enabled", False)
-                    and os.environ.get("JARVIS_MEMORY_AUTOMATION_ENABLED", "false").lower()
-                    in {"1", "true", "yes"}):
+                    and memory_automation_enabled()):
                 try:
                     with get_conn() as conn:
                         result = process_classification_jobs(
@@ -1827,4 +1908,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 "session_teardown_under_detached_runs session=%s runs=%d",
                 runtime.session_id, still,
             )
-        await registry.stop()
+        # T3.1: the shared registry outlives the session; only a per-session
+        # one (JARVIS_REGISTRY_SHARED_ENABLED=false) is stopped here.
+        if not registry_is_shared:
+            await registry.stop()

@@ -28,7 +28,7 @@ ALLOWLIST_JSON = REPO_ROOT / "config" / "self_edit_allowlist.json"
 #: Contract K4 (CROSS_PLAN_RESOLUTION.md §B). Servers that can reach the
 #: outside world, write code, capture the screen, or write a shared calendar.
 OUTBOUND = {"mcp-web", "mcp-git", "mcp-apps", "mcp-repo", "mcp-selfedit",
-            "mcp-screen", "mcp-calendar"}
+            "mcp-screen", "mcp-calendar", "mcp-status"}
 
 #: Contract K4. Servers whose CONTENT is authored by someone who is not
 #: Larry, and is therefore a prompt-injection vector.
@@ -63,8 +63,11 @@ def test_no_agent_mixes_untrusted_input_with_an_outbound_channel():
 def test_the_sets_have_not_been_quietly_emptied():
     """A passing test with an empty set proves nothing. K4 fixes both sets;
     growing UNTRUSTED_INPUT is expected, shrinking either is not."""
+    # Status spec T2.6 (announced under R4): mcp-status joins — its P4
+    # tools read provider catalogs and GitHub.
     assert OUTBOUND == {"mcp-web", "mcp-git", "mcp-apps", "mcp-repo",
-                        "mcp-selfedit", "mcp-screen", "mcp-calendar"}
+                        "mcp-selfedit", "mcp-screen", "mcp-calendar",
+                        "mcp-status"}
     assert "mcp-mail" in UNTRUSTED_INPUT
 
 
