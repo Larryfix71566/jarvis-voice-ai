@@ -1,5 +1,6 @@
 # Documentation map
 
+- [Master roadmap](../ROADMAP.md) — who owns what across Claude and Codex; read before any work (protocol in §0).
 - [Architecture reference](ARCHITECTURE.md) — current runtime ownership,
   trust boundaries, model routes, deployment paths and verification pointers.
 - [Repository map](REPO_MAP.md) — source tree navigation for agents and

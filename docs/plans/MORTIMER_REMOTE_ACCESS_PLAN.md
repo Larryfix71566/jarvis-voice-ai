@@ -2395,3 +2395,186 @@ Larry ticks each before the implementer starts.
 - [ ] **§5 Step 5** — accepts that the unit suite runs with `JARVIS_AUTH_ENABLED=false` by default and that auth coverage lives in three dedicated files.
 - [ ] **§8** — will run V1–V10 on his own hardware, including the `nmap` gate (V5b) and the live revocation check (V5c), and will record the routing-eval score (V9) in the PR.
 - [ ] Branch name `feat/remote-access-t2`; Larry commits, the implementer never runs git.
+
+---
+
+## Addendum R1 (2026-09-27): make T2 merge-safe against main, and dormant by default
+
+**Status:** direction approved by Larry, 2026-09-27 ("move forward … with the recommended fixes"). **Owner:** Codex (`ROADMAP.md` WS-04). **Author:** Claude (Cowork), from a read-only review of `main` `0b76f49` and Codex's worktree `codex/isolated-20260924`. Evidence: `docs/reviews/CROSS_SYSTEM_PLAN_EVAL_2026-09-27.md` §7 and `ROADMAP.md` CX-11.
+
+**What this addendum decides.** T2 code may merge to `main`, but only **dormant**: after the merge, Mortimer behaves exactly as it does today. Turning T2 on is a separate, undecided roadmap item for Larry, and so is how tokens get created without shell commands (R1.9). Nothing in this addendum opens a port or turns authentication on.
+
+**Where this addendum overrides the plan above:**
+- K1's "`JARVIS_AUTH_ENABLED` defaults to true" becomes **defaults to false** (R1.2).
+- The §1.2 route inventory must be recounted on the merged tree (R1.6).
+- The client-token migration id becomes `0034` (R1.7).
+
+Everything else stands.
+
+### R1.1 Preconditions
+
+1. WS-01 has merged `origin/main` into `codex/isolated-20260924` (`ROADMAP.md` CX-01). Every step below edits the **merged** tree. None of them applies to Codex's pre-merge tree, which lacks the main files named here.
+2. Record a baseline receipt before editing: `pytest tests/unit -q`, `pytest tests/integration -q` and `python -m unittest discover -s tests/ci`, with counts, on the merged tree.
+
+### R1.2 Auth is dormant unless explicitly enabled
+
+**Why.** In Codex's tree, `jarvis/auth.py` `auth_enabled()` returns true unless the variable is exactly `"false"`. `jarvis/authmw.py` then rejects every HTTP and WebSocket request without a valid token, loopback included, with no exempt route. `.env.example` does not set the variable, and production's `.env` has never had it. Merged as written, the first deploy would turn auth on, and the callers in R1.3–R1.4 would start failing. [certain from the code; not run]
+
+**Change, `jarvis/auth.py`:**
+
+```python
+def auth_enabled() -> bool:
+    """JARVIS_AUTH_ENABLED, default FALSE (Remote Access plan Addendum R1).
+
+    T2 ships dormant: only the exact string "true" (case-insensitive,
+    stripped) turns authentication on. Larry decides when that happens.
+    Typos ("1", "yes", "ture") leave it OFF, and OFF also forces a loopback
+    bind (jarvis/bind.py), so a typo can never expose a port: the safe
+    direction is preserved by the bind rule, not by this default.
+
+    THE ONLY READ OF THIS NAME IN THE CODEBASE (roadmap kill-switch rule).
+    """
+    return os.environ.get(ENABLED_ENV, "").strip().lower() == "true"
+```
+
+**Change, `tests/unit/test_auth.py` `test_auth_enabled_table`:** the new table is
+`(None, False), ("", False), ("true", True), ("TRUE", True), (" true ", True), ("false", False), ("1", False), ("yes", False), ("on", False)`.
+
+**Add, `tests/unit/test_bind.py`:** `test_unset_auth_forces_loopback_even_when_remote_requested`. Delete `JARVIS_AUTH_ENABLED`, set `JARVIS_BIND_HOST=100.64.1.2`, and expect `resolve_bind_host(...) == "127.0.0.1"`. This proves that the dormant default cannot expose a port.
+
+**Unchanged:** the tests that set `JARVIS_AUTH_ENABLED=true` explicitly (`test_auth_middleware.py`, `test_bind.py`) keep passing as written.
+
+**`.env.example`:** add a commented line under the existing service section, with no value set:
+`# JARVIS_AUTH_ENABLED=true   # Remote access (T2). Off unless set to "true". Larry decides when.`
+
+### R1.3 Service token on the internal caller that exists only on main
+
+**Why.** `jarvis/bot/status_tool.py` came in with #86 and does not exist in Codex's tree. Its `_default_client` builds `httpx.AsyncClient(base_url=base_url, timeout=timeout)` with no headers. With auth on, `system_status` would answer "the admin sidecar is not reachable". [certain]
+
+**Change, `jarvis/bot/status_tool.py`:**
+
+```python
+def _default_client(base_url: str, timeout: float) -> Any:
+    import httpx
+    from jarvis.auth import service_headers  # K1: every internal caller
+
+    return httpx.AsyncClient(base_url=base_url, timeout=timeout,
+                             headers=service_headers())
+```
+
+**Test, `tests/unit/test_service_token.py`:** add `test_status_tool_default_client_sends_service_token`. With `JARVIS_SERVICE_TOKEN=jvt_test`, `status_tool._default_client("http://x", 1.0).headers["Authorization"] == "Bearer jvt_test"`. With the variable unset, there is no `Authorization` header.
+
+### R1.4 Keep both sides in the two callers changed on both branches
+
+| File | Main has (keep) | Codex has (keep) |
+|---|---|---|
+| `jarvis/bot/progress_watcher.py` | Main's current content (changed in the 09-25 landing) | `from jarvis.auth import service_headers`, `headers=service_headers()` and `resp.raise_for_status()` in `_default_fetch_selfedit_job` |
+| `mcp_servers/mcp_selfedit/logic.py` | Main's current content (31.6 KB, changed in the 09-25 landing) | `headers=service_headers()` on `AdminClient`'s `httpx.Client`, and `ADMIN_URL_ENV` / `DEFAULT_ADMIN_URL` imported from `jarvis.urls` |
+
+`jarvis/bot/plan_watcher.py` and `jarvis/bot/research_watcher.py` are unchanged on main since August, so Codex's versions merge cleanly.
+
+`mcp_selfedit/logic.py` must keep exporting `ADMIN_URL_ENV` and `DEFAULT_ADMIN_URL`, because main's `status_tool.py`, `plan_watcher.py`, `progress_watcher.py` and `research_watcher.py` import them from there. A re-export from `jarvis.urls` is fine.
+
+### R1.5 A guard so future Claude or Codex code can't add an unauthenticated caller
+
+**Add `tests/unit/test_internal_callers_authenticated.py`.** It scans `jarvis/`, `mcp_servers/` and `scripts/*.py` (tests excluded) for files that both
+
+- name the sidecar or bot (`ADMIN_URL_ENV`, `DEFAULT_ADMIN_URL`, `admin_url(`, `bot_url(`, `127.0.0.1:7861`, `127.0.0.1:7860`), **and**
+- construct an HTTP client (`httpx.Client(`, `httpx.AsyncClient(`, `urlopen(`, `urllib.request.Request(`).
+
+Every such file must also contain `service_headers`.
+
+One file is allow-listed, with its reason in the test: `jarvis/status/services.py`. It probes the bot by bare TCP connect and probes the vault and costs services, which T2 does not cover.
+
+Run against main's files on 2026-09-27, this rule flags `jarvis/bot/status_tool.py`, `plan_watcher.py`, `progress_watcher.py`, `research_watcher.py`, `mcp_servers/mcp_selfedit/logic.py` and `jarvis/status/services.py` (allow-listed). After the merge and R1.3–R1.4, only the allow-listed file may match. [certain for the files checked; the rule was dry-run over the main files staged for this review, not the whole tree. The test itself covers the whole tree]
+
+### R1.6 DEPLOY-MAIN health checks work with auth on or off
+
+**Why.** `scripts/deploy_main.sh` phase D requires 200 from `http://127.0.0.1:7861/api/health` and 200/307 from `http://127.0.0.1:7860/`, both via plain `curl`. With auth on, both answer 401, and the deploy stops with "services did not come healthy". [certain from the script; not run]
+
+**Add `scripts/service_health.py`** (stdlib only; prints nothing but the status code):
+
+```python
+"""Print the HTTP status of Mortimer's admin sidecar or bot, authenticated
+with the service token when one exists (Remote Access plan Addendum R1.6).
+Usage: python scripts/service_health.py admin|bot. Prints only the code; never
+prints a header or a token. Prints 000 when the service does not answer."""
+import os, sys, urllib.error, urllib.request
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from jarvis.auth import service_headers
+from jarvis.vault import inject_env
+
+TARGETS = {"admin": ("JARVIS_ADMIN_PORT", 7861, "/api/health"),
+           "bot": ("JARVIS_BOT_PORT", 7860, "/")}
+
+def main() -> None:
+    env, default, path = TARGETS[sys.argv[1]]
+    inject_env()
+    url = f"http://127.0.0.1:{int(os.environ.get(env, default))}{path}"
+    req = urllib.request.Request(url, headers=service_headers())
+    # No proxy: a system proxy must never see the service token or reroute localhost.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)
+    try:
+        code = opener.open(req, timeout=3).status
+    except urllib.error.HTTPError as exc:
+        code = exc.code
+    except Exception:  # noqa: BLE001 - not listening yet
+        code = 0
+    print(f"{code:03d}")
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):  # keep the bot's 307 visible
+        return None
+
+if __name__ == "__main__":
+    main()
+```
+
+**Change, `scripts/deploy_main.sh` phase D.** Keep the vault `curl` as it is, and read the admin and bot codes from the new script, run with production's interpreter from production's checkout:
+
+```bash
+a=$(cd "$C" && "$PY" scripts/service_health.py admin); v=$(hcode http://127.0.0.1:8484/health); b=$(cd "$C" && "$PY" scripts/service_health.py bot)
+```
+
+The pass condition is unchanged: admin 200, vault 200, bot 307 or 200.
+
+**Allow-list:** `scripts/service_health.py` is human-only, like `deploy_main.sh`. Add it through a new row in `docs/plans/ALLOWLIST_SEQUENCE.md`. Rule C8 still applies: allow-list changes are human commits.
+
+**Tests, `tests/unit/test_deploy_main.py`:**
+- `test_phase_d_does_not_curl_the_sidecar_or_bot_directly` (the script text contains no `curl` of `127.0.0.1:7861` or `127.0.0.1:7860`).
+- `test_service_health_prints_only_a_code`: run it against a stub HTTP server that answers 401 and 200. The output matches `^\d{3}\n$`, and it never contains `Bearer`.
+
+**Optional, same change:** have `scripts/mortimer.sh` `check_admin` call `service_health.py admin`, so there is one implementation.
+
+`deploy_main.sh` was written by Claude (WS-07, landed). Codex edits it here under WS-04, and Larry reviews that hunk in the PR.
+
+### R1.7 Migration id and route inventory
+
+- **Migration:** rename `0031_client_tokens` to `0034_client_tokens` (`ROADMAP.md` §3). In this plan's §0.7 and CP-F1, replace "REMOTE owns `0031_client_tokens`; MAIL moves to `0032`" with "REMOTE owns `0034_client_tokens`; MAIL reserves `0035`". Under the dormant default the table is created but unused, which is additive and harmless.
+- **Route inventory:** after the merge, the sidecar has main's 10 routes that Codex's tree lacks (`/api/status/{build,catalog,github,location,logs,models,overview,services}`, `POST /api/status/subscription/probe`, `/api/workflows`), plus Codex's own. Recount decorators on the merged tree and update §1.2's table and `EXPECTED_SIDECAR_ROUTES` in `tests/unit/test_auth_middleware.py`. By decorator count the result is about 74 (58 shared, 10 main-only, 6 Codex-only); the test's `APIRoute` count is authoritative. Better still, replace the bare number with an explicit sorted list of `(method, path)`, so a newly added route fails the test with its name rather than a count.
+- `test_every_sidecar_route_requires_bearer_token` then proves that the 10 main routes also answer 401 when auth is enabled.
+
+### R1.8 Native app: verify only
+
+No code change. `macos/JarvisKit/Sources/JarvisKit/JarvisHTTP.swift` already sets `Authorization: Bearer` from the Keychain on every request. `AdminAPI.swift`'s `workflows()` (the Workflow Viewer) and the status calls go through that sender. [certain, read on main]
+On the Mac: `swift test --package-path macos/JarvisKit` and the MortimerHost suite on the merged tree, with counts in the receipt.
+
+### R1.9 Deferred to Larry's T2 decision (not built here)
+
+1. **Turning T2 on:** setting `JARVIS_AUTH_ENABLED=true` and then plan §5 Step 9 (bind).
+2. **Creating tokens without shell commands.** A13 makes `python -m jarvis.auth add` CLI-only, which conflicts with the no-terminal-commands principle (Voice Workflows D-L2/D-L5). The options to put in front of Larry, not decided here:
+   - (a) Keep the CLI. Mortimer shows the command only when Larry explicitly asks, which D-L5 allows.
+   - (b) A pairing button in the Mac app that calls a loopback-only, one-time endpoint. This reverses A13 and needs its own threat review.
+   - (c) DEPLOY-MAIN mints the service token and a device token during a supervised deploy, and stores them in the vault and the Keychain.
+
+### R1.10 Verification: done when
+
+1. Unit, integration and `tests/ci` are green on the merged tree, and counts are in a dated receipt under `docs/acceptance/`.
+2. **Dormant proof** (flag unset, no tokens): `service_health.py admin` → `200`, `service_health.py bot` → `307` or `200`, and `system_status` answers in a voice session.
+3. **Enabled proof, in a test environment and never on production** (flag `true`, service token in the environment, no client tokens): `curl` to `/api/health` → 401; `service_health.py admin` → 200; `test_internal_callers_authenticated.py` passes.
+4. A DEPLOY-MAIN run of the merged `main`, with the flag unset, passes phase D. This is a Larry step.
+5. JarvisKit and MortimerHost suites pass on the Mac.
+
+### R1.11 Rollback
+
+Revert the WS-04 commits. Because auth is dormant, the runtime is unaffected either way. Migration `0034_client_tokens` is additive, and nothing reads it while auth is off, so it stays.
