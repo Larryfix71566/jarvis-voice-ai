@@ -6,6 +6,7 @@ unknown model is a route error and never an invitation to pick another model.
 """
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,7 @@ PRIORITIES = {"interactive", "background"}
 DEFAULT_POLICY_PATH = Path(__file__).resolve().parents[1] / "config" / "model_access.yaml"
 POLICY_PATH_ENV = "JARVIS_MODEL_ACCESS_CONFIG"
 ROUTE_ENV_PREFIX = "JARVIS_ROUTE_"
+SKILL_EVAL_ENABLED_ENV = "JARVIS_SKILL_EVAL_ENABLED"
 
 
 class ModelRouteError(RuntimeError):
@@ -140,6 +142,70 @@ class WorkloadPolicy:
 
 
 @dataclass(frozen=True)
+class SkillEvaluationLimits:
+    """Hard upper bounds for an explicitly enabled skill-evaluation batch."""
+
+    max_cases: int
+    repetitions: int
+    max_calls: int
+    max_calls_per_trial: int
+    deadline_seconds: int
+    max_input_tokens_per_call: int
+    max_output_tokens_per_call: int
+    spend_ceiling_usd: float | None
+
+
+def load_skill_evaluation_limits(
+    path: str | os.PathLike[str] | None = None,
+) -> SkillEvaluationLimits | None:
+    """Read optional bounded evaluation config; absence keeps it unavailable."""
+    data = load_access_config(path)
+    raw = data.get("skill_evaluation")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or raw.get("schema_version") != 1:
+        raise ModelRouteError("skill evaluation configuration is invalid")
+    if raw.get("enabled") is not True:
+        return None
+    required = {
+        "schema_version", "enabled", "max_cases", "repetitions", "max_calls",
+        "max_calls_per_trial", "deadline_seconds", "max_input_tokens_per_call",
+        "max_output_tokens_per_call", "spend_ceiling_usd",
+    }
+    if set(raw) != required:
+        raise ModelRouteError("skill evaluation budget fields are invalid")
+
+    def bounded_int(name: str, minimum: int, maximum: int) -> int:
+        value = raw[name]
+        if type(value) is not int or not minimum <= value <= maximum:
+            raise ModelRouteError(f"skill evaluation {name} is outside its limit")
+        return value
+
+    max_cases = bounded_int("max_cases", 1, 6)
+    repetitions = bounded_int("repetitions", 1, 2)
+    calls_per_trial = bounded_int("max_calls_per_trial", 1, 4)
+    max_calls = bounded_int("max_calls", 1, 96)
+    if max_calls > max_cases * 2 * repetitions * calls_per_trial:
+        raise ModelRouteError("skill evaluation max_calls exceeds the trial budget")
+    deadline = bounded_int("deadline_seconds", 1, 900)
+    input_tokens = bounded_int("max_input_tokens_per_call", 1, 64_000)
+    output_tokens = bounded_int("max_output_tokens_per_call", 1, 4_000)
+    spend_ceiling = raw["spend_ceiling_usd"]
+    if spend_ceiling is not None and (
+            isinstance(spend_ceiling, bool)
+            or not isinstance(spend_ceiling, (int, float))
+            or not math.isfinite(spend_ceiling) or spend_ceiling <= 0):
+        raise ModelRouteError("skill evaluation spend ceiling must be positive or null")
+    return SkillEvaluationLimits(
+        max_cases=max_cases, repetitions=repetitions, max_calls=max_calls,
+        max_calls_per_trial=calls_per_trial, deadline_seconds=deadline,
+        max_input_tokens_per_call=input_tokens,
+        max_output_tokens_per_call=output_tokens,
+        spend_ceiling_usd=float(spend_ceiling) if spend_ceiling is not None else None,
+    )
+
+
+@dataclass(frozen=True)
 class ResolvedModelRoute:
     workload: str
     profile_name: str
@@ -189,18 +255,25 @@ def resolve_policy(workload: str, *, explicit_profile: str | None = None,
                    explicit_route: str | None = None,
                    path: str | os.PathLike[str] | None = None,
                    include_preferences: bool = True) -> WorkloadPolicy:
+    skill_eval = workload == "skill_eval"
     data = load_access_config(path)
+    if skill_eval:
+        limits = load_skill_evaluation_limits(path)
+        if (limits is None
+                or os.environ.get(SKILL_EVAL_ENABLED_ENV) != "1"):
+            raise ModelRouteError("skill evaluation is disabled")
     workloads = data.get("workloads") or {}
     if workload not in workloads:
         raise ModelRouteError(f"unknown workload {workload!r}")
     raw = dict(data.get("defaults") or {})
     raw.update(workloads.get(workload) or {})
-    if include_preferences and os.environ.get("JARVIS_MODEL_PREFERENCES_ENABLED", "1") != "0":
+    if (not skill_eval and include_preferences
+            and os.environ.get("JARVIS_MODEL_PREFERENCES_ENABLED", "1") != "0"):
         try:
             from jarvis.model_preferences import list_preferences
             preference = next((item for item in list_preferences()
                                if item.get("workload") == workload), None)
-        except Exception:
+        except Exception:  # noqa: BLE001 — preferences are optional; route defaults remain authoritative
             preference = None
         if preference:
             raw["profile"] = preference["profile"]
@@ -208,6 +281,12 @@ def resolve_policy(workload: str, *, explicit_profile: str | None = None,
             raw["privacy"] = preference["privacy"]
     env_profile = os.environ.get(f"JARVIS_MODEL_PROFILE_{workload.upper()}")
     env_route = os.environ.get(f"JARVIS_MODEL_ROUTE_{workload.upper()}")
+    if skill_eval and (env_profile or env_route):
+        raise ModelRouteError("skill evaluation route overrides are not allowed")
+    if skill_eval and (
+            (explicit_profile is not None and explicit_profile != raw.get("profile"))
+            or (explicit_route is not None and explicit_route != raw.get("route"))):
+        raise ModelRouteError("skill evaluation route must match explicit configuration")
     if env_profile:
         raw["profile"] = env_profile
     if env_route:
@@ -216,7 +295,15 @@ def resolve_policy(workload: str, *, explicit_profile: str | None = None,
         raw["profile"] = explicit_profile
     if explicit_route is not None:
         raw["route"] = explicit_route
-    return _validate_policy(workload, raw)
+    policy = _validate_policy(workload, raw)
+    if workload == "skill_eval":
+        if policy.priority != "background" or policy.fallback_routes:
+            raise ModelRouteError(
+                "skill evaluation must use background priority with no fallback"
+            )
+        if "text" not in policy.required_capabilities:
+            raise ModelRouteError("skill evaluation requires text capability")
+    return policy
 
 
 def _route_for_profile(profile: dict[str, Any], route_name: str,
@@ -236,6 +323,11 @@ def _route_for_profile(profile: dict[str, Any], route_name: str,
     if privacy not in PRIVACY_LEVELS:
         raise ModelRouteError(f"route {route_name!r} has unknown privacy {privacy!r}")
     capabilities = tuple(str(item) for item in raw.get("capabilities", ("text", "tools")))
+    # Streaming is opt-in per model profile. Provider SDK support alone does
+    # not silently advertise a capability for every configured endpoint.
+    if (route_name == "direct_api" and profile.get("streaming") is True
+            and "streaming" not in capabilities):
+        capabilities = capabilities + ("streaming",)
     if route_name == "direct_api" and profile.get("vision") and "images" not in capabilities:
         capabilities = capabilities + ("images",)
     return AccessRoute(
@@ -262,6 +354,14 @@ def resolve_model_route(workload: str, *, explicit_profile: str | None = None,
     registry = _load_model_registry(registry_path)
     profile = _resolve_model_profile(registry, policy.profile, workload=workload)
     route = _route_for_profile(profile, policy.route, (load_access_config(policy_path).get("routes") or {}))
+    if workload == "skill_eval":
+        limits = load_skill_evaluation_limits(policy_path)
+        if limits is None:
+            raise ModelRouteError("skill evaluation is disabled")
+        if route.billing != "subscription" and limits.spend_ceiling_usd is None:
+            raise ModelRouteError(
+                "paid skill evaluation requires an explicit spend ceiling"
+            )
     if route.name == "saygm" and saygm_model is not None:
         catalog_model = str(getattr(saygm_model, "model", ""))
         profile_model = str(profile.get("model", ""))
@@ -319,7 +419,19 @@ def resolve_model_route_checked(workload: str, *, explicit_profile: str | None =
                                    registry_path=registry_path,
                                    environ=environ)
     from jarvis.saygm import fetch_catalog
-    catalog = fetch_catalog(api_key=(environ or os.environ).get("SAYGM_API_KEY"))
+
+    route_config = (load_access_config(policy_path).get("routes") or {}).get("saygm") or {}
+    credential_env = str(
+        route_config.get("credential_env") or route_config.get("api_key_env")
+        or "SAYGM_API_KEY"
+    )
+    credential_source = environ if environ is not None else os.environ
+    api_key = credential_source.get(credential_env)
+    if not api_key:
+        raise ModelRouteError(
+            f"route 'saygm' for workload {workload!r} requires {credential_env}"
+        )
+    catalog = fetch_catalog(api_key=api_key)
     registry = _load_model_registry(registry_path)
     profile = _resolve_model_profile(registry, policy.profile, workload=workload)
     wanted = str(profile.get("model", ""))

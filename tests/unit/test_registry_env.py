@@ -105,14 +105,25 @@ class TestBridge:
         bridge_settings_to_env()
         assert os.environ["JARVIS_TIMEZONE"] == "Europe/Berlin"
 
-    def test_a_broken_settings_object_does_not_raise(self, monkeypatch):
+    def test_a_broken_settings_object_does_not_raise_or_log_details(
+            self, monkeypatch, caplog):
         """Best-effort: one unbuildable Settings must not turn a stale env
         entry into a bot that will not start."""
         import jarvis.config as cfg
         monkeypatch.setattr(
             cfg, "load_settings",
-            lambda: (_ for _ in ()).throw(RuntimeError("boom")))
-        cfg.bridge_settings_to_env()  # must not raise
+            lambda: (_ for _ in ()).throw(RuntimeError(
+                "PRIVATE_CONFIG_CANARY /Users/private/config.yaml")))
+        monkeypatch.setattr(
+            cfg, "_dotenv_values", lambda: {"JARVIS_TIMEZONE": "America/Denver"})
+        monkeypatch.delenv("JARVIS_TIMEZONE", raising=False)
+        with caplog.at_level("WARNING", logger="jarvis.config"):
+            cfg.bridge_settings_to_env()  # must not raise
+
+        assert "settings_env_bridge_degraded error_type=RuntimeError" in caplog.text
+        assert "PRIVATE_CONFIG_CANARY" not in caplog.text
+        assert "/Users/private/config.yaml" not in caplog.text
+        assert os.environ["JARVIS_TIMEZONE"] == "America/Denver"
 
 
 class TestUnresolvedPlaceholder:

@@ -13,15 +13,16 @@ import pytest
 
 from jarvis import memory_extraction as memory_extraction_module
 from jarvis.db import get_conn, run_migrations
-from jarvis.model_execution import ModelAdmissionController
-from jarvis.model_routing import AccessRoute, ResolvedModelRoute
 from jarvis.memory_extraction import (
     _parse_candidates,
     _touch_recurrence,
     admit_fact_candidate,
     admit_observation_candidate,
+    extract_candidates_from_exchange,
     extract_from_exchange,
 )
+from jarvis.model_execution import ModelAdmissionController
+from jarvis.model_routing import AccessRoute, ResolvedModelRoute
 
 
 @pytest.fixture()
@@ -74,6 +75,17 @@ def _factory(payload):
 
 def _raising_factory():
     return lambda _settings: _RaisingClient()
+
+
+@pytest.mark.asyncio
+async def test_durable_extraction_requires_route_proof_before_client_creation():
+    created = []
+    with pytest.raises(RuntimeError, match="test client injection"):
+        await extract_candidates_from_exchange(
+            _FakeSettings(), "s1", "I prefer concise replies", "Understood", 2,
+            client_factory=lambda settings: created.append(settings),
+        )
+    assert created == []
 
 
 # --- _parse_candidates ------------------------------------------------------
@@ -475,18 +487,62 @@ class TestExtractFromExchange:
         )
 
     @pytest.mark.asyncio
-    async def test_llm_exception_is_swallowed(self, conn):
+    async def test_llm_exception_is_swallowed_and_redacted(self, conn, caplog, monkeypatch):
+        async def fail_extraction(*_args, **_kwargs):
+            raise RuntimeError("USER_CONTENT_CANARY_4AF2 /tmp/private/path")
+
+        monkeypatch.setattr(
+            memory_extraction_module,
+            "_request_exchange_candidate_text",
+            fail_extraction,
+        )
         result = await extract_from_exchange(
-            _FakeSettings(),
-            "s1",
-            "whatever",
-            "sure",
-            1,
-            client_factory=_raising_factory(),
+            _FakeSettings(), "SESSION_CANARY_7C9A", "whatever", "sure", 1
         )
         assert result["error"] is True
         assert result["facts"] == 0
         assert result["observations"] == 0
+        assert "memory_extraction_failed" in caplog.text
+        assert "RuntimeError" in caplog.text
+        assert "USER_CONTENT_CANARY_4AF2" not in caplog.text
+        assert "SESSION_CANARY_7C9A" not in caplog.text
+        assert "/tmp/private/path" not in caplog.text
+
+
+def test_recall_event_write_failure_redacts_memory_key_and_traceback(caplog):
+    class BrokenConnection:
+        def execute(self, *_args):
+            raise RuntimeError("MEMORY_BACKEND_CANARY_854D")
+
+    memory_extraction_module._record_recall_event(
+        BrokenConnection(), "MEMORY_KEY_CANARY_23BC", "exact_update",
+        "SESSION_CANARY_7C9A", 12,
+    )
+
+    assert "memory_recall_event_write_failed" in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "MEMORY_BACKEND_CANARY_854D" not in caplog.text
+    assert "MEMORY_KEY_CANARY_23BC" not in caplog.text
+    assert "SESSION_CANARY_7C9A" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_success_log_omits_memory_keys_and_session_ids(conn, caplog):
+    caplog.set_level("INFO")
+    payload = json.dumps({
+        "facts": [{"key": "MEMORY_KEY_CANARY_23BC", "value": "PRIVATE_VALUE_CANARY"}],
+        "observations": [],
+    })
+    result = await extract_from_exchange(
+        _FakeSettings(), "SESSION_CANARY_7C9A", "a stated fact", "ack", 1,
+        client_factory=_factory(payload),
+    )
+
+    assert result["facts"] == 1
+    assert "memory_exchange_extracted facts=1 observations=0" in caplog.text
+    assert "MEMORY_KEY_CANARY_23BC" not in caplog.text
+    assert "PRIVATE_VALUE_CANARY" not in caplog.text
+    assert "SESSION_CANARY_7C9A" not in caplog.text
 
 
 # --------------- Phase 4 Rev 3.4 Stage A3: the recall-failure proxy

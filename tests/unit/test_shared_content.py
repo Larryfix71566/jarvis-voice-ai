@@ -1,14 +1,23 @@
-import base64
-import pytest
-from hashlib import sha256
-
 import asyncio
-from jarvis.bot.shared_content import (normalize_message, normalize_shared_content,
-                                       approve_transfer, SharedContentService,
-                                       validate_input_message, build_shared_content_tool,
-                                       parse_voice_consent)
-from jarvis.bot.shared_content_transfer import SharedContentTransferSession
+import base64
+from hashlib import sha256
+from types import SimpleNamespace
+
+import pytest
+
 from jarvis.bot.sensitive_turn import SensitiveTurn
+from jarvis.bot.shared_content import (
+    SharedContentService,
+    analyze_shared_content_via_boundary,
+    approve_transfer,
+    build_shared_content_tool,
+    normalize_message,
+    normalize_shared_content,
+    parse_voice_consent,
+    validate_input_message,
+)
+from jarvis.bot.shared_content_transfer import SharedContentTransferSession
+from jarvis.model_routing import AccessRoute, ResolvedModelRoute
 
 
 def test_text_normalization_is_bounded_and_strips_controls():
@@ -40,13 +49,15 @@ def test_transfer_requires_explicit_approval_and_provider_disclosure():
 def test_service_requires_approval_caches_result_and_clears_items():
     item = normalize_shared_content(kind="text", text="evidence")
     calls = []
-    service = SharedContentService(model=lambda items, question: calls.append(question) or "answer")
+    service = SharedContentService(
+        model=lambda items, question, request_id, batch_id: calls.append((question, request_id, batch_id)) or "answer"
+    )
     service.stage(item)
     request = lambda: service.analyze("req-1", "batch-1", [item.content_id], "What?", "approval-1")
     result = asyncio.run(request())
-    assert result["ok"] and result["ephemeral"] and calls == ["What?"]
+    assert result["ok"] and result["ephemeral"] and calls == [("What?", "req-1", "batch-1")]
     replay = asyncio.run(request())
-    assert replay == result and calls == ["What?"]
+    assert replay == result and calls == [("What?", "req-1", "batch-1")]
     denied = asyncio.run(service.analyze("req-2", "batch-1", [item.content_id], "What?", "approval-2"))
     assert denied["error_code"] == "decode_failed"
 
@@ -63,6 +74,90 @@ def test_input_protocol_is_strict_and_bounded():
         validate_input_message({**message, "unexpected": True})
     with pytest.raises(ValueError):
         validate_input_message({**message, "question": "x" * 2001})
+
+
+def test_shared_content_uses_boundary_with_exact_approved_route_and_request(monkeypatch):
+    import jarvis.model_execution as execution
+    import jarvis.usage_ledger as ledger
+
+    route = ResolvedModelRoute(
+        workload="vision", profile_name="vision-profile", model="vision-model",
+        provider="openai", base_url="https://example.invalid/v1/",
+        route=AccessRoute(
+            "direct_api", "openai_compatible", "provider_api", "VISION_API_KEY",
+            "approved_external", capabilities=("text", "images"),
+        ),
+        api_key_env="VISION_API_KEY", identity="openai/vision-model",
+        priority="interactive",
+    )
+    image = normalize_shared_content(kind="image", data=b"image-bytes", mime_type="image/png")
+    captured = []
+    usage = []
+
+    async def fake_execute(request, selected_route, **kwargs):
+        captured.append((request, selected_route))
+        return SimpleNamespace(text="The image shows a chart.", response_id="response-1")
+
+    monkeypatch.setattr(execution, "execute_chat", fake_execute)
+    monkeypatch.setattr(ledger, "record_execution_result", lambda *a, **k: usage.append((a, k)))
+    answer = asyncio.run(analyze_shared_content_via_boundary(
+        [image], "Describe this image", "request-42", resolved_route=route,
+        session_id="session-5",
+    ))
+
+    request, selected_route = captured[0]
+    assert answer == "The image shows a chart."
+    assert selected_route is route
+    assert request.workload == "vision"
+    assert request.task_id == "shared-content:request-42"
+    assert request.parent_request_id == "request-42"
+    assert request.instructions.endswith("User question: Describe this image")
+    assert request.tools == ()
+    assert request.attachments[0].content == image
+    assert request.attachments[0].approved_route == "direct_api"
+    assert request.attachments[0].approved_model_identity == "openai/vision-model"
+    assert usage and usage[0][0][0] == "shared_content"
+    assert usage[0][1]["session_id"] == "session-5"
+
+
+def test_usage_record_failure_redacts_exception_and_preserves_answer(
+    monkeypatch, caplog
+):
+    import jarvis.model_execution as execution
+    import jarvis.usage_ledger as ledger
+
+    route = ResolvedModelRoute(
+        workload="vision", profile_name="vision-profile", model="vision-model",
+        provider="openai", base_url="https://example.invalid/v1/",
+        route=AccessRoute(
+            "direct_api", "openai_compatible", "provider_api", "VISION_API_KEY",
+            "approved_external", capabilities=("text", "images"),
+        ),
+        api_key_env="VISION_API_KEY", identity="openai/vision-model",
+        priority="interactive",
+    )
+
+    async def fake_execute(*_args, **_kwargs):
+        return SimpleNamespace(text="ANSWER_CANARY", response_id="response-1")
+
+    def fail_ledger(*_args, **_kwargs):
+        raise RuntimeError("SHARED_USAGE_CANARY /private/shared/ledger")
+
+    monkeypatch.setattr(execution, "execute_chat", fake_execute)
+    monkeypatch.setattr(ledger, "record_execution_result", fail_ledger)
+    caplog.set_level("WARNING", logger="jarvis.bot.shared_content")
+    answer = asyncio.run(analyze_shared_content_via_boundary(
+        [normalize_shared_content(kind="text", text="private source")],
+        "question", "request-1", resolved_route=route,
+        session_id="SESSION_CANARY",
+    ))
+
+    assert answer == "ANSWER_CANARY"
+    assert "shared_content_usage_record_failed error_type=RuntimeError" in caplog.text
+    assert "SHARED_USAGE_CANARY" not in caplog.text
+    assert "/private/shared/ledger" not in caplog.text
+    assert "ANSWER_CANARY" not in caplog.text
+    assert "SESSION_CANARY" not in caplog.text
 
 
 def test_voice_shared_content_only_requests_an_explicit_offer():
@@ -83,6 +178,25 @@ def test_voice_shared_content_only_requests_an_explicit_offer():
     assert sent[0]["type"] == "input/offer"
     assert sent[0]["attachment_ids"] == [attachment]
     assert sent[0]["profile"]["label"] == "Configured vision"
+
+
+def test_voice_shared_content_resolves_profile_for_each_offer_before_disclosure():
+    sent = []
+    resolved = []
+
+    def profile(batch_id):
+        resolved.append(batch_id)
+        return {"id": f"route:{batch_id}", "label": "Vision via subscription"}
+
+    _, handler = build_shared_content_tool(
+        lambda message: sent.append(message),
+        session_id="session", generation="generation", profile=profile,
+    )
+    attachment = "00000000-0000-4000-8000-000000000099"
+    asyncio.run(handler({"attachment_ids": [attachment], "question": "Describe this."}))
+    assert len(resolved) == 1
+    assert sent[0]["batch_id"] == resolved[0]
+    assert sent[0]["profile"]["id"] == f"route:{resolved[0]}"
 
 
 def test_voice_consent_accepts_only_the_exact_pending_notice_phrases():
@@ -138,7 +252,9 @@ def test_approved_manifest_chunks_commit_and_analyze_are_ephemeral():
     raw = b"approved research"
     digest = sha256(raw).hexdigest()
     calls = []
-    service = SharedContentService(model=lambda items, question: calls.append((len(items), question)) or "answer")
+    service = SharedContentService(
+        model=lambda items, question, request_id, batch_id: calls.append((len(items), question)) or "answer"
+    )
     transfer = SharedContentTransferSession(service, session_id=session_id, generation=generation)
     envelope = {"version": 1, "session_id": session_id, "generation": generation,
                 "request_id": "00000000-0000-4000-8000-000000000026"}
@@ -243,10 +359,15 @@ def test_cancel_during_analysis_discards_late_provider_result():
     digest = sha256(raw).hexdigest()
     started = asyncio.Event()
     release = asyncio.Event()
+    interrupted = asyncio.Event()
 
-    async def model(items, question):
+    async def model(items, question, request_id, batch_id):
         started.set()
-        await release.wait()
+        try:
+            await release.wait()
+        except asyncio.CancelledError:
+            interrupted.set()
+            raise
         return "late answer"
 
     service = SharedContentService(model=model)
@@ -276,6 +397,7 @@ def test_cancel_during_analysis_discards_late_provider_result():
 
     result = asyncio.run(run())
     assert result["status"] == "error" and result["code"] == "cancelled"
+    assert interrupted.is_set()
 
 
 def test_malformed_analyze_is_reported_without_escaping_the_session():

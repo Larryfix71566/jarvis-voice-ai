@@ -1,0 +1,18 @@
+{
+  "observed_at": "2026-09-28T21:03:34.767706+00:00",
+  "source": "system_profiler SPHardwareDataType and host-authorized SPDisplaysDataType",
+  "machine_name": "MacBook Air",
+  "machine_model": "Mac17,4",
+  "chip": "Apple M5",
+  "memory": "16 GB",
+  "displays": [
+    {
+      "name": "Color LCD",
+      "built_in": true,
+      "online": true,
+      "main": true
+    }
+  ],
+  "physical_external_display_observed": false,
+  "performance_acceptance": false
+}

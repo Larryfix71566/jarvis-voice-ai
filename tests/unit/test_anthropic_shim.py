@@ -12,6 +12,7 @@ against the real SDK's classes, not a hand-rolled stand-in for them).
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import anthropic
 import httpx
@@ -20,7 +21,13 @@ import pytest
 from anthropic.types import Message, TextBlock, ToolUseBlock, Usage
 
 from jarvis import anthropic_shim as shim
-
+from jarvis.model_execution import (
+    ModelAdmissionController,
+    ModelExecutionRequest,
+    execute_chat,
+)
+from jarvis.model_routing import AccessRoute, ResolvedModelRoute
+from jarvis.privacy_policy import DataPolicy
 
 # ---------------------------------------------------------------------------
 # S1 — tools
@@ -77,7 +84,7 @@ class TestConvertTools:
 
 class TestLeadingSystemBlocks:
     def test_no_system_messages_returns_not_given(self):
-        system, messages = shim._convert_messages([{"role": "user", "content": "hi"}])
+        system, _messages = shim._convert_messages([{"role": "user", "content": "hi"}])
         assert system is anthropic.NOT_GIVEN
 
     def test_single_leading_system_message_cached(self):
@@ -468,9 +475,13 @@ class TestBuildRequest:
         with pytest.raises(TypeError):
             shim._build_request(model="m", messages=self._messages(), n=2)
 
-    def test_stream_true_raises_shim_error(self):
-        with pytest.raises(shim.ShimError):
-            shim._build_request(model="m", messages=self._messages(), stream=True)
+    def test_stream_true_uses_messages_stream_without_forwarding_stream_kwarg(self):
+        req = shim._build_request(model="m", messages=self._messages(), stream=True)
+        assert "stream" not in req
+
+    def test_non_boolean_stream_is_rejected(self):
+        with pytest.raises(shim.ShimError, match="stream must be a boolean"):
+            shim._build_request(model="m", messages=self._messages(), stream="yes")
 
     def test_stream_false_is_fine(self):
         req = shim._build_request(model="m", messages=self._messages(), stream=False)
@@ -522,6 +533,7 @@ class _FakeMessages:
         self._response = response
         self._to_raise = to_raise
         self.last_kwargs = None
+        self.stream_manager = None
 
     def create(self, **kwargs):
         self.last_kwargs = kwargs
@@ -529,10 +541,35 @@ class _FakeMessages:
             raise self._to_raise
         return self._response
 
+    def stream(self, **kwargs):
+        self.last_kwargs = kwargs
+        if self.stream_manager is None:
+            raise AssertionError("unexpected streaming request")
+        return self.stream_manager
+
 
 class _FakeClient:
     def __init__(self, response=None, to_raise=None):
         self.messages = _FakeMessages(response=response, to_raise=to_raise)
+
+
+class _SyncStreamManager:
+    def __init__(self, events, final_message):
+        self.events = events
+        self.final_message = final_message
+        self.closed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.closed = True
+
+    def __iter__(self):
+        return iter(self.events)
+
+    def get_final_message(self):
+        return self.final_message
 
 
 class TestChatCompletionsShimSync:
@@ -563,15 +600,64 @@ class TestChatCompletionsShimSync:
             )
         assert excinfo.value.status_code == 529
 
+    def test_stream_emits_openai_shaped_text_and_terminal_chunks(self):
+        events = [
+            SimpleNamespace(type="message_start", message=SimpleNamespace(id="sync-stream")),
+            SimpleNamespace(type="content_block_delta", index=0,
+                             delta=SimpleNamespace(type="text_delta", text="sync answer")),
+            SimpleNamespace(type="message_delta", delta=SimpleNamespace(stop_reason="end_turn")),
+        ]
+        manager = _SyncStreamManager(events, _msg(content=[TextBlock(type="text", text="sync answer")]))
+        client = _FakeClient()
+        client.messages.stream_manager = manager
+        chunks = shim._ChatCompletionsShim(client, {}).create(
+            model="claude-sonnet-5", messages=[{"role": "user", "content": "hello"}],
+            stream=True,
+        )
+        emitted = list(chunks)
+        assert emitted[0].choices[0].delta.content == "sync answer"
+        assert emitted[-1].choices[0].finish_reason == "stop"
+        assert emitted[-1].usage.completion_tokens == 50
+        assert manager.closed
+
 
 class _FakeAsyncMessages:
     def __init__(self, response):
         self._response = response
         self.last_kwargs = None
+        self.stream_manager = None
 
     async def create(self, **kwargs):
         self.last_kwargs = kwargs
         return self._response
+
+    def stream(self, **kwargs):
+        self.last_kwargs = kwargs
+        if self.stream_manager is None:
+            raise AssertionError("unexpected streaming request")
+        return self.stream_manager
+
+
+class _AsyncStreamManager:
+    def __init__(self, events, final_message):
+        self.events = events
+        self.final_message = final_message
+        self.closed = False
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_):
+        self.closed = True
+
+    def __aiter__(self):
+        async def iterate():
+            for event in self.events:
+                yield event
+        return iterate()
+
+    async def get_final_message(self):
+        return self.final_message
 
 
 class _FakeAsyncClient:
@@ -593,6 +679,91 @@ class TestChatCompletionsShimAsync:
 
         assert client.messages.last_kwargs["model"] == "claude-sonnet-5"
         assert cc.choices[0].message.content == "async hi"
+
+    @pytest.mark.asyncio
+    async def test_stream_translates_text_and_tool_deltas_to_openai_chunks(self):
+        events = [
+            SimpleNamespace(type="message_start", message=SimpleNamespace(id="msg-stream")),
+            SimpleNamespace(type="content_block_delta", index=0,
+                             delta=SimpleNamespace(type="text_delta", text="Hello")),
+            SimpleNamespace(type="content_block_start", index=1,
+                             content_block=SimpleNamespace(type="tool_use", id="call-1",
+                                                            name="search", input={})),
+            SimpleNamespace(type="content_block_delta", index=1,
+                             delta=SimpleNamespace(type="input_json_delta",
+                                                   partial_json='{"query":"orb"}')),
+            SimpleNamespace(type="message_delta",
+                             delta=SimpleNamespace(stop_reason="tool_use")),
+        ]
+        manager = _AsyncStreamManager(
+            events,
+            _msg(content=[TextBlock(type="text", text="Hello"),
+                          ToolUseBlock(type="tool_use", id="call-1", name="search",
+                                       input={"query": "orb"})], stop_reason="tool_use"),
+        )
+        client = _FakeAsyncClient(response=None)
+        client.messages.stream_manager = manager
+        chunks = await shim._AsyncChatCompletionsShim(client).create(
+            model="claude-sonnet-5",
+            messages=[{"role": "user", "content": "search"}],
+            tools=[{"type": "function", "function": {"name": "search",
+                    "parameters": {"type": "object"}}}],
+            stream=True,
+        )
+        emitted = [chunk async for chunk in chunks]
+        assert client.messages.last_kwargs["model"] == "claude-sonnet-5"
+        assert emitted[0].choices[0].delta.content == "Hello"
+        tool_start = next(chunk for chunk in emitted
+                          if chunk.choices[0].delta.tool_calls)
+        assert tool_start.choices[0].delta.tool_calls[0].id == "call-1"
+        args = next(chunk for chunk in emitted
+                    if chunk.choices[0].delta.tool_calls
+                    and chunk.choices[0].delta.tool_calls[0].function.arguments)
+        assert args.choices[0].delta.tool_calls[0].function.arguments == '{"query":"orb"}'
+        assert emitted[-1].choices[0].finish_reason == "tool_calls"
+        assert emitted[-1].usage.prompt_tokens == 100
+        assert manager.closed
+
+    @pytest.mark.asyncio
+    async def test_execution_boundary_collects_native_anthropic_stream(self):
+        manager = _AsyncStreamManager(
+            [
+                SimpleNamespace(type="message_start", message=SimpleNamespace(id="msg_123")),
+                SimpleNamespace(type="content_block_delta", index=0,
+                                 delta=SimpleNamespace(type="text_delta", text="streamed answer")),
+                SimpleNamespace(type="message_delta",
+                                 delta=SimpleNamespace(stop_reason="end_turn")),
+            ],
+            _msg(content=[TextBlock(type="text", text="streamed answer")]),
+        )
+        native_client = _FakeAsyncClient(response=None)
+        native_client.messages.stream_manager = manager
+        completions = shim._AsyncChatCompletionsShim(native_client)
+        client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+        route = ResolvedModelRoute(
+            workload="developer", profile_name="test", model="claude-sonnet-5",
+            provider="anthropic", base_url="https://api.anthropic.com/v1",
+            route=AccessRoute("direct_api", "openai_compatible", "provider_api", None,
+                              "approved_external", capabilities=("text", "streaming")),
+            api_key_env=None, identity="anthropic/claude-sonnet-5",
+        )
+        events = []
+        result = await execute_chat(
+            ModelExecutionRequest(
+                "developer", "task-anthropic-stream", "parent-anthropic-stream",
+                "Answer", data_policy=DataPolicy("approved_external", "test"),
+                stream_text=True,
+            ), route, client_factory=lambda _: client, event_sink=events.append,
+            event_sink_policy=DataPolicy("local_only", "local-test"),
+            admission=ModelAdmissionController(),
+        )
+        assert result.text == "streamed answer"
+        assert result.response_id == "msg_123"
+        assert [event.text_delta for event in events if event.event_type == "text_delta"] == [
+            "streamed answer",
+        ]
+        assert events[-1].event_type == "completed"
+        assert manager.closed
 
 
 # ---------------------------------------------------------------------------

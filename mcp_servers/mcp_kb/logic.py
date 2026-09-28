@@ -50,7 +50,8 @@ def _warn_unreachable(exc: Exception) -> None:
     global _LAST_UNREACHABLE_WARNING
     now = time.monotonic()
     if now - _LAST_UNREACHABLE_WARNING >= _UNREACHABLE_WARNING_INTERVAL_S:
-        logger.warning("kb_vault_unreachable base_url=%s error=%s", _base_url(), exc)
+        logger.warning("kb_vault_unreachable error_type=%s",
+                       type(exc).__name__[:64])
         _LAST_UNREACHABLE_WARNING = now
 
 
@@ -119,7 +120,7 @@ def kb_write(
     """
     reason = scan_memory_content(body)
     if reason is not None:
-        logger.warning("kb_write_rejected reason=%s id=%s", reason, id)
+        logger.warning("kb_write_rejected")
         return {"ok": False, "error": "content rejected"}
 
     payload = _without_none(
@@ -148,4 +149,3 @@ def kb_delete(id: str) -> dict[str, Any]:
 def kb_flush() -> dict[str, Any]:
     """Flush buffered access-time bookkeeping into a single commit."""
     return _post("/flush_access", {})
-

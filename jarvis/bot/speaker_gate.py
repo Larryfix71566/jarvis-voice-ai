@@ -154,10 +154,11 @@ def _write_capture(pcm16: bytes, sample_rate: int) -> None:
         existing = sorted(CAPTURE_DIR.glob("turn-*.wav"))
         for old in existing[:-CAPTURE_MAX_FILES]:
             old.unlink(missing_ok=True)
-        logger.info("speaker_capture_saved path=%s secs=%.1f", path,
-                    len(pcm16) / (2 * sample_rate))
-    except Exception:
-        logger.warning("speaker_capture_failed", exc_info=True)
+        logger.info("speaker_capture_saved secs=%.1f", len(pcm16) / (2 * sample_rate))
+    except Exception as exc:
+        logger.warning(
+            "speaker_capture_failed error_type=%s", type(exc).__name__[:80]
+        )
 
 
 @dataclass
@@ -260,13 +261,16 @@ class SpeakerTap(FrameProcessor):
                 self._state.scores[turn_id] = best
                 if final:
                     logger.info(
-                        "speaker_gate_scored turn_id=%s windows=%d best=%s whole=%s",
-                        turn_id, n_windows,
+                        "speaker_gate_scored windows=%d best=%s whole=%s",
+                        n_windows,
                         f"{best:.2f}" if best is not None else "none",
                         f"{whole:.2f}" if whole is not None else "none",
                     )
-            except Exception:
-                logger.warning("speaker_gate_score_failed turn_id=%s", turn_id, exc_info=True)
+            except Exception as exc:
+                logger.warning(
+                    "speaker_gate_score_failed error_type=%s",
+                    type(exc).__name__[:80],
+                )
                 self._state.scores[turn_id] = None
 
         asyncio.create_task(_run())
@@ -338,8 +342,11 @@ class TranscriptGate(FrameProcessor):
                 "type": "speaker_gate", "verdict": "dropped",
                 "score": score, "near_threshold": near_threshold,
             })
-        except Exception:
-            logger.debug("speaker_gate_ui_notify_failed", exc_info=True)
+        except Exception as exc:
+            logger.debug(
+                "speaker_gate_ui_notify_failed error_type=%s",
+                type(exc).__name__[:80],
+            )
 
         # F3 — the honest-drop context note. Doubly bounded: only for a
         # score plausibly the enrolled speaker (near_threshold), and only
@@ -351,8 +358,11 @@ class TranscriptGate(FrameProcessor):
                 self._last_drop_note_at = now
                 try:
                     await self._inject(DROP_NOTICE)
-                except Exception:
-                    logger.debug("speaker_gate_drop_note_failed", exc_info=True)
+                except Exception as exc:
+                    logger.debug(
+                        "speaker_gate_drop_note_failed error_type=%s",
+                        type(exc).__name__[:80],
+                    )
         # Do not push the frame downstream.
 
     async def _await_score(self, turn_id: int) -> float | None:

@@ -44,8 +44,9 @@ one terminal signal that works on every path.
   2. Non-delegated turn: first MORTIMER log line, or 25s with no delegation,
      then --quiet seconds of inactivity.
 
-Progress goes to stdout; the bot log carries the USER:/MORTIMER:/[AGENT]/TURN
-lines used as checklist evidence.
+Progress goes to stdout; the bot log carries content-free USER:/MORTIMER:
+speaker markers, [AGENT] lifecycle events, and TURN latency lines used as
+checklist evidence. Transcript text is deliberately omitted from that log.
 
 Manifest directives (Phase 5/7 extensions — same tooling, no server changes):
   @APP {"type":"voice/set","voice":"eric"}
@@ -70,6 +71,7 @@ import asyncio
 import fractions
 import json
 import logging
+import os
 import re
 import sys
 import time
@@ -390,6 +392,7 @@ async def run(args: argparse.Namespace) -> int:
         resp = await http.post(
             args.url,
             json={"sdp": pc.localDescription.sdp, "type": "offer"},
+            headers={"Authorization": f"Bearer {args.token}"} if args.token else {},
         )
         resp.raise_for_status()
         answer = resp.json()
@@ -523,6 +526,7 @@ def main() -> None:
     ap.add_argument("--manifest", required=True)
     ap.add_argument("--bot-log", required=True)
     ap.add_argument("--url", default="http://localhost:7860/api/offer")
+    ap.add_argument("--token", default=os.environ.get("JARVIS_SERVICE_TOKEN", ""))
     ap.add_argument("--turn-timeout", type=float, default=150.0)
     ap.add_argument("--greeting-timeout", type=float, default=45.0)
     ap.add_argument("--quiet", type=float, default=8.0,

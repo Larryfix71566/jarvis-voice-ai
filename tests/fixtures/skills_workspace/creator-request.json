@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "operation": "draft",
+  "request_id": "82f3b1da-0191-44ce-a7a9-c083efbc8101",
+  "bot_session_id": "11111111-2222-4333-8444-555555555555",
+  "expected_catalog_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "skill_id": "example-skill",
+  "task_brief": "Create a reviewed skill using only the approved synthetic examples.",
+  "privacy_context": "standard"
+}

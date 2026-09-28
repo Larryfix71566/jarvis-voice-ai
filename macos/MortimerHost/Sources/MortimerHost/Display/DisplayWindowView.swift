@@ -13,6 +13,7 @@ struct DisplayWindowView: View {
     }
     @Environment(DisplayWindowStore.self) private var store
     @Environment(WorkspaceStore.self) private var workspace
+    @Environment(SkillsStore.self) private var skills
     @Environment(DrawerState.self) private var drawer
     @EnvironmentObject private var client: JarvisClient
 
@@ -30,6 +31,9 @@ struct DisplayWindowView: View {
                         MemoryGraphView(store: workspace.memoryGraph, api: client.admin)
                     } else if let result = workspace.supportingResult {
                         WorkspaceResultPane(result: result, onSupportingDisplay: true)
+                    } else if case .some(.skillDetail(let skillID)) = workspace.supportingContent,
+                              skills.selectedSkillID == skillID {
+                        SkillsWorkspaceView(detailOnly: true)
                     }
                 }.padding(16)
             } else {
@@ -76,6 +80,8 @@ private struct LegacySupportingDisplayStage: View {
     let content: SupportingDisplayContent
     @Environment(WorkspaceStore.self) private var workspace
     @EnvironmentObject private var client: JarvisClient
+    @Environment(SkillsStore.self) private var skills
+    @Environment(DrawerState.self) private var drawer
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -86,6 +92,13 @@ private struct LegacySupportingDisplayStage: View {
                 Text("SUPPORTING DISPLAY")
                     .font(.caption2.monospaced().weight(.semibold))
                     .foregroundStyle(AppTheme.textDim)
+                if case .skillDetail = content {
+                    Button("Return here") {
+                        workspace.returnSkillDetailsToMain()
+                        drawer.placementRef?.closeDisplay()
+                    }
+                        .accessibilityHint("Moves the skill details back to the main window")
+                }
             }
             .padding(.horizontal, 4)
             Group {
@@ -97,6 +110,13 @@ private struct LegacySupportingDisplayStage: View {
                         WorkspaceResultPane(result: result, onSupportingDisplay: true)
                     } else {
                         ContentUnavailableView("Result unavailable", systemImage: "exclamationmark.triangle")
+                    }
+                case .skillDetail(let skillID):
+                    if skills.selectedSkillID == skillID {
+                        SkillsWorkspaceView(detailOnly: true)
+                    } else {
+                        ContentUnavailableView("Skill selection changed", systemImage: "square.grid.2x2",
+                            description: Text("Return to the main window and select the skill again."))
                     }
                 }
             }
@@ -112,8 +132,10 @@ private struct LegacySupportingDisplayStage: View {
         switch content {
         case .memoryGraph: return "Memory graph"
         case .result(let id): return workspace.results.first(where: { $0.id == id })?.payload.title ?? "Result"
+        case .skillDetail(let id): return skills.displayName(for: id) ?? "Skill details"
         }
     }
+
 }
 
 /// The default supporting-display renderer. The display scene is already a

@@ -135,7 +135,7 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   agent TEXT NOT NULL,
   display_name TEXT NOT NULL DEFAULT '',
   task TEXT NOT NULL,
-  status TEXT NOT NULL,              -- running | ok | failed | timeout
+  status TEXT NOT NULL,              -- running | ok | failed | timeout | cancelled
   started_at TEXT NOT NULL,
   ended_at TEXT,
   latency_ms INTEGER,
@@ -655,6 +655,172 @@ CREATE INDEX IF NOT EXISTS idx_model_route_drafts_expiry
   ON model_route_drafts(expires_at);
 """
 
+# Durable staging for new extraction exchanges before the global cursor moves
+# past them. Payloads remain staging-only and are removed on terminal success,
+# cancellation, or an authorized forget request.
+MIGRATION_0025_memory_admission_jobs = """
+CREATE TABLE IF NOT EXISTS memory_admission_jobs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  user_id TEXT NOT NULL DEFAULT 'local',
+  session_id TEXT NOT NULL,
+  user_turn_id INTEGER NOT NULL,
+  assistant_turn_id INTEGER NOT NULL,
+  policy_version TEXT NOT NULL,
+  stage TEXT NOT NULL DEFAULT 'extract'
+    CHECK (stage IN ('extract','classify','apply')),
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','running','complete','failed','cancelled')),
+  candidate_json TEXT,
+  classification_json TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+  next_attempt_at TEXT NOT NULL,
+  claimed_at TEXT,
+  last_error_code TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(user_id, session_id, user_turn_id, assistant_turn_id, policy_version)
+);
+CREATE INDEX IF NOT EXISTS idx_memory_admission_jobs_due
+  ON memory_admission_jobs(status, next_attempt_at, id);
+CREATE INDEX IF NOT EXISTS idx_memory_admission_jobs_turns
+  ON memory_admission_jobs(user_id, user_turn_id, assistant_turn_id);
+"""
+
+# Atomic shared classification budget for the legacy maintenance queue and
+# durable exchange-admission jobs. Existing rows remain countable as legacy
+# usage; new provider work reserves before it leaves the process.
+MIGRATION_0026_memory_classification_budget = """
+ALTER TABLE memory_maintenance ADD COLUMN budget_reservation_id TEXT;
+CREATE TABLE IF NOT EXISTS memory_classification_budget_reservations (
+  reservation_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL DEFAULT 'local',
+  usage_day TEXT NOT NULL,
+  candidate_count INTEGER NOT NULL CHECK (candidate_count >= 0),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_memory_classification_budget_day
+  ON memory_classification_budget_reservations(usage_day);
+"""
+
+MIGRATION_0027_memory_admission_shadow = """
+CREATE TABLE IF NOT EXISTS memory_admission_shadow (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id INTEGER NOT NULL UNIQUE,
+  user_id TEXT NOT NULL DEFAULT 'local',
+  candidate_digest TEXT NOT NULL,
+  classification_json TEXT NOT NULL,
+  observed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_memory_admission_shadow_observed
+  ON memory_admission_shadow(observed_at);
+"""
+
+# GC24-02: correlate durable tool requests/results and expose actions whose
+# outcome is unknown after cancellation or process interruption. Legacy event
+# rows remain readable with a NULL call identity.
+MIGRATION_0028_agent_event_tool_call_identity = """
+ALTER TABLE agent_events ADD COLUMN tool_call_id TEXT;
+CREATE INDEX idx_agent_events_tool_call
+  ON agent_events(run_id, tool_call_id, type);
+"""
+
+# GC24-02: durable one-shot claims for side-effecting job starts. The
+# execution id is supplied by the owning execution (currently a SubAgent run
+# id for plan_start), so a provider may issue a fresh tool_call_id without
+# starting the same job again. No prompt, arguments, or result content is
+# stored in this table.
+MIGRATION_0029_execution_action_claims = """
+CREATE TABLE IF NOT EXISTS execution_action_claims (
+  user_id TEXT NOT NULL DEFAULT 'local',
+  action_scope TEXT NOT NULL,
+  execution_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'claimed'
+    CHECK (status IN ('claimed','running','awaiting_choice','completed','failed')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(user_id, action_scope, execution_id)
+);
+CREATE INDEX IF NOT EXISTS idx_execution_action_claims_updated
+  ON execution_action_claims(user_id, updated_at);
+"""
+
+# Skills workspace SW2: bounded, content-free execution receipts. These are
+# separate from agent_events so the UI never has to interpret preview fields
+# as a skill schema. Retention is explicitly coupled in runlog.prune.
+MIGRATION_0030_skill_events = """
+CREATE TABLE IF NOT EXISTS skill_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL DEFAULT 'local',
+  run_id TEXT NOT NULL,
+  request_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+  occurred_at TEXT NOT NULL,
+  skill_id TEXT,
+  skill_revision TEXT,
+  step_id TEXT,
+  attempt_id TEXT,
+  type TEXT NOT NULL CHECK (type IN (
+    'skill_selected', 'skill_resource_read', 'skill_step_started',
+    'skill_step_finished', 'skill_step_skipped', 'skill_selection_refused',
+    'protected_activity', 'truncated'
+  )),
+  status TEXT NOT NULL CHECK (status IN (
+    'running', 'passed', 'failed', 'skipped', 'unknown'
+  )),
+  evidence_refs TEXT NOT NULL DEFAULT '[]',
+  UNIQUE(user_id, run_id, event_id),
+  UNIQUE(user_id, run_id, seq)
+);
+CREATE INDEX IF NOT EXISTS idx_skill_events_skill_revision
+  ON skill_events(user_id, skill_id, skill_revision, run_id, seq);
+CREATE INDEX IF NOT EXISTS idx_skill_events_run_cursor
+  ON skill_events(user_id, run_id, seq);
+"""
+
+# K1 (MORTIMER_REMOTE_ACCESS_PLAN.md A1/A3): per-client bearer tokens.
+# Only SHA-256 digests are stored; plaintext is shown once by the CLI.
+# No backfill is needed: an empty table means no caller is authorized.
+MIGRATION_0031 = """
+CREATE TABLE IF NOT EXISTS client_tokens (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL DEFAULT 'larry',
+  name TEXT NOT NULL UNIQUE,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  last_used_at TEXT,
+  revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_client_tokens_revoked
+  ON client_tokens(revoked_at);
+"""
+
+# Skills workspace SW2: one-shot host-controller receipts for verifiable
+# process-step checks. The receipt payload is not retained; its digest, exact
+# scope and bounded lifetime suffice for replay/idempotency checks.
+MIGRATION_0032_skill_step_check_receipts = """
+CREATE TABLE IF NOT EXISTS skill_step_check_receipts (
+  user_id TEXT NOT NULL DEFAULT 'local',
+  receipt_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  request_id TEXT NOT NULL,
+  skill_id TEXT NOT NULL,
+  skill_revision TEXT NOT NULL,
+  step_id TEXT NOT NULL,
+  attempt_id TEXT NOT NULL,
+  receipt_sha256 TEXT NOT NULL,
+  issued_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  accepted_at TEXT NOT NULL,
+  UNIQUE(user_id, receipt_id),
+  UNIQUE(user_id, run_id, skill_id, skill_revision, step_id, attempt_id)
+);
+CREATE INDEX IF NOT EXISTS idx_skill_step_receipts_run
+  ON skill_step_check_receipts(user_id, run_id);
+"""
+
 # (migration_id, sql) — applied strictly in list order.
 MIGRATIONS: list[tuple[str, str]] = [
     ("0001_init", MIGRATION_0001),
@@ -681,6 +847,14 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0022_memory_automation", MIGRATION_0022),
     ("0023_memory_classification_shadow", MIGRATION_0023),
     ("0024_model_route_preferences", MIGRATION_0024_model_route_preferences),
+    ("0025_memory_admission_jobs", MIGRATION_0025_memory_admission_jobs),
+    ("0026_memory_classification_budget", MIGRATION_0026_memory_classification_budget),
+    ("0027_memory_admission_shadow", MIGRATION_0027_memory_admission_shadow),
+    ("0028_agent_event_tool_call_identity", MIGRATION_0028_agent_event_tool_call_identity),
+    ("0029_execution_action_claims", MIGRATION_0029_execution_action_claims),
+    ("0030_skill_events", MIGRATION_0030_skill_events),
+    ("0031_client_tokens", MIGRATION_0031),
+    ("0032_skill_step_check_receipts", MIGRATION_0032_skill_step_check_receipts),
 ]
 
 
@@ -702,6 +876,77 @@ def get_conn(db_path: str | Path | None = None) -> sqlite3.Connection:
 def now_iso() -> str:
     """Current UTC time as an ISO 8601 string."""
     return datetime.now(timezone.utc).isoformat()
+
+
+def claim_execution_action(
+    action_scope: str, execution_id: str, db_path: str | Path | None = None,
+    *, user_id: str = "local",
+) -> bool:
+    """Atomically claim one side effect for a stable owning execution id.
+
+    This does not infer equivalence from tool arguments. Callers must choose
+    an action scope and an execution identity whose lifecycle matches the
+    protected operation. A false result means a prior attempt may have
+    produced an effect and must be reconciled before retry.
+    """
+    scope = str(action_scope or "").strip()
+    identity = str(execution_id or "").strip()
+    owner = str(user_id or "").strip()
+    if (not scope or len(scope) > 160 or not identity or len(identity) > 256
+            or not owner or len(owner) > 128):
+        raise ValueError("action scope and execution id must be bounded and non-empty")
+    stamp = now_iso()
+    conn = get_conn(db_path)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO execution_action_claims "
+            "(user_id, action_scope, execution_id, status, created_at, updated_at) "
+            "VALUES (?, ?, ?, 'claimed', ?, ?)",
+            (owner, scope, identity, stamp, stamp),
+        )
+        conn.commit()
+        return cur.rowcount == 1
+    finally:
+        conn.close()
+
+
+def update_execution_action(
+    action_scope: str, execution_id: str, status: str,
+    db_path: str | Path | None = None, *, user_id: str = "local",
+) -> bool:
+    """Update a claimed action's bounded lifecycle state; never creates it."""
+    if status not in {"claimed", "running", "awaiting_choice", "completed", "failed"}:
+        raise ValueError("unsupported execution action status")
+    conn = get_conn(db_path)
+    try:
+        cur = conn.execute(
+            "UPDATE execution_action_claims SET status = ?, updated_at = ? "
+            "WHERE user_id = ? AND action_scope = ? AND execution_id = ?",
+            (status, now_iso(), user_id, action_scope, execution_id),
+        )
+        conn.commit()
+        return cur.rowcount == 1
+    finally:
+        conn.close()
+
+
+def get_execution_action(
+    action_scope: str, execution_id: str, db_path: str | Path | None = None,
+    *, user_id: str = "local",
+) -> dict[str, str] | None:
+    """Return only the content-free receipt for one claimed action."""
+    conn = get_conn(db_path)
+    try:
+        row = conn.execute(
+            "SELECT user_id, action_scope, execution_id, status, created_at, updated_at "
+            "FROM execution_action_claims WHERE user_id = ? AND action_scope = ? "
+            "AND execution_id = ?",
+            (user_id, action_scope, execution_id),
+        ).fetchone()
+        return dict(row) if row is not None else None
+    finally:
+        conn.close()
 
 
 def run_migrations(conn: sqlite3.Connection | None = None) -> list[str]:

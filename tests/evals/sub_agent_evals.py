@@ -31,6 +31,8 @@ from types import SimpleNamespace
 import pytest
 
 from jarvis.agents.base import SubAgent
+import jarvis.agents.base as agent_base
+from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.config import Settings
 from jarvis.skills.registry import SkillRegistry
 
@@ -94,6 +96,31 @@ class RecordingRegistry(SkillRegistry):
             "servers": server_names,
         })
         return await super().call(name, arguments, server_names)
+
+
+@pytest.fixture(autouse=True)
+def public_fake_agent_context(monkeypatch):
+    """Keep these fake-tool evals independent of live route/privacy policy.
+
+    This suite checks deterministic tool selection against synthetic data and
+    FakeLLM only. Live protected-route enforcement has separate unit coverage.
+    Explicitly install an ordinary turn and approved-external test policy so
+    fail-closed production defaults cannot short-circuit every fake run.
+    """
+    from dataclasses import replace
+
+    original_resolve_policy = agent_base.resolve_policy
+
+    def public_fixture_policy(*args, **kwargs):
+        policy = original_resolve_policy(*args, **kwargs)
+        return replace(policy, privacy="approved_external")
+
+    monkeypatch.setattr(agent_base, "resolve_policy", public_fixture_policy)
+    token = current_sensitive_turn.set(SensitiveTurn())
+    try:
+        yield
+    finally:
+        current_sensitive_turn.reset(token)
 
     def reset(self):
         self.calls.clear()

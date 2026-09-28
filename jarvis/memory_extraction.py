@@ -60,9 +60,9 @@ Known, deliberate scope limits (not attempted here):
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
-import hashlib
 from typing import Any, Callable
 
 from jarvis.config import Settings
@@ -77,10 +77,15 @@ from jarvis.memory import (
     scan_memory_content,
     upsert_fact,
 )
-from jarvis.procedures import _overlap_score, _tokens
 from jarvis.memory_model import make_memory_async_client
-from jarvis.model_execution import ModelContextMessage, ModelExecutionRequest, execute_chat
+from jarvis.model_execution import (
+    ModelContextMessage,
+    ModelExecutionRequest,
+    execute_chat,
+)
+from jarvis.model_routing import make_route_client
 from jarvis.privacy_policy import DataPolicy
+from jarvis.procedures import _overlap_score, _tokens
 from jarvis.usage_ledger import (
     provider_from_base_url,
     record_completion,
@@ -160,6 +165,152 @@ def _parse_candidates(text: str) -> dict | None:
     return {"facts": clean_facts, "observations": clean_observations}
 
 
+def _parse_candidates_strict(text: str) -> dict[str, list[dict[str, str]]]:
+    """Parse a complete bounded candidate batch for durable staging.
+
+    Unlike the legacy direct-write parser, this rejects the whole response if
+    any row is malformed, duplicated, oversized, or carries extra fields.
+    """
+    candidate = text.strip()
+    if candidate.startswith("```"):
+        candidate = candidate.strip("`").strip()
+        if candidate.startswith("json"):
+            candidate = candidate[4:].strip()
+    try:
+        data = json.loads(candidate)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise ValueError("memory candidate response is not valid JSON") from exc
+    if not isinstance(data, dict) or set(data) != {"facts", "observations"}:
+        raise ValueError("memory candidate response fields do not match contract")
+    result: dict[str, list[dict[str, str]]] = {"facts": [], "observations": []}
+    all_keys: set[str] = set()
+    total_chars = 0
+    for group in ("facts", "observations"):
+        items = data[group]
+        if not isinstance(items, list):
+            raise ValueError("memory candidate groups must be arrays")
+        for item in items:
+            if (not isinstance(item, dict) or set(item) != {"key", "value"}
+                    or not isinstance(item["key"], str)
+                    or not isinstance(item["value"], str)):
+                raise ValueError("memory candidate row does not match contract")
+            key, value = item["key"].strip(), item["value"].strip()
+            if not key or not value or len(key) > 120 or len(value) > 300:
+                raise ValueError("memory candidate row is empty or oversized")
+            if key in all_keys:
+                raise ValueError("memory candidate keys must be unique")
+            all_keys.add(key)
+            total_chars += len(key) + len(value)
+            result[group].append({"key": key, "value": value})
+    if sum(map(len, result.values())) > 20 or total_chars > 12_000:
+        raise ValueError("memory candidate batch exceeds staging bounds")
+    return result
+
+
+async def _request_exchange_candidate_text(
+    settings: Settings, session_id: str, user_content: str,
+    assistant_content: str, source_turn: int | None,
+    client_factory: Callable[[Settings], Any] | None = None,
+    *, require_confidential_route: bool = False,
+) -> str:
+    """Call the configured confidential memory route and return raw JSON text."""
+    if require_confidential_route:
+        if client_factory is not None:
+            raise RuntimeError("test client injection cannot prove a confidential route")
+        from jarvis.memory_model import resolve_memory_route
+        from jarvis.privacy_policy import assert_route_allowed
+
+        preflight = resolve_memory_route(settings)
+        if preflight.resolved is None:
+            raise RuntimeError("durable memory admission requires a verified confidential route")
+        assert_route_allowed(
+            preflight.resolved.route,
+            DataPolicy("confidential", "memory-extraction-candidates"),
+        )
+    exchange_text = f"USER: {user_content[:MAX_ROW_CHARS]}"
+    if assistant_content:
+        exchange_text += f"\nMORTIMER: {assistant_content[:MAX_ROW_CHARS]}"
+    if require_confidential_route:
+        client = make_route_client(preflight.resolved, timeout=60, max_retries=0)
+        model = preflight.model
+        resolved = preflight.resolved
+    elif client_factory is not None:
+        client = client_factory(settings)
+        model = settings.openai_model
+        resolved = None
+    else:
+        client, route = make_memory_async_client(settings)
+        model = route.model
+        resolved = route.resolved
+    if require_confidential_route:
+        if resolved is None:
+            raise RuntimeError("durable memory admission requires a verified confidential route")
+        from jarvis.privacy_policy import assert_route_allowed
+        assert_route_allowed(
+            resolved.route, DataPolicy("confidential", "memory-extraction-candidates")
+        )
+    if resolved is not None:
+        request_id = hashlib.sha256(
+            f"{session_id}:{source_turn}".encode("utf-8")
+        ).hexdigest()[:24]
+        execution = await execute_chat(
+            ModelExecutionRequest(
+                workload=resolved.workload,
+                task_id=f"memory-extraction:{request_id}",
+                parent_request_id=f"memory-extraction:{request_id}",
+                instructions=exchange_text,
+                context=(ModelContextMessage(
+                    "system", EXCHANGE_EXTRACTION_PROMPT,
+                    DataPolicy("confidential", "memory-extraction-prompt"),
+                ),),
+                data_policy=DataPolicy("confidential", "conversation-exchange"),
+                timeout_s=30.0,
+            ),
+            resolved,
+            client_factory=lambda _: client,
+        )
+        record_execution_result("memory_extraction", execution, session_id=session_id)
+        return execution.text
+
+    # Compatibility path for routing-disabled installs and injected tests.
+    response = await client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": EXCHANGE_EXTRACTION_PROMPT},
+            {"role": "user", "content": exchange_text},
+        ],
+    )
+    try:
+        record_completion(
+            rung="memory_extraction",
+            provider=provider_from_base_url(str(client.base_url)),
+            model=model,
+            response=response,
+            session_id=session_id,
+        )
+    except Exception:
+        pass
+    return response.choices[0].message.content or ""
+
+
+async def extract_candidates_from_exchange(
+    settings: Settings, session_id: str, user_content: str,
+    assistant_content: str, assistant_turn_id: int,
+    client_factory: Callable[[Settings], Any] | None = None,
+) -> dict[str, list[dict[str, str]]]:
+    """Extract a strictly validated candidate batch without writing memory."""
+    # Durable admission candidates are extracted from the user's own turn
+    # only. Mortimer's answer can help the legacy novelty extractor, but it
+    # is not evidence that the user stated a preference or fact.
+    del assistant_content
+    result_text = await _request_exchange_candidate_text(
+        settings, session_id, user_content, "",
+        assistant_turn_id, client_factory,
+        require_confidential_route=True,
+    )
+    return _parse_candidates_strict(result_text)
+
+
 def _touch_recurrence(conn, table: str, row_id: int, source_turn: int | None, *, bump: bool) -> None:
     """Refresh last_seen_at/source_turn on an existing row by id (never by
     key — observations can have several rows sharing one key, one per
@@ -226,12 +377,17 @@ def _record_recall_event(conn, key: str, outcome: str, session_id: str | None,
             "VALUES (?,?,?,?,?)",
             (session_id, source_turn, key, outcome, now_iso()),
         )
-    except Exception:  # noqa: BLE001 — never break an admission over a metric
-        logger.warning("memory_recall_event_write_failed key=%s", key, exc_info=True)
+    except Exception as exc:  # noqa: BLE001 — never break an admission over a metric
+        logger.warning(
+            "memory_recall_event_write_failed error_type=%s",
+            type(exc).__name__,
+        )
 
 
 def admit_fact_candidate(conn, key: str, value: str, session_id: str | None,
-                          source_turn: int | None) -> str:
+                          source_turn: int | None, *,
+                          evidence_turn_id: int | None = None,
+                          enqueue_classification: bool = True) -> str:
     """One fact candidate through the novelty gate, then to the store.
     Returns 'rejected' | 'exact_update' | 'near_duplicate:<matched_key>'
     | 'inserted' — outcomes are strings so tests and the worker's own
@@ -239,38 +395,38 @@ def admit_fact_candidate(conn, key: str, value: str, session_id: str | None,
     reason = scan_memory_content(key) or scan_memory_content(value)
     if reason is not None:
         logger.warning(
-            "memory_write_rejected kind=fact key=%s reason=%s session=%s",
-            key, reason, session_id,
+            "memory_write_rejected kind=fact reason=%s",
+            reason,
         )
         return "rejected"
     if _is_volatile_state(key, value):
         logger.warning(
-            "memory_write_rejected kind=fact key=%s reason=volatile_state session=%s",
-            key, session_id,
+            "memory_write_rejected kind=fact reason=volatile_state",
         )
         return "rejected"
 
     match, is_exact = _find_fact_match(conn, key, value)
     if is_exact:
-        upsert_fact(conn, key, value, session_id)
+        upsert_fact(conn, key, value, session_id, source_turn_id=evidence_turn_id,
+                    enqueue_classification=enqueue_classification)
         _touch_recurrence(conn, "memories", match["id"], source_turn, bump=True)
         # Stage A3: the stored fact's key, not the candidate's — for an
         # exact match they are the same, for a near-duplicate they are not,
         # and what we want to know is which STORED fact went unrecalled.
         _record_recall_event(conn, match["key"], "exact_update",
-                             session_id, source_turn)
+                             session_id, evidence_turn_id if evidence_turn_id is not None else source_turn)
         return "exact_update"
     if match is not None:
         _touch_recurrence(conn, "memories", match["id"], source_turn, bump=True)
         logger.info(
-            "memory_novelty_gate kind=fact key=%s matched=%s session=%s",
-            key, match["key"], session_id,
+            "memory_novelty_gate kind=fact outcome=near_duplicate",
         )
         _record_recall_event(conn, match["key"], "near_duplicate",
-                             session_id, source_turn)
+                             session_id, evidence_turn_id if evidence_turn_id is not None else source_turn)
         return f"near_duplicate:{match['key']}"
 
-    upsert_fact(conn, key, value, session_id)
+    upsert_fact(conn, key, value, session_id, source_turn_id=evidence_turn_id,
+                enqueue_classification=enqueue_classification)
     row = conn.execute(
         "SELECT id FROM memories WHERE kind='fact' AND key=?", (key,)
     ).fetchone()
@@ -300,8 +456,8 @@ def admit_observation_candidate(conn, key: str, value: str, session_id: str | No
     reason = scan_memory_content(key) or scan_memory_content(value)
     if reason is not None:
         logger.warning(
-            "memory_write_rejected kind=observation key=%s reason=%s session=%s",
-            key, reason, session_id,
+            "memory_write_rejected kind=observation reason=%s",
+            reason,
         )
         return "rejected"
 
@@ -327,6 +483,7 @@ async def extract_from_exchange(
     assistant_content: str,
     source_turn: int | None,
     client_factory: Callable[[Settings], Any] | None = None,
+    *, user_turn_id: int | None = None,
 ) -> dict:
     """One finished exchange in, candidates admitted. Never raises —
     mirrors jarvis.memory.update_memory_from_session's safety discipline
@@ -338,70 +495,14 @@ async def extract_from_exchange(
     {"facts": n, "observations": n, "outcomes": [...], "promoted": [...]}
     (or {"error": True} alongside zeroed counts on failure)."""
     try:
-        exchange_text = (
-            f"USER: {user_content[:MAX_ROW_CHARS]}\n"
-            f"MORTIMER: {assistant_content[:MAX_ROW_CHARS]}"
+        result_text = await _request_exchange_candidate_text(
+            settings, session_id, user_content, assistant_content,
+            source_turn, client_factory,
         )
-        if client_factory is not None:
-            # Test seam only; production uses JARVIS_MEMORY_PROFILE.
-            client = client_factory(settings)
-            model = settings.openai_model
-            resolved = None
-        else:
-            client, route = make_memory_async_client(settings)
-            model = route.model
-            resolved = route.resolved
-        if resolved is not None:
-            request_id = hashlib.sha256(
-                f"{session_id}:{source_turn}".encode("utf-8")
-            ).hexdigest()[:24]
-            execution = await execute_chat(
-                ModelExecutionRequest(
-                    workload=resolved.workload,
-                    task_id=f"memory-extraction:{request_id}",
-                    parent_request_id=f"memory-extraction:{request_id}",
-                    instructions=exchange_text,
-                    context=(ModelContextMessage(
-                        "system", EXCHANGE_EXTRACTION_PROMPT,
-                        DataPolicy("confidential", "memory-extraction-prompt"),
-                    ),),
-                    data_policy=DataPolicy("confidential", "conversation-exchange"),
-                    timeout_s=30.0,
-                ),
-                resolved,
-                client_factory=lambda _: client,
-            )
-            record_execution_result(
-                "memory_extraction", execution, session_id=session_id
-            )
-            result_text = execution.text
-        else:
-            # Compatibility path while model routing is disabled and for the
-            # injected test seam; preserve its request and parsing semantics.
-            response = await client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": EXCHANGE_EXTRACTION_PROMPT},
-                    {"role": "user", "content": exchange_text},
-                ],
-            )
-            try:
-                record_completion(
-                    rung="memory_extraction",
-                    provider=provider_from_base_url(str(client.base_url)),
-                    model=model,
-                    response=response,
-                    session_id=session_id,
-                )
-            except Exception:
-                pass
-            result_text = response.choices[0].message.content or ""
-
         parsed = _parse_candidates(result_text)
         if parsed is None:
             logger.warning(
-                "memory_extraction_unparseable session=%s source_turn=%s",
-                session_id, source_turn,
+                "memory_extraction_unparseable",
             )
             return {"facts": 0, "observations": 0, "outcomes": [], "promoted": []}
 
@@ -410,7 +511,10 @@ async def extract_from_exchange(
         try:
             for key, value in parsed["facts"]:
                 outcomes.append(
-                    ("fact", key, admit_fact_candidate(conn, key, value, session_id, source_turn))
+                    ("fact", key, admit_fact_candidate(
+                        conn, key, value, session_id, source_turn,
+                        evidence_turn_id=user_turn_id,
+                    ))
                 )
             for key, value in parsed["observations"]:
                 outcomes.append(
@@ -423,10 +527,8 @@ async def extract_from_exchange(
             conn.close()
 
         logger.info(
-            "memory_exchange_extracted session=%s source_turn=%s facts=%d "
-            "observations=%d promoted=%s",
-            session_id, source_turn, len(parsed["facts"]), len(parsed["observations"]),
-            promoted,
+            "memory_exchange_extracted facts=%d observations=%d",
+            len(parsed["facts"]), len(parsed["observations"]),
         )
         return {
             "facts": len(parsed["facts"]),
@@ -434,8 +536,9 @@ async def extract_from_exchange(
             "outcomes": outcomes,
             "promoted": promoted,
         }
-    except Exception:  # noqa: BLE001 — one bad exchange must never wedge the worker
-        logger.exception(
-            "memory_extraction_failed session=%s source_turn=%s", session_id, source_turn
+    except Exception as exc:  # noqa: BLE001 — one bad exchange must never wedge the worker
+        logger.warning(
+            "memory_extraction_failed error_type=%s",
+            type(exc).__name__,
         )
         return {"facts": 0, "observations": 0, "outcomes": [], "promoted": [], "error": True}

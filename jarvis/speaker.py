@@ -41,7 +41,6 @@ import json
 import logging
 import os
 import sys
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -86,7 +85,7 @@ def threshold() -> float:
     try:
         return float(value)
     except ValueError:
-        logger.warning("speaker_threshold_unparseable value=%r — using default", value)
+        logger.warning("speaker_threshold_unparseable — using default")
         return DEFAULT_THRESHOLD
 
 
@@ -160,8 +159,10 @@ def load_profile(path: Path = PROFILE_NPY) -> np.ndarray | None:
             return None
         arr = np.load(path)
         return np.asarray(arr, dtype=np.float32)
-    except Exception:
-        logger.warning("speaker_profile_load_failed path=%s", path, exc_info=True)
+    except Exception as exc:
+        logger.warning(
+            "speaker_profile_load_failed error_type=%s", type(exc).__name__[:80]
+        )
         return None
 
 
@@ -180,8 +181,11 @@ def load_profile_metadata(path: Path = PROFILE_JSON) -> dict[str, Any] | None:
         if not path.exists():
             return None
         return json.loads(path.read_text())
-    except Exception:
-        logger.warning("speaker_profile_metadata_load_failed path=%s", path, exc_info=True)
+    except Exception as exc:
+        logger.warning(
+            "speaker_profile_metadata_load_failed error_type=%s",
+            type(exc).__name__[:80],
+        )
         return None
 
 
@@ -205,7 +209,7 @@ class Encoder:
         if self._model is not None:
             return True
         if not self.model_dir.exists():
-            logger.info("speaker_gate_inactive reason=model_dir_missing dir=%s", self.model_dir)
+            logger.info("speaker_gate_inactive reason=model_dir_missing")
             return False
         return self._from_hparams()
 
@@ -228,8 +232,11 @@ class Encoder:
                 savedir=str(self.model_dir),
             )
             return True
-        except Exception:
-            logger.warning("speaker_gate_inactive reason=model_load_failed", exc_info=True)
+        except Exception as exc:
+            logger.warning(
+                "speaker_gate_inactive reason=model_load_failed error_type=%s",
+                type(exc).__name__[:80],
+            )
             self._model = None
             return False
 
@@ -251,8 +258,10 @@ class Encoder:
             with torch.no_grad():
                 embedding = self._model.encode_batch(waveform)
             return embedding.squeeze().detach().cpu().numpy().astype(np.float32)
-        except Exception:
-            logger.warning("speaker_gate_embed_failed", exc_info=True)
+        except Exception as exc:
+            logger.warning(
+                "speaker_gate_embed_failed error_type=%s", type(exc).__name__[:80]
+            )
             return None
 
     def embed_file(self, wav_path: Path) -> np.ndarray | None:
@@ -267,8 +276,11 @@ class Encoder:
             if data.ndim > 1:
                 data = data[:, 0]
             return self.embed(data.tobytes(), sample_rate)
-        except Exception:
-            logger.warning("speaker_gate_embed_file_failed path=%s", wav_path, exc_info=True)
+        except Exception as exc:
+            logger.warning(
+                "speaker_gate_embed_file_failed error_type=%s",
+                type(exc).__name__[:80],
+            )
             return None
 
 

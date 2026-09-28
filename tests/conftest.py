@@ -88,3 +88,9 @@ def _stub_procedures_learning(monkeypatch):
     monkeypatch.setattr(
         "jarvis.agents.delegate.learn_from_run", _noop, raising=False
     )
+
+
+@pytest.fixture(autouse=True)
+def _auth_disabled_by_default(monkeypatch):
+    """Keep unrelated tests focused on their behavior; auth tests opt in."""
+    monkeypatch.setenv("JARVIS_AUTH_ENABLED", "false")

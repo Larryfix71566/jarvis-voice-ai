@@ -166,6 +166,54 @@ The same suite's `tests/unit/test_plan_manifests.py` checks that every B8
 implementation, fixture, acceptance, provider-shadow and rollout-monitoring
 artifact remains in the repository.
 
+**2026-09-25 isolated-worktree update — evidence integrity:** the classifier
+worker now verifies cited source IDs against stored user conversation turns,
+excludes mere `used_for` recall events from corroboration, requires
+independent user turns/sessions for corroborated status, and prevents
+assistant/tool/quoted provenance from being promoted by model output. New
+per-exchange facts retain their user-turn provenance; content changes without
+a fresh source clear the old evidence pointer. The focused memory set passes
+89 tests and the complete Python unit/integration suite passes 2,833 tests,
+4 skipped, 11 warnings, and 2 subtests. See the
+[GC24-05 source-evidence receipt](../verified-gap-closure/GC24-05-memory-source-evidence-2026-09-25.md).
+That source-evidence receipt records the first policy-boundary increment. The
+later [route-aware classifier receipt](../verified-gap-closure/GC24-05-route-aware-classifier-2026-09-25.md)
+supersedes its status on adapter wiring: production and synthetic shadow now
+use the same `execute_chat` classifier, production candidate content keeps a
+confidential policy label, and provider work runs outside the voice loop and
+outside an open SQLite claim transaction. The worker has no heuristic fallback
+after route/provider failure.
+
+**Still open:** this isolated config has no currently verified confidential
+production route, so provider-backed live classification remains fail-closed.
+Migration 0025 and durable queue primitives now exist, with focused validation
+recorded in the [GC24-05 admission-staging receipt](../verified-gap-closure/GC24-05-admission-staging-2026-09-25.md).
+Migration 0026 now supplies a shared atomic classifier-budget reservation
+ledger, and the existing maintenance classifier uses it before provider work;
+see the [budget reservation receipt](../verified-gap-closure/GC24-05-shared-budget-reservations-2026-09-25.md).
+The admission-stage worker now reserves from that shared ledger before
+provider classification. The idle worker and teardown enqueue before
+cursor/pairing advancement and drain resumable stages in the isolated tree.
+The [admission worker receipt](../verified-gap-closure/GC24-05-admission-worker-2026-09-25.md)
+records the worker validation. The [apply/commit crash receipt](../verified-gap-closure/GC24-05-admission-apply-rollback-2026-09-25.md)
+proves rollback and retry at apply-stage failure boundaries, including the
+terminal completion update. The [apply-claim fencing receipt](../verified-gap-closure/GC24-05-admission-apply-claim-fencing-2026-09-25.md)
+proves a lease-replaced stale worker cannot write memory and that the current
+claim applies once. The [concurrent-claims receipt](../verified-gap-closure/GC24-05-admission-concurrent-claims-2026-09-25.md)
+proves two simultaneous SQLite worker connections claim a due job only once.
+The [forget/apply receipt](../verified-gap-closure/GC24-05-admission-forget-apply-race-2026-09-25.md)
+proves a concurrent forget request leaves no admitted fact after SQLite
+serializes it behind apply. The [multi-process race receipt](../verified-gap-closure/GC24-05-admission-multiprocess-races-2026-09-25.md)
+adds independent-process duplicate-claim and forget-during-apply tests. The
+focused admission/worker/acceptance suite now passes **77 tests**. The latest
+full Python unit/integration run passed **2,912 tests, 4 skipped,
+11 warnings, and 2 subtests** before these two new tests were added; it has not
+been rerun for this test-only increment. Cross-process duplicate claims,
+forget/apply, and forget/lease-reclaim races are covered; verified
+confidential-route acceptance and staged Mac rollout remain open. Production
+remains fail-closed. Earlier counts below are historical
+snapshots and do not describe this newest increment.
+
 The automated portion is reproducible with:
 ```sh
 UV_CACHE_DIR=/private/tmp/jarvis-uv-cache uv run --with-requirements requirements-lock.txt \

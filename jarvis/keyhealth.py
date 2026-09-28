@@ -61,6 +61,24 @@ _verdicts: dict[str, str] = {}
 _details: dict[str, str] = {}
 _lock = threading.Lock()
 
+_SAFE_OUTCOMES = {"ok", "rejected", "unfunded", "unreachable", "unknown"}
+_SAFE_DETAILS = {
+    "ok": "Credential probe succeeded",
+    "rejected": "Provider rejected the credential",
+    "unfunded": "Provider could not bill the credential",
+    "unreachable": "Provider could not be reached",
+    "unknown": "Credential probe was inconclusive",
+}
+
+
+def _safe_probe_result(outcome: object) -> tuple[str, str]:
+    """Reduce provider-controlled probe output to stable UI/log categories."""
+    safe_outcome = (
+        outcome if isinstance(outcome, str) and outcome in _SAFE_OUTCOMES
+        else "unknown"
+    )
+    return safe_outcome, _SAFE_DETAILS[safe_outcome]
+
 
 def enabled() -> bool:
     """Single enforcement point for the kill switch. Disabled means every
@@ -148,9 +166,10 @@ def probe_all(registry: dict[str, Any] | None = None,
             if not key or not base_url:
                 continue
             try:
-                outcome, why = probe(base_url, key, model)
-            except Exception as exc:  # noqa: BLE001
-                outcome, why = "unreachable", f"{type(exc).__name__}: {exc}"
+                raw_outcome, _ = probe(base_url, key, model)
+            except Exception:  # noqa: BLE001
+                raw_outcome = "unreachable"
+            outcome, why = _safe_probe_result(raw_outcome)
             with _lock:
                 _verdicts[key_env] = outcome
                 _details[key_env] = why
@@ -158,10 +177,9 @@ def probe_all(registry: dict[str, Any] | None = None,
             # log level is itself the rejected/unreachable distinction.
             (logger.warning if outcome in ("rejected", "unfunded")
              else logger.info)(
-                "key_health key=%s endpoint=%s outcome=%s detail=%s",
-                key_env, base_url, outcome, why)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("key_health_probe_failed error=%s", exc)
+                "key_health outcome=%s", outcome)
+    except Exception:  # noqa: BLE001
+        logger.warning("key_health_probe_failed")
     with _lock:
         return dict(_verdicts)
 

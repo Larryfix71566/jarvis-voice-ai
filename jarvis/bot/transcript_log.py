@@ -41,7 +41,9 @@ from pipecat.observers.base_observer import BaseObserver, FramePushed
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from jarvis.bot.sensitive_turn import (
-    arm_from_text, current_sensitive_turn, is_sensitive, redacted,
+    arm_from_text,
+    current_sensitive_turn,
+    is_sensitive,
 )
 from jarvis.db import get_conn, now_iso
 
@@ -82,11 +84,8 @@ class TranscriptLogger(FrameProcessor):
                 # only place the value appears ("what's my balance?" ->
                 # "$2,431.18"). Scan it before printing/persisting.
                 arm_from_text(text)
-                if is_sensitive():
-                    print(f"[{_ts()}] {ASSISTANT_LOG_PREFIX} "
-                          f"{redacted(text)}", flush=True)
-                else:
-                    print(f"[{_ts()}] {ASSISTANT_LOG_PREFIX} {text}", flush=True)
+                _log_transcript(ASSISTANT_LOG_PREFIX, text)
+                if not is_sensitive():
                     self._persist("assistant", text)
             self._log_turn("llm_done")
 
@@ -159,11 +158,8 @@ class TranscriptObserver(BaseObserver):
                     except Exception:  # noqa: BLE001 — consent must not break voice
                         pass
                 arm_from_text(text)          # arm on the FULL turn text
-                if is_sensitive():
-                    # P6 (plan D-H6): no content to bot.log, no conversations row
-                    print(f"[{_ts()}] USER: {redacted(text)}", flush=True)
-                else:
-                    print(f"[{_ts()}] USER: {text}", flush=True)
+                _log_transcript("USER:", text)
+                if not is_sensitive():
                     _persist(self._session_id, "user", text)  # P1
             return
 
@@ -210,8 +206,16 @@ def _persist(session_id: str, role: str, content: str) -> None:
                 (session_id, role, content, now_iso()),
             )
     except Exception as exc:  # noqa: BLE001 — logging must never break audio
-        print(f"TranscriptLogger persist error: {exc}", flush=True)
+        print(
+            f"TranscriptLogger persist error_type={type(exc).__name__[:64]}",
+            flush=True,
+        )
 
 
 def _ts() -> str:
     return datetime.now().strftime("%H:%M:%S")
+
+
+def _log_transcript(role: str, text: str) -> None:
+    """Keep speaker markers for latency tooling without logging transcript text."""
+    print(f"[{_ts()}] {role} [content omitted; chars={len(text)}]", flush=True)

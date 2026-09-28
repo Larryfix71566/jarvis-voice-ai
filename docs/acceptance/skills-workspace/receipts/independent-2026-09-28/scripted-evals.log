@@ -1,0 +1,9 @@
+.............                                                            [100%]
+=============================== warnings summary ===============================
+../dependencies/python/lib/python3.12/site-packages/_pytest/cacheprovider.py:469
+  /Users/admin/mortimer/dependencies/python/lib/python3.12/site-packages/_pytest/cacheprovider.py:469: PytestCacheWarning: could not create cache path /Users/admin/mortimer/verification/.pytest_cache/v/cache/nodeids: [Errno 13] Permission denied: '/Users/admin/mortimer/verification/pytest-cache-files-tlxvxka4'
+    config.cache.set("cache/nodeids", sorted(self.cached_nodeids))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+13 passed, 1 warning in 0.79s
+

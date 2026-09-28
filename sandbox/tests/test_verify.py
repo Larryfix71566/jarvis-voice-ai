@@ -121,6 +121,7 @@ class VerificationTests(unittest.TestCase):
         directory = self.directory / 'new-check-logs'
         def guest(task, argv, **kwargs):
             self.assertTrue(directory.is_dir())
+            self.assertIn("export MORTIMER_SANDBOX_GUEST=1", argv[-1])
             kwargs['on_output'](b'progress\n', b'')
             return subprocess.CompletedProcess(argv, 0, stdout=b'done\n', stderr=b'')
         with patch.object(self, 'guest', side_effect=guest):

@@ -51,6 +51,299 @@ final class ConsoleActionCoordinatorTests: XCTestCase {
         XCTAssertTrue(workspace.showsAtlas)
     }
 
+    func testSkillsViewSetUsesTheSharedWorkspaceOwner() {
+        let (coordinator, workspace, _, _, _) = coordinator()
+        XCTAssertEqual(coordinator.execute(request(.viewSet,
+            args: ["mode": .string("skills")])), .applied)
+        XCTAssertTrue(workspace.showsSkills)
+        XCTAssertFalse(workspace.showsConversation)
+        XCTAssertFalse(workspace.showsAtlas)
+        XCTAssertEqual(workspace.consoleInventory["mode"] as? String, "skills")
+    }
+
+    func testPointerSkillSelectionUsesCoordinatorDispatcherAndPublishesMutation() {
+        let workspace = WorkspaceStore()
+        let skills = SkillsStore()
+        skills.updateCatalog([.object([
+            "skill_id": .string("pointer-skill"), "display_name": .string("Pointer skill"),
+            "category": .string("development"), "installation": .string("installed"),
+            "enabled": .bool(true), "readiness": .string("ready"),
+        ])])
+        let coordinator = ConsoleActionCoordinator(
+            workspace: workspace, display: DisplayWindowStore(),
+            placement: WindowPlacement(drawer: DrawerState(), windows: WindowActions()),
+            skills: skills)
+        let startRevision = workspace.consoleRevision
+
+        XCTAssertEqual(coordinator.executePointer(.skillSelect, target: "pointer-skill"), .applied)
+        XCTAssertEqual(skills.selectedSkillID, "pointer-skill")
+        XCTAssertGreaterThan(workspace.consoleRevision, startRevision)
+    }
+
+    func testSkillDisplayTransferRequiresTheCurrentlySelectedSkill() {
+        let workspace = WorkspaceStore()
+        let skills = SkillsStore()
+        skills.updateCatalog([.object([
+            "skill_id": .string("display-skill"), "display_name": .string("Display skill"),
+            "category": .string("development"), "installation": .string("installed"),
+            "enabled": .bool(true), "readiness": .string("ready"),
+        ])])
+        XCTAssertTrue(skills.selectSkill("display-skill"))
+        let coordinator = ConsoleActionCoordinator(
+            workspace: workspace, display: DisplayWindowStore(),
+            placement: WindowPlacement(drawer: DrawerState(), windows: WindowActions()),
+            skills: skills)
+        XCTAssertEqual(coordinator.executePointer(.skillDisplayTransfer, target: "other-skill"), .invalid)
+        XCTAssertNil(workspace.supportingContent)
+
+        let result = coordinator.executePointer(.skillDisplayTransfer, target: "display-skill")
+        if NSScreen.screens.count > 1 {
+            XCTAssertEqual(result, .applied)
+            XCTAssertEqual(workspace.supportingContent, .skillDetail("display-skill"))
+        } else {
+            XCTAssertEqual(result, .unsupported)
+            XCTAssertNil(workspace.supportingContent)
+        }
+    }
+
+    func testViewOwnedSkillControlsShareTheValidatedCoordinatorPath() {
+        let (coordinator, workspace, _, _, _) = coordinator()
+        let owner = UUID()
+        var received: [ConsoleAction] = []
+        coordinator.registerSkillWorkspaceActionHandler(owner: owner) { action, _ in
+            received.append(action)
+            return .applied
+        }
+        for action: ConsoleAction in [.skillsRefresh, .skillBack, .skillActivityRetry, .skillActivityMore,
+                                      .skillCreatorOpen] {
+            XCTAssertEqual(coordinator.executePointer(action), .applied)
+        }
+        XCTAssertEqual(received, [.skillsRefresh, .skillBack, .skillActivityRetry, .skillActivityMore,
+                                  .skillCreatorOpen])
+
+        coordinator.unregisterSkillWorkspaceActionHandler(owner: UUID())
+        XCTAssertEqual(coordinator.execute(request(.skillsRefresh,
+            revision: workspace.consoleRevision)), .applied,
+            "a stale view cannot unregister the currently mounted handler")
+        coordinator.unregisterSkillWorkspaceActionHandler(owner: owner)
+        XCTAssertEqual(coordinator.execute(request(.skillsRefresh,
+            revision: workspace.consoleRevision)), .unsupported)
+    }
+
+    func testCreatorOpenWithoutMountedAuthorizedComposerCannotStartDrafting() {
+        let skills = SkillsStore()
+        let coordinator = ConsoleActionCoordinator(
+            workspace: WorkspaceStore(), display: DisplayWindowStore(),
+            placement: WindowPlacement(drawer: DrawerState(), windows: WindowActions()),
+            skills: skills)
+        XCTAssertEqual(coordinator.executePointer(.skillCreatorOpen), .unsupported)
+        XCTAssertNil(skills.pendingVoiceDraft)
+    }
+
+    func testSkillsVoiceNavigationUsesLoadedCatalogAndProcessInventory() {
+        let workspace = WorkspaceStore()
+        let skills = SkillsStore()
+        let entry = JSONValue.object([
+            "skill_id": .string("skill-creator"), "display_name": .string("Skill Creator"),
+            "category": .string("development"), "installation": .string("installed"),
+            "enabled": .bool(true), "readiness": .string("ready"),
+        ])
+        skills.updateCatalog([entry])
+        skills.updateProcess(skillID: "skill-creator", stepIDs: ["inspect", "draft"])
+        skills.updateRuns(skillID: "skill-creator", runIDs: ["run-1"])
+        let drawer = DrawerState()
+        let coordinator = ConsoleActionCoordinator(
+            workspace: workspace, display: DisplayWindowStore(),
+            placement: WindowPlacement(drawer: drawer, windows: WindowActions()),
+            skills: skills)
+
+        func current(_ action: ConsoleAction, target: String? = nil,
+                     args: [String: JSONValue] = [:]) -> ConsoleRequest {
+            request(action, target: target, args: args, revision: workspace.consoleRevision)
+        }
+        XCTAssertEqual(coordinator.execute(current(.skillSelect, target: "skill-creator")), .applied)
+        XCTAssertEqual(skills.selectedSkillID, "skill-creator")
+        XCTAssertEqual(coordinator.execute(current(.skillTab, args: ["tab": .string("process")])), .applied)
+        XCTAssertEqual(skills.selectedTab, "process")
+        XCTAssertEqual(coordinator.execute(current(.skillStepSelect, target: "draft")), .applied)
+        XCTAssertEqual(skills.selectedStepID, "draft")
+        XCTAssertEqual(coordinator.execute(current(.skillStepExplain, target: "inspect")), .stepDetailsOpened)
+        XCTAssertTrue(workspace.showsSkills)
+        XCTAssertEqual(skills.selectedTab, "process")
+        XCTAssertEqual(skills.selectedStepID, "inspect")
+        XCTAssertEqual(coordinator.execute(current(.skillRunSelect, target: "run-1")), .applied)
+        XCTAssertEqual(skills.selectedTab, "activity")
+        XCTAssertEqual(skills.selectedRunID, "run-1")
+        XCTAssertEqual(coordinator.execute(current(.skillStepSelect, target: "foreign-step")), .invalid)
+        XCTAssertEqual(coordinator.execute(current(.skillsFilter, args: [
+            "state": .string("installed"), "category": .string("unknown"),
+        ])), .invalid)
+        XCTAssertEqual(skills.catalogInventory.count, 1)
+        let inventorySkills = coordinator.inventory()["skills"] as? [[String: Any]]
+        XCTAssertEqual(inventorySkills?.count, 1)
+        XCTAssertEqual(coordinator.execute(current(.skillSelect, target: "skill-creator")), .applied)
+        XCTAssertEqual(skills.selectedTab, "overview", "reopening a selected skill returns to its overview")
+        XCTAssertNil(skills.selectedRunID)
+    }
+
+    func testSkillsVoiceActionRejectsStaleInventoryAndUnknownTargetsActionably() {
+        let workspace = WorkspaceStore()
+        let skills = SkillsStore()
+        skills.updateCatalog([.object([
+            "skill_id": .string("listed-skill"), "display_name": .string("Listed skill"),
+            "category": .string("development"), "installation": .string("installed"),
+            "enabled": .bool(true), "readiness": .string("ready"),
+        ])])
+        let drawer = DrawerState()
+        let coordinator = ConsoleActionCoordinator(
+            workspace: workspace, display: DisplayWindowStore(),
+            placement: WindowPlacement(drawer: drawer, windows: WindowActions()),
+            skills: skills)
+        let inventoryRevision = workspace.consoleRevision
+        let staleTarget = request(.skillSelect, target: "listed-skill", revision: inventoryRevision)
+
+        // Removing a target mutates the shared inventory revision. A voice
+        // request resolved against the previous snapshot must ask for a fresh
+        // selection instead of silently acting on a changed library.
+        skills.updateCatalog([])
+        XCTAssertGreaterThan(workspace.consoleRevision, inventoryRevision)
+        XCTAssertEqual(coordinator.execute(staleTarget), .stale)
+
+        // A target that was never in the current inventory is reported as an
+        // unavailable target, which the native router turns into a useful
+        // spoken/action-notice message.
+        XCTAssertEqual(coordinator.execute(request(.skillSelect, target: "missing-skill",
+            revision: workspace.consoleRevision)), .invalid)
+    }
+
+    func testSameStepIDInDifferentSkillsCannotUseAStaleSelectionContext() {
+        let workspace = WorkspaceStore()
+        let skills = SkillsStore()
+        skills.updateCatalog([
+            .object([
+                "skill_id": .string("alpha-skill"), "display_name": .string("Alpha"),
+                "category": .string("development"), "installation": .string("installed"),
+                "enabled": .bool(true), "readiness": .string("ready"),
+            ]),
+            .object([
+                "skill_id": .string("beta-skill"), "display_name": .string("Beta"),
+                "category": .string("development"), "installation": .string("installed"),
+                "enabled": .bool(true), "readiness": .string("ready"),
+            ]),
+        ])
+        skills.updateProcess(skillID: "alpha-skill", stepIDs: ["draft"])
+        skills.updateProcess(skillID: "beta-skill", stepIDs: ["draft"])
+        let drawer = DrawerState()
+        let coordinator = ConsoleActionCoordinator(
+            workspace: workspace, display: DisplayWindowStore(),
+            placement: WindowPlacement(drawer: drawer, windows: WindowActions()),
+            skills: skills)
+
+        XCTAssertEqual(coordinator.execute(request(.skillSelect, target: "alpha-skill",
+            revision: workspace.consoleRevision)), .applied)
+        let alphaInventoryRevision = workspace.consoleRevision
+        let alphaStepRequest = request(.skillStepSelect, target: "draft",
+            revision: alphaInventoryRevision)
+
+        XCTAssertEqual(coordinator.execute(request(.skillSelect, target: "beta-skill",
+            revision: workspace.consoleRevision)), .applied)
+        XCTAssertGreaterThan(workspace.consoleRevision, alphaInventoryRevision)
+        XCTAssertEqual(coordinator.execute(alphaStepRequest), .stale,
+                       "a duplicate step ID must not resolve against a different selected skill")
+        XCTAssertNil(skills.selectedStepID)
+        XCTAssertEqual(coordinator.execute(request(.skillStepSelect, target: "draft",
+            revision: workspace.consoleRevision)), .applied)
+        XCTAssertEqual(skills.selectedStepID, "draft")
+    }
+
+    func testVoiceDraftPreviewIsOpaqueSingleUseAndNeverEntersInventory() {
+        let workspace = WorkspaceStore()
+        let skills = SkillsStore()
+        skills.updateCatalog([.object([
+            "skill_id": .string("existing-skill"), "display_name": .string("Existing"),
+            "category": .string("development"), "installation": .string("installed"),
+            "enabled": .bool(true), "readiness": .string("ready"),
+        ])])
+        let drawer = DrawerState()
+        let coordinator = ConsoleActionCoordinator(
+            workspace: workspace, display: DisplayWindowStore(),
+            placement: WindowPlacement(drawer: drawer, windows: WindowActions()), skills: skills)
+        let brief = "PRIVATE brief for a new skill"
+        let preview = coordinator.execute(request(.skillRequestPreview, args: [
+            "operation": .string("draft"), "skill_id": .string("new-skill"),
+            "task_brief": .string(brief),
+        ]))
+        guard case .previewReady(let id) = preview else { return XCTFail("expected a native preview ID") }
+        XCTAssertFalse(String(describing: coordinator.inventory()).contains(brief))
+        XCTAssertEqual(coordinator.execute(request(.skillRequest, args: [
+            "operation": .string("draft"), "preview_id": .string(id),
+        ])), .draftStarted)
+        XCTAssertTrue(workspace.showsSkills)
+        XCTAssertEqual(skills.pendingVoiceDraft?.taskBrief, brief)
+        XCTAssertNotEqual(coordinator.execute(request(.skillRequest, args: [
+            "operation": .string("draft"), "preview_id": .string(id),
+        ])), .draftStarted, "a preview must be consumed once")
+    }
+
+    func testVoiceDraftPreviewExpiresAfterFiveMinutes() {
+        let skills = SkillsStore()
+        let start = Date(timeIntervalSince1970: 100)
+        let preview = skills.makeVoiceDraftPreview(skillID: "new-skill",
+            taskBrief: "Create a new skill", now: start)
+        XCTAssertNotNil(preview)
+        XCTAssertFalse(skills.consumeVoiceDraftPreview(preview!.id,
+            now: start.addingTimeInterval(301)))
+        XCTAssertNil(skills.pendingVoiceDraft)
+    }
+
+    func testVoiceExamplePreviewRequiresDeclaredSkillAndExample() {
+        let workspace = WorkspaceStore()
+        let skills = SkillsStore()
+        skills.updateCatalog([.object([
+            "skill_id": .string("technical-plan-document"),
+            "display_name": .string("Technical plan"),
+            "category": .string("development"), "installation": .string("installed"),
+            "enabled": .bool(true), "readiness": .string("ready"),
+            "example_ids": .array([.string("implementation-plan")]),
+        ])])
+        let drawer = DrawerState()
+        let coordinator = ConsoleActionCoordinator(
+            workspace: workspace, display: DisplayWindowStore(),
+            placement: WindowPlacement(drawer: drawer, windows: WindowActions()), skills: skills)
+        XCTAssertEqual(coordinator.execute(request(.skillExamplePreview, target: "implementation-plan",
+            args: ["skill_id": .string("technical-plan-document")])), .examplePreviewOpened)
+        XCTAssertTrue(workspace.showsSkills)
+        XCTAssertEqual(skills.selectedSkillID, "technical-plan-document")
+        XCTAssertEqual(skills.selectedExampleID, "implementation-plan")
+        XCTAssertEqual(coordinator.execute(request(.skillExamplePreview, target: "missing-example",
+            args: ["skill_id": .string("technical-plan-document")], revision: workspace.consoleRevision)), .invalid)
+    }
+
+    func testSkillsInventoryIsBoundedAndOmitsUnreviewedTaskFields() {
+        let skills = SkillsStore()
+        let entries = (0..<40).map { index in
+            JSONValue.object([
+                "skill_id": .string("skill-\(index)"),
+                "display_name": .string("Skill \(index)"),
+                "category": .string("general"),
+                "installation": .string("installed"),
+                "enabled": .bool(false), "readiness": .string("unknown"),
+                "description": .string("Must never be sent in this inventory"),
+                "task_prompt": .string("PRIVATE TASK CONTENT"),
+            ])
+        }
+        skills.updateCatalog(entries)
+        let drawer = DrawerState()
+        let coordinator = ConsoleActionCoordinator(
+            workspace: WorkspaceStore(), display: DisplayWindowStore(),
+            placement: WindowPlacement(drawer: drawer, windows: WindowActions()),
+            skills: skills)
+        let inventorySkills = coordinator.inventory()["skills"] as? [[String: Any]]
+        XCTAssertEqual(inventorySkills?.count, 32)
+        XCTAssertFalse(String(describing: coordinator.inventory()).contains("PRIVATE TASK CONTENT"))
+        XCTAssertFalse(String(describing: coordinator.inventory()).contains("Must never be sent"))
+    }
+
     func testPointerHelperUsesTheSameDispatcherAsVoiceRequests() {
         let (coordinator, workspace, _, _, _) = coordinator()
         XCTAssertEqual(coordinator.executePointer(.viewSet, target: "atlas"), .applied)
@@ -181,7 +474,7 @@ final class ConsoleActionCoordinatorTests: XCTestCase {
 
     func testSharePreviewAndCopyUseTheFrozenResult() {
         let workspace = WorkspaceStore()
-        let sharing = ShareCoordinator()
+        let sharing = ShareCoordinator(clipboardWriter: { _ in true })
         let drawer = DrawerState()
         let placement = WindowPlacement(drawer: drawer, windows: WindowActions())
         let coordinator = ConsoleActionCoordinator(workspace: workspace,
@@ -199,6 +492,93 @@ final class ConsoleActionCoordinatorTests: XCTestCase {
         XCTAssertEqual(sharing.status, "copied")
         XCTAssertEqual(coordinator.execute(request(.shareCancel, revision: workspace.consoleRevision)), .applied)
         XCTAssertNil(sharing.preview)
+    }
+
+    func testUnclassifiedMemoryGraphBitmapCannotBeSharedAsPublicResultPNG() {
+        let workspace = WorkspaceStore()
+        let sharing = ShareCoordinator(clipboardWriter: { _ in true })
+        let drawer = DrawerState()
+        let placement = WindowPlacement(drawer: drawer, windows: WindowActions())
+        let coordinator = ConsoleActionCoordinator(workspace: workspace,
+                                                    display: DisplayWindowStore(),
+                                                    placement: placement, sharing: sharing)
+        let item = result(title: "Public result")
+        workspace.receive(item)
+
+        XCTAssertEqual(coordinator.execute(request(.sharePreview, target: "graph",
+            args: ["format": .string("png")], revision: workspace.consoleRevision)), .unsupported)
+        XCTAssertEqual(coordinator.execute(request(.sharePreview, target: item.id.uuidString,
+            args: ["format": .string("png")], revision: workspace.consoleRevision)), .unsupported)
+        XCTAssertNil(sharing.preview,
+                     "a public result cannot authorize sharing the separately sourced memory-graph bitmap")
+    }
+
+    func testProtectedLocalResultCannotBeSharedThroughConsoleActions() throws {
+        let workspace = WorkspaceStore()
+        let sharing = ShareCoordinator()
+        let drawer = DrawerState()
+        let placement = WindowPlacement(drawer: drawer, windows: WindowActions())
+        let coordinator = ConsoleActionCoordinator(workspace: workspace,
+                                                    display: DisplayWindowStore(),
+                                                    placement: placement, sharing: sharing)
+        let payload = try JSONDecoder().decode(DisplayPayload.self, from: Data(
+            #"{"title":"Protected","body":"private evidence","surface":"window","data_policy":"local_only"}"#.utf8))
+        let item = WorkspaceResult(payload: payload)
+        workspace.receive(item)
+        XCTAssertEqual(coordinator.execute(request(.sharePreview, target: item.id.uuidString,
+            revision: workspace.consoleRevision)), .unsupported)
+        XCTAssertNil(sharing.preview)
+    }
+
+    func testComparisonShareRejectsProtectedContentOnEitherSide() throws {
+        for protectedIsActive in [true, false] {
+            let workspace = WorkspaceStore()
+            let sharing = ShareCoordinator()
+            let drawer = DrawerState()
+            let placement = WindowPlacement(drawer: drawer, windows: WindowActions())
+            let coordinator = ConsoleActionCoordinator(workspace: workspace,
+                                                        display: DisplayWindowStore(),
+                                                        placement: placement, sharing: sharing)
+            let protectedData = try JSONDecoder().decode(DisplayPayload.self, from: Data(
+                #"{"title":"Protected comparison canary","body":"private comparison body","data_policy":"confidential"}"#.utf8))
+            let protected = WorkspaceResult(payload: protectedData)
+            let publicItem = result(title: "Public comparison")
+            let active = protectedIsActive ? protected : publicItem
+            let compared = protectedIsActive ? publicItem : protected
+            workspace.receive(active)
+            workspace.receive(compared)
+            XCTAssertTrue(workspace.compare(with: compared.id))
+
+            XCTAssertEqual(coordinator.execute(request(.sharePreview, target: "comparison",
+                revision: workspace.consoleRevision)), .unsupported)
+            XCTAssertNil(sharing.preview, "comparison preview leaked protected content")
+        }
+    }
+
+    func testProtectedImagePreviewCannotReachCopySaveOrShareActions() throws {
+        let workspace = WorkspaceStore()
+        var copied: [String] = []
+        let sharing = ShareCoordinator(clipboardWriter: { copied.append($0); return true })
+        let drawer = DrawerState()
+        let placement = WindowPlacement(drawer: drawer, windows: WindowActions())
+        let coordinator = ConsoleActionCoordinator(workspace: workspace,
+                                                    display: DisplayWindowStore(),
+                                                    placement: placement,
+                                                    sharing: sharing)
+        let payload = try JSONDecoder().decode(DisplayPayload.self, from: Data(
+            #"{"title":"Protected","body":"private evidence","surface":"window","data_policy":"confidential"}"#.utf8))
+        let item = WorkspaceResult(payload: payload)
+        workspace.receive(item)
+        XCTAssertFalse(sharing.beginImagePreview(result: item,
+            sourceURL: URL(string: "https://example.org/protected.png")!, pngData: Data([1, 2, 3])))
+        XCTAssertNil(sharing.preview, "protected image payload must not enter the share preview")
+        XCTAssertEqual(sharing.status, "error")
+
+        XCTAssertEqual(coordinator.execute(request(.shareCopy, revision: workspace.consoleRevision)), .invalid)
+        XCTAssertEqual(coordinator.execute(request(.shareSave, revision: workspace.consoleRevision)), .invalid)
+        XCTAssertEqual(coordinator.execute(request(.sharePicker, revision: workspace.consoleRevision)), .invalid)
+        XCTAssertTrue(copied.isEmpty)
+        XCTAssertEqual(sharing.status, "error")
     }
 
     func testExtendedResultAtlasPanelAndSidecarActionsUseSharedState() {

@@ -17,6 +17,14 @@ final class EditViewModel {
     var goal = ""
     var actionError: String?
     var actionBusy = false
+    private struct PendingRun {
+        let id: String
+        let goal: String
+        let profile: String?
+        let api: AdminAPI
+    }
+    private var pendingRun: PendingRun?
+    var needsRunReconciliation: Bool { pendingRun != nil }
     private var pollTask: Task<Void, Never>?
     private var stopped = false
 
@@ -94,10 +102,23 @@ final class EditViewModel {
     }
 
     func run() {
-        let goalText = goal
-        let profile = selectedModel.isEmpty ? nil : selectedModel
-        act("run") { [api] in
-            try await api.selfeditRun(goal: goalText, profile: profile, plan: nil, stagingId: nil)
+        let request = pendingRun ?? PendingRun(
+            id: UUID().uuidString.lowercased(),
+            goal: goal,
+            profile: selectedModel.isEmpty ? nil : selectedModel,
+            api: api
+        )
+        pendingRun = request
+        act("run") {
+            let result = try await request.api.selfeditRun(
+                goal: request.goal, profile: request.profile,
+                plan: nil, stagingId: nil, runID: request.id
+            )
+            // Only a decoded server response resolves this request identity.
+            // A transport failure leaves it intact so the next tap replays
+            // the same action ID and cannot create a second planner run.
+            self.pendingRun = nil
+            return result
         }
     }
     func validate() { act("validate") { [api] in try await api.selfeditValidate() } }
@@ -148,8 +169,12 @@ struct EditTab: View {
             TextField("Goal", text: $model.goal)
                 .textFieldStyle(.roundedBorder)
             HStack {
-                Button("Run") { model.run() }
+                Button(model.needsRunReconciliation ? "Retry / Check Run" : "Run") { model.run() }
                     .disabled(model.goal.isEmpty || model.actionBusy)
+                if model.needsRunReconciliation {
+                    Text("The previous request may have reached Mortimer. Retry / Check Run reuses its ID and will not start a duplicate.")
+                        .font(.caption).foregroundStyle(AppTheme.textDim)
+                }
                 Button("Validate") { model.validate() }.disabled(model.actionBusy)
                 Button("Submit") { model.submit() }.disabled(model.actionBusy)
                 Button("Revert") { model.revert() }.disabled(model.actionBusy)

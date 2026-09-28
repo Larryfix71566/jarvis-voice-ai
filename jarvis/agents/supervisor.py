@@ -19,6 +19,7 @@ Locked behavior:
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 import logging
@@ -31,12 +32,12 @@ from openai import AsyncOpenAI
 from jarvis.agents.base import SubAgent, load_sub_agents
 from jarvis.agents.base import _assistant_message as _base_assistant_message
 from jarvis.agents.delegate import build_delegate_tool
+from jarvis.bot.sensitive_turn import arm_from_text, is_sensitive
 from jarvis.db import get_conn, now_iso
+from jarvis.memory import render_memory_context
 from jarvis.model_catalog import render_model_catalog
 from jarvis.prompts import build_supervisor_prompt, render_agent_catalog
-from jarvis.memory import render_memory_context
-from jarvis.bot.sensitive_turn import arm_from_text, is_sensitive
-from jarvis.usage_ledger import record_completion, provider_from_base_url
+from jarvis.usage_ledger import provider_from_base_url, record_completion
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +162,7 @@ class Orchestrator:
     async def chat(self, user_text: str) -> str:
         start = time.perf_counter()
         tool_calls_total = 0
+        seen_tool_call_ids: set[str] = set()
         self._history.append({"role": "user", "content": user_text})
         arm_from_text(user_text)               # T4a K3 (P4)
         if not is_sensitive():
@@ -177,6 +179,7 @@ class Orchestrator:
                 **extra,
                 **self._tools_kwarg(),
             )
+            self._raise_if_cancelled()
             # 2026-09-01 (MORTIMER_OPTIMIZATION_PLAN.md Phase 0, step 1 of
             # the readiness checklist — supervisor-only first, before the
             # other 12 sites). Inside the tool-iteration loop deliberately:
@@ -198,7 +201,36 @@ class Orchestrator:
             if not tool_calls:
                 reply = message.content or ""
                 break
+
+            # Provider tool-call IDs are the identity used to match a tool
+            # result to its request. Reusing one across rounds (or within a
+            # batch) must not dispatch the action twice. Validate the whole
+            # batch before running any tools so malformed provider output
+            # cannot partially execute a request. Keep the voice response
+            # bounded and do not expose provider IDs or arguments.
+            batch_ids: set[str] = set()
+            invalid_identity = False
+            for tool_call in tool_calls:
+                call_id = getattr(tool_call, "id", None)
+                if (
+                    not isinstance(call_id, str)
+                    or not call_id
+                    or len(call_id) > 256
+                    or call_id in seen_tool_call_ids
+                    or call_id in batch_ids
+                ):
+                    invalid_identity = True
+                    break
+                batch_ids.add(call_id)
+            if invalid_identity:
+                logger.warning("supervisor_tool_call_rejected reason=invalid_or_reused_id")
+                reply = STUCK_MESSAGE
+                break
+
+            seen_tool_call_ids.update(batch_ids)
+            tool_history_start = len(self._history)
             self._history.append(self._assistant_message(message))
+            protected_result_detected = False
             for tool_call in tool_calls:
                 tool_calls_total += 1
                 try:
@@ -208,12 +240,28 @@ class Orchestrator:
                 result = await self._execute_tool(
                     tool_call.function.name, arguments
                 )
+                arm_from_text(result)
+                if is_sensitive():
+                    # The live Supervisor is the documented voice-provider
+                    # exception, so never send a sensitive tool result back
+                    # on the next provider round. Remove this round's raw
+                    # tool arguments/results from retained history as well.
+                    del self._history[tool_history_start:]
+                    reply = (
+                        "Protected details were detected during this task. I stopped "
+                        "before sending them to the voice model."
+                    )
+                    protected_result_detected = True
+                    break
                 self._history.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
                     "content": result,
                 })
+            if protected_result_detected:
+                break
 
+        self._raise_if_cancelled()
         self._history.append({"role": "assistant", "content": reply})
         arm_from_text(reply)                    # T4a K3 (P5), review F2
         if not is_sensitive():
@@ -226,6 +274,13 @@ class Orchestrator:
         )
         return reply
 
+    @staticmethod
+    def _raise_if_cancelled() -> None:
+        """Reject provider output returned after cancellation was absorbed."""
+        task = asyncio.current_task()
+        if task is not None and task.cancelling():
+            raise asyncio.CancelledError
+
     def _messages(self) -> list[dict]:
         return [{"role": "system", "content": self._system_prompt}, *self._history]
 
@@ -235,8 +290,9 @@ class Orchestrator:
             return
         try:
             self._on_event(payload)
-        except Exception:  # noqa: BLE001 — observation is never load-bearing
-            logger.exception("on_event handler raised")
+        except Exception as exc:  # noqa: BLE001 — observation is never load-bearing
+            logger.warning("supervisor_event_handler_failed error_type=%s",
+                           type(exc).__name__[:64])
 
     async def _execute_tool(self, name: str, arguments: dict) -> str:
         # Nothing observed the Supervisor's OWN tool calls before this:

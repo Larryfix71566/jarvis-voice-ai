@@ -3,6 +3,7 @@ deterministic, no network (plan Phase 3 Tests)."""
 
 import asyncio
 import json
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -13,6 +14,21 @@ from jarvis.agents.base import (
     SubAgent,
     load_sub_agents,
 )
+from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
+from jarvis.model_execution import ModelAdmissionController
+from jarvis.model_routing import AccessRoute, ResolvedModelRoute, resolve_policy
+
+
+@pytest.fixture(autouse=True)
+def _initialized_non_sensitive_turn():
+    # Live sessions always publish their per-turn holder before agents run.
+    # Keep ordinary unit cases in that same explicit, non-sensitive state;
+    # tests for an armed turn override this holder themselves.
+    token = current_sensitive_turn.set(SensitiveTurn())
+    try:
+        yield
+    finally:
+        current_sensitive_turn.reset(token)
 
 
 def make_settings():
@@ -113,6 +129,738 @@ def make_agent(script, registry=None, name="scheduler", settings=None, **kwargs)
 
 
 class TestSubAgentLoop:
+    def test_v2_package_snapshot_is_prewarmed_only_when_both_gates_are_on(
+        self, monkeypatch,
+    ):
+        calls = []
+        monkeypatch.setenv("JARVIS_SKILLS_SELECTION_V2", "1")
+        monkeypatch.setenv("JARVIS_SKILLS_WORKSPACE_ENABLED", "1")
+        monkeypatch.setattr(
+            "jarvis.skill_selection.prewarm_runtime_package_snapshot",
+            lambda: calls.append(True) or True,
+        )
+
+        make_agent([("text", "unused")])
+
+        assert calls == [True]
+
+        calls.clear()
+        monkeypatch.delenv("JARVIS_SKILLS_WORKSPACE_ENABLED", raising=False)
+        make_agent([("text", "unused")])
+        assert calls == []
+
+    async def test_v2_flag_uses_runtime_selector_without_legacy_fallback(
+        self, monkeypatch,
+    ):
+        import jarvis.agents.base as base_module
+
+        agent, completions = make_agent([("text", "completed")])
+        monkeypatch.setattr(base_module, "skill_selection_v2_enabled", lambda: True)
+        monkeypatch.setattr(
+            base_module, "match_skill",
+            lambda _task: pytest.fail("v2 opt-in must not silently use the legacy selector"),
+        )
+        monkeypatch.setattr(
+            "jarvis.skill_selection.select_runtime_primary_skill",
+            lambda *_args, **_kwargs: SimpleNamespace(
+                selected=None, reason="revision_enforcement_disabled", candidates=(),
+            ),
+        )
+
+        assert await agent.run("ordinary task") == "completed"
+        assert all(
+            "Reference — skill" not in str(message)
+            for message in completions.requests[0]["messages"]
+        )
+
+    async def test_explicit_skill_refusal_stops_before_model_call(self, monkeypatch):
+        import jarvis.agents.base as base_module
+
+        agent, completions = make_agent([("text", "must not run")])
+        monkeypatch.setattr(base_module, "skill_selection_v2_enabled", lambda: True)
+        monkeypatch.setattr(base_module, "skills_workspace_enabled", lambda: True)
+        monkeypatch.setattr(
+            "jarvis.skill_selection.select_runtime_primary_skill",
+            lambda *_args, **_kwargs: SimpleNamespace(
+                selected=None, reason="readiness_unverified", candidates=(),
+            ),
+        )
+
+        result = await agent.run("explicit request", explicit_skill_id="some-skill")
+
+        assert result.startswith("REFUSED: the explicitly requested skill")
+        assert completions.requests == []
+
+    async def test_explicit_skill_selector_error_refuses_before_model_call(self, monkeypatch):
+        import jarvis.agents.base as base_module
+
+        agent, completions = make_agent([("text", "must not run")])
+        monkeypatch.setattr(base_module, "skill_selection_v2_enabled", lambda: True)
+        monkeypatch.setattr(base_module, "skills_workspace_enabled", lambda: True)
+
+        def unavailable(*_args, **_kwargs):
+            raise RuntimeError("private selector diagnostic")
+
+        monkeypatch.setattr(
+            "jarvis.skill_selection.select_runtime_primary_skill", unavailable,
+        )
+
+        result = await agent.run("explicit request", explicit_skill_id="some-skill")
+
+        assert result == (
+            "REFUSED: the explicitly requested skill could not be selected safely "
+            "(runtime_evidence_unavailable)."
+        )
+        assert completions.requests == []
+
+    async def test_sensitive_local_tool_result_stops_external_followup_and_redacts_event(self):
+        class SensitiveRegistry(FakeRegistry):
+            async def call(self, name, arguments, server_names=None):
+                self.calls.append((name, arguments, server_names))
+                return "Account balance is $1,234.56."
+
+        registry = SensitiveRegistry()
+        agent, completions = make_agent(
+            [("tool", "fake_tool", {}), ("text", "provider must not see this")],
+            registry=registry,
+        )
+        events = []
+
+        reply = await agent.run("read the local account record", on_event=events.append)
+
+        assert len(completions.requests) == 1
+        assert "Protected details were detected" in reply
+        assert "$1,234.56" not in reply
+        result_events = [event for event in events if event.get("type") == "agent_tool_result"]
+        assert len(result_events) == 1
+        assert "result" not in result_events[0]
+        assert "arguments" not in result_events[0]
+
+    async def test_matching_and_event_callback_errors_do_not_log_payloads(
+        self, monkeypatch, caplog,
+    ):
+        agent, _ = make_agent([("text", "completed")])
+        agent._settings.jarvis_procedures_enabled = True
+
+        def fail_with_canary(*_args, **_kwargs):
+            raise RuntimeError("PRIVATE_CANARY_match_error_4d2a")
+
+        monkeypatch.setattr("jarvis.agents.base.match_procedure", fail_with_canary)
+        monkeypatch.setattr("jarvis.agents.base.match_skill", fail_with_canary)
+        monkeypatch.setattr("jarvis.agents.base.match_workflow", fail_with_canary)
+
+        def failing_observer(_event):
+            raise RuntimeError("PRIVATE_CANARY_observer_error_4d2a")
+
+        result = await agent.run("PRIVATE_CANARY_task_4d2a", on_event=failing_observer)
+
+        assert result == "completed"
+        for canary in (
+            "PRIVATE_CANARY_match_error_4d2a",
+            "PRIVATE_CANARY_observer_error_4d2a",
+            "PRIVATE_CANARY_task_4d2a",
+        ):
+            assert canary not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    async def test_skill_and_workflow_injection_logs_omit_local_labels(
+        self, monkeypatch, caplog, tmp_path,
+    ):
+        agent, _ = make_agent([("text", "completed")])
+        skill_name = "PRIVATE_SKILL_LABEL_CANARY_18f2"
+        workflow_name = "PRIVATE_WORKFLOW_LABEL_CANARY_18f2"
+        workflow_source = "/private/PRIVATE_WORKFLOW_SOURCE_CANARY_18f2.yaml"
+        from jarvis.agent_skills import Skill
+
+        skill_path = tmp_path / "skill" / "SKILL.md"
+        skill = Skill(
+            name=skill_name, description="private test skill card", path=skill_path,
+            _body="safe skill instructions",
+        )
+
+        monkeypatch.setattr(
+            "jarvis.agents.base.match_skill",
+            lambda _task: skill,
+        )
+        monkeypatch.setattr(
+            "jarvis.agent_skills.parse_skill",
+            lambda _path: (skill, []),
+        )
+        monkeypatch.setattr(
+            "jarvis.skill_catalog.inspect_package",
+            lambda _directory, **_kwargs: SimpleNamespace(
+                enabled=True, revision="a" * 64, reference_paths=(),
+            ),
+        )
+        monkeypatch.setattr(
+            "jarvis.agents.base.match_workflow",
+            lambda _agent, _task: SimpleNamespace(
+                name=workflow_name,
+                source=workflow_source,
+                as_prompt=lambda: "safe workflow instructions",
+            ),
+        )
+
+        with caplog.at_level("INFO", logger="jarvis.agents.base"):
+            result = await agent.run("ordinary task")
+
+        assert result == "completed"
+        assert "skill_injected agent=scheduler" in caplog.text
+        assert "workflow_injected agent=scheduler" in caplog.text
+        for canary in (skill_name, workflow_name, workflow_source):
+            assert canary not in caplog.text
+
+    async def test_subagent_rechecks_v2_revision_pin_before_injection(self, monkeypatch, tmp_path):
+        from jarvis.agent_skills import Skill
+
+        skill_path = tmp_path / "skill-package" / "SKILL.md"
+        skill_path.parent.mkdir()
+        skill_path.write_text("DO_NOT_INJECT_STALE_SKILL", encoding="utf-8")
+        skill = Skill(
+            name="pinned-skill", description="A pinned test skill",
+            path=skill_path, _body="DO_NOT_INJECT_STALE_SKILL",
+        )
+        monkeypatch.setattr("jarvis.agents.base.match_skill", lambda _task: skill)
+        monkeypatch.setattr("jarvis.agents.base.skills_workspace_enabled", lambda: True)
+        monkeypatch.setattr(
+            "jarvis.agents.base.skill_revision_pins",
+            lambda: {"pinned-skill": "0" * 64},
+        )
+        monkeypatch.setattr(
+            "jarvis.skill_catalog.inspect_package",
+            lambda *_args, **_kwargs: SimpleNamespace(
+                enabled=True, revision="a" * 64, reference_paths=(),
+            ),
+        )
+        agent, completions = make_agent([("text", "completed")])
+
+        assert await agent.run("use pinned-skill") == "completed"
+        assert all(
+            "DO_NOT_INJECT_STALE_SKILL" not in str(message)
+            for message in completions.requests[0]["messages"]
+        )
+
+    async def test_selected_skill_snapshot_refuses_body_changed_after_matching(
+        self, monkeypatch, tmp_path,
+    ):
+        import jarvis.agents.base as base_module
+        import jarvis.skill_catalog as catalog_module
+        from jarvis.agent_skills import parse_skill
+
+        package = tmp_path / "skills" / "snapshot-skill"
+        package.mkdir(parents=True)
+        skill_path = package / "SKILL.md"
+        frontmatter = (
+            "---\nname: snapshot-skill\ndescription: A stable snapshot test\n---\n"
+        )
+        skill_path.write_text(frontmatter + "OLD_SNAPSHOT_BODY_CANARY\n", encoding="utf-8")
+        config_path = tmp_path / "skills.yaml"
+        config_path.write_text("enabled: [snapshot-skill]\n", encoding="utf-8")
+        monkeypatch.setattr(base_module, "SKILLS_CONFIG", config_path)
+        monkeypatch.setattr(catalog_module, "SKILLS_CONFIG", config_path)
+        monkeypatch.delenv("JARVIS_SKILLS_WORKSPACE_ENABLED", raising=False)
+        stale_skill, problems = parse_skill(skill_path)
+        assert stale_skill is not None and not problems
+
+        def select_then_edit(_task):
+            # Simulate a package update after matching has cached SKILL.md but
+            # before _loop validates the selected package for injection.
+            skill_path.write_text(frontmatter + "NEW_SNAPSHOT_BODY_CANARY\n", encoding="utf-8")
+            return stale_skill
+
+        monkeypatch.setattr(base_module, "match_skill", select_then_edit)
+        agent, completions = make_agent([("text", "completed")])
+
+        assert await agent.run("use the snapshot skill") == "completed"
+        injected = "\n".join(str(message) for message in completions.requests[0]["messages"])
+        assert "OLD_SNAPSHOT_BODY_CANARY" not in injected
+        assert "NEW_SNAPSHOT_BODY_CANARY" not in injected
+
+    async def test_selected_skill_writes_revision_bound_activity(self, monkeypatch, tmp_path):
+        import jarvis.agents.base as base_module
+        from jarvis.agent_skills import Skill
+        from jarvis.db import get_conn, run_migrations
+        from jarvis.runlog.store import RunLogger, get_skill_events
+        monkeypatch.delenv("JARVIS_SKILLS_WORKSPACE_ENABLED", raising=False)
+
+        db_path = tmp_path / "skill-trace.db"
+        conn = get_conn(db_path)
+        run_migrations(conn)
+        conn.close()
+        package = tmp_path / "skills" / "demo-skill"
+        package.mkdir(parents=True)
+        skill_file = package / "SKILL.md"
+        skill_file.write_text(
+            "---\nname: demo-skill\ndescription: A test skill for trace coverage\n---\n"
+            "Use the test procedure.\n",
+            encoding="utf-8",
+        )
+        (package / "mortimer.yaml").write_text(
+            "schema_version: 1\n"
+            "skill_id: demo-skill\n"
+            "display_name: Demo skill\n"
+            "category: development\n"
+            "version: 1.0.0\n"
+            "source: {kind: local, reference: test}\n"
+            "capabilities: []\n"
+            "required_tools: []\n"
+            "required_credentials: []\n"
+            "reference_paths: []\n"
+            "example_ids: []\n"
+            "related_workflow_ids: []\n"
+            "compatible_with: []\n"
+            "process:\n"
+            "  kind: linear\n"
+            "  nodes:\n"
+            "    - step_id: call-tool\n"
+            "      title: Call the tool\n"
+            "      description: Use the declared test tool.\n"
+            "      tools: [fake_tool]\n"
+            "      success_criteria: [The tool result is checked.]\n"
+            "      edges: []\n",
+            encoding="utf-8",
+        )
+        skill_config = tmp_path / "skills.yaml"
+        skill_config.write_text("enabled: [demo-skill]\n", encoding="utf-8")
+        monkeypatch.setattr("jarvis.skill_catalog.SKILLS_CONFIG", skill_config)
+        monkeypatch.setattr(base_module, "SKILLS_CONFIG", skill_config)
+        skill = Skill(
+            name="demo-skill", description="A test skill for trace coverage",
+            path=skill_file,
+        )
+
+        class IsolatedRunLogger(RunLogger):
+            def __init__(self, *args, **kwargs):
+                kwargs.update(enabled=True, db_path=db_path, root=tmp_path)
+                super().__init__(*args, **kwargs)
+
+        monkeypatch.setattr(base_module, "RunLogger", IsolatedRunLogger)
+        monkeypatch.setattr(base_module, "match_skill", lambda _task: skill)
+        agent, _ = make_agent([
+            ("tool", "fake_tool", {}), ("text", "completed"),
+        ])
+        reply = await agent.run("use the demo", run_id="request-demo-1")
+
+        assert reply == "completed"
+        trace = get_skill_events("request-demo-1", db_path=db_path)
+        assert [event["type"] for event in trace["events"]] == [
+            "skill_selected", "skill_step_started", "skill_step_finished",
+        ]
+        assert {event["skill_id"] for event in trace["events"]} == {"demo-skill"}
+        assert len({event["skill_revision"] for event in trace["events"]}) == 1
+        step_events = trace["events"][1:]
+        assert [event["status"] for event in step_events] == ["running", "unknown"]
+        assert {event["step_id"] for event in step_events} == {"call-tool"}
+        assert all(
+            event["evidence_refs"][0]["kind"] == "tool_call_id"
+            for event in step_events
+        )
+        assert step_events[0]["attempt_id"]
+        assert step_events[0]["attempt_id"] == step_events[1]["attempt_id"]
+        assert all(
+            event["attempt_id"] == event["evidence_refs"][0]["id"]
+            for event in step_events
+        )
+
+        class FailedToolRegistry(FakeRegistry):
+            async def call(self, name, arguments, server_names=None):
+                self.calls.append((name, arguments, server_names))
+                return '{"ok": false, "error": "synthetic failure"}'
+
+        failed_agent, _ = make_agent(
+            [("tool", "fake_tool", {}), ("text", "completed")],
+            registry=FailedToolRegistry(),
+        )
+        await failed_agent.run("use the demo", run_id="request-demo-failure")
+        failed_trace = get_skill_events(
+            "request-demo-failure", db_path=db_path,
+        )
+        assert [event["status"] for event in failed_trace["events"]] == [
+            "unknown", "running", "failed",
+        ]
+        assert failed_trace["events"][1]["attempt_id"] == failed_trace["events"][2]["attempt_id"]
+
+    async def test_weather_tool_result_records_host_verified_process_step(
+        self, monkeypatch, tmp_path,
+    ):
+        """Only the host-checked structured result can pass this pinned step."""
+        import jarvis.agents.base as base_module
+        from jarvis.agent_skills import SKILLS_DIR, parse_skill
+        from jarvis.db import get_conn, run_migrations
+        from jarvis.runlog.store import RunLogger, get_skill_events
+
+        db_path = tmp_path / "weather-verified-step.db"
+        conn = get_conn(db_path)
+        run_migrations(conn)
+        conn.close()
+
+        weather_path = SKILLS_DIR / "current-weather-with-fahrenheit" / "SKILL.md"
+        weather_skill, problems = parse_skill(weather_path)
+        assert weather_skill is not None and not problems
+        monkeypatch.setattr(base_module, "match_skill", lambda _task: weather_skill)
+
+        class WeatherRegistry(FakeRegistry):
+            def openai_tools(self, server_names=None):
+                return [{
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "description": "Get current weather and short forecast.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "city": {"type": "string"},
+                                "days": {"type": "integer"},
+                            },
+                            "required": ["city"],
+                        },
+                    },
+                }]
+
+            async def call(self, name, arguments, server_names=None):
+                self.calls.append((name, arguments, server_names))
+                return json.dumps({
+                    "city": "Camp Croft",
+                    "requested_city": "Camp Croft",
+                    "source": "open-meteo",
+                    "units": "imperial",
+                    "human": "Clear, 72 F; high 78 F, low 61 F.",
+                    "current": {
+                        "condition": "clear",
+                        "temperature_f": 72.0,
+                        "temperature_c": 22.2,
+                        "observed_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                    "daily": [{
+                        "date": "2026-09-28",
+                        "max_f": 78.0,
+                        "min_f": 61.0,
+                        "max_c": 25.6,
+                        "min_c": 16.1,
+                    }],
+                })
+
+        class IsolatedRunLogger(RunLogger):
+            def __init__(self, *args, **kwargs):
+                kwargs.update(enabled=True, db_path=db_path, root=tmp_path)
+                super().__init__(*args, **kwargs)
+
+        monkeypatch.setattr(base_module, "RunLogger", IsolatedRunLogger)
+        settings = make_settings()
+        settings.jarvis_runlog_enabled = True
+        agent, _ = make_agent(
+            [("tool", "get_weather", {"city": "Camp Croft", "days": 1}),
+             ("text", "The forecast is clear.")],
+            registry=WeatherRegistry(),
+            settings=settings,
+        )
+
+        reply = await agent.run("Check the weather in Camp Croft", run_id="weather-run")
+
+        assert reply == "The forecast is clear."
+        trace = get_skill_events("weather-run", db_path=db_path)
+        assert trace is not None
+        events = trace["events"]
+        assert [event["type"] for event in events] == [
+            "skill_selected", "skill_step_started", "skill_step_finished",
+        ]
+        assert [(event["skill_id"], event["skill_revision"], event["step_id"])
+                for event in events[1:]] == [
+            ("current-weather-with-fahrenheit",
+             "9064f3d61d680d8cbce9c4dda1b2d98b854624fce2b106f89cc7f13b4ace521e",
+             "retrieve-conditions"),
+            ("current-weather-with-fahrenheit",
+             "9064f3d61d680d8cbce9c4dda1b2d98b854624fce2b106f89cc7f13b4ace521e",
+             "retrieve-conditions"),
+        ]
+        started, finished = events[1:]
+        assert started["status"] == "running"
+        assert finished["status"] == "passed"
+        assert started["attempt_id"] == finished["attempt_id"]
+        assert finished["evidence_refs"] == [{
+            "kind": "check_receipt_id",
+            "id": finished["evidence_refs"][0]["id"],
+        }]
+        serialized = json.dumps(trace)
+        assert "Camp Croft" not in serialized
+        assert "72.0" not in serialized
+
+    async def test_declared_reference_reaches_model_but_not_logs_or_activity(
+        self, monkeypatch, tmp_path, caplog,
+    ):
+        import jarvis.agents.base as base_module
+        from jarvis.agent_skills import Skill
+        from jarvis.db import get_conn, run_migrations
+        from jarvis.runlog.store import RunLogger, get_run, get_skill_events
+        from jarvis.skill_catalog import _package_digest
+
+        db_path = tmp_path / "reference-trace.db"
+        conn = get_conn(db_path)
+        run_migrations(conn)
+        conn.close()
+        package = tmp_path / "skills" / "reference-demo"
+        reference_dir = package / "references"
+        reference_dir.mkdir(parents=True)
+        (package / "SKILL.md").write_text(
+            "---\nname: reference-demo\ndescription: A test skill for references\n---\n"
+            "Use the reference only when useful.\n",
+            encoding="utf-8",
+        )
+        (reference_dir / "guide.md").write_text(
+            "REFERENCE_BODY_CANARY_d0bd", encoding="utf-8",
+        )
+        (package / "mortimer.yaml").write_text(
+            "schema_version: 1\n"
+            "skill_id: reference-demo\n"
+            "display_name: Reference demo\n"
+            "category: development\n"
+            "version: 1.0.0\n"
+            "source: {kind: local, reference: test}\n"
+            "capabilities: []\n"
+            "required_tools: []\n"
+            "required_credentials: []\n"
+            "reference_paths: [references/guide.md]\n"
+            "example_ids: []\n"
+            "related_workflow_ids: []\n"
+            "compatible_with: []\n"
+            "process: null\n",
+            encoding="utf-8",
+        )
+        skill_config = tmp_path / "skills.yaml"
+        digest = _package_digest(package)
+        skill_config.write_text(
+            "schema_version: 2\n"
+            "enabled: [reference-demo]\n"
+            f"revisions: {{reference-demo: {digest}}}\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(base_module, "SKILLS_CONFIG", skill_config)
+        monkeypatch.setattr("jarvis.skill_resources.SKILLS_CONFIG", skill_config)
+        monkeypatch.setenv("JARVIS_SKILLS_WORKSPACE_ENABLED", "1")
+
+        class IsolatedRunLogger(RunLogger):
+            def __init__(self, *args, **kwargs):
+                kwargs.update(enabled=True, db_path=db_path, root=tmp_path)
+                super().__init__(*args, **kwargs)
+
+        monkeypatch.setattr(base_module, "RunLogger", IsolatedRunLogger)
+        monkeypatch.setattr(
+            base_module, "match_skill",
+            lambda _task: Skill(
+                name="reference-demo", description="A test skill for references",
+                path=package / "SKILL.md",
+            ),
+        )
+        monkeypatch.setattr(base_module, "skill_revision_pins", lambda: {"reference-demo": digest})
+        agent, completions = make_agent([
+            ("tool", "skill_reference_read", {"reference_path": "references/guide.md"}),
+            ("text", "Reference checked."),
+        ])
+        emitted = []
+
+        reply = await agent.run(
+            "use the reference", run_id="request-reference-1", on_event=emitted.append,
+        )
+
+        assert reply == "Reference checked."
+        assert len(completions.requests) == 2
+        assert any(
+            "skill_reference_read" == tool["function"]["name"]
+            for tool in completions.requests[0]["tools"]
+        )
+        tool_message = next(
+            message for message in completions.requests[1]["messages"]
+            if message.get("role") == "tool"
+        )
+        assert "REFERENCE_BODY_CANARY_d0bd" in tool_message["content"]
+        assert all("REFERENCE_BODY_CANARY_d0bd" not in str(event) for event in emitted)
+
+        trace = get_skill_events("request-reference-1", db_path=db_path)
+        assert [event["type"] for event in trace["events"]] == [
+            "skill_selected", "skill_resource_read",
+        ]
+        run_record = get_run(
+            "request-reference-1", db_path=db_path, root=tmp_path,
+        )
+        serialized = json.dumps(run_record, default=str)
+        assert "REFERENCE_BODY_CANARY_d0bd" not in serialized
+        assert "REFERENCE_BODY_CANARY_d0bd" not in caplog.text
+
+        # Failure to persist the activity receipt must not turn a successful
+        # reference read into a failed tool call or interrupt the agent run.
+        original_skill_event = IsolatedRunLogger.skill_event
+
+        def fail_resource_trace(self, skill_id, revision, event_type, **kwargs):
+            if event_type == "skill_resource_read":
+                raise OSError("synthetic activity store outage")
+            return original_skill_event(self, skill_id, revision, event_type, **kwargs)
+
+        monkeypatch.setattr(IsolatedRunLogger, "skill_event", fail_resource_trace)
+        outage_agent, outage_completions = make_agent([
+            ("tool", "skill_reference_read", {"reference_path": "references/guide.md"}),
+            ("text", "Reference remains available."),
+        ])
+        outage_reply = await outage_agent.run(
+            "use the reference while activity storage is unavailable",
+            run_id="request-reference-trace-outage",
+        )
+        assert outage_reply == "Reference remains available."
+        outage_tool_message = next(
+            message for message in outage_completions.requests[1]["messages"]
+            if message.get("role") == "tool"
+        )
+        assert "REFERENCE_BODY_CANARY_d0bd" in outage_tool_message["content"]
+        outage_trace = get_skill_events(
+            "request-reference-trace-outage", db_path=db_path,
+        )
+        assert [event["type"] for event in outage_trace["events"]] == [
+            "skill_selected",
+        ]
+
+    async def test_mutually_compatible_support_skill_is_injected_and_can_read_own_reference(
+        self, monkeypatch, tmp_path,
+    ):
+        import jarvis.agents.base as base_module
+        import jarvis.skill_resources as resources_module
+        from jarvis.agent_skills import Skill
+        from jarvis.skill_catalog import _package_digest
+
+        skills_root = tmp_path / "skills"
+        primary_dir = skills_root / "primary-skill"
+        support_dir = skills_root / "support-skill"
+        (primary_dir / "SKILL.md").parent.mkdir(parents=True)
+        (support_dir / "references").mkdir(parents=True)
+        primary_file = primary_dir / "SKILL.md"
+        support_file = support_dir / "SKILL.md"
+        primary_file.write_text(
+            "---\nname: primary-skill\ndescription: Primary test procedure\n---\n"
+            "PRIMARY_SKILL_BODY\n", encoding="utf-8",
+        )
+        support_file.write_text(
+            "---\nname: support-skill\ndescription: Supporting test reference\n---\n"
+            "SUPPORT_SKILL_BODY\n", encoding="utf-8",
+        )
+        (support_dir / "references" / "guide.md").write_text(
+            "SUPPORT_REFERENCE_CONTENT", encoding="utf-8",
+        )
+        common = (
+            "schema_version: 1\ncategory: development\nversion: 1.0.0\n"
+            "source: {kind: local, reference: test}\ncapabilities: []\n"
+            "required_tools: []\nrequired_credentials: []\n"
+            "example_ids: []\nrelated_workflow_ids: []\nprocess: null\n"
+        )
+        (primary_dir / "mortimer.yaml").write_text(
+            "skill_id: primary-skill\ndisplay_name: Primary skill\n"
+            "reference_paths: []\ncompatible_with: [support-skill]\n" + common,
+            encoding="utf-8",
+        )
+        (support_dir / "mortimer.yaml").write_text(
+            "skill_id: support-skill\ndisplay_name: Support skill\n"
+            "reference_paths: [references/guide.md]\n"
+            "compatible_with: [primary-skill]\n" + common,
+            encoding="utf-8",
+        )
+        from jarvis.skill_catalog import inspect_package
+
+        revisions = {
+            "primary-skill": _package_digest(primary_dir),
+            "support-skill": _package_digest(support_dir),
+        }
+        config = tmp_path / "skills.yaml"
+        config.write_text(
+            "schema_version: 2\nenabled: [primary-skill, support-skill]\n"
+            f"revisions: {revisions}\n", encoding="utf-8",
+        )
+        # Validate the temporary package definitions before routing them.
+        assert inspect_package(primary_dir, config_path=config).revision == revisions["primary-skill"]
+        assert inspect_package(support_dir, config_path=config).revision == revisions["support-skill"]
+        monkeypatch.setattr(base_module, "SKILLS_CONFIG", config)
+        monkeypatch.setattr(resources_module, "SKILLS_CONFIG", config)
+        monkeypatch.setattr(base_module, "skills_workspace_enabled", lambda: True)
+        monkeypatch.setattr(base_module, "skill_selection_v2_enabled", lambda: True)
+        monkeypatch.setattr(base_module, "skill_revision_pins", lambda: revisions)
+        monkeypatch.setattr(
+            "jarvis.skill_selection.select_runtime_primary_skill",
+            lambda *_args, **_kwargs: SimpleNamespace(
+                selected=Skill(
+                    "primary-skill", "Primary test procedure", primary_file,
+                    _body="PRIMARY_SKILL_BODY",
+                ),
+                supporting=Skill(
+                    "support-skill", "Supporting test reference", support_file,
+                    _body="SUPPORT_SKILL_BODY",
+                ),
+                reason="automatic_match", candidates=(),
+            ),
+        )
+        agent, completions = make_agent([
+            ("tool", "skill_reference_read", {
+                "skill_id": "support-skill",
+                "reference_path": "references/guide.md",
+            }),
+            ("text", "support reference used"),
+        ])
+
+        result = await agent.run("use compatible skills")
+
+        assert result == "support reference used"
+        first_request = completions.requests[0]
+        system_text = "\n".join(
+            message["content"] for message in first_request["messages"]
+            if message.get("role") == "system"
+        )
+        assert "PRIMARY_SKILL_BODY" in system_text
+        assert "SUPPORT_SKILL_BODY" in system_text
+        reference_tool = next(
+            tool for tool in first_request["tools"]
+            if tool["function"]["name"] == "skill_reference_read"
+        )
+        assert "skill_id" in reference_tool["function"]["parameters"]["properties"]
+        reference_message = next(
+            message for message in completions.requests[1]["messages"]
+            if message.get("role") == "tool"
+        )
+        assert "SUPPORT_REFERENCE_CONTENT" in reference_message["content"]
+
+        refused_agent, refused_completions = make_agent([
+            ("tool", "skill_reference_read", {
+                "skill_id": "unselected-skill",
+                "reference_path": "references/guide.md",
+            }),
+            ("text", "unselected reference refused"),
+        ])
+        refused_result = await refused_agent.run("try another skill reference")
+        assert refused_result.startswith("FAILED:")
+        assert "skill_not_selected_for_run" in refused_result
+        refused_message = next(
+            message for message in refused_completions.requests[1]["messages"]
+            if message.get("role") == "tool"
+        )
+        assert "skill_not_selected_for_run" in refused_message["content"]
+        assert "SUPPORT_REFERENCE_CONTENT" not in refused_message["content"]
+
+    async def test_override_refusal_log_omits_profile_and_reason(
+        self, monkeypatch, caplog,
+    ):
+        agent, completions = make_agent([("text", "must not run")])
+        profile = "PRIVATE_PROFILE_CANARY_23c1"
+        reason = "PRIVATE_ROUTE_REASON_CANARY_23c1"
+        monkeypatch.setattr(
+            agent, "_resolve_model_profile_details",
+            lambda _profile: (None, None, reason, None),
+        )
+
+        with caplog.at_level("WARNING", logger="jarvis.agents.base"):
+            result = await agent.run(
+                "ordinary task", model_profile_override=profile,
+            )
+
+        assert result == f"REFUSED: {reason}"
+        assert completions.requests == []
+        assert "subagent_override_refused agent=scheduler" in caplog.text
+        assert profile not in caplog.text
+        assert reason not in caplog.text
+
     async def test_plain_text_reply(self):
         agent, _ = make_agent([("text", "It is 3 PM.")])
         assert await agent.run("what time") == "It is 3 PM."
@@ -127,6 +875,281 @@ class TestSubAgentLoop:
         assert reply == "It is 3 PM."
         assert registry.calls == [("get_time", {}, ["mcp-time"])]
         assert completions.requests[0]["tools"][0]["function"]["name"] == "fake_tool"
+
+    async def test_routed_tool_loop_uses_shared_execution_and_preserves_history(
+        self, monkeypatch,
+    ):
+        class TimeRegistry(FakeRegistry):
+            def openai_tools(self, server_names=None):
+                return [{
+                    "type": "function",
+                    "function": {
+                        "name": "get_time", "description": "Get local time",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                }]
+
+        registry = TimeRegistry()
+        agent, completions = make_agent(
+            [("tool", "get_time", {}), ("text", "It is 3 PM.")],
+            registry=registry,
+        )
+        agent._resolved_route = ResolvedModelRoute(
+            workload="scheduler", profile_name="test", model="model",
+            provider="saygm", base_url="https://gateway.example/v1/",
+            route=AccessRoute(
+                "saygm", "saygm_gateway", "saygm_credit", None, "confidential",
+                capabilities=("text", "tools"),
+            ),
+            api_key_env=None, identity="saygm/model", priority="interactive",
+        )
+        recorded = []
+        monkeypatch.setattr(
+            "jarvis.agents.base.record_execution_result",
+            lambda *args, **kwargs: recorded.append((args, kwargs)),
+        )
+        monkeypatch.setattr(
+            "jarvis.model_execution._PROCESS_ADMISSION", ModelAdmissionController()
+        )
+        local_results = []
+
+        def local_sink(run_id, opaque_ref, body, data_policy):
+            # A Future is awaitable but is not recognized by
+            # asyncio.iscoroutine; the private delivery contract must await
+            # it before the specialist returns a status to its caller.
+            loop = asyncio.get_running_loop()
+            delivered = loop.create_future()
+
+            async def finish_delivery():
+                await asyncio.sleep(0)
+                local_results.append((run_id, opaque_ref, body, data_policy))
+                delivered.set_result(True)
+
+            loop.create_task(finish_delivery())
+            return delivered
+
+        reply = await agent.run("what time", private_result_sink=local_sink)
+        assert "It is 3 PM." not in reply
+        assert "Reference:" in reply
+        assert local_results[0][2] == "It is 3 PM."
+        assert registry.calls == [("get_time", {}, ["mcp-time"])]
+        assert recorded and recorded[0][0][0] == "scheduler"
+        assert completions.requests[0]["tools"][0]["function"]["name"] == "get_time"
+        next_turn = completions.requests[1]["messages"]
+        assert next_turn[-2]["role"] == "assistant"
+        assert next_turn[-2]["tool_calls"][0]["function"]["name"] == "get_time"
+        assert next_turn[-1] == {
+            "role": "tool", "tool_call_id": "call_1", "name": "get_time",
+            "content": '{"ok": true}',
+        }
+
+    async def test_sensitive_turn_cannot_use_approved_external_routed_agent(self):
+        agent, completions = make_agent([("text", "private answer")])
+        agent._settings.jarvis_model_routing_enabled = True
+        agent._resolved_route = ResolvedModelRoute(
+            workload="scheduler", profile_name="external", model="model",
+            provider="openai", base_url="https://api.example/v1/",
+            route=AccessRoute(
+                "direct_api", "openai_compatible", "provider_api", "OPENAI_API_KEY",
+                "approved_external", capabilities=("text", "tools"),
+            ),
+            api_key_env="OPENAI_API_KEY", identity="openai/model", priority="interactive",
+        )
+        holder = SensitiveTurn()
+        holder.arm("financial", "turn-1")
+        token = current_sensitive_turn.set(holder)
+        try:
+            result = await agent.run("summarize my private financial records")
+        finally:
+            current_sensitive_turn.reset(token)
+
+        assert result.startswith("FAILED:")
+        assert completions.requests == []
+
+    async def test_sensitive_turn_without_verified_local_route_fails_closed(self):
+        agent, completions = make_agent([("text", "private answer")])
+        holder = SensitiveTurn()
+        holder.arm("financial", "turn-local-only")
+        token = current_sensitive_turn.set(holder)
+        try:
+            result = await agent.run("summarize protected records")
+        finally:
+            current_sensitive_turn.reset(token)
+        assert result.startswith("FAILED: no verified local route")
+        assert completions.requests == []
+
+    async def test_confidential_workload_fails_closed_when_routing_is_disabled(self):
+        agent, completions = make_agent([("text", "private answer")], name="librarian")
+        result = await agent.run("summarize private record")
+        assert result.startswith("FAILED: no verified local route")
+        assert completions.requests == []
+
+    async def test_confidential_result_is_delivered_locally_and_redacted_to_supervisor(self):
+        agent, _ = make_agent([("text", "TOP SECRET RESULT")])
+        agent._resolved_route = ResolvedModelRoute(
+            workload="scheduler", profile_name="local", model="local-model",
+            provider="local", base_url="http://local.invalid/v1/",
+            route=AccessRoute(
+                "local", "openai_compatible", "none", None, "confidential",
+                capabilities=("text", "tools"),
+            ),
+            api_key_env=None, identity="local/local-model", priority="interactive",
+        )
+        delivered = []
+
+        async def sink(run_id, opaque_ref, body, data_policy):
+            await asyncio.sleep(0)
+            delivered.append((run_id, opaque_ref, body, data_policy))
+            return True
+
+        reply = await agent.run("inspect protected data", run_id="parent-run",
+                                private_result_sink=sink)
+        assert len(delivered) == 1
+        assert delivered[0][0] == "parent-run"
+        assert delivered[0][2] == "TOP SECRET RESULT"
+        assert delivered[0][3] == "confidential"
+        assert delivered[0][1]
+        assert "TOP SECRET RESULT" not in reply
+        assert "Reference:" in reply
+
+    async def test_private_route_without_local_sink_does_not_call_provider(self):
+        agent, completions = make_agent([("text", "TOP SECRET RESULT")])
+        agent._resolved_route = ResolvedModelRoute(
+            workload="scheduler", profile_name="local", model="local-model",
+            provider="local", base_url="http://local.invalid/v1/",
+            route=AccessRoute(
+                "local", "openai_compatible", "none", None, "local_only",
+                capabilities=("text", "tools"),
+            ),
+            api_key_env=None, identity="local/local-model", priority="interactive",
+        )
+
+        result = await agent.run("inspect protected data")
+
+        assert result.startswith("The protected result could not be delivered")
+        assert "TOP SECRET RESULT" not in result
+        assert completions.requests == []
+
+    async def test_private_route_without_sink_does_not_construct_provider_client(
+        self, monkeypatch,
+    ):
+        monkeypatch.setenv("JARVIS_MODEL_ROUTING_ENABLED", "1")
+        monkeypatch.setenv("JARVIS_MODEL_PREFERENCES_ENABLED", "0")
+        monkeypatch.setenv("JARVIS_MODEL_ROUTE_SCHEDULER", "local")
+        constructed = []
+        monkeypatch.setattr(
+            "jarvis.agents.base.make_route_client",
+            lambda route: constructed.append(route) or object(),
+        )
+        settings = make_settings()
+        settings.jarvis_model_routing_enabled = True
+        agent = SubAgent(
+            name="scheduler", display_name="Scheduler", description="d",
+            mcp_servers=[], settings=settings, registry=FakeRegistry(),
+            model_profile="claude-sonnet-5",
+        )
+        assert constructed == []
+
+        result = await agent.run("inspect protected data")
+
+        assert result.startswith("The protected result could not be delivered")
+        assert constructed == []
+
+    async def test_user_route_preference_cannot_lower_workload_privacy_floor(
+        self, monkeypatch,
+    ):
+        monkeypatch.setattr(
+            "jarvis.model_preferences.list_preferences",
+            lambda **_kwargs: [{
+                "workload": "librarian", "profile": "external",
+                "route": "direct_api", "privacy": "approved_external",
+            }],
+        )
+        assert resolve_policy("librarian").privacy == "approved_external"
+        assert resolve_policy("librarian", include_preferences=False).privacy == "confidential"
+
+        agent, completions = make_agent(
+            [("text", "TOP SECRET RESULT")], name="librarian",
+        )
+        agent._settings.jarvis_model_routing_enabled = True
+        agent._resolved_route = ResolvedModelRoute(
+            workload="librarian", profile_name="external", model="external-model",
+            provider="openai", base_url="https://provider.invalid/v1/",
+            route=AccessRoute(
+                "direct_api", "openai_compatible", "provider_api", "OPENAI_API_KEY",
+                "approved_external", capabilities=("text", "tools"),
+            ),
+            api_key_env="OPENAI_API_KEY", identity="openai/external-model",
+            priority="interactive",
+        )
+        # Simulate an in-process preference/config refresh that would report
+        # the weaker route label after the agent captured its workload floor.
+        monkeypatch.setattr(
+            "jarvis.agents.base.resolve_policy",
+            lambda *_args, **_kwargs: SimpleNamespace(privacy="approved_external"),
+        )
+
+        result = await agent.run("inspect protected records")
+
+        assert result.startswith("FAILED: no verified local route")
+        assert completions.requests == []
+
+    async def test_confidential_result_sink_failure_never_returns_content(self):
+        agent, _ = make_agent([("text", "TOP SECRET RESULT")])
+        agent._resolved_route = ResolvedModelRoute(
+            workload="scheduler", profile_name="local", model="local-model",
+            provider="local", base_url="http://local.invalid/v1/",
+            route=AccessRoute(
+                "local", "openai_compatible", "none", None, "local_only",
+                capabilities=("text", "tools"),
+            ),
+            api_key_env=None, identity="local/local-model", priority="interactive",
+        )
+
+        async def failed_sink(*_args):
+            raise RuntimeError("transport detail with secret TOP SECRET RESULT")
+
+        reply = await agent.run("inspect protected data", private_result_sink=failed_sink)
+        assert "TOP SECRET RESULT" not in reply
+        assert reply.startswith("The protected result could not be delivered")
+
+    async def test_confidential_tool_output_is_removed_from_activity_events(self, monkeypatch):
+        class ProtectedRegistry(FakeRegistry):
+            async def call(self, name, arguments, server_names=None):
+                return '{"record":"TOOL SECRET"}'
+
+        agent, _ = make_agent(
+            [("tool", "fake_tool", {"query": "PRIVATE QUERY"}),
+             ("text", "FINAL SECRET")],
+            registry=ProtectedRegistry(),
+        )
+        agent._resolved_route = ResolvedModelRoute(
+            workload="scheduler", profile_name="local", model="local-model",
+            provider="local", base_url="http://local.invalid/v1/",
+            route=AccessRoute(
+                "local", "openai_compatible", "none", None, "confidential",
+                capabilities=("text", "tools"),
+            ),
+            api_key_env=None, identity="local/local-model", priority="interactive",
+        )
+        monkeypatch.setattr("jarvis.agents.base.record_execution_result",
+                            lambda *args, **kwargs: None)
+        monkeypatch.setattr("jarvis.model_execution._PROCESS_ADMISSION",
+                            ModelAdmissionController())
+        events = []
+
+        async def sink(*_args):
+            return True
+
+        await agent.run("inspect protected record", on_event=events.append,
+                        private_result_sink=sink)
+        result_event = next(event for event in events
+                            if event["type"] == "agent_tool_result")
+        assert "result" not in result_event
+        assert "arguments" not in result_event
+        assert "PRIVATE QUERY" not in repr(events)
+        assert "TOOL SECRET" not in repr(events)
+        assert "FINAL SECRET" not in repr(events)
 
     async def test_iteration_cap_says_it_ran_out_of_rounds(self):
         """B (Larry 2026-08-18): exhausting the iteration budget is NOT the
@@ -156,6 +1179,132 @@ class TestSubAgentLoop:
         agent, _ = make_agent([("sleep", 5.0)], timeout_s=0.05)
         assert await agent.run("slow task") == TIMEOUT_MESSAGE
 
+    async def test_provider_that_swallows_cancellation_cannot_start_tool_round(
+        self, monkeypatch,
+    ):
+        class SwallowingProvider:
+            def __init__(self):
+                self.started = asyncio.Event()
+                self.requests = 0
+
+            async def create(self, **_kwargs):
+                self.requests += 1
+                self.started.set()
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
+                        content=None,
+                        tool_calls=[SimpleNamespace(
+                            id="late-call",
+                            function=SimpleNamespace(
+                                name="fake_tool", arguments="{}",
+                            ),
+                        )],
+                    ))])
+
+        provider = SwallowingProvider()
+        registry = FakeRegistry()
+        agent, _ = make_agent([("text", "unused")], registry=registry)
+        recorded_completions = []
+        monkeypatch.setattr(
+            "jarvis.agents.base.record_completion",
+            lambda *args, **kwargs: recorded_completions.append((args, kwargs)),
+        )
+        agent._client = SimpleNamespace(
+            chat=SimpleNamespace(completions=provider),
+        )
+        events = []
+        task = asyncio.create_task(agent.run("cancel provider", on_event=events.append))
+        await asyncio.wait_for(provider.started.wait(), timeout=1)
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert provider.requests == 1
+        assert registry.calls == []
+        assert recorded_completions == []
+        assert not any(event.get("type") == "agent_tool_result" for event in events)
+
+    async def test_tool_that_swallows_cancellation_cannot_publish_or_continue(
+        self, monkeypatch,
+    ):
+        class SwallowingRegistry(FakeRegistry):
+            def __init__(self):
+                super().__init__()
+                self.started = asyncio.Event()
+
+            async def call(self, name, arguments, server_names=None):
+                self.calls.append((name, arguments, server_names))
+                self.started.set()
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    return '{"ok": true, "result": "late"}'
+
+        registry = SwallowingRegistry()
+        recorded_tool_results = []
+        unknown_outcomes = []
+        monkeypatch.setattr(
+            "jarvis.agents.base.RunLogger.tool_result",
+            lambda *args, **kwargs: recorded_tool_results.append((args, kwargs)),
+        )
+        monkeypatch.setattr(
+            "jarvis.agents.base.RunLogger.tool_outcome_unknown",
+            lambda *args, **kwargs: unknown_outcomes.append((args, kwargs)),
+        )
+        agent, completions = make_agent(
+            [("tool", "fake_tool", {}), ("text", "must not run")],
+            registry=registry,
+        )
+        events = []
+        task = asyncio.create_task(agent.run("cancel tool", on_event=events.append))
+        await asyncio.wait_for(registry.started.wait(), timeout=1)
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert len(completions.requests) == 1
+        assert len(registry.calls) == 1
+        assert recorded_tool_results == []
+        assert len(unknown_outcomes) == 1
+        args, kwargs = unknown_outcomes[0]
+        assert args[0].__class__.__name__ == "RunLogger"
+        assert args[1:] == ("fake_tool", "call_1")
+        assert kwargs == {"reason_code": "cancelled_after_return"}
+        assert not any(event.get("type") == "agent_tool_result" for event in events)
+
+    async def test_direct_mode_does_not_execute_replayed_tool_call_identity(self):
+        class ReplayingProvider:
+            def __init__(self):
+                self.requests = []
+
+            async def create(self, **kwargs):
+                self.requests.append(kwargs)
+                call = SimpleNamespace(
+                    id="same-provider-call-id",
+                    type="function",
+                    function=SimpleNamespace(name="fake_tool", arguments="{}"),
+                )
+                return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
+                    content=None, tool_calls=[call],
+                ))])
+
+        provider = ReplayingProvider()
+        registry = FakeRegistry()
+        agent, _ = make_agent([("text", "unused")], registry=registry)
+        agent._client = SimpleNamespace(
+            chat=SimpleNamespace(completions=provider),
+        )
+
+        reply = await agent.run("repeat tool call")
+
+        assert reply.startswith("FAILED: the provider repeated")
+        assert len(provider.requests) == 2
+        assert len(registry.calls) == 1
+
     async def test_events_emitted_in_order(self):
         agent, _ = make_agent(
             [("tool", "fake_tool", {"q": 1}), ("text", "done")])
@@ -183,20 +1332,32 @@ class TestSubAgentLoop:
         result_event = next(e for e in events if e["type"] == "agent_tool_result")
         assert len(result_event["result"]) == 20_000
 
-    async def test_client_exception_returns_failed(self):
+    async def test_client_exception_returns_content_free_reason_code(self, caplog):
         class Boom:
             async def create(self, **kwargs):
-                raise RuntimeError("api down")
+                raise RuntimeError("provider echoed PRIVATE REQUEST CONTENT")
 
         agent, _ = make_agent([("text", "unused")])
         agent._client = SimpleNamespace(
             chat=SimpleNamespace(completions=Boom()))
         reply = await agent.run("task")
         assert reply.startswith("FAILED:")
+        assert "PRIVATE REQUEST CONTENT" not in reply
+        assert "PRIVATE REQUEST CONTENT" not in caplog.text
+        assert "RuntimeError" in reply
 
     async def test_system_prompt_from_appendix_a(self):
         agent, completions = make_agent([("text", "ok")], name="librarian")
-        await agent.run("hi")
+        agent._resolved_route = ResolvedModelRoute(
+            workload="librarian", profile_name="local", model="local-model",
+            provider="local", base_url="http://local.invalid/v1/",
+            route=AccessRoute(
+                "local", "openai_compatible", "none", None, "confidential",
+                capabilities=("text", "tools"),
+            ),
+            api_key_env=None, identity="local/local-model", priority="interactive",
+        )
+        await agent.run("hi", private_result_sink=lambda *_args: True)
         system = completions.requests[0]["messages"][0]["content"]
         assert system.startswith("You are the Librarian")
         assert "America/New_York" not in system  # librarian prompt has no tz
@@ -875,6 +2036,15 @@ class TestRuntimeModelOverride:
             mcp_servers=[], settings=settings, registry=FakeRegistry(),
             client_factory=lambda _settings: FakeLLM([("text", "private result")]),
         )
+        agent._resolved_route = ResolvedModelRoute(
+            workload="librarian", profile_name="local", model="local-model",
+            provider="local", base_url="http://local.invalid/v1/",
+            route=AccessRoute(
+                "local", "openai_compatible", "none", None, "confidential",
+                capabilities=("text", "tools"),
+            ),
+            api_key_env=None, identity="local/local-model", priority="interactive",
+        )
         captured = []
         import jarvis.agents.base as base_module
 
@@ -886,7 +2056,10 @@ class TestRuntimeModelOverride:
                 super().__init__(*args, **kwargs)
 
         monkeypatch.setattr(base_module, "RunLogger", CapturingRunLogger)
-        await agent.run("summarize the private record")
+        await agent.run(
+            "summarize the private record",
+            private_result_sink=lambda *_args: True,
+        )
         assert captured == [True]
 
 
@@ -970,9 +2143,10 @@ class TestRefuseMode:
         ), reg
 
     async def test_refuse_mode_refuses_instead_of_running_on_the_fallback(
-            self, tmp_path, monkeypatch):
+            self, tmp_path, monkeypatch, caplog):
         agent, _ = self._agent(tmp_path, monkeypatch, "refuse")
         assert agent.refuses
+        caplog.clear()
         result = await agent.run("implement the plan")
         assert result.startswith("REFUSED:")
         # The reason must be stated, not merely signalled: Golden Rule 1 and
@@ -980,6 +2154,8 @@ class TestRefuseMode:
         # "REFUSED:" is how the model ends up inventing one.
         assert "could not be resolved" in result
         assert "does-not-exist" in result
+        assert "subagent_refused agent=developer" in caplog.text
+        assert "does-not-exist" not in caplog.text
 
     async def test_warn_mode_still_falls_back_silently(
             self, tmp_path, monkeypatch):

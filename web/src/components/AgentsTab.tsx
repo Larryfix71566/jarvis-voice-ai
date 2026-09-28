@@ -10,6 +10,7 @@ import {
   type ActivityLine,
   type RunState,
 } from "../agentRuns";
+import { getToken, setToken } from "../api";
 
 /**
  * Activity ticker (Larry 2026-08-21: "a running text narrative related
@@ -87,6 +88,7 @@ function ActivityTicker({
  * listener (plan D10), and this component only subscribes to the store.
  */
 export default function AgentsTab() {
+  const [tokenDraft, setTokenDraft] = useState("");
   const [allRuns, setAllRuns] = useState<RunState[]>(getRuns);
   const [, setTick] = useState(0);
 
@@ -110,6 +112,25 @@ export default function AgentsTab() {
   return (
     <div className="agent-runs" aria-live="polite">
       <div className="panel-title">Agents</div>
+
+      <section className="agent-access-settings" aria-label="Developer access">
+        <h4>Dev</h4>
+        <label htmlFor="admin-access-token">Access token</label>
+        <input
+          id="admin-access-token"
+          type="password"
+          autoComplete="off"
+          placeholder={getToken() ? "stored — enter a new token to replace" : "jvt_…"}
+          value={tokenDraft}
+          onChange={(event) => setTokenDraft(event.target.value)}
+        />
+        <button type="button" onClick={() => { setToken(tokenDraft); setTokenDraft(""); }}>
+          Save
+        </button>
+        <button type="button" onClick={() => { setToken(""); setTokenDraft(""); }}>
+          Clear
+        </button>
+      </section>
 
       {runs.length === 0 ? (
         <div className="agent-runs-empty">No agent runs yet.</div>

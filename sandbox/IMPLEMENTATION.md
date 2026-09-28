@@ -34,8 +34,12 @@ workflow, preview, provider and lifecycle requirements below still apply.
   VM state before trusting readiness. Interrupted verification cancels its
   abandoned child and clears the previous approval before resuming edits.
 - Candidate-bound publication receipts and resumable GitHub object/branch/draft
-  PR creation. Actual lost-response recovery and cleanup passed; CI recognizes
-  the new sandbox self-edit branch prefix.
+  PR creation. Restart reconciliation accepts only an exact, open draft PR
+  whose base, branch, repository and commit match the saved operation; a closed
+  or promoted PR is retained as a conflict for maintainer review rather than
+  reported as a successful draft. Fake-service tests cover lost responses and
+  these recovery refusals. Actual lost-response recovery and cleanup passed;
+  CI recognizes the new sandbox self-edit branch prefix.
 - Legacy `repo_write_file`, `repo_commit_write`, Git staging/commit/push, and
   `app_write_file` refuse unconditionally, including old pending action IDs.
   MCP and console entry points share the same refusal. Repository inspection

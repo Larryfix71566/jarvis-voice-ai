@@ -75,6 +75,8 @@ def test_allowed_paths(allowlist: Allowlist, path: str) -> None:
     # allowlist itself remain human-only.
     "config/upgrade_models.yaml",
     "config/skills.yaml",
+    "skills/new-skill/SKILL.md",
+    "tests/fixtures/skills_authoring/new-skill/matcher-cases.json",
     # no Swift gate exists, so a self-edit here would be unvalidated
     "macos/MortimerHost/Package.swift",
 ])

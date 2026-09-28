@@ -374,8 +374,13 @@ physical two-screen and return-locator behavior is now recorded in the
   stable namespaced identities and merges context refreshes without resetting
   result selection, manual placement, or groups. `AtlasCardView` labels each
   source kind and uses the shared Liquid Glass card treatment. The focused
-  `KnowledgeAtlasTests` suite passes 4/4. Physical Atlas refresh/error,
-  VoiceOver, and multi-display evidence remain part of the open Mac gates.
+  `AtlasStore` now owns per-source asynchronous refresh, bounded failure
+  categories, stale last-good retention, explicit retry and reconnect refresh;
+  focused `KnowledgeAtlasTests` passes 7/7. Physical auth/reconnect/source
+  change, duplicate-fetch, VoiceOver, performance and multi-display evidence
+  remain open. The full MortimerHost run has eight headless
+  `WindowVisibilityTests` fixture failures. See the
+  [GC24-06 receipt](../verified-gap-closure/GC24-06-atlas-refresh-2026-09-24.md).
 - [x] **Duplicate source file (housekeeping).** Closed 2026-09-25: removed the
   obsolete `macos/MortimerHost/Placement/ContentWindowRegistry.swift` after
   confirming no package, script or test imported it. The package-owned source

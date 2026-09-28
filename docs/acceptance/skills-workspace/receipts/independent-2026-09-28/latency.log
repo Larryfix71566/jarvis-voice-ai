@@ -1,0 +1,5 @@
+class           count        p50        p90  targets
+non-delegated       3    1153 ms    1203 ms  p50 OK (<= 1200 ms)
+delegated           1    1412 ms    1412 ms  p50 OK (<= 2500 ms)
+overall             4    1184 ms    1353 ms  p90 OK (<= 3500 ms)
+

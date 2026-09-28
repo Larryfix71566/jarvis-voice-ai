@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
+import { ADMIN_BASE as API, authFetch } from "../api";
 
-const API = "http://localhost:7861";
 const POLL_MS = 60_000;
 
 /**
@@ -75,7 +75,7 @@ export default function SystemVitals({ connected }: { connected: boolean }) {
 
     async function load() {
       try {
-        const res = await fetch(`${API}/api/ambient`);
+        const res = await authFetch(`${API}/api/ambient`);
         const body: unknown = await res.json();
         const system = (body as { system?: SystemData | null })?.system ?? null;
         if (!cancelled) setData(system);

@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "skill_id": "technical-plan-document",
+  "display_name": "Technical plan and specification",
+  "description": "Write an implementation plan with explicit decisions and acceptance criteria.",
+  "category": "development",
+  "version": "1.0.0",
+  "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "installation": "installed",
+  "enabled": true,
+  "readiness": "unknown",
+  "readiness_reasons": ["model_route_compatibility_unverified"],
+  "verification": "not_tested",
+  "capabilities": ["implementation_planning", "acceptance_design"],
+  "required_tools": [],
+  "required_credentials": [],
+  "reference_paths": [],
+  "example_ids": ["implementation-plan"],
+  "related_workflow_ids": [],
+  "compatible_with": [],
+  "process_kind": "linear",
+  "process_nodes": [
+    {
+      "step_id": "establish-scope",
+      "title": "Establish scope and current evidence",
+      "description": "Identify goals, existing behavior, constraints, owners, and relevant source documents.",
+      "inputs": ["planning request", "repository context"],
+      "outputs": ["verified scope and constraints"],
+      "tools": [],
+      "approval": null,
+      "success_criteria": ["Assumptions are separated from verified facts."],
+      "edges": [{"to": "define-design-decisions"}]
+    },
+    {
+      "step_id": "define-design-decisions",
+      "title": "Define decisions and implementation sequence",
+      "description": "Resolve design choices and dependencies before assigning implementation work.",
+      "inputs": ["verified scope and constraints"],
+      "outputs": ["ordered implementation increments"],
+      "tools": [],
+      "approval": null,
+      "success_criteria": ["Implementers are not left to make architectural choices."],
+      "edges": [{"to": "specify-acceptance"}]
+    },
+    {
+      "step_id": "specify-acceptance",
+      "title": "Specify tests, gates, and handoff",
+      "description": "Define acceptance evidence, safety boundaries, and status reporting.",
+      "inputs": ["ordered implementation increments"],
+      "outputs": ["model-ready implementation plan"],
+      "tools": [],
+      "approval": null,
+      "success_criteria": ["Completion claims can be checked against concrete evidence."],
+      "edges": []
+    }
+  ],
+  "source": {
+    "kind": "local",
+    "reference": "procedure:18+22",
+    "adaptation_notes": "Mortimer-authored.",
+    "immutable_revision": null,
+    "license": null,
+    "license_path": null,
+    "source_digest": null
+  },
+  "blockers": []
+}

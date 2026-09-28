@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "skill_id": "sample-skill",
+  "display_name": "Sample skill",
+  "category": "development",
+  "version": "1.0.0",
+  "source": {
+    "kind": "authored",
+    "reference": "synthetic-contract-fixture",
+    "adaptation_notes": "Synthetic fixture for the Skills workspace contract."
+  },
+  "capabilities": ["implementation_planning"],
+  "required_tools": [],
+  "required_credentials": [],
+  "reference_paths": [],
+  "example_ids": ["positive-sample", "negative-sample"],
+  "related_workflow_ids": [],
+  "compatible_with": [],
+  "process": {
+    "kind": "linear",
+    "nodes": [
+      {
+        "step_id": "inspect-request",
+        "title": "Inspect the request",
+        "description": "Establish the scope and constraints from verified inputs.",
+        "inputs": ["request"],
+        "outputs": ["scope"],
+        "tools": [],
+        "approval": null,
+        "success_criteria": ["The requested outcome and constraints are explicit."],
+        "edges": [{"to": "report-result"}]
+      },
+      {
+        "step_id": "report-result",
+        "title": "Report the result",
+        "description": "Deliver the completed result with its evidence and limitations.",
+        "inputs": ["scope"],
+        "outputs": ["result"],
+        "tools": [],
+        "approval": null,
+        "success_criteria": ["The result answers the request and states material limits."],
+        "edges": []
+      }
+    ]
+  }
+}

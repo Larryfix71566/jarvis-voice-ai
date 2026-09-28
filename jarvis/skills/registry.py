@@ -21,18 +21,20 @@ import logging
 import os
 import sys
 import time
+from collections.abc import Iterator
 from contextlib import AsyncExitStack
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 import yaml
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from jarvis.bot.sensitive_turn import is_sensitive
 from jarvis.config import bridge_settings_to_env, expand_env_vars
-from jarvis.bot.sensitive_turn import current_sensitive_turn
 from jarvis.runlog.context import get_run_id, get_run_logger
 from jarvis.toolresult import classify_tool_result
+from jarvis.yaml_utils import load_unique_yaml_file
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +71,10 @@ ENV_SCOPING_ENABLED_ENV = "JARVIS_ENV_SCOPING_ENABLED"
 #: openai_tools() strips the parameter from their schemas so the model never sees
 #: it. The ContextVar cannot cross the MCP child-process boundary; this is the one
 #: point that both knows the run and touches every tool call.
-RUN_ID_INJECTED_TOOLS: frozenset[str] = frozenset({"selfedit_start", "plan_start"})
+RUN_ID_INJECTED_TOOLS: frozenset[str] = frozenset({
+    "selfedit_start", "plan_start", "app_build_start",
+    "research_compare_start", "research_status",
+})
 
 #: skill.yaml requires_env_dynamic sources. Closed set — an unrecognised
 #: source is a hard error, because a typo that silently grants nothing is
@@ -105,12 +110,12 @@ def load_requires_env(server_name: str) -> tuple[list[str], list[str], list[dict
         with open(path, "r", encoding="utf-8") as fh:
             data = yaml.safe_load(fh) or {}
     except FileNotFoundError:
-        logger.warning("skill_yaml_missing server=%s path=%s "
-                       "(child gets BASE_ENV_KEYS only)", server_name, path)
+        logger.warning("skill_yaml_missing server=%s "
+                       "(child gets BASE_ENV_KEYS only)", server_name)
         return [], [], []
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("skill_yaml_unreadable server=%s error=%s "
-                       "(child gets BASE_ENV_KEYS only)", server_name, exc)
+    except Exception:  # noqa: BLE001
+        logger.warning("skill_yaml_unreadable server=%s "
+                       "(child gets BASE_ENV_KEYS only)", server_name)
         return [], [], []
     required = [str(n) for n in (data.get("requires_env") or [])]
     optional = [str(n) for n in (data.get("optional_env") or [])]
@@ -146,8 +151,9 @@ def _resolve_dynamic_env(server_name: str, dynamic: list[dict]) -> list[str]:
                       encoding="utf-8") as fh:
                 registry = yaml.safe_load(fh) or {}
         except Exception as exc:  # noqa: BLE001 — degrade to the default only
-            logger.warning("upgrade_models_unreadable server=%s error=%s",
-                           server_name, exc)
+            logger.warning(
+                "upgrade_models_unreadable server=%s error_type=%s",
+                server_name, type(exc).__name__[:64])
             continue
         for value in _walk_api_key_envs(registry):
             names.add(value)
@@ -239,10 +245,10 @@ def build_child_env(entry: dict[str, Any]) -> dict[str, str]:
     # loudly at check-time by scripts/check_skills.py (Step 1d).
     try:
         resolved = _resolve_dynamic_env(name, dynamic)
-    except ValueError as exc:
-        logger.error("mcp_requires_env_dynamic_invalid server=%s error=%s "
+    except ValueError:
+        logger.error("mcp_requires_env_dynamic_invalid server=%s "
                      "(child gets base+requires_env+optional_env only)",
-                     name, exc)
+                     name)
         resolved = []
     for key in resolved:
         if key in BASE_ENV_KEYS or key in env:
@@ -277,7 +283,7 @@ class SkillRegistry:
         # "${JARVIS_TIMEZONE}". Idempotent (setdefault), so the callers that
         # already bridge are unaffected.
         bridge_settings_to_env()
-        config = yaml.safe_load(self._config_path.read_text())
+        config = load_unique_yaml_file(self._config_path)
         self._server_configs = list(config["servers"])
         self._stack = AsyncExitStack()
         try:
@@ -295,8 +301,9 @@ class SkillRegistry:
         if stack is not None:
             try:
                 await stack.aclose()
-            except Exception as exc:  # shutdown noise must not propagate
-                logger.warning("registry_stop_error: %s", exc)
+            except Exception as exc:  # noqa: BLE001 — shutdown noise must not propagate
+                logger.warning("registry_stop_error error_type=%s",
+                               type(exc).__name__[:64])
 
     def openai_tools(self, server_names: list[str] | None = None) -> list[dict]:
         """Discovered tools as OpenAI function schemas, optionally filtered."""
@@ -341,9 +348,7 @@ class SkillRegistry:
         server, _tool = entry
         if server_names is not None and server not in set(server_names):
             return f"Tool '{tool_name}' is not available in this context."
-        holder = current_sensitive_turn.get()
-        if (server in EXTERNAL_TOOL_SERVERS and holder is not None
-                and holder.is_armed()):
+        if server in EXTERNAL_TOOL_SERVERS and is_sensitive():
             # The current turn may contain financial/private material. Do not
             # let an external MCP child receive it; the model gets a truthful
             # tool failure and can choose a local-only alternative.
@@ -372,11 +377,13 @@ class SkillRegistry:
                 runlog.mcp_call(tool_name, server, ok=False,
                                  latency_ms=latency_ms, error=error)
             return f"{tool_name} failed: {error}."
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — contain and redact MCP/provider failures
             latency_ms = int((time.perf_counter() - call_start) * 1000)
             error = type(exc).__name__
-            logger.warning("tool_call_failed tool=%s error=%s run_id=%s",
-                            tool_name, exc, get_run_id())
+            # Provider/MCP exception messages can contain request arguments,
+            # response bodies, credentials, or user content. Keep logs to a
+            # stable error category; the caller receives the same bounded code.
+            logger.warning("tool_call_failed error_type=%s", error[:64])
             if runlog is not None:
                 runlog.mcp_call(tool_name, server, ok=False,
                                  latency_ms=latency_ms, error=error)

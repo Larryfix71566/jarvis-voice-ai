@@ -1,8 +1,8 @@
 """Unit tests for jarvis/agents/supervisor.py (Orchestrator) using a
 scripted FakeLLM double — deterministic, no network."""
 
+import asyncio
 import json
-import sqlite3
 from types import SimpleNamespace
 
 import pytest
@@ -12,6 +12,16 @@ from jarvis.agents.supervisor import (
     STUCK_MESSAGE,
     Orchestrator,
 )
+from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
+
+
+@pytest.fixture(autouse=True)
+def _initialized_non_sensitive_turn():
+    token = current_sensitive_turn.set(SensitiveTurn())
+    try:
+        yield
+    finally:
+        current_sensitive_turn.reset(token)
 
 
 def make_settings():
@@ -41,14 +51,23 @@ class FakeCompletions:
         kind = action[0]
         if kind == "text":
             message = SimpleNamespace(content=action[1], tool_calls=None)
-        else:  # ("tool", name, arguments) — arguments dict or raw string
-            raw = action[2] if isinstance(action[2], str) else json.dumps(action[2])
-            tool_call = SimpleNamespace(
-                id=f"call_{len(self.requests)}",
-                type="function",
-                function=SimpleNamespace(name=action[1], arguments=raw),
+        else:  # ("tool", name, args[, id]) or ("tools", [(name,args,id), ...])
+            entries = (
+                action[1] if kind == "tools"
+                else [(action[1], action[2],
+                       action[3] if len(action) > 3
+                       else f"call_{len(self.requests)}")]
             )
-            message = SimpleNamespace(content=None, tool_calls=[tool_call])
+            tool_calls = []
+            for name, arguments, call_id in entries:
+                raw = (arguments if isinstance(arguments, str)
+                       else json.dumps(arguments))
+                tool_calls.append(SimpleNamespace(
+                    id=call_id,
+                    type="function",
+                    function=SimpleNamespace(name=name, arguments=raw),
+                ))
+            message = SimpleNamespace(content=None, tool_calls=tool_calls)
         return SimpleNamespace(choices=[SimpleNamespace(message=message)])
 
     _last = ("text", "fallback")
@@ -92,6 +111,26 @@ def make_orchestrator(script, registry=None, mode="direct", **kwargs):
 
 
 class TestSimpleReply:
+    async def test_sensitive_tool_result_is_not_sent_in_a_followup_voice_round(self, fresh_db):
+        class SensitiveRegistry(FakeRegistry):
+            async def call(self, name, arguments, server_names=None):
+                self.calls.append((name, arguments))
+                return "Account balance is $1,234.56."
+
+        registry = SensitiveRegistry()
+        orch, completions = make_orchestrator([
+            ("tool", "fake_tool", {}), ("text", "provider must not see this"),
+        ], registry=registry)
+
+        reply = await orch.chat("read the local account record")
+
+        assert len(completions.requests) == 1
+        assert "Protected details were detected" in reply
+        assert "$1,234.56" not in reply
+        assert all(
+            "$1,234.56" not in str(message)
+            for message in orch.history
+        )
     async def test_text_reply_and_history(self, fresh_db):
         orch, completions = make_orchestrator([("text", "Good afternoon, Boss.")])
         reply = await orch.chat("hello")
@@ -112,6 +151,46 @@ class TestSimpleReply:
         orch, completions = make_orchestrator([("text", "ok")], temperature=0.7)
         await orch.chat("hi")
         assert completions.requests[0]["temperature"] == 0.7
+
+    async def test_absorbed_provider_cancellation_does_not_commit_late_answer(
+        self, fresh_db
+    ):
+        from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
+        from jarvis.db import get_conn
+
+        current_sensitive_turn.set(SensitiveTurn())
+        orch, completions = make_orchestrator([("text", "unused")])
+        started = asyncio.Event()
+
+        async def return_after_cancellation(**_kwargs):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                # Simulate a provider adapter that absorbs cancellation and
+                # returns a late response anyway.
+                return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
+                    content="late private answer", tool_calls=None,
+                ))])
+
+        completions.create = return_after_cancellation
+        request = asyncio.create_task(orch.chat("question interrupted by disconnect"))
+        await started.wait()
+        request.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await request
+
+        assert orch.history == [{
+            "role": "user", "content": "question interrupted by disconnect",
+        }]
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT role,content FROM conversations WHERE session_id=? ORDER BY id",
+                ("test-session",),
+            ).fetchall()
+        assert [(row["role"], row["content"]) for row in rows] == [
+            ("user", "question interrupted by disconnect"),
+        ]
 
 
 class TestToolLoop:
@@ -150,6 +229,53 @@ class TestToolLoop:
         await orch.chat("go")
         assert registry.calls == [("fake_tool", {})]
 
+    async def test_replayed_tool_call_id_does_not_dispatch_twice(self, fresh_db):
+        registry = FakeRegistry()
+        orch, _ = make_orchestrator([
+            ("tool", "fake_tool", {}, "replayed-id"),
+            ("tool", "fake_tool", {}, "replayed-id"),
+        ], registry=registry)
+
+        reply = await orch.chat("run this action")
+
+        assert reply == STUCK_MESSAGE
+        assert registry.calls == [("fake_tool", {})]
+        assert [message["role"] for message in orch.history] == [
+            "user", "assistant", "tool", "assistant",
+        ]
+
+    async def test_invalid_tool_call_id_fails_before_dispatch(self, fresh_db):
+        registry = FakeRegistry()
+        orch, _ = make_orchestrator([
+            ("tool", "fake_tool", {}, ""),
+        ], registry=registry)
+
+        reply = await orch.chat("run this action")
+
+        assert reply == STUCK_MESSAGE
+        assert registry.calls == []
+        assert [message["role"] for message in orch.history] == [
+            "user", "assistant",
+        ]
+
+    async def test_duplicate_ids_in_batch_reject_before_partial_dispatch(
+            self, fresh_db):
+        registry = FakeRegistry()
+        orch, _ = make_orchestrator([
+            ("tools", [
+                ("first_tool", {}, "duplicate-id"),
+                ("second_tool", {}, "duplicate-id"),
+            ]),
+        ], registry=registry)
+
+        reply = await orch.chat("run both actions")
+
+        assert reply == STUCK_MESSAGE
+        assert registry.calls == []
+        assert [message["role"] for message in orch.history] == [
+            "user", "assistant",
+        ]
+
 
 class TestHistoryManagement:
     async def test_trim_to_40_and_no_leading_tool_message(self, fresh_db):
@@ -173,12 +299,12 @@ class TestHistoryManagement:
 
 class TestPersistence:
     async def test_user_and_assistant_rows_written(self, fresh_db):
-        from jarvis.db import get_conn
         # T4a K3: persistence is gated on the sensitive-turn holder, which is
         # FAIL-CLOSED when unset (an unwired holder suppresses every row, by
         # design). The live sites (cli.py, pipeline.py) set it before any
         # turn; this test must too, exactly as the CLI does.
         from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
+        from jarvis.db import get_conn
         current_sensitive_turn.set(SensitiveTurn())
 
         orch, _ = make_orchestrator([("text", "stored reply")])
@@ -410,7 +536,9 @@ class TestPromptConfiguration:
 
     async def test_by_default_no_addendum_reaches_the_prompt(self, fresh_db):
         from jarvis.prompts import (
-            HANDOFF_ADDENDUM, SCREEN_VISION_ADDENDUM, UI_CONTROL_ADDENDUM,
+            HANDOFF_ADDENDUM,
+            SCREEN_VISION_ADDENDUM,
+            UI_CONTROL_ADDENDUM,
             VOICE_ADDENDUM,
         )
         orch, completions = make_delegating([("text", "ok")])
@@ -422,7 +550,9 @@ class TestPromptConfiguration:
 
     async def test_the_production_flags_put_all_four_addenda_in(self, fresh_db):
         from jarvis.prompts import (
-            HANDOFF_ADDENDUM, SCREEN_VISION_ADDENDUM, UI_CONTROL_ADDENDUM,
+            HANDOFF_ADDENDUM,
+            SCREEN_VISION_ADDENDUM,
+            UI_CONTROL_ADDENDUM,
             VOICE_ADDENDUM,
         )
         orch, completions = make_delegating(

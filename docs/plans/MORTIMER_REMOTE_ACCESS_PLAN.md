@@ -59,7 +59,7 @@ Maps each closed review/cross-plan finding to the section changed and what chang
 | F20 | MINOR | §5 Step 7 | "add `import os`" instruction added for `spoken_acceptance.py`. |
 | F21 | MINOR | §9, §3 A5 | "Rotating the service token" paragraph added; A5 notes `service_headers()` is captured once per `AdminClient` (process-lifetime). |
 | F22 | MINOR | §3 A10, §5 Step 7 | Runner-app docstring range corrected to `run.py:169-183`. |
-| CP-F1 | BLOCKER | §0.7, §3 A3, §5 Step 1 | Migration cross-guard added (REMOTE owns `0016_client_tokens`; MAIL moves to `0017`); `MIGRATIONS` insertion anchored by "append after the last tuple", not a line number. |
+| CP-F1 | BLOCKER | §0.7, §3 A3, §5 Step 1 | Migration cross-guard added (REMOTE owns `0031_client_tokens`; MAIL moves to `0032`); `MIGRATIONS` insertion anchored by "append after the last tuple", not a line number. |
 | CP-F4 | MAJOR | §4 manifest rows, §5 Step 6(d) | `mcp_selfedit`/`mcp_web` manifest rows say **append** `JARVIS_SERVICE_TOKEN` (never replace — do not delete SEC's `JARVIS_UPGRADE_PROFILE` or `TAVILY_API_KEY`). |
 | CP-F6 | BLOCKER | §9, §10 R15, §7 T-A34b | Note added that `JARVIS_ENV_SCOPING_ENABLED=false` post-REMOTE leaks the token to all twelve children; `test_service_token_is_not_in_a_scoped_child_env` + CI-ordering assertion added. (SEC owns the §9 kill-switch row.) |
 | CP-F15 | MAJOR | §3 A15, §5 Step 10, §6, §8 V6 | K1 Keychain convention fixed to service `"com.mortimer.jarviskit"`, account `<scheme>://<host>:<port>` from the bot URL; NATIVE uses the same item. |
@@ -93,7 +93,7 @@ Roadmap §1's table and K5 imply the bot URL is configured. Verified: `grep -rn 
 4. **Do not fork, vendor, patch, or monkey-patch Pipecat.** `/usr/local/lib/python3.11/dist-packages/pipecat` (1.4.0) is read-only reference. A10's decision tree has exactly two branches and a third "report and stop" outcome; there is no fourth.
 5. **Write the code in §5 verbatim.** Where §5 gives a complete module, that module's content is the plan's content — do not "improve" the constant-time compare, do not add a cache, do not add a second verification path.
 6. **Kill switches are read in exactly one place each.** `JARVIS_AUTH_ENABLED` is read only in `jarvis/auth.py:auth_enabled()`. `JARVIS_BIND_HOST` is read only in `jarvis/bind.py:resolve_bind_host()`. If you find yourself reading either name a second time, you are wrong.
-7. **Migrations are append-only, and REMOTE owns `0016_client_tokens`.** Add one `MIGRATION_<n+1>` constant and **append its tuple after the last tuple in `MIGRATIONS`** (locate that tuple by searching for the newest `(".._..", MIGRATION_..)` line — today `("0015_memory_reviews", MIGRATION_0015)` — not by a line number); never edit an existing migration string, never renumber. **Cross-plan guard (CP-F1):** REMOTE (W1) owns `0016_client_tokens`; `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (MAIL) moves its brief migration to `0017_brief`. Because `CREATE TABLE IF NOT EXISTS` makes a number collision silent, confirm before you start that no other `0016_*` exists: `grep -c 0016 jarvis/db.py` should be 0 (the existing newest is `0015`). If a `0016_*` other than `client_tokens` is already present, **stop and report** — wave order was violated.
+7. **Migrations are append-only, and REMOTE owns `0031_client_tokens`.** Add one `MIGRATION_<n+1>` constant and **append its tuple after the last tuple in `MIGRATIONS`** (locate that tuple by searching for the newest `(".._..", MIGRATION_..)` line — today `("0030_skill_events", MIGRATION_0030_skill_events)` — not by a line number); never edit an existing migration string, never renumber. **Cross-plan guard (CP-F1):** REMOTE (W1) owns `0031_client_tokens`; `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (MAIL) moves its brief migration to `0032_brief`. Because `CREATE TABLE IF NOT EXISTS` makes a number collision silent, confirm before you start that no other `0031_*` exists: `grep -c 0031 jarvis/db.py` should be 0 (the existing newest is `0030`). If a `0031_*` other than `client_tokens` is already present, **stop and report** — wave order was violated.
 8. **`pytest tests/unit -q` must be green before you stop.** The suite is ~1538 tests today; §5 Step 5 changes the default auth posture for the whole suite and Step 5 is where you prove nothing else broke.
 9. **Every new module is stdlib-only or `jarvis.db`-only** unless §5 says otherwise. `jarvis/auth.py`, `jarvis/bind.py`, `jarvis/urls.py`, and `jarvis/authmw.py` import no third-party package — they are imported by the bot, the sidecar, the CLI, and MCP children.
 10. **If a step's precondition is not true, stop and report.** Do not improvise a substitute. The two places this can happen are A10's Check B1 and constraint 11 below.
@@ -115,61 +115,78 @@ Roadmap §1's table and K5 imply the bot URL is configured. Verified: `grep -rn 
 
 There is no `StaticFiles` mount anywhere in the file (`grep -n 'StaticFiles\|app.mount' jarvis/admin/server.py` → no matches), so there is no static route to exempt.
 
-### 1.2 The sidecar's complete route inventory — 47 routes
+### 1.2 The sidecar's complete route inventory — 64 routes
 
-Every route decorator in `jarvis/admin/server.py`, in file order. **All 47 are covered by the middleware in A6; none is exempt** (A4 justifies the absence of exemptions, including for `/api/health`).
+Every FastAPI route decorator in `jarvis/admin/server.py`, in source order. All are covered by the bearer middleware; none is exempt. The Skills request endpoints add an authenticated, user-scoped authoring boundary and are included in the same whole-app route test.
 
 | # | Method | Path | Line |
 |---|---|---|---|
-| 1 | GET | `/api/health` | 707 |
-| 2 | GET | `/api/git/status` | 712 |
-| 3 | GET | `/api/git/log` | 717 |
-| 4 | GET | `/api/git/diff` | 722 |
-| 5 | GET | `/api/git/actions` | 727 |
-| 6 | POST | `/api/git/prepare-commit` | 732 |
-| 7 | POST | `/api/git/commit` | 737 |
-| 8 | POST | `/api/git/prepare-push` | 742 |
-| 9 | POST | `/api/git/push` | 747 |
-| 10 | GET | `/api/selfedit/models` | 755 |
-| 11 | GET | `/api/selfedit/status` | 760 |
-| 12 | POST | `/api/selfedit/stage` | 767 |
-| 13 | POST | `/api/selfedit/run` | 795 |
-| 14 | GET | `/api/selfedit/run` | 878 |
-| 15 | POST | `/api/selfedit/validate` | 910 |
-| 16 | POST | `/api/selfedit/verify-appearance` | 924 |
-| 17 | POST | `/api/selfedit/submit` | 940 |
-| 18 | POST | `/api/selfedit/revert` | 949 |
-| 19 | POST | `/api/selfedit/reject` | 958 |
-| 20 | POST | `/api/appbuild/start` | 1009 |
-| 21 | GET | `/api/appbuild/job` | 1063 |
-| 22 | POST | `/api/appbuild/submit` | 1072 |
-| 23 | POST | `/api/appbuild/cancel` | 1085 |
-| 24 | POST | `/api/research/start` | 1104 |
-| 25 | GET | `/api/research/job` | 1136 |
-| 26 | POST | `/api/research/save` | 1143 |
-| 27 | POST | `/api/research/cancel` | 1190 |
-| 28 | GET | `/api/memory` | 1214 |
-| 29 | GET | `/api/knowledge` | 1226 |
-| 30 | GET | `/api/ambient` | 1324 |
-| 31 | POST | `/api/location` | 1406 |
-| 32 | POST | `/api/clipboard/clear` | 1422 |
-| 33 | GET | `/api/clipboard` | 1434 |
-| 34 | DELETE | `/api/memory/fact/{key}` | 1445 |
-| 35 | GET | `/api/memory/reviews` | 1461 |
-| 36 | POST | `/api/memory/reviews/{review_id}/resolve` | 1473 |
-| 37 | GET | `/api/runs` | 1501 |
-| 38 | GET | `/api/runs/{run_id}` | 1518 |
-| 39 | POST | `/api/council/convene` | 1533 |
-| 40 | GET | `/api/council/job` | 1576 |
-| 41 | GET | `/api/council/round/{round_id}` | 1586 |
-| 42 | GET | `/api/council/rounds` | 1595 |
-| 43 | POST | `/api/plan/start` | 1617 |
-| 44 | GET | `/api/plan/job` | 1679 |
-| 45 | POST | `/api/plan/choose` | 1686 |
-| 46 | POST | `/api/plan/adopt` | 1706 |
-| 47 | POST | `/api/plan/cancel` | 1755 |
+| 1 | GET | `/api/health` | 1491 |
+| 2 | GET | `/api/git/status` | 1496 |
+| 3 | GET | `/api/architecture` | 1501 |
+| 4 | GET | `/api/git/log` | 1528 |
+| 5 | GET | `/api/git/diff` | 1533 |
+| 6 | GET | `/api/git/actions` | 1538 |
+| 7 | POST | `/api/git/prepare-commit` | 1543 |
+| 8 | POST | `/api/git/commit` | 1550 |
+| 9 | POST | `/api/git/prepare-push` | 1555 |
+| 10 | POST | `/api/git/push` | 1560 |
+| 11 | GET | `/api/selfedit/models` | 1568 |
+| 12 | GET | `/api/model-routes` | 1573 |
+| 13 | POST | `/api/model-routes/stage` | 1613 |
+| 14 | POST | `/api/model-routes/confirm` | 1623 |
+| 15 | GET | `/api/selfedit/status` | 1631 |
+| 16 | POST | `/api/selfedit/stage` | 1638 |
+| 17 | POST | `/api/selfedit/run` | 1686 |
+| 18 | GET | `/api/selfedit/run` | 1879 |
+| 19 | GET | `/api/selfedit/file` | 2032 |
+| 20 | POST | `/api/selfedit/write` | 2052 |
+| 21 | POST | `/api/selfedit/finish` | 2099 |
+| 22 | POST | `/api/selfedit/validate` | 2144 |
+| 23 | POST | `/api/selfedit/verify-appearance` | 2158 |
+| 24 | POST | `/api/selfedit/submit` | 2174 |
+| 25 | POST | `/api/selfedit/cancel` | 2222 |
+| 26 | POST | `/api/selfedit/revert` | 2251 |
+| 27 | POST | `/api/selfedit/reject` | 2266 |
+| 28 | POST | `/api/appbuild/start` | 2317 |
+| 29 | GET | `/api/appbuild/job` | 2450 |
+| 30 | POST | `/api/appbuild/submit` | 2552 |
+| 31 | POST | `/api/appbuild/cancel` | 2618 |
+| 32 | POST | `/api/research/start` | 2649 |
+| 33 | GET | `/api/research/job` | 2725 |
+| 34 | POST | `/api/research/save` | 2747 |
+| 35 | POST | `/api/research/cancel` | 2792 |
+| 36 | GET | `/api/memory` | 2817 |
+| 37 | GET | `/api/skills` | 2829 |
+| 38 | POST | `/api/skills/requests` | 2972 |
+| 39 | GET | `/api/skills/requests/{request_id}` | 3072 |
+| 40 | GET | `/api/skills/{skill_id}/runs` | 3085 |
+| 41 | GET | `/api/skills/runs/{run_id}/events` | 3106 |
+| 42 | GET | `/api/skills/{skill_id}` | 3128 |
+| 43 | GET | `/api/knowledge` | 3154 |
+| 44 | GET | `/api/ambient` | 3253 |
+| 45 | POST | `/api/location` | 3336 |
+| 46 | POST | `/api/clipboard/clear` | 3352 |
+| 47 | GET | `/api/clipboard` | 3364 |
+| 48 | DELETE | `/api/memory/fact/{key}` | 3375 |
+| 49 | GET | `/api/memory/reviews` | 3391 |
+| 50 | POST | `/api/memory/reviews/{review_id}/resolve` | 3404 |
+| 51 | GET | `/api/runs` | 3433 |
+| 52 | GET | `/api/runs/{run_id}` | 3450 |
+| 53 | POST | `/api/council/convene` | 3465 |
+| 54 | GET | `/api/council/job` | 3508 |
+| 55 | GET | `/api/council/round/{round_id}` | 3518 |
+| 56 | GET | `/api/council/rounds` | 3527 |
+| 57 | GET | `/api/graph/{name}` | 3544 |
+| 58 | GET | `/api/graph/{name}/image.{fmt}` | 3553 |
+| 59 | GET | `/api/council/roster` | 3577 |
+| 60 | POST | `/api/plan/start` | 3605 |
+| 61 | GET | `/api/plan/job` | 3731 |
+| 62 | POST | `/api/plan/choose` | 3763 |
+| 63 | POST | `/api/plan/adopt` | 3785 |
+| 64 | POST | `/api/plan/cancel` | 3833 |
 
-Three of these deserve a sentence about what an unauthenticated caller can do today, because they are what makes G2 a gate and not a nicety: **#13 `POST /api/selfedit/run`** starts an LLM edit loop against Mortimer's own repository; **#31 `POST /api/location`** writes the user's coordinates; **#33 `GET /api/clipboard`** returns whatever was last copied on Larry's Mac (`jarvis/clipboard.py`, `pbpaste`), gated only by an in-process armed flag.
+Three routes deserve a sentence about what an unauthenticated caller could do without the shared middleware: **POST `/api/selfedit/run`** starts an LLM edit loop against Mortimer's own repository; **POST `/api/location`** writes the user's coordinates; **GET `/api/clipboard`** returns whatever was last copied on the Mac, gated only by an in-process armed flag.
 
 ### 1.3 The bot's complete route inventory, as served by Pipecat 1.4.0
 
@@ -206,7 +223,7 @@ The pattern, verbatim from source:
 
 - Each migration is a module-level string constant named `MIGRATION_00NN` (`jarvis/db.py:17, 48, 64, 78, 98, 131, 174, 235, 253, 314, 324, 340, 376, 396, 422`). Statements are plain SQL separated by `;`, executed with `conn.executescript`.
 - A comment block above each constant explains *why*, and specifically states what is and is not backfilled (e.g. `jarvis/db.py:215-234` for 0008, `jarvis/db.py:322-323` for 0011).
-- The constant is appended as one `(migration_id, sql)` tuple to `MIGRATIONS: list[tuple[str, str]]` (`jarvis/db.py:436-452`), with the id shaped `NNNN_snake_name` — the newest today is `("0015_memory_reviews", MIGRATION_0015)` at line 451.
+- The constant is appended as one `(migration_id, sql)` tuple to `MIGRATIONS: list[tuple[str, str]]` (`jarvis/db.py:794-814`), with the id shaped `NNNN_snake_name` — the newest today is `("0030_skill_events", MIGRATION_0030_skill_events)` at line 813.
 - `run_migrations(conn=None)` (`jarvis/db.py:475-499`) creates the `migrations` table if absent, reads applied ids, and for each unapplied tuple runs `conn.executescript(sql)` then `INSERT INTO migrations (id, applied_at)`, committing once at the end. It closes the connection only if it opened it (`own_connection`, 477, 497-499).
 - **The whole `MIGRATIONS` list runs in one transaction-less script sequence with a single commit**, which is why the codebase's own rule (comments at `jarvis/db.py:215-217`, `244-247`, `301-303`) is *one plan = one migration*, never two.
 
@@ -245,7 +262,7 @@ CLAUDE.md records that **`jarvis/db.py` migrations are deliberately human-only**
 
 ### 1.7 The gap, stated plainly
 
-Two processes serve 47 + up to 17 routes with no notion of a caller. The only thing standing between an attacker and `POST /api/selfedit/run` is that both processes bind `127.0.0.1`. The moment a tunnel exists — which is the entire point of T2 — that guarantee is gone, and a *device*-authenticating VPN does not restore it, because every app on a joined phone shares the device's identity (roadmap R4). There is no token table, no `Authorization` parsing, no bind configuration, and no startup check.
+Two processes serve 64 sidecar routes and 16 Pipecat Starlette route entries with no notion of a caller. The only thing standing between an attacker and `POST /api/selfedit/run` is that both processes bind `127.0.0.1`. The moment a tunnel exists — which is the entire point of T2 — that guarantee is gone, and a *device*-authenticating VPN does not restore it, because every app on a joined phone shares the device's identity (roadmap R4). There is no token table, no `Authorization` parsing, no bind configuration, and no startup check.
 
 ---
 
@@ -282,15 +299,15 @@ Two processes serve 47 + up to 17 routes with no notion of a caller. The only th
 
 *Why not reuse the name after revocation.* The name is the audit label. If `larry-iphone` can be minted twice, `list`'s `created_at`/`last_used_at`/`revoked_at` no longer describe one credential, and "revoke larry-iphone" becomes ambiguous the moment there are two rows. Deterministic rule for the implementer and for Larry: rotation is `add larry-iphone-2` then `revoke larry-iphone`.
 
-### A3 — Migration `0016_client_tokens`, following `jarvis/db.py`'s existing mechanism exactly
+### A3 — Migration `0031_client_tokens`, following `jarvis/db.py`'s existing mechanism exactly
 
-One new module-level constant, one new tuple, appended after `("0015_memory_reviews", MIGRATION_0015)` (`jarvis/db.py:451`). One migration for this whole plan, per the codebase's own rule (`jarvis/db.py:215-217`). No backfill and nothing to backfill: an empty `client_tokens` table means "no client may call", which is the correct fail-closed starting state, and A8's bind guard reads exactly that emptiness.
+One new module-level constant, one new tuple, appended after `("0030_skill_events", MIGRATION_0030_skill_events)` (`jarvis/db.py:813`). One migration for this whole plan, per the codebase's own rule (`jarvis/db.py:215-217`). No backfill and nothing to backfill: an empty `client_tokens` table means "no client may call", which is the correct fail-closed starting state, and A8's bind guard reads exactly that emptiness.
 
 `id INTEGER PRIMARY KEY AUTOINCREMENT` rather than K1's bare `INTEGER PK` — this is the shape every other table in the file uses (`memory_reviews` at `jarvis/db.py:423-424`, `agent_runs` at 132-133) and `INTEGER PRIMARY KEY AUTOINCREMENT` *is* an `INTEGER PRIMARY KEY`. Not a deviation from K1.
 
 ### A4 — The sidecar has **zero** exempt routes, `/api/health` included
 
-All 47 routes in §1.2 require `Authorization: Bearer <token>`. There is no `PUBLIC_PATHS` set, no path prefix check, and no loopback exemption (K1: *"Loopback is NOT exempt"*).
+All 64 routes in §1.2 require `Authorization: Bearer <token>`. There is no `PUBLIC_PATHS` set, no path prefix check, and no loopback exemption (K1: *"Loopback is NOT exempt"*).
 
 *Why `/api/health` is not exempt, when exempting a health check is the usual move.* Three reasons, in order of weight. (a) Roadmap gate G2(a) is literal: *"every sidecar and bot route rejects a missing/invalid token with 401"* — an exemption fails the gate as written. (b) Nothing actually calls it: the only programmatic reference in the repo is `tests/unit/test_admin_api.py:45, 145`, and `scripts/mortimer.sh:102` merely *prints* the URL inside an echo (its `check()` helper tests `kill -0 "$pid"`, never HTTP). `README.md:345` tells a human to browse to it, and a human with a token can. (c) An exempt path is a permanent invitation to grow the set — the second entry is always easier than the first. The cost of no exemption is that `README.md:345`'s troubleshooting line needs a `curl -H` form; §5 Step 11 rewrites it.
 
@@ -332,7 +349,7 @@ Complete source in §5 Step 2. Public surface, member by member:
 
 Complete source in §5 Step 3. It is **not** `BaseHTTPMiddleware` and it is **not** a FastAPI `Depends`.
 
-*Why not per-route `Depends`.* 47 sidecar routes plus up to 17 bot routes means 64 decorator edits, and the failure mode of forgetting one is silent. A middleware is coverage by construction; the test in §7 T-A14 enumerates `app.routes` and proves it.
+*Why not per-route `Depends`.* 64 sidecar routes plus 16 measured bot route entries means 80 protected routes, and the failure mode of forgetting one is silent. A middleware is coverage by construction; the test in §7 T-A14 enumerates `app.routes` and proves it.
 
 *Why not `@app.middleware("http")` / `BaseHTTPMiddleware`.* R-A3. Starlette dispatches `BaseHTTPMiddleware` only for `scope["type"] == "http"`. The runner registers four `@app.websocket` routes (`pipecat/runner/run.py:486, 491, 1274, 1279`). A pure-ASGI middleware sees every scope type and is the only shape that covers both.
 
@@ -428,7 +445,7 @@ The console is being retired at T1.4, so this is scoped to the minimum that keep
 
 - `web/src/api.ts` (new, ~45 lines, §5 Step 8) exports `ADMIN_BASE`, `BOT_OFFER_URL`, `getToken()`, `setToken(t)`, `authFetch(path, init?)`, and `subscribeAuthError(fn)`. Bases come from `import.meta.env.VITE_JARVIS_ADMIN_URL` / `VITE_JARVIS_BOT_URL` with today's literals as fallbacks. Token comes from `localStorage['jarvis_token']` (K1's key, verbatim).
 - Six panels replace `const API = "http://localhost:7861"` with `import { ADMIN_BASE as API, authFetch } from "../api"` and every `fetch(` with `authFetch(`. The 20 call sites are enumerated in §1.5 and again in §5 Step 8.
-- `web/src/jarvisClient.ts:17` gains `requestHeaders: authHeaders()` alongside `endpoint` — **but only after the field name is verified (F10).** The client library is `@pipecat-ai/small-webrtc-transport` (`web/package.json`); the snapshot has no `web/node_modules`, so before §5 Step 8 the implementer runs `npm ls @pipecat-ai/small-webrtc-transport`, opens the resolved package's `.d.ts`, and quotes the exact `path:line` of the connect-params type in §1.5. **Decision tree:** if the params type declares `requestHeaders` (a `Record<string,string>`), use it; if it does not, fall back to appending the token as a `?token=` query parameter on `endpoint` and have `BearerAuthMiddleware` accept it for the `POST`/`PATCH /api/offer` paths only — with the explicit security note that a query token lands in access logs, so this is the second choice. This matters because `web/npm run build` runs `tsc -b`, so a wrong field name is a red CI build with no server-side contingency. **Both `POST /api/offer` and `PATCH /api/offer` must carry the header** (`run.py:796` and `run.py:827`): the same transport issues the trickle-ICE `PATCH` after the initial `POST`, and if it is unauthenticated ICE trickling 401s and the connection degrades in a way that looks like a network fault. §8 V5c checks the browser network tab shows `Authorization` on both.
+- **Reverified against the locked package in this implementation:** `web/node_modules/@pipecat-ai/small-webrtc-transport/dist/index.d.ts:100` declares `webrtcRequestParams?: APIRequest`; `web/node_modules/@pipecat-ai/client-js/dist/index.d.ts:899-904` declares `APIRequest.headers?: Headers`. Use `headers: authHeaders()` where `authHeaders()` returns a `Headers` instance. No query-token fallback is needed. Both `POST /api/offer` and trickle-ICE `PATCH /api/offer` use this configured request object and must carry the header; §8 V5c checks both in the network tab.
 - **Token entry lives in `AgentsTab.tsx`**, under a heading whose literal text is `Dev`. CLAUDE.md records that the drawer tab formerly called "Developer" is now **Agents** (`AgentsTab.tsx`, tab key `agents`), while K1's required toast copy is the literal string `Token required — Dev tab`. Adding one `<h4>Dev</h4>` above the field makes the copy and the UI agree without changing K1's contract string and without renaming a tab.
 - The field is `<input type="password">` with a `Save` button; saving writes `localStorage['jarvis_token']` and reloads nothing. A `Clear` button removes the key. The current value is never rendered back (the input starts empty and shows `••••` placeholder text when a token is stored — literal placeholder: `stored — enter a new token to replace`).
 - **One toast, no retry.** `authFetch` publishes an auth error exactly once per page load on the first `401` it sees (`let notified = false`). `App.tsx` subscribes and renders a chip **reusing the existing `speaker-gate-notice` class** (F9) — the class the speaker-gate notice actually uses (`web/src/App.tsx`, `<span className="speaker-gate-notice" role="status">`); there is no `.attn-chip` rule in `web/src`, so the chip must not invent one. It is a `<span role="status">` with the literal text `Token required — Dev tab`, held in `useState` and cleared from a `useEffect` with a `clearTimeout` cleanup (mirroring `App.tsx`'s existing timeout pattern) so a re-fire cannot leak a timer. `authFetch` returns the `Response` unchanged; callers' existing `if (!r.ok)` paths handle the rest. Nothing re-issues the request.
@@ -496,7 +513,7 @@ Every file touched by §5 appears here. Nothing else is touched.
 | `web/src/api.ts` | `ADMIN_BASE`, `BOT_OFFER_URL`, `getToken`, `setToken`, `authFetch`, `subscribeAuthError` | 8 |
 | `macos/MortimerShell/Sources/MortimerShell/ShellAuth.swift` | Keychain token lookup + admin base URL | 10 |
 | `tests/unit/test_auth.py` | Token format, hashing, `parse_bearer`, `verify_bearer`, CLI | 2 |
-| `tests/unit/test_auth_middleware.py` | All 47 sidecar routes, loopback, kill switch, preflight, websocket scope | 5 |
+| `tests/unit/test_auth_middleware.py` | All 64 sidecar routes, loopback, kill switch, preflight, websocket scope | 5 |
 | `tests/unit/test_bind.py` | The A8 decision table, exit code 2, the interface wait | 3 |
 | `tests/unit/test_bot_server.py` | Branch-A assertion, bot route inventory, middleware registration | 7 |
 | `tests/unit/test_service_token.py` | `service_headers`, `AdminClient`, the three watchers, the three manifests | 6 |
@@ -505,7 +522,7 @@ Every file touched by §5 appears here. Nothing else is touched.
 
 | Path | Change | Step |
 |---|---|---|
-| `jarvis/db.py` | `MIGRATION_0016` constant + comment block; one tuple appended to `MIGRATIONS` | 1 |
+| `jarvis/db.py` | `MIGRATION_0031` constant + comment block; one tuple appended to `MIGRATIONS` | 1 |
 | `jarvis/admin/server.py` | `BearerAuthMiddleware` added **before** CORS block (F1); `Authorization` added to CORS `allow_headers` + `DELETE` to `allow_methods`; `main()` startup guard for missing service token (Step 0), then `resolve_bind_host`/`resolve_port`, exits 2 on refusal | 0, 4, 9 |
 | `jarvis/bot/bot.py` | `__main__` block calls `jarvis.bot.server.main()` instead of `pipecat.runner.run.main()`; docstring URL updated | 7 |
 | `jarvis/bot/plan_watcher.py` | `service_headers()` on the httpx GET | 6 |
@@ -557,7 +574,7 @@ Step 0 is Larry's and runs **before any code lands**. Steps 1–8 and 10–12 ch
 
 ```bash
 cd ~/jarvis-voice-ai-clean
-python scripts/init_db.py                        # applies 0016_client_tokens
+python scripts/init_db.py                        # applies 0031_client_tokens
 python -m jarvis.auth add service-bot            # prints the jvt_… plaintext ONCE
 python -m jarvis.vault set JARVIS_SERVICE_TOKEN  # paste it; value is prompted, never argv
 ```
@@ -579,11 +596,11 @@ if auth_enabled() and not service_headers():
 
 It logs and continues (it does not exit): a missing service token is a degraded state, not a reason to refuse to start, and `JARVIS_AUTH_ENABLED=false` is a legitimate way to run with no token at all.
 
-### Step 1 — migration `0016_client_tokens`
+### Step 1 — migration `0031_client_tokens`
 
-**File:** `jarvis/db.py`. (CP-F1 guard: first confirm `grep -c 0016 jarvis/db.py` is 0 — REMOTE owns `0016_client_tokens`; if a different `0016_*` is already present, stop and report, the wave order was violated.)
+**File:** `jarvis/db.py`. (CP-F1 guard: first confirm `grep -c 0031 jarvis/db.py` is 0 — REMOTE owns `0031_client_tokens`; if a different `0031_*` is already present, stop and report, the wave order was violated.)
 
-Insert the constant immediately after the closing `"""` of the newest migration constant (search for `MIGRATION_0015 = """` and place it after that string's closing `"""`), before the `MIGRATIONS: list[tuple[str, str]] = [` list:
+Insert the constant immediately after the closing `"""` of the newest migration constant (search for `MIGRATION_0030_skill_events = """` and place it after that string's closing `"""`), before the `MIGRATIONS: list[tuple[str, str]] = [` list:
 
 ```python
 # K1 (MORTIMER_REMOTE_ACCESS_PLAN.md A1/A3): per-client bearer tokens.
@@ -599,7 +616,7 @@ Insert the constant immediately after the closing `"""` of the newest migration 
 # is exactly what jarvis/bind.py's startup check reads.
 # The index serves count_active_tokens(); verify_bearer() deliberately
 # scans (A5) so its cost does not depend on which token was presented.
-MIGRATION_0016 = """
+MIGRATION_0031 = """
 CREATE TABLE IF NOT EXISTS client_tokens (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL DEFAULT 'larry',
@@ -614,10 +631,10 @@ CREATE INDEX IF NOT EXISTS idx_client_tokens_revoked
 """
 ```
 
-Then **append one tuple after the last tuple in the `MIGRATIONS` list** (locate it by searching for the newest `(".._..", MIGRATION_..)` line — today `("0015_memory_reviews", MIGRATION_0015),` — and add the new tuple immediately after it; do not target an absolute line number, since sibling plans in this wave also append here):
+Then **append one tuple after the last tuple in the `MIGRATIONS` list** (locate it by searching for the newest `(".._..", MIGRATION_..)` line — today `("0030_skill_events", MIGRATION_0030_skill_events),` — and add the new tuple immediately after it; do not target an absolute line number, since sibling plans in this wave also append here):
 
 ```python
-    ("0016_client_tokens", MIGRATION_0016),
+    ("0031_client_tokens", MIGRATION_0031),
 ```
 
 **Test that proves it** — `tests/unit/test_db.py`, add:
@@ -627,7 +644,7 @@ def test_client_tokens_table_shape(tmp_path, monkeypatch):
     monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "t.db"))
     from jarvis.db import get_conn, run_migrations
     applied = run_migrations()
-    assert "0016_client_tokens" in applied
+    assert "0031_client_tokens" in applied
     conn = get_conn()
     cols = {r["name"]: r for r in conn.execute("PRAGMA table_info(client_tokens)")}
     assert set(cols) == {"id", "user_id", "name", "token_hash",
@@ -1023,7 +1040,7 @@ WebSocket routes (pipecat/runner/run.py:486, 491, 1274, 1279). A
 middleware that cannot see a websocket scope would leave those four
 unauthenticated. This class inspects scope["type"] itself.
 
-WHY NOT PER-ROUTE Depends. 47 sidecar routes plus up to 17 bot routes,
+WHY NOT PER-ROUTE Depends. 64 sidecar routes plus 16 measured bot route entries,
 where forgetting one fails silently. Middleware is coverage by
 construction; tests/unit/test_auth_middleware.py enumerates app.routes and
 proves it.
@@ -1346,7 +1363,7 @@ from jarvis.authmw import BearerAuthMiddleware
 
 ```python
 # K1 (MORTIMER_REMOTE_ACCESS_PLAN.md A4/A6/A7): every one of this
-# module's 47 routes requires `Authorization: Bearer <token>`. There are
+# module's 64 routes requires `Authorization: Bearer <token>`. There are
 # no exemptions — /api/health included — and loopback is not exempt.
 # Added BEFORE CORSMiddleware so that CORS ends up OUTERMOST (Starlette's
 # add_middleware inserts at index 0): a 401 generated here is then wrapped
@@ -1378,7 +1395,7 @@ genuine preflight: status=200 ACAO='http://localhost:5173' (expect 200 + ACAO)
 
 The 401 now carries `Access-Control-Allow-Origin` (the defect F1 identified was `ACAO=None` with auth outermost); a bare `OPTIONS` with no `Origin` is a 401 rather than a route-enumeration oracle (F16); a genuine preflight still passes with the CORS header.
 
-**Test:** §7 T-A14 (all 47 routes 401 without a header), T-A17 (genuine preflight passes), T-A17c (401 carries ACAO — the F1 regression guard), T-A17d (bare `OPTIONS` without `Origin` → 401 — the F16 guard), T-A18 (`Authorization` is an allowed header).
+**Test:** §7 T-A14 (all 64 routes 401 without a header), T-A17 (genuine preflight passes), T-A17c (401 carries ACAO — the F1 regression guard), T-A17d (bare `OPTIONS` without `Origin` → 401 — the F16 guard), T-A18 (`Authorization` is an allowed header).
 
 ### Step 5 — make the existing test suite explicit about auth, then prove coverage
 
@@ -1411,7 +1428,7 @@ def _auth_disabled_by_default(monkeypatch):
 Its route-count assertion is the mechanism that keeps this plan true as the sidecar grows:
 
 ```python
-EXPECTED_SIDECAR_ROUTES = 47   # §1.2. Adding a route? Add it to the count
+EXPECTED_SIDECAR_ROUTES = 64   # §1.2. Adding a route? Add it to the count
                                # and confirm the middleware still covers it.
 ```
 
@@ -2093,7 +2110,7 @@ Every value below has **one owner per runtime** (F18). Within a single runtime a
 | Token length | 47 | `jarvis/auth.py` `TOKEN_LEN` (derived) | none | `parse_bearer` |
 | Verify busy timeout | `250 ms` | `jarvis/auth.py` `VERIFY_BUSY_TIMEOUT_MS` | none | `verify_bearer` (F5) |
 | `last_used_at` throttle | `60 s` | `jarvis/auth.py` `LAST_USED_THROTTLE_S` | none | `_touch_last_used` (F5) |
-| Default `user_id` | `"larry"` | `jarvis/auth.py` `DEFAULT_USER_ID` **and** the SQL `DEFAULT 'larry'` in `MIGRATION_0016` | none | `_cmd_add`; the column default is the backstop for a row inserted any other way |
+| Default `user_id` | `"larry"` | `jarvis/auth.py` `DEFAULT_USER_ID` **and** the SQL `DEFAULT 'larry'` in `MIGRATION_0031` | none | `_cmd_add`; the column default is the backstop for a row inserted any other way |
 | Bind host | `127.0.0.1` | `jarvis/bind.py` `LOOPBACK` | `JARVIS_BIND_HOST` | `jarvis/bind.py:resolve_bind_host()` |
 | Bind strict | `false` | `jarvis/bind.py` `BIND_STRICT_ENV` | `JARVIS_BIND_STRICT` | `jarvis/bind.py:_bind_strict()` (F8) |
 | Interface wait | `20.0 s` | `jarvis/bind.py` `BIND_WAIT_S` | none | `_wait_for_host` (F6 invariant: `mortimer.sh` sleep 25 s > this) |
@@ -2110,8 +2127,8 @@ Every value below has **one owner per runtime** (F18). Within a single runtime a
 | Console toast copy | `Token required — Dev tab` | `web/src/App.tsx` | none (contract K1) | one render site |
 | Shell Keychain item | service `com.mortimer.jarviskit`, account `<scheme>://<host>:<port>` of the bot URL (CP-F15) | `ShellAuth.swift` (separate runtime; NATIVE's `KeychainStore` uses the same item) | none | `ShellAuth.bearer` |
 | Shell admin base | `http://127.0.0.1:7861` | `ShellAuth.swift` fallback (separate runtime) | `UserDefaults["JARVIS_ADMIN_URL"]` | `ShellAuth.adminBaseURL` |
-| Expected sidecar route count | `47` | `tests/unit/test_auth_middleware.py` `EXPECTED_SIDECAR_ROUTES` | none | the coverage test |
-| Expected bot route count | `17` (prebuilt present) | §1.3 enumeration | none | `test_bot_server.py` T-A37 (F4) |
+| Expected sidecar route count | `62` | `tests/unit/test_auth_middleware.py` `EXPECTED_SIDECAR_ROUTES` | none | the coverage test |
+| Expected bot route count | `16` Starlette route entries (prebuilt mount included) | §1.3 enumeration | none | `test_bot_server.py` T-A37 (F4) |
 
 ---
 
@@ -2168,7 +2185,7 @@ All use `fastapi.testclient.TestClient(admin_server.app)` and `monkeypatch.seten
 
 | # | Function | Input | Expected |
 |---|---|---|---|
-| T-A14 | `test_every_sidecar_route_401s_without_a_token` | derive `paths = [r.path for r in admin_server.app.routes if isinstance(r, APIRoute)]`; assert `len(paths) == EXPECTED_SIDECAR_ROUTES` (47); for each route, issue its first declared method with path params filled by `"x"` / `"1"` | every response `status_code == 401`; every body `{"ok": false, "error": ...}`; every response carries `WWW-Authenticate: Bearer realm="jarvis"` |
+| T-A14 | `test_every_sidecar_route_401s_without_a_token` | derive `paths = [r.path for r in admin_server.app.routes if isinstance(r, APIRoute)]`; assert `len(paths) == EXPECTED_SIDECAR_ROUTES` (62); for each route, issue its first declared method with path params filled by `"x"` / `"1"` | every response `status_code == 401`; every body `{"ok": false, "error": ...}`; every response carries `WWW-Authenticate: Bearer realm="jarvis"` |
 | T-A15b | `test_health_is_not_exempt` | `GET /api/health`, no header | `401` (A4 — the exemption everyone expects is deliberately absent) |
 | T-A16b | `test_loopback_without_token_is_401` | `TestClient(app, client=("127.0.0.1", 40000))`, `GET /api/health` | `401` (K1: loopback is not exempt) |
 | T-A17 | `test_options_preflight_passes_without_token` | `OPTIONS /api/health` with `Origin: http://localhost:5173`, `Access-Control-Request-Method: GET` | `200`, and `access-control-allow-origin` present |
@@ -2234,7 +2251,7 @@ The sandbox has no Keychain, no network, no Xcode, no microphone, no `fastapi`, 
 **V1 — mint the service token and the client tokens.**
 ```bash
 cd ~/jarvis-voice-ai-clean
-python scripts/init_db.py                     # applies 0016_client_tokens
+python scripts/init_db.py                     # applies 0031_client_tokens
 python -m jarvis.auth add service-bot         # copy the jvt_… line
 python -m jarvis.vault set JARVIS_SERVICE_TOKEN   # paste it; value is prompted
 python -m jarvis.auth add larry-macbook
@@ -2324,16 +2341,16 @@ Until the restart, an MCP child (`mcp-selfedit`/`mcp-web`/`mcp-apps`) sends the 
 
 **Danger: `JARVIS_ENV_SCOPING_ENABLED=false` leaks the service token after this plan lands (CP-F6).** Once T4a's env scoping is in place, `JARVIS_SERVICE_TOKEN` reaches only the three servers that declare it. Setting `JARVIS_ENV_SCOPING_ENABLED=false` (SEC's kill switch) reverts the registry to `dict(os.environ)`, which hands the service token — a credential that authorises `POST /api/selfedit/run` — to **all twelve MCP children**, including `mcp-web` and `mcp-screen`, the two that handle untrusted external content. Before setting that switch, either revoke the service token (`python -m jarvis.auth revoke service-bot`) or set `JARVIS_AUTH_ENABLED=false` as well; re-mint after re-enabling scoping. SEC owns the kill-switch row that states this in its own §9; this note is the mirror REMOTE carries (`CROSS_PLAN_RESOLUTION.md` §C F6).
 
-**Reverting the data change.** Migration `0016` is additive: one new table and one index, no `ALTER` on an existing table. Reverting the code leaves the table in place, unread and harmless — that is the intended revert path and requires no SQL. If Larry wants it gone:
+**Reverting the data change.** Migration `0031` is additive: one new table and one index, no `ALTER` on an existing table. Reverting the code leaves the table in place, unread and harmless — that is the intended revert path and requires no SQL. If Larry wants it gone:
 
 ```sql
 DROP TABLE IF EXISTS client_tokens;
-DELETE FROM migrations WHERE id = '0016_client_tokens';
+DELETE FROM migrations WHERE id = '0031_client_tokens';
 ```
 
-(run against `data/jarvis.db` with the stack stopped; `run_migrations()` will recreate it on the next start if the code is still present). **Do not** delete the migration tuple from `jarvis/db.py` without also deleting the row — a machine that applied 0016 and then loses the constant would silently skip nothing, but a machine that has the row and not the constant is a state no other migration in this file can be in.
+(run against `data/jarvis.db` with the stack stopped; `run_migrations()` will recreate it on the next start if the code is still present). **Do not** delete the migration tuple from `jarvis/db.py` without also deleting the row — a machine that applied 0031 and then loses the constant would silently skip nothing, but a machine that has the row and not the constant is a state no other migration in this file can be in.
 
-**Reverting the code.** `git revert` the merge commit. `jarvis/db.py`'s `MIGRATION_0016` should be left in place even then (previous paragraph); every other file in §4 reverts cleanly because nothing else in the repo imports `jarvis.auth`, `jarvis.authmw`, or `jarvis.bind` except the files this plan edits.
+**Reverting the code.** `git revert` the merge commit. `jarvis/db.py`'s `MIGRATION_0031` should be left in place even then (previous paragraph); every other file in §4 reverts cleanly because nothing else in the repo imports `jarvis.auth`, `jarvis.authmw`, or `jarvis.bind` except the files this plan edits.
 
 **The one thing that does not roll back.** Tokens Larry has already put on his phone. Revoking them (`python -m jarvis.auth revoke <name>`) is instant and needs no restart (A6, verified by V5c), but the plaintext is on the device until he deletes it there.
 
@@ -2345,7 +2362,7 @@ DELETE FROM migrations WHERE id = '0016_client_tokens';
 |---|---|---|---|---|
 | R1 | A Pipecat upgrade removes the module-level `app`, silently returning the bot to unauthenticated | Low | **Critical** | T-A20 fails loudly on upgrade; A10's Branch B is pre-written; §0.4 forbids forking as the escape hatch |
 | R2 | An implementer uses `@app.middleware("http")` and leaves four WebSocket routes open | Medium (it is the obvious move) | **Critical** | R-A3 states it; A6 explains it; T-A22 fails if the middleware cannot see a websocket scope |
-| R3 | A new sidecar route is added later and someone assumes middleware coverage without checking | Medium | High | T-A14 asserts the exact route count (47); adding a route fails the test until the author looks |
+| R3 | A new sidecar route is added later and someone assumes middleware coverage without checking | Medium | High | T-A14 asserts the exact route count (62); adding a route fails the test until the author looks |
 | R4 | `JARVIS_SERVICE_TOKEN` does not reach an MCP child, so voice self-edit breaks with a 401 that gets narrated as "the sidecar is offline" | Medium | Medium | K2's `requires_env` (Step 6d) plus T-A31/T-A32; `AdminClient`'s error text already says "looks offline", which would be a fabrication in this case — the 401 body says `unauthorized`, and `classify_tool_result` marks it failed. V2 exercises the real path |
 | R5 | Larry mints a token, does not store it in the vault, and the whole stack 401s itself | Medium | Medium | `service_headers()` returns `{}` rather than raising, so the failure is a clean 401 with a clear body, not a crash; V1 orders the steps; `scripts/check_skills.py` names the missing variable |
 | R6 | Tailscale is down/late, so the requested bind host is absent — refusing would brick local voice too (F8) | Medium | Medium | Default `JARVIS_BIND_STRICT=false` falls back to `127.0.0.1` with a loud `bind_fell_back_to_loopback` ERROR after `BIND_WAIT_S`=20 s, losing remote access not security; `mortimer.sh`'s health probe (F6, sleep 25 s > 20 s) surfaces the fallback. Strict operators set `JARVIS_BIND_STRICT=true` for the hard refusal. The "no unrevoked token" case still refuses in both modes |
@@ -2354,7 +2371,7 @@ DELETE FROM migrations WHERE id = '0016_client_tokens';
 | R9 | The console's `localStorage` token is readable by any script the console loads | Certain | Medium | Accepted: the console is retired at T1.4, it loads no third-party script, and A12 is explicitly minimal. T1's Keychain storage is the fix |
 | R10 | `verify_bearer` blocks the event loop and answers 401 under write-lock contention (F5) | ~~Medium~~ Low (fixed) | ~~Medium~~ Low | The verdict is decided by a WAL `SELECT` that never blocks on a writer; the `last_used_at` write is best-effort/throttled in its own `try/except` and cannot change the answer; a `busy_timeout` of 250 ms and a `VerifyUnavailable`→503 path mean a busy database is never reported as a wrong token. **Measured:** identity returned in 0.00 s under a held write lock (the old code blocked 5.01 s then returned `None`). Still no cache — revocation stays instant (A6) |
 | R11 | A "helpful" future edit exempts `/api/health` or adds a loopback bypass | Medium | **Critical** | A4 states there are zero exemptions and why; T-A15b and T-A16b fail; A14's deny-list entries keep the assistant out of the three modules |
-| R12 | The autouse `JARVIS_AUTH_ENABLED=false` fixture masks a real auth regression across the suite | Medium | Medium | The three auth test files re-enable it in their own fixtures, and T-A14 exercises all 47 routes with auth ON. The fixture buys 1538 unchanged tests; the coverage lives in one file that cannot be accidentally disabled |
+| R12 | The autouse `JARVIS_AUTH_ENABLED=false` fixture masks a real auth regression across the suite | Medium | Medium | The three auth test files re-enable it in their own fixtures, and T-A14 exercises all 64 routes with auth ON. The fixture buys 1538 unchanged tests; the coverage lives in one file that cannot be accidentally disabled |
 | R13 | `DELETE /api/memory/fact/{key}` was never CORS-preflightable and now is | Certain (Step 4) | Low | Deliberate, stated in Step 4. It was a pre-existing defect; the route already required no auth, so nothing is newly reachable that was not reachable by a non-browser client |
 | R14 | Media takes the LAN path rather than the tunnel and someone reads that as a leak | Medium | None | A16 explains it: DTLS-SRTP keys come from the authenticated signalling channel; the media is encrypted regardless of path |
 | R15 | After this plan lands, `JARVIS_ENV_SCOPING_ENABLED=false` hands the service token to all twelve MCP children (CP-F6) | Low | **High** | §9 states the guard: revoke the service token or also set `JARVIS_AUTH_ENABLED=false` before flipping that switch, re-mint after re-enabling scoping. SEC owns the kill-switch row that carries the same warning. `test_service_token_is_not_in_a_scoped_child_env` (T-A32b) proves the scoped case; the §0.11 precondition + T-A34b prevent shipping before T4a |
@@ -2370,9 +2387,9 @@ DELETE FROM migrations WHERE id = '0016_client_tokens';
 4. **Two sections describing the same behaviour differently.** Middleware ordering was the one real hazard, and after F1 it is now the **same in both processes** — CORS outermost, auth inner — so A7 states one ordering, names Starlette's `insert(0, ...)` as the reason, and the code comments in `jarvis/authmw.py`, §5 Step 4, and `jarvis/bot/server.py` all say it the same way. The `OPTIONS` branch is described once (A6, narrowed per F16) and every mention points there. Second check: the exemption question is answered in exactly one place (A4) and every later mention (§1.2's table header, R11, T-A15b) points back to it rather than restating the reasoning. Third: `requires_env` is described only by reference to `MORTIMER_SECURITY_HARDENING_PLAN.md` §3 D-H1/D-H2 and `CROSS_PLAN_RESOLUTION.md` §A — this plan never restates `BASE_ENV_KEYS` or the missing-variable warning rule.
 5. **Copy and visual states named but unspecified.** Every user-visible string is literal: the 401 body (`"unauthorized - Authorization: Bearer <token> required"`), the toast (`Token required — Dev tab`, K1 verbatim), the duplicate-name refusal, the unknown-name refusal, the `list` header row and its `active`/`revoked` values, the `-` used for a NULL `last_used_at`, the input placeholder in both states (`jvt_…` when empty, `stored — enter a new token to replace` when a token exists), the Swift `skipping location report — no client token stored`, and both `BindRefused` messages. The chip's visual state is specified by reuse of the **real** class the speaker-gate notice uses — `speaker-gate-notice` on a `<span role="status">` (F9 — there is no `.attn-chip` rule in `web/src`), with a `clearTimeout` cleanup so a re-fire cannot leak a timer.
 6. **Initialization timing.** Five orderings are pinned. `inject_env()` already runs at the module top of `jarvis/admin/server.py` (search `inject_env()`), before any endpoint exists — so `JARVIS_SERVICE_TOKEN` is in `os.environ` before the first request. **The service token is minted before the code merges (§5 Step 0, F11)**, so the internal surface never 401s itself in a window between merge and mint. `app.add_middleware` must precede startup, which is why `install_auth()` runs before `runner_main()` and why Step 4 adds the sidecar's `BearerAuthMiddleware` at module scope **before** the CORS block (F1). `run_migrations` is called by each CLI subcommand before its query, so `python -m jarvis.auth add` works on a database that has never been migrated. `resolve_bind_host` runs **before** `uvicorn.run`, so a refusal costs nothing and binds nothing (T-A30a asserts `uvicorn.run` is never reached).
-7. **Signatures agreeing across sections; every schema column populated; every needed value derivable.** `verify_bearer(header_value, conn=None) -> ClientIdentity | None` is identical in K1, A5, the §5 Step 2 source, and the §7 tests. Schema columns: `id` (autoincrement), `user_id` (`_cmd_add` supplies `DEFAULT_USER_ID`, plus the SQL default as a backstop), `name` (CLI argument), `token_hash` (`hash_token(mint_token())`), `created_at` (`now_iso()`), `last_used_at` (`verify_bearer`), `revoked_at` (`_cmd_revoke`) — **all seven are written by some step.** Values a step needs: the bind decision needs `count_active_tokens`, which is derivable from the same table the same plan creates; the console needs `getToken()`, which is derivable from a field the same plan adds; the Swift shell needs a Keychain item, and §8 V6 gives the exact command that creates it. `EXPECTED_SIDECAR_ROUTES = 47` is derived by enumeration in §1.2 (re-verified 2026-08-27: `grep -c '@app\.'` = 48, minus one `@app.middleware`), not asserted from memory. The bot route inventory is **17** (F4), because `pipecat-ai-prebuilt==1.0.5` is pinned so `/client` + `GET /` are served.
+7. **Signatures agreeing across sections; every schema column populated; every needed value derivable.** `verify_bearer(header_value, conn=None) -> ClientIdentity | None` is identical in K1, A5, the §5 Step 2 source, and the §7 tests. Schema columns: `id` (autoincrement), `user_id` (`_cmd_add` supplies `DEFAULT_USER_ID`, plus the SQL default as a backstop), `name` (CLI argument), `token_hash` (`hash_token(mint_token())`), `created_at` (`now_iso()`), `last_used_at` (`verify_bearer`), `revoked_at` (`_cmd_revoke`) — **all seven are written by some step.** Values a step needs: the bind decision needs `count_active_tokens`, which is derivable from the same table the same plan creates; the console needs `getToken()`, which is derivable from a field the same plan adds; the Swift shell needs a Keychain item, and §8 V6 gives the exact command that creates it. `EXPECTED_SIDECAR_ROUTES = 64` is derived by enumeration in §1.2 (re-verified 2026-08-27: `grep -c '@app\.'` = 48, minus one `@app.middleware`), not asserted from memory. The measured bot inventory is **16 Starlette route entries** for Pipecat 1.4.0 with the pinned prebuilt UI: four default docs routes, seven API routes, four WebSocket routes, and the `/client` mount. `tests/unit/test_bot_server.py` protects every HTTP route and mount; middleware also protects all four WebSocket paths.
 8. **Judgment left to the implementer.** Searched for all three shapes. No "use your judgment": every threshold is a named constant with its value (§6). No "investigate first": the one genuine unknown — how to reach Pipecat's app — is A10's decision tree with a runnable check, two written branches, and a "report and stop" third outcome; the second unknown — whether the hardening plan landed first — is Step 6d's append rule with both end states tabulated. No bare "be careful": `jarvis/auth.py`, `jarvis/authmw.py`, and `jarvis/bind.py` are given as complete literal source, and every rejection case is a named test with its input and expected output in §7.
-9. **Plan drift.** Every file mentioned in §5 appears in §4's manifest (**12 created, 27 modified paths, 0 deleted, 1 Larry commit** — recounted by counting the table rows, F12) and every §4 row names its step. `scripts/mortimer.sh` (Step 9, F6) and `tests/unit/test_db.py` (Step 1, F12) are now both listed; `docs/plans/MORTIMER_PLATFORM_ROADMAP.md` is deliberately *not* in the manifest (a shared artifact SEC edits — `CROSS_PLAN_RESOLUTION.md` §C F14). Cross-checked the "write X" versus "X exists" hazard: §5 Step 8 replaces `mcp_servers/mcp_selfedit/logic.py`'s `DEFAULT_ADMIN_URL`/`ADMIN_URL_ENV` with a re-export, and §4 lists that file once with both edits (Step 6 headers, Step 8 re-export); `jarvis/admin/server.py` carries Steps 0, 4, 9 in one row. Checked against the sibling plans and the resolution: `MORTIMER_SECURITY_HARDENING_PLAN.md` also edits `mcp_servers/*/skill.yaml` — Step 6d is an **append** rule with both pre-states tabulated (CP-F4/F2) so the two plans cannot conflict in either merge order; A14 lists exactly the three W1 entries of `ALLOWLIST_SEQUENCE.md` and does **not** deny `mcp_servers/*/skill.yaml` (CP-A keeps it editable, guarded by SEC's frozen snapshot); the migration number is guarded against MAIL's `0017` (CP-F1). Checked against the roadmap: four claims were wrong and are corrected at the top (R-A1…R-A4); the roadmap edit itself is SEC's.
+9. **Plan drift.** Every file mentioned in §5 appears in §4's manifest (**12 created, 27 modified paths, 0 deleted, 1 Larry commit** — recounted by counting the table rows, F12) and every §4 row names its step. `scripts/mortimer.sh` (Step 9, F6) and `tests/unit/test_db.py` (Step 1, F12) are now both listed; `docs/plans/MORTIMER_PLATFORM_ROADMAP.md` is deliberately *not* in the manifest (a shared artifact SEC edits — `CROSS_PLAN_RESOLUTION.md` §C F14). Cross-checked the "write X" versus "X exists" hazard: §5 Step 8 replaces `mcp_servers/mcp_selfedit/logic.py`'s `DEFAULT_ADMIN_URL`/`ADMIN_URL_ENV` with a re-export, and §4 lists that file once with both edits (Step 6 headers, Step 8 re-export); `jarvis/admin/server.py` carries Steps 0, 4, 9 in one row. Checked against the sibling plans and the resolution: `MORTIMER_SECURITY_HARDENING_PLAN.md` also edits `mcp_servers/*/skill.yaml` — Step 6d is an **append** rule with both pre-states tabulated (CP-F4/F2) so the two plans cannot conflict in either merge order; A14 lists exactly the three W1 entries of `ALLOWLIST_SEQUENCE.md` and does **not** deny `mcp_servers/*/skill.yaml` (CP-A keeps it editable, guarded by SEC's frozen snapshot); the migration number is guarded against MAIL's `0032` (CP-F1). Checked against the roadmap: four claims were wrong and are corrected at the top (R-A1…R-A4); the roadmap edit itself is SEC's.
 
 ---
 

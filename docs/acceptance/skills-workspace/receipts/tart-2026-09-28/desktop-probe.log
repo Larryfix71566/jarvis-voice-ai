@@ -1,0 +1,4 @@
+identity=mortimer-dev:502 manager=Aqua manageruid=502 console=mortimer-dev
+window visible=true isVisible=true activeSpace=true appActive=true screens=1
+desktop=visible keychain=unlocked
+

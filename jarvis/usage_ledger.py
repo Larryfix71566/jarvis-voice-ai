@@ -56,7 +56,7 @@ RUNGS = frozenset({
     "memory_merge", "memory_classify", "memory_extraction", "kb_digest",
     "procedures_describe",
     "planning", "council",
-    "selfedit_executor", "appbuild_executor",
+    "selfedit_executor", "appbuild_executor", "skill_eval",
     "research",
     "tts", "stt",  # MORTIMER_SESSION_MISSES_PLAN.md S1 — voice transport
 })
@@ -264,7 +264,7 @@ def record_call(rung: str,
             # Unknown rung: still record (never lose a row over a label),
             # but say so once — cost_report.py buckets by this vocabulary.
             import sys
-            print(f"usage_ledger: unknown rung {rung!r} (not in RUNGS)",
+            print("usage_ledger: unknown rung (recorded as supplied)",
                   file=sys.stderr)
         ts = ts or datetime.now(timezone.utc)
         month = ts.strftime("%Y-%m")
@@ -290,7 +290,8 @@ def record_call(rung: str,
             )
     except Exception as exc:  # pragma: no cover
         import sys
-        print(f"usage_ledger: record failed: {exc}", file=sys.stderr)
+        print(f"usage_ledger: record failed error_type={type(exc).__name__[:64]}",
+              file=sys.stderr)
 
 
 # ---------------------------------------------------------------- adapter
@@ -394,11 +395,6 @@ def record_completion(rung: str,
               gen_id later.
     """
     u = _get(response, "usage") or {}
-    if os.environ.get("JARVIS_DEBUG_USAGE_LEDGER") == "1":
-        import sys
-        print(f"usage_ledger DEBUG rung={rung} provider={provider} "
-              f"model={model} raw_usage={u!r}", file=sys.stderr)
-
     prompt_value = _get(u, "prompt_tokens")
     completion_value = _get(u, "completion_tokens")
     prompt_known = isinstance(prompt_value, int) and not isinstance(prompt_value, bool) and prompt_value >= 0
@@ -409,6 +405,16 @@ def record_completion(rung: str,
     cache_write_value = _find_first_optional(u, _CACHE_WRITE_ALIASES)
     cached = cached_value if cached_value is not None else 0
     cache_write = cache_write_value if cache_write_value is not None else 0
+
+    if os.environ.get("JARVIS_DEBUG_USAGE_LEDGER") == "1":
+        import sys
+        print(
+            "usage_ledger DEBUG prompt_tokens=%d completion_tokens=%d "
+            "cache_read_tokens=%d cache_write_tokens=%d" % (
+                prompt, completion, cached, cache_write,
+            ),
+            file=sys.stderr,
+        )
 
     record_call(
         rung=rung, provider=provider, model=model, session_id=session_id,
@@ -434,7 +440,8 @@ def record_completion(rung: str,
 
 
 def record_execution_result(rung: str, result: Any,
-                            session_id: str | None = None) -> None:
+                            session_id: str | None = None,
+                            plan_state: str | None = None) -> None:
     """Record normalized executor metadata without turning unknown into zero."""
     prompt = getattr(result, "prompt_tokens", None)
     completion = getattr(result, "completion_tokens", None)
@@ -455,4 +462,5 @@ def record_execution_result(rung: str, result: Any,
         billing_source=str(getattr(result, "billing", "unknown")),
         route_name=str(getattr(result, "route", "unknown")),
         duration_ms=getattr(result, "duration_ms", None),
+        plan_state=plan_state,
     )

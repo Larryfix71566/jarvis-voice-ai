@@ -61,4 +61,12 @@ class RuntimeTests(unittest.TestCase):
             with self.assertRaises(SandboxError): Runtime.configured()
         self.assertFalse((self.home / 'absent').exists())
 
+    def test_skill_authoring_workspace_kind_is_slug_scoped(self):
+        first = self.runtime._key('owner/repo', 'skill-authoring-weather-brief')
+        second = self.runtime._key('owner/repo', 'skill-authoring-finance-brief')
+        self.assertNotEqual(first, second)
+        for invalid in ['skill-authoring-', 'skill-authoring-Weather', 'skill-authoring-a/../b', []]:
+            with self.subTest(invalid=invalid), self.assertRaises(SandboxError):
+                self.runtime._key('owner/repo', invalid)
+
 if __name__ == '__main__': unittest.main()

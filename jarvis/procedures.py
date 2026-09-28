@@ -49,16 +49,25 @@ from typing import Any, Callable
 
 from jarvis.db import get_conn, now_iso
 from jarvis.memory_model import make_background_async_client
-from jarvis.model_execution import ModelContextMessage, ModelExecutionRequest, execute_chat
+from jarvis.model_execution import (
+    ModelContextMessage,
+    ModelExecutionRequest,
+    execute_chat,
+)
 from jarvis.privacy_policy import DataPolicy
 from jarvis.runlog import get_run
 from jarvis.usage_ledger import (
+    provider_from_base_url,
     record_completion,
     record_execution_result,
-    provider_from_base_url,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _log_safe_failure(event: str, exc: Exception) -> None:
+    """Keep procedure diagnostics useful without task/run/traceback data."""
+    logger.warning("%s error_type=%s", event, type(exc).__name__[:80])
 
 # ⚙ TUNING KNOB (D23) — clamp bounds applied to every --calibrate branch.
 CALIBRATE_THRESHOLD_MIN = 0.20
@@ -223,8 +232,8 @@ def match_procedure(
         if best_row is None or best_score < PROCEDURE_MATCH_THRESHOLD:
             return None
         return dict(best_row)
-    except Exception:  # noqa: BLE001 — matching must never break a delegation
-        logger.warning("procedures_match_failed agent=%s", agent, exc_info=True)
+    except Exception as exc:  # noqa: BLE001 — matching must never break a delegation
+        _log_safe_failure("procedures_match_failed", exc)
         return None
 
 
@@ -242,9 +251,8 @@ def mark_used(procedure_id: int, db_path: str | Path | None = None) -> None:
             conn.commit()
         finally:
             conn.close()
-    except Exception:  # noqa: BLE001
-        logger.warning("procedures_mark_used_failed id=%s", procedure_id,
-                        exc_info=True)
+    except Exception as exc:  # noqa: BLE001
+        _log_safe_failure("procedures_mark_used_failed", exc)
 
 
 def _promote_or_deprecate(row: dict, conn: sqlite3.Connection) -> None:
@@ -472,11 +480,8 @@ async def learn_from_run(
         if label is None:
             return
         _create_candidate(agent, label, description, run_id, db_path, task_tokens)
-    except Exception:  # noqa: BLE001 — learning must never break a delegation
-        logger.warning(
-            "procedures_learn_failed run_id=%s agent=%s", run_id, agent,
-            exc_info=True,
-        )
+    except Exception as exc:  # noqa: BLE001 — learning must never break a delegation
+        _log_safe_failure("procedures_learn_failed", exc)
 
 
 # ============================================================================

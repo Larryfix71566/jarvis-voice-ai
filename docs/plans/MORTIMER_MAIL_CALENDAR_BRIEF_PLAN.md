@@ -77,7 +77,7 @@ and what changed. Re-measured fixes cite the sandbox command in §7.
 | **F2** (review) | BLOCKER | M9, N2, §7.3, RM-11 | §7.3's contradictory "no tool could satisfy it" claim rewritten; `FORBIDDEN_TOOLS` no longer implies reminder mutation is structurally blocked. Per resolution §B `secretary` keeps `mcp-reminders`; the `get_due_reminders` destructive-read residual is documented (RM-11a) since the resolution did not mandate a server split. |
 | **F3** (review) + §B (cross-plan) | BLOCKER | header C6, M9, §7.3, §10 RM-1, §0.10 | `mcp-screen` dropped from `secretary` → `[mcp-mail, mcp-calendar, mcp-reminders]`. C6/M5 stop claiming "no outbound channel at all"; RM-1 rewritten. K4 `OUTBOUND` edit is SEC's (cited, not made). Text-laundering residual documented in §0.10 + RM-1a. |
 | **F4** (review) | BLOCKER | M11, RM-4, §7.9 | `unsourced_proper_nouns` replaced with an entity-subset check (possessive-strip, sentence-initial exemption, curated `BRIEF_STOPWORDS`). Re-measured: 0/102 opener false-positives (was 96/102), 0/10 realistic, 0/6 adversarial-entity misses, speech passes its own check. |
-| **F1** (cross-plan) | BLOCKER | M16, §4, §5.6, §0.11, §9 | Migration renumbered `0016_brief`→`0017_brief`, `MIGRATION_0016`→`MIGRATION_0017`; insertion anchored by "append after the last tuple", constant named `MIGRATION_<n+1>`; §0.11 cross-guard added (REMOTE owns 0016). |
+| **F1** (cross-plan) | BLOCKER | M16, §4, §5.6, §0.11, §9 | Migration renumbered to `0032_brief`, `MIGRATION_0032`; insertion anchored by "append after the last tuple", constant named `MIGRATION_<n+1>`; §0.11 cross-guard requires REMOTE's `0031_client_tokens` first. |
 | **F5** | MAJOR | M4, M10, M11, §5.1, §6.1, §7.1 | `unread_count` renamed `unread_in_window` everywhere; digest line and `BRIEF_PROMPT` rule 3 say "in the last N hours". |
 | **F6** | MAJOR | §5.1 `_error_sentence`, RM-5, §7.1 | Branches ordered most-specific first: `IMAP4.abort`/`IMAP4.readonly` get their own sentences before the login-rejected branch. |
 | **F7** | MAJOR | M3, M13, §6.1, §7.10 | `IMAP_TIMEOUT_S`=8.0, `MAIL_TOTAL_BUDGET_S`=22.0 added (fits `registry.py` `CALL_TIMEOUT=30`); M13 step 1 parses `registry.call`'s **string** return into `(dict|None, err)`. |
@@ -226,8 +226,8 @@ state both, do not silently rely on them.**
   one sanitised line per message, not a 2 KB body.
 
 0.11 **Migration number cross-guard (cross-plan F1).** REMOTE (W1) adds
-`0016_client_tokens`; this plan owns `0017_brief`. Before editing `jarvis/db.py`, run
-`grep -c 0016_client_tokens jarvis/db.py`; if it is `0`, **stop and report** — wave
+`0031_client_tokens`; this plan owns `0032_brief`. Before editing `jarvis/db.py`, run
+`grep -c 0031_client_tokens jarvis/db.py`; if it is `0`, **stop and report** — wave
 order was violated (REMOTE must land first). Anchor the `MIGRATIONS` insertion by text,
 never by line: "append a tuple after the last one in the `MIGRATIONS` list and name the
 constant `MIGRATION_<n+1>`." Do not cite an absolute line for the insertion.
@@ -254,7 +254,7 @@ constant `MIGRATION_<n+1>`." Do not cite an absolute line for the insertion.
 | A scheduled job fires from a watcher owned by the bot: `start()/stop()/_run()/tick_once()`, a `is_connected` gate checked **before** the call, log-and-continue on every failure, and never raises. | `jarvis/bot/reminders_watcher.py:41–96` |
 | A watcher that speaks *and* shows uses two injected async callables built in the pipeline: `_speak_*` pushing a `TTSSpeakFrame`, `_push_*_display` calling `send_app_message(transport, {"type":"display","display":payload})`. Each is behind its own `JARVIS_*_ENABLED` env check read in that one place. | `jarvis/bot/pipeline.py:996–1031` |
 | A tool can hand work to a background worker and let a watcher announce the result — the research feature's two-hop shape. | `mcp_servers/mcp_web/logic.py:495–528`; `jarvis/bot/research_watcher.py:88–120` |
-| DB migrations are `(id, sql)` pairs applied in list order by `run_migrations`; `get_conn` gives a WAL, `Row`-factory connection honouring `JARVIS_DB_PATH`. The last migration today is `0015_memory_reviews`. | `jarvis/db.py:436–452`, `:459–469`, `:475` |
+| DB migrations are `(id, sql)` pairs applied in list order by `run_migrations`; `get_conn` gives a WAL, `Row`-factory connection honouring `JARVIS_DB_PATH`. The last migration today is `0030_skill_events`; REMOTE appends `0031_client_tokens` and MAIL follows as `0032_brief`. | `jarvis/db.py:751–814` |
 | The atomic claim pattern for "fetch what is due and mark it handled" is `BEGIN IMMEDIATE` → `SELECT` → `UPDATE … WHERE id IN (…)` → `commit`. | `mcp_servers/mcp_reminders/logic.py:232–250` |
 | Secrets live in an AES-256-GCM vault; `set_secret` rejects empty values; `inject_env()` copies every secret into `os.environ` where unset or empty. | `jarvis/vault.py:236–246`, `:266–276` |
 | `TOTAL_TOOLS` is asserted at **64** against `registry.openai_tools()`. | `tests/integration/test_registry.py:23`, `:43` |
@@ -1368,14 +1368,15 @@ env scoping, which is the failure mode T4a exists to eliminate.
 `JARVIS_SERVICE_TOKEN` appears in **neither** file — see the K1 note in the contracts
 header.
 
-### M16 — Migration `0017_brief`, with `user_id` from the first migration
+### M16 — Migration `0032_brief`, with `user_id` from the first migration
 
 Roadmap §6: *"the `user_id` column exists in every new table … from the first
 migration, hardcoded to one value."*
 
-**Number (cross-plan F1).** This migration is `0017_brief`, constant `MIGRATION_0017`.
-REMOTE (W1) owns `0016_client_tokens`; the earlier `0016_brief` collided with it. The
-insertion is anchored by text (§0.11, §5 Step 6): "append a tuple after the last one in
+**Number (cross-plan F1).** This migration is `0032_brief`, constant `MIGRATION_0032`.
+REMOTE (W1) owns `0031_client_tokens`; current `jarvis/db.py` already contains
+migrations through `0030_skill_events`, so MAIL follows as `0032_brief`. The insertion
+is anchored by text (§0.11, §5 Step 6): "append a tuple after the last one in
 `MIGRATIONS` and name the constant `MIGRATION_<n+1>`" — never by an absolute line.
 
 ```sql
@@ -1518,7 +1519,7 @@ usernames — the shape `mcp_web`'s `{"error": …}` dicts already use.
 | `config/mcp_servers.yaml` | two new server entries, `env: {}` (M2/M15 — nothing to expand) | 9 |
 | `config/agents.yaml` | `secretary` block added; `scheduler` description loses "calendar" (R-M3) | 10 |
 | `jarvis/prompts.py` | Supervisor rule 13; `BRIEF_SYSTEM_PROMPT`; `BRIEF_PROMPT` | 10, 7 |
-| `jarvis/db.py` | `MIGRATION_0017` constant + `("0017_brief", MIGRATION_0017)` appended after the last tuple in `MIGRATIONS` (anchor by text, §0.11 — REMOTE owns `0016_client_tokens`) | 6 |
+| `jarvis/db.py` | `MIGRATION_0032` constant + `("0032_brief", MIGRATION_0032)` appended after the last tuple in `MIGRATIONS` (anchor by text, §0.11 — REMOTE owns `0031_client_tokens`) | 6 |
 | `jarvis/bot/display.py` | `brief_report` in `DISPLAY_TOOLS`, `DISPLAY_SURFACE`, `_FORMATTERS`; `_fmt_brief_report`; `_brief_facts_markdown` | 7 |
 | `jarvis/bot/pipeline.py` | import + construct/start/stop `BriefWatcher` behind `JARVIS_BRIEF_WATCHER_ENABLED` | 8 |
 | `web/src/agentLayout.ts` | one `AGENT_LAYOUT` entry (M17) | 11 |
@@ -2533,15 +2534,15 @@ fixtures inline in the test file, `http_client` injected.
 
 ---
 
-### Step 6 — Migration `0017_brief`, and the O3 branch decision
+### Step 6 — Migration `0032_brief`, and the O3 branch decision
 
-First run the §0.11 cross-guard: `grep -c 0016_client_tokens jarvis/db.py`; if `0`,
-**stop and report** (REMOTE must land first). Then add `MIGRATION_0017` (M16's SQL, as a
+First run the §0.11 cross-guard: `grep -c 0031_client_tokens jarvis/db.py`; if `0`,
+**stop and report** (REMOTE must land first). Then add `MIGRATION_0032` (M16's SQL, as a
 module-level triple-quoted string beside the other `MIGRATION_*` constants — locate them
-by searching for `MIGRATION_0015 = """`, do not cite a line) and append
-`("0017_brief", MIGRATION_0017)` **after the last tuple in the `MIGRATIONS` list** (find
+by searching for `MIGRATION_0030_skill_events = """`, do not cite a line) and append
+`("0032_brief", MIGRATION_0032)` **after the last tuple in the `MIGRATIONS` list** (find
 it by searching for the closing `]` of `MIGRATIONS = [`; the last entry today is
-`("0015_memory_reviews", MIGRATION_0015)` but REMOTE's `0016_client_tokens` lands before
+`("0030_skill_events", MIGRATION_0030_skill_events)` and REMOTE's `0031_client_tokens` lands before
 this plan, so append after whatever is last — never by line number, and name the constant
 `MIGRATION_<n+1>`). Then **execute M8's decision tree** and set `JARVIS_CALENDAR_BACKEND`
 in `.env.example` accordingly, recording the branch taken in §12.
@@ -3217,7 +3218,7 @@ from `web/src/agentLayout.ts`, and restore
 are spawned by `SkillRegistry` but reachable by nobody. Re-run the routing eval.
 
 **Full revert.** `git revert` the merge commit (Larry, not the assistant — §0.2). The
-two new tables are left in place: `run_migrations` records `0017_brief` as applied, so
+two new tables are left in place: `run_migrations` records `0032_brief` as applied, so
 a re-apply is a no-op, and dropping them is unnecessary — they are empty of anything
 another feature reads.
 

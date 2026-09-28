@@ -118,6 +118,22 @@ async def test_routed_memory_merge_uses_shared_execution_boundary(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_failed_merge_logs_no_memory_keys_or_exception_text(caplog):
+    proposal = SimpleNamespace(
+        keys=("PRIVATE_CANARY_memory_key_631c", "PRIVATE_CANARY_memory_key_641c"),
+        contents=("private one", "private two"),
+        tier="preference",
+    )
+
+    def _fail(_settings):
+        raise RuntimeError("PRIVATE_CANARY_merge_error_631c")
+
+    assert await _merge_cluster(proposal, object(), client_factory=_fail) is None
+    assert "memory_enforce_merge_failed tier=preference error_type=RuntimeError" in caplog.text
+    assert "PRIVATE_CANARY" not in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_routed_memory_classification_uses_shared_execution_boundary(monkeypatch):
     payload = json.dumps({
         "pairs": [{"a": "user.preference.a", "b": "user.preference.b", "verdict": "duplicate"}],
@@ -285,11 +301,14 @@ def _observation(conn, key, content, last_seen_at, session_id="s1"):
     )
 
 
-def test_unpromoted_stale_observation_expires(conn):
+def test_unpromoted_stale_observation_expires(conn, caplog):
+    caplog.set_level("INFO", logger="jarvis.memory_sweep")
     _observation(conn, "user.style.emoji", "uses emoji rarely", "2020-01-01T00:00:00+00:00")
     conn.commit()
     expired = run_staging_expiry(conn, expiry_days=STAGING_EXPIRY_DAYS)
     assert expired == ["user.style.emoji"]
+    assert "memory_staging_expiry expired_count=1" in caplog.text
+    assert "user.style.emoji" not in caplog.text
     assert conn.execute(
         "SELECT COUNT(*) AS n FROM observations WHERE key='user.style.emoji'"
     ).fetchone()["n"] == 0
@@ -317,6 +336,20 @@ def test_promoted_key_is_left_alone_even_if_stale(conn):
     assert conn.execute(
         "SELECT COUNT(*) AS n FROM observations WHERE key='user.style.emoji'"
     ).fetchone()["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_sweep_failure_logs_bounded_error_type(monkeypatch, caplog):
+    monkeypatch.setattr(memory_sweep_module, "enabled", lambda: True)
+
+    def _fail(_db_path=None):
+        raise RuntimeError("PRIVATE_CANARY_sweep_error_1fd2")
+
+    monkeypatch.setattr(memory_sweep_module, "get_conn", _fail)
+    result = await run_sweep()
+    assert result["archived"] == 0
+    assert "memory_sweep_failed error_type=RuntimeError" in caplog.text
+    assert "PRIVATE_CANARY" not in caplog.text
 
 
 def test_null_last_seen_at_falls_back_to_created_at(conn):

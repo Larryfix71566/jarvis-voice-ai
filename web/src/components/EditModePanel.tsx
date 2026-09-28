@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ADMIN_BASE as API, authFetch } from "../api";
 
-const API = "http://localhost:7861";
 
 interface Proposal {
   path: string;
@@ -207,7 +207,7 @@ export default function EditModePanel() {
 
   const refresh = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/api/selfedit/status`);
+      const r = await authFetch(`${API}/api/selfedit/status`);
       setStatus(await r.json());
       setUnreachable(false);
     } catch {
@@ -217,7 +217,7 @@ export default function EditModePanel() {
 
   const loadModels = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/api/selfedit/models`);
+      const r = await authFetch(`${API}/api/selfedit/models`);
       const j = (await r.json()) as { ok: boolean; models: ModelProfile[] };
       if (j.ok) {
         setModels(j.models);
@@ -242,7 +242,7 @@ export default function EditModePanel() {
     stopPolling();
     pollRef.current = setInterval(async () => {
       try {
-        const r = await fetch(`${API}/api/selfedit/run`);
+        const r = await authFetch(`${API}/api/selfedit/run`);
         const j = (await r.json()) as { ok: boolean; job: RunJob };
         if (!j.ok) return;
         if (j.job.state !== "running") {
@@ -283,7 +283,7 @@ export default function EditModePanel() {
   }, [refresh, loadModels, stopPolling, stopCouncilPolling, stopPlanPolling]);
 
   const post = async (path: string, body?: object) => {
-    const r = await fetch(`${API}${path}`, {
+    const r = await authFetch(`${API}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
@@ -376,7 +376,7 @@ export default function EditModePanel() {
 
   const loadCouncilRound = async (roundId: string) => {
     try {
-      const r = await fetch(`${API}/api/council/round/${roundId}`);
+      const r = await authFetch(`${API}/api/council/round/${roundId}`);
       const j = (await r.json()) as CouncilRoundDetail;
       setCouncilRound(j.ok ? j : null);
     } catch {
@@ -386,7 +386,7 @@ export default function EditModePanel() {
 
   const loadCouncilRounds = async () => {
     try {
-      const r = await fetch(`${API}/api/council/rounds?limit=10`);
+      const r = await authFetch(`${API}/api/council/rounds?limit=10`);
       const j = (await r.json()) as { ok: boolean; rounds?: CouncilRoundSummary[] };
       setCouncilRounds(j.ok ? j.rounds ?? [] : null);
     } catch {
@@ -402,7 +402,7 @@ export default function EditModePanel() {
     stopCouncilPolling();
     councilPollRef.current = setInterval(async () => {
       try {
-        const r = await fetch(`${API}/api/council/job`);
+        const r = await authFetch(`${API}/api/council/job`);
         const j = (await r.json()) as { ok: boolean; job: CouncilJob };
         if (!j.ok) return;
         if (j.job.state === "done" || j.job.state === "error") {
@@ -491,7 +491,7 @@ export default function EditModePanel() {
     stopPlanPolling();
     planPollRef.current = setInterval(async () => {
       try {
-        const r = await fetch(`${API}/api/plan/job`);
+        const r = await authFetch(`${API}/api/plan/job`);
         const j = (await r.json()) as { ok: boolean; job: PlanJob };
         if (!j.ok) return;
         setPlanJob(j.job);
@@ -531,7 +531,7 @@ export default function EditModePanel() {
     const res = await post("/api/plan/choose", { label });
     if (res.ok) {
       try {
-        const r = await fetch(`${API}/api/plan/job`);
+        const r = await authFetch(`${API}/api/plan/job`);
         const j = (await r.json()) as { ok: boolean; job: PlanJob };
         if (j.ok) setPlanJob(j.job);
       } catch {

@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "suite": "runtime_skill_selection_100_public_fixture",
+  "generated_at": "2026-09-28T14:16:55.535708+00:00",
+  "platform": "macOS-27.0-arm64-arm-64bit",
+  "python": "3.12.13",
+  "candidate_commit": "977f50bec7b77bd7d3381d3b8f3d63fa69bd00e2",
+  "candidate_dirty": true,
+  "fixture_sha256": "acc66d7f56fdba2a2a7c0ea6c2e90707e5c04bf75b947aa25273b07e4209a26a",
+  "fixture_skill_count": 100,
+  "synthetic_package_set_sha256": "0dc631c93766d2ca2004edade6266c09606b91e80832a5e5b208fab14ccd2ebb",
+  "synthetic_config_sha256": "eb1c9f7bbc75a5038941e07c70129c144578672b4ac21382686f937419b8e0f3",
+  "implementation_sha256": {
+    "scripts/benchmark_skill_selection.py": "afca062930dd148b8028b70e65f1ff22f0eba15b40f97b11d02512d19e17b2f6",
+    "jarvis/skill_selection.py": "eaddc7932ccabb348e2c259a4e21bd3baf92045af4fbffad9b861fb7ce731ae7",
+    "jarvis/agents/base.py": "95fcedb7f3169df9112f22070e218eee24caf02f27bcb9e7414f4f818457d4b5"
+  },
+  "snapshot_prewarm_ms": 898.58,
+  "snapshot_ttl_seconds": 60.0,
+  "evidence_mode": "real_runtime_selector_synthetic_packages_no_provider",
+  "provider_calls": 0,
+  "cases": {
+    "unique-trigger-hit": {
+      "samples": 100,
+      "p50_ms": 4.707,
+      "p95_ms": 5.492,
+      "max_ms": 5.812
+    },
+    "no-skill-short-query": {
+      "samples": 100,
+      "p50_ms": 4.737,
+      "p95_ms": 5.33,
+      "max_ms": 5.644
+    }
+  },
+  "acceptance_budget_ms_p95": 20.0,
+  "budget_passed": true,
+  "candidate": {
+    "branch": "codex/isolated-20260924",
+    "head": "977f50bec7b77bd7d3381d3b8f3d63fa69bd00e2",
+    "working_tree_dirty": true,
+    "worktree_fingerprint_sha256": "77dab21d199c42d7b024cb81483ebc3d29f8d4dd37b09ccbdc78f8f9a061f301",
+    "fingerprint_refreshed_at": "2026-09-28T14:28:07.842469Z",
+    "fingerprint_refresh_scope": "Final candidate after consolidated status cross-links and current local verification; live acceptance remains open."
+  },
+  "recorded_at": "2026-09-28T14:28:07.842469Z",
+  "candidate_worktree_fingerprint_sha256": "77dab21d199c42d7b024cb81483ebc3d29f8d4dd37b09ccbdc78f8f9a061f301",
+  "fingerprint_refreshed_at": "2026-09-28T14:28:07.842469Z",
+  "fingerprint_refresh_scope": "Final candidate after consolidated status cross-links and current local verification; live acceptance remains open."
+}

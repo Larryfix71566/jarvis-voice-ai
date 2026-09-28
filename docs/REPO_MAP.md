@@ -2,6 +2,9 @@
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for system ownership and model routes.
 
+Skills workspace contract: [plan](plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md)
+and [current acceptance](acceptance/skills-workspace/STATUS.md).
+
 Verify paths and the current branch before writing. Keep this map below the
 8,000-character prompt cap (`jarvis/repo_map.py`).
 
@@ -14,8 +17,13 @@ Verify paths and the current branch before writing. Keep this map below the
   (pure) + `server.py` (FastMCP) + `skill.yaml`. `mcp_kb/` is read-only
   (`kb_search`/`kb_read`/`kb_neighbors`); KB writes go through
   `jarvis/kb_digest.py`, not MCP.
-- `skills/` — Agent Skills (`SKILL.md`), loaded by `jarvis/agent_skills.py`
-  only if enabled in `config/skills.yaml`; never executed.
+- `skills/` — Agent Skills from `config/skills.yaml`; never executed.
+  `mortimer.yaml` holds metadata; catalog verifies digests. The read-only
+  API/native view shows package, pin, candidate and synthetic-preview evidence;
+  it does not imply history, activation, or completed process steps. Opt-in v2
+  allows one mutually declared support skill; fixture:
+  `scripts/check_skill_selection_fixtures.py`. Voice draft handoff cannot
+  publish or activate; release gates remain open.
 - `macos/` — native macOS client (SwiftPM), the live interface:
   `JarvisKit/` library, `MortimerHost/` app, `VPIOBench/` echo bench.
 - `web/` — React/Vite console. FROZEN 2026-09-04; not started by

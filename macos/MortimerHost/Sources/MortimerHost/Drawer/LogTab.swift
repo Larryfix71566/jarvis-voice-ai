@@ -11,6 +11,7 @@ struct LogTab: View {
     @Environment(DrawerModels.self) private var models
     @Environment(ConversationStore.self) private var conversation
     @Environment(AgentRunStore.self) private var agentRuns
+    @Environment(\.mortimerReduceMotion) private var reduceMotion
 
     private enum Tone { case start, ok, fail }
 
@@ -79,7 +80,11 @@ struct LogTab: View {
             }
             .preserveDrawerScroll("transcript")
             .onChange(of: items.count) { _, _ in
-                withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                if reduceMotion {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                } else {
+                    withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
             }
             .onAppear {
                 if models.scrollOffsets["transcript"] == nil { proxy.scrollTo("bottom", anchor: .bottom) }

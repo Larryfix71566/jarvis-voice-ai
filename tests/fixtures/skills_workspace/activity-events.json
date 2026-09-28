@@ -1,0 +1,47 @@
+[
+  {
+    "schema_version": 1,
+    "event_id": "bd453d0f-5a53-4869-8d48-65049edc21a6",
+    "run_id": "b4921779-126a-4e80-ac54-d9d0f7690188",
+    "request_id": "82f3b1da-0191-44ce-a7a9-c083efbc8101",
+    "seq": 0,
+    "occurred_at": "2026-09-25T12:00:00Z",
+    "skill_id": "technical-plan-document",
+    "skill_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "step_id": null,
+    "attempt_id": null,
+    "type": "skill_selected",
+    "status": "unknown",
+    "evidence_refs": []
+  },
+  {
+    "schema_version": 1,
+    "event_id": "7ca8fc2f-0570-48e8-b78c-a0b6ca1be199",
+    "run_id": "b4921779-126a-4e80-ac54-d9d0f7690188",
+    "request_id": "82f3b1da-0191-44ce-a7a9-c083efbc8101",
+    "seq": 1,
+    "occurred_at": "2026-09-25T12:00:01Z",
+    "skill_id": "technical-plan-document",
+    "skill_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "step_id": "establish-scope",
+    "attempt_id": null,
+    "type": "skill_step_started",
+    "status": "running",
+    "evidence_refs": []
+  },
+  {
+    "schema_version": 1,
+    "event_id": "0f038eaa-aab3-4b87-8b40-8e4782f6e1e2",
+    "run_id": "b4921779-126a-4e80-ac54-d9d0f7690188",
+    "request_id": "82f3b1da-0191-44ce-a7a9-c083efbc8101",
+    "seq": 2,
+    "occurred_at": "2026-09-25T12:00:04Z",
+    "skill_id": "technical-plan-document",
+    "skill_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "step_id": "establish-scope",
+    "attempt_id": null,
+    "type": "skill_step_finished",
+    "status": "passed",
+    "evidence_refs": [{"kind": "check_receipt_id", "id": "fixture-check-receipt"}]
+  }
+]

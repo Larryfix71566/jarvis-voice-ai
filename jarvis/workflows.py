@@ -143,12 +143,16 @@ def load_workflows(directory: Path | None = None) -> list[Workflow]:
     for path in sorted(directory.glob("*.yaml")):
         try:
             data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001
-            logger.exception("workflow_parse_failed path=%s", path)
+        except Exception as exc:  # noqa: BLE001
+            # YAML exceptions can echo the malformed source line. Workflow
+            # files may contain project instructions, so keep diagnostics to
+            # the failure class and don't include the path or traceback.
+            logger.warning("workflow_parse_failed error_type=%s",
+                           type(exc).__name__)
             continue
         wf = parse_workflow(data, source=path.name)
         if wf is None:
-            logger.warning("workflow_invalid path=%s reason=missing_name_or_when", path)
+            logger.warning("workflow_invalid reason=missing_name_or_when")
             continue
         out.append(wf)
     return out

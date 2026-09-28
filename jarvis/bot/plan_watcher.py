@@ -37,7 +37,7 @@ import logging
 import os
 from typing import Any, Awaitable, Callable
 
-from mcp_servers.mcp_selfedit.logic import ADMIN_URL_ENV, DEFAULT_ADMIN_URL
+from jarvis.urls import ADMIN_URL_ENV, DEFAULT_ADMIN_URL
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +61,11 @@ _TERMINAL_STATES = frozenset({"done", "awaiting_choice", "error"})
 
 async def _default_fetch_job(admin_url: str) -> dict[str, Any] | None:
     import httpx  # local import: keeps module import light for tests
+    from jarvis.auth import service_headers
 
     async with httpx.AsyncClient(timeout=3.0) as client:
-        resp = await client.get(f"{admin_url}/api/plan/job")
+        resp = await client.get(f"{admin_url}/api/plan/job", headers=service_headers())
+        resp.raise_for_status()
         return resp.json()
 
 
@@ -113,7 +115,8 @@ class PlanWatcher:
         try:
             data = await self._fetch_job()
         except Exception as exc:  # noqa: BLE001 — sidecar offline/unreachable
-            logger.warning("plan_watcher call failed: %s", exc)
+            logger.warning("plan_watcher call failed error_type=%s",
+                           type(exc).__name__[:64])
             return
         if not isinstance(data, dict) or not data.get("ok"):
             return
@@ -156,8 +159,9 @@ class PlanWatcher:
         # F4 — reuses jarvis/bot/display.py's existing app-message
         # machinery via a pseudo-tool name, `plan_ready`, rather than a
         # second display code path.
-        from jarvis.bot.display import build_display_payload
         import json
+
+        from jarvis.bot.display import build_display_payload
 
         data = {
             "ok": True,

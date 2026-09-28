@@ -32,6 +32,9 @@ enum AppTheme {
     static let glassBgHeavy = Color(red: 30 / 255.0, green: 36 / 255.0, blue: 43 / 255.0).opacity(0.58)
     /// --glass-bg-opaque — the glass-OFF (rollback) fill, §9.
     static let panelOpaque = Color(red: 30 / 255.0, green: 36 / 255.0, blue: 43 / 255.0).opacity(0.94)
+    /// Fully opaque accessibility surface when Reduce Transparency is on.
+    static let panelSolid = Color(red: 30 / 255.0, green: 36 / 255.0, blue: 43 / 255.0)
     static let glassBorder = Color.white.opacity(0.14)
     static let glassEdge = Color.white.opacity(0.18)
+    static let highContrastBorder = Color.white.opacity(0.55)
 }

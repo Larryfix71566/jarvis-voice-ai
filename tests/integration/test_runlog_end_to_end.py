@@ -12,22 +12,25 @@ Regression coverage called out by the plan's revision 2 audit:
   run_id string (plan D3).
 - a sub-agent whose _loop exceeds the timeout still lands status='timeout'
   rather than being stranded at 'running' forever (plan §5.4).
+- caller cancellation terminates the run record instead of leaving it
+  stranded at 'running'.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from jarvis.agents.base import SubAgent
+from jarvis.agents.base import CANCELLED_MESSAGE, SubAgent
 from jarvis.agents.delegate import build_delegate_tool
+from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.db import get_conn, run_migrations
 from jarvis.runlog.context import get_run_logger
 from jarvis.runlog.store import get_run, list_runs
+from jarvis.tenant import user_id_scope
 
 
 def make_settings(**overrides):
@@ -54,9 +57,11 @@ class FakeCompletions:
     def __init__(self, script):
         self._script = list(script)
         self.requests = []
+        self.tool_schemas = []
 
     async def create(self, *, model, messages, tools=None):
         self.requests.append(messages)
+        self.tool_schemas.append(tools)
         action = self._script.pop(0)
         if action[0] == "sleep":
             await asyncio.sleep(action[1])
@@ -125,7 +130,76 @@ def db_path(tmp_path, monkeypatch):
     return path
 
 
+@pytest.fixture(autouse=True)
+def initialized_non_sensitive_turn():
+    # Runtime-created agent tasks inherit this holder in production. Give
+    # the integration tests the same explicit ordinary-turn context so the
+    # fail-closed unset-context path remains covered separately.
+    token = current_sensitive_turn.set(SensitiveTurn())
+    try:
+        yield
+    finally:
+        current_sensitive_turn.reset(token)
+
+
 class TestDelegationProducesQueryableRun:
+    async def test_bounded_creator_uses_real_developer_run_and_never_generic_tools(
+        self, db_path,
+    ):
+        registry = StubRegistryWithRunlog()
+        agent = make_agent(
+            [
+                ("tool", "creator_read", {"path": "skills/sample/SKILL.md"}),
+                ("text", "draft complete"),
+            ],
+            name="developer", registry=registry,
+        )
+        tool_specs = [{
+            "type": "function",
+            "function": {"name": "creator_read", "description": "read scoped file",
+                         "parameters": {"type": "object", "properties": {"path": {"type": "string"}},
+                                        "required": ["path"], "additionalProperties": False}},
+        }]
+        called = []
+        created = []
+        with user_id_scope("creator-owner"):
+            reply = await agent.run(
+                "Draft a small skill.",
+                session_id="00000000-0000-0000-0000-000000000001",
+                system_prompt_override="fixed creator policy",
+                tool_specs_override=tool_specs,
+                tool_executor=lambda name, args: called.append((name, args)) or {"ok": True},
+                on_run_created=lambda run_id: created.append(run_id) or True,
+            )
+        assert reply == "draft complete"
+        assert len(created) == 1
+        run = get_run(created[0])["run"]
+        assert run["agent"] == "developer"
+        assert run["user_id"] == "creator-owner"
+        assert run["session_id"] == "00000000-0000-0000-0000-000000000001"
+        assert called == [("creator_read", {"path": "skills/sample/SKILL.md"})]
+        assert registry.calls == []
+        assert agent._client.chat.completions.tool_schemas[0] == tool_specs
+
+    async def test_failed_run_association_prevents_any_model_or_tool_call(self, db_path):
+        agent = make_agent(
+            [("tool", "creator_read", {"path": "skills/sample/SKILL.md"})],
+            name="developer",
+        )
+        tool_calls = []
+        reply = await agent.run(
+            "Draft a skill.",
+            session_id="00000000-0000-0000-0000-000000000001",
+            system_prompt_override="fixed creator policy",
+            tool_specs_override=[{"type": "function", "function": {"name": "creator_read",
+                "parameters": {"type": "object", "properties": {}}}}],
+            tool_executor=lambda *_args: tool_calls.append(True),
+            on_run_created=lambda _run_id: False,
+        )
+        assert reply.startswith("FAILED: creator run could not be durably associated")
+        assert agent._client.chat.completions.requests == []
+        assert tool_calls == []
+
     async def test_run_id_matches_delegate_start_event_and_is_queryable(
         self, db_path,
     ):
@@ -208,3 +282,67 @@ class TestDelegationProducesQueryableRun:
         run_id = next(e for e in events if e["type"] == "delegate_start")["run_id"]
         detail = get_run(run_id, db_path=db_path)
         assert detail["run"]["status"] == "timeout"
+
+    async def test_cancellation_finishes_run_record_and_propagates(
+        self, db_path,
+    ):
+        agent = make_agent([("sleep", 2.0)])
+        task = asyncio.create_task(
+            agent.run("slow", run_id="cancelled-run", session_id="sess-cancelled")
+        )
+        for _ in range(100):
+            if agent._client.chat.completions.requests:
+                break
+            await asyncio.sleep(0)
+        assert agent._client.chat.completions.requests
+
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        detail = get_run("cancelled-run", db_path=db_path)
+        assert detail["run"]["status"] == "cancelled"
+        assert detail["run"]["reply_preview"] == CANCELLED_MESSAGE
+        assert detail["run"]["session_id"] == "sess-cancelled"
+
+    async def test_cancellation_during_tool_suppresses_followup_and_success_event(
+        self, db_path,
+    ):
+        class BlockingRegistry(StubRegistryWithRunlog):
+            def __init__(self):
+                super().__init__()
+                self.started = asyncio.Event()
+                self.cancelled = False
+
+            async def call(self, name, arguments, server_names=None):
+                self.calls.append((name, arguments))
+                self.started.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    self.cancelled = True
+
+        registry = BlockingRegistry()
+        agent = make_agent(
+            [("tool", "fake_tool", {}), ("text", "must not be reached")],
+            registry=registry,
+        )
+        events = []
+        task = asyncio.create_task(
+            agent.run(
+                "run the tool", run_id="cancelled-tool-run",
+                session_id="sess-cancelled-tool", on_event=events.append,
+            )
+        )
+        await asyncio.wait_for(registry.started.wait(), timeout=1)
+
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert registry.cancelled
+        assert len(agent._client.chat.completions.requests) == 1
+        assert not any(event.get("type") == "agent_done" for event in events)
+        detail = get_run("cancelled-tool-run", db_path=db_path)
+        assert detail["run"]["status"] == "cancelled"
+        assert detail["run"]["reply_preview"] == CANCELLED_MESSAGE

@@ -149,8 +149,11 @@ class UsageMetricsObserver(BaseObserver):
                         quantity=float(item.value or 0),
                         unit="chars",
                     )
-                except Exception:  # noqa: BLE001 — same discipline as below
-                    logger.warning("usage_watcher tts record_call failed", exc_info=True)
+                except Exception as exc:  # noqa: BLE001 — same discipline as below
+                    logger.warning(
+                        "usage_watcher_tts_record_call_failed error_type=%s",
+                        type(exc).__name__[:80],
+                    )
                 continue
             if not isinstance(item, LLMUsageMetricsData):
                 continue
@@ -190,7 +193,10 @@ class UsageMetricsObserver(BaseObserver):
                     cache_write_tokens=cache_write_tokens,
                     cache_read_tokens=cached,
                 )
-            except Exception:  # noqa: BLE001 — cost logging must never
+            except Exception as exc:  # noqa: BLE001 — cost logging must never
                 # break a live voice turn (same discipline as
                 # usage_ledger.record_call's own internal catch).
-                logger.warning("usage_watcher record_call failed", exc_info=True)
+                logger.warning(
+                    "usage_watcher_record_call_failed error_type=%s",
+                    type(exc).__name__[:80],
+                )

@@ -23,6 +23,13 @@ final class FullConsoleRenderingTests: XCTestCase {
         try checkConsole(tabTextSize: 11, layoutVersion: 2, startup: true)
     }
 
+    func testPreviousLayoutRollbackKeepsSidecarAndVoiceControlsReachable() throws {
+        // SW-A rollback-mode regression: the one-step rollback must continue
+        // to render the established voice/orb console and the sidecar, rather
+        // than leaving the app in a partially torn-down adaptive workspace.
+        try checkConsole(tabTextSize: 11, layoutVersion: 0)
+    }
+
     private func checkConsole(tabTextSize: Double, layoutVersion: Int = 1, startup: Bool = false) throws {
         _ = NSApplication.shared
         NSApplication.shared.accessibilitySetValue(true,
@@ -59,11 +66,15 @@ final class FullConsoleRenderingTests: XCTestCase {
             .environment(drawer).environment(DrawerModels()).environment(attachments)
             .environment(ShareCoordinator())
             .environment(ConsoleOverlayState())
-            .environment(ConsoleNoticeState()).preferredColorScheme(.dark))
+            .environment(ConsoleNoticeState())
+            // Rendering fixtures should not create perpetual AppKit animation
+            // roots; production views normally follow the system preference.
+            .environment(\.mortimerReduceMotion, true)
+            .preferredColorScheme(.dark))
         view.frame = NSRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height))
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
-        defer { window.close() }
+        defer { closeRenderingFixtureWindow(window) }
         window.layoutIfNeeded(); view.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.3))
         var controls: [String: NSObject] = [:]

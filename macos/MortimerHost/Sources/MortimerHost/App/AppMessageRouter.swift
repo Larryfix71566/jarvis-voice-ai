@@ -85,8 +85,12 @@ final class AppMessageRouter {
             }
         }
         #endif
+        // Register the stream synchronously before returning from start().
+        // Creating it inside Task leaves a scheduling gap where an immediate
+        // transport event can be delivered before any continuation exists.
+        let messageStream = client.messageStream()
         task = Task {
-            for await message in client.messageStream() {
+            for await message in messageStream {
                 switch message {
                 case .agentWorking, .agentDone, .agentTool, .agentActivity, .capability:
                     // E3: delegation tick / outcome tones (OrbField.tsx:125-127).
@@ -133,6 +137,18 @@ final class AppMessageRouter {
                     let summary: String
                     switch outcome {
                     case .applied: status = "ok"; code = "applied"; summary = "Console action applied."
+                    case .previewReady(let previewID):
+                        status = "ok"; code = "skill_draft_preview"
+                        summary = "Skill draft preview ready. Use preview ID \(previewID) to start sandbox drafting."
+                    case .draftStarted:
+                        status = "ok"; code = "skill_draft_started"
+                        summary = "Sandbox skill drafting has started. The Skills workspace is opening to show progress and the exact diff for review."
+                    case .stepDetailsOpened:
+                        status = "ok"; code = "skill_step_details_opened"
+                        summary = "Opened that skill's selected step details in the Process view."
+                    case .examplePreviewOpened:
+                        status = "ok"; code = "skill_example_preview_opened"
+                        summary = "Opened the selected synthetic matcher example in the Skills workspace."
                     case .noop: status = "noop"; code = "no_change"; summary = "That console action changed nothing."
                     case .pendingUser: status = "pending_user"; code = "user_action_required"; summary = "The requested system action is waiting for your choice."
                     case .unsupported: status = "unsupported"; code = "unsupported"; summary = "That console action is unavailable here."
@@ -177,6 +193,14 @@ final class AppMessageRouter {
                     // yields through the locator in WorkspaceView.
                     switch payload.surface {
                     case .window:
+                        // Protected local answers remain available in the
+                        // main workspace, but must never enter the supporting
+                        // display store. This check must precede both
+                        // DisplayWindowStore.apply and any display handoff.
+                        if payload.isProtectedLocal {
+                            workspace?.receive(result)
+                            break
+                        }
                         // An exact repeat is already represented by the same
                         // external renderer and workspace row. Reusing that
                         // owner prevents repeated graph/display requests from
@@ -187,7 +211,12 @@ final class AppMessageRouter {
                             .flatMap { id in workspace?.containsResult(id) == true ? id : nil }
                         let workspaceID = existingID ?? result.id
                         if existingID == nil { workspace?.receive(result) }
-                        let panelID = displayWindow.apply(payload, workspaceID: workspaceID)
+                        guard let panelID = displayWindow.apply(payload, workspaceID: workspaceID) else {
+                            // The display store can reject protected content at
+                            // its own sink boundary. Keep the result in the
+                            // local workspace only.
+                            break
+                        }
                         if let workspace {
                             if Self.isMemoryGraphPayload(payload) {
                                 workspace.openMemoryGraph()

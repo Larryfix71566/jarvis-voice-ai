@@ -5,6 +5,28 @@ import SwiftUI
 
 @MainActor
 final class WindowVisibilityTests: XCTestCase {
+    private func activateVisibleWindowServer() throws -> NSApplication.ActivationPolicy {
+        let app = NSApplication.shared
+        guard !NSScreen.screens.isEmpty else {
+            throw XCTSkip("requires an interactive WindowServer with at least one screen; this test process has none")
+        }
+        let originalPolicy = app.activationPolicy()
+        guard app.setActivationPolicy(.regular) else {
+            throw XCTSkip("the test process cannot activate as a regular app in this session")
+        }
+        app.finishLaunching()
+        app.activate(ignoringOtherApps: true)
+        let activationDeadline = Date().addingTimeInterval(2)
+        while !app.isActive && Date() < activationDeadline {
+            pumpEvents(for: 0.05)
+        }
+        guard app.isActive else {
+            _ = app.setActivationPolicy(originalPolicy)
+            throw XCTSkip("the test host cannot become the active app in this WindowServer session")
+        }
+        return originalPolicy
+    }
+
     private func pumpEvents(for seconds: TimeInterval) {
         _ = NSApplication.shared
         let deadline = Date().addingTimeInterval(seconds)
@@ -44,12 +66,8 @@ final class WindowVisibilityTests: XCTestCase {
     }
 
     func testActualWindowHideShowAndDetachUpdateVisibility() throws {
-        _ = NSApplication.shared
-        let originalPolicy = NSApp.activationPolicy()
-        XCTAssertTrue(NSApp.setActivationPolicy(.regular))
+        let originalPolicy = try activateVisibleWindowServer()
         defer { _ = NSApp.setActivationPolicy(originalPolicy) }
-        NSApp.finishLaunching()
-        NSApp.activate(ignoringOtherApps: true)
         let view = WindowVisibilityView(frame: NSRect(x: 0, y: 0, width: 300, height: 160))
         var reports: [Bool] = []
         view.changed = { reports.append($0) }
@@ -93,13 +111,9 @@ final class WindowVisibilityTests: XCTestCase {
         XCTAssertTrue(reports.isEmpty)
     }
 
-    func testWaveStopsSamplingWhileWindowHiddenAndResumes() {
-        _ = NSApplication.shared
-        let originalPolicy = NSApp.activationPolicy()
-        XCTAssertTrue(NSApp.setActivationPolicy(.regular))
+    func testWaveStopsSamplingWhileWindowHiddenAndResumes() throws {
+        let originalPolicy = try activateVisibleWindowServer()
         defer { _ = NSApp.setActivationPolicy(originalPolicy) }
-        NSApp.finishLaunching()
-        NSApp.activate(ignoringOtherApps: true)
         var samples = 0
         let view = NSHostingView(rootView: VoiceWaveView(voiceState: .speaking, presentation: {
             samples += 1
@@ -109,7 +123,7 @@ final class WindowVisibilityTests: XCTestCase {
         let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 400, height: 180),
             styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
-        defer { window.close() }
+        defer { if window.isVisible { window.close() } }
         window.contentView = view
         show(window)
         pumpEvents(until: { window.occlusionState.contains(.visible) })
@@ -130,15 +144,16 @@ final class WindowVisibilityTests: XCTestCase {
         let resumed = samples
         pumpEvents(for: 0.2)
         XCTAssertGreaterThan(samples, resumed, "Restoring the window must restart the active wave")
+        window.close()
+        pumpEvents(for: 0.3)
+        let closed = samples
+        pumpEvents(for: 0.2)
+        XCTAssertEqual(samples, closed, "Closing the host window must stop requesting animation samples")
     }
 
-    func testReducedMotionKeepsVisibleWaveStatic() {
-        _ = NSApplication.shared
-        let originalPolicy = NSApp.activationPolicy()
-        XCTAssertTrue(NSApp.setActivationPolicy(.regular))
+    func testReducedMotionKeepsVisibleWaveStatic() throws {
+        let originalPolicy = try activateVisibleWindowServer()
         defer { _ = NSApp.setActivationPolicy(originalPolicy) }
-        NSApp.finishLaunching()
-        NSApp.activate(ignoringOtherApps: true)
         var samples = 0
         let view = NSHostingView(rootView: VoiceWaveAnimation(voiceState: .speaking, presentation: {
             samples += 1

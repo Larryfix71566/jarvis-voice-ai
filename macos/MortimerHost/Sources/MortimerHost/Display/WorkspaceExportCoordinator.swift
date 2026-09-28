@@ -47,16 +47,27 @@ final class WorkspaceExportCoordinator {
         message = "Export folder cleared."
     }
 
-    func copy(text: String) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        message = pasteboard.setString(text, forType: .string) ? "Copied result." : "Copy failed."
+    func copy(result: WorkspaceResult,
+              writer: (String) -> Bool = { text in
+                  let pasteboard = NSPasteboard.general
+                  pasteboard.clearContents()
+                  return pasteboard.setString(text, forType: .string)
+              }) {
+        guard !result.payload.isProtectedLocal else {
+            message = "This protected result cannot be copied or exported."
+            return
+        }
+        message = writer(WorkspaceResultExport.text(result)) ? "Copied result." : "Copy failed."
     }
 
     func chooseDestination(for result: WorkspaceResult) {
+        guard !result.payload.isProtectedLocal else {
+            resultID = result.id
+            message = "This protected result cannot be exported."
+            return
+        }
         guard !busy else { return }
         busy = true; resultID = result.id; message = nil
-        let text = WorkspaceResultExport.text(result)
         let panel = NSSavePanel()
         self.panel = panel
         panel.allowedContentTypes = [.plainText]
@@ -69,12 +80,12 @@ final class WorkspaceExportCoordinator {
             guard response == .OK, let url = panel.url else {
                 self.busy = false; self.message = "Export cancelled."; return
             }
-            Task { await self.write(text: text, to: url) }
+            Task { await self.write(result: result, to: url) }
         }
     }
 
     /// Injectable completion seam: status reflects the actual write outcome.
-    func write(text: String, to url: URL,
+    func write(result: WorkspaceResult, to url: URL,
                writer: @escaping @Sendable (Data, URL) async throws -> Void = { data, destination in
                    try await Task.detached(priority: .utility) {
                        let scoped = destination.startAccessingSecurityScopedResource()
@@ -82,7 +93,13 @@ final class WorkspaceExportCoordinator {
                        try data.write(to: destination, options: .atomic)
                    }.value
                }) async {
-        busy = true; message = nil
+        guard !result.payload.isProtectedLocal else {
+            resultID = result.id
+            message = "This protected result cannot be exported."
+            return
+        }
+        let text = WorkspaceResultExport.text(result)
+        busy = true; resultID = result.id; message = nil
         do {
             try await writer(Data(text.utf8), url)
             message = "Saved \(url.lastPathComponent)."

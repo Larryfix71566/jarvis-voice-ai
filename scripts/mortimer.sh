@@ -32,7 +32,6 @@ cd "$(dirname "$0")/.."
 
 BOT_PORT="${JARVIS_BOT_PORT:-7860}"
 VAULT_PORT=8484
-ADMIN_PORT=7861
 WEB_PORT=5173
 COSTS_PORT=8487
 LOG_GENERATIONS=5
@@ -154,6 +153,13 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
+# Load the same runtime configuration consumed by run_bot.sh/run_admin.sh so
+# the launcher's authenticated readiness probe uses the configured port.
+set -a
+. ./.env
+set +a
+ADMIN_PORT="${JARVIS_ADMIN_PORT:-7861}"
+
 echo "Restarting Mortimer..."
 stop_all
 
@@ -175,11 +181,9 @@ ADMIN_PID=$!
 nohup ./scripts/run_costs.sh >> logs/costs.log 2>&1 &
 COSTS_PID=$!
 
-# Give the components a moment, then report health (best-effort). Bot
-# waits on vault internally (up to 30s) before it actually launches, so
-# this is a liveness check, not a readiness probe -- a bot that's still
-# inside its own wait_for will still show "running".
-sleep 6
+# BIND_WAIT_S is 20 seconds. Wait longer before the readiness probe so a
+# late Tailscale address cannot be reported as a healthy listener early.
+sleep 25
 check() {  # name pid label
   if kill -0 "$2" 2>/dev/null; then
     echo "  $1: running (pid $2) — $3"
@@ -190,7 +194,34 @@ check() {  # name pid label
 check vault     "$VAULT_PID"     "tcp 127.0.0.1:$VAULT_PORT"
 check bot       "$BOT_PID"       "http://localhost:$BOT_PORT (waits on vault)"
 check extractor "$EXTRACTOR_PID" "background worker, no port"
-check admin     "$ADMIN_PID"     "http://localhost:$ADMIN_PORT/api/health"
+check_admin() {
+  if ! kill -0 "$ADMIN_PID" 2>/dev/null; then
+    echo "  admin: FAILED to start — see logs/admin.log" >&2
+    return
+  fi
+  if .venv/bin/python - <<'PY'
+import os
+from urllib.request import Request, urlopen
+
+from jarvis.auth import service_headers
+from jarvis.bind import resolve_bind_host
+from jarvis.vault import inject_env
+
+inject_env()
+host = resolve_bind_host("admin-health-check")
+port = int(os.environ.get("JARVIS_ADMIN_PORT", "7861"))
+request = Request(f"http://{host}:{port}/api/health", headers=service_headers())
+with urlopen(request, timeout=3) as response:
+    if response.status != 200:
+        raise SystemExit(f"health returned {response.status}")
+PY
+  then
+    echo "  admin: healthy (authenticated /api/health on port $ADMIN_PORT)"
+  else
+    echo "  admin: running but authenticated health check failed — see logs/admin.log" >&2
+  fi
+}
+check_admin
 check costs     "$COSTS_PID"     "http://localhost:$COSTS_PORT"
 
 echo

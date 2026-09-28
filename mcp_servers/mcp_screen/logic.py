@@ -21,17 +21,10 @@ Trade-off Larry accepted 2026-08-18: every screen_view call sends the
 captured image to a cloud vision API. Anything visible on the captured
 display leaves the machine. JARVIS_SCREEN_ENABLED=false is the off-ramp.
 
-DIAGNOSTICS (MORTIMER_SKILL_LIBRARY_PLAN.md Part G, Larry 2026-08-18:
-*"since computer vision is untested ... add what it sees into the logs,
-not indefinitely, only for a short period"*). Two tiers, and the
-paragraph above is now conditionally false, which is why this note
-exists:
-
-  Tier 1 (always on) — one structured log line per capture: the model's
-  TEXT answer preview, display index, image byte size, low_confidence,
-  profile, and latency. The answer already crosses back to the caller,
-  so logging it adds no exposure; the byte size and latency are what
-  actually diagnose a bad capture.
+DIAGNOSTICS (MORTIMER_SKILL_LIBRARY_PLAN.md Part G, Larry 2026-08-18):
+one structured metadata-only log line per capture. It records outcome,
+image byte size, confidence threshold, and latency. It never records the
+question, model answer, profile, display index, local paths, or image bytes.
 
   G3 (always on) — an image whose capture came back `low_confidence` IS
   retained under logs/screen/. That is a few KB of wallpaper, it is the
@@ -52,6 +45,7 @@ deliberately so.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -59,11 +53,16 @@ import os
 import subprocess
 import tempfile
 import time
-from datetime import datetime, timedelta, timezone
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 from jarvis.agents.upgrade_agent import load_model_registry
+from jarvis.bot.shared_content import (
+    analyze_shared_content_via_boundary,
+    normalize_shared_content,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,11 +74,6 @@ SCREEN_RETENTION_ENV = "JARVIS_SCREEN_RETENTION_HOURS"
 SCREEN_LOG_DIR = Path(__file__).resolve().parents[2] / "logs" / "screen"
 
 DEFAULT_RETENTION_HOURS = 48
-
-# Only a preview of the answer goes to the log line; the full text is
-# already returned to the caller, and an unbounded log line is how a log
-# becomes unreadable.
-ANSWER_PREVIEW_CHARS = 200
 
 # A real screenshot of any populated display is comfortably above this;
 # an empty/wallpaper-only capture (the classic symptom of a missing
@@ -111,8 +105,7 @@ def retention_hours() -> int:
     try:
         value = int(raw)
     except ValueError:
-        logger.warning("screen_retention_unparseable value=%r using=%d",
-                       raw, DEFAULT_RETENTION_HOURS)
+        logger.warning("screen_retention_unparseable using=%d", DEFAULT_RETENTION_HOURS)
         return DEFAULT_RETENTION_HOURS
     return max(0, value)
 
@@ -144,8 +137,10 @@ def prune_screen_logs(directory: Path | None = None, now: float | None = None) -
         for child in sorted(directory.glob("*"), reverse=True):
             if child.is_dir() and not any(child.iterdir()):
                 child.rmdir()
-    except Exception:  # noqa: BLE001 — pruning must never break startup
-        logger.exception("screen_prune_failed dir=%s", directory)
+    except Exception as exc:  # noqa: BLE001 — pruning must never break startup
+        logger.warning(
+            "screen_prune_failed error_type=%s", type(exc).__name__[:80]
+        )
     if deleted:
         logger.info("screen_logs_pruned deleted=%d older_than_hours=%d",
                     deleted, hours)
@@ -171,12 +166,15 @@ def _retain_failed_capture(image_bytes: bytes, display: int,
         path = folder / f"lowconf-display{display}-{stamp}.png"
         path.write_bytes(image_bytes)
         logger.warning(
-            "screen_lowconf_retained path=%s bytes=%d — kept for "
+            "screen_lowconf_retained bytes=%d — kept for "
             "troubleshooting; pruned after %dh",
-            path, len(image_bytes), retention_hours())
+            len(image_bytes), retention_hours())
         return str(path)
-    except Exception:  # noqa: BLE001
-        logger.exception("screen_lowconf_retain_failed display=%s", display)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "screen_lowconf_retain_failed error_type=%s",
+            type(exc).__name__[:80],
+        )
         return None
 
 
@@ -332,17 +330,39 @@ def screen_view(
     if not screen_enabled():
         return _disabled_error()
 
-    try:
-        profile = _resolve_vision_profile(registry)
-    except NoVisionProfileError as exc:
-        return {"error": str(exc)}
+    resolved_route = None
+    if client_factory is _default_vision_client and registry is None:
+        try:
+            from jarvis.vision import resolve_vision_execution_route
+
+            resolved_route = resolve_vision_execution_route(
+                routing_enabled=os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1",
+            )
+            profile = {
+                "name": resolved_route.profile_name,
+                "model": resolved_route.model,
+                "api_key_env": resolved_route.api_key_env,
+            }
+        except Exception as exc:  # noqa: BLE001 — do not guess or fall back
+            logger.warning(
+                "screen_view route_unavailable error_type=%s",
+                type(exc).__name__[:80],
+            )
+            return {"error": "No compliant vision route is currently available."}
+    else:
+        try:
+            profile = _resolve_vision_profile(registry)
+        except NoVisionProfileError as exc:
+            return {"error": str(exc)}
 
     started = time.perf_counter()
     try:
         path = capture_fn(display)
     except Exception as exc:  # subprocess failure, bad display index, etc.
-        logger.warning("screen_view display=%s outcome=capture_failed error=%s",
-                       display, exc)
+        logger.warning(
+            "screen_view outcome=capture_failed error_type=%s",
+            type(exc).__name__[:80],
+        )
         return {"error": f"Screen capture failed: {exc}"}
 
     try:
@@ -354,12 +374,11 @@ def screen_view(
             # sending a useless image to the vision model and presenting
             # its confused answer as a real one.
             # G3 — this is the one image worth keeping.
-            retained = _retain_failed_capture(image_bytes, display)
+            _retain_failed_capture(image_bytes, display)
             logger.warning(
-                "screen_view display=%s outcome=low_confidence bytes=%d "
-                "min_bytes=%d profile=%s retained=%s ms=%d",
-                display, len(image_bytes), MIN_SCREENSHOT_BYTES,
-                profile.get("name"), retained,
+                "screen_view outcome=low_confidence bytes=%d "
+                "min_bytes=%d ms=%d",
+                len(image_bytes), MIN_SCREENSHOT_BYTES,
                 int((time.perf_counter() - started) * 1000))
             return {
                 "answer": (
@@ -373,23 +392,33 @@ def screen_view(
                 "low_confidence": True,
             }
 
-        b64 = base64.b64encode(image_bytes).decode("ascii")
         try:
-            client, model = client_factory(profile)
-            response = client.chat.completions.create(
-                model=model,
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": question},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{b64}"},
-                        },
-                    ],
-                }],
-            )
-            answer = response.choices[0].message.content or ""
+            if resolved_route is not None:
+                image = normalize_shared_content(
+                    kind="image", data=image_bytes, mime_type="image/png",
+                )
+                answer = asyncio.run(analyze_shared_content_via_boundary(
+                    [image], question, str(uuid.uuid4()),
+                    resolved_route=resolved_route, rung="screen_vision",
+                    policy_source="user-requested-screen-view",
+                ))
+            else:
+                b64 = base64.b64encode(image_bytes).decode("ascii")
+                client, model = client_factory(profile)
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": question},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/png;base64,{b64}"},
+                            },
+                        ],
+                    }],
+                )
+                answer = response.choices[0].message.content or ""
         except Exception as exc:
             # MORTIMER_KEY_VALIDITY_PLAN.md K7 — an auth failure is named as
             # one, never folded into a generic "vision model call failed"
@@ -405,17 +434,22 @@ def screen_view(
             # which is the same mistake that once reported a GitHub 401 as
             # "the sidecar may be offline" (AGENT_TRUST_PLAN D8).
             status = getattr(exc, "status_code", None)
-            name = type(exc).__name__
+            name = type(exc).__name__[:80]
             rejected = (status in (401, 403)
                         or name in ("AuthenticationError", "PermissionDeniedError"))
             outcome = "auth_rejected" if rejected else "model_failed"
             logger.warning(
-                "screen_view display=%s outcome=%s bytes=%d "
-                "profile=%s error=%s ms=%d",
-                display, outcome, len(image_bytes), profile.get("name"), exc,
+                "screen_view outcome=%s bytes=%d error_type=%s ms=%d",
+                outcome, len(image_bytes), name,
                 int((time.perf_counter() - started) * 1000))
             if rejected:
                 key_env = profile.get("api_key_env", "the vision API key")
+                if resolved_route is not None:
+                    return {
+                        "error": "The selected vision route rejected its credential.",
+                        "auth_rejected": True,
+                        "profile": profile.get("name"),
+                    }
                 return {
                     "error": (
                         f"The vision model rejected the credential "
@@ -427,20 +461,15 @@ def screen_view(
                     "auth_rejected": True,
                     "profile": profile.get("name"),
                 }
+            if resolved_route is not None:
+                return {"error": f"Vision model call failed ({name})."}
             return {"error": f"Vision model call failed: {exc}"}
 
-        # Tier 1 — the diagnostic record. The answer already crosses back
-        # to the caller, so a bounded preview here costs no new exposure;
-        # bytes and latency are what actually distinguish "the capture was
-        # wrong" from "the model was wrong", which is the question the
-        # direct view_screen path could not answer at all before this
-        # (it is not a delegation, so it writes no run-log row).
+        # Diagnostics are metadata-only: answer/question content, profile,
+        # display identifiers, and paths remain outside the log sink.
         logger.info(
-            "screen_view display=%s outcome=ok bytes=%d profile=%s ms=%d "
-            "answer=%r",
-            display, len(image_bytes), profile.get("name"),
-            int((time.perf_counter() - started) * 1000),
-            answer[:ANSWER_PREVIEW_CHARS])
+            "screen_view outcome=ok bytes=%d ms=%d",
+            len(image_bytes), int((time.perf_counter() - started) * 1000))
 
         return {
             "answer": answer,

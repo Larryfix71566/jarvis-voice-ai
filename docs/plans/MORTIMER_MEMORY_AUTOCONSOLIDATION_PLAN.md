@@ -13,19 +13,20 @@ The implementation evidence is recorded in
 remaining Mac rollout evidence. This status does not certify the
 remaining deployment gates.
 
-*Reconciled 2026-09-22 against main `88b206f`* (header otherwise accurate;
-provider-shadow and rollout-monitoring receipts are present and passing).
-Caveats:
-- **Runtime classification is heuristic, not model-backed.** The live bot
-  passes `heuristic_classifier` (`jarvis/memory_automation.py`, no model
-  call) to the idle watcher (`jarvis/bot/pipeline.py`,
-  `jarvis/bot/memory_watcher.py`) when `JARVIS_MEMORY_AUTOMATION_ENABLED` is
-  set (default false). The model classifier (`ProviderClassifier`,
-  `jarvis/memory_automation_eval.py`) is used only by
-  `scripts/run_memory_provider_shadow.py`. B7's statement that production
-  classification resolves `JARVIS_MEMORY_PROFILE` holds for extraction,
-  consolidation and the sweep's August A2/A5 classification
-  (`jarvis/memory_sweep.py`), not for the B-section automation classifier.
+*Reconciled 2026-09-25 against main `4acb4dc` and isolated worktree.* The
+original reconciliation below records the earlier state. Current isolated
+tree status: `ConfiguredMemoryClassifier` now resolves the dedicated memory
+workload and calls the shared `ProviderClassifier` through `execute_chat` in
+both the production worker and synthetic shadow runner. Production candidates
+are confidential and fail closed if the selected route is not verified for
+that tier; the runner's `memory_shadow` workload accepts only the synthetic,
+approved-external corpus. Classification executes off the voice loop, claims
+are committed before model work, and no heuristic success fallback hides a
+route/provider failure. The dedicated durable admission-job/stage/cursor flow,
+secure-route acceptance and staged Mac rollout remain open; see the current
+[GC24-05 receipt](../acceptance/verified-gap-closure/GC24-05-route-aware-classifier-2026-09-25.md).
+
+Earlier 2026-09-22 caveats (historical):
 - **B7's locked names differ from the code.** B7 specifies
   `retrieve_memory_context(query, *, subject, project, limit, max_chars)`;
   the implementation is `retrieve_automated_memory_context(conn, query, *,

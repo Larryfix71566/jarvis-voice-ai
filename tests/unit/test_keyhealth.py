@@ -13,6 +13,8 @@ green one over a dead key.
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from jarvis import keyhealth
@@ -64,7 +66,8 @@ class TestVerdicts:
         probe = _probe({"https://a.example/v1": ("unfunded", "HTTP 402")})
         keyhealth.probe_all(REGISTRY, probe=probe)
         assert keyhealth.is_unusable("KEY_A") is True
-        assert "402" in keyhealth.detail("KEY_A")
+        assert keyhealth.detail("KEY_A") == (
+            "Provider could not bill the credential")
 
     def test_unreachable_is_never_unusable(self):
         """THE test this module exists for. A blocked network and a dead
@@ -124,8 +127,59 @@ class TestKillSwitch:
 class TestNoSecretLeak:
     def test_the_module_never_logs_a_key_value(self):
         source = open(keyhealth.__file__, encoding="utf-8").read()
-        # The key is passed to the probe and nowhere else — never formatted
-        # into a log line, not even truncated.
-        assert "key=%s" in source          # the NAME is logged
+        # The key is passed to the probe and nowhere else — neither the value
+        # nor its environment-variable name is formatted into a log line.
+        assert "key_health key=%s" not in source
         assert "%s\", key" not in source
         assert "key[:" not in source
+
+    def test_probe_error_and_endpoint_are_not_exposed(
+            self, monkeypatch, caplog):
+        caplog.set_level(logging.INFO, logger="jarvis.keyhealth")
+        key_name = "PRIVATE_KEY_NAME_CANARY"
+        monkeypatch.setenv(key_name, "PRIVATE_KEY_VALUE_CANARY")
+        endpoint = "https://private-endpoint-canary.invalid/v1"
+        exception_text = "PRIVATE_PROVIDER_BODY_CANARY /Users/private/path"
+        registry = {
+            "profiles": {
+                "private": {
+                    "api_key_env": key_name,
+                    "base_url": endpoint,
+                    "model": "private-model",
+                }
+            }
+        }
+
+        def boom(_base_url, _key, _model):
+            raise RuntimeError(exception_text)
+
+        keyhealth.probe_all(registry, probe=boom)
+
+        assert keyhealth.verdict(key_name) == "unreachable"
+        assert keyhealth.detail(key_name) == _SAFE_DETAIL_UNREACHABLE
+        logs = caplog.text
+        assert "key_health outcome=unreachable" in logs
+        assert key_name not in logs
+        assert "PRIVATE_KEY_VALUE_CANARY" not in logs
+        assert endpoint not in logs
+        assert exception_text not in logs
+        assert "/Users/private/path" not in logs
+        assert exception_text not in keyhealth.detail(key_name)
+
+    def test_unrecognized_probe_output_is_bounded(self, caplog):
+        caplog.set_level(logging.INFO, logger="jarvis.keyhealth")
+        hostile_outcome = "PRIVATE_OUTCOME_CANARY"
+        keyhealth.probe_all(
+            REGISTRY,
+            probe=lambda *_args: (hostile_outcome, "PRIVATE_DETAIL_CANARY"),
+        )
+
+        assert keyhealth.verdict("KEY_A") == "unknown"
+        assert keyhealth.detail("KEY_A") == _SAFE_DETAIL_UNKNOWN
+        assert "key_health outcome=unknown" in caplog.text
+        assert hostile_outcome not in caplog.text
+        assert "PRIVATE_DETAIL_CANARY" not in caplog.text
+
+
+_SAFE_DETAIL_UNREACHABLE = "Provider could not be reached"
+_SAFE_DETAIL_UNKNOWN = "Credential probe was inconclusive"

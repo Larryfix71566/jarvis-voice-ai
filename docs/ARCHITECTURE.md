@@ -5,6 +5,62 @@
 "Configuration and deployment paths" (2026-09-17/18) were not re-observed.
 A navigation aid; track plans stay authoritative for requirements and gates.
 
+**Skills workspace candidate supplement, refreshed 2026-09-28:** the current
+isolated worktree adds read-only skills catalog/detail/version APIs, typed
+privacy-safe selection/body-read traces, user-scoped run/event APIs and native
+Activity and Versions views alongside the native Skills view. The Versions view
+distinguishes human manifest version, package SHA-256, enabled registry pin and
+caller-owned candidate requests; it does not claim activation or historical
+installed revisions. A versioned `SkillStepCheckReceipt` contract now uses a
+process-local HMAC, exact run/request/skill-revision/step/attempt identity,
+two-minute expiry, a host-owned check registry/map, and durable one-shot
+replay protection. The checker registry maps exact weather-condition,
+repository-status, repository-history, and creator offline-validation steps to
+host checks. Other steps remain unknown until independent host evidence is
+implemented and bound to the owning attempt. Successful tool
+calls alone are observations. The opt-in deterministic selector
+requires both rollout flags and verified route, tool, capability, package-pin,
+readiness and privacy evidence; explicit skill IDs skip lexical scoring only.
+It selects one primary and at most one support, and only when both packages
+mutually declare compatibility and their combined body fits the fixed prompt
+budget. Current packages declare no mutual skill-pair compatibility, so they
+remain single-skill. Public dry-run evidence covers five positive, five no-skill
+and four overlapping cases with no provider calls. The package snapshot is cached
+for 60 seconds; measured warm selector p95 is 4.39/4.37 ms across 100 synthetic
+skills. Same-pin expiry refresh runs in a background worker while package pins
+are rechecked before injection; registry changes rebuild synchronously.
+Declared matcher examples return
+only bounded synthetic request/expected-selection previews after declaration,
+fixture-schema and package-pin checks; they never execute a skill or model.
+Voice can open a declared process step or example and hand a bounded draft to
+the native creator review, but cannot publish or activate. Version API evidence
+is limited to the current package/config and owner-scoped request receipts; no
+previous installed package/Git history is returned. Activation and rollback
+still require evaluation evidence and a maintainer-reviewed config change.
+Trusted step evidence, live creator evaluation, readiness evaluation, activation
+and rollback remain open. It is not yet merged or deployed; see the [implementation
+plan](plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md) and [acceptance
+status](acceptance/skills-workspace/STATUS.md).
+
+Creator drafts use the owner-scoped job receipts in `jarvis/skill_requests.py`.
+The admin service prepares the disposable sandbox, then uses the authenticated
+internal endpoint in `jarvis/bot/server.py` to reach the live Developer through
+`jarvis/bot/skill_creator_dispatch.py`. That registry carries the actual user's
+identity and session privacy holder. The Developer's RunLogger generates the
+run ID; an atomic admin association binds it to the creator request, pinned
+creator revision and separate sandbox job before tool execution. The run has
+only the four creator tools; the authoring service checks the expected job at
+session resolution. Scrubbed lifecycle messages retain this run ID through
+JarvisKit and the native AgentRunStore, so a completed creator run cannot settle
+another concurrent Developer card. Late validation uses `jarvis/skill_validation_activity.py` to append to the
+originating run without changing its terminal row. The worker records an
+attempt before validation, and the saved host receipt binds the request,
+attempt and sandbox job. Recovery never invents a missing started event. An
+exact pinned host check rechecks complete candidate evidence before a signed
+receipt is accepted; job locking, owner/privacy checks, transactional event
+ordering and one-shot receipt storage cover cancellation and duplicate delivery.
+This path has local fake-VM integration coverage; live acceptance remains open.
+
 ## Runtime shape
 
 ```mermaid
@@ -19,10 +75,12 @@ flowchart LR
   BOT --> UI[RTVI over /ws-client WebSocket or WebRTC]
   UI --> HOST[MortimerHost native Command Console]
   HOST --> ATLAS[Knowledge Atlas, graph, sidecar, content panels]
+  HOST --> SKILLS[Skills library and intended process view]
   HOST --> SHARE[Text/image staging and OS share]
   HOST --> DISPLAY[NSScreen placement]
   HOST --> SIDE[Admin sidecar :7861]
   SIDE --> EDIT[Sandbox/self-edit and planning]
+  SIDE --> SKCAT[Read-only skill catalog/detail/version evidence]
   SIDE --> DB
   VAULT[Mac Keychain + data/secrets.vault] -. injects process env .-> BOT
   VAULT -.-> SIDE
@@ -38,7 +96,15 @@ The bot owns the voice session, Supervisor turn, tool registration, memory
 session lifecycle and speech output. `MortimerHost` owns native windows,
 layout, drawer tabs, Atlas/graph state, display placement and content
 sharing. The admin sidecar owns self-edit, planning, run status and
-HTTP inspection. MCP servers are subprocesses with declared credentials and
+HTTP inspection. The Skills view reads validated package metadata, process
+maps, version pins and owner-scoped candidate receipts from the sidecar;
+synthetic examples preview expected selection without
+running a skill, and intended steps do not prove that a run completed them.
+Trusted pass receipts are persisted in the `skill_step_check_receipts` table
+under migration 0032 and are erased with protected-run transitions or run
+retention pruning. Receipt infrastructure does not turn tool results or
+model-authored activity into verified step success.
+MCP servers are subprocesses with declared credentials and
 no UI state. SQLite durably owns conversations, memories, jobs, receipts and
 run metadata.
 
@@ -94,6 +160,12 @@ No single project-wide model setting exists. `OPENAI_MODEL`/`OPENAI_BASE_URL`
   Repo sidecar and gated `model_route` voice tool. Council, planning and
   shadow calls reject a route that fails a stricter `data_policy`; enabled
   confidential/local-only policies also redact the run log.
+- Skill evaluation is an isolated `skill_eval` background workload: it requires
+  both an enabled `skill_evaluation` budget block and
+  `JARVIS_SKILL_EVAL_ENABLED=1`, ignores model preferences, rejects route
+  overrides, and has no fallback. No such block is configured in the current
+  access policy, so the workload remains unavailable. Paid calls require a
+  numeric spend ceiling and a known price at per-call reservation.
 - `claude-haiku-4-5` is a voice-only built-in route, absent from the registry.
 - Claude/Codex subscription adapters are text-only (tool calls rejected);
   `jarvis/subscription.py` strips inherited API keys and endpoints before the
@@ -156,6 +228,7 @@ loaded-version evidence remain open gates.
 | Surface | Implementation | Acceptance evidence |
 | --- | --- | --- |
 | Native Command Console / Atlas | `macos/MortimerHost/`, `macos/JarvisKit/` | `docs/acceptance/command-console/STATUS.md`, physical Mac gates |
+| Skills workspace (candidate) | `jarvis/skill_catalog.py`, `/api/skills`, `MortimerHost/Console/SkillsWorkspaceView.swift` | `docs/acceptance/skills-workspace/STATUS.md`; activity, creator and live release gates open |
 | Voice and shared actions | `jarvis/bot/`, `ConsoleProtocol` | `docs/acceptance/command-console/VOICE.md` |
 | Memory admission and automation | `jarvis/memory.py`, `jarvis/memory_automation.py`, `jarvis/memory_sweep.py` | `docs/acceptance/memory-automation/STATUS.md` |
 | Provider shadow | `scripts/run_memory_provider_shadow.py`, registry | `provider-shadow-receipt.json`, `rollout-monitoring-receipt.json` (same directory) |

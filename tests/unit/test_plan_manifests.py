@@ -6,9 +6,8 @@ source, fixture, test, or acceptance document has disappeared. The one
 documented filename alias reflects the landed Command Console suite's name.
 """
 
-from pathlib import Path
 import json
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -106,9 +105,11 @@ MEMORY_ARTIFACTS = (
     "web/src/components/MemoryPanel.tsx",
     "jarvis/memory_model.py",
     "jarvis/memory_automation.py",
+    "jarvis/memory_admission.py",
     "jarvis/memory_automation_eval.py",
     "tests/unit/test_memory_model.py",
     "tests/unit/test_memory_automation.py",
+    "tests/unit/test_memory_admission.py",
     "tests/unit/test_memory_automation_acceptance.py",
     "tests/unit/test_memory_rollout_acceptance.py",
     "tests/unit/test_memory.py",

@@ -76,7 +76,10 @@ def _observation_temp_f(obs: Any) -> Optional[tuple[float, str]]:
     return fahrenheit, str(props.get("textDescription") or "").strip()
 
 
-def weathergov_current(lat: float, lon: float, fetch: Callable[[str], Any]) -> Optional[dict]:
+def weathergov_current(
+    lat: float, lon: float, fetch: Callable[[str], Any], *,
+    include_observed_at: bool = False,
+) -> Optional[dict]:
     """CURRENT conditions from Weather.gov, or None if unavailable.
 
     The observation chain is three hops:
@@ -109,12 +112,13 @@ def weathergov_current(lat: float, lon: float, fetch: Callable[[str], Any]) -> O
                         "stationIdentifier")
                     if not station_id:
                         continue
-                    reading = _observation_temp_f(
-                        fetch(WEATHERGOV_OBSERVATION_URL.format(station=station_id)))
+                    observation = fetch(
+                        WEATHERGOV_OBSERVATION_URL.format(station=station_id))
+                    reading = _observation_temp_f(observation)
                     if reading is None:
                         continue          # station reported no temperature
                     temp_f, conditions = reading
-                    return {
+                    result = {
                         "summary": conditions or "Weather",
                         "temp_f": round(temp_f),
                         "location": city,
@@ -122,6 +126,17 @@ def weathergov_current(lat: float, lon: float, fetch: Callable[[str], Any]) -> O
                         "source": "weather.gov",
                         "station": station_id,
                     }
+                    # Preserve the provider's measurement timestamp for
+                    # callers that need to verify freshness. Keep the
+                    # ambient chip's established payload unchanged by
+                    # making this opt-in.
+                    if include_observed_at:
+                        observation_props = (observation or {}).get("properties") or {}
+                        observed_at = observation_props.get("timestamp")
+                        result["observed_at"] = (
+                            observed_at if isinstance(observed_at, str) else None
+                        )
+                    return result
             except Exception:
                 pass  # fall through to the forecast below
 

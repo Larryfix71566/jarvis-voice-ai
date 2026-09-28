@@ -6,7 +6,53 @@ from types import SimpleNamespace
 
 import pytest
 
+from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.skills.registry import SkillRegistry
+from jarvis.yaml_utils import DuplicateYAMLKeyError, load_unique_yaml
+
+
+def test_unique_yaml_preserves_explicit_override_of_merged_defaults():
+    parsed = load_unique_yaml(
+        "defaults: &defaults\n"
+        "  retries: 3\n"
+        "  label: inherited\n"
+        "job:\n"
+        "  <<: *defaults\n"
+        "  retries: 5\n"
+    )
+
+    assert parsed["job"] == {"retries": 5, "label": "inherited"}
+
+
+def test_unique_yaml_rejects_duplicate_nested_explicit_keys():
+    with pytest.raises(DuplicateYAMLKeyError):
+        load_unique_yaml("settings:\n  token: first\n  token: second\n")
+
+
+@pytest.mark.asyncio
+async def test_registry_rejects_duplicate_config_keys_before_starting_servers(tmp_path,
+                                                                              monkeypatch):
+    config_path = tmp_path / "mcp_servers.yaml"
+    config_path.write_text(
+        "servers:\n"
+        "  - name: mcp-time\n"
+        "    command: python\n"
+        "servers: []\n",
+        encoding="utf-8",
+    )
+    registry = SkillRegistry(config_path)
+    started = []
+
+    async def fake_start_server(entry):
+        started.append(entry)
+
+    monkeypatch.setattr(registry, "_start_server", fake_start_server)
+
+    with pytest.raises(DuplicateYAMLKeyError):
+        await registry.start()
+
+    assert started == []
+    assert registry._stack is None
 
 
 def make_tool(name, server, description="desc", schema=None):
@@ -55,6 +101,86 @@ class TestOpenaiTools:
         ]
         assert registry.tools_for(["mcp-system"]) == []
 
+    def test_app_build_start_run_id_is_hidden_from_model_schema(self):
+        registry = SkillRegistry(config_path="unused.yaml")
+        registry._tools = {
+            "app_build_start": ("mcp-apps", make_tool(
+                "app_build_start", "mcp-apps", schema={
+                    "type": "object",
+                    "properties": {"app": {"type": "string"}, "run_id": {"type": "string"}},
+                    "required": ["app", "run_id"],
+                },
+            )),
+        }
+        schema = registry.openai_tools()[0]["function"]["parameters"]
+        assert "run_id" not in schema["properties"]
+        assert "run_id" not in schema["required"]
+
+
+class TestRegistryDiagnosticRedaction:
+    def test_unreadable_skill_manifest_hides_path_and_source(self, tmp_path, monkeypatch, caplog):
+        import jarvis.skills.registry as registry_module
+
+        manifest = tmp_path / "PRIVATE_MANIFEST_PATH_CANARY" / "skill.yaml"
+        manifest.parent.mkdir()
+        manifest.write_text(
+            "requires_env: [PRIVATE_MANIFEST_SOURCE_CANARY\n", encoding="utf-8",
+        )
+        monkeypatch.setattr(registry_module, "_skill_yaml_path", lambda _name: manifest)
+
+        loaded = registry_module.load_requires_env("private-server")
+
+        assert loaded == ([], [], [])
+        assert "skill_yaml_unreadable server=private-server" in caplog.text
+        assert "PRIVATE_MANIFEST_PATH_CANARY" not in caplog.text
+        assert "PRIVATE_MANIFEST_SOURCE_CANARY" not in caplog.text
+
+    def test_invalid_dynamic_source_hides_manifest_path_and_source(self, tmp_path, monkeypatch, caplog):
+        import jarvis.skills.registry as registry_module
+
+        manifest = tmp_path / "PRIVATE_DYNAMIC_PATH_CANARY" / "skill.yaml"
+        manifest.parent.mkdir()
+        manifest.write_text(
+            "requires_env_dynamic:\n  - source: PRIVATE_DYNAMIC_SOURCE_CANARY\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("JARVIS_ENV_SCOPING_ENABLED", "true")
+        monkeypatch.setattr(registry_module, "_skill_yaml_path", lambda _name: manifest)
+
+        result = registry_module.build_child_env({"name": "private-server"})
+
+        assert isinstance(result, dict)
+        assert "mcp_requires_env_dynamic_invalid server=private-server" in caplog.text
+        assert "PRIVATE_DYNAMIC_PATH_CANARY" not in caplog.text
+        assert "PRIVATE_DYNAMIC_SOURCE_CANARY" not in caplog.text
+
+    def test_unreadable_upgrade_model_manifest_hides_path_and_contents(
+            self, tmp_path, monkeypatch, caplog):
+        import jarvis.skills.registry as registry_module
+
+        root = tmp_path / "PRIVATE_REPO_ROOT_CANARY"
+        config = root / "config"
+        config.mkdir(parents=True)
+        (config / "upgrade_models.yaml").write_text(
+            "api_key_env: PRIVATE_UPGRADE_SOURCE_CANARY\nbroken: [\n",
+            encoding="utf-8",
+        )
+        skill = tmp_path / "skill.yaml"
+        skill.write_text(
+            "requires_env_dynamic:\n  - source: upgrade_models_api_keys\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("JARVIS_ENV_SCOPING_ENABLED", "true")
+        monkeypatch.setattr(registry_module, "REPO_ROOT", root)
+        monkeypatch.setattr(registry_module, "_skill_yaml_path", lambda _name: skill)
+
+        result = registry_module.build_child_env({"name": "private-server"})
+
+        assert isinstance(result, dict)
+        assert "upgrade_models_unreadable server=private-server error_type=" in caplog.text
+        assert "PRIVATE_REPO_ROOT_CANARY" not in caplog.text
+        assert "PRIVATE_UPGRADE_SOURCE_CANARY" not in caplog.text
+
 
 class FakeSession:
     def __init__(self, result=None, exc=None):
@@ -91,6 +217,62 @@ class TestCall:
         assert json.loads(result) == {"iso": "2026-08-04"}
         assert session.calls == [("get_current_time", {})]
 
+    async def test_app_build_start_receives_owner_run_id(self, monkeypatch):
+        import jarvis.skills.registry as registry_module
+
+        registry = SkillRegistry(config_path="unused.yaml")
+        tool = make_tool("app_build_start", "mcp-apps", schema={
+            "type": "object", "properties": {"run_id": {"type": "string"}},
+        })
+        registry._tools = {"app_build_start": ("mcp-apps", tool)}
+        session = FakeSession(result=ok_result())
+        registry._sessions = {"mcp-apps": session}
+        monkeypatch.setattr(registry_module, "get_run_id", lambda: "owner-run-1")
+        token = current_sensitive_turn.set(SensitiveTurn())
+        try:
+            await registry.call("app_build_start", {"run_id": "untrusted-tool-value"})
+        finally:
+            current_sensitive_turn.reset(token)
+        assert session.calls == [("app_build_start", {"run_id": "owner-run-1"})]
+
+    async def test_external_tool_fails_closed_when_sensitivity_context_is_missing(self):
+        registry = make_external_registry()
+        session = FakeSession(result=ok_result())
+        registry._sessions = {"mcp-web": session}
+        token = current_sensitive_turn.set(None)
+        try:
+            result = await registry.call("web_search", {"query": "PRIVATE_CANARY_91"})
+        finally:
+            current_sensitive_turn.reset(token)
+        assert "protected turn cannot call external" in result
+        assert session.calls == []
+
+    async def test_external_tool_fails_closed_for_armed_turn(self):
+        registry = make_external_registry()
+        session = FakeSession(result=ok_result())
+        registry._sessions = {"mcp-web": session}
+        holder = SensitiveTurn()
+        holder.arm("financial", turn_id="canary")
+        token = current_sensitive_turn.set(holder)
+        try:
+            result = await registry.call("web_search", {"query": "PRIVATE_CANARY_92"})
+        finally:
+            current_sensitive_turn.reset(token)
+        assert "protected turn cannot call external" in result
+        assert session.calls == []
+
+    async def test_external_tool_allowed_only_for_explicitly_unarmed_turn(self):
+        registry = make_external_registry()
+        session = FakeSession(result=ok_result())
+        registry._sessions = {"mcp-web": session}
+        token = current_sensitive_turn.set(SensitiveTurn())
+        try:
+            result = await registry.call("web_search", {"query": "public query"})
+        finally:
+            current_sensitive_turn.reset(token)
+        assert "protected turn cannot call external" not in result
+        assert len(session.calls) == 1
+
     async def test_text_fallback_when_no_structured(self):
         registry = make_registry()
         registry._sessions = {"mcp-time": FakeSession(result=ok_result(text="hi"))}
@@ -107,9 +289,42 @@ class TestCall:
 
     async def test_exception_becomes_failure_string(self):
         registry = make_registry()
-        registry._sessions = {"mcp-time": FakeSession(exc=RuntimeError("crash"))}
+        registry._sessions = {
+            "mcp-time": FakeSession(exc=RuntimeError("private prompt sentinel"))
+        }
         result = await registry.call("get_current_time", {})
         assert result == "get_current_time failed: RuntimeError."
+
+    async def test_exception_message_and_run_id_are_not_written_to_logs(
+            self, caplog, monkeypatch):
+        import jarvis.skills.registry as registry_module
+
+        registry = make_registry()
+        registry._sessions = {
+            "mcp-time": FakeSession(exc=RuntimeError("PRIVATE_CANARY_7fc19"))
+        }
+        monkeypatch.setattr(
+            registry_module, "get_run_id", lambda: "PRIVATE_RUN_ID_CANARY")
+
+        await registry.call("get_current_time", {})
+
+        assert "PRIVATE_CANARY_7fc19" not in caplog.text
+        assert "PRIVATE_RUN_ID_CANARY" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    async def test_stop_exception_message_is_not_written_to_logs(self, caplog):
+        class FailingStack:
+            async def aclose(self):
+                raise RuntimeError("PRIVATE_STOP_CANARY /Users/private/path")
+
+        registry = SkillRegistry(config_path="unused.yaml")
+        registry._stack = FailingStack()
+
+        await registry.stop()
+
+        assert "registry_stop_error error_type=RuntimeError" in caplog.text
+        assert "PRIVATE_STOP_CANARY" not in caplog.text
+        assert "/Users/private/path" not in caplog.text
 
     async def test_server_scope_restriction(self):
         registry = make_registry()

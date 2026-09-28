@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { ADMIN_BASE as API, authFetch } from "../api";
 
-const API = "http://localhost:7861";
 
 interface Status {
   branch: string;
@@ -27,7 +27,7 @@ export default function GitPanel() {
 
   const refresh = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/api/git/status`);
+      const r = await authFetch(`${API}/api/git/status`);
       setStatus(await r.json());
       setUnreachable(false);
     } catch {
@@ -42,7 +42,7 @@ export default function GitPanel() {
   }, [refresh]);
 
   const post = async (path: string, body?: object): Promise<Draft> => {
-    const r = await fetch(`${API}${path}`, {
+    const r = await authFetch(`${API}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,

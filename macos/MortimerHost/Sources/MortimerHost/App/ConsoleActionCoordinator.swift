@@ -6,7 +6,7 @@ import JarvisKit
 /// voice dispatch submit the same request; unsupported actions are explicit.
 @MainActor
 final class ConsoleActionCoordinator {
-    enum Outcome: Equatable { case applied, noop, pendingUser, unsupported, capacity, invalid, stale }
+    enum Outcome: Equatable { case applied, previewReady(String), draftStarted, stepDetailsOpened, examplePreviewOpened, noop, pendingUser, unsupported, capacity, invalid, stale }
     private let workspace: WorkspaceStore
     private let display: DisplayWindowStore
     private let placement: WindowPlacement
@@ -15,22 +15,73 @@ final class ConsoleActionCoordinator {
     private let drawer: DrawerState?
     private let sharing: ShareCoordinator?
     private let attachments: AttachmentStore?
+    private let skills: SkillsStore?
     private let notices: ConsoleNoticeState?
     private weak var client: JarvisClient?
     private let registry = ConsoleActionRegistry()
+    private var skillWorkspaceActionOwner: UUID?
+    private var skillWorkspaceActionHandler: ((ConsoleAction, ConsoleRequest) -> Outcome)?
 
     init(workspace: WorkspaceStore, display: DisplayWindowStore, placement: WindowPlacement,
          atlas: AtlasStore? = nil, panels: PanelStore? = nil, drawer: DrawerState? = nil,
          sharing: ShareCoordinator? = nil, attachments: AttachmentStore? = nil,
-         client: JarvisClient? = nil, notices: ConsoleNoticeState? = nil) {
+         client: JarvisClient? = nil, notices: ConsoleNoticeState? = nil,
+         skills: SkillsStore? = nil) {
         self.workspace = workspace; self.display = display; self.placement = placement
         self.atlas = atlas; self.panels = panels; self.drawer = drawer; self.sharing = sharing
         self.client = client
         self.attachments = attachments
         self.notices = notices
+        self.skills = skills
+        skills?.onInventoryMutation = { [weak self, weak workspace] in
+            workspace?.noteConsoleMutation()
+            self?.publishInventory()
+        }
     }
 
-    func inventory() -> [String: Any] { workspace.consoleInventory }
+    func inventory() -> [String: Any] {
+        var result = workspace.consoleInventory
+        result["skills"] = skills?.catalogInventory.map(Self.foundationValue) ?? []
+        if let skills {
+            result["skills_state"] = [
+                "selected_skill_id": skills.selectedSkillID.map { $0 as Any } ?? NSNull(),
+                "tab": skills.selectedTab,
+                "selected_step_id": skills.selectedStepID.map { $0 as Any } ?? NSNull(),
+                "selected_run_id": skills.selectedRunID.map { $0 as Any } ?? NSNull(),
+                "selected_example_id": skills.selectedExampleID.map { $0 as Any } ?? NSNull(),
+                "state_filter": skills.stateFilter,
+                "category_filter": skills.categoryFilter,
+                "steps": skills.selectedProcessInventory.map(Self.foundationValue),
+                "runs": skills.selectedRunInventory.map(Self.foundationValue),
+            ]
+        }
+        return result
+    }
+
+    func registerSkillWorkspaceActionHandler(
+        owner: UUID,
+        handler: @escaping (ConsoleAction, ConsoleRequest) -> Outcome
+    ) {
+        skillWorkspaceActionOwner = owner
+        skillWorkspaceActionHandler = handler
+    }
+
+    func unregisterSkillWorkspaceActionHandler(owner: UUID) {
+        guard skillWorkspaceActionOwner == owner else { return }
+        skillWorkspaceActionOwner = nil
+        skillWorkspaceActionHandler = nil
+    }
+
+    private static func foundationValue(_ value: JSONValue) -> Any {
+        switch value {
+        case .null: NSNull()
+        case .bool(let value): value
+        case .number(let value): value
+        case .string(let value): value
+        case .array(let values): values.map(foundationValue)
+        case .object(let fields): fields.mapValues(foundationValue)
+        }
+    }
 
     /// Route a native pointer/keyboard action through the same validated
     /// dispatcher used by voice requests. The negotiated identity is used
@@ -61,6 +112,20 @@ final class ConsoleActionCoordinator {
         var data = workspace.consoleInventoryJSON
         if case .object(var object) = data {
             object["attachments"] = .array(attachments?.consoleInventoryEntries ?? [])
+            object["skills"] = .array(skills?.catalogInventory ?? [])
+            if let skills {
+                object["skills_state"] = .object([
+                    "selected_skill_id": skills.selectedSkillID.map(JSONValue.string) ?? .null,
+                    "tab": .string(skills.selectedTab),
+                    "selected_step_id": skills.selectedStepID.map(JSONValue.string) ?? .null,
+                    "selected_run_id": skills.selectedRunID.map(JSONValue.string) ?? .null,
+                    "selected_example_id": skills.selectedExampleID.map(JSONValue.string) ?? .null,
+                    "state_filter": .string(skills.stateFilter),
+                    "category_filter": .string(skills.categoryFilter),
+                    "steps": .array(skills.selectedProcessInventory),
+                    "runs": .array(skills.selectedRunInventory),
+                ])
+            }
             // Dynamic content panels are the authoritative detachable
             // identities. Keep the legacy enum panels only as a fallback so
             // older clients still see their four fixed surfaces, while the
@@ -92,8 +157,69 @@ final class ConsoleActionCoordinator {
             case "memory": workspace.openMemoryGraph(); return .applied
             case "results": workspace.returnToWorkspace(); return .applied
             case "atlas": workspace.openAtlas(); return .applied
+            case "skills": workspace.openSkills(); return .applied
             default: return .invalid
             }
+        case .skillsSearch:
+            guard let skills, let query = stringArg(request, "query") else { return .unsupported }
+            return skills.setSearch(query) ? .applied : .invalid
+        case .skillsFilter:
+            guard let skills, let state = stringArg(request, "state"),
+                  let category = stringArg(request, "category") else { return .unsupported }
+            return skills.setFilters(state: state, category: category) ? .applied : .invalid
+        case .skillSelect:
+            guard let skills, let target = request.target else { return .unsupported }
+            return skills.selectSkill(target) ? .applied : .invalid
+        case .skillTab:
+            guard let skills, let tab = stringArg(request, "tab") else { return .unsupported }
+            return skills.selectTab(tab) ? .applied : .invalid
+        case .skillStepSelect:
+            guard let skills, let target = request.target else { return .unsupported }
+            if boolArg(request, "expanded") == false {
+                guard skills.selectedStepID == target else { return .invalid }
+                skills.clearStep()
+                return .applied
+            }
+            return skills.selectStep(target) ? .applied : .invalid
+        case .skillStepExplain:
+            guard let skills, let target = request.target,
+                  skills.selectStep(target) else { return .invalid }
+            workspace.openSkills()
+            return .stepDetailsOpened
+        case .skillRunSelect:
+            guard let skills, let target = request.target else { return .unsupported }
+            return skills.selectRun(target) ? .applied : .invalid
+        case .skillExamplePreview:
+            guard let skills, let target = request.target,
+                  let skillID = stringArg(request, "skill_id"),
+                  skills.selectSkill(skillID), skills.selectExample(target) else { return .invalid }
+            workspace.openSkills()
+            return .examplePreviewOpened
+        case .skillsRefresh, .skillBack, .skillActivityRetry, .skillActivityMore, .skillCreatorOpen:
+            guard let skillWorkspaceActionHandler else { return .unsupported }
+            return skillWorkspaceActionHandler(request.action, request)
+        case .skillDisplayTransfer:
+            guard let skills, let target = request.target,
+                  target == skills.selectedSkillID else { return .invalid }
+            guard NSScreen.screens.count > 1 else { return .unsupported }
+            guard workspace.sendToDisplay(.skillDetail(target)) else { return .invalid }
+            drawer?.placementRef?.openDisplay()
+            return .applied
+        case .skillRequestPreview:
+            guard let skills,
+                  let operation = stringArg(request, "operation"), operation == "draft",
+                  let skillID = stringArg(request, "skill_id"),
+                  let brief = stringArg(request, "task_brief"),
+                  let preview = skills.makeVoiceDraftPreview(skillID: skillID, taskBrief: brief) else {
+                return .invalid
+            }
+            return .previewReady(preview.id)
+        case .skillRequest:
+            guard let skills, stringArg(request, "operation") == "draft",
+                  let previewID = stringArg(request, "preview_id"),
+                  skills.consumeVoiceDraftPreview(previewID) else { return .invalid }
+            workspace.openSkills()
+            return .draftStarted
         case .resultSelect:
             guard let id = request.target.flatMap(UUID.init(uuidString:)),
                   workspace.results.contains(where: { $0.id == id }) else { return .invalid }
@@ -269,39 +395,43 @@ final class ConsoleActionCoordinator {
             let format = stringArg(request, "format") ?? "text"
             guard ["text", "png"].contains(format) else { return .invalid }
             if target == "memory" || target == "graph" {
-                guard format == "png", let id = workspace.activeID,
-                      let data = workspace.memoryGraph.imageFallback.image?.pngData() else { return .unsupported }
-                return sharing.beginImagePreview(resultID: id, pngData: data) ? .applied : .noop
+                // The memory graph is user-specific content and its bitmap has
+                // no payload-level privacy classification. A public active
+                // result cannot authorize exporting an unrelated graph image.
+                return .unsupported
             }
             if target == "comparison" {
                 guard format == "text", let first = workspace.activeResult,
                       let second = workspace.comparisonResult else { return .invalid }
+                guard !first.payload.isProtectedLocal,
+                      !second.payload.isProtectedLocal else { return .unsupported }
                 let text = WorkspaceResultExport.text(first) + "\n--- Comparison ---\n\n" + WorkspaceResultExport.text(second)
-                sharing.beginPreview(first, text: text)
-                return .applied
+                return sharing.beginPreview(first, text: text) == nil ? .unsupported : .applied
             }
             guard let id = UUID(uuidString: target),
                   let result = workspace.results.first(where: { $0.id == id }) else { return .invalid }
+            guard !result.payload.isProtectedLocal else { return .unsupported }
             if format == "text" {
                 let scope = stringArg(request, "scope") ?? "whole"
                 let ordinal = intArg(request, "ordinal")
                 guard let text = WorkspaceResultExport.scopedText(result, scope: scope, ordinal: ordinal) else { return .invalid }
-                sharing.beginPreview(result, text: text)
-                return .applied
+                return sharing.beginPreview(result, text: text) == nil ? .unsupported : .applied
             }
-            guard let data = workspace.memoryGraph.imageFallback.image?.pngData() else {
-                return .unsupported
-            }
-            return sharing.beginImagePreview(resultID: id, pngData: data) ? .applied : .noop
+            // Do not substitute the memory graph bitmap for an arbitrary
+            // result's PNG share. Until image bytes carry their own result
+            // identity and privacy classification, this route fails closed.
+            return .unsupported
         case .shareCopy:
-            guard let sharing, sharing.preview != nil else { return .invalid }
+            guard let sharing, let preview = sharing.preview else { return .invalid }
+            guard !isProtectedResult(preview.resultID) else { return .unsupported }
             return sharing.copy() ? .applied : .noop
         case .shareCancel:
             guard let sharing, sharing.preview != nil else { return .noop }
             sharing.cancel()
             return .applied
         case .shareSave:
-            guard let sharing, sharing.preview != nil else { return .invalid }
+            guard let sharing, let preview = sharing.preview else { return .invalid }
+            guard !isProtectedResult(preview.resultID) else { return .unsupported }
             if let folder = workspace.exporter.exportFolderURL,
                let preview = sharing.preview {
                 let suffix = preview.format == "png" ? "png" : "txt"
@@ -312,7 +442,8 @@ final class ConsoleActionCoordinator {
             }
             return .pendingUser
         case .sharePicker:
-            guard let sharing, sharing.preview != nil else { return .invalid }
+            guard let sharing, let preview = sharing.preview else { return .invalid }
+            guard !isProtectedResult(preview.resultID) else { return .unsupported }
             return sharing.presentPicker() ? .pendingUser : .noop
         case .shareSource:
             guard let id = request.target.flatMap(UUID.init(uuidString:)) ?? workspace.activeID,
@@ -476,6 +607,10 @@ final class ConsoleActionCoordinator {
         case .sharedContent:
             return .unsupported
         }
+    }
+
+    private func isProtectedResult(_ id: UUID) -> Bool {
+        workspace.results.first(where: { $0.id == id })?.payload.isProtectedLocal ?? false
     }
 
     private func stringArg(_ request: ConsoleRequest, _ key: String) -> String? {

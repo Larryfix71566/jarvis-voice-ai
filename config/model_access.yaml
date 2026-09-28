@@ -82,6 +82,15 @@ workloads:
     priority: background
     capabilities: [text]
     fallback_routes: []
+  # Public fixtures only. This profile exists to exercise the same classifier
+  # adapter on synthetic, approved-external data without weakening live memory.
+  memory_shadow:
+    profile: claude-sonnet-5
+    route: direct_api
+    privacy: approved_external
+    priority: background
+    capabilities: [text]
+    fallback_routes: []
   background:
     profile: claude-sonnet-5
     route: direct_api

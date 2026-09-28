@@ -45,8 +45,9 @@ def test_every_table_has_default_local_user_id(tmp_path):
                 missing.append(name)
                 continue
             assert col["notnull"] == 1, f"{name}.user_id must be NOT NULL"
-            assert col["dflt_value"] == "'local'", (
-                f"{name}.user_id default is {col['dflt_value']!r}, expected \"'local'\""
+            expected_default = "'larry'" if name == "client_tokens" else "'local'"
+            assert col["dflt_value"] == expected_default, (
+                f"{name}.user_id default is {col['dflt_value']!r}, expected {expected_default!r}"
             )
         assert not missing, f"tables missing user_id: {missing}"
     finally:

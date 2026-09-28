@@ -6,10 +6,10 @@ that unit tests alone prove containment. No production data is used.
 """
 import argparse
 import json
-from pathlib import Path
 import socket
 import tempfile
 import threading
+from pathlib import Path
 
 from control import Controller, SandboxError
 
@@ -44,6 +44,10 @@ def connect(host, port):
 result['host_gateway_blocked'] = gateway is not None and not connect(gateway, port)
 result['public_ipv4_blocked'] = not connect('1.1.1.1', 443)
 result['metadata_address_blocked'] = not connect('169.254.169.254', 80)
+ipv6_route = subprocess.run(['/sbin/route', '-n', 'get', '-inet6', 'default'], capture_output=True, text=True)
+ipv6_route_fields = {line.split(':', 1)[0].strip() for line in ipv6_route.stdout.splitlines() if ':' in line}
+result['ipv6_default_route_observed'] = (ipv6_route.returncode == 0 and
+    {'gateway', 'interface'}.issubset(ipv6_route_fields))
 result['public_ipv6_connection_failed'] = not connect('2606:4700:4700::1111', 443)
 result['guest_memory_bytes'] = int(subprocess.check_output(['/usr/sbin/sysctl', '-n', 'hw.memsize']))
 result['guest_cpu_count'] = int(subprocess.check_output(['/usr/sbin/sysctl', '-n', 'hw.ncpu']))
@@ -51,6 +55,36 @@ result['virtualized'] = subprocess.check_output(['/usr/sbin/sysctl', '-n', 'kern
 result['resource_limits_match'] = result['guest_memory_bytes'] == 8192 * 1024 * 1024 and result['guest_cpu_count'] == 4
 print(json.dumps(result))
 '''
+
+
+def containment_acceptance_fields(observations: dict) -> dict:
+    """Return a full-containment claim only with affirmative IPv6 evidence."""
+    ipv6_proven = (
+        observations.get('ipv6_active_route_verified') is True
+        and observations.get('ipv6_canary_blocked') is True
+    )
+    complete = observations.get('observed_checks_passed') is True and ipv6_proven
+    if ipv6_proven:
+        ipv6_status = 'verified_blocked'
+        reason = None
+    else:
+        ipv6_status = 'unverified'
+        if observations.get('ipv6_default_route_observed') is False:
+            reason = (
+                'The guest reported no configured IPv6 default route. The failed '
+                'connection is inconclusive; an active-route IPv6 canary is required.'
+            )
+        else:
+            reason = (
+                'A failed connection alone does not distinguish filtering from absent '
+                'IPv6 routing; no active-route canary was run.'
+            )
+    return {
+        'ipv6_containment_status': ipv6_status,
+        'ipv6_containment_reason': reason,
+        'full_network_containment_proven': complete,
+        'acceptance_complete': complete,
+    }
 
 
 def main():
@@ -113,7 +147,9 @@ def main():
     result['expected_public_network_behavior'] = result['public_ipv4_blocked'] is (not args.provisioning)
     required.append('expected_public_network_behavior')
     result['observed_checks_passed'] = all(result.get(name) is True for name in required)
-    result['ipv6_limit'] = 'A failed connection alone does not distinguish filtering from absent IPv6 routing.'
+    # Softnet's configured CIDR policy does not establish IPv6 filtering. Keep
+    # ordinary observations distinct from complete network-containment proof.
+    result.update(containment_acceptance_fields(result))
     filename = 'provisioning-containment-observations.json' if args.provisioning else 'containment-observations.json'
     report = controller.task_dir(args.task) / filename
     report.write_text(json.dumps(result, indent=2) + '\n')

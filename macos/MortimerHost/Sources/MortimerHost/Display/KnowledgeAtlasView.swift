@@ -9,8 +9,8 @@ struct KnowledgeAtlasView: View {
     let coordinator: ConsoleActionCoordinator?
     @Environment(WorkspaceStore.self) private var workspace
     @Environment(AtlasStore.self) private var atlas
+    @Environment(AgentRunStore.self) private var agentRuns
     @EnvironmentObject private var client: JarvisClient
-    @State private var contextTask: Task<Void, Never>?
     private let columns = [GridItem(.adaptive(minimum: 260, maximum: 360), spacing: 20)]
 
     init(coordinator: ConsoleActionCoordinator? = nil) {
@@ -19,30 +19,48 @@ struct KnowledgeAtlasView: View {
 
     var body: some View {
         ScrollView {
-            if atlas.cards.isEmpty {
-                ContentUnavailableView("Atlas is empty", systemImage: "square.grid.2x2",
-                    description: Text("Research, memory, architecture and plan context will appear here."))
-            } else {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 20) {
-                    ForEach(atlas.visibleCards) { card in
-                        Button {
-                            guard card.kind == .result else { return }
-                            if let coordinator {
-                                _ = coordinator.executePointer(.resultSelect, target: card.id.uuidString)
-                            } else {
-                                workspace.select(card.id)
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Text("Knowledge Atlas").font(.title2.weight(.semibold))
+                    Spacer()
+                    Button { refreshContext(force: true) } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .accessibilityLabel("Refresh Knowledge Atlas sources")
+                }
+                sourceHealthStrip
+
+                if atlas.cards.isEmpty {
+                    if AtlasContextSource.allCases.contains(where: {
+                        atlas.sourceHealth[$0]?.phase == .failed
+                    }) {
+                        ContentUnavailableView("Atlas sources unavailable",
+                            systemImage: "exclamationmark.icloud",
+                            description: Text("Some sources could not be loaded. Retry to try again."))
+                    } else if AtlasContextSource.allCases.contains(where: {
+                        atlas.sourceHealth[$0]?.phase == .loading
+                    }) {
+                        ProgressView("Loading Atlas sources…")
+                            .frame(maxWidth: .infinity, minHeight: 180)
+                    } else {
+                        ContentUnavailableView("Atlas is empty", systemImage: "square.grid.2x2",
+                            description: Text("Research, memory, architecture and plan context will appear here."))
+                    }
+                } else {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: 20) {
+                        ForEach(atlas.visibleCards) { card in
+                            AtlasCardButton(card: card, selected: workspace.activeID == card.id) {
+                                if let coordinator {
+                                    _ = coordinator.executePointer(.resultSelect, target: card.id.uuidString)
+                                } else {
+                                    workspace.select(card.id)
+                                }
                             }
-                        } label: {
-                            AtlasCardView(card: card, selected: workspace.activeID == card.id)
                         }
-                        .buttonStyle(.plain)
-                        .disabled(card.kind != .result)
-                        .accessibilityLabel(card.kind == .result
-                            ? "Open atlas result \(card.title)"
-                            : "Atlas \(card.kind.label): \(card.title)")
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(16)
         .scaleEffect(atlas.zoomScale, anchor: .center)
@@ -53,10 +71,73 @@ struct KnowledgeAtlasView: View {
             refreshContext()
         }
         .onDisappear {
-            contextTask?.cancel()
-            contextTask = nil
+            cancelContextRefreshes()
         }
         .onChange(of: workspace.results) { _, _ in syncResults() }
+        .onChange(of: workspace.memoryGraph.graph) { _, graph in syncGraphSource(graph) }
+        .onChange(of: agentRuns.lastCompleted) { _, _ in refreshRuns() }
+        .onChange(of: client.state) { _, state in
+            if case .connected = state { refreshContext() }
+        }
+    }
+
+    private var sourceHealthStrip: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                sourceStatusChip(.memory)
+                sourceStatusChip(.architecture)
+                sourceStatusChip(.plan)
+                sourceStatusChip(.runs)
+                sourceStatusChip(.memoryGraph)
+            }
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private func sourceStatusChip(_ source: AtlasContextSource) -> some View {
+        let health = atlas.sourceHealth[source] ?? AtlasSourceHealth()
+        return Label(sourceStatusText(health), systemImage: sourceStatusIcon(health))
+            .font(.caption)
+            .foregroundStyle(health.phase == .failed ? AppTheme.attn : AppTheme.textDim)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(AppTheme.panel, in: Capsule())
+            .accessibilityLabel("\(source.label): \(sourceStatusText(health))")
+    }
+
+    private func sourceStatusText(_ health: AtlasSourceHealth) -> String {
+        switch health.phase {
+        case .idle: return "Not loaded"
+        case .loading: return "Loading"
+        case .loaded:
+            if health.stale { return "Stale · \(lastSuccessTime(health))" }
+            return health.lastSuccessAt.map {
+                "Updated \($0.formatted(date: .omitted, time: .shortened))"
+            } ?? "Ready"
+        case .empty:
+            return health.lastSuccessAt.map {
+                "No data · \($0.formatted(date: .omitted, time: .shortened))"
+            } ?? "No data"
+        case .failed:
+            let category = health.failure?.rawValue ?? "unavailable"
+            return health.stale
+                ? "Stale · \(category) · \(lastSuccessTime(health))"
+                : "Unavailable · \(category)"
+        }
+    }
+
+    private func lastSuccessTime(_ health: AtlasSourceHealth) -> String {
+        health.lastSuccessAt?.formatted(date: .omitted, time: .shortened) ?? "last good"
+    }
+
+    private func sourceStatusIcon(_ health: AtlasSourceHealth) -> String {
+        switch health.phase {
+        case .idle: return "circle"
+        case .loading: return "arrow.triangle.2.circlepath"
+        case .loaded: return health.stale ? "clock" : "checkmark.circle.fill"
+        case .empty: return "minus.circle"
+        case .failed: return "exclamationmark.circle.fill"
+        }
     }
 
     private func syncResults() {
@@ -68,22 +149,73 @@ struct KnowledgeAtlasView: View {
         })
     }
 
-    private func refreshContext() {
-        contextTask?.cancel()
+    private func refreshContext(force: Bool = false) {
         let api = client.admin
-        contextTask = Task { @MainActor in
-            async let memory = api.memoryOverview()
-            async let architecture = api.architectureReference()
-            async let plan = api.planJob()
-            async let runs = api.runsTyped()
-            let context = Self.contextCards(
-                memory: try? await memory,
-                architecture: try? await architecture,
-                plan: try? await plan,
-                runs: try? await runs,
-                graph: workspace.memoryGraph.graph)
-            guard !Task.isCancelled else { return }
-            atlas.replaceContext(context)
+        let classify = Self.failureCategory
+        atlas.refresh(source: .memory, force: force, classifyFailure: classify) {
+            let value = try await api.memoryOverview()
+            return Self.cards(for: .memory, memory: value)
+        }
+        atlas.refresh(source: .architecture, force: force, classifyFailure: classify) {
+            let value = try await api.architectureReference()
+            guard value.ok else { throw AtlasInvalidResponse() }
+            return Self.cards(for: .architecture, architecture: value)
+        }
+        atlas.refresh(source: .plan, force: force, classifyFailure: classify) {
+            let value = try await api.planJob()
+            return Self.cards(for: .plan, plan: value)
+        }
+        atlas.refresh(source: .runs, force: force, classifyFailure: classify) {
+            let value = try await api.runsTyped()
+            return Self.cards(for: .runs, runs: value)
+        }
+        syncGraphSource(workspace.memoryGraph.graph)
+    }
+
+    /// Agent completion is the existing source-change event for run history.
+    /// Refresh only that projection; changing or moving an Atlas presentation
+    /// must not refetch unrelated sources or create another result request.
+    private func refreshRuns() {
+        let api = client.admin
+        atlas.refresh(source: .runs, classifyFailure: Self.failureCategory) {
+            let value = try await api.runsTyped()
+            return Self.cards(for: .runs, runs: value)
+        }
+    }
+
+    private func cancelContextRefreshes() {
+        atlas.cancelRefreshes()
+    }
+
+    private func syncGraphSource(_ graph: MemoryGraphResponse?) {
+        let generation = atlas.beginRefresh(.memoryGraph)
+        _ = atlas.completeRefresh(.memoryGraph, generation: generation,
+            cards: Self.cards(for: .memoryGraph, graph: graph), empty: graph == nil)
+    }
+
+    private static func failureCategory(_ error: Error) -> AtlasFailureCategory {
+        if error is AtlasInvalidResponse { return .invalidResponse }
+        if let error = error as? URLError, error.code == .timedOut { return .timedOut }
+        if error is DecodingError { return .invalidResponse }
+        return .unavailable
+    }
+
+    private struct AtlasInvalidResponse: Error {}
+
+    private static func cards(for source: AtlasContextSource,
+                              memory: MemoryOverview? = nil,
+                              architecture: ArchitectureReference? = nil,
+                              plan: JSONValue? = nil,
+                              runs: RunsList? = nil,
+                              graph: MemoryGraphResponse? = nil) -> [AtlasCard] {
+        let all = contextCards(memory: memory, architecture: architecture,
+                               plan: plan, runs: runs, graph: graph)
+        switch source {
+        case .memory: return all.filter { $0.kind == .memory }
+        case .architecture: return all.filter { $0.kind == .architecture }
+        case .plan: return all.filter { $0.kind == .plan }
+        case .runs: return all.filter { $0.kind == .run }
+        case .memoryGraph: return all.filter { $0.kind == .memoryGraph }
         }
     }
 

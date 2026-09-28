@@ -229,17 +229,30 @@ struct TopBarView: View {
 
 /// App.css brand-breathe — the 3.2s opacity cycle on the brand dot.
 private struct BreathingDot: View {
+    @Environment(\.mortimerReduceMotion) private var reduceMotion
     @State private var dim = false
     var body: some View {
         Circle()
             .fill(AppTheme.accent)
             .frame(width: 8, height: 8)
             .shadow(color: AppTheme.accent, radius: 5)
-            .opacity(dim ? 0.5 : 1)
+            .opacity(reduceMotion ? 1 : (dim ? 0.5 : 1))
             .onAppear {
-                withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
-                    dim = true
+                startBreathingIfAllowed()
+            }
+            .onChange(of: reduceMotion) { _, isReduced in
+                if isReduced {
+                    withAnimation(nil) { dim = false }
+                } else {
+                    startBreathingIfAllowed()
                 }
             }
+    }
+
+    private func startBreathingIfAllowed() {
+        guard !reduceMotion else { return }
+        withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+            dim = true
+        }
     }
 }

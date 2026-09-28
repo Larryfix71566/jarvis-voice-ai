@@ -31,6 +31,16 @@ public enum ConsoleAction: String, Codable, Sendable, CaseIterable {
     case inputCancel = "input_cancel", inputNewConversation = "input_new_conversation"
     case exportFolderChoose = "export_folder_choose", exportFolderClear = "export_folder_clear"
     case sharedContent = "shared_content"
+    case skillsSearch = "skills_search", skillsFilter = "skills_filter"
+    case skillSelect = "skill_select", skillTab = "skill_tab"
+    case skillStepSelect = "skill_step_select", skillStepExplain = "skill_step_explain"
+    case skillRunSelect = "skill_run_select"
+    case skillExamplePreview = "skill_example_preview"
+    case skillRequestPreview = "skill_request_preview", skillRequest = "skill_request"
+    case skillsRefresh = "skills_refresh", skillBack = "skill_back"
+    case skillDisplayTransfer = "skill_display_transfer"
+    case skillActivityRetry = "skill_activity_retry", skillActivityMore = "skill_activity_more"
+    case skillCreatorOpen = "skill_creator_open"
 }
 
 public struct ConsoleHello: Codable, Sendable, Equatable {

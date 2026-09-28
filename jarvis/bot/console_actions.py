@@ -17,7 +17,7 @@ CONSOLE_ACTION_SCHEMA = {
     "type": "function",
     "function": {
         "name": "console_action",
-        "description": "Change the visible Mortimer Command Console view or result selection.",
+        "description": "Navigate Mortimer's existing Command Console, results, Atlas, and Skills workspace. Skills actions search/filter the loaded library, refresh its catalog, return from compact skill details to the library, transfer the listed selected skill detail to the supporting display, retry or load more recorded activity, open a listed skill/process step/run, and open a declared synthetic matcher example. skill_creator_open only opens the existing skill composer when authoring is available; it does not create or submit a draft. For skill_step_select, target a listed step ID; set args.expanded=false only to collapse the currently selected step. To create a skill, first call skill_request_preview with operation=draft, skill_id, and task_brief; after its short preview response, call skill_request with operation=draft and the returned preview_id. This starts sandbox drafting only. Voice cannot publish, activate, or roll back a skill; opening a review PR requires the native exact-diff review.",
         "parameters": {
             "type": "object",
             "properties": {

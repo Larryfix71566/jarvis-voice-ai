@@ -1,0 +1,77 @@
+schema_version: 1
+skill_id: skill-creator
+display_name: Skill Creator
+category: development
+version: 0.1.0
+source:
+  kind: adapted
+  reference: https://github.com/anthropics/skills/tree/33375500bcea98d610eb30ce10ac4e59b89c390d/skills/skill-creator
+  immutable_revision: 33375500bcea98d610eb30ce10ac4e59b89c390d
+  license: Apache-2.0
+  license_path: LICENSE.txt
+  source_digest: 7293d1fb6fc7eddc22c663354a80cefb12bb14fbe2950a23cd7f7416605a6b30
+  adaptation_notes: Retains the upstream intent-to-draft, progressive-disclosure, example, and iterative-review concepts. Rewritten for Mortimer; removes upstream scripts, provider invocation, Claude CLI assumptions, and unsupported execution paths. Upstream tree digest is SHA-256 over sorted relative paths and exact file bytes.
+capabilities:
+  - draft_skill_packages
+  - review_skill_quality
+required_tools: []
+required_credentials: []
+reference_paths:
+  - references/authoring-quality.md
+  - references/mortimer-boundaries.md
+example_ids: []
+related_workflow_ids: []
+compatible_with:
+  - mortimer_skills_workspace
+process:
+  kind: linear
+  nodes:
+    - step_id: capture-intent
+      title: Capture intent
+      description: Reuse conversation context and resolve only material gaps in trigger, output, constraints, examples, and success criteria.
+      inputs: [user_request, conversation_context]
+      outputs: [skill_brief]
+      tools: []
+      approval: null
+      success_criteria: [intended capability and boundaries are explicit]
+      edges:
+        - to: inspect-catalog
+    - step_id: inspect-catalog
+      title: Inspect existing skills
+      description: Compare the brief with installed skills and workflows; prefer reuse or a focused revision when suitable.
+      inputs: [skill_brief, skill_catalog]
+      outputs: [reuse_or_new_decision]
+      tools: []
+      approval: null
+      success_criteria: [overlap and rationale are recorded]
+      edges:
+        - to: draft-package
+    - step_id: draft-package
+      title: Draft package
+      description: Write focused instructions, declared references, synthetic examples, and reviewed process metadata in the sandbox candidate.
+      inputs: [skill_brief, reuse_or_new_decision]
+      outputs: [candidate_package]
+      tools: []
+      approval: null
+      success_criteria: [package stays within scoped sandbox policy]
+      edges:
+        - to: offline-validate
+    - step_id: offline-validate
+      title: Validate offline
+      description: Run host-owned package checks and inspect representative trigger and boundary cases without model-provider calls.
+      inputs: [candidate_package]
+      outputs: [offline_receipts, unresolved_gaps]
+      tools: []
+      approval: null
+      success_criteria: [each reported result has a host-generated receipt]
+      edges:
+        - to: prepare-review
+    - step_id: prepare-review
+      title: Prepare review
+      description: Present the exact diff, immutable revision, receipts, limitations, and unresolved gaps through Mortimer's existing result area.
+      inputs: [candidate_package, offline_receipts, unresolved_gaps]
+      outputs: [review_candidate]
+      tools: []
+      approval: Review, merge, release, and activation remain separate human-controlled boundaries.
+      success_criteria: [candidate is reviewable and remains disabled]
+      edges: []

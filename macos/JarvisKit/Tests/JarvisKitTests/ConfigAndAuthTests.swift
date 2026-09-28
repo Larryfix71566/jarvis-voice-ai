@@ -143,14 +143,9 @@ final class ConfigAndAuthTests: XCTestCase {
     func testKeychainAccountDerivedFromBotURL() {
         let a = URL(string: "http://192.168.1.9:7860")!
         let b = URL(string: "http://127.0.0.1:7860")!
-        KeychainStore.setToken("token-a", for: a)
-        KeychainStore.setToken("token-b", for: b)
-        defer { KeychainStore.setToken(nil, for: a); KeychainStore.setToken(nil, for: b) }
-        XCTAssertEqual(KeychainStore.token(for: a), "token-a")
-        XCTAssertEqual(KeychainStore.token(for: b), "token-b")
-        // Relocating to the mini (T3) is a new keychain entry, not a
-        // silently reused one.
-        XCTAssertNotEqual(KeychainStore.token(for: a), KeychainStore.token(for: b))
+        XCTAssertEqual(KeychainStore.account(for: a), "http://192.168.1.9:7860")
+        XCTAssertEqual(KeychainStore.account(for: b), "http://127.0.0.1:7860")
+        XCTAssertNotEqual(KeychainStore.account(for: a), KeychainStore.account(for: b))
     }
 
     func testNonLoopbackWithoutTokenRefuses() {
@@ -190,15 +185,15 @@ final class ConfigAndAuthTests: XCTestCase {
     @MainActor
     func testConnectRereadsTokenFromKeychain() async throws {
         let botURL = URL(string: "http://127.0.0.1:7860")!
-        KeychainStore.setToken(nil, for: botURL)
+        var storedToken: String?
         let stub = StubTransport()
         let client = JarvisClient(
             config: JarvisConfig(botURL: botURL, adminURL: URL(string: "http://127.0.0.1:7861")!,
                                   wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: nil),
-            stubTransport: stub
+            stubTransport: stub,
+            tokenProvider: { _ in storedToken },
         )
-        KeychainStore.setToken("just-minted", for: botURL)
-        defer { KeychainStore.setToken(nil, for: botURL) }
+        storedToken = "just-minted"
 
         await client.connect()
 

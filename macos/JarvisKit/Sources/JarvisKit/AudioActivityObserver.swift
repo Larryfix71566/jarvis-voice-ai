@@ -108,18 +108,28 @@ public final class AudioActivityObserver: @unchecked Sendable {
     private var lastSeen: [TimeInterval?] = [nil, nil]      // 0 input, 1 playout
     private var _snapshot: AudioActivitySnapshot?
     private var _generation: UUID
+    private let automaticSamplingEnabled: Bool
 
     /// Called on the main actor with every new snapshot (≤30 Hz).
     private let publish: @Sendable (AudioActivitySnapshot) -> Void
     private let now: @Sendable () -> TimeInterval
 
-    public init(publish: @escaping @Sendable (AudioActivitySnapshot) -> Void,
-                now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
+    public convenience init(publish: @escaping @Sendable (AudioActivitySnapshot) -> Void,
+                            now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
+        self.init(publish: publish, now: now, automaticSamplingEnabled: true)
+    }
+
+    /// Test seam for deterministic stepped sampling. Production callers use
+    /// the public initializer, which always enables the 30 Hz timer.
+    init(publish: @escaping @Sendable (AudioActivitySnapshot) -> Void,
+         now: @escaping @Sendable () -> TimeInterval,
+         automaticSamplingEnabled: Bool) {
         let generation = UUID()
         self._generation = generation
         self.accumulator = AudioActivityAccumulator(generation: generation)
         self.publish = publish
         self.now = now
+        self.automaticSamplingEnabled = automaticSamplingEnabled
     }
 
     public var generation: UUID { lock.withLock { _generation } }
@@ -177,6 +187,7 @@ public final class AudioActivityObserver: @unchecked Sendable {
     }
 
     private func startTimer() {
+        guard automaticSamplingEnabled else { return }
         timer?.cancel()
         let timer = DispatchSource.makeTimerSource(queue: queue)
         let interval = 1.0 / Self.sampleHz

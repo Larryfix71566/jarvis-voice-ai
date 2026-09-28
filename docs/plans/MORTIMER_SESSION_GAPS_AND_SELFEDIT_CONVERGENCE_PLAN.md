@@ -98,6 +98,14 @@ deploy. *Why:* D2. The 16:48 loop was five re-derivations of a goal the
 system could have stored once. This is the same fix `prepare_commit` →
 `commit(action_id)` already embodies; selfedit simply never got it.
 
+**2026-09-25 follow-up:** the bare-goal compatibility route now requires a
+stable `run_id` and refuses missing/blank or overlong IDs before dispatch.
+The native Edit tab sends and retains this ID for same-process transport
+reconciliation; the MCP registry injects the owning SubAgent ID. This
+supersedes only the no-ID compatibility sentence above. Staged preview/confirm
+remains preferred and unchanged. See the current
+[GC24-02 receipt](../acceptance/verified-gap-closure/GC24-02-native-edit-tab-action-id-2026-09-25.md).
+
 **G3 — approval is never solicited before preview content exists.** Two
 layers, per the house rule that a prompt rule needs a mechanical backstop:
 (prompt) Supervisor rule 9 gains one sentence — never ask the user to

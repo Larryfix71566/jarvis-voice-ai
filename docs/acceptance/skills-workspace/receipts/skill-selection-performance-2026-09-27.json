@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "suite": "runtime_skill_selection_100_public_fixture",
+  "generated_at": "2026-09-27T23:15:31.357436+00:00",
+  "platform": "macOS-27.0-arm64-arm-64bit",
+  "python": "3.12.13",
+  "candidate_commit": "977f50bec7b77bd7d3381d3b8f3d63fa69bd00e2",
+  "candidate_dirty": true,
+  "fixture_sha256": "acc66d7f56fdba2a2a7c0ea6c2e90707e5c04bf75b947aa25273b07e4209a26a",
+  "fixture_skill_count": 100,
+  "synthetic_package_set_sha256": "0dc631c93766d2ca2004edade6266c09606b91e80832a5e5b208fab14ccd2ebb",
+  "synthetic_config_sha256": "eb1c9f7bbc75a5038941e07c70129c144578672b4ac21382686f937419b8e0f3",
+  "implementation_sha256": {
+    "scripts/benchmark_skill_selection.py": "afca062930dd148b8028b70e65f1ff22f0eba15b40f97b11d02512d19e17b2f6",
+    "jarvis/skill_selection.py": "b22ba9e3d9577e5fddb1eb4ec6cd13a0aecb966ce78b8e993b210e406a6b8f12",
+    "jarvis/agents/base.py": "9da34fd57fbeb6c885f8780ece83567108461d083f74ec21aeb3ea6719cb396d"
+  },
+  "snapshot_prewarm_ms": 790.617,
+  "snapshot_ttl_seconds": 60.0,
+  "evidence_mode": "real_runtime_selector_synthetic_packages_no_provider",
+  "provider_calls": 0,
+  "cases": {
+    "unique-trigger-hit": {
+      "samples": 100,
+      "p50_ms": 4.292,
+      "p95_ms": 4.393,
+      "max_ms": 4.48
+    },
+    "no-skill-short-query": {
+      "samples": 100,
+      "p50_ms": 4.282,
+      "p95_ms": 4.367,
+      "max_ms": 4.45
+    }
+  },
+  "acceptance_budget_ms_p95": 20.0,
+  "budget_passed": true
+}

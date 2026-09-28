@@ -6,8 +6,6 @@ model, no network.
 
 from __future__ import annotations
 
-import pytest
-
 from jarvis.workflows import (
     MATCH_THRESHOLD,
     Workflow,
@@ -114,14 +112,31 @@ class TestKillSwitchAndLoading:
     def test_missing_directory_is_not_an_error(self, tmp_path):
         assert load_workflows(tmp_path / "nope") == []
 
-    def test_one_bad_file_does_not_disable_the_rest(self, tmp_path, monkeypatch):
+    def test_one_bad_file_does_not_disable_the_rest(
+            self, tmp_path, monkeypatch, caplog):
         monkeypatch.delenv("JARVIS_WORKFLOWS_ENABLED", raising=False)
         (tmp_path / "good.yaml").write_text(
             "name: good\nwhen: commit and push\n", encoding="utf-8")
         (tmp_path / "broken.yaml").write_text("{[not yaml", encoding="utf-8")
-        (tmp_path / "incomplete.yaml").write_text("when: no name\n", encoding="utf-8")
+        private_path = tmp_path / "PRIVATE_WORKFLOW_PATH_CANARY.yaml"
+        private_path.write_text("when: no name\n", encoding="utf-8")
         loaded = load_workflows(tmp_path)
         assert [w.name for w in loaded] == ["good"]
+        assert "workflow_invalid reason=missing_name_or_when" in caplog.text
+        assert "PRIVATE_WORKFLOW_PATH_CANARY" not in caplog.text
+        assert str(tmp_path) not in caplog.text
+
+    def test_malformed_source_line_is_not_written_to_logs(self, tmp_path, monkeypatch, caplog):
+        monkeypatch.delenv("JARVIS_WORKFLOWS_ENABLED", raising=False)
+        secret = "WORKFLOW_SOURCE_CANARY"
+        (tmp_path / "private-name.yaml").write_text(
+            f"name: broken\nwhen: [{secret}\n", encoding="utf-8"
+        )
+
+        assert load_workflows(tmp_path) == []
+        assert secret not in caplog.text
+        assert "workflow_parse_failed error_type=" in caplog.text
+        assert "private-name.yaml" not in caplog.text
 
     def test_source_is_recorded_for_traceability(self, tmp_path, monkeypatch):
         monkeypatch.delenv("JARVIS_WORKFLOWS_ENABLED", raising=False)

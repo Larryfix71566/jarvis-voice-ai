@@ -1,0 +1,25 @@
+{
+  "task": "6af24d742e9e",
+  "source_commit": "ba82b7602f9d12e3e8202c78b2e57b39c8e80f5f",
+  "candidate": "33d8161aa31f6012bb6ddbeeeb10aa5cfcf37abdcce84e189875add0a2facc2a",
+  "desktop_probe": {
+    "returncode": 0,
+    "passed": true,
+    "seconds": 23.861,
+    "log_sha256": "adbe9a9199ac1cd291958992aa51394dbd50840d5c75fed5cd68600ea52742d9"
+  },
+  "native_app": {
+    "name": "native-app",
+    "argv": [
+      "swift",
+      "test",
+      "--package-path",
+      "macos/MortimerHost"
+    ],
+    "returncode": 0,
+    "passed": true,
+    "seconds": 226.426,
+    "log_sha256": "4e6cd6537e6468dafa9934417ae4a1709be88e272264860ab9b01d6b616300e0"
+  },
+  "passed": true
+}

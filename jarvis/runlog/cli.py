@@ -19,7 +19,7 @@ from datetime import datetime
 
 from jarvis.runlog.store import get_run, list_runs, parse_since
 
-_STATUSES = ("ok", "failed", "timeout", "running", "orphaned")
+_STATUSES = ("ok", "failed", "timeout", "cancelled", "running", "orphaned")
 
 
 def _local_time(iso_ts: str) -> str:
@@ -94,6 +94,16 @@ def _print_detail(detail: dict) -> None:
     if run.get("error"):
         print(f"error        {run['error']}")
     print(f"task         {run['task']}")
+    unresolved = detail.get("unresolved_tool_calls") or []
+    if unresolved:
+        print()
+        print("UNRESOLVED TOOL OUTCOMES — verify before retrying:")
+        for call in unresolved:
+            print(
+                f"  {call.get('status', 'unresolved')}: "
+                f"{call.get('tool') or 'tool'} "
+                f"(call_id={call.get('tool_call_id')})"
+            )
     print()
     print("-- events --")
     for ev in detail["events"]:

@@ -4,7 +4,16 @@ import sqlite3
 
 import pytest
 
-from jarvis.db import MIGRATION_0020_user_id, MIGRATIONS, get_conn, now_iso, run_migrations
+from jarvis.db import (
+    MIGRATIONS,
+    MIGRATION_0020_user_id,
+    claim_execution_action,
+    get_conn,
+    get_execution_action,
+    now_iso,
+    run_migrations,
+    update_execution_action,
+)
 
 EXPECTED_TABLES = {
     "migrations", "notes", "reminders", "conversations", "actions", "memories",
@@ -12,7 +21,14 @@ EXPECTED_TABLES = {
     "procedures", "procedures_fts", "council_rounds", "council_scores",
     "memory_reviews", "memory_extraction_cursor", "memory_extraction_pending",
     "memory_classification_shadow",
+    "memory_admission_jobs",
+    "memory_classification_budget_reservations",
+    "memory_admission_shadow",
     "model_route_preferences", "model_route_drafts",
+    "execution_action_claims",
+    "skill_events",
+    "client_tokens",
+    "skill_step_check_receipts",
 }
 
 EXPECTED_MIGRATION_IDS = [
@@ -33,6 +49,14 @@ EXPECTED_MIGRATION_IDS = [
     "0022_memory_automation",
     "0023_memory_classification_shadow",
     "0024_model_route_preferences",
+    "0025_memory_admission_jobs",
+    "0026_memory_classification_budget",
+    "0027_memory_admission_shadow",
+    "0028_agent_event_tool_call_identity",
+    "0029_execution_action_claims",
+    "0030_skill_events",
+    "0031_client_tokens",
+    "0032_skill_step_check_receipts",
 ]
 
 
@@ -46,6 +70,10 @@ def test_migrations_apply_cleanly_to_fresh_db(tmp_path):
     newly = run_migrations(conn)
     assert newly == EXPECTED_MIGRATION_IDS
     assert EXPECTED_TABLES <= _table_names(conn)
+    reservation_columns = {row["name"] for row in conn.execute(
+        "PRAGMA table_info(memory_classification_budget_reservations)"
+    )}
+    assert "user_id" in reservation_columns
     conn.close()
 
 
@@ -58,6 +86,34 @@ def test_migrations_are_idempotent(tmp_path):
     # Still exactly one recorded migration row per migration.
     rows = conn.execute("SELECT id FROM migrations").fetchall()
     assert [row["id"] for row in rows] == EXPECTED_MIGRATION_IDS
+    conn.close()
+
+
+def test_client_tokens_table_shape(tmp_path, monkeypatch):
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "client-tokens.db"))
+    applied = run_migrations()
+    assert "0031_client_tokens" in applied
+    conn = get_conn()
+    cols = {row["name"]: row for row in conn.execute(
+        "PRAGMA table_info(client_tokens)"
+    )}
+    assert set(cols) == {
+        "id", "user_id", "name", "token_hash", "created_at",
+        "last_used_at", "revoked_at",
+    }
+    assert cols["user_id"]["notnull"] == 1
+    assert cols["user_id"]["dflt_value"] == "'larry'"
+    assert cols["name"]["notnull"] == 1
+    assert cols["token_hash"]["notnull"] == 1
+    assert cols["created_at"]["notnull"] == 1
+    assert cols["last_used_at"]["notnull"] == 0
+    assert cols["revoked_at"]["notnull"] == 0
+    indices = {row["name"] for row in conn.execute(
+        "PRAGMA index_list(client_tokens)"
+    )}
+    assert any("name" in index or "token_hash" in index or "revoked" in index
+               for index in indices)
+    assert run_migrations() == []
     conn.close()
 
 
@@ -224,7 +280,8 @@ def test_migration_0010_applies_over_existing_0009_db(tmp_path):
     db_path = tmp_path / "upgrade.db"
     conn = get_conn(db_path)
     # Simulate a pre-v2 install: apply everything through 0009 only.
-    from jarvis.db import MIGRATIONS, now_iso as _now_iso
+    from jarvis.db import MIGRATIONS
+    from jarvis.db import now_iso as _now_iso
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS migrations "
@@ -270,6 +327,58 @@ def test_now_iso_is_utc_isoformat():
     assert "T" in stamp
 
 
+def test_execution_action_claim_is_durable_content_free_and_one_shot(tmp_path):
+    db_path = tmp_path / "action-claims.db"
+    conn = get_conn(db_path)
+    run_migrations(conn)
+    conn.close()
+
+    assert claim_execution_action("mcp-selfedit.plan_start", "run-a", db_path)
+    assert not claim_execution_action("mcp-selfedit.plan_start", "run-a", db_path)
+    assert claim_execution_action("mcp-selfedit.plan_start", "run-b", db_path)
+    assert update_execution_action(
+        "mcp-selfedit.plan_start", "run-a", "completed", db_path,
+    )
+    receipt = get_execution_action("mcp-selfedit.plan_start", "run-a", db_path)
+    assert receipt is not None
+    assert receipt["status"] == "completed"
+    assert set(receipt) == {
+        "user_id", "action_scope", "execution_id", "status", "created_at",
+        "updated_at",
+    }
+    assert not update_execution_action(
+        "mcp-selfedit.plan_start", "missing", "failed", db_path,
+    )
+    # Ownership scopes are independent; one local user cannot consume
+    # another user's execution identity.
+    assert claim_execution_action(
+        "mcp-selfedit.plan_start", "run-a", db_path, user_id="user-b",
+    )
+    other = get_execution_action(
+        "mcp-selfedit.plan_start", "run-a", db_path, user_id="user-b",
+    )
+    assert other is not None and other["user_id"] == "user-b"
+
+
+def test_execution_action_claim_allows_exactly_one_concurrent_owner(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    db_path = tmp_path / "action-claim-race.db"
+    conn = get_conn(db_path)
+    run_migrations(conn)
+    conn.close()
+    gate = Barrier(2)
+
+    def claim():
+        gate.wait(timeout=2)
+        return claim_execution_action("mcp-selfedit.plan_start", "shared-run", db_path)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = sorted(pool.map(lambda _: claim(), range(2)))
+    assert results == [False, True]
+
+
 def test_migration_0020_user_id_everywhere(tmp_path):
     """GC8 (gap-closure plan, 2026-09-04): every table except migrations,
     sqlite_* and *_fts* gains user_id TEXT NOT NULL DEFAULT 'local'. Same
@@ -298,6 +407,52 @@ def test_migration_0020_user_id_everywhere(tmp_path):
         conn.close()
 
 
+def test_migration_0028_preserves_existing_agent_events(tmp_path):
+    """GC24-02: an existing 0027 database gains nullable tool identity
+    without rewriting or losing its historical event rows."""
+    db_path = tmp_path / "0028-upgrade.db"
+    conn = get_conn(db_path)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS migrations "
+        "(id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)"
+    )
+    for migration_id, sql in MIGRATIONS:
+        if migration_id == "0028_agent_event_tool_call_identity":
+            break
+        conn.executescript(sql)
+        conn.execute(
+            "INSERT INTO migrations (id, applied_at) VALUES (?, ?)",
+            (migration_id, now_iso()),
+        )
+    conn.execute(
+        "INSERT INTO agent_events (run_id, seq, type, tool, args_preview, created_at) "
+        "VALUES ('legacy-run', 0, 'tool_call', 'legacy_tool', '{}', ?)",
+        (now_iso(),),
+    )
+    conn.commit()
+
+    assert run_migrations(conn) == [
+        "0028_agent_event_tool_call_identity",
+        "0029_execution_action_claims",
+        "0030_skill_events",
+        "0031_client_tokens",
+        "0032_skill_step_check_receipts",
+    ]
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(agent_events)")}
+    assert "tool_call_id" in columns
+    legacy = conn.execute(
+        "SELECT tool, args_preview, tool_call_id FROM agent_events "
+        "WHERE run_id='legacy-run'"
+    ).fetchone()
+    assert tuple(legacy) == ("legacy_tool", "{}", None)
+    index = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='index' "
+        "AND name='idx_agent_events_tool_call'"
+    ).fetchone()
+    assert index is not None
+    conn.close()
+
+
 def test_migration_0020_is_atomic(tmp_path, monkeypatch):
     """GC8: MIGRATION_0020_user_id is wrapped in BEGIN/COMMIT because
     run_migrations records the id only after executescript succeeds
@@ -306,7 +461,7 @@ def test_migration_0020_is_atomic(tmp_path, monkeypatch):
     and every later boot would die on "duplicate column name". This
     monkeypatches a bogus ALTER into the middle of the script and confirms
     NOTHING from it landed, not even the columns added before the failure."""
-    import jarvis.db as db
+    from jarvis import db
 
     db_path = tmp_path / "atomic.db"
     monkeypatch.setenv("JARVIS_DB_PATH", str(db_path))

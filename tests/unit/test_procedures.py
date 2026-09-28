@@ -193,6 +193,48 @@ def test_match_procedure_never_raises_on_empty_task(conn):
     assert match_procedure("analyst", "") is None
 
 
+def test_match_procedure_failure_redacts_task_agent_and_traceback(monkeypatch, caplog):
+    def fail_connect(*_args, **_kwargs):
+        raise RuntimeError("PROCEDURE_TASK_CANARY /private/procedure/db")
+
+    monkeypatch.setattr(procedures_module, "get_conn", fail_connect)
+    assert match_procedure("AGENT_CANARY", "weather Tokyo") is None
+    assert "procedures_match_failed error_type=RuntimeError" in caplog.text
+    assert "AGENT_CANARY" not in caplog.text
+    assert "PROCEDURE_TASK_CANARY" not in caplog.text
+    assert "/private/procedure/db" not in caplog.text
+    assert "Traceback" not in caplog.text
+
+
+def test_mark_used_failure_redacts_procedure_id_and_exception(monkeypatch, caplog):
+    def fail_connect(*_args, **_kwargs):
+        raise RuntimeError("PROCEDURE_BACKEND_CANARY")
+
+    monkeypatch.setattr(procedures_module, "get_conn", fail_connect)
+    procedures_module.mark_used(731904)
+    assert "procedures_mark_used_failed error_type=RuntimeError" in caplog.text
+    assert "731904" not in caplog.text
+    assert "PROCEDURE_BACKEND_CANARY" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_procedure_learning_failure_redacts_run_id_and_agent(
+    enabled_settings, monkeypatch, caplog,
+):
+    import jarvis.procedures as mod
+
+    def fail_get_run(*_args, **_kwargs):
+        raise RuntimeError("LEARNING_TASK_CANARY /private/run/log")
+
+    monkeypatch.setattr(mod, "get_run", fail_get_run)
+    await learn_from_run("RUN_ID_CANARY", "AGENT_CANARY")
+    assert "procedures_learn_failed error_type=RuntimeError" in caplog.text
+    assert "RUN_ID_CANARY" not in caplog.text
+    assert "AGENT_CANARY" not in caplog.text
+    assert "LEARNING_TASK_CANARY" not in caplog.text
+    assert "/private/run/log" not in caplog.text
+
+
 # --- learn_from_run: candidate creation (D14 step 4/5, D16) ---------------
 
 

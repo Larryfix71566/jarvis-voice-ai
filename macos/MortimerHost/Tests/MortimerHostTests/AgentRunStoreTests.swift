@@ -30,6 +30,40 @@ final class AgentRunStoreTests: XCTestCase {
         XCTAssertFalse(run.modelFallback)
     }
 
+    func testCreatorProgressAndCompletionTargetOnlyItsDeveloperRun() throws {
+        let store = AgentRunStore()
+        store.apply(try working(name: "developer", runId: "creator-run"))
+        store.apply(try working(name: "developer", runId: "other-run"))
+        store.apply(try message("""
+        {"type":"agent_tool","name":"developer","run_id":"creator-run","tool":"file_read"}
+        """))
+        store.apply(try message("""
+        {"type":"agent","state":"done","name":"developer","run_id":"creator-run","ok":true}
+        """))
+        let creator = try XCTUnwrap(store.runs.first(where: { $0.runId == "creator-run" }))
+        let other = try XCTUnwrap(store.runs.first(where: { $0.runId == "other-run" }))
+        XCTAssertEqual(creator.tools, ["file_read"])
+        XCTAssertNotNil(creator.doneAt)
+        XCTAssertNil(other.doneAt)
+        XCTAssertTrue(other.tools.isEmpty)
+    }
+
+    func testUnknownRunCannotFallBackToAnUnidentifiedDeveloperCard() throws {
+        let store = AgentRunStore()
+        store.apply(try working(name: "developer", runId: ""))
+        for payload in [
+            #"{"type":"agent_tool","name":"developer","run_id":"unknown","tool":"file_read"}"#,
+            #"{"type":"agent_activity","name":"developer","run_id":"unknown","tool":"file_read","ok":true}"#,
+            #"{"type":"agent","state":"done","name":"developer","run_id":"unknown","ok":true}"#
+        ] {
+            store.apply(try message(payload))
+        }
+        let run = try XCTUnwrap(store.runs.first)
+        XCTAssertNil(run.doneAt)
+        XCTAssertTrue(run.tools.isEmpty)
+        XCTAssertTrue(run.activity.isEmpty)
+    }
+
     func testActivityMatchedByRunId() throws {
         let store = AgentRunStore()
         store.apply(try working(name: "analyst", runId: "r1"))

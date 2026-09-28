@@ -14,7 +14,6 @@ import pytest
 
 from mcp_servers.mcp_screen import logic
 
-
 # --- screen_enabled / kill switch -----------------------------------------
 
 
@@ -146,25 +145,71 @@ def _write_fake_screenshot(tmp_path: Path, size_bytes: int = 5000) -> Path:
 
 
 class TestScreenView:
-    def test_happy_path_returns_answer_and_deletes_temp_file(self, tmp_path, monkeypatch):
+    def test_production_vision_route_uses_shared_execution_boundary(self, tmp_path, monkeypatch):
+        import jarvis.vision as vision
+        from jarvis.model_routing import AccessRoute, ResolvedModelRoute
+
+        monkeypatch.delenv("JARVIS_SCREEN_ENABLED", raising=False)
+        monkeypatch.setenv("JARVIS_MODEL_ROUTING_ENABLED", "1")
+        shot = _write_fake_screenshot(tmp_path)
+        expected_image = shot.read_bytes()
+        route = ResolvedModelRoute(
+            workload="vision", profile_name="vision-profile", model="vision-model",
+            provider="openai", base_url="https://example.invalid/v1/",
+            route=AccessRoute(
+                "direct_api", "openai_compatible", "provider_api", "VISION_API_KEY",
+                "approved_external", capabilities=("text", "images"),
+            ),
+            api_key_env="VISION_API_KEY", identity="openai/vision-model",
+            priority="interactive",
+        )
+        monkeypatch.setattr(vision, "resolve_vision_execution_route", lambda **kw: route)
+        calls = []
+
+        async def analyze(items, question, request_id, **kwargs):
+            calls.append((items, question, request_id, kwargs))
+            return "A terminal is open."
+
+        monkeypatch.setattr(logic, "analyze_shared_content_via_boundary", analyze)
+        result = logic.screen_view("what is open?", capture_fn=lambda _display: shot)
+
+        assert result["answer"] == "A terminal is open."
+        assert result["profile"] == "vision-profile"
+        assert calls[0][0][0].kind == "image"
+        assert calls[0][0][0].data == expected_image
+        assert calls[0][1] == "what is open?"
+        assert calls[0][2]
+        assert calls[0][3]["resolved_route"] is route
+        assert calls[0][3]["rung"] == "screen_vision"
+        assert calls[0][3]["policy_source"] == "user-requested-screen-view"
+        assert not shot.exists()
+
+    def test_happy_path_returns_answer_and_deletes_temp_file(self, tmp_path, monkeypatch, caplog):
+        caplog.set_level("INFO")
         monkeypatch.delenv("JARVIS_SCREEN_ENABLED", raising=False)
         monkeypatch.setenv("JARVIS_VISION_PROFILE", "claude-sonnet")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
         shot = _write_fake_screenshot(tmp_path)
 
+        question = "QUESTION_CANARY: what is on screen?"
+        answer = "ANSWER_CANARY: a code editor."
         result = logic.screen_view(
-            "what is on screen",
+            question,
             display=2,
             capture_fn=lambda d: shot,
-            client_factory=lambda profile: (FakeVisionClient("A code editor."), "claude-sonnet-5"),
+            client_factory=lambda profile: (FakeVisionClient(answer), "claude-sonnet-5"),
             registry=VISION_REGISTRY,
         )
 
-        assert result["answer"] == "A code editor."
+        assert result["answer"] == answer
         assert result["display"] == 2
         assert result["profile"] == "claude-sonnet"
         assert result["low_confidence"] is False
         assert not shot.exists()  # V4: never persists
+        assert "screen_view outcome=ok" in caplog.text
+        assert "QUESTION_CANARY" not in caplog.text
+        assert "ANSWER_CANARY" not in caplog.text
+        assert str(tmp_path) not in caplog.text
 
     def test_tiny_capture_reports_low_confidence_without_calling_vision(self, tmp_path, monkeypatch):
         monkeypatch.delenv("JARVIS_SCREEN_ENABLED", raising=False)
@@ -189,19 +234,24 @@ class TestScreenView:
         assert called == []  # never sent to the vision model
         assert not shot.exists()
 
-    def test_capture_failure_returns_error_dict(self, monkeypatch):
+    def test_capture_failure_returns_error_dict_without_logging_exception(
+        self, monkeypatch, caplog
+    ):
         monkeypatch.delenv("JARVIS_SCREEN_ENABLED", raising=False)
         monkeypatch.setenv("JARVIS_VISION_PROFILE", "claude-sonnet")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
 
         def failing_capture(d):
-            raise RuntimeError("screencapture exited 1")
+            raise RuntimeError("CAPTURE_CONTENT_CANARY /private/screen/shot.png")
 
         result = logic.screen_view(
             "what is on screen", capture_fn=failing_capture, registry=VISION_REGISTRY,
         )
         assert "error" in result
         assert "capture failed" in result["error"].lower()
+        assert "screen_view outcome=capture_failed error_type=RuntimeError" in caplog.text
+        assert "CAPTURE_CONTENT_CANARY" not in caplog.text
+        assert "/private/screen/shot.png" not in caplog.text
 
     def test_no_vision_profile_returns_error_dict_not_raise(self, monkeypatch):
         monkeypatch.delenv("JARVIS_SCREEN_ENABLED", raising=False)
@@ -244,7 +294,9 @@ class TestDiagnostics:
         return {"profiles": {"v": {"model": "m", "base_url": "http://x",
                                    "api_key_env": "K", "vision": True}}}
 
-    def test_low_confidence_capture_is_retained(self, tmp_path, monkeypatch):
+    def test_low_confidence_capture_is_retained_without_logging_its_path(
+        self, tmp_path, monkeypatch, caplog
+    ):
         """G3 — a wallpaper-only image is the artifact that proves a
         missing Screen Recording grant, and is the one image nearly
         certain to hold nothing private."""
@@ -264,6 +316,10 @@ class TestDiagnostics:
         kept = list((tmp_path / "screen").rglob("*.png"))
         assert len(kept) == 1
         assert "lowconf" in kept[0].name
+        assert "screen_lowconf_retained" in caplog.text
+        assert "screen_view outcome=low_confidence" in caplog.text
+        assert str(tmp_path) not in caplog.text
+        assert str(kept[0]) not in caplog.text
 
     def test_a_good_capture_is_never_retained(self, tmp_path, monkeypatch):
         """Tier 2 was NOT built. A successful capture still leaves no
@@ -326,18 +382,56 @@ class TestDiagnostics:
         assert not old.exists()
         assert new.exists()
 
-    def test_prune_never_raises_on_a_missing_directory(self, tmp_path):
+    def test_prune_failure_is_redacted_and_never_raises(
+        self, tmp_path, monkeypatch, caplog
+    ):
         import mcp_servers.mcp_screen.logic as mod
 
-        assert mod.prune_screen_logs(tmp_path / "nope") == 0
+        directory = tmp_path / "SCREEN_PATH_CANARY"
+        directory.mkdir()
+        original_rglob = Path.rglob
 
-    def test_retention_default_and_bad_values(self, monkeypatch):
+        def fail_rglob(path, pattern):
+            if path == directory:
+                raise RuntimeError(f"PRUNE_CANARY {path}")
+            return original_rglob(path, pattern)
+
+        monkeypatch.setattr(Path, "rglob", fail_rglob)
+        assert mod.prune_screen_logs(directory) == 0
+        assert "screen_prune_failed error_type=RuntimeError" in caplog.text
+        assert "PRUNE_CANARY" not in caplog.text
+        assert str(directory) not in caplog.text
+
+    def test_low_confidence_retention_failure_is_redacted(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        import mcp_servers.mcp_screen.logic as mod
+
+        directory = tmp_path / "SCREEN_PATH_CANARY"
+
+        def fail_write(_self, _data):
+            raise RuntimeError("RETENTION_CONTENT_CANARY")
+
+        monkeypatch.setattr(Path, "write_bytes", fail_write)
+        assert mod._retain_failed_capture(b"synthetic", 7, directory) is None
+        assert "screen_lowconf_retain_failed error_type=RuntimeError" in caplog.text
+        assert "RETENTION_CONTENT_CANARY" not in caplog.text
+        assert str(directory) not in caplog.text
+        assert "display=7" not in caplog.text
+
+    def test_retention_default_and_bad_values(self, monkeypatch, caplog):
         import mcp_servers.mcp_screen.logic as mod
 
         monkeypatch.delenv("JARVIS_SCREEN_RETENTION_HOURS", raising=False)
         assert mod.retention_hours() == 48
-        monkeypatch.setenv("JARVIS_SCREEN_RETENTION_HOURS", "banana")
+        monkeypatch.setenv(
+            "JARVIS_SCREEN_RETENTION_HOURS",
+            "RETENTION_CONFIG_CANARY /private/user/settings",
+        )
         assert mod.retention_hours() == 48        # unparseable falls back
+        assert "screen_retention_unparseable using=48" in caplog.text
+        assert "RETENTION_CONFIG_CANARY" not in caplog.text
+        assert "/private/user/settings" not in caplog.text
         monkeypatch.setenv("JARVIS_SCREEN_RETENTION_HOURS", "-5")
         assert mod.retention_hours() == 0         # never negative
 
@@ -392,10 +486,15 @@ class TestAuthFailureIsNamed:
         assert "ANTHROPIC_API_KEY" in result["error"]
         assert "captured fine" in result["error"]
 
-    def test_a_non_auth_failure_is_not_mislabelled(self, monkeypatch):
+    def test_a_non_auth_failure_is_not_mislabelled_and_redacts_log(
+        self, monkeypatch, caplog
+    ):
         """The mirror risk: calling every model error a dead key would send
         the user to rotate a working credential."""
         monkeypatch.setenv("ANTHROPIC_API_KEY", "fine")
-        result = self._run(RuntimeError("model is overloaded"))
+        result = self._run(RuntimeError("VISION_RESPONSE_CANARY /private/provider/body"))
         assert "auth_rejected" not in result
         assert "Vision model call failed" in result["error"]
+        assert "VISION_RESPONSE_CANARY" not in caplog.text
+        assert "/private/provider/body" not in caplog.text
+        assert "Traceback" not in caplog.text

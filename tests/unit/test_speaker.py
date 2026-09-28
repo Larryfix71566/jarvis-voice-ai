@@ -39,6 +39,14 @@ class TestThreshold:
         monkeypatch.setenv(speaker.THRESHOLD_ENV, "not-a-number")
         assert speaker.threshold() == speaker.DEFAULT_THRESHOLD
 
+    def test_unparseable_threshold_does_not_log_raw_setting(self, monkeypatch, caplog):
+        canary = "THRESHOLD_CANARY_9A42 /private/user/config"
+        monkeypatch.setenv(speaker.THRESHOLD_ENV, canary)
+        assert speaker.threshold() == speaker.DEFAULT_THRESHOLD
+        assert "speaker_threshold_unparseable" in caplog.text
+        assert canary not in caplog.text
+        assert "/private/user/config" not in caplog.text
+
 
 class TestVerdict:
     def test_verdict_passes_above_threshold(self, monkeypatch):
@@ -94,12 +102,33 @@ class TestProfileRoundtrip:
         path.write_bytes(b"not a numpy file")
         assert speaker.load_profile(path=path) is None
 
+    def test_corrupt_profile_log_omits_path_and_exception(self, tmp_path, caplog):
+        path = tmp_path / "PROFILE_PATH_CANARY" / "profile.npy"
+        path.parent.mkdir()
+        path.write_bytes(b"PROFILE_CONTENT_CANARY")
+
+        assert speaker.load_profile(path=path) is None
+        assert "speaker_profile_load_failed" in caplog.text
+        assert "ValueError" in caplog.text
+        assert "PROFILE_PATH_CANARY" not in caplog.text
+        assert "PROFILE_CONTENT_CANARY" not in caplog.text
+
     def test_metadata_roundtrip(self, tmp_path):
         path = tmp_path / "meta.json"
         meta = {"files": ["a.wav", "b.wav"], "pairwise_scores": [0.7, 0.8]}
         speaker.save_profile_metadata(meta, path=path)
         loaded = speaker.load_profile_metadata(path=path)
         assert loaded == meta
+
+    def test_corrupt_metadata_log_omits_path_and_exception(self, tmp_path, caplog):
+        path = tmp_path / "PROFILE_PATH_CANARY" / "profile.json"
+        path.parent.mkdir()
+        path.write_text("METADATA_CONTENT_CANARY {")
+
+        assert speaker.load_profile_metadata(path=path) is None
+        assert "speaker_profile_metadata_load_failed" in caplog.text
+        assert "PROFILE_PATH_CANARY" not in caplog.text
+        assert "METADATA_CONTENT_CANARY" not in caplog.text
 
 
 class TestEnrollRefusesSingleFile:
@@ -128,6 +157,77 @@ class TestEncoderLoadNeverDownloads:
 
     def test_download_is_a_distinct_entry_point(self):
         assert speaker.Encoder.download is not speaker.Encoder.load
+
+    def test_missing_model_log_omits_local_path(self, tmp_path, caplog):
+        caplog.set_level("INFO")
+        model_dir = tmp_path / "MODEL_PATH_CANARY"
+        assert speaker.Encoder(model_dir=model_dir).load() is False
+        assert "speaker_gate_inactive reason=model_dir_missing" in caplog.text
+        assert "MODEL_PATH_CANARY" not in caplog.text
+
+    def test_model_load_failure_log_omits_exception(self, tmp_path, monkeypatch, caplog):
+        import builtins
+
+        real_import = builtins.__import__
+
+        def failing_import(name, *args, **kwargs):
+            if name == "speechbrain.inference.speaker":
+                raise RuntimeError("MODEL_BACKEND_CANARY")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", failing_import)
+        encoder = speaker.Encoder(model_dir=tmp_path)
+        assert encoder.load() is False
+        assert "speaker_gate_inactive reason=model_load_failed" in caplog.text
+        assert "RuntimeError" in caplog.text
+        assert "MODEL_BACKEND_CANARY" not in caplog.text
+
+    def test_embed_failure_log_omits_backend_exception(self, monkeypatch, caplog):
+        import sys
+        from contextlib import nullcontext
+        from types import SimpleNamespace
+
+        class Tensor:
+            def unsqueeze(self, _axis):
+                return self
+
+        monkeypatch.setitem(
+            sys.modules,
+            "torch",
+            SimpleNamespace(from_numpy=lambda _samples: Tensor(), no_grad=nullcontext),
+        )
+
+        class Model:
+            def encode_batch(self, _waveform):
+                raise RuntimeError("AUDIO_BACKEND_CANARY")
+
+        encoder = speaker.Encoder()
+        encoder._model = Model()
+        assert encoder.embed(b"\x00\x00", 16000) is None
+        assert "speaker_gate_embed_failed" in caplog.text
+        assert "RuntimeError" in caplog.text
+        assert "AUDIO_BACKEND_CANARY" not in caplog.text
+
+    def test_embed_file_failure_log_omits_path_and_exception(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        import sys
+        from types import SimpleNamespace
+
+        path = tmp_path / "WAV_PATH_CANARY" / "voice.wav"
+        monkeypatch.setitem(
+            sys.modules,
+            "soundfile",
+            SimpleNamespace(read=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                RuntimeError("WAV_BACKEND_CANARY")
+            )),
+        )
+        encoder = speaker.Encoder()
+        encoder._model = object()
+        assert encoder.embed_file(path) is None
+        assert "speaker_gate_embed_file_failed" in caplog.text
+        assert "WAV_PATH_CANARY" not in caplog.text
+        assert "WAV_BACKEND_CANARY" not in caplog.text
 
 
 # ------------------------------------------------- S10: windowed verify

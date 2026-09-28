@@ -53,7 +53,13 @@ struct ConsoleActionRegistry: Sendable {
             case .number(let number):
                 guard number.isFinite else { return false }
             case .string(let text):
-                guard text.count <= 2_000 else { return false }
+                let isDraftBrief = request.action == .skillRequestPreview
+                    && request.args["task_brief"]?.stringValue == text
+                // Python's wire validator measures `len(str)` in Unicode
+                // code points. Swift Character counts grapheme clusters, so
+                // decomposed text could otherwise pass a larger native limit
+                // than the shared protocol permits.
+                guard text.unicodeScalars.count <= (isDraftBrief ? 8_000 : 2_000) else { return false }
             case .array(let values):
                 guard values.count <= 4 else { return false }
             default:
@@ -77,6 +83,41 @@ struct ConsoleActionRegistry: Sendable {
         if request.action == .graphFocus,
            let depth = request.args["depth"]?.intValue,
            !(1...4).contains(depth) { return false }
+        if request.action == .skillsSearch {
+            guard let query = request.args["query"]?.stringValue,
+                  query.unicodeScalars.count <= 256 else { return false }
+        }
+        if request.action == .skillsFilter {
+            guard let state = request.args["state"]?.stringValue,
+                  ["all", "installed", "proposed", "needs_attention"].contains(state),
+                  let category = request.args["category"]?.stringValue,
+                  !category.isEmpty, category.unicodeScalars.count <= 40 else { return false }
+        }
+        if request.action == .skillTab {
+            guard let tab = request.args["tab"]?.stringValue,
+                  ["overview", "process", "activity", "versions"].contains(tab) else { return false }
+        }
+        if request.action == .skillExamplePreview {
+            guard let skillID = request.args["skill_id"]?.stringValue,
+                  skillID.count <= 64,
+                  skillID.range(of: "^[a-z0-9]+(?:-[a-z0-9]+)*$", options: .regularExpression) != nil,
+                  let target = request.target,
+                  target.range(of: "^[a-z0-9]+(?:-[a-z0-9]+)*$", options: .regularExpression) != nil else { return false }
+        }
+        if request.action == .skillRequestPreview {
+            guard request.args["operation"]?.stringValue == "draft",
+                  let skillID = request.args["skill_id"]?.stringValue,
+                  skillID.unicodeScalars.count <= 64,
+                  skillID.range(of: "^[a-z0-9]+(?:-[a-z0-9]+)*$", options: .regularExpression) != nil,
+                  let brief = request.args["task_brief"]?.stringValue,
+                  !brief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  brief.unicodeScalars.count <= 8_000 else { return false }
+        }
+        if request.action == .skillRequest {
+            guard request.args["operation"]?.stringValue == "draft",
+                  let previewID = request.args["preview_id"]?.stringValue,
+                  UUID(uuidString: previewID) != nil else { return false }
+        }
         return true
     }
 
@@ -104,6 +145,12 @@ struct ConsoleActionRegistry: Sendable {
         .inputPaste: ["format"], .inputChoose: ["format"],
         .inputQuestion: ["question"], .inputNewConversation: ["confirmed"],
         .sharedContent: ["attachment_ids", "question"],
+        .skillsSearch: ["query"], .skillsFilter: ["state", "category"],
+        .skillTab: ["tab"],
+        .skillRequestPreview: ["operation", "skill_id", "task_brief"],
+        .skillRequest: ["operation", "preview_id"],
+        .skillExamplePreview: ["skill_id"],
+        .skillStepSelect: ["expanded"],
     ]
 
     private static func argumentsAreWellTyped(_ request: ConsoleRequest) -> Bool {
@@ -124,7 +171,9 @@ struct ConsoleActionRegistry: Sendable {
         }
         let stringFields = ["scope", "cursor", "mode", "side", "panel", "direction",
                             "source", "relation", "name", "group", "query", "kind",
-                            "screen_id", "key", "format", "question", "scope"]
+                            "screen_id", "key", "format", "question", "scope",
+                            "state", "category", "tab"]
+            + ["operation", "preview_id", "skill_id", "task_brief"]
         guard stringFields.allSatisfy(string), ["viewport", "points", "x", "y", "value"].allSatisfy(number),
               ["open", "visible", "collapsed", "enabled", "expanded", "confirmed"].allSatisfy(bool) else { return false }
         if let value = request.args["index"] { guard value.intValue != nil else { return false } }
@@ -150,7 +199,9 @@ struct ConsoleActionRegistry: Sendable {
         .atlasMove, .graphFocus, .graphSelect, .graphSelectEdge, .graphFilter,
         .graphGroup, .graphPath, .graphCenter, .graphMoveNode,
         .panelDetach, .panelMove, .panelReturn, .panelClose, .panelFocus,
-        .panelFullscreen, .inputRemove,
+        .panelFullscreen, .inputRemove, .skillSelect, .skillStepSelect,
+        .skillStepExplain, .skillRunSelect, .skillExamplePreview,
+        .skillDisplayTransfer,
     ]
 
     private static let secondaryTargetActions: Set<ConsoleAction> = [

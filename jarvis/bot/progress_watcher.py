@@ -66,7 +66,7 @@ from pipecat.frames.frames import (
 from pipecat.observers.base_observer import BaseObserver, FramePushed
 from pipecat.processors.frame_processor import FrameDirection
 
-from mcp_servers.mcp_selfedit.logic import ADMIN_URL_ENV, DEFAULT_ADMIN_URL
+from jarvis.urls import ADMIN_URL_ENV, DEFAULT_ADMIN_URL
 
 logger = logging.getLogger(__name__)
 
@@ -168,9 +168,11 @@ async def _default_fetch_delegations(session_id: str) -> list[dict[str, Any]]:
 
 async def _default_fetch_selfedit_job(admin_url: str) -> dict[str, Any] | None:
     import httpx  # local import: keeps module import light for tests
+    from jarvis.auth import service_headers
 
     async with httpx.AsyncClient(timeout=3.0) as client:
-        resp = await client.get(f"{admin_url}/api/selfedit/run")
+        resp = await client.get(f"{admin_url}/api/selfedit/run", headers=service_headers())
+        resp.raise_for_status()
         data = resp.json()
     if not isinstance(data, dict) or not data.get("ok"):
         return None
@@ -264,12 +266,14 @@ class ProgressWatcher:
         try:
             delegations = await self._fetch_delegations()
         except Exception as exc:  # noqa: BLE001 — DB unreachable, skip silently
-            logger.warning("progress_watcher delegations fetch failed: %s", exc)
+            logger.warning("progress_watcher delegations fetch failed error_type=%s",
+                           type(exc).__name__[:64])
             delegations = []
         try:
             selfedit_job = await self._fetch_selfedit_job()
         except Exception as exc:  # noqa: BLE001 — sidecar offline, skip silently
-            logger.warning("progress_watcher selfedit fetch failed: %s", exc)
+            logger.warning("progress_watcher selfedit fetch failed error_type=%s",
+                           type(exc).__name__[:64])
             selfedit_job = None
 
         lines = [_fmt_delegation_line(d) for d in delegations]

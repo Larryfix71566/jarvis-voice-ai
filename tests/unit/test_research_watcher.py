@@ -116,16 +116,18 @@ async def test_watcher_announces_once_per_transition():
 
 
 @pytest.mark.asyncio
-async def test_fetch_job_exception_is_swallowed():
+async def test_fetch_job_exception_is_swallowed_without_logging_its_message(caplog):
     rec = _Recorder()
 
     async def _boom():
-        raise ConnectionError("sidecar offline")
+        raise ConnectionError("PRIVATE_CANARY_research_4d2a")
 
     w = ResearchWatcher(speak=rec.speak, push_display=rec.push_display,
                          is_connected=lambda: True, fetch_job=_boom)
     await w.tick_once()  # must not raise
     assert rec.spoken == []
+    assert "PRIVATE_CANARY_research_4d2a" not in caplog.text
+    assert "error_type=ConnectionError" in caplog.text
 
 
 @pytest.mark.asyncio

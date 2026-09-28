@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RTVIEvent } from "@pipecat-ai/client-js";
 import {
   usePipecatClient,
@@ -47,6 +47,7 @@ import {
   writeDrawerPopoutPreference,
 } from "./drawerRelay";
 import { play as playSound, setSoundsEnabled, soundsEnabled } from "./sounds";
+import { subscribeAuthError } from "./api";
 import type { VoiceState } from "./voiceState";
 import "./App.css";
 import "./command-deck.css";
@@ -294,6 +295,19 @@ export default function App() {
     const id = window.setTimeout(() => setSpeakerGateNotice(null), 4000);
     return () => window.clearTimeout(id);
   }, [speakerGateNotice]);
+  const [authChip, setAuthChip] = useState(false);
+  const authTimer = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const unsubscribe = subscribeAuthError(() => {
+      setAuthChip(true);
+      window.clearTimeout(authTimer.current);
+      authTimer.current = window.setTimeout(() => setAuthChip(false), 4000);
+    });
+    return () => {
+      unsubscribe();
+      window.clearTimeout(authTimer.current);
+    };
+  }, []);
   const openDrawerPopout = (onFail?: (reason: string) => void) => {
     writeDrawerPopoutPreference(true);
     openDrawerWindow();
@@ -630,6 +644,11 @@ export default function App() {
           {speakerGateNotice && (
             <span className="speaker-gate-notice" role="status">
               {speakerGateNotice}
+            </span>
+          )}
+          {authChip && (
+            <span className="speaker-gate-notice" role="status">
+              Token required — Dev tab
             </span>
           )}
         </main>

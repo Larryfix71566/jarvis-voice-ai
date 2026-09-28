@@ -2,11 +2,14 @@
 import difflib
 import uuid
 from pathlib import Path
-from sandbox.artifacts import SandboxError, source_path_allowed
+
+from sandbox.artifacts import Candidate, File, SandboxError, source_path_allowed
+
 
 class FakeRuntime:
     def __init__(self, root):
         root = Path(root)
+        self.root = root
         self.baseline = {}
         for p in root.rglob('*'):
             if p.is_file() and '.git' not in p.relative_to(root).parts and source_path_allowed(str(p.relative_to(root))):
@@ -32,6 +35,8 @@ class FakeSession:
     def __init__(self, runtime, allowed, goal, run_id):
         self.runtime, self.allowed = runtime, allowed
         self.id = uuid.uuid4().hex
+        self.directory = runtime.root / ".fake-sessions" / self.id
+        self.directory.mkdir(parents=True, exist_ok=True)
         self.files = dict(runtime.baseline)
         self.state = {'id':self.id, 'task':self.id[:12], 'phase':'editing', 'goal':goal, 'run_id':run_id,
             'ready':True, 'vm_status':'running', 'ref':'a'*40, 'branch':'mortimer/selfedit/'+self.id, 'proposals':[], 'checks':[]}
@@ -42,6 +47,8 @@ class FakeSession:
         self.state.update(ready=True, vm_status='running')
         return {'ok': True, 'ready': True}
     def status(self): return dict(self.state)
+    def _read(self): return dict(self.state)
+    def _files(self, state): return FakeWorkspaceFiles(self)
     def _path(self, path):
         if not source_path_allowed(path) or not self.allowed(path): raise SandboxError('Path is outside the workspace policy')
         if self.state['phase'] in {'reverted','cancelled'}: raise SandboxError('Session is not available')
@@ -60,16 +67,39 @@ class FakeSession:
     def validate(self):
         passed=self.runtime.validation_ok
         checks=[{'name':'independent-vm','ok':passed,'seconds':1}]
-        self.state.update(phase='validated' if passed else 'validation_failed',checks=checks,candidate='b'*64)
+        candidate = FakeWorkspaceFiles(self)._capture()
+        self.state.update(phase='validated' if passed else 'validation_failed',checks=checks,candidate=candidate.fingerprint)
         return {'ok':passed,'checks':checks}
-    def submit(self, publisher, title, body):
-        if self.state['phase']!='validated': raise SandboxError('Validation has not passed since the last edit')
+    def submit(self, publisher, title, body, *, preflight=None):
+        if preflight is not None:
+            preflight(FakeWorkspaceFiles(self), dict(self.state))
+        if self.state['phase'] not in {'validated', 'publication_pending'}:
+            raise SandboxError('Validation has not passed since the last edit')
         self.runtime.events.append(('submit',title,body))
-        self.state['phase']='published'
-        return {'ok':True,'number':42,'url':self.runtime.pr_url}
+        publication={'number':42,'url':self.runtime.pr_url}
+        self.state.update(phase='published',publication=publication)
+        return {'ok':True,**publication}
     def revert(self):
         self.state['phase']='reverted'
         return {'ok':True}
     def cancel(self):
         self.state['phase']='cancelled'
         return {'ok':True,'cancelled':True}
+
+
+class FakeWorkspaceFiles:
+    def __init__(self, session):
+        self.session = session
+        self.baseline = Candidate(tuple(
+            File(path, 0o644, content.encode())
+            for path, content in session.runtime.baseline.items()
+        ))
+
+    def _capture(self):
+        return Candidate(tuple(
+            File(path, 0o644, content.encode())
+            for path, content in self.session.files.items()
+        ))
+
+    def frozen(self):
+        return self._capture()

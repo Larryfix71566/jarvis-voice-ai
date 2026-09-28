@@ -172,8 +172,8 @@ final class AgentRunStore {
             // later line that didn't report one.
             let plannerModel = (a.plannerModel?.isEmpty == false) ? a.plannerModel : nil
             runs = runs.map { r in
-                let match = (!runId.isEmpty && !r.runId.isEmpty)
-                    ? r.runId == runId
+                let match = !runId.isEmpty
+                    ? r.name == name && r.runId == runId
                     : r.name == name && r.doneAt == nil
                 guard match else { return r }
                 var next = r
@@ -185,8 +185,10 @@ final class AgentRunStore {
         case .agentTool(let t):
             guard let name = t.name, let tool = t.tool else { return }
             let displayName = (t.displayName?.isEmpty == false) ? t.displayName! : name
+            let runId = t.runId ?? ""
             runs = runs.map { r in
-                guard r.name == name && r.doneAt == nil else { return r }
+                guard r.name == name && r.doneAt == nil,
+                      runId.isEmpty || r.runId == runId else { return r }
                 var next = r
                 next.displayName = displayName
                 next.tools = Array((r.tools + [tool]).suffix(AppTuning.maxTools))
@@ -199,8 +201,12 @@ final class AgentRunStore {
             let displayName = (done.displayName?.isEmpty == false) ? done.displayName! : name
             let ok = done.ok               // decoder already defaults missing to true (agentRuns.ts:362)
             let detail = clampText(done.detail, 300)
+            let runId = done.runId ?? ""
+            var settledIDs: [Int] = []
             runs = runs.map { r in
-                guard r.name == name && r.doneAt == nil else { return r }
+                guard r.name == name && r.doneAt == nil,
+                      runId.isEmpty || r.runId == runId else { return r }
+                settledIDs.append(r.id)
                 var next = r
                 next.displayName = displayName
                 next.doneAt = Date()
@@ -215,14 +221,16 @@ final class AgentRunStore {
             }
             // D8: self-edit runs are exempt from the success fade — the
             // tab is a deliberately opened reading surface.
-            guard ok, let id = liveRunIds[name],
-                  let settled = runs.first(where: { $0.id == id }),
-                  !isSelfEditRun(name: settled.name, tools: settled.tools) else { return }
-            clearTimer(id)
-            fadeTasks[id] = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64(AppTuning.doneFadeSeconds * 1_000_000_000))
-                guard !Task.isCancelled else { return }
-                self?.removeRun(id: id)
+            guard ok else { return }
+            for id in settledIDs {
+                guard let settled = runs.first(where: { $0.id == id }),
+                      !isSelfEditRun(name: settled.name, tools: settled.tools) else { continue }
+                clearTimer(id)
+                fadeTasks[id] = Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: UInt64(AppTuning.doneFadeSeconds * 1_000_000_000))
+                    guard !Task.isCancelled else { return }
+                    self?.removeRun(id: id)
+                }
             }
 
         case .capability(let agents):

@@ -60,10 +60,11 @@ currently running app:
    separate synthetic classification path; it does not prove production
    model-backed admission. Existing revisions, queues, budgets, retrieval and
    rollback machinery must be extended rather than replaced.
-5. `KnowledgeAtlasView.swift` projects existing results and AdminAPI data, but
-   context requests use `try?`, refresh on appearance, and do not expose a
-   dependable per-source failure/retry lifecycle. Workspace-result changes
-   refresh results, not all context sources.
+5. At the inspected base commit, `KnowledgeAtlasView.swift` projected existing
+   results and AdminAPI data without a dependable per-source failure/retry
+   lifecycle. The isolated worktree now implements store-owned per-source
+   refresh state and visible failure/retry status; physical, accessibility,
+   reconnect/auth and performance acceptance remain open (GC24-06).
 6. Native layout 2 defaults coexist with disabled backend console/sharing,
    memory and routing defaults. That is a deployment compatibility risk to
    check against effective runtime settings, not proof of a live failure.
@@ -140,15 +141,20 @@ section 15; passing implementation tests alone cannot close a live gate.
   2026-09-25 after source audit, status/ID reconciliation, duplicate-source
   removal, and manifest/documentation checks. See the
   [GC24-01 receipt](../acceptance/verified-gap-closure/GC24-01-status-reconciliation-2026-09-25.md).
-- [ ] **GC24-02 — Complete the shared execution contract.** After 00.
+- [ ] **GC24-02 — Complete the shared execution contract.** After 00. The
+  SubAgent cancellation/run-log slice has a current receipt; the complete
+  provider/tool/event lifecycle remains open.
 - [ ] **GC24-03 — Enforce policy through every transmission and result sink.**
   After 02; blocks enabling new routes for protected content.
 - [ ] **GC24-04 — Complete subscription and SAYGM capability gates.** After
   02/03; text and tool capabilities have separate subreceipts.
-- [ ] **GC24-05 — Connect the production memory classifier.** After 02/03;
-  uses an explicitly permitted route, so does not require a subscription.
+- [ ] **GC24-05 — Connect the production memory classifier.** The shared
+  `execute_chat` adapter is wired to production and synthetic shadow, with
+  confidential route checks and off-loop execution. Still gated on a verified
+  confidential route plus the separate durable admission-job/stage/cursor and
+  rollout evidence. See the [route-aware classifier receipt](../acceptance/verified-gap-closure/GC24-05-route-aware-classifier-2026-09-25.md).
 - [ ] **GC24-06 — Make Atlas freshness and failures visible.** After 00;
-  independent of model-provider availability.
+  implementation is in progress in the isolated tree; live acceptance remains.
 - [ ] **GC24-07 — Complete candidate configuration and local regression.**
   After code increments included in that candidate.
 - [ ] **GC24-08 — Close remaining physical Mac journeys.** After 07; run
@@ -231,9 +237,10 @@ source owner, unsupported completion claim or change to historical receipts.
 **Primary files:** `jarvis/model_execution.py`, `jarvis/model_routing.py`,
 `jarvis/llm_client.py`, `jarvis/memory_model.py`,
 `jarvis/memory_extraction.py`, `jarvis/memory.py`, `jarvis/usage_ledger.py`,
-`jarvis/memory_sweep.py`, `scripts/cost_report.py`; affected callers identified by
-`scripts/audit_model_call_sites.py` (first migrated family:
-`jarvis/kb_digest.py`). Tests in `tests/unit/test_model_execution.py`,
+`jarvis/memory_sweep.py`, `jarvis/agents/base.py`, `scripts/cost_report.py`;
+affected callers identified by `scripts/audit_model_call_sites.py` (first
+migrated family: `jarvis/kb_digest.py`). Tests in
+`tests/unit/test_model_execution.py`, `tests/unit/test_subagent.py`,
 `tests/unit/test_usage_ledger.py`, `tests/unit/test_kb_digest.py`,
 `tests/unit/test_cost_report.py`, and the existing routing, call-site,
 subagent and integration suites.
@@ -268,14 +275,29 @@ Lock the following contract before migrating callers:
    model calls: at most two active calls by default, at most one background
    call. Interactive work takes the next free slot; background work cannot
    consume the reserved interactive capacity. This does not throttle the
-   voice pipeline. Pending memory stays in its existing durable queue.
-   No Redis, separate daemon or second durable task database.
+   voice pipeline. The same counters must apply across the app's async loop and
+   synchronous worker threads that submit through the boundary; do not create
+   per-loop capacity pools. Pending memory stays in its existing durable
+   queue. No Redis, separate daemon or second durable task database.
 
 **Required tests:** context survives identically with role/order; supported
 images are forwarded and unsupported images cause zero transmissions; model
 selection is immutable during a run; first/terminal event ordering; timeout,
 queued/active cancel and late results; duplicate tool-result replay; parent
 result grouping; interactive capacity under memory load; direct-API parity.
+
+**2026-09-25 implementation progress:** optional `stream_text` is implemented
+for explicitly streaming-enabled routes. Three direct Anthropic profiles opt
+in; the Anthropic SDK stream is translated into the existing OpenAI-shaped
+chunk interface, and the shared boundary emits policy-labeled text deltas
+while collecting a compatibility result. Tool fragments remain buffered
+until provider completion and are then validated with the registered schema.
+Focused model-execution, Anthropic-shim and route tests pass **125/125**; the
+full Python unit/integration suite passes **2,828 tests, 4 skipped, 11
+warnings, 2 subtests** on the current tree. No production caller consumes the
+deltas yet. This does not complete artifacts, tool-result events, full agent
+loop terminal ownership, downstream UI/DB cancellation, or durable recovery.
+See the updated GC24-02 receipt.
 
 **Pass:** no accepted input is lost, every migrated caller crosses policy
 validation, and baseline direct-API behavior remains covered with unchanged
@@ -406,6 +428,28 @@ selection; authentication success alone cannot close MAR-E/MAR-F/MAR-G.
 `jarvis/bot/memory_watcher.py`, existing admission hooks in `jarvis/memory.py`,
 `scripts/run_memory_provider_shadow.py` and memory acceptance suites.
 
+**2026-09-25 isolated-tree progress:** the maintenance classifier now accepts
+evidence only when IDs resolve to stored user conversation turns; only
+`exact_update` and `near_duplicate` recall events can add corroboration;
+corroboration is checked against distinct turns and sessions; provider output
+cannot upgrade assistant/tool/quoted provenance; and per-exchange facts carry
+their source user-turn ID. The source-evidence increment's full Python
+unit/integration suite passed 2,833 tests with four skips, 11 warnings and two
+subtests. The latest full Python unit/integration suite passes 2,848 tests,
+4 skipped, 11 warnings and 2 subtests; its focused memory/manifest/DB set
+passes 282. See the [GC24-05 source-evidence receipt](../acceptance/verified-gap-closure/GC24-05-memory-source-evidence-2026-09-25.md).
+The [route-aware classifier receipt](../acceptance/verified-gap-closure/GC24-05-route-aware-classifier-2026-09-25.md)
+records the next increment: the same `execute_chat` adapter is wired to the
+production worker and synthetic shadow runner, the DB claim is committed
+before model work, and worker execution is off the voice loop. The current
+configuration still has no verified confidential production route, so live
+provider admission remains fail-closed. Additive migration `0025` and the
+queue primitives are now present; their source-identity, stage, claim, retry,
+reclaim and forget behavior has focused coverage. End-to-end worker/teardown
+enqueue-before-cursor wiring, resumable extract/classify/apply processing,
+shared atomic budgets, remaining crash/race cases, and rollout/live evidence
+remain open. See the [GC24-05 staging receipt](../acceptance/verified-gap-closure/GC24-05-admission-staging-2026-09-25.md).
+
 1. Implement one production classifier adapter satisfying section B7's exact
    `classify(candidates, *, policy_version)` contract. Both runtime maintenance
    and the shadow runner invoke this adapter. Keep heuristics as a deterministic
@@ -521,6 +565,15 @@ client and `macos/MortimerHost/Tests/MortimerHostTests/KnowledgeAtlasTests.swift
 manual refresh tests; the Atlas displays available useful context without a
 research result first; no duplicate fetch on display move or tab switching;
 selection/pins survive refresh and previous graph/performance gates hold.
+
+**2026-09-24 implementation progress:** `AtlasStore` owns asynchronous
+per-source refresh tasks and generation guards; the Atlas exposes loading,
+ready, empty, stale and unavailable states, preserves last-good cards on
+failure, coalesces active refreshes, and refreshes after a backend reconnect.
+The focused `KnowledgeAtlasTests` suite passed **7/7** at that snapshot. The
+same-date headless visibility failures were subsequently rechecked and
+classified in the [2026-09-25 fixture receipt](../acceptance/verified-gap-closure/GC24-06-headless-window-fixture-classification-2026-09-25.md).
+They are historical evidence, not current failing assertions.
 
 ## 12. GC24-07 — Candidate configuration and regression
 
@@ -716,6 +769,99 @@ do all independent preparation before seeking the user's action.
 
 ### Handoff log
 
+- **2026-09-25 — GC24-02 opt-in streaming progress.** Added an explicit
+  route capability for direct Anthropic streaming profiles, translated pinned
+  Anthropic Messages stream text and tool-input events to OpenAI-shaped chunks,
+  and added shared-boundary delta emission, compatibility collection,
+  finish-marker validation and cancellation/error stream cleanup. Focused tests
+  pass **125/125**, cross-caller tests **239/239**, and the Python
+  unit/integration suite passes **2,828 passed, 4 skipped, 11 warnings, 2
+  subtests**. No production caller consumes the stream yet; tool-result,
+  artifact, complete agent-loop terminal ownership, late-write suppression and
+  durable recovery remain open. See the
+  [GC24-02 receipt](../acceptance/verified-gap-closure/GC24-02-execution-boundary-implementation-2026-09-24.md).
+
+- **2026-09-24 — GC24-02 queued-event cancellation progress.** Moved
+  `queued` event delivery inside the execution boundary's guarded timeout so
+  cancellation while an asynchronous lifecycle observer handles the initial
+  event now emits one sequenced `cancelled` terminal event. The focused
+  `test_model_execution.py` suite passes **30 tests**, including the regression
+  case. This closes only the pre-start observer-cancellation hole. Streaming,
+  artifact/tool-result events, whole tool-loop terminal ownership, downstream
+  cancellation and durable reconciliation remain open. See the updated
+  [GC24-02 receipt](../acceptance/verified-gap-closure/GC24-02-execution-boundary-implementation-2026-09-24.md).
+
+- **2026-09-24 — GC24-06 Atlas lifecycle progress.** The authenticated Atlas
+  source requests are now coordinated by the app-owned `AtlasStore`; a
+  per-source health strip distinguishes loading, success, empty, stale and
+  unavailable; last-good cards survive failed refresh; explicit retry and
+  reconnect refresh are wired; generations reject obsolete responses. The
+  focused native suite passes **7/7** including store-owned success and
+  stale-on-failure cases. At that snapshot the full MortimerHost run reported
+  eight headless WindowServer visibility assertions; these are historical
+  results and are superseded by the following fixture-classification receipt.
+  GC24-06 stays open for live/auth/reconnect,
+  accessibility, source-change, window-move, graph/performance and candidate
+  evidence. See the
+  [GC24-06 receipt](../acceptance/verified-gap-closure/GC24-06-atlas-refresh-2026-09-24.md).
+
+- **2026-09-25 — GC24-06 headless fixture classification and host regression.**
+  The XCTest process exposes no `NSScreen`, so actual-window visibility and
+  on-screen graph timing were not valid in this runner. Only three
+  WindowServer-dependent tests and the graph benchmark now skip when their
+  explicit display precondition is absent; graph-layer dirtiness is checked
+  after render-server completion on a real display. Screen unlock is injected
+  for deterministic unit testing while production retains its distributed
+  notification observer. Focused Atlas tests pass **10/10**; focused fixture,
+  placement and graph tests pass **14** with **5** documented skips; full
+  MortimerHost passes **265** with **7 skips, 0 failures**. Physical monitor,
+  real unlock, visible-window, and on-screen p95 acceptance remain open. See
+  the [fixture receipt](../acceptance/verified-gap-closure/GC24-06-headless-window-fixture-classification-2026-09-25.md).
+
+- **2026-09-24 — GC24-03 council workload-floor progress.** Council and
+  planning now derive privacy from the static configured workload policy
+  (route preferences cannot lower the data-classification floor), combine any
+  stricter caller label, and carry policy through pre-provider `too_small`
+  persistence. Focused council/planning/CLI suites pass **78 tests**; full
+  locked unit/integration suite passes **2,816 passed, 4 skipped, 11 warnings,
+  2 subtests passed**. Negative checks cover rejection before client creation,
+  weaker caller labels, and SQLite redaction. This closes only this council
+  slice; full GC24-03 inventory/canaries remain open. See the
+  [council workload-floor receipt](../acceptance/verified-gap-closure/GC24-03-council-workload-floor-2026-09-24.md).
+- **2026-09-24 — GC24-03 sensitive SubAgent policy progress.** Routed
+  SubAgent requests now combine resolved-route privacy with the inherited
+  sensitive-turn signal via strictest-policy, so an approved-external route
+  cannot receive that context. The full locked unit/integration suite passes
+  **2,813 passed, 4 skipped, 2 subtests passed**; SubAgent eval, call-site
+  audit, and latency fixture also pass. This closes one negative transmission
+  path only. Other caller sources, supervisor/speech/display/export/log
+  sinks, and direct-mode callers remain unaudited and unverified; GC24-03
+  remains open. See the
+  [GC24-03 progress receipt](../acceptance/verified-gap-closure/GC24-03-sensitive-routed-subagent-2026-09-24.md).
+- **2026-09-24 — GC24-02 lifecycle and replay-guard progress.** The execution
+  boundary now emits policy-carrying `progress` events at provider request and
+  response receipt. It rejects reused tool-call IDs in a completed history and
+  rejects provider responses that reuse any call ID from that history. The
+  full locked unit/integration suite passes **2,812 passed, 4 skipped, 2
+  subtests passed**; the 13-case SubAgent eval, 25-entry call-site audit (zero
+  review-required), latency probe, and seven plan-manifest tests pass. This
+  does not close GC24-02: token streaming, artifacts, whole-tool-loop result
+  events/terminal ownership, cancellation-safe downstream writes, and durable
+  crash/retry reconciliation remain open. See the
+  [GC24-02 implementation receipt](../acceptance/verified-gap-closure/GC24-02-execution-boundary-implementation-2026-09-24.md).
+- **2026-09-24 — GC24-02 implementation update.** In the dirty isolated tree,
+  planner cancellation/race handling and shared-boundary migrations for planner,
+  council, shared-content vision, and screen vision are implemented. The
+  connected vision path still captures its route at connection setup; resolve
+  and bind the route per task before closing that subrequirement. The exact
+  dirty-tree run passes 2,810 unit/integration tests, with 4 skips and 2
+  subtests; SubAgent eval passes 13 cases; call-site audit v2 reports 25
+  entries and zero review-required; the fixture latency probe passes. Full
+  lifecycle streaming, downstream cancellation, late-write suppression,
+  idempotent tool reconciliation, sink-by-sink privacy proof, live Mac/provider
+  acceptance, and later closure gates remain open. Details and commands:
+  [GC24-02 implementation receipt](../acceptance/verified-gap-closure/GC24-02-execution-boundary-implementation-2026-09-24.md).
+  This progress does not close GC24-02 or authorize deployment.
 - **2026-09-24 — Planning only, Codex.** Created this execution addendum against
   `96aaf7a` in `codex/isolated-20260924`. All GC24 work remains open. No runtime
   behavior, feature flag, credential, database, provider route or deployment
@@ -742,19 +888,213 @@ do all independent preparation before seeking the user's action.
   resolved workload priority; enforces two-slot interactive/background
   admission; validates bounded output and caller-provided tool schemas; returns
   schema-checked tool requests without executing them; and reports ordered
-  policy-carrying lifecycle events with known usage metadata. The 254 focused
+  policy-carrying lifecycle events with known usage metadata. The 325 focused
   execution, ledger, reporting, and migrated-caller pytest cases pass under the
   isolated targeted dependency set; the full project suite remains unrun.
   `kb_digest` and
   procedure description, per-exchange extraction, whole-session memory
-  fold-in, and both memory-sweep model calls now use this boundary when model
-  routing is enabled; the usage ledger separately records unknown counts,
+  fold-in, both memory-sweep calls, and the delegated-agent tool loop now use
+  this boundary when model routing is enabled; the usage ledger separately
+  records unknown counts,
   billing source, route, duration and response ID. A real SQLite exercise
   passed. See the
   [GC24-02 progress receipt](../acceptance/verified-gap-closure/GC24-02-execution-input-progress-2026-09-25.md).
-  This does not close GC24-02: four production migration targets remain
-  (delegated agent, planner, mixed voice/vision pipeline, and council), with
+  This does not close GC24-02: three production migration targets remain
+  (planner, mixed voice/vision pipeline, and council), with
   the supervisor voice path explicitly exempt. Streaming/tool-result/artifact
   events, downstream cancellation, idempotent
   tool reconciliation, locked-environment verification and prevention of late
   durable writes remain.
+- **2026-09-25 — GC24-02 caller audit and SubAgent cancellation increment.**
+  The current call-site audit now reports **26/26 covered, zero review-required,
+  secret-free**, including planner, mixed vision, council and screen paths;
+  this supersedes the migration-target sentence in the earlier progress note
+  above. Cancellation during an active SubAgent tool call now finalizes its
+  run-log record as `cancelled`, propagates to the tool coroutine, prevents a
+  second provider round, and emits no `agent_done` success event. Focused
+  run-log/SubAgent/integration tests pass **92**; the full Python
+  unit/integration suite passes **2,870**, with **4 skipped**, **11 warnings**,
+  and **2 subtests**. The new evidence is in the
+  [GC24-02 cancellation receipt](../acceptance/verified-gap-closure/GC24-02-cancellation-terminal-2026-09-25.md).
+  This closes only the run-log cancellation slice; production text-delta
+  consumption, exactly-one terminal across the entire provider/tool loop,
+  late side-effect suppression, and mutating-tool reconciliation remain open.
+- **2026-09-25 — GC24-03 MCP exception-log redaction.** `SkillRegistry.call()`
+  now logs only a bounded exception-class code instead of raw MCP exception
+  text. A canary test confirms the exception message cannot appear in logs;
+  the tool's existing failure-result contract is preserved. Focused
+  registry/run-log/SubAgent tests pass **104**, and the full Python
+  unit/integration suite passes **2,871**, with **4 skipped**, **11 warnings**,
+  and **2 subtests**. See the
+  [GC24-03 receipt](../acceptance/verified-gap-closure/GC24-03-mcp-exception-log-redaction-2026-09-25.md).
+  This closes one logging sink only; all other source-to-sink checks remain.
+- **2026-09-25 — GC24-03 watcher log redaction.** Research, plan, progress,
+  and reminder watchers now log bounded exception categories instead of raw
+  exception messages; malformed reminder responses are no longer written to
+  logs. Content-canary tests cover all four watcher paths. Focused watcher
+  tests pass **48**, and the full Python unit/integration suite passes
+  **2,871**, with **4 skipped**, **11 warnings**, and **2 subtests**. See the
+  [GC24-03 watcher receipt](../acceptance/verified-gap-closure/GC24-03-watcher-log-redaction-2026-09-25.md).
+  This closes only these watcher log paths; GC24-03 remains open.
+- **2026-09-25 — GC24-03 clipboard and command-title log redaction.** The
+  clipboard sidecar warning now omits its path and raw exception; the
+  `show_commands` tool no longer logs user-authored titles and reports arm
+  exceptions by bounded class only. Tests invoke the registered clipboard
+  tool and exercise the command handoff with canary strings. The combined
+  clipboard/watcher/pipeline suite passes **107**, and the full Python
+  unit/integration suite passes **2,873**, with **4 skipped**, **11 warnings**,
+  and **2 subtests**. See the
+  [GC24-03 clipboard receipt](../acceptance/verified-gap-closure/GC24-03-clipboard-log-redaction-2026-09-25.md).
+  This closes only those logging paths; GC24-03 remains open.
+- **2026-09-25 — GC24-03 agent/delegation/event/findings log redaction.**
+  SubAgent matcher and observer failures, specialist findings reads,
+  upgrade-agent callbacks, and supervisor event callbacks now avoid logging
+  raw exception text, tracebacks, agent-supplied paths, or untrusted failure
+  reason text. Canary tests cover the bounded paths. The focused suite passes
+  **165**; the full Python unit/integration suite passes **2,877**, with **4
+  skipped**, **11 warnings**, and **2 subtests**. Ruff `F`/`I` and
+  `git diff --check` pass. See the
+  [GC24-03 receipt](../acceptance/verified-gap-closure/GC24-03-agent-event-findings-log-redaction-2026-09-25.md).
+  This closes only these selected log paths; GC24-03 remains open.
+- **2026-09-25 — GC24-03 admin job log redaction.** Admin self-edit,
+  app-build, research, planning, council, model-route status, and selected
+  read-only status failures no longer log user prompts, generated summaries,
+  research URLs, publication notices, or raw exception text. Asynchronous job
+  error fields use bounded exception classes as well. Bounded state/count
+  signals remain. Successful local task results remain visible and are an open
+  response/display sink.
+  Focused admin tests pass **129**; the full Python unit/integration suite
+  passes **2,878**, with **4 skipped**, **11 warnings**, and **2 subtests**.
+  See the [GC24-03 admin-log/status receipt](../acceptance/verified-gap-closure/GC24-03-admin-job-log-and-status-redaction-2026-09-25.md).
+  This closes only selected admin logging paths; GC24-03 remains open.
+- **2026-09-25 — GC24-03 memory diagnostic redaction.** Memory-context
+  filtering, write-rejection, extraction, sweep, and watcher logs now use
+  aggregate counts, bounded policy reasons, and bounded exception classes;
+  memory keys, session IDs, promoted fact names, raw exception text, and
+  tracebacks are omitted. Tier-cap observability and drop counters remain.
+  Focused memory/remember/sweep/watcher tests pass **158**; the full Python
+  unit/integration suite passes **2,883**,
+  with **4 skipped**, **11 warnings**, and **2 subtests**. Ruff `F` and
+  `git diff --check` pass. See the
+  [GC24-03 memory-log receipt](../acceptance/verified-gap-closure/GC24-03-memory-log-redaction-2026-09-25.md).
+  Other memory maintenance logs and all non-memory source-to-sink gaps remain.
+- **2026-09-25 — GC24-02 delegate terminal lifecycle.** The existing
+  delegate-card event owner now emits exactly one terminal event for normal
+  completion, unexpected detached-run failure, and session-shutdown
+  cancellation. Status-observer failures no longer change task execution;
+  late-delivered exceptions contain only a bounded error class. Focused
+  delegate tests pass **56**; the full Python unit/integration suite passes
+  **2,887**, with **4 skipped**, **11 warnings**, and **2 subtests**. Ruff
+  `F` and `git diff --check` pass. See the
+  [GC24-02 delegate lifecycle receipt](../acceptance/verified-gap-closure/GC24-02-delegate-terminal-lifecycle-2026-09-25.md).
+  The full provider/tool lifecycle and late-side-effect suppression remain
+  open.
+- **2026-09-25 — GC24-03 protected specialist-result handoff.** A confidential
+  or local-only SubAgent now requires an awaited local result sink and returns
+  only a fixed status plus opaque reference to its caller. A missing sink is
+  rejected before model-client construction; route clients for protected
+  workloads are deferred until route and sink checks pass. Static workload
+  privacy is combined with route and sensitive-turn policy, so a user route
+  preference cannot lower it. Protected activity, logs, result presentation,
+  and copy/share/export paths receive bounded handling; native copy/share/
+  export actions are rejected. The full unit/integration suite passes
+  **2,867 passed, 4 skipped, 11 warnings, 2 subtests**; focused native
+  share/action tests pass **19/19**. The handoff is one covered path only.
+  Full source-to-sink inventory, verified confidential route capability, and
+  direct-mode/provider-sink proofs remain open. See the
+  [protected local-result receipt](../acceptance/verified-gap-closure/GC24-03-protected-local-result-handoff-2026-09-25.md).
+- **2026-09-25 — GC24-02 SubAgent cancellation-result suppression.** The
+  multi-round SubAgent loop now detects a cancellation request even when a
+  provider or tool adapter catches cancellation and returns a value. It
+  suppresses that value before usage/run-log writes, tool-result events, or a
+  subsequent provider round. The focused SubAgent suite passes **62**; the
+  combined SubAgent/run-log/integration/bot-wiring suites pass **128**; the
+  full Python unit/integration suite passes **2,889**, with **4 skipped**,
+  **11 warnings**, and **2 subtests**. Ruff `F`/`I`, plan manifest (**7/7**),
+  and `git diff --check` pass. See the
+  [GC24-02 cancellation-suppression receipt](../acceptance/verified-gap-closure/GC24-02-subagent-cancellation-suppression-2026-09-25.md).
+  This does not roll back a mutation already performed inside a tool or
+  reconcile unknown outcomes; those and the other provider/tool caller
+  families remain open.
+- **2026-09-25 — GC24-02 direct-mode tool-call identity replay guard.** Routed
+  SubAgent and self-edit planner calls already reject a provider tool-call ID
+  present in request history. Direct-mode SubAgent and self-edit planner calls
+  now keep an ID set across provider rounds and stop before dispatch if a
+  batch contains a missing, malformed, overlong, or reused identity. The
+  end-to-end app-build fixture now supplies distinct IDs across rounds.
+  Focused SubAgent tests pass **63**, and combined SubAgent/UpgradeAgent/
+  AppBuildAgent suites pass **115**; the full Python unit/integration suite
+  passes **2,891**, with **4 skipped**, **11 warnings**, and **2 subtests**.
+  Ruff `F`/`I`, plan manifest (**7/7**), and
+  `git diff --check` pass. See the
+  [GC24-02 tool-call replay receipt](../acceptance/verified-gap-closure/GC24-02-tool-call-identity-replay-2026-09-25.md).
+  The existing startup path orphans stale runs rather than resuming them, but
+  durable unknown-mutation receipts, rollback, and cross-caller replay proof
+  remain open.
+- **2026-09-25 — GC24-02 live Supervisor tool-call identity guard.** The
+  Supervisor now validates the complete provider tool-call batch before
+  dispatch. Empty, oversized, duplicate-in-batch, or reused-across-round IDs
+  fail closed with the existing bounded response; an invalid batch dispatches
+  no tools and logs no IDs or arguments. Focused Supervisor/orchestrator tests
+  pass **36**, and the full Python unit/integration suite passes **2,894**,
+  with **4 skipped**, **11 warnings**, and **2 subtests**. Ruff `F`/`I`,
+  `git diff --check`, and changed-document relative-link checks pass. See the
+  [Supervisor replay receipt](../acceptance/verified-gap-closure/GC24-02-supervisor-tool-call-identity-replay-2026-09-25.md).
+  This closes only same-turn ID replay for the Supervisor. Production delta
+  consumption, full-loop terminal ownership, cancellation and late-write
+  suppression, durable unknown-mutation reconciliation, and remaining callers
+  stay open.
+- **2026-09-25 — GC24-02 verify the existing voice result stream.** Source
+  tracing confirmed the live RTVI `bot-llm-text` path already appends token
+  chunks to one `JarvisClient.transcript` entry; `AppMessageRouter` forwards
+  transcript updates to the existing `ResponseResultRouter`, which retains
+  one result identity. JarvisKit inbound-frame tests pass **2/2**, a new
+  stub-transport integration through `AppMessageRouter` and the workspace
+  passes **1/1**, and MortimerHost result-router tests pass **7/7**. This
+  corrects the earlier broad claim that no production response consumer
+  exists. The integrated test uses a stub transport, not the running backend
+  or installed Mac candidate; that live journey remains open. Generic
+  shared-execution `ModelExecutionEvent` deltas still lack a native consumer.
+  See the [voice response-stream
+  receipt](../acceptance/verified-gap-closure/GC24-02-existing-voice-response-stream-path-2026-09-25.md).
+- **2026-09-25 — GC24-02 unknown tool outcome observability.** Agent-event
+  migration 0028 stores provider tool-call identity; SubAgent cancellation
+  after tool dispatch records a metadata-only unknown-outcome event; run
+  details, CLI, and MCP expose calls without a correlated result. The focused
+  migration/runlog/SubAgent/MCP/e2e suite passes **124**; the full Python
+  unit/integration suite passes **2,917**, with **4 skipped**, **11
+  warnings**, and **2 subtests**. Ruff `F`/`I` and `git diff --check` pass.
+  See the [unknown-outcome observability
+  receipt](../acceptance/verified-gap-closure/GC24-02-unknown-tool-outcome-observability-2026-09-25.md).
+  This is an operator reconciliation signal only. Cross-request action
+  idempotency/reconciliation across new provider IDs, mutation rollback, and
+  other caller families remain open; this does not close GC24-02.
+- **2026-09-25 — GC24-02 direct Supervisor tool outcome visibility.** The live
+  Pipecat tool adapter now creates a sensitive run-log record for each direct
+  Supervisor tool, correlates provider call IDs, and scopes nested MCP events
+  to that run. Normal outcomes are persisted before the Pipecat callback;
+  cancellation and post-dispatch exceptions write metadata-only unknown
+  outcomes, and cancellation suppresses the late callback. Durable SQLite and
+  JSONL tests prove arguments, result text, and exception text are redacted;
+  cancellation-swallowing and disabled-logging cases are covered. The focused
+  Supervisor/runlog/MCP/SubAgent suite passes **116**; focused pipeline wiring
+  tests pass **73**; the full Python unit/integration suite passes **2,923**,
+  with **4 skipped**, **11 warnings**, and **2 subtests**. Ruff `F`/`I` and
+  `git diff --check` pass. See the [direct Supervisor runlog
+  receipt](../acceptance/verified-gap-closure/GC24-02-supervisor-direct-tool-runlog-2026-09-25.md).
+  This closes only direct-tool outcome visibility. Unknown mutations are not
+  reconciled or made idempotent; other callers and live-candidate acceptance
+  remain open.
+- **2026-09-25 — GC24-02 run-scoped planning-start claim.** Migration 0029
+  adds a tenant-scoped, payload-free one-shot claim for mcp-selfedit
+  plan_start, keyed by the existing injected SubAgent run ID. A retry with a
+  different provider tool-call ID in that same run returns its prior
+  content-free status and launches no duplicate job. Status can be queried by
+  action_run_id after the singleton live-job slot changes; an evicted active
+  state is reported as unknown and must not be retried automatically.
+  Focused DB/admin/MCP/manifest/tenant tests pass **126**; the full Python
+  unit/integration suite passes **2,930**, with **4 skipped**, **11 warnings**,
+  and **2 subtests**. See the [run-scoped plan-start claim
+  receipt](../acceptance/verified-gap-closure/GC24-02-plan-start-run-scoped-claim-2026-09-25.md).
+  This does not cover a fresh SubAgent run ID, direct Supervisor handlers, or
+  other mutating tools, so cross-run action reconciliation remains open.

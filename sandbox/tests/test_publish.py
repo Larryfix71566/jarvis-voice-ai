@@ -26,6 +26,8 @@ class PublicationTests(unittest.TestCase):
         self.commit_objects = set()
         self.remote = None
         self.pulls = []
+        self.pr_state = "open"
+        self.pr_draft = True
         self.fail_after = None
         self.fail_verification = False
         self.changed_source = False
@@ -73,7 +75,8 @@ class PublicationTests(unittest.TestCase):
         if method == "GET" and "/pulls?" in path:
             return self.pulls
         if method == "POST" and path.endswith("/pulls"):
-            pr = {"number": 23, "state": "open", "base": {"ref": body["base"]},
+            pr = {"number": 23, "state": self.pr_state, "draft": self.pr_draft,
+                  "base": {"ref": body["base"]},
                   "head": {"ref": body["head"], "sha": self.remote["object"]["sha"], "repo": {"full_name": "owner/repo"}}}
             self.pulls.append(pr)
             self.maybe_lose("pr")
@@ -98,6 +101,12 @@ class PublicationTests(unittest.TestCase):
         self.assertFalse((self.directory / "new.bin").exists())
         posts = [body for method, path, body in self.calls if method == "POST" and path.endswith("/pulls")]
         self.assertTrue(posts[0]["draft"])
+
+    def test_slug_scoped_skill_authoring_branch_can_publish_as_draft(self):
+        result = self.publish(branch="mortimer/skill-authoring-weather-brief/draft-1")
+        self.assertEqual(result["url"], "https://github.com/owner/repo/pull/23")
+        self.assertEqual(self.remote["ref"],
+                         "refs/heads/mortimer/skill-authoring-weather-brief/draft-1")
 
     def test_lost_commit_response_reuses_exact_commit_object(self):
         self.fail_after = "commit"
@@ -125,6 +134,36 @@ class PublicationTests(unittest.TestCase):
         with self.assertRaises(SandboxError): self.publish()
         self.assertFalse(any(method in {"PATCH", "PUT", "DELETE"} for method, _, _ in self.calls))
         self.assertEqual(self.pulls, [])
+
+    def test_create_response_must_confirm_exact_open_draft(self):
+        for state, draft in [("closed", True), ("open", False)]:
+            with self.subTest(state=state, draft=draft):
+                (self.directory / "publication.json").unlink(missing_ok=True)
+                self.calls, self.pulls, self.remote = [], [], None
+                self.pr_state, self.pr_draft = state, draft
+                with self.assertRaises(SandboxError):
+                    self.publish()
+                saved = json.loads((self.directory / "publication.json").read_bytes())
+                self.assertNotEqual(saved["status"], "published")
+                self.assertEqual(sum(method == "POST" and path.endswith("/pulls")
+                                     for method, path, _ in self.calls), 1)
+
+    def test_recovery_refuses_closed_or_non_draft_matching_pull_request(self):
+        for state, draft in [("closed", True), ("open", False)]:
+            with self.subTest(state=state, draft=draft):
+                (self.directory / "publication.json").unlink(missing_ok=True)
+                self.calls, self.pulls, self.remote = [], [], None
+                self.fail_after = "pr"
+                with self.assertRaises(SandboxError):
+                    self.publish()
+                self.pulls[0]["state"] = state
+                self.pulls[0]["draft"] = draft
+                calls_before_retry = len(self.calls)
+                with self.assertRaises(SandboxError):
+                    self.publish()
+                self.assertGreater(len(self.calls), calls_before_retry)
+                self.assertEqual(sum(method == "POST" and path.endswith("/pulls")
+                                     for method, path, _ in self.calls), 1)
 
     def test_cancellation_after_commit_prevents_branch_or_pr_creation(self):
         original = self.call

@@ -35,6 +35,12 @@ def insert_run(db_path, run_id: str, started_at: str) -> None:
         "VALUES (?, 0, 'tool_call', ?)",
         (run_id, started_at),
     )
+    conn.execute(
+        "INSERT INTO skill_events (user_id, run_id, request_id, event_id, seq, "
+        "schema_version, occurred_at, type, status) "
+        "VALUES ('local', ?, ?, ?, 1, 1, ?, 'skill_selected', 'unknown')",
+        (run_id, run_id, f"event-{run_id}", started_at),
+    )
     conn.commit()
     conn.close()
 
@@ -55,9 +61,13 @@ class TestRowPruning:
         conn.row_factory = sqlite3.Row
         remaining_runs = {r["run_id"] for r in conn.execute("SELECT run_id FROM agent_runs")}
         remaining_events = {r["run_id"] for r in conn.execute("SELECT run_id FROM agent_events")}
+        remaining_skill_events = {
+            r["run_id"] for r in conn.execute("SELECT run_id FROM skill_events")
+        }
         conn.close()
         assert remaining_runs == {"recent"}
         assert remaining_events == {"recent"}
+        assert remaining_skill_events == {"recent"}
 
     def test_retention_zero_disables_pruning(self, db_path):
         insert_run(db_path, "old", iso_days_ago(400))

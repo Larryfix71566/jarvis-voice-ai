@@ -17,13 +17,13 @@ Conventions (AGENTS.md on the mortimer-dev branch):
 
 from __future__ import annotations
 
-from mcp_servers.development_boundary import sandbox_required
-
 import json
 import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+
+from mcp_servers.development_boundary import sandbox_required
 
 APP_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$")
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
@@ -296,7 +296,7 @@ def app_list(client) -> dict:
 
 def app_build_start(
     client, app: str, goal: str, profile: str = "", confirm: bool = False,
-    plan_path: str = "",
+    plan_path: str = "", run_id: str = "",
 ) -> dict:
     """Two-phase start of an app-build run (preview, then confirm), same
     convention as mcp_selfedit.logic.selfedit_start."""
@@ -319,15 +319,29 @@ def app_build_start(
             ),
             "app": app, "goal": goal, "profile": profile or None,
         }
+    if not (run_id or "").strip():
+        return _err(
+            "I can't safely start this app build without its execution ID; "
+            "retry through the registered app_build_start action."
+        )
     payload: dict = {"app": app, "goal": goal, "profile": profile or None}
     if plan_path:
         payload["plan_path"] = plan_path
+    if run_id:
+        payload["run_id"] = run_id
     try:
         resp = client.post("/api/appbuild/start", json=payload)
     except Exception as exc:  # noqa: BLE001 — sidecar offline
         return _err(f"the admin sidecar looks offline: {exc}")
     if not resp.get("ok"):
         return resp
+    if resp.get("duplicate"):
+        return {
+            "ok": True, "started": False, "duplicate": True,
+            "state": resp.get("state", "unknown"),
+            "action_run_id": resp.get("action_run_id"),
+            "summary": resp.get("summary", "This app-build action was already claimed; no new build was started."),
+        }
     return {
         "ok": True, "started": True,
         "summary": (
@@ -338,17 +352,58 @@ def app_build_start(
     }
 
 
-def app_build_status(client) -> dict:
+def app_build_status(
+    client, action_run_id: str = "", submission_id: str = "",
+) -> dict:
     """Compose the app-build job + workspace state into one spoken
     summary, same shape as mcp_selfedit.logic.selfedit_status."""
     try:
-        resp = client.get("/api/appbuild/job")
+        identity = (action_run_id or "").strip()
+        submit_identity = (submission_id or "").strip()
+        if identity and submit_identity:
+            return _err("check one app-build action at a time")
+        resp = client.get(
+            "/api/appbuild/job",
+            params=(
+                {"submit_action_id": submit_identity} if submit_identity
+                else ({"run_id": identity} if identity else None)
+            ),
+        )
     except Exception as exc:  # noqa: BLE001
         return _err(f"the admin sidecar looks offline: {exc}")
     if not resp.get("ok"):
         return resp
     job = resp.get("job", {}) or {}
     status = resp.get("status", {}) or {}
+
+    if job.get("state") == "unknown":
+        if job.get("submit_action_id"):
+            summary = (
+                "The app-build submission may have reached GitHub, but no pull request "
+                "could be verified. Do not retry it; reconcile the saved workspace and "
+                "repository first. Supply this submission_id again to check its status."
+            )
+        else:
+            summary = (
+                "The prior app-build action may have started, but its result is not "
+                "available in the current status slot. Do not retry it automatically; "
+                "reconcile the outcome first."
+            )
+        return {
+            "ok": True,
+            "summary": summary,
+            "job": job,
+        }
+    if job.get("state") in {"completed", "failed"} and job.get("result_available") is False:
+        return {
+            "ok": True,
+            "summary": (
+                f"The prior app-build action is recorded as {job['state']}, but its "
+                "result is no longer available in the current status slot. Do not "
+                "start it again automatically."
+            ),
+            "job": job,
+        }
 
     if job.get("state") == "submitting":
         return {"ok": True, "summary": "The saved candidate is being submitted as a draft pull request. Ask for app-build status to see the result.", "job": job}
@@ -422,9 +477,28 @@ def app_build_submit(client, confirm: bool = False) -> dict:
         return resp
     if resp.get("started"):
         return {"ok": True, "started": True,
+                "submission_id": resp.get("action_run_id"),
                 "summary": "Draft submission has started. Ask for app-build status to get the pull request when it is ready."}
+    if resp.get("state") == "unknown" or resp.get("reconciliation_required"):
+        return {
+            "ok": False, "state": "unknown",
+            "submission_id": resp.get("action_run_id"),
+            "reconciliation_required": True,
+            "summary": (
+                "The submission may have reached GitHub, but its result could not be verified. "
+                "Do not retry; check app-build status with the returned submission_id and reconcile the repository."
+            ),
+        }
+    if resp.get("duplicate") and resp.get("pr_url"):
+        return {
+            "ok": True, "already_submitted": True,
+            "submission_id": resp.get("action_run_id"),
+            "pr_url": resp["pr_url"],
+            "summary": f"The draft pull request is already available: {resp['pr_url']}. Review and merge it on GitHub.",
+        }
     return {
         "ok": True, "pr_url": resp.get("pr_url"),
+        "submission_id": resp.get("action_run_id"),
         "summary": (
             f"Pull request opened: {resp.get('pr_url')}. Review and merge it on "
             "GitHub — I cannot merge it myself."

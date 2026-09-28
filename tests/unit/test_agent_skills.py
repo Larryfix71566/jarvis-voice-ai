@@ -14,6 +14,7 @@ from jarvis.agent_skills import (
     Skill,
     discover,
     enabled_names,
+    format_inventory,
     load_skills,
     match_skill,
     parse_skill,
@@ -112,6 +113,47 @@ class TestParsing:
         assert skill is None
         assert any("frontmatter" in prob for prob in problems)
 
+    @pytest.mark.parametrize("newline", ["\n", "\r\n"])
+    def test_body_keeps_markdown_rules_and_diff_headers(self, tmp_path, newline):
+        path = tmp_path / "rule-skill" / "SKILL.md"
+        path.parent.mkdir()
+        body = (
+            "# Instructions" + newline + newline
+            + "Keep this section." + newline + newline
+            + "---" + newline + "This section follows a Markdown rule." + newline + newline
+            + "--- a/example.md" + newline + "This section follows a diff header." + newline
+        )
+        path.write_text(
+            "---" + newline + "name: rule-skill" + newline
+            + "description: Demonstrate complete body parsing." + newline
+            + "---" + newline + body,
+            encoding="utf-8",
+            newline="",
+        )
+        skill, problems = parse_skill(path)
+        assert skill is not None, problems
+        assert skill.body() == body.strip()
+
+    @pytest.mark.parametrize("text", ["", "---", " ---\nname: x\n---\nbody\n"])
+    def test_frontmatter_requires_exact_open_and_close_delimiter_lines(self, text):
+        from jarvis.agent_skills import _split_frontmatter
+
+        front, body = _split_frontmatter(text)
+        assert front == ""
+        assert body == text
+
+    def test_body_is_not_silently_truncated_after_later_separator(self, tmp_path):
+        path = tmp_path / "long-skill" / "SKILL.md"
+        path.parent.mkdir()
+        body = "# Start\n\n" + "x" * 25_000 + "\n\n---\n\n# Required ending\n"
+        path.write_text(
+            "---\nname: long-skill\ndescription: Complete body\n---\n" + body,
+            encoding="utf-8",
+        )
+        skill, _ = parse_skill(path)
+        assert skill is not None
+        assert skill.body() == body.strip()
+
     def test_broken_yaml_is_a_problem_not_a_crash(self, tmp_path):
         p = tmp_path / "x" / "SKILL.md"
         p.parent.mkdir()
@@ -159,10 +201,16 @@ class TestRegistrationGate:
         make_skill(root)
         assert load_skills(root, tmp_path / "absent.yaml") == []
 
-    def test_an_unreadable_config_enables_nothing(self, tmp_path):
-        bad = tmp_path / "skills.yaml"
-        bad.write_text("{[not yaml", encoding="utf-8")
+    def test_an_unreadable_config_enables_nothing_without_logging_path_or_text(
+        self, tmp_path, caplog
+    ):
+        bad = tmp_path / "SKILLS_PATH_CANARY" / "skills.yaml"
+        bad.parent.mkdir()
+        bad.write_text("CONFIG_CONTENT_CANARY: {[not yaml", encoding="utf-8")
         assert enabled_names(bad) == []
+        assert "skills_config_unreadable error_type=" in caplog.text
+        assert "SKILLS_PATH_CANARY" not in caplog.text
+        assert "CONFIG_CONTENT_CANARY" not in caplog.text
 
     def test_one_invalid_skill_does_not_disable_the_rest(self, tmp_path, monkeypatch):
         monkeypatch.delenv("JARVIS_AGENT_SKILLS_ENABLED", raising=False)
@@ -172,6 +220,19 @@ class TestRegistrationGate:
         (root / "broken" / "SKILL.md").write_text("no frontmatter", encoding="utf-8")
         cfg = config_with(tmp_path, ["good", "broken"])
         assert [s.name for s in load_skills(root, cfg)] == ["good"]
+
+    def test_invalid_skill_log_omits_path_and_frontmatter(self, tmp_path, monkeypatch, caplog):
+        monkeypatch.delenv("JARVIS_AGENT_SKILLS_ENABLED", raising=False)
+        root = tmp_path / "SKILLS_PATH_CANARY"
+        (root / "broken").mkdir(parents=True)
+        (root / "broken" / "SKILL.md").write_text(
+            "---\nname: SKILL_CONTENT_CANARY\ndescription: X\n---\n"
+        )
+        cfg = config_with(tmp_path, ["broken"])
+        assert load_skills(root, cfg) == []
+        assert "skill_invalid problem_count=1" in caplog.text
+        assert "SKILLS_PATH_CANARY" not in caplog.text
+        assert "SKILL_CONTENT_CANARY" not in caplog.text
 
     def test_kill_switch(self, tmp_path, monkeypatch):
         root = tmp_path / "skills"
@@ -184,6 +245,99 @@ class TestRegistrationGate:
     def test_enabled_by_default(self, monkeypatch):
         monkeypatch.delenv("JARVIS_AGENT_SKILLS_ENABLED", raising=False)
         assert skills_enabled() is True
+
+    def test_digest_pinned_v2_loader_accepts_exact_revision_and_refuses_drift(
+        self, tmp_path, monkeypatch,
+    ):
+        from jarvis.skill_catalog import inspect_package
+
+        root = tmp_path / "skills"
+        skill_path = make_skill(root, name="pinned-skill")
+        revision = inspect_package(skill_path.parent).revision
+        cfg = tmp_path / "skills.yaml"
+        cfg.write_text(
+            "schema_version: 2\n"
+            "enabled: [pinned-skill]\n"
+            f"revisions: {{pinned-skill: {revision}}}\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("JARVIS_SKILLS_WORKSPACE_ENABLED", "1")
+        monkeypatch.delenv("JARVIS_AGENT_SKILLS_ENABLED", raising=False)
+
+        assert [skill.name for skill in load_skills(root, cfg)] == ["pinned-skill"]
+        skill_path.write_text(skill_path.read_text() + "Drifted instructions.\n", encoding="utf-8")
+        assert load_skills(root, cfg) == []
+
+    @pytest.mark.parametrize("registry", [
+        "schema_version: 2\nenabled: [pinned-skill]\nrevisions: {}\n",
+        "schema_version: 2\nenabled: [pinned-skill]\nrevisions: {pinned-skill: bad}\n",
+        "schema_version: 2\nenabled: [pinned-skill, pinned-skill]\nrevisions: {}\n",
+        "schema_version: 3\nenabled: [pinned-skill]\nrevisions: {}\n",
+    ])
+    def test_digest_registry_rejects_missing_duplicate_or_malformed_pins(
+        self, tmp_path, monkeypatch, registry,
+    ):
+        root = tmp_path / "skills"
+        make_skill(root, name="pinned-skill")
+        cfg = tmp_path / "skills.yaml"
+        cfg.write_text(registry, encoding="utf-8")
+        monkeypatch.setenv("JARVIS_SKILLS_WORKSPACE_ENABLED", "1")
+        assert load_skills(root, cfg) == []
+
+    def test_workspace_mode_refuses_legacy_registry_but_legacy_mode_still_loads(
+        self, tmp_path, monkeypatch,
+    ):
+        root = tmp_path / "skills"
+        make_skill(root, name="pinned-skill")
+        cfg = config_with(tmp_path, ["pinned-skill"])
+        monkeypatch.delenv("JARVIS_AGENT_SKILLS_ENABLED", raising=False)
+        monkeypatch.delenv("JARVIS_SKILLS_WORKSPACE_ENABLED", raising=False)
+        assert [skill.name for skill in load_skills(root, cfg)] == ["pinned-skill"]
+        monkeypatch.setenv("JARVIS_SKILLS_WORKSPACE_ENABLED", "1")
+        assert load_skills(root, cfg) == []
+
+    def test_repository_v2_pins_match_every_enabled_package(self, monkeypatch):
+        monkeypatch.setenv("JARVIS_SKILLS_WORKSPACE_ENABLED", "1")
+        monkeypatch.delenv("JARVIS_AGENT_SKILLS_ENABLED", raising=False)
+        loaded = load_skills()
+        assert {skill.name for skill in loaded} == {
+            "current-weather-with-fahrenheit",
+            "git-history-and-status-review",
+            "layered-geolocation",
+            "mcp-server-authoring",
+            "technical-plan-document",
+        }
+
+    def test_inventory_reports_digest_pin_state_and_enforcement_mode(self, monkeypatch):
+        monkeypatch.delenv("JARVIS_SKILLS_WORKSPACE_ENABLED", raising=False)
+        text = format_inventory()
+        assert "registry: schema v2; digest enforcement OFF (legacy loader)" in text
+        assert text.count("digest pin: matches") == 5
+
+    def test_inventory_surfaces_a_package_pin_mismatch(self, tmp_path):
+        from jarvis.skill_catalog import inspect_package
+
+        root = tmp_path / "skills"
+        skill_path = make_skill(root, name="pinned-skill")
+        revision = inspect_package(skill_path.parent).revision
+        skill_path.write_text(skill_path.read_text() + "changed\n", encoding="utf-8")
+        cfg = tmp_path / "skills.yaml"
+        cfg.write_text(
+            "schema_version: 2\nenabled: [pinned-skill]\n"
+            f"revisions: {{pinned-skill: {revision}}}\n",
+            encoding="utf-8",
+        )
+        assert "digest pin: MISMATCH" in format_inventory(root, cfg)
+
+    def test_inventory_does_not_call_unregistered_v2_candidate_a_pin_mismatch(self, tmp_path):
+        root = tmp_path / "skills"
+        make_skill(root, name="draft-skill")
+        cfg = tmp_path / "skills.yaml"
+        cfg.write_text("schema_version: 2\nenabled: []\nrevisions: {}\n", encoding="utf-8")
+        text = format_inventory(root, cfg)
+        assert "[inert   ] draft-skill" in text
+        assert "digest pin: not configured (inert)" in text
+        assert "digest pin: MISMATCH" not in text
 
 
 class TestMatching:
@@ -272,13 +426,16 @@ class TestNoExecutionPath:
         for forbidden in ("run", "execute", "invoke", "call"):
             assert not hasattr(sk(), forbidden), f"Skill grew a .{forbidden}()"
 
-    def test_a_bundled_script_is_never_read_or_run(self, tmp_path, monkeypatch):
+    def test_a_bundled_script_is_never_read_or_run(self, tmp_path, monkeypatch, caplog):
         monkeypatch.delenv("JARVIS_AGENT_SKILLS_ENABLED", raising=False)
         root = tmp_path / "skills"
         make_skill(root, scripts=True)
         cfg = config_with(tmp_path, ["a-skill"])
         loaded = load_skills(root, cfg)
         assert loaded and loaded[0].has_scripts is True
+        assert "skill_bundles_scripts" in caplog.text
+        assert "a-skill" not in caplog.text
+        assert str(root) not in caplog.text
         # The prompt carries the warning; the script content never appears.
         assert "echo hi" not in loaded[0].as_prompt()
 

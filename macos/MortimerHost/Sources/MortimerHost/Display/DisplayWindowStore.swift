@@ -108,6 +108,10 @@ final class DisplayWindowStore {
             return containsMemoryGraph() ? nil : selection
         case .result(let id):
             return containsWorkspaceResult(id) ? nil : selection
+        case .skillDetail:
+            // Skills detail is rendered directly in the shared stage and
+            // never creates a transport panel or a second copy.
+            return selection
         }
     }
 
@@ -129,6 +133,11 @@ final class DisplayWindowStore {
             return visible.contains { $0.allPayloads.contains(where: Self.isMemoryGraphPayload) }
         case .result(let id):
             return visible.contains { $0.allWorkspaceIDs.contains(id) }
+        case .skillDetail:
+            // The owning SkillsStore validates that the ID is still selected
+            // before rendering. This locator suppresses the main copy only
+            // while the shared display scene is actually open.
+            return selection == content
         }
     }
 
@@ -147,11 +156,16 @@ final class DisplayWindowStore {
     /// deliberate pinning explicit instead of turning repeated voice
     /// requests into a panel fan-out.
     @discardableResult
-    func apply(_ payload: DisplayPayload, workspaceID: UUID? = nil) -> Int {
+    func apply(_ payload: DisplayPayload, workspaceID: UUID? = nil) -> Int? {
+        // Enforce the privacy boundary at the display sink as well as in the
+        // message router. Other callers (including future voice/UI routes)
+        // must not be able to append a local-only payload to an existing
+        // Developer batch or create a panel on the supporting display.
+        guard !payload.isProtectedLocal else { return nil }
         let aggregationKey = Self.aggregationKey(for: payload)
         if let aggregationKey,
            let index = panels.firstIndex(where: {
-               $0.aggregationKey == aggregationKey && !$0.pinned
+               $0.aggregationKey == aggregationKey
            }) {
             let matchedIndex = panels[index].allPayloads.firstIndex {
                 Self.identityKey(for: $0) == Self.identityKey(for: payload)
@@ -194,7 +208,7 @@ final class DisplayWindowStore {
         // ordinary repeated-result arrival; the caller can still use the
         // existing pinned panel or explicitly close one.
         guard let id = insert(payload, identityKey: identity, workspaceID: workspaceID) else {
-            return focusedID ?? panels.last?.id ?? 0
+            return nil
         }
         // Enforce the curated-stage budget at insertion time, not only when
         // the external scene happens to be open. A one-screen or closed-
@@ -212,6 +226,10 @@ final class DisplayWindowStore {
     /// answers to different requests remain distinct, while streamed chunks
     /// update one tile. A closed/evicted tile is not reopened by later chunks.
     func presentResponse(_ result: WorkspaceResult, isNew: Bool) {
+        // Stream updates can arrive after an initial response has already
+        // created a supporting-display tile. Reject protected updates before
+        // either replacing that tile or creating a new one.
+        guard !result.payload.isProtectedLocal else { return }
         let identity = "response:\(result.id.uuidString)"
         let matches = panels.indices.filter { panels[$0].identityKey == identity }
         if !matches.isEmpty {
@@ -264,7 +282,9 @@ final class DisplayWindowStore {
     /// identity rather than creating more copies.
     @discardableResult
     func openAdditional(id: Int, workspaceID: UUID? = nil) -> Int? {
-        guard let source = panels.first(where: { $0.id == id }) else { return nil }
+        guard let source = panels.first(where: { $0.id == id }),
+              !source.payload.isProtectedLocal,
+              source.appendedPayloads.allSatisfy({ !$0.isProtectedLocal }) else { return nil }
         // The explicit duplicate path pins the source first so opening the
         // additional copy cannot cause the active presentation to be replaced.
         if let index = panels.firstIndex(where: { $0.id == id }) {
@@ -297,6 +317,7 @@ final class DisplayWindowStore {
 
     private func insert(_ payload: DisplayPayload, identityKey: String,
                         workspaceID: UUID?) -> Int? {
+        guard !payload.isProtectedLocal else { return nil }
         seq += 1
         let step = Self.cascadeStep * CGFloat(panels.count % 8)
         let panel = DisplayWindowPanel(
@@ -364,7 +385,7 @@ final class DisplayWindowStore {
             fields(payload.images), fields(payload.basemapImages), fields(links),
             field(payload.agent), field(payload.tool), fields(payload.commands),
             field(payload.note), boolField, field(payload.content), intField,
-            truncatedField,
+            truncatedField, field(payload.dataPolicy), field(payload.opaqueRef),
         ].joined(separator: "\u{1e}")
     }
 

@@ -19,7 +19,7 @@ from sandbox.durable import atomic_json
 
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 REPOSITORY = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\Z")
-BRANCH = re.compile(r"mortimer/(?:selfedit|app-build)/[a-z0-9][a-z0-9/_-]{0,180}\Z")
+BRANCH = re.compile(r"mortimer/(?:selfedit|app-build|skill-authoring-[a-z0-9]+(?:-[a-z0-9]+)*)/[a-z0-9][a-z0-9/_-]{0,180}\Z")
 
 
 class NoRedirect(request.HTTPRedirectHandler):
@@ -168,14 +168,21 @@ class Publisher:
                 raise SandboxError("Multiple pull requests exist for this task branch")
             if matching:
                 pr = matching[0]
-                if pr.get("base", {}).get("ref") != base_branch or pr.get("head", {}).get("sha") != state["commit"]:
-                    raise SandboxError("Existing pull request no longer matches this publication")
+                if (pr.get("base", {}).get("ref") != base_branch
+                        or pr.get("head", {}).get("sha") != state["commit"]
+                        or pr.get("state") != "open" or pr.get("draft") is not True):
+                    raise SandboxError("Existing pull request is not the exact open draft for this publication")
             else:
                 pr = call("POST", prefix + "/pulls", {"head": branch, "base": base_branch,
                     "title": title, "body": body, "draft": True})
             number = pr.get("number")
-            if type(number) is not int or number < 1:
-                raise SandboxError("GitHub returned an invalid pull-request number")
+            if (type(number) is not int or number < 1 or pr.get("state") != "open"
+                    or pr.get("draft") is not True
+                    or pr.get("base", {}).get("ref") != base_branch
+                    or pr.get("head", {}).get("ref") != branch
+                    or pr.get("head", {}).get("repo", {}).get("full_name", "").casefold() != repository.casefold()
+                    or pr.get("head", {}).get("sha") != state["commit"]):
+                raise SandboxError("GitHub did not confirm the exact open draft pull request")
             state.update(status="published", number=number, url=f"https://github.com/{repository}/pull/{number}")
             atomic_json(path, state)
             return {"ok": True, "number": number, "url": state["url"], "commit": state["commit"],

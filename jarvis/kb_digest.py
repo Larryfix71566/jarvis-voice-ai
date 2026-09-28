@@ -25,14 +25,18 @@ from jarvis.config import Settings
 from jarvis.db import get_conn
 from jarvis.memory import MAX_ROW_CHARS, MAX_TRANSCRIPT_ROWS, scan_memory_content
 from jarvis.memory_model import make_background_async_client
-from jarvis.model_execution import ModelContextMessage, ModelExecutionRequest, execute_chat
+from jarvis.model_execution import (
+    ModelContextMessage,
+    ModelExecutionRequest,
+    execute_chat,
+)
 from jarvis.privacy_policy import DataPolicy
-from mcp_servers.mcp_kb import logic as kb
 from jarvis.usage_ledger import (
+    provider_from_base_url,
     record_completion,
     record_execution_result,
-    provider_from_base_url,
 )
+from mcp_servers.mcp_kb import logic as kb
 
 logger = logging.getLogger(__name__)
 
@@ -170,12 +174,12 @@ async def write_session_digest(
         if digest == "SKIP":
             skip = True
         elif not digest:
-            logger.warning("kb_digest_empty_response session=%s", session_id)
+            logger.warning("kb_digest_empty_response")
             skip = True
         else:
             reason = scan_memory_content(digest)
             if reason is not None:
-                logger.warning("kb_digest_rejected reason=%s session=%s", reason, session_id)
+                logger.warning("kb_digest_rejected")
                 skip = True
 
         if skip:
@@ -195,8 +199,7 @@ async def write_session_digest(
                     part_ids.append(result["id"])
                 else:
                     logger.warning(
-                        "kb_digest_part_write_failed session=%s error=%s",
-                        session_id, result.get("error"),
+                        "kb_digest_part_write_failed",
                     )
 
             if part_ids:
@@ -213,8 +216,7 @@ async def write_session_digest(
                 wrote = bool(primary_result.get("ok"))
                 if not wrote:
                     logger.warning(
-                        "kb_digest_primary_write_failed session=%s error=%s",
-                        session_id, primary_result.get("error"),
+                        "kb_digest_primary_write_failed",
                     )
         else:
             result = kb.kb_write(
@@ -227,20 +229,19 @@ async def write_session_digest(
             wrote = bool(result.get("ok"))
             if not wrote:
                 logger.warning(
-                    "kb_digest_write_failed session=%s error=%s",
-                    session_id, result.get("error"),
+                    "kb_digest_write_failed",
                 )
 
         flush_result = kb.kb_flush()
         if not flush_result.get("ok"):
             logger.warning(
-                "kb_flush_failed session=%s error=%s",
-                session_id, flush_result.get("error"),
+                "kb_flush_failed",
             )
 
         return wrote
-    except Exception:  # noqa: BLE001 — digest must never break the pipeline
-        logger.exception("kb_digest_failed session=%s", session_id)
+    except Exception as exc:  # noqa: BLE001 — digest must never break the pipeline
+        logger.warning("kb_digest_failed error_type=%s",
+                       type(exc).__name__[:64])
         try:
             kb.kb_flush()
         except Exception:  # noqa: BLE001

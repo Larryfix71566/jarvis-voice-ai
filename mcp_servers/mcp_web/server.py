@@ -38,15 +38,19 @@ def get_weather_radar(city: str) -> dict:
 
 
 @mcp.tool()
-def research_compare_start(urls: list, focus: str = "", confirm: bool = False) -> dict:
+def research_compare_start(
+    urls: list, focus: str = "", confirm: bool = False, run_id: str = "",
+) -> dict:
     """Start a deep comparison of TWO websites' content (not a quick search) — crawls each site and writes a comparison review. Two-phase: confirm=false previews the cost and asks; only after the user explicitly agrees, call again with confirm=true. FOCUS optionally steers what the comparison is about (e.g. "pricing and support"). Runs in the background for a few minutes — use research_status for progress."""
-    return logic.research_compare_start(_get_admin_client(), urls, focus, confirm)
+    return logic.research_compare_start(
+        _get_admin_client(), urls, focus, confirm, run_id=run_id,
+    )
 
 
 @mcp.tool()
-def research_status() -> dict:
+def research_status(run_id: str = "") -> dict:
     """Report progress of the current site comparison: still crawling, failed, or ready to view/save."""
-    return logic.research_status(_get_admin_client())
+    return logic.research_status(_get_admin_client(), run_id=run_id)
 
 
 @mcp.tool()

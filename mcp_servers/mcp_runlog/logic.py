@@ -106,6 +106,7 @@ def runlog_detail(run_id: str) -> dict[str, Any]:
             }
             for e in detail["events"]
         ],
+        "unresolved_tool_calls": detail.get("unresolved_tool_calls", []),
     }
 
 

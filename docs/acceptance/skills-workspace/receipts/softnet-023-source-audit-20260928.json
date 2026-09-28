@@ -1,0 +1,27 @@
+{
+  "version": "0.23.0-e5fd48c",
+  "archive_sha256": "b5daa4e5efaef3c2716f872dcda3961a35b2bddcdf03fe630ac3db0ab8156f3e",
+  "release_binary_sha256": "5982c8cde55cd039d4aa71add54356224b8b8a040df1a8786f16327b421f701d",
+  "installed_sha256": "5982c8cde55cd039d4aa71add54356224b8b8a040df1a8786f16327b421f701d",
+  "binary_matches_official_release": true,
+  "sources": {
+    "lib_proxy_host.rs": "6f0f49d19c31a83343e46ba1f6dec488bdc785a8d0e96f8ba9216fe8c2f9ded0",
+    "lib_proxy_vm.rs": "88680f0c69d6f315062fe84f5e9239fac288b549747cc4ea5909969b748919f1",
+    "src_main.rs": "62269c26a825cef271629a5561ce09ce11a3112878c5d1690f7ebc63a6cf8c14",
+    "lib_proxy_rule.rs": "4c6cbf6cead3a272fc76f4a86338d78a00023c5389b808a6b3c8f7b92bdfeec5",
+    "lib_proxy_mod.rs": "9a42c13b019e7fd93fc103b3a46044b3638ffd4775469428292f4ca8050e835f",
+    "lib_proxy_rules.rs": "cf17a6d3ff894b84b24d277fcbd9f3d186b0962fe62f7b09e4e5afcd991ad0ad"
+  },
+  "live_ipv6_acceptance": false,
+  "source_audit": {
+    "outbound": "allowed_from_vm permits ARP and IPv4 only; other Ethernet protocols return None and are not forwarded",
+    "inbound": "allowed_from_host permits ARP and IPv4 only; other Ethernet protocols return None and are not forwarded",
+    "conclusion": "IPv6 is denied by the protocol filter in the pinned source; live target-VM IPv6 acceptance remains unverified",
+    "sources": [
+      "https://github.com/cirruslabs/softnet/blob/0.23.0/lib/proxy/vm.rs",
+      "https://github.com/cirruslabs/softnet/blob/0.23.0/lib/proxy/host.rs"
+    ]
+  },
+  "source_commit": "e5fd48cf033ed0ec376710607187d761e60c2374",
+  "source_commit_matches_installed_version": true
+}

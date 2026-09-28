@@ -10,27 +10,36 @@ import asyncio
 import base64
 import inspect
 import json
+import logging
 import math
 import re
 import threading
 import time
-from dataclasses import dataclass, field
+from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Callable, Literal
-from collections.abc import Mapping
+from dataclasses import dataclass, field
+from types import SimpleNamespace
+from typing import Any, Literal
 
 from jarvis.bot.shared_content import (
     MAX_ATTACHMENTS,
     SharedContent,
     normalize_shared_content,
 )
-from jarvis.model_routing import ModelRouteError, ResolvedModelRoute, make_route_client
+from jarvis.model_routing import (
+    AccessRoute,
+    ModelRouteError,
+    ResolvedModelRoute,
+    make_route_client,
+)
 from jarvis.privacy_policy import (
     DataPolicy,
     assert_route_allowed,
     inherit_result_policy,
     strictest,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ModelExecutionInputError(ValueError):
@@ -45,15 +54,17 @@ ExecutionEventType = Literal[
     "queued", "started", "progress", "text_delta", "tool_request",
     "tool_result", "artifact", "completed", "cancelled", "failed",
 ]
+ExecutionProgressStage = Literal["provider_request", "response_received"]
 
 
 @dataclass(frozen=True)
 class ModelExecutionEvent:
-    """Non-payload lifecycle event correlated to the originating request.
+    """Policy-labeled event correlated to the originating request.
 
-    The event carries the effective policy even when it has no content. A
-    content-bearing future event must additionally pass its content through
-    the same policy checks before the event is emitted.
+    Most events contain no payload. Text deltas are delivered only through the
+    caller-owned in-process sink after the selected provider route has passed
+    the same effective-policy check as the request; they are not usage-log or
+    provider telemetry fields. Consumers must retain and enforce this policy.
     """
 
     task_id: str
@@ -62,6 +73,8 @@ class ModelExecutionEvent:
     event_type: ExecutionEventType
     data_policy: DataPolicy
     error_code: str | None = None
+    progress_stage: ExecutionProgressStage | None = None
+    text_delta: str | None = None
     tool_call_id: str | None = None
     tool_name: str | None = None
 
@@ -86,6 +99,8 @@ class ModelToolCall:
     tool_call_id: str
     name: str
     arguments: Mapping[str, Any]
+    raw_arguments: str | None = None
+    provider_extras: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -95,12 +110,14 @@ class ModelOutputRequirements:
 
 
 class ModelAdmissionController:
-    """One-process, event-loop-local limit for non-voice model execution.
+    """One-process limit for non-voice execution, shared across event loops.
 
     At most two requests execute at once and at most one is background. This
     leaves one slot available to interactive work even while background work
     is queued. Waiting interactive requests are admitted ahead of background
-    waiters as soon as capacity becomes available.
+    waiters as soon as capacity becomes available. A condition variable owns
+    the counters so synchronous workers and multiple async loops cannot each
+    create a separate effective capacity pool.
     """
 
     def __init__(self, *, max_active: int = 2, max_background: int = 1):
@@ -108,73 +125,116 @@ class ModelAdmissionController:
             raise ValueError("admission limits must reserve an interactive slot")
         self._max_active = max_active
         self._max_background = max_background
-        self._condition = asyncio.Condition()
-        self._owner_guard = threading.Lock()
-        self._owner_loop: asyncio.AbstractEventLoop | None = None
+        self._condition = threading.Condition()
         self._active_interactive = 0
         self._active_background = 0
-        self._waiting_interactive = 0
+        self._waiters: list[tuple[int, str, object]] = []
+        self._next_ticket = 0
 
     @property
     def active_counts(self) -> tuple[int, int]:
         """Return (interactive, background) counts for diagnostics/tests."""
-        return self._active_interactive, self._active_background
+        with self._condition:
+            return self._active_interactive, self._active_background
 
     @property
     def waiting_interactive(self) -> int:
-        return self._waiting_interactive
+        with self._condition:
+            return sum(priority == "interactive" for _, priority, _ in self._waiters)
 
-    def _can_start(self, priority: str) -> bool:
+    def _can_start(self, priority: str, token: object) -> bool:
         active = self._active_interactive + self._active_background
         if active >= self._max_active:
             return False
+
+        earlier = [
+            (ticket, queued_priority)
+            for ticket, queued_priority, queued_token in self._waiters
+            if queued_token is not token
+        ]
+        interactive_waiters = [
+            ticket for ticket, queued_priority in earlier
+            if queued_priority == "interactive"
+        ]
         if priority == "interactive":
-            return True
-        return (
-            priority == "background"
-            and self._active_background < self._max_background
-            and self._waiting_interactive == 0
-        )
+            own_ticket = next(
+                ticket for ticket, queued_priority, queued_token in self._waiters
+                if queued_token is token
+            )
+            return not any(ticket < own_ticket for ticket in interactive_waiters)
+        if priority == "background":
+            earlier_background = [
+                ticket for ticket, queued_priority in earlier
+                if queued_priority == "background"
+            ]
+            own_ticket = next(
+                ticket for ticket, queued_priority, queued_token in self._waiters
+                if queued_token is token
+            )
+            return (
+                self._active_background < self._max_background
+                and not interactive_waiters
+                and not any(ticket < own_ticket for ticket in earlier_background)
+            )
+        return False
+
+    def _acquire(self, priority: str, cancelled: threading.Event) -> bool:
+        with self._condition:
+            ticket = self._next_ticket
+            self._next_ticket += 1
+            token = object()
+            waiter = (ticket, priority, token)
+            self._waiters.append(waiter)
+            while True:
+                if cancelled.is_set():
+                    self._waiters.remove(waiter)
+                    self._condition.notify_all()
+                    return False
+                if self._can_start(priority, token):
+                    self._waiters.remove(waiter)
+                    if priority == "interactive":
+                        self._active_interactive += 1
+                    else:
+                        self._active_background += 1
+                    self._condition.notify_all()
+                    return True
+                self._condition.wait(timeout=0.05)
+
+    def _release(self, priority: str) -> None:
+        with self._condition:
+            if priority == "interactive":
+                self._active_interactive -= 1
+            else:
+                self._active_background -= 1
+            self._condition.notify_all()
 
     @asynccontextmanager
     async def slot(self, priority: str) -> AsyncIterator[None]:
         if priority not in {"interactive", "background"}:
             raise ModelExecutionInputError("priority must be interactive or background")
-        current_loop = asyncio.get_running_loop()
-        with self._owner_guard:
-            if self._owner_loop is None:
-                self._owner_loop = current_loop
-            elif self._owner_loop is not current_loop:
-                raise RuntimeError(
-                    "model admission controller is already owned by another event loop"
-                )
-        acquired = False
-        async with self._condition:
-            if priority == "interactive":
-                self._waiting_interactive += 1
-            try:
-                while not self._can_start(priority):
-                    await self._condition.wait()
-                if priority == "interactive":
-                    self._waiting_interactive -= 1
-                    self._active_interactive += 1
-                else:
-                    self._active_background += 1
-                acquired = True
+        cancelled = threading.Event()
+        acquisition = asyncio.create_task(asyncio.to_thread(
+            self._acquire, priority, cancelled,
+        ))
+        try:
+            acquired = await asyncio.shield(acquisition)
+        except asyncio.CancelledError:
+            cancelled.set()
+            with self._condition:
                 self._condition.notify_all()
-            finally:
-                if not acquired and priority == "interactive":
-                    self._waiting_interactive -= 1
-                    self._condition.notify_all()
+            try:
+                acquired = await asyncio.shield(acquisition)
+            except asyncio.CancelledError:
+                acquired = False
+            if acquired:
+                self._release(priority)
+            raise
+        if not acquired:
+            raise asyncio.CancelledError
         try:
             yield
         finally:
-            async with self._condition:
-                if priority == "interactive":
-                    self._active_interactive -= 1
-                else:
-                    self._active_background -= 1
-                self._condition.notify_all()
+            self._release(priority)
 
 
 _PROCESS_ADMISSION = ModelAdmissionController()
@@ -182,9 +242,13 @@ _PROCESS_ADMISSION = ModelAdmissionController()
 
 @dataclass(frozen=True)
 class ModelContextMessage:
-    role: Literal["system", "user", "assistant"]
+    role: Literal["system", "user", "assistant", "tool"]
     content: str
     data_policy: DataPolicy = field(default_factory=DataPolicy)
+    name: str | None = None
+    tool_call_id: str | None = None
+    tool_calls: tuple[ModelToolCall, ...] = ()
+    provider_extras: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -209,6 +273,9 @@ class ModelExecutionRequest:
     output: ModelOutputRequirements = field(default_factory=ModelOutputRequirements)
     data_policy: DataPolicy = field(default_factory=DataPolicy)
     timeout_s: float = 60.0
+    stream_text: bool = False
+    extra_body: Mapping[str, Any] | None = None
+    temperature: float | None = None
 
 
 @dataclass(frozen=True)
@@ -229,12 +296,14 @@ class ModelExecutionResult:
     cache_write_tokens: int | None = None
     duration_ms: float = 0.0
     response_id: str | None = None
+    provider_extras: Mapping[str, Any] = field(default_factory=dict)
 
 
 def _validated_inputs(request: ModelExecutionRequest,
                       resolved: ResolvedModelRoute
                       ) -> tuple[
-                          list[dict[str, Any]], DataPolicy, list[dict[str, Any]], dict[str, Any]
+                          list[dict[str, Any]], DataPolicy, list[dict[str, Any]],
+                          dict[str, Any], set[str]
                       ]:
     if (not isinstance(request.workload, str) or not request.workload
             or request.workload != resolved.workload):
@@ -243,8 +312,8 @@ def _validated_inputs(request: ModelExecutionRequest,
             or not isinstance(request.parent_request_id, str)
             or not request.parent_request_id.strip()):
         raise ModelExecutionInputError("task and parent request IDs are required")
-    if not isinstance(request.instructions, str) or not request.instructions.strip():
-        raise ModelExecutionInputError("instructions must be non-empty text")
+    if not isinstance(request.instructions, str):
+        raise ModelExecutionInputError("instructions must be text")
     if (isinstance(request.timeout_s, bool) or not isinstance(request.timeout_s, (int, float))
             or not math.isfinite(request.timeout_s) or request.timeout_s <= 0):
         raise ModelExecutionInputError("timeout must be a positive finite number")
@@ -259,6 +328,28 @@ def _validated_inputs(request: ModelExecutionRequest,
         raise ModelExecutionInputError("max_tokens must be an integer from 1 to 32000")
     if not isinstance(request.output.require_nonempty_text, bool):
         raise ModelExecutionInputError("require_nonempty_text must be boolean")
+    if not isinstance(request.stream_text, bool):
+        raise ModelExecutionInputError("stream_text must be boolean")
+    if request.stream_text and "streaming" not in resolved.route.capabilities:
+        raise ModelRouteError(
+            f"route {resolved.route.name!r} lacks required capability: streaming"
+        )
+    if request.temperature is not None and (
+            isinstance(request.temperature, bool)
+            or not isinstance(request.temperature, (int, float))
+            or not math.isfinite(request.temperature)):
+        raise ModelExecutionInputError("temperature must be a finite number or None")
+    if (request.extra_body is not None
+            and (resolved.provider != "anthropic"
+                 or not isinstance(request.extra_body, Mapping)
+                 or set(request.extra_body) != {"output_config"}
+                 or not isinstance(request.extra_body.get("output_config"), Mapping)
+                 or set(request.extra_body["output_config"]) != {"effort"}
+                 or request.extra_body["output_config"].get("effort")
+                 not in {"low", "medium", "high", "xhigh", "max"})):
+        raise ModelExecutionInputError(
+            "only a supported Anthropic output-effort parameter is allowed"
+        )
     if max_tokens is not None and resolved.route.adapter not in {
             "openai_compatible", "saygm_gateway"}:
         raise ModelRouteError(
@@ -268,6 +359,9 @@ def _validated_inputs(request: ModelExecutionRequest,
 
     messages: list[dict[str, Any]] = []
     policies = [request.data_policy]
+    pending_tool_results: dict[str, str] = {}
+    seen_tool_call_ids: set[str] = set()
+    history_tool_names: set[str] = set()
     for item in request.context:
         # Strings were the only practical context shape in the original
         # uncalled foundation. Keep them as ordinary user context; reject all
@@ -276,14 +370,91 @@ def _validated_inputs(request: ModelExecutionRequest,
             item = ModelContextMessage("user", item)
         if not isinstance(item, ModelContextMessage):
             raise ModelExecutionInputError("context items must be text messages")
-        if not isinstance(item.role, str) or item.role not in {"system", "user", "assistant"}:
+        if not isinstance(item.role, str) or item.role not in {
+                "system", "user", "assistant", "tool"}:
             raise ModelExecutionInputError("unsupported context message role")
-        if not isinstance(item.content, str) or not item.content.strip():
-            raise ModelExecutionInputError("context message content must be non-empty text")
         if not isinstance(item.data_policy, DataPolicy):
             raise ModelExecutionInputError("context data policy is invalid")
-        messages.append({"role": item.role, "content": item.content})
+        if not isinstance(item.content, str) or len(item.content) > 1_000_000:
+            raise ModelExecutionInputError("context message content must be bounded text")
+        if not isinstance(item.tool_calls, tuple):
+            raise ModelExecutionInputError("context tool calls must be an immutable tuple")
+        if item.role == "tool":
+            if (not item.content.strip() or not isinstance(item.name, str)
+                    or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", item.name)
+                    or not isinstance(item.tool_call_id, str)
+                    or pending_tool_results.get(item.tool_call_id) != item.name
+                    or item.tool_calls):
+                raise ModelExecutionInputError("tool result does not match a pending tool call")
+            pending_tool_results.pop(item.tool_call_id)
+            messages.append({
+                "role": "tool", "tool_call_id": item.tool_call_id,
+                "name": item.name, "content": item.content,
+            })
+        elif item.role == "assistant" and item.tool_calls:
+            if pending_tool_results or item.name is not None or item.tool_call_id is not None:
+                raise ModelExecutionInputError("assistant tool-call message is out of order")
+            if len(item.tool_calls) > 16:
+                raise ModelExecutionInputError("context has too many tool calls")
+            message_extras = _validated_provider_extras(
+                item.provider_extras,
+                reserved={"role", "content", "tool_calls"},
+                label="assistant message",
+            )
+            wire_calls = []
+            for call in item.tool_calls:
+                if (not isinstance(call, ModelToolCall)
+                        or not isinstance(call.tool_call_id, str)
+                        or not call.tool_call_id.strip() or len(call.tool_call_id) > 256
+                        or call.tool_call_id in seen_tool_call_ids
+                        or not isinstance(call.name, str)
+                        or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", call.name)
+                        or not isinstance(call.arguments, Mapping)):
+                    raise ModelExecutionInputError("assistant tool-call context is malformed")
+                raw_arguments = call.raw_arguments
+                if raw_arguments is None:
+                    raw_arguments = json.dumps(call.arguments, separators=(",", ":"))
+                if not isinstance(raw_arguments, str) or len(raw_arguments) > 16_384:
+                    raise ModelExecutionInputError("assistant tool arguments exceed the limit")
+                try:
+                    parsed_arguments = json.loads(raw_arguments)
+                except json.JSONDecodeError as exc:
+                    raise ModelExecutionInputError("assistant tool arguments are malformed") from exc
+                if not isinstance(parsed_arguments, dict) or dict(call.arguments) != parsed_arguments:
+                    raise ModelExecutionInputError("assistant tool arguments do not match their JSON")
+                call_extras = _validated_provider_extras(
+                    call.provider_extras,
+                    reserved={"id", "type", "function"},
+                    label="tool call",
+                )
+                pending_tool_results[call.tool_call_id] = call.name
+                seen_tool_call_ids.add(call.tool_call_id)
+                history_tool_names.add(call.name)
+                wire_call = {
+                    "id": call.tool_call_id,
+                    "type": "function",
+                    "function": {"name": call.name, "arguments": raw_arguments},
+                }
+                wire_call.update(call_extras)
+                wire_calls.append(wire_call)
+            if item.content and not item.content.strip():
+                raise ModelExecutionInputError("assistant tool-call content is invalid")
+            wire_message = {
+                "role": "assistant", "content": item.content or None,
+                "tool_calls": wire_calls,
+            }
+            wire_message.update(message_extras)
+            messages.append(wire_message)
+        else:
+            if (not item.content.strip() or item.name is not None
+                    or item.tool_call_id is not None or item.tool_calls
+                    or item.provider_extras):
+                raise ModelExecutionInputError("context message has invalid role-specific fields")
+            messages.append({"role": item.role, "content": item.content})
         policies.append(item.data_policy)
+
+    if pending_tool_results:
+        raise ModelExecutionInputError("context ends before every tool call has a result")
 
     attachments = request.attachments
     if not isinstance(attachments, tuple):
@@ -347,7 +518,10 @@ def _validated_inputs(request: ModelExecutionRequest,
             },
         })
 
-    messages.append({"role": "user", "content": user_content})
+    if request.instructions.strip() or attachments:
+        messages.append({"role": "user", "content": user_content})
+    elif not messages:
+        raise ModelExecutionInputError("request requires instructions or context")
 
     if not isinstance(request.tools, tuple):
         raise ModelExecutionInputError("tools must be an immutable tuple")
@@ -401,10 +575,14 @@ def _validated_inputs(request: ModelExecutionRequest,
                 "parameters": schema,
             },
         })
+    if history_tool_names - tool_names:
+        raise ModelExecutionInputError(
+            "tool history references a tool outside the caller's current allowlist"
+        )
 
     effective_policy = strictest(*policies)
     assert_route_allowed(resolved.route, effective_policy)
-    return messages, effective_policy, tool_schemas, tool_validators
+    return messages, effective_policy, tool_schemas, tool_validators, seen_tool_call_ids
 
 
 def _field(value: Any, name: str) -> Any:
@@ -422,6 +600,23 @@ def _contains_schema_ref(value: Any) -> bool:
     return False
 
 
+def _validated_provider_extras(value: Any, *, reserved: set[str], label: str) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or len(value) > 32:
+        raise ModelExecutionInputError(f"{label} provider metadata is malformed")
+    if any(not isinstance(key, str) or not key or key in reserved for key in value):
+        raise ModelExecutionInputError(f"{label} provider metadata has a reserved key")
+    try:
+        encoded = json.dumps(
+            dict(value), ensure_ascii=False, allow_nan=False, separators=(",", ":")
+        )
+        copied = json.loads(encoded)
+    except (TypeError, ValueError) as exc:
+        raise ModelExecutionInputError(f"{label} provider metadata is not JSON data") from exc
+    if len(encoded.encode("utf-8")) > 16_384:
+        raise ModelExecutionInputError(f"{label} provider metadata exceeds its quota")
+    return copied
+
+
 def _usage_count(usage: Any, *names: str) -> int | None:
     for name in names:
         value = usage
@@ -433,14 +628,15 @@ def _usage_count(usage: Any, *names: str) -> int | None:
 
 
 def _validated_tool_calls(message: Any,
-                          validators: Mapping[str, Any]) -> tuple[ModelToolCall, ...]:
+                          validators: Mapping[str, Any], *,
+                          seen_ids: set[str] | None = None) -> tuple[ModelToolCall, ...]:
     raw_calls = _field(message, "tool_calls") or ()
     if not isinstance(raw_calls, (list, tuple)):
         raise ModelExecutionOutputError("provider tool-call output is malformed")
     if len(raw_calls) > 16:
         raise ModelExecutionOutputError("provider returned too many tool calls")
     calls: list[ModelToolCall] = []
-    call_ids: set[str] = set()
+    call_ids: set[str] = set(seen_ids or ())
     for raw in raw_calls:
         call_id = _field(raw, "id")
         function = _field(raw, "function")
@@ -466,10 +662,134 @@ def _validated_tool_calls(message: Any,
                 "provider tool arguments do not match the registered schema"
             ) from exc
         call_ids.add(call_id)
-        calls.append(ModelToolCall(call_id, name, parsed))
+        raw_extras = _field(raw, "model_extra") or {}
+        call_extras = _validated_provider_extras(
+            raw_extras, reserved={"id", "type", "function"}, label="provider tool call"
+        )
+        calls.append(ModelToolCall(call_id, name, parsed, arguments, call_extras))
     if calls and not validators:
         raise ModelExecutionOutputError("provider requested tools when none were permitted")
     return tuple(calls)
+
+
+async def _collect_chat_stream(stream: Any,
+                              on_text_delta: Callable[[str], Any]) -> Any:
+    """Collect OpenAI-shaped chunks without exposing partial tool arguments.
+
+    Text deltas are policy-bearing events; tool requests are reconstructed and
+    validated only after a provider finish marker arrives. The stream is
+    always closed on completion, error, deadline or caller cancellation.
+    """
+    text_parts: list[str] = []
+    tool_parts: dict[int, dict[str, Any]] = {}
+    response_id: str | None = None
+    usage: Any = None
+    finish_reason: str | None = None
+    try:
+        async for chunk in stream:
+            candidate_id = _field(chunk, "id")
+            if isinstance(candidate_id, str) and candidate_id:
+                if response_id is not None and response_id != candidate_id:
+                    raise ModelExecutionOutputError("provider changed the stream response identity")
+                response_id = candidate_id
+            candidate_usage = _field(chunk, "usage")
+            if candidate_usage is not None:
+                usage = candidate_usage
+            choices = _field(chunk, "choices") or ()
+            if not choices:
+                continue
+            if not isinstance(choices, (list, tuple)) or len(choices) > 1:
+                raise ModelExecutionOutputError("provider stream choice shape is unsupported")
+            choice = choices[0]
+            delta = _field(choice, "delta")
+            content = _field(delta, "content")
+            if content is not None:
+                if not isinstance(content, str):
+                    raise ModelExecutionOutputError("provider streamed non-text content")
+                if content:
+                    text_parts.append(content)
+                    observed = on_text_delta(content)
+                    if inspect.isawaitable(observed):
+                        await observed
+            calls = _field(delta, "tool_calls") or ()
+            if not isinstance(calls, (list, tuple)) or len(calls) > 16:
+                raise ModelExecutionOutputError("provider streamed malformed tool calls")
+            for part in calls:
+                index = _field(part, "index")
+                if (isinstance(index, bool) or not isinstance(index, int)
+                        or not 0 <= index < 16):
+                    raise ModelExecutionOutputError("provider streamed an invalid tool index")
+                state = tool_parts.setdefault(index, {
+                    "id": None, "name": "", "arguments": "", "extras": {},
+                })
+                call_id = _field(part, "id")
+                if call_id is not None:
+                    if not isinstance(call_id, str) or not call_id.strip():
+                        raise ModelExecutionOutputError("provider streamed an invalid tool identity")
+                    if state["id"] not in (None, call_id):
+                        raise ModelExecutionOutputError("provider changed a streamed tool identity")
+                    state["id"] = call_id
+                function = _field(part, "function")
+                for key in ("name", "arguments"):
+                    fragment = _field(function, key)
+                    if fragment is not None:
+                        if not isinstance(fragment, str):
+                            raise ModelExecutionOutputError("provider streamed malformed tool data")
+                        state[key] += fragment
+                        if len(state[key]) > (64 if key == "name" else 16_384):
+                            raise ModelExecutionOutputError("provider streamed oversized tool data")
+                raw_extras = _field(part, "model_extra") or {}
+                extras = _validated_provider_extras(
+                    raw_extras, reserved={"index", "id", "type", "function"},
+                    label="streamed tool call",
+                )
+                for key, value in extras.items():
+                    previous = state["extras"].get(key)
+                    if previous is not None and previous != value:
+                        raise ModelExecutionOutputError("provider changed streamed tool metadata")
+                    state["extras"][key] = value
+            candidate_finish = _field(choice, "finish_reason")
+            if candidate_finish is not None:
+                if (not isinstance(candidate_finish, str)
+                        or candidate_finish not in {
+                            "stop", "length", "tool_calls", "function_call", "content_filter",
+                        }):
+                    raise ModelExecutionOutputError("provider returned an unknown stream finish reason")
+                if finish_reason is not None and finish_reason != candidate_finish:
+                    raise ModelExecutionOutputError("provider changed stream finish reason")
+                finish_reason = candidate_finish
+    finally:
+        close = getattr(stream, "aclose", None) or getattr(stream, "close", None)
+        if callable(close):
+            try:
+                closed = close()
+                if inspect.isawaitable(closed):
+                    await closed
+            except Exception as exc:  # noqa: BLE001 — cleanup cannot mask task outcome
+                logger.warning("model_stream_cleanup_failed: %s", type(exc).__name__)
+
+    if finish_reason is None:
+        raise ModelExecutionOutputError("provider stream ended without a finish marker")
+    calls = []
+    for index in sorted(tool_parts):
+        state = tool_parts[index]
+        if not state["id"]:
+            raise ModelExecutionOutputError("provider streamed a tool call without an identity")
+        calls.append(SimpleNamespace(
+            id=state["id"], type="function",
+            function=SimpleNamespace(name=state["name"], arguments=state["arguments"]),
+            model_extra=state["extras"],
+        ))
+    message = SimpleNamespace(
+        content="".join(text_parts) or None,
+        tool_calls=calls,
+        model_extra={},
+    )
+    return SimpleNamespace(
+        id=response_id,
+        choices=[SimpleNamespace(message=message, finish_reason=finish_reason)],
+        usage=usage,
+    )
 
 
 async def execute_chat(request: ModelExecutionRequest,
@@ -477,6 +797,7 @@ async def execute_chat(request: ModelExecutionRequest,
                        *,
                        client_factory: Callable[..., Any] | None = None,
                        event_sink: Callable[[ModelExecutionEvent], Any] | None = None,
+                       event_sink_policy: DataPolicy | None = None,
                        admission: ModelAdmissionController | None = None) -> ModelExecutionResult:
     """Execute one validated request, preserving context and attachments.
 
@@ -484,11 +805,28 @@ async def execute_chat(request: ModelExecutionRequest,
     prevents late results from being returned to callers. Tool loops remain
     owned by their existing agent boundary.
     """
-    messages, effective_policy, tools, tool_validators = _validated_inputs(request, resolved)
+    messages, effective_policy, tools, tool_validators, seen_tool_call_ids = _validated_inputs(
+        request, resolved
+    )
+    if request.stream_text and event_sink is not None:
+        if not isinstance(event_sink_policy, DataPolicy):
+            raise ModelExecutionInputError(
+                "streamed text events require an explicitly classified event sink"
+            )
+        assert_route_allowed(
+            AccessRoute(
+                name="execution_event_sink", adapter="in_process_sink", billing="none",
+                credential_env=None, privacy=event_sink_policy.level,
+                capabilities=("text",),
+            ),
+            inherit_result_policy(effective_policy),
+        )
     controller = admission or _PROCESS_ADMISSION
     sequence = 0
 
-    async def emit(event_type: ExecutionEventType, *, error_code: str | None = None) -> None:
+    async def emit(event_type: ExecutionEventType, *, error_code: str | None = None,
+                   progress_stage: ExecutionProgressStage | None = None,
+                   text_delta: str | None = None) -> None:
         nonlocal sequence
         sequence += 1
         if event_sink is None:
@@ -500,12 +838,14 @@ async def execute_chat(request: ModelExecutionRequest,
             event_type=event_type,
             data_policy=effective_policy,
             error_code=error_code,
+            progress_stage=progress_stage,
+            text_delta=text_delta,
         )
         try:
             observed = event_sink(event)
             if inspect.isawaitable(observed):
                 await observed
-        except Exception:
+        except Exception:  # noqa: BLE001 — telemetry observers never own request outcome
             # Lifecycle observers must not turn a successful provider result
             # into a failure or obscure the original provider exception.
             return
@@ -528,28 +868,72 @@ async def execute_chat(request: ModelExecutionRequest,
             observed = event_sink(event)
             if inspect.isawaitable(observed):
                 await observed
-        except Exception:
+        except Exception:  # noqa: BLE001 — telemetry observers never own request outcome
+            return
+
+    async def emit_tool_result(call_id: str, name: str) -> None:
+        nonlocal sequence
+        sequence += 1
+        if event_sink is None:
+            return
+        event = ModelExecutionEvent(
+            task_id=request.task_id,
+            parent_request_id=request.parent_request_id,
+            sequence=sequence,
+            event_type="tool_result",
+            data_policy=effective_policy,
+            tool_call_id=call_id,
+            tool_name=name,
+        )
+        try:
+            observed = event_sink(event)
+            if inspect.isawaitable(observed):
+                await observed
+        except Exception:  # noqa: BLE001 — telemetry observers never own request outcome
             return
 
     started_at = time.monotonic()
-    await emit("queued")
     try:
-        # The deadline includes time spent queued for capacity; a saturated
-        # worker must not make a request live longer than its caller allowed.
+        # The deadline includes lifecycle admission and time spent queued for
+        # capacity; cancellation at either point must still emit one terminal
+        # event rather than escaping before the lifecycle guard is active.
         async with asyncio.timeout(request.timeout_s):
+            await emit("queued")
             async with controller.slot(resolved.priority):
                 await emit("started")
+                # Tool execution belongs to the caller, so this boundary
+                # receives results as validated conversation context on the
+                # next model round. Publish lifecycle metadata for those
+                # results without exposing their content to the event sink.
+                for item in request.context:
+                    if isinstance(item, ModelContextMessage) and item.role == "tool":
+                        await emit_tool_result(item.tool_call_id, item.name)
                 client = (client_factory(resolved) if client_factory is not None
                           else make_route_client(resolved, timeout=request.timeout_s))
                 completion_args: dict[str, Any] = {
                     "model": resolved.model,
                     "messages": messages,
                 }
+                if request.temperature is not None:
+                    completion_args["temperature"] = request.temperature
                 if tools:
                     completion_args["tools"] = tools
                 if request.output.max_tokens is not None:
                     completion_args["max_tokens"] = request.output.max_tokens
+                if request.extra_body is not None:
+                    completion_args["extra_body"] = {
+                        "output_config": dict(request.extra_body["output_config"])
+                    }
+                if request.stream_text:
+                    completion_args["stream"] = True
+                await emit("progress", progress_stage="provider_request")
                 response = await client.chat.completions.create(**completion_args)
+                if request.stream_text:
+                    response = await _collect_chat_stream(
+                        response,
+                        lambda fragment: emit("text_delta", text_delta=fragment),
+                    )
+                await emit("progress", progress_stage="response_received")
                 message = response.choices[0].message
                 text = message.content
                 if text is None:
@@ -558,7 +942,14 @@ async def execute_chat(request: ModelExecutionRequest,
                     raise ModelExecutionOutputError("provider returned non-text message content")
                 if request.output.require_nonempty_text and not text.strip():
                     raise ModelExecutionOutputError("provider returned empty text")
-                tool_calls = _validated_tool_calls(message, tool_validators)
+                tool_calls = _validated_tool_calls(
+                    message, tool_validators, seen_ids=seen_tool_call_ids
+                )
+                provider_extras = _validated_provider_extras(
+                    _field(message, "model_extra") or {},
+                    reserved={"role", "content", "tool_calls"},
+                    label="provider assistant message",
+                )
                 for call in tool_calls:
                     await emit_tool_request(call)
                 usage = _field(response, "usage")
@@ -588,6 +979,7 @@ async def execute_chat(request: ModelExecutionRequest,
                     ),
                     duration_ms=(time.monotonic() - started_at) * 1000.0,
                     response_id=response_id,
+                    provider_extras=provider_extras,
                 )
                 await emit("completed")
                 return result

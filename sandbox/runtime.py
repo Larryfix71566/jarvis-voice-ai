@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 
 from sandbox.artifacts import SandboxError
 from sandbox.control import Controller
@@ -16,6 +17,14 @@ from sandbox.publish import GitHubAPI, Publisher, REPOSITORY
 from sandbox.session import Session
 from sandbox.source import GitSource
 from sandbox.verify import Verifier
+
+_SKILL_WORKSPACE_KIND = re.compile(r"skill-authoring-[a-z0-9]+(?:-[a-z0-9]+)*\Z")
+
+
+def _valid_kind(kind: str) -> bool:
+    if not isinstance(kind, str):
+        return False
+    return kind in {"selfedit", "app-build"} or _SKILL_WORKSPACE_KIND.fullmatch(kind) is not None
 
 
 class Runtime:
@@ -43,7 +52,8 @@ class Runtime:
             raise SandboxError('The host sandbox configuration is invalid.') from None
 
     def _key(self, repository: str, kind: str) -> str:
-        if not isinstance(repository, str) or not REPOSITORY.fullmatch(repository) or kind not in {'selfedit', 'app-build'}:
+        if (not isinstance(repository, str) or not REPOSITORY.fullmatch(repository)
+                or not _valid_kind(kind)):
             raise SandboxError('Invalid sandbox workspace')
         return hashlib.sha256((repository.casefold() + '\0' + kind).encode()).hexdigest()
 

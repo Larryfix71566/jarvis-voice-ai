@@ -80,14 +80,15 @@ class RemindersWatcher:
             )
         except Exception as exc:  # noqa: BLE001 — registry.call promises not
             # to raise; if it ever does, the watcher still must not crash.
-            logger.warning("reminders_watcher call failed: %s", exc)
+            logger.warning("reminders_watcher call failed error_type=%s",
+                           type(exc).__name__[:64])
             return
         try:
             data = json.loads(result)
             reminders = data.get("reminders") or []
         except (json.JSONDecodeError, AttributeError):
             # e.g. the registry's failure sentence — server down/DB locked.
-            logger.warning("reminders_watcher unexpected result: %r", result)
+            logger.warning("reminders_watcher unexpected result; invalid reminder JSON")
             return
         for row in reminders:
             message = str(row.get("message", "")).strip()

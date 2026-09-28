@@ -9,7 +9,7 @@ mcp = FastMCP("mcp-git")
 
 @mcp.tool()
 def git_status() -> dict:
-    """Repository status: current branch, changed files, commits ahead/behind origin."""
+    """Repository root and working-tree status, including upstream and ahead/behind counts."""
     return logic.git_status()
 
 

@@ -7,13 +7,28 @@ and the model call are faked so no network is exercised.
 from __future__ import annotations
 
 import time
+import uuid
 
 import pytest
-from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient as FastAPITestClient
 
 import jarvis.admin.server as srv
 from jarvis.admin.server import app
 from jarvis.db import get_conn, run_migrations
+
+
+class TestClient(FastAPITestClient):
+    """Model the stable execution ID injected by the registered MCP tool."""
+
+    def post(self, url, *args, **kwargs):
+        body = kwargs.get("json")
+        if (
+            url == "/api/research/start"
+            and isinstance(body, dict)
+            and not (body.get("run_id") or "").strip()
+        ):
+            kwargs["json"] = {**body, "run_id": uuid.uuid4().hex}
+        return super().post(url, *args, **kwargs)
 
 FAKE_PROFILE = {"name": "kimi-k2", "model": "kimi-k2-latest", "provider": "moonshot"}
 
@@ -45,6 +60,7 @@ def _reset_research_job(monkeypatch):
         state="idle", urls=None, focus=None, sites=None, comparison=None,
         model=None, credits_used=None, error=None, started_at=None,
         finished_at=None, saved_path=None, save_error=None,
+        run_id=None,
     )
     with srv._research_lock:
         srv._research_job.update(idle)
@@ -86,7 +102,8 @@ def test_happy_path_both_sites_succeed(monkeypatch):
     res = c.post("/api/research/start", json={
         "urls": ["https://a.com", "https://b.com"], "focus": "pricing",
     }).json()
-    assert res == {"ok": True, "started": True}
+    assert res["ok"] is True and res["started"] is True
+    assert res["action_run_id"]
     job = _wait_for_job(c)
     assert job["state"] == "done"
     assert job["comparison"].startswith("# Comparison")
@@ -142,6 +159,31 @@ def test_both_sites_failing_is_a_terminal_error(monkeypatch):
     assert "both sites failed" in job["error"]
 
 
+def test_research_crash_logs_no_urls_focus_or_exception_content(monkeypatch, caplog):
+    async def _raise_with_private_details(*args, **kwargs):
+        raise RuntimeError("PRIVATE_CANARY_research_exception_91ad")
+
+    monkeypatch.setattr(srv.council_mod, "_call_profile", _raise_with_private_details)
+    monkeypatch.setattr(
+        srv.research_crawl, "crawl_site",
+        lambda client, url, focus, api_key, config=None: {
+            "ok": True, "url": url, "pages": [], "credits": 1, "page_count": 0,
+        },
+    )
+    urls = [
+        "https://private.example/PRIVATE_CANARY_url_91ad",
+        "https://private.example/PRIVATE_CANARY_url_92ad",
+    ]
+    focus = "PRIVATE_CANARY_focus_91ad"
+
+    srv._run_research_job(urls, focus, "research-test-run")
+
+    assert "research_job_failed error_type=RuntimeError" in caplog.text
+    assert "PRIVATE_CANARY" not in caplog.text
+    assert "urls=" not in caplog.text
+    assert srv._research_job["error"] == "research job failed (RuntimeError)"
+
+
 # ------------------------------------------------------------------- R8
 
 def test_credits_reported_in_payload_and_summary(monkeypatch):
@@ -154,7 +196,7 @@ def test_credits_reported_in_payload_and_summary(monkeypatch):
     from mcp_servers.mcp_web import logic as web_logic
 
     class _AdminClient:
-        def get(self, path):
+        def get(self, path, params=None):
             return {"ok": True, "job": job}
 
     status = web_logic.research_status(_AdminClient())
@@ -180,6 +222,48 @@ def test_second_start_refused_while_running(monkeypatch):
     assert second["ok"] is False
     assert "already in progress" in second["error"]
     _wait_for_job(c)
+
+
+def test_research_start_refuses_missing_or_oversized_action_id_before_dispatch(monkeypatch):
+    calls = {"n": 0}
+    monkeypatch.setattr(srv.research_crawl, "crawl_site",
+                        lambda *a, **k: calls.__setitem__("n", calls["n"] + 1))
+    c = FastAPITestClient(app)
+    base = {"urls": ["https://a.com", "https://b.com"]}
+    missing = c.post("/api/research/start", json=base).json()
+    oversized = c.post("/api/research/start", json={**base, "run_id": "x" * 257}).json()
+    assert missing["ok"] is False
+    assert "stable run_id" in missing["error"]
+    assert oversized["ok"] is False
+    assert "identity is invalid" in oversized["error"]
+    assert calls["n"] == 0
+    assert c.get("/api/research/job").json()["job"]["state"] == "idle"
+
+
+def test_duplicate_research_action_id_never_starts_second_crawl(monkeypatch):
+    started = {"n": 0}
+    release = __import__("threading").Event()
+
+    def _slow_crawl(client, url, focus, api_key, config=None):
+        started["n"] += 1
+        release.wait(timeout=1.0)
+        return {"ok": True, "url": url, "pages": [], "credits": 1, "page_count": 0}
+
+    monkeypatch.setattr(srv.research_crawl, "crawl_site", _slow_crawl)
+    c = FastAPITestClient(app)
+    payload = {"urls": ["https://a.com", "https://b.com"], "run_id": "same-research-id"}
+    first = c.post("/api/research/start", json=payload).json()
+    second = c.post("/api/research/start", json=payload).json()
+    assert first["ok"] is True and first["started"] is True
+    assert second["ok"] is True and second["duplicate"] is True
+    assert second["action_run_id"] == "same-research-id"
+    assert started["n"] <= 1
+    release.set()
+    _wait_for_job(TestClient(app))
+    assert started["n"] == 2  # one crawl per site, from the single accepted job
+    status = c.get("/api/research/job", params={"run_id": "same-research-id"}).json()
+    assert status["job"]["state"] == "done"
+    assert status["job"]["run_id"] == "same-research-id"
 
 
 # ------------------------------------------------------------------- R6

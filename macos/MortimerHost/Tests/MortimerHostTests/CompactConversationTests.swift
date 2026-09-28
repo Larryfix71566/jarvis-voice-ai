@@ -28,11 +28,12 @@ final class CompactConversationTests: XCTestCase {
                 .defaultAppStorage(defaults).environment(workspace).environmentObject(client)
                 .environment(AgentRunStore()).environment(DrawerState()).environment(DisplayResultStore())
                 .environment(ConversationStore()).environment(ConsoleNoticeState())
+                .environment(\.mortimerReduceMotion, true)
                 .foregroundStyle(AppTheme.text).background(AppTheme.bg).preferredColorScheme(.dark))
             view.frame = NSRect(x: 0, y: 0, width: CGFloat(width), height: 600)
             let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
-            defer { window.close() }
+            defer { closeRenderingFixtureWindow(window) }
             window.layoutIfNeeded(); view.layoutSubtreeIfNeeded()
             RunLoop.main.run(until: Date().addingTimeInterval(0.2))
             var labels: [String] = []

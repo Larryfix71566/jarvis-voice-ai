@@ -45,6 +45,25 @@ def test_health(client):
     assert c.get("/api/health").json() == {"ok": True}
 
 
+def test_selfedit_appearance_log_omits_branch_label(client, monkeypatch, caplog):
+    import jarvis.admin.server as admin_server
+
+    c, _ = client
+    branch = "PRIVATE_BRANCH_CANARY_24d6"
+
+    class FakeSelfEditService:
+        def verify_appearance(self, **_kwargs):
+            return {"ok": True, "branch": branch}
+
+    monkeypatch.setattr(admin_server, "_selfedit_service", FakeSelfEditService())
+    with caplog.at_level("INFO", logger="jarvis.admin.server"):
+        response = c.post("/api/selfedit/verify-appearance", json={})
+
+    assert response.json() == {"ok": True, "branch": branch}
+    assert "selfedit_verify_appearance ok=True branch_present=True" in caplog.text
+    assert branch not in caplog.text
+
+
 def test_model_routes_exposes_policy_without_secret_values(client, monkeypatch):
     c, _ = client
     monkeypatch.setenv("SAYGM_API_KEY", "do-not-return")
@@ -135,19 +154,26 @@ class TestD17Logging:
         live verification (curl against a freshly spawned process) this
         was confirmed against."""
         import inspect
+
         import jarvis.admin.server as admin_server
         source = inspect.getsource(admin_server)
         assert "logging.basicConfig(" in source
         assert "level=logging.INFO" in source
 
     def test_startup_log_line_present(self, caplog):
+        import inspect
+
         import jarvis.admin.server as admin_server
+        source = inspect.getsource(admin_server.main)
+        assert '"admin_sidecar_startup host=%s port=%d"' in source
+        assert "repo_root=%s" not in source
         with caplog.at_level("INFO", logger="jarvis.admin.server"):
             admin_server.logger.info(
-                "admin_sidecar_startup host=%s port=%d repo_root=%s",
-                "127.0.0.1", 7861, admin_server.REPO_ROOT,
+                "admin_sidecar_startup host=%s port=%d",
+                "127.0.0.1", 7861,
             )
         assert any("admin_sidecar_startup" in r.message for r in caplog.records)
+        assert str(admin_server.REPO_ROOT) not in caplog.text
 
     def test_5xx_response_is_logged(self, client, caplog):
         c, _ = client
@@ -158,10 +184,16 @@ class TestD17Logging:
             from starlette.responses import Response
             return Response(status_code=500)
 
-        with caplog.at_level("WARNING", logger="jarvis.admin.server"):
-            resp = c.get("/api/__test_500")
-        assert resp.status_code == 500
-        assert any("admin_5xx" in r.message for r in caplog.records)
+        try:
+            with caplog.at_level("WARNING", logger="jarvis.admin.server"):
+                resp = c.get("/api/__test_500")
+            assert resp.status_code == 500
+            assert any("admin_5xx" in r.message for r in caplog.records)
+        finally:
+            admin_server.app.router.routes[:] = [
+                route for route in admin_server.app.router.routes
+                if getattr(route, "path", None) != "/api/__test_500"
+            ]
         assert any("path=/api/__test_500" in r.message for r in caplog.records)
 
     def test_4xx_response_is_not_logged_as_5xx(self, client, caplog):

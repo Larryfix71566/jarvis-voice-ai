@@ -410,10 +410,10 @@ async def _merge_cluster(
                 pass
             text = (response.choices[0].message.content or "").strip()
         return text or None
-    except Exception:  # noqa: BLE001 — a failed merge falls through to age-out
+    except Exception as exc:  # noqa: BLE001 — a failed merge falls through to age-out
         logger.warning(
-            "memory_enforce_merge_failed tier=%s keys=%s",
-            proposal.tier, proposal.keys, exc_info=True,
+            "memory_enforce_merge_failed tier=%s error_type=%s",
+            proposal.tier, type(exc).__name__,
         )
         return None
 
@@ -478,12 +478,12 @@ async def run_capacity_enforcement(
                         from jarvis.config import load_settings
 
                         settings = load_settings()
-                    except Exception:  # noqa: BLE001
+                    except Exception as exc:  # noqa: BLE001
                         merge_skipped = True
                         merge_skip_reason = "settings_load_failed"
                         logger.warning(
-                            "memory_enforce_settings_load_failed tier=%s",
-                            tier, exc_info=True,
+                            "memory_enforce_settings_load_failed tier=%s error_type=%s",
+                            tier, type(exc).__name__,
                         )
                         break
                 rewritten = await _merge_cluster(proposal, settings, client_factory)
@@ -623,7 +623,7 @@ def run_staging_expiry(conn, expiry_days: int = STAGING_EXPIRY_DAYS) -> list[str
         if cur.rowcount:
             expired.append(key)
     if expired:
-        logger.info("memory_staging_expiry expired=%s", expired)
+        logger.info("memory_staging_expiry expired_count=%d", len(expired))
     return expired
 
 
@@ -1054,8 +1054,8 @@ async def run_sweep(
             conn.commit()
         finally:
             conn.close()
-    except Exception:  # noqa: BLE001 — a sweep must never break the bot
-        logger.exception("memory_sweep_failed")
+    except Exception as exc:  # noqa: BLE001 — a sweep must never break the bot
+        logger.warning("memory_sweep_failed error_type=%s", type(exc).__name__)
         return summary
 
     logger.info(
@@ -1080,8 +1080,9 @@ def start_background_sweep(db_path: str | None = None) -> threading.Thread | Non
     def _runner() -> None:
         try:
             asyncio.run(run_sweep(db_path=db_path))
-        except Exception:  # noqa: BLE001
-            logger.exception("memory_sweep_thread_failed")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("memory_sweep_thread_failed error_type=%s",
+                           type(exc).__name__)
 
     thread = threading.Thread(target=_runner, name="memory-sweep", daemon=True)
     thread.start()

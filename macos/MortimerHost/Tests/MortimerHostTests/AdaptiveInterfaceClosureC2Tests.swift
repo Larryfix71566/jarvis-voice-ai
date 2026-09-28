@@ -137,7 +137,7 @@ final class AdaptiveInterfaceClosureC2Tests: XCTestCase {
             view.frame = NSRect(x: 0, y: 0, width: 300, height: 40)
             let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
-            defer { window.close() }
+            defer { closeRenderingFixtureWindow(window) }
             window.layoutIfNeeded(); view.layoutSubtreeIfNeeded()
             RunLoop.main.run(until: Date().addingTimeInterval(0.2))
             let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
@@ -174,15 +174,41 @@ final class AdaptiveInterfaceClosureC2Tests: XCTestCase {
         let view = NSHostingView(rootView: OrbFieldView(voiceState: .listening, compactPresentation: true, hidesLettering: true)
             .environmentObject(client).environment(runs).environment(DrawerState())
             .environment(DisplayResultStore()).environment(ConversationStore()).environment(ConsoleNoticeState())
+            .environment(\.mortimerReduceMotion, true)
             .frame(width: 200, height: 600))
         view.frame = NSRect(x: 0, y: 0, width: 200, height: 600)
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
-        defer { window.close() }
+        defer { closeRenderingFixtureWindow(window) }
         RunLoop.main.run(until: Date().addingTimeInterval(0.3))
         let labels = accessibilityLabels(in: view)
         XCTAssertTrue(labels.contains("Developer working"), "compact rail must show the working affordance; tree: \(labels)")
         XCTAssertTrue(labels.contains(where: { $0.hasPrefix("DEVELOPER") || $0 == "Developer" }), "satellite still present; tree: \(labels)")
+    }
+
+    func testCompactRailRendersWithReducedMotionWhileAgentIsActive() throws {
+        _ = NSApplication.shared
+        NSApplication.shared.accessibilitySetValue(true,
+            forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+        let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
+            adminURL: URL(string: "http://127.0.0.1:7861")!, wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: "synthetic"))
+        let runs = AgentRunStore()
+        runs.apply(try XCTUnwrap(try AppMessage.decode(frame: Data("""
+        {"type":"agent","name":"developer","display_name":"Developer","state":"working",
+         "run_id":"r-reduce-motion","task":"synthetic","model":"fixture","model_fallback":false}
+        """.utf8))))
+        let view = NSHostingView(rootView: OrbFieldView(voiceState: .listening, compactPresentation: true, hidesLettering: true)
+            .environmentObject(client).environment(runs).environment(DrawerState())
+            .environment(DisplayResultStore()).environment(ConversationStore()).environment(ConsoleNoticeState())
+            .environment(\.mortimerReduceMotion, true)
+            .frame(width: 220, height: 640))
+        view.frame = NSRect(x: 0, y: 0, width: 220, height: 640)
+        let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
+        defer { closeRenderingFixtureWindow(window) }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertTrue(accessibilityLabels(in: view).contains("Developer working"),
+                      "active agent status remains visible with reduced motion enabled")
     }
 
     func testCompactRailPinsClockAboveAgentActivity() throws {
@@ -199,11 +225,12 @@ final class AdaptiveInterfaceClosureC2Tests: XCTestCase {
         let view = NSHostingView(rootView: OrbFieldView(voiceState: .listening, compactPresentation: true, hidesLettering: true)
             .environmentObject(client).environment(runs).environment(DrawerState())
             .environment(DisplayResultStore()).environment(ConversationStore()).environment(ConsoleNoticeState())
+            .environment(\.mortimerReduceMotion, true)
             .frame(width: 220, height: 640))
         view.frame = NSRect(x: 0, y: 0, width: 220, height: 640)
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
-        defer { window.close() }
+        defer { closeRenderingFixtureWindow(window) }
         RunLoop.main.run(until: Date().addingTimeInterval(0.3))
         let labels = accessibilityLabels(in: view)
         let clockIndex = try XCTUnwrap(labels.firstIndex(of: "Current time"),

@@ -62,14 +62,34 @@ final class WorkspaceResultDetailsTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let destination = directory.appendingPathComponent("result.txt")
-        let text = WorkspaceResultExport.text(try result())
-        await exporter.write(text: text, to: destination)
+        let item = try result()
+        let text = WorkspaceResultExport.text(item)
+        await exporter.write(result: item, to: destination)
         XCTAssertEqual(try String(contentsOf: destination, encoding: .utf8), text)
         XCTAssertEqual(exporter.message, "Saved result.txt.")
         XCTAssertFalse(exporter.busy)
-        await exporter.write(text: text, to: destination) { _, _ in throw CocoaError(.fileWriteNoPermission) }
+        await exporter.write(result: item, to: destination) { _, _ in throw CocoaError(.fileWriteNoPermission) }
         XCTAssertTrue(exporter.message?.hasPrefix("Export failed:") == true)
         XCTAssertFalse(exporter.busy)
         XCTAssertEqual(try String(contentsOf: destination, encoding: .utf8), text)
+    }
+
+    func testProtectedResultCannotReachFileWriterEvenWhenCalledDirectly() async throws {
+        let exporter = WorkspaceExportCoordinator()
+        let payload = try JSONDecoder().decode(DisplayPayload.self, from: Data(
+            #"{"title":"Protected export canary","body":"private text","data_policy":"local_only"}"#.utf8
+        ))
+        let protected = WorkspaceResult(payload: payload)
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: destination) }
+
+        await exporter.write(result: protected, to: destination) { data, url in
+            try data.write(to: url)
+        }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+        XCTAssertFalse(exporter.busy)
+        XCTAssertEqual(exporter.message, "This protected result cannot be exported.")
     }
 }

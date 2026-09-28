@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -12,6 +13,15 @@ from sandbox.artifacts import Candidate, File, SandboxError
 
 
 class ArtifactTests(unittest.TestCase):
+    def test_baseline_fixture_allowance_is_bound_to_path_and_digest(self):
+        data = b"sk-" + b"b" * 30
+        reviewed = {"baseline-fixture.py": hashlib.sha256(data).hexdigest()}
+        with patch.dict(artifacts.REVIEWED_BASELINE_TEST_FIXTURES, reviewed, clear=True):
+            Candidate((File("baseline-fixture.py", 0o644, data),))
+            for name, content in [("elsewhere.py", data), ("baseline-fixture.py", data + b"changed")]:
+                with self.assertRaises(SandboxError):
+                    Candidate((File(name, 0o644, content),))
+
     def test_binary_modes_deletions_and_stable_fingerprint(self):
         a = File("app.py", 0o644, b"\x00\xff\n")
         b = File("run.sh", 0o755, b"#!/bin/sh\n")

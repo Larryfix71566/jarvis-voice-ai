@@ -7,16 +7,29 @@ acceptance oracle.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+import asyncio
 import hashlib
 import json
 import time
-from typing import Callable, Iterable, Any, Mapping
+from dataclasses import asdict, dataclass
+from typing import Any, Callable, Iterable, Mapping
 
 from jarvis.memory_automation import (
-    Candidate, Classification, EvidenceStatus, MemoryType, Provenance,
+    Candidate,
+    Classification,
+    EvidenceStatus,
+    MemoryType,
+    Provenance,
     heuristic_classifier,
 )
+from jarvis.model_execution import (
+    ModelContextMessage,
+    ModelExecutionRequest,
+    ModelOutputRequirements,
+    execute_chat,
+)
+from jarvis.model_routing import ResolvedModelRoute
+from jarvis.privacy_policy import DataPolicy
 
 
 @dataclass(frozen=True)
@@ -287,20 +300,30 @@ deployment before relying on it.
 
 
 class ProviderClassifier:
-    """Small OpenAI-compatible provider adapter for the B6 shadow run.
+    """Strict model classifier shared by production and synthetic shadow.
 
-    The adapter is deliberately outside the live worker. It receives only the
-    redacted, synthetic corpus supplied by the evaluator, validates the model
-    response through ``Classification.from_dict``, and records bounded token
-    usage in memory. It never opens SQLite or writes a receipt itself.
+    With a resolved route, model execution uses Mortimer's policy-checked
+    boundary. This adapter has no database or Mortimer-tool authority. The
+    legacy sync-client seam remains for compatibility tests and old receipts.
     """
 
-    def __init__(self, client: Any, *, model: str, temperature: float | None = 0) -> None:
+    def __init__(self, client: Any = None, *, model: str,
+                 temperature: float | None = 0,
+                 resolved: ResolvedModelRoute | None = None,
+                 client_factory=None,
+                 data_policy: DataPolicy | None = None,
+                 execution_recorder=None) -> None:
         if not model:
             raise ValueError("provider model is required")
         self.client = client
         self.model = model
         self.temperature = temperature
+        self.resolved = resolved
+        self.client_factory = client_factory
+        self.data_policy = data_policy or DataPolicy("approved_external", "synthetic-memory-corpus")
+        self.execution_recorder = execution_recorder
+        if resolved is not None and resolved.model != model:
+            raise ValueError("classifier model must match the resolved route")
         self.calls = 0
         self.prompt_tokens = 0
         self.completion_tokens = 0
@@ -325,22 +348,62 @@ class ProviderClassifier:
                 for item in items
             ],
         }
-        response = self.client.chat.completions.create(
-            model=self.model,
-            **({"temperature": self.temperature} if self.temperature is not None else {}),
-            max_tokens=2000,
-            messages=[
-                {"role": "system", "content": PROVIDER_CLASSIFIER_SYSTEM_PROMPT},
-                {"role": "user", "content": json.dumps(payload, sort_keys=True)},
-            ],
-        )
+        encoded = json.dumps(payload, sort_keys=True)
+        if self.resolved is not None:
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                pass
+            else:
+                raise RuntimeError("route-aware memory classification must run off the caller event loop")
+
+            async def _execute():
+                request = ModelExecutionRequest(
+                    workload=self.resolved.workload,
+                    task_id="memory-classify:" + hashlib.sha256(encoded.encode()).hexdigest()[:24],
+                    parent_request_id="memory-classify:" + hashlib.sha256(encoded.encode()).hexdigest()[:24],
+                    instructions=encoded,
+                    context=(ModelContextMessage(
+                        "system", PROVIDER_CLASSIFIER_SYSTEM_PROMPT,
+                        DataPolicy("approved_external", "memory-classifier-instructions"),
+                    ),),
+                    output=ModelOutputRequirements(max_tokens=2000, require_nonempty_text=True),
+                    data_policy=self.data_policy,
+                    timeout_s=60.0,
+                    temperature=self.temperature,
+                )
+                return await execute_chat(request, self.resolved,
+                                          client_factory=self.client_factory)
+
+            execution = asyncio.run(_execute())
+            if self.execution_recorder is not None:
+                self.execution_recorder(execution)
+            text = execution.text
+            prompt_tokens = execution.prompt_tokens
+            completion_tokens = execution.completion_tokens
+            total_tokens = execution.total_tokens
+        else:
+            if self.client is None:
+                raise ValueError("provider classifier requires a resolved route or test client")
+            response = self.client.chat.completions.create(
+                model=self.model,
+                **({"temperature": self.temperature} if self.temperature is not None else {}),
+                max_tokens=2000,
+                messages=[
+                    {"role": "system", "content": PROVIDER_CLASSIFIER_SYSTEM_PROMPT},
+                    {"role": "user", "content": encoded},
+                ],
+            )
+            message = response.choices[0].message
+            text = getattr(message, "content", None)
+            usage = getattr(response, "usage", None)
+            prompt_tokens = getattr(usage, "prompt_tokens", 0)
+            completion_tokens = getattr(usage, "completion_tokens", 0)
+            total_tokens = getattr(usage, "total_tokens", 0)
         self.calls += 1
-        usage = getattr(response, "usage", None)
-        self.prompt_tokens += int(getattr(usage, "prompt_tokens", 0) or 0)
-        self.completion_tokens += int(getattr(usage, "completion_tokens", 0) or 0)
-        self.total_tokens += int(getattr(usage, "total_tokens", 0) or 0)
-        message = response.choices[0].message
-        text = getattr(message, "content", None)
+        self.prompt_tokens += int(prompt_tokens or 0)
+        self.completion_tokens += int(completion_tokens or 0)
+        self.total_tokens += int(total_tokens or 0)
         if not isinstance(text, str) or not text.strip():
             raise ValueError("provider returned empty classification")
         text = text.strip()
@@ -363,6 +426,44 @@ class ProviderClassifier:
             "completion_tokens": self.completion_tokens,
             "total_tokens": self.total_tokens,
         }
+
+
+class ConfiguredMemoryClassifier:
+    """Lazy production adapter pinned to the confidential memory workload.
+
+    Route construction happens in the worker thread when a batch is actually
+    due. If the project is still on legacy routing or no confidential route is
+    available, the job fails closed through the caller's bounded retry policy.
+    """
+
+    def __init__(self, settings: Any) -> None:
+        self.settings = settings
+        self._provider: ProviderClassifier | None = None
+
+    def __call__(self, candidates: Iterable[Candidate], *,
+                 policy_version: str = "b1") -> list[Classification]:
+        from jarvis.memory_model import resolve_memory_route
+        from jarvis.privacy_policy import assert_route_allowed
+        from jarvis.usage_ledger import record_execution_result
+
+        if self._provider is None:
+            from jarvis.agents.upgrade_agent import load_model_registry, resolve_profile
+            route = resolve_memory_route(self.settings)
+            if route.resolved is None:
+                raise RuntimeError("model-routed confidential memory classification is not enabled")
+            assert_route_allowed(route.resolved.route,
+                                 DataPolicy("confidential", "memory-classifier-candidates"))
+            profile = resolve_profile(load_model_registry(), route.profile)
+            self._provider = ProviderClassifier(
+                model=route.model,
+                temperature=profile.get("temperature"),
+                resolved=route.resolved,
+                data_policy=DataPolicy("confidential", "memory-classifier-candidates"),
+                execution_recorder=lambda result: record_execution_result(
+                    "memory_classify", result
+                ),
+            )
+        return self._provider(candidates, policy_version=policy_version)
 
 
 def _classify(classifier: Callable[..., list], candidate: Candidate) -> Classification:

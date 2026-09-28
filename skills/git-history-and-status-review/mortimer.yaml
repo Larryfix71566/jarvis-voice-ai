@@ -1,0 +1,43 @@
+schema_version: 1
+skill_id: git-history-and-status-review
+display_name: Git history and status review
+category: development
+version: 1.0.0
+source:
+  kind: local
+  reference: procedure:15
+  adaptation_notes: Reviewed Mortimer procedure promotion; instructions remain in SKILL.md.
+capabilities: [repository_read, git_status_review]
+required_tools: [git_status, git_log, repo_search]
+required_credentials: []
+reference_paths: []
+example_ids: [review-repository-status, unrelated-weather-request]
+related_workflow_ids: []
+compatible_with: []
+process:
+  kind: linear
+  nodes:
+    - step_id: inspect-repository
+      title: Inspect repository and working tree
+      description: Establish the repository root, current branch, upstream relation, and local changes.
+      inputs: [repository]
+      outputs: [repository status]
+      tools: [git_status]
+      success_criteria: [The checked repository and working tree are identified.]
+      edges: [{to: inspect-history}]
+    - step_id: inspect-history
+      title: Inspect recent history
+      description: Read the relevant recent commits and changed paths.
+      inputs: [repository status, requested time range]
+      outputs: [commit and file history]
+      tools: [git_log]
+      success_criteria: [History claims are tied to observed commits.]
+      edges: [{to: summarize-findings}]
+    - step_id: summarize-findings
+      title: Summarize observed changes
+      description: Separate committed, modified, untracked, and unknown state.
+      inputs: [repository status, commit and file history]
+      outputs: [repository review]
+      tools: []
+      success_criteria: [No unobserved synchronization or publication is claimed.]
+      edges: []

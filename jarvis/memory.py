@@ -31,12 +31,21 @@ from typing import Any, Callable
 
 from jarvis.config import Settings
 from jarvis.db import get_conn, now_iso
-from jarvis.sensitive import detect_financial
-from jarvis.memory_automation import Classification, EvidenceStatus, retrieval_rank, enqueue_maintenance
-from jarvis.tenant import current_user_id
+from jarvis.memory_automation import (
+    Classification,
+    EvidenceStatus,
+    enqueue_maintenance,
+    retrieval_rank,
+)
 from jarvis.memory_model import make_memory_async_client
-from jarvis.model_execution import ModelContextMessage, ModelExecutionRequest, execute_chat
+from jarvis.model_execution import (
+    ModelContextMessage,
+    ModelExecutionRequest,
+    execute_chat,
+)
 from jarvis.privacy_policy import DataPolicy
+from jarvis.sensitive import detect_financial
+from jarvis.tenant import current_user_id
 from jarvis.usage_ledger import (
     provider_from_base_url,
     record_completion,
@@ -578,8 +587,9 @@ def render_memory_context(
             "SELECT content FROM memories WHERE kind = 'summary' "
             "ORDER BY updated_at DESC LIMIT 1"
         ).fetchone()
-    except Exception:  # noqa: BLE001 — memory must never break the pipeline
-        logger.exception("memory_context_read_failed")
+    except Exception as exc:  # noqa: BLE001 — memory must never break the pipeline
+        logger.warning("memory_context_read_failed error_type=%s",
+                       type(exc).__name__)
         return EMPTY_CONTEXT
     finally:
         if own_connection:
@@ -590,9 +600,9 @@ def render_memory_context(
     # Supervisor prompt. Applied before the per-tier cap so a filtered fact
     # does not consume a slot a real fact could have used.
     kept_rows = []
-    firewalled: list[str] = []
+    firewalled_count = 0
     now = datetime.now(timezone.utc)
-    automation_filtered: list[str] = []
+    automation_filtered_count = 0
     for row in fact_rows:
         if row["classifier_version"] not in (None, "legacy-v1"):
             # Automated metadata is advisory until it has explicit or
@@ -602,29 +612,29 @@ def render_memory_context(
             # context only while their conservative expiry is in the future.
             evidence = row["evidence_status"]
             if evidence in {"tentative", "unknown", "disputed"} or row["provenance"] == "quoted_document":
-                automation_filtered.append(row["key"])
+                automation_filtered_count += 1
                 continue
             if row["memory_type"] == "temporary_context" and row["valid_until"]:
                 try:
                     if datetime.fromisoformat(row["valid_until"].replace("Z", "+00:00")) <= now:
-                        automation_filtered.append(row["key"])
+                        automation_filtered_count += 1
                         continue
                 except ValueError:
-                    automation_filtered.append(row["key"])
+                    automation_filtered_count += 1
                     continue
         if _is_capability_claim(row["key"], row["content"]):
-            firewalled.append(row["key"])
+            firewalled_count += 1
         else:
             kept_rows.append(row)
-    if automation_filtered:
+    if automation_filtered_count:
         logger.info(
-            "memory_context_facts_dropped reason=automation_policy count=%d keys=%s",
-            len(automation_filtered), automation_filtered[:10],
+            "memory_context_facts_dropped reason=automation_policy count=%d",
+            automation_filtered_count,
         )
-    if firewalled:
+    if firewalled_count:
         logger.warning(
-            "memory_context_facts_dropped reason=capability_claim count=%d keys=%s",
-            len(firewalled), firewalled[:10],
+            "memory_context_facts_dropped reason=capability_claim count=%d",
+            firewalled_count,
         )
     fact_rows = kept_rows
 
@@ -634,25 +644,25 @@ def render_memory_context(
     per_tier_cap = {"preference": MAX_PREFERENCE_FACTS, "project": MAX_PROJECT_FACTS}
     seen: dict[str, int] = {}
     capped_rows = []
-    tier_dropped: list[str] = []
+    tier_dropped: dict[str, int] = {}
     for row in fact_rows:
         tier = row["tier"] or DEFAULT_TIER
         seen[tier] = seen.get(tier, 0) + 1
         cap = per_tier_cap.get(tier)
         if cap is not None and seen[tier] > cap:
-            tier_dropped.append(f"{tier}:{row['key']}")
+            tier_dropped[tier] = tier_dropped.get(tier, 0) + 1
             continue
         capped_rows.append(row)
     if tier_dropped:
         logger.warning(
-            "memory_context_facts_dropped reason=tier_cap count=%d keys=%s",
-            len(tier_dropped), tier_dropped[:10],
+            "memory_context_facts_dropped reason=tier_cap count=%d tiers=%s",
+            sum(tier_dropped.values()), sorted(tier_dropped),
         )
     if stats is not None:
-        stats["dropped_tier_cap"] = len(tier_dropped)
+        stats["dropped_tier_cap"] = sum(tier_dropped.values())
 
     lines: list[str] = []
-    budget_dropped: list[str] = []
+    budget_dropped = 0
     for i, row in enumerate(capped_rows):
         line = f"- {row['key']}: {row['content'][:MAX_FACT_CHARS]}"
         # K1: identity is exempt — it is ordered first and is a handful of
@@ -661,16 +671,16 @@ def render_memory_context(
         if (row["tier"] or DEFAULT_TIER) != "identity" and (
             sum(len(l) for l in lines) + len(line) > MAX_CONTEXT_CHARS
         ):
-            budget_dropped = [r["key"] for r in capped_rows[i:]]
+            budget_dropped = len(capped_rows) - i
             break
         lines.append(line)
     if budget_dropped:
         logger.warning(
-            "memory_context_facts_dropped reason=char_budget count=%d keys=%s",
-            len(budget_dropped), budget_dropped[:10],
+            "memory_context_facts_dropped reason=char_budget count=%d",
+            budget_dropped,
         )
     if stats is not None:
-        stats["dropped_char_budget"] = len(budget_dropped)
+        stats["dropped_char_budget"] = budget_dropped
         stats["facts"] = len(lines)
 
     if summary_row is not None:
@@ -787,21 +797,21 @@ def infer_tier(key: str) -> str:
 
 
 def upsert_fact(
-    conn: sqlite3.Connection, key: str, value: str, session_id: str | None
+    conn: sqlite3.Connection, key: str, value: str, session_id: str | None,
+    *, source_turn_id: str | int | None = None,
+    enqueue_classification: bool = True,
 ) -> None:
     """Insert or replace one keyed fact. Rejects and logs (never raises)
     if the key or value trips the Phase 5b content scan."""
     reason = scan_memory_content(key) or scan_memory_content(value)
     if reason is not None:
         logger.warning(
-            "memory_write_rejected kind=fact key=%s reason=%s session=%s",
-            key, reason, session_id,
+            "memory_write_rejected kind=fact reason=%s", reason,
         )
         return
     if _is_volatile_state(key, value):
         logger.warning(
-            "memory_write_rejected kind=fact key=%s reason=volatile_state session=%s",
-            key, session_id,
+            "memory_write_rejected kind=fact reason=volatile_state",
         )
         return
     now = now_iso()
@@ -814,18 +824,26 @@ def upsert_fact(
     if existing is None:
         conn.execute(
             "INSERT INTO memories (kind, key, content, source_session_id, "
-            "created_at, updated_at, tier, user_id, content_revision) VALUES "
-            "('fact', ?, ?, ?, ?, ?, ?, ?, 1)",
-            (key, value[:MAX_FACT_CHARS], session_id, now, now, infer_tier(key), user_id),
+            "created_at, updated_at, tier, user_id, content_revision,source_turn_id) VALUES "
+            "('fact', ?, ?, ?, ?, ?, ?, ?, 1, ?)",
+            (key, value[:MAX_FACT_CHARS], session_id, now, now, infer_tier(key), user_id,
+             str(source_turn_id) if source_turn_id is not None else None),
         )
     else:
         changed = existing["content"] != value[:MAX_FACT_CHARS]
         conn.execute(
             "UPDATE memories SET content=?, source_session_id=?, updated_at=?, "
-            "tier=COALESCE(tier,?), content_revision=content_revision+? WHERE id=?",
-            (value[:MAX_FACT_CHARS], session_id, now, infer_tier(key), int(changed), existing["id"]),
+            "tier=COALESCE(tier,?), content_revision=content_revision+?, "
+            "source_turn_id=CASE WHEN ? IS NOT NULL THEN ? "
+            "WHEN ? THEN NULL ELSE source_turn_id END WHERE id=?",
+            (value[:MAX_FACT_CHARS], session_id, now, infer_tier(key), int(changed),
+             str(source_turn_id) if source_turn_id is not None else None,
+             str(source_turn_id) if source_turn_id is not None else None,
+             int(changed), existing["id"]),
         )
-    if os.environ.get("JARVIS_MEMORY_AUTOMATION_ENABLED", "false").lower() in {"1", "true", "yes"}:
+    if (enqueue_classification and
+            os.environ.get("JARVIS_MEMORY_AUTOMATION_ENABLED", "false").lower()
+            in {"1", "true", "yes"}):
         row = conn.execute("SELECT id, content_revision FROM memories WHERE kind='fact' AND user_id=? AND key=? AND COALESCE(archived_at,'')=''", (user_id, key)).fetchone()
         if row is not None:
             enqueue_maintenance(conn, memory_id=row["id"], revision=row["content_revision"],
@@ -853,8 +871,7 @@ def set_summary(
     reason = scan_memory_content(summary)
     if reason is not None:
         logger.warning(
-            "memory_write_rejected kind=summary reason=%s session=%s",
-            reason, session_id,
+            "memory_write_rejected kind=summary reason=%s", reason,
         )
         return
     now = now_iso()
@@ -884,8 +901,7 @@ def add_observation(
     reason = scan_memory_content(key) or scan_memory_content(value)
     if reason is not None:
         logger.warning(
-            "memory_write_rejected kind=observation key=%s reason=%s "
-            "session=%s", key, reason, session_id,
+            "memory_write_rejected kind=observation reason=%s", reason,
         )
         return
     conn.execute(
@@ -1082,10 +1098,36 @@ def memory_usage(conn: sqlite3.Connection | None = None) -> dict:
 
 def delete_fact(conn: sqlite3.Connection, key: str) -> bool:
     """Forget one fact and its accumulated observations ('forget that' path)."""
+    existing_rows = conn.execute(
+        "SELECT source_session_id,source_turn_id FROM memories "
+        "WHERE kind='fact' AND key=? AND user_id=?",
+        (key, current_user_id()),
+    ).fetchall()
     cur = conn.execute(
-        "DELETE FROM memories WHERE kind = 'fact' AND key = ?", (key,)
+        "DELETE FROM memories WHERE kind = 'fact' AND key = ? AND user_id=?", (key, current_user_id())
     )
-    conn.execute("DELETE FROM observations WHERE key = ?", (key,))
+    conn.execute("DELETE FROM observations WHERE key = ? AND user_id=?", (key, current_user_id()))
+    try:
+        from jarvis.memory_admission import cancel_jobs_for_key, cancel_jobs_for_turn
+        stamp = now_iso()
+        for existing in existing_rows:
+            if not existing["source_turn_id"] or not existing["source_session_id"]:
+                continue
+            try:
+                user_turn_id = int(existing["source_turn_id"])
+            except (TypeError, ValueError):
+                continue
+            cancel_jobs_for_turn(
+                conn, user_id=current_user_id(),
+                session_id=str(existing["source_session_id"]),
+                user_turn_id=user_turn_id, now_iso=stamp,
+            )
+        cancel_jobs_for_key(conn, user_id=current_user_id(), key=key, now_iso=stamp)
+    except sqlite3.OperationalError as exc:
+        # A pre-0025 database may be opened briefly before the normal
+        # startup migration path; the fact deletion itself still applies.
+        if "memory_admission_jobs" not in str(exc):
+            raise
     return cur.rowcount > 0
 
 
@@ -1231,7 +1273,7 @@ async def update_memory_from_session(
             result_text = response.choices[0].message.content or ""
         update = _parse_update(result_text)
         if update is None:
-            logger.warning("memory_update_unparseable session=%s", session_id)
+            logger.warning("memory_update_unparseable")
             return False
 
         with get_conn() as conn:
@@ -1245,12 +1287,12 @@ async def update_memory_from_session(
             if update["summary"]:
                 set_summary(conn, update["summary"], session_id)
         logger.info(
-            "memory_updated session=%s facts=%d observations=%d promoted=%s "
+            "memory_updated facts=%d observations=%d promoted_count=%d "
             "v2_writes_skipped=%s",
-            session_id, len(update["facts"]), len(update["observations"]),
-            promoted, not extract_facts_and_observations,
+            len(update["facts"]), len(update["observations"]), len(promoted),
+            not extract_facts_and_observations,
         )
         return True
-    except Exception:  # noqa: BLE001 — memory must never break the pipeline
-        logger.exception("memory_update_failed session=%s", session_id)
+    except Exception as exc:  # noqa: BLE001 — memory must never break the pipeline
+        logger.warning("memory_update_failed error_type=%s", type(exc).__name__)
         return False

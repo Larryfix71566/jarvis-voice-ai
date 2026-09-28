@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import re
 import uuid
 from typing import Any
 
@@ -25,6 +26,10 @@ ALLOWED_ACTIONS = frozenset({
     "input_choose", "input_remove", "input_clear", "input_preview", "input_question",
     "input_cancel", "input_new_conversation", "export_folder_choose", "export_folder_clear",
     "shared_content",
+    "skills_search", "skills_filter", "skill_select", "skill_tab",
+    "skill_step_select", "skill_step_explain", "skill_run_select", "skill_example_preview", "skill_request_preview",
+    "skill_request", "skills_refresh", "skill_back", "skill_display_transfer",
+    "skill_activity_retry", "skill_activity_more", "skill_creator_open",
 })
 
 # The action enum is closed, and so is each action's argument object. Keeping
@@ -70,6 +75,13 @@ ACTION_ARG_FIELDS: dict[str, frozenset[str]] = {
     "input_question": frozenset({"question"}),
     "input_new_conversation": frozenset({"confirmed"}),
     "shared_content": frozenset({"attachment_ids", "question"}),
+    "skills_search": frozenset({"query"}),
+    "skills_filter": frozenset({"state", "category"}),
+    "skill_tab": frozenset({"tab"}),
+    "skill_request_preview": frozenset({"operation", "skill_id", "task_brief"}),
+    "skill_request": frozenset({"operation", "preview_id"}),
+    "skill_example_preview": frozenset({"skill_id"}),
+    "skill_step_select": frozenset({"expanded"}),
 }
 
 # Keep the server boundary aligned with ConsoleActionRegistry's native
@@ -84,12 +96,15 @@ REQUIRED_TARGET_ACTIONS = frozenset({
     "graph_center", "graph_move_node", "panel_detach", "panel_move",
     "panel_return", "panel_close", "panel_focus", "panel_fullscreen",
     "input_remove",
+    "skill_select", "skill_step_select", "skill_step_explain", "skill_run_select", "skill_example_preview",
+    "skill_display_transfer",
 })
 REQUIRED_SECONDARY_TARGET_ACTIONS = frozenset({"compare_set", "graph_path"})
 
 STRING_ARGUMENTS = frozenset({
     "scope", "cursor", "mode", "side", "panel", "direction", "source", "relation",
     "name", "group", "query", "kind", "screen_id", "key", "format", "question",
+    "state", "category", "tab", "operation", "preview_id", "skill_id", "task_brief",
 })
 NUMBER_ARGUMENTS = frozenset({"viewport", "points", "x", "y", "value"})
 BOOLEAN_ARGUMENTS = frozenset({"open", "visible", "collapsed", "enabled", "expanded", "confirmed"})
@@ -145,10 +160,11 @@ def validate_request(message: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("atlas_move requires relation+secondary target or row+column")
         if has_relation and not message.get("secondary_target"):
             raise ValueError("atlas_move relation requires a secondary target")
-    for value in args.values():
+    for key, value in args.items():
         if isinstance(value, float) and not math.isfinite(value):
             raise ValueError("non-finite numeric argument")
-        if isinstance(value, str) and len(value) > 2_000:
+        limit = 8_000 if action == "skill_request_preview" and key == "task_brief" else 2_000
+        if isinstance(value, str) and len(value) > limit:
             raise ValueError("console action argument exceeds size limit")
         if isinstance(value, list):
             if not 1 <= len(value) <= 4:
@@ -170,6 +186,40 @@ def validate_request(message: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError("atlas_move row and column must be between 1 and 100")
     if action == "graph_search" and "query" in args and len(args["query"]) > 200:
         raise ValueError("graph_search query exceeds 200 characters")
+    if action == "skills_search":
+        if not isinstance(args.get("query"), str):
+            raise ValueError("skills_search requires a query")
+        if len(args["query"]) > 256:
+            raise ValueError("skills_search query exceeds 256 characters")
+    if action == "skills_filter":
+        if args.get("state") not in {"all", "installed", "proposed", "needs_attention"}:
+            raise ValueError("skills_filter state is invalid")
+        if not isinstance(args.get("category"), str) or not args["category"] or len(args["category"]) > 40:
+            raise ValueError("skills_filter category is invalid")
+    if action == "skill_tab" and args.get("tab") not in {"overview", "process", "activity", "versions"}:
+        raise ValueError("skill_tab tab is invalid")
+    if action == "skill_example_preview":
+        skill_id = args.get("skill_id")
+        target = message.get("target")
+        if (not isinstance(skill_id, str) or len(skill_id) > 64
+                or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", skill_id)
+                or not isinstance(target, str)
+                or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", target)):
+            raise ValueError("skill_example_preview requires a valid skill_id and example target")
+    if action == "skill_request_preview":
+        if args.get("operation") != "draft":
+            raise ValueError("only skill draft previews are available by voice")
+        if not isinstance(args.get("skill_id"), str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", args["skill_id"]) or len(args["skill_id"]) > 64:
+            raise ValueError("skill_request_preview requires a valid skill_id")
+        brief = args.get("task_brief")
+        if not isinstance(brief, str) or not brief.strip() or len(brief) > 8_000:
+            raise ValueError("skill_request_preview requires a task brief of 1–8,000 characters")
+    if action == "skill_request":
+        if args.get("operation") != "draft":
+            raise ValueError("only skill draft requests are available by voice")
+        if not isinstance(args.get("preview_id"), str):
+            raise ValueError("skill_request requires a preview_id")
+        _uuid(args["preview_id"], "preview_id")
     if action == "graph_focus" and "depth" in args and not 1 <= args["depth"] <= 4:
         raise ValueError("graph_focus depth must be between 1 and 4")
     result = dict(message)

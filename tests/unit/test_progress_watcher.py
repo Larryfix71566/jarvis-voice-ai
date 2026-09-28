@@ -5,8 +5,6 @@ real DB or network is exercised."""
 
 from __future__ import annotations
 
-import pytest
-
 from jarvis.bot.progress_watcher import PROGRESS_UPDATE_INTERVAL_S, ProgressWatcher
 
 
@@ -161,6 +159,9 @@ async def test_the_fetcher_treats_a_running_finish_as_in_flight():
         def json(self):
             return self._payload
 
+        def raise_for_status(self):
+            return None
+
     class _Client:
         def __init__(self, payload):
             self._payload = payload
@@ -171,7 +172,7 @@ async def test_the_fetcher_treats_a_running_finish_as_in_flight():
         async def __aexit__(self, *exc):
             return False
 
-        async def get(self, url):
+        async def get(self, url, **kwargs):
             return _Resp(self._payload)
 
     async def fetch(payload, monkeypatched=None):
@@ -217,11 +218,11 @@ async def test_delegation_and_selfedit_together_one_update():
 # ------------------------------------------------------------- resilience
 
 
-async def test_delegations_fetch_failure_does_not_raise():
+async def test_delegations_fetch_failure_does_not_log_exception_message(caplog):
     rec = _Recorder()
 
     async def _explode():
-        raise ConnectionError("db unreachable")
+        raise ConnectionError("PRIVATE_CANARY_delegations_4d2a")
 
     w = ProgressWatcher(
         speak=rec.speak,
@@ -232,13 +233,15 @@ async def test_delegations_fetch_failure_does_not_raise():
     )
     await w.tick_once()
     assert rec.spoken == []  # degrades to "nothing to report", not a crash
+    assert "PRIVATE_CANARY_delegations_4d2a" not in caplog.text
+    assert "error_type=ConnectionError" in caplog.text
 
 
-async def test_selfedit_fetch_failure_still_reports_delegations():
+async def test_selfedit_fetch_failure_still_reports_delegations_without_log_leak(caplog):
     rec = _Recorder()
 
     async def _explode():
-        raise ConnectionError("sidecar offline")
+        raise ConnectionError("PRIVATE_CANARY_selfedit_4d2a")
 
     w = ProgressWatcher(
         speak=rec.speak,
@@ -250,6 +253,8 @@ async def test_selfedit_fetch_failure_still_reports_delegations():
     await w.tick_once()
     assert len(rec.spoken) == 1
     assert "Developer" in rec.spoken[0]
+    assert "PRIVATE_CANARY_selfedit_4d2a" not in caplog.text
+    assert "error_type=ConnectionError" in caplog.text
 
 
 async def _no_job():
@@ -284,7 +289,10 @@ class TestSpeakingStateTracker:
         assert SpeakingStateTracker().is_busy() is False
 
     async def test_bot_speaking_sets_busy(self):
-        from pipecat.frames.frames import BotStartedSpeakingFrame, BotStoppedSpeakingFrame
+        from pipecat.frames.frames import (
+            BotStartedSpeakingFrame,
+            BotStoppedSpeakingFrame,
+        )
         from pipecat.observers.base_observer import FramePushed
         from pipecat.processors.frame_processor import FrameDirection
 
@@ -303,7 +311,10 @@ class TestSpeakingStateTracker:
         assert t.is_busy() is False
 
     async def test_user_speaking_sets_busy(self):
-        from pipecat.frames.frames import UserStartedSpeakingFrame, UserStoppedSpeakingFrame
+        from pipecat.frames.frames import (
+            UserStartedSpeakingFrame,
+            UserStoppedSpeakingFrame,
+        )
         from pipecat.observers.base_observer import FramePushed
         from pipecat.processors.frame_processor import FrameDirection
 
@@ -349,6 +360,7 @@ async def test_kill_switch_env_read_at_pipeline_construction_site():
 
 def test_live_progress_uses_completed_events_not_the_unfinished_run_counter(tmp_path):
     import sqlite3
+
     from jarvis.bot.progress_watcher import _live_progress_for_run
     db = tmp_path / "progress.db"
     with sqlite3.connect(db) as conn:

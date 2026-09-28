@@ -14,7 +14,12 @@ from types import SimpleNamespace
 import pytest
 
 import jarvis.bot.pipeline as bp
-from jarvis.bot.pipeline import Runtime, build_pipeline, connection_greeting_note
+from jarvis.bot.pipeline import (
+    Runtime,
+    bot_event_log,
+    build_pipeline,
+    connection_greeting_note,
+)
 from jarvis.bot.transcript_log import TranscriptLogger
 
 
@@ -122,6 +127,126 @@ def test_connection_greeting_keeps_memory_maintenance_silent():
     )
     assert "memory" not in note.lower()
     assert "review" not in note.lower()
+
+
+@pytest.mark.parametrize(("event", "expected"), [
+    ({"type": "delegate_start", "display_name": "PRIVATE_AGENT_CANARY",
+      "task": "PRIVATE_TASK_CANARY"}, "delegate_start"),
+    ({"type": "agent_tool", "display_name": "PRIVATE_AGENT_CANARY",
+      "tool": "PRIVATE_TOOL_CANARY"}, "agent_tool"),
+    ({"type": "delegate_done", "display_name": "PRIVATE_AGENT_CANARY"},
+     "agent_done"),
+])
+def test_agent_progress_stdout_omits_content_and_names(event, expected, capsys):
+    bot_event_log(event)
+
+    output = capsys.readouterr().out
+    assert f"[AGENT] {expected}" in output
+    assert "PRIVATE_AGENT_CANARY" not in output
+    assert "PRIVATE_TASK_CANARY" not in output
+    assert "PRIVATE_TOOL_CANARY" not in output
+
+
+@pytest.mark.parametrize(("kind", "event_name"), [
+    ("inventory", "console_inventory_rejected"),
+    ("request", "console_request_rejected"),
+])
+def test_console_validation_log_omits_rejected_values(kind, event_name, caplog):
+    exception = ValueError(
+        "PRIVATE_REQUEST_CANARY PRIVATE_ID_CANARY /Users/private/path")
+
+    bp._log_console_validation_failure(kind, exception)
+
+    assert event_name in caplog.text
+    assert "PRIVATE_REQUEST_CANARY" not in caplog.text
+    assert "PRIVATE_ID_CANARY" not in caplog.text
+    assert "/Users/private/path" not in caplog.text
+
+
+def test_invalid_console_inventory_is_not_applied_or_logged(caplog):
+    from jarvis.bot.console_protocol import validate_inventory
+    from jarvis.bot.console_session import ConsoleSession
+
+    session = ConsoleSession()
+    canary = "PRIVATE_INVENTORY_CANARY"
+    message = {
+        "type": "console/inventory", "version": 1,
+        "session_id": session.session_id, "generation": session.generation,
+        "revision": 4, "data": {}, canary: "/Users/private/path",
+    }
+
+    try:
+        snapshot = validate_inventory(
+            message, session_id=session.session_id, generation=session.generation,
+        )
+        session.update_inventory(snapshot["data"])
+    except ValueError as exc:
+        bp._log_console_validation_failure("inventory", exc)
+
+    assert session.inventory is None
+    assert "console_inventory_rejected" in caplog.text
+    assert canary not in caplog.text
+    assert "/Users/private/path" not in caplog.text
+
+
+def test_invalid_console_request_never_dispatches_or_exposes_input(caplog):
+    from jarvis.bot.console_session import ConsoleSession
+
+    session = ConsoleSession()
+    dispatched = []
+    canary = "PRIVATE_REQUEST_FIELD_CANARY"
+    message = {
+        "type": "console/request", "version": 1,
+        "session_id": session.session_id, "generation": session.generation,
+        "request_id": "f610300a-a237-4c47-a4d9-1a57f48dcab2",
+        "revision": 0, "action": "help", "args": {}, canary: "private",
+    }
+
+    result = session.accept(
+        message, inventory=lambda: {},
+        apply=lambda request: dispatched.append(request) or ("ok", "applied"),
+    )
+
+    assert result["status"] == "error"
+    assert result["code"] == "invalid_request"
+    assert dispatched == []
+    assert canary not in result["summary"]
+    assert canary not in caplog.text
+
+
+@pytest.mark.parametrize(("message_type", "event_name"), [
+    ("voice/set", "voice_set_received"),
+    ("ui/noop", "ui_noop_received"),
+])
+def test_client_app_message_log_uses_bounded_events(
+    message_type, event_name, capsys,
+):
+    bp._log_client_app_message_received(message_type)
+
+    output = capsys.readouterr().out
+    assert f"[appmsg] {event_name}" in output
+    assert message_type not in output
+
+
+def test_unknown_client_app_message_log_type_is_ignored(capsys):
+    bp._log_client_app_message_received("PRIVATE_CLIENT_VALUE_CANARY_2121")
+
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize("event", [
+    "runlog_prune_failed", "council_prune_failed",
+    "runlog_reconcile_orphaned_failed", "key_health_probe_start_failed",
+    "screen_prune_failed", "memory_sweep_start_failed",
+    "memory_extraction_failed", "memory_admission_teardown_failed",
+    "memory_automation_teardown_failed", "kb_digest_failed",
+    "stt_ledger_row_failed",
+])
+def test_best_effort_logs_omit_exception_content(caplog, event):
+    canary = "PRIVATE_CANARY_best_effort_exception_7ca1"
+    bp._log_best_effort_failure(event, RuntimeError(canary), session_id="session-fixture")
+    assert canary not in caplog.text
+    assert f"{event} session=session-fixture error_type=RuntimeError" in caplog.text
 
 
 @pytest.fixture
@@ -391,6 +516,31 @@ async def test_registered_handlers_accept_pipecat_params(runtime, fakes):
     assert delivered and label.split()[0] in delivered[0]
 
 
+async def test_clipboard_sidecar_exception_text_is_not_logged(
+    runtime, fakes, monkeypatch, caplog,
+):
+    from mcp_servers.mcp_selfedit import logic as selfedit_logic
+
+    def fail_admin_client():
+        raise RuntimeError("PRIVATE_CANARY_clipboard_error_4d2a")
+
+    monkeypatch.setattr(selfedit_logic, "AdminClient", fail_admin_client)
+    _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
+
+    class FakeParams:
+        arguments = {}
+
+        async def result_callback(self, result):
+            self.result = result
+
+    params = FakeParams()
+    await llm.functions["clear_clipboard"](params)
+
+    assert "PRIVATE_CANARY_clipboard_error_4d2a" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "clipboard_sidecar_unreachable path=" not in caplog.text
+
+
 def test_tts_settings_from_voices_yaml(runtime, fakes):
     pipeline, _, _, _ = build_pipeline(FakeTransport(), runtime)
     tts = next(p for p in pipeline.processors if isinstance(p, FakeTTS))
@@ -484,12 +634,17 @@ async def test_agent_events_pushed_as_app_messages(runtime, fakes, monkeypatch,
          "model": None, "model_fallback": False,
          "model_unusable": False, "model_unusable_detail": ""},
         {"type": "agent_tool", "name": "scheduler",
-         "display_name": "Scheduler", "tool": "get_time"},
+         "display_name": "Scheduler", "tool": "get_time", "run_id": None},
         {"type": "agent", "name": "scheduler", "display_name": "Scheduler",
-         "state": "done", "ok": True, "detail": ""},
+         "state": "done", "ok": True, "detail": "", "run_id": None},
     ]
-    # stdout feed (Phase 4 behavior) still intact.
-    assert "[AGENT] Scheduler working" in capsys.readouterr().out
+    # Persistent stdout keeps the progress stages but excludes task/name data.
+    output = capsys.readouterr().out
+    assert "[AGENT] delegate_start" in output
+    assert "[AGENT] agent_tool" in output
+    assert output.count("[AGENT] agent_done") == 2
+    assert "Scheduler" not in output
+    assert "get_time" not in output
 
 
 def test_dead_on_app_message_handler_removed():
@@ -528,7 +683,7 @@ def test_wrap_rtvi_envelope():
     assert wrapped["id"]
 
 
-async def test_transcript_logger_writes_both_roles(fresh_db):
+async def test_transcript_logger_writes_both_roles(fresh_db, capsys):
     """User rows come from TranscriptObserver (D-007: the 1.4 user aggregator
     consumes TranscriptionFrame, so the processor never sees it); assistant
     rows still come from the TranscriptLogger processor.
@@ -541,7 +696,9 @@ async def test_transcript_logger_writes_both_roles(fresh_db):
     path. Reset via token so the ambient context doesn't leak into whatever
     test runs next in this process."""
     from pipecat.frames.frames import (
-        LLMFullResponseEndFrame, LLMTextFrame, TranscriptionFrame,
+        LLMFullResponseEndFrame,
+        LLMTextFrame,
+        TranscriptionFrame,
         UserStoppedSpeakingFrame,
     )
     from pipecat.observers.base_observer import FramePushed
@@ -556,7 +713,8 @@ async def test_transcript_logger_writes_both_roles(fresh_db):
         await observer.on_push_frame(FramePushed(
             source=None, destination=None,
             frame=TranscriptionFrame(
-                text="hello jarvis", finalized=True, user_id="u", timestamp="t"),
+                text="PRIVATE_USER_TRANSCRIPT_CANARY_F25",
+                finalized=True, user_id="u", timestamp="t"),
             direction=FrameDirection.DOWNSTREAM, timestamp=0))
         # D-007/review F13: the user side is buffered and only flushed (armed,
         # printed, persisted) at turn close, so a UserStoppedSpeakingFrame is
@@ -572,9 +730,15 @@ async def test_transcript_logger_writes_both_roles(fresh_db):
             pass
         logger.push_frame = noop  # detach from pipeline plumbing
 
-        await logger.process_frame(LLMTextFrame(text="Good "), None)
-        await logger.process_frame(LLMTextFrame(text="afternoon."), None)
+        assistant_text = "PRIVATE_ASSISTANT_TRANSCRIPT_CANARY_F25"
+        await logger.process_frame(LLMTextFrame(text=assistant_text), None)
         await logger.process_frame(LLMFullResponseEndFrame(), None)
+
+        output = capsys.readouterr().out
+        assert "USER: [content omitted; chars=" in output
+        assert "MORTIMER: [content omitted; chars=" in output
+        assert "PRIVATE_USER_TRANSCRIPT_CANARY_F25" not in output
+        assert assistant_text not in output
 
         from jarvis.db import get_conn
         with get_conn() as conn:
@@ -582,8 +746,8 @@ async def test_transcript_logger_writes_both_roles(fresh_db):
                 "SELECT role, content FROM conversations WHERE session_id='s1' ORDER BY id"
             ).fetchall()
         assert [(r["role"], r["content"]) for r in rows] == [
-            ("user", "hello jarvis"),
-            ("assistant", "Good afternoon."),
+            ("user", "PRIVATE_USER_TRANSCRIPT_CANARY_F25"),
+            ("assistant", "PRIVATE_ASSISTANT_TRANSCRIPT_CANARY_F25"),
         ]
     finally:
         current_sensitive_turn.reset(token)

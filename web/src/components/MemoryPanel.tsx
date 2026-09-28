@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { ADMIN_BASE as API, authFetch } from "../api";
 
-const API = "http://localhost:7861";
 
 interface Fact {
   id?: number;
@@ -101,12 +101,12 @@ export default function MemoryPanel() {
 
   const refresh = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/api/memory`);
+      const r = await authFetch(`${API}/api/memory`);
       setOverview(await r.json());
       // K5: the four layers. Failing to load this must not blank the
       // panel — memory visibility is the more important half.
       try {
-        const k = await fetch(`${API}/api/knowledge`);
+        const k = await authFetch(`${API}/api/knowledge`);
         const kj = (await k.json()) as Knowledge;
         setKnowledge(kj.ok ? kj : null);
       } catch {
@@ -114,7 +114,7 @@ export default function MemoryPanel() {
       }
       // A3: the review queue. Same "must not blank the panel" discipline.
       try {
-        const rv = await fetch(`${API}/api/memory/reviews`);
+        const rv = await authFetch(`${API}/api/memory/reviews`);
         const rvj = await rv.json();
         setReviews(rvj.ok ? rvj.reviews : []);
       } catch {
@@ -138,7 +138,7 @@ export default function MemoryPanel() {
     rewriteContent?: string,
   ) => {
     setNote(null);
-    const r = await fetch(`${API}/api/memory/reviews/${id}/resolve`, {
+    const r = await authFetch(`${API}/api/memory/reviews/${id}/resolve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, rewrite_content: rewriteContent ?? null }),
@@ -150,7 +150,7 @@ export default function MemoryPanel() {
 
   const onDelete = async (key: string) => {
     setNote(null);
-    const r = await fetch(`${API}/api/memory/fact/${encodeURIComponent(key)}`, {
+    const r = await authFetch(`${API}/api/memory/fact/${encodeURIComponent(key)}`, {
       method: "DELETE",
     });
     const res = await r.json();

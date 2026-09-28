@@ -26,17 +26,54 @@ import logging
 import os
 
 from jarvis.config import Settings
+from jarvis.db import get_conn, now_iso
 from jarvis.memory import (
     MEMORY_EXTRACTION_TIMEOUT_S,
     memory_extraction_v2_enabled,
     update_memory_from_session,
 )
+from jarvis.memory_admission import enqueue_finished_session_exchanges
 from jarvis.memory_automation import process_classification_jobs
-from jarvis.db import get_conn, now_iso
+from jarvis.memory_extraction_worker import process_admission_jobs
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_INTERVAL_S = 300.0
+
+
+def process_automation_jobs(settings: Settings, classifier) -> dict[str, int]:
+    """Run one bounded classification batch with a worker-owned DB handle."""
+    conn = get_conn()
+    try:
+        result = process_classification_jobs(
+            conn, now_iso=now_iso(), classifier=classifier,
+            shadow=bool(getattr(settings, "jarvis_memory_automation_shadow", True)),
+            rollout_stage=getattr(settings, "jarvis_memory_automation_stage", "shadow"),
+        )
+        conn.commit()
+        return result
+    finally:
+        conn.close()
+
+
+def process_session_admission(settings: Settings, session_id: str) -> dict[str, int]:
+    """Stage finished pairs before teardown and process one bounded stage batch."""
+    if (not bool(getattr(settings, "jarvis_memory_automation_enabled", False))
+            or os.environ.get("JARVIS_MEMORY_AUTOMATION_ENABLED", "false").lower()
+            not in {"1", "true", "yes"}):
+        return {"staged": 0, "claimed": 0, "extracted": 0, "classified": 0,
+                "applied": 0, "failed": 0, "deferred": 0}
+    conn = get_conn()
+    try:
+        staged = enqueue_finished_session_exchanges(
+            conn, session_id=session_id, policy_version="b1", now_iso=now_iso(),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    result = process_admission_jobs(settings)
+    result["staged"] = staged
+    return result
 
 
 class MemorySweepWatcher:
@@ -93,25 +130,14 @@ class MemorySweepWatcher:
             )
             if (self._automation_handler is not None and
                     os.environ.get("JARVIS_MEMORY_AUTOMATION_ENABLED", "false").lower() in {"1", "true", "yes"}):
-                conn = get_conn()
-                try:
-                    process_classification_jobs(
-                        conn, now_iso=now_iso(), classifier=self._automation_handler,
-                        shadow=bool(getattr(self._settings, "jarvis_memory_automation_shadow", True)),
-                        rollout_stage=getattr(self._settings,
-                                              "jarvis_memory_automation_stage", "shadow"),
-                    )
-                    # Classification updates and maintenance status are
-                    # ordinary SQLite writes. Close must not roll them back:
-                    # the idle worker is the durable path, not just a probe.
-                    conn.commit()
-                finally:
-                    conn.close()
+                # Model classification is background work. Run both SQLite
+                # ownership and provider execution off the live voice loop.
+                await asyncio.to_thread(
+                    process_automation_jobs, self._settings,
+                    self._automation_handler,
+                )
         except asyncio.TimeoutError:
-            logger.warning(
-                "memory_sweep_timeout session=%s", self._session_id
-            )
-        except Exception:  # noqa: BLE001 — memory must never break the pipeline
-            logger.exception(
-                "memory_sweep_failed session=%s", self._session_id
-            )
+            logger.warning("memory_sweep_timeout")
+        except Exception as exc:  # noqa: BLE001 — memory must never break the pipeline
+            logger.warning("memory_sweep_failed error_type=%s",
+                           type(exc).__name__)

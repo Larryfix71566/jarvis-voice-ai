@@ -1,0 +1,43 @@
+schema_version: 1
+skill_id: current-weather-with-fahrenheit
+display_name: Current weather in Fahrenheit
+category: research
+version: 1.0.0
+source:
+  kind: local
+  reference: procedure:16
+  adaptation_notes: Reviewed Mortimer procedure promotion; instructions remain in SKILL.md.
+capabilities: [weather_lookup, forecast_reporting]
+required_tools: [get_weather]
+required_credentials: []
+reference_paths: []
+example_ids: [current-weather-fahrenheit, unrelated-implementation-plan]
+related_workflow_ids: []
+compatible_with: []
+process:
+  kind: linear
+  nodes:
+    - step_id: resolve-location
+      title: Resolve the requested location
+      description: Use the location supplied by the user or the existing consent-aware location flow.
+      inputs: [requested location]
+      outputs: [resolved location]
+      tools: []
+      success_criteria: [A location is known or uncertainty is stated.]
+      edges: [{to: retrieve-conditions}]
+    - step_id: retrieve-conditions
+      title: Retrieve current conditions
+      description: Request current weather and short-term forecast for the resolved location.
+      inputs: [resolved location]
+      outputs: [weather result]
+      tools: [get_weather]
+      success_criteria: [The weather result is current and for the requested location.]
+      edges: [{to: report-fahrenheit}]
+    - step_id: report-fahrenheit
+      title: Report temperatures in Fahrenheit
+      description: Summarize conditions and state the Fahrenheit unit explicitly.
+      inputs: [weather result]
+      outputs: [weather summary]
+      tools: []
+      success_criteria: [Every stated temperature is identified as Fahrenheit.]
+      edges: []

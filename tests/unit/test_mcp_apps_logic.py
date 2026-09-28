@@ -203,9 +203,13 @@ class FakeAdminClient:
     def __init__(self, get_responses=None, post_responses=None):
         self._get_responses = get_responses or {}
         self._post_responses = post_responses or {}
+        self.gets: list[tuple[str, dict | None]] = []
         self.posts: list[tuple[str, dict]] = []
 
-    def get(self, path):
+    def get(self, path, params=None):
+        self.gets.append((path, params))
+        if params:
+            self.get_params = (path, params)
         return self._get_responses.get(path, {"ok": True, "job": {}, "status": {}})
 
     def post(self, path, json=None):
@@ -235,10 +239,81 @@ def test_app_build_start_confirmed_posts_to_sidecar():
     admin = FakeAdminClient(
         post_responses={"/api/appbuild/start": {"ok": True, "started": True, "profile": "kimi-k3"}},
     )
-    result = logic.app_build_start(admin, "demo-app", "add a button", confirm=True)
+    result = logic.app_build_start(
+        admin, "demo-app", "add a button", confirm=True, run_id="app-run-123",
+    )
     assert result["ok"] and result["started"]
     assert admin.posts[0][0] == "/api/appbuild/start"
     assert admin.posts[0][1]["app"] == "demo-app"
+    assert admin.posts[0][1]["run_id"] == "app-run-123"
+
+
+def test_app_build_start_without_execution_id_does_not_call_sidecar():
+    admin = FakeAdminClient()
+    result = logic.app_build_start(
+        admin, "demo-app", "add a button", confirm=True,
+    )
+    assert result["ok"] is False
+    assert "execution ID" in result["error"]
+    assert admin.posts == []
+
+
+def test_app_build_start_passes_injected_execution_identity():
+    admin = FakeAdminClient(
+        post_responses={"/api/appbuild/start": {"ok": True, "started": True}},
+    )
+    result = logic.app_build_start(
+        admin, "demo-app", "add a button", confirm=True, run_id="stable-run",
+    )
+    assert result["started"]
+    assert admin.posts[0][1]["run_id"] == "stable-run"
+
+
+def test_app_build_start_reports_duplicate_as_not_started():
+    admin = FakeAdminClient(post_responses={"/api/appbuild/start": {
+        "ok": True, "started": False, "duplicate": True,
+        "state": "unknown", "action_run_id": "stable-run",
+        "summary": "Already claimed; reconcile before retrying.",
+    }})
+    result = logic.app_build_start(
+        admin, "demo-app", "add a button", confirm=True, run_id="stable-run",
+    )
+    assert result["ok"] and result["duplicate"] and not result["started"]
+    assert result["state"] == "unknown"
+
+
+def test_app_build_status_queries_a_specific_action_receipt():
+    admin = FakeAdminClient(get_responses={"/api/appbuild/job": {
+        "ok": True,
+        "job": {"state": "unknown", "reconciliation_required": True},
+        "status": {"active": False},
+    }})
+    result = logic.app_build_status(admin, "stable-run")
+    assert result["ok"] and "Do not retry" in result["summary"]
+    assert "prior app-build action may have started" in result["summary"]
+    assert admin.get_params == ("/api/appbuild/job", {"run_id": "stable-run"})
+
+
+def test_app_build_status_queries_submission_identity():
+    admin = FakeAdminClient(get_responses={"/api/appbuild/job": {
+        "ok": True,
+        "job": {"state": "unknown", "submit_action_id": "session-1"},
+        "status": {"active": True},
+    }})
+    result = logic.app_build_status(admin, submission_id="session-1")
+    assert result["ok"] and "Do not retry" in result["summary"]
+    assert admin.get_params == (
+        "/api/appbuild/job", {"submit_action_id": "session-1"},
+    )
+
+
+def test_app_build_status_rejects_two_identities():
+    admin = FakeAdminClient()
+    result = logic.app_build_status(
+        admin, action_run_id="run-1", submission_id="session-1",
+    )
+    assert not result["ok"]
+    assert admin.gets == []
 
 
 def test_app_build_status_reports_running():
@@ -283,11 +358,46 @@ def test_app_build_submit_previews_then_confirms():
 def test_app_submit_reports_background_work_without_a_fabricated_pr_url():
     admin = FakeAdminClient(get_responses={'/api/appbuild/job': {'ok':True, 'job':{},
         'status': {'active':True, 'proposals':[{'path':'src/app.js'}], 'validated_ok':True}}},
-        post_responses={'/api/appbuild/submit': {'ok':True, 'started':True, 'state':'submitting'}})
+        post_responses={'/api/appbuild/submit': {'ok':True, 'started':True, 'state':'submitting',
+            'action_run_id':'session-1'}})
     result = logic.app_build_submit(admin, confirm=True)
     assert result['ok'] and result['started']
+    assert result['submission_id'] == 'session-1'
     assert 'pr_url' not in result
     assert 'has started' in result['summary']
+
+
+def test_app_submit_unknown_outcome_is_not_reported_as_opened():
+    admin = FakeAdminClient(
+        get_responses={'/api/appbuild/job': {'ok':True, 'job':{},
+            'status': {'active':True, 'proposals':[{'path':'src/app.js'}], 'validated_ok':True}}},
+        post_responses={'/api/appbuild/submit': {
+            'ok':True, 'started':False, 'state':'unknown',
+            'reconciliation_required':True, 'action_run_id':'session-unknown',
+        }},
+    )
+    result = logic.app_build_submit(admin, confirm=True)
+    assert not result['ok']
+    assert result['state'] == 'unknown'
+    assert result['submission_id'] == 'session-unknown'
+    assert result['reconciliation_required']
+    assert 'Do not retry' in result['summary']
+
+
+def test_app_submit_duplicate_with_saved_pr_reports_existing_pr():
+    admin = FakeAdminClient(
+        get_responses={'/api/appbuild/job': {'ok':True, 'job':{},
+            'status': {'active':True, 'proposals':[{'path':'src/app.js'}], 'validated_ok':True}}},
+        post_responses={'/api/appbuild/submit': {
+            'ok':True, 'started':False, 'duplicate':True,
+            'state':'completed', 'action_run_id':'session-done',
+            'pr_url':'https://example.invalid/pr/7',
+        }},
+    )
+    result = logic.app_build_submit(admin, confirm=True)
+    assert result['ok'] and result['already_submitted']
+    assert result['pr_url'] == 'https://example.invalid/pr/7'
+    assert 'already available' in result['summary']
 
 
 def test_recovered_app_status_reports_a_saved_publication():

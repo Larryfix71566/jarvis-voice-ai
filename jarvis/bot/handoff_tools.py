@@ -150,10 +150,11 @@ def build_show_commands_tool(
         if expect_output:
             try:
                 armed = bool((await asyncio.to_thread(arm_clipboard)).get("ok"))
-            except Exception:  # noqa: BLE001 — showing the command still helps
-                logger.exception("show_commands_arm_failed")
+            except Exception as exc:  # noqa: BLE001 — showing the command still helps
+                logger.warning("show_commands_arm_failed error_type=%s",
+                               type(exc).__name__[:64])
             if not armed:
-                logger.warning("show_commands_not_armed title=%s", title)
+                logger.warning("show_commands_not_armed")
 
         emit_display({
             "type": "display",
@@ -168,8 +169,8 @@ def build_show_commands_tool(
             # and terseness drops exactly this kind of sentence.
             "expect_output": expect_output and armed,
         })
-        logger.info("show_commands title=%s count=%d expect_output=%s armed=%s",
-                    title, len(commands), expect_output, armed)
+        logger.info("show_commands command_count=%d expect_output=%s armed=%s",
+                    len(commands), expect_output, armed)
 
         if not expect_output:
             return "Shown in the display window."

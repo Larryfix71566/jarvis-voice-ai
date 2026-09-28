@@ -497,17 +497,20 @@ struct OrbFieldView: View {
 /// command-deck.css .wake-ripple — expanding ring from the field centre,
 /// 0.9s ease-out, one-shot (replayed by identity).
 private struct WakeRipple: View {
+    @Environment(\.mortimerReduceMotion) private var reduceMotion
     var diameter: CGFloat = 300
     @State private var expanded = false
     var body: some View {
         Circle()
             .strokeBorder(AppTheme.accent, lineWidth: 2)
             .frame(width: diameter, height: diameter)
-            .scaleEffect(expanded ? 1.6 : 0.85)
-            .opacity(expanded ? 0 : 0.9)
+            .scaleEffect(reduceMotion ? 1 : (expanded ? 1.6 : 0.85))
+            .opacity(reduceMotion ? 0.65 : (expanded ? 0 : 0.9))
             .onAppear {
+                guard !reduceMotion else { return }
                 withAnimation(.easeOut(duration: 0.9)) { expanded = true }
             }
+            .transaction { if reduceMotion { $0.animation = nil } }
             .allowsHitTesting(false)
     }
 }
@@ -515,6 +518,7 @@ private struct WakeRipple: View {
 /// E2 one-shot entrance: opacity 0 → resting, after `delay`, replayed
 /// whenever `pulse` changes (the React key trick, native form).
 private struct BootFadeIn: ViewModifier {
+    @Environment(\.mortimerReduceMotion) private var reduceMotion
     let pulse: Int
     let delay: Double
     let restingOpacity: Double
@@ -525,14 +529,23 @@ private struct BootFadeIn: ViewModifier {
             .opacity(visible ? restingOpacity : (pulse == 0 ? restingOpacity : 0))
             .onAppear { visible = true }
             .onChange(of: pulse) { _, _ in
+                guard !reduceMotion else {
+                    visible = true
+                    return
+                }
                 visible = false
                 withAnimation(.easeIn(duration: 0.35).delay(delay)) { visible = true }
             }
+            .onChange(of: reduceMotion) { _, isReduced in
+                if isReduced { visible = true }
+            }
+            .transaction { if reduceMotion { $0.animation = nil } }
     }
 }
 
 /// App.css dot-pulse — opacity 0.35 ↔ 1 cycle while active.
 private struct DotPulse: ViewModifier {
+    @Environment(\.mortimerReduceMotion) private var reduceMotion
     let active: Bool
     let period: Double
     @State private var dim = false
@@ -541,14 +554,25 @@ private struct DotPulse: ViewModifier {
         content
             .opacity(active && dim ? 0.35 : 1)
             .onChange(of: active, initial: true) { _, isActive in
-                if isActive && period > 0 {
-                    withAnimation(.easeInOut(duration: period / 2).repeatForever(autoreverses: true)) {
-                        dim = true
-                    }
+                if isActive && period > 0 && !reduceMotion {
+                    startPulsing()
                 } else {
-                    withAnimation(.linear(duration: 0.1)) { dim = false }
+                    withAnimation(nil) { dim = false }
                 }
             }
+            .onChange(of: reduceMotion) { _, isReduced in
+                if isReduced || !active || period <= 0 {
+                    withAnimation(nil) { dim = false }
+                } else {
+                    startPulsing()
+                }
+            }
+    }
+
+    private func startPulsing() {
+        withAnimation(.easeInOut(duration: period / 2).repeatForever(autoreverses: true)) {
+            dim = true
+        }
     }
 }
 

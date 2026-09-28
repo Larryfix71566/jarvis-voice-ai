@@ -93,6 +93,7 @@ public final class JarvisClient: ObservableObject {
     #endif
 
     public private(set) var config: JarvisConfig   // re-read on connect(), F20
+    private let tokenProvider: (URL) -> String?
     // AdminAPI is a struct holding a JarvisConfig (N14, §5 step 4). The F20
     // token re-read in connect() ALSO reassigns `admin = AdminAPI(config: config)`
     // so an admin request made after a token is stored carries that token —
@@ -151,16 +152,22 @@ public final class JarvisClient: ObservableObject {
 
     public init(config: JarvisConfig = .default()) {
         self.config = config
+        self.tokenProvider = KeychainStore.token(for:)
     }
 
     /// Test-only constructor (internal — @testable import exposes this to
     /// JarvisKitTests, never to a production caller outside the package):
-    /// injects a stub transport so §7.5's UICommandOwnershipTests and
-    /// §7.4's testConnectRereadsTokenFromKeychain can drive JarvisClient
+    /// injects a stub transport and optional token provider so §7.5's
+    /// UICommandOwnershipTests and §7.4's connect-time token refresh can drive JarvisClient
     /// end-to-end (connect/disconnect/inbound frames/outbound sends)
     /// without a real WebRTC session.
-    init(config: JarvisConfig = .default(), stubTransport: RTVITransport) {
+    init(
+        config: JarvisConfig = .default(),
+        stubTransport: RTVITransport,
+        tokenProvider: @escaping (URL) -> String? = KeychainStore.token(for:),
+    ) {
         self.config = config
+        self.tokenProvider = tokenProvider
         self.transport = stubTransport
         stubTransport.delegate = self
     }
@@ -213,7 +220,7 @@ public final class JarvisClient: ObservableObject {
         // (1) re-read the token from the Keychain so a token stored while
         // the app is running attaches on the next connect without a
         // relaunch (review F20).
-        config.token = JarvisFlags.authEnabled ? KeychainStore.token(for: config.botURL) : nil
+        config.token = JarvisFlags.authEnabled ? tokenProvider(config.botURL) : nil
         admin = AdminAPI(config: config)
         costs = CostsAPI(config: config)
 

@@ -35,11 +35,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-from cryptography.exceptions import InvalidTag
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
 import keyring
 import keyring.errors
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 logger = logging.getLogger(__name__)
 
@@ -279,7 +278,7 @@ def inject_env() -> int:
         return 0
     path = vault_path()
     if not path.exists():
-        logger.info("no vault file at %s — using .env/environment as-is", path)
+        logger.info("vault_file_missing — using .env/environment as-is")
         return 0
     injected = 0
     for name, value in load_secrets().items():

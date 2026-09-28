@@ -4,14 +4,35 @@ from __future__ import annotations
 
 import threading
 import time
+import uuid
 
 import pytest
 import yaml
-from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient as FastAPITestClient
 
 import jarvis.admin.server as srv
 from jarvis.admin.server import app
 
+
+class TestClient(FastAPITestClient):
+    """Model the current client contract for bare self-edit starts.
+
+    Production callers send an action ID. Older tests predating that contract
+    get a synthetic ID here; tests for missing-ID refusal use FastAPITestClient
+    directly so the boundary stays explicit.
+    """
+
+    def post(self, url, *args, **kwargs):
+        body = kwargs.get("json")
+        if (
+            url == "/api/selfedit/run"
+            and isinstance(body, dict)
+            and (body.get("goal") or "").strip()
+            and not body.get("staging_id")
+            and not (body.get("run_id") or "").strip()
+        ):
+            kwargs["json"] = {**body, "run_id": uuid.uuid4().hex}
+        return super().post(url, *args, **kwargs)
 
 REGISTRY = {
     "default": "kimi-k2",
@@ -44,6 +65,7 @@ def reset_run_job():
         srv._run_job.update(
             state="idle", cancel_requested=False, goal=None, profile=None, summary=None,
             started_at=None, finished_at=None, submitted=False, pr_url=None,
+            action_run_id=None, action_scope=None,
         )
     yield
 
@@ -59,7 +81,7 @@ def reset_stagings():
 
 
 @pytest.fixture
-def registry_file(tmp_path, monkeypatch):
+def registry_file(tmp_path, monkeypatch, fresh_db):
     p = tmp_path / "upgrade_models.yaml"
     p.write_text(yaml.safe_dump(REGISTRY))
     monkeypatch.setenv("JARVIS_UPGRADE_MODELS", str(p))
@@ -236,12 +258,18 @@ def test_empty_goal_rejected(registry_file):
     assert res["ok"] is False and "goal" in res["error"]
 
 
-def test_agent_crash_settles_job_as_error(registry_file, monkeypatch):
+def test_agent_crash_settles_job_as_error_without_logging_user_content(
+    registry_file, monkeypatch, caplog,
+):
     _install_fake_agent(monkeypatch, crash=True)
     c = TestClient(app)
     c.post("/api/selfedit/run", json={"goal": "explode"})
     job = _wait_for_job(c, "error")
-    assert "boom" in job["summary"]
+    assert job["summary"] == "Upgrade run failed (RuntimeError)."
+    assert "upgrade_run_failed error_type=RuntimeError" in caplog.text
+    assert "goal='explode'" not in caplog.text
+    assert "summary=" not in caplog.text
+    assert "boom" not in caplog.text
 
 
 def test_run_plan_path_read_and_seeded(registry_file, monkeypatch):
@@ -386,40 +414,190 @@ def test_staging_carries_run_id_to_agent(registry_file, monkeypatch):
     assert seen["run_id"] == "r9"
 
 
-def test_bare_run_empty_run_id_is_none(registry_file, monkeypatch):
-    """GL9: the bare {goal, ...} confirm=true form normalises an empty
-    run_id to None, never the empty string, reaching _make_agent."""
-    seen = {}
-
-    def _spy(service, profile, run_id=None):
-        seen["run_id"] = run_id
-        return FakeAgent(service, profile)
-
-    monkeypatch.setattr(srv, "_make_agent", _spy)
-    c = TestClient(app)
+def test_bare_run_without_stable_action_id_is_refused(registry_file):
+    """Legacy bare starts cannot dispatch without a durable replay key."""
+    c = FastAPITestClient(app)
     res = c.post(
         "/api/selfedit/run", json={"goal": "add a clock", "run_id": ""},
     ).json()
-    assert res["ok"] and res["started"]
-    _wait_for_job(c, "done")
-    assert seen["run_id"] is None
+    assert res["ok"] is False
+    assert "stable run_id is required" in res["error"]
+    assert c.get("/api/selfedit/run").json()["job"]["state"] == "idle"
 
 
-def test_run_with_staging_id_consumes_it_once(registry_file, monkeypatch):
-    """A staging record is single-use — a second confirm with the SAME id
-    must fail honestly rather than silently starting a second run."""
+def test_bare_run_rejects_oversized_action_id(registry_file):
+    c = FastAPITestClient(app)
+    res = c.post("/api/selfedit/run", json={
+        "goal": "add a clock", "run_id": "x" * 257,
+    }).json()
+    assert res["ok"] is False
+    assert "run_id exceeds" in res["error"]
+    assert c.get("/api/selfedit/run").json()["job"]["state"] == "idle"
+
+
+def test_bare_run_uses_injected_run_id_for_cross_run_claim(
+    registry_file, fresh_db, monkeypatch,
+):
+    """GL9's registry-injected SubAgent run ID is already the owning
+    execution identity used by plan/app-build claims; protect the deprecated
+    bare self-edit path under its own scope."""
+    run_calls = []
+
+    class CountingAgent(FakeAgent):
+        def run(self, goal, plan=None):
+            run_calls.append(goal)
+            return super().run(goal, plan=plan)
+
     _install_fake_agent(monkeypatch)
+    monkeypatch.setattr(
+        srv, "_make_agent",
+        lambda service, profile, run_id=None: CountingAgent(service, profile),
+    )
+    c = TestClient(app)
+    request = {"goal": "add a clock", "run_id": "subagent-run-unique"}
+    first = c.post("/api/selfedit/run", json=request).json()
+    assert first["ok"] and first["started"]
+    assert first["action_run_id"] == request["run_id"]
+    _wait_for_job(c, "done")
+    receipt = srv.get_execution_action(
+        srv._SELFEDIT_RUN_START_ACTION_SCOPE, request["run_id"],
+    )
+    assert receipt and receipt["status"] == "completed"
+
+    with srv._run_lock:
+        srv._run_job.update(
+            state="idle", action_run_id=None, action_scope=None, goal=None,
+        )
+    duplicate = c.post("/api/selfedit/run", json=request).json()
+    assert duplicate["ok"] and duplicate["started"] is False
+    assert duplicate["duplicate"]
+    assert duplicate["action_run_id"] == request["run_id"]
+    assert duplicate["state"] == "completed"
+    assert run_calls == ["add a clock"]
+    recovered = c.get("/api/selfedit/run", params={
+        "action_run_id": request["run_id"],
+    }).json()
+    assert recovered["job"]["state"] == "completed"
+    assert recovered["job"]["result_available"] is False
+
+
+def test_run_with_staging_id_claim_prevents_cross_run_replay(
+    registry_file, fresh_db, monkeypatch,
+):
+    """A stable issued staging ID cannot start a second run after the live
+    job slot changes or the one-shot staging record has been consumed."""
+    run_calls = []
+    class CountingAgent(FakeAgent):
+        def run(self, goal, plan=None):
+            run_calls.append(goal)
+            return super().run(goal, plan=plan)
+
+    monkeypatch.setattr(FakeAgent, "crash", False)
+    monkeypatch.setattr(FakeAgent, "gate", None)
+    monkeypatch.setattr(
+        srv, "_make_agent",
+        lambda service, profile, run_id=None: CountingAgent(service, profile),
+    )
     c = TestClient(app)
     stage = c.post("/api/selfedit/stage", json={"goal": "add a clock"}).json()
     sid = stage["staging_id"]
+    with srv._staging_lock:
+        staged_record = dict(srv._selfedit_stagings[sid])
     first = c.post("/api/selfedit/run", json={"staging_id": sid}).json()
     assert first["ok"] and first["started"]
     _wait_for_job(c, "done")
+    assert run_calls == ["add a clock"]
 
+    with srv._run_lock:
+        srv._run_job.update(state="idle", action_run_id=None, goal=None)
+    # Model a staged record surviving independently of the in-memory job
+    # slot; the durable claim must reject before another worker is launched.
+    with srv._staging_lock:
+        srv._selfedit_stagings[sid] = staged_record
     second = c.post("/api/selfedit/run", json={"staging_id": sid}).json()
-    assert second["ok"] is False
-    assert "no staged edit" in second["error"]
-    assert "session expired" not in second["error"]  # G2: name the real state
+    assert second["ok"] is True
+    assert second["duplicate"] is True
+    assert second["started"] is False
+    assert second["action_run_id"] == sid
+    assert run_calls == ["add a clock"]
+    assert sid in {
+        item["staging_id"] for item in c.get("/api/selfedit/run").json()["stagings"]
+    }
+
+    status = c.get("/api/selfedit/run", params={"action_run_id": sid}).json()
+    assert status["ok"]
+    assert status["job"]["state"] == "completed"
+    assert status["job"]["result_available"] is False
+
+
+def test_staged_selfedit_claim_fails_closed_when_store_unavailable(
+    registry_file, fresh_db, monkeypatch,
+):
+    _install_fake_agent(monkeypatch)
+    monkeypatch.setattr(
+        srv, "claim_execution_action",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("db unavailable")),
+    )
+    c = TestClient(app)
+    sid = c.post("/api/selfedit/stage", json={"goal": "add a clock"}).json()["staging_id"]
+    result = c.post("/api/selfedit/run", json={"staging_id": sid}).json()
+    assert result["ok"] is False
+    assert "no job was started" in result["error"]
+    assert c.get("/api/selfedit/run").json()["job"]["state"] == "idle"
+
+
+def test_authoring_staged_action_is_claimed_once(
+    registry_file, fresh_db, monkeypatch, tmp_path,
+):
+    service = _authoring_service(monkeypatch, tmp_path)
+    calls = []
+    original = service.start_session
+
+    def start_session(*args, **kwargs):
+        calls.append(args[0])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(service, "start_session", start_session)
+    c = TestClient(app)
+    sid = c.post("/api/selfedit/stage", json={
+        "goal": "Update docs/README.md", "target_paths": ["docs/README.md"],
+    }).json()["staging_id"]
+    with srv._staging_lock:
+        staged_record = dict(srv._selfedit_stagings[sid])
+    first = c.post("/api/selfedit/run", json={"staging_id": sid, "author": True}).json()
+    assert first["ok"]
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        opening = c.get("/api/selfedit/run").json()["opening"]
+        if opening["state"] in {"ready", "error", "cancelled"}:
+            break
+        time.sleep(.02)
+    assert opening["state"] == "ready"
+    with srv._opening_lock:
+        srv._opening_job = {"state": "idle", "cancel_requested": False}
+    with srv._staging_lock:
+        srv._selfedit_stagings[sid] = staged_record
+    duplicate = c.post("/api/selfedit/run", json={"staging_id": sid, "author": True}).json()
+    assert duplicate["ok"] and duplicate["duplicate"] and not duplicate["started"]
+    assert calls == ["Update docs/README.md"]
+
+
+def test_authoring_setup_failure_settles_staged_action_claim(
+    registry_file, fresh_db, monkeypatch, tmp_path,
+):
+    service = _authoring_service(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        service, "start_session",
+        lambda *args, **kwargs: {"ok": False, "error": "test setup failure"},
+    )
+    c = TestClient(app)
+    sid = c.post("/api/selfedit/stage", json={
+        "goal": "Update docs/README.md", "target_paths": ["docs/README.md"],
+    }).json()["staging_id"]
+    result = c.post("/api/selfedit/run", json={"staging_id": sid, "author": True}).json()
+    assert result["ok"] is False
+    receipt = srv.get_execution_action(srv._SELFEDIT_STAGED_START_ACTION_SCOPE, sid)
+    assert receipt["status"] == "failed"
 
 
 def test_run_unknown_staging_id_names_real_state(registry_file):
@@ -452,7 +630,8 @@ def test_run_bare_form_without_staging_id_still_works(registry_file, monkeypatch
     _wait_for_job(c, "done")
 
 
-def test_run_resolves_a_mangled_staging_id_when_exactly_one_is_live(registry_file, monkeypatch):
+def test_run_resolves_a_mangled_staging_id_without_logging_ids(
+        registry_file, monkeypatch, caplog):
     """2026-09-07: the id is relayed as spoken text and arrived as
     'stg-<id>' and '43'. With one live staging there is nothing to guess —
     the sidecar starts the preview the user actually approved."""
@@ -468,11 +647,16 @@ def test_run_resolves_a_mangled_staging_id_when_exactly_one_is_live(registry_fil
     )
     c = TestClient(app)
     sid = c.post("/api/selfedit/stage", json={"goal": "add a clock panel"}).json()["staging_id"]
-    res = c.post("/api/selfedit/run", json={"staging_id": f"stg-{sid}"}).json()
+    requested_id = "PRIVATE_REQUESTED_STAGING_ID_CANARY"
+    with caplog.at_level("INFO", logger="jarvis.admin.server"):
+        res = c.post("/api/selfedit/run", json={"staging_id": requested_id}).json()
     assert res["ok"] and res["started"], res
     _wait_for_job(c, "done")
     assert seen["goal"] == "add a clock panel"
     assert c.get("/api/selfedit/run").json()["stagings"] == []  # consumed
+    assert "selfedit_run_staging_resolved" in caplog.text
+    assert requested_id not in caplog.text
+    assert sid not in caplog.text
 
 
 def test_run_with_no_id_and_no_goal_uses_the_single_live_staging(registry_file, monkeypatch):
@@ -596,6 +780,7 @@ def _authoring_service(monkeypatch, tmp_path):
     """Real service and API routing with a test-only in-memory VM session."""
     import json
     import subprocess
+
     from jarvis.selfedit.service import SelfEditService
 
     def git(cwd, *args):
@@ -643,6 +828,22 @@ def _stage(c, **kw):
     return c.post("/api/selfedit/stage", json=body).json()["staging_id"]
 
 
+def _wait_for_authoring_response(client, response, timeout=5.0):
+    """Resolve the endpoint's documented async startup response without
+    requiring sandbox setup to finish inside the 50 ms fast path."""
+    if not response.get("started"):
+        return response
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        opening = client.get("/api/selfedit/run").json()["opening"]
+        if opening.get("state") == "ready":
+            return opening["result"]
+        if opening.get("state") in {"error", "cancelled"}:
+            pytest.fail(f"sandbox authoring did not open: {opening}")
+        time.sleep(0.02)
+    pytest.fail("sandbox authoring did not reach a terminal opening state")
+
+
 class TestAuthoringConfirm:
     """SE3 — author=true with no plan opens a session for the developer;
     everything else still launches the planner."""
@@ -656,12 +857,13 @@ class TestAuthoringConfirm:
         sid = _stage(c, target_paths=["docs/README.md"])
         res = c.post("/api/selfedit/run", json={"staging_id": sid, "author": True}).json()
         assert res["ok"] is True, res
-        assert res["started"] is False
-        assert res["session"]["branch"].startswith("mortimer/selfedit/")
-        assert res["session"]["goal"] == "add a line to docs/README.md"
-        assert res["session"]["target_paths"] == ["docs/README.md"]
-        assert res["session"]["worktree"] is None
-        assert res["session"]["sandbox_task"]
+        opened = _wait_for_authoring_response(c, res)
+        assert opened["started"] is False
+        assert opened["session"]["branch"].startswith("mortimer/selfedit/")
+        assert opened["session"]["goal"] == "add a line to docs/README.md"
+        assert opened["session"]["target_paths"] == ["docs/README.md"]
+        assert opened["session"]["worktree"] is None
+        assert opened["session"]["sandbox_task"]
         assert svc.branch is not None
         # the planner job never started
         assert c.get("/api/selfedit/run").json()["job"]["state"] == "idle"
@@ -737,10 +939,12 @@ class TestAuthoringConfirm:
         first = c.post("/api/selfedit/run", json={
             "staging_id": _stage(c, goal="old goal"), "author": True,
         }).json()
+        first = _wait_for_authoring_response(c, first)
         old_branch = first["session"]["branch"]
         second = c.post("/api/selfedit/run", json={
             "staging_id": _stage(c, goal="a different goal"), "author": True,
         }).json()
+        second = _wait_for_authoring_response(c, second)
         assert second["ok"] is True, second
         assert second["session"]["branch"] != old_branch
         assert svc.goal == "a different goal"
@@ -779,7 +983,10 @@ class TestAuthoringRoutes:
             "notice": "SWIFT CHANGE: rebuild",
         })
         started = c.post("/api/selfedit/finish", json={}).json()
-        assert started == {"ok": True, "started": True, "state": "validating"}
+        assert started == {
+            "ok": True, "started": True, "state": "validating",
+            "action_run_id": svc.status()["id"],
+        }
         finish = _wait_for_finish(c, "done")
         assert finish["pr_url"] == "https://example.invalid/pr/1"
         assert finish["notice"].startswith("SWIFT CHANGE")
@@ -821,7 +1028,7 @@ class TestAuthoringRoutes:
         monkeypatch.setattr(svc, "validate", boom)
         c.post("/api/selfedit/finish", json={})
         finish = _wait_for_finish(c, "error")
-        assert "gate exploded" in finish["notice"]
+        assert finish["notice"] == "finish failed (RuntimeError)"
 
     def test_finish_refuses_with_nothing_written(
         self, registry_file, monkeypatch, tmp_path,
@@ -981,6 +1188,7 @@ def _preflight_service(monkeypatch, tmp_path):
     """A SelfEditService over a scratch allowlist with a core tier, so the
     stage endpoint's pre-flight has real tiers to classify against."""
     import json
+
     from jarvis.selfedit.service import SelfEditService
     al = tmp_path / "allow.json"
     al.write_text(json.dumps({
@@ -1161,11 +1369,14 @@ def test_cold_file_request_only_warms_vm_and_requires_explicit_retry(registry_fi
     assert len(session.state['proposals']) == (1 if method == 'write' else 0)
 
 
-def test_finish_failure_records_the_submit_reason(monkeypatch, caplog):
+def test_finish_failure_keeps_submit_reason_out_of_logs(monkeypatch, caplog, fresh_db):
     from types import SimpleNamespace
     with srv._finish_lock:
         before = dict(srv._finish_job)
-        srv._finish_job.update(cancel_requested=False, run_id="diagnostic-fixture")
+        srv._finish_job.update(
+            cancel_requested=False, run_id="diagnostic-fixture",
+            action_run_id="diagnostic-fixture-action", state="validating",
+        )
     monkeypatch.setattr(srv, "_selfedit_service", SimpleNamespace(
         validate=lambda: {"ok": True, "checks": []},
         submit=lambda: {"ok": False, "error": "synthetic publication rejected"},
@@ -1173,8 +1384,9 @@ def test_finish_failure_records_the_submit_reason(monkeypatch, caplog):
     try:
         with caplog.at_level("INFO", logger=srv.logger.name):
             srv._run_finish()
-        assert "state=finish_error" in caplog.text
-        assert "synthetic publication rejected" in caplog.text
+        assert "state=finish_unknown" in caplog.text
+        assert "notice_present=True" in caplog.text
+        assert "synthetic publication rejected" not in caplog.text
     finally:
         with srv._finish_lock:
             srv._finish_job.clear()

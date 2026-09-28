@@ -10,7 +10,7 @@ struct WorkspaceView: View {
     @Environment(WorkspaceStore.self) private var workspace
     @State private var pinLimitNotice = false
     @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 2
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mortimerReduceMotion) private var reduceMotion
     @Environment(DisplayWindowStore.self) private var display
     @Environment(DrawerState.self) private var drawer
 
@@ -142,13 +142,16 @@ struct WorkspaceView: View {
         }
         Menu("Display") {
             Button("Show memory graph") { sendToDisplay(.memoryGraph) }
-            if let active = workspace.activeResult {
+            if let active = workspace.activeResult, !active.payload.isProtectedLocal {
                 Button("Show active result") { sendToDisplay(.result(active.id)) }
             }
-            if let comparison = workspace.comparisonResult {
+            if let comparison = workspace.comparisonResult,
+               !comparison.payload.isProtectedLocal {
                 Button("Show comparison result") { sendToDisplay(.result(comparison.id)) }
             }
-            ForEach(workspace.results.filter { workspace.pinnedIDs.contains($0.id) }) { result in
+            ForEach(workspace.results.filter {
+                workspace.pinnedIDs.contains($0.id) && !$0.payload.isProtectedLocal
+            }) { result in
                 Button(result.payload.title ?? "Pinned result") { sendToDisplay(.result(result.id)) }
             }
             if display.isWindowOpen {

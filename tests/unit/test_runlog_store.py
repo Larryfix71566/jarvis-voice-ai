@@ -8,20 +8,22 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from pathlib import Path
 
 import pytest
 
-from jarvis.agents.base import TIMEOUT_MESSAGE
+from jarvis.agents.base import CANCELLED_MESSAGE, TIMEOUT_MESSAGE
 from jarvis.db import get_conn, run_migrations
 from jarvis.runlog import store
 from jarvis.runlog.store import (
     MAX_BUFFERED_EVENTS,
+    MAX_SKILL_EVENTS,
     RUN_ORPHAN_AFTER_S,
     RunLogger,
     _display_status,
     get_run,
+    get_skill_events,
     list_runs,
+    list_skill_runs,
     parse_since,
     reconcile_orphaned_runs,
 )
@@ -49,6 +51,219 @@ def make_logger(db_path, root, run_id="r1", **kwargs):
 
 
 class TestFullRun:
+    def test_skill_cursor_survives_external_writer_and_privacy_scrub(self, db_path, root):
+        rl = make_logger(db_path, root)
+        rl.start()
+        rl.skill_event("skill-creator", "a" * 64, "skill_selected")
+        # Simulate durable activity beyond the still-live logger's counter.
+        conn = get_conn(db_path)
+        conn.execute("UPDATE skill_events SET seq=100 WHERE run_id='r1'")
+        conn.commit()
+        conn.close()
+        rl.skill_event("skill-creator", "a" * 64, "skill_step_started",
+                       step_id="offline-validate", attempt_id="attempt-1", status="running")
+        page = get_skill_events("r1", after_seq=100, db_path=db_path)
+        assert [event["seq"] for event in page["events"]] == [101]
+        rl.mark_sensitive()
+        page = get_skill_events("r1", after_seq=101, db_path=db_path)
+        assert [event["seq"] for event in page["events"]] == [102]
+        assert page["events"][0]["type"] == "protected_activity"
+        assert page["events"][0]["skill_id"] is None
+
+    def test_skill_sequence_allocation_serializes_independent_writers(self, db_path, root):
+        from concurrent.futures import ThreadPoolExecutor
+
+        rl = make_logger(db_path, root)
+        rl.start()
+        rl.skill_event("skill-creator", "a" * 64, "skill_selected")
+        owner = rl.user_id
+
+        def append(index):
+            conn = get_conn(db_path)
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                seq = store._next_skill_event_seq(conn, owner, "r1")
+                conn.execute(
+                    "INSERT INTO skill_events (user_id, run_id, request_id, event_id, seq, "
+                    "schema_version, occurred_at, skill_id, skill_revision, type, status) "
+                    "VALUES (?, 'r1', 'r1', ?, ?, 1, ?, 'skill-creator', ?, "
+                    "'skill_resource_read', 'unknown')",
+                    (owner, f"external-{index}", seq, store.now_iso(), "a" * 64),
+                )
+                conn.commit()
+                return seq
+            finally:
+                conn.close()
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            sequences = list(pool.map(append, range(16)))
+        assert len(set(sequences)) == 16
+        assert sorted(sequences) == list(range(min(sequences), max(sequences) + 1))
+        rl.skill_event("skill-creator", "a" * 64, "skill_resource_read")
+        page = get_skill_events("r1", after_seq=max(sequences), db_path=db_path)
+        assert [event["seq"] for event in page["events"]] == [max(sequences) + 1]
+
+    def test_skill_trace_storage_failure_does_not_log_exception_text(
+        self, db_path, root, monkeypatch, caplog,
+    ):
+        rl = make_logger(db_path, root)
+
+        def fail_with_private_detail(*_args, **_kwargs):
+            raise RuntimeError("PRIVATE_SKILL_TRACE_CANARY")
+
+        monkeypatch.setattr(store, "get_conn", fail_with_private_detail)
+        rl.skill_event("technical-plan-document", "a" * 64, "skill_selected")
+
+        assert "runlog_write_failed" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "PRIVATE_SKILL_TRACE_CANARY" not in caplog.text
+
+    def test_skill_events_are_typed_bounded_and_linked_to_run(self, db_path, root):
+        rl = make_logger(db_path, root)
+        rl.start()
+        revision = "a" * 64
+        rl.skill_event("technical-plan-document", revision, "skill_selected")
+        rl.skill_event(
+            "technical-plan-document", revision, "skill_step_finished",
+            step_id="establish-scope", status="unknown",
+            evidence_refs=[{"kind": "tool_call_id", "id": "tool-123"}],
+        )
+        rl.finish("done")
+
+        page = get_skill_events("r1", db_path=db_path)
+        assert page["trace_status"] == "recorded"
+        assert [event["type"] for event in page["events"]] == [
+            "skill_selected", "skill_step_finished",
+        ]
+        assert page["events"][0]["skill_revision"] == revision
+        assert page["events"][1]["status"] == "unknown"
+        assert page["events"][1]["evidence_refs"] == [
+            {"kind": "tool_call_id", "id": "tool-123"},
+        ]
+        runs = list_skill_runs("technical-plan-document", db_path=db_path)
+        assert [run["run_id"] for run in runs["runs"]] == ["r1"]
+        assert "task" not in runs["runs"][0]
+
+    def test_sensitive_skill_event_persists_no_skill_specific_data(self, db_path, root):
+        rl = make_logger(db_path, root, sensitive=True)
+        rl.start()
+        rl.skill_event("technical-plan-document", "b" * 64, "skill_selected")
+        rl.skill_event("technical-plan-document", "b" * 64, "skill_resource_read")
+        rl.finish("protected")
+
+        page = get_skill_events("r1", db_path=db_path)
+        assert len(page["events"]) == 1
+        event = page["events"][0]
+        assert event["type"] == "protected_activity"
+        assert event["skill_id"] is None
+        assert event["skill_revision"] is None
+        assert event["step_id"] is None
+        assert event["evidence_refs"] == []
+        assert list_skill_runs("technical-plan-document", db_path=db_path)["runs"] == []
+
+    def test_becoming_sensitive_scrubs_earlier_skill_identity(self, db_path, root):
+        rl = make_logger(db_path, root)
+        rl.start()
+        rl.skill_event("technical-plan-document", "e" * 64, "skill_selected")
+        rl.mark_sensitive()
+        rl.finish("protected")
+
+        page = get_skill_events("r1", db_path=db_path)
+        assert len(page["events"]) == 1
+        assert page["events"][0]["type"] == "protected_activity"
+        assert page["events"][0]["skill_id"] is None
+        assert page["events"][0]["skill_revision"] is None
+
+    def test_skill_event_caps_at_256_and_marks_truncation(self, db_path, root):
+        rl = make_logger(db_path, root)
+        rl.start()
+        for _ in range(MAX_SKILL_EVENTS + 3):
+            rl.skill_event("technical-plan-document", "c" * 64, "skill_selected")
+        page = get_skill_events("r1", limit=100, db_path=db_path)
+        assert page["has_more"] is True
+        assert page["truncated"] is True  # trace-level state, even before the marker page
+        all_events = []
+        while True:
+            all_events.extend(page["events"])
+            if not page["has_more"]:
+                break
+            page = get_skill_events(
+                "r1", after_seq=page["next_after_seq"], limit=100, db_path=db_path,
+            )
+        assert len(all_events) == MAX_SKILL_EVENTS
+        assert all_events[-1]["type"] == "truncated"
+
+    def test_skill_trace_is_user_scoped_and_cursors_are_validated(self, db_path, root):
+        rl = make_logger(db_path, root)
+        rl.start()
+        rl.skill_event("technical-plan-document", "d" * 64, "skill_selected")
+        rl.finish("done")
+        assert get_skill_events("r1", db_path=db_path, user_id="other") is None
+        assert list_skill_runs(
+            "technical-plan-document", db_path=db_path, user_id="other",
+        )["runs"] == []
+        with pytest.raises(ValueError):
+            list_skill_runs("technical-plan-document", cursor="bad cursor", db_path=db_path)
+
+    def test_skill_run_cursor_pages_without_duplicate_runs(self, db_path, root):
+        for run_id in ("older-run", "newer-run"):
+            rl = make_logger(db_path, root, run_id=run_id)
+            rl.start()
+            rl.skill_event("technical-plan-document", "f" * 64, "skill_selected")
+            rl.finish("done")
+
+        first = list_skill_runs("technical-plan-document", limit=1, db_path=db_path)
+        assert len(first["runs"]) == 1
+        assert first["next_cursor"]
+        second = list_skill_runs(
+            "technical-plan-document", cursor=first["next_cursor"],
+            limit=1, db_path=db_path,
+        )
+        assert len(second["runs"]) == 1
+        assert second["next_cursor"] is None
+        assert first["runs"][0]["run_id"] != second["runs"][0]["run_id"]
+
+    def test_skill_event_rejects_malformed_evidence_and_false_status(self, db_path, root):
+        rl = make_logger(db_path, root)
+        rl.start()
+        rl.skill_event(
+            "technical-plan-document", "a" * 64, "skill_selected", status="passed",
+        )
+        rl.skill_event(
+            "technical-plan-document", "a" * 64, "skill_step_finished",
+            step_id="collect-evidence", status="passed",
+            evidence_refs=[{"kind": "tool_call_id", "id": "../../private"}],
+        )
+        assert get_skill_events("r1", db_path=db_path)["events"] == []
+
+    def test_generic_skill_event_cannot_claim_pass_even_with_receipt_reference(
+        self, db_path, root,
+    ):
+        rl = make_logger(db_path, root)
+        rl.start()
+        rl.skill_event(
+            "technical-plan-document", "a" * 64, "skill_step_finished",
+            step_id="establish-scope", status="passed",
+            evidence_refs=[{"kind": "check_receipt_id", "id": "receipt-123"}],
+        )
+        assert get_skill_events("r1", db_path=db_path)["events"] == []
+
+    def test_run_can_become_sensitive_after_a_tool_result_source(self, db_path, root):
+        rl = make_logger(db_path, root)
+        rl.start()
+        rl.mark_sensitive()
+        rl.tool_result("repo_read_file", "PRIVATE_CANARY_midtask", 4, True)
+        rl.finish("protected details withheld")
+
+        conn = get_conn(db_path)
+        row = conn.execute(
+            "SELECT result_preview FROM agent_events WHERE run_id = ?", ("r1",)
+        ).fetchone()
+        conn.close()
+        assert row[0] == "<sensitive>"
+        payload = next(root.rglob("*.jsonl")).read_text()
+        assert "PRIVATE_CANARY_midtask" not in payload
+
     def test_writes_one_agent_runs_row_and_expected_events(self, db_path, root):
         rl = make_logger(db_path, root)
         rl.start()
@@ -126,6 +341,7 @@ class TestStatusDerivation:
         ("all done", "ok"),
         ("", "ok"),
         (TIMEOUT_MESSAGE, "timeout"),
+        (CANCELLED_MESSAGE, "cancelled"),
         ("FAILED: boom", "failed"),
         ("FAILED: the task could not be completed.", "failed"),
     ])
@@ -211,7 +427,6 @@ class TestEnabledFlag:
 
 class TestWriteFailureIsSwallowed:
     def test_unwritable_db_path_does_not_raise(self, root, tmp_path):
-        bad_path = tmp_path / "does" / "not" / "exist" / "unwritable.db"
         # Parent dir doesn't exist and get_conn will try to create it —
         # simulate a genuine failure by pointing at a path that collides
         # with a file instead of a directory.
@@ -386,3 +601,78 @@ class TestListAndGetRun:
 
     def test_get_run_unknown_id_returns_none(self, db_path):
         assert get_run("does-not-exist", db_path=db_path) is None
+
+    def test_unknown_tool_outcome_is_durable_and_never_exposes_arguments(
+        self, db_path, root, capsys,
+    ):
+        rl = make_logger(db_path, root, run_id="r-unknown")
+        rl.start()
+        rl.tool_call(
+            "send_message", {"recipient": "private@example.test", "body": "secret"},
+            tool_call_id="provider-call-17",
+        )
+        rl.tool_outcome_unknown(
+            "send_message", "provider-call-17", reason_code="cancelled_after_return",
+        )
+        rl.finish("CANCELLED: interrupted")
+
+        detail = get_run("r-unknown", db_path=db_path, root=root)
+        assert detail["unresolved_tool_calls"] == [{
+            "tool_call_id": "provider-call-17",
+            "tool": "send_message",
+            "status": "unknown",
+        }]
+        unknown_event = next(
+            event for event in detail["events"]
+            if event["type"] == "tool_outcome_unknown"
+        )
+        assert unknown_event["tool_call_id"] == "provider-call-17"
+        assert unknown_event["result_preview"] == "cancelled_after_return"
+        assert unknown_event["args_preview"] is None
+        assert unknown_event["args_preview"] is None
+        assert "private@example.test" not in json.dumps(unknown_event)
+        assert "secret" not in json.dumps(unknown_event)
+
+        records = [
+            json.loads(line)
+            for line in (root / rl.payload_path).read_text().splitlines()
+        ]
+        unknown_record = next(
+            record for record in records
+            if record["type"] == "tool_outcome_unknown"
+        )
+        assert unknown_record["tool_call_id"] == "provider-call-17"
+        assert "arguments" not in unknown_record
+        assert "result" not in unknown_record
+        assert "private@example.test" not in json.dumps(unknown_record)
+        assert "secret" not in json.dumps(unknown_record)
+
+        from jarvis.runlog.cli import _print_detail
+
+        _print_detail(detail)
+        output = capsys.readouterr().out
+        assert "UNRESOLVED TOOL OUTCOMES" in output
+        assert "verify before retrying" in output
+        assert "provider-call-17" in output
+
+    def test_interrupted_tool_call_without_result_is_exposed_as_unresolved(
+        self, db_path, root,
+    ):
+        rl = make_logger(db_path, root, run_id="r-interrupted")
+        rl.start()
+        rl.tool_call("write_file", {"path": "safe.txt"}, tool_call_id="call-unknown")
+
+        detail = get_run("r-interrupted", db_path=db_path, root=root)
+        assert detail["unresolved_tool_calls"] == [{
+            "tool_call_id": "call-unknown",
+            "tool": "write_file",
+            "status": "unresolved",
+        }]
+
+    def test_correlated_successful_tool_call_is_not_unresolved(self, db_path, root):
+        rl = make_logger(db_path, root, run_id="r-resolved")
+        rl.start()
+        rl.tool_call("read_file", {"path": "safe.txt"}, tool_call_id="call-ok")
+        rl.tool_result("read_file", "contents", 1, True, tool_call_id="call-ok")
+        detail = get_run("r-resolved", db_path=db_path, root=root)
+        assert detail["unresolved_tool_calls"] == []

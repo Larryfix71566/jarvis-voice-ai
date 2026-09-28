@@ -1,0 +1,42 @@
+{
+  "candidate": {
+    "branch": "codex/isolated-20260924",
+    "head": "977f50bec7b77bd7d3381d3b8f3d63fa69bd00e2",
+    "status_entry_count": 379,
+    "working_tree_dirty": true,
+    "fingerprint_refreshed_at": "2026-09-28T06:50:58Z",
+    "fingerprint_refresh_scope": "Full current dirty-worktree fingerprint refreshed after SW-E, SW-I, and SW-K acceptance notes; receipt-specific fixture and implementation evidence remains scoped to its named test."
+  },
+  "command": "./.venv/bin/python -m jarvis.agent_skills --validate && ./.venv/bin/python -m jarvis.agent_skills --list",
+  "environment": {
+    "executable": "/Users/larryfix/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/bin/python3.12",
+    "platform": "macOS-27.0-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "gate": "SW1-loader-cli-validation",
+  "limitation": "Local loader/registry validation only; does not prove the running Mortimer app, live route/tool readiness, VoiceOver, physical display, VM lifecycle, or release acceptance.",
+  "recorded_at": "2026-09-28T03:38:04.665391+00:00",
+  "result": {
+    "configured_pin_ids": [
+      "current-weather-with-fahrenheit",
+      "git-history-and-status-review",
+      "layered-geolocation",
+      "mcp-server-authoring",
+      "technical-plan-document"
+    ],
+    "creator_status": "inert; not configured in enabled registry",
+    "enabled_skill_ids": [
+      "git-history-and-status-review",
+      "current-weather-with-fahrenheit",
+      "layered-geolocation",
+      "technical-plan-document",
+      "mcp-server-authoring"
+    ],
+    "provider_calls": 0,
+    "registry_valid": true,
+    "route_or_feature_flags_changed": false,
+    "runtime_digest_enforcement": "off (legacy loader)",
+    "schema_version": 2
+  },
+  "schema_version": 1
+}
