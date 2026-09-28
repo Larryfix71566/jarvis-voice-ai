@@ -125,12 +125,17 @@ main() {
   # credential exported in this shell walks straight past that (23 Sep: an
   # exported JARVIS_GITHUB_TOKEN made check_env probe GitHub, and an exported
   # model key let the real council convene inside test_upgrade_agent). Run the
-  # suite with a minimal allowlisted environment instead. Names only are shown.
+  # suite with a minimal allowlisted environment instead. Pipecat's runner
+  # imports python-dotenv with override=True during test collection; without
+  # PYTHON_DOTENV_DISABLED it can reload production .env from this venv's
+  # parent directory and undo env -i before tests even begin.
+  # Names only are shown.
   echo "credential-shaped variables in this shell (names only; NOT passed to pytest):"
   echo "  $(env | grep -oE '^[A-Za-z0-9_]*(API_KEY|TOKEN|SECRET|PASSWORD|_KEY)[A-Za-z0-9_]*=' | tr -d = | sort | tr '\n' ' ')"
   echo "JARVIS_* variables in this shell (names only; NOT passed): $(env | grep -oE '^JARVIS_[A-Z0-9_]*=' | tr -d = | sort | tr '\n' ' ')"
   CLEAN_ENV=(env -i HOME="$HOME" PATH="$PATH" USER="${USER:-larryfix}" LOGNAME="${LOGNAME:-${USER:-larryfix}}"
-             SHELL="${SHELL:-/bin/zsh}" TMPDIR="${TMPDIR:-/tmp}" LANG="${LANG:-en_US.UTF-8}" TERM="${TERM:-xterm-256color}")
+             SHELL="${SHELL:-/bin/zsh}" TMPDIR="${TMPDIR:-/tmp}" LANG="${LANG:-en_US.UTF-8}" TERM="${TERM:-xterm-256color}"
+             PYTHON_DOTENV_DISABLED=1)
   echo "Python (clean environment, no .env sourced):"
   OUT=$(cd "$V" && "${CLEAN_ENV[@]}" "$PY" -m pytest -q -p no:cacheprovider 2>&1); RC=$?
   echo "$OUT" > "$LOGD/deploy-pytest-$TS.txt"; echo "$OUT" | tail -1
