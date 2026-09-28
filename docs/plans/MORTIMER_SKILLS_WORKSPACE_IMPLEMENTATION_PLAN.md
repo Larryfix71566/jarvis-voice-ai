@@ -2732,3 +2732,18 @@ ten-minute memory growth, physical display, accessibility, provider evaluation,
 human review, activation/rollback or frozen release acceptance. Exact logs and
 hashes are under the main-integration-2026-09-28 acceptance receipts. No app was
 deployed or activated by this work.
+
+### 2026-09-28 — merged-release claim race
+
+PR #94 merged as `79aad4c`, but its Linux validation failed one creator
+claim-settlement test in addition to the two pending human allow-list checks.
+The setup worker published `state=error` before its `finally` block persisted
+`failed` for the staged action claim. The request could observe that gap and
+return the error while the claim still read `claimed`. The intended 50 ms
+worker join was mistakenly indented inside the thread-start exception path
+and never ran. The follow-up puts the join after successful start and settles
+an observed setup error's claim before returning it. The existing test now
+holds the worker's claim update to force the race; the request must still
+return a failed claim. The whole admin self-edit module passes 69 tests on the
+Mac. No human allow-list edit, production deploy or Skills activation is
+claimed by this follow-up.
