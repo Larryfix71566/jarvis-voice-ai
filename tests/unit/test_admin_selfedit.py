@@ -586,18 +586,45 @@ def test_authoring_setup_failure_settles_staged_action_claim(
     registry_file, fresh_db, monkeypatch, tmp_path,
 ):
     service = _authoring_service(monkeypatch, tmp_path)
+    worker_id = {"value": None}
+    worker_update_entered = threading.Event()
+    release_worker_update = threading.Event()
+    worker_update_done = threading.Event()
+
+    def fail_setup(*args, **kwargs):
+        worker_id["value"] = threading.get_ident()
+        return {"ok": False, "error": "test setup failure"}
+
+    original_update = srv._update_staged_selfedit_claim
+
+    def delayed_worker_update(*args, **kwargs):
+        if threading.get_ident() == worker_id["value"]:
+            worker_update_entered.set()
+            try:
+                assert release_worker_update.wait(5)
+                return original_update(*args, **kwargs)
+            finally:
+                worker_update_done.set()
+        return original_update(*args, **kwargs)
+
     monkeypatch.setattr(
         service, "start_session",
-        lambda *args, **kwargs: {"ok": False, "error": "test setup failure"},
+        fail_setup,
     )
+    monkeypatch.setattr(srv, "_update_staged_selfedit_claim", delayed_worker_update)
     c = TestClient(app)
     sid = c.post("/api/selfedit/stage", json={
         "goal": "Update docs/README.md", "target_paths": ["docs/README.md"],
     }).json()["staging_id"]
-    result = c.post("/api/selfedit/run", json={"staging_id": sid, "author": True}).json()
-    assert result["ok"] is False
-    receipt = srv.get_execution_action(srv._SELFEDIT_STAGED_START_ACTION_SCOPE, sid)
-    assert receipt["status"] == "failed"
+    try:
+        result = c.post("/api/selfedit/run", json={"staging_id": sid, "author": True}).json()
+        assert worker_update_entered.wait(1)
+        assert result["ok"] is False
+        receipt = srv.get_execution_action(srv._SELFEDIT_STAGED_START_ACTION_SCOPE, sid)
+        assert receipt["status"] == "failed"
+    finally:
+        release_worker_update.set()
+    assert worker_update_done.wait(5)
 
 
 def test_run_unknown_staging_id_names_real_state(registry_file):

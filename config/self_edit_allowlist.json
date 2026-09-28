@@ -58,6 +58,8 @@
     "macos/**/*.entitlements",
     "macos/**/scripts/**",
     "macos/GlassSpike/**",
-    "macos/MortimerShell/**"
+    "macos/MortimerShell/**",
+    "scripts/service_health.py",
+    "tests/fixtures/skills_authoring/**"
   ]
 }

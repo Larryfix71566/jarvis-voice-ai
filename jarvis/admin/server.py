@@ -718,12 +718,18 @@ def _begin_authoring(
         return {"ok": False, "error": "Sandbox setup worker could not be started."}
     # An already-open session may finish immediately. A fresh VM never holds
     # this request open for the duration of its preparation.
-        worker.join(timeout=0.05)
+    worker.join(timeout=0.05)
     with _opening_lock:
         if job["state"] == "ready":
             return {**job["result"], "action_run_id": action_run_id}
-        if job["state"] == "error":
-            return {"ok": False, "error": job.get("error")}
+        setup_failed = job["state"] == "error"
+        setup_error = job.get("error")
+    if setup_failed:
+        # The worker records its terminal state before its finally block
+        # settles the durable claim. If the request observes that small gap,
+        # settle it here before returning a failure to the caller.
+        _update_staged_selfedit_claim(action_run_id, "failed", action_scope)
+        return {"ok": False, "error": setup_error}
     return {
         "ok": True, "started": True, "opening": True, "state": "starting",
         "action_run_id": action_run_id,
