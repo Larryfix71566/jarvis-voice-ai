@@ -59,6 +59,7 @@
     "macos/**/scripts/**",
     "macos/GlassSpike/**",
     "macos/MortimerShell/**",
-    "scripts/service_health.py"
+    "scripts/service_health.py",
+    "tests/fixtures/skills_authoring/**"
   ]
 }
