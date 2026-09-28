@@ -3,7 +3,7 @@
 MORTIMER_EVAL_CONFIG_PARITY_PLAN.md follow-up, 2026-09-05. The spoken-name
 mapping used to be prose in two places — rule 8 in jarvis/prompts.py and
 the model_profile description in jarvis/agents/delegate.py — and both had
-drifted from config/upgrade_models.yaml:
+drifted from the model registry (then config/upgrade_models.yaml):
 
     rule 8              said `fable`        no such profile
     both locations      said `or-sonnet-5`  no such profile
@@ -33,14 +33,21 @@ from typing import Any
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-REGISTRY_PATH = REPO_ROOT / "config" / "upgrade_models.yaml"
 ALIASES_PATH = REPO_ROOT / "config" / "model_aliases.yaml"
 
 
 def load_profiles(path: Path | None = None) -> list[dict[str, Any]]:
-    """Profiles from the registry, in file order."""
-    data = yaml.safe_load((path or REGISTRY_PATH).read_text(encoding="utf-8"))
-    return list((data or {}).get("profiles") or [])
+    """Profiles from the registry, in file order.
+
+    Through the ONE loader, so this sees the joined view (endpoint facts
+    merged in) rather than whichever file happens to hold the profiles —
+    docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md §2/D2. `path` is an
+    explicit registry file, as load_model_registry takes it. Imported
+    lazily so importing this renderer stays cheap.
+    """
+    from jarvis.agents.upgrade_agent import load_model_registry
+
+    return list(load_model_registry(path)["profiles"].values())
 
 
 def load_aliases(path: Path | None = None) -> dict[str, str]:

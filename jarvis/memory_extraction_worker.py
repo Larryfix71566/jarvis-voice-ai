@@ -111,6 +111,7 @@ from jarvis.memory_extraction import (
     admit_observation_candidate,
     extract_candidates_from_exchange,
     extract_from_exchange,
+    filter_echo_candidates,
 )
 
 logger = logging.getLogger(__name__)
@@ -489,6 +490,11 @@ def process_admission_jobs(
                     )
                     if inspect.isawaitable(result):
                         result = asyncio.run(result)
+                    # Reject echoes before the durable queue persists candidates
+                    # for classification. The transcript remains canonical.
+                    result = filter_echo_candidates(
+                        result, source["user_content"], source["assistant_content"],
+                    )
                     if not save_extracted_candidates(
                             conn, job_id=int(job["id"]), candidates=result,
                             now_iso=stamp, expected_claimed_at=claim_stamp):

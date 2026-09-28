@@ -78,7 +78,7 @@ Moonshot/Kimi, DeepSeek, or a local Ollama). Anthropic Claude also works
 through its OpenAI-compatibility layer (`https://api.anthropic.com/v1/`, model
 `claude-haiku-4-5` is the low-latency Supervisor route). Other agents,
 planners, research, vision and background memory jobs resolve independently
-through `config/upgrade_models.yaml` and their profile environment variables;
+through the model registry (`config/model_profiles.yaml` + `config/model_endpoints.yaml`) and their endpoint environment variables;
 they do not inherit `OPENAI_MODEL`. Ready-made examples are commented in
 `.env.example`.
 
@@ -184,8 +184,8 @@ and test commands.
   anything is published, and the result is a **draft** pull request.
   Merging always happens on GitHub, by you; Mortimer can never merge. A
   merged Swift change still needs `bundle.sh` to reach the running app.
-  - **Planner models** live in `config/upgrade_models.yaml` as named
-    profiles (registry `default: claude-fable-5`; Anthropic, Moonshot
+  - **Planner models** live in `config/model_profiles.yaml` as named
+    profiles, each naming an endpoint in `config/model_endpoints.yaml` (registry `default: claude-fable-5`; Anthropic, Moonshot
     `kimi-k3`/`kimi-k2`, OpenRouter `or-*` and a `codex-subscription`
     profile ship alongside — add your own). Choose one per session (spoken
     or the Edit tab's picker), set `JARVIS_UPGRADE_PROFILE` to change the
@@ -263,7 +263,7 @@ jarvis-voice-ai/
 ├── .env.example                   # copy to .env (config only once the vault holds secrets)
 ├── Procfile                       # reference inventory of long-lived processes
 ├── config/                        # routing and model config: agents.yaml, mcp_servers.yaml,
-│                                  #   upgrade_models.yaml (model registry), model_access.yaml,
+│                                  #   model_profiles.yaml + model_endpoints.yaml (model registry), model_access.yaml,
 │                                  #   voices.yaml, self_edit_allowlist.json, skills.yaml, workflows/
 ├── jarvis/                        # Python backend (package name kept for stability)
 │   ├── bot/                       #   Pipecat bot: bot.py (entry), pipeline.py, ws_transport.py
@@ -368,7 +368,7 @@ ls tests/acceptance/
 | `JARVIS_MEMORY_AUTOMATION_SHADOW` | `true` | Run automated memory policy in shadow (measure without writes); independent of `_ENABLED` |
 | `JARVIS_MEMORY_AUTOMATION_STAGE` | `shadow` | Ordered memory rollout gate: `shadow`, `explicit_preferences`, or `corroborated_inferences` |
 | `JARVIS_BACKGROUND_PROFILE` | `claude-sonnet-5` | KB digest and procedure-maintenance profile |
-| `JARVIS_UPGRADE_MODELS` | `config/upgrade_models.yaml` | Point at an alternate planner registry file |
+| `JARVIS_UPGRADE_MODELS` | `config/model_profiles.yaml` (joined with `model_endpoints.yaml`) | Point at an alternate registry file (a legacy single file is still accepted) |
 | `JARVIS_MODEL_ROUTING_ENABLED` | unset (off) | Model Use Enhancements rollout gate; only the value `1` enables the shared model-access policy at routed call sites |
 | `JARVIS_GITHUB_TOKEN` | — | PAT for self-edit PRs (contents + pull requests on this repo only) |
 | `JARVIS_GITHUB_REPO` | `Larryfix71566/jarvis-voice-ai` | Repo the self-edit service targets |
@@ -396,7 +396,8 @@ ls tests/acceptance/
 | `config/mcp_servers.yaml` | The MCP skill servers: command, args, env |
 | `config/agents.yaml` | Sub-agent roster: name, display name, routing description, owned MCP servers |
 | `config/voices.yaml` | Voice catalog (`id`, `label`, `elevenlabs_voice_id`) + default voice |
-| `config/upgrade_models.yaml` | Upgrade planner registry: named OpenAI-compatible profiles + default. NOT on the self-edit allowlist — the agent cannot re-point its own brain |
+| `config/model_endpoints.yaml` | Model endpoints: provider, base_url, key variable name per endpoint, plus the pinned planner (`supervisor:`). Human-only (self-edit deny): the agent cannot re-point its own brain or send a key elsewhere |
+| `config/model_profiles.yaml` | Model profile pool: named profiles + default, each naming an endpoint id. Routine — self-edit may add a model on an existing endpoint; a profile carrying a host or key is a load error |
 | `config/upgrade_agent.yaml` | Upgrade agent loop bounds (max iterations/minutes) + legacy single-slot model fallback |
 | `config/self_edit_allowlist.json` | Paths the self-development loop may read/write; the deny list always wins |
 | `jarvis/prompts.py` | All system prompts (Supervisor, sub-agents, voice addendum) — single source of truth |

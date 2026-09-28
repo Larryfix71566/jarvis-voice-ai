@@ -35,11 +35,18 @@ EXPECTED_TOOLS = {
     "mcp_servers.mcp_web.server": {
         "web_search", "get_weather", "get_weather_radar",
         "research_compare_start", "research_status", "research_save",
+        "sports_scores",  # status spec P6 (2026-09-23)
     },
     "mcp_servers.mcp_system.server": {"get_system_status", "get_top_processes"},
     "mcp_servers.mcp_repo.server": {
         "repo_read_file", "repo_list_files", "repo_search",
         "repo_write_file", "repo_commit_write",
+    },
+    # Status spec T2.6 + T4.4: five P2 reads, four P4 external reads.
+    "mcp_servers.mcp_status.server": {
+        "status_models", "status_services", "status_overview", "status_build",
+        "log_search", "status_catalog", "status_subscription", "github_prs",
+        "github_pr_checks",
     },
 }
 
@@ -160,6 +167,17 @@ async def test_mcp_system_server():
     )
     assert tools == EXPECTED_TOOLS["mcp_servers.mcp_system.server"]
     assert "cpu_percent" in payload and "human" in payload
+
+
+async def test_mcp_status_server():
+    """Exact tool set over stdio; with no sidecar listening, a call is the
+    "not reachable" result, never a crash (the child holds no secrets)."""
+    tools, payload = await _call(
+        "mcp_servers.mcp_status.server", "status_models", {},
+        extra_env={"JARVIS_ADMIN_URL": "http://127.0.0.1:9"},
+    )
+    assert tools == EXPECTED_TOOLS["mcp_servers.mcp_status.server"]
+    assert payload == {"ok": False, "error": "the admin sidecar is not reachable."}
 
 
 async def test_mcp_repo_server_read(tmp_path):

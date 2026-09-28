@@ -61,7 +61,7 @@ except Exception as exc:                                  # noqa: BLE001
     vault_note = f"vault NOT read ({type(exc).__name__}) - .env only"
 
 try:
-    import yaml
+    from jarvis.agents.upgrade_agent import load_model_registry
     from jarvis.config import load_settings
     from openai import OpenAI
 except Exception as exc:                                  # noqa: BLE001
@@ -71,8 +71,10 @@ except Exception as exc:                                  # noqa: BLE001
 
 # 2. Group profiles by their api_key_env: probe once per KEY, not per
 #    profile, so one dead Moonshot key reads as one problem not two.
-registry_path = REPO_ROOT / "config" / "upgrade_models.yaml"
-registry = yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}
+# The joined registry, through the ONE loader: after the registry split the
+# key names and endpoints live in config/model_endpoints.yaml, not in the
+# profile file (docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md step 3).
+registry = load_model_registry()
 # Keyed by (api_key_env, base_url) — NOT by env name alone. One key env can
 # legitimately be used against two different endpoints: .env.example
 # documents pointing OPENAI_BASE_URL at Anthropic and running Haiku as the
@@ -81,7 +83,7 @@ registry = yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}
 # OpenAI key" — which would read as "renew it" and send you to rotate a
 # perfectly good credential. The endpoint is part of the question.
 groups = {}
-for prof in registry.get("profiles") or []:
+for prof in registry["profiles"].values():
     if not isinstance(prof, dict):
         continue
     env_name = str(prof.get("api_key_env", "OPENAI_API_KEY"))

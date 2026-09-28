@@ -91,7 +91,7 @@ def _approx_system_prompt() -> str:
     ])
     voice_catalog = "- rachel: Rachel (warm, conversational)\n- adam: Adam (deep, confident)"
     memory_context = (
-        "- user.name: Larry\n- user.style.brevity: prefers short answers\n"
+        "- user.name (today): Larry\n- user.style.brevity (3 weeks ago): prefers short answers\n"
         "Previously discussed: reviewed the Mortimer upgrade plan phases."
     )
     # 2026-09-05: goes through build_supervisor_prompt rather than

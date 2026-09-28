@@ -108,10 +108,15 @@ final class DisplayWindowStore {
             return containsMemoryGraph() ? nil : selection
         case .result(let id):
             return containsWorkspaceResult(id) ? nil : selection
+        case .skills:
+            // The full Skills library is rendered directly in the shared stage.
+            return selection
         case .skillDetail:
             // Skills detail is rendered directly in the shared stage and
             // never creates a transport panel or a second copy.
             return selection
+        case .workflows:
+            return selection   // no transport panel ever carries the viewer
         }
     }
 
@@ -133,11 +138,12 @@ final class DisplayWindowStore {
             return visible.contains { $0.allPayloads.contains(where: Self.isMemoryGraphPayload) }
         case .result(let id):
             return visible.contains { $0.allWorkspaceIDs.contains(id) }
-        case .skillDetail:
-            // The owning SkillsStore validates that the ID is still selected
-            // before rendering. This locator suppresses the main copy only
-            // while the shared display scene is actually open.
+        case .skills, .skillDetail:
+            // The owning SkillsStore validates the selected detail before
+            // rendering; the full-library mode uses the same stage locator.
             return selection == content
+        case .workflows:
+            return false   // only ever the supplemental tile, handled above
         }
     }
 

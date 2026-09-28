@@ -24,9 +24,11 @@ import os
 import time
 import uuid
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import yaml
 
@@ -84,6 +86,14 @@ from jarvis.usage_ledger import (
 from jarvis.workflows import match_workflow
 
 logger = logging.getLogger(__name__)
+
+
+def model_routing_env_enabled() -> bool:
+    """JARVIS_MODEL_ROUTING_ENABLED: on only if the value is exactly "1".
+    Extracted from SubAgent's inline checks (status spec T2.3) so they and
+    jarvis.status.overview read ONE rule (R8). The Settings field
+    `jarvis_model_routing_enabled` is OR-ed in by the callers, unchanged."""
+    return os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
 
 
 def _policy_requires_runlog_redaction(workload: str, *, enabled: bool) -> bool:
@@ -234,6 +244,19 @@ def _result_is_pending_draft(result: str) -> bool:
     return isinstance(body, dict) and body.get("pending") is True
 
 
+def clock_note(timezone: str, now: datetime | None = None) -> str:
+    """D5 — the per-run clock line for live-data agents. `now` is the test
+    seam; a bad timezone falls back to UTC rather than failing the run."""
+    try:
+        tz = ZoneInfo(timezone)
+    except Exception:  # noqa: BLE001 — a bad setting must not break a run
+        tz = ZoneInfo("UTC")
+    local = (now or datetime.now(tz)).astimezone(tz)
+    stamp = local.strftime("%A, %d %B %Y, %I:%M %p").replace(" 0", " ")
+    return (f"Now: {stamp} {local.strftime('%Z')} ({tz.key}). "
+            "\"Today\" and \"tonight\" mean this date; results dated earlier are stale.")
+
+
 class SubAgent:
     def __init__(
         self,
@@ -250,8 +273,15 @@ class SubAgent:
         inject_repo_map: bool = False,
         on_profile_fallback: str = "warn",
         effort: str | None = None,
+        clock: bool = False,
     ):
         self.name = name
+        # MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 2 D5 — live-data agents get
+        # the current date, time and timezone on every run (agents.yaml
+        # `clock: true`). Logged turn 911 (2026-08-20): the analyst "couldn't
+        # determine today's date" for "any NFL games tonight"; 3173: it
+        # could not tell tonight's games from stale ones.
+        self.clock = bool(clock)
         self.display_name = display_name
         self.description = description
         self.mcp_servers = list(mcp_servers)
@@ -305,7 +335,7 @@ class SubAgent:
         self._effort: str | None = effort
         routing_enabled = bool(
             getattr(settings, "jarvis_model_routing_enabled", False)
-            or os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
+            or model_routing_env_enabled()
         )
         self._resolved_route: ResolvedModelRoute | None = None
         if client_factory is not None:
@@ -360,8 +390,9 @@ class SubAgent:
                         f"model profile {model_profile!r} could not be "
                         f"resolved ({exc}). This agent is configured "
                         f"on_profile_fallback=refuse, so it will not run on "
-                        f"the voice model instead. Fix the credential "
-                        f"(python scripts/check_keys.py) and retry."
+                        f"the voice model instead. The key for this model "
+                        f"needs fixing (its state can be checked with the "
+                        f"status tools); then retry."
                     )
                 logger.warning(
                     "subagent_model_profile_fallback agent=%s profile=%s mode=%s",
@@ -434,6 +465,13 @@ class SubAgent:
         base = developer_prompt_for(task).format(
             timezone=self._settings.jarvis_timezone)
         return f"{base}\n{AGENT_DISCIPLINE}{self._repo_map_suffix}"
+
+    @property
+    def api_key_env(self) -> str:
+        """The credential this agent's own model rides on ("" for the
+        voice-model path). Read-only; delegate.py reports a successful run
+        against it to jarvis.keyhealth.note_success (status spec T3.3)."""
+        return self._api_key_env
 
     @property
     def model_unusable(self) -> bool:
@@ -513,7 +551,7 @@ class SubAgent:
         try:
             routing_enabled = bool(
                 getattr(self._settings, "jarvis_model_routing_enabled", False)
-                or os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
+                or model_routing_env_enabled()
             )
             if routing_enabled:
                 resolved = resolve_model_route_checked(
@@ -619,7 +657,7 @@ class SubAgent:
 
         routing_enabled = bool(
             getattr(self._settings, "jarvis_model_routing_enabled", False)
-            or os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
+            or model_routing_env_enabled()
         )
         try:
             configured_workload_policy = resolve_policy(
@@ -1109,6 +1147,9 @@ class SubAgent:
             messages.append({"role": "system", "content": workflow.as_prompt()})
             logger.info("workflow_injected agent=%s", self.name)
 
+        if self.clock:
+            messages.append({"role": "system", "content": clock_note(
+                self._settings.jarvis_timezone)})
         messages.append({"role": "user", "content": task})
         tools = (
             json.loads(json.dumps(tool_specs_override))
@@ -1802,6 +1843,7 @@ def load_sub_agents(
             on_profile_fallback=str(
                 entry.get("on_profile_fallback", "warn")).strip().lower(),
             inject_repo_map=bool(entry.get("inject_repo_map", False)),
+            clock=bool(entry.get("clock", False)),
             effort=entry.get("effort"),
         )
     return agents

@@ -5,6 +5,7 @@ import pytest
 from jarvis.prompts import (
     HANDOFF_ADDENDUM,
     SCREEN_VISION_ADDENDUM,
+    STATUS_ADDENDUM,
     SUBAGENT_PROMPTS,
     SUPERVISOR_PROMPT,
     UI_CONTROL_ADDENDUM,
@@ -149,10 +150,32 @@ def test_rule_11_authorizes_reporting_an_absent_reason():
 
 def test_rule_12_single_selfedit_slot_and_no_wait_primitive():
     """G9/G10 (MORTIMER_SESSION_GAPS_AND_SELFEDIT_CONVERGENCE_PLAN.md): no
-    parallel self-edit slot exists and there is no wait/timer capability —
-    the Supervisor must say so rather than imply either."""
+    parallel self-edit slot exists, and waiting is never claimed. W12
+    (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4, option B) retired the flat
+    "There is no wait or timer capability": follow_up and progress_updates
+    now wait, so the rule says only a tool can, which holds with or
+    without them registered."""
     assert "Only one self-edit runs at a time" in SUPERVISOR_PROMPT
-    assert "There is no wait or timer capability" in SUPERVISOR_PROMPT
+    assert "There is no wait or timer capability" not in SUPERVISOR_PROMPT
+    assert ("Only a tool can wait: never say you are waiting or will check back unless "
+            "a tool call in this turn actually set that up.") in SUPERVISOR_PROMPT
+    assert "if they want a reminder — delegate that to scheduler" in SUPERVISOR_PROMPT
+    # Tool-neutral: the base prompt names neither timing tool.
+    assert "follow_up" not in SUPERVISOR_PROMPT and "progress_updates" not in SUPERVISOR_PROMPT
+
+
+def test_the_timing_addenda_ship_only_with_their_tools():
+    from jarvis.prompts import FOLLOW_UP_ADDENDUM, PROGRESS_ADDENDUM, build_supervisor_prompt
+
+    kwargs = dict(jarvis_name="M", user_name="L", timezone="UTC", units="imperial",
+                  agent_catalog="", model_catalog="", voice_catalog="", memory_context="")
+    bare = build_supervisor_prompt(**kwargs)
+    assert PROGRESS_ADDENDUM not in bare and FOLLOW_UP_ADDENDUM not in bare
+    both = build_supervisor_prompt(**kwargs, progress=True, follow_up=True)
+    assert both == bare + "\n" + PROGRESS_ADDENDUM + "\n" + FOLLOW_UP_ADDENDUM
+    assert "call progress_updates" in PROGRESS_ADDENDUM
+    assert "call follow_up" in FOLLOW_UP_ADDENDUM and "[follow-up due]" in FOLLOW_UP_ADDENDUM
+    assert "belongs to scheduler, not follow_up" in FOLLOW_UP_ADDENDUM
 
 
 def test_developer_prompt_forbids_unwritten_commit_claims():
@@ -264,16 +287,22 @@ class TestAgentDiscipline:
 
         assert "size of the error does not fit your explanation" in R
 
-    def test_handoff_survived_and_still_names_the_marker(self):
-        """H2.1 — delegate.py reads this marker from the agent's OWN reply
-        to authorise a budget-resetting continuation. Changing the string
-        here breaks that; this pins the pair."""
-        from jarvis.agents.delegate import HANDOFF_MARKER
+    def test_missing_tool_replaces_the_command_handoff(self):
+        """T1.2 (2026-09-22) — a sub-agent without a tool names the gap
+        (MISSING-TOOL:) instead of handing the user a command; NEEDS-INPUT:
+        stays for choices only the user can make. delegate.py reads both
+        markers from the agent's OWN reply, so this pins the pairs."""
+        from jarvis.agents.delegate import HANDOFF_MARKER, MISSING_TOOL_MARKER
         from jarvis.prompts import AGENT_DISCIPLINE as R
 
         assert HANDOFF_MARKER in R
+        assert MISSING_TOOL_MARKER in R
         assert 'do not stop at "I cannot"' in R
-        assert "exact command" in R
+        assert "never a user command" in R
+        assert "exact command" not in R
+        # MORTIMER_VOICE_WORKFLOWS_PLAN.md D11 — NEEDS-INPUT also covers a
+        # step only Larry can do (the show_commands gate keys on it).
+        assert "NEEDS-INPUT: only for what only Larry can do" in R
 
     def test_search_discipline_survived(self):
         """H2.3 — run b74ed019 had every file it needed by round 8 and
@@ -301,11 +330,28 @@ class TestHandoffAddendum:
 
         assert "zsh" in HANDOFF_ADDENDUM
 
+    def test_addendum_allows_an_explicit_ask(self):
+        """D-L5 (Larry, 2026-09-25): commands when he explicitly asks, or
+        for a NEEDS-INPUT step only he can do; never assume a terminal."""
+        from jarvis.prompts import HANDOFF_ADDENDUM
+
+        assert "assume he does not use a terminal" in HANDOFF_ADDENDUM
+        assert "only when he explicitly asks for commands" in HANDOFF_ADDENDUM
+        assert "NEEDS-INPUT for a step only Larry can do" in HANDOFF_ADDENDUM
+
     def test_the_addendum_explains_continuation(self):
         from jarvis.prompts import HANDOFF_ADDENDUM
 
         assert "continuation" in HANDOFF_ADDENDUM
         assert "not a retry" in HANDOFF_ADDENDUM
+
+    def test_addendum_forbids_commands_by_default(self):
+        """T1.3 (Larry, 2026-09-22): assume the user is not technical."""
+        from jarvis.prompts import HANDOFF_ADDENDUM
+
+        assert "assume he does not use a terminal" in HANDOFF_ADDENDUM
+        assert "only when he explicitly asks" in HANDOFF_ADDENDUM
+        assert "MISSING-TOOL" in HANDOFF_ADDENDUM
 
 
 class TestDeveloperSections:
@@ -341,6 +387,37 @@ class TestDeveloperSections:
         for name, text in DEVELOPER_SECTIONS.items():
             assert "two-phase" in text or "plan_start" in text, name
             assert text.strip() == text
+
+    def test_self_development_offers_plan_on_core_refusal(self):
+        """Status spec T4.8: a core-tier refusal becomes an offer to write
+        the plan, then a restart with its plan_path — not a dead end."""
+        from jarvis.prompts import DEVELOPER_SECTIONS
+        text = DEVELOPER_SECTIONS["self_development"]
+        sentence = ("If selfedit_start refuses because a core file needs a plan, offer to "
+                    "write one with plan_start for the same goal, and after the user adopts "
+                    "it, start again with that plan_path.")
+        assert text.endswith(sentence)
+        assert text.count(sentence) == 1
+
+    def test_an_offline_sidecar_is_reported_without_a_command(self):
+        """Review finding 8 (L1): the user never gets a terminal command —
+        the section used to say to suggest ./scripts/mortimer.sh."""
+        from jarvis.prompts import DEVELOPER_SECTIONS
+        text = DEVELOPER_SECTIONS["self_development"]
+        assert "scripts/" not in text and ".sh" not in text
+        assert "the admin sidecar is not running" in text
+        assert "never give the user a command" in text
+
+    def test_self_development_routes_human_only_files_and_names_the_deploy(self):
+        """Phase 3 (Larry, 2026-09-25): W8 option A and self-rebuild option
+        B. Turns 2753/2769 told Larry to run a build script after a merge."""
+        from jarvis.prompts import DEVELOPER_SECTIONS
+        text = DEVELOPER_SECTIONS["self_development"]
+        assert "merged; deploy with DEPLOY-MAIN when you're ready" in text
+        assert "never name a build script" in text and "bundle" not in text
+        assert "A human-only (Tier 0) file is never written" in text
+        assert "HUMAN-ONLY PROPOSAL, copy that sentence into your reply word for word" in text
+        assert "rebuild the app" not in text
 
     def test_a_self_edit_task_gets_the_self_development_section(self):
         from jarvis.prompts import select_developer_sections as sel
@@ -512,6 +589,7 @@ def test_the_default_production_call_matches_the_expression_it_replaced():
         ("ui_control", UI_CONTROL_ADDENDUM),
         ("screen", SCREEN_VISION_ADDENDUM),
         ("clipboard", HANDOFF_ADDENDUM),
+        ("status", STATUS_ADDENDUM),
     ],
 )
 def test_each_flag_appends_exactly_its_own_addendum(flag, addendum):
@@ -527,6 +605,27 @@ def test_a_disabled_addendum_leaves_no_trace_in_the_prompt():
     assert UI_CONTROL_ADDENDUM not in off
     assert SCREEN_VISION_ADDENDUM not in off
     assert HANDOFF_ADDENDUM not in off
+
+
+def test_status_addendum_follows_ui_control():
+    full = build_supervisor_prompt(
+        **_FMT, voice=True, ui_control=True, screen=True, clipboard=True, status=True
+    )
+    assert full.index(UI_CONTROL_ADDENDUM) < full.index(STATUS_ADDENDUM) < full.index(
+        SCREEN_VISION_ADDENDUM)
+    assert STATUS_ADDENDUM not in build_supervisor_prompt(
+        **_FMT, voice=True, ui_control=True, screen=True, clipboard=True)
+
+
+def test_status_addendum_is_the_spec_text():
+    assert STATUS_ADDENDUM == (
+        "Your own status: for questions about your models, what a provider or "
+        "subscription offers, your services, configuration, the Mac app build, or "
+        "where the user is, call system_status yourself — never delegate these and "
+        "never hand the user a command. The model registry lists what is configured, "
+        "not what an account offers: answer whether a model is available only from a "
+        "catalog or subscription result, and say which source and when."
+    )
 
 
 def test_addenda_keep_the_order_pipeline_py_used():
@@ -557,7 +656,7 @@ def test_a_specialists_records_are_not_self_knowledge():
     assert "A specialist's records are not things you know" in GOLDEN_RULES
     assert "reporting any of it without asking" in GOLDEN_RULES
     # The boundary against the memory block, which says the opposite about
-    # memories ("things you already know").
+    # memories ("what you already know, as of when each was written").
     assert "a specialist's data never is" in GOLDEN_RULES
 
 
@@ -641,6 +740,11 @@ def test_the_missing_tool_case_is_still_reported_plainly():
     assert "offer to have it added through self-development" in SUPERVISOR_PROMPT
 
 
+def test_rule_10_assumes_no_terminal():
+    # T1.3 — holds even when the clipboard switch removes HANDOFF_ADDENDUM.
+    assert "Assume the user does not use a terminal" in SUPERVISOR_PROMPT
+
+
 def test_rule_13_cites_golden_rule_1_not_the_numbered_rule_1():
     # There are two "Rule 1"s: the numbered one is the acknowledgment
     # sentence, and "say exactly that" is in the GOLDEN rules. Rule 3 gets
@@ -708,3 +812,41 @@ def test_selfedit_previews_then_starts_without_an_extra_spoken_confirmation():
     assert "only after explicit confirmation in a new turn" not in text
     # Larry's self-edit decision does not silently change new-app creation.
     assert "only after the user explicitly confirms in a new turn" in DEVELOPER_SECTIONS["app_development"]
+
+
+def test_memories_about_things_that_change_are_checked_before_use():
+    # W10 (MORTIMER_VOICE_WORKFLOWS_PLAN.md, Larry 2026-09-25: "I prefer the
+    # correct info, so knowing how old a memory is would tell us if we need
+    # to refresh it before answering"). Every memory line carries its age
+    # (jarvis.memory.fact_age); the prompt must say what the age is for.
+    from jarvis.prompts import GOLDEN_RULES
+    assert "Each memory shows how long ago it was written." in SUPERVISOR_PROMPT
+    assert "is an old observation, not a current fact" in SUPERVISOR_PROMPT
+    assert "find it out the way you would if you had no memory of it" in SUPERVISOR_PROMPT
+    assert "if nothing can check it, say how old the memory is" in SUPERVISOR_PROMPT
+    # Stable facts still come from memory, never from a delegation.
+    assert "answer from memory and never delegate to recall it" in SUPERVISOR_PROMPT
+    # The old blanket "already known" wording is gone from both places.
+    assert "things you already know" not in SUPERVISOR_PROMPT
+    assert "they are already known" not in SUPERVISOR_PROMPT
+    assert "as of when each was written" in GOLDEN_RULES
+    # No tool is named: the paragraph ships whether or not system_status
+    # is registered (a prompt naming an unregistered tool invites
+    # hallucinated calls).
+    start = SUPERVISOR_PROMPT.index("Long-term memory")
+    paragraph = SUPERVISOR_PROMPT[start:SUPERVISOR_PROMPT.index("\n\nWhen the user explicitly", start)]
+    assert "system_status" not in paragraph
+
+
+def test_app_build_submit_needs_no_second_yes():
+    # W9 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4, Larry 2026-09-25): one
+    # approval at app_build_start covers through the draft PR; app_create
+    # keeps its own confirmation.
+    from jarvis.prompts import SUBAGENT_PROMPTS
+    import jarvis.prompts as prompts
+
+    source = open(prompts.__file__, encoding="utf-8").read()
+    assert "app_build_submit (also two-phase" not in source
+    assert "the user's yes to app_build_start already covers it, so never ask again" in source
+    assert "covered by the yes to app_build_start: never ask again" in SUBAGENT_PROMPTS["app_builder"]
+    assert "call app_create with confirm set to false" in source

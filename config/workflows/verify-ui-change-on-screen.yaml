@@ -1,0 +1,16 @@
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 2 W14 (2026-09-25). Developer only.
+# Logged 2026-09-09 00:34-01:01: a zoom-and-pan self-edit for the graph
+# window was reported as confirmed, then Larry found nothing on screen
+# (turn 2694) and "the zoom code was never committed". A UI change is done
+# when it can be seen in the running app, not when a run says so.
+name: verify-ui-change-on-screen
+when: "self-edit status validation committed pushed working zoom pan window visible"
+agents:
+- developer
+steps:
+- A UI change is done only when Larry can see it in the running app. First check where it actually is - staged, validated, committed, PR open, merged, or built into the running app.
+- If it should be visible now, call screen_view on that window and compare what you see with what was asked.
+- If it is not in the running app yet, say which step is left (validation, PR, merge, deploy with DEPLOY-MAIN) instead of calling it done.
+- If screen_view fails, say the change is unverified and quote the capture error.
+done_when:
+- The reply states what screen_view showed, or which step is left before the change can appear, or that it is unverified and why.

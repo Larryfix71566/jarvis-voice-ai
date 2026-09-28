@@ -3,7 +3,7 @@
 The spoken-name mapping used to be prose in two places — rule 8 in
 jarvis/prompts.py and the model_profile description in
 jarvis/agents/delegate.py — and both had drifted from
-config/upgrade_models.yaml:
+the model registry (then config/upgrade_models.yaml):
 
     rule 8          said `fable`        no such profile
     both locations  said `or-sonnet-5`  no such profile

@@ -6,12 +6,22 @@ Status vocabulary: `not_started`, `in_progress`, `implemented_unverified`,
 `blocked`, `accepted`. This record tracks this isolated working tree; it is
 not a Mac deployment or PR receipt.
 
-Latest checkpoint: see **2026-09-28 historical verifier completed** at the end
-of this document. All candidate checks passed with unchanged source, but the
-historical baseline's app suite failed one exact floating-point assertion; the
-final verifier receipt remains failed (11/12 stages passed). The live IPv6 test stopped at a failed positive control, so containment is
-still unverified. Provider evaluation and physical-display
-acceptance still await the pending user inputs.
+Latest checkpoint (2026-09-28): main `2e6f769` is integrated locally with all
+conflicts resolved. Approved memory ordering and separate Skills/Workflows
+navigation are implemented. Creator execution retains genuine Developer-run
+identity and late validation ownership. [Integration receipts](receipts/main-integration-2026-09-28/)
+record 4,851 Python passes with two human-only protection failures and four
+skips; JarvisKit 219 tests/zero failures; MortimerHost 372 executed/seven skips/
+zero failures. The post-run historical-fixture correction has a passing explicit
+streaming-overlay test (59 registry passes, three migration-snapshot skips).
+
+The prior historical VM verifier remains failed (11/12 stages), despite its
+candidate checks passing: the old baseline has a floating-point assertion
+failure. IPv4/IPv6 containment passed the later eight-observation canary, but
+full live creator lifecycle and release acceptance remain open. Paid evaluation,
+human review, physical monitors, live accessibility/voice, activation/rollback,
+and remaining performance gates are unaccepted. No deployment is claimed.
+Earlier checkpoints below are history, not current release status.
 
 ## Approved product direction
 

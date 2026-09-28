@@ -94,3 +94,22 @@ def _stub_procedures_learning(monkeypatch):
 def _auth_disabled_by_default(monkeypatch):
     """Keep unrelated tests focused on their behavior; auth tests opt in."""
     monkeypatch.setenv("JARVIS_AUTH_ENABLED", "false")
+
+
+@pytest.fixture(autouse=True)
+def _stub_notice_outbox(monkeypatch):
+    """Status spec T3.2: a delegation orphaned with no live session writes
+    its result to the notice outbox (jarvis.notices -> JARVIS_DB_PATH, which
+    defaults to the REAL data/jarvis.db). Several tests drive exactly that
+    path (barge-in with no hook, the teardown drain tests), so the seam is
+    stubbed by default, like learn_from_run above. Tests of the outbox
+    itself re-patch jarvis.agents.delegate._to_outbox in their body."""
+    monkeypatch.setattr(
+        "jarvis.agents.delegate._to_outbox", lambda source, text: -1,
+        raising=False,
+    )
+    # Review finding 5(b): a session left "live" by one test must not
+    # receive another test's late results.
+    from jarvis import notices
+
+    notices._reset_live_session_for_tests()

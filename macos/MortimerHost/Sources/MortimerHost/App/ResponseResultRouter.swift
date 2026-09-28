@@ -50,7 +50,7 @@ final class ResponseResultRouter {
         }
         let followsResponses = workspace.showsConversation || (
             previousResponseID != nil && workspace.activeID == previousResponseID
-            && !workspace.showsMemoryGraph && !workspace.showsAtlas
+            && !workspace.showsMemoryGraph && !workspace.showsAtlas && !workspace.showsWorkflows
             && workspace.comparisonID == nil
             && !workspace.pinnedIDs.contains(previousResponseID!))
         workspace.receive(result)

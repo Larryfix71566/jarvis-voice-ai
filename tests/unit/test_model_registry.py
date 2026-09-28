@@ -1,4 +1,10 @@
-"""config/upgrade_models.yaml invariants.
+"""Model registry invariants, checked against the JOINED view.
+
+The registry is config/model_profiles.yaml joined with
+config/model_endpoints.yaml by jarvis.agents.upgrade_agent's
+load_model_registry (docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md);
+these invariants were written against the single-file
+config/upgrade_models.yaml and hold unchanged on the join.
 
 Larry 2026-08-19, when OpenRouter joined the registry. A proxy makes it
 possible — and easy — to register a model you can already reach directly,
@@ -20,19 +26,22 @@ from pathlib import Path
 import pytest
 import yaml
 
-REGISTRY_PATH = Path(__file__).resolve().parents[2] / "config" / "upgrade_models.yaml"
+CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
 AGENTS_PATH = Path(__file__).resolve().parents[2] / "config" / "agents.yaml"
 COUNCIL_TIERS = {"economy", "mid", "frontier"}
 
 
 @pytest.fixture(scope="module")
 def registry() -> dict:
-    return yaml.safe_load(REGISTRY_PATH.read_text(encoding="utf-8")) or {}
+    from jarvis.agents.upgrade_agent import REGISTRY_PATH_ENV, load_model_registry
+    with pytest.MonkeyPatch.context() as mp:
+        mp.delenv(REGISTRY_PATH_ENV, raising=False)
+        return load_model_registry(config_dir=CONFIG_DIR)
 
 
 @pytest.fixture(scope="module")
 def profiles(registry) -> list[dict]:
-    return [p for p in (registry.get("profiles") or []) if isinstance(p, dict)]
+    return [p for p in registry["profiles"].values() if isinstance(p, dict)]
 
 
 class TestIdentity:

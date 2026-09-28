@@ -20,7 +20,18 @@ one-phrase sign-off; an error sentence → relayed in one short sentence.
 
 from __future__ import annotations
 
+import os
+
 from typing import Any, Awaitable, Callable
+
+def ui_control_enabled() -> bool:
+    """JARVIS_UI_CONTROL_ENABLED: on unless false/0/no. Extracted verbatim
+    from build_pipeline's inline check (status spec T2.3) so the pipeline's
+    registration site and jarvis.status.overview read ONE rule (R8)."""
+    return os.environ.get(
+        "JARVIS_UI_CONTROL_ENABLED", ""
+    ).strip().lower() not in ("false", "0", "no")
+
 
 UI_ACTIONS = frozenset({
     "drawer_open", "drawer_close", "drawer_tab",

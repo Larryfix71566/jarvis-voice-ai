@@ -655,10 +655,63 @@ CREATE INDEX IF NOT EXISTS idx_model_route_drafts_expiry
   ON model_route_drafts(expires_at);
 """
 
+# Status spec T3.2 (L12): the notice outbox — late delegation results and
+# daily-status findings, spoken once after the greeting at the next connect
+# (jarvis/notices.py). user_id: tests/unit/test_tenant_columns.py's contract
+# (GC8) that every table carries it.
+# W9 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4). Every tool that created or
+# confirmed an action was retired on 2026-09-10 (8b9dd59): commit, push and
+# repo_commit_write refuse even an old action id. The 21 rows still
+# 'pending' (2026-08-13 .. 09-07) can therefore never resolve, yet
+# list_actions('pending') still offered them. Nothing creates an action any
+# more, so one pass settles them for good.
+MIGRATION_0026_expire_retired_actions = """
+UPDATE actions
+   SET status = 'expired',
+       resolved_at = COALESCE(resolved_at, strftime('%Y-%m-%dT%H:%M:%S+00:00', 'now')),
+       result = COALESCE(result, 'expired: direct repository writes were retired on 2026-09-10; changes go through the self-edit sandbox')
+ WHERE status = 'pending';
+"""
+
+# W10 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4): the memory sweep settles
+# open contradictions itself and says what it archived once, as a notice
+# (jarvis/memory_sweep.settle_open_reviews). SQLite cannot alter a CHECK
+# constraint, so the table is rebuilt with the new kind; rows, ids and the
+# index carry over unchanged.
+MIGRATION_0027_notice_memory_review = """
+CREATE TABLE notices_0027 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('late_result','daily_status','memory_review')),
+  source TEXT NOT NULL,
+  text TEXT NOT NULL,
+  delivered_at TEXT,
+  user_id TEXT NOT NULL DEFAULT 'local'
+);
+INSERT INTO notices_0027 (id, created_at, kind, source, text, delivered_at, user_id)
+  SELECT id, created_at, kind, source, text, delivered_at, user_id FROM notices;
+DROP TABLE notices;
+ALTER TABLE notices_0027 RENAME TO notices;
+CREATE INDEX IF NOT EXISTS idx_notices_pending ON notices(delivered_at, created_at);
+"""
+
+MIGRATION_0025_notices = """
+CREATE TABLE IF NOT EXISTS notices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('late_result','daily_status')),
+  source TEXT NOT NULL,
+  text TEXT NOT NULL,
+  delivered_at TEXT,
+  user_id TEXT NOT NULL DEFAULT 'local'
+);
+CREATE INDEX IF NOT EXISTS idx_notices_pending ON notices(delivered_at, created_at);
+"""
+
 # Durable staging for new extraction exchanges before the global cursor moves
 # past them. Payloads remain staging-only and are removed on terminal success,
 # cancellation, or an authorized forget request.
-MIGRATION_0025_memory_admission_jobs = """
+MIGRATION_0028_memory_admission_jobs = """
 CREATE TABLE IF NOT EXISTS memory_admission_jobs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   idempotency_key TEXT NOT NULL UNIQUE,
@@ -690,7 +743,7 @@ CREATE INDEX IF NOT EXISTS idx_memory_admission_jobs_turns
 # Atomic shared classification budget for the legacy maintenance queue and
 # durable exchange-admission jobs. Existing rows remain countable as legacy
 # usage; new provider work reserves before it leaves the process.
-MIGRATION_0026_memory_classification_budget = """
+MIGRATION_0029_memory_classification_budget = """
 ALTER TABLE memory_maintenance ADD COLUMN budget_reservation_id TEXT;
 CREATE TABLE IF NOT EXISTS memory_classification_budget_reservations (
   reservation_id TEXT PRIMARY KEY,
@@ -703,7 +756,7 @@ CREATE INDEX IF NOT EXISTS idx_memory_classification_budget_day
   ON memory_classification_budget_reservations(usage_day);
 """
 
-MIGRATION_0027_memory_admission_shadow = """
+MIGRATION_0030_memory_admission_shadow = """
 CREATE TABLE IF NOT EXISTS memory_admission_shadow (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   job_id INTEGER NOT NULL UNIQUE,
@@ -719,7 +772,7 @@ CREATE INDEX IF NOT EXISTS idx_memory_admission_shadow_observed
 # GC24-02: correlate durable tool requests/results and expose actions whose
 # outcome is unknown after cancellation or process interruption. Legacy event
 # rows remain readable with a NULL call identity.
-MIGRATION_0028_agent_event_tool_call_identity = """
+MIGRATION_0031_agent_event_tool_call_identity = """
 ALTER TABLE agent_events ADD COLUMN tool_call_id TEXT;
 CREATE INDEX idx_agent_events_tool_call
   ON agent_events(run_id, tool_call_id, type);
@@ -730,7 +783,7 @@ CREATE INDEX idx_agent_events_tool_call
 # id for plan_start), so a provider may issue a fresh tool_call_id without
 # starting the same job again. No prompt, arguments, or result content is
 # stored in this table.
-MIGRATION_0029_execution_action_claims = """
+MIGRATION_0032_execution_action_claims = """
 CREATE TABLE IF NOT EXISTS execution_action_claims (
   user_id TEXT NOT NULL DEFAULT 'local',
   action_scope TEXT NOT NULL,
@@ -748,7 +801,7 @@ CREATE INDEX IF NOT EXISTS idx_execution_action_claims_updated
 # Skills workspace SW2: bounded, content-free execution receipts. These are
 # separate from agent_events so the UI never has to interpret preview fields
 # as a skill schema. Retention is explicitly coupled in runlog.prune.
-MIGRATION_0030_skill_events = """
+MIGRATION_0033_skill_events = """
 CREATE TABLE IF NOT EXISTS skill_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL DEFAULT 'local',
@@ -783,7 +836,7 @@ CREATE INDEX IF NOT EXISTS idx_skill_events_run_cursor
 # K1 (MORTIMER_REMOTE_ACCESS_PLAN.md A1/A3): per-client bearer tokens.
 # Only SHA-256 digests are stored; plaintext is shown once by the CLI.
 # No backfill is needed: an empty table means no caller is authorized.
-MIGRATION_0031 = """
+MIGRATION_0034 = """
 CREATE TABLE IF NOT EXISTS client_tokens (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL DEFAULT 'larry',
@@ -800,7 +853,7 @@ CREATE INDEX IF NOT EXISTS idx_client_tokens_revoked
 # Skills workspace SW2: one-shot host-controller receipts for verifiable
 # process-step checks. The receipt payload is not retained; its digest, exact
 # scope and bounded lifetime suffice for replay/idempotency checks.
-MIGRATION_0032_skill_step_check_receipts = """
+MIGRATION_0036_skill_step_check_receipts = """
 CREATE TABLE IF NOT EXISTS skill_step_check_receipts (
   user_id TEXT NOT NULL DEFAULT 'local',
   receipt_id TEXT NOT NULL,
@@ -847,14 +900,17 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("0022_memory_automation", MIGRATION_0022),
     ("0023_memory_classification_shadow", MIGRATION_0023),
     ("0024_model_route_preferences", MIGRATION_0024_model_route_preferences),
-    ("0025_memory_admission_jobs", MIGRATION_0025_memory_admission_jobs),
-    ("0026_memory_classification_budget", MIGRATION_0026_memory_classification_budget),
-    ("0027_memory_admission_shadow", MIGRATION_0027_memory_admission_shadow),
-    ("0028_agent_event_tool_call_identity", MIGRATION_0028_agent_event_tool_call_identity),
-    ("0029_execution_action_claims", MIGRATION_0029_execution_action_claims),
-    ("0030_skill_events", MIGRATION_0030_skill_events),
-    ("0031_client_tokens", MIGRATION_0031),
-    ("0032_skill_step_check_receipts", MIGRATION_0032_skill_step_check_receipts),
+    ("0025_notices", MIGRATION_0025_notices),  # status spec T3.2
+    ("0026_expire_retired_actions", MIGRATION_0026_expire_retired_actions),  # W9
+    ("0027_notice_memory_review", MIGRATION_0027_notice_memory_review),  # W10
+    ("0028_memory_admission_jobs", MIGRATION_0028_memory_admission_jobs),
+    ("0029_memory_classification_budget", MIGRATION_0029_memory_classification_budget),
+    ("0030_memory_admission_shadow", MIGRATION_0030_memory_admission_shadow),
+    ("0031_agent_event_tool_call_identity", MIGRATION_0031_agent_event_tool_call_identity),
+    ("0032_execution_action_claims", MIGRATION_0032_execution_action_claims),
+    ("0033_skill_events", MIGRATION_0033_skill_events),
+    ("0034_client_tokens", MIGRATION_0034),
+    ("0036_skill_step_check_receipts", MIGRATION_0036_skill_step_check_receipts),
 ]
 
 

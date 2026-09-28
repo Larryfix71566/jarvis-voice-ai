@@ -29,7 +29,8 @@ Usage (from repo root, keys in .env or vault):
                                                          # wiring for free
     python scripts/voice_model_bench.py --only haiku-baseline,sonnet-4-5
 
-Never edits .env or config/upgrade_models.yaml — every candidate is reached
+Never edits .env or the model registry (config/model_profiles.yaml,
+config/model_endpoints.yaml) — every candidate is reached
 by overriding OPENAI_MODEL/OPENAI_BASE_URL/the relevant key env in this
 process only (same "environment override, never a file edit" rule the plan
 states for the accuracy runs in §4). Never prints a key value.

@@ -1,8 +1,9 @@
 # Mortimer — Verified Gap Closure
 
 **Authored:** 2026-09-24, Codex, from repository inspection.
-**Status:** Planned. This document does not claim implementation, deployment,
-provider verification, or release acceptance.
+**Status:** In progress on the isolated Codex branch; main integration and
+release acceptance remain open. `ROADMAP.md` is authoritative for ownership
+and current state. No deployment or provider verification is claimed.
 **Inspected source:** `4acb4dc2827f292f1236155e3c445d4ec4e9e5a0` (main PR #90).
 **Working branch:** `codex/isolated-20260924`.
 **Working directory:**
@@ -1098,3 +1099,89 @@ do all independent preparation before seeking the user's action.
   receipt](../acceptance/verified-gap-closure/GC24-02-plan-start-run-scoped-claim-2026-09-25.md).
   This does not cover a fresh SubAgent run ID, direct Supervisor handlers, or
   other mutating tools, so cross-run action reconciliation remains open.
+
+## 2026-09-28 current-main integration checkpoint
+
+Checkpoint `44cb8ae` preserves the isolated implementation before merging main
+`2e6f769`. Main's workflow/status, supervised registry and notices behavior
+are being retained alongside execution/privacy/Skills work. Migration IDs
+were reserved and renumbered in ROADMAP before use; a read-only production
+check found only main's IDs through 0027. The main-schema upgrade regression
+preserves existing notices and is idempotent (20 DB tests passed).
+
+Twenty conflict files now have merged resolutions staged. Memory pipeline
+semantics await CX-07's decision, and Swift navigation awaits the requested
+Skills placement choice. The merge cannot be committed until those conflicts
+are resolved. Independent merged-tree checks: 475 workflow/key-health/Skills
+validation tests, 79 auth/bind/service-token tests, 70 web-tool tests, and 10
+native packaging tests passed. These are targeted checks, not full acceptance.
+Auth remains dormant unless explicitly enabled; the current route inventory
+has 79 sidecar decorators, including all ten main workflow/status routes. Its
+whole-app auth test must still run after the memory imports are resolved.
+
+## Appendix — archived overlapping gap plans (2026-09-28)
+
+The following twelve documents were overlapping execution indexes identified
+by [review F7](../reviews/CROSS_SYSTEM_PLAN_EVAL_2026-09-27.md). Their complete
+original bodies are preserved under `docs/archive/`; each former `docs/plans/`
+path remains as a redirect stub. These links map historic scope to the current
+GC24 topics for retrieval only. A topic's appearance here is not evidence that
+its implementation, verification, deployment, or acceptance gate is complete.
+Use this plan and `ROADMAP.md` for current scope and status.
+
+| Archived document | Related GC24 topics (topic names in §4) |
+| --- | --- |
+| [Newly verified gaps](../archive/MORTIMER_NEWLY_VERIFIED_GAPS_IMPLEMENTATION_PLAN.md) | GC24-00 baseline; 01 status; 02 execution; 03 privacy; 04 routes; 05 memory; 06 Atlas; 07 candidate; 08 physical; 09 pilots; 10 release |
+| [Remaining gaps implementation](../archive/MORTIMER_REMAINING_GAPS_IMPLEMENTATION_PLAN.md) | GC24-00 baseline; 01 status; 02 execution; 03 privacy; 04 routes; 05 memory; 06 Atlas; 07 candidate; 08 physical; 09 pilots |
+| [Gaps implementation, 2026-09-25](../archive/MORTIMER_GAPS_IMPLEMENTATION_PLAN_2026-09-25.md) | GC24-00 baseline; 02 execution; 03 privacy; 04 routes; 05 memory; 06 Atlas; 07 candidate |
+| [Review gaps, 2026-09-25](../archive/MORTIMER_REVIEW_GAPS_IMPLEMENTATION_PLAN_2026-09-25.md) | GC24-00 baseline; 02 execution; 03 privacy; 04 routes; 05 memory; 06 Atlas; 07 candidate |
+| [Reviewed gaps, 2026-09-25](../archive/MORTIMER_REVIEWED_GAPS_IMPLEMENTATION_PLAN_2026-09-25.md) | GC24-00 baseline; 02 execution; 03 privacy; 04 routes; 05 memory; 06 Atlas; 07 candidate |
+| [Post-review gap closure, 2026-09-25](../archive/MORTIMER_POST_REVIEW_GAP_CLOSURE_PLAN_2026-09-25.md) | GC24-00 baseline; 02 execution; 03 privacy; 04 routes; 05 memory; 06 Atlas; 07 candidate |
+| [Implementation gaps execution, 2026-09-25](../archive/MORTIMER_IMPLEMENTATION_GAPS_EXECUTION_PLAN_2026-09-25.md) | GC24-00 baseline; 02 execution; 03 privacy; 04 routes; 05 memory; 06 Atlas; 07 candidate |
+| [Remaining gaps execution, 2026-09-25](../archive/MORTIMER_REMAINING_GAPS_EXECUTION_PLAN_2026-09-25.md) | GC24-00 baseline; 02 execution; 03 privacy; 04 routes; 05 memory; 06 Atlas; 07 candidate |
+| [Fresh review implementation, 2026-09-25](../archive/MORTIMER_FRESH_REVIEW_IMPLEMENTATION_PLAN_2026-09-25.md) | GC24-00 baseline; 02 execution; 03 privacy; 04 routes; 05 memory; 06 Atlas; 07 candidate |
+| [Current review gaps, 2026-09-25](../archive/MORTIMER_CURRENT_REVIEW_GAPS_IMPLEMENTATION_PLAN_2026-09-25.md) | GC24-02 execution; 03 privacy; 04 routes; 05 memory; 06 Atlas; 07 candidate |
+| [Next gaps, 2026-09-25](../archive/MORTIMER_NEXT_GAPS_IMPLEMENTATION_PLAN_2026-09-25.md) | GC24-02 execution; 03 privacy; 04 routes; 05 memory; 06 Atlas; 07 candidate |
+| [Model-neutral gap implementation, 2026-09-25](../archive/MORTIMER_MODEL_NEUTRAL_GAP_IMPLEMENTATION_PLAN_2026-09-25.md) | GC24-02 execution; 03 privacy; 04 routes; 05 memory; 06 Atlas; 07 candidate |
+
+The archived versions preserve their original proposed order, requirements,
+and historical evidence. Where that evidence describes a test or prior
+observation, it remains historical; consult each current GC24 row and its
+acceptance record before treating any gate as satisfied.
+
+## 2026-09-28 approved merge decisions implemented/in progress
+
+Larry approved the memory sequence (echo filtering → durable classification/
+admission → saved memory → automatic contradiction settlement), assigned its
+integration to Codex, and approved separate Skills navigation beside Workflows.
+Those merge resolutions are underway. CX-12's three original Anthropic
+`streaming: true` flags are restored, with the split-file digest updated to the
+exact output of the lossless migration renderer. No model identity, credential,
+access route or voice setting changed.
+
+After memory modules parsed, all 73 whole-app auth, architecture endpoint and
+registry-split tests passed. This includes runtime enumeration and unauthorized
+requests against all 79 sidecar routes. The registry scan found the Skills
+evaluation CLI naming the deleted legacy registry; it now uses the shared
+`registry_source` resolver. Its 45 budget/review tests pass without live calls.
+Full merged Python and native acceptance still remain open.
+
+### Final integration checkpoint and provenance correction
+
+All 31 merge conflicts are resolved. The approved memory sequence passes 333
+focused tests; exact-once supervisor dispatch survives a voice retry. Broad
+Python integration: 4,851 pass, four skipped, two outstanding human deny-list
+failures. JarvisKit: 219/zero failures. Host: 372 executed/seven skips/zero
+failures. Logs are in the main-integration-2026-09-28 Skills receipts.
+
+The earlier description of CX-12 as main losing streaming flags was incorrect.
+Those flags existed in Codex's pre-merge live registry; Git's rename merge
+carried them into main's historical YAML fixture instead of its new live pool.
+Both main historical snapshots are now unchanged, the approved flags exist in
+the live profile pool, and an explicit overlay test proves all other fields
+stay equal. The registry suite passes 59 with three appropriate historical
+byte-snapshot skips. No acceptance criterion was relaxed.
+
+Human-only protection entries, live provider comparison and review, physical
+displays/accessibility/voice, soak/latency and exact release acceptance remain
+open. No deployment or runtime activation occurred.

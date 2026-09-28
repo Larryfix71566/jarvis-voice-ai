@@ -29,6 +29,7 @@ EXPECTED_TABLES = {
     "skill_events",
     "client_tokens",
     "skill_step_check_receipts",
+    "notices",
 }
 
 EXPECTED_MIGRATION_IDS = [
@@ -49,14 +50,17 @@ EXPECTED_MIGRATION_IDS = [
     "0022_memory_automation",
     "0023_memory_classification_shadow",
     "0024_model_route_preferences",
-    "0025_memory_admission_jobs",
-    "0026_memory_classification_budget",
-    "0027_memory_admission_shadow",
-    "0028_agent_event_tool_call_identity",
-    "0029_execution_action_claims",
-    "0030_skill_events",
-    "0031_client_tokens",
-    "0032_skill_step_check_receipts",
+    "0025_notices",
+    "0026_expire_retired_actions",
+    "0027_notice_memory_review",
+    "0028_memory_admission_jobs",
+    "0029_memory_classification_budget",
+    "0030_memory_admission_shadow",
+    "0031_agent_event_tool_call_identity",
+    "0032_execution_action_claims",
+    "0033_skill_events",
+    "0034_client_tokens",
+    "0036_skill_step_check_receipts",
 ]
 
 
@@ -89,10 +93,36 @@ def test_migrations_are_idempotent(tmp_path):
     conn.close()
 
 
+def test_reserved_migrations_upgrade_main_without_rewriting_notices(tmp_path):
+    """The deployed main schema keeps its IDs and data when Codex work lands."""
+    conn = get_conn(tmp_path / "main-upgrade.db")
+    conn.execute("CREATE TABLE migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)")
+    deployed = [item for item in MIGRATIONS if int(item[0][:4]) <= 27]
+    for migration_id, sql in deployed:
+        conn.executescript(sql)
+        conn.execute("INSERT INTO migrations VALUES (?, ?)", (migration_id, now_iso()))
+    conn.execute(
+        "INSERT INTO notices (created_at, kind, source, text, user_id) VALUES (?, ?, ?, ?, ?)",
+        (now_iso(), "memory_review", "test", "Synthetic preserved notice", "alice"),
+    )
+    conn.commit()
+    prior = [tuple(row) for row in conn.execute("SELECT * FROM notices")]
+    assert run_migrations(conn) == [
+        "0028_memory_admission_jobs", "0029_memory_classification_budget",
+        "0030_memory_admission_shadow", "0031_agent_event_tool_call_identity",
+        "0032_execution_action_claims", "0033_skill_events",
+        "0034_client_tokens", "0036_skill_step_check_receipts",
+    ]
+    assert [tuple(row) for row in conn.execute("SELECT * FROM notices")] == prior
+    assert [row["id"] for row in conn.execute("SELECT id FROM migrations ORDER BY id")] == EXPECTED_MIGRATION_IDS
+    assert run_migrations(conn) == []
+    conn.close()
+
+
 def test_client_tokens_table_shape(tmp_path, monkeypatch):
     monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "client-tokens.db"))
     applied = run_migrations()
-    assert "0031_client_tokens" in applied
+    assert "0034_client_tokens" in applied
     conn = get_conn()
     cols = {row["name"]: row for row in conn.execute(
         "PRAGMA table_info(client_tokens)"
@@ -407,17 +437,17 @@ def test_migration_0020_user_id_everywhere(tmp_path):
         conn.close()
 
 
-def test_migration_0028_preserves_existing_agent_events(tmp_path):
+def test_migration_0031_preserves_existing_agent_events(tmp_path):
     """GC24-02: an existing 0027 database gains nullable tool identity
     without rewriting or losing its historical event rows."""
-    db_path = tmp_path / "0028-upgrade.db"
+    db_path = tmp_path / "0031-upgrade.db"
     conn = get_conn(db_path)
     conn.execute(
         "CREATE TABLE IF NOT EXISTS migrations "
         "(id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)"
     )
     for migration_id, sql in MIGRATIONS:
-        if migration_id == "0028_agent_event_tool_call_identity":
+        if migration_id == "0031_agent_event_tool_call_identity":
             break
         conn.executescript(sql)
         conn.execute(
@@ -432,11 +462,11 @@ def test_migration_0028_preserves_existing_agent_events(tmp_path):
     conn.commit()
 
     assert run_migrations(conn) == [
-        "0028_agent_event_tool_call_identity",
-        "0029_execution_action_claims",
-        "0030_skill_events",
-        "0031_client_tokens",
-        "0032_skill_step_check_receipts",
+        "0031_agent_event_tool_call_identity",
+        "0032_execution_action_claims",
+        "0033_skill_events",
+        "0034_client_tokens",
+        "0036_skill_step_check_receipts",
     ]
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(agent_events)")}
     assert "tool_call_id" in columns
@@ -512,3 +542,64 @@ def test_migration_0021_notified_at(tmp_path):
         assert row["notified_at"] is None
     finally:
         conn.close()
+
+
+def test_migration_0026_expires_only_the_pending_actions(tmp_path):
+    """W9 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4): the tools that could
+    confirm an action were retired on 2026-09-10, so a pending row can never
+    resolve. The migration settles those and leaves every other row alone."""
+    conn = get_conn(tmp_path / "actions.db")
+    run_migrations(conn)
+    rows = [("git_commit", "pending", None, None), ("repo_write", "pending", None, None),
+            ("git_push", "committed", "2026-08-20T02:31:00+00:00", "ok"),
+            ("git_push", "failed", "2026-08-30T21:41:00+00:00", "rejected")]
+    for tool, status, resolved_at, result in rows:
+        conn.execute(
+            "INSERT INTO actions (tool, action_class, draft_payload, summary, status, created_at, resolved_at, result)"
+            " VALUES (?, 'privileged', '{}', 's', ?, '2026-08-13T00:39:00+00:00', ?, ?)",
+            (tool, status, resolved_at, result))
+    conn.execute("DELETE FROM migrations WHERE id = '0026_expire_retired_actions'")
+    conn.commit()
+    assert run_migrations(conn) == ["0026_expire_retired_actions"]
+    got = [dict(r) for r in conn.execute("SELECT tool, status, resolved_at, result FROM actions ORDER BY id")]
+    assert [r["status"] for r in got] == ["expired", "expired", "committed", "failed"]
+    assert all(r["resolved_at"] and "retired on 2026-09-10" in r["result"] for r in got[:2])
+    assert got[2]["result"] == "ok" and got[3]["resolved_at"] == "2026-08-30T21:41:00+00:00"
+    assert conn.execute("SELECT COUNT(*) FROM actions WHERE status = 'pending'").fetchone()[0] == 0
+    conn.close()
+
+
+def test_migration_0027_rebuilds_notices_with_the_memory_review_kind(tmp_path):
+    """W10 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4): the sweep's settle
+    notice needs a new kind, and SQLite cannot alter a CHECK constraint, so
+    0027 rebuilds the table. Every existing row keeps its id and fields."""
+    from jarvis.db import MIGRATION_0025_notices
+
+    conn = get_conn(tmp_path / "notices.db")
+    run_migrations(conn)
+    # Put the table back the way 0025 left it, with rows in it.
+    conn.executescript("DROP TABLE notices;" + MIGRATION_0025_notices)
+    conn.execute("INSERT INTO notices (id, created_at, kind, source, text, delivered_at) "
+                 "VALUES (7, '2026-09-24T10:00:00+00:00', 'late_result', 'Developer', 'done', "
+                 "'2026-09-24T11:00:00+00:00')")
+    conn.execute("INSERT INTO notices (id, created_at, kind, source, text) "
+                 "VALUES (9, '2026-09-25T06:30:00+00:00', 'daily_status', 'daily', 'ok')")
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO notices (created_at, kind, source, text) "
+                     "VALUES ('x', 'memory_review', 's', 't')")
+    conn.execute("DELETE FROM migrations WHERE id = '0027_notice_memory_review'")
+    conn.commit()
+    assert run_migrations(conn) == ["0027_notice_memory_review"]
+    rows = [tuple(r) for r in conn.execute(
+        "SELECT id, kind, source, text, delivered_at, user_id FROM notices ORDER BY id")]
+    assert rows == [(7, "late_result", "Developer", "done", "2026-09-24T11:00:00+00:00", "local"),
+                    (9, "daily_status", "daily", "ok", None, "local")]
+    conn.execute("INSERT INTO notices (created_at, kind, source, text) "
+                 "VALUES ('2026-09-25T07:00:00+00:00', 'memory_review', 'memory_sweep', 't')")
+    assert conn.execute("SELECT MAX(id) FROM notices").fetchone()[0] == 10
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO notices (created_at, kind, source, text) "
+                     "VALUES ('x', 'anything_else', 's', 't')")
+    assert conn.execute("SELECT name FROM sqlite_master WHERE type = 'index' "
+                        "AND name = 'idx_notices_pending'").fetchone() is not None
+    conn.close()

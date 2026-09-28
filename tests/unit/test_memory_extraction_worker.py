@@ -1307,6 +1307,43 @@ class TestTickOnceBasicPairing:
         assert "I prefer concise answers" not in shadow["classification_json"]
 
     @pytest.mark.asyncio
+    async def test_echo_facts_are_filtered_before_durable_classification(
+        self, conn, monkeypatch
+    ):
+        monkeypatch.setenv("JARVIS_MEMORY_AUTOMATION_ENABLED", "true")
+        user_turn = _add_turn(
+            conn, "echo-session", "user", "Hello? I prefer concise answers."
+        )
+        _add_turn(
+            conn, "echo-session", "assistant",
+            "Hi Larry, you are in Spartanburg. I have your preferences saved.",
+        )
+        await tick_once(_AutomationSettings())
+
+        result = process_admission_jobs(
+            _AutomationSettings(), extractor=lambda *_: {
+                "facts": [
+                    {"key": "user.name", "value": "Larry"},
+                    {"key": "user.location.home", "value": "Spartanburg"},
+                    {"key": "user.preference.concise", "value": "Prefers concise answers"},
+                ],
+                "observations": [],
+            },
+        )
+        assert result["extracted"] == 1
+        job = conn.execute(
+            "SELECT stage,candidate_json FROM memory_admission_jobs"
+        ).fetchone()
+        assert job["stage"] == "classify"
+        candidates = json.loads(job["candidate_json"])
+        assert candidates == {
+            "facts": [{"key": "user.preference.concise", "value": "Prefers concise answers"}],
+            "observations": [],
+        }
+        assert str(user_turn) not in job["candidate_json"]
+        assert conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0] == 0
+
+    @pytest.mark.asyncio
     async def test_shadow_stage_never_admits_candidate_to_live_memory(self, conn, monkeypatch):
         monkeypatch.setenv("JARVIS_MEMORY_AUTOMATION_ENABLED", "true")
         user_turn = _add_turn(conn, "shadow-session", "user", "I prefer short replies.")

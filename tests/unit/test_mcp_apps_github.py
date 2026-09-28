@@ -73,3 +73,60 @@ class TestOtherFailuresUnchanged:
             client._raise_for_status(resp, "lookup")
         assert "HTTP 500" in str(exc_info.value)
         assert "admin sidecar" not in str(exc_info.value).lower()
+
+
+class TestReadMethods:
+    """Status spec T4.3: list_pulls / pull_checks, GET only."""
+
+    PR = {"number": 81, "title": "P4: external reads", "state": "open", "draft": True,
+          "head": {"ref": "impl/p4-external", "sha": "abc1234def"},
+          "base": {"ref": "main", "sha": "000"}, "updated_at": "2026-09-23T12:00:00Z",
+          "html_url": "https://github.com/o/r/pull/81", "body": "long text", "user": {"login": "x"}}
+
+    def _client(self, responses):
+        client = GitHubClient(token="ghp_fixturetokenvalue000000000000", owner="o")
+        calls = []
+
+        def fake_request(method, url, **kwargs):
+            calls.append((method, url, kwargs))
+            status, payload = responses[len(calls) - 1]
+            return httpx.Response(status, json=payload, request=httpx.Request(method, url))
+
+        client._request = fake_request
+        return client, calls
+
+    def test_list_pulls_shape_and_params(self):
+        client, calls = self._client([(200, [self.PR, {**self.PR, "number": 80}])])
+        out = client.list_pulls("r", state="all", limit=1)
+        assert calls == [("GET", "https://api.github.com/repos/o/r/pulls",
+                          {"params": {"state": "all", "per_page": 1}})]
+        assert out == [{"number": 81, "title": "P4: external reads", "state": "open",
+                        "draft": True, "head": "impl/p4-external", "base": "main",
+                        "updated_at": "2026-09-23T12:00:00Z",
+                        "html_url": "https://github.com/o/r/pull/81"}]
+
+    def test_pull_checks_reads_head_sha_then_check_runs(self):
+        runs = {"total_count": 2, "check_runs": [
+            {"name": "Unit tests", "status": "completed", "conclusion": "success", "id": 1},
+            {"name": "evals", "status": "in_progress", "conclusion": None, "id": 2}]}
+        client, calls = self._client([(200, self.PR), (200, runs)])
+        out = client.pull_checks("r", 81)
+        assert [c[1] for c in calls] == [
+            "https://api.github.com/repos/o/r/pulls/81",
+            "https://api.github.com/repos/o/r/commits/abc1234def/check-runs"]
+        assert out == {"sha": "abc1234def", "checks": [
+            {"name": "Unit tests", "status": "completed", "conclusion": "success"},
+            {"name": "evals", "status": "in_progress", "conclusion": None}]}
+
+    def test_no_write_methods_called(self):
+        client, calls = self._client([(200, [self.PR]), (200, self.PR), (200, {"check_runs": []})])
+        client.list_pulls("r")
+        client.pull_checks("r", 81)
+        assert {c[0] for c in calls} == {"GET"}
+
+    def test_read_errors_keep_the_auth_message_and_hide_the_token(self):
+        client, _ = self._client([(401, {"message": "Bad credentials"})])
+        with pytest.raises(GitHubError) as exc_info:
+            client.list_pulls("r")
+        assert "HTTP 401" in str(exc_info.value)
+        assert "fixturetoken" not in str(exc_info.value)

@@ -2662,3 +2662,73 @@ The full native suites were rerun after the parallel fixes: MortimerHost passes
 two connected displays, so this is local regression evidence rather than live
 acceptance. Candidate receipts and the release bundle fingerprint must be
 refreshed once more after this plan/status update.
+
+
+### 2026-09-28 current-main integration and live IPv6 result
+
+Fetched main `2e6f769` and read its AGENTS.md/ROADMAP protocol. WS-03 ownership
+matches `codex/isolated-20260924`. Preserved the prior work in local checkpoint
+`44cb8ae`, then started a merge of current main; shared-file conflicts are being
+resolved by preserving both implementations. The pending allow-list deny-row
+proposal is retained in the named stash `preserve human-commit allow-list
+proposal during main integration`, rather than committed by the agent. No
+production files were changed. Read-only production migration inspection found
+only main IDs through `0027_notice_memory_review`, and none of the Codex IDs.
+
+Reserved numbers follow ROADMAP §3: Skills events use 0033; client tokens use
+0034; mail/calendar retains 0035; added the next available reservation 0036 for
+skill step-check receipts. Both migration branches are retained in ordered form.
+Twenty database tests pass, including upgrade from the deployed main schema
+with preservation of existing notices and repeat-run idempotency. Other merged
+code is not yet verified and the merge is not yet committed.
+
+The actual IPv4/IPv6 canary test now passes: a gateway-matched synthetic path
+works before and after both Softnet modes, and provisioning/offline modes block
+both protocols. Eight observations, the exact driver, logs, receipt and hash
+manifest are in `docs/acceptance/skills-workspace/receipts/ipv6-verified-2026-09-28/`.
+The disposable VM was stopped and deleted. This closes the missing live IPv6
+canary subcheck for installed Softnet 0.23.0-e5fd48c, not all of SW-F or release
+acceptance. The first failed positive control remains preserved separately.
+
+Per current-main ROADMAP, the memory ordering/ownership decision (CX-07) and
+Skills navigation placement (WS-03) were requested from Larry. Continue
+independent backend conflicts; do not decide these pending choices by timeout.
+The bounded API-evaluation and physical-monitor questions also remain pending.
+
+### 2026-09-28 — creator routing decision reconfirmed
+
+Larry explicitly selected routing creator work through a real Developer agent
+run. The merged delegate bridge calls the session's Developer `SubAgent.run`,
+whose `RunLogger` creates the run identity; the pipeline retains that bridge
+before wrapping ordinary delegation for voice workflows. Creator validation
+remains attached to the originating run, with its separate job lifecycle and
+without reopening a completed run. This decision is settled; current-main
+integration and live acceptance are still incomplete.
+
+### 2026-09-28 — navigation approval
+
+Larry confirmed separate top-level Skills beside Workflows, inclusion in the
+Display menu, voice navigation via “open skills”, and related-workflow links.
+The merge must preserve the existing Workflow Viewer and its semantics. Native
+integration and acceptance remain open; this decision authorizes the layout,
+not a claim that the frozen candidate has passed.
+
+### 2026-09-28 — integrated main verification
+
+All merge conflicts are resolved. Skills and Workflows retain separate top-
+level, Display-menu and voice view modes; related-workflow links select the
+matching workflow without replacing the existing viewer. Creator execution
+retains real Developer identity, exact-once dispatch across voice retries,
+and late validation association. Native results: JarvisKit 219 tests with no
+failures; MortimerHost 372 executed, seven environment-dependent skips, no
+failures. Broad Python run: 4,851 pass, four skips and two outstanding human
+deny-list gates (health script and frozen authoring fixtures). The proposal
+patch is reviewable and not applied automatically.
+
+Rendered 100-sample debug measurements on the current host: selection-to-layout
+p95 19.844 ms wide / 7.514 ms compact; cached navigation p95 50.751 / 27.690 ms.
+These pass their local timing sub-budgets. They do not close paired voice,
+ten-minute memory growth, physical display, accessibility, provider evaluation,
+human review, activation/rollback or frozen release acceptance. Exact logs and
+hashes are under the main-integration-2026-09-28 acceptance receipts. No app was
+deployed or activated by this work.

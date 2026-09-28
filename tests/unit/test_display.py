@@ -428,5 +428,16 @@ class TestGraphView:
         p = build("graph_view", data)
         assert "Truncated: run cap." in p["body"]
 
+    def test_memory_graph_focus_miss_prefix(self):
+        """Status spec T4.6: an unmatched memory focus shows the overview, said so."""
+        url = "http://127.0.0.1:7861/api/graph/memory/image.png?focus=&depth=2"
+        data = {"ok": True, "graph": "memory", "focus": None, "focus_miss": "zzz",
+                "image_url": url, "summary": "2 memories within 2 of the whole graph.",
+                "truncated": False}
+        p = build("memory_graph_view", data)
+        assert p["body"] == ("No memory matched 'zzz'; showing the overview.\n"
+                             "2 memories within 2 of the whole graph.")
+        assert p["title"] == "Memory graph — whole graph"
+
     def test_graph_view_ok_false_returns_none(self):
         assert build("memory_graph_view", {"ok": False, "error": "no node matches 'zzz'"}) is None

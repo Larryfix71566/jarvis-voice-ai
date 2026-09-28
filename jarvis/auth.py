@@ -69,15 +69,14 @@ class ClientIdentity:
 
 
 def auth_enabled() -> bool:
-    """JARVIS_AUTH_ENABLED, default true.
+    """JARVIS_AUTH_ENABLED, dormant by default (Remote Access Addendum R1).
 
     THE ONLY READ OF THIS NAME IN THE CODEBASE (roadmap kill-switch rule).
-    Only the exact string "false" (case-insensitive, stripped) turns it
-    off; a typo like "0" or "no" leaves auth ON, which is the safe
-    direction for a switch whose off position also forces a loopback bind
-    (jarvis/bind.py).
+    Only the exact string "true" (case-insensitive, stripped) enables it.
+    Disabled auth always forces a loopback bind through jarvis.bind; enabling
+    remote access remains an explicit operator decision.
     """
-    return os.environ.get(ENABLED_ENV, "true").strip().lower() != "false"
+    return os.environ.get(ENABLED_ENV, "").strip().lower() == "true"
 
 
 def service_headers() -> dict[str, str]:

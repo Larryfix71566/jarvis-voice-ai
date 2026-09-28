@@ -84,7 +84,7 @@ def extra_body_for(rung: str, provider: str, explicit: str | None = None,
 
     explicit: the level the CALLER already resolved from its own
     config (config/agents.yaml's `effort:` for a SubAgent, or an
-    upgrade_models.yaml profile's optional `effort:` — see the plan's
+    model_profiles.yaml profile's optional `effort:` — see the plan's
     Phase 1b task 2). A `JARVIS_EFFORT_<RUNG>` environment variable,
     when set, overrides it — a live, no-restart way to test or roll
     back a single rung's effort level without touching config (same

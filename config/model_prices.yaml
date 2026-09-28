@@ -4,7 +4,7 @@
 # by you. provider comes from provider_from_base_url() (base.py/settings
 # sites) or profile["provider"] (council/model_profile sites); model is
 # whatever wire string was actually sent to chat.completions.create.
-# This is deliberately NOT the same as upgrade_models.yaml's `identity`
+# This is deliberately NOT the same as model_profiles.yaml's `identity`
 # string for every row — it's constructed fresh so every rung's key is
 # derivable the same way regardless of which file the call came from.
 #
@@ -58,7 +58,7 @@ models:
     cache_read_mult: 0.10
     history: []
 
-  # ---- present in upgrade_models.yaml (Mythos-class); not currently
+  # ---- present in model_profiles.yaml (Mythos-class); not currently
   # assigned to any rung in agents.yaml, but a profile exists ----
   # Source: platform.claude.com/docs/en/about-claude/pricing, 2026-09-01.
   # Note: this is Claude Fable 5 (not 5.1) — the 5.1 line gets a special
@@ -73,7 +73,7 @@ models:
 
   # ---- direct Anthropic, model-floor tier (agents.yaml model_profile:
   # claude-sonnet-5 for scheduler/librarian/analyst/systems, added
-  # 2026-09-01 Phase 0b item 5; also upgrade_models.yaml's claude-sonnet-5
+  # 2026-09-01 Phase 0b item 5; also model_profiles.yaml's claude-sonnet-5
   # profile, provider: anthropic, base_url: api.anthropic.com/v1/, model:
   # "claude-sonnet-5" bare -> key is exactly this, confirmed by reading
   # that profile's base_url/provider fields directly rather than assumed.
@@ -92,7 +92,7 @@ models:
     cache_read_mult: 0.10
     history: []
 
-  # ---- direct Moonshot (council pool + upgrade_models default) ----
+  # ---- direct Moonshot (council pool + former registry default) ----
   # Source: platform.kimi.ai/docs/pricing/chat-k3, 2026-09-01 (official,
   # direct — NOT OpenRouter's marked-up $2.55/$12.75 for the same model).
   # Cache hit $0.30/M vs cache-miss input $3.00/M -> mult 0.10. No

@@ -2,7 +2,7 @@
 name: mcp-memory
 version: 1.0.0
 class: standard
-tools: [memory_review_list, memory_review_resolve, memory_search, memory_graph_view]
+tools: [memory_review_list, memory_review_resolve, memory_search, memory_restore, memory_graph_view]
 requires_env: []
 # MORTIMER_GRAPH_LAYER_PLAN.md GL12/GL15 (2026-09-04): K2 scoping forwards only
 # declared names, so the graph kill switch and knobs must be listed to reach

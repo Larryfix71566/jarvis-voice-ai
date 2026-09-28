@@ -15,8 +15,14 @@ from jarvis.auth import VerifyUnavailable
 from jarvis.authmw import BearerAuthMiddleware
 from jarvis.db import get_conn, now_iso, run_migrations
 
-# Includes the Skills synthetic-example preview endpoint.
-EXPECTED_SIDECAR_ROUTES = 69
+# Includes Skills endpoints and main's workflow/status routes.
+EXPECTED_SIDECAR_ROUTES = 79
+MAIN_STATUS_PATHS = {
+    "/api/workflows", "/api/status/models", "/api/status/services",
+    "/api/status/overview", "/api/status/build", "/api/status/location",
+    "/api/status/logs", "/api/status/catalog",
+    "/api/status/subscription/probe", "/api/status/github",
+}
 
 
 def _path_for(route: APIRoute) -> str:
@@ -34,6 +40,7 @@ def test_every_sidecar_route_requires_bearer_token(
     run_migrations()
     routes = [route for route in app.routes if isinstance(route, APIRoute)]
     assert len(routes) == EXPECTED_SIDECAR_ROUTES
+    assert MAIN_STATUS_PATHS <= {route.path for route in routes}
 
     client = TestClient(app, raise_server_exceptions=False)
     for route in routes:

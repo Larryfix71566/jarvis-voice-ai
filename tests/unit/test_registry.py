@@ -52,7 +52,8 @@ async def test_registry_rejects_duplicate_config_keys_before_starting_servers(tm
         await registry.start()
 
     assert started == []
-    assert registry._stack is None
+    # Config validation happens before owner tasks or handles are created.
+    assert registry._handles == {}
 
 
 def make_tool(name, server, description="desc", schema=None):
@@ -161,10 +162,6 @@ class TestRegistryDiagnosticRedaction:
         root = tmp_path / "PRIVATE_REPO_ROOT_CANARY"
         config = root / "config"
         config.mkdir(parents=True)
-        (config / "upgrade_models.yaml").write_text(
-            "api_key_env: PRIVATE_UPGRADE_SOURCE_CANARY\nbroken: [\n",
-            encoding="utf-8",
-        )
         skill = tmp_path / "skill.yaml"
         skill.write_text(
             "requires_env_dynamic:\n  - source: upgrade_models_api_keys\n",
@@ -173,7 +170,12 @@ class TestRegistryDiagnosticRedaction:
         monkeypatch.setenv("JARVIS_ENV_SCOPING_ENABLED", "true")
         monkeypatch.setattr(registry_module, "REPO_ROOT", root)
         monkeypatch.setattr(registry_module, "_skill_yaml_path", lambda _name: skill)
+        import jarvis.agents.upgrade_agent as upgrade_agent
 
+        def fail_loader():
+            raise ValueError("PRIVATE_UPGRADE_SOURCE_CANARY /private/config/path")
+
+        monkeypatch.setattr(upgrade_agent, "load_model_registry", fail_loader)
         result = registry_module.build_child_env({"name": "private-server"})
 
         assert isinstance(result, dict)
@@ -312,19 +314,65 @@ class TestCall:
         assert "PRIVATE_RUN_ID_CANARY" not in caplog.text
         assert "error_type=RuntimeError" in caplog.text
 
-    async def test_stop_exception_message_is_not_written_to_logs(self, caplog):
-        class FailingStack:
-            async def aclose(self):
+    async def test_owner_task_shutdown_exception_is_redacted(self, tmp_path, monkeypatch, caplog):
+        import jarvis.skills.registry as registry_module
+
+        class FailingExit:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_exc_info):
                 raise RuntimeError("PRIVATE_STOP_CANARY /Users/private/path")
 
-        registry = SkillRegistry(config_path="unused.yaml")
-        registry._stack = FailingStack()
+        config_path = tmp_path / "mcp_servers.yaml"
+        config_path.write_text(
+            "servers:\n  - name: mcp-time\n    command: python\n",
+            encoding="utf-8",
+        )
+        registry = SkillRegistry(config_path=config_path)
+
+        async def start_server(_entry):
+            owner_stack = registry_module._OWNER_STACK.get()
+            assert owner_stack is not None
+            await owner_stack.enter_async_context(FailingExit())
+            return FakeSession(), []
+
+        monkeypatch.setattr(registry, "_start_server", start_server)
+        await registry.start()
+        handle = registry._handles["mcp-time"]
+        assert handle.state == "up"
 
         await registry.stop()
 
-        assert "registry_stop_error error_type=RuntimeError" in caplog.text
+        assert "mcp_server_down name=mcp-time error_type=RuntimeError" in caplog.text
         assert "PRIVATE_STOP_CANARY" not in caplog.text
         assert "/Users/private/path" not in caplog.text
+        assert handle.last_error == "RuntimeError"
+
+    async def test_stop_guard_error_is_redacted(self, monkeypatch, caplog):
+        import asyncio
+        import jarvis.skills.registry as registry_module
+
+        registry = SkillRegistry(config_path="unused.yaml")
+        handle = registry_module._ServerHandle(
+            name="mcp-time", entry={"name": "mcp-time"})
+
+        async def wait_for_owner_stop():
+            await handle.stop.wait()
+
+        handle.task = asyncio.create_task(wait_for_owner_stop())
+        registry._handles = {handle.name: handle}
+
+        async def fail_wait(*_args, **_kwargs):
+            raise RuntimeError("PRIVATE_STOP_WAIT_CANARY /private/worker/path")
+
+        monkeypatch.setattr(registry_module.asyncio, "wait", fail_wait)
+        await registry.stop()
+        await handle.task
+
+        assert "registry_stop_error error_type=RuntimeError" in caplog.text
+        assert "PRIVATE_STOP_WAIT_CANARY" not in caplog.text
+        assert "/private/worker/path" not in caplog.text
 
     async def test_server_scope_restriction(self):
         registry = make_registry()

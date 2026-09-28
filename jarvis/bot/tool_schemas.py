@@ -39,6 +39,8 @@ from jarvis.bot.ui_control import UI_CONTROL_SCHEMA
 from jarvis.bot.voice_switch import SET_VOICE_SCHEMA
 from jarvis.bot.console_actions import CONSOLE_ACTION_SCHEMA
 from jarvis.bot.shared_content import SHARED_CONTENT_SCHEMA
+from jarvis.bot.status_tool import SYSTEM_STATUS_SCHEMA
+from jarvis.bot.follow_up import FOLLOW_UP_SCHEMA, PROGRESS_UPDATES_SCHEMA
 
 
 def supervisor_tool_schemas(
@@ -49,6 +51,9 @@ def supervisor_tool_schemas(
     clipboard: bool = False,
     command_console: bool = False,
     shared_content: bool = False,
+    status: bool = False,
+    progress: bool = False,
+    follow_up: bool = False,
 ) -> list[dict]:
     """OpenAI-style tool schemas the Supervisor sees, for one configuration.
 
@@ -69,6 +74,10 @@ def supervisor_tool_schemas(
         REMEMBER_SCHEMA,
         COST_SUMMARY_SCHEMA,
     ]
+    # Status spec T2.5: immediately after cost_summary, behind
+    # JARVIS_STATUS_TOOLS_ENABLED (jarvis.status.status_enabled).
+    if status:
+        schemas.append(SYSTEM_STATUS_SCHEMA)
     if ui_control:
         schemas.append(UI_CONTROL_SCHEMA)
     if screen:
@@ -83,4 +92,10 @@ def supervisor_tool_schemas(
         schemas.append(CONSOLE_ACTION_SCHEMA)
     if command_console and shared_content:
         schemas.append(SHARED_CONTENT_SCHEMA)
+    # W12 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4): last, so every menu
+    # that existed before keeps its order byte for byte.
+    if progress:
+        schemas.append(PROGRESS_UPDATES_SCHEMA)
+    if follow_up:
+        schemas.append(FOLLOW_UP_SCHEMA)
     return schemas

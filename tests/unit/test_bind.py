@@ -29,6 +29,13 @@ def bind_db(tmp_path, monkeypatch):
     run_migrations()
 
 
+@pytest.mark.parametrize("service", ["admin", "bot"])
+def test_unset_auth_forces_loopback_even_when_remote_requested(monkeypatch, service):
+    monkeypatch.delenv("JARVIS_AUTH_ENABLED", raising=False)
+    monkeypatch.setenv("JARVIS_BIND_HOST", "100.64.1.2")
+    assert bind.resolve_bind_host(service) == "127.0.0.1"
+
+
 @pytest.mark.parametrize("host", ["127.0.0.1", "127.0.2.3", "localhost", "LOCALHOST", "::1"])
 def test_is_loopback_table(host):
     assert bind.is_loopback(host)

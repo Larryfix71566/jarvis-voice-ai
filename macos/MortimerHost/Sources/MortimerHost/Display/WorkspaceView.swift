@@ -73,6 +73,22 @@ struct WorkspaceView: View {
                 } else { MemoryGraphView(store: workspace.memoryGraph, api: client.admin, coordinator: coordinator) }
             } else if workspace.showsAtlas {
                 KnowledgeAtlasView(coordinator: coordinator)
+            } else if workspace.showsSkills {
+                if isOnSupportingDisplay(.skills) {
+                    ContentUnavailableView {
+                        Label("Skills are on the supporting display", systemImage: "display")
+                    } actions: {
+                        Button("Return here") { drawer.placementRef?.closeDisplay() }
+                    }
+                } else { SkillsWorkspaceView(coordinator: coordinator) }
+            } else if workspace.showsWorkflows {
+                if isOnSupportingDisplay(.workflows) {
+                    ContentUnavailableView {
+                        Label("Workflows are on the supporting display", systemImage: "display")
+                    } actions: {
+                        Button("Return here") { drawer.placementRef?.closeDisplay() }
+                    }
+                } else { WorkflowsView(store: workspace.workflows, api: client.admin) }
             } else if let active = workspace.activeResult {
                 GeometryReader { geometry in
                     if let comparison = workspace.comparisonResult {
@@ -103,6 +119,7 @@ struct WorkspaceView: View {
         // §7 / closure C2.3: entering or leaving comparison and the graph animate for 200 ms.
         .animation(AdaptiveTransition.animation(reduceMotion: reduceMotion), value: workspace.comparisonID)
         .animation(AdaptiveTransition.animation(reduceMotion: reduceMotion), value: workspace.showsMemoryGraph)
+        .animation(AdaptiveTransition.animation(reduceMotion: reduceMotion), value: workspace.showsSkills)
         .alert("Pin limit reached", isPresented: $pinLimitNotice) {
             Button("OK", role: .cancel) {}
         } message: { Text("Unpin a result before pinning another. Your existing pins are preserved.") }
@@ -140,8 +157,18 @@ struct WorkspaceView: View {
             if let coordinator { _ = coordinator.executePointer(.viewSet, target: "memory") }
             else { workspace.openMemoryGraph() }
         }
+        Button("Skills") {
+            if let coordinator { _ = coordinator.executePointer(.viewSet, target: "skills") }
+            else { workspace.openSkills() }
+        }
+        Button("Workflows") {
+            if let coordinator { _ = coordinator.executePointer(.viewSet, target: "workflows") }
+            else { workspace.openWorkflows() }
+        }
         Menu("Display") {
             Button("Show memory graph") { sendToDisplay(.memoryGraph) }
+            Button("Show Skills") { sendToDisplay(.skills) }
+            Button("Show workflows") { sendToDisplay(.workflows) }
             if let active = workspace.activeResult, !active.payload.isProtectedLocal {
                 Button("Show active result") { sendToDisplay(.result(active.id)) }
             }

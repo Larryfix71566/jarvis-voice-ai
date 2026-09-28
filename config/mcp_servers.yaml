@@ -86,6 +86,14 @@ servers:
     # requires_env_dynamic resolves the vision profile's API key by name at
     # spawn time, so all three still reach the child without a static
     # allowlist here — a static list would be actively wrong, since which
-    # key is needed depends on which profile config/upgrade_models.yaml
-    # resolves to.
+    # key is needed depends on which profile the model registry
+    # (config/model_profiles.yaml + model_endpoints.yaml) resolves to.
+    env: {}
+  # Status spec T2.6 (L2/L8): Mortimer's own live status for the systems
+  # and developer agents. A thin HTTP client of the admin sidecar's
+  # /api/status/* routes; JARVIS_ADMIN_URL is in BASE_ENV_KEYS, and no
+  # secret ever reaches this child.
+  - name: mcp-status
+    command: python
+    args: ["-m", "mcp_servers.mcp_status.server"]
     env: {}

@@ -158,6 +158,7 @@ final class ConsoleActionCoordinator {
             case "results": workspace.returnToWorkspace(); return .applied
             case "atlas": workspace.openAtlas(); return .applied
             case "skills": workspace.openSkills(); return .applied
+            case "workflows": workspace.openWorkflows(); return .applied   // MORTIMER_WORKFLOW_VIEWER_PLAN.md
             default: return .invalid
             }
         case .skillsSearch:

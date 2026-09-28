@@ -33,6 +33,10 @@ struct CommandConsoleView: View {
                     if let coordinator { _ = coordinator.executePointer(.viewSet, target: "memory") }
                     else { workspace.openMemoryGraph() }
                 }
+                Button("Workflows") {
+                    if let coordinator { _ = coordinator.executePointer(.viewSet, target: "workflows") }
+                    else { workspace.openWorkflows() }
+                }
                 Spacer()
                 if let result = notices.consoleResult {
                     Text(result.summary)

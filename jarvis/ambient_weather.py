@@ -175,8 +175,46 @@ def get_device_location() -> Optional[dict]:
     return _device_location
 
 
+class LocationLookupError(Exception):
+    """ip_location failed. `reason` is "offline" (no connection reached
+    ip-api) or "lookup_failed" (it answered, but not with a location)."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def ip_location(fetch: Callable[[str], Any] | None = None) -> dict:
+    """IP geolocation alone: {"lat", "lon", "label", "source": "ip"}.
+    Raises LocationLookupError. MORTIMER_VOICE_WORKFLOWS_PLAN.md D-L6 asks
+    "where am I" to try this only after the device, and to say why it
+    failed, so unlike _resolve_location it reports the failure."""
+    fetch = fetch or _fetch_json
+    try:
+        geo = fetch(GEO_URL)
+    except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+        raise LocationLookupError("offline") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise LocationLookupError("lookup_failed") from exc
+    if not isinstance(geo, dict) or geo.get("status") != "success":
+        raise LocationLookupError("lookup_failed")
+    try:
+        return {
+            "lat": float(geo["lat"]),
+            "lon": float(geo["lon"]),
+            "label": str(geo.get("city") or ""),
+            "source": "ip",
+        }
+    except (KeyError, TypeError, ValueError) as exc:
+        raise LocationLookupError("lookup_failed") from exc
+
+
 def _resolve_location(fetch: Callable[[str], Any]) -> Optional[dict]:
-    """{"lat": float, "lon": float, "label": str} or None."""
+    """{"lat": float, "lon": float, "label": str, "source": str} or None.
+
+    `source` is "env" | "device" | "ip" (status spec T2.3), and a device
+    location also carries "age_s". Additive: existing callers read only
+    lat/lon/label and ignore the extra keys."""
     lat_env = os.environ.get("JARVIS_WEATHER_LAT", "").strip()
     lon_env = os.environ.get("JARVIS_WEATHER_LON", "").strip()
     if lat_env and lon_env:
@@ -185,22 +223,18 @@ def _resolve_location(fetch: Callable[[str], Any]) -> Optional[dict]:
                 "lat": float(lat_env),
                 "lon": float(lon_env),
                 "label": os.environ.get("JARVIS_WEATHER_LABEL", "").strip(),
+                "source": "env",
             }
         except ValueError:
             pass  # malformed override — fall through
     device = get_device_location()
     if device is not None:
-        return {"lat": device["lat"], "lon": device["lon"], "label": device["label"]}
+        return {"lat": device["lat"], "lon": device["lon"], "label": device["label"],
+                "source": "device",
+                "age_s": max(0, int(time.monotonic() - device["at"]))}
     try:
-        geo = fetch(GEO_URL)
-        if geo.get("status") != "success":
-            return None
-        return {
-            "lat": float(geo["lat"]),
-            "lon": float(geo["lon"]),
-            "label": str(geo.get("city") or ""),
-        }
-    except Exception:
+        return ip_location(fetch)
+    except LocationLookupError:
         return None
 
 

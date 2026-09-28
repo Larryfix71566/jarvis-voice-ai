@@ -14,6 +14,11 @@ import xml.sax.saxutils as saxutils
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# `python scripts/launchd_gen.py` puts scripts/ on sys.path, not the repo.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from jarvis.status.services import launchd_state  # noqa: E402  (after the path fix)
 TEMPLATE_PATH = ROOT / "scripts" / "launchd" / "com.mortimer.template.plist"
 
 # service -> shell command run inside `bash -c "cd <repo> && <cmd>"`
@@ -24,7 +29,27 @@ SERVICES = {
     "admin": "exec ./scripts/run_admin.sh",
     "costs": "exec ./scripts/run_costs.sh",
 }
-ALL_SERVICES = (*SERVICES, "backup")  # backup is special-cased below: direct argv, StartCalendarInterval
+# Calendar jobs: job -> (argv, hour, minute); direct argv, StartCalendarInterval,
+# no KeepAlive. `{repo}` in an argv element is filled by render().
+#
+# backup — 2026-09-05: the SYSTEM python, deliberately, not the project venv.
+# .venv/bin/python is a symlink into uv's managed interpreter store
+# (~/.local/share/uv/python/cpython-*/), which uv can move or collect on any
+# python upgrade. This job has no fallback (unlike run_bot.sh, which does
+# `if [ -x .venv/bin/python ] … else python3`), so a moved interpreter means
+# the 03:15 backup stops silently and forever, and you find out the night you
+# need a restore. backup_db.py is stdlib-only by design —
+# test_backup_db_uses_only_stdlib enforces it, so this stays safe.
+#
+# status-daily — status spec T4.5: the daily catalog/subscription/key check.
+# It needs the project's dependencies, so it runs the venv, and it sources
+# .env the way scripts/run_admin.sh does so it sees the same
+# OPENAI_BASE_URL/OPENAI_MODEL as the sidecar.
+CALENDAR_JOBS = {
+    "backup": (["/usr/bin/python3", "scripts/backup_db.py"], 3, 15),
+    "status-daily": (["/bin/bash", "-c", "cd {repo} && set -a && . ./.env && set +a && exec .venv/bin/python -m jarvis.status.daily"], 6, 30),
+}
+ALL_SERVICES = (*SERVICES, *CALENDAR_JOBS)
 
 
 def _esc(s: object) -> str:
@@ -35,27 +60,24 @@ def _args_xml(args: list[str]) -> str:
     return "".join(f"<string>{_esc(a)}</string>" for a in args)
 
 
-def render(svc: str, repo: Path, hour: int = 3, minute: int = 15) -> str:
+def render(svc: str, repo: Path, hour: int | None = None, minute: int | None = None) -> str:
     """Render one service's plist. `repo` is a parameter (not the module's
     ROOT) so tests can render against a fake path, including one containing
-    a bare `&` -- the escaping must survive that."""
+    a bare `&` -- the escaping must survive that. `hour`/`minute` override
+    the schedule of `backup` only (the --hour/--minute CLI flags); every
+    other calendar job keeps its CALENDAR_JOBS time."""
     template = TEMPLATE_PATH.read_text()
     repo_str = str(repo)
-    if svc == "backup":
-        # 2026-09-05 — the SYSTEM python, deliberately, not the project venv.
-        # .venv/bin/python is a symlink into uv's managed interpreter store
-        # (~/.local/share/uv/python/cpython-*/), which uv can move or collect
-        # on any python upgrade. This job has no fallback (unlike run_bot.sh,
-        # which does `if [ -x .venv/bin/python ] … else python3`), so a moved
-        # interpreter means the 03:15 backup stops silently and forever, and
-        # you find out the night you need a restore. backup_db.py is
-        # stdlib-only by design — test_backup_db_uses_only_stdlib enforces it,
-        # so this stays safe.
-        args_xml = _args_xml(["/usr/bin/python3", "scripts/backup_db.py"])
+    if svc in CALENDAR_JOBS:
+        argv, job_hour, job_minute = CALENDAR_JOBS[svc]
+        if svc == "backup":
+            job_hour = job_hour if hour is None else hour
+            job_minute = job_minute if minute is None else minute
+        args_xml = _args_xml([a.replace("{repo}", repo_str) for a in argv])
         schedule = (
             "<key>StartCalendarInterval</key><dict>"
-            f"<key>Hour</key><integer>{int(hour)}</integer>"
-            f"<key>Minute</key><integer>{int(minute)}</integer>"
+            f"<key>Hour</key><integer>{int(job_hour)}</integer>"
+            f"<key>Minute</key><integer>{int(job_minute)}</integer>"
             "</dict>"
         )
     elif svc in SERVICES:
@@ -107,21 +129,10 @@ def uninstall() -> None:
 
 
 def status() -> dict[str, str]:
-    out: dict[str, str] = {}
-    for svc in ALL_SERVICES:
-        target = f"gui/{_uid()}/com.mortimer.{svc}"
-        proc = subprocess.run(["launchctl", "print", target], check=False, capture_output=True, text=True)
-        if proc.returncode != 0:
-            out[svc] = "not loaded"
-            continue
-        pid = None
-        for line in proc.stdout.splitlines():
-            line = line.strip()
-            if line.startswith("pid ="):
-                pid = line.split("=", 1)[1].strip()
-                break
-        out[svc] = f"loaded (pid {pid})" if pid else "loaded (idle)"
-    return out
+    # The per-service `launchctl print` parse lives in
+    # jarvis/status/services.py:launchd_state (status spec T2.3, R8), so
+    # this CLI and the status tools can never disagree.
+    return {svc: launchd_state(svc) for svc in ALL_SERVICES}
 
 
 def main(argv: list[str] | None = None) -> int:

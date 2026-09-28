@@ -5,10 +5,12 @@ Locked processor order (Phase 5):
       -> VADProcessor(SileroVADAnalyzer)          # D-004: VAD is a processor in pipecat 1.4
       -> DeepgramFluxSTTService (flux-general-en) # should_interrupt=False; interruptions come from the turn-start strategy
       -> context_aggregator.user()
+      -> VoiceWorkflowInjector               # MORTIMER_VOICE_WORKFLOWS_PLAN.md D5
       -> OpenAILLMService (or GoogleLLMService / AnthropicLLMService --
          provider-routed off settings.openai_base_url, see the LLM
          service block below; MORTIMER_OPTIMIZATION_PLAN.md Phase 1 Path
          A wires AnthropicLLMService with native prompt caching on)
+      -> ReplyGuard                          # MORTIMER_VOICE_WORKFLOWS_PLAN.md D6
       -> TranscriptLogger
       -> ElevenLabsTTSService (eleven_flash_v2_5)
       -> transport.output()
@@ -25,6 +27,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -67,6 +70,19 @@ from jarvis.agents.delegate import (
 )
 from jarvis.anthropic_shim import native_base_url
 from jarvis.bot.connect_greeting import ConnectGreeting  # noqa: E402
+from jarvis.bot.voice_guidance import ReplyGuard, VoiceTurnState, VoiceWorkflowInjector
+from jarvis.bot.sensitive_turn import is_sensitive as _voice_is_sensitive
+from jarvis.voice_workflows import wrap_delegate_handler
+from jarvis.bot.follow_up import (
+    FollowUps,
+    build_follow_up_tool,
+    build_progress_updates_tool,
+    follow_ups_enabled,
+    progress_updates_enabled,
+)
+from jarvis.bot.status_tool import build_system_status_tool
+from jarvis.bot.device_location import DeviceLocation, resolve_location, summarize_location
+from jarvis import ambient_weather
 from jarvis.bot.console_actions import build_console_action_tool
 from jarvis.bot.console_protocol import (
     ALLOWED_ACTIONS,
@@ -115,6 +131,7 @@ from jarvis.bot.speaker_gate import (
 from jarvis.bot.tool_schemas import supervisor_tool_schemas
 from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
 from jarvis.bot.ui_control import build_ui_control_tool
+from jarvis.bot.ui_control import ui_control_enabled as ui_control_flag_enabled
 from jarvis.bot.usage_watcher import UsageMetricsObserver
 from jarvis.bot.voice_switch import (
     build_set_voice_tool,
@@ -124,7 +141,12 @@ from jarvis.bot.voice_switch import (
 )
 from jarvis.cli import bridge_settings_to_env
 from jarvis.config import Settings, load_settings
-
+from jarvis.status import status_enabled as jarvis_status_enabled
+from jarvis.memory_automation import (
+    heuristic_classifier,
+    memory_automation_enabled,
+    process_classification_jobs,
+)
 # NOT `from jarvis.council import prune` — that binds the MODULE
 # jarvis/council/prune.py, and calling it raises "'module' object is not
 # callable". The runlog line below looks identical and works only because
@@ -157,6 +179,8 @@ from jarvis.runlog import RunLogger, reconcile_orphaned_runs, run_logger_scope
 from jarvis.runlog import prune as prune_runlog
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry
 from jarvis.toolresult import classify_tool_result
+from jarvis.skills.shared import get_shared_registry, shared_enabled
+from jarvis import notices
 
 # Service imports are module-level names so tests can monkeypatch them.
 # D-004: pipecat 1.4.0 class locations/settings classes differ from the
@@ -177,6 +201,16 @@ def _log_best_effort_failure(
     _logger.warning("%s%s error_type=%s", event, session, type(exc).__name__)
 
 
+def session_disconnect_line(session_id: str, duration_s: float,
+                            transport: str, client: Any) -> str:
+    """Status spec P7: the one ``session_disconnect`` log line."""
+    code = getattr(client, "close_code", None)
+    close_code = str(code) if isinstance(code, int) and not isinstance(code, bool) else "unknown"
+    return (f"session_disconnect session={session_id} "
+            f"duration_s={max(0.0, duration_s):.1f} transport={transport} "
+            f"close_code={close_code}")
+
+
 @dataclass
 class Runtime:
     """Per-session resources shared by the pipeline and event handlers."""
@@ -192,6 +226,9 @@ class Runtime:
     # two functions share no scope: #80 read these as build_pipeline locals
     # from run_session, a NameError on every connect (2026-09-23).
     command_console_enabled: bool = False
+    # Console readiness, inventory revision and acknowledgement futures.
+    # build_pipeline creates these; run_session's console handlers read the
+    # SAME objects through the runtime (they are not in its scope otherwise).
     console_ready: dict = field(default_factory=lambda: {"value": False})
     console_inventory_revision: dict = field(default_factory=lambda: {"value": 0})
     console_waiters: dict = field(default_factory=dict)
@@ -211,11 +248,30 @@ class Runtime:
     # at construction time — same late-binding reason RemindersWatcher
     # takes inject= at run_session level.
     late_delivery: dict = field(default_factory=dict)
+    # Status spec T3.2 (L12): False from the first statement of teardown.
+    # inject_late_result checks it, so a result landing during or after
+    # teardown goes to the notice outbox instead of a dead pipeline.
+    alive: bool = True
     # Item 11 (2026-09-17): the detached delegation runs this session
     # started and has not seen finish. run_session drains it before
     # registry.stop(), because those runs call tools through this
     # session's registry and outlive the session by design.
     detached_runs: set = field(default_factory=set)
+    # MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 2 D4 (D-L6): this session's
+    # client location channel. build_pipeline creates it (it needs the
+    # transport); run_session's app-message handlers feed it.
+    device_location: Any = None
+    # MORTIMER_VOICE_WORKFLOWS_PLAN.md D5/D10 — per-session voice-workflow
+    # turn state (injector + reply guard) and the show_commands gate that
+    # the delegate result hook stamps on every NEEDS-INPUT.
+    voice_state: VoiceTurnState = field(default_factory=VoiceTurnState)
+    handoff_gate: dict = field(default_factory=dict)
+    # W12 (MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 4): the progress_updates
+    # and follow_up tools are registered in build_pipeline, but what they
+    # drive — the ProgressWatcher ("progress") and the session's FollowUps
+    # ("follow_ups") — can only exist in run_session. Same late binding as
+    # late_delivery above.
+    timing: dict = field(default_factory=dict)
     # Tier 2 (2026-08-21): the live TranscriptGate instance when the
     # speaker gate is active, else None. run_session hands it to
     # TranscriptObserver so persisted USER lines match what the LLM
@@ -586,12 +642,47 @@ class FramePusher:
 # Deepgram Flux keyterm boosting — proper nouns this vocabulary-heavy
 # console actually needs recognized. Static by design: deriving these
 # from the model registry at boot would couple STT config to
-# upgrade_models.yaml for marginal benefit. Observed failure this fixes:
+# the model registry for marginal benefit. Observed failure this fixes:
 # "Fable 5" -> "table five" -> "Clyde's frontier model" (2026-08-17).
 STT_KEYTERMS = [
     "Mortimer", "Jarvis", "Fable", "Claude", "Opus", "Kimi",
     "geolocation", "self-edit",
 ]
+
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 2 W4 (2026-09-25). Place names Larry
+# uses are boosted too, read from his durable place memories rather than
+# written into code. Turn 3513 (2026-09-23): "Alfreda, Georgia" for
+# Alpharetta, one minute after 3508 heard it correctly; the analyst failed on
+# "Alfreda" and the retry guard refused the correction (fixed by #86 T1.1).
+PLACE_KEYTERM_KEYS = (
+    "user.location.home", "user.location.work",
+    "user.location.primary", "user.location.secondary",
+)
+PLACE_KEYTERM_MAX = 12
+_PLACE_WORD_RE = re.compile(r"\b[A-Z][a-z]{3,}\b")
+
+
+def place_keyterms(facts: list[dict]) -> list[str]:
+    """Capitalized place words from Larry's durable place facts, in key
+    order, de-duplicated, capped. Never the current location (D-L6)."""
+    by_key = {f.get("key"): str(f.get("content") or "") for f in facts}
+    out: list[str] = []
+    for key in PLACE_KEYTERM_KEYS:
+        for word in _PLACE_WORD_RE.findall(by_key.get(key, "")):
+            if word not in out and word not in STT_KEYTERMS:
+                out.append(word)
+    return out[:PLACE_KEYTERM_MAX]
+
+
+def stt_keyterms() -> list[str]:
+    """STT_KEYTERMS plus place_keyterms; the static list alone on any error."""
+    try:
+        from jarvis.memory import list_facts
+
+        return STT_KEYTERMS + place_keyterms(list_facts())
+    except Exception:  # noqa: BLE001 — STT must start even if memory can't be read
+        _logger.warning("stt_place_keyterms_unavailable", exc_info=True)
+        return list(STT_KEYTERMS)
 
 
 def build_pipeline(
@@ -609,15 +700,12 @@ def build_pipeline(
     pusher = pusher or FramePusher()
     console_generation = str(uuid.uuid4())
     runtime.console_generation = console_generation
-    console_ready = {"value": False}
-    console_inventory_revision = {"value": 0}
+    console_ready = runtime.console_ready
+    console_inventory_revision = runtime.console_inventory_revision
     # One bounded acknowledgement future per request. The console tool waits
     # for the native client to apply the request, so voice cannot report
     # success merely because a frame was queued.
-    console_waiters: dict[str, asyncio.Future[dict[str, Any]]] = {}
-    runtime.console_ready = console_ready
-    runtime.console_inventory_revision = console_inventory_revision
-    runtime.console_waiters = console_waiters
+    console_waiters: dict[str, asyncio.Future[dict[str, Any]]] = runtime.console_waiters
 
     async def await_console_result(request_id: str) -> dict[str, Any] | None:
         loop = asyncio.get_running_loop()
@@ -647,20 +735,56 @@ def build_pipeline(
         late_delivery=runtime.late_delivery,
         in_flight=runtime.detached_runs,
         private_result_sink=make_private_result_sink(transport),
+        # Phase 2 W5: Larry's current turn, for the named-source exemption.
+        user_text=lambda: runtime.voice_state.user_text,
     )
-    runtime.skill_creator_dispatcher = delegate_handler.run_skill_creator
+    creator_dispatcher = delegate_handler.run_skill_creator
+    # MORTIMER_VOICE_WORKFLOWS_PLAN.md D16 — getattr with the production
+    # defaults, because tests build this pipeline from SimpleNamespace
+    # settings that predate these two fields.
+    voice_workflows_on = bool(getattr(settings, "jarvis_voice_workflows_enabled", True))
+    reply_guard_mode = getattr(settings, "jarvis_reply_guard_mode", "log")
+    # D9 — wrap the regular delegation tool. The creator bridge stays attached
+    # to the original dispatcher so the server uses the same Developer run.
+    delegate_handler = wrap_delegate_handler(
+        delegate_handler,
+        gate=runtime.handoff_gate,
+        session_id=runtime.session_id,
+        enabled=lambda: voice_workflows_on,
+        is_sensitive=_voice_is_sensitive,
+    )
+    runtime.skill_creator_dispatcher = creator_dispatcher
     _, set_voice_handler = build_set_voice_tool(pusher.push, catalog)
     _, remember_handler = build_remember_tool(runtime.session_id)
     _, cost_summary_handler = build_cost_summary_tool()
+    # Phase 2 D4 (D-L6): "where am I" asks THIS session's client first.
+    runtime.device_location = DeviceLocation(
+        lambda message: send_app_message(transport, message))
+
+    async def _location_answer(protected: bool) -> str:
+        result = await resolve_location(
+            runtime.device_location, protected=protected,
+            ip_lookup=lambda: asyncio.to_thread(ambient_weather.ip_location))
+        return summarize_location(result)
+
+    _, system_status_handler = build_system_status_tool(location=_location_answer)
+    # W12 — both read their kill switch once, here, and pass it to the menu,
+    # the prompt and registration, so the three cannot disagree.
+    progress_enabled = progress_updates_enabled()
+    follow_up_enabled = follow_ups_enabled()
+    _, progress_updates_handler = build_progress_updates_tool(runtime.timing)
+    _, follow_up_handler = build_follow_up_tool(runtime.timing)
 
     # MORTIMER_VOICE_UI_PLAN.md U1/U6 — voice control of the console's UI
     # chrome. Kill switch read here, at the single registration site (same
     # env-first pattern as the council's): false = the tool is not
     # registered and not in the schema list, so the Supervisor cannot call
     # what it cannot see, and the prompt addendum is omitted to match.
-    ui_control_enabled = os.environ.get(
-        "JARVIS_UI_CONTROL_ENABLED", ""
-    ).strip().lower() not in ("false", "0", "no")
+    ui_control_enabled = ui_control_flag_enabled()
+    # Status spec T2.5 — system_status is a direct tool behind
+    # JARVIS_STATUS_TOOLS_ENABLED; read once here and passed explicitly to
+    # the menu and the prompt so the three can never disagree (R9).
+    status_enabled = jarvis_status_enabled()
     # V3/V4: screen vision is a DIRECT Supervisor tool (like set_voice /
     # ui_control), never a delegation. Same kill-switch-at-registration
     # pattern as ui_control above.
@@ -773,11 +897,13 @@ def build_pipeline(
                             type(exc).__name__[:64])
             return {"ok": False,
                     "error": "The admin sidecar isn't running, so I can't reach "
-                             "the clipboard. Start it with ./scripts/mortimer.sh start."}
+                             "the clipboard. It comes back when Mortimer's services "
+                             "are restarted."}
 
     _, show_commands_handler = build_show_commands_tool(
         _emit_display,
         lambda: _clipboard_call("/api/clipboard/clear", post=True),
+        gate=runtime.handoff_gate,   # MORTIMER_VOICE_WORKFLOWS_PLAN.md D10
     )
     _, clear_clipboard_handler = build_clear_clipboard_tool(
         lambda: _clipboard_call("/api/clipboard/clear", post=True),
@@ -815,10 +941,13 @@ def build_pipeline(
         # U5/U6: the addendum ships only when the tool does — a prompt
         # describing an unregistered tool would invite hallucinated calls.
         ui_control=ui_control_enabled,
+        status=status_enabled,
         screen=screen_enabled,
         # H3/H6 — show_commands is always registered; the clipboard half
         # of the addendum only makes sense when its tools are.
         clipboard=clipboard_enabled,
+        progress=progress_enabled,
+        follow_up=follow_up_enabled,
     )
 
     # Phase 4 Rev 3.4 Stage A2 — see memory_stats above. Logged with the
@@ -840,7 +969,7 @@ def build_pipeline(
     stt = DeepgramFluxSTTService(
         api_key=settings.deepgram_api_key,
         settings=DeepgramFluxSTTSettings(
-            model="flux-general-en", keyterm=STT_KEYTERMS,
+            model="flux-general-en", keyterm=stt_keyterms(),
         ),
         # was True (plan Phase 5, D-004) until 2026-08-22. With
         # should_interrupt=True, Flux broadcasts an interruption on EVERY
@@ -929,6 +1058,8 @@ def build_pipeline(
     register_voice_tool("set_voice", set_voice_handler)
     register_voice_tool("remember", remember_handler)
     register_voice_tool("cost_summary", cost_summary_handler)
+    if status_enabled:
+        register_voice_tool("system_status", system_status_handler)
     if ui_control_enabled:
         register_voice_tool("ui_control", ui_control_handler)
     if screen_enabled:
@@ -947,6 +1078,10 @@ def build_pipeline(
     if clipboard_enabled:
         register_voice_tool("clear_clipboard", clear_clipboard_handler)
         register_voice_tool("read_clipboard", read_clipboard_handler)
+    if progress_enabled:
+        register_voice_tool("progress_updates", progress_updates_handler)
+    if follow_up_enabled:
+        register_voice_tool("follow_up", follow_up_handler)
     tts = ElevenLabsTTSService(
         api_key=settings.elevenlabs_api_key,
         settings=ElevenLabsTTSSettings(
@@ -989,6 +1124,9 @@ def build_pipeline(
             clipboard=clipboard_enabled,
             command_console=command_console_enabled,
             shared_content=shared_content_enabled,
+            status=status_enabled,
+            progress=progress_enabled,
+            follow_up=follow_up_enabled,
         )
     ]
     context = LLMContext(
@@ -1058,6 +1196,35 @@ def build_pipeline(
     # above. Set here because the tools are registered before this line.
     _context_holder["user"] = aggregators.user()
 
+    # MORTIMER_VOICE_WORKFLOWS_PLAN.md D5/D6 — the user hook and the reply
+    # guard. The correction note uses the same silent-append channel as
+    # inject_late_result, including its in-flight deferral: a context push
+    # mid-delegation makes the model answer around a hole (2026-09-05).
+    async def _reply_guard_correction(note_text: str) -> None:
+        message = {"role": "user", "content": note_text}
+        runtime.voice_state.notes.append(message)
+        aggregators.user().add_messages([message])
+        if foreground_delegation_count():
+            _logger.info("reply_guard_correction_deferred_inflight delegations=%d",
+                         foreground_delegation_count())
+            return
+        await aggregators.user().push_context_frame()
+
+    voice_injector = VoiceWorkflowInjector(
+        runtime.voice_state,
+        inject_enabled=voice_workflows_on,
+        gate=runtime.handoff_gate,   # D-L5: an explicit ask opens show_commands
+    )
+    reply_guard = ReplyGuard(
+        runtime.voice_state,
+        mode=reply_guard_mode,
+        on_correct=_reply_guard_correction,
+        session_id=runtime.session_id,
+        is_sensitive=_voice_is_sensitive,
+    )
+    _logger.info("voice_workflows enabled=%s reply_guard=%s",
+                 voice_workflows_on, reply_guard.mode)
+
     # F3 — now that `aggregators` exists, finish constructing the gate:
     # its honest-drop note appends to the SAME shared context
     # inject_silent (below, in run_session) uses — a plain
@@ -1106,7 +1273,9 @@ def build_pipeline(
         pipeline_steps.append(speaker_transcript_gate)
     pipeline_steps.extend([
         aggregators.user(),
+        voice_injector,
         llm,
+        reply_guard,
         transcript,
         tts,
         transport.output(),
@@ -1231,6 +1400,9 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
 
         if keyhealth.start_background_probe() is not None:
             _logger.info("key_health_probe_started")
+        # Status spec T3.3: re-probe keys that are not ok every 10 minutes.
+        # A process singleton, so every session after the first is a no-op.
+        keyhealth.start_refresh_loop()
     except Exception as exc:  # noqa: BLE001 — must never block startup
         _log_best_effort_failure("key_health_probe_start_failed", exc)
 
@@ -1262,8 +1434,22 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
     except Exception as exc:  # noqa: BLE001 — must never block startup
         _log_best_effort_failure("memory_sweep_start_failed", exc)
 
-    registry = SkillRegistry(REPO_ROOT / "config" / "mcp_servers.yaml")
-    await registry.start()
+    # Status spec T3.1 Step 0 — TEMPORARY: the process-scoped registry is
+    # valid only if every session runs on the same event loop. Compare this
+    # line across two connects on the Mac; remove once Step 0 is recorded.
+    _logger.info("session_loop_id id=%d", id(asyncio.get_running_loop()))
+    # Status spec T3.1 (L11): one registry per PROCESS. The first session
+    # starts it; later sessions reuse it, so a reconnect no longer respawns
+    # every MCP child and a detached run never loses its tools to teardown.
+    # `SkillRegistry` is this module's name so tests that monkeypatch
+    # bp.SkillRegistry still control what gets built.
+    registry_is_shared = shared_enabled()
+    if registry_is_shared:
+        registry = await get_shared_registry(
+            REPO_ROOT / "config" / "mcp_servers.yaml", factory=SkillRegistry)
+    else:
+        registry = SkillRegistry(REPO_ROOT / "config" / "mcp_servers.yaml")
+        await registry.start()
     runtime = Runtime(settings=settings, registry=registry,
                       session_id=str(uuid.uuid4()))
     print(f"[session] {runtime.session_id}", flush=True)
@@ -1433,9 +1619,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # the user's local time, but keep background memory maintenance
             # silent; open reviews remain available from the Memory panel or
             # an explicit memory request.
+            # Status spec T3.2 (L12, #86): notices queued while nobody was
+            # connected (late results, daily status) ride on the greeting,
+            # once — take_pending marks them delivered, so it runs here,
+            # when the greeting is actually sent.
+            greeting_note = (connection_greeting_note(settings.jarvis_timezone)
+                             + notices.render_for_greeting(notices.take_pending()))
             aggregators.user().add_messages([{
-                "role": "user",
-                "content": connection_greeting_note(settings.jarvis_timezone),
+                "role": "user", "content": greeting_note,
             }])
             await aggregators.user().push_context_frame()
 
@@ -1461,11 +1652,22 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                     actions=sorted(ALLOWED_ACTIONS),
                     input_profile=vision_profile if shared_content_enabled else None,
                 ))
+            # Review finding 5(b) (#86): this session now receives late
+            # results whose own session has ended.
+            notices.set_live_session(runtime.session_id, inject_late_result)
             await greeting.client_connected()
 
         @transport.event_handler("on_client_disconnected")
         async def on_client_disconnected(transport: Any, client: Any) -> None:
+            # Review finding 5(a): first, before anything can await — a late
+            # result landing from here on must not reach this pipeline.
+            runtime.alive = False
+            notices.clear_live_session(runtime.session_id)
             print("[session] client disconnected", flush=True)
+            # Status spec P7: reconnect-churn data, no behaviour change.
+            _logger.info("%s", session_disconnect_line(
+                runtime.session_id, time.monotonic() - session_started,
+                "webrtc" if webrtc_connection is not None else "ws", client))
             client_connected["value"] = False
             # End the pipeline task so `await runner.run(task)` returns and the
             # finally block below actually runs. Without this the task blocks
@@ -1483,7 +1685,12 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             aggregators.user().add_messages([{"role": "user", "content": text}])
             await aggregators.user().push_context_frame()
 
-        async def inject_late_result(text: str) -> None:
+        async def inject_late_result(text: str) -> bool:
+            # Status spec T3.2: False — without touching the pipeline — once
+            # the session is tearing down; delegate.py then puts the result
+            # in the notice outbox. True once the note is in the context.
+            if not runtime.alive:
+                return False
             # MORTIMER_SESSION_MISSES_PLAN.md S6: same channel as
             # inject_context, but the note is registered with the
             # neutralizer so its imperative dies with the relay turn. The
@@ -1505,8 +1712,9 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                     "late_result_deferred_inflight delegations=%d",
                     foreground_delegation_count(),
                 )
-                return
+                return True
             await aggregators.user().push_context_frame()
+            return True
 
         # Barge-in survival — install the late-delivery hook the delegate
         # tool uses for results whose voice turn was cancelled. Same
@@ -1514,6 +1722,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
         # arrives as a context note and Mortimer reports it on its own
         # initiative, exactly like a due reminder — once (S6-S8).
         runtime.late_delivery["fn"] = inject_late_result
+
+        # W12 — one-shot follow-ups come due through the same channel as a
+        # late result: deferred while a delegation is in flight, neutralized
+        # once relayed, refused (False) once the session is tearing down.
+        follow_ups = None
+        if follow_ups_enabled():
+            follow_ups = FollowUps(inject_late_result, speaking_tracker.is_busy)
+            runtime.timing["follow_ups"] = follow_ups
 
         watcher = RemindersWatcher(
             runtime.registry,
@@ -1600,9 +1816,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
         # self-edit run is in flight. Kill switch:
         # JARVIS_PROGRESS_UPDATES_ENABLED=false.
         progress_watcher = None
-        if os.environ.get("JARVIS_PROGRESS_UPDATES_ENABLED", "").strip().lower() not in (
-            "false", "0", "no",
-        ):
+        if progress_updates_enabled():
             async def _speak_progress(text: str) -> None:
                 from pipecat.frames.frames import TTSSpeakFrame
                 await pusher.push(TTSSpeakFrame(text=text))
@@ -1614,6 +1828,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 session_id=runtime.session_id,
             )
             progress_watcher.start()
+            runtime.timing["progress"] = progress_watcher  # W12: progress_updates
 
         voice_state = {"current": catalog["default"]}
 
@@ -1705,6 +1920,11 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                     "code": str(msg.get("code", "invalid")),
                     "data": msg.get("data") if isinstance(msg.get("data"), dict) else None,
                 })
+
+        async def handle_location(message: Any) -> None:
+            """Phase 2 D4: location/hello and location/result from the client."""
+            if runtime.device_location is not None:
+                runtime.device_location.handle_message(_unwrap_client_message(message))
 
         async def handle_console_ready(message: Any) -> None:
             """Accept readiness only from the hello's session/generation."""
@@ -1819,18 +2039,25 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 await handle_console_ready(message)
                 await handle_console(message)
                 await handle_shared_content(message)
+                await handle_location(message)
         elif client_messages is not None:
             # WebSocket transport (native-audio plan §3.2 findings): no
             # connection object and no on_app_message event — the same two
             # handlers run from the pipeline processor instead.
             client_messages.bind(handle_voice_set, handle_ui_noop,
                                   handle_console_result, handle_console_ready,
-                                  handle_console, handle_shared_content)
+                                  handle_console, handle_shared_content,
+                                  handle_location)
 
         runner = PipelineRunner()
         try:
             await runner.run(task)
         finally:
+            # T3.2: first, before anything below can await — a late result
+            # landing from here on goes to the notice outbox. (Also set at
+            # the top of on_client_disconnected; this covers every other end.)
+            runtime.alive = False
+            notices.clear_live_session(runtime.session_id)
             shared_transfer.close()
             await watcher.stop()
             await memory_watcher.stop()
@@ -1842,6 +2069,9 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 await research_watcher.stop()
             if progress_watcher is not None:
                 await progress_watcher.stop()
+            runtime.timing.clear()
+            if follow_ups is not None:
+                await follow_ups.stop()
             # U2.5: fold this session into long-term memory. Best-effort,
             # hard-capped — memory work must never delay shutdown.
             #
@@ -1903,8 +2133,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # connection. This is best-effort and runs only during teardown;
             # it cannot block an active voice turn or alter stored content.
             if (getattr(settings, "jarvis_memory_automation_enabled", False)
-                    and os.environ.get("JARVIS_MEMORY_AUTOMATION_ENABLED", "false").lower()
-                    in {"1", "true", "yes"}):
+                    and memory_automation_enabled()):
                 try:
                     result = await asyncio.to_thread(
                         process_automation_jobs, settings,
@@ -1978,4 +2207,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 await skill_runtime_task
             except asyncio.CancelledError:
                 pass
-        await registry.stop()
+        # T3.1: shared registries outlive the session. Stop only a registry
+        # owned by this connection, after detached work has drained.
+        if not registry_is_shared:
+            await registry.stop()

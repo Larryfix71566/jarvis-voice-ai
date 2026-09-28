@@ -21,7 +21,7 @@ max_session_minutes: 30
 # MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md D1/D7: the app-build
 # loop's own bounds — app builds legitimately run longer than self-edits.
 # Provider/model/base_url/temperature above are unused for app-build
-# whenever config/upgrade_models.yaml has profiles (it does); only these
+# whenever the model registry has profiles (it does); only these
 # two loop bounds are read from this section.
 app_build:
   max_iterations: 40

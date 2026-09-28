@@ -29,6 +29,10 @@ struct DisplayWindowView: View {
                     }
                     if workspace.supportingContent == .memoryGraph {
                         MemoryGraphView(store: workspace.memoryGraph, api: client.admin)
+                    } else if workspace.supportingContent == .workflows {
+                        WorkflowsView(store: workspace.workflows, api: client.admin)
+                    } else if workspace.supportingContent == .skills {
+                        SkillsWorkspaceView()
                     } else if let result = workspace.supportingResult {
                         WorkspaceResultPane(result: result, onSupportingDisplay: true)
                     } else if case .some(.skillDetail(let skillID)) = workspace.supportingContent,
@@ -92,7 +96,12 @@ private struct LegacySupportingDisplayStage: View {
                 Text("SUPPORTING DISPLAY")
                     .font(.caption2.monospaced().weight(.semibold))
                     .foregroundStyle(AppTheme.textDim)
-                if case .skillDetail = content {
+                if case .skills = content {
+                    Button("Return here") {
+                        workspace.showOriginalDisplayPanels()
+                        drawer.placementRef?.closeDisplay()
+                    }
+                } else if case .skillDetail = content {
                     Button("Return here") {
                         workspace.returnSkillDetailsToMain()
                         drawer.placementRef?.closeDisplay()
@@ -105,6 +114,10 @@ private struct LegacySupportingDisplayStage: View {
                 switch content {
                 case .memoryGraph:
                     MemoryGraphView(store: workspace.memoryGraph, api: client.admin)
+                case .workflows:
+                    WorkflowsView(store: workspace.workflows, api: client.admin)
+                case .skills:
+                    SkillsWorkspaceView()
                 case .result(let id):
                     if let result = workspace.results.first(where: { $0.id == id }) {
                         WorkspaceResultPane(result: result, onSupportingDisplay: true)
@@ -131,6 +144,8 @@ private struct LegacySupportingDisplayStage: View {
     private var title: String {
         switch content {
         case .memoryGraph: return "Memory graph"
+        case .skills: return "Skills"
+        case .workflows: return "Workflows"
         case .result(let id): return workspace.results.first(where: { $0.id == id })?.payload.title ?? "Result"
         case .skillDetail(let id): return skills.displayName(for: id) ?? "Skill details"
         }

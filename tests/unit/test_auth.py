@@ -173,9 +173,10 @@ def test_service_headers(monkeypatch, value, expected):
 
 
 @pytest.mark.parametrize("value,expected", [
-    (None, True), ("true", True), ("false", False), ("False", False),
-    ("FALSE", False), (" false ", False), ("0", True), ("no", True),
-    ("off", True), ("", True),
+    (None, False), ("", False), ("true", True), ("TRUE", True), (" true ", True),
+    ("false", False), ("False", False), ("FALSE", False), (" false ", False),
+    ("0", False), ("no", False), ("off", False), ("1", False), ("yes", False),
+    ("on", False), ("ture", False),
 ])
 def test_auth_enabled_table(monkeypatch, value, expected):
     if value is None:

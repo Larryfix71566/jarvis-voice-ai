@@ -117,6 +117,15 @@ if name=='codesign':
         self.assertTrue((self.app / "Contents/MacOS/MortimerHost").is_file())
         self.assertNotIn("open", [command[0] for command in commands])
 
+    def test_location_usage_is_declared(self):
+        # Phase 2 D4 (MORTIMER_VOICE_WORKFLOWS_PLAN.md D-L6): CoreLocation
+        # refuses an app whose Info.plist has no location usage string.
+        result, _ = self.run_bundle(MORTIMER_BUNDLE_LAUNCH="0")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        info = plistlib.loads((self.app / "Contents/Info.plist").read_bytes())
+        self.assertIn("where you are", info["NSLocationWhenInUseUsageDescription"])
+        self.assertEqual(info["NSLocationUsageDescription"], info["NSLocationWhenInUseUsageDescription"])
+
     def test_invalid_source_identity_is_rejected_before_building(self):
         result, commands = self.run_bundle(MORTIMER_SOURCE_REVISION="<not-a-revision>")
         self.assertEqual(result.returncode, 2)

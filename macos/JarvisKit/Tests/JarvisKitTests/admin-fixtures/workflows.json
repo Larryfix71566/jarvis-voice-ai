@@ -1,0 +1,433 @@
+{
+ "ok": true,
+ "enabled": true,
+ "match_threshold": 0.35,
+ "workflows": [
+  {
+   "name": "ask-once-then-commit",
+   "when": "branch merge approach choice option direction which way",
+   "steps": [
+    "Ask the clarifying question up front (new branch vs merge, which approach).",
+    "Once Larry answers, proceed decisively without re-litigating."
+   ],
+   "done_when": [
+    "The question was asked before work started, and not asked twice"
+   ],
+   "agents": [],
+   "source": "ask-once-then-commit.yaml",
+   "triggers": [],
+   "priority": 100,
+   "kind": "rule",
+   "draft": false
+  },
+  {
+   "name": "authorization-is-binding",
+   "when": "implement build execute the approved task plan work step permission confirm authorized proceed",
+   "steps": [
+    "One explicit yes from Larry authorizes the whole task — do not re-ask permission per step.",
+    "Execute end to end, then report what was done.",
+    "Still stop for the confirmation gates that exist mechanically (repo writes, commits, pushes)."
+   ],
+   "done_when": [
+    "The authorized task ran to completion without asking again mid-way",
+    "Any mechanical confirmation gate was still honored"
+   ],
+   "agents": [],
+   "source": "authorization-is-binding.yaml",
+   "triggers": [],
+   "priority": 100,
+   "kind": "rule",
+   "draft": false
+  },
+  {
+   "name": "bundle-work-before-merge",
+   "when": "commit merge main branch uncommitted feature work push",
+   "steps": [
+    "Bundle outstanding feature work into commits before merging to main.",
+    "Do not leave feature work uncommitted across a merge."
+   ],
+   "done_when": [
+    "Nothing related was left uncommitted at merge time"
+   ],
+   "agents": [],
+   "source": "bundle-work-before-merge.yaml",
+   "triggers": [],
+   "priority": 100,
+   "kind": "rule",
+   "draft": false
+  },
+  {
+   "name": "diagnose-before-proposing",
+   "when": "broken failing bug wrong problem issue investigate why",
+   "steps": [
+    "Identify the problem and show the actual state first.",
+    "Propose a solution only after the data is visible."
+   ],
+   "done_when": [
+    "Real evidence was shown before any fix was proposed"
+   ],
+   "agents": [],
+   "source": "diagnose-before-proposing.yaml",
+   "triggers": [],
+   "priority": 100,
+   "kind": "rule",
+   "draft": false
+  },
+  {
+   "name": "live-progress-during-runs",
+   "when": "run task execute long working progress status waiting subagent card",
+   "steps": [
+    "Show real-time progress while a task runs.",
+    "Never leave Larry watching an empty window with no indication of work."
+   ],
+   "done_when": [
+    "Status was visible throughout, not only at the end"
+   ],
+   "agents": [],
+   "source": "live-progress-during-runs.yaml",
+   "triggers": [],
+   "priority": 100,
+   "kind": "rule",
+   "draft": false
+  },
+  {
+   "name": "plan-before-implementing",
+   "when": "implement change modify build feature interface plan spec design document before changes",
+   "steps": [
+    "Write the full plan or spec and show it to Larry before making any changes.",
+    "Wait for explicit approval of the plan before implementing.",
+    "Especially when modifying the interface."
+   ],
+   "done_when": [
+    "Larry saw the complete document, not a summary",
+    "He approved it before code was written"
+   ],
+   "agents": [],
+   "source": "plan-before-implementing.yaml",
+   "triggers": [],
+   "priority": 100,
+   "kind": "rule",
+   "draft": false
+  },
+  {
+   "name": "plans-render-in-display-window",
+   "when": "show display plan spec document output review readability window",
+   "steps": [
+    "Render plans and long documents in the main display window, not the drawer.",
+    "Maximize readability and review space."
+   ],
+   "done_when": [
+    "The document is in the display window, not a cramped panel"
+   ],
+   "agents": [],
+   "source": "plans-render-in-display-window.yaml",
+   "triggers": [],
+   "priority": 100,
+   "kind": "rule",
+   "draft": false
+  },
+  {
+   "name": "research-before-modifying",
+   "when": "Research alternative APIs first before modifying code",
+   "steps": [
+    "Research alternative APIs first before modifying code"
+   ],
+   "done_when": [],
+   "agents": [],
+   "source": "research-before-modifying.yaml",
+   "triggers": [],
+   "priority": 100,
+   "kind": "rule",
+   "draft": true
+  },
+  {
+   "name": "show-planner-model",
+   "when": "planning plan step developer card model profile which model display",
+   "steps": [
+    "The developer card must show WHICH planner model is used for each planning step.",
+    "Track and display the model name per step, not just once."
+   ],
+   "done_when": [
+    "The model in use is visible for every planning step"
+   ],
+   "agents": [],
+   "source": "show-planner-model.yaml",
+   "triggers": [],
+   "priority": 100,
+   "kind": "rule",
+   "draft": false
+  },
+  {
+   "name": "use-screen-vision-to-verify",
+   "when": "terminal error screen window check what happened verify visually",
+   "steps": [
+    "Use screen vision to look at the terminal or window rather than asking Larry to describe it."
+   ],
+   "done_when": [
+    "The visual state was observed, not narrated"
+   ],
+   "agents": [],
+   "source": "use-screen-vision-to-verify.yaml",
+   "triggers": [],
+   "priority": 100,
+   "kind": "rule",
+   "draft": false
+  },
+  {
+   "name": "user-interface-analyst-visibility",
+   "when": "Analyst agent must appear in sidecar agents panel",
+   "steps": [
+    "Analyst agent must appear in sidecar agents panel"
+   ],
+   "done_when": [],
+   "agents": [],
+   "source": "user-interface-analyst-visibility.yaml",
+   "triggers": [],
+   "priority": 100,
+   "kind": "rule",
+   "draft": true
+  },
+  {
+   "name": "user-style-display-output",
+   "when": "One display window per specialist per request with summarized HTML output, CSS-formatted for readability and adjustability",
+   "steps": [
+    "One display window per specialist per request with summarized HTML output, CSS-formatted for readability and adjustability"
+   ],
+   "done_when": [],
+   "agents": [],
+   "source": "user-style-display-output.yaml",
+   "triggers": [],
+   "priority": 100,
+   "kind": "rule",
+   "draft": true
+  },
+  {
+   "name": "user-style-ui-requirement",
+   "when": "Analyst agent must appear in agents window in sidecar panel.",
+   "steps": [
+    "Analyst agent must appear in agents window in sidecar panel."
+   ],
+   "done_when": [],
+   "agents": [],
+   "source": "user-style-ui-requirement.yaml",
+   "triggers": [],
+   "priority": 100,
+   "kind": "rule",
+   "draft": true
+  },
+  {
+   "name": "user-task-website-comparison",
+   "when": "comparing three websites for features and implementation recommendation; session ongoing",
+   "steps": [
+    "comparing three websites for features and implementation recommendation; session ongoing"
+   ],
+   "done_when": [],
+   "agents": [],
+   "source": "user-task-website-comparison.yaml",
+   "triggers": [],
+   "priority": 100,
+   "kind": "rule",
+   "draft": true
+  },
+  {
+   "name": "verify-in-repo-not-memory",
+   "when": "check verify confirm state configuration what does the code say assumption",
+   "steps": [
+    "Verify facts by reading the repository, not by recalling them.",
+    "A remembered assumption is not evidence."
+   ],
+   "done_when": [
+    "The claim is backed by a file that was actually read"
+   ],
+   "agents": [],
+   "source": "verify-in-repo-not-memory.yaml",
+   "triggers": [],
+   "priority": 100,
+   "kind": "rule",
+   "draft": false
+  },
+  {
+   "name": "verify-ui-change-on-screen",
+   "when": "self-edit status validation committed pushed working zoom pan window visible",
+   "steps": [
+    "A UI change is done only when Larry can see it in the running app. First check where it actually is - staged, validated, committed, PR open, merged, or built into the running app.",
+    "If it should be visible now, call screen_view on that window and compare what you see with what was asked.",
+    "If it is not in the running app yet, say which step is left (validation, PR, merge, deploy with DEPLOY-MAIN) instead of calling it done.",
+    "If screen_view fails, say the change is unverified and quote the capture error."
+   ],
+   "done_when": [
+    "The reply states what screen_view showed, or which step is left before the change can appear, or that it is unverified and why."
+   ],
+   "agents": [
+    "developer"
+   ],
+   "source": "verify-ui-change-on-screen.yaml",
+   "triggers": [],
+   "priority": 100,
+   "kind": "rule",
+   "draft": false
+  },
+  {
+   "name": "voice-check-before-cant",
+   "when": "Larry asks whether Mortimer can do, see, reach, or access something, or pushes back after a refusal",
+   "steps": [
+    "A specialist's abilities are yours. Before saying you can't do, see, reach, or access something, delegate it to the specialist whose area covers it.",
+    "Only a specialist's own MISSING-TOOL or no-tool report means the tool doesn't exist. Then say it isn't something you have a tool for yet, and offer to have it added.",
+    "Never say \"I can't\", \"I don't have access\", or \"I don't have a tool\" on your own judgment."
+   ],
+   "done_when": [
+    "A specialist was asked in this conversation, or one reported that it has no tool for this request."
+   ],
+   "agents": [
+    "supervisor"
+   ],
+   "source": "voice-check-before-cant.yaml",
+   "triggers": [
+    "user",
+    "result",
+    "reply"
+   ],
+   "priority": 20,
+   "kind": "voice",
+   "draft": false
+  },
+  {
+   "name": "voice-do-it-dont-hand-off",
+   "when": "Larry would otherwise be asked to run a command, copy output, paste, or edit a file himself",
+   "steps": [
+    "Larry does not run commands, copy output, paste, or edit files unless he explicitly asks to be given the command. Otherwise give the step to the specialist that can do it.",
+    "If no specialist has a tool for it, say in one sentence that it isn't something you have a tool for yet and offer to have it added. Do not show a command instead.",
+    "Use show_commands only when Larry explicitly asked for the command, or when a specialist wrote NEEDS-INPUT for a step only Larry can do, such as signing in or approving on GitHub, and say what he must do in one sentence.",
+    "Never suggest a command that deletes, resets, or discards work."
+   ],
+   "done_when": [
+    "Larry was not asked to run, copy, paste, or edit anything, unless he explicitly asked for the command or a specialist wrote NEEDS-INPUT for a step only he can do."
+   ],
+   "agents": [
+    "supervisor"
+   ],
+   "source": "voice-do-it-dont-hand-off.yaml",
+   "triggers": [
+    "user",
+    "result",
+    "reply"
+   ],
+   "priority": 10,
+   "kind": "voice",
+   "draft": false
+  },
+  {
+   "name": "voice-explain-failure",
+   "when": "a delegated task failed, or Larry asks why something failed or what went wrong",
+   "steps": [
+    "Say what failed and the reason the result gave, in one or two sentences, without naming a specialist.",
+    "If the result gave no reason, or Larry asks why, delegate to developer: read the run log for the most recent run of that task and report the failing tool call and its exact error.",
+    "Never guess a cause, and never ask Larry to describe an error the run log already holds."
+   ],
+   "done_when": [
+    "The reply names the failing step and its logged error, or says the run log recorded no reason."
+   ],
+   "agents": [
+    "supervisor"
+   ],
+   "source": "voice-explain-failure.yaml",
+   "triggers": [
+    "user",
+    "result"
+   ],
+   "priority": 30,
+   "kind": "voice",
+   "draft": false
+  },
+  {
+   "name": "voice-human-only-proposal",
+   "when": "a self-edit pull request carries a proposal for a human-only file",
+   "steps": [
+    "The pull request proposes a change to a human-only file. Mortimer never changes those files; Larry approves the change and applies it himself.",
+    "In one or two sentences, say which file it changes and what the change does. Then ask \"approve?\".",
+    "Do not show the command until Larry says yes. On yes, call show_commands with exactly the apply command from the result. Say it shows him the exact change first and pushes nothing until he types y.",
+    "On no, say the pull request stays open for him to review or close, and nothing changed.",
+    "Never tell him to merge the proposal pull request itself."
+   ],
+   "done_when": [
+    "Larry approved or declined, and the apply command was shown only after he said yes."
+   ],
+   "agents": [
+    "supervisor"
+   ],
+   "source": "voice-human-only-proposal.yaml",
+   "triggers": [
+    "result"
+   ],
+   "priority": 8,
+   "kind": "voice",
+   "draft": false
+  },
+  {
+   "name": "voice-merged-deploy",
+   "when": "Larry says a pull request was merged, or asks about a rebuild or whether a change is live",
+   "steps": [
+    "A merged pull request does nothing until Larry deploys. Say \"merged; deploy with DEPLOY-MAIN when you're ready\".",
+    "Never suggest scripts/bundle.sh, swift build, a restart, or any other build command. DEPLOY-MAIN builds, tests and restarts everything itself.",
+    "If Larry asks whether a change is live or the app was rebuilt, check system_status, topic build, and say which commit the running app was built from. Do not ask him to run anything to find out."
+   ],
+   "done_when": [
+    "Larry heard that the deploy is his one command, and was never given bundle.sh or another build command."
+   ],
+   "agents": [
+    "supervisor"
+   ],
+   "source": "voice-merged-deploy.yaml",
+   "triggers": [
+    "user"
+   ],
+   "priority": 9,
+   "kind": "voice",
+   "draft": false
+  },
+  {
+   "name": "voice-model-availability",
+   "when": "Larry asks which models Mortimer has, whether a model or subscription is available, or what a provider offers",
+   "steps": [
+    "Answer from system_status, never from the model list you were given or from memory. Topic models says what is configured and whether each key works. Topic catalog says what a provider offers right now. Topic subscription tries one exact model on the Claude or Codex subscription; use the model name Larry said, as he said it.",
+    "Say which check you ran and what it returned. If a check failed, say that and the reason it gave.",
+    "Never ask Larry to run a command or copy output to find this out."
+   ],
+   "done_when": [
+    "The answer names the check that was run and its result, or says the check failed and why."
+   ],
+   "agents": [
+    "supervisor"
+   ],
+   "source": "voice-model-availability.yaml",
+   "triggers": [
+    "user"
+   ],
+   "priority": 14,
+   "kind": "voice",
+   "draft": false
+  },
+  {
+   "name": "voice-where-am-i",
+   "when": "Larry asks where he is, or asks about something near him",
+   "steps": [
+    "Get Larry's location with system_status, topic location. Never answer where he is from memory, even when memory names a place.",
+    "Say the place and how it was found. If the result says approximately, say approximately.",
+    "If the result says the location isn't available, say that and the reason it gave. Do not guess a place."
+   ],
+   "done_when": [
+    "The reply names the place system_status returned and how it was found, or says it isn't available and why."
+   ],
+   "agents": [
+    "supervisor"
+   ],
+   "source": "voice-where-am-i.yaml",
+   "triggers": [
+    "user"
+   ],
+   "priority": 15,
+   "kind": "voice",
+   "draft": false
+  }
+ ]
+}

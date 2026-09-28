@@ -1,0 +1,19 @@
+# MORTIMER_VOICE_WORKFLOWS_PLAN.md Phase 2 D4 (Larry's decision D-L6,
+# 2026-09-25). Voice agent only. Location questions are answered by the
+# system_status location topic, which asks the device Larry is talking
+# through, then the internet connection. Never from memory: the Spartanburg
+# loop (D-L7) was memory answering "where am I".
+name: voice-where-am-i
+when: Larry asks where he is, or asks about something near him
+agents:
+- supervisor
+priority: 15
+triggers:
+  user:
+  - \b(where am i|where i am|my (?:current )?location|(?:for|get|find) (?:a|my) location|what (?:city|town|state) am i|near me|nearby|around here)\b
+steps:
+- Get Larry's location with system_status, topic location. Never answer where he is from memory, even when memory names a place.
+- Say the place and how it was found. If the result says approximately, say approximately.
+- If the result says the location isn't available, say that and the reason it gave. Do not guess a place.
+done_when:
+- The reply names the place system_status returned and how it was found, or says it isn't available and why.

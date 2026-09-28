@@ -299,6 +299,8 @@ def test_unreadable_upgrade_models_omits_path_and_parser_source(
     config = tmp_path / "config" / "upgrade_models.yaml"
     config.parent.mkdir(parents=True)
     config.write_text("PRIVATE_UPGRADE_CONFIG_CANARY: [", encoding="utf-8")
+    # Exercise the shared loader's supported override after the registry split.
+    monkeypatch.setenv("JARVIS_UPGRADE_MODELS", str(config))
 
     with caplog.at_level("WARNING"):
         names = registry._resolve_dynamic_env(

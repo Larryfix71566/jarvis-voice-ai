@@ -1,6 +1,6 @@
 """Unit tests for scripts/check_env.py's check_model_registry() (H2,
 MORTIMER_CONFIRMATION_AND_CAPABILITY_PLAN.md) — reports per-profile key
-presence from config/upgrade_models.yaml, plus a per-sub-agent
+presence from the model registry, plus a per-sub-agent
 cross-reference against config/agents.yaml's model_profile /
 on_profile_fallback, with special wording when a REFUSE-mode agent's key
 is missing (developer's real-world incident this plan fixes).

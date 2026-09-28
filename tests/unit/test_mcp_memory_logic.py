@@ -140,7 +140,48 @@ class TestMemoryGraphView:
         assert out["image_url"].startswith("http://127.0.0.1:7861/api/graph/memory/image.png?")
         assert "focus=" in out["image_url"]
 
-    def test_memory_graph_view_error_passthrough(self, conn):
+    def test_memory_graph_unmatched_focus_falls_back_to_overview(self, conn):
+        # Status spec T4.6 replaces test_memory_graph_view_error_passthrough:
+        # an unknown memory topic shows the overview, flagged, not an error.
+        _fact(conn, "user.style.a", "short answers")
+        conn.commit()
         out = logic.memory_graph_view(focus="zzz-nothing")
-        assert out["ok"] is False
-        assert "no node matches" in out["error"]
+        assert out["ok"] is True
+        assert out["focus_miss"] == "zzz-nothing"
+        assert out["focus"] is None
+        assert "nodes" not in out
+        assert "focus=&" in out["image_url"]
+        assert out["summary"].endswith("of the whole graph; 0 of them archived.")
+
+    def test_memory_graph_matched_focus_has_no_focus_miss(self, conn):
+        _fact(conn, "user.style.a", "short answers")
+        conn.commit()
+        assert "focus_miss" not in logic.memory_graph_view(focus="user.style.a")
+
+
+class TestMemoryRestore:
+    """W10 (MORTIMER_VOICE_WORKFLOWS_PLAN.md): restore any archived memory
+    by voice. Thin over jarvis.memory.restore_fact."""
+
+    def test_restores_an_archived_fact_and_commits(self, conn, tmp_path):
+        _fact(conn, "user.style.no_lookups", "prefers no lookups")
+        conn.execute("UPDATE memories SET archived_at = ?, became = 'not-stated:review-112' "
+                     "WHERE key = 'user.style.no_lookups'", (now_iso(),))
+        conn.commit()
+        out = logic.memory_restore("user.style.no_lookups")
+        assert out["ok"] is True and out["was"] == "not-stated:review-112"
+        # A fresh connection sees it live: the tool committed.
+        fresh = get_conn(tmp_path / "mem.db")
+        try:
+            row = fresh.execute("SELECT archived_at, became FROM memories "
+                                "WHERE key = 'user.style.no_lookups'").fetchone()
+            assert row["archived_at"] is None and row["became"] is None
+        finally:
+            fresh.close()
+
+    def test_a_live_or_unknown_key_is_refused(self, conn):
+        _fact(conn, "user.name", "Larry")
+        conn.commit()
+        assert "already in memory" in logic.memory_restore("user.name")["error"]
+        miss = logic.memory_restore("user.nothing")
+        assert miss["ok"] is False and miss["candidates"] == []

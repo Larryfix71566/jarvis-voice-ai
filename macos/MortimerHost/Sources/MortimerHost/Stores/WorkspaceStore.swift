@@ -22,9 +22,12 @@ struct WorkspaceResult: Identifiable, Equatable, Sendable {
 enum SupportingDisplayContent: Equatable {
     case result(UUID)
     case memoryGraph
+    case skills
     /// A pointer to the selected Skills detail. The detail remains owned by
     /// SkillsStore; this selection only transfers its single visible renderer.
     case skillDetail(String)
+    /// MORTIMER_WORKFLOW_VIEWER_PLAN.md — the read-only workflow gallery.
+    case workflows
 }
 
 enum WorkspaceComparisonSide: String, Sendable {
@@ -46,11 +49,15 @@ final class WorkspaceStore {
     private(set) var showsMemoryGraph = false
     private(set) var showsAtlas = false
     private(set) var showsSkills = false
+    /// MORTIMER_WORKFLOW_VIEWER_PLAN.md: a standalone main view alongside
+    /// Skills, Atlas, Memory Graph, and Conversation.
+    private(set) var showsWorkflows = false
     private(set) var supportingContent: SupportingDisplayContent?
     var showComparisonOnCompact = false
     private(set) var comparisonSide: WorkspaceComparisonSide = .a
     let exporter = WorkspaceExportCoordinator()
     let memoryGraph = MemoryGraphStore(persistenceKey: "mortimer.interface.memoryGraph.view")
+    let workflows = WorkflowsStore()
     @ObservationIgnored private var presentations: [UUID: WorkspaceResultPresentation] = [:]
     @ObservationIgnored private var resultGraphs: [UUID: MemoryGraphStore] = [:]
     private(set) var scrollOffsets: [UUID: Double] = [:]
@@ -80,7 +87,7 @@ final class WorkspaceStore {
         let visibleResults = results.filter { !$0.payload.isProtectedLocal }
         let visibleIDs = Set(visibleResults.map(\.id))
         return ["revision": inventoryRevision,
-         "mode": showsConversation ? "conversation" : (showsSkills ? "skills" : (showsMemoryGraph ? "memory" : (showsAtlas ? "atlas" : "results"))),
+         "mode": showsConversation ? "conversation" : (showsSkills ? "skills" : (showsMemoryGraph ? "memory" : (showsAtlas ? "atlas" : (showsWorkflows ? "workflows" : "results")))),
          "active_result_id": activeID.flatMap { visibleIDs.contains($0) ? $0.uuidString : nil } as Any,
          "focused_panel_id": NSNull(),
          "results": visibleResults.enumerated().map { index, result in
@@ -136,6 +143,7 @@ final class WorkspaceStore {
         else if showsSkills { mode = "skills" }
         else if showsMemoryGraph { mode = "memory" }
         else if showsAtlas { mode = "atlas" }
+        else if showsWorkflows { mode = "workflows" }
         else { mode = "results" }
         let activeValue: JSONValue = activeID.flatMap {
             visibleIDs.contains($0) ? .string($0.uuidString) : nil
@@ -213,6 +221,7 @@ final class WorkspaceStore {
         activeID = id
         showsAtlas = false
         showsSkills = false
+        showsWorkflows = false
         showsConversation = false
         showsMemoryGraph = false
         unreadIDs.remove(id)
@@ -233,6 +242,8 @@ final class WorkspaceStore {
         hasChosenPresentation = true
         showsAtlas = false
         showsSkills = false
+        showsWorkflows = false
+        showsMemoryGraph = false
         showsConversation = true
         inventoryRevision += 1
     }
@@ -241,6 +252,7 @@ final class WorkspaceStore {
         showsMemoryGraph = true
         showsAtlas = false
         showsSkills = false
+        showsWorkflows = false
         showsConversation = false
         inventoryRevision += 1
     }
@@ -248,14 +260,29 @@ final class WorkspaceStore {
         hasChosenPresentation = true
         showsAtlas = true
         showsSkills = false
+        showsWorkflows = false
         showsMemoryGraph = false
         showsConversation = false
         inventoryRevision += 1
     }
+
+    /// MORTIMER_WORKFLOW_VIEWER_PLAN.md — view_set mode "workflows".
+    func openWorkflows() {
+        hasChosenPresentation = true
+        showsWorkflows = true
+        showsAtlas = false
+        showsSkills = false
+        showsMemoryGraph = false
+        showsConversation = false
+        inventoryRevision += 1
+    }
+
     func returnToWorkspace() {
         hasChosenPresentation = true
         showsAtlas = false
         showsSkills = false
+        showsWorkflows = false
+        showsMemoryGraph = false
         showsConversation = false
         inventoryRevision += 1
     }
@@ -263,6 +290,7 @@ final class WorkspaceStore {
     func openSkills() {
         hasChosenPresentation = true
         showsSkills = true
+        showsWorkflows = false
         showsAtlas = false
         showsMemoryGraph = false
         showsConversation = false
@@ -333,6 +361,7 @@ final class WorkspaceStore {
         unreadIDs.remove(id)
         showsConversation = false
         showsMemoryGraph = false
+        showsWorkflows = false   // the comparison must be visible
         inventoryRevision += 1
         return true
     }
@@ -417,7 +446,12 @@ final class WorkspaceStore {
             comparisonID = nil
         }
         if comparisonID == id { comparisonID = nil }
-        if activeID == nil && !showsMemoryGraph { showsConversation = true }
+        // Standalone views stay selected when the last result tab closes;
+        // closing a result says nothing about the selected view.
+        if activeID == nil && !showsMemoryGraph && !showsWorkflows &&
+            !showsSkills && !showsAtlas {
+            showsConversation = true
+        }
     }
 
     private func remove(_ id: UUID) {

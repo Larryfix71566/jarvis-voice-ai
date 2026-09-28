@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from jarvis.agents.upgrade_agent import registry_source
 from jarvis.model_execution import execute_chat
 from jarvis.model_routing import (
     ModelRouteError,
@@ -103,7 +104,7 @@ async def _run() -> int:
     route = resolve_model_route_checked(
         "skill_eval",
         policy_path=ROOT / "config" / "model_access.yaml",
-        registry_path=ROOT / "config" / "upgrade_models.yaml",
+        registry_path=registry_source(config_dir=ROOT / "config"),
     )
     budget = SkillEvaluationBudget(limits, route)
     trials = await run_skill_evaluation(

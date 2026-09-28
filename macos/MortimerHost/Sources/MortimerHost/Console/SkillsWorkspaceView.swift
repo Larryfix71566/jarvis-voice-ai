@@ -700,7 +700,7 @@ struct SkillsWorkspaceView: View {
                 metadataRow("Required tools", stringList(detail["required_tools"]))
                 metadataRow("Required credentials", stringList(detail["required_credentials"]))
                 metadataRow("Readiness details", readinessReasons(detail["readiness_reasons"]))
-                metadataRow("Related workflows", stringList(detail["related_workflow_ids"]))
+                relatedWorkflowsContent
                 if let card = selectedCard, !card.exampleIDs.isEmpty {
                     Divider().padding(.vertical, 4)
                     Text("Synthetic matcher examples").font(.headline)
@@ -749,6 +749,33 @@ struct SkillsWorkspaceView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
+    }
+
+    @ViewBuilder
+    private var relatedWorkflowsContent: some View {
+        let workflowIDs = detail?["related_workflow_ids"]?.arrayValue?.compactMap(\.stringValue) ?? []
+        if workflowIDs.isEmpty {
+            metadataRow("Related workflows", "None linked")
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Related workflows").font(.caption).foregroundStyle(AppTheme.textDim)
+                ForEach(workflowIDs, id: \.self) { workflowID in
+                    Button {
+                        Task {
+                            guard await workspace.workflows.openRelatedWorkflow(workflowID, api: client.admin) else {
+                                return
+                            }
+                            workspace.openWorkflows()
+                        }
+                    } label: {
+                        Label(workspace.workflows.workflowName(for: workflowID) ?? workflowID,
+                              systemImage: "arrow.up.right.square")
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityHint("Opens this related workflow in the separate Workflows view")
+                }
+            }
+        }
     }
 
     @ViewBuilder

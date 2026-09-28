@@ -11,13 +11,34 @@ import uuid
 import inspect
 import json
 
+from pathlib import Path
+
 from jarvis.bot.console_protocol import validate_request, response
+
+# MORTIMER_WORKFLOW_VIEWER_PLAN.md piece 3: the view_set modes, from the one
+# file MortimerHost's coordinator test also reads. Until 2026-09-25 nothing
+# the Supervisor saw named them, so "show me the workflows" could not be
+# resolved to a mode by voice.
+VIEW_MODES_PATH = Path(__file__).resolve().parents[2] / "config" / "console_view_modes.json"
+VIEW_SET_MODES: tuple[str, ...] = tuple(json.loads(VIEW_MODES_PATH.read_text(encoding="utf-8"))["view_set"])
 
 CONSOLE_ACTION_SCHEMA = {
     "type": "function",
     "function": {
         "name": "console_action",
-        "description": "Navigate Mortimer's existing Command Console, results, Atlas, and Skills workspace. Skills actions search/filter the loaded library, refresh its catalog, return from compact skill details to the library, transfer the listed selected skill detail to the supporting display, retry or load more recorded activity, open a listed skill/process step/run, and open a declared synthetic matcher example. skill_creator_open only opens the existing skill composer when authoring is available; it does not create or submit a draft. For skill_step_select, target a listed step ID; set args.expanded=false only to collapse the currently selected step. To create a skill, first call skill_request_preview with operation=draft, skill_id, and task_brief; after its short preview response, call skill_request with operation=draft and the returned preview_id. This starts sandbox drafting only. Voice cannot publish, activate, or roll back a skill; opening a review PR requires the native exact-diff review.",
+        "description": (
+            "Navigate Mortimer's Command Console, results, Atlas, and Skills. "
+            "action view_set switches the main view: args.mode is one of "
+            + ", ".join(VIEW_SET_MODES)
+            + " (workflows is the read-only gallery of Larry's workflows). "
+            "Skills actions search/filter the library, refresh its catalog, open "
+            "listed skill, process-step, run, or example details, and transfer "
+            "selected skill details to the supporting display. skill_creator_open "
+            "only opens the composer. skill_request_preview followed by "
+            "skill_request starts a sandbox draft. Voice cannot publish, activate, "
+            "or roll back a skill; opening a review PR requires native exact-diff "
+            "review."
+        ),
         "parameters": {
             "type": "object",
             "properties": {

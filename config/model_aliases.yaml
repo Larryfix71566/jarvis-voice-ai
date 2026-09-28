@@ -1,4 +1,4 @@
-# Spoken model names -> profile names in config/upgrade_models.yaml.
+# Spoken model names -> profile names in config/model_profiles.yaml.
 #
 # 2026-09-05. This file exists because the mapping used to live in prose, in
 # TWO places, and both had drifted from the registry:

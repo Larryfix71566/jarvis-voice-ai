@@ -274,3 +274,27 @@ def test_tool_result_shape_and_url(monkeypatch):
     monkeypatch.setenv("JARVIS_ADMIN_URL", "http://x:1")
     out2 = tool_result(result, since="7d")
     assert out2["image_url"].startswith("http://x:1")
+
+
+def test_memory_graph_unmatched_focus_falls_back_to_overview(conn):
+    """Status spec T4.6: the unfocused memory graph, ok, flagged focus_miss."""
+    _insert_fact(conn, "user.style.a")
+    _insert_fact(conn, "user.name", "Larry")
+    conn.commit()
+    overview = build("memory", conn)
+    r = build("memory", conn, focus="  zzz-nothing  ")
+    assert r["ok"] is True
+    assert r["focus_miss"] == "zzz-nothing"
+    assert r["focus"] is None
+    assert {n["id"] for n in r["nodes"]} == {n["id"] for n in overview["nodes"]}
+    out = tool_result(r)
+    assert out["focus_miss"] == "zzz-nothing"
+    assert "focus_miss" not in tool_result(overview)
+
+
+@pytest.mark.parametrize("name", ["execution", "capability", "deliberation"])
+def test_execution_graph_still_errors_on_unmatched_focus(conn, name):
+    r = build(name, conn, focus="nonexistent-zzz")
+    assert r["ok"] is False
+    assert r["error"] == f"no node matches 'nonexistent-zzz' in the {name} graph"
+    assert "focus_miss" not in r

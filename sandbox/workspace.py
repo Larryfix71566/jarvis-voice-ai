@@ -55,6 +55,7 @@ class SandboxWorkspace:
             return self._error(exc)
 
     def read_file(self, path: str) -> dict: return self._invoke('read_file', path)
+    def baseline_text(self, path: str) -> dict: return self._invoke('baseline_text', path)
     def propose_edit(self, path: str, new_content: str, rationale: str, visual_intent: str = '') -> dict:
         return self._invoke('propose_edit', path, new_content, rationale, visual_intent)
     def validate(self) -> dict: return self._invoke('validate')
