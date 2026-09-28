@@ -27,10 +27,17 @@ CONSOLE_ACTION_SCHEMA = {
     "function": {
         "name": "console_action",
         "description": (
-            "Change the visible Mortimer Command Console view or result selection. "
+            "Navigate Mortimer's Command Console, results, Atlas, and Skills. "
             "action view_set switches the main view: args.mode is one of "
             + ", ".join(VIEW_SET_MODES)
-            + " (workflows is the read-only gallery of Larry's workflows)."
+            + " (workflows is the read-only gallery of Larry's workflows). "
+            "Skills actions search/filter the library, refresh its catalog, open "
+            "listed skill, process-step, run, or example details, and transfer "
+            "selected skill details to the supporting display. skill_creator_open "
+            "only opens the composer. skill_request_preview followed by "
+            "skill_request starts a sandbox draft. Voice cannot publish, activate, "
+            "or roll back a skill; opening a review PR requires native exact-diff "
+            "review."
         ),
         "parameters": {
             "type": "object",

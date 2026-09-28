@@ -1,0 +1,48 @@
+[
+  {
+    "utterance": "Show my skills",
+    "action": "view_set",
+    "args": {"mode": "skills"}
+  },
+  {
+    "utterance": "Find the skill creator",
+    "action": "skills_search",
+    "args": {"query": "skill creator"}
+  },
+  {
+    "utterance": "Show skills that need attention",
+    "action": "skills_filter",
+    "args": {"state": "needs_attention", "category": "all"}
+  },
+  {
+    "utterance": "Open the skill creator",
+    "action": "skill_select",
+    "target": "skill-creator"
+  },
+  {
+    "utterance": "Show its process",
+    "action": "skill_tab",
+    "args": {"tab": "process"}
+  },
+  {
+    "utterance": "Focus the inspect request step",
+    "action": "skill_step_select",
+    "target": "inspect-request"
+  },
+  {
+    "utterance": "Explain the establish scope step",
+    "action": "skill_step_explain",
+    "target": "establish-scope"
+  },
+  {
+    "utterance": "Preview the implementation plan example",
+    "action": "skill_example_preview",
+    "target": "implementation-plan",
+    "args": {"skill_id": "technical-plan-document"}
+  },
+  {
+    "utterance": "Show the last failed run",
+    "action": "skill_run_select",
+    "target": "run-synthetic-failed"
+  }
+]

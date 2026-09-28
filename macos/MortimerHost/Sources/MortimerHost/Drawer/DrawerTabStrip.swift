@@ -25,7 +25,7 @@ struct DrawerTabStrip: View {
     @State private var tabFrames: [String: CGRect] = [:]
     @State private var fallbackOffset: CGFloat = 0
     @FocusState private var stripFocused: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mortimerReduceMotion) private var reduceMotion
 
     /// Some AppKit/SwiftUI hosting fixtures do not publish ScrollView's
     /// contentSize, even though child frames are available. Derive a safe

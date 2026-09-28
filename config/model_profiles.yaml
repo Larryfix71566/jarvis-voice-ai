@@ -114,6 +114,7 @@ profiles:
     temperature: null
     tier: frontier
     vision: true
+    streaming: true
 
   - name: claude-fable-5
     label: "Claude Fable 5 — Anthropic Mythos-class, above Opus"
@@ -127,6 +128,7 @@ profiles:
     temperature: null
     tier: frontier
     vision: true
+    streaming: true
 
   - name: claude-sonnet-5
     label: "Claude Sonnet 5 — direct Anthropic; the agent floor / executor tier"
@@ -137,6 +139,7 @@ profiles:
     # temperature rather than risk the 400.
     temperature: null
     tier: mid
+    streaming: true
     # 2026-09-01 (MORTIMER_OPTIMIZATION_PLAN.md Phase 0b item 5) — REPLACES
     # or-sonnet-5: same identity, same tier, only the route changes, so the
     # council's mid judge pool is exactly as deep as before (no backfill).

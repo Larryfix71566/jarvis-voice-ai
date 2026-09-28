@@ -4,8 +4,6 @@
 
 import asyncio
 
-import pytest
-
 from jarvis.bot.memory_watcher import MemorySweepWatcher
 
 
@@ -53,7 +51,9 @@ async def test_tick_once_swallows_exception_and_logs(monkeypatch, caplog):
     await watcher.tick_once()  # must not raise
 
     assert "memory_sweep_failed" in caplog.text
-    assert "sess-2" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "sess-2" not in caplog.text
+    assert "boom" not in caplog.text
 
 
 async def test_tick_once_swallows_timeout_and_logs(monkeypatch, caplog):
@@ -66,7 +66,7 @@ async def test_tick_once_swallows_timeout_and_logs(monkeypatch, caplog):
     await watcher.tick_once()  # must not raise
 
     assert "memory_sweep_timeout" in caplog.text
-    assert "sess-3" in caplog.text
+    assert "sess-3" not in caplog.text
 
 
 async def test_start_and_stop_runs_ticks(monkeypatch):

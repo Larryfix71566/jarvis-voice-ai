@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
+from jarvis import memory_sweep as memory_sweep_module
 from jarvis.db import get_conn, now_iso, run_migrations
 from jarvis.memory import (
     MAX_CONTEXT_CHARS,
@@ -23,6 +25,8 @@ from jarvis.memory_sweep import (
     STAGING_EXPIRY_DAYS,
     SWEEP_MAX_ARCHIVES,
     _apply_classification,
+    _classify_batch,
+    _merge_cluster,
     _parse_classification,
     _select_audience_candidates,
     _select_contradiction_pairs,
@@ -35,6 +39,8 @@ from jarvis.memory_sweep import (
     run_sweep,
     run_stale_sweep,
 )
+from jarvis.model_execution import ModelAdmissionController
+from jarvis.model_routing import AccessRoute, ResolvedModelRoute
 from tests.unit.test_memory import _factory
 
 
@@ -53,6 +59,141 @@ def _fact(conn, key, content, tier=None):
         "VALUES ('fact', ?, ?, ?, ?, ?)",
         (key, content, now_iso(), now_iso(), tier),
     )
+
+
+@pytest.mark.asyncio
+async def test_routed_memory_merge_uses_shared_execution_boundary(monkeypatch):
+    class RoutedClient:
+        def __init__(self):
+            self.chat = self
+            self.completions = self
+            self.request = None
+
+        async def create(self, **kwargs):
+            self.request = kwargs
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="Merged fact."))],
+                usage=None,
+                id="memory-merge-response",
+            )
+
+    client = RoutedClient()
+    resolved = ResolvedModelRoute(
+        workload="background", profile_name="test", model="model",
+        provider="saygm", base_url="https://gateway.example/v1/",
+        route=AccessRoute(
+            "saygm", "saygm_gateway", "saygm_credit", None, "confidential",
+            capabilities=("text",),
+        ),
+        api_key_env=None, identity="saygm/model", priority="background",
+    )
+    monkeypatch.setattr(
+        "jarvis.model_execution._PROCESS_ADMISSION", ModelAdmissionController()
+    )
+    monkeypatch.setattr(
+        memory_sweep_module, "make_memory_async_client",
+        lambda settings: (client, SimpleNamespace(model="model", resolved=resolved)),
+    )
+    recorded = []
+    monkeypatch.setattr(
+        memory_sweep_module, "record_execution_result",
+        lambda *args, **kwargs: recorded.append((args, kwargs)),
+    )
+    proposal = SimpleNamespace(
+        keys=("user.preference.a", "user.preference.b"),
+        contents=("prefers concise answers", "prefers brief replies"),
+        tier="preference",
+    )
+
+    result = await _merge_cluster(proposal, object())
+
+    assert result == "Merged fact."
+    assert client.request["messages"] == [{
+        "role": "user",
+        "content": memory_sweep_module.MERGE_PROMPT.format(
+            facts="- user.preference.a: prefers concise answers\n- user.preference.b: prefers brief replies"
+        ),
+    }]
+    assert recorded and recorded[0][0][0] == "memory_merge"
+
+
+@pytest.mark.asyncio
+async def test_failed_merge_logs_no_memory_keys_or_exception_text(caplog):
+    proposal = SimpleNamespace(
+        keys=("PRIVATE_CANARY_memory_key_631c", "PRIVATE_CANARY_memory_key_641c"),
+        contents=("private one", "private two"),
+        tier="preference",
+    )
+
+    def _fail(_settings):
+        raise RuntimeError("PRIVATE_CANARY_merge_error_631c")
+
+    assert await _merge_cluster(proposal, object(), client_factory=_fail) is None
+    assert "memory_enforce_merge_failed tier=preference error_type=RuntimeError" in caplog.text
+    assert "PRIVATE_CANARY" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_routed_memory_classification_uses_shared_execution_boundary(monkeypatch):
+    payload = json.dumps({
+        "pairs": [{"a": "user.preference.a", "b": "user.preference.b", "verdict": "duplicate"}],
+        "audiences": [{"key": "user.preference.a", "audience": "interaction"}],
+    })
+
+    class RoutedClient:
+        def __init__(self):
+            self.chat = self
+            self.completions = self
+            self.request = None
+
+        async def create(self, **kwargs):
+            self.request = kwargs
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=payload))],
+                usage=None,
+                id="memory-classify-response",
+            )
+
+    client = RoutedClient()
+    resolved = ResolvedModelRoute(
+        workload="background", profile_name="test", model="model",
+        provider="saygm", base_url="https://gateway.example/v1/",
+        route=AccessRoute(
+            "saygm", "saygm_gateway", "saygm_credit", None, "confidential",
+            capabilities=("text",),
+        ),
+        api_key_env=None, identity="saygm/model", priority="background",
+    )
+    monkeypatch.setattr(
+        "jarvis.model_execution._PROCESS_ADMISSION", ModelAdmissionController()
+    )
+    monkeypatch.setattr(
+        memory_sweep_module, "make_memory_async_client",
+        lambda settings: (client, SimpleNamespace(model="model", resolved=resolved)),
+    )
+    recorded = []
+    monkeypatch.setattr(
+        memory_sweep_module, "record_execution_result",
+        lambda *args, **kwargs: recorded.append((args, kwargs)),
+    )
+    pair = (
+        {"key": "user.preference.a", "content": "prefers concise answers"},
+        {"key": "user.preference.b", "content": "prefers brief replies"},
+    )
+    candidates = [{"key": "user.preference.a", "content": "prefers concise answers"}]
+
+    result = await _classify_batch([pair], candidates, object())
+
+    assert result["pairs"] == {frozenset(("user.preference.a", "user.preference.b")): "duplicate"}
+    assert result["audiences"] == {"user.preference.a": "interaction"}
+    assert client.request["messages"] == [
+        {"role": "system", "content": memory_sweep_module.CLASSIFY_PROMPT},
+        {"role": "user", "content": json.dumps({
+            "pairs": [{"a": "user.preference.a", "a_content": "prefers concise answers", "b": "user.preference.b", "b_content": "prefers brief replies"}],
+            "facts": [{"key": "user.preference.a", "content": "prefers concise answers"}],
+        })},
+    ]
+    assert recorded and recorded[0][0][0] == "memory_classify"
 
 
 # --- A1: auto-consolidation ---------------------------------------------
@@ -160,11 +301,14 @@ def _observation(conn, key, content, last_seen_at, session_id="s1"):
     )
 
 
-def test_unpromoted_stale_observation_expires(conn):
+def test_unpromoted_stale_observation_expires(conn, caplog):
+    caplog.set_level("INFO", logger="jarvis.memory_sweep")
     _observation(conn, "user.style.emoji", "uses emoji rarely", "2020-01-01T00:00:00+00:00")
     conn.commit()
     expired = run_staging_expiry(conn, expiry_days=STAGING_EXPIRY_DAYS)
     assert expired == ["user.style.emoji"]
+    assert "memory_staging_expiry expired_count=1" in caplog.text
+    assert "user.style.emoji" not in caplog.text
     assert conn.execute(
         "SELECT COUNT(*) AS n FROM observations WHERE key='user.style.emoji'"
     ).fetchone()["n"] == 0
@@ -192,6 +336,20 @@ def test_promoted_key_is_left_alone_even_if_stale(conn):
     assert conn.execute(
         "SELECT COUNT(*) AS n FROM observations WHERE key='user.style.emoji'"
     ).fetchone()["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_sweep_failure_logs_bounded_error_type(monkeypatch, caplog):
+    monkeypatch.setattr(memory_sweep_module, "enabled", lambda: True)
+
+    def _fail(_db_path=None):
+        raise RuntimeError("PRIVATE_CANARY_sweep_error_1fd2")
+
+    monkeypatch.setattr(memory_sweep_module, "get_conn", _fail)
+    result = await run_sweep()
+    assert result["archived"] == 0
+    assert "memory_sweep_failed error_type=RuntimeError" in caplog.text
+    assert "PRIVATE_CANARY" not in caplog.text
 
 
 def test_null_last_seen_at_falls_back_to_created_at(conn):

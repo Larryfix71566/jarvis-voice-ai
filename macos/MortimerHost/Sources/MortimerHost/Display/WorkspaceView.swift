@@ -10,7 +10,7 @@ struct WorkspaceView: View {
     @Environment(WorkspaceStore.self) private var workspace
     @State private var pinLimitNotice = false
     @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 2
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mortimerReduceMotion) private var reduceMotion
     @Environment(DisplayWindowStore.self) private var display
     @Environment(DrawerState.self) private var drawer
 
@@ -73,6 +73,14 @@ struct WorkspaceView: View {
                 } else { MemoryGraphView(store: workspace.memoryGraph, api: client.admin, coordinator: coordinator) }
             } else if workspace.showsAtlas {
                 KnowledgeAtlasView(coordinator: coordinator)
+            } else if workspace.showsSkills {
+                if isOnSupportingDisplay(.skills) {
+                    ContentUnavailableView {
+                        Label("Skills are on the supporting display", systemImage: "display")
+                    } actions: {
+                        Button("Return here") { drawer.placementRef?.closeDisplay() }
+                    }
+                } else { SkillsWorkspaceView(coordinator: coordinator) }
             } else if workspace.showsWorkflows {
                 if isOnSupportingDisplay(.workflows) {
                     ContentUnavailableView {
@@ -111,6 +119,7 @@ struct WorkspaceView: View {
         // §7 / closure C2.3: entering or leaving comparison and the graph animate for 200 ms.
         .animation(AdaptiveTransition.animation(reduceMotion: reduceMotion), value: workspace.comparisonID)
         .animation(AdaptiveTransition.animation(reduceMotion: reduceMotion), value: workspace.showsMemoryGraph)
+        .animation(AdaptiveTransition.animation(reduceMotion: reduceMotion), value: workspace.showsSkills)
         .alert("Pin limit reached", isPresented: $pinLimitNotice) {
             Button("OK", role: .cancel) {}
         } message: { Text("Unpin a result before pinning another. Your existing pins are preserved.") }
@@ -148,20 +157,28 @@ struct WorkspaceView: View {
             if let coordinator { _ = coordinator.executePointer(.viewSet, target: "memory") }
             else { workspace.openMemoryGraph() }
         }
+        Button("Skills") {
+            if let coordinator { _ = coordinator.executePointer(.viewSet, target: "skills") }
+            else { workspace.openSkills() }
+        }
         Button("Workflows") {
             if let coordinator { _ = coordinator.executePointer(.viewSet, target: "workflows") }
             else { workspace.openWorkflows() }
         }
         Menu("Display") {
             Button("Show memory graph") { sendToDisplay(.memoryGraph) }
+            Button("Show Skills") { sendToDisplay(.skills) }
             Button("Show workflows") { sendToDisplay(.workflows) }
-            if let active = workspace.activeResult {
+            if let active = workspace.activeResult, !active.payload.isProtectedLocal {
                 Button("Show active result") { sendToDisplay(.result(active.id)) }
             }
-            if let comparison = workspace.comparisonResult {
+            if let comparison = workspace.comparisonResult,
+               !comparison.payload.isProtectedLocal {
                 Button("Show comparison result") { sendToDisplay(.result(comparison.id)) }
             }
-            ForEach(workspace.results.filter { workspace.pinnedIDs.contains($0.id) }) { result in
+            ForEach(workspace.results.filter {
+                workspace.pinnedIDs.contains($0.id) && !$0.payload.isProtectedLocal
+            }) { result in
                 Button(result.payload.title ?? "Pinned result") { sendToDisplay(.result(result.id)) }
             }
             if display.isWindowOpen {

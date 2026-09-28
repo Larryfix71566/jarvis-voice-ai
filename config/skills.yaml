@@ -19,8 +19,10 @@
 #      may reference tools that do not exist.
 #
 # `python -m jarvis.agent_skills --list` shows what is on disk and which
-# of it is live.
+# of it is live. Schema v2 pins every enabled skill to its reviewed package
+# digest; update the pin in the same change as the package.
 
+schema_version: 2
 enabled:
   # Promoted from active procedures, 2026-08-18.
   - git-history-and-status-review
@@ -32,3 +34,10 @@ enabled:
   # their own diff and carry no scripts. The one-at-a-time rule above
   # still governs anything IMPORTED from a third party.
   - mcp-server-authoring
+
+revisions:
+  current-weather-with-fahrenheit: 9064f3d61d680d8cbce9c4dda1b2d98b854624fce2b106f89cc7f13b4ace521e
+  git-history-and-status-review: 8794a16e69d4908ff12906e93b8b5cc01d0560c8c792d0ab43279c41ac1a5c7e
+  layered-geolocation: 4b85b307b01135554d839cf35039f876323c30bd957b75984a1c2fdecf47ca3a
+  mcp-server-authoring: eb29e0acd71c72f271a2609bbad27529de5874fbcbbdd9c21f90e8a53d45bc9f
+  technical-plan-document: 9f5a334f77baf5800c7dbd70c74ee345902e37f2b258f0ef2a4301b05773f314

@@ -217,7 +217,9 @@ RBEOF
   hcode() { curl -s -o /dev/null -m 3 -w '%{http_code}' "$1"; }
   ok=0
   for i in $(seq 1 30); do
-    a=$(hcode http://127.0.0.1:7861/api/health); v=$(hcode http://127.0.0.1:8484/health); b=$(hcode http://127.0.0.1:7860/)
+    a=$(cd "$C" && "$PY" scripts/service_health.py admin)
+    v=$(hcode http://127.0.0.1:8484/health)
+    b=$(cd "$C" && "$PY" scripts/service_health.py bot)
     if [ "$a" = 200 ] && [ "$v" = 200 ] && { [ "$b" = 307 ] || [ "$b" = 200 ]; }; then ok=1; break; fi; sleep 2
   done
   echo "health: admin=$a vault=$v bot=$b"

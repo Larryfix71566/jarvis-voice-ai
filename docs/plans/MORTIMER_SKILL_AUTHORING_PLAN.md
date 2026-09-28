@@ -1,5 +1,13 @@
 # Mortimer skill authoring — the `skill-authoring` skill and the allow-list move
 
+**Superseded for new implementation, 2026-09-25:** follow the
+[Skills Workspace and Skill Creation Implementation Plan](MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md)
+for T6's skill-authoring scope. It uses one reviewed `skill-creator`, a narrowly
+scoped sandbox authoring policy, and explicit activation/release evidence.
+Do not implement this historical draft's blanket allowlist change or create a
+competing `skill-authoring` package. The measurements below remain historical;
+this supersession does not close G6(a), G6(c), or unrelated acceptance gates.
+
 **Status:** DRAFT for Larry's approval, 2026-08-26. Implements roadmap track
 **T6, skill-authoring half only** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md`
 §2.6, first two bullets). Gate **G6(a)** and **G6(c)**.
@@ -2166,5 +2174,4 @@ Larry ticks these before the implementer starts:
       `config/skills.yaml` is the off switch.
 - [ ] **Scope** — the Xcode half of T6 (§2) is a separate plan, after T1.3.
 - [ ] Branch name `jarvis/self-edit/skill-authoring` is acceptable.
-
 

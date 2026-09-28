@@ -43,15 +43,31 @@ import json
 import logging
 import re
 import sqlite3
+import uuid
 from pathlib import Path
 from typing import Any, Callable
 
 from jarvis.db import get_conn, now_iso
 from jarvis.memory_model import make_background_async_client
+from jarvis.model_execution import (
+    ModelContextMessage,
+    ModelExecutionRequest,
+    execute_chat,
+)
+from jarvis.privacy_policy import DataPolicy
 from jarvis.runlog import get_run
-from jarvis.usage_ledger import record_completion, provider_from_base_url
+from jarvis.usage_ledger import (
+    provider_from_base_url,
+    record_completion,
+    record_execution_result,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _log_safe_failure(event: str, exc: Exception) -> None:
+    """Keep procedure diagnostics useful without task/run/traceback data."""
+    logger.warning("%s error_type=%s", event, type(exc).__name__[:80])
 
 # ⚙ TUNING KNOB (D23) — clamp bounds applied to every --calibrate branch.
 CALIBRATE_THRESHOLD_MIN = 0.20
@@ -216,8 +232,8 @@ def match_procedure(
         if best_row is None or best_score < PROCEDURE_MATCH_THRESHOLD:
             return None
         return dict(best_row)
-    except Exception:  # noqa: BLE001 — matching must never break a delegation
-        logger.warning("procedures_match_failed agent=%s", agent, exc_info=True)
+    except Exception as exc:  # noqa: BLE001 — matching must never break a delegation
+        _log_safe_failure("procedures_match_failed", exc)
         return None
 
 
@@ -235,9 +251,8 @@ def mark_used(procedure_id: int, db_path: str | Path | None = None) -> None:
             conn.commit()
         finally:
             conn.close()
-    except Exception:  # noqa: BLE001
-        logger.warning("procedures_mark_used_failed id=%s", procedure_id,
-                        exc_info=True)
+    except Exception as exc:  # noqa: BLE001
+        _log_safe_failure("procedures_mark_used_failed", exc)
 
 
 def _promote_or_deprecate(row: dict, conn: sqlite3.Connection) -> None:
@@ -355,26 +370,52 @@ async def _describe_procedure(
         # Test seam only; production uses JARVIS_BACKGROUND_PROFILE.
         client = client_factory(settings)
         model = settings.openai_model
+        resolved = None
     else:
         client, route = make_background_async_client(settings)
         model = route.model
-    response = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": _DESCRIBE_PROMPT},
-            {"role": "user", "content": f"Agent: {agent}\nTask: {task}"},
-        ],
-    )
-    try:
-        record_completion(
-            rung="procedures_describe",
-            provider=provider_from_base_url(str(client.base_url)),
-            model=model,
-            response=response,
+        resolved = route.resolved
+    if resolved is not None:
+        request_id = f"procedure-description:{uuid.uuid4().hex}"
+        execution = await execute_chat(
+            ModelExecutionRequest(
+                workload=resolved.workload,
+                task_id=request_id,
+                parent_request_id=request_id,
+                instructions=f"Agent: {agent}\nTask: {task}",
+                context=(ModelContextMessage(
+                    "system", _DESCRIBE_PROMPT,
+                    DataPolicy("confidential", "procedure-description-prompt"),
+                ),),
+                data_policy=DataPolicy("confidential", "successful-agent-task"),
+                timeout_s=30.0,
+            ),
+            resolved,
+            client_factory=lambda _: client,
         )
-    except Exception:
-        pass
-    return _parse_label_description(response.choices[0].message.content or "")
+        record_execution_result("procedures_describe", execution)
+        result_text = execution.text
+    else:
+        # Compatibility path while model routing is disabled and for the
+        # existing injected test seam. Preserve the provider request shape.
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": _DESCRIBE_PROMPT},
+                {"role": "user", "content": f"Agent: {agent}\nTask: {task}"},
+            ],
+        )
+        try:
+            record_completion(
+                rung="procedures_describe",
+                provider=provider_from_base_url(str(client.base_url)),
+                model=model,
+                response=response,
+            )
+        except Exception:
+            pass
+        result_text = response.choices[0].message.content or ""
+    return _parse_label_description(result_text)
 
 
 async def learn_from_run(
@@ -439,11 +480,8 @@ async def learn_from_run(
         if label is None:
             return
         _create_candidate(agent, label, description, run_id, db_path, task_tokens)
-    except Exception:  # noqa: BLE001 — learning must never break a delegation
-        logger.warning(
-            "procedures_learn_failed run_id=%s agent=%s", run_id, agent,
-            exc_info=True,
-        )
+    except Exception as exc:  # noqa: BLE001 — learning must never break a delegation
+        _log_safe_failure("procedures_learn_failed", exc)
 
 
 # ============================================================================

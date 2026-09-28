@@ -45,6 +45,7 @@ struct MortimerHostApp: App {
     @State private var agentRuns = AgentRunStore()
     @State private var displayResults = DisplayResultStore()
     @State private var workspace = WorkspaceStore()
+    @State private var skills = SkillsStore()
     @State private var atlas = AtlasStore()
     @State private var panels = PanelStore()
     @State private var attachments = AttachmentStore()
@@ -75,6 +76,7 @@ struct MortimerHostApp: App {
                 .environment(agentRuns)
                 .environment(displayResults)
                 .environment(workspace)
+                .environment(skills)
                 .environment(atlas)
                 .environment(panels)
                 .environment(attachments)
@@ -297,7 +299,8 @@ struct MortimerHostApp: App {
                                                             placement: placement, atlas: atlas,
                                                             panels: panels, drawer: drawer,
                                                             sharing: sharing, attachments: attachments,
-                                                            client: client, notices: notices)
+                                                            client: client, notices: notices,
+                                                            skills: skills)
         let router = UICommandRouter(drawer: drawer, overlay: overlay, windows: windowActions,
                                      placement: placement, displayWindow: displayWindow)
         self.uiRouter = router

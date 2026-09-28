@@ -25,8 +25,18 @@ from jarvis.config import Settings
 from jarvis.db import get_conn
 from jarvis.memory import MAX_ROW_CHARS, MAX_TRANSCRIPT_ROWS, scan_memory_content
 from jarvis.memory_model import make_background_async_client
+from jarvis.model_execution import (
+    ModelContextMessage,
+    ModelExecutionRequest,
+    execute_chat,
+)
+from jarvis.privacy_policy import DataPolicy
+from jarvis.usage_ledger import (
+    provider_from_base_url,
+    record_completion,
+    record_execution_result,
+)
 from mcp_servers.mcp_kb import logic as kb
-from jarvis.usage_ledger import record_completion, provider_from_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -110,39 +120,66 @@ async def write_session_digest(
             # Test seam only; production uses JARVIS_BACKGROUND_PROFILE.
             client = client_factory(settings)
             model = settings.openai_model
+            resolved = None
         else:
             client, route = make_background_async_client(settings)
             model = route.model
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": DIGEST_SYSTEM_PROMPT},
-                {"role": "user", "content": f"Session transcript:\n{transcript}"},
-            ],
-        )
-        try:
-            record_completion(
-                rung="kb_digest",
-                provider=provider_from_base_url(str(client.base_url)),
-                model=model,
-                response=response,
-                session_id=session_id,
+            resolved = route.resolved
+        if resolved is not None:
+            execution = await execute_chat(
+                ModelExecutionRequest(
+                    workload=resolved.workload,
+                    task_id=f"kb-digest:{session_id}",
+                    parent_request_id=session_id,
+                    instructions=f"Session transcript:\n{transcript}",
+                    context=(ModelContextMessage(
+                        "system", DIGEST_SYSTEM_PROMPT,
+                        DataPolicy("confidential", "digest-system-prompt"),
+                    ),),
+                    data_policy=DataPolicy("confidential", "session-transcript"),
+                    timeout_s=DIGEST_EXTRACTION_TIMEOUT_S,
+                ),
+                resolved,
+                # The already resolved route/client are one immutable
+                # selection. Do not resolve preferences a second time.
+                client_factory=lambda _: client,
             )
-        except Exception:
-            pass
-        digest = (response.choices[0].message.content or "").strip()
+            record_execution_result("kb_digest", execution, session_id=session_id)
+            digest = execution.text.strip()
+        else:
+            # Compatibility path for deployments that have not enabled model
+            # routing yet, plus the injected test seam. It retains its exact
+            # direct-client request shape until that feature gate is enabled.
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": DIGEST_SYSTEM_PROMPT},
+                    {"role": "user", "content": f"Session transcript:\n{transcript}"},
+                ],
+            )
+            try:
+                record_completion(
+                    rung="kb_digest",
+                    provider=provider_from_base_url(str(client.base_url)),
+                    model=model,
+                    response=response,
+                    session_id=session_id,
+                )
+            except Exception:
+                pass
+            digest = (response.choices[0].message.content or "").strip()
 
         wrote = False
         skip = False
         if digest == "SKIP":
             skip = True
         elif not digest:
-            logger.warning("kb_digest_empty_response session=%s", session_id)
+            logger.warning("kb_digest_empty_response")
             skip = True
         else:
             reason = scan_memory_content(digest)
             if reason is not None:
-                logger.warning("kb_digest_rejected reason=%s session=%s", reason, session_id)
+                logger.warning("kb_digest_rejected")
                 skip = True
 
         if skip:
@@ -162,8 +199,7 @@ async def write_session_digest(
                     part_ids.append(result["id"])
                 else:
                     logger.warning(
-                        "kb_digest_part_write_failed session=%s error=%s",
-                        session_id, result.get("error"),
+                        "kb_digest_part_write_failed",
                     )
 
             if part_ids:
@@ -180,8 +216,7 @@ async def write_session_digest(
                 wrote = bool(primary_result.get("ok"))
                 if not wrote:
                     logger.warning(
-                        "kb_digest_primary_write_failed session=%s error=%s",
-                        session_id, primary_result.get("error"),
+                        "kb_digest_primary_write_failed",
                     )
         else:
             result = kb.kb_write(
@@ -194,20 +229,19 @@ async def write_session_digest(
             wrote = bool(result.get("ok"))
             if not wrote:
                 logger.warning(
-                    "kb_digest_write_failed session=%s error=%s",
-                    session_id, result.get("error"),
+                    "kb_digest_write_failed",
                 )
 
         flush_result = kb.kb_flush()
         if not flush_result.get("ok"):
             logger.warning(
-                "kb_flush_failed session=%s error=%s",
-                session_id, flush_result.get("error"),
+                "kb_flush_failed",
             )
 
         return wrote
-    except Exception:  # noqa: BLE001 — digest must never break the pipeline
-        logger.exception("kb_digest_failed session=%s", session_id)
+    except Exception as exc:  # noqa: BLE001 — digest must never break the pipeline
+        logger.warning("kb_digest_failed error_type=%s",
+                       type(exc).__name__[:64])
         try:
             kb.kb_flush()
         except Exception:  # noqa: BLE001

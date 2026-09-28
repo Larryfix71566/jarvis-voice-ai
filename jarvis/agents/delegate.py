@@ -20,6 +20,7 @@ even if execution is briefly queued behind the cap.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import os
 import re
@@ -29,10 +30,13 @@ from typing import Any, Callable
 
 from jarvis import keyhealth
 from jarvis.agents.base import EventCallback, SubAgent
+from jarvis.agent_skills import (
+    skill_selection_v2_enabled,
+    skills_workspace_enabled,
+)
 from jarvis.bot.sensitive_turn import current_sensitive_turn
 from jarvis.model_routing import resolve_policy
 from jarvis.procedures import _overlap_score, _tokens, learn_from_run
-from jarvis.sensitive import detect_financial
 
 logger = logging.getLogger(__name__)
 
@@ -41,29 +45,25 @@ PROTECTED_TASK_EVENT = "<protected task>"
 
 
 def _task_for_event(agent_name: str, task: str) -> str:
-    """Keep protected delegation prompts out of stdout and UI events.
+    """Return no prompt text to the activity/status surface.
 
-    The agent still receives the complete task and its RunLogger applies the
-    same policy to durable storage. This copy is only the activity/status
-    surface, which previously printed the raw task before the run's privacy
-    policy was consulted.
+    The run receives the original task. Status events are metadata sinks and
+    must never carry prompts, even when the activity observer outlives the
+    voice turn that established its sensitivity context.
     """
-    # The live turn/run logger has its own fail-closed sensitive-turn context;
-    # this event surface cannot safely depend on that ContextVar because the
-    # delegation may be detached from the voice turn. Use the workload policy
-    # plus the shared financial detector for this bounded status copy.
+    del agent_name, task
+    return PROTECTED_TASK_EVENT
+
+
+def _emit_event(on_event: EventCallback | None, event: dict[str, Any]) -> None:
+    """Keep a status observer from changing delegation execution outcome."""
+    if on_event is None:
+        return
     try:
-        protected = resolve_policy(agent_name).privacy in {
-            "confidential", "local_only"
-        }
-    except Exception:  # noqa: BLE001 - status emission must never block work
-        protected = False
-    if not protected:
-        try:
-            protected = detect_financial(task) is not None
-        except Exception:  # noqa: BLE001 - status emission must never block work
-            protected = True
-    return PROTECTED_TASK_EVENT if protected else task
+        on_event(event)
+    except Exception as exc:  # noqa: BLE001 — observers do not own the run
+        logger.warning("delegate_event_callback_failed error_type=%s",
+                       type(exc).__name__[:64])
 
 # MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md A2 — the mechanical
 # half of the stop rule: the Supervisor prompt asks it not to retry a
@@ -349,12 +349,12 @@ def _read_findings(path: str, max_chars: int = FINDINGS_MAX_CHARS) -> str | None
         from mcp_servers.mcp_repo import logic as repo_logic
 
         result = repo_logic.repo_read_file(path)
-    except Exception:  # noqa: BLE001 — a bad path must not break a run
-        logger.exception("delegate_findings_read_failed path=%s", path)
+    except Exception as exc:  # noqa: BLE001 — a bad path must not break a run
+        logger.warning("delegate_findings_read_failed error_type=%s",
+                       type(exc).__name__[:64])
         return None
     if not isinstance(result, dict) or result.get("error"):
-        logger.info("delegate_findings_unreadable path=%s reason=%s",
-                    path, (result or {}).get("error") if isinstance(result, dict) else "?")
+        logger.info("delegate_findings_unreadable reason=invalid_or_unavailable")
         return None
     content = str(result.get("content") or "").strip()
     if not content:
@@ -370,6 +370,7 @@ def build_delegate_tool(
     session_id: str | None = None,
     late_delivery: dict | None = None,
     in_flight: set | None = None,
+    private_result_sink: Callable[[str, str, str, str], Any] | None = None,
     user_text: Callable[[], str] | None = None,
 ) -> tuple[dict, Callable[[dict], Any]]:
     """Return (openai_tool_schema, async_handler) for delegate_task.
@@ -458,6 +459,18 @@ def build_delegate_tool(
             },
         },
     }
+    if skill_selection_v2_enabled() and skills_workspace_enabled():
+        schema["function"]["parameters"]["properties"]["skill_id"] = {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "maxLength": 64,
+            "description": (
+                "Set only when the user explicitly asked to use a specific "
+                "skill and named its exact skill ID. This requests priority, "
+                "not an override: Mortimer still checks package pin, readiness, "
+                "privacy, capability, and tool availability. Omit otherwise."
+            ),
+        }
 
     semaphore = asyncio.Semaphore(max(1, max_parallel))
     # A2 — per-session, per-agent: (task_tokens, failed_at_monotonic).
@@ -479,6 +492,7 @@ def build_delegate_tool(
         claims_continuation = bool(arguments.get("continuation"))
         findings_path = str(arguments.get("findings_path") or "").strip()
         model_profile = str(arguments.get("model_profile") or "").strip()
+        explicit_skill_id = str(arguments.get("skill_id") or "").strip()
         # T3.2 — captured at delegation start: a late result from a protected
         # turn goes to the outbox redacted (SENSITIVE_LATE_NOTICE).
         holder = current_sensitive_turn.get()
@@ -609,8 +623,25 @@ def build_delegate_tool(
         # semaphore below means a queued-but-not-yet-running delegation
         # still has an identity in the UI and the run log.
         run_id = str(uuid.uuid4())
+        terminal_emitted = False
+
+        def _emit_terminal(ok: bool) -> None:
+            nonlocal terminal_emitted
+            if terminal_emitted:
+                return
+            terminal_emitted = True
+            if on_event is None:
+                return
+            _emit_event(on_event, {
+                "type": "delegate_done", "agent": agent_name,
+                "display_name": agent.display_name, "ok": ok,
+                "run_id": run_id,
+                "detail": ("Task failed; protected details were not shared."
+                           if not ok else ""),
+            })
+
         if on_event is not None:
-            on_event({"type": "delegate_start", "agent": agent_name,
+            _emit_event(on_event, {"type": "delegate_start", "agent": agent_name,
                       "display_name": agent.display_name,
                       "task": _task_for_event(agent_name, task),
                       "run_id": run_id,
@@ -645,6 +676,8 @@ def build_delegate_tool(
                     task, on_event=on_event, run_id=run_id,
                     session_id=session_id,
                     model_profile_override=model_profile or None,
+                    private_result_sink=private_result_sink,
+                    explicit_skill_id=explicit_skill_id or None,
                 )
             # F9 — the honesty backstop. "Checking with Fable now" was a
             # promise the Supervisor had no mechanism to keep (measured
@@ -710,18 +743,7 @@ def build_delegate_tool(
                     "have established, what you still do not know, and "
                     "what information would settle it.]"
                 )
-            if on_event is not None:
-                on_event({"type": "delegate_done", "agent": agent_name,
-                          "display_name": agent.display_name,
-                          "ok": not failed,
-                          "run_id": run_id,
-                          # Failure reasons surface in the UI status card;
-                          # successful output is spoken/displayed elsewhere.
-                          # Protected workloads keep the failure detail in
-                          # the specialist result/run log, never this UI
-                          # activity event.
-                          "detail": (_task_for_event(agent_name, result[:300])
-                                     if failed else "")})
+            _emit_terminal(not failed)
             return result
 
         # Barge-in survival: the WORK runs in a detached task; only the
@@ -732,6 +754,16 @@ def build_delegate_tool(
         # delegate_done, all of it). The finished result is then handed to
         # late_delivery so the next thing Mortimer says can include it.
         run_task = asyncio.create_task(_execute())
+
+        def _ensure_terminal(task: asyncio.Task) -> None:
+            """Close the UI lifecycle even if the detached runner exits abnormally."""
+            if task.cancelled():
+                _emit_terminal(False)
+                return
+            error = task.exception()
+            _emit_terminal(error is None and not str(task.result()).startswith("FAILED:"))
+
+        run_task.add_done_callback(_ensure_terminal)
         _background_tasks.add(run_task)
         run_task.add_done_callback(_background_tasks.discard)
         # Item 11: the session that owns this registry drains this set
@@ -752,6 +784,7 @@ def build_delegate_tool(
             if run_task.cancelled():
                 # The work itself was cancelled (session shutdown), not
                 # just this await — nothing survives to deliver.
+                _emit_terminal(False)
                 raise
             logger.info(
                 "delegate_orphaned_by_interruption agent=%s run_id=%s — "
@@ -804,10 +837,20 @@ def build_delegate_tool(
 
             def _deliver(task: asyncio.Task) -> None:
                 if task.cancelled():
+                    _emit_terminal(False)
                     return
                 exc = task.exception()
-                outcome = f"FAILED: {exc}" if exc else task.result()
-                note = _late_note(agent.display_name, outcome)
+                if exc is not None:
+                    _emit_terminal(False)
+                    code = type(exc).__name__[:64] or "SpecialistError"
+                    logger.warning("delegate_detached_run_failed error_type=%s",
+                                   code)
+                    outcome = f"FAILED: delegated task failed ({code})."
+                else:
+                    _emit_terminal(not str(task.result()).startswith("FAILED:"))
+                    outcome = task.result()
+                delivery_outcome = SENSITIVE_LATE_NOTICE if armed else outcome
+                note = _late_note(agent.display_name, delivery_outcome)
                 fn = (late_delivery or {}).get("fn")
                 _spawn_background(_deliver_or_outbox(fn, note, outcome))
 
@@ -816,7 +859,81 @@ def build_delegate_tool(
             else:
                 run_task.add_done_callback(_deliver)
             raise
+        except Exception as exc:  # noqa: BLE001 — return bounded failure to caller
+            _emit_terminal(False)
+            code = type(exc).__name__[:64] or "SpecialistError"
+            logger.warning("delegate_run_failed error_type=%s", code)
+            return f"FAILED: delegated task failed ({code})."
         finally:
             _foreground_delegations.discard(run_id)
 
+    async def run_skill_creator(
+        task: str,
+        *,
+        system_prompt: str,
+        tool_specs: list[dict],
+        tool_executor,
+        on_run_created,
+        event_filter=None,
+    ) -> str:
+        """Run the bounded creator as the live Developer SubAgent.
+
+        The Developer's RunLogger generates the run ID. This bridge shares
+        the session's delegation semaphore and SubAgent instance, while the
+        supplied per-run tool set replaces the Developer's normal tools.
+        """
+        agent = sub_agents.get("developer")
+        if agent is None:
+            return "REFUSED: the Developer agent is unavailable in this session."
+        if not callable(on_run_created) or not callable(tool_executor):
+            return "REFUSED: the creator capability bridge is incomplete."
+        real_run_id = None
+
+        def creator_events(event: dict) -> None:
+            # A filter transforms events; it is not the transport callback.
+            safe = event_filter(event) if event_filter is not None else None
+            if safe is not None:
+                _emit_event(on_event, safe)
+
+        async def associate_and_announce(run_id: str):
+            nonlocal real_run_id
+            associated = on_run_created(run_id)
+            if inspect.isawaitable(associated):
+                associated = await associated
+            if associated is False:
+                return False
+            real_run_id = run_id
+            _emit_event(on_event, {
+                "type": "delegate_start", "agent": "developer",
+                "display_name": agent.display_name, "run_id": run_id,
+                "task": "Authoring a skill in the scoped sandbox.",
+                "model": agent.model,
+            })
+            return True
+
+        async with semaphore:
+            ok = False
+            try:
+                result = await agent.run(
+                    task,
+                    on_event=creator_events,
+                    session_id=session_id,
+                    system_prompt_override=system_prompt,
+                    tool_specs_override=tool_specs,
+                    tool_executor=tool_executor,
+                    on_run_created=associate_and_announce,
+                )
+                ok = not result.startswith(("FAILED:", "REFUSED:"))
+            finally:
+                if real_run_id is not None:
+                    _emit_event(on_event, {
+                        "type": "delegate_done", "agent": "developer",
+                        "display_name": agent.display_name,
+                        "run_id": real_run_id, "ok": ok,
+                    })
+        return result
+
+    # The attribute is private to the bot-owned dispatcher closure. The
+    # Supervisor never receives this function as an exposed model tool.
+    handler.run_skill_creator = run_skill_creator
     return schema, handler

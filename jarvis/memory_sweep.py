@@ -41,6 +41,7 @@ import json
 import logging
 import os
 import threading
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
@@ -53,8 +54,14 @@ from jarvis.memory import (
     upsert_fact,
 )
 from jarvis.procedures import _tokens
-from jarvis.usage_ledger import record_completion, provider_from_base_url
 from jarvis.memory_model import make_memory_async_client
+from jarvis.model_execution import ModelContextMessage, ModelExecutionRequest, execute_chat
+from jarvis.privacy_policy import DataPolicy
+from jarvis.usage_ledger import (
+    provider_from_base_url,
+    record_completion,
+    record_execution_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -361,36 +368,56 @@ async def _merge_cluster(
         if client_factory is not None:
             client = client_factory(settings)
             model = getattr(settings, "openai_model", None)
+            resolved = None
         else:
             client, route = make_memory_async_client(settings)
             model = route.model
+            resolved = route.resolved
         # `settings` may be None when a test-seam `client_factory` supplies
         # its own fake client — getattr rather than assume, so that seam
         # never has to fabricate a whole Settings object.
         facts_block = "\n".join(
             f"- {k}: {c}" for k, c in zip(proposal.keys, proposal.contents)
         )
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "user", "content": MERGE_PROMPT.format(facts=facts_block)},
-            ],
-        )
-        try:
-            record_completion(
-                rung="memory_merge",
-                provider=provider_from_base_url(str(client.base_url)),
-                model=model,
-                response=response,
+        prompt = MERGE_PROMPT.format(facts=facts_block)
+        if resolved is not None:
+            request_id = f"memory-merge:{uuid.uuid4().hex}"
+            execution = await execute_chat(
+                ModelExecutionRequest(
+                    workload=resolved.workload,
+                    task_id=request_id,
+                    parent_request_id=request_id,
+                    instructions=prompt,
+                    data_policy=DataPolicy("confidential", "memory-merge-facts"),
+                    timeout_s=30.0,
+                ),
+                resolved,
+                client_factory=lambda _: client,
             )
-        except Exception:
-            pass
-        text = (response.choices[0].message.content or "").strip()
+            record_execution_result("memory_merge", execution)
+            text = execution.text.strip()
+        else:
+            # Compatibility path while model routing is disabled and for the
+            # injected test seam; preserve the legacy user-message request.
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            try:
+                record_completion(
+                    rung="memory_merge",
+                    provider=provider_from_base_url(str(client.base_url)),
+                    model=model,
+                    response=response,
+                )
+            except Exception:
+                pass
+            text = (response.choices[0].message.content or "").strip()
         return text or None
-    except Exception:  # noqa: BLE001 — a failed merge falls through to age-out
+    except Exception as exc:  # noqa: BLE001 — a failed merge falls through to age-out
         logger.warning(
-            "memory_enforce_merge_failed tier=%s keys=%s",
-            proposal.tier, proposal.keys, exc_info=True,
+            "memory_enforce_merge_failed tier=%s error_type=%s",
+            proposal.tier, type(exc).__name__,
         )
         return None
 
@@ -455,12 +482,12 @@ async def run_capacity_enforcement(
                         from jarvis.config import load_settings
 
                         settings = load_settings()
-                    except Exception:  # noqa: BLE001
+                    except Exception as exc:  # noqa: BLE001
                         merge_skipped = True
                         merge_skip_reason = "settings_load_failed"
                         logger.warning(
-                            "memory_enforce_settings_load_failed tier=%s",
-                            tier, exc_info=True,
+                            "memory_enforce_settings_load_failed tier=%s error_type=%s",
+                            tier, type(exc).__name__,
                         )
                         break
                 # D1b (MORTIMER_VOICE_WORKFLOWS_PLAN.md): never hold the
@@ -606,7 +633,7 @@ def run_staging_expiry(conn, expiry_days: int = STAGING_EXPIRY_DAYS) -> list[str
         if cur.rowcount:
             expired.append(key)
     if expired:
-        logger.info("memory_staging_expiry expired=%s", expired)
+        logger.info("memory_staging_expiry expired_count=%d", len(expired))
     return expired
 
 
@@ -711,9 +738,11 @@ async def _classify_batch(
     if client_factory is not None:
         client = client_factory(settings)
         model = getattr(settings, "openai_model", None)
+        resolved = None
     else:
         client, route = make_memory_async_client(settings)
         model = route.model
+        resolved = route.resolved
     payload = {
         "pairs": [
             {"a": a["key"], "a_content": a["content"], "b": b["key"], "b_content": b["content"]}
@@ -723,23 +752,48 @@ async def _classify_batch(
             {"key": f["key"], "content": f["content"]} for f in audience_candidates
         ],
     }
-    response = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": CLASSIFY_PROMPT},
-            {"role": "user", "content": json.dumps(payload)},
-        ],
-    )
-    try:
-        record_completion(
-            rung="memory_classify",
-            provider=provider_from_base_url(str(client.base_url)),
-            model=model,
-            response=response,
+    user_prompt = json.dumps(payload)
+    if resolved is not None:
+        request_id = f"memory-classify:{uuid.uuid4().hex}"
+        execution = await execute_chat(
+            ModelExecutionRequest(
+                workload=resolved.workload,
+                task_id=request_id,
+                parent_request_id=request_id,
+                instructions=user_prompt,
+                context=(ModelContextMessage(
+                    "system", CLASSIFY_PROMPT,
+                    DataPolicy("confidential", "memory-classification-prompt"),
+                ),),
+                data_policy=DataPolicy("confidential", "memory-classification-input"),
+                timeout_s=30.0,
+            ),
+            resolved,
+            client_factory=lambda _: client,
         )
-    except Exception:
-        pass
-    return _parse_classification(response.choices[0].message.content or "")
+        record_execution_result("memory_classify", execution)
+        result_text = execution.text
+    else:
+        # Compatibility path while model routing is disabled and for the
+        # injected test seam; preserve the two-message prompt shape.
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": CLASSIFY_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        try:
+            record_completion(
+                rung="memory_classify",
+                provider=provider_from_base_url(str(client.base_url)),
+                model=model,
+                response=response,
+            )
+        except Exception:
+            pass
+        result_text = response.choices[0].message.content or ""
+    return _parse_classification(result_text)
 
 
 def _apply_classification(
@@ -1224,7 +1278,8 @@ async def settle_open_reviews(
             pass
         answers = _parse_settlement(response.choices[0].message.content or "")
     except Exception as exc:  # noqa: BLE001 — a failed check leaves reviews open
-        logger.warning("memory_settle_failed reviews=%d error=%s", len(items), exc)
+        logger.warning("memory_settle_failed reviews=%d error_type=%s",
+                       len(items), type(exc).__name__[:80])
         result["left_open"] += len(items)
         close_stale()
         return result
@@ -1358,8 +1413,8 @@ async def run_sweep(
             conn.commit()
         finally:
             conn.close()
-    except Exception:  # noqa: BLE001 — a sweep must never break the bot
-        logger.exception("memory_sweep_failed")
+    except Exception as exc:  # noqa: BLE001 — a sweep must never break the bot
+        logger.warning("memory_sweep_failed error_type=%s", type(exc).__name__)
         return summary
 
     if settle_notice:
@@ -1390,8 +1445,9 @@ def start_background_sweep(db_path: str | None = None) -> threading.Thread | Non
     def _runner() -> None:
         try:
             asyncio.run(run_sweep(db_path=db_path))
-        except Exception:  # noqa: BLE001
-            logger.exception("memory_sweep_thread_failed")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("memory_sweep_thread_failed error_type=%s",
+                           type(exc).__name__)
 
     thread = threading.Thread(target=_runner, name="memory-sweep", daemon=True)
     thread.start()

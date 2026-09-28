@@ -68,6 +68,25 @@ _verdicts: dict[str, str] = {}
 _details: dict[str, str] = {}
 _lock = threading.Lock()
 
+_SAFE_OUTCOMES = {"ok", "rejected", "unfunded", "unreachable", "unknown"}
+_SAFE_DETAILS = {
+    "ok": "Credential probe succeeded",
+    "rejected": "Provider rejected the credential",
+    "unfunded": "Provider could not bill the credential",
+    "unreachable": "Provider could not be reached",
+    "unknown": "Credential probe was inconclusive",
+}
+
+
+def _safe_probe_result(outcome: object) -> tuple[str, str]:
+    """Reduce provider-controlled probe output to stable UI/log categories."""
+    safe_outcome = (
+        outcome if isinstance(outcome, str) and outcome in _SAFE_OUTCOMES
+        else "unknown"
+    )
+    return safe_outcome, _SAFE_DETAILS[safe_outcome]
+
+
 # The refresh loop is a PROCESS singleton: the bot calls start_refresh_loop
 # once per session and the sidecar once at import, and each process must get
 # exactly one thread.
@@ -127,8 +146,10 @@ def note_success(key_env: str) -> None:
             return
         _verdicts[key_env] = "ok"
         _details[key_env] = RECOVERED_DETAIL
-    logger.info("key_health_recovered key=%s previous=%s detail=%s",
-                key_env, previous, RECOVERED_DETAIL)
+    # Configuration names can disclose provider/account details. Keep
+    # recovery logs content-free.
+    logger.info("key_health_recovered previous=%s detail=%s",
+                previous, RECOVERED_DETAIL)
 
 
 def _load_probe():
@@ -184,9 +205,10 @@ def probe_all(registry: dict[str, Any] | None = None,
             if not key or not base_url:
                 continue
             try:
-                outcome, why = probe(base_url, key, model)
-            except Exception as exc:  # noqa: BLE001
-                outcome, why = "unreachable", f"{type(exc).__name__}: {exc}"
+                raw_outcome, _ = probe(base_url, key, model)
+            except Exception:  # noqa: BLE001
+                raw_outcome = "unreachable"
+            outcome, why = _safe_probe_result(raw_outcome)
             with _lock:
                 _verdicts[key_env] = outcome
                 _details[key_env] = why
@@ -194,10 +216,9 @@ def probe_all(registry: dict[str, Any] | None = None,
             # log level is itself the rejected/unreachable distinction.
             (logger.warning if outcome in ("rejected", "unfunded")
              else logger.info)(
-                "key_health key=%s endpoint=%s outcome=%s detail=%s",
-                key_env, base_url, outcome, why)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("key_health_probe_failed error=%s", exc)
+                "key_health outcome=%s", outcome)
+    except Exception:  # noqa: BLE001
+        logger.warning("key_health_probe_failed")
     with _lock:
         return dict(_verdicts)
 
@@ -230,9 +251,10 @@ def refresh_bad_keys(registry: dict[str, Any] | None = None, probe=None,
             if not key or not base_url:
                 continue
             try:
-                outcome, why = probe(base_url, key, model)
-            except Exception as exc:  # noqa: BLE001
-                outcome, why = "unreachable", f"{type(exc).__name__}: {exc}"
+                raw_outcome, _ = probe(base_url, key, model)
+            except Exception:  # noqa: BLE001
+                raw_outcome = "unreachable"
+            outcome, why = _safe_probe_result(raw_outcome)
             with _lock:
                 previous = _verdicts.get(key_env, "unknown")
                 _verdicts[key_env] = outcome
@@ -240,11 +262,10 @@ def refresh_bad_keys(registry: dict[str, Any] | None = None, probe=None,
             probed[key_env] = outcome
             (logger.warning if outcome in ("rejected", "unfunded")
              else logger.info)(
-                "key_health_refresh key=%s endpoint=%s previous=%s outcome=%s "
-                "detail=%s",
-                key_env, base_url, previous, outcome, why)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("key_health_refresh_failed error=%s", exc)
+                "key_health_refresh previous=%s outcome=%s detail=%s",
+                previous, outcome, why)
+    except Exception:  # noqa: BLE001
+        logger.warning("key_health_refresh_failed")
     return probed
 
 

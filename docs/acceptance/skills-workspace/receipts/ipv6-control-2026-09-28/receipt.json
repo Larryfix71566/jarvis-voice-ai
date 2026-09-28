@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "vm": "mortimer-ipv6-canary-4d6fcbb0e152",
+  "image": "32a82fdd1de4ebdd002bd720f671fe08af485a1631b21364442a7600d4abd49f",
+  "no_host_shares": true,
+  "no_candidate_import": true,
+  "softnet_sha256": "5982c8cde55cd039d4aa71add54356224b8b8a040df1a8786f16327b421f701d",
+  "phases": [
+    {
+      "interface": "en0",
+      "ipv6_target_route_observed": true,
+      "sent": true,
+      "reply": false,
+      "mode": "control-before",
+      "host_received_canary": false,
+      "host_bridge": "bridge100"
+    }
+  ],
+  "passed": false,
+  "disposable_vm_deleted": true
+}

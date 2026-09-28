@@ -1,7 +1,8 @@
 """Runner-compatible bot entry point (plan Phase 4 step 4.1, Phase 5 step 5.1).
 
 Run:  python -m jarvis.bot.bot   (or ./scripts/run_bot.sh)
-Then open http://localhost:7860/client and click Connect.
+Use the authenticated console or native app to connect. The runner's built-in
+`/client` page cannot attach the bearer token during browser navigation.
 
 D-004 (pipecat 1.4.0): TransportParams has no vad_analyzer or
 allow_interruptions fields. VAD runs as VADProcessor inside the pipeline
@@ -96,4 +97,6 @@ def _runner_main_preserving_env(importer=None):
 
 
 if __name__ == "__main__":
-    _runner_main_preserving_env()()
+    from jarvis.bot.server import main
+
+    main()

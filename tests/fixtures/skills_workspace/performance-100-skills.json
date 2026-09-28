@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "skill_count": 100,
+  "skill_id_prefix": "benchmark-skill",
+  "trigger_token_prefix": "fixturecapability",
+  "description_suffix": "reference guide for one narrow capability",
+  "body_chars": 512,
+  "requests": [
+    {
+      "id": "unique-trigger-hit",
+      "request": "Please use fixturecapability057 reference guide for this request.",
+      "expected_skill_id": "benchmark-skill-057"
+    },
+    {
+      "id": "no-skill-short-query",
+      "request": "What is the plan for today?",
+      "expected_skill_id": null
+    }
+  ]
+}

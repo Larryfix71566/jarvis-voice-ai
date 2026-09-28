@@ -25,7 +25,7 @@ final class MemoryGraphRenderingTests: XCTestCase {
             view.frame = NSRect(origin: .zero, size: size)
             let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
-            defer { window.close() }
+            defer { closeRenderingFixtureWindow(window) }
             window.layoutIfNeeded(); view.layoutSubtreeIfNeeded()
             RunLoop.main.run(until: Date().addingTimeInterval(0.2))
             let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))

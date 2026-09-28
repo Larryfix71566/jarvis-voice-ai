@@ -33,10 +33,18 @@ enum GlassRole {
 
 private struct MortimerGlass: ViewModifier {
     let role: GlassRole
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: role.cornerRadius)
-        if JarvisFlags.glassEnabled {
+        let increasedContrast = colorSchemeContrast == .increased
+        let accessibleOpaque = MortimerGlassAccessibilityPolicy.usesOpaqueSurface(
+            glassEnabled: JarvisFlags.glassEnabled,
+            reduceTransparency: reduceTransparency,
+            increasedContrast: increasedContrast
+        )
+        if JarvisFlags.glassEnabled && !accessibleOpaque {
             // T1.0: the signed material — .glassEffect(.regular) over the
             // transparent window, with the heavy roles carrying an extra
             // tint layer for dense-text contrast (the CSS -heavy trade:
@@ -46,10 +54,24 @@ private struct MortimerGlass: ViewModifier {
                 .glassEffect(.regular, in: .rect(cornerRadius: role.cornerRadius))
                 .overlay(shape.strokeBorder(AppTheme.glassBorder, lineWidth: 1))
         } else {
+            // Respect system accessibility overrides while leaving the
+            // explicit glass-off rollback appearance unchanged.
+            let fill = reduceTransparency && JarvisFlags.glassEnabled
+                ? AppTheme.panelSolid : AppTheme.panelOpaque
             content
-                .background(AppTheme.panelOpaque, in: shape)
-                .overlay(shape.strokeBorder(AppTheme.hairline, lineWidth: 1))
+                .background(fill, in: shape)
+                .overlay(shape.strokeBorder(
+                    increasedContrast ? AppTheme.highContrastBorder : AppTheme.hairline,
+                    lineWidth: increasedContrast ? 1.5 : 1
+                ))
         }
+    }
+}
+
+enum MortimerGlassAccessibilityPolicy {
+    static func usesOpaqueSurface(glassEnabled: Bool, reduceTransparency: Bool,
+                                  increasedContrast: Bool) -> Bool {
+        !glassEnabled || reduceTransparency || increasedContrast
     }
 }
 

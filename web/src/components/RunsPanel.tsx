@@ -5,8 +5,8 @@ import {
   subscribeAgentFilter,
 } from "../agentRuns";
 import { relTime } from "../timeFormat";
+import { ADMIN_BASE as API, authFetch } from "../api";
 
-const API = "http://localhost:7861";
 
 // Run status taxonomy (run-logging plan D9) — orphaned is a presentation-
 // only label applied by the server, never stored.
@@ -113,7 +113,7 @@ export default function RunsPanel() {
       const params = new URLSearchParams();
       if (agentFilter) params.set("agent", agentFilter);
       if (statusFilter) params.set("status", statusFilter);
-      const r = await fetch(`${API}/api/runs?${params.toString()}`);
+      const r = await authFetch(`${API}/api/runs?${params.toString()}`);
       const res = await r.json();
       setRuns(res.runs ?? []);
       setUnreachable(false);
@@ -136,7 +136,7 @@ export default function RunsPanel() {
     setDetail(null);
     setDetailLoading(true);
     try {
-      const r = await fetch(`${API}/api/runs/${encodeURIComponent(runId)}`);
+      const r = await authFetch(`${API}/api/runs/${encodeURIComponent(runId)}`);
       const res = await r.json();
       setDetail(res.ok ? res : null);
     } catch {

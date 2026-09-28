@@ -26,8 +26,9 @@ struct GoalIn: Encodable {
     var profile: String?
     var plan: String?
     var stagingId: String?
+    var runId: String?
     enum CodingKeys: String, CodingKey {
-        case goal, profile, plan, stagingId = "staging_id"
+        case goal, profile, plan, stagingId = "staging_id", runId = "run_id"
     }
 }
 
@@ -112,8 +113,8 @@ public struct AdminAPI: Sendable {
     // MARK: Edit
     public func selfeditModels() async throws -> JSONValue { try await get("api/selfedit/models") }
     public func selfeditStatus() async throws -> JSONValue { try await get("api/selfedit/status") }
-    public func selfeditRun(goal: String?, profile: String?, plan: String?, stagingId: String?) async throws -> JSONValue {
-        let body = GoalIn(goal: goal ?? "", profile: profile, plan: plan, stagingId: stagingId)
+    public func selfeditRun(goal: String?, profile: String?, plan: String?, stagingId: String?, runID: String? = nil) async throws -> JSONValue {
+        let body = GoalIn(goal: goal ?? "", profile: profile, plan: plan, stagingId: stagingId, runId: runID)
         return try await post("api/selfedit/run", body: body)
     }
 
@@ -138,6 +139,189 @@ public struct AdminAPI: Sendable {
         return try await post("api/memory/reviews/\(id)/resolve", body: body)
     }
     public func knowledge() async throws -> JSONValue { try await get("api/knowledge") }
+
+    // MARK: Skills (read-only catalog and immutable detail)
+    public func skillsCatalog(cursor: String? = nil, limit: Int = 50) async throws -> JSONValue {
+        guard (1...100).contains(limit), cursor.map({ $0.count <= 12 && ($0.isEmpty || $0.allSatisfy { $0.isASCII && $0.isNumber }) }) ?? true else {
+            throw JarvisError.decoding("invalid Skills catalog page")
+        }
+        var components = URLComponents(url: config.adminURL.appending(path: "api/skills"),
+                                       resolvingAgainstBaseURL: false)
+        var query = [URLQueryItem(name: "limit", value: String(limit))]
+        if let cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
+        components?.queryItems = query
+        guard let url = components?.url else { throw JarvisError.decoding("invalid Skills catalog URL") }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        let (data, _) = try await JarvisHTTP.send(request, config: config)
+        return try JSONDecoder().decode(JSONValue.self, from: data)
+    }
+
+    /// Loads the complete catalog while retaining the first page's metadata.
+    /// A repeated cursor or unreasonable page count is an explicit error so a
+    /// caller never mistakes a partial catalog for a complete one.
+    public func allSkillsCatalog(pageSize: Int = 100) async throws -> JSONValue {
+        guard (1...100).contains(pageSize) else {
+            throw JarvisError.decoding("invalid Skills catalog page size")
+        }
+        var firstPage: [String: JSONValue]?
+        var items: [JSONValue] = []
+        var skillIDs = Set<String>()
+        var nextCursor: String? = nil
+        var seenCursors = Set<String>()
+        let maximumPages = 1_000
+
+        for pageIndex in 0..<maximumPages {
+            let page = try await skillsCatalog(cursor: nextCursor, limit: pageSize)
+            guard let object = page.objectValue,
+                  let pageItems = page["items"]?.arrayValue,
+                  let cursorValue = page["next_cursor"],
+                  page["schema_version"]?.intValue == 1,
+                  let pageRevision = page["catalog_revision"]?.stringValue,
+                  pageRevision.count == 64,
+                  pageRevision.allSatisfy({ $0.isASCII && $0.isHexDigit }),
+                  pageItems.count <= pageSize else {
+                throw JarvisError.decoding("invalid Skills catalog page")
+            }
+            if firstPage == nil {
+                firstPage = object
+            } else if firstPage?["catalog_revision"]?.stringValue != pageRevision {
+                throw JarvisError.decoding("Skills catalog changed while pages were loading")
+            }
+            for item in pageItems {
+                guard let id = item["skill_id"]?.stringValue,
+                      !id.isEmpty, id.count <= 64,
+                      id.allSatisfy({ $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "-") }),
+                      skillIDs.insert(id).inserted else {
+                    throw JarvisError.decoding("invalid or duplicate skill in catalog pages")
+                }
+            }
+            items.append(contentsOf: pageItems)
+
+            if case .null = cursorValue { nextCursor = nil; break }
+            guard let cursor = cursorValue.stringValue,
+                  !cursor.isEmpty, cursor.count <= 12,
+                  !pageItems.isEmpty,
+                  cursor.allSatisfy({ $0.isASCII && $0.isNumber }),
+                  let nextOffset = Int(cursor),
+                  nextOffset == (Int(nextCursor ?? "0") ?? -1) + pageItems.count,
+                  seenCursors.insert(cursor).inserted else {
+                throw JarvisError.decoding("invalid or repeated Skills catalog cursor")
+            }
+            guard pageIndex + 1 < maximumPages else {
+                throw JarvisError.decoding("Skills catalog exceeds pagination safety limit")
+            }
+            nextCursor = cursor
+        }
+
+        guard var result = firstPage else {
+            throw JarvisError.decoding("Skills catalog is empty or unavailable")
+        }
+        result["items"] = .array(items)
+        result["next_cursor"] = .null
+        return .object(result)
+    }
+
+    public func skillDetail(id: String, revision: String? = nil) async throws -> JSONValue {
+        guard !id.isEmpty, id.count <= 64,
+              id.allSatisfy({ $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "-") }) else {
+            throw JarvisError.decoding("invalid skill identifier")
+        }
+        var components = URLComponents(url: config.adminURL.appending(path: "api/skills/\(id)"),
+                                       resolvingAgainstBaseURL: false)
+        if let revision {
+            guard revision.count == 64, revision.allSatisfy(\.isHexDigit) else {
+                throw JarvisError.decoding("invalid skill revision")
+            }
+            components?.queryItems = [URLQueryItem(name: "revision", value: revision)]
+        }
+        guard let url = components?.url else { throw JarvisError.decoding("invalid skill detail URL") }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        let (data, _) = try await JarvisHTTP.send(request, config: config)
+        return try JSONDecoder().decode(JSONValue.self, from: data)
+    }
+
+    public func skillVersions(id: String) async throws -> JSONValue {
+        guard !id.isEmpty, id.count <= 64,
+              id.allSatisfy({ $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "-") }) else {
+            throw JarvisError.decoding("invalid skill identifier")
+        }
+        let url = config.adminURL.appending(path: "api/skills/\(id)/versions")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        let (data, _) = try await JarvisHTTP.send(request, config: config)
+        return try JSONDecoder().decode(JSONValue.self, from: data)
+    }
+
+    public func skillExamplePreview(id: String, exampleID: String) async throws -> JSONValue {
+        let valid: (String) -> Bool = { value in
+            !value.isEmpty && value.count <= 64
+                && value.allSatisfy { $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "-") }
+        }
+        guard valid(id), valid(exampleID) else {
+            throw JarvisError.decoding("invalid skill example identifier")
+        }
+        let url = config.adminURL.appending(path: "api/skills/\(id)/examples/\(exampleID)")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        let (data, _) = try await JarvisHTTP.send(request, config: config)
+        return try JSONDecoder().decode(JSONValue.self, from: data)
+    }
+
+    public func skillRuns(id: String, cursor: String? = nil, limit: Int = 20) async throws -> SkillRunPage {
+        guard !id.isEmpty, id.count <= 64,
+              id.allSatisfy({ $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "-") }),
+              (1...100).contains(limit), cursor.map({ $0.count <= 512 && $0.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }) }) ?? true else {
+            throw JarvisError.decoding("invalid Skills run page")
+        }
+        var components = URLComponents(
+            url: config.adminURL.appending(path: "api/skills/\(id)/runs"),
+            resolvingAgainstBaseURL: false
+        )
+        var query = [URLQueryItem(name: "limit", value: String(limit))]
+        if let cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
+        components?.queryItems = query
+        guard let url = components?.url else { throw JarvisError.decoding("invalid Skills runs URL") }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        let (data, _) = try await JarvisHTTP.send(request, config: config)
+        return try JSONDecoder().decode(SkillRunPage.self, from: data)
+    }
+
+    public func skillActivity(runID: String, afterSeq: Int = 0, limit: Int = 100) async throws -> SkillActivityPage {
+        guard !runID.isEmpty, runID.count <= 128,
+              runID.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }),
+              afterSeq >= 0, (1...100).contains(limit) else {
+            throw JarvisError.decoding("invalid Skills activity cursor")
+        }
+        var components = URLComponents(
+            url: config.adminURL.appending(path: "api/skills/runs/\(runID)/events"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "after_seq", value: String(afterSeq)),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ]
+        guard let url = components?.url else { throw JarvisError.decoding("invalid Skills activity URL") }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        let (data, _) = try await JarvisHTTP.send(request, config: config)
+        let page = try JSONDecoder().decode(SkillActivityPage.self, from: data)
+        try page.validate(runID: runID, afterSeq: afterSeq)
+        return page
+    }
+
+    public func createSkillRequest(_ request: SkillAuthoringRequest) async throws -> JSONValue {
+        try await post("api/skills/requests", body: request)
+    }
+
+    public func skillRequestStatus(id: String) async throws -> JSONValue {
+        guard UUID(uuidString: id)?.uuidString.lowercased() == id else {
+            throw JarvisError.decoding("invalid Skills request identifier")
+        }
+        return try await get("api/skills/requests/\(id)")
+    }
 
     // MARK: Runs
     public func runs() async throws -> JSONValue { try await get("api/runs") }

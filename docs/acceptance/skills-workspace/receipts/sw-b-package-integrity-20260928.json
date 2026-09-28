@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "gate": "SW-B-package-integrity",
+  "status": "accepted-local",
+  "recorded_at": "2026-09-28T14:28:07.842469Z",
+  "candidate": {
+    "branch": "codex/isolated-20260924",
+    "head": "977f50bec7b77bd7d3381d3b8f3d63fa69bd00e2",
+    "working_tree_dirty": true,
+    "worktree_fingerprint_sha256": "77dab21d199c42d7b024cb81483ebc3d29f8d4dd37b09ccbdc78f8f9a061f301",
+    "fingerprint_refreshed_at": "2026-09-28T14:28:07.842469Z",
+    "fingerprint_refresh_scope": "Final candidate after consolidated status cross-links and current local verification; live acceptance remains open."
+  },
+  "environment": {
+    "platform": "macOS 27.0 arm64",
+    "python": "3.12.13"
+  },
+  "commands": [
+    {
+      "command": "./.venv/bin/python -m pytest -q tests/unit/test_agent_skills.py tests/unit/test_skill_catalog.py tests/unit/test_skill_resources.py",
+      "result": "89 passed"
+    },
+    {
+      "command": "./.venv/bin/python -m jarvis.agent_skills --validate",
+      "result": "All skill packages, metadata, and active digest pins are valid."
+    },
+    {
+      "command": "./.venv/bin/python -m jarvis.agent_skills --list",
+      "result": "6 skill directories; 5 enabled; all five active package pins match; skill-creator is inert; schema v2; runtime digest enforcement off."
+    }
+  ],
+  "coverage": {
+    "body_after_embedded_separator_preserved": "tests/unit/test_agent_skills.py::TestSkillParser::test_body_is_not_silently_truncated_after_later_separator",
+    "invalid_and_duplicate_manifest_metadata_rejected": "tests/unit/test_skill_catalog.py",
+    "package_file_count_total_bytes_and_text_file_limits": {
+      "limits": {
+        "file_count": 128,
+        "total_package_bytes": 10485760,
+        "text_file_bytes": 131072
+      },
+      "test": "tests/unit/test_skill_catalog.py::test_package_enforces_file_count_total_bytes_and_text_file_limits"
+    },
+    "traversal_and_symlinks_rejected": [
+      "tests/unit/test_skill_catalog.py::test_rejects_invalid_metadata",
+      "tests/unit/test_skill_catalog.py::test_package_digest_rejects_symlink",
+      "tests/unit/test_skill_resources.py::test_rejects_unsafe_or_nontext_reference_paths",
+      "tests/unit/test_skill_resources.py::test_refuses_symlinked_reference_and_package_digest_changes"
+    ],
+    "digest_drift_and_stale_reads_rejected": "tests/unit/test_skill_resources.py",
+    "on_disk_installation_does_not_enable_skill": "tests/unit/test_agent_skills.py::TestRegistrationGate::test_a_skill_on_disk_is_inert_until_registered"
+  },
+  "package_revisions": {
+    "current-weather-with-fahrenheit": "9064f3d61d680d8cbce9c4dda1b2d98b854624fce2b106f89cc7f13b4ace521e",
+    "git-history-and-status-review": "8794a16e69d4908ff12906e93b8b5cc01d0560c8c792d0ab43279c41ac1a5c7e",
+    "layered-geolocation": "4b85b307b01135554d839cf35039f876323c30bd957b75984a1c2fdecf47ca3a",
+    "mcp-server-authoring": "eb29e0acd71c72f271a2609bbad27529de5874fbcbbdd9c21f90e8a53d45bc9f",
+    "skill-creator": "9ec4a15fc4b4854dfdab5ce1ea74bacde27064d1ba5cb8bf51c6b88a3000927b",
+    "technical-plan-document": "9f5a334f77baf5800c7dbd70c74ee345902e37f2b258f0ef2a4301b05773f314"
+  },
+  "limitations": [
+    "This receipt closes only SW-B package-integrity evidence.",
+    "Runtime digest enforcement remains off; no provider calls were made.",
+    "It does not close target-Mac readiness, privacy source-to-sink, VoiceOver, voice, display, VM lifecycle, evaluator, activation, rollback, or release gates."
+  ],
+  "reviewer": "Codex local evidence verification",
+  "latest_followup_verification": {
+    "commands": [
+      "./.venv/bin/python -m pytest -q tests/unit/test_agent_skills.py tests/unit/test_skill_catalog.py tests/unit/test_skill_resources.py",
+      "./.venv/bin/python -m jarvis.agent_skills --validate",
+      "./.venv/bin/python -m jarvis.agent_skills --list",
+      "./.venv/bin/python -m pytest -q"
+    ],
+    "results": [
+      "96 focused loader/catalog/resource tests passed",
+      "All skill packages, metadata, and active digest pins are valid; five enabled pins match; creator remains inert",
+      "3,542 passed, 4 skipped, 11 warnings, 2 subtests passed"
+    ],
+    "catalog_validation": "All skill packages, metadata, and active digest pins are valid."
+  }
+}

@@ -3,16 +3,21 @@
 """
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
+from jarvis import procedures as procedures_module
 from jarvis.db import get_conn, now_iso, run_migrations
+from jarvis.model_execution import ModelAdmissionController
+from jarvis.model_routing import AccessRoute, ResolvedModelRoute
 from jarvis.procedures import (
     MAX_SOURCE_RUN_IDS,
     PROCEDURE_DEPRECATE_AFTER,
     PROCEDURE_PROMOTE_AFTER,
     _calibrate_populations,
     _cli_main,
+    _describe_procedure,
     _explain,
     _load_successful_runs,
     _percentile,
@@ -98,6 +103,60 @@ WEATHER_LABEL = "weather lookup"
 WEATHER_DESC = "used get_weather to check current weather conditions for a city"
 
 
+@pytest.mark.asyncio
+async def test_routed_procedure_description_uses_shared_execution_boundary(monkeypatch):
+    class Client:
+        def __init__(self):
+            self.chat = self
+            self.completions = self
+            self.request = None
+
+        async def create(self, **kwargs):
+            self.request = kwargs
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(
+                    content='{"label":"weather lookup","description":"Use the weather tool."}'
+                ))],
+                usage=None,
+                id="procedure-response",
+            )
+
+    client = Client()
+    resolved = ResolvedModelRoute(
+        workload="background", profile_name="test", model="model",
+        provider="saygm", base_url="https://gateway.example/v1/",
+        identity="saygm/model",
+        route=AccessRoute(
+            "saygm", "saygm_gateway", "saygm_credit", None, "confidential",
+            capabilities=("text",),
+        ),
+        api_key_env=None,
+        priority="background",
+    )
+    monkeypatch.setattr(
+        "jarvis.model_execution._PROCESS_ADMISSION", ModelAdmissionController()
+    )
+    monkeypatch.setattr(
+        procedures_module, "make_background_async_client",
+        lambda settings: (client, SimpleNamespace(model="model", resolved=resolved)),
+    )
+    recorded = []
+    monkeypatch.setattr(
+        procedures_module, "record_execution_result",
+        lambda *args, **kwargs: recorded.append((args, kwargs)),
+    )
+
+    result = await _describe_procedure("analyst", "check Tokyo weather", object())
+
+    assert result == ("weather lookup", "Use the weather tool.")
+    assert client.request["model"] == "model"
+    assert client.request["messages"] == [
+        {"role": "system", "content": procedures_module._DESCRIBE_PROMPT},
+        {"role": "user", "content": "Agent: analyst\nTask: check Tokyo weather"},
+    ]
+    assert recorded and recorded[0][0][0] == "procedures_describe"
+
+
 # --- match_procedure ------------------------------------------------------
 
 
@@ -132,6 +191,48 @@ def test_match_procedure_unrelated_task_no_match(conn):
 def test_match_procedure_never_raises_on_empty_task(conn):
     _insert_procedure(conn, "analyst", WEATHER_LABEL, WEATHER_DESC, status="active")
     assert match_procedure("analyst", "") is None
+
+
+def test_match_procedure_failure_redacts_task_agent_and_traceback(monkeypatch, caplog):
+    def fail_connect(*_args, **_kwargs):
+        raise RuntimeError("PROCEDURE_TASK_CANARY /private/procedure/db")
+
+    monkeypatch.setattr(procedures_module, "get_conn", fail_connect)
+    assert match_procedure("AGENT_CANARY", "weather Tokyo") is None
+    assert "procedures_match_failed error_type=RuntimeError" in caplog.text
+    assert "AGENT_CANARY" not in caplog.text
+    assert "PROCEDURE_TASK_CANARY" not in caplog.text
+    assert "/private/procedure/db" not in caplog.text
+    assert "Traceback" not in caplog.text
+
+
+def test_mark_used_failure_redacts_procedure_id_and_exception(monkeypatch, caplog):
+    def fail_connect(*_args, **_kwargs):
+        raise RuntimeError("PROCEDURE_BACKEND_CANARY")
+
+    monkeypatch.setattr(procedures_module, "get_conn", fail_connect)
+    procedures_module.mark_used(731904)
+    assert "procedures_mark_used_failed error_type=RuntimeError" in caplog.text
+    assert "731904" not in caplog.text
+    assert "PROCEDURE_BACKEND_CANARY" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_procedure_learning_failure_redacts_run_id_and_agent(
+    enabled_settings, monkeypatch, caplog,
+):
+    import jarvis.procedures as mod
+
+    def fail_get_run(*_args, **_kwargs):
+        raise RuntimeError("LEARNING_TASK_CANARY /private/run/log")
+
+    monkeypatch.setattr(mod, "get_run", fail_get_run)
+    await learn_from_run("RUN_ID_CANARY", "AGENT_CANARY")
+    assert "procedures_learn_failed error_type=RuntimeError" in caplog.text
+    assert "RUN_ID_CANARY" not in caplog.text
+    assert "AGENT_CANARY" not in caplog.text
+    assert "LEARNING_TASK_CANARY" not in caplog.text
+    assert "/private/run/log" not in caplog.text
 
 
 # --- learn_from_run: candidate creation (D14 step 4/5, D16) ---------------

@@ -18,16 +18,33 @@ tests/unit/test_admin_council.py.
 
 from __future__ import annotations
 
+import threading
 import time
+import uuid
 
 import pytest
-from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient as FastAPITestClient
 
 import jarvis.admin.server as srv
 from jarvis.admin.server import app
 from jarvis.agents.upgrade_agent import UnknownModelProfileError
 from jarvis.council.types import Proposal, RoundResult
 from jarvis.db import get_conn, run_migrations
+
+
+class TestClient(FastAPITestClient):
+    """Model the run ID injected by the current registered plan_start tool."""
+
+    def post(self, url, *args, **kwargs):
+        body = kwargs.get("json")
+        if (
+            url == "/api/plan/start"
+            and isinstance(body, dict)
+            and (body.get("goal") or "").strip()
+            and not (body.get("run_id") or "").strip()
+        ):
+            kwargs["json"] = {**body, "run_id": uuid.uuid4().hex}
+        return super().post(url, *args, **kwargs)
 
 
 @pytest.fixture(autouse=True)
@@ -45,7 +62,7 @@ def _reset_plan_job():
     idle = dict(
         state="idle", mode=None, goal=None, profile=None, round_id=None,
         candidates=None, plan=None, author=None, error=None,
-        started_at=None, finished_at=None, review_path=None,
+        started_at=None, finished_at=None, review_path=None, run_id=None,
     )
     with srv._plan_lock:
         srv._plan_job.update(idle)
@@ -117,6 +134,112 @@ def test_single_mode_transport_failure_settles_job_as_error(monkeypatch):
     job = _wait_for_job(c, states=("done", "error"))
     assert job["state"] == "error"
     assert "planning call failed" in job["error"]
+
+
+def test_same_execution_cannot_start_plan_twice_under_new_provider_call_id(monkeypatch):
+    """A fresh provider call ID is not a fresh planning action: the hidden
+    SubAgent run_id stays stable through retries of this delegated task."""
+    starts = []
+
+    def _fake_start(goal, profile, context, run_id=None):
+        starts.append((goal, run_id))
+        with srv._plan_lock:
+            srv._plan_job.update(
+                state="done", mode="single", goal=goal,
+                profile=profile["name"], plan="# Plan", author=profile["name"],
+                run_id=run_id, finished_at=time.time(),
+            )
+        srv._update_plan_start_claim(run_id, "completed")
+
+    monkeypatch.setattr(srv, "_resolve_planning_profile", lambda explicit: FAKE_PROFILE)
+    monkeypatch.setattr(srv, "_run_plan_single", _fake_start)
+    c = TestClient(app)
+    first = c.post("/api/plan/start", json={
+        "goal": "write the plan", "mode": "single", "run_id": "stable-run-001",
+    }).json()
+    _wait_for_job(c, states=("done", "error"))
+    duplicate = c.post("/api/plan/start", json={
+        # Different arguments/provider call ID are not exposed to this API;
+        # the owning run identity is the cross-round idempotency boundary.
+        "goal": "write the plan again", "mode": "single", "run_id": "stable-run-001",
+    }).json()
+
+    assert first == {"ok": True, "started": True}
+    assert duplicate["ok"] is True
+    assert duplicate["started"] is False
+    assert duplicate["duplicate"] is True
+    assert duplicate["action_run_id"] == "stable-run-001"
+    assert len(starts) == 1
+    assert starts[0] == ("write the plan", "stable-run-001")
+    status = c.get("/api/plan/job", params={"run_id": "stable-run-001"}).json()
+    assert status["job"]["state"] == "done"
+    assert status["job"]["plan"] == "# Plan"
+
+
+def test_duplicate_plan_start_claim_survives_loss_of_live_job_slot(monkeypatch):
+    monkeypatch.setattr(srv, "_resolve_planning_profile", lambda explicit: FAKE_PROFILE)
+
+    def _fake_start(goal, profile, context, run_id=None):
+        with srv._plan_lock:
+            srv._plan_job.update(
+                state="done", goal=goal, run_id=run_id,
+                plan="# Complete", author=profile["name"],
+            )
+        srv._update_plan_start_claim(run_id, "completed")
+
+    monkeypatch.setattr(srv, "_run_plan_single", _fake_start)
+    c = TestClient(app)
+    c.post("/api/plan/start", json={
+        "goal": "first plan", "mode": "single", "run_id": "stable-run-002",
+    })
+    _wait_for_job(c, states=("done", "error"))
+    # A later independent request replaces the singleton status slot.
+    with srv._plan_lock:
+        srv._plan_job.update(state="done", run_id="another-run")
+
+    duplicate = c.post("/api/plan/start", json={
+        "goal": "retry first plan", "mode": "single", "run_id": "stable-run-002",
+    }).json()
+    status = c.get("/api/plan/job", params={"run_id": "stable-run-002"}).json()
+    assert duplicate["duplicate"] is True
+    assert duplicate["state"] == "completed"
+    assert status["job"] == {
+        "state": "completed",
+        "run_id": "stable-run-002",
+        "result_available": False,
+        "reconciliation_required": False,
+    }
+
+
+def test_unknown_plan_start_after_live_slot_loss_is_not_relaunched(monkeypatch):
+    starts = []
+    dispatched = threading.Event()
+    monkeypatch.setattr(srv, "_resolve_planning_profile", lambda explicit: FAKE_PROFILE)
+
+    def _fake_start(goal, profile, context, run_id=None):
+        starts.append(run_id)
+        dispatched.set()
+
+    monkeypatch.setattr(srv, "_run_plan_single", _fake_start)
+    c = TestClient(app)
+    c.post("/api/plan/start", json={
+        "goal": "possibly started", "mode": "single", "run_id": "stable-run-003",
+    })
+    assert dispatched.wait(timeout=2)
+    # Simulate losing the one live status slot while the durable claim remains
+    # running, as after a process restart or a later task replacing the slot.
+    with srv._plan_lock:
+        srv._plan_job.update(state="idle", run_id=None)
+
+    status = c.get("/api/plan/job", params={"run_id": "stable-run-003"}).json()
+    duplicate = c.post("/api/plan/start", json={
+        "goal": "possibly started", "mode": "single", "run_id": "stable-run-003",
+    }).json()
+    assert status["job"]["state"] == "unknown"
+    assert status["job"]["reconciliation_required"] is True
+    assert duplicate["duplicate"] is True
+    assert duplicate["state"] == "unknown"
+    assert starts == ["stable-run-003"]
 
 
 # -------------------------------------------------------------- council mode
@@ -203,6 +326,26 @@ def test_start_rejects_bad_mode():
     res = c.post("/api/plan/start", json={"goal": "x", "mode": "parallel"}).json()
     assert res["ok"] is False
     assert "mode" in res["error"]
+
+
+def test_start_without_stable_action_id_is_refused_before_dispatch():
+    c = FastAPITestClient(app)
+    res = c.post("/api/plan/start", json={
+        "goal": "write a spec", "mode": "single",
+    }).json()
+    assert res["ok"] is False
+    assert "stable run_id is required" in res["error"]
+    assert srv._plan_job["state"] == "idle"
+
+
+def test_start_rejects_oversized_action_id_before_dispatch():
+    c = FastAPITestClient(app)
+    res = c.post("/api/plan/start", json={
+        "goal": "write a spec", "mode": "single", "run_id": "x" * 257,
+    }).json()
+    assert res["ok"] is False
+    assert "run identity is invalid" in res["error"]
+    assert srv._plan_job["state"] == "idle"
 
 
 def test_second_start_while_running_is_refused(monkeypatch):

@@ -27,11 +27,13 @@ import uuid
 
 try:
     from sandbox.artifacts import (MAX_SOURCE_BYTES, MAX_FILE_BYTES, MAX_FILES, SECRET,
-                                   REVIEWED_TEST_FIXTURES, SandboxError, check_paths, source_path_allowed)
+                                   REVIEWED_TEST_FIXTURES, REVIEWED_BASELINE_TEST_FIXTURES,
+                                   SandboxError, check_paths, source_path_allowed)
     from sandbox.durable import atomic_bytes, atomic_json
 except ModuleNotFoundError:  # Direct script invocation.
     from artifacts import (MAX_SOURCE_BYTES, MAX_FILE_BYTES, MAX_FILES, SECRET,
-                           REVIEWED_TEST_FIXTURES, SandboxError, check_paths, source_path_allowed)
+                           REVIEWED_TEST_FIXTURES, REVIEWED_BASELINE_TEST_FIXTURES,
+                           SandboxError, check_paths, source_path_allowed)
     from durable import atomic_bytes, atomic_json
 
 TASK_ID = re.compile(r"[0-9a-f]{12}\Z")
@@ -78,7 +80,9 @@ def snapshot(repo: Path, ref: str, output: Path) -> dict:
                 if size > MAX_FILE_BYTES or total + size > MAX_SOURCE_BYTES or len(files) >= MAX_FILES:
                     raise SandboxError(f"Source size limit exceeded: {name}")
                 data = subprocess.check_output(["git", "-C", str(repo), "cat-file", "blob", blob])
-                reviewed_fixture = REVIEWED_TEST_FIXTURES.get(name) == hashlib.sha256(data).hexdigest()
+                digest = hashlib.sha256(data).hexdigest()
+                reviewed_fixture = (REVIEWED_TEST_FIXTURES.get(name) == digest
+                                    or REVIEWED_BASELINE_TEST_FIXTURES.get(name) == digest)
                 if SECRET.search(data) and not reviewed_fixture:
                     raise SandboxError(f"Potential credential in source: {name}")
                 item = tarfile.TarInfo(name)

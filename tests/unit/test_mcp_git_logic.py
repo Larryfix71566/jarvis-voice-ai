@@ -6,12 +6,14 @@ Push target is a local bare repo, so no network is involved.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
 
 import pytest
 
+from jarvis.skill_step_checks import HOST_CHECKS
 from mcp_servers.mcp_git import logic
 
 
@@ -45,19 +47,52 @@ def repo(tmp_path, monkeypatch):
 def test_status_clean(repo):
     st = logic.git_status()
     assert st["branch"] == "main"
+    assert st["repository"] == str(repo.resolve())
+    assert st["upstream"] == "origin/main"
     assert st["clean"] is True
     assert st["ahead"] == 0
+    assert st["behind"] == 0
+    assert HOST_CHECKS["repository.status_observed"]({
+        "tool_name": "git_status", "arguments": {},
+        "result": json.dumps(st),
+    }) is True
+
+
+def test_status_reports_no_upstream_and_dirty_paths_explicitly(repo):
+    git(repo, "branch", "--unset-upstream")
+    (repo / "untracked.txt").write_text("local\n")
+
+    status = logic.git_status()
+
+    assert status["repository"] == str(repo.resolve())
+    assert status["upstream"] is None
+    assert status["clean"] is False
+    assert status["changed_files"] == ["untracked.txt"]
+
+
+def test_status_explicitly_rejects_non_repository_root(repo, monkeypatch, tmp_path):
+    non_repo = tmp_path / "not-a-repo"
+    non_repo.mkdir()
+    monkeypatch.setenv("JARVIS_REPO_ROOT", str(non_repo))
+
+    assert logic.git_status() == {"error": "Repository status is unavailable."}
 
 
 def test_log(repo):
     out = logic.git_log(5)
     assert any("init" in c for c in out["commits"])
+    assert len(out["commit_records"]) == 1
+    assert HOST_CHECKS["repository.history_observed"]({
+        "tool_name": "git_log", "arguments": {"n": 5},
+        "result": json.dumps(out),
+    }) is True
 
 
 @pytest.mark.parametrize("operation", ["prepare_commit", "commit", "prepare_push", "push"])
 def test_retired_operation_never_invokes_git(repo, monkeypatch, operation):
-    from jarvis.db import get_conn, now_iso, run_migrations
     import json
+
+    from jarvis.db import get_conn, now_iso, run_migrations
     (repo / "a.txt").write_text("two\n")
     git(repo, "add", "a.txt")
     before_index = (repo / ".git/index").read_bytes()

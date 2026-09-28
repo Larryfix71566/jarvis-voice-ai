@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import pytest
 
+from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.runlog.context import run_logger_scope
 from jarvis.runlog.store import RunLogger
 from jarvis.skills.registry import REPO_ROOT, SkillRegistry
@@ -39,7 +40,7 @@ class FakeTool:
 @pytest.fixture()
 def reg():
     r = SkillRegistry(REPO_ROOT / "config" / "mcp_servers.yaml")   # parses config only
-    r._sessions = {"mcp-selfedit": FakeSession()}
+    r._sessions = {"mcp-selfedit": FakeSession(), "mcp-web": FakeSession()}
     r._tools = {
         "selfedit_start": ("mcp-selfedit", FakeTool("selfedit_start", {
             "type": "object",
@@ -49,27 +50,62 @@ def reg():
         "plan_status": ("mcp-selfedit", FakeTool("plan_status", {
             "type": "object", "properties": {"run_id": {"type": "string"}},
         })),
+        "research_compare_start": ("mcp-web", FakeTool("research_compare_start", {
+            "type": "object",
+            "properties": {"urls": {"type": "array"}, "run_id": {"type": "string"}},
+            "required": ["urls", "run_id"],
+        })),
+        "research_status": ("mcp-web", FakeTool("research_status", {
+            "type": "object", "properties": {"run_id": {"type": "string"}},
+        })),
     }
     return r
 
 
 async def test_call_overwrites_model_supplied_run_id(reg):
-    with run_logger_scope(RunLogger("abc", "developer", "Developer", "t", enabled=False)):
-        await reg.call("selfedit_start", {"goal": "g", "run_id": "evil"})
+    token = current_sensitive_turn.set(SensitiveTurn())
+    try:
+        with run_logger_scope(RunLogger("abc", "developer", "Developer", "t", enabled=False)):
+            await reg.call("selfedit_start", {"goal": "g", "run_id": "evil"})
+    finally:
+        current_sensitive_turn.reset(token)
     session = reg._sessions["mcp-selfedit"]
     assert session.calls[-1] == ("selfedit_start", {"goal": "g", "run_id": "abc"})
 
 
 async def test_call_outside_run_sends_empty_string(reg):
-    await reg.call("selfedit_start", {"goal": "g", "run_id": "evil"})
+    token = current_sensitive_turn.set(SensitiveTurn())
+    try:
+        await reg.call("selfedit_start", {"goal": "g", "run_id": "evil"})
+    finally:
+        current_sensitive_turn.reset(token)
     session = reg._sessions["mcp-selfedit"]
     assert session.calls[-1] == ("selfedit_start", {"goal": "g", "run_id": ""})
 
 
 async def test_tool_not_in_set_untouched(reg):
-    await reg.call("plan_status", {"run_id": "keep"})
+    token = current_sensitive_turn.set(SensitiveTurn())
+    try:
+        await reg.call("plan_status", {"run_id": "keep"})
+    finally:
+        current_sensitive_turn.reset(token)
     session = reg._sessions["mcp-selfedit"]
     assert session.calls[-1] == ("plan_status", {"run_id": "keep"})
+
+
+async def test_research_start_and_status_receive_injected_identity(reg):
+    token = current_sensitive_turn.set(SensitiveTurn())
+    try:
+        with run_logger_scope(RunLogger("research-run", "developer", "Developer", "t", enabled=False)):
+            await reg.call("research_compare_start", {"urls": [], "run_id": "model-value"})
+            await reg.call("research_status", {"run_id": "model-value"})
+    finally:
+        current_sensitive_turn.reset(token)
+    session = reg._sessions["mcp-web"]
+    assert session.calls == [
+        ("research_compare_start", {"urls": [], "run_id": "research-run"}),
+        ("research_status", {"run_id": "research-run"}),
+    ]
 
 
 async def test_openai_tools_strips_run_id_property_and_required(reg):
@@ -80,6 +116,9 @@ async def test_openai_tools_strips_run_id_property_and_required(reg):
 
     status_params = schemas["plan_status"]["parameters"]
     assert "run_id" in status_params["properties"]
+
+    for name in ("research_compare_start", "research_status"):
+        assert "run_id" not in schemas[name]["parameters"]["properties"]
 
     # Deep copy — the original tool schema objects are untouched.
     original = reg._tools["selfedit_start"][1].inputSchema

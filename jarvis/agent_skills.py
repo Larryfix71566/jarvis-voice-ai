@@ -47,8 +47,9 @@ Progressive disclosure is the reason the standard fits Mortimer
 specifically. The Supervisor runs on a small model with a prompt already
 carrying memory context and addenda; a layer that costs ~100 tokens per
 skill until something activates it is the right shape. Here that means
-`SkillCard` (name + description, cheap) is what matching sees, and the
-body is read from disk only for the one skill that matched.
+`SkillCard` (name + description, cheap) is what matching sees. The legacy
+matcher reads one body; the opt-in v2 selector may read one primary and at most
+one mutually compatible supporting body.
 """
 
 from __future__ import annotations
@@ -83,8 +84,9 @@ SKILLS_CONFIG = _REPO_ROOT / "config" / "skills.yaml"
 # does not assert a policy that does not apply.
 MATCH_THRESHOLD = 0.30
 
-# One skill per run, same reason MAX_INJECTED is 1 for workflows: two
-# competing how-tos in one prompt is how a small model stalls.
+# Legacy matcher limit: one skill per run, same reason MAX_INJECTED is 1 for
+# workflows. The opt-in v2 selector has a separate mutual-compatibility gate
+# for its optional support skill; it does not change this legacy constant.
 MAX_INJECTED = 1
 
 # A single coincidental word is not a match. `_overlap_score` divides by
@@ -104,6 +106,9 @@ MAX_INJECTED = 1
 # "what are you planning to do next" to this skill's description moved
 # that task's score from 0.000 to 1.000 — precisely backwards.
 MIN_SHARED_TOKENS = 2
+SKILLS_WORKSPACE_ENABLED_ENV = "JARVIS_SKILLS_WORKSPACE_ENABLED"
+SKILLS_SELECTION_V2_ENABLED_ENV = "JARVIS_SKILLS_SELECTION_V2"
+_REVISION_RE = re.compile(r"^[0-9a-f]{64}$")
 
 # Limits from the standard itself.
 NAME_MAX_CHARS = 64
@@ -171,17 +176,105 @@ def skills_enabled() -> bool:
         "JARVIS_AGENT_SKILLS_ENABLED", "").strip().lower() not in ("false", "0", "no")
 
 
+def skills_workspace_enabled() -> bool:
+    """The digest-pinned v2 loader is an explicit opt-in during rollout."""
+    return os.environ.get(SKILLS_WORKSPACE_ENABLED_ENV, "").strip() == "1"
+
+
+def skill_selection_v2_enabled() -> bool:
+    """The capability-aware selector is a separate explicit rollout gate."""
+    return os.environ.get(SKILLS_SELECTION_V2_ENABLED_ENV, "").strip() == "1"
+
+
+def read_skill_registry(
+    config_path: Path | None = None,
+) -> tuple[list[str], dict[str, str] | None, int | None, bool]:
+    """Read a legacy or strict schema-v2 registry; malformed v2 fails closed."""
+    path = config_path or SKILLS_CONFIG
+    if not path.exists():
+        return [], None, None, False
+    try:
+        import yaml
+
+        class UniqueKeyLoader(yaml.SafeLoader):
+            """Reject ambiguous YAML mappings instead of silently taking the last key."""
+
+        def construct_unique_mapping(loader, node, deep=False):
+            loader.flatten_mapping(node)
+            mapping = {}
+            for key_node, value_node in node.value:
+                key = loader.construct_object(key_node, deep=deep)
+                try:
+                    duplicate = key in mapping
+                except TypeError:
+                    raise yaml.constructor.ConstructorError(
+                        "while constructing a mapping", node.start_mark,
+                        "found an unhashable mapping key", key_node.start_mark,
+                    ) from None
+                if duplicate:
+                    raise yaml.constructor.ConstructorError(
+                        "while constructing a mapping", node.start_mark,
+                        "found a duplicate mapping key", key_node.start_mark,
+                    )
+                mapping[key] = loader.construct_object(value_node, deep=deep)
+            return mapping
+
+        UniqueKeyLoader.add_constructor(
+            yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, construct_unique_mapping,
+        )
+        data = yaml.load(path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader) or {}
+    except Exception as exc:  # noqa: BLE001 — never log content or path
+        logger.warning("skills_config_unreadable error_type=%s", type(exc).__name__[:80])
+        return [], None, None, False
+    if not isinstance(data, dict):
+        return [], None, None, False
+
+    version = data.get("schema_version")
+    if version is None:
+        raw_names = data.get("enabled") or []
+        if isinstance(raw_names, (str, bytes)):
+            return [], None, None, False
+        try:
+            names = [str(name).strip() for name in raw_names if str(name).strip()]
+        except TypeError:
+            return [], None, None, False
+        return names, None, None, True
+
+    if version != 2 or set(data) != {"schema_version", "enabled", "revisions"}:
+        return [], None, version if isinstance(version, int) else None, False
+    names = data.get("enabled")
+    pins = data.get("revisions")
+    if (not isinstance(names, list) or not isinstance(pins, dict)
+            or any(not isinstance(name, str) or not NAME_RE.fullmatch(name) for name in names)
+            or len(names) != len(set(names))
+            or set(pins) != set(names)
+            or any(not isinstance(name, str) or not NAME_RE.fullmatch(name)
+                   or not isinstance(digest, str) or not _REVISION_RE.fullmatch(digest)
+                   for name, digest in pins.items())):
+        return [], None, 2, False
+    return list(names), dict(pins), 2, True
+
+
+def skill_revision_pins(config_path: Path | None = None) -> dict[str, str] | None:
+    """Return digest pins only for a structurally valid v2 registry."""
+    _names, pins, version, valid = read_skill_registry(config_path)
+    return pins if valid and version == 2 else None
+
+
 def _split_frontmatter(text: str) -> tuple[str, str]:
     """Return (frontmatter, body). Missing frontmatter yields ("", text)
     so a malformed file fails validation rather than raising."""
-    if not text.startswith("---"):
+    # Delimiters are whole lines. Splitting on ``\n---`` also matches a
+    # Markdown horizontal rule or a unified-diff header in the body and
+    # silently discards everything after it. Retain line endings exactly;
+    # SKILL.md content is prompt material and must not be truncated here.
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].rstrip("\r\n") != "---":
         return "", text
-    parts = text.split("\n---", 2)
-    if len(parts) < 2:
-        return "", text
-    front = parts[0][3:]          # drop the opening ---
-    body = parts[1].lstrip("-\n")
-    return front, body
+    for index in range(1, len(lines)):
+        if lines[index].rstrip("\r\n") == "---":
+            return "".join(lines[1:index]), "".join(lines[index + 1:])
+    return "", text
 
 
 def validate_frontmatter(data: dict) -> list[str]:
@@ -228,7 +321,10 @@ def parse_skill(path: Path) -> tuple[Skill | None, list[str]]:
     come back so the loader can log them and `--validate` can print them.
     """
     try:
-        text = path.read_text(encoding="utf-8")
+        # Disable universal-newline conversion so the parser can retain the
+        # package's exact body bytes when it snapshots instruction content.
+        with path.open("r", encoding="utf-8", newline="") as source:
+            text = source.read()
     except OSError as exc:
         return None, [f"unreadable: {exc}"]
 
@@ -274,19 +370,8 @@ def enabled_names(config_path: Path | None = None) -> list[str]:
     direction. A skill that exists on disk but is not named here is
     inert, which is the whole point of the file.
     """
-    config_path = config_path or SKILLS_CONFIG
-    if not config_path.exists():
-        return []
-    try:
-        import yaml
-
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    except Exception:  # noqa: BLE001
-        logger.exception("skills_config_unreadable path=%s", config_path)
-        return []
-    if not isinstance(data, dict):
-        return []
-    return [str(n).strip() for n in (data.get("enabled") or []) if str(n).strip()]
+    names, _pins, _version, valid = read_skill_registry(config_path)
+    return names if valid else []
 
 
 def discover(directory: Path | None = None) -> list[tuple[Path, Skill | None, list[str]]]:
@@ -318,21 +403,39 @@ def load_skills(
     if not allowed:
         return []
 
+    revision_map: dict[str, str] | None = None
+    if skills_workspace_enabled():
+        names, revision_map, version, valid = read_skill_registry(config_path)
+        if not valid or version != 2 or not revision_map:
+            logger.warning("skill_workspace_registry_unavailable")
+            return []
+        allowed = set(names)
+
     out: list[Skill] = []
     for path, skill, problems in discover(directory):
         if skill is None:
-            logger.warning("skill_invalid path=%s problems=%s", path, "; ".join(problems))
+            logger.warning("skill_invalid problem_count=%d", len(problems))
             continue
         if skill.name not in allowed:
             # Not an error: the normal state of an unreviewed skill.
-            logger.debug("skill_not_enabled name=%s", skill.name)
+            logger.debug("skill_not_enabled")
             continue
+        if revision_map is not None:
+            try:
+                from jarvis.skill_catalog import inspect_package
+
+                package = inspect_package(path.parent, config_path=config_path)
+                if package.revision != revision_map.get(skill.name):
+                    logger.warning("skill_revision_pin_refused")
+                    continue
+            except Exception as exc:  # noqa: BLE001 — one broken package is isolated
+                logger.warning("skill_revision_check_failed error_type=%s",
+                               type(exc).__name__[:64])
+                continue
         for p in problems:
-            logger.warning("skill_warning name=%s %s", skill.name, p)
+            logger.warning("skill_warning")
         if skill.has_scripts:
-            logger.warning(
-                "skill_bundles_scripts name=%s path=%s — scripts are NEVER executed",
-                skill.name, path.parent / "scripts")
+            logger.warning("skill_bundles_scripts — scripts are NEVER executed")
         out.append(skill)
     return out
 
@@ -564,10 +667,20 @@ def format_inventory(directory: Path | None = None,
     found = discover(directory)
     if not found:
         return f"No skills found under {directory or SKILLS_DIR}."
-    allowed = set(enabled_names(config_path))
+    allowed_list, pins, version, registry_valid = read_skill_registry(config_path)
+    allowed = set(allowed_list if registry_valid else [])
 
     out = [f"{len(found)} skill folder(s); {len(allowed)} enabled in "
            f"{(config_path or SKILLS_CONFIG).name}.\n"]
+    if not registry_valid:
+        out.append("  registry: INVALID — no skills are enabled")
+    elif version == 2:
+        out.append(
+            "  registry: schema v2; digest enforcement "
+            f"{'ON' if skills_workspace_enabled() else 'OFF (legacy loader)'}"
+        )
+    else:
+        out.append("  registry: legacy, package digests are not pinned")
     for path, skill, problems in found:
         if skill is None:
             out.append(f"  [INVALID]  {path.parent.name}")
@@ -577,6 +690,22 @@ def format_inventory(directory: Path | None = None,
         state = "enabled " if skill.name in allowed else "inert   "
         out.append(f"  [{state}] {skill.name}")
         out.append(f"             {skill.description[:96]}")
+        if version == 2 and registry_valid:
+            if skill.name not in allowed:
+                # The v2 registry pins enabled packages only. An unregistered
+                # folder is an intentional inert candidate, not a pin failure.
+                pin_state = "not configured (inert)"
+            else:
+                try:
+                    from jarvis.skill_catalog import inspect_package
+
+                    actual = inspect_package(path.parent, config_path=config_path).revision
+                    pin_state = "matches" if pins and pins.get(skill.name) == actual else "MISMATCH"
+                except Exception:  # noqa: BLE001 — CLI reports state, never package content
+                    pin_state = "unavailable"
+            out.append(f"             digest pin: {pin_state}")
+        elif registry_valid:
+            out.append("             digest pin: not configured")
         if skill.has_scripts:
             out.append("             bundles scripts/ — NEVER executed by Mortimer")
         for p in problems:
@@ -595,7 +724,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--list", action="store_true",
                    help="show every skill on disk and whether it is enabled")
     p.add_argument("--validate", action="store_true",
-                   help="exit non-zero if any SKILL.md is invalid")
+                   help="exit non-zero if any skill package, metadata, or active digest pin is invalid")
     p.add_argument("--from-procedure", metavar="ID", type=int,
                    help="write a SKILL.md draft from one procedure (kept, not moved)")
     p.add_argument("--force", action="store_true",
@@ -638,15 +767,24 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.validate:
-        bad = [(path, problems) for path, skill, problems in discover()
-               if skill is None]
-        for path, problems in bad:
-            print(f"INVALID {path}")
-            for prob in problems:
-                print(f"        {prob}")
-        if not bad:
-            print("All SKILL.md files are valid.")
-        return 1 if bad else 0
+        from jarvis.skill_catalog import validate_skill_inventory
+
+        frontmatter_errors = {}
+        for path, skill, problems in discover():
+            if skill is None:
+                frontmatter_errors[path.parent.name] = path
+                print(f"INVALID {path}")
+                for problem in problems:
+                    print(f"        {problem}")
+        package_errors = validate_skill_inventory()
+        for error in package_errors:
+            skill_id = error.partition(":")[0]
+            if skill_id in frontmatter_errors and error.endswith("invalid_skill_instructions"):
+                continue
+            print(f"INVALID {error}")
+        if not frontmatter_errors and not package_errors:
+            print("All skill packages, metadata, and active digest pins are valid.")
+        return 1 if frontmatter_errors or package_errors else 0
 
     print(format_inventory())
     return 0

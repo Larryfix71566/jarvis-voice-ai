@@ -2,24 +2,45 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from jarvis.memory_automation import (
-    Candidate, EvidenceStatus, bounded_candidates, classify_threshold,
-    idempotency_key, maintenance_due, retrieval_rank, enqueue_maintenance,
-    claim_due_maintenance, finish_maintenance,
-    recover_stale_maintenance,
-    run_maintenance_once,
-    process_classification_jobs,
-    heuristic_classifier,
-)
 from jarvis.db import get_conn, run_migrations
-from jarvis.memory import apply_automation_classification, retrieve_automated_memory_context
-from jarvis.memory_automation import Classification, Scope, MemoryType, Provenance
+from jarvis.memory import (
+    apply_automation_classification,
+    retrieve_automated_memory_context,
+)
+from jarvis.memory_automation import (
+    Candidate,
+    Classification,
+    EvidenceStatus,
+    MemoryType,
+    Provenance,
+    Scope,
+    bounded_candidates,
+    claim_due_maintenance,
+    classify_threshold,
+    enqueue_maintenance,
+    finish_maintenance,
+    heuristic_classifier,
+    idempotency_key,
+    maintenance_due,
+    process_classification_jobs,
+    recover_stale_maintenance,
+    retrieval_rank,
+    run_maintenance_once,
+)
+
+
+def _add_user_evidence(conn, session_id="s1"):
+    return str(conn.execute(
+        "INSERT INTO conversations(session_id,role,content,created_at) "
+        "VALUES (?,?,?,?)", (session_id, "user", "user stated the candidate", "2026-01-01T00:00:00Z"),
+    ).lastrowid)
 
 
 def test_heuristic_classifier_marks_explicit_preferences():
     result = heuristic_classifier([Candidate("user.preference", "I prefer concise answers", ("t1",), ("s1",))])
     assert result[0].memory_type is MemoryType.EXPLICIT_PREFERENCE
     assert result[0].evidence_status is EvidenceStatus.EXPLICIT
+    assert result[0].confidence == 1.0
 
 
 def test_heuristic_classifier_infers_project_scope_and_user_facts_without_prompt_chore():
@@ -150,6 +171,19 @@ def test_fact_admission_enqueues_only_when_enabled(tmp_path, monkeypatch):
     assert job["operation"] == "classify" and job["memory_id"] > 0
 
 
+def test_fact_content_correction_without_new_source_clears_stale_evidence(tmp_path):
+    from jarvis.memory import upsert_fact
+    conn = get_conn(tmp_path / "memory.db")
+    run_migrations(conn)
+    turn_id = _add_user_evidence(conn, "s1")
+    upsert_fact(conn, "user.preference.units", "metric", "s1", source_turn_id=turn_id)
+    upsert_fact(conn, "user.preference.units", "imperial", "s2")
+    row = conn.execute(
+        "SELECT content,source_turn_id FROM memories WHERE key='user.preference.units'"
+    ).fetchone()
+    assert row["content"] == "imperial" and row["source_turn_id"] is None
+
+
 def test_maintenance_runner_contains_handler_failures(tmp_path):
     conn = get_conn(tmp_path / "memory.db"); run_migrations(conn)
     enqueue_maintenance(conn, memory_id=1, revision=1, policy_version="b1",
@@ -198,10 +232,12 @@ def test_classification_processor_requires_complete_batch(tmp_path):
     conn = get_conn(tmp_path / "memory.db"); run_migrations(conn)
     import os
     os.environ["JARVIS_MEMORY_AUTOMATION_ENABLED"] = "true"
-    upsert_fact(conn, "user.preference.units", "metric", "s1")
+    turn_id = _add_user_evidence(conn)
+    upsert_fact(conn, "user.preference.units", "metric", "s1", source_turn_id=turn_id)
     def classifier(items, *, policy_version):
         return [Classification(items[0].key, Scope.PROJECT, MemoryType.FACT,
-                                Provenance.USER, EvidenceStatus.EXPLICIT, 1.0, (), "explicit")]
+                                Provenance.USER, EvidenceStatus.EXPLICIT, 1.0,
+                                items[0].source_turn_ids, "explicit")]
     from jarvis.db import now_iso
     result = process_classification_jobs(conn, now_iso=now_iso(), classifier=classifier)
     assert result["applied"] == 1

@@ -55,10 +55,17 @@ import time
 from typing import Any
 
 import anthropic
-import httpx
 import openai
-from openai.types.chat import ChatCompletion, ChatCompletionMessage
+from openai.types.chat import ChatCompletion, ChatCompletionChunk, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
+from openai.types.chat.chat_completion_chunk import (
+    Choice as ChunkChoice,
+)
+from openai.types.chat.chat_completion_chunk import (
+    ChoiceDelta,
+    ChoiceDeltaToolCall,
+    ChoiceDeltaToolCallFunction,
+)
 from openai.types.chat.chat_completion_message_function_tool_call import (
     ChatCompletionMessageFunctionToolCall,
     Function,
@@ -239,7 +246,7 @@ def _convert_messages(
 # S5/S7 — response translation
 # --------------------------------------------------------------------------
 
-def _convert_response(msg: "anthropic.types.Message", *, model: str) -> ChatCompletion:
+def _convert_response(msg: anthropic.types.Message, *, model: str) -> ChatCompletion:
     text_parts = []
     tool_calls: list[ChatCompletionMessageFunctionToolCall] = []
     for block in msg.content:
@@ -314,8 +321,8 @@ def _build_request(**kwargs: Any) -> dict[str, Any]:
     unknown = set(kwargs) - _SUPPORTED_KWARGS
     if unknown:
         raise TypeError(f"anthropic_shim: unsupported chat.completions.create kwarg(s): {sorted(unknown)}")
-    if kwargs.get("stream"):
-        raise ShimError("anthropic_shim: stream=True is not supported (no Path B caller streams)")
+    if "stream" in kwargs and not isinstance(kwargs["stream"], bool):
+        raise ShimError("anthropic_shim: stream must be a boolean")
     if "tool_choice" in kwargs:
         raise ShimError(
             "anthropic_shim: tool_choice is not translated (no call site sends it "
@@ -344,30 +351,153 @@ def _build_request(**kwargs: Any) -> dict[str, Any]:
 
 
 class _ChatCompletionsShim:
-    def __init__(self, client: "anthropic.Anthropic", model_holder: dict) -> None:
+    def __init__(self, client: anthropic.Anthropic, model_holder: dict) -> None:
         self._client = client
         self._model_holder = model_holder
 
-    def create(self, **kwargs: Any) -> ChatCompletion:
+    def create(self, **kwargs: Any) -> Any:
         request = _build_request(**kwargs)
+        if kwargs.get("stream"):
+            return self._stream(request, model=kwargs["model"])
         try:
             msg = self._client.messages.create(**request)
-        except Exception as exc:  # noqa: BLE001 — translate, then re-raise
+        except Exception as exc:
             raise _translate_error(exc) from exc
         return _convert_response(msg, model=kwargs["model"])
+
+    def _stream(self, request: dict[str, Any], *, model: str):
+        """Return OpenAI-shaped chunks from the pinned Anthropic Messages stream."""
+        try:
+            with self._client.messages.stream(**request) as stream:
+                yield from _openai_chunks(stream, model=model)
+        except Exception as exc:
+            raise _translate_error(exc) from exc
 
 
 class _AsyncChatCompletionsShim:
-    def __init__(self, client: "anthropic.AsyncAnthropic") -> None:
+    def __init__(self, client: anthropic.AsyncAnthropic) -> None:
         self._client = client
 
-    async def create(self, **kwargs: Any) -> ChatCompletion:
+    async def create(self, **kwargs: Any) -> Any:
         request = _build_request(**kwargs)
+        if kwargs.get("stream"):
+            return self._stream(request, model=kwargs["model"])
         try:
             msg = await self._client.messages.create(**request)
-        except Exception as exc:  # noqa: BLE001 — translate, then re-raise
+        except Exception as exc:
             raise _translate_error(exc) from exc
         return _convert_response(msg, model=kwargs["model"])
+
+    async def _stream(self, request: dict[str, Any], *, model: str):
+        try:
+            async with self._client.messages.stream(**request) as stream:
+                async for chunk in _async_openai_chunks(stream, model=model):
+                    yield chunk
+        except Exception as exc:
+            raise _translate_error(exc) from exc
+
+
+def _stream_chunk(model: str, *, message_id: str, delta: ChoiceDelta,
+                  finish_reason: str | None = None,
+                  usage: CompletionUsage | None = None) -> ChatCompletionChunk:
+    return ChatCompletionChunk(
+        id=message_id or "anthropic-stream",
+        choices=[ChunkChoice(index=0, delta=delta, finish_reason=finish_reason,
+                             logprobs=None)],
+        created=int(time.time()), model=model, object="chat.completion.chunk", usage=usage,
+    )
+
+
+def _stream_tool_delta(index: int, *, call_id: str | None = None,
+                       name: str | None = None, arguments: str | None = None
+                       ) -> ChoiceDeltaToolCall:
+    return ChoiceDeltaToolCall(
+        index=index, id=call_id, type="function" if call_id is not None else None,
+        function=ChoiceDeltaToolCallFunction(name=name, arguments=arguments),
+    )
+
+
+def _finish_usage(message: Any) -> CompletionUsage:
+    usage = message.usage
+    cache_read = usage.cache_read_input_tokens or 0
+    cache_write = usage.cache_creation_input_tokens or 0
+    prompt = usage.input_tokens + cache_read + cache_write
+    return CompletionUsage(
+        prompt_tokens=prompt,
+        completion_tokens=usage.output_tokens,
+        total_tokens=prompt + usage.output_tokens,
+        prompt_tokens_details=PromptTokensDetails(
+            cached_tokens=cache_read, cache_write_tokens=cache_write,
+        ),
+    )
+
+
+def _anthropic_event_chunk(event: Any, *, model: str, message_id: str,
+                           tool_indices: dict[int, int]) -> ChatCompletionChunk | None:
+    event_type = getattr(event, "type", None)
+    if event_type == "message_start":
+        message_id = getattr(getattr(event, "message", None), "id", None) or message_id
+    elif event_type == "content_block_start":
+        block = getattr(event, "content_block", None)
+        if getattr(block, "type", None) == "tool_use":
+            block_index = getattr(event, "index", None)
+            tool_index = len(tool_indices)
+            tool_indices[block_index] = tool_index
+            return _stream_chunk(model, message_id=message_id, delta=ChoiceDelta(
+                tool_calls=[_stream_tool_delta(
+                    tool_index, call_id=block.id, name=block.name, arguments="",
+                )],
+            ))
+    elif event_type == "content_block_delta":
+        delta = getattr(event, "delta", None)
+        delta_type = getattr(delta, "type", None)
+        if delta_type == "text_delta":
+            return _stream_chunk(model, message_id=message_id,
+                                 delta=ChoiceDelta(content=delta.text))
+        if delta_type == "input_json_delta":
+            index = tool_indices.get(getattr(event, "index", None))
+            if index is None:
+                raise ShimError("anthropic_shim: tool argument delta arrived before tool declaration")
+            return _stream_chunk(model, message_id=message_id, delta=ChoiceDelta(
+                tool_calls=[_stream_tool_delta(index, arguments=delta.partial_json)],
+            ))
+    return None
+
+
+def _openai_chunks(stream: Any, *, model: str):
+    message_id = "anthropic-stream"
+    tool_indices: dict[int, int] = {}
+    for event in stream:
+        message_id = getattr(getattr(event, "message", None), "id", message_id) or message_id
+        chunk = _anthropic_event_chunk(event, model=model, message_id=message_id,
+                                       tool_indices=tool_indices)
+        if chunk is not None:
+            yield chunk
+    message = stream.get_final_message()
+    yield _stream_chunk(
+        model, message_id=message.id,
+        delta=ChoiceDelta(),
+        finish_reason=_FINISH_REASON.get(message.stop_reason or "end_turn", "stop"),
+        usage=_finish_usage(message),
+    )
+
+
+async def _async_openai_chunks(stream: Any, *, model: str):
+    message_id = "anthropic-stream"
+    tool_indices: dict[int, int] = {}
+    async for event in stream:
+        message_id = getattr(getattr(event, "message", None), "id", message_id) or message_id
+        chunk = _anthropic_event_chunk(event, model=model, message_id=message_id,
+                                       tool_indices=tool_indices)
+        if chunk is not None:
+            yield chunk
+    message = await stream.get_final_message()
+    yield _stream_chunk(
+        model, message_id=message.id,
+        delta=ChoiceDelta(),
+        finish_reason=_FINISH_REASON.get(message.stop_reason or "end_turn", "stop"),
+        usage=_finish_usage(message),
+    )
 
 
 def native_base_url(base_url: str | None) -> str | None:
@@ -393,8 +523,7 @@ def native_base_url(base_url: str | None) -> str | None:
     if not base_url:
         return None
     stripped = base_url.rstrip("/")
-    if stripped.endswith("/v1"):
-        stripped = stripped[: -len("/v1")]
+    stripped = stripped.removesuffix("/v1")
     return stripped or None
 
 

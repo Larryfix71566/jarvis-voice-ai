@@ -23,20 +23,38 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from jarvis import effort, llm_client
 from jarvis.agents.upgrade_agent import available_models, load_model_registry
 from jarvis.council import config as council_config
 from jarvis.council.scoring import council_size_ok, mean_of, parse_scores, select_winner
 from jarvis.council.types import Proposal, RoundResult, Score
-from jarvis import effort, llm_client
 from jarvis.db import get_conn, now_iso
-from jarvis.prompts import PLAN_AUTHOR_PROMPT, PLAN_REVIEW_PROMPT
-from jarvis.usage_ledger import record_completion, provider_from_base_url
-from jarvis.model_routing import (
-    AccessRoute, ModelRouteError, make_sync_route_client, resolve_model_route,
+from jarvis.model_execution import (
+    ModelContextMessage,
+    ModelExecutionRequest,
+    execute_chat,
 )
-from jarvis.privacy_policy import DataPolicy, assert_route_allowed
+from jarvis.model_routing import (
+    AccessRoute,
+    ModelRouteError,
+    make_sync_route_client,
+    resolve_model_route,
+    resolve_policy,
+)
+from jarvis.privacy_policy import DataPolicy, assert_route_allowed, strictest
+from jarvis.prompts import PLAN_AUTHOR_PROMPT, PLAN_REVIEW_PROMPT
+from jarvis.usage_ledger import (
+    provider_from_base_url,
+    record_completion,
+    record_execution_result,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _log_safe_failure(event: str, exc: Exception) -> None:
+    """Log only a static event and bounded exception class, never traceback data."""
+    logger.warning("%s error_type=%s", event, type(exc).__name__[:80])
 
 # ⚙ TUNING KNOB (D12)
 COUNCIL_MEMBER_TIMEOUT_S = 120
@@ -62,28 +80,38 @@ COUNCIL_SHADOW_INLINE = False
 _last_shadow_thread: threading.Thread | None = None
 
 
-def _context_data_policy(context: dict[str, Any]) -> DataPolicy | None:
-    """Read an optional stricter policy carried by a council request.
+def _context_data_policy(context: dict[str, Any], *, workload: str) -> DataPolicy:
+    """Combine workload policy with any stricter source policy.
 
-    Existing council callers omit this field and retain their configured
-    workload behavior. New delegated callers can pass either
+    Existing callers inherit their configured workload policy. Callers with
+    more-restrictive source information can pass either
     ``{"data_policy": {"level": ..., "source": ...}}`` or the compact
-    ``{"privacy": "..."}`` form; malformed values fail closed at the call
-    boundary rather than being silently downgraded.
+    ``{"privacy": "..."}`` form. Restrictions combine monotonically, and
+    malformed/unavailable policy fails closed rather than being downgraded.
     """
+    try:
+        # User route preferences choose access details; they cannot lower a
+        # workload's configured privacy floor for council persistence.
+        workload_policy = resolve_policy(workload, include_preferences=False)
+    except (ModelRouteError, ValueError, OSError) as exc:
+        raise ModelRouteError(
+            f"council workload policy {workload!r} is unavailable"
+        ) from exc
+    effective = DataPolicy(workload_policy.privacy, f"council-workload:{workload}")
     raw = context.get("data_policy") if isinstance(context, dict) else None
     if raw is None and isinstance(context, dict) and "privacy" in context:
         raw = {"level": context.get("privacy"), "source": "council-context"}
     if raw is None:
-        return None
+        return effective
     if isinstance(raw, DataPolicy):
-        return raw
+        return strictest(effective, raw)
     if not isinstance(raw, dict):
         raise ModelRouteError("council data_policy must be a mapping")
-    return DataPolicy(
+    source_policy = DataPolicy(
         level=str(raw.get("level") or raw.get("privacy") or ""),
         source=str(raw.get("source") or "council-context"),
     )
+    return strictest(effective, source_policy)
 
 
 def _redact_council_value(value: Any, policy: DataPolicy | None) -> Any:
@@ -252,15 +280,61 @@ async def _call_profile(
     `None` (some OpenAI-compatible providers omit it entirely — never
     fabricated)."""
 
+    # 2026-09-01 (MORTIMER_OPTIMIZATION_PLAN.md Phase 0b): profile timeout
+    # may extend, but never shorten, the caller's established floor.
+    try:
+        profile_timeout = float(profile.get("timeout_s") or 0)
+    except (TypeError, ValueError):
+        profile_timeout = 0.0
+    effective = max(float(timeout_s), profile_timeout)
+
+    use_routing = os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
+    resolved_route = None
+    if use_routing:
+        try:
+            resolved_route = resolve_model_route(
+                "council", explicit_profile=str(profile["name"]))
+        except ModelRouteError as exc:
+            raise RuntimeError(str(exc)) from exc
+        # Routed council calls use the same validated input, policy, usage,
+        # and deadline boundary as other model workloads. The un-routed
+        # implementation below remains the compatibility path while the
+        # global routing gate is disabled.
+        route_policy = data_policy or DataPolicy(
+            resolved_route.route.privacy, "council-request"
+        )
+        request_id = f"council:{uuid.uuid4().hex}"
+        provider = resolved_route.provider
+        extra_body = effort.extra_body_for(
+            rung=rung, provider=provider, explicit=profile.get("effort"),
+            model=resolved_route.model,
+        )
+        request = ModelExecutionRequest(
+            workload=resolved_route.workload,
+            task_id=request_id,
+            parent_request_id=request_id,
+            instructions="",
+            context=(
+                ModelContextMessage("system", system_prompt, route_policy),
+                ModelContextMessage("user", user_content, route_policy),
+            ),
+            data_policy=route_policy,
+            timeout_s=effective,
+            temperature=profile.get("temperature"),
+            extra_body=extra_body or None,
+        )
+        execution = await execute_chat(request, resolved_route)
+        record_execution_result(rung, execution)
+        usage = None
+        if execution.prompt_tokens is not None and execution.completion_tokens is not None:
+            usage = {
+                "prompt_tokens": execution.prompt_tokens,
+                "completion_tokens": execution.completion_tokens,
+            }
+        return execution.text, usage
+
     def _sync_call() -> tuple[str, dict[str, int] | None]:
-        use_routing = os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
         resolved_route = None
-        if use_routing:
-            try:
-                resolved_route = resolve_model_route(
-                    "council", explicit_profile=str(profile["name"]))
-            except ModelRouteError as exc:
-                raise RuntimeError(str(exc)) from exc
         api_key_env = (resolved_route.api_key_env if resolved_route is not None
                        else profile.get("api_key_env", "OPENAI_API_KEY"))
         api_key = os.environ.get(api_key_env) if api_key_env else None
@@ -340,17 +414,6 @@ async def _call_profile(
                 }
         return content, usage
 
-    # 2026-09-01 (MORTIMER_OPTIMIZATION_PLAN.md Phase 0b) — a profile may
-    # declare `timeout_s` to buy itself MORE time than the caller's floor,
-    # never less: max() keeps COUNCIL_MEMBER_TIMEOUT_S / PLANNING_MEMBER_
-    # TIMEOUT_S as floors and lets an always-on-thinking model (kimi-k3,
-    # round e48cfbe1: four judge timeouts with empty abstain reasons) finish
-    # a real judge workload instead of abstaining by clock.
-    try:
-        profile_timeout = float(profile.get("timeout_s") or 0)
-    except (TypeError, ValueError):
-        profile_timeout = 0.0
-    effective = max(float(timeout_s), profile_timeout)
     return await asyncio.wait_for(asyncio.to_thread(_sync_call), timeout=effective)
 
 
@@ -482,8 +545,8 @@ async def _gather_proposals(
             # GC6(a): same fix as the judge branch above -- the exception TYPE
             # must survive even when str(exc) is empty.
             logger.warning(
-                "council_proposer_failed profile=%s error=%s: %s",
-                name, type(exc).__name__, exc,
+                "council_proposer_failed profile=%s error_type=%s",
+                name, type(exc).__name__[:80],
             )
             return name, None, None
 
@@ -570,8 +633,8 @@ async def _gather_scores(
             return parse_scores(name, raw, labels), usage
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "council_judge_failed profile=%s shadow=%s error=%s",
-                name, shadow, exc,
+                "council_judge_failed profile=%s shadow=%s error_type=%s",
+                name, shadow, type(exc).__name__[:80],
             )
             return [
                 Score(judge_profile=name, proposal_label=lbl, value=None,
@@ -617,8 +680,8 @@ async def convene(
             workflow=workflow, placement=placement, trigger=trigger,
             goal=goal, tier=tier, context=context, run_id=run_id,
         )
-    except Exception:  # noqa: BLE001 — D13, never raise into the agent loop
-        logger.warning("council_convene_failed", exc_info=True)
+    except Exception as exc:  # noqa: BLE001 — D13, never raise into the agent loop
+        _log_safe_failure("council_convene_failed", exc)
         return None
 
 
@@ -629,7 +692,7 @@ async def _convene_inner(
     round_id = uuid.uuid4().hex
     started_at = now_iso()
     started_monotonic = time.monotonic()
-    data_policy = _context_data_policy(context)
+    data_policy = _context_data_policy(context, workload="council")
 
     # MORTIMER_LLM_COUNCIL_V2_PLAN.md V14 — the ONE prompt-pair selection
     # site. Every gather call in this round (proposer fan-out, live
@@ -682,6 +745,7 @@ async def _convene_inner(
             placement=placement, trigger=trigger, tier=tier, goal=goal,
             proposer_count=0, judge_count=0,
             reason=f"no usable proposers: {exc}", started_at=started_at,
+            data_policy=data_policy,
         )
 
     try:
@@ -698,6 +762,7 @@ async def _convene_inner(
             placement=placement, trigger=trigger, tier=tier, goal=goal,
             proposer_count=len(proposer_names), judge_count=0,
             reason=f"no usable judges: {exc}", started_at=started_at,
+            data_policy=data_policy,
         )
 
     if not council_size_ok(
@@ -716,6 +781,7 @@ async def _convene_inner(
                 f"{council_config.COUNCIL_MIN_JUDGES})"
             ),
             started_at=started_at,
+            data_policy=data_policy,
         )
 
     proposer_user_content = _proposer_user_message(goal, context, placement)
@@ -756,6 +822,7 @@ async def _convene_inner(
                 f"{len(proposer_names)} proposers responded"
             ),
             started_at=started_at,
+            data_policy=data_policy,
         )
 
     # MORTIMER_LLM_COUNCIL_V2_PLAN.md V4 — the single labeling site. Runs
@@ -855,8 +922,8 @@ async def _convene_inner(
                 shadow_tier_name,
                 exclude=set(proposer_names) | set(judge_names),
             )
-        except Exception:  # noqa: BLE001 — D8.2.1, never degrades the round
-            logger.warning("council_shadow_failed round_id=%s", round_id, exc_info=True)
+        except Exception as exc:  # noqa: BLE001 — D8.2.1, never degrades the round
+            _log_safe_failure("council_shadow_config_failed", exc)
             shadow_judge_names = []
         if shadow_judge_names:
             if COUNCIL_SHADOW_INLINE:
@@ -888,11 +955,12 @@ def _finalize_too_small(
     *, round_id: str, run_id: str | None, workflow: str, placement: str,
     trigger: str, tier: int, goal: str, proposer_count: int,
     judge_count: int, reason: str, started_at: str,
+    data_policy: DataPolicy | None = None,
 ) -> RoundResult:
     """A round that never got far enough to fan out to any model. Cheap
     to log (no LLM cost incurred), and D8's status enum has `too_small`
     specifically for this case."""
-    logger.info("council_too_small round_id=%s reason=%s", round_id, reason)
+    logger.info("council_too_small")
     ended_at = now_iso()
     _write_round_row(
         round_id=round_id, run_id=run_id, workflow=workflow, placement=placement,
@@ -900,6 +968,7 @@ def _finalize_too_small(
         judge_count=judge_count, abstentions=0, winner=None, winner_mean=None,
         select_reason=reason, status="too_small", started_at=started_at,
         ended_at=ended_at, latency_ms=0,
+        data_policy=data_policy,
     )
     return RoundResult(
         round_id=round_id, winner=None, winner_mean=None, select_reason=reason,
@@ -939,8 +1008,8 @@ async def draft_candidates(
         return await _draft_candidates_inner(
             goal, members=members, judge=judge, context=context or {}, run_id=run_id,
         )
-    except Exception:  # noqa: BLE001 — D13, never raise into the caller
-        logger.warning("council_draft_candidates_failed", exc_info=True)
+    except Exception as exc:  # noqa: BLE001 — D13, never raise into the caller
+        _log_safe_failure("council_draft_candidates_failed", exc)
         return None
 
 
@@ -957,7 +1026,7 @@ async def _draft_candidates_inner(
     round_id = uuid.uuid4().hex
     started_at = now_iso()
     started_monotonic = time.monotonic()
-    data_policy = _context_data_policy(context)
+    data_policy = _context_data_policy(context, workload="planning")
 
     is_review = context.get("document") is not None
     placement = "review" if is_review else "doc"
@@ -1002,6 +1071,7 @@ async def _draft_candidates_inner(
             round_id=round_id, run_id=run_id, workflow="planning", placement=placement,
             trigger="user", tier=0, goal=goal, proposer_count=0, judge_count=0,
             reason="no usable proposers for planning", started_at=started_at,
+            data_policy=data_policy,
         )
 
     proposer_user_content = _proposer_user_message(goal, context, "doc")
@@ -1022,6 +1092,7 @@ async def _draft_candidates_inner(
                 f"no proposer responded: 0 of {len(proposer_names)} produced a plan"
             ),
             started_at=started_at,
+            data_policy=data_policy,
         )
 
     # V4 — the single labeling site, same as convene()'s (no carry-forward
@@ -1172,8 +1243,7 @@ def record_user_choice(round_id: str, label: str) -> None:
             profile = _profile_for_label_from_payload(round_id, row["started_at"], label)
             if profile is None:
                 logger.warning(
-                    "council_record_user_choice_unknown_label round_id=%s label=%s",
-                    round_id, label,
+                    "council_record_user_choice_unknown_label",
                 )
                 return
             conn.execute(
@@ -1184,10 +1254,8 @@ def record_user_choice(round_id: str, label: str) -> None:
             conn.commit()
         finally:
             conn.close()
-    except Exception:  # noqa: BLE001
-        logger.warning(
-            "council_record_user_choice_failed round_id=%s", round_id, exc_info=True,
-        )
+    except Exception as exc:  # noqa: BLE001
+        _log_safe_failure("council_record_user_choice_failed", exc)
 
 
 # --------------------------------------------------------------------- D8
@@ -1255,8 +1323,8 @@ def _write_round_row(
             conn.commit()
         finally:
             conn.close()
-    except Exception:  # noqa: BLE001 — a logging failure must not sink the round
-        logger.warning("council_write_round_row_failed round_id=%s", round_id, exc_info=True)
+    except Exception as exc:  # noqa: BLE001 — a logging failure must not sink the round
+        _log_safe_failure("council_write_round_row_failed", exc)
 
 
 def _write_score_rows(
@@ -1296,8 +1364,8 @@ def _write_score_rows(
             conn.commit()
         finally:
             conn.close()
-    except Exception:  # noqa: BLE001
-        logger.warning("council_write_score_rows_failed round_id=%s", round_id, exc_info=True)
+    except Exception as exc:  # noqa: BLE001
+        _log_safe_failure("council_write_score_rows_failed", exc)
 
 
 def record_retry_validated(round_id: str, validated: bool) -> None:
@@ -1321,11 +1389,8 @@ def record_retry_validated(round_id: str, validated: bool) -> None:
             conn.commit()
         finally:
             conn.close()
-    except Exception:  # noqa: BLE001
-        logger.warning(
-            "council_record_retry_validated_failed round_id=%s", round_id,
-            exc_info=True,
-        )
+    except Exception as exc:  # noqa: BLE001
+        _log_safe_failure("council_record_retry_validated_failed", exc)
 
 
 # MORTIMER_OPTIMIZATION_PLAN.md Phase 3 Rev 3.3 (2026-09-03). The closed
@@ -1358,8 +1423,7 @@ def record_retry_outcome(round_id: str, outcome: str) -> None:
     of RETRY_OUTCOMES; an unknown string is stored as-is (a report will
     show it, which beats dropping it) and logged."""
     if outcome not in RETRY_OUTCOMES:
-        logger.warning("council_retry_outcome_unknown round_id=%s outcome=%s",
-                       round_id, outcome)
+        logger.warning("council_retry_outcome_unknown")
     try:
         conn = get_conn()
         try:
@@ -1370,11 +1434,8 @@ def record_retry_outcome(round_id: str, outcome: str) -> None:
             conn.commit()
         finally:
             conn.close()
-    except Exception:  # noqa: BLE001
-        logger.warning(
-            "council_record_retry_outcome_failed round_id=%s", round_id,
-            exc_info=True,
-        )
+    except Exception as exc:  # noqa: BLE001
+        _log_safe_failure("council_record_retry_outcome_failed", exc)
 
 
 # ---------------------------------------------------------- read helpers
@@ -1731,8 +1792,8 @@ def _write_payload(
             for record in records:
                 f.write(json.dumps(record, default=str))
                 f.write("\n")
-    except Exception:  # noqa: BLE001
-        logger.warning("council_write_payload_failed round_id=%s", round_id, exc_info=True)
+    except Exception as exc:  # noqa: BLE001
+        _log_safe_failure("council_write_payload_failed", exc)
 
 
 async def _shadow_pass(
@@ -1769,8 +1830,8 @@ async def _shadow_pass(
             usage_by_name=shadow_usage_by_name,
             rung="council", data_policy=data_policy,
         )
-    except Exception:  # noqa: BLE001 — D8.2.1, never degrades the round
-        logger.warning("council_shadow_failed round_id=%s", round_id, exc_info=True)
+    except Exception as exc:  # noqa: BLE001 — D8.2.1, never degrades the round
+        _log_safe_failure("council_shadow_failed", exc)
         return
 
     if shadow_scores:
@@ -1793,10 +1854,8 @@ async def _shadow_pass(
                 }
                 f.write(json.dumps(record, default=str))
                 f.write("\n")
-    except Exception:  # noqa: BLE001
-        logger.warning(
-            "council_shadow_write_payload_failed round_id=%s", round_id, exc_info=True,
-        )
+    except Exception as exc:  # noqa: BLE001
+        _log_safe_failure("council_shadow_write_payload_failed", exc)
 
     if shadow_usage.get("reported_calls", 0) > 0:
         try:
@@ -1815,7 +1874,5 @@ async def _shadow_pass(
                 conn.commit()
             finally:
                 conn.close()
-        except Exception:  # noqa: BLE001
-            logger.warning(
-                "council_shadow_usage_update_failed round_id=%s", round_id, exc_info=True,
-            )
+        except Exception as exc:  # noqa: BLE001
+            _log_safe_failure("council_shadow_usage_update_failed", exc)

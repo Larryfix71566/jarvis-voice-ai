@@ -115,6 +115,12 @@ must fail; `--provisioning` requires public traffic to succeed while the same
 host/private-network canaries remain blocked. A failed IPv6 connection
 is recorded separately: it alone cannot prove filtering versus absent routing.
 Neither these probes nor passing unit tests establish complete containment.
+Until an active-route IPv6 canary is implemented and observed, probe reports
+set `ipv6_containment_status` to `unverified` and
+`full_network_containment_proven` / `acceptance_complete` to `false`, even when
+the existing IPv4 and host-boundary observations pass. `observed_checks_passed`
+therefore reports only those existing observations; it is not the SW-F
+complete-containment acceptance gate.
 
 The installed Mortimer verification profile declares that its native AppKit
 checks require graphics. Independent verification therefore starts its clone
@@ -133,7 +139,10 @@ as seen for the running build.
 
 Two source files contain intentionally fake credential-shaped fixtures.
 `REVIEWED_TEST_FIXTURES` permits only their reviewed path and exact SHA-256
-content. A changed or moved fixture is still rejected by the source scanner.
+content. `REVIEWED_BASELINE_TEST_FIXTURES` additionally retains one exact older
+memory-test revision whose three credential-shaped literals match the reviewed
+current fixture byte-for-byte. A changed or moved fixture is still rejected by
+the source scanner; neither list grants a path-only exemption.
 
 The exported patch is saved as data, with a SHA-256 identifier. It is not
 applied, pushed, merged or deployed automatically. A guest-controlled report

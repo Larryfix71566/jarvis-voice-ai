@@ -122,6 +122,6 @@ def test_console_action_names_the_view_modes_from_the_shared_file():
 
     modes = json.loads((REPO / "config/console_view_modes.json").read_text())["view_set"]
     assert tuple(modes) == VIEW_SET_MODES
-    assert modes == ["conversation", "results", "atlas", "memory", "workflows"]
+    assert modes == ["conversation", "results", "atlas", "memory", "skills", "workflows"]
     description = CONSOLE_ACTION_SCHEMA["function"]["description"]
-    assert "args.mode is one of conversation, results, atlas, memory, workflows" in description
+    assert "args.mode is one of " + ", ".join(modes) in description

@@ -90,6 +90,30 @@ def test_report_without_voice_columns_still_builds(tmp_path):
     assert report["voice_usd"] == 0
     assert report["llm_usd"] == pytest.approx(0.05)
     assert report["voice"]["tts_rows"] == 0 and report["voice"]["stt_rows"] == 0
+    assert report["unknown_usage_calls"] is None
+    assert report["unknown_cache_breakdown_calls"] is None
+    assert report["billing_sources"] is None
+
+
+def test_report_exposes_unknown_usage_and_subscription_vs_api_billing(ledger):
+    usage_ledger.record_call(
+        rung="planning", provider="subscription", model="codex-model",
+        usage_known=False, cache_breakdown_known=False,
+        billing_source="subscription", route_name="codex_subscription",
+    )
+    usage_ledger.record_call(
+        rung="planning", provider="anthropic", model="claude-sonnet-5",
+        input_tokens=100, output_tokens=25,
+        billing_source="provider_api", route_name="direct_api",
+    )
+    with sqlite3.connect(ledger) as conn:
+        report = cost_report.build_report(conn, _month())
+    assert report["unknown_usage_calls"] == 1
+    assert report["unknown_cache_breakdown_calls"] == 1
+    sources = {row["source"]: row["calls"] for row in report["billing_sources"]}
+    assert sources["subscription"] == 1
+    assert sources["provider_api"] == 1
+    assert sources["unknown"] == 3
 
 
 def test_text_rendering_prints_the_voice_section(ledger, monkeypatch, capsys):

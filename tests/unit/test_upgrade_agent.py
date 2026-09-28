@@ -7,22 +7,49 @@ and that off-allowlist goals cannot produce edits.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 import yaml
 
+import jarvis.agents.upgrade_agent as upgrade_agent_module
 import jarvis.council.council as council_mod
 from jarvis.agents.upgrade_agent import TOOL_SPECS, UpgradeAgent
 from jarvis.council.types import Proposal, RoundResult
 from jarvis.db import get_conn, run_migrations
+from jarvis.model_routing import AccessRoute, ResolvedModelRoute
 from jarvis.selfedit.service import SelfEditService
 from tests.sandbox_fakes import FakeRuntime
 
 ALLOWLIST = {"allow": ["docs/**"], "deny": ["jarvis/**"]}
+
+
+def test_event_callback_error_logs_only_error_type(caplog):
+    def fail(_event):
+        raise RuntimeError("PRIVATE_CANARY_planner_event_4d2a")
+
+    UpgradeAgent._emit(fail, {"content": "PRIVATE_CANARY_payload_4d2a"})
+
+    assert "PRIVATE_CANARY_planner_event_4d2a" not in caplog.text
+    assert "PRIVATE_CANARY_payload_4d2a" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
+def test_upgrade_agent_safe_failure_log_redacts_exception(caplog):
+    upgrade_agent_module._log_safe_failure(
+        "planner_test_failure",
+        RuntimeError("PLANNER_CONTENT_CANARY_B4D6 /private/planner/goal"),
+    )
+    assert "planner_test_failure" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "PLANNER_CONTENT_CANARY_B4D6" not in caplog.text
+    assert "/private/planner/goal" not in caplog.text
+    assert "Traceback" not in caplog.text
 
 
 @pytest.fixture(autouse=True)
@@ -1083,6 +1110,28 @@ def test_kill_switch_disables_escalation_entirely(
 
 # ------------------------------------------------ P7: pre-written plan input
 
+def test_direct_planner_does_not_dispatch_replayed_tool_call_identity(
+    service: SelfEditService, monkeypatch,
+) -> None:
+    call = _tool_call("file_read", {"path": "docs/README.md"}, "same-id")
+    client = ScriptedClient([
+        _msg(tool_calls=[call]),
+        _msg(tool_calls=[call]),
+    ])
+    agent = _agent(service, client)
+    dispatched = []
+    monkeypatch.setattr(
+        agent, "_dispatch",
+        lambda name, args: dispatched.append((name, args)) or {"ok": True},
+    )
+
+    result = agent.run("read then continue")
+
+    assert result["ok"] is False
+    assert "repeated" in result["summary"]
+    assert client.calls == 2
+    assert dispatched == [("file_read", {"path": "docs/README.md"})]
+
 def test_plan_kwarg_injects_system_message_before_first_completion_call(
     service: SelfEditService,
 ) -> None:
@@ -1149,6 +1198,168 @@ def test_executor_ledger_rows_carry_plan_state(service: SelfEditService, monkeyp
     agent = _agent(service, ScriptedClient([_msg(content="done")]))
     agent.run("do the thing")
     assert [c["plan_state"] for c in seen] == ["planless"]
+
+
+def test_routed_planner_uses_shared_boundary_and_preserves_tool_history(
+    service: SelfEditService, monkeypatch,
+) -> None:
+    import jarvis.agents.upgrade_agent as ua_mod
+    from jarvis.model_execution import ModelToolCall
+
+    monkeypatch.setenv("JARVIS_MODEL_ROUTING_ENABLED", "1")
+    route = ResolvedModelRoute(
+        workload="developer", profile_name="test-profile", model="routed-model",
+        provider="openai", base_url="https://example.invalid/v1/",
+        route=AccessRoute(
+            "direct_api", "openai_compatible", "provider_api", "OPENAI_API_KEY",
+            "approved_external", capabilities=("text", "tools"),
+        ),
+        api_key_env="OPENAI_API_KEY", identity="openai/routed-model",
+        priority="interactive",
+    )
+    agent = _agent(service, ScriptedClient([]))
+    agent._resolved_route = route
+    agent.cfg["temperature"] = 0.2
+    contexts = []
+    recorded = []
+    calls = 0
+
+    class AsyncClient:
+        async def close(self):
+            return None
+
+    monkeypatch.setattr(ua_mod, "make_route_client", lambda *a, **k: AsyncClient())
+    monkeypatch.setattr(
+        ua_mod, "record_execution_result",
+        lambda *args, **kwargs: recorded.append((args, kwargs)),
+    )
+
+    async def fake_execute(request, resolved, *, client_factory=None):
+        nonlocal calls
+        calls += 1
+        contexts.append(request)
+        if calls == 1:
+            return SimpleNamespace(
+                text="", provider="openai", model="routed-model",
+                route="direct_api", billing="provider_api", prompt_tokens=10,
+                completion_tokens=3, total_tokens=13, cache_read_tokens=None,
+                cache_write_tokens=None, duration_ms=2.0, response_id="response-1",
+                provider_extras={}, tool_calls=(ModelToolCall(
+                    "call-1", "file_read", {"path": "docs/README.md"},
+                    '{"path":"docs/README.md"}',
+                ),),
+            )
+        return SimpleNamespace(
+            text="done", provider="openai", model="routed-model",
+            route="direct_api", billing="provider_api", prompt_tokens=15,
+            completion_tokens=2, total_tokens=17, cache_read_tokens=None,
+            cache_write_tokens=None, duration_ms=1.0, response_id="response-2",
+            provider_extras={}, tool_calls=(),
+        )
+
+    monkeypatch.setattr(ua_mod, "execute_chat", fake_execute)
+    result = agent.run("read the project file and finish", plan="Read then report.")
+
+    assert result["ok"] is True
+    assert calls == 2
+    assert contexts[0].workload == "developer"
+    assert contexts[0].temperature == 0.2
+    assert contexts[0].tools[0].name == "file_read"
+    assert [item.role for item in contexts[1].context[-2:]] == ["assistant", "tool"]
+    assert contexts[1].context[-1].name == "file_read"
+    assert json.loads(contexts[1].context[-1].content)["ok"] is True
+    assert len(recorded) == 2
+    assert all(item[1]["plan_state"] == "planned" for item in recorded)
+
+
+def _routed_planner_route() -> ResolvedModelRoute:
+    return ResolvedModelRoute(
+        workload="developer", profile_name="test-profile", model="routed-model",
+        provider="openai", base_url="https://example.invalid/v1/",
+        route=AccessRoute(
+            "direct_api", "openai_compatible", "provider_api", "OPENAI_API_KEY",
+            "approved_external", capabilities=("text", "tools"),
+        ),
+        api_key_env="OPENAI_API_KEY", identity="openai/routed-model",
+        priority="interactive",
+    )
+
+
+def test_routed_planner_cancel_during_request_returns_structured_cancelled_result(
+    service: SelfEditService, monkeypatch,
+) -> None:
+    import jarvis.agents.upgrade_agent as ua_mod
+
+    agent = _agent(service, ScriptedClient([]))
+    agent._resolved_route = _routed_planner_route()
+
+    class AsyncClient:
+        async def close(self):
+            return None
+
+    monkeypatch.setattr(ua_mod, "make_route_client", lambda *a, **k: AsyncClient())
+    started = threading.Event()
+
+    async def fake_execute(*args, **kwargs):
+        started.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(ua_mod, "execute_chat", fake_execute)
+    cancel = threading.Timer(0.02, agent.request_cancel)
+    cancel.start()
+    try:
+        result = agent.run("read a file")
+    finally:
+        cancel.join(timeout=1)
+
+    assert started.is_set()
+    assert result["cancelled"] is True
+    assert result["ok"] is False
+    assert "cancelled by the user" in result["summary"]
+    assert result["submitted"] is False
+
+
+def test_routed_planner_discards_completion_if_cancel_wins_before_record_or_tool(
+    service: SelfEditService, monkeypatch,
+) -> None:
+    import jarvis.agents.upgrade_agent as ua_mod
+    from jarvis.model_execution import ModelToolCall
+
+    agent = _agent(service, ScriptedClient([]))
+    agent._resolved_route = _routed_planner_route()
+    recorded: list[object] = []
+    dispatched: list[tuple[str, dict]] = []
+
+    class AsyncClient:
+        async def close(self):
+            return None
+
+    monkeypatch.setattr(ua_mod, "make_route_client", lambda *a, **k: AsyncClient())
+    monkeypatch.setattr(
+        ua_mod, "record_execution_result", lambda *args, **kwargs: recorded.append(args)
+    )
+    agent._dispatch = lambda name, args: dispatched.append((name, args)) or {"ok": True}
+
+    async def fake_execute(*args, **kwargs):
+        agent.request_cancel()
+        return SimpleNamespace(
+            text="", provider="openai", model="routed-model", route="direct_api",
+            billing="provider_api", prompt_tokens=1, completion_tokens=1,
+            total_tokens=2, cache_read_tokens=None, cache_write_tokens=None,
+            duration_ms=1.0, response_id="late-response", provider_extras={},
+            tool_calls=(ModelToolCall(
+                "call-late", "file_read", {"path": "docs/README.md"},
+                '{"path":"docs/README.md"}',
+            ),),
+        )
+
+    monkeypatch.setattr(ua_mod, "execute_chat", fake_execute)
+    result = agent.run("read a file")
+
+    assert result["cancelled"] is True
+    assert result["ok"] is False
+    assert recorded == []
+    assert dispatched == []
 
 
 def test_no_plan_kwarg_omits_divergence_rule_too(service: SelfEditService) -> None:

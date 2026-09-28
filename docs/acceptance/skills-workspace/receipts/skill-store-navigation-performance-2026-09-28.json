@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "suite": "native_skill_store_navigation_100_sample_public_fixture",
+  "recorded_at": "2026-09-28T14:28:07.842469Z",
+  "candidate": {
+    "branch": "codex/isolated-20260924",
+    "head": "977f50bec7b77bd7d3381d3b8f3d63fa69bd00e2",
+    "working_tree_dirty": true,
+    "worktree_fingerprint_sha256": "77dab21d199c42d7b024cb81483ebc3d29f8d4dd37b09ccbdc78f8f9a061f301",
+    "fingerprint_refreshed_at": "2026-09-28T14:28:07.842469Z",
+    "fingerprint_refresh_scope": "Final candidate after consolidated status cross-links and current local verification; live acceptance remains open."
+  },
+  "environment": {
+    "platform": "macOS 27.0",
+    "architecture": "arm64",
+    "swift_target": "arm64-apple-macosx14.0",
+    "hardware_model": "unavailable: sysctl hw.model denied by sandbox"
+  },
+  "command": "CLANG_MODULE_CACHE_PATH=/private/tmp/mortimer-clang-cache SWIFTPM_MODULECACHE_OVERRIDE=/private/tmp/mortimer-clang-cache XDG_CACHE_HOME=/private/tmp/mortimer-swift-cache swift test --package-path macos/MortimerHost --disable-sandbox --skip-update --skip-build --filter SkillsStoreCatalogSelectionTests/testCachedStoreNavigationP95WithHundredSkillCatalog",
+  "result": {
+    "exit_code": 0,
+    "tests_executed": 1,
+    "failures": 0,
+    "samples_per_measurement": 100,
+    "catalog_skill_count": 100,
+    "cached_detail_count": 32,
+    "selection_p95_ms": 0.0008,
+    "cached_store_navigation_p95_ms": 0.0077,
+    "selection_budget_ms_p95": 20.0,
+    "navigation_budget_ms_p95": 100.0,
+    "budgets_passed": true,
+    "measurement_scope": "store-only; excludes SwiftUI rendering and network",
+    "hardware_model_verified": false,
+    "rendered_navigation_p95_ms": "not reported by this run"
+  },
+  "implementation_sha256": {
+    "macos/MortimerHost/Tests/MortimerHostTests/SkillsStoreCatalogSelectionTests.swift": "214c4394a2108b268c4de25ad542fbcc92d608a47e0c38befcb22614ec1eec3d",
+    "macos/MortimerHost/Sources/MortimerHost/Stores/SkillsStore.swift": "abef93305735ec021750715e98367df6b459be038a0bc80125b84b1cdde88aef"
+  },
+  "limitations": [
+    "Store timings exclude SwiftUI rendering, display transfer, service/network latency, paired live voice latency, and ten-minute process memory growth.",
+    "Rendered-navigation benchmark skipped because no macOS display was available.",
+    "Hardware identity could not be verified; target-hardware performance acceptance remains open.",
+    "Physical two-display behavior, paired voice latency, and ten-minute memory soak remain unmeasured."
+  ],
+  "latest_integrated_run": {
+    "recorded_at": "2026-09-28T14:06:42.356926Z",
+    "command": "swift test --disable-sandbox --skip-update --cache-path /private/tmp/mortimer-swift-cache --package-path macos/MortimerHost",
+    "suite_result": "full MortimerHost suite passed after compact repeated-navigation fix",
+    "samples_per_case": 100,
+    "catalog_skill_count": 100,
+    "cached_detail_count": 32,
+    "selection_p95_ms": 0.002,
+    "cached_store_navigation_p95_ms": 0.0182,
+    "budgets_passed": true,
+    "measurement_scope": "store-only; excludes SwiftUI rendering and network",
+    "hardware_model_verified": false,
+    "rendered_navigation_p95_ms": "not reported by this run"
+  }
+}

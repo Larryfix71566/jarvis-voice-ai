@@ -112,6 +112,18 @@ def test_joined_registry_equals_the_pre_split_registry(snapshot_env, as_migrated
     assert joined == expected
 
 
+def test_approved_streaming_restoration_preserves_every_other_profile_field(snapshot_env):
+    """CX-12 preserves Codex's three flags on the new live profile layout.
+
+    Main's historical migration fixtures remain immutable; this deliberate
+    post-split change is compared explicitly instead of rewriting the snapshot.
+    """
+    expected = _pre_split_registry()
+    for name in ("claude-opus", "claude-fable-5", "claude-sonnet-5"):
+        expected["profiles"][name]["streaming"] = True
+    assert ua.load_model_registry() == expected
+
+
 def test_the_frozen_pre_split_file_still_loads_to_the_snapshot(snapshot_env):
     """Legacy single-file acceptance (§3 item 2, §9 rollback): the last
     single-file registry, loaded through the same loader, is still exactly

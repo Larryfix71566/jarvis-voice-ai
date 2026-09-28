@@ -172,7 +172,7 @@ final class VoiceWaveRenderingTests: XCTestCase {
         view.frame = NSRect(x: 0, y: 0, width: 400, height: 180)
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
-        defer { window.close() }
+        defer { closeRenderingFixtureWindow(window) }
         window.layoutIfNeeded(); view.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))

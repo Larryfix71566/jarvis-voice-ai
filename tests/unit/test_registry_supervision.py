@@ -94,7 +94,7 @@ class TestCallSupervision:
         monkeypatch.setattr(reg, "_restart", fake_restart)
         result = await reg.call("get_current_time", {})
         assert result == ("get_current_time failed: mcp-time stopped and could "
-                          "not be restarted (ClosedResourceError: ).")
+                          "not be restarted (ClosedResourceError).")
 
     async def test_a_retry_that_fails_again_does_not_restart_twice(self, monkeypatch):
         reg, h = registry_with(session=FakeSession(exc=anyio.ClosedResourceError()))

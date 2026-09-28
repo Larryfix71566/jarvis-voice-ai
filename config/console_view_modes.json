@@ -1,10 +1,11 @@
 {
-  "_comment": "The Command Console's view_set modes. Read by jarvis/bot/console_actions.py (the console_action tool description, pinned by tests/unit/test_workflows_viewer.py) and by MortimerHost's WorkflowsViewerTests.testEveryModeVoiceIsToldAboutIsAccepted, so the modes voice is told about and the modes the app accepts cannot drift apart. MORTIMER_WORKFLOW_VIEWER_PLAN.md piece 3.",
+  "_comment": "The Command Console's view_set modes, shared by the voice action schema and native coordinator tests. Skills and Workflows are separate views. See MORTIMER_WORKFLOW_VIEWER_PLAN.md and MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md.",
   "view_set": [
     "conversation",
     "results",
     "atlas",
     "memory",
+    "skills",
     "workflows"
   ]
 }

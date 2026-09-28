@@ -52,12 +52,12 @@ if name=='codesign':
             path.chmod(0o755)
         self.app = self.package / ".build/MortimerHost.app"
 
-    def run_bundle(self, failure="", **overrides):
+    def run_bundle(self, failure="", configuration="debug", **overrides):
         env = {**os.environ, "PATH": str(self.bin) + ":/usr/bin:/bin",
                "BUNDLE_TEST_LOG": str(self.log), "BUNDLE_TEST_FAILURE": failure,
                "MORTIMER_SOURCE_REVISION": "unknown", "MORTIMER_CANDIDATE_FINGERPRINT": "unknown", "MORTIMER_BUNDLE_LAUNCH": "1"}
         env.update(overrides)
-        result = subprocess.run(["/bin/bash", str(self.script), "debug"], env=env,
+        result = subprocess.run(["/bin/bash", str(self.script), configuration], env=env,
                                 capture_output=True, text=True, timeout=20)
         commands = [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
         return result, commands
@@ -88,6 +88,34 @@ if name=='codesign':
         self.assertEqual(info["MortimerBuildConfiguration"], "debug")
         self.assertNotIn("open", [command[0] for command in commands])
         self.assertIn(["codesign", "--verify", "--deep", "--strict", str(self.app)], commands)
+
+    def test_build_sandbox_disablement_is_opt_in_and_explicit(self):
+        result, commands = self.run_bundle(MORTIMER_SWIFT_BUILD_DISABLE_SANDBOX="1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(commands[0], [
+            "swift", "build", "-c", "debug", "--disable-sandbox",
+        ])
+
+    def test_release_bundle_build_disables_dsym_generation(self):
+        release_products = self.package / ".build/release"
+        release_products.mkdir()
+        (release_products / "MortimerHost").write_bytes(b"release executable")
+        framework = release_products / "WebRTC.framework"
+        framework.mkdir()
+        (framework / "WebRTC").write_bytes(b"release framework")
+
+        result, commands = self.run_bundle(
+            configuration="release", MORTIMER_BUNDLE_LAUNCH="0",
+            MORTIMER_SWIFT_BUILD_DISABLE_SANDBOX="1",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(commands[0], [
+            "swift", "build", "-c", "release", "-debug-info-format", "none",
+            "--disable-sandbox",
+        ])
+        self.assertTrue((self.app / "Contents/MacOS/MortimerHost").is_file())
+        self.assertNotIn("open", [command[0] for command in commands])
 
     def test_location_usage_is_declared(self):
         # Phase 2 D4 (MORTIMER_VOICE_WORKFLOWS_PLAN.md D-L6): CoreLocation

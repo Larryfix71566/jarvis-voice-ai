@@ -2,6 +2,18 @@
 
 **Status:** APPROVED by Larry 2026-08-26 (was DRAFT); track plans written 2026-08-26/27.
 
+**T6 skills scope update, 2026-09-28:** the
+[Skills Workspace and Skill Creation Implementation Plan](MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md)
+is the current implementation contract for the skill-authoring and inspection
+work. Its scoped sandbox authoring policy supersedes the blanket `skills/**`
+allowlist proposal in T6, R11 and the W0 skill-authoring entry below. Use one
+reviewed `skill-creator`, preserving human-reviewed configuration and release
+activation. Implementation is estimated at **90.7%**; SW-B and SW-C are the
+only accepted SW-A–SW-L gates (**2/12**). Tart/VM isolation and lifecycle,
+provider trials and independent review, live accessibility and display checks,
+target-Mac performance, activation/rollback, and release handoff remain open.
+This skills progress does not close G6(a,c) or the separate G6(b).
+
 **Reconciled 2026-09-22 against main `88b206f`** (status notes only; the body
 below is unchanged history):
 - §8 items 3 and 4 still read "unwritten", but both

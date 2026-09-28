@@ -113,10 +113,12 @@ def test_start_preview_posts_target_paths_for_the_tier_check():
 
 def test_start_honors_spoken_profile():
     c = _client()
-    r = logic.selfedit_start(c, "add a clock", profile="claude-opus", confirm=True)
+    r = logic.selfedit_start(
+        c, "add a clock", profile="claude-opus", confirm=True, run_id="run-123",
+    )
     assert r["ok"] and r["started"]
     assert c.posts == [("/api/selfedit/run", {"goal": "add a clock", "profile": "claude-opus",
-                                               "run_id": None})]
+                                               "run_id": "run-123"})]
     assert "several minutes" in r["summary"]
 
 
@@ -170,10 +172,10 @@ def test_start_confirm_with_a_mangled_id_is_passed_through_unchanged():
 
 def test_start_confirm_posts_goal_and_profile():
     c = _client()
-    r = logic.selfedit_start(c, "dark theme", confirm=True)
+    r = logic.selfedit_start(c, "dark theme", confirm=True, run_id="run-dark")
     assert r["started"]
     assert c.posts == [("/api/selfedit/run", {"goal": "dark theme", "profile": "kimi-k2",
-                                               "run_id": None})]
+                                               "run_id": "run-dark"})]
 
 
 def test_start_env_profile_beats_registry_default(monkeypatch):
@@ -186,9 +188,11 @@ def test_start_env_profile_beats_registry_default(monkeypatch):
 def test_start_explicit_profile_beats_env(monkeypatch):
     monkeypatch.setenv("JARVIS_UPGRADE_PROFILE", "claude-opus")
     c = _client()
-    logic.selfedit_start(c, "add a clock", profile="kimi-k2", confirm=True)
+    logic.selfedit_start(
+        c, "add a clock", profile="kimi-k2", confirm=True, run_id="run-clock",
+    )
     assert c.posts == [("/api/selfedit/run", {"goal": "add a clock", "profile": "kimi-k2",
-                                               "run_id": None})]
+                                               "run_id": "run-clock"})]
 
 
 def test_start_env_profile_missing_key_names_env_profile(monkeypatch):
@@ -222,21 +226,44 @@ def test_start_confirm_posts_plan_path():
     r = logic.selfedit_start(
         c, "implement geolocation phase 1", confirm=True,
         plan_path="docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md",
+        run_id="run-geolocation",
     )
     assert r["started"]
     assert c.posts == [("/api/selfedit/run", {
         "goal": "implement geolocation phase 1",
         "profile": "kimi-k2",
         "plan_path": "docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md",
-        "run_id": None,
+        "run_id": "run-geolocation",
     })]
 
 
 def test_start_empty_plan_path_omitted_from_post():
     c = _client()
-    logic.selfedit_start(c, "dark theme", confirm=True, plan_path="  ")
+    logic.selfedit_start(
+        c, "dark theme", confirm=True, plan_path="  ", run_id="run-dark-empty-plan",
+    )
     assert c.posts == [("/api/selfedit/run", {"goal": "dark theme", "profile": "kimi-k2",
-                                               "run_id": None})]
+                                               "run_id": "run-dark-empty-plan"})]
+
+
+def test_bare_confirm_without_run_id_refuses_before_sidecar_dispatch():
+    client = _client()
+    result = logic.selfedit_start(client, "dark theme", confirm=True)
+    assert result["ok"] is False
+    assert "execution ID" in result["error"]
+    assert client.posts == []
+
+
+def test_legacy_bare_start_returns_injected_action_identity():
+    c = _client({("POST", "/api/selfedit/run"): {
+        "ok": True, "started": True, "profile": "kimi-k2",
+        "action_run_id": "subagent-run-unique",
+    }})
+    result = logic.selfedit_start(
+        c, "add a clock", confirm=True, run_id="subagent-run-unique",
+    )
+    assert result["ok"] and result["started"]
+    assert result["action_run_id"] == "subagent-run-unique"
 
 
 # ── selfedit_start: G2 staged confirm flow ──────────────────────────────────
@@ -253,6 +280,20 @@ def test_start_confirm_with_staging_id_replays_without_restating_goal():
     assert r["profile"] == "kimi-k3"
     assert c.posts == [("/api/selfedit/run",
                        {"staging_id": "stg-abc", "author": True})]
+
+
+def test_start_confirm_duplicate_claim_is_not_reported_as_started():
+    c = _client({("POST", "/api/selfedit/run"): {
+        "ok": True, "started": False, "duplicate": True,
+        "action_run_id": "stage-abc", "state": "completed",
+        "summary": "This approved self-edit was already claimed.",
+    }})
+    result = logic.selfedit_start(c, confirm=True, staging_id="stage-abc")
+    assert result["ok"] is True
+    assert result["started"] is False
+    assert result["duplicate"] is True
+    assert result["action_run_id"] == "stage-abc"
+    assert "already claimed" in result["summary"]
 
 
 def test_start_confirm_staging_id_takes_priority_over_goal():
@@ -336,9 +377,24 @@ def test_status_reports_live_staging_when_asked():
                       "expires_in_s": 595.0}],
     }})
     r = logic.selfedit_status(c, staging_id="469bff19ef49")
+    assert c.gets == [("/api/selfedit/run", {"action_run_id": "469bff19ef49"})]
     assert r["staging_found"] is True
     assert "still live" in r["summary"]
     assert "469bff19ef49" in r["summary"]
+
+
+@pytest.mark.parametrize("state", ["unknown", "completed", "failed"])
+def test_status_with_action_receipt_never_suggests_automatic_replay(state):
+    job = {"state": state, "action_run_id": "stage-abc", "result_available": False}
+    if state == "unknown":
+        job["reconciliation_required"] = True
+    c = _client({("GET", "/api/selfedit/run"): {
+        "ok": True, "job": job, "status": {"active": False}, "stagings": [],
+    }})
+    result = logic.selfedit_status(c, staging_id="stage-abc")
+    assert result["ok"] is True
+    assert "automatically" in result["summary"]
+    assert result["job"] == job
 
 
 def test_status_reports_missing_staging_honestly():
@@ -444,11 +500,25 @@ def test_write_relays_an_allowlist_refusal_unchanged():
 
 def test_finish_starts_the_job_and_says_it_runs_in_the_background():
     c = _client({("POST", "/api/selfedit/finish"): {
-        "ok": True, "started": True, "state": "validating"}})
+        "ok": True, "started": True, "state": "validating",
+        "action_run_id": "session-123"}})
     r = logic.selfedit_finish(c)
     assert r["ok"] and r["started"]
+    assert r["action_run_id"] == "session-123"
     assert "Validating now" in r["summary"]
     assert c.posts == [("/api/selfedit/finish", {})]
+
+
+def test_finish_duplicate_does_not_claim_that_validation_started():
+    c = _client({("POST", "/api/selfedit/finish"): {
+        "ok": True, "started": False, "duplicate": True,
+        "state": "unknown", "action_run_id": "session-123",
+        "summary": "Already claimed; inspect status before retrying.",
+    }})
+    r = logic.selfedit_finish(c)
+    assert r["ok"] and r["started"] is False and r["duplicate"]
+    assert r["action_run_id"] == "session-123"
+    assert "Already claimed" in r["summary"]
 
 
 def test_finish_relays_a_refusal():
@@ -481,6 +551,17 @@ def test_status_speaks_the_finish_job_states():
     errored = logic.selfedit_status(status_with({
         "state": "error", "notice": "push rejected"}))
     assert "push rejected" in errored["summary"]
+
+
+def test_status_can_recover_submission_outcome_by_action_id():
+    c = _client({("GET", "/api/selfedit/run"): {
+        "ok": True, "job": {"state": "idle"}, "status": {"active": False},
+        "finish": {"state": "unknown", "action_run_id": "session-123",
+                   "reconciliation_required": True},
+    }})
+    result = logic.selfedit_status(c, action_run_id="session-123")
+    assert result["ok"] and "Do not retry automatically" in result["summary"]
+    assert c.gets == [("/api/selfedit/run", {"finish_action_id": "session-123"})]
 
 
 def test_a_proposal_pr_is_spoken_without_merging_is_yours():
@@ -537,13 +618,13 @@ def test_revert_refused_while_running():
 # ── offline degradation ────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("call", [
-    lambda c: logic.selfedit_start(c, "goal", confirm=True),
+    lambda c: logic.selfedit_start(c, "goal", confirm=True, run_id="run-offline"),
     lambda c: logic.selfedit_status(c),
     lambda c: logic.selfedit_read(c, "docs/x.md"),
     lambda c: logic.selfedit_write(c, "docs/x.md", "hi\n", "why"),
     lambda c: logic.selfedit_finish(c),
     lambda c: logic.selfedit_revert(c, confirm=True),
-    lambda c: logic.plan_start(c, "goal", confirm=True),
+    lambda c: logic.plan_start(c, "goal", confirm=True, run_id="run-offline-plan"),
     lambda c: logic.plan_status(c),
     lambda c: logic.plan_choose(c, "Proposal A"),
     lambda c: logic.plan_adopt(c, confirm=True),
@@ -565,6 +646,20 @@ def test_plan_start_requires_goal():
     assert "goal" in r["error"]
 
 
+def test_plan_start_duplicate_claim_does_not_claim_a_new_job():
+    c = _client({("POST", "/api/plan/start"): {
+        "ok": True, "started": False, "duplicate": True,
+        "action_run_id": "stable-run", "state": "unknown",
+        "summary": "already claimed",
+    }})
+    r = logic.plan_start(c, "write a spec", confirm=True, run_id="stable-run")
+    assert r["ok"] is True
+    assert r["started"] is False
+    assert r["duplicate"] is True
+    assert r["action_run_id"] == "stable-run"
+    assert r["summary"] == "already claimed"
+
+
 def test_plan_start_rejects_bad_mode():
     r = logic.plan_start(_client(), "write a spec", mode="parallel", confirm=False)
     assert r["ok"] is False
@@ -580,12 +675,14 @@ def test_plan_start_previews_without_confirm():
 
 def test_plan_start_council_confirm_posts_and_summarizes(monkeypatch):
     c = _client({("POST", "/api/plan/start"): {"ok": True, "started": True}})
-    r = logic.plan_start(c, "write a spec", mode="council", confirm=True)
+    r = logic.plan_start(
+        c, "write a spec", mode="council", confirm=True, run_id="council-run",
+    )
     assert r["ok"] is True
     assert r["started"] is True
     assert c.posts[0] == ("/api/plan/start", {
         "goal": "write a spec", "mode": "council", "profile": None,
-        "review_path": "", "run_id": None,
+        "review_path": "", "run_id": "council-run",
     })
 
 
@@ -599,11 +696,32 @@ def test_plan_start_forwards_run_id():
     })
 
 
+def test_plan_start_without_execution_id_refuses_before_sidecar_dispatch():
+    client = _client()
+    result = logic.plan_start(client, "write a spec", confirm=True)
+    assert result["ok"] is False
+    assert "execution ID" in result["error"]
+    assert client.posts == []
+
+
 def test_plan_status_idle():
     c = _client({("GET", "/api/plan/job"): {"ok": True, "job": {"state": "idle"}}})
     r = logic.plan_status(c)
     assert r["ok"] is True
     assert "No planning job" in r["summary"]
+
+
+def test_plan_status_can_query_exact_prior_action_receipt():
+    c = _client({("GET", "/api/plan/job"): {
+        "ok": True,
+        "job": {
+            "state": "unknown", "run_id": "stable-run",
+            "result_available": False, "reconciliation_required": True,
+        },
+    }})
+    r = logic.plan_status(c, "stable-run")
+    assert "Do not retry it automatically" in r["summary"]
+    assert c.gets == [("/api/plan/job", {"run_id": "stable-run"})]
 
 
 def test_plan_status_running():
@@ -693,11 +811,12 @@ def test_plan_start_review_path_passed_through_on_confirm():
     r = logic.plan_start(
         c, "review the geolocation plan", mode="single", confirm=True,
         review_path="docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md",
+        run_id="review-run",
     )
     assert r["ok"] is True
     assert c.posts[0] == ("/api/plan/start", {
         "goal": "review the geolocation plan", "mode": "single", "profile": None,
-        "review_path": "docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md", "run_id": None,
+        "review_path": "docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md", "run_id": "review-run",
     })
     assert "started the review" in r["summary"].lower()
 

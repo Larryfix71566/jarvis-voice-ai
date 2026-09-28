@@ -23,12 +23,14 @@ final class ScreenPlacement {
     }
 
     typealias Scheduler = @MainActor (_ delay: TimeInterval, _ work: DispatchWorkItem) -> Void
+    typealias UnlockObserver = @MainActor (@escaping @MainActor () -> Void) -> NSObjectProtocol
 
     private let defaults: UserDefaults
     private let screenProvider: @MainActor () -> [PlacementScreen]
     private let windowProvider: @MainActor (HostWindowKind) -> NSWindow?
     private let schedule: Scheduler
     private let now: @MainActor () -> TimeInterval
+    private let observeUnlock: UnlockObserver
 
     private var policy = DisplayPlacementPolicy()
     private var observing = false
@@ -82,19 +84,38 @@ final class ScreenPlacement {
                   screens: { ScreenPlacement.liveScreens() },
                   windows: { findHostWindow(kind: $0) },
                   schedule: { delay, work in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work) },
-                  now: { ProcessInfo.processInfo.systemUptime })
+                  now: { ProcessInfo.processInfo.systemUptime },
+                  observeUnlock: { action in
+                      DistributedNotificationCenter.default().addObserver(
+                          forName: Self.screenUnlockedNotification,
+                          object: nil,
+                          queue: .main,
+                      ) { _ in
+                          Task { @MainActor in action() }
+                      }
+                  })
     }
 
     init(defaults: UserDefaults,
          screens: @escaping @MainActor () -> [PlacementScreen],
          windows: @escaping @MainActor (HostWindowKind) -> NSWindow?,
          schedule: @escaping Scheduler,
-         now: @escaping @MainActor () -> TimeInterval) {
+         now: @escaping @MainActor () -> TimeInterval,
+         observeUnlock: @escaping UnlockObserver = { action in
+             DistributedNotificationCenter.default().addObserver(
+                 forName: ScreenPlacement.screenUnlockedNotification,
+                 object: nil,
+                 queue: .main,
+             ) { _ in
+                 Task { @MainActor in action() }
+             }
+         }) {
         self.defaults = defaults
         self.screenProvider = screens
         self.windowProvider = windows
         self.schedule = schedule
         self.now = now
+        self.observeUnlock = observeUnlock
         policy.records = Self.decodeRecords(defaults.data(forKey: Self.preferenceKey))
     }
 
@@ -149,10 +170,7 @@ final class ScreenPlacement {
         }
         // … and the screen unlock itself, which loginwindow posts as a
         // distributed notification (there is no NSWorkspace equivalent).
-        observers.append(DistributedNotificationCenter.default().addObserver(
-            forName: Self.screenUnlockedNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.topologyChanged() }
-        })
+        observers.append(observeUnlock { [weak self] in self?.topologyChanged() })
         scheduleReposition()
     }
 

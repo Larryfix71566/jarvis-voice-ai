@@ -6,8 +6,6 @@ sandbox-required response. Publication is owned by the verified VM session.
 
 from __future__ import annotations
 
-from mcp_servers.development_boundary import sandbox_required
-
 import os
 import sqlite3
 import subprocess
@@ -15,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from jarvis.db import get_conn, run_migrations
+from mcp_servers.development_boundary import sandbox_required
 
 # ⚙ TUNING KNOB — age past which a held index.lock is called out as
 # unusually old in the D15 message below (MORTIMER_AGENT_TRUST_PLAN.md
@@ -169,13 +168,21 @@ def _now_utc() -> datetime:
 
 
 def git_status() -> dict:
-    code, branch = _git("branch", "--show-current")
-    code, porcelain = _git("status", "--porcelain")
+    root_code, root = _git("rev-parse", "--show-toplevel")
+    branch_code, branch = _git("branch", "--show-current")
+    status_code, porcelain = _git("status", "--porcelain")
+    if root_code != 0 or branch_code != 0 or status_code != 0:
+        return {"error": "Repository status is unavailable."}
+    _upstream_code, upstream = _git(
+        "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"
+    )
     _c, ahead_raw = _git("rev-list", "--count", "@{u}..HEAD")
     _c2, behind_raw = _git("rev-list", "--count", "HEAD..@{u}")
     changed = [l for l in porcelain.splitlines() if l.strip()]
     return {
-        "branch": branch,
+        "repository": root,
+        "branch": branch or "(detached HEAD)",
+        "upstream": upstream if _upstream_code == 0 and upstream else None,
         "clean": not changed,
         "changed_files": [l[3:] for l in changed],
         "ahead": int(ahead_raw) if ahead_raw.isdigit() else 0,
@@ -199,8 +206,27 @@ def changed_files() -> dict:
 
 def git_log(n: int = 5) -> dict:
     n = max(1, min(int(n), 20))
-    code, out = _git("log", f"-{n}", "--pretty=format:%h %ad %s", "--date=relative")
-    return {"commits": out.splitlines() if out else []}
+    code, out, _err = _git_raw(
+        "log", f"-{n}", "--format=%H%x00%cI%x00%s%x00",
+    )
+    if code != 0:
+        return {"error": "Git history is unavailable."}
+    fields = out.rstrip("\n").split("\0")
+    if fields and fields[-1] == "":
+        fields.pop()
+    if len(fields) % 3:
+        return {"error": "Git history response is incomplete."}
+    records = [
+        {"sha": fields[index], "date": fields[index + 1], "subject": fields[index + 2]}
+        for index in range(0, len(fields), 3)
+    ]
+    return {
+        "commits": [
+            f"{record['sha'][:7]} {record['date']} {record['subject']}"
+            for record in records
+        ],
+        "commit_records": records,
+    }
 
 
 def git_diff_summary() -> dict:

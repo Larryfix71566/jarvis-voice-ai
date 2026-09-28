@@ -87,6 +87,18 @@ class SourceTests(unittest.TestCase):
             with self.assertRaises(control.SandboxError):
                 control.snapshot(self.repo, "HEAD", self.root / "moved.tar")
 
+    def test_reviewed_baseline_fixture_export_still_requires_exact_bytes(self):
+        data = ("sk-" + "b" * 30).encode()
+        (self.repo / "baseline-fixture.py").write_bytes(data)
+        self.commit()
+        reviewed = {"baseline-fixture.py": hashlib.sha256(data).hexdigest()}
+        with patch.dict(control.REVIEWED_BASELINE_TEST_FIXTURES, reviewed, clear=True):
+            control.snapshot(self.repo, "HEAD", self.root / "source.tar")
+            (self.repo / "baseline-fixture.py").write_bytes(data + b"changed")
+            self.commit()
+            with self.assertRaises(control.SandboxError):
+                control.snapshot(self.repo, "HEAD", self.root / "changed-baseline.tar")
+
 
 class WorkerDispatchTests(unittest.TestCase):
     """Run the dispatch shell with stand-ins only for OS identity and sudo.
@@ -223,6 +235,19 @@ class ControllerTests(unittest.TestCase):
         shares = [x for x in args if x.startswith("--dir=")]
         self.assertEqual(len(shares), 1)
         self.assertTrue(shares[0].endswith("/input:ro"))
+
+    def test_skill_task_goal_is_not_copied_to_vm_process_arguments(self):
+        """Session task text is not passed to Tart's host process argv."""
+        canary = "PRIVATE_SKILL_TASK_CANARY_PROCESS_8bc2"
+        state = self.c.read(self.task)
+        state["goal"] = canary
+        self.c.save(self.task, state)
+
+        # These are the exact arguments Controller.start passes to Popen.
+        args = self.c.run_args(self.task, False, True)
+
+        self.assertNotIn(canary, args)
+        self.assertEqual(args[-1], "mortimer-" + self.task)
 
     def test_task_traversal_is_rejected(self):
         with self.assertRaises(control.SandboxError): self.c.task_dir("../elsewhere")

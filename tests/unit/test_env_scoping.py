@@ -8,7 +8,10 @@ import pytest
 import yaml
 
 from jarvis.skills.registry import (
-    BASE_ENV_KEYS, REPO_ROOT, build_child_env, load_requires_env,
+    BASE_ENV_KEYS,
+    REPO_ROOT,
+    build_child_env,
+    load_requires_env,
 )
 
 SERVERS = sorted(p.parent.name for p in (REPO_ROOT / "mcp_servers").glob("*/skill.yaml"))
@@ -59,6 +62,12 @@ _KNOWN_INDIRECT_TRANSITIVE_READS: dict[str, set[str]] = {
                    "JARVIS_GRAPH_MAX_NODES", "JARVIS_GRAPH_SINCE"},
     "mcp_runlog": {"JARVIS_GRAPHS_ENABLED", "JARVIS_GRAPH_DEPTH",
                    "JARVIS_GRAPH_MAX_NODES", "JARVIS_GRAPH_SINCE"},
+    # mcp-apps and mcp-web import the shared AdminClient through
+    # mcp_selfedit.logic. Its service_headers() helper reads this token from
+    # jarvis.auth; the static analyzer follows jarvis imports but not sibling
+    # MCP package imports, so confirm this narrow transitive read explicitly.
+    "mcp_apps": {"JARVIS_SERVICE_TOKEN"},
+    "mcp_web": {"JARVIS_SERVICE_TOKEN"},
 }
 
 
@@ -249,7 +258,10 @@ def test_kill_switch_restores_full_inheritance(monkeypatch):
     assert env["GITHUB_TOKEN"].startswith("ghp_")
 
 
-def test_missing_skill_yaml_degrades_to_base_only(caplog):
+def test_missing_skill_yaml_degrades_to_base_only(caplog, tmp_path, monkeypatch):
+    from jarvis.skills import registry
+
+    monkeypatch.setattr(registry, "REPO_ROOT", tmp_path)
     # NOTE: load_requires_env returns a 3-tuple (required, optional,
     # dynamic) per its own signature/docstring — the plan text's
     # 2-value unpack here was a bug (would raise "too many values to
@@ -258,3 +270,62 @@ def test_missing_skill_yaml_degrades_to_base_only(caplog):
         required, optional, dynamic = load_requires_env("mcp-does-not-exist")
     assert required == [] and optional == [] and dynamic == []
     assert "skill_yaml_missing" in caplog.text
+    assert str(tmp_path) not in caplog.text
+
+
+def test_unreadable_skill_yaml_omits_path_and_parser_source(
+        caplog, tmp_path, monkeypatch):
+    from jarvis.skills import registry
+
+    monkeypatch.setattr(registry, "REPO_ROOT", tmp_path)
+    skill = tmp_path / "mcp_servers" / "mcp_private" / "skill.yaml"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("PRIVATE_SKILL_SOURCE_CANARY: [", encoding="utf-8")
+
+    with caplog.at_level("WARNING"):
+        result = load_requires_env("mcp-private")
+
+    assert result == ([], [], [])
+    assert "skill_yaml_unreadable server=mcp-private" in caplog.text
+    assert str(tmp_path) not in caplog.text
+    assert "PRIVATE_SKILL_SOURCE_CANARY" not in caplog.text
+
+
+def test_unreadable_upgrade_models_omits_path_and_parser_source(
+        caplog, tmp_path, monkeypatch):
+    from jarvis.skills import registry
+
+    monkeypatch.setattr(registry, "REPO_ROOT", tmp_path)
+    config = tmp_path / "config" / "upgrade_models.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("PRIVATE_UPGRADE_CONFIG_CANARY: [", encoding="utf-8")
+    # Exercise the shared loader's supported override after the registry split.
+    monkeypatch.setenv("JARVIS_UPGRADE_MODELS", str(config))
+
+    with caplog.at_level("WARNING"):
+        names = registry._resolve_dynamic_env(
+            "mcp-private", [{"source": "upgrade_models_api_keys"}])
+
+    assert names == ["OPENAI_API_KEY"]
+    assert "upgrade_models_unreadable server=mcp-private" in caplog.text
+    assert "error_type=ParserError" in caplog.text
+    assert str(tmp_path) not in caplog.text
+    assert "PRIVATE_UPGRADE_CONFIG_CANARY" not in caplog.text
+
+
+def test_invalid_dynamic_env_source_omits_exception_details(
+        caplog, monkeypatch):
+    from jarvis.skills import registry
+
+    monkeypatch.setattr(
+        registry, "_resolve_dynamic_env",
+        lambda *_args: (_ for _ in ()).throw(
+            ValueError("PRIVATE_DYNAMIC_SOURCE_CANARY /Users/private/path")),
+    )
+    with caplog.at_level("ERROR"):
+        env = build_child_env({"name": "mcp-private", "env": {}})
+
+    assert "mcp_requires_env_dynamic_invalid" in caplog.text
+    assert "PRIVATE_DYNAMIC_SOURCE_CANARY" not in caplog.text
+    assert "/Users/private/path" not in caplog.text
+    assert "mcp-private" not in env

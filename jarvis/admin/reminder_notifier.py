@@ -2,10 +2,14 @@
 RemindersWatcher lives inside a WebRTC session; this thread lives as long
 as the sidecar, and only ever sets reminders.notified_at — never delivered."""
 from __future__ import annotations
-import logging, threading
+
+import logging
+import threading
 from typing import Callable
-from mcp_servers.mcp_reminders import logic
+
 from jarvis.notify import post_notification
+from mcp_servers.mcp_reminders import logic
+
 logger = logging.getLogger(__name__)
 REMINDER_NOTIFY_INTERVAL_S = 30.0   # §6
 REMINDER_NOTIFY_GRACE_S = 60.0      # §6
@@ -41,12 +45,14 @@ class ReminderNotifier:
             try:
                 posted = self._post(str(row.get("message", "")))
             except Exception as exc:  # one failed notification must not stop the watcher
-                logger.warning("reminder_notifier_post_failed id=%s error=%s", row.get("id"), type(exc).__name__)
+                logger.warning("reminder_notifier_post_failed error_type=%s",
+                               type(exc).__name__)
                 continue
             if posted:
                 try:
                     logic.mark_notified([int(row["id"])])
                     sent += 1
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning("reminder_notifier_mark_failed id=%s error=%s", row.get("id"), type(exc).__name__)
+                    logger.warning("reminder_notifier_mark_failed error_type=%s",
+                                   type(exc).__name__)
         return sent

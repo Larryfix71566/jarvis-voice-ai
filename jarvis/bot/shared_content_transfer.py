@@ -7,13 +7,14 @@ feed both the WebRTC and WebSocket paths into the same state machine.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
-from hashlib import sha256
 import base64
 import inspect
 import uuid
+from dataclasses import dataclass, field, replace
+from hashlib import sha256
 from typing import Any
 
+from jarvis.bot.sensitive_turn import SensitiveTurn
 from jarvis.bot.shared_content import (
     MAX_ATTACHMENTS,
     MAX_CHUNK_BYTES,
@@ -23,7 +24,6 @@ from jarvis.bot.shared_content import (
     normalize_shared_content,
     validate_input_message,
 )
-from jarvis.bot.sensitive_turn import SensitiveTurn
 
 
 @dataclass

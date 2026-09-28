@@ -35,7 +35,11 @@ final class AudioActivityObserverTests: XCTestCase {
     }
 
     private func observer(_ box: SnapshotBox) -> AudioActivityObserver {
-        AudioActivityObserver(publish: { box.append($0) })
+        AudioActivityObserver(
+            publish: { box.append($0) },
+            now: { ProcessInfo.processInfo.systemUptime },
+            automaticSamplingEnabled: false,
+        )
     }
 
     /// Begins a session and lets eligibility age. The accumulator only

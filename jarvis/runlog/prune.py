@@ -25,7 +25,7 @@ def prune(
     db_path: str | Path | None = None,
     root: Path | None = None,
 ) -> dict:
-    """Delete agent_runs/agent_events rows and logs/agents/<date>/
+    """Delete run rows and all linked event rows plus logs/agents/<date>/
     directories older than `retention_days`. Returns
     {"runs_deleted": n, "dirs_deleted": n}. `retention_days <= 0` disables
     pruning and returns zeros immediately."""
@@ -44,6 +44,14 @@ def prune(
             placeholders = ",".join("?" for _ in expired_ids)
             conn.execute(
                 f"DELETE FROM agent_events WHERE run_id IN ({placeholders})",
+                expired_ids,
+            )
+            conn.execute(
+                f"DELETE FROM skill_events WHERE run_id IN ({placeholders})",
+                expired_ids,
+            )
+            conn.execute(
+                f"DELETE FROM skill_step_check_receipts WHERE run_id IN ({placeholders})",
                 expired_ids,
             )
             conn.execute(

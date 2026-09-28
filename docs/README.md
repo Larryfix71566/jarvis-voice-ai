@@ -9,6 +9,9 @@
   including those authored through the planning pathway (adopt default).
   One document per plan; never create documentation directories anywhere
   else in the repo (`jarvis/docs/` in particular must not be recreated).
+- [Verified gap closure](plans/MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md) — the
+  2026-09-24 execution addendum for remaining interface, memory, model-access
+  and release-evidence gaps; includes locked decisions and model handoff rules.
 - [Implemented plans](plans/implemented/) — completed implementation plans,
   kept for the decision history they carry. CLAUDE.md links here.
 - [Reviews](reviews/) — model-authored reviews of plans/specs, adopted

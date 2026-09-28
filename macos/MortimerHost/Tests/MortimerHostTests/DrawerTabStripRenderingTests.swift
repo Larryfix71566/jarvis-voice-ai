@@ -11,12 +11,13 @@ final class DrawerTabStripRenderingTests: XCTestCase {
         NSApplication.shared.accessibilitySetValue(true,
             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
         let view = NSHostingView(rootView: DrawerTabStrip(selectedTab: "costs", attention: [:], select: { _ in })
+            .environment(\.mortimerReduceMotion, true)
             .padding(8).background(Color.black))
         view.frame = NSRect(x: 0, y: 0, width: 300, height: 64)
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = view
         window.orderFrontRegardless()
-        defer { window.close() }
+        defer { closeRenderingFixtureWindow(window) }
         window.layoutIfNeeded(); view.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.25))
         var selectedFrames: [CGRect] = []
@@ -54,12 +55,13 @@ final class DrawerTabStripRenderingTests: XCTestCase {
             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
         let selection = HeaderSelection()
         let view = NSHostingView(rootView: MountedHeader(selection: selection)
+            .environment(\.mortimerReduceMotion, true)
             .padding(8).background(Color.black))
         view.frame = NSRect(x: 0, y: 0, width: 300, height: 64)
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = view
         window.orderFrontRegardless()
-        defer { window.close() }
+        defer { closeRenderingFixtureWindow(window) }
         window.layoutIfNeeded(); view.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.25))
         for key in DrawerState.tabKeys + DrawerState.tabKeys.reversed() {
@@ -101,12 +103,13 @@ final class DrawerTabStripRenderingTests: XCTestCase {
             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
         let selection = HeaderSelection()
         let view = NSHostingView(rootView: MountedHeader(selection: selection)
+            .environment(\.mortimerReduceMotion, true)
             .padding(8).background(Color.black))
         view.frame = NSRect(x: 0, y: 0, width: 300, height: 128)
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = view
         window.orderFrontRegardless()
-        defer { window.close() }
+        defer { closeRenderingFixtureWindow(window) }
         window.layoutIfNeeded(); view.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.25))
         for key in DrawerState.tabKeys + DrawerState.tabKeys.reversed() {
@@ -154,11 +157,12 @@ final class DrawerTabStripRenderingTests: XCTestCase {
             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
         let selection = HeaderSelection()
         let view = NSHostingView(rootView: MountedHeader(selection: selection)
+            .environment(\.mortimerReduceMotion, true)
             .padding(8))
         view.frame = NSRect(x: 0, y: 0, width: 300, height: 64)
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
-        defer { window.close() }
+        defer { closeRenderingFixtureWindow(window) }
         RunLoop.main.run(until: Date().addingTimeInterval(0.25))
         func controls() -> [String: NSObject] {
             var found: [String: NSObject] = [:]
@@ -203,13 +207,14 @@ final class DrawerTabStripRenderingTests: XCTestCase {
         NSApplication.shared.accessibilitySetValue(true,
             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
         let view = NSHostingView(rootView: DrawerTabStrip(selectedTab: "memory", attention: [:], select: { _ in })
+            .environment(\.mortimerReduceMotion, true)
             .padding(8).background(Color.black))
         view.frame = NSRect(x: 0, y: 0, width: 1000, height: 64)
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = view
         window.orderFrontRegardless()
-        defer { window.close() }
+        defer { closeRenderingFixtureWindow(window) }
         window.layoutIfNeeded()
         view.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.15))

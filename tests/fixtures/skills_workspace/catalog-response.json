@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "catalog_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "capabilities": {
+    "process_view": true,
+    "activity_trace": true,
+    "authoring": false
+  },
+  "items": [
+    {
+      "skill_id": "technical-plan-document",
+      "display_name": "Technical plan and specification",
+      "description": "Write an implementation plan with explicit decisions and acceptance criteria.",
+      "category": "development",
+      "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "installation": "installed",
+      "enabled": true,
+      "readiness": "unknown",
+      "readiness_reasons": ["model_route_compatibility_unverified"],
+      "verification": "not_tested",
+      "example_ids": ["implementation-plan"],
+      "blockers": []
+    }
+  ],
+  "next_cursor": null
+}

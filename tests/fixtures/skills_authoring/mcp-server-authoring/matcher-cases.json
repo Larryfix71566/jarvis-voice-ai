@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "author-mcp-server",
+      "request": "Help me build an MCP server in mcp_servers with logic and server files, tool descriptions, skill.yaml and config registration.",
+      "expect_selected": true
+    },
+    {
+      "id": "unrelated-weather-request",
+      "request": "What is the current weather forecast and temperature in Fahrenheit?",
+      "expect_selected": false
+    }
+  ]
+}

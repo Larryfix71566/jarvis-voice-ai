@@ -113,6 +113,19 @@ final class WorkflowsViewerTests: XCTestCase {
         XCTAssertNotEqual(store.selected?.id, "plan-before-implementing-2.yaml")
     }
 
+    func testRelatedWorkflowLinkLoadsAndSelectsExactWorkflow() async throws {
+        let store = WorkflowsStore()
+        let response = try WorkflowFixtures.response()
+        let opened = await store.openRelatedWorkflow("voice-where-am-i") { response }
+        XCTAssertTrue(opened)
+        XCTAssertEqual(store.selected?.name, "voice-where-am-i")
+        XCTAssertEqual(store.selected?.id, "voice-where-am-i.yaml")
+
+        XCTAssertFalse(store.selectRelatedWorkflow("not-a-workflow"))
+        XCTAssertTrue(store.selectRelatedWorkflow("plan-before-implementing.yaml"))
+        XCTAssertEqual(store.selected?.name, "plan-before-implementing")
+    }
+
     func testAFailedReadIsNotLoadedSoTheNextOpenRetries() async throws {
         let store = WorkflowsStore()
         let failed = try JSONDecoder().decode(WorkflowsResponse.self,
@@ -163,22 +176,29 @@ final class WorkflowsViewerTests: XCTestCase {
 
     // MARK: view mode, voice and the supporting display
 
-    func testWorkflowsIsAFourthMutuallyExclusiveMode() {
+    func testSkillsAndWorkflowsAreSeparateMutuallyExclusiveModes() {
         let workspace = WorkspaceStore()
         func modes() -> [Bool] {
-            [workspace.showsConversation, workspace.showsMemoryGraph, workspace.showsAtlas, workspace.showsWorkflows]
+            [workspace.showsConversation, workspace.showsMemoryGraph, workspace.showsAtlas,
+             workspace.showsSkills, workspace.showsWorkflows]
         }
+        workspace.openSkills()
+        XCTAssertEqual(modes(), [false, false, false, true, false])
+        XCTAssertEqual(workspace.consoleInventory["mode"] as? String, "skills")
+        guard case .object(let skillInventory) = workspace.consoleInventoryJSON,
+              case .string(let skillMode) = skillInventory["mode"] else { return XCTFail("inventory shape") }
+        XCTAssertEqual(skillMode, "skills")
         workspace.openWorkflows()
-        XCTAssertEqual(modes(), [false, false, false, true])
+        XCTAssertEqual(modes(), [false, false, false, false, true])
         XCTAssertEqual(workspace.consoleInventory["mode"] as? String, "workflows")
         guard case .object(let inventory) = workspace.consoleInventoryJSON,
               case .string(let mode) = inventory["mode"] else { return XCTFail("inventory shape") }
         XCTAssertEqual(mode, "workflows")
         workspace.openAtlas()
-        XCTAssertEqual(modes(), [false, false, true, false])
+        XCTAssertEqual(modes(), [false, false, true, false, false])
         workspace.openWorkflows()
         workspace.openMemoryGraph()
-        XCTAssertEqual(modes(), [false, true, false, false])
+        XCTAssertEqual(modes(), [false, true, false, false, false])
         workspace.openWorkflows()
         workspace.returnToConversation()
         XCTAssertFalse(workspace.showsWorkflows)
@@ -213,6 +233,7 @@ final class WorkflowsViewerTests: XCTestCase {
         let url = GraphFixture.repositoryRoot().appendingPathComponent("config/console_view_modes.json")
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let modes = try XCTUnwrap(object["view_set"] as? [String])
+        XCTAssertTrue(modes.contains("skills"))
         XCTAssertTrue(modes.contains("workflows"))
         for mode in modes {
             let workspace = WorkspaceStore()
@@ -234,7 +255,21 @@ final class WorkflowsViewerTests: XCTestCase {
             atlas: AtlasStore(), panels: PanelStore(), drawer: drawer)
         XCTAssertEqual(coordinator.executePointer(.viewSet, target: "workflows"), .applied)
         XCTAssertTrue(workspace.showsWorkflows)
+        XCTAssertEqual(coordinator.executePointer(.viewSet, target: "skills"), .applied)
+        XCTAssertTrue(workspace.showsSkills)
+        XCTAssertFalse(workspace.showsWorkflows)
         XCTAssertEqual(coordinator.executePointer(.viewSet, target: "not-a-mode"), .invalid)
+    }
+
+    func testSkillsUseASeparateSupportingDisplayStage() {
+        let workspace = WorkspaceStore()
+        let display = DisplayWindowStore()
+        XCTAssertTrue(workspace.sendToDisplay(.skills))
+        XCTAssertEqual(workspace.supportingContent, .skills)
+        XCTAssertEqual(display.supplementalContent(.skills), .skills)
+        XCTAssertTrue(display.stagePanels(selection: .skills).isEmpty)
+        display.setWindowOpen(true)
+        XCTAssertTrue(display.isPresented(.skills, selection: workspace.supportingContent))
     }
 
     func testWorkflowsGoToTheSupportingDisplayAsTheirOwnTile() {

@@ -5,8 +5,12 @@ import json
 import pytest
 
 from jarvis.bot.sensitive_turn import (
-    SensitiveTurn, arm_from_text, current_sensitive_turn, current_turn_id,
-    is_sensitive, redacted,
+    SensitiveTurn,
+    arm_from_text,
+    current_sensitive_turn,
+    current_turn_id,
+    is_sensitive,
+    redacted,
 )
 from jarvis.skills.registry import REPO_ROOT
 
@@ -114,6 +118,28 @@ def test_p1_p2_no_conversations_row_when_armed(holder, tmp_path, monkeypatch):
     assert [r[0] for r in rows] == ["ordinary line"]
 
 
+def test_transcript_persistence_failure_omits_exception_payload(
+    holder, monkeypatch, capsys,
+):
+    from contextlib import contextmanager
+
+    from jarvis.bot import transcript_log
+
+    canary = "PRIVATE_TRANSCRIPT_DB_EXCEPTION_CANARY_19a7"
+
+    @contextmanager
+    def failing_connection():
+        raise RuntimeError(canary)
+        yield  # pragma: no cover - context manager raises before yielding
+
+    monkeypatch.setattr(transcript_log, "get_conn", failing_connection)
+    transcript_log._persist("session-canary", "user", "transcript body")
+
+    output = capsys.readouterr().out
+    assert "TranscriptLogger persist error_type=RuntimeError" in output
+    assert canary not in output
+
+
 def test_p4_p5_supervisor_does_not_persist_when_armed(holder, tmp_path, monkeypatch):
     """Same assertion for the CLI/text path (jarvis/agents/supervisor.py).
 
@@ -164,20 +190,27 @@ def test_p4_p5_supervisor_does_not_persist_when_armed(holder, tmp_path, monkeypa
 
 # --- F1: the real frame sequence suppresses the assistant row ------------
 
-def test_real_frame_sequence_suppresses_assistant_row(holder, tmp_path, monkeypatch):
+def test_real_frame_sequence_suppresses_assistant_row(
+    holder, tmp_path, monkeypatch, capsys,
+):
     """review F1 — drive the ACTUAL order the observer/processor see:
     UserStartedSpeakingFrame -> TranscriptionFrame(s) -> UserStoppedSpeakingFrame
     -> LLMTextFrame(s) -> LLMFullResponseEndFrame. The user turn carries no
     value; the ASSISTANT reply does (review F2). Both rows must be suppressed,
     and the flag must NOT have been cleared before the reply was scanned."""
     import asyncio
+
     from pipecat.frames.frames import (
-        UserStartedSpeakingFrame, UserStoppedSpeakingFrame,
-        TranscriptionFrame, LLMTextFrame, LLMFullResponseEndFrame,
+        LLMFullResponseEndFrame,
+        LLMTextFrame,
+        TranscriptionFrame,
+        UserStartedSpeakingFrame,
+        UserStoppedSpeakingFrame,
     )
-    from pipecat.processors.frame_processor import FrameDirection
     from pipecat.observers.base_observer import FramePushed
-    from jarvis.bot.transcript_log import TranscriptObserver, TranscriptLogger
+    from pipecat.processors.frame_processor import FrameDirection
+
+    from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
     from jarvis.db import get_conn, run_migrations
     monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "t.db"))
     run_migrations()
@@ -195,13 +228,21 @@ def test_real_frame_sequence_suppresses_assistant_row(holder, tmp_path, monkeypa
     async def drive():
         await push_obs(UserStartedSpeakingFrame())
         # user asks a question with NO value in it
-        await push_obs(TranscriptionFrame("what is my checking balance", "u", ""))
+        await push_obs(TranscriptionFrame(
+            text="what is my checking balance", finalized=True,
+            user_id="u", timestamp="t",
+        ))
         await push_obs(UserStoppedSpeakingFrame())
         # assistant answers WITH the value
         await push_log(LLMTextFrame("Your checking account balance is $2,431.18."))
         await push_log(LLMFullResponseEndFrame())
 
     asyncio.run(drive())
+    output = capsys.readouterr().out
+    assert "USER: [content omitted; chars=" in output
+    assert "MORTIMER: [content omitted; chars=" in output
+    assert "what is my checking balance" not in output
+    assert "$2,431.18" not in output
     with get_conn() as conn:
         rows = conn.execute("SELECT role, content FROM conversations").fetchall()
     # the assistant row must be absent (reply scanned, flag still armed);
@@ -213,9 +254,15 @@ def test_real_frame_sequence_suppresses_assistant_row(holder, tmp_path, monkeypa
 
 def test_transcript_observer_consumes_exact_spoken_consent_before_persistence(tmp_path, monkeypatch):
     import asyncio
-    from pipecat.frames.frames import UserStartedSpeakingFrame, UserStoppedSpeakingFrame, TranscriptionFrame
+
+    from pipecat.frames.frames import (
+        TranscriptionFrame,
+        UserStartedSpeakingFrame,
+        UserStoppedSpeakingFrame,
+    )
     from pipecat.observers.base_observer import FramePushed
     from pipecat.processors.frame_processor import FrameDirection
+
     from jarvis.bot.transcript_log import TranscriptObserver
     from jarvis.db import get_conn, run_migrations
 

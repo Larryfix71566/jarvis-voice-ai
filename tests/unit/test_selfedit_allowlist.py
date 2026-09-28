@@ -84,6 +84,8 @@ def test_allowed_paths(allowlist: Allowlist, path: str) -> None:
     # config/upgrade_models.yaml here, which no longer exists).
     "config/model_endpoints.yaml",
     "config/skills.yaml",
+    "skills/new-skill/SKILL.md",
+    "tests/fixtures/skills_authoring/new-skill/matcher-cases.json",
     # no Swift gate exists, so a self-edit here would be unvalidated
     "macos/MortimerHost/Package.swift",
 ])

@@ -5,6 +5,7 @@ import json
 import subprocess
 import tarfile
 import tempfile
+from threading import Event, Thread
 import unittest
 from unittest.mock import patch
 
@@ -26,7 +27,7 @@ class SessionTests(unittest.TestCase):
         self.guests = {}
         self.fail_hydration = False
         self.cancel_in_check = False
-        for name in ('start', 'stop', 'destroy', 'rpc', 'reconcile'):
+        for name in ('start', 'stop', 'destroy', 'rpc', 'reconcile', 'cancel'):
             p = patch.object(self.c, name, side_effect=getattr(self, name))
             p.start(); self.addCleanup(p.stop)
         self.session = Session.create(self.c, self, self, self.profile, lambda p: p == 'app.py',
@@ -58,6 +59,10 @@ class SessionTests(unittest.TestCase):
     def destroy(self, task):
         self.events.append(('destroy', task))
         state = self.c.read(task); state['status'] = 'deleted'; self.c.save(task, state)
+    def cancel(self, task):
+        self.events.append(('cancel', task))
+        if self.c.read(task)['status'] in {'running', 'provisioning'}:
+            self.stop(task)
     def wait_ready(self, task): pass
     def hydrate(self, task):
         if self.fail_hydration:
@@ -95,6 +100,17 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(self.session.status()['checks'], [])
         self.assertIn('interrupted', self.session.status()['recovery_notice'])
         self.assertIsNone(self.session._files(state).status()['verification'])
+
+    def test_resume_finishes_cancellation_interrupted_after_durable_marker(self):
+        task = self.session.status()['task']
+        (self.session.directory / 'cancelled.json').write_text('{"requested_at": 1}')
+
+        with self.assertRaisesRegex(SandboxError, 'session has ended'):
+            self.session.resume()
+
+        self.assertIn(('cancel', task), self.events)
+        self.assertEqual(self.c.read(task)['status'], 'stopped')
+        self.assertEqual(self.session._read()['phase'], 'cancelled')
 
     def test_reopen_reads_same_guest_and_preserves_validation_invalidation(self):
         self.session.propose_edit('app.py', 'updated', 'needed')
@@ -158,6 +174,73 @@ class SessionTests(unittest.TestCase):
         self.assertTrue(self.session.submit(publisher, 'Title', 'Body')['ok'])
         self.assertEqual(self.session.status()['phase'], 'published')
         self.assertEqual(self.c.read(self.session.status()['task'])['status'], 'stopped')
+
+    def test_interrupted_publication_recovers_after_reopening_session(self):
+        # Model a host crash after the session journal enters publishing and
+        # the publisher persists its idempotency record, but before the result
+        # is saved back into session.json.
+        task = self.session.status()['task']
+        (self.c.task_dir(task) / 'publication.json').write_text('{}')
+        state = self.session._read()
+        state['phase'] = 'publishing'
+        self.session._save(state)
+
+        reopened = Session(self.c, self, self, self.profile, lambda p: p == 'app.py', self.session.id)
+        self.assertTrue(reopened.resume()['ready'])
+        self.assertEqual(reopened.status()['phase'], 'publication_pending')
+
+        class Publisher:
+            def publish(inner, files, *args, **kwargs):
+                self.assertTrue((files.directory / 'publication.json').is_file())
+                return {'ok': True, 'number': 17, 'recovered': True}
+
+        result = reopened.submit(Publisher(), 'Title', 'Body')
+        self.assertEqual(result['number'], 17)
+        self.assertTrue(result['recovered'])
+        self.assertEqual(reopened.status()['phase'], 'published')
+        self.assertEqual(reopened.status()['publication']['number'], 17)
+
+    def test_submit_preflight_holds_session_lock_through_publication(self):
+        self.session.propose_edit('app.py', 'creator candidate', 'draft skill')
+        self.assertTrue(self.session.validate()['ok'])
+        preflight_entered = Event()
+        edit_attempted = Event()
+        edit_finished = Event()
+        edit_result = []
+
+        def late_edit():
+            self.assertTrue(preflight_entered.wait(2))
+            edit_attempted.set()
+            try:
+                edit_result.append(self.session.propose_edit('app.py', 'late edit', 'race'))
+            except SandboxError:
+                edit_result.append({'ok': False})
+            finally:
+                edit_finished.set()
+
+        editor = Thread(target=late_edit)
+        editor.start()
+
+        def preflight(files, state):
+            self.assertEqual(state['phase'], 'validated')
+            self.assertEqual(files.frozen().fingerprint, state['candidate'])
+            preflight_entered.set()
+            self.assertTrue(edit_attempted.wait(2))
+            self.assertFalse(edit_finished.wait(0.05))
+
+        class Publisher:
+            def publish(inner, files, *args, **kwargs):
+                self.assertFalse(edit_finished.is_set())
+                (files.directory / 'publication.json').write_text('{}')
+                return {'ok': True, 'number': 1}
+
+        result = self.session.submit(Publisher(), 'Title', 'Body', preflight=preflight)
+        editor.join(2)
+
+        self.assertFalse(editor.is_alive())
+        self.assertTrue(result['ok'])
+        self.assertEqual(edit_result, [{'ok': False}])
+        self.assertEqual(self.session.status()['phase'], 'published')
 
     def test_revert_is_idempotent_and_retains_record(self):
         self.assertTrue(self.session.revert()['ok'])

@@ -18,12 +18,17 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from pipecat.frames.frames import (
+    InterimTranscriptionFrame,
+    TranscriptionFrame,
+)
+from pipecat.processors.frame_processor import FrameDirection
 
+import jarvis.bot.speaker_gate as speaker_gate_module
 from jarvis import speaker
 from jarvis.bot.speaker_gate import (
     MAX_SCORE_WINDOWS,
     MIN_EMBED_SECS,
-    SCORE_HOP_SECS,
     SCORE_WINDOW_SECS,
     GateState,
     SpeakerTap,
@@ -31,11 +36,6 @@ from jarvis.bot.speaker_gate import (
     TranscriptGate,
     _window_slices,
 )
-from pipecat.frames.frames import (
-    InterimTranscriptionFrame,
-    TranscriptionFrame,
-)
-from pipecat.processors.frame_processor import FrameDirection
 
 
 def _make_gate(state: GateState, profile_loaded: bool = True, inject=None):
@@ -195,6 +195,34 @@ class TestHonestDropNote:
 
         assert all(secret_text not in text for text in injected)
 
+    async def test_delivery_failures_redact_exception_and_turn_id(self, monkeypatch, caplog):
+        from jarvis.bot.speaker_gate import DROP_NOTE_MIN_SCORE
+
+        caplog.set_level(logging.DEBUG)
+        monkeypatch.delenv(speaker.THRESHOLD_ENV, raising=False)
+        state = GateState(turn_id=731904)
+        state.scores[state.turn_id] = DROP_NOTE_MIN_SCORE + 0.05
+        state.speech_secs[state.turn_id] = 2.0
+
+        async def fail_delivery(*_args, **_kwargs):
+            raise RuntimeError("DELIVERY_CANARY_7F20 /private/voice/state")
+
+        gate, _, _ = _make_gate(state, inject=fail_delivery)
+        gate._send_message = fail_delivery
+        gate._last_drop_note_at = 0.0
+        frame = TranscriptionFrame(
+            text="TRANSCRIPT_CANARY", user_id="u", timestamp="t"
+        )
+        await gate.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+        assert "speaker_gate_ui_notify_failed" in caplog.text
+        assert "speaker_gate_drop_note_failed" in caplog.text
+        assert "RuntimeError" in caplog.text
+        assert "DELIVERY_CANARY_7F20" not in caplog.text
+        assert "/private/voice/state" not in caplog.text
+        assert "TRANSCRIPT_CANARY" not in caplog.text
+        assert "731904" not in caplog.text
+
     async def test_no_inject_callback_still_works(self, monkeypatch):
         """inject=None (the default, matching every pre-F3 caller) must
         not raise — the message still sends, no note attempted."""
@@ -262,6 +290,62 @@ class TestSpeakerTapMinEmbedGuard:
 
         assert state.speech_secs[3] < MIN_EMBED_SECS
         assert 3 not in state.scores  # no score attempt recorded
+
+    async def test_scoring_failure_redacts_exception_and_turn_id(
+        self, monkeypatch, caplog
+    ):
+        import asyncio
+
+        caplog.set_level(logging.WARNING)
+        state = GateState(turn_id=731904)
+
+        class FakeEncoder:
+            def embed(self, *_args):
+                return np.array([1.0], dtype=np.float32)
+
+        async def fail_to_thread(*_args, **_kwargs):
+            raise RuntimeError("SCORE_CANARY_0C6D /private/audio")
+
+        monkeypatch.setattr(speaker_gate_module.asyncio, "to_thread", fail_to_thread)
+        tap = SpeakerTap(state, FakeEncoder(), profile=np.array([1.0], dtype=np.float32))
+        tap._sample_rate = 16000
+        tap._buffer = bytearray(2 * 16000)
+        tap._schedule_score(final=True)
+        await asyncio.sleep(0)
+
+        assert state.scores[731904] is None
+        assert "speaker_gate_score_failed" in caplog.text
+        assert "RuntimeError" in caplog.text
+        assert "SCORE_CANARY_0C6D" not in caplog.text
+        assert "/private/audio" not in caplog.text
+        assert "731904" not in caplog.text
+
+
+def test_capture_logs_omit_local_path_and_exception(
+    tmp_path, monkeypatch, caplog
+):
+    import wave
+
+    caplog.set_level(logging.INFO)
+    capture_dir = tmp_path / "CAPTURE_PATH_CANARY"
+    monkeypatch.setattr(speaker_gate_module, "CAPTURE_DIR", capture_dir)
+    speaker_gate_module._write_capture(bytes(32000), 16000)
+    assert "speaker_capture_saved secs=1.0" in caplog.text
+    assert "CAPTURE_PATH_CANARY" not in caplog.text
+
+    caplog.clear()
+    original_open = wave.open
+
+    def fail_open(path, *args, **kwargs):
+        raise RuntimeError(f"CAPTURE_BACKEND_CANARY {path}")
+
+    monkeypatch.setattr(wave, "open", fail_open)
+    speaker_gate_module._write_capture(bytes(32000), 16000)
+    monkeypatch.setattr(wave, "open", original_open)
+    assert "speaker_capture_failed" in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "CAPTURE_BACKEND_CANARY" not in caplog.text
+    assert "CAPTURE_PATH_CANARY" not in caplog.text
 
 
 class TestWindowSlices:

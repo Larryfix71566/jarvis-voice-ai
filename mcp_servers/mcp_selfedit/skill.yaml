@@ -22,7 +22,7 @@ tools:
   - plan_status
   - plan_choose
   - plan_adopt
-requires_env: []
+requires_env: [JARVIS_SERVICE_TOKEN]
 # logic.py:127 reads JARVIS_UPGRADE_PROFILE (has a code default).
 # JARVIS_ADMIN_URL (logic.py:36) is NOT listed — it is in BASE_ENV_KEYS (K2/K5).
 optional_env: [JARVIS_UPGRADE_PROFILE]

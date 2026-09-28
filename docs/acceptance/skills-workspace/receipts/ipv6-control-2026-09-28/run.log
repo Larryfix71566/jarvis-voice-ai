@@ -1,0 +1,5 @@
+{"interface": "en0", "ipv6_target_route_observed": true, "sent": true, "reply": false, "mode": "control-before", "host_received_canary": false, "host_bridge": "bridge100"}
+Traceback (most recent call last):
+  File "/private/tmp/mortimer-ipv6-live-20260928/probe.py", line 84, in <module>
+    raise RuntimeError('Positive IPv6 path control failed; containment unproven')
+RuntimeError: Positive IPv6 path control failed; containment unproven

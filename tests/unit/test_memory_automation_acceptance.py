@@ -1,21 +1,102 @@
 """B5/M0-M5 acceptance fixtures for the automated-memory contract."""
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
+
 import pytest
 
 from jarvis.db import get_conn, run_migrations
 from jarvis.memory import retrieve_automated_memory_context
 from jarvis.memory_automation import (
-    Candidate, Classification, EvidenceStatus, MemoryType, Provenance, Scope,
-    apply_scoped_correction, bounded_candidates, classify_threshold,
-    enqueue_maintenance, heuristic_classifier, maintenance_budget_remaining,
-    normalize_rollout_stage, process_classification_jobs, RolloutStage,
+    Candidate,
+    Classification,
+    EvidenceStatus,
+    MemoryType,
+    Provenance,
+    RolloutStage,
+    Scope,
+    apply_scoped_correction,
+    bounded_candidates,
+    classify_threshold,
+    enqueue_maintenance,
+    heuristic_classifier,
+    maintenance_budget_remaining,
+    normalize_rollout_stage,
+    process_classification_jobs,
+    reserve_classification_budget,
 )
 from jarvis.memory_automation_eval import (
-    PROVIDER_CLASSIFIER_SYSTEM_PROMPT, ProviderClassifier, evaluate_memory_cases, measure_shadow,
+    PROVIDER_CLASSIFIER_SYSTEM_PROMPT,
+    ProviderClassifier,
+    evaluate_memory_cases,
+    measure_shadow,
 )
+from jarvis.model_routing import AccessRoute, ResolvedModelRoute, resolve_model_route
+from jarvis.privacy_policy import DataPolicy
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "memory_automation_cases.json"
+
+
+def test_shared_classification_budget_reserves_atomically_across_connections(tmp_path):
+    db_path = tmp_path / "shared-budget.db"
+    first = get_conn(db_path)
+    run_migrations(first)
+    second = get_conn(db_path)
+
+    first_reservation = reserve_classification_budget(
+        first, now_iso="2026-09-25T12:00:00+00:00", candidate_count=2,
+        candidate_limit=3, call_limit=2, reservation_id="admission-1",
+    )
+    second_reservation = reserve_classification_budget(
+        second, now_iso="2026-09-25T12:01:00+00:00", candidate_count=2,
+        candidate_limit=3, call_limit=2, reservation_id="maintenance-1",
+    )
+
+    assert first_reservation == "admission-1"
+    assert second_reservation is None
+    assert maintenance_budget_remaining(
+        first, day="2026-09-25", candidate_limit=3, call_limit=2,
+    ) == {
+        "candidates_used": 2, "calls_used": 1,
+        "candidates_remaining": 1, "calls_remaining": 1,
+    }
+    first.close()
+    second.close()
+
+
+def test_concurrent_budget_reservations_cannot_both_consume_last_call(tmp_path):
+    db_path = tmp_path / "concurrent-budget.db"
+    setup = get_conn(db_path)
+    run_migrations(setup)
+    setup.close()
+    barrier = Barrier(2)
+
+    def reserve(reservation_id):
+        conn = get_conn(db_path)
+        try:
+            barrier.wait(timeout=3)
+            return reserve_classification_budget(
+                conn, now_iso="2026-09-25T12:00:00+00:00", candidate_count=1,
+                candidate_limit=10, call_limit=1, reservation_id=reservation_id,
+            )
+        finally:
+            conn.close()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(reserve, ("worker-a", "worker-b")))
+
+    assert sum(result is not None for result in results) == 1
+    check = get_conn(db_path)
+    assert maintenance_budget_remaining(check, day="2026-09-25")["calls_used"] == 1
+    check.close()
+
+
+def _add_user_evidence(conn, session_id="s1"):
+    return str(conn.execute(
+        "INSERT INTO conversations(session_id,role,content,created_at) "
+        "VALUES (?,?,?,?)", (session_id, "user", "user stated the candidate", "2026-01-01T00:00:00Z"),
+    ).lastrowid)
 
 
 def test_acceptance_fixture_is_versioned_and_complete():
@@ -84,6 +165,82 @@ def test_provider_classifier_validates_order_and_records_bounded_usage(temperatu
     }
 
 
+def test_route_aware_classifier_uses_shared_execution_boundary_and_confidential_policy():
+    result_json = '[{"key":"user.units","scope":"global","memory_type":"explicit_preference",' \
+                  '"provenance":"user","evidence_status":"explicit","confidence":1.0,' \
+                  '"evidence":["turn-1"],"reason_code":"explicit"}]'
+    seen = {}
+
+    class Completions:
+        async def create(self, **kwargs):
+            seen.update(kwargs)
+            return type("Response", (), {
+                "choices": [type("Choice", (), {"message": type("Message", (), {
+                    "content": result_json, "tool_calls": [], "model_extra": {},
+                })()})()],
+                "usage": type("Usage", (), {"prompt_tokens": 9, "completion_tokens": 5,
+                                               "total_tokens": 14})(),
+                "id": "classifier-test",
+            })()
+
+    client = type("Client", (), {"chat": type("Chat", (), {
+        "completions": Completions(),
+    })()})()
+    route = ResolvedModelRoute(
+        workload="memory", profile_name="test", model="test-model", provider="saygm",
+        base_url="https://example.invalid", route=AccessRoute(
+            name="saygm", adapter="saygm_gateway", billing="test",
+            credential_env=None, privacy="confidential", capabilities=("text",),
+        ), api_key_env=None, identity="test/model", priority="background",
+    )
+    classifier = ProviderClassifier(
+        model="test-model", resolved=route,
+        client_factory=lambda _: client,
+        data_policy=DataPolicy("confidential", "memory-candidate"),
+    )
+    candidate = Candidate("user.units", "I prefer metric units", ("turn-1",), ("s1",))
+    result = classifier([candidate])[0]
+    assert result.memory_type is MemoryType.EXPLICIT_PREFERENCE
+    assert classifier.usage() == {
+        "calls": 1, "prompt_tokens": 9, "completion_tokens": 5, "total_tokens": 14,
+    }
+    assert "I prefer metric units" in seen["messages"][-1]["content"]
+    assert "tools" not in seen
+
+
+def test_route_aware_classifier_rejects_approved_external_for_confidential_memory():
+    route = ResolvedModelRoute(
+        workload="memory", profile_name="test", model="test-model", provider="anthropic",
+        base_url="https://example.invalid", route=AccessRoute(
+            name="direct_api", adapter="openai_compatible", billing="test",
+            credential_env=None, privacy="approved_external", capabilities=("text",),
+        ), api_key_env=None, identity="test/model", priority="background",
+    )
+    created = []
+    classifier = ProviderClassifier(
+        model="test-model", resolved=route,
+        client_factory=lambda _: created.append(True),
+        data_policy=DataPolicy("confidential", "memory-candidate"),
+    )
+    with pytest.raises(Exception, match="requires 'confidential'"):
+        classifier([Candidate("user.units", "private preference", ("turn-1",), ("s1",))])
+    assert created == []
+
+
+def test_memory_shadow_route_is_public_fixture_only_and_live_memory_stays_confidential():
+    shadow = resolve_model_route(
+        "memory_shadow", explicit_profile="kimi-k3", explicit_route="direct_api",
+        environ={"MOONSHOT_API_KEY": "test-only"},
+    )
+    assert shadow.route.privacy == "approved_external"
+    assert shadow.priority == "background"
+    with pytest.raises(Exception, match="requires confidential"):
+        resolve_model_route(
+            "memory", explicit_profile="claude-sonnet-5", explicit_route="direct_api",
+            environ={"ANTHROPIC_API_KEY": "test-only"},
+        )
+
+
 def test_explicit_preference_is_immediate_and_replay_is_idempotent():
     result = heuristic_classifier([
         Candidate("user.units", "I prefer metric units", ("turn-1",), ("session-1",))
@@ -149,26 +306,32 @@ def test_scoped_correction_retains_reversible_history(tmp_path):
 
 def test_processor_accepts_provider_json_and_applies_metadata(tmp_path, monkeypatch):
     from jarvis.memory import upsert_fact
-    from jarvis.memory_automation import enqueue_maintenance, process_classification_jobs
+    from jarvis.memory_automation import (
+        process_classification_jobs,
+    )
     conn = get_conn(tmp_path / "memory.db")
     run_migrations(conn)
     monkeypatch.setenv("JARVIS_MEMORY_AUTOMATION_ENABLED", "true")
-    upsert_fact(conn, "user.units", "metric", "s1")
+    turn_id = _add_user_evidence(conn)
+    upsert_fact(conn, "user.units", "metric", "s1", source_turn_id=turn_id)
 
     def classifier(items, *, policy_version):
+        assert not conn.in_transaction
         return [{"key": items[0].key, "scope": "global", "memory_type": "fact",
                  "provenance": "user", "evidence_status": "explicit",
-                 "confidence": 1.0, "evidence": ["turn-1"],
+                 "confidence": 1.0, "evidence": list(items[0].source_turn_ids),
                  "reason_code": "explicit"}]
 
-    from jarvis.db import now_iso
-    result = process_classification_jobs(conn, now_iso=now_iso(), classifier=classifier)
+    result = process_classification_jobs(conn, now_iso="2099-01-01T00:01:00Z", classifier=classifier)
     assert result == {"claimed": 1, "applied": 1, "failed": 0}
     assert conn.execute("SELECT evidence_status FROM memories WHERE key='user.units'").fetchone()[0] == "explicit"
 
 
 def test_processor_enforces_assistant_source_attribution(tmp_path):
-    from jarvis.memory_automation import enqueue_maintenance, process_classification_jobs
+    from jarvis.memory_automation import (
+        enqueue_maintenance,
+        process_classification_jobs,
+    )
     conn = get_conn(tmp_path / "memory.db")
     run_migrations(conn)
     memory_id = conn.execute(
@@ -190,19 +353,71 @@ def test_processor_enforces_assistant_source_attribution(tmp_path):
     assert row["evidence_status"] == "unknown" and row["confidence"] == 0.0
 
 
+def test_processor_rejects_fabricated_evidence_ids(tmp_path, monkeypatch):
+    conn = get_conn(tmp_path / "memory.db")
+    run_migrations(conn)
+    monkeypatch.setenv("JARVIS_MEMORY_AUTOMATION_ENABLED", "true")
+    from jarvis.memory import upsert_fact
+    turn_id = _add_user_evidence(conn)
+    upsert_fact(conn, "user.preference.units", "metric", "s1", source_turn_id=turn_id)
+
+    def classifier(items, *, policy_version):
+        return [Classification(items[0].key, Scope.GLOBAL, MemoryType.EXPLICIT_PREFERENCE,
+                               Provenance.USER, EvidenceStatus.EXPLICIT, 1.0,
+                               ("fabricated-turn",), "explicit")]
+
+    result = process_classification_jobs(conn, now_iso="2099-01-01T00:01:00Z", classifier=classifier)
+    assert result == {"claimed": 1, "applied": 0, "failed": 1}
+    row = conn.execute(
+        "SELECT memory_type,evidence_status FROM memories WHERE key='user.preference.units'"
+    ).fetchone()
+    assert row["memory_type"] == "fact" and row["evidence_status"] == "unknown"
+
+
+def test_tool_origin_cannot_be_promoted_to_user_preference(tmp_path):
+    conn = get_conn(tmp_path / "memory.db")
+    run_migrations(conn)
+    turn_id = _add_user_evidence(conn)
+    memory_id = conn.execute(
+        "INSERT INTO memories(kind,key,content,source_session_id,source_turn_id,created_at,updated_at,user_id,provenance) "
+        "VALUES ('fact','tool.setting','metric','s1',?,?,?,'local','tool')",
+        (turn_id, "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
+    ).lastrowid
+    enqueue_maintenance(conn, memory_id=memory_id, revision=1, policy_version="b1",
+                        operation="classify", now_iso="2026-01-01T00:00:00Z")
+
+    def classifier(items, *, policy_version):
+        return [Classification(items[0].key, Scope.GLOBAL, MemoryType.EXPLICIT_PREFERENCE,
+                               Provenance.USER, EvidenceStatus.EXPLICIT, 1.0,
+                               items[0].source_turn_ids, "explicit")]
+
+    result = process_classification_jobs(
+        conn, now_iso="2026-01-01T00:01:00Z", classifier=classifier,
+        rollout_stage=RolloutStage.EXPLICIT_PREFERENCES,
+    )
+    assert result == {"claimed": 1, "applied": 1, "failed": 0}
+    row = conn.execute(
+        "SELECT provenance,evidence_status,confidence FROM memories WHERE id=?", (memory_id,)
+    ).fetchone()
+    assert row["provenance"] == "tool"
+    assert row["evidence_status"] != "explicit" and row["confidence"] < 1.0
+
+
 def test_processor_folds_recall_ledger_sessions_into_classifier_evidence(tmp_path):
     conn = get_conn(tmp_path / "memory.db")
     run_migrations(conn)
+    source_new = _add_user_evidence(conn, "session-new")
+    source_old = _add_user_evidence(conn, "session-old")
     memory_id = conn.execute(
         "INSERT INTO memories(kind,key,content,source_session_id,source_turn_id,"
         "created_at,updated_at,user_id) VALUES ('fact','user.units','metric',"
-        "'session-new','turn-new',?,?, 'local')",
-        ("2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
+        "'session-new',?,?,?, 'local')",
+        (source_new, "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
     ).lastrowid
     conn.execute(
         "INSERT INTO memory_recall_events(session_id,source_turn,key,outcome,created_at,user_id) "
         "VALUES (?,?,?,?,?,?)",
-        ("session-old", 12, "user.units", "exact_update", "2026-01-02T00:00:00Z", "local"),
+        ("session-old", int(source_old), "user.units", "exact_update", "2026-01-02T00:00:00Z", "local"),
     )
     enqueue_maintenance(conn, memory_id=memory_id, revision=1, policy_version="b1",
                         operation="classify", now_iso="2026-01-03T00:00:00Z")
@@ -218,7 +433,42 @@ def test_processor_folds_recall_ledger_sessions_into_classifier_evidence(tmp_pat
                                          classifier=classifier)
     assert result == {"claimed": 1, "applied": 1, "failed": 0}
     assert seen[0].session_ids == ("session-new", "session-old")
-    assert seen[0].source_turn_ids == ("turn-new", "12")
+    assert seen[0].source_turn_ids == (source_new, source_old)
+
+
+def test_memory_usage_event_does_not_count_as_corroborating_evidence(tmp_path):
+    conn = get_conn(tmp_path / "memory.db")
+    run_migrations(conn)
+    source_turn = _add_user_evidence(conn, "session-source")
+    usage_turn = _add_user_evidence(conn, "session-used")
+    memory_id = conn.execute(
+        "INSERT INTO memories(kind,key,content,source_session_id,source_turn_id,created_at,updated_at,user_id) "
+        "VALUES ('fact','project.rule','compact layout','session-source',?,?,?,'local')",
+        (source_turn, "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
+    ).lastrowid
+    conn.execute(
+        "INSERT INTO memory_recall_events(session_id,source_turn,key,outcome,created_at,user_id) "
+        "VALUES (?,?,?,?,?,?)",
+        ("session-used", int(usage_turn), "project.rule", "used_for", "2026-01-02T00:00:00Z", "local"),
+    )
+    enqueue_maintenance(conn, memory_id=memory_id, revision=1, policy_version="b1",
+                        operation="classify", now_iso="2026-01-03T00:00:00Z")
+    observed = []
+
+    def classifier(items, *, policy_version):
+        observed.append(items[0])
+        return [Classification(items[0].key, Scope.PROJECT, MemoryType.TASK_RULE,
+                               Provenance.USER, EvidenceStatus.CORROBORATED, 0.9,
+                               items[0].source_turn_ids, "repeat_independent")]
+
+    process_classification_jobs(
+        conn, now_iso="2026-01-03T00:01:00Z", classifier=classifier,
+        rollout_stage=RolloutStage.CORROBORATED_INFERENCES,
+    )
+    assert observed[0].source_turn_ids == (source_turn,)
+    assert observed[0].session_ids == ("session-source",)
+    row = conn.execute("SELECT memory_type,evidence_status FROM memories WHERE id=?", (memory_id,)).fetchone()
+    assert row["memory_type"] == "fact" and row["evidence_status"] == "unknown"
 
 
 def test_classifier_redaction_never_rewrites_stored_content(tmp_path, monkeypatch):
@@ -226,10 +476,11 @@ def test_classifier_redaction_never_rewrites_stored_content(tmp_path, monkeypatc
     conn = get_conn(tmp_path / "memory.db")
     run_migrations(conn)
     monkeypatch.setenv("JARVIS_MEMORY_AUTOMATION_ENABLED", "false")
+    source_turn = _add_user_evidence(conn, "s1")
     memory_id = conn.execute(
-        "INSERT INTO memories(kind,key,content,source_session_id,created_at,updated_at,user_id) "
-        "VALUES ('fact','project.token_note','api_key=super-secret','s1',?,?, 'local')",
-        ("2026-09-17T11:00:00Z", "2026-09-17T11:00:00Z"),
+        "INSERT INTO memories(kind,key,content,source_session_id,source_turn_id,created_at,updated_at,user_id) "
+        "VALUES ('fact','project.token_note','api_key=super-secret','s1',?,?,?, 'local')",
+        (source_turn, "2026-09-17T11:00:00Z", "2026-09-17T11:00:00Z"),
     ).lastrowid
     enqueue_maintenance(conn, memory_id=memory_id, revision=1, policy_version="b1",
                         operation="classify", now_iso="2026-09-17T11:00:00Z")
@@ -239,7 +490,7 @@ def test_classifier_redaction_never_rewrites_stored_content(tmp_path, monkeypatc
         assert "super-secret" not in items[0].content
         return [Classification(items[0].key, Scope.PROJECT, MemoryType.FACT,
                                Provenance.USER, EvidenceStatus.EXPLICIT, 1.0,
-                               ("turn-1",), "explicit")]
+                                   (source_turn,), "explicit")]
 
     now = "2026-09-17T12:00:00Z"
     result = process_classification_jobs(conn, now_iso=now, classifier=classifier)
@@ -255,7 +506,8 @@ def test_shadow_processing_never_changes_live_memory_metadata(tmp_path):
     from jarvis.memory_automation import process_classification_jobs
     conn = get_conn(tmp_path / "memory.db")
     run_migrations(conn)
-    upsert_fact(conn, "user.units", "metric", "s1")
+    source_turn = _add_user_evidence(conn, "s1")
+    upsert_fact(conn, "user.units", "metric", "s1", source_turn_id=source_turn)
     before = dict(conn.execute(
         "SELECT content,scope,memory_type,provenance,evidence_status,confidence,updated_at "
         "FROM memories WHERE key='user.units'"
@@ -270,7 +522,7 @@ def test_shadow_processing_never_changes_live_memory_metadata(tmp_path):
     def classifier(items, *, policy_version):
         return [{"key": items[0].key, "scope": "project", "memory_type": "decision",
                  "provenance": "assistant", "evidence_status": "disputed",
-                 "confidence": 0.1, "evidence": ["shadow-turn"],
+                 "confidence": 0.1, "evidence": list(items[0].source_turn_ids),
                  "reason_code": "insufficient_evidence"}]
 
     result = process_classification_jobs(conn, now_iso="2026-09-17T12:00:00Z",
@@ -347,10 +599,11 @@ def test_staged_rollout_admits_only_explicit_preferences_then_corroborated(tmp_p
     rows = []
     for key, content in (("user.preference.units", "metric"),
                          ("project.rule", "use the compact layout")):
+        source_turn = _add_user_evidence(conn, key)
         row = conn.execute(
-            "INSERT INTO memories(kind,key,content,created_at,updated_at,user_id) "
-            "VALUES ('fact',?,?,?,?,?)",
-            (key, content, "2026-01-01", "2026-01-01", "local"),
+            "INSERT INTO memories(kind,key,content,source_session_id,source_turn_id,created_at,updated_at,user_id) "
+            "VALUES ('fact',?,?,?,?,?,?,?)",
+            (key, content, key, source_turn, "2026-01-01", "2026-01-01", "local"),
         )
         rows.append(int(row.lastrowid))
     for memory_id in rows:

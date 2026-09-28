@@ -194,6 +194,17 @@ async def test_anything_the_check_cannot_answer_stays_open(conn, reply):
     assert result["left_open"] == 1 and result["notice"] == ""
 
 
+async def test_settle_failure_log_redacts_exception_message(conn, caplog):
+    review = _pair(conn)
+    client = _Client(RuntimeError("PRIVATE_MEMORY_CANARY /tmp/user-content"))
+    result = await settle_open_reviews(conn, _Settings(), lambda _s: client)
+    assert result["left_open"] == 1
+    assert _status(conn, review) == "open"
+    assert "RuntimeError" in caplog.text
+    assert "PRIVATE_MEMORY_CANARY" not in caplog.text
+    assert "/tmp/user-content" not in caplog.text
+
+
 async def test_the_kill_switch_settles_nothing(conn, monkeypatch):
     monkeypatch.setenv("JARVIS_MEMORY_AUTO_SETTLE", "false")
     review = _pair(conn)

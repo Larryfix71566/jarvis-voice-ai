@@ -25,6 +25,10 @@ struct CommandConsoleView: View {
                     if let coordinator { _ = coordinator.executePointer(.viewSet, target: "atlas") }
                     else { workspace.openAtlas() }
                 }
+                Button("Skills") {
+                    if let coordinator { _ = coordinator.executePointer(.viewSet, target: "skills") }
+                    else { workspace.openSkills() }
+                }
                 Button("Memory graph") {
                     if let coordinator { _ = coordinator.executePointer(.viewSet, target: "memory") }
                     else { workspace.openMemoryGraph() }

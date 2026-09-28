@@ -20,6 +20,8 @@ import warnings
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from jarvis.urls import DEFAULT_BOT_URL
+
 logger = logging.getLogger(__name__)
 
 from pydantic import field_validator
@@ -77,7 +79,7 @@ class Settings(BaseSettings):
     jarvis_db_path: str = "data/jarvis.db"
     jarvis_log_level: str = "INFO"
     jarvis_bot_port: int = 7860
-    jarvis_webrtc_endpoint: str = "http://localhost:7860/api/offer"
+    jarvis_webrtc_endpoint: str = f"{DEFAULT_BOT_URL}/api/offer"
     jarvis_timezone: str = "America/New_York"
     jarvis_user_name: str = "Boss"
     jarvis_name: str = "Mortimer"
@@ -364,7 +366,8 @@ def bridge_settings_to_env(settings=None) -> None:
             os.environ.setdefault("TAVILY_API_KEY", settings.tavily_api_key)
         return
     except Exception as exc:  # noqa: BLE001 — must never block startup
-        logger.warning("settings_env_bridge_degraded error=%s", exc)
+        logger.warning("settings_env_bridge_degraded error_type=%s",
+                       type(exc).__name__[:64])
 
     # Settings validation FAILS without OPENAI/DEEPGRAM/ELEVENLABS keys —
     # none of which this function needs. Left there, a fresh checkout or a

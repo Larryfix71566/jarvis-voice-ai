@@ -20,12 +20,12 @@ Self-edit endpoints (plan §3/§3.5):
   form let goal/profile drift between the two calls and produced an
   invented "session expired" narrative (there was never a session to
   expire). TTL 10 minutes (SELFEDIT_STAGING_TTL_S).
-- POST /api/selfedit/run      {staging_id} or {goal, profile?} — start an
+- POST /api/selfedit/run      {staging_id} or {goal, profile?, run_id} — start an
   upgrade run ASYNC (background thread + GET /api/selfedit/run polling):
   planning takes minutes and voice turns cannot block. `staging_id`
-  replays a /api/selfedit/stage record (preferred); the bare {goal,
-  profile?} form still works for one release as a logged-deprecation
-  fallback (G2).
+  replays a /api/selfedit/stage record (preferred); the bare form is a
+  compatibility fallback and requires a stable action ID for durable
+  duplicate protection. Bare requests without run_id are refused.
 - GET  /api/selfedit/run              — poll the current/last run job
 - GET  /api/selfedit/status           — session state, proposals, validation
 - POST /api/selfedit/validate         — run the validation gate
@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import os
 import re
@@ -61,12 +62,18 @@ import time
 import uuid
 from contextlib import closing
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
+from jarvis import graphs
+from jarvis.auth import auth_enabled, service_headers
+from jarvis.authmw import BearerAuthMiddleware
+from jarvis.bind import BindRefused, resolve_bind_host, resolve_port
+from jarvis import memory as memory_module
+from jarvis.admin.reminder_notifier import ReminderNotifier
 from jarvis.agents.upgrade_agent import (
     AppBuildAgent,
     UnknownModelProfileError,
@@ -75,22 +82,27 @@ from jarvis.agents.upgrade_agent import (
     load_model_registry,
     resolve_profile,
 )
-from jarvis.model_routing import available_routes, load_access_config
+from jarvis.agents.workspace import AppWorkspace
+from jarvis.council import config as council_config
+from jarvis.council import council as council_mod
+from jarvis.db import (
+    claim_execution_action,
+    get_conn,
+    get_execution_action,
+    now_iso,
+    run_migrations,
+    update_execution_action,
+)
+from jarvis.graphs import config as gcfg
+from jarvis.graphs import render
 from jarvis.model_preferences import (
     ModelPreferenceError,
     confirm_preference,
     list_preferences,
     stage_preference,
 )
-from jarvis.agents.workspace import AppWorkspace
-from jarvis.admin.reminder_notifier import ReminderNotifier
-from jarvis import memory as memory_module
-from jarvis.council import config as council_config
-from jarvis.council import council as council_mod
-from jarvis.db import get_conn, now_iso, run_migrations
-from jarvis import graphs
+from jarvis.model_routing import available_routes, load_access_config
 from jarvis import keyhealth
-from jarvis.graphs import config as gcfg, render
 from jarvis.prompts import (
     PLAN_AUTHOR_PROMPT,
     PLAN_REVIEW_PROMPT,
@@ -99,6 +111,8 @@ from jarvis.prompts import (
 )
 from jarvis.research import crawl as research_crawl
 from jarvis.runlog import get_run, list_runs, parse_since
+from jarvis.runlog.store import get_skill_events, list_skill_runs
+from jarvis.tenant import current_user_id
 from jarvis.selfedit.service import SelfEditService
 from jarvis.vault import inject_env
 from mcp_servers.mcp_apps.logic import validate_app_name
@@ -117,11 +131,14 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 app = FastAPI(title="jarvis-admin", docs_url=None, redoc_url=None, openapi_url=None)
 
+# Middleware is wrapped in reverse registration order. Register auth first so
+# CORS is outside it and can add headers to authenticated failures/preflights.
+app.add_middleware(BearerAuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
@@ -180,10 +197,10 @@ class GoalIn(BaseModel):
     #
     # This is an EXPLICIT flag rather than an inference from "no plan_path"
     # because this route has two callers with different needs. The native
-    # app's Edit tab (macos/MortimerHost/.../Drawer/EditTab.swift:91 →
-    # AdminAPI.selfeditRun) posts a bare {goal, profile} — no plan, no
+    # app's Edit tab posts a bare {goal, profile, run_id} — no plan or
     # staging — and reads `started` to know a run began; it has no way to
-    # author anything, so it needs the planner (C1/SE10). The developer
+    # author anything, so it needs the planner (C1/SE10). The request ID
+    # lets the client reconcile a transport retry. The developer
     # sets author=true and writes the files itself. An older mcp_selfedit
     # build that does not send the flag gets the planner, the safe default.
     author: bool = False
@@ -251,10 +268,60 @@ class ResearchStartIn(BaseModel):
     plus the hard cap in jarvis/research/crawl.py, per R2."""
     urls: list[str]
     focus: str = ""
+    run_id: str | None = None
 
 
 class ResearchSaveIn(BaseModel):
     path: str | None = None
+
+
+class SkillRequestIn(BaseModel):
+    """Closed, versioned mutation surface for Skills workspace requests."""
+    model_config = ConfigDict(extra="forbid")
+    schema_version: int = 1
+    operation: str
+    request_id: str
+    bot_session_id: str | None = None
+    expected_catalog_revision: str
+    skill_id: str
+    skill_revision: str | None = None
+    privacy_context: str
+    task_brief: str | None = None
+    example_ids: list[str] | None = None
+    scope: str | None = None
+    route_policy_ref: str | None = None
+    budget: dict[str, int] | None = None
+    review_artifact_ref: str | None = None
+    candidate_digest: str | None = None
+    job_id: str | None = None
+
+
+class SkillRuntimeInventoryIn(BaseModel):
+    """Bounded, content-free inventory reported by the authenticated bot."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    schema_version: int
+    runtime_id: str = Field(min_length=36, max_length=36)
+    owner_id: str = Field(min_length=1, max_length=64)
+    active: bool
+    complete: bool
+    tools: list[Annotated[str, Field(max_length=128)]] = Field(max_length=256)
+
+
+class SkillCreatorAssociationIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    owner_id: str = Field(min_length=1, max_length=64)
+    bot_session_id: str = Field(min_length=36, max_length=36)
+    request_id: str = Field(min_length=36, max_length=36)
+    developer_run_id: str = Field(min_length=36, max_length=36)
+    creator_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class SkillCreatorToolIn(SkillCreatorAssociationIn):
+    tool_name: str = Field(min_length=1, max_length=64)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
 
 
 class AppBuildGoalIn(BaseModel):
@@ -266,6 +333,7 @@ class AppBuildGoalIn(BaseModel):
     profile: str | None = None
     plan: str | None = None
     plan_path: str | None = None
+    run_id: str | None = None
 
 
 class ModelRouteStageIn(BaseModel):
@@ -322,8 +390,7 @@ def _take_staging(requested: str) -> tuple[dict[str, Any] | None, str, list[str]
         rec = _selfedit_stagings.pop(requested, None) if requested else None
         if rec is None and len(_selfedit_stagings) == 1:
             used, rec = _selfedit_stagings.popitem()
-            logger.info("selfedit_run_staging_resolved requested=%r used=%s",
-                        requested, used)
+            logger.info("selfedit_run_staging_resolved")
         live = sorted(_selfedit_stagings)
     return rec, used, live
 
@@ -358,12 +425,18 @@ _run_lock = threading.Lock()
 # held only so POST /api/selfedit/cancel can reach its cooperative
 # cancel flag (the same reason _appbuild_workspace exists).
 _run_agent_instance: Any = None
+_SELFEDIT_STAGED_START_ACTION_SCOPE = "mcp-selfedit.staged_start"
+_SELFEDIT_RUN_START_ACTION_SCOPE = "mcp-selfedit.run_start"
+_SELFEDIT_PUBLISH_ACTION_SCOPE = "mcp-selfedit.publish"
 _run_job: dict[str, Any] = {
     "state": "idle",  # idle | running | done | error | cancelled
     "cancel_requested": False,
     "goal": None,
     "profile": None,
     "summary": None,
+    "run_id": None,
+    "action_run_id": None,
+    "action_scope": None,
     "started_at": None,
     "finished_at": None,
     # 2026-09-07 (review F6): "done" says the planner stopped; these say
@@ -411,6 +484,7 @@ _finish_job: dict[str, Any] = {
     "human_only": None,
     "apply_command": None,
     "run_id": None,
+    "action_run_id": None,
     "started_at": None,
     "finished_at": None,
 }
@@ -418,7 +492,129 @@ _finish_job: dict[str, Any] = {
 # VM preparation outlives the voice client's HTTP deadline. Keep the start
 # request short and expose progress; Session persists the underlying task.
 _opening_lock = threading.Lock()
-_opening_job: dict[str, Any] = {"state": "idle", "cancel_requested": False}
+_opening_job: dict[str, Any] = {
+    "state": "idle", "cancel_requested": False,
+    "action_run_id": None, "action_scope": None,
+}
+
+
+def _update_staged_selfedit_claim(
+    action_run_id: str | None, status: str,
+    action_scope: str = _SELFEDIT_STAGED_START_ACTION_SCOPE,
+) -> None:
+    if not action_run_id:
+        return
+    try:
+        update_execution_action(
+            action_scope, action_run_id, status,
+        )
+    except Exception as exc:  # action outcome reporting must not break work
+        logger.warning("selfedit_start_claim_update_failed error_type=%s", type(exc).__name__)
+
+
+def _prior_staged_selfedit_action(
+    action_run_id: str,
+    action_scope: str = _SELFEDIT_STAGED_START_ACTION_SCOPE,
+) -> dict[str, Any] | None:
+    try:
+        prior = get_execution_action(
+            action_scope, action_run_id,
+        )
+    except Exception as exc:
+        logger.warning("selfedit_start_claim_read_failed error_type=%s", type(exc).__name__)
+        return {
+            "ok": False,
+            "error": "could not verify whether this self-edit already started; no retry was launched",
+            "outcome": "unknown", "action_run_id": action_run_id,
+        }
+    if prior is None:
+        return None
+    with _run_lock:
+        same_run = (
+            _run_job.get("action_run_id") == action_run_id
+            and _run_job.get("action_scope", _SELFEDIT_STAGED_START_ACTION_SCOPE)
+            == action_scope
+        )
+        state = _run_job.get("state") if same_run else None
+    with _opening_lock:
+        same_opening = (
+            _opening_job.get("action_run_id") == action_run_id
+            and _opening_job.get("action_scope", _SELFEDIT_STAGED_START_ACTION_SCOPE)
+            == action_scope
+        )
+        if same_opening:
+            state = _opening_job.get("state")
+    if not same_run and not same_opening and prior.get("status") in {
+        "claimed", "running", "awaiting_choice",
+    }:
+        state = "unknown"
+    return {
+        "ok": True, "started": False, "duplicate": True,
+        "state": state or prior.get("status", "unknown"),
+        "action_run_id": action_run_id,
+        "summary": (
+            "This self-edit start was already claimed; no new job was started. "
+            "Check selfedit_status with this action_run_id before considering any retry."
+        ),
+    }
+
+
+def _prior_selfedit_publish(action_run_id: str) -> dict[str, Any] | None:
+    try:
+        prior = get_execution_action(_SELFEDIT_PUBLISH_ACTION_SCOPE, action_run_id)
+    except Exception as exc:
+        logger.warning("selfedit_publish_claim_read_failed error_type=%s", type(exc).__name__)
+        return {
+            "ok": False,
+            "error": "could not verify whether this sandbox session was already submitted; no retry was launched",
+            "outcome": "unknown", "action_run_id": action_run_id,
+        }
+    if prior is None:
+        return None
+    with _finish_lock:
+        same_finish = (
+            _finish_job.get("action_run_id") == action_run_id
+            and _finish_job.get("state") != "idle"
+        )
+        state = _finish_job.get("state") if same_finish else None
+        finish_url = _finish_job.get("pr_url") if same_finish else None
+    publication = {}
+    if not same_finish or state not in {"validating", "submitting"}:
+        try:
+            session = _selfedit_service.status()
+            if session.get("id") == action_run_id:
+                publication = session.get("publication") or {}
+                finish_url = finish_url or publication.get("url") or session.get("pr_url")
+        except Exception as exc:
+            logger.warning("selfedit_publish_status_read_failed error_type=%s", type(exc).__name__)
+    if finish_url:
+        state = "completed"
+        try:
+            update_execution_action(
+                _SELFEDIT_PUBLISH_ACTION_SCOPE, action_run_id, "completed",
+            )
+        except Exception as exc:
+            logger.warning("selfedit_publish_claim_update_failed error_type=%s", type(exc).__name__)
+    if not same_finish and prior.get("status") in {"claimed", "running", "awaiting_choice"}:
+        if not finish_url:
+            state = "unknown"
+    if prior.get("status") == "completed" and not finish_url and not same_finish:
+        # The durable claim records completion but intentionally carries no
+        # publication payload. If the sandbox cannot confirm it now, do not
+        # turn a missing result into either success or a retry.
+        state = "unknown"
+    result = {
+        "ok": True, "started": False, "duplicate": True,
+        "state": state or prior.get("status", "unknown"),
+        "action_run_id": action_run_id,
+        "summary": (
+            "Submission for this sandbox session was already claimed; no new publication was started. "
+            "Check selfedit_status with this action_run_id before any retry."
+        ),
+    }
+    if finish_url:
+        result["pr_url"] = finish_url
+    return result
 
 
 def _open_authoring(service, goal, run_id, target_paths, job):
@@ -461,8 +657,9 @@ def _open_authoring(service, goal, run_id, target_paths, job):
                 job.update(state="ready", result=result)
         if cancelled:
             service.cancel()
-    except Exception:
-        logger.exception("sandbox authoring setup failed")
+    except Exception as exc:
+        logger.warning("sandbox_authoring_setup_failed error_type=%s",
+                       type(exc).__name__)
         with _opening_lock:
             job.update(state="error", error="Sandbox setup failed; inspect the saved session before retrying.")
     finally:
@@ -470,30 +667,67 @@ def _open_authoring(service, goal, run_id, target_paths, job):
             if job.get("cancel_requested"):
                 job["state"] = "cancelled"
             job["finished_at"] = time.time()
+            claim_status = "completed" if job.get("state") == "ready" else "failed"
+        _update_staged_selfedit_claim(
+            job.get("action_run_id"), claim_status,
+            job.get("action_scope", _SELFEDIT_STAGED_START_ACTION_SCOPE),
+        )
 
 
-def _begin_authoring(goal, run_id, target_paths, *, resume_session_id=None):
+def _begin_authoring(
+    goal, run_id, target_paths, *, resume_session_id=None,
+    action_run_id: str | None = None,
+    action_scope: str = _SELFEDIT_STAGED_START_ACTION_SCOPE,
+):
     global _opening_job
+    duplicate = False
     with _run_lock, _finish_lock, _opening_lock:
         if (_run_job["state"] == "running" or _finish_job["state"] in {"validating", "submitting"}
                 or _opening_job["state"] == "starting"):
             return {"ok": False, "error": "an upgrade run is already in progress — ask for status instead"}
-        job = dict(state="starting", goal=goal, run_id=run_id,
-            target_paths=target_paths, resume_session_id=resume_session_id,
-            cancel_requested=False, started_at=time.time())
-        _opening_job = job
+        if action_run_id:
+            try:
+                claimed = claim_execution_action(
+                    action_scope, action_run_id,
+                )
+            except Exception as exc:
+                logger.warning("selfedit_start_claim_write_failed error_type=%s", type(exc).__name__)
+                return {"ok": False, "error": "could not safely record this self-edit; no session was opened"}
+            if not claimed:
+                duplicate = True
+        if not duplicate:
+            job = dict(state="starting", goal=goal, run_id=run_id,
+                target_paths=target_paths, resume_session_id=resume_session_id,
+                cancel_requested=False, started_at=time.time(),
+                action_run_id=action_run_id, action_scope=action_scope)
+            _opening_job = job
+    if duplicate:
+        return _prior_staged_selfedit_action(action_run_id, action_scope) or {
+            "ok": False, "error": "the self-edit claim could not be reconciled; no session was opened",
+        }
     worker = threading.Thread(target=_open_authoring,
         args=(_selfedit_service, goal, run_id, target_paths, job), daemon=True)
-    worker.start()
+    try:
+        worker.start()
+    except Exception as exc:
+        logger.warning("selfedit_authoring_thread_start_failed error_type=%s", type(exc).__name__)
+        with _opening_lock:
+            job.update(state="error", error="Sandbox setup worker could not be started.",
+                       finished_at=time.time())
+        _update_staged_selfedit_claim(action_run_id, "failed", action_scope)
+        return {"ok": False, "error": "Sandbox setup worker could not be started."}
     # An already-open session may finish immediately. A fresh VM never holds
     # this request open for the duration of its preparation.
-    worker.join(timeout=0.05)
+        worker.join(timeout=0.05)
     with _opening_lock:
         if job["state"] == "ready":
-            return job["result"]
+            return {**job["result"], "action_run_id": action_run_id}
         if job["state"] == "error":
             return {"ok": False, "error": job.get("error")}
-    return {"ok": True, "started": True, "opening": True, "state": "starting"}
+    return {
+        "ok": True, "started": True, "opening": True, "state": "starting",
+        "action_run_id": action_run_id,
+    }
 
 def _prepare_file_access():
     """Start only VM warmup; the caller must retry its read or edit explicitly."""
@@ -539,6 +773,7 @@ _council_job: dict[str, Any] = {
 # shape/pattern as _run_job/_council_job above (one planning job at a
 # time, ever). GET /api/plan/job is the polling target.
 _plan_lock = threading.Lock()
+_PLAN_START_ACTION_SCOPE = "mcp-selfedit.plan_start"
 _plan_job: dict[str, Any] = {
     "state": "idle",   # idle | running | awaiting_choice | done | error
     "mode": None,       # "single" | "council"
@@ -553,7 +788,20 @@ _plan_job: dict[str, Any] = {
     # MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R1 — set (repo-relative path)
     # for a review job, None for an authoring job.
     "review_path": None,
+    # GL9 supplies the owning SubAgent run identity. It remains stable across
+    # provider tool-call IDs, allowing /api/plan/start to reject a replay.
+    "run_id": None,
 }
+
+
+def _update_plan_start_claim(run_id: str | None, status: str) -> None:
+    """Best-effort status for the content-free plan-start claim."""
+    if not run_id:
+        return
+    try:
+        update_execution_action(_PLAN_START_ACTION_SCOPE, run_id, status)
+    except Exception as exc:  # the accepted result must not be lost to telemetry
+        logger.warning("plan_start_claim_update_failed error_type=%s", type(exc).__name__)
 
 # MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md D5 — a fourth async-job
 # slot, same shape/pattern as _run_job/_plan_job/_council_job above. Unlike
@@ -564,6 +812,8 @@ _plan_job: dict[str, Any] = {
 # reach. One app build at a time (one slot), and an app build does not
 # block self-edit jobs — separate slots, separate locks.
 _appbuild_lock = threading.Lock()
+_APPBUILD_START_ACTION_SCOPE = "mcp-apps.app_build_start"
+_APPBUILD_SUBMIT_ACTION_SCOPE = "mcp-apps.app_build_submit"
 _appbuild_workspace: AppWorkspace | None = None
 _appbuild_agent_instance: AppBuildAgent | None = None
 _appbuild_job: dict[str, Any] = {
@@ -586,6 +836,7 @@ RESEARCH_ENABLED_ENV = "JARVIS_RESEARCH_ENABLED"
 RESEARCH_DISABLED_MESSAGE = "site research is turned off"
 
 _research_lock = threading.Lock()
+_RESEARCH_START_ACTION_SCOPE = "mcp-web.research_compare_start"
 _research_job: dict[str, Any] = {
     "state": "idle",  # idle | running | done | error
     "urls": None,
@@ -599,7 +850,38 @@ _research_job: dict[str, Any] = {
     "finished_at": None,
     "saved_path": None,
     "save_error": None,
+    "run_id": None,
 }
+
+
+def _update_research_start_claim(run_id: str | None, status: str) -> None:
+    if not run_id:
+        return
+    try:
+        update_execution_action(_RESEARCH_START_ACTION_SCOPE, run_id, status)
+    except Exception as exc:
+        logger.warning("research_start_claim_update_failed error_type=%s", type(exc).__name__)
+
+
+def _research_duplicate(
+    run_id: str, prior: dict[str, Any], current_job: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    current_job = current_job or {}
+    same_job = current_job.get("run_id") == run_id
+    state = current_job.get("state") if same_job else None
+    if not state:
+        state = prior.get("status", "unknown")
+        if state in {"claimed", "running", "awaiting_choice"}:
+            state = "unknown"
+    state = {"completed": "done", "failed": "error"}.get(state, state)
+    return {
+        "ok": True, "started": False, "duplicate": True,
+        "state": state, "action_run_id": run_id,
+        "summary": (
+            "This research comparison was already claimed; no second crawl was started. "
+            "Check research_status with this action_run_id before considering a retry."
+        ),
+    }
 
 
 def _research_enabled() -> bool:
@@ -611,7 +893,7 @@ def _research_busy() -> bool:
         return _research_job["state"] == "running"
 
 
-def _run_research_job(urls: list[str], focus: str) -> None:
+def _run_research_job(urls: list[str], focus: str, run_id: str) -> None:
     """Background thread target (R1): crawl both sites (sync, one at a
     time — Tavily's own crawl is already parallel internally, and two
     concurrent 120s calls would only double the memory footprint for no
@@ -628,6 +910,7 @@ def _run_research_job(urls: list[str], focus: str) -> None:
                     error="TAVILY_API_KEY is not configured",
                     finished_at=time.time(),
                 )
+            _update_research_start_claim(run_id, "failed")
             return
         client = research_crawl.TavilyCrawlClient(timeout=float(cfg.get("timeout_s", 120)) + 10.0)
         results = [
@@ -646,6 +929,7 @@ def _run_research_job(urls: list[str], focus: str) -> None:
                     ),
                     finished_at=time.time(),
                 )
+            _update_research_start_claim(run_id, "failed")
             return
 
         digests = research_crawl.assemble_digests(results[0], results[1])
@@ -659,14 +943,15 @@ def _run_research_job(urls: list[str], focus: str) -> None:
         profile_name = os.environ.get("JARVIS_PLANNING_PROFILE") or registry.get("default")
         try:
             profile = resolve_profile(registry, profile_name)
-        except UnknownModelProfileError as exc:
+        except UnknownModelProfileError:
             with _research_lock:
                 _research_job.update(
                     state="error",
                     sites=[_site_summary(r) for r in results],
-                    error=f"no usable planner model: {exc}",
+                    error="no usable planner model",
                     finished_at=time.time(),
                 )
+            _update_research_start_claim(run_id, "failed")
             return
         content, _usage = asyncio.run(council_mod._call_profile(
             profile, RESEARCH_SYSTEM_PROMPT, user_content,
@@ -681,15 +966,17 @@ def _run_research_job(urls: list[str], focus: str) -> None:
                 credits_used=research_crawl.total_credits(*results),
                 finished_at=time.time(),
             )
-        logger.info("research_state_transition state=done urls=%r", urls)
+        _update_research_start_claim(run_id, "completed")
+        logger.info("research_state_transition state=done site_count=%d", len(urls))
     except Exception as exc:  # noqa: BLE001 — a crash must still settle the job
-        logger.exception("research job crashed")
+        logger.warning("research_job_failed error_type=%s", type(exc).__name__)
         with _research_lock:
             _research_job.update(
                 state="error",
-                error=f"research job crashed: {type(exc).__name__}: {exc}",
+                error=f"research job failed ({type(exc).__name__})",
                 finished_at=time.time(),
             )
+        _update_research_start_claim(run_id, "failed")
 
 
 def _site_summary(result: dict[str, Any]) -> dict[str, Any]:
@@ -723,11 +1010,15 @@ def _run_finish() -> None:
     and open the pull request if every check passes. On a failure the
     session stays OPEN with the check output, so repair is the developer on
     the next turn (read → write → finish again) rather than a dead end."""
+    action_run_id = None
+    publication_dispatched = False
+    claimed = False
     try:
         with _finish_lock:
             if _finish_job.get("cancel_requested"):
                 _finish_job.update(state="cancelled", finished_at=time.time())
                 return
+            action_run_id = _finish_job.get("action_run_id")
         result = _selfedit_service.validate()
         with _finish_lock:
             _finish_job["checks"] = result.get("checks")
@@ -740,9 +1031,67 @@ def _run_finish() -> None:
                 run_id = _finish_job["run_id"]
             logger.info("selfedit_state_transition state=finish_failed run_id=%s", run_id)
             return
+        if not action_run_id:
+            with _finish_lock:
+                _finish_job.update(
+                    state="error", notice="Sandbox session identity is unavailable; no pull request was submitted.",
+                    finished_at=time.time(),
+                )
+            return
+        try:
+            claimed = claim_execution_action(
+                _SELFEDIT_PUBLISH_ACTION_SCOPE, action_run_id,
+            )
+        except Exception as exc:
+            logger.warning("selfedit_publish_claim_write_failed error_type=%s", type(exc).__name__)
+            with _finish_lock:
+                _finish_job.update(
+                    state="error", notice="Submission could not be safely recorded; no pull request was submitted.",
+                    finished_at=time.time(),
+                )
+            return
+        if not claimed:
+            prior = _prior_selfedit_publish(action_run_id)
+            current = _selfedit_service.status()
+            publication = current.get("publication") or {}
+            with _finish_lock:
+                if prior and prior.get("state") == "completed" and publication.get("url"):
+                    _finish_job.update(
+                        state="done", pr_url=publication.get("url"),
+                        finished_at=time.time(),
+                    )
+                else:
+                    _finish_job.update(
+                        state="unknown", notice="Submission was already claimed; inspect the saved publication state before retrying.",
+                        finished_at=time.time(),
+                    )
+            return
+        try:
+            update_execution_action(
+                _SELFEDIT_PUBLISH_ACTION_SCOPE, action_run_id, "running",
+            )
+        except Exception as exc:
+            logger.warning("selfedit_publish_claim_update_failed error_type=%s", type(exc).__name__)
         with _finish_lock:
+            if _finish_job.get("cancel_requested"):
+                _finish_job.update(state="cancelled", finished_at=time.time())
+                try:
+                    update_execution_action(
+                        _SELFEDIT_PUBLISH_ACTION_SCOPE, action_run_id, "failed",
+                    )
+                except Exception as exc:
+                    logger.warning("selfedit_publish_claim_update_failed error_type=%s", type(exc).__name__)
+                return
             _finish_job["state"] = "submitting"
+        publication_dispatched = True
         submitted = _selfedit_service.submit()
+        if submitted.get("ok"):
+            try:
+                update_execution_action(
+                    _SELFEDIT_PUBLISH_ACTION_SCOPE, action_run_id, "completed",
+                )
+            except Exception as exc:
+                logger.warning("selfedit_publish_claim_update_failed error_type=%s", type(exc).__name__)
         with _finish_lock:
             if submitted.get("ok"):
                 _finish_job.update(
@@ -753,32 +1102,43 @@ def _run_finish() -> None:
                 )
             else:
                 _finish_job.update(
-                    state="cancelled" if _finish_job.get("cancel_requested") else "error", notice=submitted.get("error"),
+                    state="unknown",
+                    notice="Submission outcome is unresolved; inspect the saved workspace status before retrying.",
                     finished_at=time.time(),
                 )
             state, pr_url, run_id = (_finish_job["state"], _finish_job["pr_url"],
                                      _finish_job["run_id"])
             notice = _finish_job.get("notice")
-        # The notice carries the git/GitHub error text on failure. Logging
-        # only the state (2026-09-08) meant a submit that died in 0.47 s
-        # left NO record of why, and the reason had to be chased through a
-        # live API call before it was overwritten by the next attempt.
-        logger.info("selfedit_state_transition state=finish_%s pr=%s run_id=%s notice=%r",
-                    state, pr_url, run_id, notice)
+        # Keep the fact that a notice exists observable without copying
+        # provider or GitHub error text into the diagnostic log.
+        logger.info("selfedit_state_transition state=finish_%s pr_present=%s run_id=%s notice_present=%s",
+                    state, bool(pr_url), run_id, bool(notice))
     except Exception as exc:  # noqa: BLE001 — a crash must still settle the job
         # Without this the job would sit in "validating" forever and the
         # developer would keep reporting it as still running.
-        logger.exception("selfedit finish job crashed")
+        logger.warning("selfedit_finish_job_failed error_type=%s",
+                       type(exc).__name__)
+        if claimed and not publication_dispatched and action_run_id:
+            try:
+                update_execution_action(
+                    _SELFEDIT_PUBLISH_ACTION_SCOPE, action_run_id, "failed",
+                )
+            except Exception as update_exc:
+                logger.warning("selfedit_publish_claim_update_failed error_type=%s",
+                               type(update_exc).__name__)
         with _finish_lock:
             _finish_job.update(
-                state="cancelled" if _finish_job.get("cancel_requested") else "error",
-                notice=f"finish crashed: {type(exc).__name__}: {exc}",
+                state=("unknown" if publication_dispatched else
+                       "cancelled" if _finish_job.get("cancel_requested") else "error"),
+                notice=f"finish failed ({type(exc).__name__})",
                 finished_at=time.time(),
             )
 
 
 def _run_agent(goal: str, profile: str | None, plan: str | None = None,
-               run_id: str | None = None) -> None:
+               run_id: str | None = None,
+               action_run_id: str | None = None,
+               action_scope: str = _SELFEDIT_STAGED_START_ACTION_SCOPE) -> None:
     """Background thread target: plan edits, then settle the job state."""
     global _run_agent_instance
     try:
@@ -796,8 +1156,8 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None,
         # different goal → drop the leftover first, and say so in the log.
         stale = _selfedit_service.branch
         if stale and (_selfedit_service.goal or "") != goal:
-            logger.info("selfedit_stale_session_reverted branch=%s old_goal=%r new_goal=%r",
-                        stale, _selfedit_service.goal, goal)
+            logger.info("selfedit_stale_session_reverted branch_present=%s",
+                        bool(stale))
             _selfedit_service.revert()
         result = agent.run(goal, plan=plan)
         if result.get("cancelled") or _run_job.get("cancel_requested", False):
@@ -834,19 +1194,25 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None,
                 pr_url=result.get("pr_url"),
                 finished_at=time.time(),
             )
-        # D17 — every self-edit state transition is logged.
-        logger.info("selfedit_state_transition state=%s submitted=%s goal=%r summary=%r",
-                    state, submitted, goal, summary[:400])
+        _update_staged_selfedit_claim(
+            action_run_id, "failed" if state in {"error", "cancelled"} else "completed",
+            action_scope,
+        )
+        # Record job state without persisting user-authored instructions or
+        # model-generated summaries to the diagnostic log.
+        logger.info("selfedit_state_transition state=%s submitted=%s",
+                    state, submitted)
     except Exception as exc:  # planner crash must still settle the job
-        logger.exception("upgrade run crashed")
+        logger.warning("upgrade_run_failed error_type=%s", type(exc).__name__)
         with _run_lock:
             _run_agent_instance = None
             _run_job.update(
                 state="error",
-                summary=f"upgrade run crashed: {type(exc).__name__}: {exc}",
+                summary=f"Upgrade run failed ({type(exc).__name__}).",
                 finished_at=time.time(),
             )
-        logger.info("selfedit_state_transition state=error goal=%r", goal)
+        _update_staged_selfedit_claim(action_run_id, "failed", action_scope)
+        logger.info("selfedit_state_transition state=error")
 
 
 def _busy() -> bool:
@@ -874,8 +1240,87 @@ def _appbuild_busy() -> bool:
         return _appbuild_job["state"] in {"running", "submitting"}
 
 
+def _update_appbuild_start_claim(run_id: str | None, status: str) -> None:
+    if not run_id:
+        return
+    try:
+        update_execution_action(_APPBUILD_START_ACTION_SCOPE, run_id, status)
+    except Exception as exc:  # the accepted result must not be lost to telemetry
+        logger.warning("appbuild_start_claim_update_failed error_type=%s", type(exc).__name__)
+
+
+def _update_appbuild_submit_claim(session_id: str | None, status: str) -> None:
+    if not session_id:
+        return
+    try:
+        update_execution_action(_APPBUILD_SUBMIT_ACTION_SCOPE, session_id, status)
+    except Exception as exc:
+        logger.warning("appbuild_submit_claim_update_failed error_type=%s", type(exc).__name__)
+
+
+def _prior_appbuild_submit(session_id: str, workspace_status: dict[str, Any]) -> dict[str, Any] | None:
+    """Resolve or block a repeated PR submission for one persisted sandbox session."""
+    publication = workspace_status.get("publication") or {}
+    pr_url = workspace_status.get("pr_url") or publication.get("url")
+    if pr_url:
+        # The sandbox's saved publication is authoritative even if the claim
+        # store is temporarily unavailable during recovery.
+        try:
+            claim_execution_action(_APPBUILD_SUBMIT_ACTION_SCOPE, session_id)
+        except Exception as exc:
+            logger.warning("appbuild_submit_claim_write_failed error_type=%s", type(exc).__name__)
+        _update_appbuild_submit_claim(session_id, "completed")
+        return {
+            "ok": True, "started": False, "duplicate": True,
+            "state": "completed", "action_run_id": session_id,
+            "pr_url": pr_url,
+            "summary": "The draft pull request for this app-build session is already available.",
+        }
+    try:
+        prior = get_execution_action(_APPBUILD_SUBMIT_ACTION_SCOPE, session_id)
+    except Exception as exc:
+        logger.warning("appbuild_submit_claim_read_failed error_type=%s", type(exc).__name__)
+        return {
+            "ok": False, "state": "unknown", "action_run_id": session_id,
+            "error": "could not verify whether this app-build session was already submitted; no retry was launched",
+        }
+    if workspace_status.get("phase") in {"publishing", "publication_pending"}:
+        if prior is None:
+            try:
+                if claim_execution_action(_APPBUILD_SUBMIT_ACTION_SCOPE, session_id):
+                    _update_appbuild_submit_claim(session_id, "running")
+            except Exception as exc:
+                logger.warning("appbuild_submit_claim_write_failed error_type=%s", type(exc).__name__)
+        return {
+            "ok": True, "started": False, "duplicate": True,
+            "state": "unknown", "action_run_id": session_id,
+            "reconciliation_required": True,
+            "summary": (
+                "This sandbox session has a publication in progress or pending reconciliation; "
+                "no new pull request was started. Inspect the saved workspace and GitHub repository."
+            ),
+        }
+    if prior is None and not pr_url:
+        return None
+    same_live_job = (
+        _appbuild_job.get("submit_action_id") == session_id
+        and _appbuild_job.get("state") == "submitting"
+    )
+    state = "submitting" if same_live_job else "unknown"
+    return {
+        "ok": True, "started": False, "duplicate": True,
+        "state": state, "action_run_id": session_id,
+        "reconciliation_required": state == "unknown",
+        "summary": (
+            "Submission for this app-build session was already claimed; no new pull request was started. "
+            "Check app-build status and the saved GitHub repository before considering any retry."
+        ),
+    }
+
+
 def _run_appbuild_agent(
     app: str, goal: str, profile: str | None, plan: str | None = None,
+    run_id: str | None = None,
 ) -> None:
     """Background thread target, mirroring _run_agent: build one app, then
     settle _appbuild_job. The AppWorkspace itself lives on _appbuild_
@@ -907,18 +1352,23 @@ def _run_appbuild_agent(
                 submitted=bool(result.get("submitted")), pr_url=result.get("pr_url"),
                 finished_at=time.time(),
             )
-        logger.info("appbuild_state_transition state=%s app=%r goal=%r", state, app, goal)
+        _update_appbuild_start_claim(
+            run_id, "failed" if state in {"error", "cancelled"} else "completed",
+        )
+        logger.info("appbuild_state_transition state=%s", state)
     except Exception as exc:  # a build crash must still settle the job
-        logger.exception("app build run crashed")
+        logger.warning("appbuild_run_failed error_type=%s", type(exc).__name__)
         with _appbuild_lock:
             cancelled = _appbuild_job.get("cancel_requested", False)
             _appbuild_agent_instance = None
             _appbuild_job.update(
                 state="cancelled" if cancelled else "error",
-                summary="Build cancelled." if cancelled else f"app build run crashed: {type(exc).__name__}: {exc}",
+                summary="Build cancelled." if cancelled else f"App build failed ({type(exc).__name__}).",
                 finished_at=time.time(),
             )
-        logger.info("appbuild_state_transition state=%s app=%r", "cancelled" if cancelled else "error", app)
+        _update_appbuild_start_claim(run_id, "failed")
+        logger.info("appbuild_state_transition state=%s",
+                    "cancelled" if cancelled else "error")
 
 
 def _council_busy() -> bool:
@@ -943,11 +1393,11 @@ def _run_council_job(
             goal=goal, tier=1, context=context,
         ))
     except Exception as exc:  # noqa: BLE001 — a crash must still settle the job
-        logger.exception("council job crashed")
+        logger.warning("council_job_failed error_type=%s", type(exc).__name__)
         with _council_lock:
             _council_job.update(
                 state="error",
-                error=f"council job crashed: {type(exc).__name__}: {exc}",
+                error=f"council job failed ({type(exc).__name__})",
                 finished_at=time.time(),
             )
         return
@@ -993,6 +1443,7 @@ def _resolve_planning_profile(explicit: str | None) -> dict[str, Any]:
 
 def _run_plan_single(
     goal: str, profile: dict[str, Any], context: dict[str, Any],
+    run_id: str | None = None,
 ) -> None:
     # MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R3 — single mode now shares
     # the same _proposer_user_message assembly council mode uses, so a
@@ -1007,19 +1458,21 @@ def _run_plan_single(
             council_config.PLANNING_MEMBER_TIMEOUT_S, rung="planning",
         ))
     except Exception as exc:  # noqa: BLE001 — a crash must still settle the job
-        logger.exception("plan single-mode job crashed")
+        logger.warning("plan_single_job_failed error_type=%s", type(exc).__name__)
         with _plan_lock:
             _plan_job.update(
                 state="error",
-                error=f"planning call failed: {type(exc).__name__}: {exc}",
+                error=f"planning call failed ({type(exc).__name__})",
                 finished_at=time.time(),
             )
+        _update_plan_start_claim(run_id, "failed")
         return
     with _plan_lock:
         _plan_job.update(
             state="done", plan=content, author=profile["name"],
             finished_at=time.time(),
         )
+    _update_plan_start_claim(run_id, "completed")
 
 
 def _run_plan_council(
@@ -1031,13 +1484,14 @@ def _run_plan_council(
             goal, members=members, judge=True, context=context, run_id=run_id,
         ))
     except Exception as exc:  # noqa: BLE001
-        logger.exception("plan council-mode job crashed")
+        logger.warning("plan_council_job_failed error_type=%s", type(exc).__name__)
         with _plan_lock:
             _plan_job.update(
                 state="error",
-                error=f"planning round crashed: {type(exc).__name__}: {exc}",
+                error=f"planning round failed ({type(exc).__name__})",
                 finished_at=time.time(),
             )
+        _update_plan_start_claim(run_id, "failed")
         return
     if result is None:
         with _plan_lock:
@@ -1046,6 +1500,7 @@ def _run_plan_council(
                 error="council unavailable — see admin sidecar logs",
                 finished_at=time.time(),
             )
+        _update_plan_start_claim(run_id, "failed")
         return
     if not result.proposals:
         with _plan_lock:
@@ -1054,6 +1509,7 @@ def _run_plan_council(
                 error=result.select_reason or "no candidates were produced",
                 finished_at=time.time(),
             )
+        _update_plan_start_claim(run_id, "failed")
         return
     candidates = [
         {
@@ -1067,6 +1523,7 @@ def _run_plan_council(
             state="awaiting_choice", round_id=result.round_id,
             candidates=candidates, finished_at=time.time(),
         )
+    _update_plan_start_claim(run_id, "awaiting_choice")
 
 
 def _slugify_goal(goal: str) -> str:
@@ -1192,8 +1649,9 @@ def model_routes() -> dict:
                 "workloads": access.get("workloads") or {},
                 "profiles": profiles, "preferences": list_preferences()}
     except Exception as exc:  # noqa: BLE001 - read-only status boundary
-        logger.exception("model_routes_status_failed")
-        return {"ok": False, "error": str(exc)}
+        logger.warning("model_routes_status_failed error_type=%s",
+                       type(exc).__name__)
+        return {"ok": False, "error": "model route status unavailable"}
 
 
 @app.post("/api/model-routes/stage")
@@ -1276,15 +1734,24 @@ def selfedit_run(body: GoalIn) -> dict:
     """Start an upgrade run in the background; poll GET /api/selfedit/run.
 
     G2: prefer {staging_id} (from POST /api/selfedit/stage) over the bare
-    {goal, profile?} form — the staged record is the source of truth for
-    what was actually previewed. The bare form still works for one release
-    (logged as a deprecation signal), so an older mcp_selfedit build in the
-    field doesn't break."""
+    {goal, profile?, run_id} form — the staged record is the source of truth
+    for what was actually previewed. A bare start without a stable run_id is
+    refused because it cannot be reconciled safely after a transport retry."""
     staging_id = (body.staging_id or "").strip()
     bare_goal = (body.goal or "").strip()
+    requested_action_id = staging_id or None
+    requested_action_scope = _SELFEDIT_STAGED_START_ACTION_SCOPE
+    # Issued staging IDs are exactly 12 lowercase hexadecimal characters.
+    # Avoid querying the execution-claim table for arbitrary/mangled input;
+    # the one-live-stage repair below resolves that to the canonical ID.
+    if requested_action_id and re.fullmatch(r"[0-9a-f]{12}", requested_action_id):
+        duplicate = _prior_staged_selfedit_action(requested_action_id)
+        if duplicate is not None:
+            return duplicate
     # Refuse a confirm that lands during a live run BEFORE touching the
     # staging (2026-09-07 review, F4): the pop used to come first, so the
     # refusal itself consumed the preview the user had just approved.
+    duplicate_claim = False
     with _run_lock:
         if (_run_job["state"] == "running" or _opening_job["state"] == "starting"
                 or _finish_job["state"] in {"validating", "submitting"}):
@@ -1320,19 +1787,37 @@ def selfedit_run(body: GoalIn) -> dict:
                 ),
             }
         goal = rec["goal"]
+        # The claim identity must be the exact ID issued by /stage, even
+        # when _take_staging repaired a harmless relay typo.
+        requested_action_id = staging_id
         profile = rec["profile"]
         plan_path = rec["plan_path"] or ""
         run_id = rec.get("run_id")
         target_paths = list(rec.get("target_paths") or [])
     else:
         goal = bare_goal
+        run_id = (body.run_id or "").strip()
+        if not run_id:
+            return {
+                "ok": False,
+                "error": "a stable run_id is required for a bare self-edit start; preview and confirm a staged request instead",
+            }
+        if len(run_id) > 256:
+            return {"ok": False, "error": "run_id exceeds the supported length"}
         logger.warning(
-            "selfedit_run_stateless_confirm goal=%r — pass staging_id instead "
-            "(deprecated fallback, see G2)", goal,
+            "selfedit_run_stateless_confirm — pass staging_id instead "
+            "(deprecated fallback, see G2)"
         )
         profile = body.profile
         plan_path = (body.plan_path or "").strip()
-        run_id = (body.run_id or "").strip() or None
+        run_id = run_id or None
+        requested_action_id = run_id
+        requested_action_scope = _SELFEDIT_RUN_START_ACTION_SCOPE
+        prior = _prior_staged_selfedit_action(
+            requested_action_id, requested_action_scope,
+        )
+        if prior is not None:
+            return prior
         # The deprecated bare-goal form carries no target_paths (GoalIn has
         # no such field and gains none): only a staged preview classified
         # them.
@@ -1348,7 +1833,10 @@ def selfedit_run(body: GoalIn) -> dict:
         # A plan_path (or an explicit plan) is implementation-scale work and
         # still goes to the Upgrade Agent, below. Two declared fields
         # (author, plan_path), no judgment.
-        return _begin_authoring(goal, run_id, target_paths)
+        return _begin_authoring(
+            goal, run_id, target_paths, action_run_id=requested_action_id,
+            action_scope=requested_action_scope,
+        )
 
     plan = body.plan
     if plan is None and plan_path:
@@ -1380,28 +1868,181 @@ def selfedit_run(body: GoalIn) -> dict:
             agent = _make_agent(_selfedit_service, profile, run_id)
         except UnknownModelProfileError as exc:
             return {"ok": False, "error": str(exc)}
-        _run_job.update(
-            state="running", cancel_requested=False,
-            goal=goal,
-            profile=agent.model_label(),
-            summary=None,
-            started_at=time.time(),
-            finished_at=None,
-            submitted=False,
-            pr_url=None,
+        if requested_action_id:
+            try:
+                claimed = claim_execution_action(
+                    requested_action_scope, requested_action_id,
+                )
+            except Exception as exc:
+                logger.warning("selfedit_start_claim_write_failed error_type=%s", type(exc).__name__)
+                return {"ok": False, "error": "could not safely record this self-edit; no job was started"}
+            if not claimed:
+                duplicate_claim = True
+        if not duplicate_claim:
+            _run_job.update(
+                state="running", cancel_requested=False,
+                goal=goal,
+                profile=agent.model_label(),
+                summary=None,
+                started_at=time.time(),
+                finished_at=None,
+                submitted=False,
+                pr_url=None,
+                action_run_id=requested_action_id,
+                action_scope=requested_action_scope,
+            )
+    if duplicate_claim:
+        return _prior_staged_selfedit_action(
+            requested_action_id, requested_action_scope,
+        ) or {
+            "ok": False, "error": "the self-edit claim could not be reconciled; no job was started",
+        }
+    logger.info("selfedit_state_transition state=running")
+    try:
+        threading.Thread(
+            target=_run_agent,
+            args=(goal, profile, plan, run_id, requested_action_id,
+                  requested_action_scope),
+            daemon=True,
+        ).start()
+    except Exception as exc:
+        logger.warning("selfedit_worker_start_failed error_type=%s", type(exc).__name__)
+        with _run_lock:
+            _run_job.update(
+                state="error", summary="Upgrade worker could not be started.",
+                finished_at=time.time(),
+            )
+        _update_staged_selfedit_claim(
+            requested_action_id, "failed", requested_action_scope,
         )
-    # D17 — every self-edit state transition is logged.
-    logger.info("selfedit_state_transition state=running goal=%r", goal)
-    threading.Thread(
-        target=_run_agent, args=(goal, profile, plan, run_id), daemon=True,
-    ).start()
-    return {"ok": True, "started": True, "profile": agent.model_label()}
+        return {"ok": False, "error": "Upgrade worker could not be started."}
+    return {
+        "ok": True, "started": True, "profile": agent.model_label(),
+        "action_run_id": requested_action_id,
+    }
 
 
 @app.get("/api/selfedit/run")
-def selfedit_run_status() -> dict:
+def selfedit_run_status(
+    action_run_id: str | None = None,
+    finish_action_id: str | None = None,
+) -> dict:
     with _run_lock:
         job = dict(_run_job)
+    with _opening_lock:
+        opening = dict(_opening_job)
+    requested_action_id = (action_run_id or "").strip()
+    requested_finish_id = (finish_action_id or "").strip()
+    if requested_action_id and requested_finish_id:
+        return {"ok": False, "error": "request only one self-edit action identity"}
+    if requested_finish_id:
+        if len(requested_finish_id) > 256:
+            return {"ok": False, "error": "self-edit action identity is invalid"}
+        with _finish_lock:
+            finish_snapshot = dict(_finish_job)
+        if finish_snapshot.get("action_run_id") != requested_finish_id:
+            try:
+                receipt = get_execution_action(
+                    _SELFEDIT_PUBLISH_ACTION_SCOPE, requested_finish_id,
+                )
+            except Exception as exc:
+                logger.warning("selfedit_status_claim_read_failed error_type=%s", type(exc).__name__)
+                return {"ok": False, "error": "the self-edit submission receipt is unavailable"}
+            session = _selfedit_service.status()
+            if receipt is None:
+                # Validation is deliberately not claimed, so a failed
+                # validation remains repairable. The durable sandbox session
+                # is the authority for this specific session's saved checks.
+                if session.get("id") != requested_finish_id:
+                    return {"ok": False, "error": "no self-edit submission receipt exists for that action"}
+                phase = session.get("phase")
+                if phase == "validation_failed":
+                    finish_state = "failed"
+                else:
+                    return {"ok": False, "error": "no self-edit submission receipt exists for that action"}
+                return {
+                    "ok": True,
+                    "job": {"state": "idle", "action_run_id": requested_finish_id,
+                            "result_available": False},
+                    "finish": {"state": finish_state, "action_run_id": requested_finish_id,
+                               "checks": [], "result_available": False},
+                    "opening": {"state": "idle"}, "status": {"active": True}, "stagings": [],
+                }
+            receipt_state = receipt["status"]
+            same_session = session.get("id") == requested_finish_id
+            publication = session.get("publication") or {} if same_session else {}
+            pr_url = (
+                publication.get("url") or session.get("pr_url")
+                if same_session else None
+            )
+            if pr_url:
+                finish_state = "done"
+                try:
+                    update_execution_action(
+                        _SELFEDIT_PUBLISH_ACTION_SCOPE, requested_finish_id, "completed",
+                    )
+                except Exception as exc:
+                    logger.warning("selfedit_publish_claim_update_failed error_type=%s", type(exc).__name__)
+            elif receipt_state == "failed":
+                finish_state = "failed"
+            else:
+                # Claimed/running can mean publication reached GitHub before
+                # the process stopped. Completed without a saved URL is also
+                # unresolved. Neither is safe to replay automatically.
+                finish_state = "unknown"
+            finish_result = {
+                "state": finish_state, "action_run_id": requested_finish_id,
+                "result_available": bool(pr_url),
+                "reconciliation_required": finish_state == "unknown",
+            }
+            if pr_url:
+                finish_result["pr_url"] = pr_url
+            return {
+                "ok": True,
+                "job": {"state": "idle", "action_run_id": requested_finish_id,
+                        "result_available": False},
+                "finish": finish_result,
+                "opening": {"state": "idle"}, "status": {"active": False}, "stagings": [],
+            }
+    if requested_action_id:
+        if len(requested_action_id) > 256:
+            return {"ok": False, "error": "self-edit action identity is invalid"}
+        live_action_matches = (
+            job.get("action_run_id") == requested_action_id
+            and job.get("action_scope", _SELFEDIT_STAGED_START_ACTION_SCOPE)
+            in {_SELFEDIT_STAGED_START_ACTION_SCOPE, _SELFEDIT_RUN_START_ACTION_SCOPE}
+        ) or (
+            opening.get("action_run_id") == requested_action_id
+            and opening.get("action_scope", _SELFEDIT_STAGED_START_ACTION_SCOPE)
+            in {_SELFEDIT_STAGED_START_ACTION_SCOPE, _SELFEDIT_RUN_START_ACTION_SCOPE}
+        )
+        if not live_action_matches:
+            try:
+                receipt = get_execution_action(
+                    _SELFEDIT_STAGED_START_ACTION_SCOPE, requested_action_id,
+                )
+                if receipt is None:
+                    receipt = get_execution_action(
+                        _SELFEDIT_RUN_START_ACTION_SCOPE, requested_action_id,
+                    )
+            except Exception as exc:
+                logger.warning("selfedit_status_claim_read_failed error_type=%s", type(exc).__name__)
+                return {"ok": False, "error": "the self-edit action receipt is unavailable"}
+            if receipt is None:
+                return {"ok": False, "error": "no self-edit action receipt exists for that action"}
+            state = receipt["status"]
+            if state in {"claimed", "running", "awaiting_choice"}:
+                state = "unknown"
+            return {
+                "ok": True,
+                "job": {
+                    "state": state, "action_run_id": requested_action_id,
+                    "result_available": False,
+                    "reconciliation_required": state == "unknown",
+                },
+                "finish": {}, "opening": {"state": "idle"},
+                "status": {"active": False}, "stagings": [],
+            }
     # 2026-08-25 — a live incident: the developer fabricated "staging
     # expires after 10 minutes... it's gone" from THIS endpoint, which had
     # no way to answer that question at all — job/status describe the run
@@ -1428,7 +2069,7 @@ def selfedit_run_status() -> dict:
         "ok": True,
         "job": job,
         "finish": finish,
-        "opening": dict(_opening_job),
+        "opening": opening,
         "status": _selfedit_service.status(),
         "stagings": stagings,
     }
@@ -1514,9 +2155,20 @@ def selfedit_finish() -> dict:
     """SE4 — start the finish job: validate, and submit if green."""
     if not authoring_enabled():
         return dict(_AUTHORING_OFF)
-    if not _selfedit_service.branch:
+    session = _selfedit_service.status()
+    action_run_id = str(session.get("id") or "")
+    if action_run_id:
+        prior = _prior_selfedit_publish(action_run_id)
+        if prior is not None:
+            return prior
+    if session.get("phase") == "publication_pending":
+        return {
+            "ok": False, "state": "unknown", "action_run_id": action_run_id or None,
+            "error": "a previous publication may have started; inspect the saved sandbox and PR state before retrying",
+        }
+    if not session.get("branch"):
         return {"ok": False, "error": "no open self-edit session"}
-    if not _selfedit_service.proposals:
+    if not session.get("proposals"):
         return {"ok": False, "error": "nothing has been written yet"}
     with _finish_lock:
         # The busy check is INLINED rather than calling _busy(): _busy()
@@ -1532,12 +2184,17 @@ def selfedit_finish() -> dict:
         _finish_job.update(
             state="validating", checks=None, pr_url=None, notice=None, cancel_requested=False,
             human_only=None, apply_command=None,
-            run_id=_selfedit_service.run_id, started_at=time.time(), finished_at=None,
+            run_id=session.get("run_id") or _selfedit_service.run_id,
+            action_run_id=action_run_id,
+            started_at=time.time(), finished_at=None,
         )
     logger.info("selfedit_state_transition state=finish_validating run_id=%s",
                 _selfedit_service.run_id)
     threading.Thread(target=_run_finish, daemon=True).start()
-    return {"ok": True, "started": True, "state": "validating"}
+    return {
+        "ok": True, "started": True, "state": "validating",
+        "action_run_id": action_run_id,
+    }
 
 
 @app.post("/api/selfedit/validate")
@@ -1565,8 +2222,8 @@ def selfedit_verify_appearance(body: VerifyAppearanceBody | None = None) -> dict
     body = body or VerifyAppearanceBody()
     result = _selfedit_service.verify_appearance(
         branch_override=body.branch_override, display=body.display)
-    logger.info("selfedit_verify_appearance ok=%s branch=%s",
-                result.get("ok"), result.get("branch"))
+    logger.info("selfedit_verify_appearance ok=%s branch_present=%s",
+                result.get("ok"), bool(result.get("branch")))
     return result
 
 
@@ -1574,9 +2231,48 @@ def selfedit_verify_appearance(body: VerifyAppearanceBody | None = None) -> dict
 def selfedit_submit() -> dict:
     if _busy():
         return {"ok": False, "error": "an upgrade run is in progress — ask for status instead"}
+    session = _selfedit_service.status()
+    action_run_id = str(session.get("id") or "")
+    if not action_run_id:
+        return {"ok": False, "error": "no open self-edit session"}
+    prior = _prior_selfedit_publish(action_run_id)
+    if prior is not None:
+        return prior
+    if session.get("phase") == "publication_pending":
+        return {
+            "ok": False, "state": "unknown", "action_run_id": action_run_id,
+            "error": "a previous publication may have started; inspect the saved sandbox and PR state before retrying",
+        }
+    if not session.get("validated_ok") or not session.get("proposals"):
+        return {"ok": False, "error": "validation must pass and edits must exist before submission"}
+    try:
+        claimed = claim_execution_action(
+            _SELFEDIT_PUBLISH_ACTION_SCOPE, action_run_id,
+        )
+    except Exception as exc:
+        logger.warning("selfedit_publish_claim_write_failed error_type=%s", type(exc).__name__)
+        return {"ok": False, "error": "could not safely record publication; no pull request was submitted"}
+    if not claimed:
+        return _prior_selfedit_publish(action_run_id) or {
+            "ok": False, "state": "unknown", "action_run_id": action_run_id,
+            "error": "publication was already claimed; inspect status before retrying",
+        }
+    try:
+        update_execution_action(
+            _SELFEDIT_PUBLISH_ACTION_SCOPE, action_run_id, "running",
+        )
+    except Exception as exc:
+        logger.warning("selfedit_publish_claim_update_failed error_type=%s", type(exc).__name__)
     result = _selfedit_service.submit()
+    if result.get("ok"):
+        try:
+            update_execution_action(
+                _SELFEDIT_PUBLISH_ACTION_SCOPE, action_run_id, "completed",
+            )
+        except Exception as exc:
+            logger.warning("selfedit_publish_claim_update_failed error_type=%s", type(exc).__name__)
     logger.info("selfedit_state_transition state=submitted ok=%s", result.get("ok"))
-    return result
+    return {**result, "action_run_id": action_run_id}
 
 
 @app.post("/api/selfedit/cancel")
@@ -1685,6 +2381,39 @@ def appbuild_start(body: AppBuildGoalIn) -> dict:
         app_name = validate_app_name(body.app)
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
+    run_id = (body.run_id or "").strip()
+    if not run_id:
+        return {
+            "ok": False,
+            "error": "a stable run_id is required for an app-build start",
+        }
+    if len(run_id) > 256:
+        return {"ok": False, "error": "app-build action identity is invalid"}
+    try:
+        prior = get_execution_action(_APPBUILD_START_ACTION_SCOPE, run_id)
+    except Exception as exc:
+        logger.warning("appbuild_start_claim_read_failed error_type=%s", type(exc).__name__)
+        return {
+            "ok": False,
+            "error": "could not verify whether this app-build action already started; no retry was launched",
+            "outcome": "unknown", "action_run_id": run_id,
+        }
+    if prior is not None:
+        with _appbuild_lock:
+            same_live_job = _appbuild_job.get("run_id") == run_id
+            live_state = _appbuild_job.get("state") or "unknown"
+        state = live_state if same_live_job else prior.get("status", "unknown")
+        if state in {"claimed", "running", "awaiting_choice"} and not same_live_job:
+            state = "unknown"
+        return {
+            "ok": True, "started": False, "duplicate": True,
+            "state": state, "action_run_id": run_id,
+            "summary": (
+                "This app-build action was already claimed for this execution; "
+                "no new build was started. Check app_build_status with this "
+                "action_run_id before considering any retry."
+            ),
+        }
     plan = body.plan
     plan_path = (body.plan_path or "").strip()
     if plan is None and plan_path:
@@ -1717,6 +2446,21 @@ def appbuild_start(body: AppBuildGoalIn) -> dict:
             return {"ok": False, "error": str(exc)}
         except Exception as exc:  # noqa: BLE001 — e.g. GitHubError: no token configured
             return {"ok": False, "error": str(exc)}
+        try:
+            claimed = claim_execution_action(_APPBUILD_START_ACTION_SCOPE, run_id)
+        except Exception as exc:
+            logger.warning("appbuild_start_claim_write_failed error_type=%s", type(exc).__name__)
+            return {"ok": False, "error": "could not safely record this app-build action; no build was started"}
+        if not claimed:
+            return {
+                "ok": True, "started": False, "duplicate": True,
+                "state": "unknown", "action_run_id": run_id,
+                "summary": (
+                    "This app-build action was already claimed for this execution; "
+                    "no new build was started. Check app_build_status with this "
+                    "action_run_id before considering any retry."
+                ),
+            }
         _appbuild_workspace = None
         _appbuild_agent_instance = None
         _appbuild_job.update(
@@ -1724,11 +2468,21 @@ def appbuild_start(body: AppBuildGoalIn) -> dict:
             submitted=False, pr_url=None,
             profile=agent.model_label(), summary=None,
             started_at=time.time(), finished_at=None,
+            run_id=run_id or None,
         )
-    logger.info("appbuild_state_transition state=running app=%r goal=%r", app_name, goal)
-    threading.Thread(
-        target=_run_appbuild_agent, args=(app_name, goal, body.profile, plan), daemon=True,
-    ).start()
+    logger.info("appbuild_state_transition state=running")
+    _update_appbuild_start_claim(run_id, "running")
+    worker = threading.Thread(
+        target=_run_appbuild_agent, args=(app_name, goal, body.profile, plan, run_id), daemon=True,
+    )
+    try:
+        worker.start()
+    except Exception as exc:
+        logger.warning("appbuild_thread_start_failed error_type=%s", type(exc).__name__)
+        with _appbuild_lock:
+            _appbuild_job.update(state="error", finished_at=time.time())
+        _update_appbuild_start_claim(run_id, "failed")
+        return {"ok": False, "error": "the app-build worker could not be started"}
     return {"ok": True, "started": True, "profile": agent.model_label()}
 
 
@@ -1750,11 +2504,79 @@ def _recover_appbuild_workspace():
 
 
 @app.get("/api/appbuild/job")
-def appbuild_job_status() -> dict:
+def appbuild_job_status(
+    run_id: str | None = None, submit_action_id: str | None = None,
+) -> dict:
     _recover_appbuild_workspace()
     with _appbuild_lock:
         job = dict(_appbuild_job)
         workspace = _appbuild_workspace
+    requested_submit_id = (submit_action_id or "").strip()
+    if requested_submit_id:
+        if len(requested_submit_id) > 256:
+            return {"ok": False, "error": "app-build submission identity is invalid"}
+        status = workspace.status() if workspace is not None else {"active": False}
+        try:
+            receipt = get_execution_action(
+                _APPBUILD_SUBMIT_ACTION_SCOPE, requested_submit_id,
+            )
+        except Exception as exc:
+            logger.warning("appbuild_submit_status_claim_read_failed error_type=%s", type(exc).__name__)
+            if not (status.get("id") == requested_submit_id
+                    and (status.get("publication") or {}).get("url")):
+                return {"ok": False, "error": "the app-build submission receipt is unavailable"}
+            receipt = None
+        publication = status.get("publication") or {}
+        pr_url = status.get("pr_url") or publication.get("url")
+        if pr_url:
+            state = "completed"
+        elif status.get("id") != requested_submit_id and receipt is None:
+            return {"ok": False, "error": "no app-build submission receipt exists for that session"}
+        elif status.get("phase") in {"publishing", "publication_pending"}:
+            state = "unknown"
+        elif receipt is None:
+            return {"ok": False, "error": "no app-build submission receipt exists for that session"}
+        elif receipt.get("status") in {"claimed", "running", "awaiting_choice"}:
+            same_live_job = (
+                job.get("submit_action_id") == requested_submit_id
+                and job.get("state") == "submitting"
+            )
+            state = "submitting" if same_live_job else "unknown"
+        else:
+            state = receipt.get("status", "unknown")
+        submit_job = {
+            "state": state,
+            "submit_action_id": requested_submit_id,
+            "result_available": bool(pr_url),
+            "reconciliation_required": state == "unknown",
+        }
+        if pr_url:
+            submit_job["pr_url"] = pr_url
+        return {"ok": True, "job": submit_job, "status": status}
+    requested_run_id = (run_id or "").strip()
+    if requested_run_id:
+        if len(requested_run_id) > 256:
+            return {"ok": False, "error": "app-build action identity is invalid"}
+        if job.get("run_id") != requested_run_id:
+            try:
+                receipt = get_execution_action(_APPBUILD_START_ACTION_SCOPE, requested_run_id)
+            except Exception as exc:
+                logger.warning("appbuild_status_claim_read_failed error_type=%s", type(exc).__name__)
+                return {"ok": False, "error": "the app-build action receipt is unavailable"}
+            if receipt is None:
+                return {"ok": False, "error": "no app-build action receipt exists for that execution"}
+            state = receipt["status"]
+            if state in {"claimed", "running", "awaiting_choice"}:
+                state = "unknown"
+            return {
+                "ok": True,
+                "job": {
+                    "state": state, "run_id": requested_run_id,
+                    "result_available": False,
+                    "reconciliation_required": state == "unknown",
+                },
+                "status": {"active": False},
+            }
     status = workspace.status() if workspace is not None else {"active": False}
     if job["state"] == "idle" and status.get("id"):
         job.update(state="recovered", app=status.get("app"), goal=status.get("goal"),
@@ -1762,11 +2584,12 @@ def appbuild_job_status() -> dict:
     return {"ok": True, "job": job, "status": status}
 
 
-def _submit_appbuild(workspace, operation_id, output):
+def _submit_appbuild(workspace, operation_id, session_id, output):
     try:
         result = workspace.submit()
-    except Exception:
-        logger.exception("app workspace submission failed")
+    except Exception as exc:
+        logger.warning("app_workspace_submission_failed error_type=%s",
+                       type(exc).__name__)
         result = {"ok": False, "error": "App submission failed; inspect the saved workspace before retrying."}
     output["result"] = result
     with _appbuild_lock:
@@ -1776,22 +2599,72 @@ def _submit_appbuild(workspace, operation_id, output):
                 submitted=bool(result.get("ok")), pr_url=result.get("pr_url"),
                 summary=result.get("notice") or result.get("error") or "Draft pull request opened.",
                 finished_at=time.time())
+    if result.get("ok") and result.get("pr_url"):
+        _update_appbuild_submit_claim(session_id, "completed")
+    elif result.get("ok"):
+        _update_appbuild_submit_claim(session_id, "running")
 
 
 @app.post("/api/appbuild/submit")
 def appbuild_submit() -> dict:
     workspace = _recover_appbuild_workspace()
+    if workspace is None:
+        return {"ok": False, "error": "no active app-build session to submit"}
+    workspace_status = workspace.status()
+    session_id = str(workspace_status.get("id") or "").strip()
+    if not session_id or len(session_id) > 256:
+        return {"ok": False, "error": "the app-build session has no stable submission identity; no pull request was submitted"}
     with _appbuild_lock:
         if _appbuild_job["state"] in {"running", "submitting"}:
             return {"ok": False, "error": "an app build is in progress — ask for status instead"}
-        if workspace is None or not workspace.branch:
+    prior = _prior_appbuild_submit(session_id, workspace_status)
+    if prior is not None:
+        return prior
+    with _appbuild_lock:
+        if _appbuild_job["state"] in {"running", "submitting"}:
+            return {"ok": False, "error": "an app build is in progress — ask for status instead"}
+        prior = _prior_appbuild_submit(session_id, workspace_status)
+        if prior is not None:
+            return prior
+        if not workspace_status.get("active") or not workspace_status.get("branch"):
             return {"ok": False, "error": "no active app-build session to submit"}
+        if not workspace_status.get("proposals"):
+            return {"ok": False, "error": "no app-build edits have been proposed"}
+        if not workspace_status.get("validated_ok"):
+            return {"ok": False, "error": "validation must pass before app-build submission"}
+        try:
+            claimed = claim_execution_action(_APPBUILD_SUBMIT_ACTION_SCOPE, session_id)
+        except Exception as exc:
+            logger.warning("appbuild_submit_claim_write_failed error_type=%s", type(exc).__name__)
+            return {"ok": False, "error": "could not safely record app-build submission; no pull request was submitted"}
+        if not claimed:
+            return {
+                "ok": False, "state": "unknown", "action_run_id": session_id,
+                "reconciliation_required": True,
+                "error": "app-build submission was already claimed; inspect status before retrying",
+            }
+        _update_appbuild_submit_claim(session_id, "running")
         operation_id = uuid.uuid4().hex
         _appbuild_job.update(state="submitting", operation_id=operation_id, cancel_requested=False,
-                            submitted=False, pr_url=None, finished_at=None)
+                            submitted=False, pr_url=None, finished_at=None,
+                            submit_action_id=session_id)
     output = {}
-    worker = threading.Thread(target=_submit_appbuild, args=(workspace, operation_id, output), daemon=True)
-    worker.start()
+    worker = threading.Thread(
+        target=_submit_appbuild,
+        args=(workspace, operation_id, session_id, output), daemon=True,
+    )
+    try:
+        worker.start()
+    except Exception as exc:
+        logger.warning("appbuild_submit_thread_start_failed error_type=%s", type(exc).__name__)
+        with _appbuild_lock:
+            if _appbuild_job.get("operation_id") == operation_id:
+                _appbuild_job.update(state="unknown", finished_at=time.time())
+        return {
+            "ok": False, "state": "unknown", "action_run_id": session_id,
+            "reconciliation_required": True,
+            "error": "submission could not be started safely; inspect the saved workspace before retrying",
+        }
     worker.join(timeout=0.05)
     if not worker.is_alive():
         return output["result"]
@@ -1833,6 +2706,11 @@ def appbuild_cancel() -> dict:
 def research_start(body: ResearchStartIn) -> dict:
     if not _research_enabled():
         return {"ok": False, "error": RESEARCH_DISABLED_MESSAGE}
+    run_id = (body.run_id or "").strip()
+    if not run_id:
+        return {"ok": False, "error": "a stable run_id is required for a research start"}
+    if len(run_id) > 256:
+        return {"ok": False, "error": "run identity is invalid; no research job was started"}
     urls = [u.strip() for u in (body.urls or []) if u.strip()]
     cfg = research_crawl.load_research_config()
     max_sites = int(cfg.get("max_sites", 2))
@@ -1843,28 +2721,82 @@ def research_start(body: ResearchStartIn) -> dict:
     if not os.environ.get(research_crawl.TAVILY_API_KEY_ENV):
         return {"ok": False, "error": "TAVILY_API_KEY is not configured"}
     with _research_lock:
+        try:
+            prior = get_execution_action(_RESEARCH_START_ACTION_SCOPE, run_id)
+        except Exception as exc:
+            logger.warning("research_start_claim_read_failed error_type=%s", type(exc).__name__)
+            return {
+                "ok": False,
+                "error": "could not verify whether this research already started; no retry was launched",
+                "outcome": "unknown", "action_run_id": run_id,
+            }
+        if prior is not None:
+            return _research_duplicate(run_id, prior, _research_job)
         if _research_job["state"] == "running":
             return {
                 "ok": False,
                 "error": "a comparison is already in progress — ask for status instead",
                 "job": dict(_research_job),
             }
+        try:
+            claimed = claim_execution_action(_RESEARCH_START_ACTION_SCOPE, run_id)
+        except Exception as exc:
+            logger.warning("research_start_claim_write_failed error_type=%s", type(exc).__name__)
+            return {
+                "ok": False,
+                "error": "could not safely record research start; no crawl was launched",
+                "outcome": "unknown", "action_run_id": run_id,
+            }
+        if not claimed:
+            try:
+                prior = get_execution_action(_RESEARCH_START_ACTION_SCOPE, run_id)
+            except Exception:
+                prior = None
+            return _research_duplicate(
+                run_id, prior or {"status": "unknown"}, _research_job,
+            )
         _research_job.update(
             state="running", urls=urls, focus=(body.focus or "").strip() or None,
             sites=None, comparison=None, model=None, credits_used=None, error=None,
             started_at=time.time(), finished_at=None, saved_path=None, save_error=None,
+            run_id=run_id,
         )
-    logger.info("research_state_transition state=running urls=%r", urls)
-    threading.Thread(
-        target=_run_research_job, args=(urls, body.focus or ""), daemon=True,
-    ).start()
-    return {"ok": True, "started": True}
+    _update_research_start_claim(run_id, "running")
+    logger.info("research_state_transition state=running site_count=%d", len(urls))
+    try:
+        threading.Thread(
+            target=_run_research_job, args=(urls, body.focus or "", run_id), daemon=True,
+        ).start()
+    except Exception as exc:
+        logger.warning("research_job_dispatch_failed error_type=%s", type(exc).__name__)
+        with _research_lock:
+            _research_job.update(state="error", error="research job could not be started",
+                                 finished_at=time.time())
+        _update_research_start_claim(run_id, "failed")
+        return {"ok": False, "error": "research job could not be started",
+                "action_run_id": run_id}
+    return {"ok": True, "started": True, "action_run_id": run_id}
 
 
 @app.get("/api/research/job")
-def research_job_status() -> dict:
+def research_job_status(run_id: str | None = None) -> dict:
+    requested_run_id = (run_id or "").strip()
     with _research_lock:
         job = dict(_research_job)
+    if requested_run_id and job.get("run_id") != requested_run_id:
+        try:
+            prior = get_execution_action(_RESEARCH_START_ACTION_SCOPE, requested_run_id)
+        except Exception as exc:
+            logger.warning("research_status_claim_read_failed error_type=%s", type(exc).__name__)
+            return {"ok": False, "error": "research status is temporarily unavailable"}
+        if prior is None:
+            return {"ok": False, "error": "no research action found for that execution ID"}
+        state = prior.get("status", "unknown")
+        if state in {"claimed", "running", "awaiting_choice"}:
+            state = "unknown"
+        state = {"completed": "done", "failed": "error"}.get(state, state)
+        job = {"state": state, "run_id": requested_run_id,
+               "finished_at": None, "error": None}
     return {"ok": True, "job": job}
 
 
@@ -1924,6 +2856,7 @@ def research_cancel() -> dict:
             state="idle", urls=None, focus=None, sites=None, comparison=None,
             model=None, credits_used=None, error=None, started_at=None,
             finished_at=None, saved_path=None, save_error=None,
+            run_id=None,
         )
     return {"ok": True}
 
@@ -1949,6 +2882,671 @@ def memory_overview() -> dict:
     }
 
 
+@app.post("/api/skills/runtime-inventory")
+def skills_runtime_inventory(body: SkillRuntimeInventoryIn, request: Request) -> dict:
+    """Accept a fresh inventory only from Mortimer's service-bot token.
+
+    This records discovered tools, never tool-call success or package/provider
+    readiness. The receipt is held in process memory and expires quickly.
+    """
+    if not auth_enabled():
+        raise HTTPException(status_code=503, detail="runtime evidence requires bearer authentication")
+    identity = request.scope.get("client_identity")
+    if identity is None:
+        raise HTTPException(status_code=503, detail="authenticated identity is unavailable")
+    if getattr(identity, "name", None) != "service-bot":
+        raise HTTPException(status_code=403, detail="runtime evidence requires the service-bot identity")
+    if body.schema_version != 1:
+        raise HTTPException(status_code=400, detail="unsupported runtime inventory schema")
+    from jarvis.skill_runtime import update_runtime_inventory
+
+    try:
+        update_runtime_inventory(
+            body.runtime_id, body.tools, body.complete,
+            active=body.active, owner_id=body.owner_id,
+        )
+    except ValueError as exc:
+        if str(exc) == "runtime_capacity_exceeded":
+            raise HTTPException(status_code=503, detail="runtime inventory capacity is full") from None
+        raise HTTPException(status_code=400, detail="invalid runtime inventory") from None
+    return {"ok": True}
+
+
+def _creator_internal_owner(body, request: Request) -> dict:
+    """Authorize a service-bot call against the owner-bound live session."""
+    if not auth_enabled():
+        raise HTTPException(status_code=503, detail="creator dispatch requires bearer authentication")
+    identity = request.scope.get("client_identity")
+    if identity is None or getattr(identity, "name", None) != "service-bot":
+        raise HTTPException(status_code=403, detail="creator capability requires service-bot identity")
+    from jarvis.skill_creator_agent import CREATOR_PACKAGE_REVISION
+    if body.creator_revision != CREATOR_PACKAGE_REVISION:
+        raise HTTPException(status_code=409, detail="creator package revision changed")
+    try:
+        session_uuid = uuid.UUID(body.bot_session_id)
+        request_uuid = uuid.UUID(body.request_id)
+        run_uuid = uuid.UUID(body.developer_run_id)
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(status_code=400, detail="creator identity is invalid") from None
+    if any(str(value) != raw for value, raw in (
+        (session_uuid, body.bot_session_id),
+        (request_uuid, body.request_id),
+        (run_uuid, body.developer_run_id),
+    )):
+        raise HTTPException(status_code=400, detail="creator identity is invalid")
+    from jarvis.skill_runtime import runtime_owner
+    if runtime_owner(body.bot_session_id) != body.owner_id:
+        raise HTTPException(status_code=409, detail="creator session is stale or belongs to another owner")
+    from jarvis.skill_requests import get as get_skill_request
+    try:
+        state = get_skill_request(body.owner_id, body.request_id)
+    except Exception:
+        state = None
+    if (not state or state.get("operation") != "draft"
+            or state.get("bot_session_id") != body.bot_session_id):
+        raise HTTPException(status_code=404, detail="creator request is unavailable")
+    return state
+
+
+def _verify_developer_run(body, *, require_running: bool = True) -> dict:
+    from jarvis.runlog.store import get_run
+    detail = get_run(body.developer_run_id)
+    run = detail.get("run") if isinstance(detail, dict) else None
+    if (not run or run.get("agent") != "developer"
+            or run.get("user_id") != body.owner_id
+            or run.get("session_id") != body.bot_session_id
+            or (require_running and run.get("status") != "running")):
+        raise HTTPException(status_code=409, detail="creator Developer run does not match this request")
+    return run
+
+
+@app.post("/api/skills/creator/associate")
+def associate_skill_creator_run(body: SkillCreatorAssociationIn, request: Request) -> dict:
+    """Durably bind only a RunLogger-created Developer run to a creator job."""
+    _creator_internal_owner(body, request)
+    _verify_developer_run(body)
+    from jarvis.skill_requests import SkillRequestError, associate_developer_run
+    try:
+        associate_developer_run(
+            body.owner_id, body.request_id,
+            session_id=body.bot_session_id, run_id=body.developer_run_id,
+            creator_revision=body.creator_revision,
+        )
+    except SkillRequestError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
+    return {"ok": True, "developer_run_id": body.developer_run_id}
+
+
+@app.post("/api/skills/creator/tool")
+def execute_skill_creator_tool(body: SkillCreatorToolIn, request: Request) -> dict:
+    """Execute one of the four creator tools for its exact live run/job pair."""
+    from jarvis.skill_requests import _service
+
+    state = _creator_internal_owner(body, request)
+    if (state.get("developer_run_id") != body.developer_run_id
+            or state.get("creator_revision") != body.creator_revision):
+        raise HTTPException(status_code=409, detail="creator tool is not bound to this Developer run")
+    run = _verify_developer_run(body)
+    if state.get("cancel_requested"):
+        raise HTTPException(status_code=409, detail="creator request is cancelling")
+    tool = body.tool_name
+    args = body.arguments
+    service = _service(state["skill_id"], expected_job_id=state["sandbox_job_id"])
+    live = service.status()
+    if live.get("run_id") != state.get("sandbox_job_id"):
+        raise HTTPException(status_code=409, detail="creator sandbox job changed")
+    if tool == "file_read":
+        if set(args) != {"path"} or not isinstance(args.get("path"), str):
+            raise HTTPException(status_code=400, detail="invalid creator tool arguments")
+        result = service.read_file(args["path"])
+    elif tool == "edit_propose":
+        allowed = {"path", "new_content", "rationale", "visual_intent"}
+        if (not {"path", "new_content"} <= set(args) or set(args) - allowed
+                or not isinstance(args.get("path"), str)
+                or not isinstance(args.get("new_content"), str)
+                or len(args["new_content"].encode("utf-8")) > 512 * 1024
+                or not isinstance(args.get("rationale", ""), str)
+                or len(args.get("rationale", "")) > 2000
+                or not isinstance(args.get("visual_intent", ""), str)
+                or len(args.get("visual_intent", "")) > 1000):
+            raise HTTPException(status_code=400, detail="invalid creator tool arguments")
+        result = service.propose_edit(
+            args["path"], args["new_content"], args.get("rationale", ""),
+            args.get("visual_intent", ""),
+        )
+    elif tool == "session_validate":
+        if args:
+            raise HTTPException(status_code=400, detail="invalid creator tool arguments")
+        result = service.validate()
+    elif tool == "session_decline":
+        if set(args) != {"reason"} or not isinstance(args.get("reason"), str) or len(args["reason"]) > 2000:
+            raise HTTPException(status_code=400, detail="invalid creator tool arguments")
+        from jarvis.skill_requests import update as update_skill_request
+        update_skill_request(
+            body.owner_id, body.request_id, state="draft_needs_attention",
+            result_code="creator_declined",
+        )
+        result = {"ok": False, "declined": True, "reason": args["reason"]}
+    else:
+        raise HTTPException(status_code=403, detail="tool is outside the creator capability")
+    if not isinstance(result, dict):
+        raise HTTPException(status_code=502, detail="creator tool returned an invalid result")
+    # The Developer run identity is rechecked before execution and the exact
+    # sandbox identity is checked above; return only the tool receipt itself.
+    _ = run
+    return {"ok": True, "result": result}
+
+
+@app.get("/api/skills")
+def skills_catalog(cursor: str = "", limit: int = 50) -> dict:
+    """Read-only, bounded inventory for the native Skills workspace."""
+    from jarvis.skill_catalog import list_catalog
+    from jarvis.skill_service import assess_current_readiness, configured_tool_inventory
+    from jarvis.skill_requests import authoring_available
+
+    if len(cursor) > 12 or (cursor and not cursor.isdecimal()):
+        raise HTTPException(status_code=400, detail="invalid catalog cursor")
+    if not 1 <= limit <= 100:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 100")
+    entries = list_catalog()
+    tool_inventory = configured_tool_inventory()
+    catalog_revision = hashlib.sha256("\n".join(
+        f"{item.skill_id}:{item.revision or 'invalid'}:{int(item.enabled)}"
+        for item in entries
+    ).encode("utf-8")).hexdigest()
+    offset = int(cursor or "0")
+    page = entries[offset:offset + limit]
+    next_offset = offset + len(page)
+    return {
+        "schema_version": 1,
+        "catalog_revision": catalog_revision,
+        "capabilities": {"process_view": True, "activity_trace": True,
+                         "authoring": authoring_available()},
+        "items": [{
+            "skill_id": item.skill_id,
+            "display_name": item.display_name,
+            "description": item.description,
+            "category": item.category,
+            "example_ids": list(item.example_ids[:32]),
+            "revision": item.revision,
+            "installation": item.installation,
+            "enabled": item.enabled,
+            "readiness": (readiness := assess_current_readiness(
+                item, tool_inventory=tool_inventory,
+            )).state,
+            "readiness_reasons": list(readiness.reason_codes),
+            "verification": item.verification,
+            "blockers": item.blockers,
+        } for item in page],
+        "next_cursor": str(next_offset) if next_offset < len(entries) else None,
+    }
+
+
+def _skill_request_owner(request: Request) -> str:
+    identity = request.scope.get("client_identity")
+    if not auth_enabled():
+        raise HTTPException(status_code=503, detail="Skills requests require bearer authentication")
+    if identity is not None and isinstance(getattr(identity, "user_id", None), str):
+        return identity.user_id
+    # A new request route must never collapse an authenticated caller into the
+    # legacy process-wide `local` tenant.
+    raise HTTPException(status_code=503, detail="authenticated identity is unavailable")
+
+
+def _skill_activity_owner(request: Request) -> str:
+    """Resolve read-API tenancy from the authenticated caller, never process state."""
+    if not auth_enabled():
+        return current_user_id()
+    identity = request.scope.get("client_identity")
+    user_id = getattr(identity, "user_id", None)
+    if isinstance(user_id, str) and user_id:
+        return user_id
+    # The bearer middleware normally rejects or annotates every authenticated
+    # request. Fail closed if an embedding bypasses that contract; falling back
+    # to JARVIS_USER_ID could expose another tenant's run activity.
+    raise HTTPException(status_code=503, detail="authenticated identity is unavailable")
+
+
+def _validated_skill_request(payload: SkillRequestIn) -> dict:
+    from jarvis.skill_catalog import SLUG
+
+    values = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+    if type(values["schema_version"]) is not int or values["schema_version"] != 1:
+        raise HTTPException(status_code=400, detail="unsupported Skills request schema")
+    try:
+        parsed = uuid.UUID(values["request_id"])
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(status_code=400, detail="invalid request identifier") from None
+    if str(parsed) != values["request_id"]:
+        raise HTTPException(status_code=400, detail="invalid request identifier")
+    if not SLUG.fullmatch(values["skill_id"]):
+        raise HTTPException(status_code=400, detail="invalid skill identifier")
+    for field in ("expected_catalog_revision",):
+        if not isinstance(values[field], str) or not re.fullmatch(r"[0-9a-f]{64}", values[field]):
+            raise HTTPException(status_code=400, detail=f"invalid {field}")
+    if values["skill_revision"] is not None and not re.fullmatch(r"[0-9a-f]{64}", values["skill_revision"]):
+        raise HTTPException(status_code=400, detail="invalid skill revision")
+    if values["privacy_context"] not in {"standard", "protected"}:
+        raise HTTPException(status_code=400, detail="invalid privacy context")
+    operation = values["operation"]
+    allowed = {"draft", "test", "request_publish", "request_activation", "request_rollback", "cancel"}
+    if operation not in allowed:
+        raise HTTPException(status_code=400, detail="unsupported Skills operation")
+    base_fields = {"schema_version", "operation", "request_id", "bot_session_id", "expected_catalog_revision",
+                   "skill_id", "skill_revision", "privacy_context"}
+    operation_fields = {
+        "draft": {"task_brief"},
+        "test": {"example_ids", "scope", "route_policy_ref", "budget", "job_id"},
+        "request_activation": {"review_artifact_ref"},
+        "request_rollback": {"review_artifact_ref"},
+        "request_publish": {"review_artifact_ref", "candidate_digest"},
+        "cancel": {"job_id"},
+    }[operation]
+    if any(values.get(key) is not None for key in (set(values) - base_fields - operation_fields)):
+        raise HTTPException(status_code=400, detail="fields are not valid for this Skills operation")
+    required = {
+        "draft": ("task_brief", "bot_session_id"), "test": ("example_ids", "scope", "job_id"),
+        "request_activation": ("skill_revision", "review_artifact_ref"),
+        "request_rollback": ("skill_revision", "review_artifact_ref"),
+        "request_publish": ("skill_revision", "review_artifact_ref", "candidate_digest"),
+        "cancel": ("job_id",),
+    }[operation]
+    if any(values.get(field) is None for field in required):
+        raise HTTPException(status_code=400, detail="missing operation fields")
+    if operation == "draft":
+        try:
+            session_id = str(uuid.UUID(values["bot_session_id"]))
+        except (ValueError, TypeError, AttributeError):
+            raise HTTPException(status_code=400, detail="invalid bot session identifier") from None
+        if session_id != values["bot_session_id"]:
+            raise HTTPException(status_code=400, detail="invalid bot session identifier")
+        brief = values["task_brief"]
+        if not isinstance(brief, str) or not brief.strip() or len(brief) > 8000:
+            raise HTTPException(status_code=400, detail="task brief must contain 1–8,000 characters")
+    if operation == "test":
+        ids = values["example_ids"]
+        if (not isinstance(ids, list) or not 1 <= len(ids) <= 32
+                or any(not isinstance(item, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", item) for item in ids)
+                or len(set(ids)) != len(ids)):
+            raise HTTPException(status_code=400, detail="invalid reviewed example IDs")
+        if values["scope"] not in {"offline", "live"}:
+            raise HTTPException(status_code=400, detail="invalid test scope")
+        try:
+            job = uuid.UUID(values["job_id"])
+        except (ValueError, TypeError, AttributeError):
+            raise HTTPException(status_code=400, detail="invalid authoring job identifier") from None
+        if str(job) != values["job_id"]:
+            raise HTTPException(status_code=400, detail="invalid authoring job identifier")
+        if values.get("route_policy_ref") is not None and not re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,63}", values["route_policy_ref"]):
+            raise HTTPException(status_code=400, detail="invalid route policy reference")
+        budget = values.get("budget")
+        if budget is not None and (set(budget) - {"max_calls", "max_seconds"}
+                                   or any(type(v) is not int or v < 1 for v in budget.values())):
+            raise HTTPException(status_code=400, detail="invalid test budget")
+    if operation in {"request_activation", "request_rollback"}:
+        if not re.fullmatch(r"[0-9a-f]{64}", values["skill_revision"]):
+            raise HTTPException(status_code=400, detail="invalid reviewed revision")
+        try:
+            ref = uuid.UUID(values["review_artifact_ref"])
+        except (ValueError, TypeError, AttributeError):
+            raise HTTPException(status_code=400, detail="invalid review artifact reference") from None
+        if str(ref) != values["review_artifact_ref"]:
+            raise HTTPException(status_code=400, detail="invalid review artifact reference")
+    if operation == "request_publish":
+        if (not re.fullmatch(r"[0-9a-f]{64}", values["skill_revision"])
+                or not re.fullmatch(r"[0-9a-f]{64}", values["candidate_digest"])):
+            raise HTTPException(status_code=400, detail="invalid reviewed candidate digest")
+        try:
+            ref = uuid.UUID(values["review_artifact_ref"])
+        except (ValueError, TypeError, AttributeError):
+            raise HTTPException(status_code=400, detail="invalid review artifact reference") from None
+        if str(ref) != values["review_artifact_ref"]:
+            raise HTTPException(status_code=400, detail="invalid review artifact reference")
+    if operation == "cancel":
+        try:
+            job = uuid.UUID(values["job_id"])
+        except (ValueError, TypeError, AttributeError):
+            raise HTTPException(status_code=400, detail="invalid job identifier") from None
+        if str(job) != values["job_id"]:
+            raise HTTPException(status_code=400, detail="invalid job identifier")
+    # Bound total serialized request size, including optional fields.
+    if len(json.dumps(values, ensure_ascii=False).encode("utf-8")) > 256 * 1024:
+        raise HTTPException(status_code=413, detail="Skills request exceeds 256 KiB")
+    return values
+
+
+@app.post("/api/skills/requests", status_code=202)
+def create_skill_request(payload: SkillRequestIn, request: Request) -> dict:
+    """Start/reconcile a bounded Skills operation under the bearer owner."""
+    from jarvis.skill_catalog import list_catalog
+    from jarvis.skill_requests import (
+        SkillRequestError, cancel_job, get as get_skill_job, start_draft,
+        start_offline_validation, start_publish,
+    )
+
+    values = _validated_skill_request(payload)
+    owner = _skill_request_owner(request)
+    if values["privacy_context"] == "protected":
+        raise HTTPException(status_code=409, detail="protected requests cannot be persisted in a sandbox workspace")
+    entries = list_catalog()
+    catalog_revision = hashlib.sha256("\n".join(
+        f"{item.skill_id}:{item.revision or 'invalid'}:{int(item.enabled)}" for item in entries
+    ).encode("utf-8")).hexdigest()
+    if (values["operation"] != "cancel"
+            and values["expected_catalog_revision"] != catalog_revision):
+        raise HTTPException(status_code=409, detail="Skills catalog changed; refresh before retrying")
+    current = next((item for item in entries if item.skill_id == values["skill_id"]), None)
+    if values["operation"] == "draft":
+        if current and current.installation == "installed" and values["skill_revision"] != current.revision:
+            raise HTTPException(status_code=409, detail="existing skill revision changed; refresh before drafting")
+        try:
+            from jarvis.skill_runtime import runtime_owner
+
+            if runtime_owner(values["bot_session_id"]) != owner:
+                raise HTTPException(
+                    status_code=409,
+                    detail="creator requests require the caller's active Mortimer session",
+                )
+            job, created = start_draft(owner, values)
+        except SkillRequestError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
+        return {"schema_version": 1, **job, "replayed": not created}
+
+    if values["operation"] == "test" and current is None:
+        # A just-authored slug is not in the live catalog. It remains valid
+        # only when the same caller owns the corresponding sandbox draft.
+        from jarvis.skill_requests import get as get_skill_job
+        try:
+            draft = get_skill_job(owner, values["job_id"])
+        except Exception:
+            draft = None
+        if not draft or draft.get("operation") != "draft" or draft.get("skill_id") != values["skill_id"]:
+            raise HTTPException(status_code=404, detail="skill is unavailable")
+    elif current is None and values["operation"] not in {"request_publish", "request_activation", "request_rollback", "cancel"}:
+        raise HTTPException(status_code=404, detail="skill is unavailable")
+    if (values["operation"] != "request_publish" and current is not None
+            and values["skill_revision"] is not None and current.revision != values["skill_revision"]):
+        raise HTTPException(status_code=409, detail="skill revision changed")
+    if values["operation"] == "request_activation":
+        # Offline package validation is not the paired SW-G evaluation or its
+        # blinded human review. Until an accepted evaluation report is bound to
+        # this exact skill revision through an owner-scoped receipt, do not
+        # create a maintainer artifact that could look activation-ready.
+        raise HTTPException(
+            status_code=409,
+            detail="accepted live evaluation and blinded human review evidence is required",
+        )
+    if values["operation"] == "request_rollback":
+        # The Versions API currently has no durable accepted-version history;
+        # a successful offline test alone cannot identify a valid prior config.
+        raise HTTPException(
+            status_code=409,
+            detail="no previously accepted package and registry revision is recorded",
+        )
+    if values["operation"] == "cancel":
+        try:
+            cancelled, created = cancel_job(owner, values)
+            return {"schema_version": 1, **cancelled, "replayed": not created}
+        except SkillRequestError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
+    if values["operation"] == "test":
+        if values["scope"] == "live":
+            raise HTTPException(status_code=409, detail="live skill evaluation is disabled until a reviewed route and budget are configured")
+        try:
+            draft = get_skill_job(owner, values["job_id"])
+            if (not draft or draft.get("operation") != "draft"
+                    or draft.get("skill_id") != values["skill_id"]):
+                raise HTTPException(status_code=404, detail="authoring job is unavailable")
+            if draft.get("state") != "drafting":
+                raise HTTPException(status_code=409, detail="authoring job is not ready for offline validation")
+            job, created = start_offline_validation(owner, values)
+            return {"schema_version": 1, **job, "replayed": not created}
+        except SkillRequestError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
+    if values["operation"] == "request_publish":
+        try:
+            job, created = start_publish(owner, values)
+            return {"schema_version": 1, **job, "replayed": not created}
+        except SkillRequestError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
+    raise HTTPException(status_code=400, detail="unsupported Skills operation")
+
+
+@app.get("/api/skills/requests/{request_id}")
+def skill_request_status(request_id: str, request: Request) -> dict:
+    from jarvis.skill_requests import SkillRequestError, _service, reconcile
+    owner = _skill_request_owner(request)
+    try:
+        state = reconcile(owner, request_id)
+    except SkillRequestError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
+    if state is None:
+        raise HTTPException(status_code=404, detail="request is unavailable")
+    response = {"schema_version": 1, **state}
+    if state.get("operation") == "draft" and state.get("state") == "review_ready":
+        try:
+            live = _service(state["skill_id"]).status()
+        except Exception:
+            live = {}
+        proposals = live.get("proposals") if live.get("run_id") == state.get("sandbox_job_id") else None
+        if (live.get("candidate") == state.get("candidate_digest")
+                and live.get("package_revision") == state.get("candidate_revision")
+                and isinstance(proposals, list) and len(proposals) <= 64):
+            review_items = []
+            total_bytes = 0
+            for item in proposals:
+                if not isinstance(item, dict):
+                    continue
+                path, diff = item.get("path"), item.get("diff")
+                allowed_prefixes = (
+                    f"skills/{state['skill_id']}/",
+                    f"tests/fixtures/skills_authoring/{state['skill_id']}/",
+                )
+                if (not isinstance(path, str) or not isinstance(diff, str)
+                        or len(path) > 240 or "\\" in path or ".." in path.split("/")
+                        or not path.startswith(allowed_prefixes)):
+                    continue
+                total_bytes += len(path.encode()) + len(diff.encode())
+                if total_bytes > 256 * 1024:
+                    review_items = []
+                    break
+                review_items.append({"path": path, "diff": diff})
+            if review_items:
+                response["review"] = {
+                    "candidate_digest": state["candidate_digest"],
+                    "skill_revision": state["candidate_revision"],
+                    "files": review_items,
+                }
+    return response
+
+
+@app.get("/api/skills/{skill_id}/runs")
+def skills_runs(
+    skill_id: str, request: Request, cursor: str = "", limit: int = 20,
+) -> dict:
+    """List bounded, content-free run cards for one skill revision family."""
+    from jarvis.skill_catalog import SLUG
+
+    run_migrations()
+    if not SLUG.fullmatch(skill_id):
+        raise HTTPException(status_code=400, detail="invalid skill identifier")
+    if len(cursor) > 512:
+        raise HTTPException(status_code=400, detail="invalid skill run cursor")
+    if not 1 <= limit <= 100:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 100")
+    try:
+        page = list_skill_runs(
+            skill_id, cursor=cursor, limit=limit,
+            user_id=_skill_activity_owner(request),
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid skill run cursor") from None
+    return {"schema_version": 1, **page}
+
+
+@app.get("/api/skills/runs/{run_id}/events")
+def skills_run_events(
+    run_id: str, request: Request, after_seq: int = 0, limit: int = 100,
+) -> dict:
+    """Read typed activity for an owned run; never fall back to prompt logs."""
+    run_migrations()
+    if not 0 <= after_seq <= 2**63 - 1:
+        raise HTTPException(status_code=400, detail="invalid event cursor")
+    if not 1 <= limit <= 100:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 100")
+    try:
+        page = get_skill_events(
+            run_id, after_seq=after_seq, limit=limit,
+            user_id=_skill_activity_owner(request),
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid run identifier") from None
+    if page is None:
+        raise HTTPException(status_code=404, detail="run is unavailable")
+    return {"schema_version": 1, **page}
+
+
+@app.get("/api/skills/{skill_id}")
+def skill_detail(skill_id: str, revision: str | None = None) -> dict:
+    """Return a validated immutable skill description and intended process."""
+    from jarvis.skill_catalog import SLUG, SkillPackageError, inspect_package
+    from jarvis.skill_service import assess_current_readiness
+    from jarvis.agent_skills import SKILLS_DIR
+
+    if not SLUG.fullmatch(skill_id):
+        raise HTTPException(status_code=400, detail="invalid skill identifier")
+    try:
+        item = inspect_package(SKILLS_DIR / skill_id)
+    except (OSError, SkillPackageError):
+        raise HTTPException(status_code=404, detail="skill is unavailable") from None
+    if item.installation != "installed" or item.revision is None:
+        raise HTTPException(status_code=409, detail="skill package needs attention")
+    if revision is not None and revision != item.revision:
+        raise HTTPException(status_code=409, detail="skill revision changed")
+    readiness = assess_current_readiness(item)
+    return {
+        "schema_version": 1,
+        **item.as_dict(),
+        "readiness": readiness.state,
+        "readiness_reasons": list(readiness.reason_codes),
+    }
+
+
+@app.get("/api/skills/{skill_id}/versions")
+def skill_versions(skill_id: str, request: Request) -> dict:
+    """Show installed package and caller-owned candidate evidence, read-only."""
+    from jarvis.skill_catalog import SLUG, SkillPackageError, inspect_package
+    from jarvis.skill_catalog import read_skill_registry
+    from jarvis.skill_requests import SkillRequestError, list_for_skill
+    from jarvis.agent_skills import SKILLS_CONFIG, SKILLS_DIR
+
+    if not SLUG.fullmatch(skill_id):
+        raise HTTPException(status_code=400, detail="invalid skill identifier")
+    try:
+        owner = _skill_request_owner(request)
+        item = inspect_package(SKILLS_DIR / skill_id)
+        names, pins, registry_version, registry_valid = read_skill_registry(SKILLS_CONFIG)
+        candidates = list_for_skill(owner, skill_id)
+    except HTTPException:
+        raise
+    except SkillRequestError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
+    except (OSError, SkillPackageError):
+        raise HTTPException(status_code=404, detail="skill version evidence is unavailable") from None
+
+    active_pin = pins.get(skill_id) if registry_valid and isinstance(pins, dict) else None
+    pin_state = (
+        "registry_unavailable" if not registry_valid or registry_version != 2
+        else "disabled" if skill_id not in names
+        else "unverified" if not isinstance(active_pin, str)
+        else "matches_installed" if active_pin == item.revision
+        else "differs_from_installed"
+    )
+    return {
+        "schema_version": 1,
+        "skill_id": skill_id,
+        "installed": {
+            "declared_version": item.version,
+            "package_revision": item.revision,
+            "enabled": item.enabled,
+        },
+        "registry": {
+            "schema_version": registry_version if registry_valid else None,
+            "active_pin": active_pin,
+            "pin_state": pin_state,
+        },
+        "candidates": candidates,
+        "limitations": [
+            "Package revision is a SHA-256 digest; declared version is manifest metadata.",
+            "Candidate requests are caller-owned ledger records, not activation evidence.",
+            "Git commit history and previously installed revisions are not available here.",
+            "No activation or rollback is performed by this view.",
+        ],
+    }
+
+
+@app.get("/api/skills/{skill_id}/examples/{example_id}")
+def skill_example_preview(skill_id: str, example_id: str) -> dict:
+    """Return one declared, inert matcher fixture for native preview only."""
+    from jarvis.skill_catalog import SLUG, SkillPackageError, inspect_package, read_skill_registry
+    from jarvis.agent_skills import SKILLS_DIR
+
+    if not SLUG.fullmatch(skill_id) or not SLUG.fullmatch(example_id):
+        raise HTTPException(status_code=400, detail="invalid skill example identifier")
+    try:
+        package = inspect_package(SKILLS_DIR / skill_id)
+    except (OSError, SkillPackageError):
+        raise HTTPException(status_code=404, detail="skill example is unavailable") from None
+    if package.installation != "installed" or example_id not in package.example_ids:
+        raise HTTPException(status_code=404, detail="skill example is unavailable")
+    names, pins, version, registry_valid = read_skill_registry()
+    if (not registry_valid or version != 2 or skill_id not in names
+            or pins is None or pins.get(skill_id) != package.revision):
+        raise HTTPException(status_code=409, detail="skill example is not bound to the reviewed package revision")
+    repository = REPO_ROOT.resolve()
+    fixture = repository / "tests" / "fixtures" / "skills_authoring" / skill_id / "matcher-cases.json"
+    try:
+        if fixture.is_symlink() or not fixture.is_file() or fixture.stat().st_size > 64 * 1024:
+            raise ValueError("fixture unavailable")
+        resolved = fixture.resolve(strict=True)
+        if not resolved.is_relative_to(repository):
+            raise ValueError("fixture escaped repository")
+        def unique_pairs(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError("duplicate fixture field")
+                result[key] = value
+            return result
+        payload = json.loads(resolved.read_text(encoding="utf-8"), object_pairs_hook=unique_pairs)
+        cases = payload.get("cases") if isinstance(payload, dict) and set(payload) == {"schema_version", "cases"} and payload.get("schema_version") == 1 else None
+        if not isinstance(cases, list) or not 2 <= len(cases) <= 32:
+            raise ValueError("fixture schema invalid")
+        seen: set[str] = set()
+        outcomes: set[bool] = set()
+        selected = None
+        for case in cases:
+            if (not isinstance(case, dict) or set(case) != {"id", "request", "expect_selected"}
+                    or not isinstance(case.get("id"), str)
+                    or not SLUG.fullmatch(case["id"])
+                    or case["id"] in seen
+                    or not isinstance(case.get("request"), str)
+                    or not 1 <= len(case["request"].strip()) <= 1_000
+                    or type(case.get("expect_selected")) is not bool):
+                raise ValueError("fixture case invalid")
+            seen.add(case["id"])
+            outcomes.add(case["expect_selected"])
+            if case["id"] == example_id:
+                selected = case
+        if selected is None or seen != set(package.example_ids) or outcomes != {False, True}:
+            raise ValueError("declared example is absent")
+        return {"schema_version": 1, "skill_id": skill_id, "example_id": example_id,
+                "request": selected["request"], "expect_selected": selected["expect_selected"],
+                "synthetic": True}
+    except (OSError, UnicodeError, ValueError, TypeError):
+        raise HTTPException(status_code=409, detail="reviewed example preview is unavailable") from None
+
+
 @app.get("/api/knowledge")
 def knowledge_overview() -> dict:
     """K5 (MORTIMER_KNOWLEDGE_FRAMEWORK_PLAN.md) — the four layers, with
@@ -1966,7 +3564,6 @@ def workflows_detail() -> dict:
     the read-only viewer. Body in jarvis/status/overview.py, beside the
     knowledge overview."""
     from jarvis.status.overview import workflows_detail as _workflows
-
     return _workflows()
 
 
@@ -2041,8 +3638,9 @@ def _system_vitals() -> dict | None:
             "flags": flags,
             "threshold": FLAG_THRESHOLD,
         }
-    except Exception:  # noqa: BLE001 — never break the ambient strip
-        logger.exception("ambient_system_vitals_failed")
+    except Exception as exc:  # noqa: BLE001 — never break the ambient strip
+        logger.warning("ambient_system_vitals_failed error_type=%s",
+                       type(exc).__name__)
         return None
 
 
@@ -2225,8 +3823,9 @@ def memory_reviews_list() -> dict:
 
     try:
         return {"ok": True, "reviews": memory_sweep.list_open_reviews()}
-    except Exception:  # noqa: BLE001 — a panel must never break the sidecar
-        logger.exception("memory_reviews_list_failed")
+    except Exception as exc:  # noqa: BLE001 — a panel must never break the sidecar
+        logger.warning("memory_reviews_list_failed error_type=%s",
+                       type(exc).__name__)
         return {"ok": False, "error": "could not read the review queue"}
 
 
@@ -2244,8 +3843,9 @@ def memory_reviews_resolve(review_id: int, body: MemoryReviewResolveIn) -> dict:
         return {"ok": True, **result}
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
-    except Exception:  # noqa: BLE001 — a panel must never break the sidecar
-        logger.exception("memory_reviews_resolve_failed id=%s", review_id)
+    except Exception as exc:  # noqa: BLE001 — a panel must never break the sidecar
+        logger.warning("memory_reviews_resolve_failed error_type=%s",
+                       type(exc).__name__)
         return {"ok": False, "error": "could not resolve that review"}
 
 
@@ -2438,6 +4038,14 @@ def plan_start(body: PlanStartIn) -> dict:
         return {"ok": False, "error": "a goal is required — what should the plan cover?"}
     if body.mode not in ("single", "council"):
         return {"ok": False, "error": f"mode={body.mode!r} must be 'single' or 'council'"}
+    run_id = (body.run_id or "").strip() or None
+    if not run_id:
+        return {
+            "ok": False,
+            "error": "a stable run_id is required for a planning start",
+        }
+    if len(run_id) > 256:
+        return {"ok": False, "error": "run identity is invalid; no planning job was started"}
 
     review_path = (body.review_path or "").strip()
     context: dict[str, Any] = {}
@@ -2457,6 +4065,39 @@ def plan_start(body: PlanStartIn) -> dict:
         context = {"document": content, "document_path": review_path}
 
     with _plan_lock:
+        try:
+            prior = get_execution_action(_PLAN_START_ACTION_SCOPE, run_id)
+        except Exception as exc:
+            logger.warning("plan_start_claim_read_failed error_type=%s", type(exc).__name__)
+            return {
+                "ok": False,
+                "error": "could not verify whether this planning action already started; "
+                         "no retry was launched",
+                "outcome": "unknown",
+                "action_run_id": run_id,
+            }
+        if prior is not None:
+            if _plan_job.get("run_id") == run_id:
+                state = _plan_job.get("state") or "unknown"
+            elif prior.get("status") in {"completed", "failed"}:
+                state = prior["status"]
+            else:
+                # A server restart or a later job can evict the result
+                # from the single live status slot. The durable claim
+                # prevents a retry, but cannot establish the effect.
+                state = "unknown"
+            return {
+                "ok": True,
+                "started": False,
+                "duplicate": True,
+                "state": state,
+                "action_run_id": run_id,
+                "summary": (
+                    "This planning action was already claimed for this execution; "
+                    "no new job was started. Check plan_status with this action_run_id "
+                    "before considering any retry."
+                ),
+            }
         if _plan_job["state"] == "running":
             return {
                 "ok": False,
@@ -2474,29 +4115,76 @@ def plan_start(body: PlanStartIn) -> dict:
             except UnknownModelProfileError as exc:
                 return {"ok": False, "error": str(exc)}
             resolved_profile_name = profile["name"]
+        try:
+            claimed = claim_execution_action(_PLAN_START_ACTION_SCOPE, run_id)
+        except Exception as exc:
+            logger.warning("plan_start_claim_write_failed error_type=%s", type(exc).__name__)
+            return {
+                "ok": False,
+                "error": "could not safely record this planning action; no job was started",
+            }
+        if not claimed:
+            # A concurrent request won between the read and claim. Treat
+            # it exactly like a replay, never as permission to dispatch.
+            return {
+                "ok": True, "started": False, "duplicate": True,
+                "state": "unknown", "action_run_id": run_id,
+                "summary": (
+                    "This planning action was already claimed for this execution; "
+                    "no new job was started. Check plan_status with this action_run_id "
+                    "before considering any retry."
+                ),
+            }
         _plan_job.update(
             state="running", mode=body.mode, goal=goal,
             profile=resolved_profile_name, round_id=None, candidates=None,
             plan=None, author=None, error=None,
             started_at=time.time(), finished_at=None,
             review_path=review_path or None,
+            run_id=run_id,
         )
+    _update_plan_start_claim(run_id, "running")
     if body.mode == "single":
         threading.Thread(
-            target=_run_plan_single, args=(goal, profile, context), daemon=True,
+            target=_run_plan_single, args=(goal, profile, context, run_id), daemon=True,
         ).start()
     else:
         threading.Thread(
             target=_run_plan_council,
-            args=(goal, body.members, context, (body.run_id or "").strip() or None), daemon=True,
+            args=(goal, body.members, context, run_id), daemon=True,
         ).start()
     return {"ok": True, "started": True}
 
 
 @app.get("/api/plan/job")
-def plan_job_status() -> dict:
+def plan_job_status(run_id: str | None = None) -> dict:
     with _plan_lock:
         job = dict(_plan_job)
+    requested_run_id = (run_id or "").strip()
+    if requested_run_id:
+        if len(requested_run_id) > 256:
+            return {"ok": False, "error": "planning action identity is invalid"}
+        if job.get("run_id") == requested_run_id:
+            return {"ok": True, "job": job}
+        try:
+            receipt = get_execution_action(_PLAN_START_ACTION_SCOPE, requested_run_id)
+        except Exception as exc:
+            logger.warning("plan_start_status_read_failed error_type=%s", type(exc).__name__)
+            return {"ok": False, "error": "the planning action receipt is unavailable"}
+        if receipt is None:
+            return {"ok": False, "error": "no planning action receipt exists for that execution"}
+        state = receipt["status"]
+        if state in {"claimed", "running", "awaiting_choice"}:
+            state = "unknown"
+        return {
+            "ok": True,
+            "job": {
+                "state": state,
+                "run_id": requested_run_id,
+                "result_available": False,
+                "reconciliation_required": state == "unknown",
+            },
+        }
     return {"ok": True, "job": job}
 
 
@@ -2517,6 +4205,8 @@ def plan_choose(body: PlanChooseIn) -> dict:
             state="done", plan=match["content"], author=match["profile"],
             finished_at=time.time(),
         )
+        chosen_run_id = _plan_job.get("run_id")
+    _update_plan_start_claim(chosen_run_id, "completed")
     return {"ok": True}
 
 
@@ -2602,14 +4292,26 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
 
-    host, port = "127.0.0.1", 7861
-    # D17 — at minimum, log startup with host/port/repo root. Logged via
+    if auth_enabled() and not service_headers():
+        logger.warning(
+            "admin_sidecar_service_token_missing internal_clients_will_fail_auth"
+        )
+    try:
+        host = resolve_bind_host("admin-sidecar")
+    except BindRefused as exc:
+        logger.error("bind_refused process=admin-sidecar %s", exc)
+        print(f"bind refused: {exc}", file=sys.stderr)
+        raise SystemExit(2)
+    port = resolve_port("JARVIS_ADMIN_PORT", 7861)
+    # D17 — log startup with host/port. Logged via
     # this module's own logger (configured above), not uvicorn's —
     # log_level stays "warning" deliberately, to keep per-request access
     # logs quiet; the explicit points this decision requires (startup,
     # self-edit transitions, 5xx) are covered by our own logger calls.
-    logger.info("admin_sidecar_startup host=%s port=%d repo_root=%s",
-                host, port, REPO_ROOT)
+    logger.info(
+        "admin_sidecar_startup host=%s port=%d",
+        host, port,
+    )
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 

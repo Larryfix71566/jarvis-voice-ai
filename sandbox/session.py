@@ -14,6 +14,7 @@ from sandbox.durable import atomic_json
 from sandbox.files import WorkspaceFiles
 
 SESSION_ID = re.compile(r"[0-9a-f]{32}\Z")
+SKILL_WORKSPACE_KIND = re.compile(r"skill-authoring-[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 MAX_EDITOR_BYTES = 256 * 1024
 
 
@@ -46,7 +47,10 @@ class Session:
     def create(cls, controller, images, verifier, profile, allowed, *, image_id: str, repo: Path,
                ref: str, repository: str, base_branch: str, kind: str, goal: str, run_id: str | None = None,
                on_created=None):
-        if kind not in {"selfedit", "app-build"} or not isinstance(goal, str) or not goal.strip() or len(goal) > 8000:
+        valid_kind = isinstance(kind, str) and (
+            kind in {"selfedit", "app-build"} or SKILL_WORKSPACE_KIND.fullmatch(kind) is not None
+        )
+        if not valid_kind or not isinstance(goal, str) or not goal.strip() or len(goal) > 8000:
             raise SandboxError("Invalid development goal or workspace type")
         identifier = uuid.uuid4().hex
         directory = controller.home / "sessions" / identifier
@@ -101,6 +105,19 @@ class Session:
     def resume(self) -> dict:
         with self._locked():
             state = self._read()
+            if (self.directory / "cancelled.json").exists():
+                # cancel() persists the request before stopping the VM. If the
+                # host exits in that interval, the marker survives but the
+                # VM may still be running. Finish the idempotent controller
+                # cancellation during recovery before treating the session as
+                # terminal.
+                if self._has_task(state):
+                    task_state = self.controller.read(state["task"])
+                    if task_state.get("status") in {"running", "provisioning"}:
+                        self.controller.cancel(state["task"])
+                state["phase"] = "cancelled"
+                self._save(state)
+                raise SandboxError("This development session has ended.")
             if state.get("phase") in {"published", "reverted", "cancelled", "setup_failed"}:
                 raise SandboxError("This development session has ended.")
             # An active verifier owns the session lock. Reaching this phase
@@ -214,10 +231,15 @@ class Session:
                 self._save(state)
                 raise
 
-    def submit(self, publisher, title: str, body: str) -> dict:
+    def submit(self, publisher, title: str, body: str, *, preflight=None) -> dict:
         with self._locked():
             state = self._read()
             self._ensure_running(state)
+            # A host-owned check may bind extra publication requirements to
+            # the current frozen files. Run it under the same session lock as
+            # publication so no edit can slip between preflight and publish.
+            if preflight is not None:
+                preflight(self._files(state), dict(state))
             state["phase"] = "publishing"
             self._save(state)
             try:

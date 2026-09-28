@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "weather-current-conditions",
+      "category": "positive",
+      "request": "What is the current weather forecast, temperature, wind and humidity for Camp Croft in Fahrenheit?",
+      "expected_skill_id": "current-weather-with-fahrenheit"
+    },
+    {
+      "id": "repository-history-review",
+      "category": "positive",
+      "request": "Review the current git repository status and recent commit history, including uncommitted changes.",
+      "expected_skill_id": "git-history-and-status-review"
+    },
+    {
+      "id": "location-design",
+      "category": "positive",
+      "request": "Design app location resolution using a stored preference, device location consent and IP fallback, with honest staleness reporting.",
+      "expected_skill_id": "layered-geolocation"
+    },
+    {
+      "id": "mcp-server-authoring",
+      "category": "positive",
+      "request": "Help me build an MCP server in mcp_servers with logic and server files, tool descriptions, skill.yaml and config registration.",
+      "expected_skill_id": "mcp-server-authoring"
+    },
+    {
+      "id": "implementation-plan",
+      "category": "positive",
+      "request": "Write a model-ready implementation plan with explicit design decisions, phases and acceptance criteria.",
+      "expected_skill_id": "technical-plan-document"
+    },
+    {
+      "id": "short-plan-for-today",
+      "category": "no_skill",
+      "request": "What is the plan for today?",
+      "expected_skill_id": null
+    },
+    {
+      "id": "greeting",
+      "category": "no_skill",
+      "request": "Hello, how are you?",
+      "expected_skill_id": null
+    },
+    {
+      "id": "acknowledgement",
+      "category": "no_skill",
+      "request": "Thanks, that is all.",
+      "expected_skill_id": null
+    },
+    {
+      "id": "general-capability-question",
+      "category": "no_skill",
+      "request": "What can you do?",
+      "expected_skill_id": null
+    },
+    {
+      "id": "unqualified-weather",
+      "category": "no_skill",
+      "request": "What is the weather?",
+      "expected_skill_id": null
+    },
+    {
+      "id": "location-plus-plan-overlap",
+      "category": "overlap",
+      "request": "Help me design a location-aware feature and write an implementation plan.",
+      "expected_skill_id": "technical-plan-document"
+    },
+    {
+      "id": "repository-plus-plan-overlap",
+      "category": "overlap",
+      "request": "Review current git status and create an implementation plan for pending changes.",
+      "expected_skill_id": "git-history-and-status-review"
+    },
+    {
+      "id": "mcp-plus-plan-overlap",
+      "category": "overlap",
+      "request": "Help me author an MCP server, then document its implementation plan.",
+      "expected_skill_id": "technical-plan-document"
+    },
+    {
+      "id": "location-plus-mcp-overlap",
+      "category": "overlap",
+      "request": "Check if the location design uses MCP servers and tool schema.",
+      "expected_skill_id": "mcp-server-authoring"
+    }
+  ]
+}

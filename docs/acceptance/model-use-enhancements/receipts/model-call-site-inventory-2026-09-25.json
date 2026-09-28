@@ -1,0 +1,223 @@
+{
+  "call_sites": [
+    {
+      "file": "jarvis/agents/base.py",
+      "kind": "shared_boundary",
+      "line": 866,
+      "owner": "agent_routed",
+      "rationale": "SubAgent route resolution and policy redaction",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/agents/base.py",
+      "kind": "provider_adapter",
+      "line": 886,
+      "owner": "agent_routed",
+      "rationale": "SubAgent route resolution and policy redaction",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/agents/supervisor.py",
+      "kind": "provider_adapter",
+      "line": 174,
+      "owner": "voice_exempt",
+      "rationale": "Supervisor remains on the existing Haiku route",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/agents/upgrade_agent.py",
+      "kind": "shared_boundary",
+      "line": 750,
+      "owner": "planner_routed",
+      "rationale": "Planner route resolution/failover",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/agents/upgrade_agent.py",
+      "kind": "provider_adapter",
+      "line": 630,
+      "owner": "planner_routed",
+      "rationale": "Planner route resolution/failover",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/bot/pipeline.py",
+      "kind": "shared_boundary",
+      "line": 1567,
+      "owner": "mixed_routed",
+      "rationale": "Voice supervisor plus validated shared-content vision route",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/bot/shared_content.py",
+      "kind": "shared_boundary",
+      "line": 106,
+      "owner": "mixed_routed",
+      "rationale": "Shared text/image analysis uses the validated vision boundary",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/council/council.py",
+      "kind": "provider_adapter",
+      "line": 389,
+      "owner": "council_routed",
+      "rationale": "Council route and request-policy boundary",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/council/council.py",
+      "kind": "shared_boundary",
+      "line": 321,
+      "owner": "council_routed",
+      "rationale": "Council route and request-policy boundary",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/kb_digest.py",
+      "kind": "shared_boundary",
+      "line": 125,
+      "owner": "background_routed",
+      "rationale": "Knowledge digest uses background route factory",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/kb_digest.py",
+      "kind": "provider_adapter",
+      "line": 149,
+      "owner": "background_routed",
+      "rationale": "Knowledge digest uses background route factory",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/memory.py",
+      "kind": "shared_boundary",
+      "line": 1238,
+      "owner": "background_routed",
+      "rationale": "Memory fold-in uses memory route factory",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/memory.py",
+      "kind": "provider_adapter",
+      "line": 1259,
+      "owner": "background_routed",
+      "rationale": "Memory fold-in uses memory route factory",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/memory_automation_eval.py",
+      "kind": "provider_adapter",
+      "line": 388,
+      "owner": "background_routed",
+      "rationale": "Production memory classifier uses confidential execution; shadow uses synthetic approved-external workload",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/memory_automation_eval.py",
+      "kind": "shared_boundary",
+      "line": 375,
+      "owner": "background_routed",
+      "rationale": "Production memory classifier uses confidential execution; shadow uses synthetic approved-external workload",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/memory_extraction.py",
+      "kind": "provider_adapter",
+      "line": 276,
+      "owner": "background_routed",
+      "rationale": "Memory extraction uses memory route factory",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/memory_extraction.py",
+      "kind": "shared_boundary",
+      "line": 256,
+      "owner": "background_routed",
+      "rationale": "Memory extraction uses memory route factory",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/memory_sweep.py",
+      "kind": "shared_boundary",
+      "line": 748,
+      "owner": "background_routed",
+      "rationale": "Maintenance sweep uses memory route factory",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/memory_sweep.py",
+      "kind": "provider_adapter",
+      "line": 769,
+      "owner": "background_routed",
+      "rationale": "Maintenance sweep uses memory route factory",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/memory_sweep.py",
+      "kind": "shared_boundary",
+      "line": 381,
+      "owner": "background_routed",
+      "rationale": "Maintenance sweep uses memory route factory",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/memory_sweep.py",
+      "kind": "provider_adapter",
+      "line": 398,
+      "owner": "background_routed",
+      "rationale": "Maintenance sweep uses memory route factory",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/model_execution.py",
+      "kind": "provider_adapter",
+      "line": 902,
+      "owner": "execution_boundary",
+      "rationale": "Provider-neutral policy execution boundary",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/procedures.py",
+      "kind": "shared_boundary",
+      "line": 372,
+      "owner": "background_routed",
+      "rationale": "Procedure description uses background route factory",
+      "status": "covered"
+    },
+    {
+      "file": "jarvis/procedures.py",
+      "kind": "provider_adapter",
+      "line": 393,
+      "owner": "background_routed",
+      "rationale": "Procedure description uses background route factory",
+      "status": "covered"
+    },
+    {
+      "file": "mcp_servers/mcp_screen/logic.py",
+      "kind": "provider_adapter",
+      "line": 412,
+      "owner": "screen_routed",
+      "rationale": "Production screen vision uses the shared boundary; injected client is a test seam",
+      "status": "covered"
+    },
+    {
+      "file": "mcp_servers/mcp_screen/logic.py",
+      "kind": "shared_boundary",
+      "line": 404,
+      "owner": "screen_routed",
+      "rationale": "Production screen vision uses the shared boundary; injected client is a test seam",
+      "status": "covered"
+    }
+  ],
+  "counts": {
+    "covered": 26,
+    "review_required": 0,
+    "total": 26
+  },
+  "secret_free": true,
+  "source": [
+    "jarvis/",
+    "mcp_servers/"
+  ],
+  "version": "model-call-site-inventory-v2"
+}

@@ -1,0 +1,13 @@
+{
+  "path": "tests/unit/test_memory.py",
+  "historical_sha256": "dce7e7a64402906bf726f79534aa65011a578b1fa578577ee1ba57cb1bb84f5e",
+  "current_sha256": "bc0ce75f3b9989bf1269ba0adc0776e4beb429bdda9c08d8cd1488029db14912",
+  "current_matches_existing_reviewed_hash": true,
+  "credential_pattern_bytes_identical": true,
+  "matching_pattern_count": 3,
+  "guard_changed": true,
+  "status": "exact historical path/hash added; no path-only exemption",
+  "sandbox_tests_passed": 129,
+  "sandbox_subtests_passed": 45,
+  "historical_export_verified": true
+}

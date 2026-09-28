@@ -17,7 +17,8 @@ Usage:
     python scripts/cost_report.py 2026-09 --json
 
 Reports: total spend, input vs output share, per-rung share, per-model
-spend, cache hit rate, run-rate projection, and verdicts on assumptions
+spend, billing source (API/subscription/etc.), unknown-usage count, cache hit
+rate, run-rate projection, and verdicts on assumptions
 A1 (input dominance), A3 (sub-agent share), A5 (routed cache passthrough).
 A2 (prefix share) needs prompt-assembly sizes, not the ledger — measured
 in Phase 1 when breakpoints go in.
@@ -154,12 +155,43 @@ def build_report(conn: sqlite3.Connection, month: str) -> dict:
     voice_usd = by_bucket.get("voice", 0.0)
     llm_usd = total - voice_usd
 
+    columns = {row[1] for row in q(conn, "PRAGMA table_info(llm_calls)")}
+    if "usage_known" in columns:
+        unknown_usage_calls = q(
+            conn, f"SELECT COUNT(*) {base} AND COALESCE(usage_known,0)=0", (month,)
+        )[0][0]
+    else:
+        # A ledger written before the metadata migration cannot prove usage
+        # completeness. Null means unavailable; do not report a false zero.
+        unknown_usage_calls = None
+    if "cache_breakdown_known" in columns:
+        unknown_cache_breakdown_calls = q(
+            conn, f"SELECT COUNT(*) {base} AND COALESCE(cache_breakdown_known,0)=0",
+            (month,),
+        )[0][0]
+    else:
+        unknown_cache_breakdown_calls = None
+    if "billing_source" in columns:
+        by_billing_source = q(conn, f"""
+            SELECT COALESCE(billing_source, 'unknown'), COUNT(*),
+                   COALESCE(SUM({eff}),0)
+            {base} GROUP BY 1 ORDER BY 1""", (month,))
+        billing_summary = [
+            {"source": source, "calls": count, "cost": round(cost, 4)}
+            for source, count, cost in by_billing_source
+        ]
+    else:
+        billing_summary = None
+
     report = {
         "month": month,
         "calls": n_calls,
         "total_cost_usd": round(total, 4),
         "projected_month_end_usd": round(projected, 2),
         "unpriced_calls": {"count": unpriced[0], "models": unpriced[1]},
+        "unknown_usage_calls": unknown_usage_calls,
+        "unknown_cache_breakdown_calls": unknown_cache_breakdown_calls,
+        "billing_sources": billing_summary,
         "tokens": {"input_uncached": tin, "output": tout, "cache_read": tcache_r},
         "per_rung": [{"rung": r, "calls": c, "cost": round(v, 4)} for r, c, v in rungs],
         "executor_by_plan_state": [
@@ -221,10 +253,27 @@ def main() -> None:
     print(f"calls: {report['calls']}   total: ${total:.2f}"
           f"   projected month-end: ${report['projected_month_end_usd']:.2f}")
     if unpriced["count"]:
-        print(f"!! {unpriced['count']} calls have NO cost (unmapped models: {unpriced['models']})"
-              f" — fill config/model_prices.yaml")
+        print(f"!! {unpriced['count']} calls have no recorded cost"
+              f" (models: {unpriced['models']}; check usage completeness and price mapping)")
     print(f"tokens: in(uncached)={tokens['input_uncached']:,}"
           f"  cache_read={tokens['cache_read']:,}  out={tokens['output']:,}")
+    unknown_usage = report["unknown_usage_calls"]
+    if unknown_usage is None:
+        print("usage completeness: unavailable (ledger predates usage metadata)")
+    elif unknown_usage:
+        print(f"!! {unknown_usage} calls have unknown token usage; they are not priced as zero")
+    unknown_cache = report["unknown_cache_breakdown_calls"]
+    if unknown_cache is None:
+        print("cache usage completeness: unavailable (ledger predates cache metadata)")
+    elif unknown_cache:
+        print(f"cache breakdown unknown for {unknown_cache} calls; computed costs may be estimates")
+    billing_sources = report["billing_sources"]
+    if billing_sources is None:
+        print("billing source: unavailable (ledger predates route metadata)")
+    elif billing_sources:
+        print("billing source:")
+        for row in billing_sources:
+            print(f"  {row['source']}: {row['calls']} calls, ${row['cost']:.4f}")
     print("\nby rung:")
     for row in report["per_rung"]:
         pct = (row["cost"] / total * 100) if total else 0

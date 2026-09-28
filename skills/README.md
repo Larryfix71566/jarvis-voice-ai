@@ -2,6 +2,9 @@
 
 Capability knowledge in the [Agent Skills](https://agentskills.io) open
 format — a folder with `SKILL.md` (YAML frontmatter + Markdown body).
+Mortimer's optional `mortimer.yaml` adds a reviewed step map, declared
+capabilities/dependencies and provenance for its native library. It is
+descriptive metadata; it does not alter the skill prompt or grant tools.
 Loaded by `jarvis/agent_skills.py`, injected into a matching sub-agent run
 as one system message.
 
@@ -18,10 +21,28 @@ as one system message.
 
 ```bash
 python -m jarvis.agent_skills --list                    # what is here, what is live
-python -m jarvis.agent_skills --validate                # frontmatter conformance
+python -m jarvis.agent_skills --validate                # package metadata + exact pins; duplicate YAML keys are refused
 python -m jarvis.agent_skills --explain "<a task>"      # scores + what would inject
 python -m jarvis.agent_skills --from-procedure <id>     # promote a learned procedure
 ```
+
+The native Command Console reads the bounded `/api/skills` catalog,
+revision-bound `/api/skills/<skill_id>` detail, and authenticated
+`/api/skills/<skill_id>/versions` evidence. Versions distinguish manifest
+version, package SHA-256, enabled registry pin, and caller-owned candidate
+requests; they do not imply activation or expose previous installed revisions.
+Readiness remains `unknown` until its dependencies are checked. A Process view
+describes reviewed intent; it is not evidence that a run completed those steps.
+Run logs record skill selection and instruction-body reads, and the native
+Activity view presents those receipts. Generic event writers reject `passed`
+step outcomes until a trusted runtime controller/validator receipt exists, so a
+successful tool call alone leaves process completion `unknown`. Declared matcher examples
+show a schema-checked synthetic request and expected selection only; they do
+not execute a skill or model. Voice navigation can open reviewed process steps
+and examples; bounded draft handoff opens the native creator review. Voice
+cannot publish or activate. Trusted per-step evidence, live draft evaluation,
+readiness checks, maintainer-reviewed activation/rollback and Mac runtime acceptance remain unfinished in
+the [Skills workspace plan](../docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md).
 
 ---
 
@@ -47,10 +68,12 @@ each can be judged on its own — that rule is unchanged.
    that way. If the body reads normatively, it belongs in
    `config/workflows/`.
 
-4. **Does the description carry an anti-trigger?**
-   One sentence saying what it is NOT for. `MATCH_THRESHOLD` is 0.30 and
-   matching is token overlap, so a description full of common words will
-   fire on tasks it has no business touching.
+4. **Are trigger boundaries tested?**
+   Keep what the skill does in the description; put non-applicable cases
+   in the body and positive/negative utterances in fixtures. `MATCH_THRESHOLD`
+   is 0.30 and matching is token overlap. Adding anti-trigger words to a
+   description makes those same words easier to match and can cause false
+   positives, so verify both expected and rejected tasks with `--explain`.
 
 5. **Does it say what to do when a tool it names is unavailable?**
    Without this, an agent facing a missing tool invents a reason. That is
@@ -59,12 +82,15 @@ each can be judged on its own — that rule is unchanged.
 6. **Match evidence recorded** — two tasks it should match and two it must
    not, with scores from `--explain`. The negative cases matter more.
 
-7. **No overlap with an existing skill.**
-   `MAX_INJECTED = 1`: only the top-scoring skill is ever injected, so two
-   skills that both match are not complementary — they compete, and the
-   loser contributes nothing at all. If a draft scores above threshold on
-   a task another skill owns, **merge into that skill or sharpen both
-   descriptions**. Never ship a competitor.
+7. **No unreviewed overlap with an existing skill.**
+   The legacy matcher injects only its top-scoring skill. The opt-in v2
+   selector may add at most one support skill only when both package manifests
+   list each other in `compatible_with`, both independently meet the trigger
+   threshold and readiness checks, and their combined bodies fit the shared
+   16,000-character budget. A one-sided declaration or an undeclared pair is
+   a conflict: keep the primary alone. If a draft overlaps an existing skill
+   without an explicitly reviewed compatible relationship, merge it or sharpen
+   the trigger descriptions; never infer compatibility from wording.
 
 ---
 

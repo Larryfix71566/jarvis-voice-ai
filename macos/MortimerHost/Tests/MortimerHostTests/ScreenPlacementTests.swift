@@ -16,6 +16,7 @@ final class ScreenPlacementTests: XCTestCase {
         var screens: [PlacementScreen]
         var windows: [HostWindowKind: NSWindow] = [:]
         var scheduled: [(delay: TimeInterval, work: DispatchWorkItem)] = []
+        var unlockAction: (@MainActor () -> Void)?
         var clock: TimeInterval = 100
         let suite: String
         let defaults: UserDefaults
@@ -39,7 +40,11 @@ final class ScreenPlacementTests: XCTestCase {
                         screens: { seams.screens },
                         windows: { seams.windows[$0] },
                         schedule: { delay, work in seams.scheduled.append((delay, work)) },
-                        now: { seams.clock })
+                        now: { seams.clock },
+                        observeUnlock: { action in
+                            seams.unlockAction = action
+                            return NSObject()
+                        })
     }
 
     private func makeWindow(_ kind: HostWindowKind, frame: CGRect, in seams: Seams) -> NSWindow {
@@ -291,10 +296,7 @@ final class ScreenPlacementTests: XCTestCase {
             XCTAssertEqual(seams.scheduled.count, before + 1, "\(name.rawValue) must schedule a reposition")
         }
         let before = seams.scheduled.count
-        DistributedNotificationCenter.default().postNotificationName(ScreenPlacement.screenUnlockedNotification, object: nil,
-                                                                     userInfo: nil, deliverImmediately: true)
-        let deadline = Date(timeIntervalSinceNow: 2)
-        while seams.scheduled.count == before, Date() < deadline { RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.02)) }
+        try XCTUnwrap(seams.unlockAction)()
         XCTAssertEqual(seams.scheduled.count, before + 1, "com.apple.screenIsUnlocked must schedule a reposition")
         XCTAssertEqual(ScreenPlacement.screenUnlockedNotification.rawValue, "com.apple.screenIsUnlocked")
         // Every one of them is a topology-class signal: the pending work carries it.

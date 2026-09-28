@@ -8,13 +8,21 @@ import pytest
 import yaml
 
 from jarvis.agents.delegate import (
-    RETRY_GUARD_OVERLAP,
     RETRY_GUARD_WINDOW_S,
     build_delegate_tool,
 )
+from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.prompts import render_agent_catalog
-
 from tests.unit.test_orchestrator import FakeSubAgent
+
+
+@pytest.fixture(autouse=True)
+def _initialized_non_sensitive_turn():
+    token = current_sensitive_turn.set(SensitiveTurn())
+    try:
+        yield
+    finally:
+        current_sensitive_turn.reset(token)
 
 
 class SlowFakeSubAgent:
@@ -74,6 +82,21 @@ class TestSchema:
         assert props["model_profile"]["type"] == "string"
         assert "model_profile" not in fn["parameters"]["required"]
 
+    def test_explicit_skill_parameter_is_hidden_until_both_v2_gates_are_enabled(
+        self, monkeypatch,
+    ):
+        monkeypatch.setenv("JARVIS_SKILLS_SELECTION_V2", "1")
+        monkeypatch.delenv("JARVIS_SKILLS_WORKSPACE_ENABLED", raising=False)
+        schema, _ = build_delegate_tool(AGENTS)
+        assert "skill_id" not in schema["function"]["parameters"]["properties"]
+
+        monkeypatch.setenv("JARVIS_SKILLS_WORKSPACE_ENABLED", "1")
+        schema, _ = build_delegate_tool(AGENTS)
+        skill_id = schema["function"]["parameters"]["properties"]["skill_id"]
+        assert skill_id["pattern"] == "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        assert skill_id["maxLength"] == 64
+        assert "skill_id" not in schema["function"]["parameters"]["required"]
+
 
 class TestModelProfileOverride:
     """F6/F7/F8/F9 — delegate.py's side of the named-model request."""
@@ -96,6 +119,29 @@ class TestModelProfileOverride:
         result = await handler({"agent_name": "developer", "task": "research radar"})
         assert result == "done"
         assert agents["developer"].run_kwargs[-1]["model_profile_override"] is None
+
+    async def test_explicit_skill_id_is_forwarded_to_subagent(self, monkeypatch):
+        monkeypatch.setenv("JARVIS_SKILLS_SELECTION_V2", "1")
+        monkeypatch.setenv("JARVIS_SKILLS_WORKSPACE_ENABLED", "1")
+        agents = {"developer": FakeSubAgent("developer", result="done")}
+        _, handler = build_delegate_tool(agents)
+        assert await handler({
+            "agent_name": "developer", "task": "weather",
+            "skill_id": "current-weather-with-fahrenheit",
+        }) == "done"
+        assert agents["developer"].run_kwargs[-1]["explicit_skill_id"] == \
+            "current-weather-with-fahrenheit"
+
+    async def test_private_result_sink_is_passed_to_specialist(self):
+        async def private_sink(*_args):
+            return True
+
+        agent = FakeSubAgent("developer", result="protected status")
+        _, handler = build_delegate_tool(
+            {"developer": agent}, private_result_sink=private_sink,
+        )
+        assert await handler({"agent_name": "developer", "task": "private"}) == "protected status"
+        assert agent.run_kwargs[-1]["private_result_sink"] is private_sink
 
     async def test_unresolvable_override_refuses_before_any_run_row(self):
         """F7: an unresolvable named request refuses immediately — no
@@ -157,6 +203,7 @@ class TestHandler:
         assert types[0] == "delegate_start"
         assert types[-1] == "delegate_done"
         assert events[0]["agent"] == "analyst"
+        assert events[0]["task"] == "<protected task>"
 
     async def test_protected_workload_task_is_redacted_only_on_status_event(self):
         """Confidential prompts may reach the specialist, never the UI/stdout
@@ -178,7 +225,7 @@ class TestHandler:
         result = await handler({"agent_name": "librarian", "task": "inspect private file"})
 
         assert result.startswith("FAILED:")
-        assert events[-1]["detail"] == "<protected task>"
+        assert events[-1]["detail"] == "Task failed; protected details were not shared."
 
     async def test_delegate_start_carries_the_resolved_model(self):
         """Larry 2026-08-19 — the Agents tab card header shows which LLM
@@ -210,7 +257,7 @@ class TestHandler:
         assert done["ok"] is True
         assert done["detail"] == ""
 
-    async def test_delegate_done_marks_failure_with_detail(self):
+    async def test_delegate_done_uses_content_free_failure_status(self):
         agents = {"analyst": FakeSubAgent("analyst", result="FAILED: web_search down")}
         events = []
         _, handler = build_delegate_tool(agents, on_event=events.append)
@@ -219,7 +266,36 @@ class TestHandler:
         done = events[-1]
         assert done["type"] == "delegate_done"
         assert done["ok"] is False
-        assert done["detail"] == "FAILED: web_search down"
+        assert done["detail"] == "Task failed; protected details were not shared."
+
+    async def test_raising_event_observer_does_not_break_or_duplicate_run(self, caplog):
+        agents = {"analyst": FakeSubAgent("analyst", result="finished")}
+        observed = []
+
+        def _observer(event):
+            observed.append(event["type"])
+            if event["type"] in {"delegate_start", "delegate_done"}:
+                raise RuntimeError("observer failure")
+
+        _, handler = build_delegate_tool(agents, on_event=_observer)
+        assert await handler({"agent_name": "analyst", "task": "weather"}) == "finished"
+        assert observed == ["delegate_start", "delegate_done"]
+        assert "delegate_event_callback_failed error_type=RuntimeError" in caplog.text
+
+    async def test_unexpected_runner_exception_is_content_free_and_terminal(self):
+        class RaisingAgent(FakeSubAgent):
+            async def run(self, task, on_event=None, **kwargs):
+                raise RuntimeError("PRIVATE_CANARY_delegate_error_4d1a")
+
+        events = []
+        _, handler = build_delegate_tool(
+            {"analyst": RaisingAgent("analyst")}, on_event=events.append,
+        )
+        result = await handler({"agent_name": "analyst", "task": "weather"})
+        assert result == "FAILED: delegated task failed (RuntimeError)."
+        assert [event["type"] for event in events].count("delegate_done") == 1
+        assert events[-1]["ok"] is False
+        assert "PRIVATE_CANARY" not in repr(events)
 
 
 class TestParallelDelegation:
@@ -881,6 +957,27 @@ class TestFindingsCarryForward:
         assert "without them" in out
         assert len(agent.tasks) == 1        # the run never happened
 
+    def test_findings_failures_do_not_log_path_or_error_content(
+        self, monkeypatch, caplog,
+    ):
+        from jarvis.agents.delegate import _read_findings
+        from mcp_servers.mcp_repo import logic as repo_logic
+
+        monkeypatch.setattr(
+            repo_logic, "repo_read_file",
+            lambda *_args, **_kwargs: {"error": "PRIVATE_CANARY_error_4d2a"},
+        )
+        assert _read_findings("PRIVATE_CANARY_path_4d2a") is None
+        assert "PRIVATE_CANARY_error_4d2a" not in caplog.text
+        assert "PRIVATE_CANARY_path_4d2a" not in caplog.text
+
+        def raise_canary(*_args, **_kwargs):
+            raise RuntimeError("PRIVATE_CANARY_exception_4d2a")
+
+        monkeypatch.setattr(repo_logic, "repo_read_file", raise_canary)
+        assert _read_findings("PRIVATE_CANARY_path_4d2a") is None
+        assert "PRIVATE_CANARY_exception_4d2a" not in caplog.text
+
 
 class TestBargeInSurvival:
     """Larry 2026-08-21: "me continuing to talk should not kill existing
@@ -952,6 +1049,64 @@ class TestBargeInSurvival:
         types = [e["type"] for e in events]
         assert "delegate_start" in types
         assert "delegate_done" in types
+        assert types.count("delegate_done") == 1
+
+    async def test_session_shutdown_cancellation_emits_one_terminal_event(self):
+        started = asyncio.Event()
+
+        class BlockedAgent(FakeSubAgent):
+            async def run(self, task, on_event=None, **kwargs):
+                started.set()
+                await asyncio.Future()
+
+        events = []
+        in_flight = set()
+        _, handler = build_delegate_tool(
+            {"developer": BlockedAgent("developer")},
+            on_event=events.append, in_flight=in_flight,
+        )
+        outer = asyncio.create_task(
+            handler({"agent_name": "developer", "task": "blocked task"})
+        )
+        await asyncio.wait_for(started.wait(), timeout=1)
+        child = next(iter(in_flight))
+        child.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await outer
+        await asyncio.sleep(0)
+        assert [event["type"] for event in events].count("delegate_done") == 1
+        assert events[-1]["ok"] is False
+
+    async def test_detached_exception_is_sanitized_before_late_delivery(self):
+        started = asyncio.Event()
+        delivered = []
+
+        class RaisingAfterInterruption(FakeSubAgent):
+            async def run(self, task, on_event=None, **kwargs):
+                started.set()
+                await asyncio.sleep(0)
+                raise RuntimeError("PRIVATE_CANARY_detached_exception_6a81")
+
+        async def _deliver(note):
+            delivered.append(note)
+
+        events = []
+        _, handler = build_delegate_tool(
+            {"developer": RaisingAfterInterruption("developer")},
+            on_event=events.append, late_delivery={"fn": _deliver},
+        )
+        turn = asyncio.create_task(
+            handler({"agent_name": "developer", "task": "do the thing"})
+        )
+        await asyncio.wait_for(started.wait(), timeout=1)
+        turn.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await turn
+        await asyncio.sleep(0.05)
+        assert len(delivered) == 1
+        assert "FAILED: delegated task failed (RuntimeError)." in delivered[0]
+        assert "PRIVATE_CANARY" not in delivered[0]
+        assert [event["type"] for event in events].count("delegate_done") == 1
 
     async def test_no_hook_installed_is_logged_not_raised(self):
         """A missing late_delivery hook must not take down anything —

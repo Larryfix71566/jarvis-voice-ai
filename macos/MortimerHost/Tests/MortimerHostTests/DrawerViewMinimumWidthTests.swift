@@ -47,7 +47,7 @@ final class DrawerViewMinimumWidthTests: XCTestCase {
         view.frame = NSRect(x: 0, y: 0, width: width, height: 600)
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
-        defer { window.close() }
+        defer { closeRenderingFixtureWindow(window) }
         window.layoutIfNeeded(); view.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.3))
 

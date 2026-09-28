@@ -5,16 +5,21 @@ is the shared contract used by admission, retrieval, and the idle worker.
 """
 from __future__ import annotations
 
+import json
+import math
+import re
+import sqlite3
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from hashlib import sha256
-from typing import Iterable
-import sqlite3
 import json
-import re
 import math
 import os
+import re
+import sqlite3
+from typing import Iterable
+from uuid import uuid4
 
 
 class Scope(StrEnum):
@@ -232,7 +237,7 @@ def heuristic_classifier(candidates: Iterable[Candidate], *, policy_version: str
             "for this project", "when working on", "the rule is", "must always",
             "only use", "constraint:",
         )) and not explicit_preference
-        confidence = 0.9 if explicit else 0.55
+        confidence = 1.0 if explicit else 0.55
         independent = len(set(item.session_ids))
         if quoted:
             output.append(Classification(
@@ -324,16 +329,91 @@ def maintenance_budget_remaining(conn: sqlite3.Connection, *, day: str,
     """
     if candidate_limit < 1 or call_limit < 1:
         raise ValueError("budget limits must be positive")
-    rows = conn.execute(
-        "SELECT operation, created_at FROM memory_maintenance "
-        "WHERE created_at >= ? AND created_at < ?",
+    legacy = conn.execute(
+        "SELECT COUNT(*) AS candidates, COUNT(DISTINCT created_at) AS calls "
+        "FROM memory_maintenance WHERE operation='classify' "
+        "AND budget_reservation_id IS NULL AND created_at >= ? AND created_at < ?",
         (f"{day}T00:00:00", f"{day}T23:59:59.999999"),
-    ).fetchall()
-    candidates = sum(1 for row in rows if row["operation"] == "classify")
-    calls = len({row["created_at"] for row in rows if row["operation"] == "classify"})
+    ).fetchone()
+    reserved = conn.execute(
+        "SELECT COALESCE(SUM(candidate_count),0) AS candidates, COUNT(*) AS calls "
+        "FROM memory_classification_budget_reservations WHERE usage_day=?", (day,),
+    ).fetchone()
+    candidates = int(legacy["candidates"]) + int(reserved["candidates"])
+    calls = int(legacy["calls"]) + int(reserved["calls"])
     return {"candidates_used": candidates, "calls_used": calls,
             "candidates_remaining": max(0, candidate_limit - candidates),
             "calls_remaining": max(0, call_limit - calls)}
+
+
+def reserve_classification_budget(
+    conn: sqlite3.Connection, *, now_iso: str, candidate_count: int,
+    maintenance_job_ids: Iterable[int] = (), candidate_limit: int = 100,
+    call_limit: int = 5, reservation_id: str | None = None,
+) -> str | None:
+    """Atomically reserve one classifier call across all memory workers.
+
+    Existing maintenance rows are linked to the reservation in the same
+    immediate transaction, so they are not counted both as legacy usage and
+    as a reservation. If the reservation would exceed a limit, claimed rows
+    return to queued state without consuming a retry attempt.
+    """
+    if candidate_count < 0 or candidate_limit < 1 or call_limit < 1:
+        raise ValueError("classification budget request is invalid")
+    if conn.in_transaction:
+        raise ValueError("budget reservation requires a clean connection")
+    stamp = datetime.fromisoformat(now_iso.replace("Z", "+00:00"))
+    if stamp.tzinfo is None:
+        raise ValueError("now_iso must be timezone-aware")
+    usage_day = stamp.date().isoformat()
+    reservation_id = reservation_id or uuid4().hex
+    job_ids = tuple(dict.fromkeys(int(value) for value in maintenance_job_ids))
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        exists = conn.execute(
+            "SELECT 1 FROM memory_classification_budget_reservations WHERE reservation_id=?",
+            (reservation_id,),
+        ).fetchone()
+        if exists:
+            conn.commit()
+            return reservation_id
+        for job_id in job_ids:
+            conn.execute(
+                "UPDATE memory_maintenance SET budget_reservation_id=? "
+                "WHERE id=? AND status='running'",
+                (reservation_id, job_id),
+            )
+        legacy = conn.execute(
+            "SELECT COUNT(*) AS candidates, COUNT(DISTINCT created_at) AS calls "
+            "FROM memory_maintenance WHERE operation='classify' "
+            "AND budget_reservation_id IS NULL AND created_at >= ? AND created_at < ?",
+            (f"{usage_day}T00:00:00", f"{usage_day}T23:59:59.999999"),
+        ).fetchone()
+        reserved = conn.execute(
+            "SELECT COALESCE(SUM(candidate_count),0) AS candidates, COUNT(*) AS calls "
+            "FROM memory_classification_budget_reservations WHERE usage_day=?", (usage_day,),
+        ).fetchone()
+        candidate_total = int(legacy["candidates"]) + int(reserved["candidates"]) + candidate_count
+        call_total = int(legacy["calls"]) + int(reserved["calls"]) + 1
+        if candidate_total > candidate_limit or call_total > call_limit:
+            for job_id in job_ids:
+                conn.execute(
+                    "UPDATE memory_maintenance SET status='queued',budget_reservation_id=NULL,updated_at=? "
+                    "WHERE id=? AND status='running' AND budget_reservation_id=?",
+                    (now_iso, job_id, reservation_id),
+                )
+            conn.commit()
+            return None
+        conn.execute(
+            "INSERT INTO memory_classification_budget_reservations "
+            "(reservation_id,usage_day,candidate_count,created_at) VALUES (?,?,?,?)",
+            (reservation_id, usage_day, candidate_count, now_iso),
+        )
+        conn.commit()
+        return reservation_id
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def retrieval_rank(*, scope_match: bool, evidence_status: EvidenceStatus,
@@ -556,8 +636,13 @@ def process_classification_jobs(conn: sqlite3.Connection, *, now_iso: str,
     jobs = claim_due_maintenance(conn, now_iso=now_iso, limit=limit)
     if not jobs:
         return {"claimed": 0, "applied": 0, "failed": recovery["failed"]}
+    # Make the bounded claim durable before any provider call. The classifier
+    # must never run while this connection holds the claim/update transaction.
+    conn.commit()
     candidates: list[Candidate] = []
-    job_candidates: list[tuple[sqlite3.Row, Candidate]] = []
+    job_candidates: list[
+        tuple[sqlite3.Row, Candidate, tuple[tuple[str, str], ...]]
+    ] = []
     processable_jobs: list[sqlite3.Row] = []
     missing = 0
     for job in jobs:
@@ -579,28 +664,50 @@ def process_classification_jobs(conn: sqlite3.Connection, *, now_iso: str,
         # without adding a second evidence database.
         evidence_rows = conn.execute(
             "SELECT session_id, source_turn FROM memory_recall_events "
-            "WHERE key=? AND user_id=? AND session_id IS NOT NULL "
+            "WHERE key=? AND user_id=? AND outcome IN ('exact_update','near_duplicate') "
+            "AND session_id IS NOT NULL "
             "ORDER BY created_at DESC LIMIT 8",
             (row["key"], row["user_id"] or "local"),
         ).fetchall()
-        session_ids = list(dict.fromkeys(
-            [value for value in [row["source_session_id"]] if value]
-            + [item["session_id"] for item in evidence_rows if item["session_id"]]
-        ))[:8]
-        source_turns = list(dict.fromkeys(
+        source_turn_candidates = list(dict.fromkeys(
             [str(value) for value in [row["source_turn_id"]] if value]
             + [str(item["source_turn"]) for item in evidence_rows if item["source_turn"] is not None]
         ))[:8]
+        # A stored ID or recall row is only a hint. Verify each one against
+        # the transcript and accept user turns only; assistant/tool turn IDs
+        # cannot prove the user's preference or claim.
+        verified_evidence: list[tuple[str, str]] = []
+        for turn_id in source_turn_candidates:
+            try:
+                turn_number = int(turn_id)
+            except (TypeError, ValueError):
+                continue
+            turn = conn.execute(
+                "SELECT id,session_id FROM conversations WHERE id=? AND role='user'",
+                (turn_number,),
+            ).fetchone()
+            if turn is not None:
+                verified_evidence.append((str(turn["id"]), str(turn["session_id"])))
+        evidence_sessions = tuple(dict.fromkeys(verified_evidence))[:8]
+        source_turns = tuple(turn_id for turn_id, _ in evidence_sessions)
+        session_ids = tuple(dict.fromkeys(session for _, session in evidence_sessions))
         candidate = Candidate(row["key"], redact_candidate_text(row["content"]),
-                              tuple(source_turns or [str(row["id"])]),
-                              tuple(session_ids or [str(row["id"])]),
+                              source_turns,
+                              session_ids,
                               row["subject"], row["scope"] if row["scope"] not in (None, "global") else None,
                               provenance_hint)
         candidates.append(candidate)
         # Keep stored content out of the classifier boundary. Classification
         # updates metadata only; explicit correction is a separate operation.
-        job_candidates.append((job, candidate))
+        job_candidates.append((job, candidate, evidence_sessions))
         processable_jobs.append(job)
+    conn.commit()
+    reservation = reserve_classification_budget(
+        conn, now_iso=now_iso, candidate_count=len(candidates),
+        maintenance_job_ids=(int(job["id"]) for job in processable_jobs),
+    ) if candidates else None
+    if candidates and reservation is None:
+        return {"claimed": 0, "applied": 0, "failed": missing + recovery["failed"]}
     try:
         bounded = bounded_candidates(candidates)
         results = tuple(classifier(bounded, policy_version=policy_version))
@@ -619,34 +726,64 @@ def process_classification_jobs(conn: sqlite3.Connection, *, now_iso: str,
         by_key = {item.key: item for item in results}
         if len(by_key) != len(candidates) or any(item.key not in by_key for item in candidates):
             raise ValueError("classification batch is incomplete")
+        for candidate in candidates:
+            item = by_key[candidate.key]
+            eligible = set(candidate.source_turn_ids)
+            if (len(set(item.evidence)) != len(item.evidence)
+                    or any(turn_id not in eligible for turn_id in item.evidence)):
+                raise ValueError("classification cited unverified source evidence")
     except Exception:
         for job in processable_jobs:
             finish_maintenance(conn, job_id=job["id"], ok=False, now_iso=now_iso, error_code="invalid_output")
         return {"claimed": len(jobs), "applied": 0,
                 "failed": len(processable_jobs) + missing + recovery["failed"]}
-    for job, candidate in job_candidates:
+    for job, candidate, evidence_sessions in job_candidates:
         item = by_key[candidate.key]
         # Source attribution is a policy boundary, not model decoration. A
         # provider may suggest metadata, but it cannot turn an assistant or
         # quoted-document row into a trusted user preference.
-        if candidate.provenance_hint in {Provenance.ASSISTANT, Provenance.QUOTED_DOCUMENT}:
+        if candidate.provenance_hint in {
+            Provenance.ASSISTANT, Provenance.TOOL, Provenance.QUOTED_DOCUMENT,
+        }:
+            non_user_status = (
+                EvidenceStatus.UNKNOWN
+                if candidate.provenance_hint in {Provenance.ASSISTANT, Provenance.QUOTED_DOCUMENT}
+                else EvidenceStatus.TENTATIVE
+            )
             item = replace(item, provenance=candidate.provenance_hint,
-                           evidence_status=EvidenceStatus.UNKNOWN,
-                           confidence=0.0,
+                           evidence_status=non_user_status,
+                           confidence=0.0 if non_user_status is EvidenceStatus.UNKNOWN else min(item.confidence, 0.5),
                            reason_code="quoted_content" if candidate.provenance_hint is Provenance.QUOTED_DOCUMENT else "insufficient_evidence")
+        if item.evidence_status is EvidenceStatus.CORROBORATED:
+            evidence_session_by_turn = dict(evidence_sessions)
+            cited_sessions = {
+                evidence_session_by_turn[turn_id] for turn_id in item.evidence
+                if turn_id in evidence_session_by_turn
+            }
+            if len(set(item.evidence)) < 2 or len(cited_sessions) < 2:
+                item = replace(
+                    item,
+                    evidence_status=EvidenceStatus.TENTATIVE,
+                    confidence=min(item.confidence, 0.79),
+                    reason_code="insufficient_evidence",
+                )
         row = conn.execute("SELECT id,user_id FROM memories WHERE id=?", (job["memory_id"],)).fetchone()
         if row is None:
             finish_maintenance(conn, job_id=job["id"], ok=False, now_iso=now_iso, error_code="missing_memory")
             missing += 1
             continue
-        if not effective_shadow and (stage is None or classification_admitted(item, stage)):
+        has_verified_evidence = bool(item.evidence) and all(
+            evidence in set(candidate.source_turn_ids) for evidence in item.evidence
+        )
+        if (not effective_shadow and has_verified_evidence
+                and (stage is None or classification_admitted(item, stage))):
             # Content revisions are reserved for an explicit correction call,
             # where replacement text and scope are checked by the caller.
             # Never turn classifier redaction into a stored-memory edit.
             conn.execute("UPDATE memories SET subject=?, scope=?, memory_type=?, provenance=?, evidence_status=?, confidence=?, valid_from=?, valid_until=?, source_turn_id=?, classifier_version=?, classified_at=? WHERE id=?",
                          (item.subject, item.scope.value, item.memory_type.value, item.provenance.value,
                           item.evidence_status.value, item.confidence, item.valid_from, item.valid_until,
-                          item.evidence[0] if item.evidence else candidate.source_turn_ids[0], policy_version, now_iso, row["id"]))
+                          item.evidence[0], policy_version, now_iso, row["id"]))
         else:
             # Shadow mode is observable and restart-safe. Keep only bounded,
             # non-secret metadata; the candidate itself is represented by a

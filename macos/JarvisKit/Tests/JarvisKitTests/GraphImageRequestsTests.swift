@@ -4,8 +4,18 @@ import XCTest
 private actor GraphFetchProbe {
     private(set) var calls = 0
     private(set) var cancellations = 0
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func waitUntilStarted() async {
+        if calls > 0 { return }
+        await withCheckedContinuation { startWaiters.append($0) }
+    }
+
     func fetch() async throws -> Data {
         calls += 1
+        let waiters = startWaiters
+        startWaiters.removeAll()
+        waiters.forEach { $0.resume() }
         do { try await Task.sleep(nanoseconds: 100_000_000) }
         catch { cancellations += 1; throw error }
         return Data([1, 2, 3])
@@ -32,7 +42,7 @@ final class GraphImageRequestsTests: XCTestCase {
         let requests = GraphImageRequests(), probe = GraphFetchProbe()
         let first = Task { try await requests.data(at: url) { try await probe.fetch() } }
         let second = Task { try await requests.data(at: url) { try await probe.fetch() } }
-        try await Task.sleep(nanoseconds: 20_000_000)
+        await probe.waitUntilStarted()
         first.cancel()
         let result = try await second.value
         XCTAssertEqual(result, Data([1, 2, 3]))
@@ -47,7 +57,7 @@ final class GraphImageRequestsTests: XCTestCase {
     func testLastViewCancellationStopsFetchAndAllowsRetry() async throws {
         let requests = GraphImageRequests(), probe = GraphFetchProbe()
         let first = Task { try await requests.data(at: url) { try await probe.fetch() } }
-        try await Task.sleep(nanoseconds: 20_000_000)
+        await probe.waitUntilStarted()
         first.cancel()
         do { _ = try await first.value; XCTFail("cancelled read must fail") }
         catch is CancellationError {} catch { XCTFail("Unexpected error: \(error)") }

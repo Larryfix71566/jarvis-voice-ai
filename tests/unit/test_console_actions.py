@@ -1,6 +1,7 @@
-import uuid
 import asyncio
-from jarvis.bot.console_actions import handle_console_request, build_console_action_tool
+import uuid
+
+from jarvis.bot.console_actions import build_console_action_tool, handle_console_request
 
 
 def request(revision=3, action="inventory"):

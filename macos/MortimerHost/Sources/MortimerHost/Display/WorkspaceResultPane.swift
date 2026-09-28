@@ -27,6 +27,17 @@ struct WorkspaceResultPane: View {
         let presentation = workspace.presentation(for: result)
         VStack(alignment: .leading, spacing: 8) {
             Text(result.payload.title ?? "Result").font(.headline)
+            if result.payload.isProtectedLocal {
+                Label("Protected local result · sharing and export disabled",
+                      systemImage: "lock.shield")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.amber)
+                if let reference = result.payload.opaqueRef {
+                    Text("Reference: \(reference)")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(AppTheme.textDim)
+                }
+            }
             if !onSupportingDisplay && display.isPresented(.result(result.id),
                 selection: workspace.supportingContent,
                 layoutVersion: InterfaceLayoutVersion.resolve(layoutVersion)) {
@@ -37,25 +48,35 @@ struct WorkspaceResultPane: View {
                 }
             } else {
                 ViewThatFits(in: .horizontal) {
-                    HStack { modePicker(presentation); copyButton; shareButton; exportButton }
-                    VStack(alignment: .leading) { modePicker(presentation); HStack { copyButton; shareButton; exportButton } }
+                    HStack {
+                        if !result.payload.isProtectedLocal { modePicker(presentation) }
+                        copyButton; shareButton; exportButton
+                    }
+                    VStack(alignment: .leading) {
+                        if !result.payload.isProtectedLocal { modePicker(presentation) }
+                        HStack { copyButton; shareButton; exportButton }
+                    }
                 }
                 if workspace.exporter.resultID == result.id, let message = workspace.exporter.message {
                     Text(message).font(.caption).textSelection(.enabled)
                 }
-                switch presentation.mode {
-                case .summary: original
-                case .sources: WorkspaceSourcesView(result: result, presentation: presentation)
-                case .connections:
-                    if let url = MemoryGraphSource.imageURL(result.payload) {
-                        let graphStore = workspace.graphStore(for: result, url: url)
-                        if let body = result.payload.body { Text(body).font(.caption).textSelection(.enabled) }
-                        // Result-specific connection graphs have their own
-                        // store; the shared coordinator intentionally owns
-                        // only the primary memory graph. Keep these local
-                        // controls on their existing store path.
-                        MemoryGraphView(store: graphStore, api: client.admin)
-                    } else { original }
+                if result.payload.isProtectedLocal {
+                    original
+                } else {
+                    switch presentation.mode {
+                    case .summary: original
+                    case .sources: WorkspaceSourcesView(result: result, presentation: presentation)
+                    case .connections:
+                        if let url = MemoryGraphSource.imageURL(result.payload) {
+                            let graphStore = workspace.graphStore(for: result, url: url)
+                            if let body = result.payload.body { Text(body).font(.caption).textSelection(.enabled) }
+                            // Result-specific connection graphs have their own
+                            // store; the shared coordinator intentionally owns
+                            // only the primary memory graph. Keep these local
+                            // controls on their existing store path.
+                            MemoryGraphView(store: graphStore, api: client.admin)
+                        } else { original }
+                    }
                 }
             }
         }
@@ -114,33 +135,36 @@ struct WorkspaceResultPane: View {
 
     private var exportButton: some View {
         Button("Export…") { workspace.exporter.chooseDestination(for: result) }
-            .disabled(workspace.exporter.busy)
+            .disabled(workspace.exporter.busy || result.payload.isProtectedLocal)
             .help("Save supplied text and reference URLs; clipboard content is excluded")
     }
 
     private var copyButton: some View {
         Button("Copy") {
+            guard !result.payload.isProtectedLocal else { return }
             if let coordinator {
                 _ = coordinator.executePointer(.sharePreview, target: result.id.uuidString)
                 _ = coordinator.executePointer(.shareCopy)
             } else {
-                workspace.exporter.copy(text: WorkspaceResultExport.text(result))
+                workspace.exporter.copy(result: result)
             }
         }
+        .disabled(result.payload.isProtectedLocal)
         .help("Copy the selected result text; clipboard payloads are excluded")
         .accessibilityLabel("Copy selected result")
     }
 
     private var shareButton: some View {
         Button("Share…") {
+            guard !result.payload.isProtectedLocal else { return }
             if let coordinator {
                 let outcome = coordinator.executePointer(.sharePreview, target: result.id.uuidString)
                 if outcome == .applied { showingSharePreview = true }
             } else {
-                sharing.beginPreview(result)
-                showingSharePreview = true
+                if sharing.beginPreview(result) != nil { showingSharePreview = true }
             }
         }
+        .disabled(result.payload.isProtectedLocal)
         .help("Review the selected result before copying, saving, or sharing it")
         .accessibilityLabel("Share selected result")
     }

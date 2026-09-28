@@ -1,0 +1,41 @@
+# Reviewed requirements for capability labels in skills/*/mortimer.yaml.
+# A label is available only when its route capabilities and live tool inventory
+# are both present. This registry adds no tools or authority.
+schema_version: 1
+capabilities:
+  weather_lookup:
+    route_capabilities: [text]
+    tools: [get_weather]
+  forecast_reporting:
+    route_capabilities: [text]
+    tools: []
+  repository_read:
+    route_capabilities: [text]
+    tools: [repo_read_file, repo_search]
+  git_status_review:
+    route_capabilities: [text]
+    tools: [git_status, git_log]
+  location_design:
+    route_capabilities: [text]
+    tools: []
+  consent_aware_resolution:
+    route_capabilities: [text]
+    tools: []
+  mcp_server_design:
+    route_capabilities: [text]
+    tools: [repo_read_file, repo_search]
+  tool_schema_design:
+    route_capabilities: [text]
+    tools: [repo_read_file, repo_search]
+  draft_skill_packages:
+    route_capabilities: [text]
+    tools: []
+  review_skill_quality:
+    route_capabilities: [text]
+    tools: []
+  implementation_planning:
+    route_capabilities: [text]
+    tools: []
+  acceptance_design:
+    route_capabilities: [text]
+    tools: []

@@ -41,23 +41,48 @@ The client factory is injectable for tests.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import os
 import threading
 import time
+import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable
 
 import yaml
 
 from jarvis import effort, llm_client
+from jarvis.model_execution import (
+    ModelContextMessage,
+    ModelExecutionRequest,
+    ModelToolCall,
+    ModelToolReference,
+    execute_chat,
+)
+from jarvis.model_routing import (
+    ModelRouteError,
+    ResolvedModelRoute,
+    make_route_client,
+    resolve_model_route,
+)
+from jarvis.privacy_policy import DataPolicy
 from jarvis.repo_map import load_architecture_suffix, load_repo_map_suffix
 from jarvis.selfedit.service import SelfEditService
-from jarvis.usage_ledger import record_completion, provider_from_base_url
-from jarvis.model_routing import ModelRouteError, make_sync_route_client, resolve_model_route
+from jarvis.usage_ledger import (
+    provider_from_base_url,
+    record_completion,
+    record_execution_result,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _log_safe_failure(event: str, exc: Exception) -> None:
+    """Log a bounded failure category without exception or traceback data."""
+    logger.warning("%s error_type=%s", event, type(exc).__name__[:80])
 
 DEFAULT_CONFIG_PATH = (
     Path(__file__).resolve().parents[2] / "config" / "upgrade_agent.yaml"
@@ -651,12 +676,22 @@ class UpgradeAgent:
         system_prompt: str | None = None,
         council_workflow: str = "selfedit",
         run_id: str | None = None,
+        tool_specs: list[dict[str, Any]] | None = None,
     ):
         self.service = service
         # MORTIMER_GRAPH_LAYER_PLAN.md GL9 (contract G2): the delegating sub-agent
         # run, threaded from SkillRegistry.call() through the sidecar; None for a
         # console-initiated run. Every convene() below passes it through.
         self._run_id = run_id
+        # Most callers use the normal self-edit toolset. A reviewed workflow
+        # may supply a narrower closed set; keep a private copy so later
+        # mutation by a caller cannot widen an active agent's authority.
+        self._tool_specs = json.loads(json.dumps(tool_specs if tool_specs is not None else TOOL_SPECS))
+        self._workload = "app_builder" if config_section == "app_build" else "developer"
+        self._execution_loop: asyncio.AbstractEventLoop | None = None
+        self._execution_parent_id: str | None = None
+        self._routed_client: Any = None
+        self._routed_client_identity: tuple[str, str, str] | None = None
         self.cfg = load_agent_config(config_path, section=config_section)
         self._system_prompt = system_prompt or SYSTEM_PROMPT
         # Cooperative cancel (Larry 2026-08-30/31: a kimi-k3 planner sat
@@ -711,10 +746,9 @@ class UpgradeAgent:
             self._api_key_env = prof.get("api_key_env", "OPENAI_API_KEY")
             self._resolved_route = None
             if os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1":
-                workload = "app_builder" if config_section == "app_build" else "developer"
                 try:
                     self._resolved_route = resolve_model_route(
-                        workload, explicit_profile=self.profile_name,
+                        self._workload, explicit_profile=self.profile_name,
                         registry_path=registry_path)
                     self.cfg["provider"] = self._resolved_route.provider
                     self.cfg["model"] = self._resolved_route.model
@@ -750,14 +784,31 @@ class UpgradeAgent:
         self._plan_state: str | None = None
         self._submit_result: dict | None = None
 
-        # Defer client construction when the key is absent: run() fails fast
-        # with a clear summary instead of the SDK raising at construction.
-        self._key_missing = (
-            client_factory is None
-            and (isinstance(self._resolved_route, ModelRouteError)
-                 or not self._api_key_env
-                 or not os.environ.get(self._api_key_env))
+        # Defer client construction when credentials/runtime access are
+        # unavailable so run() can report a route-specific readiness error.
+        subscription_adapters = {
+            "subscription_runtime", "codex_subscription_runtime",
+        }
+        route_is_subscription = (
+            isinstance(self._resolved_route, ResolvedModelRoute)
+            and self._resolved_route.route.adapter in subscription_adapters
         )
+        self._missing_access_reason = None
+        if client_factory is not None:
+            pass
+        elif route_is_subscription and os.environ.get("JARVIS_SUBSCRIPTION_TEXT_ENABLED") != "1":
+            self._missing_access_reason = "the subscription text adapter is disabled"
+        elif (self._resolved_route is not None
+              and not isinstance(self._resolved_route, ModelRouteError)
+              and not route_is_subscription
+              and (not self._api_key_env or not os.environ.get(self._api_key_env))):
+            self._missing_access_reason = f"{self._api_key_env or 'route credential'} is not set"
+        elif isinstance(self._resolved_route, ModelRouteError):
+            self._missing_access_reason = str(self._resolved_route)
+        elif (self._resolved_route is None
+              and (not self._api_key_env or not os.environ.get(self._api_key_env))):
+            self._missing_access_reason = f"{self._api_key_env or 'route credential'} is not set"
+        self._key_missing = self._missing_access_reason is not None
         # Failover state (Larry 2026-08-22: "spin on a dead model is not a
         # great look"). Profiles that have already failed UNREACHABLY this
         # session are never selected again by _completion_with_failover.
@@ -767,16 +818,10 @@ class UpgradeAgent:
         self._client: Any = None
         if client_factory is not None:
             self._client = client_factory()
-        elif isinstance(self._resolved_route, ModelRouteError):
-            self._client = None
         elif not self._key_missing:
-            if self._resolved_route is not None:
-                self._client = make_sync_route_client(self._resolved_route,
-                                                       timeout=PLANNER_CALL_TIMEOUT_S,
-                                                       max_retries=0)
-                return
-            self._client = self._build_client(
-                self._api_key_env, self.cfg["base_url"], self.cfg.get("provider"))
+            if self._resolved_route is None:
+                self._client = self._build_client(
+                    self._api_key_env, self.cfg["base_url"], self.cfg.get("provider"))
 
     def _build_client(self, api_key_env: str, base_url: str | None,
                       provider: str | None = None) -> Any:
@@ -853,10 +898,16 @@ class UpgradeAgent:
             name = entry["name"]
             if name == self.profile_name or name in self._failed_profiles:
                 continue
-            if not entry.get("key_present"):
-                continue
             try:
-                return resolve_profile(registry, name)
+                candidate = resolve_profile(registry, name)
+                if os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1":
+                    resolve_model_route(
+                        self._workload, explicit_profile=name,
+                        registry_path=self._registry_path,
+                    )
+                elif not entry.get("key_present"):
+                    continue
+                return candidate
             except Exception:  # noqa: BLE001 — try the next candidate
                 continue
         return None
@@ -898,24 +949,35 @@ class UpgradeAgent:
             # fake client missing base_url now resolves to
             # provider="unknown" (never "anthropic"), so extra_body_for()
             # cleanly returns {} instead of the whole call raising.
-            provider = provider_from_base_url(str(getattr(self._client, "base_url", "")))
+            provider = (
+                self._resolved_route.provider
+                if isinstance(self._resolved_route, ResolvedModelRoute)
+                else provider_from_base_url(str(getattr(self._client, "base_url", "")))
+            )
             extra_body = effort.extra_body_for(
                 rung=f"{self._council_workflow}_executor", provider=provider,
                 explicit=self.cfg.get("effort"), model=self.model,
             )
             call_request = {**request, "extra_body": extra_body} if extra_body else request
             try:
-                response = self._client.chat.completions.create(**call_request)
-                try:
-                    record_completion(
-                        rung=f"{self._council_workflow}_executor",
-                        provider=provider,
-                        model=self.model,
-                        response=response,
-                        plan_state=self._plan_state,
+                if isinstance(self._resolved_route, ResolvedModelRoute):
+                    if self._execution_loop is None:
+                        raise RuntimeError("routed planner execution loop is unavailable")
+                    response = self._execution_loop.run_until_complete(
+                        self._routed_completion(call_request)
                     )
-                except Exception:
-                    pass
+                else:
+                    response = self._client.chat.completions.create(**call_request)
+                    try:
+                        record_completion(
+                            rung=f"{self._council_workflow}_executor",
+                            provider=provider,
+                            model=self.model,
+                            response=response,
+                            plan_state=self._plan_state,
+                        )
+                    except Exception:
+                        pass
                 return response
             except Exception as exc:  # noqa: BLE001 — classified immediately below
                 if not self._is_unreachable(exc) or attempts >= MAX_PLANNER_FAILOVERS:
@@ -926,7 +988,7 @@ class UpgradeAgent:
                 if nxt is None:
                     logger.warning(
                         "planner_failover_exhausted failed=%s error=%s",
-                        failed_name, type(exc).__name__,
+                        failed_name, type(exc).__name__[:80],
                     )
                     raise
                 note = (
@@ -934,7 +996,7 @@ class UpgradeAgent:
                     f"({type(exc).__name__}); continued on {nxt['name']}"
                 )
                 logger.warning("planner_failover from=%s to=%s error=%s",
-                               failed_name, nxt["name"], type(exc).__name__)
+                               failed_name, nxt["name"], type(exc).__name__[:80])
                 self._failover_notes.append(note)
 
                 self.profile_name = nxt["name"]
@@ -958,8 +1020,18 @@ class UpgradeAgent:
                 self._api_key_env = nxt.get("api_key_env", "OPENAI_API_KEY")
                 self.model = self.cfg["model"]
                 self.base_url = self.cfg["base_url"]
-                self._client = self._build_client(
-                    self._api_key_env, self.cfg["base_url"], self.cfg.get("provider"))
+                if os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1":
+                    if self._execution_loop is not None:
+                        self._execution_loop.run_until_complete(self._close_routed_client())
+                    self._resolved_route = resolve_model_route(
+                        self._workload, explicit_profile=self.profile_name,
+                        registry_path=self._registry_path,
+                    )
+                    self._api_key_env = self._resolved_route.api_key_env or ""
+                    self._client = None
+                else:
+                    self._client = self._build_client(
+                        self._api_key_env, self.cfg["base_url"], self.cfg.get("provider"))
 
                 # The retry must carry the NEW model and its temperature
                 # rule (D-003), not the dead profile's.
@@ -969,7 +1041,125 @@ class UpgradeAgent:
                     request["temperature"] = self.cfg["temperature"]
                 attempts += 1
 
+    async def _close_routed_client(self) -> None:
+        client = self._routed_client
+        self._routed_client = None
+        self._routed_client_identity = None
+        if client is None:
+            return
+        close = getattr(client, "close", None)
+        if callable(close):
+            result = close()
+            if inspect.isawaitable(result):
+                await result
+
+    async def _routed_completion(self, request: dict[str, Any]) -> Any:
+        route = self._resolved_route
+        if not isinstance(route, ResolvedModelRoute):
+            raise ModelRouteError("planner route is not resolved")
+        identity = (route.identity, route.route.name, route.model)
+        if self._routed_client is None or self._routed_client_identity != identity:
+            await self._close_routed_client()
+            self._routed_client = make_route_client(
+                route, timeout=PLANNER_CALL_TIMEOUT_S, max_retries=0,
+            )
+            self._routed_client_identity = identity
+
+        policy = DataPolicy(route.route.privacy, f"{self._workload}-planner")
+        context = _planner_context_messages(request.get("messages"), policy)
+        references = tuple(
+            ModelToolReference(
+                spec["function"]["name"],
+                spec["function"]["parameters"],
+                spec["function"].get("description", ""),
+            )
+            for spec in request.get("tools", TOOL_SPECS)
+        )
+        execution_request = ModelExecutionRequest(
+            workload=route.workload,
+            task_id=f"{self._council_workflow}-planner:{uuid.uuid4().hex}",
+            parent_request_id=self._execution_parent_id or uuid.uuid4().hex,
+            instructions="",
+            context=context,
+            tools=references,
+            data_policy=policy,
+            timeout_s=PLANNER_CALL_TIMEOUT_S,
+            temperature=request.get("temperature"),
+            extra_body=request.get("extra_body"),
+        )
+        operation = asyncio.create_task(execute_chat(
+            execution_request, route,
+            client_factory=lambda _route: self._routed_client,
+        ))
+        while not operation.done():
+            if self._cancel.is_set():
+                operation.cancel()
+                break
+            await asyncio.wait({operation}, timeout=0.05)
+        result = await operation
+        # Cancellation may land after execute_chat completes but before this
+        # coroutine resumes. Do not ledger or expose a stale completion in
+        # that race; the synchronous run loop converts this into its normal
+        # structured cancelled result.
+        if self._cancel.is_set():
+            raise asyncio.CancelledError
+        record_execution_result(
+            f"{self._council_workflow}_executor", result,
+            session_id=self._run_id,
+            plan_state=self._plan_state,
+        )
+        message = SimpleNamespace(
+            content=result.text or None,
+            tool_calls=[
+                SimpleNamespace(
+                    id=call.tool_call_id,
+                    type="function",
+                    function=SimpleNamespace(
+                        name=call.name,
+                        arguments=call.raw_arguments or json.dumps(
+                            dict(call.arguments), separators=(",", ":")
+                        ),
+                    ),
+                    model_extra=dict(call.provider_extras),
+                )
+                for call in result.tool_calls
+            ],
+            model_extra=dict(result.provider_extras),
+        )
+        usage = None
+        if result.prompt_tokens is not None and result.completion_tokens is not None:
+            usage = SimpleNamespace(
+                prompt_tokens=result.prompt_tokens,
+                completion_tokens=result.completion_tokens,
+                total_tokens=result.total_tokens,
+            )
+        return SimpleNamespace(
+            id=result.response_id,
+            choices=[SimpleNamespace(message=message)],
+            usage=usage,
+        )
+
     def run(
+        self, goal: str, on_event: Callable[[dict], None] | None = None,
+        *, plan: str | None = None,
+    ) -> dict:
+        """Run synchronously while keeping one async client loop per session."""
+        loop = asyncio.new_event_loop()
+        self._execution_loop = loop
+        self._execution_parent_id = self._run_id or f"{self._council_workflow}:{uuid.uuid4().hex}"
+        try:
+            return self._run_with_execution_loop(goal, on_event, plan=plan)
+        finally:
+            if not loop.is_closed():
+                try:
+                    loop.run_until_complete(self._close_routed_client())
+                except Exception as exc:  # noqa: BLE001 — cleanup cannot mask the session result
+                    _log_safe_failure("planner_async_client_cleanup_failed", exc)
+                loop.close()
+            self._execution_loop = None
+            self._execution_parent_id = None
+
+    def _run_with_execution_loop(
         self, goal: str, on_event: Callable[[dict], None] | None = None,
         *, plan: str | None = None,
     ) -> dict:
@@ -994,8 +1184,8 @@ class UpgradeAgent:
             return {
                 "ok": False,
                 "summary": (
-                    f"the {self._api_key_env} environment variable is not set, so the "
-                    f"{self.model_label()} planner cannot run — add it to .env and restart"
+                    f"{self._missing_access_reason}; the {self.model_label()} planner "
+                    "cannot run until its configured route is ready"
                 ),
                 "session_started": False,
                 "status": self.service.status(),
@@ -1069,6 +1259,7 @@ class UpgradeAgent:
         # never reached session_validate). Falls through as
         # "iteration_limit" when the `while` condition itself ends the loop.
         end_reason = "iteration_limit"
+        seen_tool_call_ids: set[str] = set()
         while iterations_used < iterations_budget:
             if self._cancel.is_set():
                 cancelled = True
@@ -1096,11 +1287,31 @@ class UpgradeAgent:
             request: dict[str, Any] = {
                 "model": self.cfg["model"],
                 "messages": messages,
-                "tools": TOOL_SPECS,
+                "tools": self._tool_specs,
             }
             if self.cfg["temperature"] is not None:
                 request["temperature"] = self.cfg["temperature"]
-            response = self._completion(request)
+            try:
+                response = self._completion(request)
+            except asyncio.CancelledError:
+                cancelled = True
+                end_reason = "cancelled"
+                summary = (
+                    "cancelled by the user while the planner was running; "
+                    "no changes were submitted"
+                )
+                break
+            # A cancellation can arrive immediately after a completion
+            # returns. Suppress its content and every tool call before they
+            # can affect the sandbox or the next planner request.
+            if self._cancel.is_set():
+                cancelled = True
+                end_reason = "cancelled"
+                summary = (
+                    "cancelled by the user while the planner was running; "
+                    "no changes were submitted"
+                )
+                break
             message = response.choices[0].message
             tool_calls = list(getattr(message, "tool_calls", None) or [])
             if not tool_calls:
@@ -1108,6 +1319,19 @@ class UpgradeAgent:
                 ok = True
                 end_reason = "prose_end"
                 break
+            response_call_ids = [getattr(call, "id", None) for call in tool_calls]
+            if any(
+                not isinstance(call_id, str) or not call_id.strip()
+                or len(call_id) > 256 or call_id in seen_tool_call_ids
+                for call_id in response_call_ids
+            ) or len(set(response_call_ids)) != len(response_call_ids):
+                summary = (
+                    "the provider repeated an invalid or previously used "
+                    "tool-call identity; no tool in this batch was executed"
+                )
+                end_reason = "tool_call_identity_replay"
+                break
+            seen_tool_call_ids.update(response_call_ids)
             messages.append(_assistant_message(message))
             for tc in tool_calls:
                 self._emit(on_event, {"type": "agent_tool", "tool": tc.function.name})
@@ -1155,10 +1379,9 @@ class UpgradeAgent:
                         try:
                             from jarvis.council.council import record_retry_validated
                             record_retry_validated(round_id, bool(result.get("ok")))
-                        except Exception:  # noqa: BLE001 — never break the agent loop
-                            logger.warning(
-                                "council_record_retry_validated_call_failed "
-                                "round_id=%s", round_id, exc_info=True,
+                        except Exception as exc:  # noqa: BLE001 — never break the agent loop
+                            _log_safe_failure(
+                                "council_record_retry_validated_call_failed", exc
                             )
                 if tc.function.name == "session_validate" and not result.get("ok"):
                     repairs_used += 1
@@ -1307,11 +1530,8 @@ class UpgradeAgent:
         try:
             from jarvis.council.council import record_retry_outcome
             record_retry_outcome(round_id, f"no_retry:{reason}")
-        except Exception:  # noqa: BLE001 — never break the agent loop
-            logger.warning(
-                "council_record_retry_outcome_call_failed round_id=%s",
-                round_id, exc_info=True,
-            )
+        except Exception as exc:  # noqa: BLE001 — never break the agent loop
+            _log_safe_failure("council_record_retry_outcome_call_failed", exc)
 
     def _maybe_escalate(self, *, goal: str, trigger: str,
                         context: dict) -> str | None:
@@ -1326,7 +1546,8 @@ class UpgradeAgent:
         import.
         """
         from jarvis.council.config import (
-            COUNCIL_MAX_ESCALATIONS, COUNCIL_PLANNER_START_TIER,
+            COUNCIL_MAX_ESCALATIONS,
+            COUNCIL_PLANNER_START_TIER,
         )
 
         if self._escalations_used >= COUNCIL_MAX_ESCALATIONS:
@@ -1354,8 +1575,8 @@ class UpgradeAgent:
                 workflow=self._council_workflow, placement="planner", trigger=trigger,
                 goal=goal, tier=tier, context=context, run_id=self._run_id,
             ))
-        except Exception:                           # noqa: BLE001
-            logger.warning("council_escalation_failed", exc_info=True)
+        except Exception as exc:                    # noqa: BLE001
+            _log_safe_failure("council_escalation_failed", exc)
             return None
         if result is None or result.winner is None:
             return None
@@ -1386,8 +1607,8 @@ class UpgradeAgent:
                 goal=goal, tier=1,
                 context={"reason": reason, "allowlist": allowlist}, run_id=self._run_id,
             ))
-        except Exception:                           # noqa: BLE001
-            logger.warning("council_scope_council_failed", exc_info=True)
+        except Exception as exc:                    # noqa: BLE001
+            _log_safe_failure("council_scope_council_failed", exc)
             return None
         if result is None or result.winner is None:
             return None
@@ -1420,8 +1641,9 @@ class UpgradeAgent:
         if on_event is not None:
             try:
                 on_event(event)
-            except Exception:  # noqa: BLE001 — observers must not break agents
-                logger.exception("on_event callback failed")
+            except Exception as exc:  # noqa: BLE001 — observers must not break agents
+                logger.warning("planner_event_callback_failed error_type=%s",
+                               type(exc).__name__[:64])
 
 
 APPBUILD_PROFILE_ENV = "JARVIS_APPBUILD_PROFILE"
@@ -1493,7 +1715,7 @@ class AppBuildAgent(UpgradeAgent):
 
 
 def _assistant_message(message: Any) -> dict:
-    return {
+    result = {
         "role": "assistant",
         "content": message.content,
         "tool_calls": [
@@ -1502,7 +1724,71 @@ def _assistant_message(message: Any) -> dict:
                 "type": "function",
                 "function": {"name": tc.function.name,
                              "arguments": tc.function.arguments},
+                **(getattr(tc, "model_extra", None) or {}),
             }
             for tc in message.tool_calls
         ],
     }
+    result.update(getattr(message, "model_extra", None) or {})
+    return result
+
+
+def _planner_context_messages(
+    messages: Any, policy: DataPolicy,
+) -> tuple[ModelContextMessage, ...]:
+    """Convert planner protocol history without losing tool-call identity."""
+    if not isinstance(messages, list):
+        raise ValueError("planner messages must be a list")
+    context: list[ModelContextMessage] = []
+    pending_names: dict[str, str] = {}
+    for message in messages:
+        if not isinstance(message, dict):
+            raise ValueError("planner message must be a mapping")
+        role = message.get("role")
+        content = message.get("content")
+        if role == "assistant" and message.get("tool_calls"):
+            if not isinstance(content, (str, type(None))):
+                raise ValueError("planner assistant content must be text")
+            calls: list[ModelToolCall] = []
+            for raw_call in message["tool_calls"]:
+                function = raw_call.get("function") or {}
+                call_id = raw_call.get("id")
+                name = function.get("name")
+                raw_arguments = function.get("arguments")
+                if not isinstance(raw_arguments, str):
+                    raise ValueError("planner tool call arguments must be serialized JSON")
+                try:
+                    arguments = json.loads(raw_arguments)
+                except json.JSONDecodeError as exc:
+                    raise ValueError("planner tool call arguments are malformed") from exc
+                if not isinstance(arguments, dict):
+                    raise ValueError("planner tool arguments must be a JSON object")
+                extras = {key: value for key, value in raw_call.items()
+                          if key not in {"id", "type", "function"}}
+                calls.append(ModelToolCall(
+                    call_id, name, arguments, raw_arguments, extras,
+                ))
+                pending_names[call_id] = name
+            message_extras = {
+                key: value for key, value in message.items()
+                if key not in {"role", "content", "tool_calls"}
+            }
+            context.append(ModelContextMessage(
+                "assistant", content or "", policy, tool_calls=tuple(calls),
+                provider_extras=message_extras,
+            ))
+        elif role == "tool":
+            call_id = message.get("tool_call_id")
+            name = pending_names.pop(call_id, None)
+            if not name or not isinstance(content, str):
+                raise ValueError("planner tool result has no matching call")
+            context.append(ModelContextMessage(
+                "tool", content, policy, name=name, tool_call_id=call_id,
+            ))
+        elif role in {"system", "user", "assistant"} and isinstance(content, str):
+            context.append(ModelContextMessage(role, content, policy))
+        else:
+            raise ValueError("planner history has an unsupported message")
+    if pending_names:
+        raise ValueError("planner history ends before its tool calls return")
+    return tuple(context)

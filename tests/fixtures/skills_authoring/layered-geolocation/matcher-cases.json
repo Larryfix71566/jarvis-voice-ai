@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "layered-location-resolution",
+      "request": "Design app location resolution using a stored preference, device location consent and IP fallback, with honest staleness reporting.",
+      "expect_selected": true
+    },
+    {
+      "id": "unrelated-weather-request",
+      "request": "What is the current weather forecast and temperature in Fahrenheit?",
+      "expect_selected": false
+    }
+  ]
+}

@@ -14,8 +14,9 @@ requires_env: []
 # it a custom-registry operator would silently load the WRONG registry (review
 # F11). optional_env forwards it when the operator has set it; default installs
 # (unset) stay green under check_skills.py.
-optional_env: [JARVIS_SCREEN_ENABLED, JARVIS_VISION_PROFILE, JARVIS_SCREEN_RETENTION_HOURS, JARVIS_UPGRADE_MODELS]
-# The vision API key's NAME is a value in config/model_endpoints.yaml
+optional_env: [JARVIS_SCREEN_ENABLED, JARVIS_VISION_PROFILE, JARVIS_SCREEN_RETENTION_HOURS, JARVIS_UPGRADE_MODELS, JARVIS_MODEL_ROUTING_ENABLED]
+# The joined model registry reads credentials from config/model_endpoints.yaml;
+# JARVIS_UPGRADE_MODELS remains its registry-path override for compatibility.
 # (api_key_env:), chosen at call time by JARVIS_VISION_PROFILE — see
 # mcp_screen/logic.py:283. A static list would go stale the day a profile
 # is added, so the registry resolves it from that file at spawn time.

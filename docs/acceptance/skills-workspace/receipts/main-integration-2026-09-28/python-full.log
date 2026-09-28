@@ -1,0 +1,178 @@
+........................................................................ [  1%]
+........................................................................ [  2%]
+........................................................................ [  4%]
+........................................................................ [  5%]
+........................................................................ [  7%]
+........................................................................ [  8%]
+........................................................................ [ 10%]
+........................................................................ [ 11%]
+........................................................................ [ 13%]
+........................................................................ [ 14%]
+........................................................................ [ 16%]
+........................................................................ [ 17%]
+........................................................................ [ 19%]
+...........................F............................................ [ 20%]
+........................................................................ [ 22%]
+........................................................................ [ 23%]
+........................................................................ [ 25%]
+........................................................................ [ 26%]
+........................................................................ [ 28%]
+........................................................................ [ 29%]
+........................................................................ [ 31%]
+........................................................................ [ 32%]
+........................................................................ [ 34%]
+........................................................................ [ 35%]
+........................................................................ [ 37%]
+........................................................................ [ 38%]
+........................................................................ [ 40%]
+........................................................................ [ 41%]
+........................................................................ [ 42%]
+........................................................................ [ 44%]
+........................................................................ [ 45%]
+........................................................................ [ 47%]
+........................................................................ [ 48%]
+...................................................................... [ 50%]
+........................................................................ [ 51%]
+........................................................................ [ 53%]
+........................................................................ [ 54%]
+........................................................................ [ 56%]
+........................................................................ [ 57%]
+........................................................................ [ 59%]
+........................................................................ [ 60%]
+..F..................................................................... [ 62%]
+........................................................................ [ 63%]
+........................................................................ [ 65%]
+........................................................................ [ 66%]
+........................................................................ [ 68%]
+........................................................................ [ 69%]
+........................................................................ [ 71%]
+........................................................................ [ 72%]
+........................................................................ [ 74%]
+........................................................................ [ 75%]
+........................................................................ [ 77%]
+........................................................................ [ 78%]
+........................................................................ [ 80%]
+........................................................................ [ 81%]
+........................................................................ [ 82%]
+........................................................................ [ 84%]
+........................................................................ [ 85%]
+........................................................................ [ 87%]
+........................................................................ [ 88%]
+........................................................................ [ 90%]
+........................................................................ [ 91%]
+........................................................................ [ 93%]
+........................................................................ [ 94%]
+........................................................................ [ 96%]
+........................................................................ [ 97%]
+................................s......sss.............................. [ 99%]
+...................................                                      [100%]
+=================================== FAILURES ===================================
+______________________ test_service_health_is_human_only _______________________
+
+    def test_service_health_is_human_only() -> None:
+        allowlist = Allowlist.load(REPO_ROOT / "config" / "self_edit_allowlist.json")
+>       assert allowlist.tier("scripts/service_health.py") == DENIED
+E       AssertionError: assert 'core' == 'denied'
+E         
+E         - denied
+E         + core
+
+tests/unit/test_deploy_main.py:73: AssertionError
+_ test_forbidden_paths[tests/fixtures/skills_authoring/new-skill/matcher-cases.json] _
+
+allowlist = <jarvis.selfedit.allowlist.Allowlist object at 0x145882960>
+path = 'tests/fixtures/skills_authoring/new-skill/matcher-cases.json'
+
+    @pytest.mark.parametrize("path", [
+        # Tier 0 (MORTIMER_SELFEDIT_TIERS_PLAN.md): files whose corruption the
+        # loop cannot recover from because they ARE the loop.
+        "jarvis/selfedit/service.py",
+        "jarvis/agents/upgrade_agent.py",
+        "jarvis/agents/workspace.py",
+        "jarvis/admin/server.py",
+        ".github/workflows/validate.yml",
+        "config/self_edit_allowlist.json",
+        "config/upgrade_agent.yaml",
+        # migrations and the vault stay human-only (CLAUDE.md)
+        "jarvis/db.py",
+        "jarvis/vault.py",
+        # the loop's own processes / the CI gate
+        "scripts/mortimer.sh",
+        "scripts/run_admin.sh",
+        "scripts/check_allowlist.py",
+        # the deploy script builds, tests and restarts production (2026-09-26)
+        "scripts/deploy_main.sh",
+        # dependency changes stay human-driven
+        "requirements.txt",
+        "requirements-lock.txt",
+        "web/package.json",
+        "web/package-lock.json",
+        # secrets
+        ".env",
+        ".env.example",
+        "web/.env.local",
+        # human-only docs
+        "DEVIATIONS.md",
+        # not on any list at all
+        "web/index.html",
+        "Makefile",
+        # still denied even though mcp_servers/config opened up (2026-08-21):
+        # the agent's own brain, the enable gate for agent skills, and the
+        # allowlist itself remain human-only. The brain's credential half is
+        # config/model_endpoints.yaml since the registry split (D5 — it replaced
+        # config/upgrade_models.yaml here, which no longer exists).
+        "config/model_endpoints.yaml",
+        "config/skills.yaml",
+        "skills/new-skill/SKILL.md",
+        "tests/fixtures/skills_authoring/new-skill/matcher-cases.json",
+        # no Swift gate exists, so a self-edit here would be unvalidated
+        "macos/MortimerHost/Package.swift",
+    ])
+    def test_forbidden_paths(allowlist: Allowlist, path: str) -> None:
+>       assert not allowlist.is_allowed(path), path
+E       AssertionError: tests/fixtures/skills_authoring/new-skill/matcher-cases.json
+E       assert not True
+E        +  where True = is_allowed('tests/fixtures/skills_authoring/new-skill/matcher-cases.json')
+E        +    where is_allowed = <jarvis.selfedit.allowlist.Allowlist object at 0x145882960>.is_allowed
+
+tests/unit/test_selfedit_allowlist.py:93: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /Users/larryfix/Documents/Codex/2026-09-09/can/work/codex-isolated-20260924/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/pipecat/audio/utils.py:14
+  /Users/larryfix/Documents/Codex/2026-09-09/can/work/codex-isolated-20260924/.venv/lib/python3.12/site-packages/pipecat/audio/utils.py:14: DeprecationWarning: 'audioop' is deprecated and slated for removal in Python 3.13
+    import audioop
+
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: `AudioContextTTSService` is deprecated since 0.0.105 and will be removed in 2.0.0. Use `WebsocketTTSService` instead.
+
+tests/unit/test_config.py::test_units_defaults_to_imperial
+tests/unit/test_config.py::test_units_setting_accepts_metric
+tests/unit/test_config.py::test_units_bridged_to_child_env
+tests/unit/test_config.py::test_units_bridge_does_not_override_real_env_var
+tests/unit/test_config.py::test_memory_automation_settings_are_bridged
+tests/unit/test_config.py::test_memory_automation_bridge_preserves_real_env_override
+tests/unit/test_config.py::test_memory_automation_stage_is_ordered_and_bridged
+tests/unit/test_config.py::test_shared_content_gate_cannot_enable_without_command_console
+  /Users/larryfix/Documents/Codex/2026-09-09/can/work/codex-isolated-20260924/jarvis/config.py:288: UserWarning: TAVILY_API_KEY not set — mcp-web will run in degraded mode (web_search unavailable).
+    warnings.warn(
+
+tests/unit/test_voice_guidance.py::TestReplyGuard::test_refusal_still_corrected_when_he_asked_for_the_command
+  /Users/larryfix/Documents/Codex/2026-09-09/can/work/codex-isolated-20260924/.venv/lib/python3.12/site-packages/yaml/scanner.py:286: RuntimeWarning: coroutine 'FrameProcessor.__process_frame_task_handler' was never awaited
+    for level in list(self.possible_simple_keys):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/unit/test_voice_guidance.py::TestReplyGuard::test_refusal_still_corrected_when_he_asked_for_the_command
+  /Users/larryfix/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/asyncio/events.py:88: RuntimeWarning: coroutine '_guard.<locals>.on_correct' was never awaited
+    self._context.run(self._callback, *self._args)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/unit/test_deploy_main.py::test_service_health_is_human_only - As...
+FAILED tests/unit/test_selfedit_allowlist.py::test_forbidden_paths[tests/fixtures/skills_authoring/new-skill/matcher-cases.json]
+2 failed, 4851 passed, 4 skipped, 13 warnings, 2 subtests passed in 144.35s (0:02:24)

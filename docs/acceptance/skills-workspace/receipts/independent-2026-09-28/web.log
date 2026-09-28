@@ -1,0 +1,28 @@
+
+> web@0.0.0 build
+> node node_modules/typescript/bin/tsc -b && node node_modules/vite/bin/vite.js build
+
+vite v8.2.1 building client environment for production...
+[2Ktransforming...✓ 207 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/display.html                        0.65 kB │ gzip:   0.34 kB
+dist/drawer.html                         0.73 kB │ gzip:   0.34 kB
+dist/index.html                          0.80 kB │ gzip:   0.35 kB
+dist/assets/drawer-CcgvVr_0.css          0.23 kB │ gzip:   0.15 kB
+dist/assets/display-CcNXA6_2.css         0.96 kB │ gzip:   0.47 kB
+dist/assets/main-DzspN2xb.css            4.87 kB │ gzip:   1.30 kB
+dist/assets/sidedrawer-ClEtr8lf.css     15.86 kB │ gzip:   3.11 kB
+dist/assets/command-deck-DhxhsjvK.css   24.23 kB │ gzip:   5.34 kB
+dist/assets/display-BCdGZKOv.js          0.80 kB │ gzip:   0.43 kB
+dist/assets/displayWindow-C2vPNFcj.js    1.59 kB │ gzip:   0.78 kB
+dist/assets/drawer-yRBXgAln.js           2.03 kB │ gzip:   0.91 kB
+dist/assets/sidedrawer-1IIGotR7.js      48.36 kB │ gzip:  13.14 kB
+dist/assets/command-deck-BM2-l8zF.js   264.72 kB │ gzip:  84.80 kB
+dist/assets/main-D_gpo7jR.js           487.65 kB │ gzip: 133.27 kB
+
+✓ built in 112ms
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vite.config.ts:20:23). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.

@@ -2,6 +2,16 @@
 
 **As of:** 2026-09-20
 **Plan:** [Model Use Enhancements](../../plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md)
+**Execution sequence:** [Remaining Gaps Implementation Plan](../../plans/MORTIMER_REMAINING_GAPS_IMPLEMENTATION_PLAN.md)
+
+**Reconciled 2026-09-25 against main `4acb4dc` (#90).** PR #90 changes the
+accepted orb shell and does not change model execution, privacy, subscription
+capability, memory admission, or route gates. Its commit reports MortimerHost
+258 executed / 3 skipped / 0 failures, JarvisKit 199 passed, and Crystal p95
+13.59 ms at 1440×220; these counts were not rerun here. Runtime identity and
+effective settings remain unverified. See the
+[`GC24-00 main refresh`](../verified-gap-closure/GC24-00-main-refresh-2026-09-25.md)
+and the [verified gap-closure plan](../../plans/MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md).
 
 This is an implementation status record, not a claim that the rollout is
 complete.
@@ -28,7 +38,18 @@ no linked receipt are also unreceipted.
   events now redact protected task text before stdout/UI emission; the
   shared MCP registry now blocks external servers during an armed sensitive
   turn before invocation; the remaining audit covers detached continuation
-  and provider-specific result sinks.
+  and provider-specific result sinks. In the isolated tree, council/planning
+  also inherit the static workload privacy floor when callers omit a label;
+  route preferences and weaker caller labels cannot lower it. Too-small
+  pre-provider rounds carry policy to their durable row and redact protected
+  goals. Confidential/local-only specialist answers now use an awaited local
+  result handoff and are returned to the external voice supervisor only as a
+  fixed status and opaque reference; protected UI results reject copy/share/
+  export. See the dated
+  [GC24-03 council receipt](../verified-gap-closure/GC24-03-council-workload-floor-2026-09-24.md).
+  The [protected local-result receipt](../verified-gap-closure/GC24-03-protected-local-result-handoff-2026-09-25.md)
+  covers this one path; MAR-D remains open until all source/sink families and
+  direct-mode paths are inventoried and negatively tested.
 - [ ] **MAR-E** — Perform the confidential-model portion of the SAYGM pilot.
   The Mac vault credential and live catalog check are now verified; the
   catalog returned 56 models but advertised zero confidential models, so a
@@ -64,10 +85,30 @@ no linked receipt are also unreceipted.
   (User-reported; not recorded in a committed receipt.)
 - [ ] **MAR-G** — Migrate all non-voice call sites and prove no background
   workload inherits the voice route. Memory, extraction, sweep, procedure,
-  digest, agent, council, upgrade, and shared-content vision paths now resolve
-  through the routing gate. The static inventory now covers all 13 production
-  completion call sites with zero review-required entries; enabled-mode runtime
-  evidence remains open.
+  digest, agent, council, upgrade, shared-content vision, and production screen
+  analysis now have shared-boundary paths under the routing gate. Audit v2
+  reports 25 classified entries and zero review-required entries in the
+  2026-09-24 receipt. Shared
+  content resolves and discloses the route per offer, then binds execution to
+  that batch's route snapshot. Enabled-mode Mac/runtime acceptance is not
+  complete.
+  (Isolated dirty tree, 2026-09-24: planner cancellation/race handling is now
+  covered; the planner, council, and vision migrations use the shared boundary.
+  Full unit/integration tests pass: 2,811 passed, 4 skipped, 2 subtests passed;
+  SubAgent eval: 13 passed. This is not merge or deployed-candidate proof. The
+  supervisor voice path remains an explicit exception. See the
+  [GC24-02 implementation receipt](../verified-gap-closure/GC24-02-execution-boundary-implementation-2026-09-24.md).)
+(2026-09-25 isolated-tree update: optional token streaming now crosses the
+shared execution boundary for three explicitly enabled direct Anthropic
+profiles. After adding the explicit event-sink policy guard, the focused
+boundary/shim/route suites pass 126 tests; the full Python unit/integration
+run passes 2,829 tests, 4 skipped, 11 warnings and 2 subtests. No production
+caller consumes streamed deltas yet; complete tool-loop lifecycle, result
+sinks, durable reconciliation and Mac/provider acceptance remain open. See
+the GC24-02 receipt.)
+The current 2026-09-25 audit reports 26 classified entries, including the
+production-routed shared memory classifier, with zero review-required entries.
+See [`model-call-site-inventory-2026-09-25.json`](receipts/model-call-site-inventory-2026-09-25.json).
 - [ ] **MAR-H** — Add persistent route/workload controls to the existing
   native console and voice command path. The sidecar draft/confirm API and
   SQLite persistence are now landed; native-console wiring is landed in the
@@ -96,6 +137,24 @@ no linked receipt are also unreceipted.
   privacy requirement, capabilities, credential reference, and billing source.
 - [x] **MAR-C foundation** — `jarvis/model_execution.py` defines the
   provider-neutral request/result contract and preserves parent request IDs.
+  (GC24-02 progress, 2026-09-24: context messages and normalized text/image
+  attachments now retain order and source policy; external attachments require
+  approval bound to exact route/model. Malformed, duplicate, unsupported-image
+  and route/workload-mismatch requests fail before client creation. An async
+  deadline includes queue time and cancels the awaited call. Two-slot
+  interactive/background admission, bounded output requirements, usage
+  metadata and allowlisted/schema-validated tool-call results are implemented
+  and have locked-environment pytest evidence. Production call families now
+  use the boundary under routing gates. The planner and shared-content vision
+  migrations now pass the locked full suite (2,813 passed, 4 skipped, 2
+  subtests); per-offer vision routing is bound to its consented batch.
+  Provider-request/response progress events are now emitted by the boundary;
+  tool-call IDs cannot be replayed inside a validated history or returned again
+  by the provider for that history.
+  Token-level text/artifact/tool-result streaming, exactly-once terminal
+  handling across callers, downstream
+  cancellation, and late-write suppression remain open. See the linked
+  [GC24-02 implementation receipt](../verified-gap-closure/GC24-02-execution-boundary-implementation-2026-09-24.md).)
 - [x] **MAR-D foundation** — `jarvis/privacy_policy.py` enforces strictest
   data policy before execution.
 - [x] **MAR-E foundation** — `jarvis/saygm.py` parses catalog tiers and only
@@ -105,6 +164,19 @@ no linked receipt are also unreceipted.
   gated text-only Claude and Codex subscription adapters. Both reject Mortimer
   tools and strip inherited API credentials/endpoint overrides before invoking
   their CLI; authentication and capability validation remain live gates.
+- **2026-09-25 MAR-F offline implementation:** adapters now use stdin-only
+  prompts, task-scoped temporary working directories, an allowlisted child
+  environment, strict successful terminal-event parsing, and owned async
+  process-group cancellation. Full Python unit/integration tests passed
+  **3,079**; the focused adapter/routing/execution group passed **87**. Codex
+  remains gated until its installed runtime is proven to expose no built-in or
+  hosted tools; setting its gate is not itself evidence. Inherited
+  `CODEX_HOME` and `CLAUDE_CONFIG_DIR` overrides are excluded. A fresh local
+  auth-status check reported Claude unauthenticated and Codex logged in, but no
+  provider request or completion was tested. No provider calls,
+  live auth/billing checks, or deployment were performed. MAR-F stays open.
+  See the [GC24-04 runtime isolation receipt](../verified-gap-closure/GC24-04-subscription-runtime-isolation-2026-09-25.md)
+  and [model-ready implementation plan](../../plans/MORTIMER_SUBSCRIPTION_RUNTIME_ISOLATION_PLAN_2026-09-25.md).
 - [x] **Status surface** — `GET /api/model-routes` exposes route/workload
   metadata without secret values.
 - [x] **Persistent preference foundation** — migration `0024` adds durable
@@ -127,8 +199,10 @@ no linked receipt are also unreceipted.
   Command Console are enabled; it never invokes a provider or bypasses the
   confirmation boundary.
 - [x] **Billing identity foundation** — subscription clients use the distinct
-  `subscription://` ledger provider, so subscription usage cannot be confused
-  with direct API spend even when token pricing is unavailable.
+  `subscription://` ledger provider. GC24-02 adds persisted billing-source,
+  route, usage-known, cache-breakdown-known and duration metadata to new ledger
+  rows; legacy rows remain explicitly unknown where those fields were not
+  recorded.
 - [x] **Background client bridge** — memory/background factories preserve the
   resolved route object and use the subscription/SAYGM adapter when routing is
   enabled instead of assuming every background route has an API key.

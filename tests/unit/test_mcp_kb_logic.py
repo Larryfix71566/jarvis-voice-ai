@@ -98,11 +98,19 @@ class TestSuccessPassthrough:
 
 
 class TestUnreachable:
-    def test_connection_error_returns_ok_false_never_raises(self, monkeypatch):
-        fake = _FakeClient(raise_exc=httpx.ConnectError("refused"))
+    def test_connection_error_returns_ok_false_never_raises(
+            self, monkeypatch, caplog):
+        endpoint = "https://PRIVATE_ENDPOINT_CANARY.invalid"
+        backend = "PRIVATE_BACKEND_CANARY /Users/private/path"
+        monkeypatch.setenv("KB_BASE_URL", endpoint)
+        fake = _FakeClient(raise_exc=httpx.ConnectError(backend))
         monkeypatch.setattr(httpx, "Client", lambda timeout: fake)
         out = logic.kb_search("x")
         assert out == {"ok": False, "error": "knowledge base is unreachable"}
+        assert "kb_vault_unreachable error_type=ConnectError" in caplog.text
+        assert endpoint not in caplog.text
+        assert backend not in caplog.text
+        assert "/Users/private/path" not in caplog.text
 
     def test_timeout_returns_ok_false_never_raises(self, monkeypatch):
         fake = _FakeClient(raise_exc=httpx.TimeoutException("timed out"))
@@ -154,3 +162,18 @@ class TestContentScanning:
         assert out["ok"] is True
         assert fake.last_call is not None
 
+    def test_rejected_write_log_omits_reason_and_document_id(
+            self, monkeypatch, caplog):
+        reason = "PRIVATE_REASON_CANARY"
+        document_id = "PRIVATE_DOCUMENT_ID_CANARY"
+        monkeypatch.setattr(logic, "scan_memory_content", lambda _body: reason)
+
+        out = logic.kb_write(
+            type="area", body="private content", tags=[],
+            confidence="medium", source_sessions=[], id=document_id,
+        )
+
+        assert out == {"ok": False, "error": "content rejected"}
+        assert "kb_write_rejected" in caplog.text
+        assert reason not in caplog.text
+        assert document_id not in caplog.text

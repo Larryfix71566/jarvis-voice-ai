@@ -1,0 +1,43 @@
+schema_version: 1
+skill_id: mcp-server-authoring
+display_name: MCP server authoring
+category: development
+version: 1.0.0
+source:
+  kind: local
+  reference: authored:2026-08-18
+  adaptation_notes: Mortimer-authored skill informed by the mcp-builder concept; no upstream files vendored.
+capabilities: [mcp_server_design, tool_schema_design]
+required_tools: [repo_search, repo_read_file]
+required_credentials: []
+reference_paths: []
+example_ids: [author-mcp-server, unrelated-weather-request]
+related_workflow_ids: []
+compatible_with: []
+process:
+  kind: linear
+  nodes:
+    - step_id: inspect-server-pattern
+      title: Inspect the existing server pattern
+      description: Review the repository's logic/server split, manifests, config, and tests.
+      inputs: [requested server change]
+      outputs: [applicable repository pattern]
+      tools: [repo_search, repo_read_file]
+      success_criteria: [The implementation matches the actual repository conventions.]
+      edges: [{to: design-tool-contract}]
+    - step_id: design-tool-contract
+      title: Define logic and tool contracts
+      description: Specify pure logic, tool inputs, errors, and any draft-confirm write boundary.
+      inputs: [applicable repository pattern, requested server change]
+      outputs: [reviewable tool design]
+      tools: []
+      success_criteria: [Read/write behavior and permission requirements are explicit.]
+      edges: [{to: validate-server}]
+    - step_id: validate-server
+      title: Validate implementation and registration
+      description: Check server wiring, both registration points, tests, and advertised tool descriptions.
+      inputs: [reviewable tool design]
+      outputs: [validated MCP change]
+      tools: []
+      success_criteria: [Required tests and both registration paths are accounted for.]
+      edges: []

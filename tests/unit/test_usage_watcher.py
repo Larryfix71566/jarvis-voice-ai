@@ -228,8 +228,27 @@ class TestTTSUsageRows:
     @pytest.mark.asyncio
     async def test_tts_record_failure_never_raises(self, observer, monkeypatch, caplog):
         def boom(**kwargs):
-            raise RuntimeError("ledger down")
+            raise RuntimeError("TTS_USAGE_CANARY /private/ledger/session")
         monkeypatch.setattr(usage_watcher, "record_call", boom)
         with caplog.at_level(logging.WARNING, logger="jarvis.bot.usage_watcher"):
             await observer.on_push_frame(_tts_pushed(5))
-        assert "tts record_call failed" in caplog.text
+        assert "usage_watcher_tts_record_call_failed error_type=RuntimeError" in caplog.text
+        assert "TTS_USAGE_CANARY" not in caplog.text
+        assert "/private/ledger/session" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_llm_record_failure_never_logs_usage_or_session(
+        self, observer, monkeypatch, caplog
+    ):
+        def boom(**kwargs):
+            raise RuntimeError("LLM_USAGE_CANARY /private/ledger/session")
+
+        monkeypatch.setattr(usage_watcher, "record_call", boom)
+        usage = LLMTokenUsage(prompt_tokens=45, completion_tokens=9, total_tokens=54)
+        with caplog.at_level(logging.WARNING, logger="jarvis.bot.usage_watcher"):
+            await observer.on_push_frame(_pushed(usage, model="MODEL_CANARY"))
+        assert "usage_watcher_record_call_failed error_type=RuntimeError" in caplog.text
+        assert "LLM_USAGE_CANARY" not in caplog.text
+        assert "/private/ledger/session" not in caplog.text
+        assert "MODEL_CANARY" not in caplog.text
+        assert "s1" not in caplog.text

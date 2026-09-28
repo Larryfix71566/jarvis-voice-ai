@@ -21,7 +21,7 @@ struct AdaptiveStageView: View {
     @EnvironmentObject private var client: JarvisClient
     @Environment(WorkspaceStore.self) private var workspace
     @Environment(ConversationStore.self) private var conversation
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mortimerReduceMotion) private var reduceMotion
 
     init(voiceState: VoiceState, wideWindow: Bool,
          coordinator: ConsoleActionCoordinator? = nil) {
@@ -134,6 +134,10 @@ struct AdaptiveStageView: View {
             if let coordinator { _ = coordinator.executePointer(.viewSet, target: "atlas") }
             else { workspace.openAtlas() }
         }
+        Button("Skills") {
+            if let coordinator { _ = coordinator.executePointer(.viewSet, target: "skills") }
+            else { workspace.openSkills() }
+        }
         Button("Memory graph") {
             if let coordinator { _ = coordinator.executePointer(.viewSet, target: "memory") }
             else { workspace.openMemoryGraph() }
@@ -152,7 +156,9 @@ struct AdaptiveStageView: View {
 
     @ViewBuilder
     private var compactStageContent: some View {
-        if workspace.showsConversation {
+        if workspace.showsSkills {
+            SkillsWorkspaceView(coordinator: coordinator)
+        } else if workspace.showsConversation {
             VStack(alignment: .leading, spacing: 16) {
                 HStack { conversationControls; Spacer(minLength: 0) }
                 Spacer()

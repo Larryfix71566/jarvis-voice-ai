@@ -21,6 +21,23 @@ carried no `CommandConsoleView`. Python at this HEAD: `pytest tests/unit`
 (Linux, Python 3.11, `requirements-lock.txt`) = 2,526 passed, 0 failed
 (run 2026-09-22); Swift suites were not run in this reconciliation.
 
+**Current source update (2026-09-25):** main is now `8bd5e7e` (PR #89), a
+change to the window-visibility test fixture only. Its commit message reports
+Python 2,773 passed / 4 skipped and MortimerHost 248 executed / 3 skipped /
+0 failures; no new JarvisKit count is reported. These counts were not rerun
+from this worktree. `94a5641` remains the last recorded deployment. The
+currently installed/running app, backend and effective feature flags were not
+observable from the sandbox; deployment remains unverified.
+
+**Current source update (2026-09-25, after PR #90):** main advanced to
+`4acb4dc`, which merges the accepted Crystal orb shell. The merge commit reports
+MortimerHost 258 executed / 3 skipped / 0 failures, JarvisKit 199 passed, and
+Crystal p95 13.59 ms at 1440×220; these results were not rerun in this
+worktree. The last recorded deployment remains `94a5641`. Placement, Reduce
+Motion, rollback, installed process identity, and effective runtime settings
+remain unverified/open. See
+[`GC24-00 main refresh`](../verified-gap-closure/GC24-00-main-refresh-2026-09-25.md).
+
 Scope augmented 2026-09-17 with the Command Console / Knowledge Atlas
 implementation closure gates below. The release identity above is the existing
 deployment record, not a claim that the proposed redesign is deployed. All 12

@@ -1,5 +1,27 @@
 import SwiftUI
 
+struct AtlasCardButton: View {
+    let card: AtlasCard
+    let selected: Bool
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button {
+            guard card.kind == .result else { return }
+            onOpen()
+        } label: {
+            AtlasCardView(card: card, selected: selected)
+        }
+        .buttonStyle(.plain)
+        .disabled(card.kind != .result)
+        .accessibilityLabel(card.accessibilityLabel)
+        .accessibilityValue(card.accessibilityValue)
+        .accessibilityHint(card.kind == .result
+            ? "Opens this result in the response area"
+            : "Informational Knowledge Atlas card")
+    }
+}
+
 struct AtlasCardView: View {
     let card: AtlasCard
     let selected: Bool

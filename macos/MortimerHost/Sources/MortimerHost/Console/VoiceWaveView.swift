@@ -16,7 +16,7 @@ struct VoiceWaveView: View {
     /// Adaptive presentation supplies current truth on each display tick so
     /// stale measurements expire even when callbacks stop. Nil retains rollback.
     var presentation: (() -> VoicePresentationState)? = nil
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mortimerReduceMotion) private var reduceMotion
 
     var body: some View {
         VoiceWaveAnimation(voiceState: voiceState, stageCenterX: stageCenterX,

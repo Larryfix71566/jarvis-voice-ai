@@ -14,12 +14,13 @@ final class DrawerTabStripKeyboardTests: XCTestCase {
             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
         let selection = KeyboardHeaderSelection()
         let view = NSHostingView(rootView: KeyboardMountedHeader(selection: selection)
+            .environment(\.mortimerReduceMotion, true)
             .padding(8).background(Color.black))
         view.frame = NSRect(x: 0, y: 0, width: 300, height: 64)
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = view
         window.orderFrontRegardless(); window.makeKey()
-        defer { window.close() }
+        defer { closeRenderingFixtureWindow(window) }
         window.layoutIfNeeded(); view.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.25))
 

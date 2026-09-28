@@ -98,6 +98,63 @@ final class WorkflowsStore {
         selectedID = id
     }
 
+    /// Resolve a declared skill-to-workflow link by stable file id, workflow
+    /// name, or source filename. No fuzzy matching is used for navigation.
+    @discardableResult
+    func selectRelatedWorkflow(_ identifier: String) -> Bool {
+        let key = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty,
+              let workflow = workflows.first(where: {
+                  $0.id == key || $0.name == key || Self.sourceStem($0.source) == Self.sourceStem(key)
+              }) else { return false }
+        selectedID = workflow.id
+        return true
+    }
+
+    func workflowName(for identifier: String) -> String? {
+        let key = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        return workflows.first(where: {
+            $0.id == key || $0.name == key || Self.sourceStem($0.source) == Self.sourceStem(key)
+        })?.name
+    }
+
+    /// A related-workflow link may be followed before the gallery has loaded.
+    /// Fetch once, then select only an exact declared identifier/name/source.
+    @discardableResult
+    func openRelatedWorkflow(
+        _ identifier: String,
+        fetch: @escaping @Sendable () async throws -> WorkflowsResponse
+    ) async -> Bool {
+        if !loaded {
+            request?.cancel()
+            generation += 1
+            let current = generation
+            loading = true
+            error = nil
+            do {
+                let response = try await fetch()
+                guard !Task.isCancelled, generation == current else { return false }
+                apply(response)
+                guard response.ok, response.enabled else { return false }
+            } catch {
+                guard !Task.isCancelled, generation == current else { return false }
+                self.error = error is JarvisError ? TabStateMapper.fromError(error).0 : error.localizedDescription
+                loading = false
+                return false
+            }
+        }
+        return selectRelatedWorkflow(identifier)
+    }
+
+    @discardableResult
+    func openRelatedWorkflow(_ identifier: String, api: AdminAPI) async -> Bool {
+        await openRelatedWorkflow(identifier) { try await api.workflows() }
+    }
+
+    private static func sourceStem(_ value: String) -> String {
+        URL(fileURLWithPath: value).deletingPathExtension().lastPathComponent
+    }
+
     func showNext() {
         if let next { selectedID = next.id }
     }

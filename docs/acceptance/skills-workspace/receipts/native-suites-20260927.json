@@ -1,0 +1,75 @@
+{
+  "candidate": {
+    "branch": "codex/isolated-20260924",
+    "head": "977f50bec7b77bd7d3381d3b8f3d63fa69bd00e2",
+    "package_source_test_tree_digests": {
+      "macos/JarvisKit": {
+        "file_count": 75,
+        "sha256": "0f54f722f88f1130cdc5e8378f5f27a508a7dde6e3f2f0b22efabfa10d6b94b8"
+      },
+      "macos/MortimerHost": {
+        "file_count": 137,
+        "sha256": "b37fe820fcf7f53511f0ff5c83f2398ca06a8b25c3f59e0438905783fac7b941"
+      }
+    },
+    "status_entry_count_observed_before_receipt": 379,
+    "working_tree_dirty": true,
+    "fingerprint_refreshed_at": "2026-09-28T06:50:58Z",
+    "fingerprint_refresh_scope": "Full current dirty-worktree fingerprint refreshed after SW-E, SW-I, and SW-K acceptance notes; receipt-specific fixture and implementation evidence remains scoped to its named test."
+  },
+  "commands": [
+    "CLANG_MODULE_CACHE_PATH=/private/tmp/mortimer-clang-module-cache swift test --disable-sandbox --package-path macos/MortimerHost --cache-path /private/tmp/mortimer-swift-cache --skip-update",
+    "CLANG_MODULE_CACHE_PATH=/private/tmp/jarviskit-clang-module-cache swift test --disable-sandbox --package-path macos/JarvisKit --cache-path /private/tmp/jarviskit-swift-cache --skip-update"
+  ],
+  "display_inventory": "system_profiler reported only built-in Apple M5 display",
+  "environment": {
+    "hardware": "Apple M5",
+    "platform": "macOS-27.0-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "gate": "native-package-regression-and-local-performance",
+  "limitations": [
+    "Seven MortimerHost tests were skipped; physical-display and interactive app acceptance remains open.",
+    "Synthetic graph layout timings are not frame-time measurements.",
+    "Resolver p95 excludes SwiftUI rendering and network latency.",
+    "No VoiceOver, live voice, physical second-display, VM, provider, activation, or release acceptance is established."
+  ],
+  "recorded_at": "2026-09-28T03:42:22.502842+00:00",
+  "results": {
+    "JarvisKit": {
+      "executed": 210,
+      "failures": 0,
+      "skipped": 0
+    },
+    "MortimerHost": {
+      "executed": 304,
+      "failures": 0,
+      "skipped": 7
+    },
+    "memory_graph_layout_fixture_seconds": {
+      "200_nodes_400_edges": 0.19624006748199463,
+      "500_nodes_2000_edges": 1.1647520065307617,
+      "50_nodes_100_edges": 0.022758007049560547
+    },
+    "orb_frame_time_ms_p50_p95": {
+      "crystal": [
+        2.763,
+        3.328
+      ],
+      "empty": [
+        0.857,
+        0.949
+      ],
+      "legacy": [
+        2.66,
+        2.848
+      ]
+    },
+    "skills_detail_cache_resolver_p95_ms": {
+      "samples": 100,
+      "scope": "resolver only; excludes SwiftUI rendering and network",
+      "value": 0.0082
+    }
+  },
+  "schema_version": 1
+}

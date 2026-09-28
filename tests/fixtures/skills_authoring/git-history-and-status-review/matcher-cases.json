@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "review-repository-status",
+      "request": "Review the current git repository status and recent commit history, including uncommitted changes.",
+      "expect_selected": true
+    },
+    {
+      "id": "unrelated-weather-request",
+      "request": "What is the current weather forecast and temperature in Fahrenheit?",
+      "expect_selected": false
+    }
+  ]
+}

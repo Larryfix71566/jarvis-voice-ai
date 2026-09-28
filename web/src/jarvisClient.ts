@@ -1,6 +1,7 @@
 import { PipecatClient } from "@pipecat-ai/client-js";
 import { SmallWebRTCTransport } from "@pipecat-ai/small-webrtc-transport";
 import { installMicConstraints } from "./micConstraints";
+import { authHeaders, BOT_OFFER_URL } from "./api";
 
 // A1 capture hardening (voice isolation plan): echo cancellation + browser
 // noise suppression + auto gain control on every mic acquisition. Must run
@@ -14,6 +15,11 @@ export const client = new PipecatClient({
 });
 
 export const connect = () =>
-  client.connect({ webrtcRequestParams: { endpoint: "http://localhost:7860/api/offer" } });
+  client.connect({
+    webrtcRequestParams: {
+      endpoint: BOT_OFFER_URL,
+      headers: authHeaders(),
+    },
+  });
 
 export const disconnect = () => client.disconnect();

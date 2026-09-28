@@ -96,13 +96,15 @@ public struct AgentWorking: Sendable, Equatable, Decodable {
 /// missing key, because §7 tests older emitters that omit fields.
 public struct AgentDone: Sendable, Equatable, Decodable {
     public let name: String?
+    public let runId: String?
     public let displayName: String?
     public let ok: Bool
     public let detail: String
-    enum CodingKeys: String, CodingKey { case name, displayName = "display_name", ok, detail }
+    enum CodingKeys: String, CodingKey { case name, runId = "run_id", displayName = "display_name", ok, detail }
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
         name       = try c.decodeIfPresent(String.self, forKey: .name)
+        runId      = try c.decodeIfPresent(String.self, forKey: .runId)
         displayName = try c.decodeIfPresent(String.self, forKey: .displayName)
         ok         = try c.decodeIfPresent(Bool.self, forKey: .ok) ?? true       // agentRuns.ts:362
         detail     = try c.decodeIfPresent(String.self, forKey: .detail) ?? ""   // clamp is server-side
@@ -111,12 +113,14 @@ public struct AgentDone: Sendable, Equatable, Decodable {
 
 public struct AgentTool: Sendable, Equatable, Decodable {
     public let name: String?
+    public let runId: String?
     public let displayName: String?
     public let tool: String?
-    enum CodingKeys: String, CodingKey { case name, displayName = "display_name", tool }
+    enum CodingKeys: String, CodingKey { case name, runId = "run_id", displayName = "display_name", tool }
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
         name = try c.decodeIfPresent(String.self, forKey: .name)
+        runId = try c.decodeIfPresent(String.self, forKey: .runId)
         displayName = try c.decodeIfPresent(String.self, forKey: .displayName)
         tool = try c.decodeIfPresent(String.self, forKey: .tool)
     }
@@ -165,7 +169,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         images = nil; basemapImages = nil; links = nil; agent = "Mortimer"
         runID = nil; ts = timestamp; surface = .window; tool = nil
         commands = nil; note = nil; expectOutput = nil; content = nil
-        chars = nil; truncated = nil
+        chars = nil; truncated = nil; dataPolicy = nil; opaqueRef = nil
     }
 
     public let kind: String?
@@ -190,6 +194,14 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
     public let content: String?
     public let chars: Int?
     public let truncated: Bool?
+    /// A protected/local-only result is visible in the native app but must
+    /// not be copied, shared, exported, or forwarded to the voice supervisor.
+    public let dataPolicy: String?
+    public let opaqueRef: String?
+    public var isProtectedLocal: Bool {
+        guard let dataPolicy else { return false }
+        return dataPolicy != "approved_external"
+    }
 
     enum CodingKeys: String, CodingKey {
         case kind, title, body, images
@@ -197,6 +209,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         case links, agent, runID = "run_id", ts, surface, tool, commands, note
         case expectOutput = "expect_output"
         case content, chars, truncated
+        case dataPolicy = "data_policy", opaqueRef = "opaque_ref"
     }
 
     public init(from d: Decoder) throws {
@@ -222,6 +235,8 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         content = try c.decodeIfPresent(String.self, forKey: .content)
         chars = try c.decodeIfPresent(Int.self, forKey: .chars)
         truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated)
+        dataPolicy = try c.decodeIfPresent(String.self, forKey: .dataPolicy)
+        opaqueRef = try c.decodeIfPresent(String.self, forKey: .opaqueRef)
     }
 }
 
@@ -299,12 +314,12 @@ public struct CapabilityAgent: Sendable, Equatable, Decodable {
     }
 }
 
-/// NOT an AppMessage case (§3 N7's "Not an app message"). Client-js
-/// *session* state (conversationFeed.ts:28-33). Against today's bot the
-/// array this feeds stays empty (correction 6: this bot emits neither
-/// user- nor bot-transcription) — declared and decodable so a future
-/// backend change (adding RTVIObserver to jarvis/bot/pipeline.py, R-N6)
-/// lights it up with no JarvisKit change.
+/// NOT a typed AppMessage case (§3 N7's "Not an app message"). Client-js
+/// *session* state (conversationFeed.ts:28-33). JarvisClient aggregates
+/// the live RTVI `user-transcription` and `bot-llm-text` observer messages
+/// into this transcript. Those observer events remain `.unknown` messages;
+/// this value is the client-side transcript projection used by captions and
+/// the existing response/results router.
 public struct ConversationEntry: Sendable, Equatable, Codable, Identifiable {
     public let id: String
     public let role: String   // "user" | "assistant"

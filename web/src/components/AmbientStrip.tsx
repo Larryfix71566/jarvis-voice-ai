@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { relTime, relTimeFromMs } from "../timeFormat";
+import { ADMIN_BASE as API, authFetch } from "../api";
 
-const API = "http://localhost:7861";
 
 /**
  * AmbientStrip — the idle screen's signs of life
@@ -114,7 +114,7 @@ export default function AmbientStrip({ connected }: { connected: boolean }) {
     let cancelled = false;
     const poll = async () => {
       try {
-        const r = await fetch(`${API}/api/ambient`);
+        const r = await authFetch(`${API}/api/ambient`);
         const j = (await r.json()) as { ok?: boolean } & AmbientData;
         if (!cancelled) setData(j.ok ? j : null);
       } catch {

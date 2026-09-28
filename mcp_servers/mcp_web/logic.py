@@ -41,13 +41,15 @@ from __future__ import annotations
 import json
 import math
 import os
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 
-from mcp_servers.mcp_selfedit.logic import AdminClient, OFFLINE_ERROR
 from jarvis.weathergov import daily_forecast as _wg_daily_forecast
 from jarvis.weathergov import fetch_headers as _wg_fetch_headers
 from jarvis.weathergov import weathergov_current as _wg_current
+from mcp_servers.mcp_selfedit.logic import OFFLINE_ERROR
 
 TAVILY_URL = "https://api.tavily.com/search"
 TAVILY_MCP_URL = "https://mcp.tavily.com/mcp/"
@@ -56,6 +58,21 @@ FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 RAINVIEWER_URL = "https://api.rainviewer.com/public/weather-maps.json"
 CARTO_BASEMAP_URL = "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
 TIMEOUT = 10.0
+
+
+def _provider_timestamp(value: object, timezone_name: object = None) -> str | None:
+    """Normalize an upstream current-condition timestamp to UTC ISO-8601."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            if not isinstance(timezone_name, str) or not timezone_name:
+                return None
+            parsed = parsed.replace(tzinfo=ZoneInfo(timezone_name))
+        return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    except (ValueError, KeyError):
+        return None
 
 VALID_UNITS = ("imperial", "metric")
 DEFAULT_UNITS = "imperial"
@@ -200,7 +217,9 @@ def _weather_via_weathergov(lat: float, lon: float, days: int) -> dict | None:
     falls back to Open-Meteo — the same "return None, let the caller
     fall through" discipline weathergov_current itself uses."""
     try:
-        wg_current = _wg_current(lat, lon, _weathergov_fetch)
+        wg_current = _wg_current(
+            lat, lon, _weathergov_fetch, include_observed_at=True,
+        )
     except Exception:
         wg_current = None
     if wg_current is None:
@@ -216,6 +235,7 @@ def _weather_via_weathergov(lat: float, lon: float, days: int) -> dict | None:
         "humidity_percent": None,
         "wind_kph": None,
         "condition": wg_current.get("summary") or "",
+        "observed_at": _provider_timestamp(wg_current.get("observed_at")),
     }
 
     daily_out: list[dict] = []
@@ -290,7 +310,7 @@ def get_weather(city: str, days: int = 1) -> dict:
                 params={
                     "latitude": lat,
                     "longitude": lon,
-                    "current": "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
+                    "current": "time,temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
                     "daily": "temperature_2m_max,temperature_2m_min,"
                              "precipitation_probability_max,weather_code",
                     "timezone": "auto",
@@ -312,6 +332,7 @@ def get_weather(city: str, days: int = 1) -> dict:
             "humidity_percent": cur.get("relative_humidity_2m"),
             "wind_kph": cur.get("wind_speed_10m"),
             "condition": _condition(cur.get("weather_code")),
+            "observed_at": _provider_timestamp(cur.get("time"), data.get("timezone")),
         }
         daily_out = []
         for i, date in enumerate(daily.get("time", [])):
@@ -356,6 +377,10 @@ def get_weather(city: str, days: int = 1) -> dict:
 
     return {
         "city": city_label,
+        # The display city may intentionally be Weather.gov's nearest-city
+        # label. Preserve the actual geocoding query separately so the host
+        # can bind evidence to the requested input without comparing labels.
+        "requested_city": city,
         "source": source,
         "units": units,
         "current": current,
@@ -494,6 +519,7 @@ def _call(fn):
 
 def research_compare_start(
     client, urls: list, focus: str = "", confirm: bool = False,
+    run_id: str = "",
 ) -> dict:
     """Two-phase start of a site comparison. URLS must name exactly two
     sites; FOCUS steers the crawl (e.g. "pricing and support") and, when
@@ -516,12 +542,29 @@ def research_compare_start(
             ),
             "urls": urls, "focus": focus,
         }
+    action_run_id = (run_id or "").strip()
+    if not action_run_id:
+        return {
+            "ok": False,
+            "error": "I can't safely start this research job without its execution ID; retry through the registered action.",
+        }
     resp = _call(lambda: client.post(
-        "/api/research/start", json={"urls": urls, "focus": focus}))
+        "/api/research/start", json={
+            "urls": urls, "focus": focus, "run_id": action_run_id,
+        }))
     if not resp.get("ok"):
         return resp
+    if resp.get("duplicate"):
+        return {
+            "ok": True, "started": False, "duplicate": True,
+            "action_run_id": resp.get("action_run_id") or action_run_id,
+            "summary": resp.get("summary") or (
+                "This comparison was already submitted; no second crawl was started. "
+                "Check research_status before retrying."
+            ),
+        }
     return {
-        "ok": True, "started": True,
+        "ok": True, "started": True, "action_run_id": action_run_id,
         "summary": (
             f"Started comparing {urls[0]} and {urls[1]}. This can take a few "
             f"minutes — ask me for status anytime."
@@ -529,10 +572,11 @@ def research_compare_start(
     }
 
 
-def research_status(client) -> dict:
+def research_status(client, run_id: str = "") -> dict:
     """Report progress of the current site comparison: still crawling,
     failed (naming which site and why), or ready to view/save."""
-    resp = _call(lambda: client.get("/api/research/job"))
+    params = {"run_id": (run_id or "").strip()} if (run_id or "").strip() else None
+    resp = _call(lambda: client.get("/api/research/job", params=params))
     if not resp.get("ok"):
         return resp
     job = resp.get("job", {}) or {}

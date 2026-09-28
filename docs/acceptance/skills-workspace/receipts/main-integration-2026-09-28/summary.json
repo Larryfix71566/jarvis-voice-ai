@@ -1,0 +1,44 @@
+{
+  "baseline": "44cb8aed04e480d6e76d3809a2a0f61e6bbdeb08",
+  "merging_main": "2e6f7690e7eb6334786cbd1a1c65194fa3affa2d",
+  "release_accepted": false,
+  "deployed": false,
+  "python_full": {
+    "passed": 4851,
+    "failed": 2,
+    "skipped": 4,
+    "subtests_passed": 2,
+    "remaining_failures": [
+      "human-only service_health.py deny entry",
+      "frozen skills_authoring fixture deny entry"
+    ]
+  },
+  "post_suite_registry_fixture_correction": {
+    "passed": 59,
+    "skipped": 3,
+    "note": "Historical main snapshots restored unchanged; explicit approved streaming overlay test added. Three original migration-byte tests skip because the live profile pool deliberately changed."
+  },
+  "jarviskit": {
+    "executed": 219,
+    "failures": 0
+  },
+  "mortimerhost": {
+    "executed": 372,
+    "skipped": 7,
+    "failures": 0
+  },
+  "logs": {
+    "python-full.log": {
+      "sha256": "287890c53c8fcc6da0c461616a675dddfb1ac9823726fff7a08826364fd428f8",
+      "bytes": 11845
+    },
+    "jarviskit.log": {
+      "sha256": "0bb5ceff31fbac75c87438c9ddabedd039bf8d2e6a99df05031611ecd159eae4",
+      "bytes": 55753
+    },
+    "mortimerhost.log": {
+      "sha256": "7a3b4c36cbadd0f777f2d53f4ad7e7653cc19bdf6dd3bd411aac07a1c5c58337",
+      "bytes": 153305
+    }
+  }
+}

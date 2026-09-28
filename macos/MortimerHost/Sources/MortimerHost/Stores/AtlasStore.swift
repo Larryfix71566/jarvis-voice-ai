@@ -22,6 +22,45 @@ enum AtlasCardKind: String, Codable, CaseIterable, Sendable {
     }
 }
 
+enum AtlasContextSource: String, CaseIterable, Hashable, Sendable {
+    case memory
+    case architecture
+    case plan
+    case runs
+    case memoryGraph
+
+    var label: String {
+        switch self {
+        case .memory: return "Memory"
+        case .architecture: return "Architecture"
+        case .plan: return "Plan"
+        case .runs: return "Runs"
+        case .memoryGraph: return "Memory graph"
+        }
+    }
+}
+
+enum AtlasLoadPhase: String, Equatable, Sendable {
+    case idle
+    case loading
+    case loaded
+    case empty
+    case failed
+}
+
+enum AtlasFailureCategory: String, Equatable, Sendable {
+    case unavailable
+    case timedOut
+    case invalidResponse
+}
+
+struct AtlasSourceHealth: Equatable, Sendable {
+    var phase: AtlasLoadPhase = .idle
+    var lastSuccessAt: Date?
+    var failure: AtlasFailureCategory?
+    var stale = false
+}
+
 struct AtlasCard: Identifiable, Equatable, Sendable {
     let id: UUID
     let title: String
@@ -30,6 +69,17 @@ struct AtlasCard: Identifiable, Equatable, Sendable {
     var group: String?
     let kind: AtlasCardKind
     let metadata: [String: String]
+
+    var accessibilityLabel: String {
+        "\(kind.label): \(title)"
+    }
+
+    var accessibilityValue: String {
+        [summary, source.map { "Source: \($0)" }]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: ". ")
+    }
 
     init(id: UUID, title: String, summary: String, source: String?, group: String? = nil,
          kind: AtlasCardKind = .result, metadata: [String: String] = [:]) {
@@ -63,6 +113,10 @@ final class AtlasStore {
     private(set) var zoomScale: Double = 1
     private(set) var panOffset: CGSize = .zero
     private(set) var positions: [UUID: AtlasGridPosition] = [:]
+    private(set) var sourceHealth: [AtlasContextSource: AtlasSourceHealth] = [:]
+    private var sourceCards: [AtlasContextSource: [AtlasCard]] = [:]
+    private var sourceGenerations: [AtlasContextSource: Int] = [:]
+    @ObservationIgnored private var refreshTasks: [AtlasContextSource: Task<Void, Never>] = [:]
 
     var cardsByKind: [AtlasCardKind: [AtlasCard]] {
         Dictionary(grouping: cards, by: \.kind)
@@ -106,6 +160,110 @@ final class AtlasStore {
         var seen = Set<UUID>()
         let merged = (results + context).filter { seen.insert($0.id).inserted }
         replace(merged)
+    }
+
+    func beginRefresh(_ source: AtlasContextSource) -> Int {
+        let generation = (sourceGenerations[source] ?? 0) + 1
+        sourceGenerations[source] = generation
+        var health = sourceHealth[source] ?? AtlasSourceHealth()
+        health.phase = .loading
+        health.failure = nil
+        health.stale = false
+        sourceHealth[source] = health
+        return generation
+    }
+
+    /// The app-owned store coordinates each source request and guards its
+    /// result with a generation so a canceled or superseded load cannot replace
+    /// newer Atlas state.
+    func refresh(source: AtlasContextSource, force: Bool = false,
+                 classifyFailure: @escaping @MainActor (Error) -> AtlasFailureCategory,
+                 loader: @escaping @MainActor () async throws -> [AtlasCard]) {
+        if !force, sourceHealth[source]?.phase == .loading { return }
+        refreshTasks[source]?.cancel()
+        let generation = beginRefresh(source)
+        refreshTasks[source] = Task { @MainActor [weak self] in
+            do {
+                let cards = try await loader()
+                guard !Task.isCancelled else {
+                    self?.cancelRefresh(source, generation: generation)
+                    return
+                }
+                _ = self?.completeRefresh(source, generation: generation, cards: cards)
+            } catch is CancellationError {
+                self?.cancelRefresh(source, generation: generation)
+            } catch {
+                guard !Task.isCancelled else {
+                    self?.cancelRefresh(source, generation: generation)
+                    return
+                }
+                _ = self?.failRefresh(source, generation: generation,
+                                      category: classifyFailure(error))
+            }
+            if self?.sourceGenerations[source] == generation {
+                self?.refreshTasks.removeValue(forKey: source)
+            }
+        }
+    }
+
+    func cancelRefreshes() {
+        refreshTasks.values.forEach { $0.cancel() }
+        refreshTasks.removeAll()
+        clearRefreshes()
+    }
+
+    @discardableResult
+    func completeRefresh(_ source: AtlasContextSource, generation: Int,
+                         cards: [AtlasCard], empty: Bool? = nil,
+                         now: Date = .now) -> Bool {
+        guard sourceGenerations[source] == generation else { return false }
+        sourceCards[source] = cards
+        sourceHealth[source] = AtlasSourceHealth(
+            phase: (empty ?? cards.isEmpty) ? .empty : .loaded,
+            lastSuccessAt: now,
+            failure: nil,
+            stale: false
+        )
+        syncContextCards()
+        return true
+    }
+
+    @discardableResult
+    func failRefresh(_ source: AtlasContextSource, generation: Int,
+                     category: AtlasFailureCategory) -> Bool {
+        guard sourceGenerations[source] == generation else { return false }
+        var health = sourceHealth[source] ?? AtlasSourceHealth()
+        health.phase = .failed
+        health.failure = category
+        health.stale = !(sourceCards[source]?.isEmpty ?? true)
+        sourceHealth[source] = health
+        return true
+    }
+
+    func cancelRefresh(_ source: AtlasContextSource, generation: Int) {
+        guard sourceGenerations[source] == generation else { return }
+        var health = sourceHealth[source] ?? AtlasSourceHealth()
+        health.phase = sourceCards[source] == nil ? .idle : (sourceCards[source]?.isEmpty == true ? .empty : .loaded)
+        health.failure = nil
+        health.stale = false
+        sourceHealth[source] = health
+    }
+
+    func clearRefreshes() {
+        for source in AtlasContextSource.allCases {
+            var health = sourceHealth[source] ?? AtlasSourceHealth()
+            if health.phase == .loading {
+                health.phase = sourceCards[source] == nil ? .idle : (sourceCards[source]?.isEmpty == true ? .empty : .loaded)
+                health.stale = false
+                sourceHealth[source] = health
+            }
+            sourceGenerations[source, default: 0] += 1
+        }
+    }
+
+    private func syncContextCards() {
+        let context = AtlasContextSource.allCases.flatMap { sourceCards[$0] ?? [] }
+        replace(results: cards.filter { $0.kind == .result }, context: context)
     }
 
     /// Stable, process-independent identity for read-only context cards. This

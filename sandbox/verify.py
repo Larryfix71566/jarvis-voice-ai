@@ -64,7 +64,12 @@ class Verifier:
 
     def run_check(self, task: str, name: str, argv: tuple[str, ...], directory: Path, timeout: int) -> dict:
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        script = "cd " + GUEST_ROOT + "/source && source " + GUEST_ROOT + "/development.env && exec " + shlex.join(argv)
+        # Native rendering timing inside Tart measures a virtual display and
+        # virtualized CPU/GPU scheduling. Keep functional tests enabled there,
+        # but let hardware-sensitive tests preserve their measurements without
+        # treating the VM as a physical-Mac performance gate.
+        script = ("cd " + GUEST_ROOT + "/source && source " + GUEST_ROOT
+                  + "/development.env && export MORTIMER_SANDBOX_GUEST=1 && exec " + shlex.join(argv))
         started = time.monotonic()
         def remaining():
             budget = int(started + timeout - time.monotonic())

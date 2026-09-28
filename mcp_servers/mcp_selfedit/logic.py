@@ -16,8 +16,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-DEFAULT_ADMIN_URL = "http://127.0.0.1:7861"
-ADMIN_URL_ENV = "JARVIS_ADMIN_URL"
+from jarvis.urls import ADMIN_URL_ENV, DEFAULT_ADMIN_URL
 
 OFFLINE_ERROR = (
     "the admin sidecar looks offline — it runs the self-development loop. "
@@ -31,10 +30,12 @@ class AdminClient:
 
     def __init__(self, base_url: str | None = None, timeout: float = 10.0):
         import httpx  # local import: keeps module import light for tests
+        from jarvis.auth import service_headers
 
         self._client = httpx.Client(
             base_url=base_url or os.environ.get(ADMIN_URL_ENV) or DEFAULT_ADMIN_URL,
             timeout=timeout,
+            headers=service_headers(),
         )
 
     def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -90,8 +91,9 @@ def selfedit_start(
     the sidecar replays the exact staged record, so nothing can drift
     between preview and confirm. GOAL/PROFILE on the confirm=true call are
     then optional and ignored when staging_id is present; they remain
-    required (goal) for a bare confirm=true with no staging_id, which
-    still works for one release as a deprecated fallback."""
+    required (goal) for a bare confirm=true with no staging_id. That
+    deprecated fallback also requires the registry-injected run_id; the
+    sidecar refuses a bare start without that stable action identity."""
     staging_id = (staging_id or "").strip()
 
     # Confirm path with a staging_id — or with no goal at all — replays the
@@ -114,15 +116,28 @@ def selfedit_start(
         )
         if not run_resp.get("ok"):
             return run_resp
+        action_run_id = run_resp.get("action_run_id") or staging_id or None
+        if run_resp.get("duplicate"):
+            return {
+                "ok": True, "started": False, "duplicate": True,
+                "action_run_id": action_run_id,
+                "state": run_resp.get("state", "unknown"),
+                "summary": run_resp.get("summary") or (
+                    "This approved self-edit was already claimed. No new job was started; "
+                    "check its status before considering another attempt."
+                ),
+            }
         if run_resp.get("opening"):
             return {"ok": True, "started": True, "opening": True,
+                    "action_run_id": action_run_id,
                     "summary": "The isolated workspace is being prepared. Ask for self-edit status; edits can begin when it is ready."}
         session = run_resp.get("session")
         if session:
-            return _describe_session(session)
+            return {**_describe_session(session), "action_run_id": action_run_id}
         return {
             "ok": True,
             "started": True,
+            "action_run_id": action_run_id,
             "summary": (
                 f"Started planning with {run_resp.get('profile', 'the chosen planner')}. "
                 f"This can take several minutes — ask me how the edit is coming "
@@ -218,15 +233,25 @@ def selfedit_start(
         }
 
     # Deprecated fallback: confirm=true with no staging_id, goal restated.
+    if not (run_id or "").strip():
+        return {
+            "ok": False,
+            "error": (
+                "I can't safely start this self-edit without its execution ID; "
+                "retry through the registered selfedit_start action."
+            ),
+        }
     payload: dict[str, Any] = {"goal": goal, "profile": chosen, "run_id": run_id or None}
     if plan_path:
         payload["plan_path"] = plan_path
     run_resp = _call(lambda: client.post("/api/selfedit/run", json=payload))
-    if not run_resp.get("ok"):
+    action_run_id = run_resp.get("action_run_id") or None
+    if not run_resp.get("ok") or run_resp.get("started") is False:
         return run_resp
     return {
         "ok": True,
         "started": True,
+        "action_run_id": action_run_id,
         "summary": (
             f"Started planning with {run_resp.get('profile', chosen)}. This can take "
             f"several minutes — ask me how the edit is coming along anytime."
@@ -313,12 +338,15 @@ def selfedit_finish(client) -> dict[str, Any]:
     30 s and the pytest gate alone runs for minutes. Ask selfedit_status
     for progress."""
     resp = _call(lambda: client.post("/api/selfedit/finish", json={}))
-    if not resp.get("ok"):
+    if not resp.get("ok") or resp.get("started") is False:
         return resp
     return {
         "ok": True,
-        "started": True,
+        "started": bool(resp.get("started", True)),
+        "action_run_id": resp.get("action_run_id"),
+        "duplicate": bool(resp.get("duplicate", False)),
         "summary": (
+            resp.get("summary") or
             "Validating now — the gates take a few minutes. I'll open the "
             "pull request if every check passes; ask me how it's going "
             "anytime."
@@ -359,6 +387,18 @@ def _describe_finish(finish: dict[str, Any]) -> str:
         return (f"The finish step errored: {finish.get('notice') or 'no detail'}. "
                 f"The session is still open."
                 )
+    if state == "unknown":
+        return (
+            "The pull request submission may have started, but its outcome "
+            "is unresolved. Do not retry automatically; inspect the saved "
+            "sandbox and GitHub state first."
+        )
+    if state == "completed":
+        return (
+            "Submission is recorded as completed, but its pull request URL "
+            "is not available in status. Reconcile the sandbox and GitHub "
+            "state; do not submit again."
+        )
     return ""
 
 
@@ -387,7 +427,9 @@ def _describe_staging(
     ), False
 
 
-def selfedit_status(client, staging_id: str = "") -> dict[str, Any]:
+def selfedit_status(
+    client, staging_id: str = "", action_run_id: str = "",
+) -> dict[str, Any]:
     """Compose the run job + session state into one spoken summary.
 
     2026-08-25 — this endpoint used to have NO way to answer "is staging
@@ -398,7 +440,18 @@ def selfedit_status(client, staging_id: str = "") -> dict[str, Any]:
     have known that. GET /api/selfedit/run now also returns a `stagings`
     list; when the caller names a staging_id, report plainly whether it is
     present there — never guessed, never inferred from silence."""
-    resp = _call(lambda: client.get("/api/selfedit/run"))
+    identity = (staging_id or "").strip()
+    finish_identity = (action_run_id or "").strip()
+    if identity and finish_identity:
+        return {"ok": False, "error": "check a staged preview or a submission action, not both at once"}
+    params = (
+        {"action_run_id": identity} if identity else
+        {"finish_action_id": finish_identity} if finish_identity else None
+    )
+    resp = _call(lambda: client.get(
+        "/api/selfedit/run",
+        params=params,
+    ))
     if not resp.get("ok"):
         return resp
     job = resp.get("job", {})
@@ -406,6 +459,37 @@ def selfedit_status(client, staging_id: str = "") -> dict[str, Any]:
     stagings = resp.get("stagings", []) or []
     finish = resp.get("finish", {}) or {}
     finish_sentence = _describe_finish(finish)
+
+    if finish.get("state") == "unknown" and finish.get("reconciliation_required"):
+        return {
+            "ok": True,
+            "action_run_id": finish.get("action_run_id") or finish_identity,
+            "summary": (
+                "The pull request may have been submitted, but its result is "
+                "unresolved. Do not retry automatically; reconcile the saved "
+                "sandbox and GitHub state first."
+            ),
+            "finish": finish,
+        }
+
+    if job.get("state") == "unknown" and job.get("reconciliation_required"):
+        return {
+            "ok": True,
+            "summary": (
+                "The approved self-edit may have started, but its live result is not "
+                "available. Do not retry it automatically; reconcile the outcome first."
+            ),
+            "job": job, "staging_found": False,
+        }
+    if job.get("state") in {"completed", "failed"} and job.get("result_available") is False:
+        return {
+            "ok": True,
+            "summary": (
+                f"The approved self-edit is recorded as {job['state']}, but its result "
+                "is no longer in the live status slot. Do not start it again automatically."
+            ),
+            "job": job, "staging_found": False,
+        }
 
     # The staging answer is computed BEFORE the running-state branch and
     # attached to every return path. The first cut computed it only on the
@@ -572,6 +656,15 @@ def plan_start(
             "review_path": review_path or None,
         }
 
+    if not (run_id or "").strip():
+        return {
+            "ok": False,
+            "error": (
+                "I can't safely start this planning job without its execution ID; "
+                "retry through the registered plan_start action."
+            ),
+        }
+
     resp = _call(lambda: client.post(
         "/api/plan/start", json={
             "goal": goal, "mode": mode, "profile": profile,
@@ -580,6 +673,17 @@ def plan_start(
     ))
     if not resp.get("ok"):
         return resp
+    if resp.get("duplicate"):
+        return {
+            "ok": True,
+            "started": False,
+            "duplicate": True,
+            "action_run_id": resp.get("action_run_id") or run_id or None,
+            "summary": resp.get("summary") or (
+                "This planning action was already submitted; no new job was started. "
+                "Check its status before considering any retry."
+            ),
+        }
     if is_review:
         if mode == "single":
             summary = (
@@ -604,14 +708,40 @@ def plan_start(
     return {"ok": True, "started": True, "summary": summary}
 
 
-def plan_status(client) -> dict[str, Any]:
+def plan_status(client, action_run_id: str = "") -> dict[str, Any]:
     """Report the current planning job: still drafting, candidates ready
-    to choose between, or a finished plan ready to adopt."""
-    resp = _call(lambda: client.get("/api/plan/job"))
+    to choose between, or a finished plan ready to adopt. When a prior
+    start returned an action_run_id, pass it to inspect that exact action's
+    content-free receipt instead of assuming the current job belongs to it."""
+    identity = (action_run_id or "").strip()
+    resp = _call(lambda: client.get(
+        "/api/plan/job", params={"run_id": identity} if identity else None,
+    ))
     if not resp.get("ok"):
         return resp
     job = resp.get("job", {}) or {}
     state = job.get("state")
+    if state == "unknown":
+        return {
+            "ok": True,
+            "summary": (
+                "The prior planning action may have started, but its result is not "
+                "available in the current status slot. Do not retry it automatically; "
+                "reconcile the outcome first."
+            ),
+            "job": job,
+        }
+    if state in {"completed", "failed"} and job.get("result_available") is False:
+        noun = "review" if job.get("review_path") else "plan"
+        return {
+            "ok": True,
+            "summary": (
+                f"The prior {noun} action is recorded as {state}, but its result is no "
+                "longer available in the current status slot. Do not start it again "
+                "automatically."
+            ),
+            "job": job,
+        }
     # R5 — say "review" instead of "plan" when the polled job carries a
     # review_path.
     noun = "review" if job.get("review_path") else "plan"

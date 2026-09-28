@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "implementation-plan",
+      "request": "Write a model-ready implementation plan with explicit design decisions, phases and acceptance criteria.",
+      "expect_selected": true
+    },
+    {
+      "id": "unrelated-weather-request",
+      "request": "What is the current weather forecast and temperature in Fahrenheit?",
+      "expect_selected": false
+    }
+  ]
+}

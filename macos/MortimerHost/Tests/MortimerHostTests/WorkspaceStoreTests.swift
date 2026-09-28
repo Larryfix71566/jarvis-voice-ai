@@ -10,6 +10,12 @@ final class WorkspaceStoreTests: XCTestCase {
         return WorkspaceResult(payload: payload)
     }
 
+    private func protectedResult() throws -> WorkspaceResult {
+        let payload = try JSONDecoder().decode(DisplayPayload.self, from: Data(
+            #"{"title":"Protected title canary","body":"Protected body canary","data_policy":"local_only"}"#.utf8))
+        return WorkspaceResult(payload: payload)
+    }
+
     func testArrivalPreservesReadingComparisonAndScroll() throws {
         let store = WorkspaceStore(historyLimit: 2)
         let a = try result(), b = try result()
@@ -140,6 +146,56 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertTrue(store.memoryGraph === graph)
         XCTAssertEqual(store.supportingContent, .memoryGraph)
         XCTAssertTrue(store.showComparisonOnCompact)
+    }
+
+    func testProtectedResultIsExcludedFromSupervisorInventoryAndSupportingDisplay() throws {
+        let store = WorkspaceStore()
+        let protected = try protectedResult()
+        let publicResult = try result()
+        store.receive(protected)
+        store.receive(publicResult)
+        XCTAssertTrue(store.compare(with: publicResult.id))
+
+        let wireInventory = try JSONEncoder().encode(store.consoleInventoryJSON)
+        let wireText = try XCTUnwrap(String(data: wireInventory, encoding: .utf8))
+        XCTAssertFalse(wireText.contains(protected.id.uuidString))
+        XCTAssertFalse(wireText.contains("Protected title canary"))
+        XCTAssertFalse(wireText.contains("Protected body canary"))
+        XCTAssertTrue(wireText.contains(publicResult.id.uuidString))
+
+        let legacyInventory = store.consoleInventory
+        let legacyCards = try XCTUnwrap(legacyInventory["results"] as? [[String: Any]])
+        XCTAssertEqual(legacyCards.count, 1)
+        XCTAssertEqual(legacyCards.first?["id"] as? String, publicResult.id.uuidString)
+        XCTAssertFalse(String(describing: legacyInventory).contains("Protected title canary"))
+
+        let resultCards = try XCTUnwrap(
+            store.consoleInventoryJSON["results"]?.arrayValue
+        )
+        XCTAssertEqual(resultCards.count, 1)
+        XCTAssertEqual(resultCards.first?["id"]?.stringValue, publicResult.id.uuidString)
+        XCTAssertTrue(store.consoleInventoryJSON["active_result_id"] == .null)
+        XCTAssertFalse(store.sendToDisplay(.result(protected.id)))
+        XCTAssertNil(store.supportingContent)
+        XCTAssertTrue(store.sendToDisplay(.result(publicResult.id)))
+    }
+
+    func testUnknownNonExternalPoliciesNeverEnterInventoryOrSupportingDisplay() throws {
+        for policy in ["local_only", "confidential", "future_restricted_policy"] {
+            let store = WorkspaceStore()
+            let payload = try JSONDecoder().decode(DisplayPayload.self, from: Data(
+                "{\"title\":\"Protected \(policy) title\",\"body\":\"Protected inventory canary\",\"data_policy\":\"\(policy)\"}".utf8))
+            let item = WorkspaceResult(payload: payload)
+            store.receive(item)
+
+            XCTAssertFalse(store.sendToDisplay(.result(item.id)), policy)
+            XCTAssertNil(store.supportingContent, policy)
+            let inventory = try JSONEncoder().encode(store.consoleInventoryJSON)
+            let wire = try XCTUnwrap(String(data: inventory, encoding: .utf8))
+            XCTAssertFalse(wire.contains(item.id.uuidString), "protected ID leaked for \(policy)")
+            XCTAssertFalse(wire.contains("Protected \(policy) title"), "protected title leaked for \(policy)")
+            XCTAssertFalse(wire.contains("Protected inventory canary"), "protected body leaked for \(policy)")
+        }
     }
 
     func testCloseActivePromotesComparisonAndRemovesOnlyItsMetadata() throws {

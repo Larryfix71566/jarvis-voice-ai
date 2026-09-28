@@ -17,6 +17,8 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -25,6 +27,7 @@ from jarvis.selfedit.allowlist import DENIED, Allowlist
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "deploy_main.sh"
+SERVICE_HEALTH = REPO_ROOT / "scripts" / "service_health.py"
 BASH = shutil.which("bash")
 
 # What the checkout "replaces" the script with: blank lines past any offset
@@ -65,6 +68,99 @@ def test_deploy_main_is_human_only() -> None:
     assert allowlist.tier("scripts/deploy_main.sh") == DENIED
 
 
+def test_service_health_is_human_only() -> None:
+    allowlist = Allowlist.load(REPO_ROOT / "config" / "self_edit_allowlist.json")
+    assert allowlist.tier("scripts/service_health.py") == DENIED
+
+
+def test_phase_d_does_not_curl_the_sidecar_or_bot_directly() -> None:
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert 'hcode http://127.0.0.1:7861' not in source
+    assert 'hcode http://127.0.0.1:7860' not in source
+    assert 'scripts/service_health.py admin' in source
+    assert 'scripts/service_health.py bot' in source
+
+
+def test_service_health_prints_only_status_codes_against_local_stub(tmp_path: Path) -> None:
+    import http.server
+    import threading
+
+    received: list[tuple[str, str | None]] = []
+    token = "jvt_local-test-token"
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            received.append((self.path, self.headers.get("Authorization")))
+            if getattr(server, "redirect_mode", False):
+                code = 307
+                self.send_response(code)
+                self.send_header("Location", "http://external.invalid/should-not-follow")
+                self.end_headers()
+                return
+            code = 200 if self.headers.get("Authorization") == f"Bearer {token}" else 401
+            self.send_response(code)
+            self.end_headers()
+
+        def log_message(self, _format: str, *args) -> None:
+            return
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.redirect_mode = False
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        env = {
+            "HOME": str(tmp_path),
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "PYTHONPATH": str(REPO_ROOT),
+            "JARVIS_VAULT_ENABLED": "false",
+            "JARVIS_ADMIN_PORT": str(server.server_port),
+            "JARVIS_SERVICE_TOKEN": token,
+            # A misconfigured ambient proxy must not receive the token or
+            # prevent direct loopback checks.
+            "HTTP_PROXY": "http://127.0.0.1:1",
+            "http_proxy": "http://127.0.0.1:1",
+            "ALL_PROXY": "http://127.0.0.1:1",
+            "all_proxy": "http://127.0.0.1:1",
+        }
+        result = subprocess.run(
+            [sys.executable, str(SERVICE_HEALTH), "admin"],
+            env=env, capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert result.stdout == "200\n"
+        assert result.stderr == ""
+        assert token not in result.stdout + result.stderr
+        assert received == [("/api/health", f"Bearer {token}")]
+
+        server.redirect_mode = True
+        result = subprocess.run(
+            [sys.executable, str(SERVICE_HEALTH), "admin"],
+            env=env, capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert result.stdout == "307\n"
+        assert result.stderr == ""
+        assert token not in result.stdout + result.stderr
+        assert received[-1] == ("/api/health", f"Bearer {token}")
+        assert len(received) == 2, "the 307 Location must not be followed"
+
+        env.pop("JARVIS_SERVICE_TOKEN")
+        server.redirect_mode = False
+        result = subprocess.run(
+            [sys.executable, str(SERVICE_HEALTH), "admin"],
+            env=env, capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0
+        assert result.stdout == "401\n"
+        assert result.stderr == ""
+        assert received[-1] == ("/api/health", None)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 @pytest.mark.skipif(BASH is None, reason="bash is not installed")
 def test_deploy_main_parses() -> None:
     result = subprocess.run([BASH, "-n", str(SCRIPT)], capture_output=True, text=True)
@@ -96,5 +192,11 @@ def test_deploy_main_never_runs_the_file_that_replaced_it(tmp_path: Path) -> Non
     # The log goes beside the rollback snapshots, not into the checkout.
     logs = list((tmp_path / "home" / "MortimerRollback" / "logs").glob("deploy-main-*.log"))
     assert len(logs) == 1
+    # Bash exits before its process-substitution tee child is guaranteed to
+    # flush the last bytes to disk. Wait briefly for the log receipt.
+    for _ in range(100):
+        if "STOPPED: origin/main does not contain #80" in logs[0].read_text():
+            break
+        time.sleep(0.01)
     assert "STOPPED: origin/main does not contain #80" in logs[0].read_text()
     assert not (tmp_path / "checkout" / "closure-checks").exists()

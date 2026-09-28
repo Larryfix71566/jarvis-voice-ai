@@ -1,0 +1,34 @@
+{
+  "candidate": {
+    "branch": "codex/isolated-20260924",
+    "head": "977f50bec7b77bd7d3381d3b8f3d63fa69bd00e2",
+    "mortimerhost_source_test_tree_sha256": "b37fe820fcf7f53511f0ff5c83f2398ca06a8b25c3f59e0438905783fac7b941",
+    "status_entry_count_observed_before_receipt": 379,
+    "working_tree_dirty": true,
+    "fingerprint_refreshed_at": "2026-09-28T06:50:58Z",
+    "fingerprint_refresh_scope": "Full current dirty-worktree fingerprint refreshed after SW-E, SW-I, and SW-K acceptance notes; receipt-specific fixture and implementation evidence remains scoped to its named test."
+  },
+  "command": "CLANG_MODULE_CACHE_PATH=/private/tmp/mortimer-release-clang-module-cache swift build -c release -debug-info-format none --disable-sandbox --package-path macos/MortimerHost --cache-path /private/tmp/mortimer-swift-cache --skip-update",
+  "environment": {
+    "architecture": "arm64",
+    "platform": "macOS-27.0-arm64-arm-64bit"
+  },
+  "gate": "release-configuration-build-only",
+  "history": "A preceding release build with the default debug-info format reached dSYM generation and failed with Operation not permitted; the verified build disabled dSYM generation and completed.",
+  "limitations": [
+    "Build artifact was not packaged as a signed .app, launched, installed, or deployed.",
+    "This does not establish app/backend/config/package revision agreement or runtime behavior.",
+    "Target-Mac interactive accessibility/voice and physical-display, VM, provider, activation/rollback, and release acceptance remain open."
+  ],
+  "recorded_at": "2026-09-28T03:50:15.904133+00:00",
+  "result": {
+    "artifact_bytes": 11759632,
+    "artifact_kind": "Mach-O arm64 executable; SwiftPM product, not .app bundle",
+    "artifact_path": "/Users/larryfix/Documents/Codex/2026-09-09/can/work/codex-isolated-20260924/macos/MortimerHost/.build/out/Products/Release/MortimerHost",
+    "artifact_sha256": "4c2a5702f0424bc90ec233b365316d22fb17d82930e0b9839599207044538292",
+    "configuration": "release",
+    "debug_info_format": "none",
+    "exit_code": 0
+  },
+  "schema_version": 1
+}

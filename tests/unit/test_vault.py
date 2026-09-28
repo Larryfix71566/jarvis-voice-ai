@@ -16,7 +16,6 @@ import pytest
 import jarvis.vault as vault
 from jarvis.vault import VaultError
 
-
 KEY = base64.b64encode(b"\x01" * 32).decode("ascii")
 
 
@@ -139,6 +138,17 @@ class TestInjectEnv:
     def test_absent_vault_returns_zero_no_error(self):
         assert not vault.vault_path().exists()
         assert vault.inject_env() == 0
+
+    def test_absent_vault_log_omits_local_path(self, monkeypatch, caplog):
+        private_path = "/Users/PRIVATE_VAULT_PATH_CANARY/secrets.vault"
+        monkeypatch.setenv("JARVIS_VAULT_PATH", private_path)
+
+        with caplog.at_level("INFO", logger="jarvis.vault"):
+            assert vault.inject_env() == 0
+
+        assert "vault_file_missing" in caplog.text
+        assert private_path not in caplog.text
+        assert "PRIVATE_VAULT_PATH_CANARY" not in caplog.text
 
     def test_kill_switch_disables_injection(self, monkeypatch):
         vault.set_secret("SOME_API_KEY", "from-vault")

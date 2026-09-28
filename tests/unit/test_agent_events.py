@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from jarvis.bot.pipeline import make_agent_event_handler
+from jarvis.bot.pipeline import make_agent_event_handler, make_private_result_sink
 
 
 @pytest.fixture()
@@ -32,6 +32,28 @@ async def flush():
     await asyncio.sleep(0)
 
 
+class TestProtectedResultDelivery:
+    async def test_private_sink_awaits_local_display_payload(self, sent):
+        deliver = make_private_result_sink(transport="local-session")
+        assert await deliver("run-123", "opaque-456", "PRIVATE ANSWER", "local_only") is True
+        assert sent == [{
+            "type": "display",
+            "display": {
+                "kind": "markdown",
+                "title": "Protected local result",
+                "body": "PRIVATE ANSWER",
+                "images": [],
+                "basemap_images": [],
+                "links": [],
+                "agent": "Mortimer",
+                "run_id": "run-123",
+                "ts": sent[0]["display"]["ts"],
+                "surface": "window",
+                "tool": "protected_result",
+                "data_policy": "local_only",
+                "opaque_ref": "opaque-456",
+            },
+        }]
 class TestLifecycleCards:
     async def test_delegate_start_sends_working_card(self, sent):
         handler = make_agent_event_handler(transport=object())
@@ -68,14 +90,14 @@ class TestLifecycleCards:
     async def test_delegate_done_success(self, sent):
         handler = make_agent_event_handler(transport=object())
         handler({"type": "delegate_done", "agent": "analyst",
-                 "display_name": "Analyst", "ok": True, "detail": ""})
+                 "display_name": "Analyst", "ok": True, "detail": "", "run_id": "run-123"})
         await flush()
         assert sent == [{
             "type": "agent", "name": "analyst", "display_name": "Analyst",
-            "state": "done", "ok": True, "detail": "",
+            "state": "done", "ok": True, "detail": "", "run_id": "run-123",
         }]
 
-    async def test_delegate_done_failure_carries_detail(self, sent):
+    async def test_delegate_done_failure_uses_content_free_status(self, sent):
         handler = make_agent_event_handler(transport=object())
         handler({"type": "delegate_done", "agent": "developer",
                  "display_name": "Developer",
@@ -83,7 +105,7 @@ class TestLifecycleCards:
         await flush()
         assert sent[0]["state"] == "done"
         assert sent[0]["ok"] is False
-        assert sent[0]["detail"] == "FAILED: sidecar offline"
+        assert sent[0]["detail"] == "Task failed; protected details were not shared."
 
     async def test_subagent_lifecycle_stays_log_only(self, sent):
         # agent_start/agent_done duplicate the delegate_* lifecycle;
@@ -101,11 +123,12 @@ class TestToolProgress:
     async def test_agent_tool_sends_progress_message(self, sent):
         handler = make_agent_event_handler(transport=object())
         handler({"type": "agent_tool", "agent": "developer",
-                 "display_name": "Developer", "tool": "selfedit_start"})
+                 "display_name": "Developer", "tool": "selfedit_start", "run_id": "run-123"})
         await flush()
         assert sent == [{
             "type": "agent_tool", "name": "developer",
             "display_name": "Developer", "tool": "selfedit_start",
+            "run_id": "run-123",
         }]
 
 

@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "gate": "SW-E-protected-automated-screenshot-renderer",
+  "status": "implemented-local",
+  "recorded_at": "2026-09-28T14:28:07.842469Z",
+  "candidate": {
+    "branch": "codex/isolated-20260924",
+    "head": "977f50bec7b77bd7d3381d3b8f3d63fa69bd00e2",
+    "working_tree_dirty": true,
+    "worktree_fingerprint_sha256": "77dab21d199c42d7b024cb81483ebc3d29f8d4dd37b09ccbdc78f8f9a061f301",
+    "fingerprint_refreshed_at": "2026-09-28T14:28:07.842469Z",
+    "fingerprint_refresh_scope": "Final candidate after consolidated status cross-links and current local verification; live acceptance remains open."
+  },
+  "environment": {
+    "platform": "macOS 27.0",
+    "architecture": "arm64"
+  },
+  "commands": [
+    {
+      "command": "CLANG_MODULE_CACHE_PATH=/private/tmp/mortimer-clang-cache SWIFTPM_MODULECACHE_OVERRIDE=/private/tmp/mortimer-clang-cache XDG_CACHE_HOME=/private/tmp/mortimer-swift-cache swift test --package-path macos/MortimerHost --disable-sandbox --skip-update --filter ShareCoordinatorTests|ConsoleActionCoordinatorTests|ProtectedDisplayContentTests",
+      "result": "41 tests executed, 1 skipped (Screen Recording permission required for real window capture), 0 failures; protected synthetic PNG and exact declared-source image sharing passed"
+    }
+  ],
+  "assertions": [
+    "Rendered a protected synthetic payload with title/link/image/command/clipboard canaries to a temporary PNG file.",
+    "Decoded the persisted PNG and compared every RGBA pixel against an otherwise-identical protected body-only reference.",
+    "Verified protected plaintext markers do not occur in the PNG bytes.",
+    "Temporary screenshot files are removed by test teardown."
+  ],
+  "test": "macos/MortimerHost/Tests/MortimerHostTests/ProtectedDisplayContentTests.swift::testProtectedAutomatedPNGContainsOnlyTheLocalBody",
+  "implementation_sha256": {
+    "macos/MortimerHost/Tests/MortimerHostTests/ProtectedDisplayContentTests.swift": "f29e9d5ff5ec40114bf2529f1be16329ebb7ae5f4cc1df87910fc0e0ba2bcbdf",
+    "macos/MortimerHost/Sources/MortimerHost/Display/DisplayContentView.swift": "e6bd493b6a65fa6c130e86ccbc742966edc5c42a8a9f7dc124cf56831d89163e",
+    "macos/MortimerHost/Display/ShareCoordinator.swift": "4915cf2b7117890775994daaecc2e7328409e7acfcf252d38305df9e87ffa791",
+    "macos/MortimerHost/Tests/MortimerHostTests/ConsoleActionCoordinatorTests.swift": "9ab0d298c0ade0c3cda876346adf316a309faa7fcaa02661944fc4c0d2b6586e",
+    "macos/JarvisKit/Sources/JarvisKit/SkillModels.swift": "24aae94c2652dbf6e4a5c4eac229aa42bdb030439ca624f74c3adf45450dbe1e",
+    "macos/JarvisKit/Tests/JarvisKitTests/AdminAPITests.swift": "5e8e55444942b00c06b22bae3983d26490d62fd3e684d345c68acd02651abe7b",
+    "macos/MortimerHost/Sources/MortimerHost/App/ConsoleActionCoordinator.swift": "a57b8e8ec0863c71ec3d3bf49ad8a0c372eb71954ab24c3b93a6a458461830ed",
+    "macos/MortimerHost/Sources/MortimerHost/Console/SkillsWorkspaceView.swift": "214b683dff88dcda229e69499ebb0c0f0256698cf8ca7df88352cc744af704f2",
+    "macos/MortimerHost/Tests/MortimerHostTests/SkillsWorkspaceRenderingTests.swift": "da9d24960d53a2ca4d8fe98ff6792b16bf2a64db242c466d94d57a0306dbeb2e"
+  },
+  "limitations": [
+    "Actual foreground-window capture is skipped because Screen Recording permission is unavailable.",
+    "No live supporting-display capture or two-physical-display acceptance is established."
+  ],
+  "related_tests": [
+    {
+      "test": "ConsoleActionCoordinatorTests.testProtectedImagePreviewCannotReachCopySaveOrShareActions",
+      "result": "23 tests passed in the focused ConsoleActionCoordinatorTests suite"
+    },
+    {
+      "test": "SkillsWorkspaceRenderingTests.testLibraryAndSelectedProcessStepRenderAtWideAndNarrowWidths",
+      "result": "included in focused 14/14 rendering suite; verifies Enabled and Disabled values in mounted AX tree at both widths"
+    }
+  ]
+}

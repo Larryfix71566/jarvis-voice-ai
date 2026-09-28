@@ -1,5 +1,6 @@
 """Unit tests for jarvis/config.py (plan Phase 0 Tests)."""
 
+import logging
 import os
 
 import pytest
@@ -185,3 +186,25 @@ def test_shared_content_gate_cannot_enable_without_command_console(clean_env):
 
     assert os.environ["JARVIS_COMMAND_CONSOLE_ENABLED"] == "false"
     assert os.environ["JARVIS_SHARED_CONTENT_ENABLED"] == "false"
+
+
+def test_settings_bridge_failure_logs_only_exception_type_and_keeps_fallback(
+        clean_env, monkeypatch, caplog):
+    from jarvis import config
+
+    private_path = "/PRIVATE_CONFIG_PATH_CANARY/settings.toml"
+    private_value = "PRIVATE_CONFIG_VALUE_CANARY"
+
+    def _raise_settings():
+        raise RuntimeError(f"{private_path} {private_value}")
+
+    monkeypatch.setattr(config, "load_settings", _raise_settings)
+    monkeypatch.setattr(config, "_dotenv_values", lambda: {"JARVIS_TIMEZONE": "UTC"})
+    caplog.set_level(logging.WARNING, logger="jarvis.config")
+
+    config.bridge_settings_to_env()
+
+    assert os.environ["JARVIS_TIMEZONE"] == "UTC"
+    assert "settings_env_bridge_degraded error_type=RuntimeError" in caplog.text
+    assert private_path not in caplog.text
+    assert private_value not in caplog.text

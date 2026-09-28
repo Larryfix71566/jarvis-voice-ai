@@ -30,7 +30,7 @@ final class SupportingDisplayAcceptanceTests: XCTestCase {
             .environment(DrawerState()).environmentObject(client).preferredColorScheme(.dark))
         let supporting = NSHostingView(rootView: DisplayWindowView().defaultAppStorage(defaults)
             .environment(ShareCoordinator()).environment(workspace).environment(display)
-            .environment(DrawerState()).environmentObject(client).preferredColorScheme(.dark))
+            .environment(SkillsStore()).environment(DrawerState()).environmentObject(client).preferredColorScheme(.dark))
         var windows: [NSWindow] = []
         defer { windows.forEach { $0.close() } }
         for (index, view) in ([main, supporting] as [NSView]).enumerated() {
@@ -94,7 +94,7 @@ final class SupportingDisplayAcceptanceTests: XCTestCase {
         for (index, screen) in screens.prefix(2).enumerated() {
             let view = NSHostingView(rootView: DisplayWindowView().defaultAppStorage(defaults)
                 .environment(ShareCoordinator()).environment(display).environment(workspace)
-                .environment(DrawerState()).environmentObject(client).preferredColorScheme(.dark))
+                .environment(SkillsStore()).environment(DrawerState()).environmentObject(client).preferredColorScheme(.dark))
             let frame = CGRect(x: screen.visibleFrame.minX, y: screen.visibleFrame.minY,
                                width: min(1280, screen.visibleFrame.width),
                                height: min(1050, screen.visibleFrame.height))
@@ -154,7 +154,7 @@ final class SupportingDisplayAcceptanceTests: XCTestCase {
             XCTAssertTrue(workspace.sendToDisplay(.result(result.id)))
             let view = NSHostingView(rootView: DisplayWindowView().defaultAppStorage(defaults)
                 .environment(ShareCoordinator())
-                .environment(display).environment(workspace).environment(DrawerState())
+                .environment(display).environment(workspace).environment(SkillsStore()).environment(DrawerState())
                 .environmentObject(client).preferredColorScheme(.dark))
             view.frame = NSRect(x: 0, y: 0, width: 900, height: 600)
             let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -189,7 +189,7 @@ final class SupportingDisplayAcceptanceTests: XCTestCase {
             XCTAssertEqual(display.panels.map(\.id), panelIDs, "switching presentation must not create or remove results")
             XCTAssertEqual(workspace.activeID, result.id)
             XCTAssertTrue(workspace.pinnedIDs.contains(result.id))
-            XCTAssertEqual(workspace.scrollOffsets[result.id], 240)
+            XCTAssertEqual(try XCTUnwrap(workspace.scrollOffsets[result.id]), 240, accuracy: 0.001)
             XCTAssertEqual(workspace.results.count, 1)
         }
     }
@@ -216,6 +216,7 @@ final class SupportingDisplayAcceptanceTests: XCTestCase {
             .environment(ShareCoordinator())
             .environment(display)
             .environment(workspace)
+            .environment(SkillsStore())
             .environment(DrawerState())
             .environmentObject(client)
             .preferredColorScheme(.dark)

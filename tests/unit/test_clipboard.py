@@ -68,6 +68,30 @@ class TestArming:
         assert cb.is_armed() is False
         assert cb.read()["ok"] is False
 
+    def test_clear_failure_omits_subprocess_output_from_log_and_result(
+            self, monkeypatch, caplog):
+        canary = "PRIVATE_CLEAR_OUTPUT_CANARY /Users/private/path"
+        monkeypatch.setattr(cb, "_run", lambda *_args, **_kwargs: (1, canary))
+
+        result = cb.clear()
+
+        assert result == {"ok": False, "error": "could not clear the clipboard"}
+        assert canary not in caplog.text
+        assert "PRIVATE_CLEAR_OUTPUT_CANARY" not in result["error"]
+
+    def test_read_failure_omits_partial_clipboard_output_from_result(
+            self, monkeypatch, caplog):
+        _stub(monkeypatch)
+        assert cb.clear()["ok"] is True
+        canary = "PRIVATE_PARTIAL_CLIPBOARD_CANARY"
+        monkeypatch.setattr(cb, "_run", lambda *_args, **_kwargs: (1, canary))
+
+        result = cb.read()
+
+        assert result == {"ok": False, "error": "could not read the clipboard"}
+        assert canary not in caplog.text
+        assert canary not in result["error"]
+
 
 class TestBounds:
     def test_truncation_is_reported_never_silent(self, monkeypatch):
@@ -123,7 +147,7 @@ class TestNoShell:
 class TestShowCommands:
     """H3 — a spoken command cannot be copied."""
 
-    async def _run(self, args, arm_result=None, state=None):
+    async def _run(self, args, arm_result=None, state=None, arm_error=None):
         from jarvis.bot.handoff_tools import build_show_commands_tool
 
         sent: list[dict] = []
@@ -131,6 +155,8 @@ class TestShowCommands:
 
         def arm():
             armed.append(True)
+            if arm_error is not None:
+                raise RuntimeError(arm_error)
             return arm_result if arm_result is not None else {"ok": True}
 
         _, handler = build_show_commands_tool(
@@ -165,6 +191,16 @@ class TestShowCommands:
             arm_result={"ok": False, "error": "sidecar down"})
         assert "could not arm" in reply
         assert sent[0]["expect_output"] is False   # the card must not promise it
+
+    async def test_arm_exception_and_command_title_are_not_logged(self, caplog):
+        await self._run(
+            {"title": "PRIVATE_CANARY_title_4d2a", "commands": ["ls"],
+             "expect_output": True},
+            arm_error="PRIVATE_CANARY_exception_4d2a",
+        )
+        assert "PRIVATE_CANARY_title_4d2a" not in caplog.text
+        assert "PRIVATE_CANARY_exception_4d2a" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
 
     async def test_the_return_path_is_spoken_once_per_session(self):
         """H6.2 — the card says it every time; saying it aloud every time

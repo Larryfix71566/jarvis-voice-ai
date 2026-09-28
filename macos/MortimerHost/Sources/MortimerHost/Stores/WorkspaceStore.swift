@@ -22,6 +22,10 @@ struct WorkspaceResult: Identifiable, Equatable, Sendable {
 enum SupportingDisplayContent: Equatable {
     case result(UUID)
     case memoryGraph
+    case skills
+    /// A pointer to the selected Skills detail. The detail remains owned by
+    /// SkillsStore; this selection only transfers its single visible renderer.
+    case skillDetail(String)
     /// MORTIMER_WORKFLOW_VIEWER_PLAN.md — the read-only workflow gallery.
     case workflows
 }
@@ -44,8 +48,9 @@ final class WorkspaceStore {
     private(set) var showsConversation = true
     private(set) var showsMemoryGraph = false
     private(set) var showsAtlas = false
-    /// MORTIMER_WORKFLOW_VIEWER_PLAN.md: the fourth main view, handled like
-    /// showsAtlas everywhere (cleared wherever showsAtlas is cleared).
+    private(set) var showsSkills = false
+    /// MORTIMER_WORKFLOW_VIEWER_PLAN.md: a standalone main view alongside
+    /// Skills, Atlas, Memory Graph, and Conversation.
     private(set) var showsWorkflows = false
     private(set) var supportingContent: SupportingDisplayContent?
     var showComparisonOnCompact = false
@@ -79,18 +84,20 @@ final class WorkspaceStore {
     /// Snapshot consumed by the command-console router. IDs are stable for the
     /// session; the count is a conservative revision for inventory checks.
     var consoleInventory: [String: Any] {
-        ["revision": inventoryRevision,
-         "mode": showsConversation ? "conversation" : (showsMemoryGraph ? "memory" : (showsAtlas ? "atlas" : (showsWorkflows ? "workflows" : "results"))),
-         "active_result_id": activeID?.uuidString as Any,
+        let visibleResults = results.filter { !$0.payload.isProtectedLocal }
+        let visibleIDs = Set(visibleResults.map(\.id))
+        return ["revision": inventoryRevision,
+         "mode": showsConversation ? "conversation" : (showsSkills ? "skills" : (showsMemoryGraph ? "memory" : (showsAtlas ? "atlas" : (showsWorkflows ? "workflows" : "results")))),
+         "active_result_id": activeID.flatMap { visibleIDs.contains($0) ? $0.uuidString : nil } as Any,
          "focused_panel_id": NSNull(),
-         "results": results.enumerated().map { index, result in
+         "results": visibleResults.enumerated().map { index, result in
              ["id": result.id.uuidString,
               "title": String((result.payload.title ?? "Result").prefix(120)),
               "index": index,
               "pinned": pinnedIDs.contains(result.id),
               "can_connections": MemoryGraphSource.imageURL(result.payload) != nil]
          },
-         "comparison": comparisonID?.uuidString as Any,
+         "comparison": comparisonID.flatMap { visibleIDs.contains($0) ? $0.uuidString : nil } as Any,
          "atlas": ["available": true]]
     }
 
@@ -98,7 +105,11 @@ final class WorkspaceStore {
     /// intentionally mirrors only the bounded inventory contract; it never
     /// serializes display bodies, transcript text, paths or image bytes.
     var consoleInventoryJSON: JSONValue {
-        let resultValues: [JSONValue] = results.enumerated().map { index, result in
+        // Protected/local results are visible only in the local result surface.
+        // Do not forward even their titles or identifiers to the voice supervisor.
+        let visibleResults = results.filter { !$0.payload.isProtectedLocal }
+        let visibleIDs = Set(visibleResults.map(\.id))
+        let resultValues: [JSONValue] = visibleResults.enumerated().map { index, result in
             .object([
                 "id": .string(result.id.uuidString),
                 "title": .string(String((result.payload.title ?? "Result").prefix(120))),
@@ -129,12 +140,17 @@ final class WorkspaceStore {
         #endif
         let mode: String
         if showsConversation { mode = "conversation" }
+        else if showsSkills { mode = "skills" }
         else if showsMemoryGraph { mode = "memory" }
         else if showsAtlas { mode = "atlas" }
         else if showsWorkflows { mode = "workflows" }
         else { mode = "results" }
-        let activeValue: JSONValue = activeID.map { .string($0.uuidString) } ?? .null
-        let comparisonValue: JSONValue = comparisonID.map { .string($0.uuidString) } ?? .null
+        let activeValue: JSONValue = activeID.flatMap {
+            visibleIDs.contains($0) ? .string($0.uuidString) : nil
+        } ?? .null
+        let comparisonValue: JSONValue = comparisonID.flatMap {
+            visibleIDs.contains($0) ? .string($0.uuidString) : nil
+        } ?? .null
         let graphValue: JSONValue = showsMemoryGraph ? .string("memory") : .null
         let nodeValue: JSONValue = memoryGraph.selectedNode.map { .string($0.id) } ?? .null
         let selection: JSONValue = .object([
@@ -204,6 +220,7 @@ final class WorkspaceStore {
         if comparisonID == id { comparisonID = activeID }
         activeID = id
         showsAtlas = false
+        showsSkills = false
         showsWorkflows = false
         showsConversation = false
         showsMemoryGraph = false
@@ -224,7 +241,9 @@ final class WorkspaceStore {
     func returnToConversation() {
         hasChosenPresentation = true
         showsAtlas = false
+        showsSkills = false
         showsWorkflows = false
+        showsMemoryGraph = false
         showsConversation = true
         inventoryRevision += 1
     }
@@ -232,6 +251,7 @@ final class WorkspaceStore {
         hasChosenPresentation = true
         showsMemoryGraph = true
         showsAtlas = false
+        showsSkills = false
         showsWorkflows = false
         showsConversation = false
         inventoryRevision += 1
@@ -239,31 +259,58 @@ final class WorkspaceStore {
     func openAtlas() {
         hasChosenPresentation = true
         showsAtlas = true
+        showsSkills = false
         showsWorkflows = false
         showsMemoryGraph = false
         showsConversation = false
         inventoryRevision += 1
     }
+
     /// MORTIMER_WORKFLOW_VIEWER_PLAN.md — view_set mode "workflows".
     func openWorkflows() {
         hasChosenPresentation = true
         showsWorkflows = true
         showsAtlas = false
+        showsSkills = false
         showsMemoryGraph = false
         showsConversation = false
         inventoryRevision += 1
     }
+
     func returnToWorkspace() {
         hasChosenPresentation = true
         showsAtlas = false
+        showsSkills = false
         showsWorkflows = false
+        showsMemoryGraph = false
         showsConversation = false
         inventoryRevision += 1
     }
 
+    func openSkills() {
+        hasChosenPresentation = true
+        showsSkills = true
+        showsWorkflows = false
+        showsAtlas = false
+        showsMemoryGraph = false
+        showsConversation = false
+        inventoryRevision += 1
+    }
+
+    /// Returns a transferred skill detail to the main Skills workspace and
+    /// releases the supporting stage's pointer to it.
+    func returnSkillDetailsToMain() {
+        guard case .some(.skillDetail(_)) = supportingContent else { return }
+        supportingContent = nil
+        openSkills()
+    }
+
     @discardableResult
     func sendToDisplay(_ content: SupportingDisplayContent) -> Bool {
-        if case .result(let id) = content, !results.contains(where: { $0.id == id }) { return false }
+        if case .result(let id) = content {
+            guard let result = results.first(where: { $0.id == id }),
+                  !result.payload.isProtectedLocal else { return false }
+        }
         supportingContent = content
         trimHistory()
         return true
@@ -399,9 +446,12 @@ final class WorkspaceStore {
             comparisonID = nil
         }
         if comparisonID == id { comparisonID = nil }
-        // Like the memory graph, the workflow viewer stays open when the
-        // last result tab closes (closing a result says nothing about it).
-        if activeID == nil && !showsMemoryGraph && !showsWorkflows { showsConversation = true }
+        // Standalone views stay selected when the last result tab closes;
+        // closing a result says nothing about the selected view.
+        if activeID == nil && !showsMemoryGraph && !showsWorkflows &&
+            !showsSkills && !showsAtlas {
+            showsConversation = true
+        }
     }
 
     private func remove(_ id: UUID) {

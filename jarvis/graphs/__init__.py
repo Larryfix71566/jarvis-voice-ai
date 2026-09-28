@@ -164,7 +164,9 @@ def summary_line(result: dict) -> str:
 
 def tool_result(result: dict, *, since: str | None = None) -> dict:
     """GL12 — the dict both MCP tools return for an ok graph (never nodes/edges)."""
-    admin_url = os.environ.get("JARVIS_ADMIN_URL") or "http://127.0.0.1:7861"
+    from jarvis.urls import admin_url
+
+    base_url = admin_url()
     query = {"focus": result.get("focus") or "", "depth": result["depth"],
              "edge_types": ",".join(result["edge_types"])}
     if since is not None:
@@ -174,7 +176,7 @@ def tool_result(result: dict, *, since: str | None = None) -> dict:
         "depth": result["depth"], "node_count": result["node_count"],
         "edge_count": result["edge_count"], "truncated": bool(result.get("truncated")),
         "truncated_reason": str(result.get("truncated_reason") or "") if result.get("truncated") else "",
-        "image_url": f"{admin_url}/api/graph/{result['graph']}/image.png?{urlencode(query)}",
+        "image_url": f"{base_url}/api/graph/{result['graph']}/image.png?{urlencode(query)}",
         "summary": summary_line(result),
     }
     if result.get("focus_miss"):

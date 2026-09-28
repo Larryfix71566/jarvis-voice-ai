@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "gate": "local-regression-suites",
+  "recorded_at": "2026-09-28T14:28:07.842469Z",
+  "candidate": {
+    "branch": "codex/isolated-20260924",
+    "head": "977f50bec7b77bd7d3381d3b8f3d63fa69bd00e2",
+    "working_tree_dirty": true,
+    "worktree_fingerprint_sha256": "77dab21d199c42d7b024cb81483ebc3d29f8d4dd37b09ccbdc78f8f9a061f301",
+    "fingerprint_refreshed_at": "2026-09-28T14:28:07.842469Z",
+    "fingerprint_refresh_scope": "Final candidate after consolidated status cross-links and current local verification; live acceptance remains open."
+  },
+  "environment": {
+    "platform": "macOS 27.0 arm64",
+    "hardware_model": "unavailable: sysctl hw.model denied by sandbox",
+    "python": "3.12.13"
+  },
+  "commands": [
+    {
+      "command": "./.venv/bin/python -m pytest -q",
+      "result": "3,542 passed, 4 skipped, 11 warnings, 2 subtests passed"
+    },
+    {
+      "command": "swift test --package-path macos/MortimerHost --disable-sandbox --skip-update --skip-build",
+      "result": "347 tests executed, 9 skipped, 0 failures (current native source; interactive display/foreground/Screen Recording skips remain)"
+    },
+    {
+      "command": "swift test --package-path macos/JarvisKit --disable-sandbox --skip-update --skip-build",
+      "result": "212 tests executed, 0 skipped, 0 failures (most recent native run; JarvisKit source unchanged since that run)"
+    },
+    {
+      "command": "CLANG_MODULE_CACHE_PATH=/private/tmp/mortimer-clang-cache SWIFTPM_MODULECACHE_OVERRIDE=/private/tmp/mortimer-clang-cache XDG_CACHE_HOME=/private/tmp/mortimer-swift-cache bash macos/MortimerHost/scripts/bundle.sh release with launch disabled; codesign --verify --deep --strict",
+      "result": "release app bundle built; strict signature verification passed; candidate fingerprint embedded; not launched, installed, or deployed"
+    }
+  ],
+  "results": {
+    "MortimerHost": {
+      "executed": 344,
+      "skipped": 9,
+      "failures": 0
+    },
+    "JarvisKit": {
+      "executed": 212,
+      "skipped": 0,
+      "failures": 0
+    },
+    "Python": {
+      "passed": 3522,
+      "skipped": 4,
+      "warnings": 11,
+      "subtests": 2
+    }
+  },
+  "limitations": [
+    "The nine MortimerHost skips include physical-display and foreground-window prerequisites; they are not acceptance evidence.",
+    "Hardware identity is unverified, and no target-Mac performance or memory-soak claim is made by this receipt.",
+    "No Tart lifecycle/IPv6 canary, live voice, VoiceOver, live provider comparison, blinded human review, activation/rollback, or deployment acceptance is established.",
+    "This receipt records local suite execution only. Candidate-bound receipts record local verification, not live acceptance."
+  ],
+  "latest_candidate_run": {
+    "recorded_at": "2026-09-28T14:20:13.163572Z",
+    "Python": {
+      "passed": 3542,
+      "skipped": 4,
+      "warnings": 11,
+      "subtests_passed": 2
+    },
+    "MortimerHost": {
+      "executed": 347,
+      "skipped": 9,
+      "failures": 0
+    },
+    "JarvisKit": {
+      "executed": 212,
+      "skipped": 0,
+      "failures": 0
+    },
+    "limitations": "Nine MortimerHost skips require Screen Recording, a foreground-capable process, or two connected displays; physical display and interactive acceptance remain open."
+  }
+}

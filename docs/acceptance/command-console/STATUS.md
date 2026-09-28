@@ -3,6 +3,14 @@
 Consolidated requirement matrix: [`../IMPLEMENTATION_STATUS.md`](../IMPLEMENTATION_STATUS.md).
 Remaining Mac procedures: [`../ACCEPTANCE_RUNBOOK.md`](../ACCEPTANCE_RUNBOOK.md).
 
+**Reconciled 2026-09-25 against main `4acb4dc` (#90).** PR #90 updates the
+accepted orb shell; the Command Console/Atlas implementation and open live
+acceptance gates remain as listed below. The merge commit reports MortimerHost
+258 executed / 3 skipped / 0 failures, JarvisKit 199 passed, and Crystal p95
+13.59 ms at 1440×220. These are commit results, not reruns here. Installed
+candidate and live service identity remain unverified. See the
+[`GC24-00 main refresh`](../verified-gap-closure/GC24-00-main-refresh-2026-09-25.md).
+
 Updated 2026-09-18. The implementation is present in the release-review
 worktree and ships with Command Console layout version 2 as the default;
 legacy layouts remain selectable through the Debug menu. Native unit evidence:
@@ -344,11 +352,11 @@ physical two-screen and return-locator behavior is now recorded in the
   physical role, reconnect and bounded multi-result behavior are now recorded
   for this session; three-display/mirrored-output behavior, provider/fetch
   instrumentation and voice-triggered repeat evidence remain open.
-- [ ] **UI2-21 — Developer-run result grouping and Liquid Glass consistency.**
-  (ID collision, noted 2026-09-22: `adaptive-interface/RELEASE_READINESS.md`
-  uses UI2-21 for a different, ticked item, "Atom-style compact voice display
-  (implementation)". The two UI2-21 entries are separate requirements. Cite
-  them by title until one is renumbered.)
+- [ ] **UI2-23 — Developer-run result grouping and Liquid Glass consistency.**
+  The previous UI2-21 ID collided with the atom display requirement in
+  `adaptive-interface/RELEASE_READINESS.md`; UI2-23 was unused in the
+  2026-09-25 audit and now identifies this unchanged requirement. Cite older
+  records by title and original UI2-21 ID.
   A single self-edit request may read several files and emit several
   window-routed results. The client must group those same-`run_id` Developer
   payloads into one outer result window with appended sections; separate runs,
@@ -366,12 +374,15 @@ physical two-screen and return-locator behavior is now recorded in the
   stable namespaced identities and merges context refreshes without resetting
   result selection, manual placement, or groups. `AtlasCardView` labels each
   source kind and uses the shared Liquid Glass card treatment. The focused
-  `KnowledgeAtlasTests` suite passes 4/4. Physical Atlas refresh/error,
-  VoiceOver, and multi-display evidence remain part of the open Mac gates.
-- [ ] **Stray duplicate source file (housekeeping, noted 2026-09-22 against
-  main `88b206f`).** `macos/MortimerHost/Placement/ContentWindowRegistry.swift`
-  sits outside the package's `Sources/` tree. It is an older, different
-  version of the real
-  `macos/MortimerHost/Sources/MortimerHost/Placement/ContentWindowRegistry.swift`,
-  which is the file the plan manifest checks. Remove it or explain it in a
-  separate code change. This status update does not touch code.
+  `AtlasStore` now owns per-source asynchronous refresh, bounded failure
+  categories, stale last-good retention, explicit retry and reconnect refresh;
+  focused `KnowledgeAtlasTests` passes 7/7. Physical auth/reconnect/source
+  change, duplicate-fetch, VoiceOver, performance and multi-display evidence
+  remain open. The full MortimerHost run has eight headless
+  `WindowVisibilityTests` fixture failures. See the
+  [GC24-06 receipt](../verified-gap-closure/GC24-06-atlas-refresh-2026-09-24.md).
+- [x] **Duplicate source file (housekeeping).** Closed 2026-09-25: removed the
+  obsolete `macos/MortimerHost/Placement/ContentWindowRegistry.swift` after
+  confirming no package, script or test imported it. The package-owned source
+  under `Sources/MortimerHost/Placement/` and its test remain. The active
+  implementation is unchanged.

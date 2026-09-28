@@ -116,8 +116,8 @@ def clear() -> dict:
     code, out = _run(["pbcopy"], stdin="")
     if code != 0:
         _armed = False
-        logger.warning("clipboard_clear_failed code=%s out=%s", code, out[:200])
-        return {"ok": False, "error": f"could not clear the clipboard ({out[:200]})"}
+        logger.warning("clipboard_clear_failed code=%s", code)
+        return {"ok": False, "error": "could not clear the clipboard"}
     _armed = True
     logger.info("clipboard_cleared armed=True")
     return {"ok": True, "armed": True}
@@ -148,7 +148,7 @@ def read() -> dict:
     code, out = _run(["pbpaste"])
     if code != 0:
         logger.warning("clipboard_read_failed code=%s", code)
-        return {"ok": False, "error": f"could not read the clipboard ({out[:200]})"}
+        return {"ok": False, "error": "could not read the clipboard"}
 
     _armed = False          # one read per arm, always
     text = out

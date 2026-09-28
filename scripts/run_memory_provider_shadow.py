@@ -24,9 +24,13 @@ FIXTURE = ROOT / "tests" / "fixtures" / "memory_automation_cases.json"
 sys.path.insert(0, str(ROOT))
 
 from jarvis.agents.upgrade_agent import load_model_registry  # noqa: E402
-from jarvis.llm_client import make_sync_client  # noqa: E402
 from jarvis.memory_automation import heuristic_classifier  # noqa: E402
-from jarvis.memory_automation_eval import ProviderClassifier, measure_shadow  # noqa: E402
+from jarvis.memory_automation_eval import (  # noqa: E402
+    ProviderClassifier,
+    measure_shadow,
+)
+from jarvis.model_routing import resolve_model_route_checked  # noqa: E402
+from jarvis.privacy_policy import DataPolicy  # noqa: E402
 from jarvis.vault import VaultError, inject_env  # noqa: E402
 
 
@@ -100,9 +104,14 @@ def main() -> int:
         parser.error(f"profile credential {route['api_key_env']} is unavailable; check --vault-path")
 
     cases = json.loads(FIXTURE.read_text())
-    client = make_sync_client(api_key=api_key, base_url=base_url, model=model,
-                              provider=route["provider"], timeout=60, max_retries=0)
-    provider = ProviderClassifier(client, model=model, temperature=route.get("temperature"))
+    resolved = resolve_model_route_checked(
+        "memory_shadow", explicit_profile=args.profile,
+        explicit_route="direct_api",
+    )
+    provider = ProviderClassifier(
+        model=model, temperature=route.get("temperature"), resolved=resolved,
+        data_policy=DataPolicy("approved_external", "synthetic-memory-corpus"),
+    )
     measurement = measure_shadow(
         cases["cases"], baseline_classifier=heuristic_classifier,
         candidate_classifier=provider,

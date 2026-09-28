@@ -1,91 +1,130 @@
 # Implementation and acceptance status
 
-Updated September 18, 2026 from the release-review worktree; verification
-counts reconciled and a model-use section added 2026-09-22 against main
-`88b206f`. This matrix
-separates repository implementation evidence from release acceptance evidence.
-An implementation row is complete when its source, tests, and receipt are
-present. A release row stays open when it needs physical hardware, a live
-provider journey, or an observation period.
+Updated 2026-09-28 during integration of main `2e6f769` into
+`codex/isolated-20260924`. [ROADMAP](../../ROADMAP.md) owns workstream status
+and assignments. Plans specify requirements; receipts prove only their recorded
+candidate, environment and scope. All merge conflicts are resolved locally; release acceptance remains open. Nothing in this update claims deployment or activation.
+
+## Work still open
+
+- **WS-01 — verified gap closure:** execution, privacy, memory admission and
+  Atlas work is implemented in part on the isolated branch. All 31 merge
+  conflicts are resolved. The approved memory ordering and live streaming
+  flags are integrated; acceptance and human-only protections remain open. See
+  [canonical plan](../plans/MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md).
+- **WS-02 — subscription isolation:** offline adapter/status checks pass on the
+  merged files (56 tests). Live route, cancellation, capability and confinement
+  gates remain open; a login or text probe does not close them. See the
+  [isolation plan](../plans/MORTIMER_SUBSCRIPTION_RUNTIME_ISOLATION_PLAN_2026-09-25.md).
+- **WS-03 — Skills Workspace:** catalog, intended process, truthful activity,
+  real Developer creator dispatch and late validation ownership exist on the
+  branch. Skills and Workflows must remain distinct views. Navigation placement
+  is approved; Swift integration is complete locally; native suites pass with environment-dependent skips. Provider
+  evaluation, blinded review, accessibility, voice, physical displays,
+  activation/rollback and frozen-candidate release gates are not accepted. The
+  frozen authoring fixtures still need their human deny-list commit. See
+  [Skills status](skills-workspace/STATUS.md) for SW-A through SW-L.
+- **WS-04 — remote access:** approved dormant-merge fixes are in progress.
+  Explicit `true` enables auth; otherwise bind is loopback-only. Synthetic
+  authenticated health/caller tests pass, but the health script's human-only
+  deny-list gate remains open. Whole-app route coverage and native suites pass; live
+  acceptance remains open. Enabling remote access and token onboarding
+  remain Larry's separate decisions. See
+  [Remote Access Addendum R1](../plans/MORTIMER_REMOTE_ACCESS_PLAN.md).
+- **WS-05 — model use:** foundation is landed, further ownership is proposed
+  in ROADMAP, and per-route live evidence remains open. Subscription access
+  does not prove image, tool, streaming, cost-bound or confidential capability.
+  See [model-use status](model-use-enhancements/STATUS.md).
+- **WS-06/07 — main's self-service access, registry and voice workflows:**
+  source is landed on main; Codex is preserving it in the merge. Mac checks
+  remain open per ROADMAP. Source integration does not certify a running build.
+- **WS-08 — orb:** source is landed; placement, Reduce Motion and rollback
+  observations remain open. Do not replace the renderer in gap closure.
+- **WS-09/11 — console, Atlas and adaptive-interface acceptance:** remaining
+  voice/display/provider sharing, accessibility, rollback and observation
+  journeys need the exact frozen Mac candidate. Follow
+  [Command Center status](command-console/STATUS.md),
+  [adaptive release readiness](adaptive-interface/RELEASE_READINESS.md) and
+  [acceptance runbook](ACCEPTANCE_RUNBOOK.md).
+- **WS-10 — automated memory enablement:** CX-07 ordering is approved; merged-pipeline implementation and acceptance remain open. Earlier sandbox
+  classification/retrieval/maintenance and synthetic shadow evidence does not
+  prove the merged admission-plus-settlement pipeline or a production benefit
+  and cost observation period. See [memory status](memory-automation/STATUS.md).
 
 ## Automated memory management
 
-| Requirement | Implementation evidence | Acceptance evidence | Status |
-| --- | --- | --- | --- |
-| Admission classification without user labeling | `jarvis/memory_model.py`, `jarvis/memory_automation.py` | Memory fixtures and focused tests | Complete in sandbox |
-| Scoped corrections, provenance, revisions, validity | Memory and sweep changes | Offline B5 receipt; acceptance tests | Complete in sandbox |
-| Task-relevant retrieval and usage accounting | Retrieval changes and `used_for` assertions | Focused memory suite | Complete in sandbox |
-| Quiet bounded idle maintenance | `memory_watcher.py`, retry/budget tests | Worker and teardown tests | Complete in sandbox |
-| Privacy-safe shadow and provider route | Provider runner and registry route | Provider shadow receipt and dry-run | Complete in sandbox; production disabled |
-| Staged rollout and rollback thresholds | `JARVIS_MEMORY_AUTOMATION_STAGE`, evaluator | Rollout receipt; manifest checks | Complete in sandbox |
-| Mac staged enablement and benefit/cost observation | Runtime procedure in runbook | Redacted daily-driver receipt | Open: requires Mac observation |
+Mac staged enablement and benefit/cost observation remain open. Offline
+classification, provenance, retrieval and maintenance checks from earlier
+candidates remain historical evidence; merged-pipeline acceptance must follow
+CX-07 before enabling the new behavior.
 
 ## Command Center and Knowledge Atlas
 
-| Requirement | Implementation evidence | Acceptance evidence | Status |
-| --- | --- | --- | --- |
-| Layout 2 command console and compact Conversation startup | Native composition and layout tests | Full-console and live candidate inspection | Complete in sandbox; live candidate observed |
-| Shared pointer/voice action ownership | `ConsoleActionCoordinator`, protocol/registry | Swift/Python parity and stale-target tests | Complete in sandbox |
-| Atlas, graph, pins, comparison, reading state | Atlas/graph stores and rendering tests | Atlas, graph, large-fixture and frame-time receipts | Complete in sandbox |
-| One response result per request | `ResponseResultRouter`, stable workspace/display IDs | Response-routing and focused native receipt | Complete in sandbox; live ownership observed |
-| Bounded supporting display and return-to-main | Display stage budget and placement owner | Live two-result stage, automatic unplug/rehome, reconnect restoration, and close/return receipts | Open: voice-triggered repeat and provider/fetch evidence remain |
-| Text/image sharing and inbound approval | Share coordinator, attachment transfer, privacy latch | Unit and protocol tests | Open: live picker/provider journey |
-| Voice parity and two-channel measured audio | Native voice routing and waveform tests | `READY VOICE` observed; live spoken-response receipt | Open: active user/output audio evidence |
-| Accessibility, rollback, independent verification | Test hooks and legacy layout paths | Mac accessibility, rollback, verifier receipts | Open |
-| Five-day daily-driver acceptance | Candidate freeze/runbook | Dated daily-driver log | Open |
+Supporting-display voice-triggered repeat and provider/fetch evidence remain
+open for the frozen merged candidate. Sharing needs a live picker/provider journey; accessibility and measured audio need target-Mac observations.
+Five-day daily-driver acceptance, rollback and independent release verification
+remain open. Earlier monitor observations do not automatically transfer to
+this new build.
 
-## Current automated verification
+## Latest scoped evidence
 
-Reconciled 2026-09-22 against main `88b206f`. The figures below are the
-counts recorded in the committed 2026-09-18 receipts (Mac, release-review
-worktree). They are receipt-time counts, not current pass counts; the current
-static test counts at `88b206f` are given for comparison.
+These checks are independent and may overlap; do not sum them into an overall
+completion percentage. They do not replace a full merged-tree verification.
 
-- Python: **2611 passed, 4 skipped** in the Mac receipt. At `88b206f` on
-  Linux, `pytest tests/unit` gave **2,526 passed** (run by Claude
-  2026-09-22; a different platform and collection, so not directly comparable).
-- JarvisKit: **190 passed** in the linked receipt. The earlier "195 passed"
-  figure here (including the five `GraphImageRequestsTests`) is not recorded
-  in a committed receipt; the source at `88b206f` has **195** static
-  `func test` methods, so 195 is a static count, not a verified pass count.
-- MortimerHost: **244 executed, 3 skipped, 0 failures** in the latest
-  complete run in the receipt; the display-dependent skips require two
-  connected displays and are covered by live monitor receipts. The source at
-  `88b206f` has **250** static `func test` methods; no committed receipt
-  records a run of all 250.
-- Focused native rerun: **47 passed** in
-  [current-focused-native-2026-09-18.md](command-console/receipts/current-focused-native-2026-09-18.md)
-  (`ScreenPlacementTests` 8 + Command Center/rendering/ownership filter 39).
-  The later full-verification receipt records `ScreenPlacementTests` **9/9**,
-  which matches the 9 static tests now in that file.
-- Plan manifest: **7 passed** (receipt); also 7 passed at `88b206f` on Linux,
-  2026-09-22.
-- Formatting: `git diff --check` passed.
+- DB migration tests: 20 passed, including upgrade from main's schema with
+  notices preserved and repeated migration application remaining idempotent.
+  Codex IDs are now reserved 0028–0034 and 0036; 0035 stays reserved for mail.
+- Workflows, key health and Skills validation activity: 475 passed.
+- Registry and supervision: 57 passed, including content-free shutdown/status
+  failure diagnostics on the actual owner-task lifecycle.
+- Auth, bind and service-token checks: 79 passed.
+- Subscription adapter/status probes: 56 passed, with synthetic providers.
+- Web-tool tests: 70 passed. Native packaging tests: 10 passed, 2 subtests.
+- Deployment health/internal caller/token tests: 14 passed with a temporary
+  loopback stub. A separate required human-only tier test fails until
+  W1-REMOTE-HEALTH is applied; no production deployment was run.
+- The earlier historical verifier completed 11/12 stages. Candidate checks
+  passed; its old baseline failed an exact floating-point assertion. The
+  aggregate receipt remains **failed**, and predates current integration.
+- The subsequent IPv4/IPv6 canary passed all eight positive-control and
+  provisioning/offline containment observations. This closes the network
+  subcheck, not all creator lifecycle/VM isolation acceptance. Evidence:
+  [verified network receipts](skills-workspace/receipts/ipv6-verified-2026-09-28/).
 
-The latest complete verification is recorded in
-[full-verification-2026-09-18.md](command-console/receipts/full-verification-2026-09-18.md).
+Runtime identity and final-release evidence remain missing for
+the merged candidate. Earlier Python/Swift counts are historical results and
+must not be presented as current pass counts.
 
-## Model use enhancements
+## Preserved history
 
-Added 2026-09-22 (reconciled against main `88b206f`). The detailed record is
-[model-use-enhancements/STATUS.md](model-use-enhancements/STATUS.md). The
-committed receipts under `model-use-enhancements/receipts/` show only the
-following:
+CX-08 reconciles the competing status copies without discarding either:
 
-| Requirement | Committed receipt | What it shows | Status |
-| --- | --- | --- | --- |
-| Call-site inventory (MAR-G) | `model-call-site-inventory-2026-09-20.json` | Static inventory: 13 call sites, 13 covered, 0 review-required, `secret_free: true` | Implementation evidence; enabled-mode runtime evidence open |
-| Secret-free route readiness | `route-readiness-2026-09-20.json`, `vault-backed-route-readiness-2026-09-20.json` | Without the vault, every workload reports `ANTHROPIC_API_KEY is not set`; with the vault, `ready_issues: []`, `routing_enabled: false`, SAYGM route `credential_present: false`, no catalog or probe run | Readiness report only |
-| SAYGM (MAR-E) | `saygm-readiness-2026-09-20.json` | Catalog check failed closed: `SAYGM_API_KEY is not set` | Open |
-| Subscriptions (MAR-F) | `subscription-probes-2026-09-20.md`, `subscription-readiness-2026-09-20.json` | Codex probe returned `SUBSCRIPTION_PROBE_OK`; Claude reported `Not logged in` | Open |
-| Memory pilot (MAR-I) | `../memory-automation/provider-shadow-receipt.json`, `../memory-automation/rollout-monitoring-receipt.json` | Direct-API 8-case synthetic memory shadow (8/8, no regression) and offline rollout gate; routing layer not enabled | Open |
+- [Main snapshot at 2e6f769](../archive/IMPLEMENTATION_STATUS_MAIN_2e6f769.md)
+  retains the September 18/22 receipt counts and release matrix.
+- [Codex snapshot before reconciliation](../archive/IMPLEMENTATION_STATUS_CODEX_2026-09-28.md)
+  retains the dated implementation details and earlier handoffs.
 
-The status file also describes user-run checks on 2026-09-21 and 2026-09-22
-(Claude login and probe, SAYGM catalog with 56 models). They are not recorded
-in a committed receipt and remain unverified.
+Both archives are historical, not alternate current trackers. Use ROADMAP for
+ownership, the canonical per-workstream plan for remaining requirements, and
+the linked receipt for any completion claim.
 
-The exact procedures for remaining rows are in
-[ACCEPTANCE_RUNBOOK.md](ACCEPTANCE_RUNBOOK.md). Detailed checklists remain in
-[memory status](memory-automation/STATUS.md), [Command Center status](command-console/STATUS.md),
-[model-use status](model-use-enhancements/STATUS.md),
-and [adaptive-interface release readiness](adaptive-interface/RELEASE_READINESS.md).
+The two human-only allow-list additions are prepared as a
+[reviewable patch](skills-workspace/human-allowlist-proposal.patch). `git apply
+--check` passes; a temporary copy verifies both paths become denied. The actual
+allow-list remains unchanged. Apply through the human-commit process in
+[ALLOWLIST_SEQUENCE](../plans/ALLOWLIST_SEQUENCE.md), after merge resolution.
+
+## 2026-09-28 merged verification update
+
+[Integration receipts](skills-workspace/receipts/main-integration-2026-09-28/)
+record the broad Python run (4,851 passed; two expected failures for the pending
+human deny-list changes; four skipped), JarvisKit (219 tests, zero failures),
+and MortimerHost (372 executed, seven skipped, zero failures). These supersede
+the earlier scoped evidence for integration, not for live acceptance.
+
+A subsequent fixture-provenance audit restored main's historical registry
+snapshots unchanged: the rename merge had carried Codex's three streaming
+flags into the old YAML fixture. The live profile flags remain, as approved,
+and a separate regression checks only that intended overlay against the
+historical snapshot. All 59 registry tests pass with three historical byte-
+snapshot tests appropriately skipped after the deliberate live-pool change.

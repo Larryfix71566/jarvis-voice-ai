@@ -6,8 +6,6 @@ due row; none when empty; none when disconnected.
 
 import json
 
-import pytest
-
 from jarvis.bot.reminders_watcher import CONTEXT_TEMPLATE, RemindersWatcher
 
 
@@ -21,7 +19,7 @@ class FakeRegistry:
     async def call(self, tool_name, arguments, server_names=None):
         self.calls.append((tool_name, arguments, server_names))
         if self.raises:
-            raise RuntimeError("server down")
+            raise RuntimeError("PRIVATE_CANARY_reminder_exception_4d2a")
         if self.raw is not None:
             return self.raw
         return json.dumps({"reminders": self.reminders})
@@ -71,18 +69,22 @@ async def test_no_call_no_injection_when_disconnected():
     assert registry.calls == []  # accumulate for the next connect
 
 
-async def test_registry_failure_never_crashes():
+async def test_registry_failure_never_crashes_or_logs_exception_message(caplog):
     registry = FakeRegistry(raises=True)
     watcher, injections = make_watcher(registry, connected=True)
     await watcher.tick_once()  # must not raise
     assert injections == []
+    assert "PRIVATE_CANARY_reminder_exception_4d2a" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
 
 
-async def test_failure_sentence_result_never_crashes():
-    registry = FakeRegistry(raw="get_due_reminders failed: DB locked.")
+async def test_failure_sentence_result_never_crashes_or_logs_response_body(caplog):
+    registry = FakeRegistry(raw="PRIVATE_CANARY_reminder_body_4d2a")
     watcher, injections = make_watcher(registry, connected=True)
     await watcher.tick_once()  # must not raise
     assert injections == []
+    assert "PRIVATE_CANARY_reminder_body_4d2a" not in caplog.text
+    assert "invalid reminder JSON" in caplog.text
 
 
 async def test_dedup_is_delivered_flag_not_watcher_state():

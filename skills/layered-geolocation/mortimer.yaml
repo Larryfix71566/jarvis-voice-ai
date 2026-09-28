@@ -1,0 +1,43 @@
+schema_version: 1
+skill_id: layered-geolocation
+display_name: Layered geolocation
+category: development
+version: 1.0.0
+source:
+  kind: local
+  reference: procedure:17
+  adaptation_notes: Reviewed Mortimer procedure promotion; instructions remain in SKILL.md.
+capabilities: [location_design, consent_aware_resolution]
+required_tools: []
+required_credentials: []
+reference_paths: []
+example_ids: [layered-location-resolution, unrelated-weather-request]
+related_workflow_ids: []
+compatible_with: []
+process:
+  kind: linear
+  nodes:
+    - step_id: identify-location-need
+      title: Identify the location requirement
+      description: Determine whether the task needs a live position or location feature design.
+      inputs: [user request]
+      outputs: [location requirement]
+      tools: []
+      success_criteria: [Lookup requests are distinguished from implementation requests.]
+      edges: [{to: evaluate-resolution-layers}]
+    - step_id: evaluate-resolution-layers
+      title: Evaluate resolution layers and consent
+      description: Order configured preference, device location, and IP fallback with accuracy and consent states.
+      inputs: [location requirement, current permissions]
+      outputs: [layered resolution behavior]
+      tools: []
+      success_criteria: [Failure, stale data, and denied consent remain distinct.]
+      edges: [{to: report-confidence}]
+    - step_id: report-confidence
+      title: Report the source and confidence
+      description: Identify which layer answered and preserve uncertainty when none succeeds.
+      inputs: [layered resolution behavior]
+      outputs: [location design guidance]
+      tools: []
+      success_criteria: [No location is presented as more precise than its source supports.]
+      edges: []

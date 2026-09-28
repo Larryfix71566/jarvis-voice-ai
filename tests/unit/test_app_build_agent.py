@@ -11,7 +11,6 @@ shared base class.
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -25,8 +24,8 @@ from jarvis.agents.upgrade_agent import (
     AppBuildAgent,
 )
 from jarvis.agents.workspace import AppWorkspace
-from tests.sandbox_fakes import FakeRuntime
 from jarvis.db import get_conn, run_migrations
+from tests.sandbox_fakes import FakeRuntime
 
 
 @pytest.fixture(autouse=True)
@@ -203,9 +202,9 @@ def test_run_produces_app_build_pr_end_to_end(workspace: AppWorkspace, tmp_path:
         _msg(tool_calls=[_tool_call("edit_propose", {
             "path": "src/index.js", "new_content": "console.log(2);\n",
             "rationale": "bump",
-        })]),
-        _msg(tool_calls=[_tool_call("session_validate", {})]),
-        _msg(tool_calls=[_tool_call("session_submit", {})]),
+        }, call_id="edit-1")]),
+        _msg(tool_calls=[_tool_call("session_validate", {}, call_id="validate-1")]),
+        _msg(tool_calls=[_tool_call("session_submit", {}, call_id="submit-1")]),
         _msg(content="Shipped it."),
     ])
     agent = _agent(workspace, client, agent_config_path)

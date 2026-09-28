@@ -8,11 +8,12 @@ documented error dict instead of raising.
 
 from fastmcp import FastMCP
 
-from . import logic
-from .github import GitHubClient, GitHubError
 # D6 — app-build tools are thin HTTP clients of the admin sidecar, the
 # SAME AdminClient class mcp_selfedit uses (not a second implementation).
 from mcp_servers.mcp_selfedit.logic import AdminClient
+
+from . import logic
+from .github import GitHubClient, GitHubError
 
 mcp = FastMCP("mcp-apps")
 
@@ -76,7 +77,7 @@ def app_read(app: str, path: str) -> dict:
 @mcp.tool()
 def app_build_start(
     app: str, goal: str, profile: str = "", confirm: bool = False,
-    plan_path: str = "",
+    plan_path: str = "", run_id: str = "",
 ) -> dict:
     """Offline sandbox, sidecar-driven: build an implementation of GOAL
     inside an EXISTING app's own repo (use app_create first if the app
@@ -86,29 +87,31 @@ def app_build_start(
     names a planner from the registry; empty uses the default.
     PLAN_PATH, when set, names an existing repo plan/spec document (from
     the planning pathway) that seeds the build. The run is asynchronous —
-    use app_build_status to check progress."""
+    use app_build_status to check progress. The execution run_id is filled
+    in by the system; do not invent one."""
     return logic.app_build_start(
-        _get_admin_client(), app, goal, profile, confirm, plan_path,
+        _get_admin_client(), app, goal, profile, confirm, plan_path, run_id,
     )
 
 
 @mcp.tool()
-def app_build_status() -> dict:
+def app_build_status(action_run_id: str = "", submission_id: str = "") -> dict:
     """Report progress of the current app-build run: whether it's still
     working, which files are proposed and why, whether validation passed,
-    and the PR URL once submitted."""
-    return logic.app_build_status(_get_admin_client())
+    and the PR URL once submitted. Pass submission_id from app_build_submit
+    when reconciling a draft-PR submission instead of an app-build run."""
+    return logic.app_build_status(_get_admin_client(), action_run_id, submission_id)
 
 
 @mcp.tool()
 def app_build_submit(confirm: bool = False) -> dict:
     """Open the draft pull request with the validated app-build edits.
 
-    Call it once app_build_status reports that validation has passed: the
-    user's yes to app_build_start already covers this step, so do not ask
-    again (confirm is ignored). It refuses before validation passes. The
-    PR is never merged by the agent — merging always stays with the human
-    on GitHub."""
+    Once app_build_status reports successful validation, call this directly:
+    the user's explicit approval of app_build_start covers opening the draft
+    PR, so confirm is ignored. It refuses before validation passes. The PR is
+    never merged by the agent. If the result is uncertain, use its
+    submission_id with app_build_status before retrying."""
     return logic.app_build_submit(_get_admin_client(), confirm)
 
 

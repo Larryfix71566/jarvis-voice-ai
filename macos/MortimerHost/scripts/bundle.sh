@@ -36,7 +36,28 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
   SOURCE_DIRTY="false"
   if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then SOURCE_DIRTY="true"; fi
 fi
-swift build -c "$CONFIG"
+DISABLE_BUILD_SANDBOX="${MORTIMER_SWIFT_BUILD_DISABLE_SANDBOX:-0}"
+case "$DISABLE_BUILD_SANDBOX" in
+  0|1) ;;
+  *) echo "MORTIMER_SWIFT_BUILD_DISABLE_SANDBOX must be 0 or 1" >&2; exit 2 ;;
+esac
+if [ "$CONFIG" = "release" ]; then
+  # On constrained macOS hosts, dsymutil can fail while creating the Release
+  # dSYM even though the app binary itself builds successfully. The local
+  # release bundle intentionally uses ad-hoc signing and does not distribute
+  # debug symbols, so omit them from this build as well.
+  if [ "$DISABLE_BUILD_SANDBOX" = "1" ]; then
+    swift build -c "$CONFIG" -debug-info-format none --disable-sandbox
+  else
+    swift build -c "$CONFIG" -debug-info-format none
+  fi
+else
+  if [ "$DISABLE_BUILD_SANDBOX" = "1" ]; then
+    swift build -c "$CONFIG" --disable-sandbox
+  else
+    swift build -c "$CONFIG"
+  fi
+fi
 BIN="$HERE/.build/$CONFIG/MortimerHost"
 APP="$HERE/.build/MortimerHost.app"
 rm -rf "$APP"

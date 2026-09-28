@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-09-28T14:28:07.842469Z",
+  "gate": "release-configuration-app-bundle-and-signature-verification-only",
+  "candidate": {
+    "branch": "codex/isolated-20260924",
+    "head": "977f50bec7b77bd7d3381d3b8f3d63fa69bd00e2",
+    "worktree_fingerprint_sha256": "77dab21d199c42d7b024cb81483ebc3d29f8d4dd37b09ccbdc78f8f9a061f301",
+    "working_tree_dirty": true,
+    "fingerprint_tool": "scripts/mortimer_candidate_fingerprint.py",
+    "fingerprint_refreshed_at": "2026-09-28T14:28:07.842469Z",
+    "fingerprint_refresh_scope": "Final candidate after consolidated status cross-links and current local verification; live acceptance remains open."
+  },
+  "environment": {
+    "platform": "macOS 27.0",
+    "architecture": "arm64",
+    "build_configuration": "release",
+    "debug_info_format": "none",
+    "hardware_model": "not required for bundle verification"
+  },
+  "command": "MORTIMER_SOURCE_REVISION=<HEAD> MORTIMER_CANDIDATE_FINGERPRINT=<current-worktree-fingerprint> MORTIMER_BUNDLE_LAUNCH=0 MORTIMER_SWIFT_BUILD_DISABLE_SANDBOX=1 CLANG_MODULE_CACHE_PATH=/private/tmp/mortimer-clang-cache SWIFTPM_MODULECACHE_OVERRIDE=/private/tmp/mortimer-clang-cache XDG_CACHE_HOME=/private/tmp/mortimer-swift-cache bash macos/MortimerHost/scripts/bundle.sh release; codesign --verify --deep --strict macos/MortimerHost/.build/MortimerHost.app",
+  "result": {
+    "bundle_path": "macos/MortimerHost/.build/MortimerHost.app",
+    "bundle_identifier": "com.mortimer.host",
+    "embedded_source_revision": "977f50bec7b77bd7d3381d3b8f3d63fa69bd00e2",
+    "embedded_candidate_fingerprint_sha256": "77dab21d199c42d7b024cb81483ebc3d29f8d4dd37b09ccbdc78f8f9a061f301",
+    "embedded_source_dirty": "true",
+    "executable_path": "macos/MortimerHost/.build/MortimerHost.app/Contents/MacOS/MortimerHost",
+    "executable_sha256": "e6e12a67d607190659ec96505ab71014f590645b018d1e7f2169bed25ca61356",
+    "executable_bytes": 11998992,
+    "signature": "ad-hoc",
+    "verification": "Final documented candidate release bundle built with launch disabled; codesign --verify --deep --strict succeeded; embedded candidate fingerprint matches.",
+    "exit_code": 0,
+    "launched": false,
+    "installed": false,
+    "deployed": false
+  },
+  "limitations": [
+    "Ad-hoc local test signature; this is not a notarized distribution artifact.",
+    "The app was not launched, installed, or deployed, so runtime behavior and app/backend/config/package agreement are not accepted by this receipt.",
+    "VoiceOver, live voice, physical display, VM lifecycle, live provider evaluation, activation/rollback, and release acceptance remain open."
+  ],
+  "verification_note": "Final documented candidate bundle built with launch disabled; strict codesign verification passed."
+}

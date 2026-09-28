@@ -1,0 +1,22 @@
+# Host-owned exact mapping from immutable skill revision + process step to
+# required machine checks. Natural-language manifest criteria are never
+# copied here or accepted as evidence. Each mapped check must be independently
+# implemented in jarvis/skill_step_checks.py.
+schema_version: 1
+required_checks:
+  - skill_id: skill-creator
+    skill_revision: 9ec4a15fc4b4854dfdab5ce1ea74bacde27064d1ba5cb8bf51c6b88a3000927b
+    step_id: offline-validate
+    check_ids: [creator.offline_validation_verified]
+  - skill_id: current-weather-with-fahrenheit
+    skill_revision: 9064f3d61d680d8cbce9c4dda1b2d98b854624fce2b106f89cc7f13b4ace521e
+    step_id: retrieve-conditions
+    check_ids: [weather.current_and_forecast_returned]
+  - skill_id: git-history-and-status-review
+    skill_revision: 8794a16e69d4908ff12906e93b8b5cc01d0560c8c792d0ab43279c41ac1a5c7e
+    step_id: inspect-repository
+    check_ids: [repository.status_observed]
+  - skill_id: git-history-and-status-review
+    skill_revision: 8794a16e69d4908ff12906e93b8b5cc01d0560c8c792d0ab43279c41ac1a5c7e
+    step_id: inspect-history
+    check_ids: [repository.history_observed]

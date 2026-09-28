@@ -1,0 +1,697 @@
+{
+  "schema_version": 1,
+  "suite": "public_skill_selection_fixtures",
+  "generated_at": "2026-09-28T13:46:05.151241+00:00",
+  "fixture_sha256": "bb7b53220e8892826d1d2283e1b3973039115f4c89c4b528685b9022c0a36950",
+  "package_revisions": {
+    "current-weather-with-fahrenheit": "9064f3d61d680d8cbce9c4dda1b2d98b854624fce2b106f89cc7f13b4ace521e",
+    "git-history-and-status-review": "8794a16e69d4908ff12906e93b8b5cc01d0560c8c792d0ab43279c41ac1a5c7e",
+    "layered-geolocation": "4b85b307b01135554d839cf35039f876323c30bd957b75984a1c2fdecf47ca3a",
+    "mcp-server-authoring": "eb29e0acd71c72f271a2609bbad27529de5874fbcbbdd9c21f90e8a53d45bc9f",
+    "technical-plan-document": "9f5a334f77baf5800c7dbd70c74ee345902e37f2b258f0ef2a4301b05773f314"
+  },
+  "evidence_mode": "synthetic_ready_route_and_tool_inventory",
+  "provider_calls": 0,
+  "summary": {
+    "case_count": 14,
+    "passed": 14,
+    "failed": 0,
+    "positive_cases": 5,
+    "no_skill_cases": 5,
+    "overlap_cases": 4
+  },
+  "cases": [
+    {
+      "case_id": "weather-current-conditions",
+      "category": "positive",
+      "expected_skill_id": "current-weather-with-fahrenheit",
+      "legacy_skill_id": "current-weather-with-fahrenheit",
+      "v2_skill_id": "current-weather-with-fahrenheit",
+      "v2_supporting_skill_id": null,
+      "v2_support_reason": "no_independent_support_candidate",
+      "v2_reason": "automatic_match",
+      "v2_candidates": [
+        {
+          "skill_id": "current-weather-with-fahrenheit",
+          "score": 0.777778,
+          "shared_token_count": 7,
+          "threshold_met": true,
+          "reason": "selected"
+        },
+        {
+          "skill_id": "git-history-and-status-review",
+          "score": 0.111111,
+          "shared_token_count": 1,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "layered-geolocation",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "mcp-server-authoring",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "technical-plan-document",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "case_id": "repository-history-review",
+      "category": "positive",
+      "expected_skill_id": "git-history-and-status-review",
+      "legacy_skill_id": "git-history-and-status-review",
+      "v2_skill_id": "git-history-and-status-review",
+      "v2_supporting_skill_id": null,
+      "v2_support_reason": "no_independent_support_candidate",
+      "v2_reason": "automatic_match",
+      "v2_candidates": [
+        {
+          "skill_id": "current-weather-with-fahrenheit",
+          "score": 0.090909,
+          "shared_token_count": 1,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "git-history-and-status-review",
+          "score": 0.818182,
+          "shared_token_count": 9,
+          "threshold_met": true,
+          "reason": "selected"
+        },
+        {
+          "skill_id": "layered-geolocation",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "mcp-server-authoring",
+          "score": 0.090909,
+          "shared_token_count": 1,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "technical-plan-document",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "case_id": "location-design",
+      "category": "positive",
+      "expected_skill_id": "layered-geolocation",
+      "legacy_skill_id": "layered-geolocation",
+      "v2_skill_id": "layered-geolocation",
+      "v2_supporting_skill_id": null,
+      "v2_support_reason": "no_independent_support_candidate",
+      "v2_reason": "automatic_match",
+      "v2_candidates": [
+        {
+          "skill_id": "current-weather-with-fahrenheit",
+          "score": 0.083333,
+          "shared_token_count": 1,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "git-history-and-status-review",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "layered-geolocation",
+          "score": 0.916667,
+          "shared_token_count": 11,
+          "threshold_met": true,
+          "reason": "selected"
+        },
+        {
+          "skill_id": "mcp-server-authoring",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "technical-plan-document",
+          "score": 0.083333,
+          "shared_token_count": 1,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "case_id": "mcp-server-authoring",
+      "category": "positive",
+      "expected_skill_id": "mcp-server-authoring",
+      "legacy_skill_id": "mcp-server-authoring",
+      "v2_skill_id": "mcp-server-authoring",
+      "v2_supporting_skill_id": null,
+      "v2_support_reason": "no_independent_support_candidate",
+      "v2_reason": "automatic_match",
+      "v2_candidates": [
+        {
+          "skill_id": "current-weather-with-fahrenheit",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "git-history-and-status-review",
+          "score": 0.076923,
+          "shared_token_count": 1,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "layered-geolocation",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "mcp-server-authoring",
+          "score": 0.846154,
+          "shared_token_count": 11,
+          "threshold_met": true,
+          "reason": "selected"
+        },
+        {
+          "skill_id": "technical-plan-document",
+          "score": 0.076923,
+          "shared_token_count": 1,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "case_id": "implementation-plan",
+      "category": "positive",
+      "expected_skill_id": "technical-plan-document",
+      "legacy_skill_id": "technical-plan-document",
+      "v2_skill_id": "technical-plan-document",
+      "v2_supporting_skill_id": null,
+      "v2_support_reason": "no_independent_support_candidate",
+      "v2_reason": "automatic_match",
+      "v2_candidates": [
+        {
+          "skill_id": "current-weather-with-fahrenheit",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "git-history-and-status-review",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "layered-geolocation",
+          "score": 0.181818,
+          "shared_token_count": 2,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "mcp-server-authoring",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "technical-plan-document",
+          "score": 0.818182,
+          "shared_token_count": 9,
+          "threshold_met": true,
+          "reason": "selected"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "case_id": "short-plan-for-today",
+      "category": "no_skill",
+      "expected_skill_id": null,
+      "legacy_skill_id": null,
+      "v2_skill_id": null,
+      "v2_supporting_skill_id": null,
+      "v2_support_reason": null,
+      "v2_reason": "no_eligible_skill",
+      "v2_candidates": [
+        {
+          "skill_id": "current-weather-with-fahrenheit",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "git-history-and-status-review",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "layered-geolocation",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "mcp-server-authoring",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "technical-plan-document",
+          "score": 0.5,
+          "shared_token_count": 1,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "case_id": "greeting",
+      "category": "no_skill",
+      "expected_skill_id": null,
+      "legacy_skill_id": null,
+      "v2_skill_id": null,
+      "v2_supporting_skill_id": null,
+      "v2_support_reason": null,
+      "v2_reason": "no_eligible_skill",
+      "v2_candidates": [
+        {
+          "skill_id": "current-weather-with-fahrenheit",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "git-history-and-status-review",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "layered-geolocation",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "mcp-server-authoring",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "technical-plan-document",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "case_id": "acknowledgement",
+      "category": "no_skill",
+      "expected_skill_id": null,
+      "legacy_skill_id": null,
+      "v2_skill_id": null,
+      "v2_supporting_skill_id": null,
+      "v2_support_reason": null,
+      "v2_reason": "no_eligible_skill",
+      "v2_candidates": [
+        {
+          "skill_id": "current-weather-with-fahrenheit",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "git-history-and-status-review",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "layered-geolocation",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "mcp-server-authoring",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "technical-plan-document",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "case_id": "general-capability-question",
+      "category": "no_skill",
+      "expected_skill_id": null,
+      "legacy_skill_id": null,
+      "v2_skill_id": null,
+      "v2_supporting_skill_id": null,
+      "v2_support_reason": null,
+      "v2_reason": "no_eligible_skill",
+      "v2_candidates": [
+        {
+          "skill_id": "current-weather-with-fahrenheit",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "git-history-and-status-review",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "layered-geolocation",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "mcp-server-authoring",
+          "score": 1.0,
+          "shared_token_count": 1,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "technical-plan-document",
+          "score": 1.0,
+          "shared_token_count": 1,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "case_id": "unqualified-weather",
+      "category": "no_skill",
+      "expected_skill_id": null,
+      "legacy_skill_id": null,
+      "v2_skill_id": null,
+      "v2_supporting_skill_id": null,
+      "v2_support_reason": null,
+      "v2_reason": "no_eligible_skill",
+      "v2_candidates": [
+        {
+          "skill_id": "current-weather-with-fahrenheit",
+          "score": 1.0,
+          "shared_token_count": 1,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "git-history-and-status-review",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "layered-geolocation",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "mcp-server-authoring",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "technical-plan-document",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "case_id": "location-plus-plan-overlap",
+      "category": "overlap",
+      "expected_skill_id": "technical-plan-document",
+      "legacy_skill_id": "technical-plan-document",
+      "v2_skill_id": "technical-plan-document",
+      "v2_supporting_skill_id": null,
+      "v2_support_reason": "mutual_compatibility_not_declared",
+      "v2_reason": "automatic_match",
+      "v2_candidates": [
+        {
+          "skill_id": "current-weather-with-fahrenheit",
+          "score": 0.125,
+          "shared_token_count": 1,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "git-history-and-status-review",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "layered-geolocation",
+          "score": 0.375,
+          "shared_token_count": 3,
+          "threshold_met": true,
+          "reason": "eligible"
+        },
+        {
+          "skill_id": "mcp-server-authoring",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "technical-plan-document",
+          "score": 0.5,
+          "shared_token_count": 4,
+          "threshold_met": true,
+          "reason": "selected"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "case_id": "repository-plus-plan-overlap",
+      "category": "overlap",
+      "expected_skill_id": "git-history-and-status-review",
+      "legacy_skill_id": "git-history-and-status-review",
+      "v2_skill_id": "git-history-and-status-review",
+      "v2_supporting_skill_id": null,
+      "v2_support_reason": "no_independent_support_candidate",
+      "v2_reason": "automatic_match",
+      "v2_candidates": [
+        {
+          "skill_id": "current-weather-with-fahrenheit",
+          "score": 0.111111,
+          "shared_token_count": 1,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "git-history-and-status-review",
+          "score": 0.444444,
+          "shared_token_count": 4,
+          "threshold_met": true,
+          "reason": "selected"
+        },
+        {
+          "skill_id": "layered-geolocation",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "mcp-server-authoring",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "technical-plan-document",
+          "score": 0.222222,
+          "shared_token_count": 2,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "case_id": "mcp-plus-plan-overlap",
+      "category": "overlap",
+      "expected_skill_id": "technical-plan-document",
+      "legacy_skill_id": "technical-plan-document",
+      "v2_skill_id": "technical-plan-document",
+      "v2_supporting_skill_id": null,
+      "v2_support_reason": "no_independent_support_candidate",
+      "v2_reason": "automatic_match",
+      "v2_candidates": [
+        {
+          "skill_id": "current-weather-with-fahrenheit",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "git-history-and-status-review",
+          "score": 0.125,
+          "shared_token_count": 1,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "layered-geolocation",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "mcp-server-authoring",
+          "score": 0.25,
+          "shared_token_count": 2,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "technical-plan-document",
+          "score": 0.5,
+          "shared_token_count": 4,
+          "threshold_met": true,
+          "reason": "selected"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "case_id": "location-plus-mcp-overlap",
+      "category": "overlap",
+      "expected_skill_id": "mcp-server-authoring",
+      "legacy_skill_id": "mcp-server-authoring",
+      "v2_skill_id": "mcp-server-authoring",
+      "v2_supporting_skill_id": null,
+      "v2_support_reason": "mutual_compatibility_not_declared",
+      "v2_reason": "automatic_match",
+      "v2_candidates": [
+        {
+          "skill_id": "current-weather-with-fahrenheit",
+          "score": 0.166667,
+          "shared_token_count": 1,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "git-history-and-status-review",
+          "score": 0.0,
+          "shared_token_count": 0,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        },
+        {
+          "skill_id": "layered-geolocation",
+          "score": 0.333333,
+          "shared_token_count": 2,
+          "threshold_met": true,
+          "reason": "eligible"
+        },
+        {
+          "skill_id": "mcp-server-authoring",
+          "score": 0.5,
+          "shared_token_count": 3,
+          "threshold_met": true,
+          "reason": "selected"
+        },
+        {
+          "skill_id": "technical-plan-document",
+          "score": 0.166667,
+          "shared_token_count": 1,
+          "threshold_met": false,
+          "reason": "below_lexical_threshold"
+        }
+      ],
+      "passed": true
+    }
+  ]
+}

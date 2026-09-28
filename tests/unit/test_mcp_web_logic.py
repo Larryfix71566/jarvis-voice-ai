@@ -62,6 +62,50 @@ class TestWebSearch:
         assert logic.web_search("q")["error"] == "Web search failed: ConnectError."
 
 
+class TestResearchActionIdentity:
+    class Client:
+        def __init__(self):
+            self.posts = []
+            self.gets = []
+
+        def post(self, path, json=None):
+            self.posts.append((path, json))
+            return {"ok": True, "started": True, "action_run_id": json["run_id"]}
+
+        def get(self, path, params=None):
+            self.gets.append((path, params))
+            return {"ok": True, "job": {"state": "done", "credits_used": 9}}
+
+    def test_preview_needs_no_execution_id_and_does_not_dispatch(self):
+        client = self.Client()
+        result = logic.research_compare_start(
+            client, ["https://a.example", "https://b.example"], confirm=False,
+        )
+        assert result["needs_confirmation"] is True
+        assert client.posts == []
+
+    def test_confirmed_start_without_execution_id_fails_closed(self):
+        client = self.Client()
+        result = logic.research_compare_start(
+            client, ["https://a.example", "https://b.example"], confirm=True,
+        )
+        assert result["ok"] is False
+        assert "execution ID" in result["error"]
+        assert client.posts == []
+
+    def test_confirmed_start_and_status_use_system_execution_id(self):
+        client = self.Client()
+        started = logic.research_compare_start(
+            client, ["https://a.example", "https://b.example"], confirm=True,
+            run_id="stable-action-1",
+        )
+        status = logic.research_status(client, run_id="stable-action-1")
+        assert started["action_run_id"] == "stable-action-1"
+        assert client.posts[0][1]["run_id"] == "stable-action-1"
+        assert client.gets == [("/api/research/job", {"run_id": "stable-action-1"})]
+        assert "9 credits" in status["summary"]
+
+
 def _sse(payload: dict) -> str:
     import json as _json
 
@@ -148,6 +192,7 @@ GEO_PAYLOAD = {
 }
 FORECAST_PAYLOAD = {
     "current": {
+        "time": "2026-09-28T12:00",
         "temperature_2m": 30.4, "relative_humidity_2m": 66,
         "weather_code": 2, "wind_speed_10m": 9.1,
     },
@@ -158,6 +203,7 @@ FORECAST_PAYLOAD = {
         "precipitation_probability_max": [20, 55],
         "weather_code": [2, 61],
     },
+    "timezone": "UTC",
 }
 
 
@@ -184,7 +230,9 @@ class TestGetWeather:
         )
         result = logic.get_weather("tokyo", days=2)
         assert result["city"] == "Tokyo, Japan"
+        assert result["requested_city"] == "tokyo"
         assert result["source"] == "open-meteo"
+        assert result["current"]["observed_at"] == "2026-09-28T12:00:00Z"
         assert result["current"]["condition"] == "partly cloudy"
         assert result["current"]["temperature_c"] == 30.4
         assert len(result["daily"]) == 2
@@ -295,6 +343,7 @@ WG_OBS_PAYLOAD = {
     "properties": {
         "temperature": {"value": 31.1, "unitCode": "wmoUnit:degC"},
         "textDescription": "Partly Cloudy",
+        "timestamp": "2026-09-28T12:00:00+00:00",
     }
 }
 WG_FORECAST_PAYLOAD = {
@@ -338,6 +387,7 @@ class TestGetWeatherWeatherGov:
         assert result["source"] == "weather.gov"
         assert result["current"]["temperature_f"] == 88  # 31.1C converted
         assert result["current"]["condition"] == "Partly Cloudy"
+        assert result["current"]["observed_at"] == "2026-09-28T12:00:00Z"
         assert result["city"] == "Spartanburg"
 
     def test_weathergov_daily_forecast_converted_both_ways(self, monkeypatch):
@@ -368,6 +418,7 @@ class TestGetWeatherWeatherGov:
         result = logic.get_weather("Spartanburg", days=1)
         assert result["source"] == "weather.gov-forecast"
         assert result["source"] != "weather.gov"
+        assert result["current"]["observed_at"] is None
 
     def test_weathergov_current_missing_falls_back_to_open_meteo(self, monkeypatch):
         """Outside the US (or any Weather.gov failure): falls back
@@ -508,7 +559,7 @@ class TestGetWeatherRadar:
             # .../{z}/{x}/{y}.png or .../{z}/{x}/{y}/2/1_1.png
             parts = url.rstrip("/").split("/")
             if parts[-1].endswith(".png") and "_" not in parts[-1]:
-                z, x, y_png = parts[-3], parts[-2], parts[-1]
+                _z, x, y_png = parts[-3], parts[-2], parts[-1]
                 y = y_png[: -len(".png")]
             else:
                 y = parts[-3]

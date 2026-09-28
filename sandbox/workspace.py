@@ -63,18 +63,22 @@ class SandboxWorkspace:
     def cancel(self) -> dict: return self._invoke('cancel')
 
     def _submission(self, state):
-        title = ('self-edit: ' if self._kind == 'selfedit' else 'app-build: ') + state['goal'].splitlines()[0]
+        prefix = ('self-edit: ' if self._kind == 'selfedit' else
+                  'skill authoring: ' if self._kind.startswith('skill-authoring-') else
+                  'app-build: ')
+        title = prefix + state['goal'].splitlines()[0]
         body = 'Goal: ' + state['goal'] + '\n\n'
         body += '\n'.join('- ' + p['path'] + ': ' + p['rationale'] for p in state['proposals'])
         body += '\n\nThe frozen candidate passed the required checks in an independent offline VM. '
         body += 'This draft is for review; merging and deployment require their own decisions.'
         return title[:120], body
 
-    def submit(self) -> dict:
+    def submit(self, *, preflight=None) -> dict:
         try:
             session = self._session()
             title, body = self._submission(session.status())
-            result = session.submit(self._runtime().publisher(self._token()), title, body)
+            result = session.submit(self._runtime().publisher(self._token()), title, body,
+                                    preflight=preflight)
             return {**result, 'pr_url': result.get('url'), 'pr_number': result.get('number')}
         except (SandboxError, OSError, ValueError, KeyError) as exc: return self._error(exc)
 

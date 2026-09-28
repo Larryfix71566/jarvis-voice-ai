@@ -91,6 +91,12 @@ def _stub_procedures_learning(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _auth_disabled_by_default(monkeypatch):
+    """Keep unrelated tests focused on their behavior; auth tests opt in."""
+    monkeypatch.setenv("JARVIS_AUTH_ENABLED", "false")
+
+
+@pytest.fixture(autouse=True)
 def _stub_notice_outbox(monkeypatch):
     """Status spec T3.2: a delegation orphaned with no live session writes
     its result to the notice outbox (jarvis.notices -> JARVIS_DB_PATH, which

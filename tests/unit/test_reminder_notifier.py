@@ -126,8 +126,25 @@ def test_post_exception_retries_failed_row_and_continues_others(db, caplog):
     assert _row(other_id)["notified_at"] is not None
     assert "RuntimeError" in caplog.text
     assert "private notification details" not in caplog.text
+    assert str(failed_id) not in caplog.text
+    assert "reminder_notifier_post_failed" in caplog.text
     notifier._post = lambda message: posted.append(message) or True
     assert notifier.tick_once() == 1
     assert notifier.tick_once() == 0
     assert posted == ["deliver me", "retry me"]
     assert _row(failed_id)["delivered"] == _row(other_id)["delivered"] == 0
+
+
+def test_mark_notified_failure_log_omits_reminder_id(db, monkeypatch, caplog):
+    reminder_id = _insert_reminder(-120)
+
+    def fail_mark(_ids):
+        raise RuntimeError("PRIVATE_MARK_FAILURE_CANARY")
+
+    monkeypatch.setattr("jarvis.admin.reminder_notifier.logic.mark_notified", fail_mark)
+    notifier = ReminderNotifier(post=lambda _message: True)
+
+    assert notifier.tick_once() == 0
+    assert "reminder_notifier_mark_failed error_type=RuntimeError" in caplog.text
+    assert str(reminder_id) not in caplog.text
+    assert "PRIVATE_MARK_FAILURE_CANARY" not in caplog.text

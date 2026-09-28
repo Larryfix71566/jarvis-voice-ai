@@ -49,6 +49,28 @@ final class ContentPanelTests: XCTestCase {
         XCTAssertTrue(store.isPresented(pointerOnly, selection: pointerOnly))
     }
 
+    func testSkillDetailTransferUsesOneSharedStageAndReturnsToMainWhenDisplayCloses() {
+        let workspace = WorkspaceStore()
+        let display = DisplayWindowStore()
+        let selectedSkill = "workflow/research"
+        let content = SupportingDisplayContent.skillDetail(selectedSkill)
+
+        XCTAssertTrue(workspace.sendToDisplay(content))
+        XCTAssertEqual(display.supplementalContent(workspace.supportingContent), content)
+        XCTAssertTrue(display.stagePanels(selection: workspace.supportingContent).isEmpty,
+                       "skill detail remains one supplemental stage item, not a floating panel")
+
+        display.setWindowOpen(true)
+        XCTAssertTrue(display.isPresented(content, selection: workspace.supportingContent))
+        display.setWindowOpen(false)
+        XCTAssertFalse(display.isPresented(content, selection: workspace.supportingContent),
+                       "closing the display removes the supporting presentation locator")
+        workspace.returnSkillDetailsToMain()
+        XCTAssertNil(workspace.supportingContent)
+        XCTAssertTrue(workspace.showsSkills,
+                      "return explicitly restores the Skills workspace in the main window")
+    }
+
     private func payload(title: String = "Research", body: String = "body",
                          agent: String? = nil, runID: String? = nil) throws -> DisplayPayload {
         let object: [String: String] = [
@@ -76,7 +98,7 @@ final class ContentPanelTests: XCTestCase {
 
     func testAdditionalPanelRequiresExplicitPinAction() throws {
         let store = DisplayWindowStore()
-        let id = store.apply(try payload())
+        let id = try XCTUnwrap(store.apply(try payload()))
         XCTAssertTrue(store.pin(id: id))
         let duplicate = try XCTUnwrap(store.openAdditional(id: id))
         XCTAssertNotEqual(duplicate, id)
@@ -92,7 +114,7 @@ final class ContentPanelTests: XCTestCase {
         let store = DisplayWindowStore()
         store.setWindowOpen(true)
         _ = store.apply(try payload(title: "First"))
-        let second = store.apply(try payload(title: "Second"))
+        let second = try XCTUnwrap(store.apply(try payload(title: "Second")))
         XCTAssertEqual(store.panels.count, 2)
         XCTAssertEqual(store.panels.last?.id, second)
         XCTAssertEqual(store.defaultPresentationPanelCount, 2)
@@ -133,7 +155,7 @@ final class ContentPanelTests: XCTestCase {
     func testOpeningSupportingDisplayPreservesBoundedUnpinnedPanelsAndPins() throws {
         let store = DisplayWindowStore()
         _ = store.apply(try payload(title: "First"))
-        let second = store.apply(try payload(title: "Second"))
+        let second = try XCTUnwrap(store.apply(try payload(title: "Second")))
         XCTAssertTrue(store.pin(id: second))
         _ = store.apply(try payload(title: "Third"))
         XCTAssertEqual(store.panels.count, 3)
@@ -146,7 +168,7 @@ final class ContentPanelTests: XCTestCase {
 
     func testSupportingStageLeavesPinnedCopiesAsExplicitExtras() throws {
         let store = DisplayWindowStore()
-        let first = store.apply(try payload(title: "First"))
+        let first = try XCTUnwrap(store.apply(try payload(title: "First")))
         XCTAssertEqual(store.activePresentationPanelID, first)
         XCTAssertTrue(store.pin(id: first))
         let second = try XCTUnwrap(store.openAdditional(id: first))
@@ -161,7 +183,7 @@ final class ContentPanelTests: XCTestCase {
 
     func testPinnedPanelStaysOutsideStageWhenUnpinnedResultsRemain() throws {
         let store = DisplayWindowStore()
-        let pinned = store.apply(try payload(title: "Pinned"))
+        let pinned = try XCTUnwrap(store.apply(try payload(title: "Pinned")))
         XCTAssertTrue(store.pin(id: pinned))
         _ = store.apply(try payload(title: "Current"))
 
@@ -174,7 +196,7 @@ final class ContentPanelTests: XCTestCase {
         let store = DisplayWindowStore()
         var pinnedIDs: [Int] = []
         for index in 0..<AppTuning.maxDisplayWindowPanels {
-            let id = store.apply(try payload(title: "Pinned \(index)"))
+            let id = try XCTUnwrap(store.apply(try payload(title: "Pinned \(index)")))
             XCTAssertTrue(store.pin(id: id))
             pinnedIDs.append(id)
         }
@@ -193,14 +215,29 @@ final class ContentPanelTests: XCTestCase {
         let first = try payload(title: "README", agent: "Developer", runID: "run-1")
         let second = try payload(title: "ROADMAP", agent: "Developer", runID: "run-1")
 
-        let panelID = store.apply(first, workspaceID: firstWorkspaceID)
-        let appendedID = store.apply(second, workspaceID: secondWorkspaceID)
+        let panelID = try XCTUnwrap(store.apply(first, workspaceID: firstWorkspaceID))
+        let appendedID = try XCTUnwrap(store.apply(second, workspaceID: secondWorkspaceID))
 
         XCTAssertEqual(appendedID, panelID)
         XCTAssertEqual(store.panels.count, 1)
         XCTAssertEqual(store.panels.first?.allPayloads.map(\.title), ["README", "ROADMAP"])
         XCTAssertTrue(store.containsWorkspaceResult(firstWorkspaceID))
         XCTAssertTrue(store.containsWorkspaceResult(secondWorkspaceID))
+    }
+
+    func testPinnedDeveloperRunStillAppendsToItsSinglePanel() throws {
+        let store = DisplayWindowStore()
+        let first = try payload(title: "README", agent: "Developer", runID: "run-pinned")
+        let second = try payload(title: "ROADMAP", agent: "Developer", runID: "run-pinned")
+
+        let panelID = try XCTUnwrap(store.apply(first))
+        XCTAssertTrue(store.pin(id: panelID))
+        let appendedID = try XCTUnwrap(store.apply(second))
+
+        XCTAssertEqual(appendedID, panelID)
+        XCTAssertEqual(store.panels.count, 1, "pinning a run must not split later output into a duplicate tile")
+        XCTAssertEqual(store.panels.first?.allPayloads.map(\.title), ["README", "ROADMAP"])
+        XCTAssertTrue(store.panels.first?.pinned == true, "new run output must preserve the user's pin")
     }
 
     func testExactRepeatReusesTheExistingWorkspaceOwnerButNewRunSectionDoesNot() throws {
@@ -254,7 +291,7 @@ final class ContentPanelTests: XCTestCase {
         XCTAssertTrue(workspace.sendToDisplay(.result(result.id)))
 
         let display = DisplayWindowStore()
-        let panelID = display.apply(resultPayload, workspaceID: result.id)
+        let panelID = try XCTUnwrap(display.apply(resultPayload, workspaceID: result.id))
         XCTAssertEqual(display.panels.count, 1)
 
         // This mirrors the last-panel close action in SingleDisplayPanel.

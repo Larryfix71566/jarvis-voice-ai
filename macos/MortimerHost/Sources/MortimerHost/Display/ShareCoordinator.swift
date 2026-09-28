@@ -1,6 +1,9 @@
 import AppKit
 import Foundation
 import Observation
+import ImageIO
+import UniformTypeIdentifiers
+import JarvisKit
 
 /// Immutable snapshot shown in the share preview. A later result arrival can
 /// never retarget an already-open preview.
@@ -19,9 +22,24 @@ final class ShareCoordinator {
     private(set) var status = "idle"
     private(set) var message: String?
     private var picker: NSSharingServicePicker?
+    private let clipboardWriter: (String) -> Bool
+
+    init(clipboardWriter: @escaping (String) -> Bool = { text in
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        return pasteboard.setString(text, forType: .string)
+    }) {
+        self.clipboardWriter = clipboardWriter
+    }
 
     @discardableResult
-    func beginPreview(_ result: WorkspaceResult, text: String? = nil) -> SharePreview {
+    func beginPreview(_ result: WorkspaceResult, text: String? = nil) -> SharePreview? {
+        guard !result.payload.isProtectedLocal else {
+            preview = nil
+            status = "error"
+            message = "This protected result is available only in the local results area."
+            return nil
+        }
         let value = SharePreview(id: UUID(), resultID: result.id,
                                  text: text ?? WorkspaceResultExport.text(result),
                                  format: "text", data: nil)
@@ -29,25 +47,70 @@ final class ShareCoordinator {
         return value
     }
 
-    /// Freeze a rendered PNG for the share transaction. The caller supplies
-    /// the already-loaded bitmap; this coordinator never downloads an
-    /// arbitrary URL or captures adjacent private UI.
+    /// Freeze an image referenced by this exact, explicitly shareable result.
+    /// Re-encoding strips source metadata (including location tags), while the
+    /// source-reference check prevents a bitmap from another result or the
+    /// memory graph from borrowing this result's sharing authorization.
     @discardableResult
-    func beginImagePreview(resultID: UUID, pngData: Data) -> Bool {
-        guard !pngData.isEmpty, pngData.count <= 8 * 1024 * 1024 else {
+    func beginImagePreview(result: WorkspaceResult, sourceURL: URL, pngData: Data) -> Bool {
+        guard result.payload.dataPolicy == "approved_external",
+              Self.isDeclaredImage(sourceURL, by: result.payload),
+              !Self.isMemoryGraphImage(sourceURL) else {
+            preview = nil
+            status = "error"
+            message = "This image is not classified for sharing with this result."
+            return false
+        }
+        guard let sanitizedPNG = Self.sanitizedPNG(pngData) else {
+            preview = nil
             message = "The image is unavailable or exceeds the share limit."
             status = "error"
             return false
         }
-        preview = SharePreview(id: UUID(), resultID: resultID, text: "Rendered image preview",
-                               format: "png", data: pngData)
+        preview = SharePreview(id: UUID(), resultID: result.id, text: "Rendered image preview",
+                               format: "png", data: sanitizedPNG)
         status = "preview"; message = nil
         return true
     }
 
+    private static func isDeclaredImage(_ source: URL, by payload: DisplayPayload) -> Bool {
+        guard let scheme = source.scheme?.lowercased(), ["https", "http"].contains(scheme),
+              let host = source.host, !host.isEmpty else { return false }
+        return (payload.images ?? []).contains { URL(string: $0) == source }
+            || (payload.basemapImages ?? []).contains { URL(string: $0) == source }
+    }
+
+    private static func isMemoryGraphImage(_ source: URL) -> Bool {
+        source.path.lowercased().contains("/api/graph/")
+            || source.path.lowercased().contains("/graph/memory")
+    }
+
+    /// Validate image bytes and encode a fresh metadata-free PNG. No opaque
+    /// payload is allowed to reach the pasteboard or share sheet unchanged.
+    private static func sanitizedPNG(_ data: Data) -> Data? {
+        guard !data.isEmpty, data.count <= 8 * 1024 * 1024,
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              CGImageSourceGetCount(source) == 1,
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+              let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
+              width.intValue > 0, height.intValue > 0,
+              width.intValue <= 4096, height.intValue <= 4096,
+              let image = CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCache: false] as CFDictionary)
+        else { return nil }
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(output, UTType.png.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        let normalized = output as Data
+        return !normalized.isEmpty && normalized.count <= 8 * 1024 * 1024 ? normalized : nil
+    }
+
     /// Compatibility helper for existing callers that need the frozen text.
     @discardableResult
-    func preview(_ result: WorkspaceResult) -> String { beginPreview(result).text }
+    func preview(_ result: WorkspaceResult) -> String {
+        beginPreview(result)?.text ?? ""
+    }
 
     func cancel() {
         picker = nil; preview = nil; status = "idle"; message = nil
@@ -68,10 +131,8 @@ final class ShareCoordinator {
     }
 
     @discardableResult
-    func copy(_ text: String) -> Bool {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        let ok = pasteboard.setString(text, forType: .string)
+    private func copy(_ text: String) -> Bool {
+        let ok = clipboardWriter(text)
         status = ok ? "copied" : "error"
         message = ok ? "Copied selected result." : "Copy failed."
         return ok

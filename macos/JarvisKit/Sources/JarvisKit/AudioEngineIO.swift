@@ -427,7 +427,10 @@ final class AudioEngineIO: @unchecked Sendable {
     private var playoutSlot: AudioLevelSample?
 
     private var engine: AVAudioEngine?
-    private let player = AVAudioPlayerNode()
+    // Do not instantiate CoreAudio until an engine is actually started. This
+    // keeps an unused AudioEngineIO inert in headless/test contexts; startLocked
+    // attaches the node before publishing playerAttached under slotLock.
+    private lazy var player = AVAudioPlayerNode()
     private var playerFormat: AVAudioFormat?
     private var converter: CaptureConverter?
     private var captureEnabled = true

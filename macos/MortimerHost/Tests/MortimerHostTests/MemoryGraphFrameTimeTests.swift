@@ -114,7 +114,7 @@ final class MemoryGraphFrameTimeTests: XCTestCase {
             self.base = store.metadata.camera
         }
 
-        func close() { window.close() }
+        func close() { closeRenderingFixtureWindow(window) }
 
         private func undisplayedLayers(_ layer: CALayer?) -> Int {
             guard let layer else { return 0 }
@@ -134,12 +134,17 @@ final class MemoryGraphFrameTimeTests: XCTestCase {
             CATransaction.commit()
             CATransaction.flush()
             mainThread.append((CACurrentMediaTime() - start) * 1000)
-            undisplayed += undisplayedLayers(view.layer)
             let deadline = Date(timeIntervalSinceNow: 0.5)
             while mark.at == nil, Date() < deadline {
                 RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.0005))
             }
             if mark.at != nil { completions += 1 }
+            // Check after the render-server completion, not immediately after
+            // flush: an asynchronous Canvas display may still be queued while
+            // the completion transaction is in flight. Counting that expected
+            // interval made this assertion report stale layers even when the
+            // frame later completed inside its measured span.
+            undisplayed += undisplayedLayers(view.layer)
             let presented = ((mark.at ?? CACurrentMediaTime()) - start) * 1000
             if capture {
                 let t = CACurrentMediaTime()
@@ -176,7 +181,7 @@ final class MemoryGraphFrameTimeTests: XCTestCase {
         func layerSurvey(_ layer: CALayer? = nil, depth: Int = 0) -> [String] {
             let layer = depth == 0 ? view.layer : layer
             guard let layer else { return [] }
-            let line = String(repeating: " ", count: depth) + "\(type(of: layer)) async=\(layer.drawsAsynchronously) bounds=\(Int(layer.bounds.width))x\(Int(layer.bounds.height))"
+            let line = String(repeating: " ", count: depth) + "\(type(of: layer)) async=\(layer.drawsAsynchronously) needsDisplay=\(layer.needsDisplay()) bounds=\(Int(layer.bounds.width))x\(Int(layer.bounds.height))"
             return [line] + (layer.sublayers ?? []).flatMap { layerSurvey($0, depth: depth + 1) }
         }
 
@@ -206,7 +211,17 @@ final class MemoryGraphFrameTimeTests: XCTestCase {
     // and a run loop spun from inside a main-queue block does not drain the
     // main queue — Core Animation's completion blocks would never arrive.
     func testPanAndZoomFrameTimesOnTheDenseHubFixtureMeetTheP95Gate() throws {
-        _ = NSApplication.shared
+        let app = NSApplication.shared
+        guard !NSScreen.screens.isEmpty, NSScreen.main != nil else {
+            throw XCTSkip("requires a visible macOS display; headless frame transactions do not prove on-screen rendering")
+        }
+        let originalPolicy = app.activationPolicy()
+        guard app.setActivationPolicy(.regular) else {
+            throw XCTSkip("test process cannot activate as a regular app; on-screen frame timing is unavailable")
+        }
+        defer { _ = app.setActivationPolicy(originalPolicy) }
+        app.finishLaunching()
+        app.activate(ignoringOtherApps: true)
         let graph = try GraphFixture.denseHub()
         XCTAssertEqual(graph.nodes.count, 500); XCTAssertEqual(graph.edges.count, 2000)
         let stress = try Harness(graph: graph, selectHub: true)
@@ -224,7 +239,7 @@ final class MemoryGraphFrameTimeTests: XCTestCase {
         let frames = pan + zoom
         XCTAssertEqual(frames.count, 300)
         XCTAssertEqual(stress.completions, 312, "every transaction must report completion within 0.5 s")
-        XCTAssertEqual(stress.undisplayed, 0, "a layer was still waiting to draw after the main-thread span")
+        XCTAssertEqual(stress.undisplayed, 0, "a layer was still waiting to draw after render-server completion")
         XCTAssertNotEqual(fitDigest, panDigest, "panning did not change the rendered pixels")
         XCTAssertNotEqual(fitDigest, zoomDigest, "zooming did not change the rendered pixels")
         XCTAssertGreaterThan(stress.painted(), 20, "the stress canvas rendered no nodes or edges")
@@ -272,7 +287,7 @@ final class MemoryGraphFrameTimeTests: XCTestCase {
             "hardware": ["model": sysctl("hw.model"), "cpu": sysctl("machdep.cpu.brand_string"),
                          "memory_bytes": Int(ProcessInfo.processInfo.physicalMemory),
                          "os": ProcessInfo.processInfo.operatingSystemVersionString],
-            "method": "per frame: explicit CATransaction with a completion block; MemoryGraphStore.setCamera + one main run-loop pass (0.5 ms timeout; SwiftUI commit) + CATransaction commit/flush (layer display); frame time = CACurrentMediaTime from setCamera until the render server ran the completion block; main-thread part reported separately; the span's sensitivity to drawing cost is checked against a four-node control; verified: every transaction completed, no layer needs display after the main-thread span, pixels differ between fit/pan/zoom; 10 unrecorded warm-up frames; NSHostingView 1440×900 in an ordered-front borderless window",
+            "method": "per frame: explicit CATransaction with a completion block; MemoryGraphStore.setCamera + one main run-loop pass (0.5 ms timeout; SwiftUI commit) + CATransaction commit/flush (layer display); frame time = CACurrentMediaTime from setCamera until the render server ran the completion block; main-thread part reported separately; the span's sensitivity to drawing cost is checked against a four-node control; verified: every transaction completed, no layer needs display after render-server completion, pixels differ between fit/pan/zoom; 10 unrecorded warm-up frames; NSHostingView 1440×900 in an ordered-front borderless window",
             "recorded_at": ISO8601DateFormatter().string(from: Date()),
             "test": "MemoryGraphFrameTimeTests.testPanAndZoomFrameTimesOnTheDenseHubFixtureMeetTheP95Gate",
         ]

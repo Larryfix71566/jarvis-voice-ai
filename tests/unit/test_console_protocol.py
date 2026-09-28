@@ -1,10 +1,17 @@
 import re
 import uuid
+
 import pytest
+
 from jarvis.bot.console_protocol import (
-    ACTION_ARG_FIELDS, ALLOWED_ACTIONS, REQUIRED_SECONDARY_TARGET_ACTIONS,
-    REQUIRED_TARGET_ACTIONS, validate_request, response, validate_ready,
+    ACTION_ARG_FIELDS,
+    ALLOWED_ACTIONS,
+    REQUIRED_SECONDARY_TARGET_ACTIONS,
+    REQUIRED_TARGET_ACTIONS,
+    response,
     validate_inventory,
+    validate_ready,
+    validate_request,
 )
 
 
@@ -76,6 +83,78 @@ def test_request_normalizes_and_rejects_unknown_or_nonfinite():
     with pytest.raises(ValueError): validate_request(req(args={"x": float("nan")}))
     with pytest.raises(ValueError): validate_request(req(target={"id": 1}))
     with pytest.raises(ValueError): validate_request(req(args={"blob": "x" * 40000}))
+
+
+def test_view_set_accepts_the_skills_workspace_mode():
+    out = validate_request(req(action="view_set", args={"mode": "skills"}))
+    assert out["action"] == "view_set"
+    assert out["args"]["mode"] == "skills"
+
+
+def test_skills_navigation_actions_are_bounded_and_enum_checked():
+    assert validate_request(req(action="skills_search", args={"query": "creator"}))['action'] == "skills_search"
+    with pytest.raises(ValueError):
+        validate_request(req(action="skills_search", args={"query": "x" * 257}))
+    with pytest.raises(ValueError):
+        validate_request(req(action="skills_search", args={"query": "e\u0301" * 129}))
+    with pytest.raises(ValueError):
+        validate_request(req(action="skills_search"))
+    assert validate_request(req(action="skills_filter", args={"state": "installed", "category": "development"}))['action'] == "skills_filter"
+    for args in ({"state": "everything", "category": "development"},
+                 {"state": "all", "category": ""}, {"state": "all", "category": "x" * 41}):
+        with pytest.raises(ValueError):
+            validate_request(req(action="skills_filter", args=args))
+    assert validate_request(req(action="skill_tab", args={"tab": "process"}))['action'] == "skill_tab"
+    with pytest.raises(ValueError):
+        validate_request(req(action="skill_tab", args={"tab": "execute"}))
+    for action in ("skill_select", "skill_step_select", "skill_step_explain", "skill_run_select"):
+        with pytest.raises(ValueError):
+            validate_request(req(action=action))
+        assert validate_request(req(action=action, target="valid-skill-id"))["action"] == action
+    with pytest.raises(ValueError):
+        validate_request(req(action="skill_example_preview", target="implementation-plan"))
+    assert validate_request(req(action="skill_example_preview", target="implementation-plan",
+                                args={"skill_id": "technical-plan-document"}))['action'] == "skill_example_preview"
+    with pytest.raises(ValueError):
+        validate_request(req(action="skill_example_preview", target="unknown-example",
+                             args={"skill_id": "technical-plan-document", "extra": True}))
+
+
+def test_skill_workspace_controls_have_typed_shared_actions():
+    for action in ("skills_refresh", "skill_back", "skill_activity_retry", "skill_activity_more",
+                   "skill_creator_open"):
+        assert validate_request(req(action=action))["action"] == action
+    assert validate_request(req(action="skill_display_transfer", target="technical-plan-document"))["action"] == "skill_display_transfer"
+    with pytest.raises(ValueError):
+        validate_request(req(action="skill_display_transfer"))
+    assert validate_request(req(action="skill_step_select", target="draft",
+                                args={"expanded": False}))["args"]["expanded"] is False
+    with pytest.raises(ValueError):
+        validate_request(req(action="skill_step_select", target="draft",
+                             args={"expanded": "false"}))
+
+
+def test_voice_skill_drafting_requires_bounded_preview_then_opaque_id():
+    preview = validate_request(req(action="skill_request_preview", args={
+        "operation": "draft", "skill_id": "meeting-prep", "task_brief": "Create a meeting preparation skill.",
+    }))
+    assert preview["args"]["skill_id"] == "meeting-prep"
+    assert validate_request(req(action="skill_request", args={
+        "operation": "draft", "preview_id": str(uuid.uuid4()),
+    }))['action'] == "skill_request"
+    for args in (
+        {"operation": "request_publish", "skill_id": "x", "task_brief": "brief"},
+        {"operation": "draft", "skill_id": "Bad Slug", "task_brief": "brief"},
+        {"operation": "draft", "skill_id": "skill", "task_brief": " "},
+        {"operation": "draft", "skill_id": "skill", "task_brief": "x" * 8_001},
+        {"operation": "draft", "skill_id": "skill", "task_brief": "e\u0301" * 4_001},
+    ):
+        with pytest.raises(ValueError):
+            validate_request(req(action="skill_request_preview", args=args))
+    with pytest.raises(ValueError):
+        validate_request(req(action="skill_request", args={"operation": "request_publish", "preview_id": str(uuid.uuid4())}))
+    with pytest.raises(ValueError):
+        validate_request(req(action="skill_request", args={"operation": "draft", "preview_id": "not-a-uuid"}))
 
 
 def test_request_matches_native_target_and_argument_contract():

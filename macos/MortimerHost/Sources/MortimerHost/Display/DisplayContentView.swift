@@ -26,29 +26,40 @@ struct DisplayContentView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 if let body = payload.body, !body.isEmpty {
-                    Text(markdown: body)
-                        .textSelection(.enabled)
-                }
-
-                if let images = payload.images, !images.isEmpty {
-                    imagesStack(images: images, basemaps: payload.basemapImages)
-                }
-
-                if let links = payload.links, !links.isEmpty {
-                    ForEach(Array(links.enumerated()), id: \.offset) { _, link in
-                        if let url = URL(string: link.url) {
-                            Link(link.label ?? link.url, destination: url)
-                                .foregroundStyle(AppTheme.accent)
-                        }
+                    if payload.isProtectedLocal {
+                        Text(verbatim: body)
+                            .textSelection(.disabled)
+                            .accessibilityLabel(body)
+                    } else {
+                        Text(markdown: body).textSelection(.enabled)
                     }
                 }
 
-                if let commands = payload.commands, !commands.isEmpty {
-                    commandsBlock(commands, note: payload.note, expectOutput: payload.expectOutput ?? false)
-                }
+                // A protected result is a local-only body. Ancillary payload
+                // fields can launch network requests, browsers, or clipboard
+                // writes (commands/content/links), so never render them on this
+                // path even if a producer accidentally includes them.
+                if !payload.isProtectedLocal {
+                    if let images = payload.images, !images.isEmpty {
+                        imagesStack(images: images, basemaps: payload.basemapImages)
+                    }
 
-                if let content = payload.content, !content.isEmpty {
-                    clipboardBlock(content, chars: payload.chars, truncated: payload.truncated ?? false)
+                    if let links = payload.links, !links.isEmpty {
+                        ForEach(Array(links.enumerated()), id: \.offset) { _, link in
+                            if let url = URL(string: link.url) {
+                                Link(link.label ?? link.url, destination: url)
+                                    .foregroundStyle(AppTheme.accent)
+                            }
+                        }
+                    }
+
+                    if let commands = payload.commands, !commands.isEmpty {
+                        commandsBlock(commands, note: payload.note, expectOutput: payload.expectOutput ?? false)
+                    }
+
+                    if let content = payload.content, !content.isEmpty {
+                        clipboardBlock(content, chars: payload.chars, truncated: payload.truncated ?? false)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -114,6 +125,7 @@ struct DisplayContentView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(AppTheme.textDim)
+                    .accessibilityLabel("Copy command")
                 }
                 .padding(8)
                 .background(AppTheme.panel.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))

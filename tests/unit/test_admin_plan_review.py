@@ -12,14 +12,30 @@ tests/unit/test_admin_plan.py.
 from __future__ import annotations
 
 import time
+import uuid
 
 import pytest
-from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient as FastAPITestClient
 
 import jarvis.admin.server as srv
 from jarvis.admin.server import app
 from jarvis.council import config as council_config
 from jarvis.db import get_conn, run_migrations
+
+
+class TestClient(FastAPITestClient):
+    """Model the stable execution ID injected by registered plan_start."""
+
+    def post(self, url, *args, **kwargs):
+        body = kwargs.get("json")
+        if (
+            url == "/api/plan/start"
+            and isinstance(body, dict)
+            and (body.get("goal") or "").strip()
+            and not (body.get("run_id") or "").strip()
+        ):
+            kwargs["json"] = {**body, "run_id": uuid.uuid4().hex}
+        return super().post(url, *args, **kwargs)
 
 
 @pytest.fixture(autouse=True)

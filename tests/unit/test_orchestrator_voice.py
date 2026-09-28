@@ -10,8 +10,18 @@ from types import SimpleNamespace
 import pytest
 
 from jarvis import voice_workflows as vw
-from jarvis.agents.supervisor import Orchestrator
+from jarvis.agents.supervisor import Orchestrator, STUCK_MESSAGE
+from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from tests.unit.test_orchestrator import FakeLLM, FakeRegistry, FakeSubAgent
+
+
+@pytest.fixture(autouse=True)
+def _initialized_non_sensitive_turn():
+    token = current_sensitive_turn.set(SensitiveTurn())
+    try:
+        yield
+    finally:
+        current_sensitive_turn.reset(token)
 
 
 def _settings(enabled: bool, mode: str):
@@ -96,6 +106,18 @@ class TestReplyGuard:
             "[system] Your last reply was cut off")
         assistant = [m["content"] for m in orch.history if m["role"] == "assistant"]
         assert not any("I don't have a tool to read" in (c or "") for c in assistant)
+
+    async def test_reply_guard_retry_cannot_replay_a_dispatched_tool_id(self, fresh_db):
+        dev = FakeSubAgent("developer", result="done")
+        orch, calls = _orch([
+            ("tool", "delegate_task", {"agent_name": "developer", "task": "run once"}, "same-id"),
+            ("text", "I can't do that."),
+            ("tool", "delegate_task", {"agent_name": "developer", "task": "replay"}, "same-id"),
+        ], sub_agents={"developer": dev})
+        reply = await orch.chat("start this task")
+        assert reply == STUCK_MESSAGE
+        assert len(dev.tasks) == 1
+        assert len(calls.requests) == 3
 
     async def test_second_violation_is_returned_and_logged(self, fresh_db, gap_log):
         orch, calls = _orch([("text", "I can't do that."), ("text", "I can't do that either.")])

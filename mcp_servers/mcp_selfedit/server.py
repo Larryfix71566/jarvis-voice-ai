@@ -55,15 +55,19 @@ def selfedit_start(
 
 
 @mcp.tool()
-def selfedit_status(staging_id: str = "") -> dict:
+def selfedit_status(staging_id: str = "", action_run_id: str = "") -> dict:
     """Report progress of the current upgrade run and edit session: whether
     the planner is still working, which files are proposed and why, whether
     validation passed, and the PR URL once submitted.
 
     Pass staging_id to check whether a specific staged preview (from
     selfedit_start with confirm=false) is still live before confirming it —
-    the answer comes from the real staging record, not a guess about TTLs."""
-    return logic.selfedit_status(_get_client(), staging_id)
+    the answer comes from the real staging record, not a guess about TTLs.
+
+    Pass action_run_id returned by selfedit_finish to recover that exact
+    submission's status after the in-memory job slot moves. Supply only one
+    identity at a time."""
+    return logic.selfedit_status(_get_client(), staging_id, action_run_id)
 
 
 @mcp.tool()
@@ -175,12 +179,14 @@ def plan_start(
 
 
 @mcp.tool()
-def plan_status() -> dict:
+def plan_status(action_run_id: str = "") -> dict:
     """Report progress of the current planning job: whether it is still
     drafting, whether council candidates are ready for the user to choose
     between (name each candidate's label and advisory score), or whether
-    a finished plan is ready to be saved as a draft with plan_adopt."""
-    return logic.plan_status(_get_client())
+    a finished plan is ready to be saved as a draft with plan_adopt. If
+    plan_start reported an action_run_id after a duplicate/uncertain start,
+    pass that ID to inspect its receipt before retrying."""
+    return logic.plan_status(_get_client(), action_run_id)
 
 
 @mcp.tool()
