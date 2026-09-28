@@ -2752,3 +2752,8 @@ Full disposable Mac verification at `b2d858a`, with the proposed two-entry
 human allow-list patch applied only in that throwaway worktree and implicit
 dotenv loading disabled, passed 4,860 Python tests, with seven skipped and two
 subtests passed. GitHub Linux CI has not yet run on this follow-up commit.
+
+Larry subsequently committed and pushed the two human-only protections as
+`617048a` (health probe) and `1152dd5` (frozen authoring fixtures). Codex
+verified both entries and the clean branch. These source protection gates
+are now implemented; Linux CI, merge and staged deployment remain next.
