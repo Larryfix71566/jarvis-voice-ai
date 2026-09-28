@@ -2747,3 +2747,8 @@ holds the worker's claim update to force the race; the request must still
 return a failed claim. The whole admin self-edit module passes 69 tests on the
 Mac. No human allow-list edit, production deploy or Skills activation is
 claimed by this follow-up.
+
+Full disposable Mac verification at `b2d858a`, with the proposed two-entry
+human allow-list patch applied only in that throwaway worktree and implicit
+dotenv loading disabled, passed 4,860 Python tests, with seven skipped and two
+subtests passed. GitHub Linux CI has not yet run on this follow-up commit.
