@@ -2648,7 +2648,8 @@ remain open; remote access has not been enabled.
 
 ### 2026-09-28 — release preflight correction
 
-PR #93 is a draft integration candidate. Its GitHub validation failed only
+PR #93 merged to main as `0316a86` before the human protection rows were
+committed. Its GitHub validation failed only
 the two pending human deny-list checks, while policy, sandbox-controller and
 knowledge-base jobs passed. A disposable Mac verification checkout confirmed
 the proposed two-entry patch clears 57 focused protection tests.
@@ -2661,5 +2662,5 @@ flags despite `env -i`. DEPLOY-MAIN now sets `PYTHON_DOTENV_DISABLED=1` in its
 minimal pytest environment; a full-collection probe confirmed the console flag
 remains unset. The disposable patched candidate then passed the complete Python
 suite: 4,860 passed, seven skipped, two subtests passed. The patch remains
-human-only and is not part of PR #93's code commit. No production deployment or
+human-only and is not part of main or the follow-up release-fix commit. No production deployment or
 auth activation has occurred.
