@@ -1,6 +1,6 @@
 # Mortimer Skills workspace and skill creation implementation plan
 
-Status: **approved direction; implementation in progress in an isolated candidate worktree**. Prepared 2026-09-25; reconciled 2026-09-27.
+Status: **implementation landed through PR #95 (`1ec20d6`); Mac deployment blocked by rendered-performance gates; activation and live acceptance remain open**. Prepared 2026-09-25; reconciled 2026-09-28.
 
 This is the implementation contract for the agreed Skills library, inspectable
 processes, truthful execution history, and sandboxed skill creation. The current
@@ -2757,3 +2757,33 @@ Larry subsequently committed and pushed the two human-only protections as
 `617048a` (health probe) and `1152dd5` (frozen authoring fixtures). Codex
 verified both entries and the clean branch. These source protection gates
 are now implemented; Linux CI, merge and staged deployment remain next.
+
+### 2026-09-28 — merged release deployment stopped safely
+
+All GitHub workflows at PR #95 head `9d20c23` passed: 4,675 unit tests,
+176 integration tests, 13 sub-agent evaluations, latency/frontend checks,
+sandbox controller, knowledge base, allowlist and policy checks. Larry merged
+as `1ec20d6`. Both human-only deny entries are present on main.
+
+DEPLOY-MAIN was run twice against exact merged main. JarvisKit passed 219
+tests in both attempts. MortimerHost ran 372 tests with seven skips: the
+first attempt failed Skills wide selection-to-layout p95 (20.350 ms versus
+20 ms); the second failed that gate again (20.213 ms) and the orb relative
+rendering gate (crystal p50 7.415 ms versus legacy 4.766 ms, maximum 1.5x).
+The orb absolute p95 remained under its 16.7 ms budget at 14.876 ms.
+
+Between full attempts, three unchanged standalone Skills benchmark runs
+passed at 19.906, 19.949 and 19.964 ms. This narrow margin and the two full
+suite failures leave release performance unaccepted. No thresholds were
+changed, tests skipped, or sandbox-guest bypass enabled. No further blind
+retries are planned. Rendering paths need investigation; the data alone do
+not prove a source regression or establish host load as the cause.
+
+Both runs stopped in phase A: no production checkout, DB changes, service
+restart, or deployment snapshot occurred. Production remains `0b76f49`.
+Logs: `~/MortimerRollback/logs/deploy-main-20260928-194752.log` and
+`deploy-main-20260928-195212.log`; corresponding native logs retain failures.
+The clean verification worktree remains at
+`~/MortimerRollback/deploy-verify-1ec20d6` for diagnosis.
+Codex retains WS-03 Skills work; Larry was asked whether to assign WS-08
+orb performance work to Codex or keep it with Claude before orb edits.
