@@ -2645,3 +2645,22 @@ R1 merged verification update: all 79 actual sidecar routes pass the no-token
 (JarvisKit 219, Host 372 executed with seven environment skips). Human-only
 health-script deny protection and live dormant/enabled/deployment acceptance
 remain open; remote access has not been enabled.
+
+### 2026-09-28 — release preflight correction
+
+PR #93 merged to main as `0316a86` before the human protection rows were
+committed. Its GitHub validation failed only
+the two pending human deny-list checks, while policy, sandbox-controller and
+knowledge-base jobs passed. A disposable Mac verification checkout confirmed
+the proposed two-entry patch clears 57 focused protection tests.
+
+The first disposable full-suite run exposed a deployment-runner isolation gap:
+Pipecat's runner imports `python-dotenv` with `override=True` while pytest
+collects tests. Because DEPLOY-MAIN uses production's `.venv`, that import
+found production `.env` above the interpreter package and restored runtime
+flags despite `env -i`. DEPLOY-MAIN now sets `PYTHON_DOTENV_DISABLED=1` in its
+minimal pytest environment; a full-collection probe confirmed the console flag
+remains unset. The disposable patched candidate then passed the complete Python
+suite: 4,860 passed, seven skipped, two subtests passed. The patch remains
+human-only and is not part of main or the follow-up release-fix commit. No production deployment or
+auth activation has occurred.
