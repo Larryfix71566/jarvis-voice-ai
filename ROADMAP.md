@@ -285,14 +285,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Orb crystal glass (#90), revised to use the crystal shell exclusively
 
 - **Owner:** `codex`
-- **Status:** landed (PR #112, merge commit `e9388fc`); deployment blocked at the MortimerHost phase-A test gate
+- **Status:** landed and deployed in `c3607e6`; final WS-08 visual/live acceptance open
 - **Implemented by:** Claude original crystal-glass workstream; Codex rendering performance fixes and single-shell cleanup
-- **Remaining work / acceptance:** DEPLOY-MAIN on `d460809` stopped before production changes: JarvisKit 215/0, MortimerHost 374 executed, five skipped, one failure in `ProtectedDisplayContentTests.testProtectedContentInActualWindowCaptureMatchesBodyOnlyReference`. Pixel comparison differs at the window edge and body-text area; no difference was found 64 px inside the frame. The capture test is outside WS-08's orb scope and needs its own assigned repair. Then rerun deployment, compare the five orb fixtures, and Larry verifies compact/expanded layouts and Reduce Motion. His 09-29 observations passed the pre-cleanup build.
+- **Remaining work / acceptance:** Larry's DEPLOY-MAIN deployed `c3607e6` after WS-16's capture repair; release suites and health checks passed. Larry reaffirmed compact/expanded appearance and Reduce Motion behavior on 09-29, so these are not repeat asks. Codex regenerated and reviewed all five current crystal fixtures against the approved references; the required glass, reflections, orbits, nucleus and talker colors remain in place. The plan reserves final five-fixture visual approval for Larry. No post-deployment record yet itemizes all named live states (listening, user, Mortimer, overlap, standby) and placements (conversation, rail, bottom).
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main (PR #112, `e9388fc`)
 - **Plan:** `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`
 - **Scope:** Orb rendering, orb-specific configuration, performance/visual regression tests, and this plan's acceptance evidence.
-- **Next step:** Assign the protected-window capture test repair to an appropriate workstream, validate it without weakening the privacy assertion, rerun DEPLOY-MAIN, then complete Larry's orb checks.
+- **Next step:** Larry reviews the five linked current fixtures in the WS-08 receipt and confirms only live states/placements not already observed. Do not repeat compact/expanded or Reduce Motion checks.
 - **Updated:** 09-29
 
 </details>
@@ -596,6 +596,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29: Codex / WS-08 reconciled deployment and acceptance after WS-16 closed. Larry's DEPLOY-MAIN installed `c3607e6` with release gates green; Larry reaffirmed compact/expanded appearance and Reduce Motion stillness. Codex regenerated five fixtures from the deployed orb source (focused CrystalOrbShellTests 7/0), reviewed their expected features against the checked-in references, and attached them to the WS-08 receipt. Final Larry fixture approval and any unobserved named live states/placements remain open.
 
 - 2026-09-29: Codex / WS-16 accepted after Larry's DEPLOY-MAIN of PR #121 (`c3607e6`): real ScreenCaptureKit protected-window test executed and passed (4.825 s); MortimerHost 383 tests, six unrelated skips, zero failures; JarvisKit 218/0; Python 4,924 passed and seven skipped. Production, app bundle and main match; services healthy. WS-08 visual and Reduce Motion acceptance remains open. Evidence: `/Users/larryfix/MortimerRollback/logs/deploy-mortimerhost-20260929-175921.txt` and `/Users/larryfix/MortimerRollback/release-c3607e6-20260929-175921`.
 

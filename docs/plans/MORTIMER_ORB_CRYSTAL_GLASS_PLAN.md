@@ -1,6 +1,6 @@
 # Mortimer orb crystal glass plan — crystal shell only
 
-**Status:** LANDED IN MAIN; DEPLOYMENT BLOCKED — PR #112 merged as `e9388fc`; CI passed. DEPLOY-MAIN for `d460809` stopped in phase A on an unrelated protected-window capture assertion, before production changes. Larry's visual and Reduce Motion acceptance remain open.
+**Status:** LANDED AND DEPLOYED — PR #112 merged as `e9388fc` and is included in production `c3607e6`. Larry reaffirmed compact/expanded appearance and Reduce Motion behavior. Final five-fixture visual approval and any unobserved live-state/placement checks remain open. The former protected-window capture failure was fixed under WS-16 and passed DEPLOY-MAIN.
 **Recorded:** 2026-09-29.
 **Original 2026-09-24 receipt:** `docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-24.md`.
 
@@ -192,7 +192,7 @@ There is no runtime selector for the retired shell. Use the standard source/depl
 
 ## 10. Approval
 
-- [ ] Larry: plan approved for implementation.
+- [x] Larry: plan approved for implementation (single-shell direction, 2026-09-29).
 - [ ] Larry: step 8 visual acceptance.
 - [ ] Larry: step 9 post-deployment check.
 
@@ -1251,3 +1251,30 @@ as a privacy pass.
 A separately assigned repair should make the live capture deterministic while
 preserving the privacy comparison, then pass the full MortimerHost suite and
 DEPLOY-MAIN before deployment and orb acceptance can continue.
+
+## 2026-09-29 — Deployment and acceptance reconciliation
+
+WS-16 fixed the independent protected-window capture gate. Larry's DEPLOY-MAIN
+then deployed `c3607e6`, which includes the WS-08 crystal-only change. The real
+capture test executed and passed; MortimerHost ran 383 tests with six unrelated
+skips and zero failures, JarvisKit ran 218 tests with zero failures, and Python
+reported 4,924 passed and seven skipped. Main, production and app-bundle
+revisions matched; services were healthy.
+
+Larry reaffirmed in this task that compact and expanded appearance and Reduce
+Motion stillness had already been confirmed. These are user-reported live
+checks, not Codex-observed ones, and should not be repeated. The five fixture
+PNGs left in production's `.build` directory were dated 09-24 and therefore
+were not used as current-release evidence. Codex regenerated all five from the
+merged source; orb product files are unchanged from deployed `c3607e6`.
+`CrystalOrbShellTests` passed 7/0. The current 400 × 180 fixtures and the
+approved 800 × 360 reference images show the specified glass, paired
+upper-left reflection, lower-right soft reflection, dark wall, orbit paths,
+nucleus and talker colors in the same relative positions. The images are
+linked from the existing WS-08 receipt. This is Codex's comparison, not
+Larry's final visual sign-off.
+
+The remaining acceptance is narrow: Larry's explicit five-fixture approval
+(step 8), plus evidence for any step 9 live states or placements not already
+seen. No further deployment or repeat compact/expanded or Reduce Motion check
+is required for this WS-08 revision.

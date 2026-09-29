@@ -26,6 +26,12 @@ Focused benchmark, 300 frames per probe at 1440 × 220 pt:
 ## Visual and live acceptance
 
 - Existing deployed build, Larry-reported before this cleanup: compact and expanded layouts showed the orb correctly; Reduce Motion kept it visible and stopped movement.
-- Fixture comparison against the approved reference: pending Larry review.
-- Post-deployment compact/expanded and Reduce Motion recheck: pending.
-- Deployment: not performed by Codex.
+- Deployment: Larry's DEPLOY-MAIN installed `c3607e6` on 2026-09-29. The release gate passed JarvisKit 218/0, MortimerHost 383 tests with six unrelated skips and zero failures (including the executed real protected-window capture), Python 4,924 passed and seven skipped, and healthy service/revision checks.
+- Larry reaffirmed in this task after deployment that compact/expanded appearance and Reduce Motion behavior were already confirmed. Do not ask for these checks again.
+- Codex regenerated the five fixtures from merged source matching the deployed orb product files; `CrystalOrbShellTests` passed 7/0. The production `.build` fixture PNGs were dated 09-24 and were not used. Current PNGs below are 400 × 180; approved references render at 800 × 360. Codex's visual inspection found the required features in the same relative positions, with normal renderer blur/gradient differences. Larry's step 8 visual approval remains open.
+- [Idle current](orb-crystal-glass-2026-09-29-fixtures/orb-crystal-idle.png) · [approved reference](../../../interface-research/orb-crystal/crystal-idle-400x180.png)
+- [Standby current](orb-crystal-glass-2026-09-29-fixtures/orb-crystal-standby.png) · [approved reference](../../../interface-research/orb-crystal/crystal-standby-400x180.png)
+- [User current](orb-crystal-glass-2026-09-29-fixtures/orb-crystal-user.png) · [approved reference](../../../interface-research/orb-crystal/crystal-user-400x180.png)
+- [Mortimer current](orb-crystal-glass-2026-09-29-fixtures/orb-crystal-mortimer.png) · [approved reference](../../../interface-research/orb-crystal/crystal-mortimer-400x180.png)
+- [Overlap current](orb-crystal-glass-2026-09-29-fixtures/orb-crystal-overlap.png) · [approved reference](../../../interface-research/orb-crystal/crystal-overlap-400x180.png)
+- The plan's named live voice states (listening, user, Mortimer, overlap, standby) and placements (conversation, rail, bottom) are not all itemized in the post-deployment record. Only unobserved combinations remain to be confirmed; compact/expanded and Reduce Motion are already confirmed.
