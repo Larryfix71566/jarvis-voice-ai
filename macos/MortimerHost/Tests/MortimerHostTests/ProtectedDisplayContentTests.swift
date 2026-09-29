@@ -139,6 +139,8 @@ final class ProtectedDisplayContentTests: XCTestCase {
         try await Task.sleep(nanoseconds: 200_000_000)
         let emptyCapture = try await captureWindowPNG(capturedWindow)
         let emptyImage = try XCTUnwrap(NSBitmapImageRep(data: emptyCapture))
+        XCTAssertEqual(emptyImage.pixelsWide, referenceImage.pixelsWide)
+        XCTAssertEqual(emptyImage.pixelsHigh, referenceImage.pixelsHigh)
         if referencePixels == rgbaPixels(emptyImage) {
             XCTFail("OS window capture did not visibly render the protected local body")
         }
