@@ -285,14 +285,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Orb crystal glass (#90), revised to use the crystal shell exclusively
 
 - **Owner:** `codex`
-- **Status:** landed (PR #112, merge commit `e9388fc`); deployment and live acceptance open
+- **Status:** landed (PR #112, merge commit `e9388fc`); deployment blocked at the MortimerHost phase-A test gate
 - **Implemented by:** Claude original crystal-glass workstream; Codex rendering performance fixes and single-shell cleanup
-- **Remaining work / acceptance:** Deploy the merged crystal-only build, compare its five visual fixtures with the approved reference, then Larry verifies the orb in compact/expanded layouts and under Reduce Motion. His 09-29 observations pass the pre-cleanup build. The local full MortimerHost run had one environment-sensitive protected-window capture failure; PR #112's CI passed on rerun.
+- **Remaining work / acceptance:** DEPLOY-MAIN on `d460809` stopped before production changes: JarvisKit 215/0, MortimerHost 374 executed, five skipped, one failure in `ProtectedDisplayContentTests.testProtectedContentInActualWindowCaptureMatchesBodyOnlyReference`. Pixel comparison differs at the window edge and body-text area; no difference was found 64 px inside the frame. The capture test is outside WS-08's orb scope and needs its own assigned repair. Then rerun deployment, compare the five orb fixtures, and Larry verifies compact/expanded layouts and Reduce Motion. His 09-29 observations passed the pre-cleanup build.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main (PR #112, `e9388fc`)
 - **Plan:** `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`
 - **Scope:** Orb rendering, orb-specific configuration, performance/visual regression tests, and this plan's acceptance evidence.
-- **Next step:** Deploy `e9388fc` through the standard release flow, then Larry reviews the visual fixtures and rechecks compact/expanded layouts and Reduce Motion.
+- **Next step:** Assign the protected-window capture test repair to an appropriate workstream, validate it without weakening the privacy assertion, rerun DEPLOY-MAIN, then complete Larry's orb checks.
 - **Updated:** 09-29
 
 </details>
@@ -577,6 +577,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29: Codex WS-08 deployment follow-up. Larry ran DEPLOY-MAIN against `d460809`; phase A stopped on the protected-window capture test after JarvisKit passed. Production remained `e340101`. Analysis of the two pixel arrays found 21,946/1,041,600 differing pixels, all at the frame edge or the body-text area (none 64 px inside). The test is outside WS-08's assigned source scope; deployment and live orb acceptance remain blocked pending a separately assigned repair.
 
 - 2026-09-29: Codex WS-08 crystal-only implementation landed in PR #112 as `e9388fc`. The first `validate` run failed in an unchanged app-build timing test; that isolated test passed locally and the complete workflow passed on rerun. Sandbox controller and Knowledge base workflows also passed. Deployment and Larry's live orb checks remain open.
 

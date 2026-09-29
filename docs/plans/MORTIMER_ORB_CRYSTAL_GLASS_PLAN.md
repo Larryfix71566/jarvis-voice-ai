@@ -1,6 +1,6 @@
 # Mortimer orb crystal glass plan — crystal shell only
 
-**Status:** LANDED IN MAIN — PR #112 merged as `e9388fc`; all CI workflows passed after a rerun of the unchanged app-build timing test. Deployment and Larry's visual and Reduce Motion acceptance remain open. The local full MortimerHost run had one environment-sensitive protected-window capture failure and is not claimed green.
+**Status:** LANDED IN MAIN; DEPLOYMENT BLOCKED — PR #112 merged as `e9388fc`; CI passed. DEPLOY-MAIN for `d460809` stopped in phase A on an unrelated protected-window capture assertion, before production changes. Larry's visual and Reduce Motion acceptance remain open.
 **Recorded:** 2026-09-29.
 **Original 2026-09-24 receipt:** `docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-24.md`.
 
@@ -1226,3 +1226,28 @@ which is outside WS-08 and unchanged by the PR. That test passed in an isolated
 local run; the full `validate` workflow passed on rerun, as did Sandbox controller
 and Knowledge base. The five-fixture comparison, deployment, and Larry's
 post-deployment compact/expanded and Reduce Motion checks remain open.
+
+## 2026-09-29 — DEPLOY-MAIN stopped before production changes
+
+Larry ran `scripts/deploy_main.sh` against `origin/main` at `d460809`.
+JarvisKit passed (215/0); MortimerHost ran 374 tests with five skips and one
+failure, `ProtectedDisplayContentTests.testProtectedContentInActualWindowCaptureMatchesBodyOnlyReference`
+at line 134. The script stopped in phase A, so no snapshot, install or service
+switch occurred. A read-only check still found production at `e340101`.
+The deployment log is local at
+`/Users/larryfix/MortimerRollback/logs/deploy-main-20260929-154149.log`.
+
+The failed assertion printed both 1240 × 840 RGBA captures. They differ at
+21,946 of 1,041,600 pixels (2.107%). Differences occur in the outer capture
+edge and the body-text area (approximately x=24–290, y=29–57); a 64-pixel
+inset contains no differences. The fixture creates and captures two separate
+windows in sequence. Window composition/text-render timing is a plausible
+cause, but this observation alone does not prove it. The source's protected
+render path ignores the ancillary fields. The captured arrays do not show
+evidence that those fields appeared, and the failed equality cannot be counted
+as a privacy pass.
+
+`ProtectedDisplayContentTests.swift` is outside WS-08's orb-specific scope.
+A separately assigned repair should make the live capture deterministic while
+preserving the privacy comparison, then pass the full MortimerHost suite and
+DEPLOY-MAIN before deployment and orb acceptance can continue.
