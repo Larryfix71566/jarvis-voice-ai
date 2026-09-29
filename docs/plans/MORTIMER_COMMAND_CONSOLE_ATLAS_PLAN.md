@@ -571,6 +571,23 @@ below the agent/status stack as notices or session content grow. The full
 stage keeps the same top-left ambient placement; only the compact rail's
 ordering changes.
 
+**Single-transcript amendment, 2026-09-28 (Larry; recorded by Codex):**
+keep the transcript in the main window and remove its duplicate from the
+left/compact panel. Reclaim the removed transcript’s layout space; do not leave
+an empty placeholder. The compact panel keeps its orb, speaker feedback,
+microphone/voice controls and ambient context. This amendment supersedes any
+earlier requirement in this plan to repeat brief conversation captions in that
+compact rail. Main-window transcript/history, keyboard and accessibility access,
+and the existing full-answer response/results routing remain intact.
+
+**Status: requested, not implemented or accepted.** WS-09 tracks this follow-up;
+implementation owner is unassigned and Larry owns acceptance. Verify live user
+and Mortimer speech appears in the main-window transcript with no duplicate
+compact-rail transcript, including single-monitor and supporting-display
+configurations. Confirm history remains accessible, the removed space is
+reclaimed, and voice controls and speaker feedback remain usable. No runtime
+code or deployment changes are part of recording this requirement.
+
 Extend placement keys, not a second placement service: introduce HostWindowID
 with legacy(HostWindowKind) or content(UUID); its stable serialized keys are
 console/display/drawer/content:<UUID>. Keep HostWindowKind/findHostWindow wrappers

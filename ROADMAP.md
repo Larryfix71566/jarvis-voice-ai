@@ -240,8 +240,13 @@ Claude’s work or enable any runtime feature.
 - **Where:** —
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md`
 - **Scope:** —
-- **Next step:** Follow `docs/acceptance/ACCEPTANCE_RUNBOOK.md`
-- **Updated:** 09-22
+- **Next step:** Assign and implement the compact-panel transcript cleanup below, then follow `docs/acceptance/ACCEPTANCE_RUNBOOK.md`.
+- **Updated:** 09-28
+
+- [ ] **Single transcript surface (Larry, 2026-09-28):** keep the transcript in the main window; remove the duplicate transcript/captions from the left/compact panel and reclaim the vacated space. Preserve the orb, speaker feedback, microphone/voice controls, and main-window transcript history/accessibility. This supersedes earlier requirements to repeat brief captions in the compact rail; full response/results routing remains unchanged.
+  - **Status:** requested; not implemented or validated.
+  - **Implementation owner:** unassigned. **Acceptance:** Larry. **Recorded by:** Codex, at Larry’s request.
+  - **Close when:** live user and Mortimer speech updates the main-window transcript without a duplicate in the compact rail, in single- and multi-monitor layouts; no blank transcript-sized gap or loss of voice controls/history.
 
 </details>
 
@@ -471,6 +476,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-28: Codex recorded Larry’s WS-09 requirement to keep the transcript in the main window and remove the duplicate from the compact left panel. Added the design amendment to the existing Console/Atlas plan; implementation remains unassigned and unchecked. No application behavior changed.
 
 - 2026-09-27: Claude (Cowork) turned this file into the master tracker: protocol, workstreams WS-01…11, migration reservations, conflict register CX-01…10. Reconciled against main `0b76f49` and Codex's worktree `codex/isolated-20260924`. The previous content (deferred features) is §7, unchanged. Owners marked "proposed" await Larry's confirmation.
 - 2026-09-27 (later): Larry's decisions. **CX-04:** workflows and skills are different objects, so they get separate views; WS-03 adds its own `skills` mode, with layout options shown before any Swift UI is built. **CX-06:** remote access (T2) is an undecided roadmap item; WS-04 is parked and Codex's T2 code moves to a parked branch; migration `0034` is held. CX-07 rewritten with the verified details.
