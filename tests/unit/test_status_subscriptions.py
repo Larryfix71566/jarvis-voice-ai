@@ -8,7 +8,7 @@ import shutil
 import pytest
 
 from jarvis.status import subscriptions as S
-from jarvis.subscription import SubscriptionRuntimeError
+from jarvis.subscription import SubscriptionCapabilityError, SubscriptionRuntimeError
 
 
 @pytest.fixture(autouse=True)
@@ -157,3 +157,46 @@ def test_subscription_status_payload(monkeypatch):
     assert out["probe"]["category"] == "authentication"
     # Error text is classified, never relayed (I1).
     assert "sk-ant" not in json.dumps(out)
+
+
+# 2026-09-29: the runtime's generic message ("Claude subscription runtime
+# failed") hid a "Not logged in" as runtime_error. The runtime's own category
+# now decides when the message table falls through; the table is unchanged.
+@pytest.mark.parametrize("runtime_category,expected", [
+    ("authentication", "authentication"),
+    ("timeout", "timeout"),
+    ("capability", "model_unavailable"),
+    ("policy", "runtime_environment"),
+    ("credit", "credit"),
+    ("allowance", "allowance"),
+    ("provider_failure", "runtime_error"),
+    ("runtime_unavailable", "runtime_error"),
+    ("malformed_output", "runtime_error"),
+])
+def test_runtime_category_is_kept_when_the_message_is_generic(runtime_category, expected):
+    exc = SubscriptionRuntimeError("Claude subscription runtime failed", category=runtime_category)
+    res = S.probe_subscription("claude", "claude-sonnet-5", runner=Runner(exc))
+    assert res["category"] == expected
+
+
+def test_message_table_still_wins_over_the_runtime_category():
+    exc = SubscriptionRuntimeError("HTTP 401 Unauthorized", category="provider_failure")
+    assert S.probe_subscription("claude", "m", runner=Runner(exc))["category"] == "authentication"
+    exc = SubscriptionRuntimeError("model x not found", category="authentication")
+    assert S.probe_subscription("claude", "m2", runner=Runner(exc))["category"] == "model_unavailable"
+
+
+def test_switched_off_route_reports_gated():
+    exc = SubscriptionCapabilityError(
+        "Codex subscription text route is disabled until its no-tools runtime capability is verified")
+    res = S.probe_subscription("codex", "gpt-6-astra", runner=Runner(exc))
+    assert (res["ok"], res["category"]) == (False, "gated")
+
+
+def test_installed_check_and_run_use_the_same_command(monkeypatch):
+    from jarvis.subscription import provider_command
+
+    monkeypatch.setenv("JARVIS_CLAUDE_SUBSCRIPTION_COMMAND", "/Users/tester/.local/bin/claude")
+    assert S.subscription_command("claude") == provider_command("claude") == \
+        "/Users/tester/.local/bin/claude"
+    assert S.subscription_command("codex") == provider_command("codex") == "codex"

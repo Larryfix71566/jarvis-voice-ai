@@ -187,8 +187,8 @@ Claude’s work or enable any runtime feature.
 - **Where:** main
 - **Plan:** `docs/plans/MORTIMER_SELF_SERVICE_ACCESS_IMPLEMENTATION_SPEC.md` and its companion `docs/plans/MORTIMER_SELF_SERVICE_ACCESS_AND_RECOVERY_PLAN.md` (added to main in PR #100, CX-09). Registry half: `docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md`
 - **Scope:** —
-- **Next step:** Fix check #2 first. The daily files for 09-26, 09-27 and 09-28 report both the `claude` and `codex` subscription commands as `not_installed`, and `.env` sets neither `JARVIS_CLAUDE_SUBSCRIPTION_COMMAND` nor `JARVIS_CODEX_SUBSCRIPTION_COMMAND`. Larry adds the absolute paths, restarts the bot, then runs the spoken and process checks from Claude's checklist.
-- **Updated:** 09-28
+- **Next step:** Check #2 needs WS-14 first. Setting the `.env` variables would not have been enough, because the variable fed only the installed check. On 09-29 Larry linked `/opt/homebrew/bin/claude` → `~/.local/bin/claude`, which is on the launchd PATH. The rerun daily file (`daily-2026-09-29.json`, 13:08 UTC) then showed `installed: true` but `runtime_error`. Reproducing the bot's exact call gave `Not logged in` without `USER` and `MORTIMER_SUBSCRIPTION_PROBE_OK` with `USER`/`LOGNAME`. Once WS-14 is deployed, rerun `com.mortimer.status-daily`. Then do the spoken and process checks. Codex's expected result is `gated` until its no-tools verification.
+- **Updated:** 09-29
 
 </details>
 
@@ -324,6 +324,27 @@ Claude’s work or enable any runtime feature.
 
 </details>
 
+<details id="ws-14">
+<summary>WS-14 — Subscription probe: sign-in, command and category fixes · Claude (Codex reviews)</summary>
+
+**Workstream:** Make the WS-06 check #2 subscription probe work under launchd and report why it fails. It touches WS-02's file (CX-13). Larry decided 09-29: Claude lands, Codex reviews before merge.
+
+- **Owner:** `claude`
+- **Status:** review (PR open; merge waits for Codex's review)
+- **Implemented by:** Claude
+- **Remaining work / acceptance:** Codex reviews against the isolation plan. Larry merges and deploys with DEPLOY-MAIN. Acceptance: after the deploy, a `com.mortimer.status-daily` rerun shows `claude` `ok: true`, and `codex` `gated` (not `runtime_error`).
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** branch `fix/subscription-probe-user-env`
+- **Plan:** Under `MORTIMER_SUBSCRIPTION_RUNTIME_ISOLATION_PLAN_2026-09-25.md`, which allows "home needed for provider-managed sign-in, plus only specifically justified" variables. The live evidence is in WS-06. Changes:
+  1. `USER` and `LOGNAME` join the child-environment allowlist. They are not credentials, and there is a `pwd` fallback when launchd omits them.
+  2. `_claude_argv` and `_codex_argv` run `provider_command()`, which reads the same `JARVIS_*_SUBSCRIPTION_COMMAND` variable as the installed check.
+  3. `probe_subscription` keeps the runtime's own category when the legacy message table falls through to `runtime_error`. A `SubscriptionCapabilityError` reports `gated`. The legacy table and the `verify_model_access` golden output are unchanged.
+- **Scope:** `jarvis/subscription.py`, `jarvis/status/subscriptions.py`, `tests/unit/test_subscription.py`, `tests/unit/test_status_subscriptions.py`
+- **Next step:** Codex reviews the PR
+- **Updated:** 09-29
+
+</details>
+
 ---
 
 ## 3. Reserved shared numbers
@@ -369,6 +390,8 @@ Open means not yet resolved. Each entry names who resolves it.
 | CX-11 | Codex's T2 code against what Claude landed on main. (1) `JARVIS_AUTH_ENABLED` **defaults to true**, with no exempt routes, loopback included, so merging it turns auth on. (2) Main callers that send no token would then get 401: `jarvis/bot/status_tool.py` (the `system_status` tool from #86) and `scripts/deploy_main.sh` phase D, whose health checks expect 200 from `/api/health` and 200/307 from the bot, so the deploy would stop. (3) The route inventory in Codex's tree has 64 sidecar routes; main has 68 decorators, including 10 Codex's copy lacks: `/api/status/*` (9) and `/api/workflows`. (4) `mcp_servers/mcp_selfedit/logic.py`: Codex added service headers; main's copy also changed, so keep both. (5) Token setup is by CLI only (`python -m jarvis.auth add`), which conflicts with the no-shell-commands principle behind Claude's voice workflows (D-L2/D-L5). The native app already sends a Keychain token on every request (`JarvisHTTP.swift`), so it needs no code change, only a stored token. | `codex`: Addendum R1 fixes (1)–(4); `larry` decides (5) when T2 is decided (options in R1.9) | R1 implemented and deployed dormant; isolated enabled/dormant proof passes; token onboarding/remote activation remain undecided |
 
 | CX-12 | Merge reconciliation must carry the three streaming flags from Codex's former live registry into the split live profiles, while preserving main's historical migration fixtures unchanged. Earlier source attribution to main was incorrect: Git rename merging had carried the flags into the historical YAML. | `codex` under WS-01, approved by Larry | resolved in main: three live flags restored; original fixtures preserved; explicit overlay regression passes |
+
+| CX-13 | WS-14 edits `jarvis/subscription.py`, which is WS-02's scope (Codex; landed, so unlocked, but its live isolation gates are open). The allowlist change adds `USER`/`LOGNAME`, justified by the live `Not logged in` result recorded in WS-06. | `larry` (09-29): Claude lands, and Codex reviews before merge | open until Codex's review |
 
 ---
 
@@ -514,6 +537,13 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29: Claude (Cowork). WS-06 check #2 traced on the Mac with Larry. There were three causes:
+  1. The CLI isn't on the launchd PATH. Larry linked it into `/opt/homebrew/bin`.
+  2. The bot strips `USER`, so the CLI can't find its Keychain sign-in (`Not logged in`).
+  3. The command variable fed only the installed check, and the probe discarded the runtime's failure category.
+
+  Added WS-14 and CX-13 for fixes 2 and 3. Larry decided Claude lands them and Codex reviews. Targeted tests pass: 95 total, 18 of them new; the related status suites give the same result before and after. Protocol note: while checking for overlapping edits, Claude compared `jarvis/subscription.py` hashes in Codex's worktrees (read-only). That goes against rule 9 and won't be repeated. Future overlap checks go through this file and open PRs.
 
 - 2026-09-28: Claude (Cowork). PR #100 added the self-service spec and its companion plan to main (CX-09 resolved) and corrected the Voice Workflows and Workflow Viewer plan status lines (WS-07). WS-06 now records the checks vetted against `539f8f6`: 1 closed, 2 nearly closed, subscriptions failing (`not_installed` in the 09-26 to 09-28 daily files), 7 open. WS-08 points to Claude's step-9 checklist. Added protocol rule 13 and proposed blocks WS-12 (CI upkeep) and WS-13 (T5 plan review). Evidence came from read-only reads of production files; no git was run.
 

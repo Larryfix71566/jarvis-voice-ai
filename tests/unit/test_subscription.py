@@ -68,8 +68,8 @@ def test_subscription_environment_is_allowlisted(monkeypatch):
     assert env["HOME"] == "/Users/tester"
     assert env["PATH"] == "/usr/bin"
     assert set(env) <= {
-        "PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "TMP", "TEMP",
-        "SSL_CERT_FILE", "SSL_CERT_DIR",
+        "PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE",
+        "TMPDIR", "TMP", "TEMP", "SSL_CERT_FILE", "SSL_CERT_DIR",
     }
     assert "CODEX_HOME" not in env
     assert "CLAUDE_CONFIG_DIR" not in env
@@ -404,3 +404,73 @@ async def test_codex_client_rejects_tools_and_unverified_runtime(monkeypatch):
         await client.chat.completions.create(tools=[{"type": "function"}], messages=[])
     with pytest.raises(SubscriptionCapabilityError, match="no-tools runtime capability"):
         await client.chat.completions.create(messages=[])
+
+
+# 2026-09-29: the Claude CLI finds its macOS Keychain sign-in through USER;
+# without it the launchd bot's probe answered "Not logged in" (verified live).
+def test_user_and_logname_are_passed_for_the_keychain(monkeypatch):
+    monkeypatch.setenv("USER", "tester")
+    monkeypatch.setenv("LOGNAME", "tester")
+    env = _subscription_env()
+    assert env["USER"] == "tester" and env["LOGNAME"] == "tester"
+
+
+def test_missing_user_falls_back_to_the_account_name(monkeypatch):
+    import pwd
+
+    monkeypatch.delenv("USER", raising=False)
+    monkeypatch.delenv("LOGNAME", raising=False)
+    env = _subscription_env()
+    expected = pwd.getpwuid(os.getuid()).pw_name
+    assert env["USER"] == expected and env["LOGNAME"] == expected
+
+
+def _capture_popen(monkeypatch, stdout):
+    seen = {}
+
+    def fake_popen(argv, **kwargs):
+        process = _FakePopen(argv, **kwargs)
+        process.kwargs["fake_stdout"] = stdout
+        seen.update(argv=argv)
+        return process
+
+    monkeypatch.setattr("jarvis.subscription.subprocess.Popen", fake_popen)
+    return seen
+
+
+def test_claude_runs_the_configured_command(monkeypatch):
+    # The same variable the status probe's "installed" check reads.
+    monkeypatch.setenv("JARVIS_CLAUDE_SUBSCRIPTION_COMMAND", "/Users/tester/.local/bin/claude")
+    seen = _capture_popen(monkeypatch, '{"is_error":false,"result":"answer"}')
+    assert _run_claude("claude-sonnet", [{"role": "user", "content": "hi"}], 3) == "answer"
+    assert seen["argv"][0] == "/Users/tester/.local/bin/claude"
+
+
+def test_claude_defaults_to_the_bare_command(monkeypatch):
+    monkeypatch.delenv("JARVIS_CLAUDE_SUBSCRIPTION_COMMAND", raising=False)
+    seen = _capture_popen(monkeypatch, '{"is_error":false,"result":"answer"}')
+    _run_claude("claude-sonnet", [{"role": "user", "content": "hi"}], 3)
+    assert seen["argv"][0] == "claude"
+
+
+def test_codex_runs_the_configured_command(monkeypatch):
+    monkeypatch.setenv(_CODEX_NO_TOOL_VERIFICATION_ENV, "1")
+    monkeypatch.setenv("JARVIS_CODEX_SUBSCRIPTION_COMMAND", "/opt/tools/codex")
+    seen = _capture_popen(monkeypatch, _codex_events("answer"))
+    assert _run_codex("gpt-test", [{"role": "user", "content": "hi"}], 3) == "answer"
+    assert seen["argv"][0] == "/opt/tools/codex"
+
+
+def test_not_logged_in_on_stdout_is_classified_authentication(monkeypatch):
+    # The exact failure seen live: exit 1, the JSON result on stdout.
+    def fake_popen(argv, **kwargs):
+        process = _FakePopen(argv, **kwargs)
+        process.kwargs["fake_stdout"] = (
+            '{"type":"result","is_error":true,"result":"Not logged in \u00b7 Please run /login"}')
+        process.returncode = 1
+        return process
+
+    monkeypatch.setattr("jarvis.subscription.subprocess.Popen", fake_popen)
+    with pytest.raises(SubscriptionRuntimeError) as exc:
+        _run_claude("claude-sonnet", [{"role": "user", "content": "hi"}], 3)
+    assert exc.value.category == "authentication"

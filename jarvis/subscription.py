@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import pwd
 import signal
 import subprocess
 import tempfile
@@ -35,14 +36,29 @@ class SubscriptionCapabilityError(SubscriptionRuntimeError):
 
 
 # These are the only caller environment values copied to a provider process.
-# HOME lets the official CLIs find their default provider-managed sign-in store; the
-# provider CLI is told to ignore user/project behavior configuration. Proxy,
-# API key, endpoint, and arbitrary application variables are intentionally not
-# inherited.
+# HOME lets the official CLIs find their default provider-managed sign-in store;
+# USER/LOGNAME let them find it in the macOS login Keychain (without USER the
+# Claude CLI reports "Not logged in" even when signed in; verified live
+# 2026-09-29). Neither is a credential. The provider CLI is told to ignore
+# user/project behavior configuration. Proxy, API key, endpoint, and arbitrary
+# application variables are intentionally not inherited.
 _ENV_ALLOWLIST = frozenset({
-    "PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "TMP", "TEMP",
-    "SSL_CERT_FILE", "SSL_CERT_DIR",
+    "PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE",
+    "TMPDIR", "TMP", "TEMP", "SSL_CERT_FILE", "SSL_CERT_DIR",
 })
+
+# Which executable runs each provider CLI. The same variable feeds the status
+# probe's "installed" check (jarvis.status.subscriptions), so the check and
+# the run can never disagree about which binary is meant.
+COMMAND_ENV = {
+    "claude": "JARVIS_CLAUDE_SUBSCRIPTION_COMMAND",
+    "codex": "JARVIS_CODEX_SUBSCRIPTION_COMMAND",
+}
+
+
+def provider_command(which: str) -> str:
+    """The configured CLI for `which` ('claude' or 'codex'), else its bare name."""
+    return os.environ.get(COMMAND_ENV[which]) or which
 
 _CODEX_NO_TOOL_VERIFICATION_ENV = "JARVIS_CODEX_SUBSCRIPTION_NO_TOOLS_VERIFIED"
 
@@ -51,6 +67,15 @@ def _subscription_env(temp_dir: str | None = None) -> dict[str, str]:
     """Construct the minimal child environment without API credentials."""
     env = {key: value for key, value in os.environ.items()
            if key in _ENV_ALLOWLIST and value}
+    if "USER" not in env:
+        # Some launch contexts omit USER; the account name is not a secret.
+        try:
+            name = pwd.getpwuid(os.getuid()).pw_name
+        except (KeyError, OSError):
+            name = ""
+        if name:
+            env["USER"] = name
+            env.setdefault("LOGNAME", name)
     if temp_dir is not None:
         # Keep runtime scratch data inside the per-request directory so its
         # lifetime is tied to the provider child process.
@@ -72,7 +97,7 @@ def _temp_cwd() -> tempfile.TemporaryDirectory[str]:
 
 
 def _claude_argv(model: str) -> list[str]:
-    command = "claude"
+    command = provider_command("claude")
     return [
         command, "--print", "--input-format", "text", "--output-format", "json",
         "--no-session-persistence", "--safe-mode", "--restricted", "--tools", "",
@@ -83,7 +108,7 @@ def _claude_argv(model: str) -> list[str]:
 
 def _codex_argv(model: str) -> list[str]:
     """Build a constrained Codex invocation after its no-tools gate is proven."""
-    command = "codex"
+    command = provider_command("codex")
     return [
         command, "exec", "--json", "--ephemeral", "--ignore-user-config",
         "--ignore-rules", "--skip-git-repo-check",
