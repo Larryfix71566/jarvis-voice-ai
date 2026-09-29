@@ -181,6 +181,25 @@ final class RadarTileStoreTests: XCTestCase {
         XCTAssertEqual(fake.requests.map(\.absoluteString), ["https://t/a/8/71/103.png"])
     }
 
+    func testStatsCountRequestsHitsAndFetchesThenReset() throws {
+        let fake = FakeFetch(); let store = RadarTileStore(fetch: fake.fetch)
+        store.tile(template: a, source: whole) { _, _ in }
+        fake.answerAll(with: try png())
+        store.tile(template: a, source: whole) { _, _ in }
+        store.prefetch(template: b, z: 8, x: 71, y: 103)
+        fake.answerAll(with: nil)
+        let s = store.takeStats()
+        XCTAssertEqual(s.requests, 2, "prefetches are not MapKit requests")
+        XCTAssertEqual(s.hits, 1)
+        XCTAssertEqual(s.fetches, 2)
+        XCTAssertEqual(s.failures, 1)
+        XCTAssertEqual(store.takeStats(), RadarTileStore.Stats())
+    }
+
+    func testOpeningViewIsNearTheRadarsOwnResolution() {
+        XCTAssertEqual(RadarMapView.openingSpanMeters, 200_000)
+    }
+
     func testRecentRequestsAreBounded() throws {
         let fake = FakeFetch(); let store = RadarTileStore(fetch: fake.fetch)
         for x in 0..<(RadarTileStore.recentLimit + 5) { store.noteRequested(z: 8, x: x, y: 0) }
