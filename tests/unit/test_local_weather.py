@@ -24,6 +24,7 @@ WEATHER = {
          "precip_probability": None, "condition": "Chance Rain Showers"},
     ],
     "hourly": [], "alerts": [{"event": "Rip Current Statement"}], "human": "In Folly Beach it's 75°F.",
+    "lat": 32.6611, "lon": -79.928,
 }
 RADAR = {"city": "Folly Beach, United States", "lat": 32.66, "lon": -79.93, "ts": 1790690400,
          "tiles": ["https://t/%d.png" % i for i in range(9)],
@@ -107,7 +108,12 @@ def test_card_is_one_weather_report_payload_on_the_window_surface():
     assert len(sink) == 1
     payload = sink[0]
     assert payload["surface"] == "window"
-    assert payload["kind"] == "image"
+    # WS-15 PR 2: one structured card (the app renders it in the main window).
+    assert payload["kind"] == "weather"
+    view = payload["weather"]
+    assert view["place"] == {"label": "Folly Beach, SC", "lat": 32.6611, "lon": -79.928,
+                             "source": "device", "approximate": False}
+    assert view["radar"]["provider"] == "iem"  # inside the lower 48
     assert payload["title"] == "Weather — Folly Beach, SC"
     assert len(payload["images"]) == 9 and len(payload["basemap_images"]) == 9
     assert "**Alert: Rip Current Statement**" in payload["body"]
@@ -156,11 +162,18 @@ def test_weather_error_is_reported_not_guessed():
     assert sink == []
 
 
-def test_radar_failure_still_sends_the_forecast_card():
+def test_radar_failure_outside_the_us_sends_the_card_without_radar():
+    # Outside the lower 48 the map needs RainViewer; if that failed, the card
+    # still goes out with the forecast and says it has no radar.
     sink = []
-    _, handler = _tool(radar={"error": "Radar data failed: ConnectError."}, sink=sink)
+    london = {"ok": True, "source": "device", "lat": 51.5, "lon": -0.12, "accuracy_m": 20,
+              "label": "London"}
+    weather = {**WEATHER, "lat": 51.5, "lon": -0.12}
+    _, handler = _tool(found=london, weather=weather,
+                       radar={"error": "Radar data failed: ConnectError."}, sink=sink)
     text = _run(handler)
     assert len(sink) == 1 and sink[0]["images"] == []
+    assert sink[0]["weather"]["radar"] is None
     assert "weather card without radar was sent" in text
 
 
@@ -182,3 +195,13 @@ def test_card_payload_is_json_safe():
     _, handler = _tool(sink=sink)
     _run(handler)
     json.dumps(sink[0])
+
+
+def test_radar_failure_inside_the_us_still_has_noaa_radar():
+    # PR 2: the card's map uses NOAA/IEM tiles directly inside the lower 48,
+    # so a RainViewer failure no longer means "without radar".
+    sink = []
+    _, handler = _tool(radar={"error": "Radar data failed: ConnectError."}, sink=sink)
+    text = _run(handler)
+    assert sink[0]["weather"]["radar"]["provider"] == "iem"
+    assert "weather card with radar was sent" in text

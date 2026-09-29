@@ -2,7 +2,7 @@
 
 This file is the single record of **who is doing what** in this repository, for every system that writes code here. Plans (`docs/plans/`) hold design. Receipts (`docs/acceptance/`) hold evidence. **This file holds ownership and state.**
 
-**Last reconciled:** 2026-09-29, against main after PR #105. Production runs `eb24e81` (PR #102 merge), deployed 09-29 10:07 EDT by DEPLOY-MAIN. It includes everything landed through PR #102, including PR #99; blocks that still say "deployed `539f8f6`" are covered by it. No PRs were open at reconcile time. Original evaluation: [cross-system evaluation](docs/reviews/CROSS_SYSTEM_PLAN_EVAL_2026-09-27.md).
+**Last full reconciliation:** 2026-09-29, against main after PR #105. **Latest verified production:** `c3607e6` (PR #121 merge), deployed 09-29 18:04 EDT by DEPLOY-MAIN; this update records WS-16 acceptance only, not a full recheck of every workstream. Earlier blocks with older deployed revisions are covered by this release. Original evaluation: [cross-system evaluation](docs/reviews/CROSS_SYSTEM_PLAN_EVAL_2026-09-27.md).
 
 ---
 
@@ -147,7 +147,7 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-29: *"it is missing current radar and it defaults to memory for weather instead of checking current location and getting fresh weather."* A weather answer must use where Larry is now and show current radar for that place.
 
 - **Owner:** `claude`
-- **Status:** in-progress: PR 1 in review (`local_weather`: place from this device, 7-day forecast, humidity and wind, alerts, honest radar wording). PR 2 (native Apple-map card with NOAA radar, card to front) next. Gates G-1 to G-3 passed 09-29 (plan §4a).
+- **Status:** in-progress: PR 1 deployed 09-29 (#110). PR 2 merged (#114, `05c4a40`) but DEPLOY-MAIN stopped: the radar overlay used the shared URL session (G13, MemoryGraphClosureC3Tests); fixed on `ws15/radar-tile-session-fix`. The same run also hit the WS-16 capture test, which is Codex's, not WS-15's.
 - **Implemented by:** Claude (plan); code not started
 - **Remaining work / acceptance:** Evidence from the 09-29 10:08 EDT session (`logs/agents/2026-09-29/`), read-only:
   1. **The location came from memory.** The voice model's delegation read *"typically in Spartanburg, SC or surrounding area"*. The analyst called `get_weather` and `get_weather_radar` with `"Spartanburg, SC"` and answered *"(assumed default, not confirmed device location)"*. Larry then had to name Charleston.
@@ -161,10 +161,10 @@ Claude’s work or enable any runtime feature.
 
   Acceptance, now A1–A5 in the plan: "what's the weather" with no place named uses a fresh device fix, or IP labeled approximate, never memory; the radar shown is for that same point and is current; a place Larry names still wins.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** branch `ws15/weather-location-radar-pr1`
+- **Where:** branch `ws15/radar-tile-session-fix`
 - **Plan:** `docs/plans/MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md` (Option A: `local_weather` direct tool; `jarvis/weather/report.py` with Weather.gov 7-day, hourly and alerts; IEM NEXRAD radar with RainViewer outside the US; native `RadarMapView` and `WeatherCardView`). It supersedes W5/W6 of `MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md`. Research: `Claude outputs/ws15/ws15_weather_research.html`.
 - **Scope:** `jarvis/weather/` (new), `jarvis/weathergov.py`, `mcp_servers/mcp_web/logic.py`, `mcp_servers/mcp_web/server.py`, `jarvis/bot/weather_tool.py` (new), tool registration in `jarvis/bot/pipeline.py`, `jarvis/bot/display.py`, weather lines in `jarvis/prompts.py`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift`, `Display/DisplayContentView.swift`, `Display/WeatherCardView.swift` and `Display/RadarMapView.swift` (new), and their tests and evals. Re-checked 09-29: none of these is inside another block's scope.
-- **Next step:** Larry merges PR 1 and runs DEPLOY-MAIN, then checks A1, A6 and A8 (voice and location). Claude builds PR 2 (S6) for the card and map checks (A2–A5, A7).
+- **Next step:** Merge the fix, run DEPLOY-MAIN (it can still stop on the WS-16 capture test until Codex lands that), then Larry runs acceptance A1–A7 (plan §6) and Claude checks A8 in the logs.
 - **Updated:** 09-29
 
 </details>
@@ -383,7 +383,25 @@ Claude’s work or enable any runtime feature.
 
 ### Completed: accepted, nothing left
 
-_None yet. A block moves here when it reaches `accepted`, and later to §6._
+Accepted workstreams are listed below; implementation milestones also appear in §6.
+
+<details id="ws-16">
+<summary>WS-16 — Protected-window capture gate repair · Codex</summary>
+
+**Workstream:** Make the privacy-preserving live-window capture assertion deterministic enough to unblock DEPLOY-MAIN without weakening what it proves.
+
+- **Owner:** `codex`
+- **Status:** accepted: PR #121 merged as `c3607e6` and DEPLOY-MAIN passed 09-29
+- **Implemented by:** Codex diagnosis and test-fixture repair
+- **Remaining work / acceptance:** None for this capture gate. Larry's DEPLOY-MAIN for `c3607e6` passed phase A: the real ScreenCaptureKit protected-window test executed and passed (4.825 s), MortimerHost ran 383 tests with six unrelated skips and zero failures, JarvisKit ran 218 tests with zero failures, and Python had 4,924 passes and seven skips. Phase D reported healthy services and matching code, production and app-bundle revisions. WS-08's separate visual and Reduce Motion acceptance remains open.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (PR #117, `c5781a8`; PR #121, `c3607e6`); acceptance status on `codex/ws16-protected-capture-20260929`
+- **Plan:** `docs/plans/MORTIMER_PROTECTED_WINDOW_CAPTURE_GATE_PLAN.md`
+- **Scope:** `macos/MortimerHost/Tests/MortimerHostTests/ProtectedDisplayContentTests.swift`, this row's plan and acceptance evidence, and `ROADMAP.md` status only. Product display code remains outside this row; WS-15 owns `Display/DisplayContentView.swift` while active.
+- **Next step:** None for WS-16; continue the independently owned WS-08 visual acceptance on the deployed build.
+- **Updated:** 09-29
+
+</details>
 
 ---
 
@@ -419,6 +437,7 @@ Open means not yet resolved. Each entry names who resolves it.
 |---|---|---|---|
 | CX-11 | Codex's T2 code against what Claude landed on main. (1) `JARVIS_AUTH_ENABLED` **defaults to true**, with no exempt routes, loopback included, so merging it turns auth on. (2) Main callers that send no token would then get 401: `jarvis/bot/status_tool.py` (the `system_status` tool from #86) and `scripts/deploy_main.sh` phase D, whose health checks expect 200 from `/api/health` and 200/307 from the bot, so the deploy would stop. (3) The route inventory in Codex's tree has 64 sidecar routes; main has 68 decorators, including 10 Codex's copy lacks: `/api/status/*` (9) and `/api/workflows`. (4) `mcp_servers/mcp_selfedit/logic.py`: Codex added service headers; main's copy also changed, so keep both. (5) Token setup is by CLI only (`python -m jarvis.auth add`), which conflicts with the no-shell-commands principle behind Claude's voice workflows (D-L2/D-L5). The native app already sends a Keychain token on every request (`JarvisHTTP.swift`), so it needs no code change, only a stored token. | `codex`: Addendum R1 fixes (1)–(4); `larry` decides (5) when T2 is decided (options in R1.9) | R1 implemented and deployed dormant; isolated enabled/dormant proof passes; token onboarding/remote activation remain undecided |
 | CX-13 | WS-14 edits `jarvis/subscription.py`, which is WS-02's scope (Codex; landed, so unlocked, but its live isolation gates are open). The allowlist change adds `USER`/`LOGNAME`, justified by the live `Not logged in` result recorded in WS-06. | `larry` (09-29): Claude lands, and Codex reviews before merge | resolved 09-29: Codex post-merge review of PR #102 found no blocking code issue; Mac Keychain/launchd evidence remains reported live evidence, not independently reproduced |
+| CX-14 | WS-15 PR #114 added `URLSession.shared.dataTask` in `Display/RadarMapView.swift`. On main `05c4a40`, the full MortimerHost suite failed two assertions in `MemoryGraphClosureC3Tests.testURLSessionSharedIsOnlyUsedByJarvisHTTPAndTheWakeWordSocket`. The WS-16 protected actual-window capture passed on that tree. | `claude` under active WS-15 scope | resolved by PR #118 (`adeffc1`): radar uses an ephemeral session; merged full MortimerHost suite passes 383 tests, five skips, zero failures |
 | CX-01 | Codex's worktree is based on `977f50b` and lacks #86 and the voice-workflows landing (`jarvis/status/`, `notices.py`, `voice_workflows.py`, …). 24 `jarvis/` files changed on both sides. | `codex`: commit, then merge `origin/main` | resolved in main; deployed `539f8f6` |
 | CX-02 | Migration ids `0025`–`0027` collide between main and Codex's tree. | `codex`: renumber per §3 | resolved in main; reserved IDs applied; upgrade/idempotency rechecked 09-28 |
 | CX-03 | `jarvis/workflows.py`: main has triggers, priority and draft; Codex has redacted parse-failure logs. Keep both. Same care applies to all 24 files in CX-01. | `codex` during the merge | resolved in main; workflow and privacy suites pass |
@@ -578,7 +597,27 @@ first lever to pull.
 
 ## 8. Change log
 
-- 2026-09-29: Codex WS-08 deployment follow-up. Larry ran DEPLOY-MAIN against `d460809`; phase A stopped on the protected-window capture test after JarvisKit passed. Production remained `e340101`. Analysis of the two pixel arrays found 21,946/1,041,600 differing pixels, all at the frame edge or the body-text area (none 64 px inside). The test is outside WS-08's assigned source scope; deployment and live orb acceptance remain blocked pending a separately assigned repair.
+- 2026-09-29: Codex / WS-16 accepted after Larry's DEPLOY-MAIN of PR #121 (`c3607e6`): real ScreenCaptureKit protected-window test executed and passed (4.825 s); MortimerHost 383 tests, six unrelated skips, zero failures; JarvisKit 218/0; Python 4,924 passed and seven skipped. Production, app bundle and main match; services healthy. WS-08 visual and Reduce Motion acceptance remains open. Evidence: `/Users/larryfix/MortimerRollback/logs/deploy-mortimerhost-20260929-175921.txt` and `/Users/larryfix/MortimerRollback/release-c3607e6-20260929-175921`.
+
+- 2026-09-29: Larry's DEPLOY-MAIN for `2ed1986` stopped in phase A; the protected-window capture test timed out waiting for `occlusionState.visible` before taking a screenshot. Production remained at `adeffc1`. Codex's WS-16 follow-up removes only that prerequisite and adds a third real capture to prove the local body rendered; four focused actual-capture runs and the full MortimerHost suite (383 tests, six unrelated skips, zero failures) passed in this worktree. Merge and a fresh DEPLOY-MAIN run remain open.
+
+- 2026-09-29: Codex WS-16 capture repair landed in PR #117 (`c5781a8`) after all five PR checks passed. The merged candidate passed MortimerHost 383 tests, five unrelated skips, zero failures; the actual protected-window capture executed and passed. Larry's DEPLOY-MAIN run and production acceptance remain open.
+
+- 2026-09-29: Codex merged main `adeffc1` (WS-15 radar-session fix) into WS-16, preserving both roadmap histories. Focused radar policy and real protected-capture tests passed without skips; full MortimerHost passed 383 tests, five unrelated skips, zero failures, including both tests. CX-14 is resolved; PR #117 review and DEPLOY-MAIN remain open.
+
+- 2026-09-29: Codex merged main `05c4a40` into WS-16 while preserving Claude's WS-15 roadmap entry. The actual protected-window capture passed on the merged tree. Full MortimerHost ran 383 tests with six skips and two failures, both in the `URLSession.shared` policy test caused by WS-15's new `RadarMapView.swift`. Registered CX-14 for Claude; WS-16 does not edit WS-15 product code.
+
+- 2026-09-29: Codex WS-16 removed only the app-active precondition after Larry's interactive Terminal capture also skipped. ScreenCaptureKit's real full-window comparison then passed four focused runs without skips and the full MortimerHost suite (374 tests, six unrelated skips, zero failures). PR #117 remains in review; production deployment is still open.
+
+- 2026-09-29: Codex WS-16 claim landed in PR #116 (`5182bdf`). Codex changed only the protected-window test fixture: protected and body-only payloads now render in the same live window; the full-frame exact comparison remains, with bounded pixel-difference diagnostics. Full MortimerHost passed 374 tests, seven skipped, zero failures. The capture test skipped because this shell's test host could not activate, so foreground capture and DEPLOY-MAIN remain open.
+
+- 2026-09-29 (late, WS-15 PR 2 fix): Claude (Cowork). DEPLOY-MAIN for `05c4a40` stopped in phase A with 3 MortimerHost failures: two assertions of MemoryGraphClosureC3Tests (the new radar tile overlay used the shared URL session; now its own ephemeral session) and the WS-16 protected-window capture test (pre-existing and environment-sensitive, owned by Codex). Production was not changed.
+
+- 2026-09-29 (night, WS-15 PR 2): Claude (Cowork). PR 1 (#110) is deployed and its logs confirm `local_weather` with the device fix. PR 2 follows Larry's one-window decision: the weather card lives in the main window only and is selected on arrival. It holds the summary, now, alerts, 12 hours, 7 days, and Apple's map with the NOAA/IEM radar loop and a pin; radar past zoom 8 is enlarged so it stays at street level.
+
+- 2026-09-29: Larry assigned Codex WS-16 after DEPLOY-MAIN for `d460809` stopped before production changes on the protected-window screenshot equality test. The logged captures differ in 21,946/1,041,600 pixels at the frame edge and body text; the central content matches. This docs-only claim reserves the test file and a separate worktree; it does not change product display code or relax the privacy assertion.
+
+- 2026-09-29: Codex WS-08 deployment follow-up. Larry ran DEPLOY-MAIN against `d460809`; phase A stopped on the protected-window capture test after JarvisKit passed. Production remained `e340101`. Analysis of the two pixel arrays found 21,946/1,041,600 differing pixels, all at the frame edge or the body-text area (none 64 px inside). The test is outside WS-08's assigned source scope; deployment and live orb acceptance remained blocked pending a separately assigned repair.
 
 - 2026-09-29: Codex WS-08 crystal-only implementation landed in PR #112 as `e9388fc`. The first `validate` run failed in an unchanged app-build timing test; that isolated test passed locally and the complete workflow passed on rerun. Sandbox controller and Knowledge base workflows also passed. Deployment and Larry's live orb checks remain open.
 
