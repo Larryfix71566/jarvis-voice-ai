@@ -80,6 +80,7 @@ class Orchestrator:
         status: bool = False,
         progress: bool = False,
         follow_up: bool = False,
+        weather: bool = False,
     ):
         self._settings = settings
         self._registry = registry
@@ -164,6 +165,8 @@ class Orchestrator:
             # W12: the progress_updates / follow_up addenda, same reason.
             progress=progress,
             follow_up=follow_up,
+            # WS-15: the local_weather addendum, same reason.
+            weather=weather,
         )
         self._history: list[dict] = []
         # MORTIMER_VOICE_WORKFLOWS_PLAN.md D15 — the same three hooks

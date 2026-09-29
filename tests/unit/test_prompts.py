@@ -850,3 +850,14 @@ def test_app_build_submit_needs_no_second_yes():
     assert "the user's yes to app_build_start already covers it, so never ask again" in source
     assert "covered by the yes to app_build_start: never ask again" in SUBAGENT_PROMPTS["app_builder"]
     assert "call app_create with confirm set to false" in source
+
+
+
+def test_weather_addendum_ships_only_with_local_weather():
+    # WS-15: the addendum describes local_weather, so it follows the same flag.
+    from jarvis.prompts import WEATHER_ADDENDUM
+    assert WEATHER_ADDENDUM not in build_supervisor_prompt(**_FMT)
+    with_it = build_supervisor_prompt(**_FMT, weather=True)
+    assert with_it.endswith(WEATHER_ADDENDUM)
+    assert "never use a remembered place" in WEATHER_ADDENDUM
+    assert "never say you have no radar" in WEATHER_ADDENDUM

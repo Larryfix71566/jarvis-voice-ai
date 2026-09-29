@@ -1,7 +1,7 @@
 # Mortimer: local weather with today, the week, and a live radar map (WS-15, Option A)
 
 **Author:** Claude (Cowork), 2026-09-29
-**Status:** APPROVED DIRECTION (Larry chose Option A on 09-29). Implementation not started; gates G-1 to G-3 (§4) come first.
+**Status:** IN PROGRESS. Gates G-1 to G-3 passed on 09-29 (§4a). PR 1 (S1–S5, Python: location, 7-day data, spoken summary) is in review. PR 2 (S6, the native card and map) is next.
 **Workstream:** WS-15 in `ROADMAP.md`
 **Supersedes:** W5/W6 of `MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md` (the one-card merge and the stacked RainViewer/CARTO radar). W1–W4, W7 and W8 stand: Weather.gov primary, both unit sets, `JARVIS_UNITS`, no new kill switches.
 **Research:** `Claude outputs/ws15/ws15_weather_research.html` (09-29), sources listed there.
@@ -23,7 +23,8 @@
 | E4 | No weekly forecast. | `get_weather` caps the forecast at 3 days (`min(int(days), 3)`). The 10:08 reply said "humidity/wind data unavailable". Weather.gov's `/points`, then `forecast` (7 days), then `forecastHourly` is not fully used, and alerts are not fetched. |
 | E5 | The radar map is unusable. | `imagesStack` (`DisplayContentView.swift`) stacks the 3×3 tiles vertically on an unlabelled dark basemap at zoom 6, with no pin. |
 | E6 | The radar source is now limited. | Since 2026-01-01, RainViewer's free API stops at zoom 7 with one colour scheme and 2 h of 10-minute frames, and is for personal/educational use only. |
-| E7 | No radar appeared at all at 10:08. | The bot sent three `weather_report` window payloads; no display window was attached, so they went to the main workspace. Nothing logs what happened after that. **Cause untested.** |
+| E7 | No radar appeared at all. | **Cause found (G-2, 09-29 17:27).** The app received the card (`kind=image`, 9 radar + 9 basemap tiles, `displayOpen=false`) and routed it to the workspace. `WorkspaceStore.receive` only makes the **first** result of a session active; later results are only marked unread. The spoken reply's text result had arrived 16 s earlier, so the radar card sat unread and was never rendered (no image-stack log line). |
+| E8 | Mortimer said "I don't have a weather radar tool yet". | 09-29 17:28 test session: the analyst had called `get_weather_radar` and the card had been sent. The voice model can't see the analyst's tools, so it answered from assumption and offered to build radar through self-development (`HANDOFF_ADDENDUM`'s "isn't something I have a tool for" line). |
 
 ## 2. What Option A delivers
 
@@ -91,6 +92,18 @@ app: DisplayPayload.weather → WeatherCardView (header, today, hourly, 7-day, a
   Reproduce on the current build. If the cause is outside the weather view (e.g. window payloads dropped in general), stop and file it separately, because that code borders WS-09.
 - **G-3 MapKit spike (Claude, throwaway branch, about 1 hour).** An `MKMapView` inside MortimerHost (ad-hoc signed, macOS 26 target, not sandboxed) with one IEM `MKTileOverlay`, built with `bundle.sh` and run on the Mac. **Pass:** Apple's map renders with the radar overlay and the pin. **Fail:** fall back to Option C's MapLibre web view for the map only; the rest of this plan is unchanged. MapKit working in an ad-hoc-signed app is likely but untested.
 
+## 4a. Gate results (09-29)
+
+- **G-1 (probe from the Mac, 17:17 UTC).**
+  - IEM `/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png` and `…nexrad-n0q-m05m-900913/…` return 200 at z6–z9. The `/c/…` form returns 404, so use `/cache/`.
+  - Weather.gov answered all three calls: `/points` (200), `alerts/active?point=` (200), `forecast` (14 periods) and `forecastHourly` (156 periods, with `relativeHumidity`, `windSpeed`, `windDirection` and `probabilityOfPrecipitation`).
+- **G-2 (diagnostic build, 17:27).** Found the cause of E7 (§1). PR 2 makes a weather card come to the front instead of sitting unread.
+- **G-3 (MapKit spike, 17:24).**
+  - Apple's map rendered fully in an ad-hoc-signed, unsandboxed app (7 `fullyRendered=true` renders, no failures).
+  - IEM tiles loaded for the current frame and the 5- and 10-minute frames (36 each, 400–1,955 bytes, i.e. real data), with no failures.
+  - **Constraint found:** with `maximumZ=8`, MapKit requests no radar tiles at all when zoomed closer than z8, so the radar disappears at the opening ~60 km view. S6 must serve z>8 by cropping and enlarging the parent z8 tile (a custom `MKTileOverlay.loadTile`).
+- **Correction:** there is no `JARVIS_WEATHER_ENABLED` switch; the existing one is `JARVIS_AMBIENT_WEATHER_ENABLED`, and it gates only the ambient chip. Following W8 (no new kill switches), `local_weather` is registered unconditionally. Rollback is a revert.
+
 ## 5. Build steps (branch `ws15/weather-location-radar`, after G-1 to G-3)
 
 **S1. Data layer: `jarvis/weather/report.py` (new; pure functions, injected fetchers)**
@@ -120,6 +133,8 @@ app: DisplayPayload.weather → WeatherCardView (header, today, hourly, 7-day, a
 - **Protected turn:** weather is an external lookup, so it follows `system_status`'s `EXTERNAL_TOPICS` rule. Say it's unavailable on a private turn; call nothing.
 - **Unavailable:** "Location isn't available (reason). Ask the user which place. Do not guess a place."
 - Registered only when `JARVIS_WEATHER_ENABLED` is on (W8: no new switch).
+
+**S3a. E8 fix.** `local_weather`'s code-built answer states whether a card with radar was sent. `WEATHER_ADDENDUM` tells the voice model the radar is on that card and never to say it has no radar.
 
 **S4. `jarvis/bot/display.py`**
 - A `weather` pseudo-tool (like `weather_report`) builds `kind="weather"` with the `weather` object, plus the legacy `images`/`basemap_images`, `surface="window"`.
@@ -166,6 +181,27 @@ app: DisplayPayload.weather → WeatherCardView (header, today, hourly, 7-day, a
 2. Larry merges and runs DEPLOY-MAIN.
 3. Larry runs the acceptance checks (§6).
 4. Receipt at `docs/acceptance/weather/ws15-weather-location-radar-<date>.md`; WS-15 moves to `accepted`.
+
+## 5a. PR 1 as built (09-29)
+
+PR 1 is smaller than S1/S2 as written: it reuses the existing, tested Weather.gov/Open-Meteo path instead of adding `jarvis/weather/report.py` first. The schema-v1 report and `get_weather_report` move to PR 2, where the native card needs them.
+
+- **`jarvis/weathergov.py`:** new `period_pop`, `hourly_forecast` and `active_alerts`. `daily_forecast` gains additive `pop`/`detail` keys.
+- **`mcp_servers/mcp_web/logic.py`:**
+  - `get_weather` = geocode, then the new `weather_at(lat, lon, label, days)`; `get_weather_radar` = geocode, then the new `radar_at(lat, lon, label)`.
+  - The forecast cap goes from 3 to 7 days.
+  - Humidity and wind come from the current hourly period (`wind` is NWS text such as "SE 8 mph"), and chance of rain from each period.
+  - New additive keys: `hourly`, `alerts` (None = lookup failed, [] = none active), `lat`, `lon`.
+  - The Open-Meteo path returns the same shape.
+- **`jarvis/bot/weather_tool.py` (new):** `local_weather`.
+  - Takes no arguments. Place order: device fix, then IP (said as approximate), then "ask which place".
+  - Refused on a protected turn.
+  - Pushes one `weather_report` card; returns a code-built summary covering the alert, now, today, the rest of the week, and whether a card with radar was sent.
+- **`jarvis/bot/tool_schemas.py`, `jarvis/prompts.py` (`WEATHER_ADDENDUM`), `jarvis/agents/supervisor.py`:** a `weather` flag, appended last so every earlier menu and prompt stays byte-identical.
+- **`jarvis/bot/pipeline.py`:** registers `local_weather` with the session's `resolve_location` and the app-message sender.
+- **`jarvis/bot/display.py`:** alerts lead the weather card.
+- **Evals:** three `require_tool: local_weather` cases in `tests/evals/voice_workflow_cases.yaml`; the eval passes `weather=True`.
+- **Known limit until PR 2:** the card is still the legacy RainViewer tile stack, and it can still sit unread in the workspace (E7). The spoken answer now says a card with radar was sent, so Mortimer no longer denies having radar.
 
 ## 6. Acceptance (Larry on the Mac; Claude checks the logs)
 

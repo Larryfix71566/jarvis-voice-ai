@@ -371,6 +371,14 @@ def _fmt_weather_report(args: dict, data: dict) -> tuple | None:
 
     if weather:
         city = str(weather.get("city") or "")
+        # WS-15: active NWS alerts lead the card. None means the lookup
+        # failed and is not shown as "no alerts".
+        for alert in (weather.get("alerts") or [])[:3]:
+            if isinstance(alert, dict) and alert.get("event"):
+                line = f"**Alert: {alert['event']}**"
+                if alert.get("headline"):
+                    line += f" — {alert['headline']}"
+                parts.append(line)
         human = str(weather.get("human") or "").strip()
         if human:
             parts.append(human)

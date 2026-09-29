@@ -138,3 +138,58 @@ class TestFetchHeaders:
 
     def test_other_url_gets_no_header(self):
         assert wg.fetch_headers("https://api.open-meteo.com/v1/forecast") == {}
+
+
+
+# ------------------------------------------------------------------ WS-15
+class TestWS15Additions:
+    def test_period_pop(self):
+        assert wg.period_pop({"probabilityOfPrecipitation": {"value": 20}}) == 20
+        assert wg.period_pop({"probabilityOfPrecipitation": {"value": None}}) is None
+        assert wg.period_pop({}) is None
+
+    def test_daily_forecast_adds_pop_and_detail(self):
+        def fetch(url):
+            if "gridpoints" in url:
+                return _forecast([
+                    {"name": "Today", "isDaytime": True, "temperature": 85, "temperatureUnit": "F",
+                     "shortForecast": "Sunny", "detailedForecast": "Sunny, high near 85.",
+                     "probabilityOfPrecipitation": {"value": 10}},
+                    {"name": "Tonight", "isDaytime": False, "temperature": 60, "temperatureUnit": "F",
+                     "shortForecast": "Clear", "probabilityOfPrecipitation": {"value": 30}},
+                ])
+            return _points()
+        day = wg.daily_forecast(35.0, -82.0, fetch, days=1)["days"][0]
+        assert day["pop"] == 30
+        assert day["detail"] == "Sunny, high near 85."
+
+    def test_hourly_forecast(self):
+        def fetch(url):
+            if url.endswith("/hourly"):
+                return {"properties": {"periods": [
+                    {"startTime": "t0", "temperature": 20, "temperatureUnit": "C",
+                     "relativeHumidity": {"value": 71.4}, "windSpeed": "5 mph",
+                     "windDirection": "N", "probabilityOfPrecipitation": {"value": 0},
+                     "shortForecast": "Clear"}] * 20}}
+            return {"properties": {"forecastHourly": "https://api.weather.gov/g/1,1/forecast/hourly"}}
+        periods = wg.hourly_forecast(35.0, -82.0, fetch, hours=12)["periods"]
+        assert len(periods) == 12
+        assert periods[0] == {"start": "t0", "temp_f": 68, "humidity": 71, "wind": "N 5 mph",
+                              "pop": 0, "condition": "Clear"}
+
+    def test_hourly_forecast_missing_url_is_none(self):
+        assert wg.hourly_forecast(35.0, -82.0, lambda url: {"properties": {}}) is None
+
+    def test_active_alerts(self):
+        def fetch(url):
+            assert "alerts/active?point=35.0000,-82.0000" in url
+            return {"features": [{"properties": {"event": "Heat Advisory", "severity": "Moderate",
+                                                 "headline": "Hot", "expires": "e"}},
+                                 {"properties": {"event": ""}}]}
+        assert wg.active_alerts(35.0, -82.0, fetch) == [
+            {"event": "Heat Advisory", "severity": "Moderate", "headline": "Hot", "ends": "e"}]
+
+    def test_active_alerts_failure_is_none(self):
+        def fetch(url):
+            raise RuntimeError("down")
+        assert wg.active_alerts(35.0, -82.0, fetch) is None
