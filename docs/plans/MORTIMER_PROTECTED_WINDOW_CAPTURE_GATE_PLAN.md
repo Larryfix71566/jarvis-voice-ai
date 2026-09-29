@@ -1,6 +1,6 @@
 # Protected-window capture gate repair (WS-16)
 
-**Status:** IN REVIEW (PR #117); real capture passed, deployment blocked by CX-14.
+**Status:** IN REVIEW (PR #117); combined Swift gate passed, deployment open.
 **Owner:** Codex. Larry runs DEPLOY-MAIN and accepts the live result.
 **Recorded:** 2026-09-29.
 
@@ -89,3 +89,9 @@ were displayed, and it is not a passing privacy check.
   in `MemoryGraphClosureC3Tests` because new WS-15 `RadarMapView.swift`
   calls bare `URLSession.shared`. That code is Claude's active WS-15 scope;
   CX-14 records the handoff. DEPLOY-MAIN remains blocked until it is fixed.
+- 2026-09-29: Claude's CX-14 fix landed in PR #118 (`adeffc1`) and was
+  merged into this branch with both roadmap histories preserved. Focused
+  radar policy and actual-window capture tests passed without skips. The
+  full MortimerHost suite passed 383 tests, five unrelated skips, zero
+  failures; both previously failing tests executed and passed. PR #117
+  review/merge and Larry's DEPLOY-MAIN run remain open.
