@@ -592,8 +592,8 @@ code or deployment changes are part of recording this requirement.
 
 **Prepared by:** Codex, 2026-09-28, at Larry’s request. **Implementation
 dispatched:** Larry, 2026-09-29, to Codex following this handoff. **Status:**
-PR #99 open for review; automated implementation gates pass; no Mac acceptance
-performed. The handoff was
+PR #99 merged to main as `4986c10`; automated implementation gates pass; no
+deployment or Mac acceptance performed. The handoff was
 written for Luna through Codex, and this Codex session is executing the same
 bounded contract. Exact model version is not recorded. Larry remains WS-09’s
 acceptance owner. This is a bounded amendment to this plan, not a new plan.
@@ -700,7 +700,9 @@ with the failing evidence before broadening scope.
     current mode-toggle, voice accessibility, result ID and scroll assertions.
   - Verify an injected audio-input notice remains visible in compact v2;
     existing toggle/voice accessibility coverage preserves speaker and mic
-    affordances. Do not remove all text to satisfy transcript absence.
+    affordances. The source retains the “Microphone muted” indicator, but the
+    tests do not explicitly assert that exact status string in compact v2; track
+    this as a coverage follow-up. Do not remove all text to satisfy transcript absence.
   Use the existing fixture cleanup helper and restore defaults. Avoid live
   provider calls, production preferences or new runtime abstractions for tests.
 - [x] **P3 — Validate.** On 2026-09-29, all four commands below passed:
@@ -715,12 +717,12 @@ with the failing evidence before broadening scope.
   `conversation-1000-compact.png`, `conversation-512-expanded.png`, and
   `conversation-1000-expanded.png` (relative to the package root).
 - [x] **P4 — Commit and handoff.** Committed `ca7e95b` on
-  `codex/isolated-20260924`, pushed and opened [PR #99](https://github.com/Larryfix71566/jarvis-voice-ai/pull/99)
-  for review. WS-09 and this checklist include the scope, test results,
-  screenshots and remaining live gates. System: Codex; the exact model build
-  is not exposed by this runtime. PR is mergeable; no deployment or user
+  `codex/isolated-20260924`, pushed, and opened [PR #99](https://github.com/Larryfix71566/jarvis-voice-ai/pull/99).
+  PR #99 merged to `main` as `4986c10`. WS-09 and this checklist include the
+  scope, test results, screenshots and remaining live gates. System: Codex;
+  the exact model build is not exposed by this runtime. No deployment or user
   acceptance is claimed.
-- [ ] **P5 — Deploy and accept.** After merge and release authorization, use
+- [ ] **P5 — Deploy and accept.** After release authorization, use
   `scripts/deploy_main.sh` only. Record the deployed source/bundle revision and
   rollback reference. Complete the physical checks below on that exact build.
 
@@ -733,6 +735,13 @@ swift test --package-path macos/MortimerHost --filter ResponseResultRouterTests
 swift test --package-path macos/MortimerHost
 git diff --check
 ```
+
+**Progress update (2026-09-29):** Implementation is landed in `main` at
+`4986c10`. Automated validation remains as recorded above; this status update
+did not rerun application tests. P5 remains open pending release authorization
+and Larry’s physical single-/multi-monitor acceptance. The muted-microphone
+indicator remains in source; add an explicit compact-v2 assertion when the
+WS-09 acceptance owner schedules the follow-up.
 
 The stream/router suites already test one response identity, streaming updates,
 supporting-display ownership and return to main. Do not weaken these tests.
