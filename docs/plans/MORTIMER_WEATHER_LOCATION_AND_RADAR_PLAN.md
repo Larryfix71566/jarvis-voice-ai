@@ -1,7 +1,7 @@
 # Mortimer: local weather with today, the week, and a live radar map (WS-15, Option A)
 
 **Author:** Claude (Cowork), 2026-09-29
-**Status:** IN PROGRESS. Gates G-1 to G-3 passed on 09-29 (§4a). PR 1 (S1–S5, Python: location, 7-day data, spoken summary) is in review. PR 2 (S6, the native card and map) is next.
+**Status:** IN PROGRESS. PR 1 (#110, location, 7-day forecast, spoken summary) merged and deployed 09-29; logs show `local_weather` using the device fix. PR 2 (the one-card view and native map) is in review.
 **Workstream:** WS-15 in `ROADMAP.md`
 **Supersedes:** W5/W6 of `MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md` (the one-card merge and the stacked RainViewer/CARTO radar). W1–W4, W7 and W8 stand: Weather.gov primary, both unit sets, `JARVIS_UNITS`, no new kill switches.
 **Research:** `Claude outputs/ws15/ws15_weather_research.html` (09-29), sources listed there.
@@ -202,6 +202,23 @@ PR 1 is smaller than S1/S2 as written: it reuses the existing, tested Weather.go
 - **`jarvis/bot/display.py`:** alerts lead the weather card.
 - **Evals:** three `require_tool: local_weather` cases in `tests/evals/voice_workflow_cases.yaml`; the eval passes `weather=True`.
 - **Known limit until PR 2:** the card is still the legacy RainViewer tile stack, and it can still sit unread in the workspace (E7). The spoken answer now says a card with radar was sent, so Mortimer no longer denies having radar.
+
+## 5b. PR 2 as built (09-29)
+
+- **Larry's decision (09-29):** *"it still shows the text on one window and the radar on another, they should be on one window."* He chose the **main window**: the weather card lives only in Mortimer's main window and is selected when it arrives. It never goes to the supporting display, and it never waits unread (fixes E7).
+- **Server:**
+  - `jarvis/bot/weather_card.py` (new) builds the schema-1 view (`weather_view`), which is display-ready in the user's units, with SF Symbol names.
+  - Radar is IEM inside the lower 48 (current plus 5–50 minute frames, native zoom 8) and RainViewer elsewhere (native zoom 7).
+  - `build_display_payload` gives a `weather_report` card `kind: "weather"` plus the `weather` view, keeping the markdown body and legacy images as the fallback.
+  - `local_weather` passes the place (label, source, approximate). Its "card with radar" wording follows the view: inside the US it uses NOAA radar even if RainViewer fails.
+- **App:**
+  - JarvisKit `WeatherCard` is decoded leniently on `DisplayPayload.weather`; an unknown schema gives nil and falls back to the body.
+  - `WeatherCardView`: header with the place and its source, now, humidity and wind, alerts, a 12-hour strip, the week, the map, and attribution.
+  - `RadarMapView`: `MKMapView` with a pin, a map/satellite toggle, and play/pause through the frames every 0.6 s. There is no autoplay under Reduce Motion.
+  - `RadarTileOverlay` serves zooms past the native level by enlarging the parent tile (`RadarTileMath`), so radar stays visible at street level (the G-3 constraint).
+  - `DisplayContentView` routes `kind == "weather"` to the card.
+  - `AppMessageRouter.showsInMainWindowOnly` keeps it in the main window and selects it.
+- **Known remaining:** the spoken reply's text still arrives as its own result, and it's also mirrored to the supporting display when that window is open (existing behaviour of `ResponseResultRouter`). The weather card, which carries the same summary, stays in front in the main window.
 
 ## 6. Acceptance (Larry on the Mac; Claude checks the logs)
 

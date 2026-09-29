@@ -161,7 +161,8 @@ class TestWeatherReport:
     def test_merges_conditions_and_radar(self):
         p = build("weather_report", {"weather": self.WEATHER, "radar": self.RADAR})
         assert p is not None
-        assert p["kind"] == "image"
+        # WS-15 PR 2: a card with conditions carries the structured view.
+        assert p["kind"] == "weather" and p["weather"]["schema"] == 1
         assert len(p["images"]) == 9
         assert "86°F" in p["body"]
         assert "Latest precipitation radar" in p["body"]
@@ -172,7 +173,8 @@ class TestWeatherReport:
         renders as a (markdown-only) card."""
         p = build("weather_report", {"weather": self.WEATHER, "radar": None})
         assert p is not None
-        assert p["kind"] == "markdown"
+        # WS-15 PR 2: a card with conditions carries the structured view.
+        assert p["kind"] == "weather" and p["weather"]["schema"] == 1
         assert p["images"] == []
         assert "86°F" in p["body"]
 
@@ -211,7 +213,8 @@ class TestWeatherReportMerger:
         second = m.offer("run-1", "analyst", "Analyst", "get_weather_radar",
                           json.dumps(TestGetWeatherRadar.DATA))
         assert second is not None
-        assert second["kind"] == "image"
+        # WS-15 PR 2: a card with conditions carries the structured view.
+        assert second["kind"] == "weather" and second["weather"]["schema"] == 1
         assert "86°F" in second["body"]
 
     def test_radar_error_still_finalizes_with_conditions_only(self):
@@ -221,7 +224,8 @@ class TestWeatherReportMerger:
         result = m.offer("run-1", "analyst", "Analyst", "get_weather_radar",
                           json.dumps({"error": "Radar data failed."}))
         assert result is not None
-        assert result["kind"] == "markdown"
+        # WS-15 PR 2: a card with conditions carries the structured view.
+        assert result["kind"] == "weather" and result["weather"]["schema"] == 1
         assert "86°F" in result["body"]
 
     def test_finalize_flushes_a_lone_pending_half(self):
@@ -232,7 +236,8 @@ class TestWeatherReportMerger:
                         json.dumps(TestGetWeather.DATA)) is None
         flushed = m.finalize("run-1")
         assert flushed is not None
-        assert flushed["kind"] == "markdown"
+        # WS-15 PR 2: a card with conditions carries the structured view.
+        assert flushed["kind"] == "weather" and flushed["weather"]["schema"] == 1
         assert "86°F" in flushed["body"]
 
     def test_finalize_on_empty_run_returns_none(self):
