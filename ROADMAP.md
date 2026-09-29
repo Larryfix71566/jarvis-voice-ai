@@ -285,14 +285,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Orb crystal glass (#90), revised to use the crystal shell exclusively
 
 - **Owner:** `codex`
-- **Status:** claimed
+- **Status:** in-progress
 - **Implemented by:** Claude original crystal-glass workstream; Codex rendering performance fixes; Codex single-shell cleanup in progress
 - **Remaining work / acceptance:** Codex removes the old orb-shell renderer and rollback flag and updates tests. Larry verifies the deployed crystal orb remains correct in compact/expanded layouts and under Reduce Motion; his 09-29 observations pass the current build, with final deployed acceptance after cleanup.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** `codex/ws08-crystal-only-20260929`
 - **Plan:** `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`
 - **Scope:** Orb rendering, orb-specific configuration, performance/visual regression tests, and this plan's acceptance evidence.
-- **Next step:** Merge this ownership/design claim, then remove the legacy renderer and `JARVIS_ORB_CRYSTAL` rollback toggle while preserving the crystal appearance and existing performance budget.
+- **Next step:** Remove the legacy renderer and `JARVIS_ORB_CRYSTAL` rollback toggle, then run the focused Swift rendering and performance suites without changing artwork or budgets.
 - **Updated:** 09-29
 
 </details>
@@ -368,7 +368,7 @@ Claude’s work or enable any runtime feature.
 - **Owner:** `claude`
 - **Status:** landed (PR #102, merge `eb24e81`); deployed 09-29 10:07 EDT by DEPLOY-MAIN (Python 4879 passed, JarvisKit 219/0, MortimerHost 374/0)
 - **Implemented by:** Claude
-- **Remaining work / acceptance:** Live check passed: the `com.mortimer.status-daily` rerun at 14:11 UTC 09-29 shows `claude` `ok: true`. `codex` shows `not_installed`, which is correct because no Codex CLI is on the launchd PATH. Claude's earlier prediction of `gated` was wrong: `gated` appears only once a Codex CLI resolves. The PR merged with no GitHub review on record, so Codex's post-merge review is still open (CX-13).
+- **Remaining work / acceptance:** Live check passed: the `com.mortimer.status-daily` rerun at 14:11 UTC 09-29 shows `claude` `ok: true`. `codex` shows `not_installed`, which is correct because no Codex CLI is on the launchd PATH. Claude's earlier prediction of `gated` was wrong: `gated` appears only once a Codex CLI resolves. Codex completed a post-merge code review of PR #102 on 09-29; no blocking code issue found. The review did not independently reproduce the Mac Keychain/launchd test (CX-13).
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main
 - **Plan:** Under `MORTIMER_SUBSCRIPTION_RUNTIME_ISOLATION_PLAN_2026-09-25.md`, which allows "home needed for provider-managed sign-in, plus only specifically justified" variables. The live evidence is in WS-06. Changes:
@@ -376,7 +376,7 @@ Claude’s work or enable any runtime feature.
   2. `_claude_argv` and `_codex_argv` run `provider_command()`, which reads the same `JARVIS_*_SUBSCRIPTION_COMMAND` variable as the installed check.
   3. `probe_subscription` keeps the runtime's own category when the legacy message table falls through to `runtime_error`. A `SubscriptionCapabilityError` reports `gated`. The legacy table and the `verify_model_access` golden output are unchanged.
 - **Scope:** `jarvis/subscription.py`, `jarvis/status/subscriptions.py`, `tests/unit/test_subscription.py`, `tests/unit/test_status_subscriptions.py`
-- **Next step:** Codex: post-merge review of PR #102 against the isolation plan (CX-13)
+- **Next step:** None for Codex review; Larry's live subscription acceptance remains as recorded in WS-06.
 - **Updated:** 09-29
 
 </details>
@@ -418,7 +418,7 @@ Open means not yet resolved. Each entry names who resolves it.
 | ID | Conflict | Resolves | State |
 |---|---|---|---|
 | CX-11 | Codex's T2 code against what Claude landed on main. (1) `JARVIS_AUTH_ENABLED` **defaults to true**, with no exempt routes, loopback included, so merging it turns auth on. (2) Main callers that send no token would then get 401: `jarvis/bot/status_tool.py` (the `system_status` tool from #86) and `scripts/deploy_main.sh` phase D, whose health checks expect 200 from `/api/health` and 200/307 from the bot, so the deploy would stop. (3) The route inventory in Codex's tree has 64 sidecar routes; main has 68 decorators, including 10 Codex's copy lacks: `/api/status/*` (9) and `/api/workflows`. (4) `mcp_servers/mcp_selfedit/logic.py`: Codex added service headers; main's copy also changed, so keep both. (5) Token setup is by CLI only (`python -m jarvis.auth add`), which conflicts with the no-shell-commands principle behind Claude's voice workflows (D-L2/D-L5). The native app already sends a Keychain token on every request (`JarvisHTTP.swift`), so it needs no code change, only a stored token. | `codex`: Addendum R1 fixes (1)–(4); `larry` decides (5) when T2 is decided (options in R1.9) | R1 implemented and deployed dormant; isolated enabled/dormant proof passes; token onboarding/remote activation remain undecided |
-| CX-13 | WS-14 edits `jarvis/subscription.py`, which is WS-02's scope (Codex; landed, so unlocked, but its live isolation gates are open). The allowlist change adds `USER`/`LOGNAME`, justified by the live `Not logged in` result recorded in WS-06. | `larry` (09-29): Claude lands, and Codex reviews before merge | merged 09-29 (PR #102) with no GitHub review on record; open until Codex's post-merge review |
+| CX-13 | WS-14 edits `jarvis/subscription.py`, which is WS-02's scope (Codex; landed, so unlocked, but its live isolation gates are open). The allowlist change adds `USER`/`LOGNAME`, justified by the live `Not logged in` result recorded in WS-06. | `larry` (09-29): Claude lands, and Codex reviews before merge | resolved 09-29: Codex post-merge review of PR #102 found no blocking code issue; Mac Keychain/launchd evidence remains reported live evidence, not independently reproduced |
 | CX-01 | Codex's worktree is based on `977f50b` and lacks #86 and the voice-workflows landing (`jarvis/status/`, `notices.py`, `voice_workflows.py`, …). 24 `jarvis/` files changed on both sides. | `codex`: commit, then merge `origin/main` | resolved in main; deployed `539f8f6` |
 | CX-02 | Migration ids `0025`–`0027` collide between main and Codex's tree. | `codex`: renumber per §3 | resolved in main; reserved IDs applied; upgrade/idempotency rechecked 09-28 |
 | CX-03 | `jarvis/workflows.py`: main has triggers, priority and draft; Codex has redacted parse-failure logs. Keep both. Same care applies to all 24 files in CX-01. | `codex` during the merge | resolved in main; workflow and privacy suites pass |
@@ -579,6 +579,8 @@ first lever to pull.
 ## 8. Change log
 
 - 2026-09-29 (evening, plan): Claude (Cowork) claimed WS-15 and added `docs/plans/MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md`. Larry chose Option A after the research: native Apple map, NOAA radar via IEM (5-minute updates, zoom 8, 50-minute loop), Weather.gov for today, 7 days, hourly and alerts, and a `local_weather` tool that never uses memory for the place. The plan has gates G-1 to G-3, steps S1–S8 and acceptance checks A1–A8. Device location confirmed working at 11:39 EDT. CX-07 moved back among the resolved conflicts (the 09-29 reorder listed it as open by mistake).
+
+- 2026-09-29: Codex completed the required post-merge review of WS-14 PR #102 for CX-13. The review found no blocking code issue in the identity-only environment additions, shared CLI command resolution, failure-category mapping or fail-closed Codex capability gate. The GitHub review explicitly notes that live Mac Keychain/launchd evidence was taken from the PR and not independently reproduced. CX-13 is resolved; live subscription acceptance remains in WS-06.
 
 - 2026-09-29 (night, later): Claude (Cowork), at Larry's request: §2 is grouped as needs work, then built and waiting on checks, then completed. §4 lists open conflicts first, and its table rows are now contiguous (blank lines had split the table). No block content changed.
 
