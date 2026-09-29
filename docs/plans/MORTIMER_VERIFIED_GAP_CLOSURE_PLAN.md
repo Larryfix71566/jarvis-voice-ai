@@ -1256,3 +1256,23 @@ holds the claim write and verifies the visible job has not yet become terminal;
 then release it and verify the durable and visible terminal states agree. Run
 the focused admin action tests and full backend validation. Claim this slice
 on main first through a docs-only PR; no backend code is changed by the claim.
+
+### 2026-09-29 — WS-01 claim-order implementation
+
+The docs-only claim landed through PR #124. The self-edit and app-build workers
+now settle the durable terminal action claim while holding their respective job
+locks, immediately before publishing terminal in-memory job state. This covers
+success, failure, and cancellation without changing duplicate-run decisions or
+claim-update error handling. Four deterministic tests pause the terminal claim
+write, verify the job remains running, then release the write and verify that
+the receipt and terminal job agree. The two focused admin modules pass (97
+tests). Full unit and CI validation remain before merging this fix into WS-08
+PR #115.
+
+Local full-unit run: 4,740 passed, three skipped, two failures outside this
+scope. The audio-filter default test passed when rerun alone, indicating
+shared-state contamination in the broad Mac run. The deploy-script log-flush
+test also failed alone on this Mac: its stdout assertion passed, but the
+process-substitution log stayed empty through the test's one-second wait.
+Neither file is changed by this WS-01 slice. Linux CI remains the authoritative
+full-suite gate for the PR.

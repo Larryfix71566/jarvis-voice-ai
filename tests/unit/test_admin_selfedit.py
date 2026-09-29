@@ -481,6 +481,46 @@ def test_bare_run_uses_injected_run_id_for_cross_run_claim(
     assert recovered["job"]["result_available"] is False
 
 
+@pytest.mark.parametrize("crash,terminal,receipt_status", [
+    (False, "done", "completed"),
+    (True, "error", "failed"),
+])
+def test_run_settles_claim_before_terminal_job(
+    registry_file, fresh_db, monkeypatch, crash, terminal, receipt_status,
+):
+    """A status poll cannot see completion while the receipt is still claimed."""
+    _install_fake_agent(monkeypatch, crash=crash)
+    entered = threading.Event()
+    release = threading.Event()
+    original_update = srv._update_staged_selfedit_claim
+
+    def pause_terminal_update(action_id, status, scope):
+        if status in {"completed", "failed"}:
+            entered.set()
+            assert release.wait(5)
+        return original_update(action_id, status, scope)
+
+    monkeypatch.setattr(srv, "_update_staged_selfedit_claim", pause_terminal_update)
+    c = TestClient(app)
+    identity = f"selfedit-settlement-{terminal}"
+    try:
+        started = c.post("/api/selfedit/run", json={
+            "goal": "add a clock", "run_id": identity,
+        }).json()
+        assert started["ok"] and started["started"]
+        assert entered.wait(2)
+        # The worker is deliberately paused inside the claim write. Reading
+        # the dict directly avoids blocking on the lock held by the worker.
+        assert srv._run_job["state"] == "running"
+        receipt = srv.get_execution_action(srv._SELFEDIT_RUN_START_ACTION_SCOPE, identity)
+        assert receipt["status"] != receipt_status
+    finally:
+        release.set()
+    _wait_for_job(c, terminal)
+    receipt = srv.get_execution_action(srv._SELFEDIT_RUN_START_ACTION_SCOPE, identity)
+    assert receipt["status"] == receipt_status
+
+
 def test_run_with_staging_id_claim_prevents_cross_run_replay(
     registry_file, fresh_db, monkeypatch,
 ):
