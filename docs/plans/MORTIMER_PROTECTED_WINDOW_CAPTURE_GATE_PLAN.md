@@ -1,6 +1,6 @@
 # Protected-window capture gate repair (WS-16)
 
-**Status:** CLAIMED; implementation waits for the roadmap claim to reach main.
+**Status:** IN REVIEW (PR #117); combined Swift gate passed, deployment open.
 **Owner:** Codex. Larry runs DEPLOY-MAIN and accepts the live result.
 **Recorded:** 2026-09-29.
 
@@ -63,3 +63,35 @@ were displayed, and it is not a passing privacy check.
   `ProtectedDisplayContentTests.swift` builds two NSWindows sequentially
   and compares raw pixel arrays; the source's protected render branch
   ignores ancillary fields. No source change or product code change yet.
+- 2026-09-29: Claim landed in PR #116 (`5182bdf`). The test fixture now
+  renders protected and body-only payloads into the same NSWindow, keeping
+  its frame and ScreenCaptureKit capture target constant. It still compares
+  every RGBA pixel in the actual capture and fails on any difference;
+  failures report only a count and bounds, avoiding multi-megabyte dumps.
+  No product display code or privacy assertion changed.
+- 2026-09-29: Focused protected-content tests: four executed, one actual-
+  window test skipped because this shell's test host could not activate,
+  zero failures. Full MortimerHost: 374 executed, seven skipped, zero
+  failures. A skipped actual capture does not satisfy the live acceptance
+  gate. Run it from an interactive Terminal with Screen Recording access,
+  then run DEPLOY-MAIN after review/merge.
+- 2026-09-29: Larry's interactive Terminal run also skipped at the app-active
+  prerequisite. The test did not need foreground app activation: it already
+  requires a visible, unoccluded window and a real ScreenCaptureKit capture.
+  Removing only that prerequisite made the full-window protected/body-only
+  comparison execute and pass four consecutive focused runs with zero skips.
+  The full MortimerHost suite then passed 374 tests with six unrelated skips
+  and zero failures; its actual-window capture test executed and passed.
+  PR #117 review/merge and Larry's DEPLOY-MAIN run remain open.
+- 2026-09-29: Main `05c4a40` (WS-15 PR #114) was merged into the WS-16
+  branch. The isolated real capture passed again without a skip. The full
+  MortimerHost suite ran 383 tests, six skipped, with two assertions failed
+  in `MemoryGraphClosureC3Tests` because new WS-15 `RadarMapView.swift`
+  calls bare `URLSession.shared`. That code is Claude's active WS-15 scope;
+  CX-14 records the handoff. DEPLOY-MAIN remains blocked until it is fixed.
+- 2026-09-29: Claude's CX-14 fix landed in PR #118 (`adeffc1`) and was
+  merged into this branch with both roadmap histories preserved. Focused
+  radar policy and actual-window capture tests passed without skips. The
+  full MortimerHost suite passed 383 tests, five unrelated skips, zero
+  failures; both previously failing tests executed and passed. PR #117
+  review/merge and Larry's DEPLOY-MAIN run remain open.

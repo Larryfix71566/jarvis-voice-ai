@@ -93,14 +93,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Make the privacy-preserving live-window capture assertion deterministic enough to unblock DEPLOY-MAIN without weakening what it proves.
 
 - **Owner:** `codex`
-- **Status:** claimed (Larry, 09-29); claim PR pending
-- **Implemented by:** Codex diagnosis; test repair pending
-- **Remaining work / acceptance:** The `d460809` DEPLOY-MAIN run stopped in phase A on an exact pixel comparison between two separate protected/body-only windows. Identify and correct capture/fixture instability while preserving full-frame privacy coverage. Require a real foreground capture (not a skip), the full MortimerHost suite, then Larry's DEPLOY-MAIN run. WS-08 orb deployment and visual acceptance resume afterward.
+- **Status:** review (PR #117); combined Swift gate passed, deployment open
+- **Implemented by:** Codex diagnosis and test-fixture repair
+- **Remaining work / acceptance:** The `d460809` DEPLOY-MAIN run stopped in phase A on an exact pixel comparison between two separate protected/body-only windows. The test now reuses one window and still compares every captured pixel. Removing the unnecessary app-active prerequisite let real ScreenCaptureKit capture pass four consecutive focused runs. Claude fixed CX-14 in PR #118 (`adeffc1`); after merging that main into this branch, the full MortimerHost suite passed 383 tests, five unrelated skips, zero failures, with both the real capture and the radar network-policy test executed and passing. After PR #117 merges, Larry reruns DEPLOY-MAIN. WS-08 orb deployment and visual acceptance resume afterward.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** `codex/ws16-protected-capture-20260929`
 - **Plan:** `docs/plans/MORTIMER_PROTECTED_WINDOW_CAPTURE_GATE_PLAN.md`
 - **Scope:** `macos/MortimerHost/Tests/MortimerHostTests/ProtectedDisplayContentTests.swift`, this row's plan and acceptance evidence, and `ROADMAP.md` status only. Product display code remains outside this row; WS-15 owns `Display/DisplayContentView.swift` while active.
-- **Next step:** Merge the docs-only claim; then implement and validate a deterministic full-window comparison in this worktree.
+- **Next step:** Merge PR #117 after checks pass; then Larry reruns DEPLOY-MAIN and records the phase A capture result.
 - **Updated:** 09-29
 
 </details>
@@ -437,6 +437,7 @@ Open means not yet resolved. Each entry names who resolves it.
 |---|---|---|---|
 | CX-11 | Codex's T2 code against what Claude landed on main. (1) `JARVIS_AUTH_ENABLED` **defaults to true**, with no exempt routes, loopback included, so merging it turns auth on. (2) Main callers that send no token would then get 401: `jarvis/bot/status_tool.py` (the `system_status` tool from #86) and `scripts/deploy_main.sh` phase D, whose health checks expect 200 from `/api/health` and 200/307 from the bot, so the deploy would stop. (3) The route inventory in Codex's tree has 64 sidecar routes; main has 68 decorators, including 10 Codex's copy lacks: `/api/status/*` (9) and `/api/workflows`. (4) `mcp_servers/mcp_selfedit/logic.py`: Codex added service headers; main's copy also changed, so keep both. (5) Token setup is by CLI only (`python -m jarvis.auth add`), which conflicts with the no-shell-commands principle behind Claude's voice workflows (D-L2/D-L5). The native app already sends a Keychain token on every request (`JarvisHTTP.swift`), so it needs no code change, only a stored token. | `codex`: Addendum R1 fixes (1)–(4); `larry` decides (5) when T2 is decided (options in R1.9) | R1 implemented and deployed dormant; isolated enabled/dormant proof passes; token onboarding/remote activation remain undecided |
 | CX-13 | WS-14 edits `jarvis/subscription.py`, which is WS-02's scope (Codex; landed, so unlocked, but its live isolation gates are open). The allowlist change adds `USER`/`LOGNAME`, justified by the live `Not logged in` result recorded in WS-06. | `larry` (09-29): Claude lands, and Codex reviews before merge | resolved 09-29: Codex post-merge review of PR #102 found no blocking code issue; Mac Keychain/launchd evidence remains reported live evidence, not independently reproduced |
+| CX-14 | WS-15 PR #114 added `URLSession.shared.dataTask` in `Display/RadarMapView.swift`. On main `05c4a40`, the full MortimerHost suite failed two assertions in `MemoryGraphClosureC3Tests.testURLSessionSharedIsOnlyUsedByJarvisHTTPAndTheWakeWordSocket`. The WS-16 protected actual-window capture passed on that tree. | `claude` under active WS-15 scope | resolved by PR #118 (`adeffc1`): radar uses an ephemeral session; merged full MortimerHost suite passes 383 tests, five skips, zero failures |
 | CX-01 | Codex's worktree is based on `977f50b` and lacks #86 and the voice-workflows landing (`jarvis/status/`, `notices.py`, `voice_workflows.py`, …). 24 `jarvis/` files changed on both sides. | `codex`: commit, then merge `origin/main` | resolved in main; deployed `539f8f6` |
 | CX-02 | Migration ids `0025`–`0027` collide between main and Codex's tree. | `codex`: renumber per §3 | resolved in main; reserved IDs applied; upgrade/idempotency rechecked 09-28 |
 | CX-03 | `jarvis/workflows.py`: main has triggers, priority and draft; Codex has redacted parse-failure logs. Keep both. Same care applies to all 24 files in CX-01. | `codex` during the merge | resolved in main; workflow and privacy suites pass |
@@ -595,6 +596,14 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29: Codex merged main `adeffc1` (WS-15 radar-session fix) into WS-16, preserving both roadmap histories. Focused radar policy and real protected-capture tests passed without skips; full MortimerHost passed 383 tests, five unrelated skips, zero failures, including both tests. CX-14 is resolved; PR #117 review and DEPLOY-MAIN remain open.
+
+- 2026-09-29: Codex merged main `05c4a40` into WS-16 while preserving Claude's WS-15 roadmap entry. The actual protected-window capture passed on the merged tree. Full MortimerHost ran 383 tests with six skips and two failures, both in the `URLSession.shared` policy test caused by WS-15's new `RadarMapView.swift`. Registered CX-14 for Claude; WS-16 does not edit WS-15 product code.
+
+- 2026-09-29: Codex WS-16 removed only the app-active precondition after Larry's interactive Terminal capture also skipped. ScreenCaptureKit's real full-window comparison then passed four focused runs without skips and the full MortimerHost suite (374 tests, six unrelated skips, zero failures). PR #117 remains in review; production deployment is still open.
+
+- 2026-09-29: Codex WS-16 claim landed in PR #116 (`5182bdf`). Codex changed only the protected-window test fixture: protected and body-only payloads now render in the same live window; the full-frame exact comparison remains, with bounded pixel-difference diagnostics. Full MortimerHost passed 374 tests, seven skipped, zero failures. The capture test skipped because this shell's test host could not activate, so foreground capture and DEPLOY-MAIN remain open.
 
 - 2026-09-29 (late, WS-15 PR 2 fix): Claude (Cowork). DEPLOY-MAIN for `05c4a40` stopped in phase A with 3 MortimerHost failures: two assertions of MemoryGraphClosureC3Tests (the new radar tile overlay used the shared URL session; now its own ephemeral session) and the WS-16 protected-window capture test (pre-existing and environment-sensitive, owned by Codex). Production was not changed.
 
