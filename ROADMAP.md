@@ -142,13 +142,13 @@ Claude’s work or enable any runtime feature.
 </details>
 
 <details id="ws-15">
-<summary>WS-15 — Weather: fresh location and current radar · Claude (proposed)</summary>
+<summary>WS-15 — Weather: fresh location and current radar · Claude</summary>
 
 **Workstream:** Larry, 09-29: *"it is missing current radar and it defaults to memory for weather instead of checking current location and getting fresh weather."* A weather answer must use where Larry is now and show current radar for that place.
 
-- **Owner:** `claude` (proposed)
-- **Status:** proposed
-- **Implemented by:** not started
+- **Owner:** `claude`
+- **Status:** claimed (Option A chosen 09-29: native MapKit map + NOAA/IEM radar + Weather.gov 7-day; plan approved in direction; gates G-1 to G-3 next)
+- **Implemented by:** Claude (plan); code not started
 - **Remaining work / acceptance:** Evidence from the 09-29 10:08 EDT session (`logs/agents/2026-09-29/`), read-only:
   1. **The location came from memory.** The voice model's delegation read *"typically in Spartanburg, SC or surrounding area"*. The analyst called `get_weather` and `get_weather_radar` with `"Spartanburg, SC"` and answered *"(assumed default, not confirmed device location)"*. Larry then had to name Charleston.
   2. **Cause in code.** The device-location resolver (`jarvis/bot/device_location.py`, order per D-L6: device fix, then IP, then "not available", never memory) is wired only into `system_status` ("where am I", `_location_answer` in `jarvis/bot/pipeline.py`). `mcp_web.get_weather(city)` and `get_weather_radar(city)` take only a city string, so "current" weather gets whatever place the voice model writes, which in practice comes from memory.
@@ -157,13 +157,14 @@ Claude’s work or enable any runtime feature.
   5. **Larry, 09-29: "no radar showed up", and when radar does show, the map under it is wrong for the area.** Two separate issues:
      - **Map wrong for the area (cause found in code).** `get_weather_radar` returns nine zoom-6 tiles (a 3×3 grid about 1,900 km across; the tile maths for Spartanburg checks out at x=17, y=25). The docstring says the UI stitches them into a 3×3 grid, but `imagesStack` in `DisplayContentView.swift` renders them as a `ForEach` of nine separate full-width images stacked vertically, each with its own basemap. So the screen shows nine separate map squares in a column, not one map of the area. Zoom 6 is also too coarse for local radar, and there is no marker for the point.
      - **No radar at all (cause untested).** The server logged three `surface=window` radar payloads at 10:08–10:09, so it sent them. Whether the display window was open, whether later web-search results pushed the radar out of the supporting display (`maxSupportingStagePanels`), or whether the images failed to load has not been checked. It needs a live check with the display window open.
+  6. **Device location works as of 11:39 EDT 09-29.** After the permission was granted: `authorization=authorized`, then a fix accurate to 35 m and 0.4 s old, labelled `Folly Beach, SC`. "Where am I?" answered "Folly Beach, South Carolina."
 
-  Acceptance, to be finalized in the plan: "what's the weather" with no place named uses a fresh device fix, or IP labeled approximate, never memory; the radar shown is for that same point and is current; a place Larry names still wins.
+  Acceptance, now A1–A5 in the plan: "what's the weather" with no place named uses a fresh device fix, or IP labeled approximate, never memory; the radar shown is for that same point and is current; a place Larry names still wins.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** plan amendment first (docs), then a code branch when claimed
-- **Plan:** amend `docs/plans/MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md` (W1–W8, implemented 08-22), showing options before any code. Candidate direction, not decided: resolve location in the D-L6 order and pass lat/lon to both tools; memory never supplies the place for "current".
-- **Scope:** when claimed: `mcp_servers/mcp_web/server.py`, `mcp_servers/mcp_web/logic.py` (radar zoom and grid), the weather-location wiring in `jarvis/bot/pipeline.py`, the weather lines in `jarvis/prompts.py`, the radar rendering in `macos/MortimerHost/Sources/MortimerHost/Display/DisplayContentView.swift` (`imagesStack`), and their tests. The display window files overlap WS-09 (Codex): coordinate before editing them.
-- **Next step:** Larry re-grants the app's location permission. Claude writes the plan amendment with options for location, radar layout (one stitched map at a closer zoom with a marker, or an interactive map) and the missing-radar check; Larry picks; Claude claims WS-15 through a roadmap PR.
+- **Where:** plan on main; code branch `ws15/weather-location-radar` after gates G-1 to G-3
+- **Plan:** `docs/plans/MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md` (Option A: `local_weather` direct tool; `jarvis/weather/report.py` with Weather.gov 7-day, hourly and alerts; IEM NEXRAD radar with RainViewer outside the US; native `RadarMapView` and `WeatherCardView`). It supersedes W5/W6 of `MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md`. Research: `Claude outputs/ws15/ws15_weather_research.html`.
+- **Scope:** `jarvis/weather/` (new), `jarvis/weathergov.py`, `mcp_servers/mcp_web/logic.py`, `mcp_servers/mcp_web/server.py`, `jarvis/bot/weather_tool.py` (new), tool registration in `jarvis/bot/pipeline.py`, `jarvis/bot/display.py`, weather lines in `jarvis/prompts.py`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift`, `Display/DisplayContentView.swift`, `Display/WeatherCardView.swift` and `Display/RadarMapView.swift` (new), and their tests and evals. Re-checked 09-29: none of these is inside another block's scope.
+- **Next step:** Gates: G-1, Larry runs the 2-minute IEM/NWS probe from the Mac; G-2, Claude adds two app log lines and Larry reproduces the missing radar; G-3, Claude's MapKit spike. Then S1–S5 (one PR: location, voice summary, 7-day data) and S6 (a second PR: the native map).
 - **Updated:** 09-29
 
 </details>
@@ -416,7 +417,6 @@ Open means not yet resolved. Each entry names who resolves it.
 
 | ID | Conflict | Resolves | State |
 |---|---|---|---|
-| CX-07 | Memory admission is designed in two places that do not know about each other. On main (Claude): the echo guard at extraction, and auto-settle of contradictions in the sweep, with a model call, notices and `memory_restore`. In Codex's worktree (GC24-05): a durable admission queue (extract → classify → apply) with a model classifier on a confidential route. Codex's `memory_extraction.py` lacks the echo guard, and its `memory_sweep.py` lacks auto-settle. See the evaluation's addendum. | `codex`: approved echo guard → durable classification/admission → saved memory → automatic contradiction settlement | resolved in main with approved ordering; full merged-release suite passes; live activation remains open |
 | CX-11 | Codex's T2 code against what Claude landed on main. (1) `JARVIS_AUTH_ENABLED` **defaults to true**, with no exempt routes, loopback included, so merging it turns auth on. (2) Main callers that send no token would then get 401: `jarvis/bot/status_tool.py` (the `system_status` tool from #86) and `scripts/deploy_main.sh` phase D, whose health checks expect 200 from `/api/health` and 200/307 from the bot, so the deploy would stop. (3) The route inventory in Codex's tree has 64 sidecar routes; main has 68 decorators, including 10 Codex's copy lacks: `/api/status/*` (9) and `/api/workflows`. (4) `mcp_servers/mcp_selfedit/logic.py`: Codex added service headers; main's copy also changed, so keep both. (5) Token setup is by CLI only (`python -m jarvis.auth add`), which conflicts with the no-shell-commands principle behind Claude's voice workflows (D-L2/D-L5). The native app already sends a Keychain token on every request (`JarvisHTTP.swift`), so it needs no code change, only a stored token. | `codex`: Addendum R1 fixes (1)–(4); `larry` decides (5) when T2 is decided (options in R1.9) | R1 implemented and deployed dormant; isolated enabled/dormant proof passes; token onboarding/remote activation remain undecided |
 | CX-13 | WS-14 edits `jarvis/subscription.py`, which is WS-02's scope (Codex; landed, so unlocked, but its live isolation gates are open). The allowlist change adds `USER`/`LOGNAME`, justified by the live `Not logged in` result recorded in WS-06. | `larry` (09-29): Claude lands, and Codex reviews before merge | merged 09-29 (PR #102) with no GitHub review on record; open until Codex's post-merge review |
 | CX-01 | Codex's worktree is based on `977f50b` and lacks #86 and the voice-workflows landing (`jarvis/status/`, `notices.py`, `voice_workflows.py`, …). 24 `jarvis/` files changed on both sides. | `codex`: commit, then merge `origin/main` | resolved in main; deployed `539f8f6` |
@@ -425,6 +425,7 @@ Open means not yet resolved. Each entry names who resolves it.
 | CX-04 | Workflow Viewer (landed) and Skills Workspace (in progress) both add a console view through the same five Swift files. | `larry`: **two separate views** (09-27). `codex` adds `skills` as its own mode in WS-03 | decided |
 | CX-05 | 12 gap-index plans in Codex's tree that overlap `MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md` and each other. Fold them into `MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md`, or archive them with a pointer. | `codex` | resolved in main: 12 originals archived with redirects and canonical topic index |
 | CX-06 | T2 code was being written while `MORTIMER_REMOTE_ACCESS_PLAN.md` still says DRAFT. | `larry` (09-27): Codex keeps owning T2; turning it on stays undecided | decided |
+| CX-07 | Memory admission is designed in two places that do not know about each other. On main (Claude): the echo guard at extraction, and auto-settle of contradictions in the sweep, with a model call, notices and `memory_restore`. In Codex's worktree (GC24-05): a durable admission queue (extract → classify → apply) with a model classifier on a confidential route. Codex's `memory_extraction.py` lacks the echo guard, and its `memory_sweep.py` lacks auto-settle. See the evaluation's addendum. | `codex`: approved echo guard → durable classification/admission → saved memory → automatic contradiction settlement | resolved in main with approved ordering; full merged-release suite passes; live activation remains open |
 | CX-08 | Status files have forked: `docs/acceptance/IMPLEMENTATION_STATUS.md` is 7 KB on main and 50 KB in Codex's tree. | whoever merges WS-01 | resolved in main: concise current status; both original histories archived |
 | CX-09 | #86 cites `docs/plans/MORTIMER_SELF_SERVICE_ACCESS_IMPLEMENTATION_SPEC.md`, which is not in main's `docs/plans/` or `docs/archive/`. | `claude` or `larry`: add it, or record where it lives | resolved: the spec and its companion plan were recovered from `plan/self-service-access-and-recovery` and added to main in PR #100 (09-28), with status lines marking them implemented |
 | CX-10 | #86's branches were built inside Codex's checkout, and the voice-workflows plan calls #86 "Codex's". | Protocol rules 9 and 12 | closed by protocol |
@@ -576,6 +577,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29 (evening, plan): Claude (Cowork) claimed WS-15 and added `docs/plans/MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md`. Larry chose Option A after the research: native Apple map, NOAA radar via IEM (5-minute updates, zoom 8, 50-minute loop), Weather.gov for today, 7 days, hourly and alerts, and a `local_weather` tool that never uses memory for the place. The plan has gates G-1 to G-3, steps S1–S8 and acceptance checks A1–A8. Device location confirmed working at 11:39 EDT. CX-07 moved back among the resolved conflicts (the 09-29 reorder listed it as open by mistake).
 
 - 2026-09-29 (night, later): Claude (Cowork), at Larry's request: §2 is grouped as needs work, then built and waiting on checks, then completed. §4 lists open conflicts first, and its table rows are now contiguous (blank lines had split the table). No block content changed.
 
