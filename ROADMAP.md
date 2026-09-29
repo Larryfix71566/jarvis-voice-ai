@@ -93,14 +93,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Make the privacy-preserving live-window capture assertion deterministic enough to unblock DEPLOY-MAIN without weakening what it proves.
 
 - **Owner:** `codex`
-- **Status:** in-progress: PR #117 landed; phase A capture-fixture follow-up after DEPLOY-MAIN stopped
+- **Status:** review (PR #121): PR #117 landed; phase A capture-fixture follow-up after DEPLOY-MAIN stopped
 - **Implemented by:** Codex diagnosis and test-fixture repair
 - **Remaining work / acceptance:** The PR #117 repair reuses one window and compares every captured pixel. DEPLOY-MAIN for `2ed1986` stopped in phase A because this test's separate `occlusionState` prerequisite timed out before ScreenCaptureKit ran; production stayed at `adeffc1`. The follow-up removes that unreliable prerequisite, requires ScreenCaptureKit to find and capture the real window, and compares protected, body-only, and empty-body captures so a blank capture cannot pass. Four focused runs passed without skips; the full MortimerHost suite passed 383 tests, six unrelated skips, zero failures, with the real capture executed. Merge this follow-up, then Larry reruns DEPLOY-MAIN. WS-08 orb deployment and visual acceptance resume afterward.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main (PR #117, `c5781a8`); status follow-up on `codex/ws16-protected-capture-20260929`
 - **Plan:** `docs/plans/MORTIMER_PROTECTED_WINDOW_CAPTURE_GATE_PLAN.md`
 - **Scope:** `macos/MortimerHost/Tests/MortimerHostTests/ProtectedDisplayContentTests.swift`, this row's plan and acceptance evidence, and `ROADMAP.md` status only. Product display code remains outside this row; WS-15 owns `Display/DisplayContentView.swift` while active.
-- **Next step:** Review and merge the capture-fixture follow-up, then Larry reruns DEPLOY-MAIN and confirms phase A capture executed and passed before production acceptance.
+- **Next step:** Review and merge PR #121 after checks pass, then Larry reruns DEPLOY-MAIN and confirms phase A capture executed and passed before production acceptance.
 - **Updated:** 09-29
 
 </details>

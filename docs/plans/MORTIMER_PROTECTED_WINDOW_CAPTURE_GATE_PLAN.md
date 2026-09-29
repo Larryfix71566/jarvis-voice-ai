@@ -1,6 +1,6 @@
 # Protected-window capture gate repair (WS-16)
 
-**Status:** IN PROGRESS; PR #117 landed, phase A capture-fixture follow-up under review.
+**Status:** IN REVIEW (PR #121); PR #117 landed, phase A capture-fixture follow-up pending.
 **Owner:** Codex. Larry runs DEPLOY-MAIN and accepts the live result.
 **Recorded:** 2026-09-29.
 
