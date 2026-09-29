@@ -1235,3 +1235,24 @@ versions remain “not recorded” when no run evidence identifies them.
 Source baseline: main `180766e`; branch `codex/isolated-20260924`. This is a
 documentation-only slice: no runtime changes, new model assignments, activation
 or newly passed acceptance gates. Documentation PR merge remains the next step.
+
+### 2026-09-29 — WS-01 action-claim settlement-order CI follow-up claimed
+
+PR #115 carries only WS-08 roadmap, plan and fixture evidence, but its full
+validation failed twice in unrelated action-claim tests. The second run failed
+three assertions in `test_admin_appbuild.py` and `test_admin_selfedit.py` that
+expect a durable `completed` claim after the visible job becomes `done`; all
+three pass together in a focused local run. The PR's diff contains no backend
+code or tests. In `jarvis/admin/server.py`, `_run_appbuild_agent` and
+`_run_agent` publish the terminal in-memory job state before calling their
+durable claim update. A concurrent status poll can therefore see `done` and
+then find the still-`claimed` receipt, which the recovery path correctly
+reports as `unknown`.
+
+The bounded repair is to commit the terminal claim outcome before exposing a
+terminal job state, for success and failure/cancellation paths, without
+weakening duplicate-run protection. Add a deterministic concurrency test that
+holds the claim write and verifies the visible job has not yet become terminal;
+then release it and verify the durable and visible terminal states agree. Run
+the focused admin action tests and full backend validation. Claim this slice
+on main first through a docs-only PR; no backend code is changed by the claim.
