@@ -83,6 +83,92 @@ Claude’s work or enable any runtime feature.
 - Scope locks only while status is `claimed`, `in-progress` or `review`.
 - "(proposed)" next to an owner means Larry has not yet confirmed who owns the row.
 - Expand a workstream for its editable fields. These blocks replace the former rows; the protocol’s references to a “row” mean the corresponding workstream block.
+- Ordered by what still needs work (Larry, 09-29). When a block's status changes, move it to the matching group. Ids are stable, so links keep working.
+
+### Needs work: not yet built (proposed, claimed, in progress, in review, blocked)
+
+<details id="ws-05">
+<summary>WS-05 — Model access: subscriptions, APIs and SAYGM · Codex proposed</summary>
+
+**Workstream:** Model Use Enhancements MAR-A…J (checklist in §7)
+
+- **Owner:** `codex` (proposed)
+- **Status:** proposed: foundation landed, live gates open
+- **Implemented by:** Not itemized for every foundation component; WS-02 isolation is Codex
+- **Remaining work / acceptance:** Codex proposed; Larry confirms assignment
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** none yet
+- **Plan:** `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md`
+- **Scope:** `jarvis/model_routing.py`, `jarvis/model_preferences.py`, `config/model_access.yaml`
+- **Next step:** Larry confirms owner; MAR-A first
+- **Updated:** 09-22
+
+</details>
+
+<details id="ws-12">
+<summary>WS-12 — CI upkeep before the Ubuntu 26 runner switch · Claude (proposed)</summary>
+
+**Workstream:** Update the GitHub Actions versions (Node 20 deprecation warnings on `actions/checkout@v4` and `actions/setup-python@v5`) and pin `runs-on: ubuntu-24.04` before `ubuntu-latest` moves to Ubuntu 26 on 10-19.
+
+- **Owner:** `claude`
+- **Status:** proposed
+- **Implemented by:** not started
+- **Remaining work / acceptance:** Claude drafts; Larry reviews (the `.github/**` files are on the self-edit deny list, so this is a human-merged PR)
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** new branch from `origin/main` when claimed
+- **Plan:** none (small change; the PR body is the record)
+- **Scope:** `.github/workflows/*.yml`
+- **Next step:** Larry picks it; Claude marks it `claimed` and drafts the change
+- **Updated:** 09-28
+
+</details>
+
+<details id="ws-13">
+<summary>WS-13 — T5 mail, calendar and brief: review the draft plan against current main · Claude (proposed)</summary>
+
+**Workstream:** Review `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (DRAFT, 2026-08-26) against today's main before anyone builds T5. Docs only.
+
+- **Owner:** `claude`
+- **Status:** proposed
+- **Implemented by:** not started
+- **Remaining work / acceptance:** Larry approves or revises the plan
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** docs branch when claimed
+- **Plan:** `docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md`. Codex edited this plan on 09-26, so coordinate with Codex before any edit. Migration `0035` stays reserved for T5.
+- **Scope:** that plan file only
+- **Next step:** Larry picks it; confirm with Codex that it has no pending edits to the plan
+- **Updated:** 09-28
+
+</details>
+
+<details id="ws-15">
+<summary>WS-15 — Weather: fresh location and current radar · Claude (proposed)</summary>
+
+**Workstream:** Larry, 09-29: *"it is missing current radar and it defaults to memory for weather instead of checking current location and getting fresh weather."* A weather answer must use where Larry is now and show current radar for that place.
+
+- **Owner:** `claude` (proposed)
+- **Status:** proposed
+- **Implemented by:** not started
+- **Remaining work / acceptance:** Evidence from the 09-29 10:08 EDT session (`logs/agents/2026-09-29/`), read-only:
+  1. **The location came from memory.** The voice model's delegation read *"typically in Spartanburg, SC or surrounding area"*. The analyst called `get_weather` and `get_weather_radar` with `"Spartanburg, SC"` and answered *"(assumed default, not confirmed device location)"*. Larry then had to name Charleston.
+  2. **Cause in code.** The device-location resolver (`jarvis/bot/device_location.py`, order per D-L6: device fix, then IP, then "not available", never memory) is wired only into `system_status` ("where am I", `_location_answer` in `jarvis/bot/pipeline.py`). `mcp_web.get_weather(city)` and `get_weather_radar(city)` take only a city string, so "current" weather gets whatever place the voice model writes, which in practice comes from memory.
+  3. **The app has not granted location since the rebuilds.** Its `location/hello` reported `authorization: not_determined` on 09-28 20:21 and 09-29 10:07. The last `authorized` hello with a fix was 09-25 22:58. So even a wired resolver would fall back to IP today. Why permission reset is untested; the app re-signing on rebuild is a candidate, not verified.
+  4. **Radar ran, for the wrong place.** `get_weather_radar` ran and sent a window display payload three times on 09-29 (the RainViewer frame was about 8 minutes old); the first was for Spartanburg.
+  5. **Larry, 09-29: "no radar showed up", and when radar does show, the map under it is wrong for the area.** Two separate issues:
+     - **Map wrong for the area (cause found in code).** `get_weather_radar` returns nine zoom-6 tiles (a 3×3 grid about 1,900 km across; the tile maths for Spartanburg checks out at x=17, y=25). The docstring says the UI stitches them into a 3×3 grid, but `imagesStack` in `DisplayContentView.swift` renders them as a `ForEach` of nine separate full-width images stacked vertically, each with its own basemap. So the screen shows nine separate map squares in a column, not one map of the area. Zoom 6 is also too coarse for local radar, and there is no marker for the point.
+     - **No radar at all (cause untested).** The server logged three `surface=window` radar payloads at 10:08–10:09, so it sent them. Whether the display window was open, whether later web-search results pushed the radar out of the supporting display (`maxSupportingStagePanels`), or whether the images failed to load has not been checked. It needs a live check with the display window open.
+
+  Acceptance, to be finalized in the plan: "what's the weather" with no place named uses a fresh device fix, or IP labeled approximate, never memory; the radar shown is for that same point and is current; a place Larry names still wins.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** plan amendment first (docs), then a code branch when claimed
+- **Plan:** amend `docs/plans/MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md` (W1–W8, implemented 08-22), showing options before any code. Candidate direction, not decided: resolve location in the D-L6 order and pass lat/lon to both tools; memory never supplies the place for "current".
+- **Scope:** when claimed: `mcp_servers/mcp_web/server.py`, `mcp_servers/mcp_web/logic.py` (radar zoom and grid), the weather-location wiring in `jarvis/bot/pipeline.py`, the weather lines in `jarvis/prompts.py`, the radar rendering in `macos/MortimerHost/Sources/MortimerHost/Display/DisplayContentView.swift` (`imagesStack`), and their tests. The display window files overlap WS-09 (Codex): coordinate before editing them.
+- **Next step:** Larry re-grants the app's location permission. Claude writes the plan amendment with options for location, radar layout (one stitched map at a closer zoom with a marker, or an interactive map) and the missing-radar check; Larry picks; Claude claims WS-15 through a roadmap PR.
+- **Updated:** 09-29
+
+</details>
+
+### Built: waiting on live checks or acceptance
 
 <details id="ws-01">
 <summary>WS-01 — Reliability, privacy and memory gaps · Codex</summary>
@@ -153,24 +239,6 @@ Claude’s work or enable any runtime feature.
 - **Scope:** `jarvis/auth.py`, `jarvis/authmw.py`, `jarvis/bind.py`, `jarvis/urls.py`, `jarvis/bot/server.py`, auth middleware and bind in `jarvis/admin/server.py`. Plus the integration points in CX-11: `jarvis/bot/status_tool.py`, `scripts/deploy_main.sh` health checks, `mcp_servers/mcp_selfedit/logic.py` headers
 - **Next step:** Dormant deployment verified; enabled-mode gate and token onboarding remain separate
 - **Updated:** 09-28
-
-</details>
-
-<details id="ws-05">
-<summary>WS-05 — Model access: subscriptions, APIs and SAYGM · Codex proposed</summary>
-
-**Workstream:** Model Use Enhancements MAR-A…J (checklist in §7)
-
-- **Owner:** `codex` (proposed)
-- **Status:** proposed: foundation landed, live gates open
-- **Implemented by:** Not itemized for every foundation component; WS-02 isolation is Codex
-- **Remaining work / acceptance:** Codex proposed; Larry confirms assignment
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** none yet
-- **Plan:** `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md`
-- **Scope:** `jarvis/model_routing.py`, `jarvis/model_preferences.py`, `config/model_access.yaml`
-- **Next step:** Larry confirms owner; MAR-A first
-- **Updated:** 09-22
 
 </details>
 
@@ -291,42 +359,6 @@ Claude’s work or enable any runtime feature.
 
 </details>
 
-<details id="ws-12">
-<summary>WS-12 — CI upkeep before the Ubuntu 26 runner switch · Claude (proposed)</summary>
-
-**Workstream:** Update the GitHub Actions versions (Node 20 deprecation warnings on `actions/checkout@v4` and `actions/setup-python@v5`) and pin `runs-on: ubuntu-24.04` before `ubuntu-latest` moves to Ubuntu 26 on 10-19.
-
-- **Owner:** `claude`
-- **Status:** proposed
-- **Implemented by:** not started
-- **Remaining work / acceptance:** Claude drafts; Larry reviews (the `.github/**` files are on the self-edit deny list, so this is a human-merged PR)
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** new branch from `origin/main` when claimed
-- **Plan:** none (small change; the PR body is the record)
-- **Scope:** `.github/workflows/*.yml`
-- **Next step:** Larry picks it; Claude marks it `claimed` and drafts the change
-- **Updated:** 09-28
-
-</details>
-
-<details id="ws-13">
-<summary>WS-13 — T5 mail, calendar and brief: review the draft plan against current main · Claude (proposed)</summary>
-
-**Workstream:** Review `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (DRAFT, 2026-08-26) against today's main before anyone builds T5. Docs only.
-
-- **Owner:** `claude`
-- **Status:** proposed
-- **Implemented by:** not started
-- **Remaining work / acceptance:** Larry approves or revises the plan
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** docs branch when claimed
-- **Plan:** `docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md`. Codex edited this plan on 09-26, so coordinate with Codex before any edit. Migration `0035` stays reserved for T5.
-- **Scope:** that plan file only
-- **Next step:** Larry picks it; confirm with Codex that it has no pending edits to the plan
-- **Updated:** 09-28
-
-</details>
-
 <details id="ws-14">
 <summary>WS-14 — Subscription probe: sign-in, command and category fixes · Claude (Codex post-merge review)</summary>
 
@@ -348,32 +380,9 @@ Claude’s work or enable any runtime feature.
 
 </details>
 
-<details id="ws-15">
-<summary>WS-15 — Weather: fresh location and current radar · Claude (proposed)</summary>
+### Completed: accepted, nothing left
 
-**Workstream:** Larry, 09-29: *"it is missing current radar and it defaults to memory for weather instead of checking current location and getting fresh weather."* A weather answer must use where Larry is now and show current radar for that place.
-
-- **Owner:** `claude` (proposed)
-- **Status:** proposed
-- **Implemented by:** not started
-- **Remaining work / acceptance:** Evidence from the 09-29 10:08 EDT session (`logs/agents/2026-09-29/`), read-only:
-  1. **The location came from memory.** The voice model's delegation read *"typically in Spartanburg, SC or surrounding area"*. The analyst called `get_weather` and `get_weather_radar` with `"Spartanburg, SC"` and answered *"(assumed default, not confirmed device location)"*. Larry then had to name Charleston.
-  2. **Cause in code.** The device-location resolver (`jarvis/bot/device_location.py`, order per D-L6: device fix, then IP, then "not available", never memory) is wired only into `system_status` ("where am I", `_location_answer` in `jarvis/bot/pipeline.py`). `mcp_web.get_weather(city)` and `get_weather_radar(city)` take only a city string, so "current" weather gets whatever place the voice model writes, which in practice comes from memory.
-  3. **The app has not granted location since the rebuilds.** Its `location/hello` reported `authorization: not_determined` on 09-28 20:21 and 09-29 10:07. The last `authorized` hello with a fix was 09-25 22:58. So even a wired resolver would fall back to IP today. Why permission reset is untested; the app re-signing on rebuild is a candidate, not verified.
-  4. **Radar ran, for the wrong place.** `get_weather_radar` ran and sent a window display payload three times on 09-29 (the RainViewer frame was about 8 minutes old); the first was for Spartanburg.
-  5. **Larry, 09-29: "no radar showed up", and when radar does show, the map under it is wrong for the area.** Two separate issues:
-     - **Map wrong for the area (cause found in code).** `get_weather_radar` returns nine zoom-6 tiles (a 3×3 grid about 1,900 km across; the tile maths for Spartanburg checks out at x=17, y=25). The docstring says the UI stitches them into a 3×3 grid, but `imagesStack` in `DisplayContentView.swift` renders them as a `ForEach` of nine separate full-width images stacked vertically, each with its own basemap. So the screen shows nine separate map squares in a column, not one map of the area. Zoom 6 is also too coarse for local radar, and there is no marker for the point.
-     - **No radar at all (cause untested).** The server logged three `surface=window` radar payloads at 10:08–10:09, so it sent them. Whether the display window was open, whether later web-search results pushed the radar out of the supporting display (`maxSupportingStagePanels`), or whether the images failed to load has not been checked. It needs a live check with the display window open.
-
-  Acceptance, to be finalized in the plan: "what's the weather" with no place named uses a fresh device fix, or IP labeled approximate, never memory; the radar shown is for that same point and is current; a place Larry names still wins.
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** plan amendment first (docs), then a code branch when claimed
-- **Plan:** amend `docs/plans/MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md` (W1–W8, implemented 08-22), showing options before any code. Candidate direction, not decided: resolve location in the D-L6 order and pass lat/lon to both tools; memory never supplies the place for "current".
-- **Scope:** when claimed: `mcp_servers/mcp_web/server.py`, `mcp_servers/mcp_web/logic.py` (radar zoom and grid), the weather-location wiring in `jarvis/bot/pipeline.py`, the weather lines in `jarvis/prompts.py`, the radar rendering in `macos/MortimerHost/Sources/MortimerHost/Display/DisplayContentView.swift` (`imagesStack`), and their tests. The display window files overlap WS-09 (Codex): coordinate before editing them.
-- **Next step:** Larry re-grants the app's location permission. Claude writes the plan amendment with options for location, radar layout (one stitched map at a closer zoom with a marker, or an interactive map) and the missing-radar check; Larry picks; Claude claims WS-15 through a roadmap PR.
-- **Updated:** 09-29
-
-</details>
+_None yet. A block moves here when it reaches `accepted`, and later to §6._
 
 ---
 
@@ -407,21 +416,21 @@ Open means not yet resolved. Each entry names who resolves it.
 
 | ID | Conflict | Resolves | State |
 |---|---|---|---|
+| CX-07 | Memory admission is designed in two places that do not know about each other. On main (Claude): the echo guard at extraction, and auto-settle of contradictions in the sweep, with a model call, notices and `memory_restore`. In Codex's worktree (GC24-05): a durable admission queue (extract → classify → apply) with a model classifier on a confidential route. Codex's `memory_extraction.py` lacks the echo guard, and its `memory_sweep.py` lacks auto-settle. See the evaluation's addendum. | `codex`: approved echo guard → durable classification/admission → saved memory → automatic contradiction settlement | resolved in main with approved ordering; full merged-release suite passes; live activation remains open |
+| CX-11 | Codex's T2 code against what Claude landed on main. (1) `JARVIS_AUTH_ENABLED` **defaults to true**, with no exempt routes, loopback included, so merging it turns auth on. (2) Main callers that send no token would then get 401: `jarvis/bot/status_tool.py` (the `system_status` tool from #86) and `scripts/deploy_main.sh` phase D, whose health checks expect 200 from `/api/health` and 200/307 from the bot, so the deploy would stop. (3) The route inventory in Codex's tree has 64 sidecar routes; main has 68 decorators, including 10 Codex's copy lacks: `/api/status/*` (9) and `/api/workflows`. (4) `mcp_servers/mcp_selfedit/logic.py`: Codex added service headers; main's copy also changed, so keep both. (5) Token setup is by CLI only (`python -m jarvis.auth add`), which conflicts with the no-shell-commands principle behind Claude's voice workflows (D-L2/D-L5). The native app already sends a Keychain token on every request (`JarvisHTTP.swift`), so it needs no code change, only a stored token. | `codex`: Addendum R1 fixes (1)–(4); `larry` decides (5) when T2 is decided (options in R1.9) | R1 implemented and deployed dormant; isolated enabled/dormant proof passes; token onboarding/remote activation remain undecided |
+| CX-13 | WS-14 edits `jarvis/subscription.py`, which is WS-02's scope (Codex; landed, so unlocked, but its live isolation gates are open). The allowlist change adds `USER`/`LOGNAME`, justified by the live `Not logged in` result recorded in WS-06. | `larry` (09-29): Claude lands, and Codex reviews before merge | merged 09-29 (PR #102) with no GitHub review on record; open until Codex's post-merge review |
 | CX-01 | Codex's worktree is based on `977f50b` and lacks #86 and the voice-workflows landing (`jarvis/status/`, `notices.py`, `voice_workflows.py`, …). 24 `jarvis/` files changed on both sides. | `codex`: commit, then merge `origin/main` | resolved in main; deployed `539f8f6` |
 | CX-02 | Migration ids `0025`–`0027` collide between main and Codex's tree. | `codex`: renumber per §3 | resolved in main; reserved IDs applied; upgrade/idempotency rechecked 09-28 |
 | CX-03 | `jarvis/workflows.py`: main has triggers, priority and draft; Codex has redacted parse-failure logs. Keep both. Same care applies to all 24 files in CX-01. | `codex` during the merge | resolved in main; workflow and privacy suites pass |
 | CX-04 | Workflow Viewer (landed) and Skills Workspace (in progress) both add a console view through the same five Swift files. | `larry`: **two separate views** (09-27). `codex` adds `skills` as its own mode in WS-03 | decided |
 | CX-05 | 12 gap-index plans in Codex's tree that overlap `MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md` and each other. Fold them into `MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md`, or archive them with a pointer. | `codex` | resolved in main: 12 originals archived with redirects and canonical topic index |
 | CX-06 | T2 code was being written while `MORTIMER_REMOTE_ACCESS_PLAN.md` still says DRAFT. | `larry` (09-27): Codex keeps owning T2; turning it on stays undecided | decided |
-| CX-07 | Memory admission is designed in two places that do not know about each other. On main (Claude): the echo guard at extraction, and auto-settle of contradictions in the sweep, with a model call, notices and `memory_restore`. In Codex's worktree (GC24-05): a durable admission queue (extract → classify → apply) with a model classifier on a confidential route. Codex's `memory_extraction.py` lacks the echo guard, and its `memory_sweep.py` lacks auto-settle. See the evaluation's addendum. | `codex`: approved echo guard → durable classification/admission → saved memory → automatic contradiction settlement | resolved in main with approved ordering; full merged-release suite passes; live activation remains open |
 | CX-08 | Status files have forked: `docs/acceptance/IMPLEMENTATION_STATUS.md` is 7 KB on main and 50 KB in Codex's tree. | whoever merges WS-01 | resolved in main: concise current status; both original histories archived |
 | CX-09 | #86 cites `docs/plans/MORTIMER_SELF_SERVICE_ACCESS_IMPLEMENTATION_SPEC.md`, which is not in main's `docs/plans/` or `docs/archive/`. | `claude` or `larry`: add it, or record where it lives | resolved: the spec and its companion plan were recovered from `plan/self-service-access-and-recovery` and added to main in PR #100 (09-28), with status lines marking them implemented |
 | CX-10 | #86's branches were built inside Codex's checkout, and the voice-workflows plan calls #86 "Codex's". | Protocol rules 9 and 12 | closed by protocol |
-| CX-11 | Codex's T2 code against what Claude landed on main. (1) `JARVIS_AUTH_ENABLED` **defaults to true**, with no exempt routes, loopback included, so merging it turns auth on. (2) Main callers that send no token would then get 401: `jarvis/bot/status_tool.py` (the `system_status` tool from #86) and `scripts/deploy_main.sh` phase D, whose health checks expect 200 from `/api/health` and 200/307 from the bot, so the deploy would stop. (3) The route inventory in Codex's tree has 64 sidecar routes; main has 68 decorators, including 10 Codex's copy lacks: `/api/status/*` (9) and `/api/workflows`. (4) `mcp_servers/mcp_selfedit/logic.py`: Codex added service headers; main's copy also changed, so keep both. (5) Token setup is by CLI only (`python -m jarvis.auth add`), which conflicts with the no-shell-commands principle behind Claude's voice workflows (D-L2/D-L5). The native app already sends a Keychain token on every request (`JarvisHTTP.swift`), so it needs no code change, only a stored token. | `codex`: Addendum R1 fixes (1)–(4); `larry` decides (5) when T2 is decided (options in R1.9) | R1 implemented and deployed dormant; isolated enabled/dormant proof passes; token onboarding/remote activation remain undecided |
-
 | CX-12 | Merge reconciliation must carry the three streaming flags from Codex's former live registry into the split live profiles, while preserving main's historical migration fixtures unchanged. Earlier source attribution to main was incorrect: Git rename merging had carried the flags into the historical YAML. | `codex` under WS-01, approved by Larry | resolved in main: three live flags restored; original fixtures preserved; explicit overlay regression passes |
 
-| CX-13 | WS-14 edits `jarvis/subscription.py`, which is WS-02's scope (Codex; landed, so unlocked, but its live isolation gates are open). The allowlist change adds `USER`/`LOGNAME`, justified by the live `Not logged in` result recorded in WS-06. | `larry` (09-29): Claude lands, and Codex reviews before merge | merged 09-29 (PR #102) with no GitHub review on record; open until Codex's post-merge review |
+Open or undecided conflicts are listed first.
 
 ---
 
@@ -567,6 +576,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29 (night, later): Claude (Cowork), at Larry's request: §2 is grouped as needs work, then built and waiting on checks, then completed. §4 lists open conflicts first, and its table rows are now contiguous (blank lines had split the table). No block content changed.
 
 - 2026-09-29 (night): Claude (Cowork) reconciled the roadmap with production `eb24e81`. The header now names the live release. WS-09 is recorded as deployed (PR #99 is in `eb24e81`), leaving only Mac acceptance. WS-06 check #2 now passes on data. `gh pr list` showed no open PRs. Codex was asked to confirm WS-01 to WS-05 itself (rule 9).
 
