@@ -592,7 +592,8 @@ code or deployment changes are part of recording this requirement.
 
 **Prepared by:** Codex, 2026-09-28, at Larry’s request. **Implementation
 dispatched:** Larry, 2026-09-29, to Codex following this handoff. **Status:**
-implementation in progress; no Mac acceptance performed. The handoff was
+PR #99 open for review; automated implementation gates pass; no Mac acceptance
+performed. The handoff was
 written for Luna through Codex, and this Codex session is executing the same
 bounded contract. Exact model version is not recorded. Larry remains WS-09’s
 acceptance owner. This is a bounded amendment to this plan, not a new plan.
@@ -713,10 +714,12 @@ with the failing evidence before broadening scope.
   `macos/MortimerHost/.build/interface-fixtures/conversation-512-compact.png`,
   `conversation-1000-compact.png`, `conversation-512-expanded.png`, and
   `conversation-1000-expanded.png` (relative to the package root).
-- [ ] **P4 — Commit and handoff.** Update WS-09 and this checklist, preserving
-  unchecked live gates. Include diff scope, actual model, commit, test outputs
-  and screenshot paths. Commit/push a reviewable PR using repository protocol.
-  Do not declare the item closed because source tests passed.
+- [x] **P4 — Commit and handoff.** Committed `ca7e95b` on
+  `codex/isolated-20260924`, pushed and opened [PR #99](https://github.com/Larryfix71566/jarvis-voice-ai/pull/99)
+  for review. WS-09 and this checklist include the scope, test results,
+  screenshots and remaining live gates. System: Codex; the exact model build
+  is not exposed by this runtime. PR is mergeable; no deployment or user
+  acceptance is claimed.
 - [ ] **P5 — Deploy and accept.** After merge and release authorization, use
   `scripts/deploy_main.sh` only. Record the deployed source/bundle revision and
   rollback reference. Complete the physical checks below on that exact build.

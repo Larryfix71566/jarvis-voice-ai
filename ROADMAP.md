@@ -233,18 +233,18 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Command Console and Atlas release acceptance
 
 - **Owner:** `larry`
-- **Status:** implementation complete; review PR and Mac acceptance remain open
+- **Status:** review (PR #99); Mac acceptance remains open
 - **Implemented by:** Codex (Codex desktop; exact model build is not exposed)
 - **Remaining work / acceptance:** Larry (Mac/live acceptance)
 - **Model version:** not recorded in a handoff receipt.
-- **Where:** branch `codex/isolated-20260924`; implementation scope below
+- **Where:** [PR #99](https://github.com/Larryfix71566/jarvis-voice-ai/pull/99), commit `ca7e95b`, branch `codex/isolated-20260924`
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md`
 - **Scope:** —
-- **Next step:** Submit the tested bounded change as a PR. After merge and authorized deployment, Larry completes physical acceptance on single- and multi-monitor setups.
+- **Next step:** Review and merge PR #99. After merge and authorized deployment, Larry completes physical acceptance on single- and multi-monitor setups.
 - **Updated:** 09-29
 
 - [ ] **Single transcript surface (Larry, 2026-09-28):** keep the transcript in the main window; remove the duplicate transcript/captions from the left/compact panel and reclaim the vacated space. Preserve the orb, speaker feedback, microphone/voice controls, and main-window transcript history/accessibility. This supersedes earlier requirements to repeat brief captions in the compact rail; full response/results routing remains unchanged.
-  - **Status:** implementation and automated validation complete; no user/Mac acceptance yet.
+  - **Status:** PR #99 open and mergeable; implementation and automated validation complete; no user/Mac acceptance yet.
   - **Implementation owner:** Codex, explicitly dispatched by Larry on 2026-09-29; follows the Codex/Luna handoff specification. **Acceptance:** Larry. **Plan author:** Codex.
   - **Scope:** `macos/MortimerHost/Sources/MortimerHost/Console/OrbFieldView.swift`, `macos/MortimerHost/Tests/MortimerHostTests/CompactConversationTests.swift`, this roadmap and the linked plan progress only.
   - **Implementation handoff:** [WS-09 transcript cleanup — Luna implementation handoff](docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md#ws-09-transcript-cleanup--luna-implementation-handoff).
