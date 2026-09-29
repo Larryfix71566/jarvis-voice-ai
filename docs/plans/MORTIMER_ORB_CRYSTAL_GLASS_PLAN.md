@@ -1,6 +1,6 @@
 # Mortimer orb crystal glass plan — replace the orb's glass shell with option A
 
-**Status:** IMPLEMENTED; Codex performance follow-up authorized 2026-09-28 (see addendum below). Original 2026-09-24 receipt: receipt `docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-24.md`. Step 9's placement, Reduce Motion and rollback checks are open until recorded in that receipt.
+**Status:** IMPLEMENTED and performance follow-up deployed at `539f8f6`, 2026-09-28 (see addendum below). Original 2026-09-24 receipt: receipt `docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-24.md`. Step 9's placement, Reduce Motion and rollback checks are open until recorded in that receipt.
 **Owner:** Larry. Implementation goes to a coding model in one pass. Larry runs every commit, merge and install, and steps 8 and 9. The implementer never runs `git merge`, `git push`, `launchctl`, `defaults write`, or `bundle.sh`.
 **Approved design:** option A ("Crystal") from the orb glass comparison, chosen by Larry on 2026-09-23. The comparison page is the Claude artifact https://claude.ai/artifact/852XZZzAqkt5WmHUe6ruGY. A copy of it and reference renders are checked in under `docs/interface-research/orb-crystal/`.
 **Baseline inspected:** `main` at `a1ca3c8` (2026-09-23). File hashes in §0 rule 2.
@@ -1143,3 +1143,28 @@ interaction test was compiled and passed separately after the full run.
 Compact receipts and exact source hashes are in the rendering-performance
 receipt directory above. CI/merge and exact-main deployment are still required;
 production remains `0b76f49` and no live activation gates are closed.
+
+
+### 2026-09-28 — staged Mac deployment completed
+
+PR #96 merged as `539f8f6`; all GitHub workflows passed. DEPLOY-MAIN then
+verified that exact commit: JarvisKit 219 tests/zero failures, MortimerHost
+372 tests/seven environment skips/zero failures, Python 4,860 passes/seven
+skips/two subtests passed. Release measurements: Skills selection-to-layout
+p95 14.480 ms wide / 7.911 ms compact; crystal orb p50/p95 4.841/13.370 ms
+versus legacy p50 4.833 ms. All original performance gates pass.
+
+At 20:19 EDT the script backed up databases, code and the prior app, installed
+and opened the production app, and restarted vault/bot/extractor/admin/costs.
+Production HEAD and bundle revision both equal `539f8f6`; all six processes
+were independently rechecked alive with the intended production paths.
+Admin/vault returned HTTP 200; bot returned the expected 307. The deployment
+receipt reports `deployed` with no problems. Database migrations through
+`0036_skill_step_check_receipts` are present (0035 remains reserved).
+
+Receipt: `docs/acceptance/skills-workspace/receipts/rendering-performance-2026-09-28/deployment-receipt.json`.
+Local rollback: `~/MortimerRollback/release-539f8f6-20260928-201417/ROLLBACK.sh`.
+This closes staged source deployment, not live feature acceptance or activation.
+No runtime feature flags or provider routes were deliberately changed by this
+operation. Remote enabled-mode acceptance, provider/VM/voice/display/accessibility
+and plan-specific activation/rollback gates remain open where previously open.

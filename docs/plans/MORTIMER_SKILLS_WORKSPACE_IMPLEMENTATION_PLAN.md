@@ -1,6 +1,6 @@
 # Mortimer Skills workspace and skill creation implementation plan
 
-Status: **implementation landed through PR #95 (`1ec20d6`); Mac deployment blocked by rendered-performance gates; activation and live acceptance remain open**. Prepared 2026-09-25; reconciled 2026-09-28.
+Status: **staged deployment complete at `539f8f6` (PR #96); activation and live acceptance remain open**. Prepared 2026-09-25; reconciled 2026-09-28.
 
 This is the implementation contract for the agreed Skills library, inspectable
 processes, truthful execution history, and sandboxed skill creation. The current
@@ -2816,3 +2816,28 @@ receipt directory above. CI/merge and exact-main deployment are still required;
 production remains `0b76f49` and no live activation gates are closed.
 
 JarvisKit follow-up also passes all 219 tests with zero failures.
+
+
+### 2026-09-28 — staged Mac deployment completed
+
+PR #96 merged as `539f8f6`; all GitHub workflows passed. DEPLOY-MAIN then
+verified that exact commit: JarvisKit 219 tests/zero failures, MortimerHost
+372 tests/seven environment skips/zero failures, Python 4,860 passes/seven
+skips/two subtests passed. Release measurements: Skills selection-to-layout
+p95 14.480 ms wide / 7.911 ms compact; crystal orb p50/p95 4.841/13.370 ms
+versus legacy p50 4.833 ms. All original performance gates pass.
+
+At 20:19 EDT the script backed up databases, code and the prior app, installed
+and opened the production app, and restarted vault/bot/extractor/admin/costs.
+Production HEAD and bundle revision both equal `539f8f6`; all six processes
+were independently rechecked alive with the intended production paths.
+Admin/vault returned HTTP 200; bot returned the expected 307. The deployment
+receipt reports `deployed` with no problems. Database migrations through
+`0036_skill_step_check_receipts` are present (0035 remains reserved).
+
+Receipt: `docs/acceptance/skills-workspace/receipts/rendering-performance-2026-09-28/deployment-receipt.json`.
+Local rollback: `~/MortimerRollback/release-539f8f6-20260928-201417/ROLLBACK.sh`.
+This closes staged source deployment, not live feature acceptance or activation.
+No runtime feature flags or provider routes were deliberately changed by this
+operation. Remote enabled-mode acceptance, provider/VM/voice/display/accessibility
+and plan-specific activation/rollback gates remain open where previously open.

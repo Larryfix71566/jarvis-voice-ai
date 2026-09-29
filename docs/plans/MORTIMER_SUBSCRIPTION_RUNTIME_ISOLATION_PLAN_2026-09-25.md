@@ -263,3 +263,12 @@ This focused implementation slice is complete only when:
 
 If runtime controls cannot be verified, the correct completion is a documented
 blocked capability with its feature gate off, not a speculative workaround.
+
+
+### 2026-09-28 — staged source deployment
+
+Runtime isolation source is deployed with main `539f8f6` through DEPLOY-MAIN.
+All exact-release test gates and service health checks passed. This is source
+deployment evidence only: live subscription capability/isolation and routed
+provider acceptance gates remain open. See the deployment receipt under
+`docs/acceptance/skills-workspace/receipts/rendering-performance-2026-09-28/`.

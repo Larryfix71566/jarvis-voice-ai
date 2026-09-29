@@ -1,6 +1,6 @@
 # Mortimer Remote Access Plan — per-client bearer tokens on every endpoint, Tailscale tunnel, fail-closed binds
 
-**Status:** DRAFT for Larry's approval, 2026-08-26. Implements roadmap track **T2** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.2). Gate: **G2**.
+**Status:** Dormant Addendum R1 implementation deployed at `539f8f6`, 2026-09-28. Remote activation remains undecided; enabled-mode acceptance is open. Original plan drafted 2026-08-26. Implements roadmap track **T2** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.2). Gate: **G2**.
 
 **Author / origin.** Larry, quoted in the roadmap's origin block: *"ios app for remote connection to the AI Assistant via VPN tunnel for security"* and *"I want this data available to the AI and myself but secured from any intruder."* Roadmap R4 states the principle this plan implements: *"Token auth on every endpoint, even inside the tunnel. Why: a VPN authenticates devices, not callers; any app on a joined phone could otherwise call `/api/selfedit/run`."*
 
@@ -2664,3 +2664,28 @@ remains unset. The disposable patched candidate then passed the complete Python
 suite: 4,860 passed, seven skipped, two subtests passed. The patch remains
 human-only and is not part of main or the follow-up release-fix commit. No production deployment or
 auth activation has occurred.
+
+
+### 2026-09-28 — staged Mac deployment completed
+
+PR #96 merged as `539f8f6`; all GitHub workflows passed. DEPLOY-MAIN then
+verified that exact commit: JarvisKit 219 tests/zero failures, MortimerHost
+372 tests/seven environment skips/zero failures, Python 4,860 passes/seven
+skips/two subtests passed. Release measurements: Skills selection-to-layout
+p95 14.480 ms wide / 7.911 ms compact; crystal orb p50/p95 4.841/13.370 ms
+versus legacy p50 4.833 ms. All original performance gates pass.
+
+At 20:19 EDT the script backed up databases, code and the prior app, installed
+and opened the production app, and restarted vault/bot/extractor/admin/costs.
+Production HEAD and bundle revision both equal `539f8f6`; all six processes
+were independently rechecked alive with the intended production paths.
+Admin/vault returned HTTP 200; bot returned the expected 307. The deployment
+receipt reports `deployed` with no problems. Database migrations through
+`0036_skill_step_check_receipts` are present (0035 remains reserved).
+
+Receipt: `docs/acceptance/skills-workspace/receipts/rendering-performance-2026-09-28/deployment-receipt.json`.
+Local rollback: `~/MortimerRollback/release-539f8f6-20260928-201417/ROLLBACK.sh`.
+This closes staged source deployment, not live feature acceptance or activation.
+No runtime feature flags or provider routes were deliberately changed by this
+operation. Remote enabled-mode acceptance, provider/VM/voice/display/accessibility
+and plan-specific activation/rollback gates remain open where previously open.
