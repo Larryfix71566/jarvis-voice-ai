@@ -109,33 +109,36 @@ final class ProtectedDisplayContentTests: XCTestCase {
         let bodyOnly = try JSONDecoder().decode(DisplayPayload.self, from: Data(
             #"{"title":"Captured title canary","body":"Visible captured body","surface":"window","data_policy":"local_only"}"#.utf8))
 
-        let protectedView = host(protected)
-        let protectedWindow = try XCTUnwrap(window)
-        showForCapture(protectedWindow)
+        let capturedView = host(protected)
+        let capturedWindow = try XCTUnwrap(window)
+        showForCapture(capturedWindow)
         try waitUntil("the protected fixture window is visible and unoccluded") {
-            protectedWindow.isVisible && protectedWindow.occlusionState.contains(.visible)
+            capturedWindow.isVisible && capturedWindow.occlusionState.contains(.visible)
         }
-        let protectedCapture = try await captureWindowPNG(protectedWindow)
-        protectedWindow.close(); window = nil
+        let protectedCapture = try await captureWindowPNG(capturedWindow)
 
-        let referenceView = host(bodyOnly)
-        let referenceWindow = try XCTUnwrap(window)
-        showForCapture(referenceWindow)
+        // Use the same live window for both payloads. Closing and recreating it changes
+        // the WindowServer edge/compositing pixels independently of the SwiftUI content.
+        capturedView.rootView = displayView(bodyOnly)
+        capturedView.layoutSubtreeIfNeeded()
+        capturedWindow.displayIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
         try waitUntil("the body-only reference window is visible and unoccluded") {
-            referenceWindow.isVisible && referenceWindow.occlusionState.contains(.visible)
+            capturedWindow.isVisible && capturedWindow.occlusionState.contains(.visible)
         }
-        let referenceCapture = try await captureWindowPNG(referenceWindow)
-        referenceWindow.close(); window = nil
+        let referenceCapture = try await captureWindowPNG(capturedWindow)
 
         let protectedImage = try XCTUnwrap(NSBitmapImageRep(data: protectedCapture))
         let referenceImage = try XCTUnwrap(NSBitmapImageRep(data: referenceCapture))
         XCTAssertEqual(protectedImage.pixelsWide, referenceImage.pixelsWide)
         XCTAssertEqual(protectedImage.pixelsHigh, referenceImage.pixelsHigh)
-        XCTAssertEqual(rgbaPixels(protectedImage), rgbaPixels(referenceImage),
-                       "OS window-capture PNG must match the protected body-only rendering")
-
-        // Keep the hosting views alive through their respective captures.
-        _ = (protectedView, referenceView)
+        let protectedPixels = rgbaPixels(protectedImage)
+        let referencePixels = rgbaPixels(referenceImage)
+        if protectedPixels != referencePixels {
+            XCTFail("OS window-capture PNG differs from the protected body-only rendering: "
+                    + pixelDifferenceSummary(protectedPixels, referencePixels,
+                                             width: protectedImage.pixelsWide))
+        }
     }
 
     func testOrdinaryPayloadKeepsCommandCopyAffordance() throws {
@@ -146,12 +149,10 @@ final class ProtectedDisplayContentTests: XCTestCase {
         XCTAssertTrue(labels.contains("Copy command"), "ordinary command copy affordance regressed: \(labels)")
     }
 
-    private func host(_ payload: DisplayPayload) -> NSHostingView<some View> {
+    private func host(_ payload: DisplayPayload) -> NSHostingView<AnyView> {
         NSApplication.shared.accessibilitySetValue(true,
             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
-        let view = NSHostingView(rootView: DisplayContentView(payload: payload)
-            .padding(12).background(AppTheme.bg).foregroundStyle(AppTheme.text)
-            .preferredColorScheme(.dark))
+        let view = NSHostingView(rootView: displayView(payload))
         view.frame = NSRect(x: 0, y: 0, width: 620, height: 420)
         let hostWindow = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         hostWindow.isReleasedWhenClosed = false
@@ -161,6 +162,12 @@ final class ProtectedDisplayContentTests: XCTestCase {
         view.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.15))
         return view
+    }
+
+    private func displayView(_ payload: DisplayPayload) -> AnyView {
+        AnyView(DisplayContentView(payload: payload)
+            .padding(12).background(AppTheme.bg).foregroundStyle(AppTheme.text)
+            .preferredColorScheme(.dark))
     }
 
     private func showForCapture(_ window: NSWindow) {
@@ -252,5 +259,33 @@ final class ProtectedDisplayContentTests: XCTestCase {
             }
         }
         return pixels
+    }
+
+    private func pixelDifferenceSummary(_ actual: [UInt8], _ expected: [UInt8],
+                                        width: Int) -> String {
+        guard actual.count == expected.count, width > 0 else {
+            return "RGBA lengths \(actual.count) and \(expected.count) differ"
+        }
+        var count = 0
+        var minX = width
+        var minY = Int.max
+        var maxX = 0
+        var maxY = 0
+        for pixel in 0..<(actual.count / 4) {
+            let offset = pixel * 4
+            guard actual[offset] != expected[offset]
+                || actual[offset + 1] != expected[offset + 1]
+                || actual[offset + 2] != expected[offset + 2]
+                || actual[offset + 3] != expected[offset + 3] else { continue }
+            count += 1
+            let x = pixel % width
+            let y = pixel / width
+            minX = min(minX, x)
+            minY = min(minY, y)
+            maxX = max(maxX, x)
+            maxY = max(maxY, y)
+        }
+        return "\(count) differing pixels; bounds x=\(minX)...\(maxX), "
+            + "y=\(minY)...\(maxY) across the full window"
     }
 }

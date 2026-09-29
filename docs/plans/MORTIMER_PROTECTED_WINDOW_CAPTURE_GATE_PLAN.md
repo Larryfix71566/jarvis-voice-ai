@@ -1,6 +1,6 @@
 # Protected-window capture gate repair (WS-16)
 
-**Status:** CLAIMED; implementation waits for the roadmap claim to reach main.
+**Status:** IN PROGRESS; scoped repair built, real foreground capture and deployment open.
 **Owner:** Codex. Larry runs DEPLOY-MAIN and accepts the live result.
 **Recorded:** 2026-09-29.
 
@@ -63,3 +63,15 @@ were displayed, and it is not a passing privacy check.
   `ProtectedDisplayContentTests.swift` builds two NSWindows sequentially
   and compares raw pixel arrays; the source's protected render branch
   ignores ancillary fields. No source change or product code change yet.
+- 2026-09-29: Claim landed in PR #116 (`5182bdf`). The test fixture now
+  renders protected and body-only payloads into the same NSWindow, keeping
+  its frame and ScreenCaptureKit capture target constant. It still compares
+  every RGBA pixel in the actual capture and fails on any difference;
+  failures report only a count and bounds, avoiding multi-megabyte dumps.
+  No product display code or privacy assertion changed.
+- 2026-09-29: Focused protected-content tests: four executed, one actual-
+  window test skipped because this shell's test host could not activate,
+  zero failures. Full MortimerHost: 374 executed, seven skipped, zero
+  failures. A skipped actual capture does not satisfy the live acceptance
+  gate. Run it from an interactive Terminal with Screen Recording access,
+  then run DEPLOY-MAIN after review/merge.
