@@ -2787,3 +2787,32 @@ The clean verification worktree remains at
 `~/MortimerRollback/deploy-verify-1ec20d6` for diagnosis.
 Codex retains WS-03 Skills work; Larry was asked whether to assign WS-08
 orb performance work to Codex or keep it with Claude before orb edits.
+
+
+### 2026-09-28 — rendering performance fix under test
+
+Larry assigned both WS-03 and WS-08 performance fixes to Codex. The catalog
+now retains the complete unchanged button/accessibility subtree, rather than
+only its label. Equality includes card data, selection, accessibility settings,
+and store/coordinator identity; button actions use current shared navigation,
+not a captured parent-view closure. Existing shared navigation handles detail
+loading and repeated compact-mode selections. The rendered interaction test
+now presses the native catalog button rather than mutating the store directly.
+
+Initial unchanged 100-sample performance gates pass: wide selection-to-layout
+p95 12.800 ms (limit 20), compact 7.668 ms; cached rendered navigation 44.211 ms
+wide / 28.121 ms compact (limit 100). No measured detail request hits the network.
+The orb follow-up preserves all ten captured crystal/legacy images pixel for
+pixel and its targeted frame gates pass. Full-suite and release evidence are
+still pending; these measurements alone do not claim deployment or acceptance.
+
+Full native follow-up: MortimerHost 372 tests, seven environment skips, zero
+failures. Skills selection-to-layout p95: 13.127 ms wide / 7.970 ms compact;
+cached navigation 44.558/28.313 ms. Crystal orb p50/p95: 4.830/14.705 ms;
+legacy p50 4.911 ms. All original budgets pass. The strengthened real-button
+interaction test was compiled and passed separately after the full run.
+Compact receipts and exact source hashes are in the rendering-performance
+receipt directory above. CI/merge and exact-main deployment are still required;
+production remains `0b76f49` and no live activation gates are closed.
+
+JarvisKit follow-up also passes all 219 tests with zero failures.

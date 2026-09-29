@@ -1,0 +1,51 @@
+{
+  "canvas_pt" : {
+    "height" : 220,
+    "width" : 1440
+  },
+  "crystal" : {
+    "max_ms" : 15.287000000000001,
+    "p50_ms" : 4.8300000000000001,
+    "p95_ms" : 14.705
+  },
+  "empty" : {
+    "max_ms" : 1.4610000000000001,
+    "p50_ms" : 0.75700000000000001,
+    "p95_ms" : 0.83399999999999996
+  },
+  "frames_per_probe" : 300,
+  "gates" : {
+    "budget" : {
+      "enforced" : true,
+      "passed" : true,
+      "rule" : "crystal p95 ≤ 16.7 ms"
+    },
+    "relative" : {
+      "passed" : true,
+      "rule" : "crystal p50 ≤ 1.5 × legacy p50"
+    },
+    "sensitivity" : {
+      "passed" : true,
+      "rule" : "legacy p50 > 1.10 × empty p50"
+    }
+  },
+  "hardware" : {
+    "cpu" : "Apple M5",
+    "main_screen_scale" : 2,
+    "model" : "Mac17,4",
+    "os" : "Version 27.0 (Build 26A428)"
+  },
+  "legacy" : {
+    "max_ms" : 15.433999999999999,
+    "p50_ms" : 4.9109999999999996,
+    "p95_ms" : 13.871
+  },
+  "recorded_at" : "2026-09-29T00:02:52Z",
+  "state" : {
+    "activity" : "assistant",
+    "output_energy" : 0.34999999999999998,
+    "phase_step_rad" : 0.025000000000000001,
+    "user_energy" : 0.20000000000000001
+  },
+  "test" : "OrbShellFrameTimeTests.testCrystalShellStaysWithinTheFrameBudget"
+}

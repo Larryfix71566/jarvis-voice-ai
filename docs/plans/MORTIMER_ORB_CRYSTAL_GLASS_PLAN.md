@@ -1,6 +1,6 @@
 # Mortimer orb crystal glass plan — replace the orb's glass shell with option A
 
-**Status:** IMPLEMENTED 2026-09-24, receipt `docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-24.md`. Step 9's placement, Reduce Motion and rollback checks are open until recorded in that receipt.
+**Status:** IMPLEMENTED; Codex performance follow-up authorized 2026-09-28 (see addendum below). Original 2026-09-24 receipt: receipt `docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-24.md`. Step 9's placement, Reduce Motion and rollback checks are open until recorded in that receipt.
 **Owner:** Larry. Implementation goes to a coding model in one pass. Larry runs every commit, merge and install, and steps 8 and 9. The implementer never runs `git merge`, `git push`, `launchctl`, `defaults write`, or `bundle.sh`.
 **Approved design:** option A ("Crystal") from the orb glass comparison, chosen by Larry on 2026-09-23. The comparison page is the Claude artifact https://claude.ai/artifact/852XZZzAqkt5WmHUe6ruGY. A copy of it and reference renders are checked in under `docs/interface-research/orb-crystal/`.
 **Baseline inspected:** `main` at `a1ca3c8` (2026-09-23). File hashes in §0 rule 2.
@@ -1109,3 +1109,37 @@ Hardware: <model / chip / macOS> (from orb-frame-time.json).
 - Reduce Motion: <>
 - Rollback on / off via defaults: <>
 ```
+
+
+## 2026-09-28 — authorized rendering performance follow-up (WS-08)
+
+Larry assigned the orb performance fix to Codex alongside the Skills fix after
+DEPLOY-MAIN at `1ec20d6` stopped before production changes. This bounded
+assignment supersedes the original one-pass "do not optimize"/stop instruction
+and prior Claude ownership for this follow-up. All design constants, draw
+order, blend modes, filter radii, legacy rendering and performance thresholds
+remain unchanged. No bitmap cache is introduced.
+
+The crystal path previously rebuilt the same five 96-point light paths and
+96 dispersion segment paths each frame, including fixed trigonometry and
+falloff calculations. It now prepares immutable unit-space vector paths and
+weights once, then transforms them to the current center/radius every frame.
+Animated plasma, comets, voice colors, and glass rendering are still drawn
+on every frame. Resizing needs no raster invalidation.
+
+Initial targeted verification: all nine crystal/benchmark tests pass. Orb
+median: 4.989 ms crystal / 5.216 ms legacy; crystal p95 14.232 ms. Decoded
+pixels for five crystal and five legacy voice-state fixtures are exactly
+unchanged against `1ec20d6` at 800x360 on the same host. Evidence lives in
+`docs/acceptance/skills-workspace/receipts/rendering-performance-2026-09-28/`.
+Full native suite, PR CI, merge and exact-main deployment remain pending;
+step 9 physical/Reduce Motion/rollback acceptance is not closed by this work.
+
+Full native follow-up: MortimerHost 372 tests, seven environment skips, zero
+failures. Skills selection-to-layout p95: 13.127 ms wide / 7.970 ms compact;
+cached navigation 44.558/28.313 ms. Crystal orb p50/p95: 4.830/14.705 ms;
+legacy p50 4.911 ms. All original budgets pass. The strengthened real-button
+interaction test was compiled and passed separately after the full run.
+Compact receipts and exact source hashes are in the rendering-performance
+receipt directory above. CI/merge and exact-main deployment are still required;
+production remains `0b76f49` and no live activation gates are closed.

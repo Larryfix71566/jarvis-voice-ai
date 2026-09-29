@@ -293,6 +293,41 @@ enum CometOrbRenderer {
 // the blur applies to the composited group (GraphicsContext.addFilter
 // filters each drawing operation, and a drawLayer call is one operation).
 extension CometOrbRenderer {
+    /// Immutable unit-space vector geometry. Each frame still renders the
+    /// original fills/strokes at its exact radius; no pixels or voice state
+    /// are cached, and resizing never reuses a raster from a different scale.
+    private struct CrystalLight {
+        let path: Path
+        let direction: CGPoint
+        init(_ outline: CrystalGlassRig.LightOutline) {
+            var path = Path()
+            for (index, point) in outline.points.enumerated() {
+                if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+            path.closeSubpath()
+            self.path = path
+            let length = hypot(outline.mid.x, outline.mid.y)
+            let norm = length > 0 ? length : 1
+            direction = CGPoint(x: outline.mid.x / norm, y: outline.mid.y / norm)
+        }
+    }
+
+    private static let crystalKeyPanes = CrystalGlassRig.keyPanes.map(CrystalLight.init)
+    private static let crystalStrip = CrystalLight(CrystalGlassRig.strip)
+    private static let crystalRimSegments: [(path: Path, weight: Double)] = {
+        typealias Rig = CrystalGlassRig
+        return (0..<Rig.arcSegmentCount).map { index in
+            let t0 = Double(index) / Double(Rig.arcSegmentCount)
+            let t1 = Double(index + 1) / Double(Rig.arcSegmentCount)
+            let start = Rig.dispersionStartRadians, end = Rig.dispersionEndRadians
+            let a0 = start + (end - start) * t0, a1 = start + (end - start) * t1
+            var path = Path()
+            path.move(to: CGPoint(x: cos(a0), y: sin(a0)))
+            path.addLine(to: CGPoint(x: cos(a1), y: sin(a1)))
+            return (path, pow(sin(Double.pi * (t0 + t1) / 2), Rig.arcFalloffExponent))
+        }
+    }()
+
     private static func drawCrystalShell(context: inout GraphicsContext, center: CGPoint,
                                          radius: Double, phase: Double, userEnergy: Double,
                                          outputEnergy: Double, tint: Color, strength: Double,
@@ -420,10 +455,10 @@ extension CometOrbRenderer {
         var lights = env
         lights.addFilter(.blur(radius: max(Rig.lightsMinBlur, radius * Rig.lightsBlurFraction)))
         lights.drawLayer { layer in
-            for pane in Rig.keyPanes {
+            for pane in crystalKeyPanes {
                 fillLight(&layer, pane, center: center, radius: radius, opacity: Rig.keyOpacity)
             }
-            fillLight(&layer, Rig.strip, center: center, radius: radius, opacity: Rig.stripOpacity)
+            fillLight(&layer, crystalStrip, center: center, radius: radius, opacity: Rig.stripOpacity)
         }
 
         // d. The window again, off the inside of the far wall: rotated a
@@ -435,7 +470,7 @@ extension CometOrbRenderer {
             layer.rotate(by: .radians(Double.pi))
             layer.scaleBy(x: Rig.backKeyScale, y: Rig.backKeyScale)
             layer.translateBy(x: -center.x, y: -center.y)
-            for pane in Rig.keyPanes {
+            for pane in crystalKeyPanes {
                 fillLight(&layer, pane, center: center, radius: radius, opacity: Rig.backKeyOpacity)
             }
         }
@@ -457,18 +492,13 @@ extension CometOrbRenderer {
     }
 
     /// Fills a light's reflection, brighter toward the rim.
-    private static func fillLight(_ layer: inout GraphicsContext, _ light: CrystalGlassRig.LightOutline,
+    private static func fillLight(_ layer: inout GraphicsContext, _ light: CrystalLight,
                                   center: CGPoint, radius: Double, opacity: Double) {
         typealias Rig = CrystalGlassRig
-        var path = Path()
-        for (index, point) in light.points.enumerated() {
-            let p = CGPoint(x: center.x + point.x * radius, y: center.y + point.y * radius)
-            if index == 0 { path.move(to: p) } else { path.addLine(to: p) }
-        }
-        path.closeSubpath()
-        let length = hypot(light.mid.x, light.mid.y)
-        let norm = length > 0 ? length : 1
-        let ux = light.mid.x / norm, uy = light.mid.y / norm
+        let transform = CGAffineTransform(a: radius, b: 0, c: 0, d: radius,
+                                          tx: center.x, ty: center.y)
+        let path = light.path.applying(transform)
+        let ux = light.direction.x, uy = light.direction.y
         layer.fill(path, with: .linearGradient(
             Gradient(colors: [Color.white.opacity(opacity),
                               Color.white.opacity(opacity * Rig.lightInnerOpacityRatio)]),
@@ -482,16 +512,11 @@ extension CometOrbRenderer {
     private static func strokeRimArc(_ layer: inout GraphicsContext, center: CGPoint,
                                      radius: Double, peak: Double, color: Color) {
         typealias Rig = CrystalGlassRig
-        let count = Rig.arcSegmentCount
-        let start = Rig.dispersionStartRadians, end = Rig.dispersionEndRadians
-        for index in 0..<count {
-            let t0 = Double(index) / Double(count)
-            let t1 = Double(index + 1) / Double(count)
-            let alpha = peak * pow(sin(Double.pi * (t0 + t1) / 2), Rig.arcFalloffExponent)
-            let a0 = start + (end - start) * t0, a1 = start + (end - start) * t1
-            var segment = Path()
-            segment.move(to: CGPoint(x: center.x + cos(a0) * radius, y: center.y + sin(a0) * radius))
-            segment.addLine(to: CGPoint(x: center.x + cos(a1) * radius, y: center.y + sin(a1) * radius))
+        let transform = CGAffineTransform(a: radius, b: 0, c: 0, d: radius,
+                                          tx: center.x, ty: center.y)
+        for cached in crystalRimSegments {
+            let alpha = peak * cached.weight
+            let segment = cached.path.applying(transform)
             layer.stroke(segment, with: .color(color.opacity(alpha)),
                          style: StrokeStyle(lineWidth: Rig.dispersionWidth, lineCap: .round))
         }
