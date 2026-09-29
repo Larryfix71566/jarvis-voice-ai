@@ -34,6 +34,39 @@ Claude has one extra rule: it never runs `git` against the Mac repo (see `CLAUDE
 
 ---
 
+
+### Shared update format (Codex and Claude)
+
+This Markdown file is the editable source for the expandable roadmap. GitHub
+renders the `<details>` sections; both systems can read and edit the same plain
+text in their **own** checkout. There is no separate JSON database or HTML copy
+to keep synchronized. Chat views are dated snapshots derived from this file,
+not a second status authority.
+
+For each update:
+
+1. Follow §0 and the workstream’s existing ownership/scope rules. Read current
+   main and integrate it into your own branch before changing status.
+2. Edit the existing block identified by `WS-xx` (stable HTML id `ws-xx`). Keep
+   **Owner**, **Status**, **Implemented by**, **Remaining work / acceptance**,
+   **Model version**, **Where**, **Plan**, **Scope**, **Next step**, and **Updated**.
+3. Separate the system that built a feature from the person/system validating
+   it. `codex` and `claude` are systems; record an exact model only when the run
+   or handoff identifies it. Use “not recorded” or “unassigned” instead of guesses.
+4. Keep unfinished acceptance, dormant activation, and proposed assignments in
+   §2/§5/§7. Put completed milestones in §6 at the **bottom**. A landed feature
+   is not accepted until its live gates have evidence; retain its open block.
+5. Update the existing plan’s dated progress and add a §8 log entry with system,
+   workstream, change, evidence, and remaining action. Link receipts rather than
+   copying large logs. Commit/hand off through the existing branch/PR protocol.
+6. Refresh any requested chat view from the merged roadmap and identify its
+   source revision. Never write status changes only into a chat visualization.
+
+**Documentation authorization, 2026-09-28:** Larry asked Codex to make the
+annotated expandable roadmap shared and editable by both systems. This bounded
+WS-01 documentation slice uses `codex/isolated-20260924`; it does not reassign
+Claude’s work or enable any runtime feature.
+
 ## 1. Systems and workspaces
 
 | System | Where it works | How work reaches main | Reads |
@@ -48,21 +81,205 @@ Claude has one extra rule: it never runs `git` against the Mac repo (see `CLAUDE
 
 - Scope locks only while status is `claimed`, `in-progress` or `review`.
 - "(proposed)" next to an owner means Larry has not yet confirmed who owns the row.
-- † marks a plan that exists only on the owner's branch until that branch merges.
+- Expand a workstream for its editable fields. These blocks replace the former rows; the protocol’s references to a “row” mean the corresponding workstream block.
 
-| ID | Workstream | Owner | Status | Where | Plan (one) | Scope (locked while active) | Next step | Updated |
-|---|---|---|---|---|---|---|---|---|
-| WS-01 | Verified gap closure GC24-00…06: execution lifecycle, privacy log redaction, memory admission, Atlas | `codex` | landed; deployed `539f8f6`; live acceptance open | main (`539f8f6`) | `docs/plans/MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md`†. The 12 gap-index plans fold into it (CX-05). | `jarvis/model_execution.py`, `jarvis/memory_admission.py`, `jarvis/runlog/`, `jarvis/agents/`, execution routes in `jarvis/admin/server.py`. GC24-03 logging edits touch the whole repo and resume only after CX-01. | Staged deployment verified; finish plan-specific live acceptance | 09-28 |
-| WS-02 | Subscription runtime isolation (GC24-04) | `codex` | landed; deployed `539f8f6`; live gates open | main (`539f8f6`) | `docs/plans/MORTIMER_SUBSCRIPTION_RUNTIME_ISOLATION_PLAN_2026-09-25.md`† | `jarvis/subscription.py` | Staged deployment verified; run live capability/isolation gates | 09-28 |
-| WS-03 | Skills Workspace and skill creation (T6; supersedes `MORTIMER_SKILL_AUTHORING_PLAN.md`). **Its own view, separate from the Workflow Viewer** (Larry, 09-27) | `codex` | landed; deployed `539f8f6`; activation/live acceptance open | main (`539f8f6`) | `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`† | `jarvis/skill_*.py`, `jarvis/agent_skills.py`, `jarvis/selfedit/skill_policy.py`, `/api/skills*` in `jarvis/admin/server.py`. The five console view-mode Swift files are **shared with WS-07's landed Workflow Viewer**: add a new `skills` mode beside `workflows`; do not replace or restyle the viewer. | Staged deployment verified; complete Skills UI/voice/provider/VM and activation gates | 09-28 |
-| WS-04 | Remote access T2: bearer tokens, fail-closed bind, Tailscale | `codex` (Larry, 09-27) | landed; deployed `539f8f6`; auth remains dormant | main (`539f8f6`) | `docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md` (DRAFT) + **Addendum R1** (dormant-merge fixes, approved 09-27) | `jarvis/auth.py`, `jarvis/authmw.py`, `jarvis/bind.py`, `jarvis/urls.py`, `jarvis/bot/server.py`, auth middleware and bind in `jarvis/admin/server.py`. Plus the integration points in CX-11: `jarvis/bot/status_tool.py`, `scripts/deploy_main.sh` health checks, `mcp_servers/mcp_selfedit/logic.py` headers | Dormant deployment verified; enabled-mode gate and token onboarding remain separate | 09-28 |
-| WS-05 | Model Use Enhancements MAR-A…J (checklist in §7) | `codex` (proposed) | proposed: foundation landed, live gates open | none yet | `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md` | `jarvis/model_routing.py`, `jarvis/model_preferences.py`, `config/model_access.yaml` | Larry confirms owner; MAR-A first | 09-22 |
-| WS-06 | Self-service access and recovery P1–P7, plus registry split P5 (#86's files; merged in the 09-25 landing) | `claude` | landed; Mac checks open | main | Spec not on main (CX-09). Registry half: `docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md` | — | `larry`: 11 Mac checks from the handoff §4; decide the tier of `config/model_access.yaml` | 09-25 |
-| WS-07 | Voice workflows phases 1–4, Workflow Viewer, #80 privacy fix, DEPLOY-MAIN | `claude` | landed (main `0b76f49`) | main | `docs/plans/MORTIMER_VOICE_WORKFLOWS_PLAN.md`, `docs/plans/MORTIMER_WORKFLOW_VIEWER_PLAN.md` | — | Correct the plan's status header (it still says "READY FOR HANDOFF") | 09-25 |
-| WS-08 | Orb crystal glass (#90) | `codex` (Larry, 09-28) | landed; deployed `539f8f6`; step 9 open | main (`539f8f6`) | `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md` | Orb rendering and its performance/visual regression tests | Performance gate passed in exact-main deployment; Larry placement, Reduce Motion and rollback checks remain | 09-28 |
-| WS-09 | Command Console and Atlas release acceptance | `larry` | open (Mac only) | — | `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md` | — | Follow `docs/acceptance/ACCEPTANCE_RUNBOOK.md` | 09-22 |
-| WS-10 | Memory automation: staged enablement on the Mac | `larry` | pending merged-pipeline acceptance | — | `docs/plans/MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md` | — | CX-07 integrated locally; validate and choose staged Mac enablement before rollout | 09-27 |
-| WS-11 | Adaptive interface C8 acceptance | `larry` | open (Mac only) | — | `docs/plans/MORTIMER_ADAPTIVE_INTERFACE_PLAN.md` | — | `docs/acceptance/adaptive-interface/RELEASE_READINESS.md` | 09-22 |
+<details id="ws-01">
+<summary>WS-01 — Reliability, privacy and memory gaps · Codex</summary>
+
+**Workstream:** Verified gap closure GC24-00…06: execution lifecycle, privacy log redaction, memory admission, Atlas
+
+- **Owner:** `codex`
+- **Status:** landed; deployed `539f8f6`; live acceptance open
+- **Implemented by:** Codex
+- **Remaining work / acceptance:** Codex; Larry for physical acceptance
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (`539f8f6`); shared-roadmap documentation: `codex/isolated-20260924`
+- **Plan:** `docs/plans/MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md`. The 12 gap-index plans fold into it (CX-05).
+- **Scope:** `jarvis/model_execution.py`, `jarvis/memory_admission.py`, `jarvis/runlog/`, `jarvis/agents/`, execution routes in `jarvis/admin/server.py`. GC24-03 logging edits touch the whole repo and resume only after CX-01. Larry-authorized docs-only slice (09-28): `ROADMAP.md`, `docs/README.md`, and this row’s existing plan progress log.
+- **Next step:** Shared expandable roadmap prepared on branch; merge documentation PR, then finish plan-specific live acceptance
+- **Updated:** 09-28
+
+</details>
+
+<details id="ws-02">
+<summary>WS-02 — Subscription runtime isolation · Codex</summary>
+
+**Workstream:** Subscription runtime isolation (GC24-04)
+
+- **Owner:** `codex`
+- **Status:** landed; deployed `539f8f6`; live gates open
+- **Implemented by:** Codex
+- **Remaining work / acceptance:** Codex; live account checks as required
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (`539f8f6`)
+- **Plan:** `docs/plans/MORTIMER_SUBSCRIPTION_RUNTIME_ISOLATION_PLAN_2026-09-25.md`
+- **Scope:** `jarvis/subscription.py`
+- **Next step:** Staged deployment verified; run live capability/isolation gates
+- **Updated:** 09-28
+
+</details>
+
+<details id="ws-03">
+<summary>WS-03 — Skills Workspace and skill creator · Codex</summary>
+
+**Workstream:** Skills Workspace and skill creation (T6; supersedes `MORTIMER_SKILL_AUTHORING_PLAN.md`). Its own view, separate from the Workflow Viewer (Larry, 09-27)
+
+- **Owner:** `codex`
+- **Status:** landed; deployed `539f8f6`; activation/live acceptance open
+- **Implemented by:** Codex
+- **Remaining work / acceptance:** Codex; Larry for human review and physical acceptance
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (`539f8f6`)
+- **Plan:** `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`
+- **Scope:** `jarvis/skill_*.py`, `jarvis/agent_skills.py`, `jarvis/selfedit/skill_policy.py`, `/api/skills*` in `jarvis/admin/server.py`. The five console view-mode Swift files are **shared with WS-07's landed Workflow Viewer**: add a new `skills` mode beside `workflows`; do not replace or restyle the viewer.
+- **Next step:** Staged deployment verified; complete Skills UI/voice/provider/VM and activation gates
+- **Updated:** 09-28
+
+</details>
+
+<details id="ws-04">
+<summary>WS-04 — Remote access · Codex; Larry decides activation</summary>
+
+**Workstream:** Remote access T2: bearer tokens, fail-closed bind, Tailscale
+
+- **Owner:** `codex` (Larry, 09-27)
+- **Status:** landed; deployed `539f8f6`; auth remains dormant
+- **Implemented by:** Codex (remote foundation and R1)
+- **Remaining work / acceptance:** Codex; Larry decides activation/token onboarding
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (`539f8f6`)
+- **Plan:** `docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md` (DRAFT) + **Addendum R1** (dormant-merge fixes, approved 09-27)
+- **Scope:** `jarvis/auth.py`, `jarvis/authmw.py`, `jarvis/bind.py`, `jarvis/urls.py`, `jarvis/bot/server.py`, auth middleware and bind in `jarvis/admin/server.py`. Plus the integration points in CX-11: `jarvis/bot/status_tool.py`, `scripts/deploy_main.sh` health checks, `mcp_servers/mcp_selfedit/logic.py` headers
+- **Next step:** Dormant deployment verified; enabled-mode gate and token onboarding remain separate
+- **Updated:** 09-28
+
+</details>
+
+<details id="ws-05">
+<summary>WS-05 — Model access: subscriptions, APIs and SAYGM · Codex proposed</summary>
+
+**Workstream:** Model Use Enhancements MAR-A…J (checklist in §7)
+
+- **Owner:** `codex` (proposed)
+- **Status:** proposed: foundation landed, live gates open
+- **Implemented by:** Not itemized for every foundation component; WS-02 isolation is Codex
+- **Remaining work / acceptance:** Codex proposed; Larry confirms assignment
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** none yet
+- **Plan:** `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md`
+- **Scope:** `jarvis/model_routing.py`, `jarvis/model_preferences.py`, `config/model_access.yaml`
+- **Next step:** Larry confirms owner; MAR-A first
+- **Updated:** 09-22
+
+</details>
+
+<details id="ws-06">
+<summary>WS-06 — Self-service recovery and model registry · Claude implementation; Larry acceptance</summary>
+
+**Workstream:** Self-service access and recovery P1–P7, plus registry split P5 (#86's files; merged in the 09-25 landing)
+
+- **Owner:** `claude`
+- **Status:** landed; Mac checks open
+- **Implemented by:** Claude
+- **Remaining work / acceptance:** Larry: 11 Mac checks and registry tier decision
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main
+- **Plan:** Spec not on main (CX-09). Registry half: `docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md`
+- **Scope:** —
+- **Next step:** `larry`: 11 Mac checks from the handoff §4; decide the tier of `config/model_access.yaml`
+- **Updated:** 09-25
+
+</details>
+
+<details id="ws-07">
+<summary>WS-07 — Voice workflows and Workflow Viewer · Claude</summary>
+
+**Workstream:** Voice workflows phases 1–4, Workflow Viewer, #80 privacy fix, DEPLOY-MAIN
+
+- **Owner:** `claude`
+- **Status:** landed (main `0b76f49`)
+- **Implemented by:** Claude
+- **Remaining work / acceptance:** Claude: correct stale plan header
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main
+- **Plan:** `docs/plans/MORTIMER_VOICE_WORKFLOWS_PLAN.md`, `docs/plans/MORTIMER_WORKFLOW_VIEWER_PLAN.md`
+- **Scope:** —
+- **Next step:** Correct the plan's status header (it still says "READY FOR HANDOFF")
+- **Updated:** 09-25
+
+</details>
+
+<details id="ws-08">
+<summary>WS-08 — Crystal orb · Claude original; Codex fixes; Larry acceptance</summary>
+
+**Workstream:** Orb crystal glass (#90)
+
+- **Owner:** `codex` (Larry, 09-28)
+- **Status:** landed; deployed `539f8f6`; step 9 open
+- **Implemented by:** Claude original workstream; Codex rendering performance fixes
+- **Remaining work / acceptance:** Larry: placement, Reduce Motion, rollback
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (`539f8f6`)
+- **Plan:** `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`
+- **Scope:** Orb rendering and its performance/visual regression tests
+- **Next step:** Performance gate passed in exact-main deployment; Larry placement, Reduce Motion and rollback checks remain
+- **Updated:** 09-28
+
+</details>
+
+<details id="ws-09">
+<summary>WS-09 — Command Console and Atlas acceptance · Larry acceptance</summary>
+
+**Workstream:** Command Console and Atlas release acceptance
+
+- **Owner:** `larry`
+- **Status:** open (Mac only)
+- **Implemented by:** Not attributed by this acceptance-only workstream
+- **Remaining work / acceptance:** Larry
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** —
+- **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md`
+- **Scope:** —
+- **Next step:** Follow `docs/acceptance/ACCEPTANCE_RUNBOOK.md`
+- **Updated:** 09-22
+
+</details>
+
+<details id="ws-10">
+<summary>WS-10 — Automatic memory rollout · Claude + Codex implementation; Larry rollout</summary>
+
+**Workstream:** Memory automation: staged enablement on the Mac
+
+- **Owner:** `larry`
+- **Status:** pending merged-pipeline acceptance
+- **Implemented by:** Claude: echo guard and auto-settlement; Codex: durable admission/classification and merge integration
+- **Remaining work / acceptance:** Larry: merged-pipeline acceptance and staged rollout
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** —
+- **Plan:** `docs/plans/MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md`
+- **Scope:** —
+- **Next step:** CX-07 integrated locally; validate and choose staged Mac enablement before rollout
+- **Updated:** 09-27
+
+</details>
+
+<details id="ws-11">
+<summary>WS-11 — Adaptive interface C8 acceptance · Larry acceptance</summary>
+
+**Workstream:** Adaptive interface C8 acceptance
+
+- **Owner:** `larry`
+- **Status:** open (Mac only)
+- **Implemented by:** Not attributed by this acceptance-only workstream
+- **Remaining work / acceptance:** Larry
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** —
+- **Plan:** `docs/plans/MORTIMER_ADAPTIVE_INTERFACE_PLAN.md`
+- **Scope:** —
+- **Next step:** `docs/acceptance/adaptive-interface/RELEASE_READINESS.md`
+- **Updated:** 09-22
+
+</details>
 
 ---
 
@@ -124,15 +341,8 @@ Nobody works on these until Larry turns one into a §2 row.
 - **T5 mail, calendar and daily brief:** `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (DRAFT). Codex edited the plan document on 09-26; no mail code was found. Migration `0035` is reserved.
 - **Personal VAD / speaker gate:** built and switched off pending the §6 effectiveness protocol (see §7 below).
 - **Optimization plan Rev 3.6:** remaining phases not reconciled in this pass.
-
----
-
-## 6. Recently landed
-
-- 09-25: voice workflows phases 1–4, Workflow Viewer, #80 privacy fix, `scripts/deploy_main.sh` (WS-07). Main is now `0b76f49`.
-- 09-25: self-service access and recovery (#86's files, merged as-is in the same landing, WS-06).
-- 09-24: orb crystal glass (#90, WS-08).
-- Earlier: see `docs/plans/implemented/` and `docs/archive/README.md`.
+- **T7 home automation / T8 surveillance:** queued, unassigned; platforms/devices and camera permissions undecided. Detailed plans unwritten; see [platform roadmap](docs/plans/MORTIMER_PLATFORM_ROADMAP.md) §2.7–2.8. Requested by Larry; implementation system not assigned.
+- **T4c investing assistance:** queued, unassigned in the financial track; G3/G4 and local-model prerequisites remain. Detailed plan unwritten; see [platform roadmap](docs/plans/MORTIMER_PLATFORM_ROADMAP.md) §2.4.
 
 ---
 
@@ -288,3 +498,61 @@ first lever to pull.
 - 2026-09-28 20:19 EDT: PR #96 merged as 539f8f6 and DEPLOY-MAIN completed. Exact-release checks: JarvisKit 219/0 failures, MortimerHost 372/7 skips/0 failures, Python 4,860 passes/7 skips/2 subtests. Code, bundle revision and all five services match production; admin/vault health 200 and bot 307, no receipt problems. DB/code/app rollback snapshot saved. Physical/live/provider/activation gates remain open. Receipt: `docs/acceptance/skills-workspace/receipts/rendering-performance-2026-09-28/deployment-receipt.json`.
 
 - 2026-09-28: At Larry's WS-01/04 follow-up, Codex fetched/read main instructions, confirmed the branch was clean and current, and rechecked R1 in code. Corrected stale §3 migration reservations and §4 "merge pending/implementation open" labels. An isolated actual admin server returns 401 without auth and 200 via the service helper when enabled, and 200 without credentials when dormant; production was not changed. Live spoken `system_status` acceptance remains unrecorded.
+
+- 2026-09-28: Codex / WS-01, at Larry’s request: converted the master workstreams to editable expandable Markdown with implementation/acceptance attribution, documented a common update format for both systems, and moved completed milestones to the bottom. Source baseline `180766e`; no runtime or acceptance status changed. Pending documentation PR merge.
+
+---
+
+## 6. Recently landed
+
+Completed implementation and verification milestones are kept last. Open
+acceptance remains in §2 even when a feature’s code has landed.
+
+<details>
+<summary>Completed — integration and Mac deployment · Codex integration; Claude release tooling; Larry merge/approval</summary>
+
+- [x] Both branches integrated with preserved behavior; conflict resolutions and migrations landed.
+- [x] Release `539f8f6` deployed on 2026-09-28 at 20:19 EDT, with database/code/app rollback snapshot and healthy services.
+- [x] Exact-release verification: JarvisKit 219 passed; MortimerHost 372 executed, 7 skips, zero failures; Python 4,860 passed, 7 skipped, 2 subtests passed.
+- [x] PR #97 merged as `180766e`: status/R1 follow-up; application remains deployed at `539f8f6`.
+- **Evidence:** [deployment receipt](docs/acceptance/skills-workspace/receipts/rendering-performance-2026-09-28/deployment-receipt.json).
+- **Attribution:** Codex integration and verification; Claude authored DEPLOY-MAIN under WS-07; Larry approved and merged. Exact model versions not recorded here.
+
+</details>
+
+<details>
+<summary>Completed — Skills and orb performance fixes · Codex</summary>
+
+- [x] Skills selection-to-layout p95 14.480 ms wide / 7.911 ms compact (20 ms limit).
+- [x] Crystal orb p50/p95 4.841/13.370 ms; original relative and absolute limits passed.
+- [x] Ten crystal/legacy voice-state render comparisons pixel-identical; no threshold relaxation.
+- **Attribution:** Codex implementation and validation; Larry assigned the bounded orb performance fix from Claude to Codex on 09-28.
+- **Still open:** physical step 9 acceptance in WS-08.
+
+</details>
+
+<details>
+<summary>Completed — workflows, recovery, Skills and model foundations · Claude + Codex</summary>
+
+- [x] **Claude / WS-07:** voice workflows phases 1–4, Workflow Viewer, #80 privacy fix and DEPLOY-MAIN (09-25).
+- [x] **Claude / WS-06:** self-service access/recovery and registry-split code (#86; 09-25 landing).
+- [x] **Codex / WS-03:** separate Skills Workspace, developer-run creator and validation activity contracts.
+- [x] **Claude original workstream / WS-08:** crystal-glass orb (#90; 09-24); later performance fixes by Codex above.
+- [x] **WS-05 foundation:** provider-neutral execution, policy-aware logs, isolated subscription adapters and draft-confirmed preferences. The roadmap does not itemize every original contributor; Codex owns WS-02 isolation and is proposed for remaining WS-05 work.
+- **Still open:** corresponding live/activation gates in §2; WS-07 status-header correction.
+
+</details>
+
+<details>
+<summary>Completed — remote safeguards, release protections and historical repair · Codex + Larry; recovery operator unrecorded here</summary>
+
+- [x] **Codex / WS-04:** dormant auth and Addendum R1; 140 focused tests passed; isolated enabled/dormant admin health proof recorded.
+- [x] **Larry:** health-probe and frozen skill-fixture protection commits `617048a` and `1152dd5`; verified by Codex.
+- [x] **Codex / WS-03:** creator claim-race fix.
+- [x] Authorized 28-exchange historical-memory recovery; recovery operator not attributed in this roadmap. This does not close WS-10 staged rollout.
+- **Still open:** remote activation, onboarding and live spoken status proof.
+
+</details>
+
+Earlier completed plans: [implemented plans](docs/plans/implemented/) and
+[archive map](docs/archive/README.md).

@@ -1221,3 +1221,17 @@ preserved. ROADMAP §3 now records the reserved migration names as applied,
 not pending renumbering. No applied migration was renamed or replayed.
 Focused R1/database/watcher checks passed 140 tests; the exact merged-release
 full-suite and deployment receipt above remain the release evidence.
+
+### 2026-09-28 — shared expandable roadmap (WS-01 documentation)
+
+At Larry’s request, Codex made `ROADMAP.md` the shared, editable source for the
+expandable attributed view. All eleven workstreams retain their scope, plan,
+owner and open gates, with separate implementation and acceptance attribution.
+Completed milestones are last. The common update format tells Codex and Claude
+to edit their own branch, record evidence and hand off through the existing PR
+protocol. Chat views are snapshots, not another source of status. Exact model
+versions remain “not recorded” when no run evidence identifies them.
+
+Source baseline: main `180766e`; branch `codex/isolated-20260924`. This is a
+documentation-only slice: no runtime changes, new model assignments, activation
+or newly passed acceptance gates. Documentation PR merge remains the next step.
