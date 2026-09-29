@@ -1,0 +1,38 @@
+{
+  "status": "deployed",
+  "problems": [],
+  "deployed_at": "2026-09-28T20:19:57-04:00",
+  "main_revision": "539f8f6e65126c991210b3340917cb381bf13790",
+  "production_head": "539f8f6e65126c991210b3340917cb381bf13790",
+  "bundle_source_revision": "539f8f6e65126c991210b3340917cb381bf13790",
+  "processes": {
+    "vault": {
+      "pid": 1250,
+      "working_directory": "/Users/larryfix/jarvis-voice-ai-clean/services/mortimer-vault"
+    },
+    "bot": {
+      "pid": 1276,
+      "working_directory": "/Users/larryfix/jarvis-voice-ai-clean"
+    },
+    "extractor": {
+      "pid": 1282,
+      "working_directory": "/Users/larryfix/jarvis-voice-ai-clean"
+    },
+    "admin": {
+      "pid": 1289,
+      "working_directory": "/Users/larryfix/jarvis-voice-ai-clean"
+    },
+    "costs": {
+      "pid": 1292,
+      "working_directory": "/Users/larryfix/jarvis-voice-ai-clean"
+    },
+    "app": {
+      "pid": 1335,
+      "executable": "/Users/larryfix/jarvis-voice-ai-clean/macos/MortimerHost/.build/MortimerHost.app/Contents/MacOS/MortimerHost"
+    }
+  },
+  "rollback": {
+    "directory": "/Users/larryfix/MortimerRollback/release-539f8f6-20260928-201417",
+    "script": "/Users/larryfix/MortimerRollback/release-539f8f6-20260928-201417/ROLLBACK.sh"
+  }
+}

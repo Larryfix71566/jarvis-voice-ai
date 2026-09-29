@@ -1,9 +1,9 @@
 # Mortimer — Verified Gap Closure
 
 **Authored:** 2026-09-24, Codex, from repository inspection.
-**Status:** In progress on the isolated Codex branch; main integration and
-release acceptance remain open. `ROADMAP.md` is authoritative for ownership
-and current state. No deployment or provider verification is claimed.
+**Status:** Integrated and deployed to the Mac at `539f8f6` on 2026-09-28.
+Live release acceptance and provider verification remain open. `ROADMAP.md`
+is authoritative for ownership and current state.
 **Inspected source:** `4acb4dc2827f292f1236155e3c445d4ec4e9e5a0` (main PR #90).
 **Working branch:** `codex/isolated-20260924`.
 **Working directory:**
@@ -1185,3 +1185,39 @@ byte-snapshot skips. No acceptance criterion was relaxed.
 Human-only protection entries, live provider comparison and review, physical
 displays/accessibility/voice, soak/latency and exact release acceptance remain
 open. No deployment or runtime activation occurred.
+
+
+### 2026-09-28 — staged Mac deployment completed
+
+PR #96 merged as `539f8f6`; all GitHub workflows passed. DEPLOY-MAIN then
+verified that exact commit: JarvisKit 219 tests/zero failures, MortimerHost
+372 tests/seven environment skips/zero failures, Python 4,860 passes/seven
+skips/two subtests passed. Release measurements: Skills selection-to-layout
+p95 14.480 ms wide / 7.911 ms compact; crystal orb p50/p95 4.841/13.370 ms
+versus legacy p50 4.833 ms. All original performance gates pass.
+
+At 20:19 EDT the script backed up databases, code and the prior app, installed
+and opened the production app, and restarted vault/bot/extractor/admin/costs.
+Production HEAD and bundle revision both equal `539f8f6`; all six processes
+were independently rechecked alive with the intended production paths.
+Admin/vault returned HTTP 200; bot returned the expected 307. The deployment
+receipt reports `deployed` with no problems. Database migrations through
+`0036_skill_step_check_receipts` are present (0035 remains reserved).
+
+Receipt: `docs/acceptance/skills-workspace/receipts/rendering-performance-2026-09-28/deployment-receipt.json`.
+Local rollback: `~/MortimerRollback/release-539f8f6-20260928-201417/ROLLBACK.sh`.
+This closes staged source deployment, not live feature acceptance or activation.
+No runtime feature flags or provider routes were deliberately changed by this
+operation. Remote enabled-mode acceptance, provider/VM/voice/display/accessibility
+and plan-specific activation/rollback gates remain open where previously open.
+
+
+### 2026-09-28 — repeated WS-01 integration instruction reconciled
+
+Fetched main and read its AGENTS/ROADMAP; current work was already committed
+and merge returned already up to date. The former conflicts are integrated
+in deployed `539f8f6`, with both workflow/status and Codex privacy/memory changes
+preserved. ROADMAP §3 now records the reserved migration names as applied,
+not pending renumbering. No applied migration was renamed or replayed.
+Focused R1/database/watcher checks passed 140 tests; the exact merged-release
+full-suite and deployment receipt above remain the release evidence.

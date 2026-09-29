@@ -95,7 +95,8 @@ async def test_watchers_send_bearer_and_check_status(
     assert seen["status_checked"] is True
 
 
-def test_system_status_client_sends_service_bearer(monkeypatch):
+@pytest.mark.parametrize("token", [None, "jvt_status-tool-token"])
+def test_system_status_client_sends_service_bearer(monkeypatch, token):
     import httpx
 
     from jarvis.bot.status_tool import _default_client
@@ -106,13 +107,16 @@ def test_system_status_client_sends_service_bearer(monkeypatch):
         def __init__(self, **kwargs):
             seen.update(kwargs)
 
-    monkeypatch.setenv("JARVIS_SERVICE_TOKEN", "jvt_status-tool-token")
+    if token is None:
+        monkeypatch.delenv("JARVIS_SERVICE_TOKEN", raising=False)
+    else:
+        monkeypatch.setenv("JARVIS_SERVICE_TOKEN", token)
     monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
     _default_client("http://admin.test", 3.0)
 
     assert seen["base_url"] == "http://admin.test"
     assert seen["timeout"] == 3.0
-    assert seen["headers"] == {"Authorization": "Bearer jvt_status-tool-token"}
+    assert seen["headers"] == ({"Authorization": f"Bearer {token}"} if token else {})
 
 
 def test_service_token_is_scoped_to_three_calling_servers(monkeypatch):

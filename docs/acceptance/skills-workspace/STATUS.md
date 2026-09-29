@@ -3,17 +3,18 @@
 Plan: [Skills Workspace and Skill Creation Implementation Plan](../../plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md)
 
 Status vocabulary: `not_started`, `in_progress`, `implemented_unverified`,
-`blocked`, `accepted`. This record tracks this isolated working tree; it is
-not a Mac deployment or PR receipt.
+`blocked`, `accepted`. Implementation/deployment evidence is distinct from
+live feature acceptance and activation.
 
-Latest checkpoint (2026-09-28): main `2e6f769` is integrated locally with all
-conflicts resolved. Approved memory ordering and separate Skills/Workflows
-navigation are implemented. Creator execution retains genuine Developer-run
-identity and late validation ownership. [Integration receipts](receipts/main-integration-2026-09-28/)
-record 4,851 Python passes with two human-only protection failures and four
-skips; JarvisKit 219 tests/zero failures; MortimerHost 372 executed/seven skips/
-zero failures. The post-run historical-fixture correction has a passing explicit
-streaming-overlay test (59 registry passes, three migration-snapshot skips).
+Latest checkpoint (2026-09-28 20:19 EDT): PR #96 (`539f8f6`) is deployed on
+the Mac through DEPLOY-MAIN. All CI workflows passed; exact merged-release
+checks passed 4,860 Python tests (seven skips), JarvisKit 219 tests, and
+MortimerHost 372 tests (seven environment skips), with zero failures. Both
+human-only protection entries are on main. The creator claim race and the
+Skills/orb rendering performance failures are fixed. Production code and app
+revision match; all five services and the app are running from production.
+See [deployment and rendering evidence](receipts/rendering-performance-2026-09-28/).
+This does not accept or activate remaining live/provider/VM/UI gates below.
 
 The prior historical VM verifier remains failed (11/12 stages), despite its
 candidate checks passing: the old baseline has a floating-point assertion
