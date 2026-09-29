@@ -15,6 +15,12 @@ it, so the answer says which model was tried (I5).
 The five failure categories and their classification are moved verbatim
 from the script's former `_probe_subscription`; `not_installed` is new and
 is returned without running anything when the CLI is not on PATH.
+
+2026-09-29: a failure the message table can't place keeps the runtime's own
+classification (e.g. "Not logged in" on stdout -> "authentication") instead
+of collapsing to "runtime_error", and a route that is switched off on
+purpose (SubscriptionCapabilityError, e.g. Codex before its no-tools
+verification) reports "gated".
 """
 
 from __future__ import annotations
@@ -39,6 +45,19 @@ CODEX_PROFILE = "codex-subscription"
 COMMANDS = {
     "claude": ("JARVIS_CLAUDE_SUBSCRIPTION_COMMAND", "claude"),
     "codex": ("JARVIS_CODEX_SUBSCRIPTION_COMMAND", "codex"),
+}
+
+# When the message text alone says nothing specific (the legacy table falls
+# through to "runtime_error"), the runtime's own stderr/stdout classification
+# (SubscriptionRuntimeError.category, see jarvis.subscription._failure_category)
+# is used instead, mapped onto this probe's vocabulary.
+_RUNTIME_CATEGORY = {
+    "authentication": "authentication",
+    "timeout": "timeout",
+    "capability": "model_unavailable",
+    "policy": "runtime_environment",
+    "credit": "credit",
+    "allowance": "allowance",
 }
 
 Which = Literal["claude", "codex"]
@@ -74,8 +93,24 @@ def default_probe_model(which: str, registry: dict | None = None) -> str:
 
 
 def subscription_command(which: str) -> str:
-    env_name, default = COMMANDS[which]
-    return os.environ.get(env_name) or default
+    """Same resolution as the runtime (jarvis.subscription.provider_command)."""
+    from jarvis.subscription import provider_command
+
+    return provider_command(which)
+
+
+def _category_for(exc: Exception) -> str:
+    """The legacy message table first (unchanged); then, for a switched-off
+    route, "gated"; then the runtime's own classification; else
+    "runtime_error"."""
+    from jarvis.subscription import SubscriptionCapabilityError
+
+    if isinstance(exc, SubscriptionCapabilityError):
+        return "gated"
+    category = _classify(str(exc))
+    if category != "runtime_error":
+        return category
+    return _RUNTIME_CATEGORY.get(getattr(exc, "category", ""), "runtime_error")
 
 
 def _classify(message: str) -> str:
@@ -141,7 +176,7 @@ def probe_subscription(which: Which, model: str | None = None, *,
         result["ok"] = text.strip() == PROBE_TOKEN
         result["response_present"] = bool(text.strip())
     except SubscriptionRuntimeError as exc:
-        result["category"] = _classify(str(exc))
+        result["category"] = _category_for(exc)
     with _cache_lock:
         _cache[key] = (time.monotonic(), dict(result))
     return result
