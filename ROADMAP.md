@@ -157,20 +157,20 @@ Claude’s work or enable any runtime feature.
 </details>
 
 <details id="ws-05">
-<summary>WS-05 — Model access: subscriptions, APIs and SAYGM · Codex proposed</summary>
+<summary>WS-05 — Model access: subscriptions, APIs and SAYGM · Codex</summary>
 
 **Workstream:** Model Use Enhancements MAR-A…J (checklist in §7)
 
-- **Owner:** `codex` (proposed)
-- **Status:** proposed: foundation landed, live gates open
+- **Owner:** `codex`
+- **Status:** claimed
 - **Implemented by:** Not itemized for every foundation component; WS-02 isolation is Codex
-- **Remaining work / acceptance:** Codex proposed; Larry confirms assignment
+- **Remaining work / acceptance:** Codex; Larry for live account/deployment steps
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** none yet
+- **Where:** `codex/isolated-20260924`
 - **Plan:** `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md`
 - **Scope:** `jarvis/model_routing.py`, `jarvis/model_preferences.py`, `config/model_access.yaml`
-- **Next step:** Larry confirms owner; MAR-A first
-- **Updated:** 09-22
+- **Next step:** Begin MAR-A: reconcile the deployed Mac checkout and capture live baseline evidence
+- **Updated:** 09-29
 
 </details>
 
