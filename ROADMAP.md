@@ -93,14 +93,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Make the privacy-preserving live-window capture assertion deterministic enough to unblock DEPLOY-MAIN without weakening what it proves.
 
 - **Owner:** `codex`
-- **Status:** review (PR #117); live capture acceptance open
+- **Status:** review (PR #117); live capture gate passed, deployment open
 - **Implemented by:** Codex diagnosis and test-fixture repair
-- **Remaining work / acceptance:** The `d460809` DEPLOY-MAIN run stopped in phase A on an exact pixel comparison between two separate protected/body-only windows. The test now reuses one window and still compares every captured pixel. Full MortimerHost passed 374 tests, seven skipped, zero failures; the actual capture was among the skips because this shell's test host could not activate. Require a real foreground capture with no skip, then Larry's DEPLOY-MAIN run. WS-08 orb deployment and visual acceptance resume afterward.
+- **Remaining work / acceptance:** The `d460809` DEPLOY-MAIN run stopped in phase A on an exact pixel comparison between two separate protected/body-only windows. The test now reuses one window and still compares every captured pixel. The old app-active prerequisite caused Larry's first interactive Terminal attempt to skip; removing only that prerequisite let real ScreenCaptureKit capture pass four consecutive focused runs and the full MortimerHost suite (374 tests, six unrelated skips, zero failures). After PR #117 merges, Larry reruns DEPLOY-MAIN. WS-08 orb deployment and visual acceptance resume afterward.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** `codex/ws16-protected-capture-20260929`
 - **Plan:** `docs/plans/MORTIMER_PROTECTED_WINDOW_CAPTURE_GATE_PLAN.md`
 - **Scope:** `macos/MortimerHost/Tests/MortimerHostTests/ProtectedDisplayContentTests.swift`, this row's plan and acceptance evidence, and `ROADMAP.md` status only. Product display code remains outside this row; WS-15 owns `Display/DisplayContentView.swift` while active.
-- **Next step:** Run the focused actual-window test from an interactive Terminal with Screen Recording permission; inspect any bounded difference report before merging PR #117.
+- **Next step:** Merge PR #117 after checks pass, then Larry reruns DEPLOY-MAIN and records the phase A capture result.
 - **Updated:** 09-29
 
 </details>
@@ -595,6 +595,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29: Codex WS-16 removed only the app-active precondition after Larry's interactive Terminal capture also skipped. ScreenCaptureKit's real full-window comparison then passed four focused runs without skips and the full MortimerHost suite (374 tests, six unrelated skips, zero failures). PR #117 remains in review; production deployment is still open.
 
 - 2026-09-29: Codex WS-16 claim landed in PR #116 (`5182bdf`). Codex changed only the protected-window test fixture: protected and body-only payloads now render in the same live window; the full-frame exact comparison remains, with bounded pixel-difference diagnostics. Full MortimerHost passed 374 tests, seven skipped, zero failures. The capture test skipped because this shell's test host could not activate, so foreground capture and DEPLOY-MAIN remain open.
 

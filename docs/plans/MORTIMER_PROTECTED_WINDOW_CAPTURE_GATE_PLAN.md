@@ -1,6 +1,6 @@
 # Protected-window capture gate repair (WS-16)
 
-**Status:** IN REVIEW (PR #117); real foreground capture and deployment open.
+**Status:** IN REVIEW (PR #117); real capture passed, deployment open.
 **Owner:** Codex. Larry runs DEPLOY-MAIN and accepts the live result.
 **Recorded:** 2026-09-29.
 
@@ -75,3 +75,11 @@ were displayed, and it is not a passing privacy check.
   failures. A skipped actual capture does not satisfy the live acceptance
   gate. Run it from an interactive Terminal with Screen Recording access,
   then run DEPLOY-MAIN after review/merge.
+- 2026-09-29: Larry's interactive Terminal run also skipped at the app-active
+  prerequisite. The test did not need foreground app activation: it already
+  requires a visible, unoccluded window and a real ScreenCaptureKit capture.
+  Removing only that prerequisite made the full-window protected/body-only
+  comparison execute and pass four consecutive focused runs with zero skips.
+  The full MortimerHost suite then passed 374 tests with six unrelated skips
+  and zero failures; its actual-window capture test executed and passed.
+  PR #117 review/merge and Larry's DEPLOY-MAIN run remain open.

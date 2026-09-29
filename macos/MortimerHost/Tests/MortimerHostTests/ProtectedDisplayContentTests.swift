@@ -97,12 +97,6 @@ final class ProtectedDisplayContentTests: XCTestCase {
         defer { _ = app.setActivationPolicy(originalPolicy) }
         app.finishLaunching()
         app.activate(ignoringOtherApps: true)
-        do {
-            try waitUntil("the test host app becomes active") { app.isActive }
-        } catch let error as NSError
-            where error.domain == "ProtectedDisplayContentTests.WindowCapturePrerequisite" {
-            throw XCTSkip("the test host cannot become active in this WindowServer session; real window capture is unavailable")
-        }
 
         let protected = try JSONDecoder().decode(DisplayPayload.self, from: Data(
             #"{"title":"Captured title canary","body":"Visible captured body","surface":"window","data_policy":"local_only","links":[{"label":"captured-link-canary","url":"https://private.invalid/?token=secret"}],"images":["https://private.invalid/image.png"],"basemap_images":["https://private.invalid/basemap-canary.png"],"commands":["captured command canary"],"content":"captured clipboard canary"}"#.utf8))
