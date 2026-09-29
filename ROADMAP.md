@@ -285,14 +285,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Orb crystal glass (#90), revised to use the crystal shell exclusively
 
 - **Owner:** `codex`
-- **Status:** review (implementation and focused gates complete; PR pending)
+- **Status:** landed (PR #112, merge commit `e9388fc`); deployment and live acceptance open
 - **Implemented by:** Claude original crystal-glass workstream; Codex rendering performance fixes and single-shell cleanup
-- **Remaining work / acceptance:** Codex implementation is ready for PR review. Focused crystal tests and timing gates pass. Full MortimerHost has one environment-sensitive failure in protected-window capture; it is outside WS-08 and skips on the unchanged base when the test host cannot activate. Larry verifies the deployed crystal orb in compact/expanded layouts and under Reduce Motion; his 09-29 observations pass the pre-cleanup build, with final deployed acceptance after this change.
+- **Remaining work / acceptance:** Deploy the merged crystal-only build, compare its five visual fixtures with the approved reference, then Larry verifies the orb in compact/expanded layouts and under Reduce Motion. His 09-29 observations pass the pre-cleanup build. The local full MortimerHost run had one environment-sensitive protected-window capture failure; PR #112's CI passed on rerun.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** `codex/ws08-crystal-only-20260929`
+- **Where:** main (PR #112, `e9388fc`)
 - **Plan:** `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`
 - **Scope:** Orb rendering, orb-specific configuration, performance/visual regression tests, and this plan's acceptance evidence.
-- **Next step:** Open/review the implementation PR, merge and deploy through the standard release flow, then Larry rechecks compact/expanded layouts and Reduce Motion.
+- **Next step:** Deploy `e9388fc` through the standard release flow, then Larry reviews the visual fixtures and rechecks compact/expanded layouts and Reduce Motion.
 - **Updated:** 09-29
 
 </details>
@@ -577,6 +577,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29: Codex WS-08 crystal-only implementation landed in PR #112 as `e9388fc`. The first `validate` run failed in an unchanged app-build timing test; that isolated test passed locally and the complete workflow passed on rerun. Sandbox controller and Knowledge base workflows also passed. Deployment and Larry's live orb checks remain open.
 
 - 2026-09-29: Codex completed the WS-08 crystal-only source change and updated the existing orb plan/acceptance record. Removed the atom-orb legacy draw branch, `OrbShell` runtime selector, and `JARVIS_ORB_CRYSTAL` flag; retained the separate Silo wave and all crystal art values. JarvisKit 215/0, focused crystal tests 7/0, focused orb frame-time test 1/0 (4.933/14.150 ms p50/p95; empty p50 0.842 ms). Full MortimerHost: 374 executed, five skipped, one environment-sensitive protected-window screenshot mismatch; on base `0cc42f2` and the focused current run it skipped because WindowServer could not activate the test host. PR and Larry's post-deployment visual/Reduce Motion acceptance remain open.
 - 2026-09-29 (evening, WS-15 PR 1): Claude (Cowork). Gates passed. G-1: IEM `/cache/` tiles and Weather.gov (7-day, hourly, alerts) answer from the Mac. G-2: the missing radar card was received but left unread, because `WorkspaceStore.receive` only activates a session's first result. G-3: Apple's map and IEM radar render in the ad-hoc-signed app, but tiles past z8 must be enlarged. PR 1 adds `local_weather` (place from this device, never memory), a 7-day forecast with humidity, wind, chance of rain and alerts, and wording so Mortimer stops denying it has radar.

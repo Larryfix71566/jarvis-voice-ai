@@ -1,6 +1,6 @@
 # Mortimer orb crystal glass plan — crystal shell only
 
-**Status:** IMPLEMENTATION COMPLETE; REVIEW PENDING — crystal-only renderer and tests are implemented on `codex/ws08-crystal-only-20260929`; focused checks pass. Full MortimerHost has one environment-sensitive protected-window capture failure (not claimed green); PR review, merge, deployment and Larry's post-deployment checks remain open.
+**Status:** LANDED IN MAIN — PR #112 merged as `e9388fc`; all CI workflows passed after a rerun of the unchanged app-build timing test. Deployment and Larry's visual and Reduce Motion acceptance remain open. The local full MortimerHost run had one environment-sensitive protected-window capture failure and is not claimed green.
 **Recorded:** 2026-09-29.
 **Original 2026-09-24 receipt:** `docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-24.md`.
 
@@ -1217,3 +1217,12 @@ Crystal visual fixtures and the timing JSON are under the ignored
 `macos/MortimerHost/.build/interface-fixtures/`. PR/CI, Larry's source-image
 comparison, merge/deployment, and post-deployment compact/expanded plus Reduce
 Motion checks remain open. No production files or app settings were changed.
+
+## 2026-09-29 — WS-08 merged and CI green
+
+PR #112 merged to main as `e9388fc`. Its first `validate` run failed in
+`tests/unit/test_admin_appbuild.py::test_submit_after_done_delegates_to_workspace`,
+which is outside WS-08 and unchanged by the PR. That test passed in an isolated
+local run; the full `validate` workflow passed on rerun, as did Sandbox controller
+and Knowledge base. The five-fixture comparison, deployment, and Larry's
+post-deployment compact/expanded and Reduce Motion checks remain open.
