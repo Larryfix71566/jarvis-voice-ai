@@ -4,7 +4,6 @@ import SwiftUI
 /// voice feedback. Geometry is deterministic so unavailable audio and reduced
 /// motion remain still, including the particle field and internal filaments.
 enum CometOrbRenderer {
-    private static let blue = Color(red: 0.24, green: 0.60, blue: 1)
     private static let ice = Color(red: 0.74, green: 0.91, blue: 1)
 
     private static func color(_ rgb: (Double, Double, Double)) -> Color {
@@ -24,8 +23,7 @@ enum CometOrbRenderer {
 
     static func draw(context: inout GraphicsContext, size: CGSize,
                      stageCenterX: CGFloat?, phase: Double, userEnergy: Double,
-                     outputEnergy: Double, activity: VoicePresentationState.Activity,
-                     shell: OrbShell = .resolved) {
+                     outputEnergy: Double, activity: VoicePresentationState.Activity) {
         let center = CGPoint(x: stageCenterX ?? size.width / 2, y: size.height / 2)
         // Give the sphere the prominence of the reference, with room for the
         // extended comet paths and bloom inside the existing compact bounds.
@@ -48,70 +46,9 @@ enum CometOrbRenderer {
         // envelopes. All temporal terms use the pausable phase, never uptime.
         let breath = ambient ? 0.94 + 0.06 * sin(phase * 1.2) : 1
 
-        // docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md: the crystal shell
-        // replaces everything below this point; the legacy shell stays
-        // verbatim as the rollback (JARVIS_ORB_CRYSTAL=off).
-        if shell == .crystal {
-            drawCrystalShell(context: &context, center: center, radius: radius, phase: phase,
-                             userEnergy: userEnergy, outputEnergy: outputEnergy, tint: tint,
-                             strength: strength, breath: breath, energy: energy, ready: ready)
-            return
-        }
-
-        // Split the orbits into back/front passes. The shell can tint rear
-        // trails, while near comets stay sharp instead of looking pasted on.
-        if ready {
-            comets(context: &context, center: center, radius: radius, phase: phase,
-                   userEnergy: userEnergy, outputEnergy: outputEnergy, front: false)
-        }
-        let sphere = disc(center, radius)
-        context.fill(disc(center, radius * 1.15), with: .radialGradient(
-            Gradient(stops: [.init(color: blue.opacity(0), location: 0.74),
-                             .init(color: blue.opacity(0.11 * strength), location: 0.85),
-                             .init(color: .clear, location: 1)]),
-            center: center, startRadius: 0, endRadius: radius * 1.15))
-        context.fill(sphere, with: .radialGradient(
-            Gradient(stops: [.init(color: blue.opacity(0.025), location: 0),
-                             .init(color: blue.opacity(0.06), location: 0.65),
-                             .init(color: blue.opacity(0.25 * strength), location: 0.91),
-                             .init(color: ice.opacity(0.38 * strength), location: 0.975),
-                             .init(color: blue.opacity(0.12), location: 1)]),
-            center: center, startRadius: 0, endRadius: radius))
-
-        var inside = context
-        inside.clip(to: disc(center, radius * 0.94))
-        plasma(context: &inside, center: center, radius: radius, phase: phase,
-               tint: tint, strength: strength * breath, energy: energy)
-
-        // Broken specular highlights replace the latitude/longitude cage.
-        // Unequal arcs and an off-center soft reflection read as curved glass.
-        for (start, length, opacity, width) in [
-            (3.45, 1.25, 0.76, 1.5), (0.05, 0.90, 0.54, 1.1),
-            (1.65, 0.48, 0.30, 0.8), (4.9, 0.34, 0.42, 0.7)
-        ] {
-            var arc = Path()
-            for i in 0...40 {
-                let t = Double(i) / 40
-                let theta = start + t * length
-                let r = radius * (0.966 + 0.007 * sin(t * .pi))
-                let point = CGPoint(x: center.x + cos(theta) * r,
-                                    y: center.y + sin(theta) * r)
-                if i == 0 { arc.move(to: point) } else { arc.addLine(to: point) }
-            }
-            context.stroke(arc, with: .color(ice.opacity(opacity * strength)),
-                           style: StrokeStyle(lineWidth: width, lineCap: .round))
-        }
-        var reflection = context
-        reflection.clip(to: sphere)
-        reflection.addFilter(.blur(radius: radius * 0.035))
-        let highlight = CGPoint(x: center.x - radius * 0.49, y: center.y - radius * 0.64)
-        reflection.fill(disc(highlight, radius * 0.25), with: .radialGradient(
-            Gradient(colors: [ice.opacity(0.40 * strength), ice.opacity(0.05), .clear]),
-            center: highlight, startRadius: 0, endRadius: radius * 0.25))
-        if ready {
-            comets(context: &context, center: center, radius: radius, phase: phase,
-                   userEnergy: userEnergy, outputEnergy: outputEnergy, front: true)
-        }
+        drawCrystalShell(context: &context, center: center, radius: radius, phase: phase,
+                         userEnergy: userEnergy, outputEnergy: outputEnergy, tint: tint,
+                         strength: strength, breath: breath, energy: energy, ready: ready)
     }
 
     private static func plasma(context: inout GraphicsContext, center: CGPoint,
@@ -287,8 +224,8 @@ enum CometOrbRenderer {
 }
 // MARK: - Crystal shell (docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md, option A)
 //
-// Same file as the legacy shell on purpose: it calls the private `plasma`,
-// `comets`, `disc`, `color` and `ice` members unchanged. Every blurred group
+// The crystal renderer calls the shared `plasma`, `comets`, `disc`, `color`
+// and `ice` helpers. Every blurred group
 // is drawn as ONE layer through a context copy that carries the filter, so
 // the blur applies to the composited group (GraphicsContext.addFilter
 // filters each drawing operation, and a drawLayer call is one operation).
