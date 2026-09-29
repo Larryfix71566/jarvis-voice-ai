@@ -1,7 +1,35 @@
-# Mortimer orb crystal glass plan — replace the orb's glass shell with option A
+# Mortimer orb crystal glass plan — crystal shell only
 
-**Status:** IMPLEMENTED and performance follow-up deployed at `539f8f6`, 2026-09-28 (see addendum below). Original 2026-09-24 receipt: receipt `docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-24.md`. Step 9's placement, Reduce Motion and rollback checks are open until recorded in that receipt.
-**Owner:** Larry. Implementation goes to a coding model in one pass. Larry runs every commit, merge and install, and steps 8 and 9. The implementer never runs `git merge`, `git push`, `launchctl`, `defaults write`, or `bundle.sh`.
+**Status:** IMPLEMENTATION IN PROGRESS — crystal shell and performance fix are deployed; single-shell cleanup is claimed in WS-08 on `codex/ws08-crystal-only-20260929`.
+**Recorded:** 2026-09-29.
+**Original 2026-09-24 receipt:** `docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-24.md`.
+
+### Revision 2 — crystal is the only orb shell (Larry, 2026-09-29)
+
+Larry directed that the crystal orb be the sole implementation. Remove the old
+orb-shell drawing branch, its `JARVIS_ORB_CRYSTAL` environment/UserDefaults
+rollback flag, and tests that instantiate the old shell. The app must always
+render the crystal shell; do not retain a hidden legacy fallback. This applies
+to the atom orb only: the separate Silo wave in legacy layout 0 remains outside
+this plan's scope. Keep the approved crystal design, colors, geometry, motion,
+accessibility behavior, and frame-time budget unchanged. Existing static
+research images may remain as historical references; they are not runtime
+alternatives.
+
+This amendment supersedes earlier D2/D3 rollback instructions, legacy-vs-crystal
+comparisons in tests, the legacy-relative frame-time gate, and the rollback part
+of step 9. Keep the empty-canvas sensitivity and 16.7 ms crystal p95 budget.
+Update the flag test to assert the crystal path is unconditional, or remove the
+test if the source structure makes that assertion redundant; do not add a
+runtime shell selector. No change to art constants is authorized.
+
+Larry's 2026-09-29 live observations on the deployed crystal build: compact and
+expanded layouts both displayed the orb correctly; Reduce Motion left the orb
+visible and stopped its movement. These are reported acceptance checks and must
+be recorded as user-observed, not as automated or independently observed facts.
+After the single-shell change is deployed, Larry rechecks those two behaviors;
+there is no rollback-to-old-shell check.
+**Design owner:** Larry. **Implementation:** Codex under WS-08 on the branch named in `ROADMAP.md`; commit and PR follow `AGENTS.md`. Larry merges and deploys. The implementer does not modify production, install the app, or change `defaults`.
 **Approved design:** option A ("Crystal") from the orb glass comparison, chosen by Larry on 2026-09-23. The comparison page is the Claude artifact https://claude.ai/artifact/852XZZzAqkt5WmHUe6ruGY. A copy of it and reference renders are checked in under `docs/interface-research/orb-crystal/`.
 **Baseline inspected:** `main` at `a1ca3c8` (2026-09-23). File hashes in §0 rule 2.
 **Safety claim:** the adaptive interface plan's contracts UI-1 through UI-7 (`docs/plans/MORTIMER_ADAPTIVE_INTERFACE_PLAN.md` §3) stay in force word for word. This plan adds no contract and relaxes none. It changes pixels inside the orb's glass and nothing else.
@@ -11,6 +39,7 @@ Path shorthand: `MH/` = `macos/MortimerHost/Sources/MortimerHost/`, `JK/` = `mac
 | Rev | Date | Change |
 |---|---|---|
 | 1 | 2026-09-23 | First version. |
+| 2 | 2026-09-29 | Crystal shell is the sole implementation; remove legacy shell and rollback flag at Larry's direction. |
 
 ## 0. Binding constraints for the implementing model
 
@@ -1168,3 +1197,8 @@ This closes staged source deployment, not live feature acceptance or activation.
 No runtime feature flags or provider routes were deliberately changed by this
 operation. Remote enabled-mode acceptance, provider/VM/voice/display/accessibility
 and plan-specific activation/rollback gates remain open where previously open.
+
+
+## 2026-09-29 — WS-08 single-shell direction claimed
+
+Larry confirmed that the crystal orb should be the only atom-orb shell. This revision removes the production fallback and rollback test; it does not change the crystal artwork or the separate Silo wave. Larry reports the current build passes compact/expanded appearance and Reduce Motion stillness checks. The updated source and tests remain unimplemented until this WS-08 claim lands on main.
