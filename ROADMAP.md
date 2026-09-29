@@ -245,7 +245,8 @@ Claude’s work or enable any runtime feature.
 
 - [ ] **Single transcript surface (Larry, 2026-09-28):** keep the transcript in the main window; remove the duplicate transcript/captions from the left/compact panel and reclaim the vacated space. Preserve the orb, speaker feedback, microphone/voice controls, and main-window transcript history/accessibility. This supersedes earlier requirements to repeat brief captions in the compact rail; full response/results routing remains unchanged.
   - **Status:** requested; not implemented or validated.
-  - **Implementation owner:** unassigned. **Acceptance:** Larry. **Recorded by:** Codex, at Larry’s request.
+  - **Implementation owner:** unassigned until dispatch; intended executor is Luna through Codex. **Acceptance:** Larry. **Plan author:** Codex, at Larry’s request.
+  - **Implementation handoff:** [WS-09 transcript cleanup — Luna implementation handoff](docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md#ws-09-transcript-cleanup--luna-implementation-handoff). Exact file scope, fixed v2-only behavior, regression commands and release criteria are specified; no implementation has started.
   - **Close when:** live user and Mortimer speech updates the main-window transcript without a duplicate in the compact rail, in single- and multi-monitor layouts; no blank transcript-sized gap or loss of voice controls/history.
 
 </details>
@@ -476,6 +477,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-28: Codex prepared Larry’s requested Luna handoff under the existing WS-09 Console/Atlas plan after inspecting `OrbFieldView`, `AdaptiveStageView`, `LogTab`, and transcript/result tests at `2c73700`. The duplicate is the `captions` call inside `compactReadout`; main history/results are separate. Plan only, no application edits or newly passed gates; intended executor Luna awaits dispatch.
 
 - 2026-09-28: Codex recorded Larry’s WS-09 requirement to keep the transcript in the main window and remove the duplicate from the compact left panel. Added the design amendment to the existing Console/Atlas plan; implementation remains unassigned and unchecked. No application behavior changed.
 
