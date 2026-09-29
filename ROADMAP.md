@@ -177,14 +177,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Verified gap closure GC24-00…06: execution lifecycle, privacy log redaction, memory admission, Atlas
 
 - **Owner:** `codex`
-- **Status:** in-progress: bounded action-claim settlement-order CI repair; earlier WS-01 foundation landed and deployed
+- **Status:** review: bounded action-claim settlement-order CI repair in PR #125; earlier WS-01 foundation landed and deployed
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Codex fixes the app-build and self-edit action-claim ordering exposed by PR #115 CI; Larry retains the original physical/live acceptance.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main (`539f8f6`); CI repair: `codex/ws01-action-claim-order-20260929`; shared-roadmap documentation: `codex/isolated-20260924`
 - **Plan:** `docs/plans/MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md`. The 12 gap-index plans fold into it (CX-05).
 - **Scope:** Existing WS-01 scope includes execution routes in `jarvis/admin/server.py`. This bounded follow-up changes only app-build/self-edit terminal claim ordering there, focused tests in `tests/unit/test_admin_appbuild.py` and `tests/unit/test_admin_selfedit.py`, this row's plan/acceptance evidence, and `ROADMAP.md` status. It does not edit WS-08 orb files or alter idempotency decisions.
-- **Next step:** Review and merge the WS-01 claim-order fix after full validation; then merge the fix into PR #115 and rerun its CI.
+- **Next step:** Pass PR #125 Linux CI, review and merge the WS-01 claim-order fix; then merge the fix into PR #115 and rerun its CI.
 - **Updated:** 09-29
 
 </details>
