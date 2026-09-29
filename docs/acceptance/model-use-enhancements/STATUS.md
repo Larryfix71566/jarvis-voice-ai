@@ -1,6 +1,6 @@
 # Model Use Enhancements — status
 
-**As of:** 2026-09-20
+**As of:** 2026-09-29
 **Plan:** [Model Use Enhancements](../../plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md)
 **Execution sequence:** [Remaining Gaps Implementation Plan](../../plans/MORTIMER_REMAINING_GAPS_IMPLEMENTATION_PLAN.md)
 
@@ -29,6 +29,7 @@ no linked receipt are also unreceipted.
 
 - [ ] **MAR-A** — Reconcile the installed Mac checkout with the candidate
   release and capture live baseline latency/quality/usage.
+  The 2026-09-29 baseline receipt confirms deployment-time revision identity and a 28/28 covered model-call-site audit. Aggregate usage is available, but the ledger has no latency, quality, or route/billing attribution; current process identity was not independently verified. MAR-A remains open pending a safe measurement method and the missing evidence. See [MAR-A baseline receipt](receipts/mar-a-baseline-2026-09-29.json).
 - [ ] **MAR-D** — Apply privacy policy checks to every tool result, council
   continuation, and usage/logging path. Enabled-mode confidential and
   local-only sub-agent runs now redact tool arguments/results and final

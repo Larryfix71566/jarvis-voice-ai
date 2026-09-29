@@ -32,8 +32,15 @@ voice-only built-in profile, so readiness checks validate the unchanged voice
 route while the general model registry continues to reject Haiku for
 non-voice workloads.
 
-**Stage status:** MAR-A is in progress because the deployed checkout still
-needs release reconciliation. MAR-B has its initial model/route/workload
+**Latest MAR-A progress (2026-09-29):** The deployment receipt ties the installed
+bundle and production checkout to `eb24e81`; the production-venv audit covers
+28/28 model call sites. Aggregate usage data is recorded in the
+[MAR-A baseline receipt](../acceptance/model-use-enhancements/receipts/mar-a-baseline-2026-09-29.json).
+It cannot establish latency, quality, route/billing attribution, or current
+process identity. MAR-A remains open until those gaps are measured through an
+agreed safe method. No provider calls or production changes were made.
+
+**Stage status:** MAR-A deployment reconciliation and call-site inventory are recorded in the 2026-09-29 baseline receipt; trustworthy latency/quality, route/billing attribution, and current-process identity evidence remain open. MAR-B has its initial model/route/workload
 contracts and MAR-C has the provider-neutral text execution contract. MAR-D
 has local privacy enforcement and enabled-mode confidential/local-only
 sub-agent run-log redaction, council call policy enforcement, and protected
@@ -505,3 +512,14 @@ the same routing rules, configuration ownership, and limitations.
 **Completion means the routes are configurable, policy-enforced, tested,
 deployed, and documented. An adapter existing in the repository alone does not
 close the item.**
+
+
+## 16. Progress log
+
+### 2026-09-29 — WS-05 MAR-A baseline reconciliation
+
+- Confirmed production deployment receipt and app bundle revision match production checkout `eb24e81`; launch agents report loaded, but current process identity was not independently verifiable.
+- Ran the production Python 3.12 model-call-site audit: 28 covered, zero review-required.
+- Captured aggregate-only usage/cost totals and workload counts. The ledger has no duration, quality score, or route/billing attribution.
+- Added the evidence and limitations to [`mar-a-baseline-2026-09-29.json`](../acceptance/model-use-enhancements/receipts/mar-a-baseline-2026-09-29.json). MAR-A stays open pending a safe, approved measurement method and the missing metrics.
+- No provider calls, feature activation, credential changes, prompt/response reads, or production writes.

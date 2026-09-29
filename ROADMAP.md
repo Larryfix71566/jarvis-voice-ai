@@ -93,14 +93,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Model Use Enhancements MAR-A…J (checklist in §7)
 
 - **Owner:** `codex`
-- **Status:** claimed
-- **Implemented by:** Not itemized for every foundation component; WS-02 isolation is Codex
-- **Remaining work / acceptance:** Codex; Larry for live account/deployment steps
+- **Status:** in-progress
+- **Implemented by:** Foundation contributions are not fully itemized; Codex is recording MAR-A baseline evidence
+- **Remaining work / acceptance:** Codex: complete MAR-A evidence and continue open gates; Larry for live provider/account or deployment decisions
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** `codex/isolated-20260924`
 - **Plan:** `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md`
-- **Scope:** `jarvis/model_routing.py`, `jarvis/model_preferences.py`, `config/model_access.yaml`
-- **Next step:** Begin MAR-A: reconcile the deployed Mac checkout and capture live baseline evidence
+- **Scope:** `jarvis/model_routing.py`, `jarvis/model_preferences.py`, `config/model_access.yaml`; `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md`; `docs/acceptance/model-use-enhancements/**`
+- **Next step:** Finish MAR-A baseline with a safe latency/quality measurement method; existing usage ledger has no durations, quality scores, or route/billing attribution
 - **Updated:** 09-29
 
 </details>
