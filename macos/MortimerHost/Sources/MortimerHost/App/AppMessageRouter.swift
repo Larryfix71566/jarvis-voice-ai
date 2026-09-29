@@ -207,6 +207,16 @@ final class AppMessageRouter {
                     // the workspace as the fallback when no supporting
                     // display is open; while the display is live its view
                     // yields through the locator in WorkspaceView.
+                    // WS-15 PR 2 (Larry, 2026-09-29: "they should be on one
+                    // window"): a weather card lives in the main window only
+                    // and comes to the front, instead of going to the
+                    // supporting display or waiting unread behind the
+                    // spoken reply (G-2 found both).
+                    if Self.showsInMainWindowOnly(payload) {
+                        workspace?.receive(result)
+                        workspace?.select(result.id)
+                        break
+                    }
                     switch payload.surface {
                     case .window:
                         // Protected local answers remain available in the
@@ -292,5 +302,14 @@ final class AppMessageRouter {
         stateSink = nil
         audioOutputSink = nil
         audioInputSink = nil
+    }
+}
+
+
+extension AppMessageRouter {
+    /// WS-15 PR 2: payloads that render only in the main window and are
+    /// selected on arrival. Pure; unit-tested (AppMessageRouterWeatherTests).
+    nonisolated static func showsInMainWindowOnly(_ payload: DisplayPayload) -> Bool {
+        payload.kind == "weather" && payload.weather != nil && !payload.isProtectedLocal
     }
 }

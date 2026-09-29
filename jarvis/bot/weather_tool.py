@@ -207,10 +207,17 @@ def build_local_weather_tool(
             payload = build_display_payload(
                 agent="mortimer", display_name="Mortimer", tool="weather_report",
                 arguments={},
-                result_str=json.dumps({"weather": weather,
-                                       "radar": {**radar, "city": label} if radar_ok else None}),
+                result_str=json.dumps({
+                    "weather": weather,
+                    "radar": {**radar, "city": label} if radar_ok else None,
+                    "place": {"label": label, "source": source, "approximate": approximate},
+                }),
             )
             if payload is not None:
+                # PR 2: inside the lower 48 the card's map uses NOAA radar
+                # tiles directly, so it has radar even if RainViewer failed.
+                if isinstance(payload.get("weather"), dict):
+                    radar_ok = payload["weather"].get("radar") is not None
                 try:
                     await push_display(payload)
                     card_sent = True

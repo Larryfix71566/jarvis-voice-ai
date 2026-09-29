@@ -165,7 +165,7 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-29: *"it is missing current radar and it defaults to memory for weather instead of checking current location and getting fresh weather."* A weather answer must use where Larry is now and show current radar for that place.
 
 - **Owner:** `claude`
-- **Status:** in-progress: PR 1 in review (`local_weather`: place from this device, 7-day forecast, humidity and wind, alerts, honest radar wording). PR 2 (native Apple-map card with NOAA radar, card to front) next. Gates G-1 to G-3 passed 09-29 (plan §4a).
+- **Status:** in-progress: PR 1 merged and deployed 09-29 (#110; logs show `local_weather` using the device fix). PR 2 in review: one weather card in the main window (summary, hours, 7 days, alerts) with Apple's map, NOAA radar loop and a pin.
 - **Implemented by:** Claude (plan); code not started
 - **Remaining work / acceptance:** Evidence from the 09-29 10:08 EDT session (`logs/agents/2026-09-29/`), read-only:
   1. **The location came from memory.** The voice model's delegation read *"typically in Spartanburg, SC or surrounding area"*. The analyst called `get_weather` and `get_weather_radar` with `"Spartanburg, SC"` and answered *"(assumed default, not confirmed device location)"*. Larry then had to name Charleston.
@@ -179,10 +179,10 @@ Claude’s work or enable any runtime feature.
 
   Acceptance, now A1–A5 in the plan: "what's the weather" with no place named uses a fresh device fix, or IP labeled approximate, never memory; the radar shown is for that same point and is current; a place Larry names still wins.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** branch `ws15/weather-location-radar-pr1`
+- **Where:** branch `ws15/weather-card-map-pr2`
 - **Plan:** `docs/plans/MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md` (Option A: `local_weather` direct tool; `jarvis/weather/report.py` with Weather.gov 7-day, hourly and alerts; IEM NEXRAD radar with RainViewer outside the US; native `RadarMapView` and `WeatherCardView`). It supersedes W5/W6 of `MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md`. Research: `Claude outputs/ws15/ws15_weather_research.html`.
 - **Scope:** `jarvis/weather/` (new), `jarvis/weathergov.py`, `mcp_servers/mcp_web/logic.py`, `mcp_servers/mcp_web/server.py`, `jarvis/bot/weather_tool.py` (new), tool registration in `jarvis/bot/pipeline.py`, `jarvis/bot/display.py`, weather lines in `jarvis/prompts.py`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift`, `Display/DisplayContentView.swift`, `Display/WeatherCardView.swift` and `Display/RadarMapView.swift` (new), and their tests and evals. Re-checked 09-29: none of these is inside another block's scope.
-- **Next step:** Larry merges PR 1 and runs DEPLOY-MAIN, then checks A1, A6 and A8 (voice and location). Claude builds PR 2 (S6) for the card and map checks (A2–A5, A7).
+- **Next step:** Larry merges PR 2 and runs DEPLOY-MAIN, then runs acceptance A1–A7 (plan §6); Claude checks A8 in the logs. Then WS-15 moves to accepted.
 - **Updated:** 09-29
 
 </details>
@@ -595,6 +595,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29 (night, WS-15 PR 2): Claude (Cowork). PR 1 (#110) is deployed and its logs confirm `local_weather` with the device fix. PR 2 follows Larry's one-window decision: the weather card lives in the main window only and is selected on arrival. It holds the summary, now, alerts, 12 hours, 7 days, and Apple's map with the NOAA/IEM radar loop and a pin; radar past zoom 8 is enlarged so it stays at street level.
 
 - 2026-09-29: Larry assigned Codex WS-16 after DEPLOY-MAIN for `d460809` stopped before production changes on the protected-window screenshot equality test. The logged captures differ in 21,946/1,041,600 pixels at the frame edge and body text; the central content matches. This docs-only claim reserves the test file and a separate worktree; it does not change product display code or relax the privacy assertion.
 
