@@ -280,20 +280,20 @@ Claude’s work or enable any runtime feature.
 </details>
 
 <details id="ws-08">
-<summary>WS-08 — Crystal orb · Claude original; Codex fixes; Larry acceptance</summary>
+<summary>WS-08 — Crystal orb, single shell · Codex implementation; Larry acceptance</summary>
 
-**Workstream:** Orb crystal glass (#90)
+**Workstream:** Orb crystal glass (#90), revised to use the crystal shell exclusively
 
-- **Owner:** `codex` (Larry, 09-28)
-- **Status:** landed; deployed `539f8f6`; step 9 open
-- **Implemented by:** Claude original workstream; Codex rendering performance fixes
-- **Remaining work / acceptance:** Larry: placement, Reduce Motion, rollback
+- **Owner:** `codex`
+- **Status:** claimed
+- **Implemented by:** Claude original crystal-glass workstream; Codex rendering performance fixes; Codex single-shell cleanup in progress
+- **Remaining work / acceptance:** Codex removes the old orb-shell renderer and rollback flag and updates tests. Larry verifies the deployed crystal orb remains correct in compact/expanded layouts and under Reduce Motion; his 09-29 observations pass the current build, with final deployed acceptance after cleanup.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (`539f8f6`)
+- **Where:** `codex/ws08-crystal-only-20260929`
 - **Plan:** `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`
-- **Scope:** Orb rendering and its performance/visual regression tests
-- **Next step:** Performance gate passed in exact-main deployment. Larry runs the three step-9 checks (placement, Reduce Motion, rollback) using Claude's 09-28 checklist; Claude then fills in the receipt's "Live check" lines.
-- **Updated:** 09-28
+- **Scope:** Orb rendering, orb-specific configuration, performance/visual regression tests, and this plan's acceptance evidence.
+- **Next step:** Merge this ownership/design claim, then remove the legacy renderer and `JARVIS_ORB_CRYSTAL` rollback toggle while preserving the crystal appearance and existing performance budget.
+- **Updated:** 09-29
 
 </details>
 
