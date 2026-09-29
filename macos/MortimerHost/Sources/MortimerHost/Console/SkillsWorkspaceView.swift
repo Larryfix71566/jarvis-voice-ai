@@ -145,6 +145,40 @@ private struct SkillsCatalogCardRowContent: View, Equatable {
     }
 }
 
+/// Keep the button and its accessibility modifiers stable as well as its
+/// label. Actions read the current shared store/coordinator, so equality never
+/// retains a closure with an obsolete catalog or navigation snapshot.
+private struct SkillsCatalogCardButton: View, Equatable {
+    let card: SkillsCatalogCard
+    let isSelected: Bool
+    let differentiateWithoutColor: Bool
+    let reduceTransparency: Bool
+    let store: SkillsStore
+    let coordinator: ConsoleActionCoordinator?
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.card == rhs.card && lhs.isSelected == rhs.isSelected
+            && lhs.differentiateWithoutColor == rhs.differentiateWithoutColor
+            && lhs.reduceTransparency == rhs.reduceTransparency
+            && lhs.store === rhs.store && lhs.coordinator === rhs.coordinator
+    }
+
+    var body: some View {
+        Button {
+            if let coordinator { _ = coordinator.executePointer(.skillSelect, target: card.id) }
+            else { _ = store.selectSkill(card.id) }
+        } label: {
+            SkillsCatalogCardRowContent(card: card, isSelected: isSelected,
+                differentiateWithoutColor: differentiateWithoutColor,
+                reduceTransparency: reduceTransparency)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityValue(card.enabled ? "Enabled" : "Disabled")
+        .accessibilityHint("Opens the skill overview and intended process")
+    }
+}
+
 enum SkillsWorkspacePresentationPolicy {
     static func needsAttention(
         installation: String,
@@ -534,23 +568,11 @@ struct SkillsWorkspaceView: View {
     }
 
     private func cardRow(_ card: SkillsCatalogCard) -> some View {
-        let isSelected = selectedID == card.id
-        return Button {
-            if let coordinator { _ = coordinator.executePointer(.skillSelect, target: card.id) }
-            else { Task { await select(card.id) } }
-        } label: {
-            SkillsCatalogCardRowContent(
-                card: card,
-                isSelected: isSelected,
-                differentiateWithoutColor: differentiateWithoutColor,
-                reduceTransparency: reduceTransparency
-            )
-            .equatable()
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityValue(card.enabled ? "Enabled" : "Disabled")
-        .accessibilityHint("Opens the skill overview and intended process")
+        SkillsCatalogCardButton(card: card, isSelected: selectedID == card.id,
+            differentiateWithoutColor: differentiateWithoutColor,
+            reduceTransparency: reduceTransparency, store: skillsStore,
+            coordinator: coordinator)
+        .equatable()
     }
 
     @ViewBuilder
@@ -1430,21 +1452,6 @@ struct SkillsWorkspaceView: View {
               let pending = skillsStore.takePendingVoiceDraft() else { return }
         voiceDraft = pending
         showingCreator = true
-    }
-
-    @MainActor
-    private func select(_ id: String) async {
-        guard let card = cards.first(where: { $0.id == id }) else { return }
-        let changingSkill = skillsStore.selectedSkillID != id
-        _ = skillsStore.selectSkill(id)
-        appliedNavigationSkillID = id
-        compactShowsDetail = true
-        if changingSkill {
-            activeTab = "overview"
-            selectedStepID = nil
-            activityState.selectSkill(id)
-        }
-        await loadDetail(for: id, revision: card.revision)
     }
 
     @MainActor

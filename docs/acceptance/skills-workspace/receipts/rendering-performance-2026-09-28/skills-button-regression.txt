@@ -1,0 +1,75 @@
+Building for debugging...
+[1 / 1]
+[2 / 7] MortimerHostTests-product
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/codex-isolated-20260924/macos/MortimerHost/Tests/MortimerHostTests/CompactConversationTests.swift:11:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+ 9 |     func testSavedCompactPreferenceChangesNativeConversationPresentation() throws {
+10 |         _ = NSApplication.shared
+11 |         NSApplication.shared.accessibilitySetValue(true,
+   |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+12 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+13 |         let suite = "compact-conversation-" + UUID().uuidString
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/codex-isolated-20260924/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:156:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+154 |     func testOverflowButtonsReachBothEndsWithoutChangingSelection() throws {
+155 |         _ = NSApplication.shared
+156 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+157 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+158 |         let selection = HeaderSelection()
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/codex-isolated-20260924/macos/MortimerHost/Tests/MortimerHostTests/SkillsWorkspaceRenderingTests.swift:478:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+476 |     func testLibraryAndSelectedProcessStepRenderAtWideAndNarrowWidths() throws {
+477 |         _ = NSApplication.shared
+478 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+479 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+480 |         let client = JarvisClient(config: JarvisConfig(
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/codex-isolated-20260924/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayAcceptanceTests.swift:125:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+123 |     func testReturningToOriginalPanelsPreservesResearchPinsAndReadingState() throws {
+124 |         _ = NSApplication.shared
+125 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+126 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+127 |         let suite = "supporting-display-" + UUID().uuidString
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[4 / 9] MortimerHostTests-product
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/codex-isolated-20260924/macos/MortimerHost/Tests/MortimerHostTests/SkillsWorkspaceRenderingTests.swift:478:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+476 |     func testLibraryAndSelectedProcessStepRenderAtWideAndNarrowWidths() throws {
+477 |         _ = NSApplication.shared
+478 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+479 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+480 |         let client = JarvisClient(config: JarvisConfig(
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/codex-isolated-20260924/macos/MortimerHost/Tests/MortimerHostTests/SkillsWorkspaceRenderingTests.swift:622:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+620 |     func testAccessibilitySizeEnvironmentKeepsProcessDetailsExposedInCompactLayout() throws {
+621 |         _ = NSApplication.shared
+622 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+623 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+624 |         let client = JarvisClient(config: JarvisConfig(
+
+/Users/larryfix/Documents/Codex/2026-09-09/can/work/codex-isolated-20260924/macos/MortimerHost/Tests/MortimerHostTests/SkillsWorkspaceRenderingTests.swift:793:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+791 |     func testVersionsViewSeparatesInstalledPinFromCandidateAndDisclaimsHistory() throws {
+792 |         _ = NSApplication.shared
+793 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+794 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+795 |         let client = JarvisClient(config: JarvisConfig(
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[10 / 14] MortimerHostTests-product
+Build complete! (1.30 sec)
+Test Suite 'Selected tests' started at 2026-09-28 20:03:43.455.
+Test Suite 'MortimerHostTests.xctest' started at 2026-09-28 20:03:43.456.
+Test Suite 'SkillsWorkspaceRenderingTests' started at 2026-09-28 20:03:43.456.
+Test Case '-[MortimerHostTests.SkillsWorkspaceRenderingTests testLibraryAndSelectedProcessStepRenderAtWideAndNarrowWidths]' started.
+Test Case '-[MortimerHostTests.SkillsWorkspaceRenderingTests testLibraryAndSelectedProcessStepRenderAtWideAndNarrowWidths]' passed (2.528 seconds).
+Test Suite 'SkillsWorkspaceRenderingTests' passed at 2026-09-28 20:03:45.984.
+	 Executed 1 test, with 0 failures (0 unexpected) in 2.528 (2.528) seconds
+Test Suite 'MortimerHostTests.xctest' passed at 2026-09-28 20:03:45.984.
+	 Executed 1 test, with 0 failures (0 unexpected) in 2.528 (2.528) seconds
+Test Suite 'Selected tests' passed at 2026-09-28 20:03:45.984.
+	 Executed 1 test, with 0 failures (0 unexpected) in 2.528 (2.529) seconds

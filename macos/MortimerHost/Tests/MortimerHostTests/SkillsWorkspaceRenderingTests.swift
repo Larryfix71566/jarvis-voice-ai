@@ -510,6 +510,7 @@ final class SkillsWorkspaceRenderingTests: XCTestCase {
             XCTAssertNil(skills.selectedSkillID, "opening Skills must land on the library, not auto-open the first card")
             view.layoutSubtreeIfNeeded()
             var cardAccessibilityValues: [String] = []
+            var enabledCardControl: NSObject?
             var controlAccessibilityLabels: [String] = []
             var visitedAXElements = Set<ObjectIdentifier>()
             func collectCardValues(_ value: Any) {
@@ -524,6 +525,10 @@ final class SkillsWorkspaceRenderingTests: XCTestCase {
                 if element.responds(to: valueSelector),
                    let accessibilityValue = element.perform(valueSelector)?.takeUnretainedValue() as? String {
                     cardAccessibilityValues.append(accessibilityValue)
+                    if accessibilityValue == "Enabled",
+                       element.responds(to: NSSelectorFromString("accessibilityPerformPress")) {
+                        enabledCardControl = element
+                    }
                 }
                 let childrenSelector = NSSelectorFromString("accessibilityChildren")
                 if element.responds(to: childrenSelector),
@@ -553,7 +558,13 @@ final class SkillsWorkspaceRenderingTests: XCTestCase {
             try FileManager.default.createDirectory(at: libraryOutput.deletingLastPathComponent(),
                                                     withIntermediateDirectories: true)
             try XCTUnwrap(libraryBitmap.representation(using: .png, properties: [:])).write(to: libraryOutput)
-            XCTAssertTrue(skills.selectSkill("demo-skill"))
+            // Exercise the actual catalog button, not a direct store mutation:
+            // the stable row must retain its action as well as its pixels.
+            let button = try XCTUnwrap(enabledCardControl)
+            let press = NSSelectorFromString("accessibilityPerformPress")
+            typealias Press = @convention(c) (AnyObject, Selector) -> Bool
+            XCTAssertTrue(unsafeBitCast(button.method(for: press), to: Press.self)(button, press))
+            XCTAssertEqual(skills.selectedSkillID, "demo-skill")
             let detailLoaded = expectation(description: "selected skill detail loads")
             Task { @MainActor in
                 let deadline = Date().addingTimeInterval(4)

@@ -1,0 +1,146 @@
+{
+  "baseline": "1ec20d6",
+  "comparison": "decoded RGBA pixels, 800x360, same host and fixture states",
+  "images": [
+    {
+      "image": "orb-crystal-idle.png",
+      "size": [
+        800,
+        360
+      ],
+      "maximum_channel_difference": 0,
+      "mean_channel_difference": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "image": "orb-crystal-mortimer.png",
+      "size": [
+        800,
+        360
+      ],
+      "maximum_channel_difference": 0,
+      "mean_channel_difference": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "image": "orb-crystal-overlap.png",
+      "size": [
+        800,
+        360
+      ],
+      "maximum_channel_difference": 0,
+      "mean_channel_difference": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "image": "orb-crystal-standby.png",
+      "size": [
+        800,
+        360
+      ],
+      "maximum_channel_difference": 0,
+      "mean_channel_difference": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "image": "orb-crystal-user.png",
+      "size": [
+        800,
+        360
+      ],
+      "maximum_channel_difference": 0,
+      "mean_channel_difference": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "image": "orb-legacy-idle.png",
+      "size": [
+        800,
+        360
+      ],
+      "maximum_channel_difference": 0,
+      "mean_channel_difference": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "image": "orb-legacy-mortimer.png",
+      "size": [
+        800,
+        360
+      ],
+      "maximum_channel_difference": 0,
+      "mean_channel_difference": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "image": "orb-legacy-overlap.png",
+      "size": [
+        800,
+        360
+      ],
+      "maximum_channel_difference": 0,
+      "mean_channel_difference": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "image": "orb-legacy-standby.png",
+      "size": [
+        800,
+        360
+      ],
+      "maximum_channel_difference": 0,
+      "mean_channel_difference": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "image": "orb-legacy-user.png",
+      "size": [
+        800,
+        360
+      ],
+      "maximum_channel_difference": 0,
+      "mean_channel_difference": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ]
+}
