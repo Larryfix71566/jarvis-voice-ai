@@ -2,7 +2,7 @@
 
 This file is the single record of **who is doing what** in this repository, for every system that writes code here. Plans (`docs/plans/`) hold design. Receipts (`docs/acceptance/`) hold evidence. **This file holds ownership and state.**
 
-**Last reconciled:** 2026-09-28, against main and deployed release `539f8f6`; Codex branch `codex/isolated-20260924` holds the status receipt. Original evaluation: [cross-system evaluation](docs/reviews/CROSS_SYSTEM_PLAN_EVAL_2026-09-27.md).
+**Last reconciled:** 2026-09-29, against main after PR #105. Production runs `eb24e81` (PR #102 merge), deployed 09-29 10:07 EDT by DEPLOY-MAIN. It includes everything landed through PR #102, including PR #99; blocks that still say "deployed `539f8f6`" are covered by it. No PRs were open at reconcile time. Original evaluation: [cross-system evaluation](docs/reviews/CROSS_SYSTEM_PLAN_EVAL_2026-09-27.md).
 
 ---
 
@@ -182,12 +182,12 @@ Claude’s work or enable any runtime feature.
 - **Owner:** `claude`
 - **Status:** landed; Mac checks open
 - **Implemented by:** Claude
-- **Remaining work / acceptance:** Larry, guided by Claude: of the 11 Mac checks vetted against `539f8f6` on 09-28, 1 is closed (#9, Swift: JarvisKit 219/0 in DEPLOY-MAIN), 2 are nearly closed (#1 catalogs, #4 daily job: both pass on `data/status/daily-*.json` and only need the spoken answer), 1 is failing (#2 subscriptions) and 7 are open. The tier decision for `config/model_access.yaml` is still Larry's.
+- **Remaining work / acceptance:** Larry, guided by Claude. Of the 11 Mac checks: #9 is closed (Swift). #2 passes on data: after WS-14 was deployed, the daily file at 14:11 UTC 09-29 shows the Claude subscription `ok: true`, and Codex `not_installed` is expected. #1 and #4 pass on data. Still open are the spoken answers for #1, #2, #4 and #8, and checks #3, #5, #6, #7, #10 and #11. The tier decision for `config/model_access.yaml` is Larry's.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main
 - **Plan:** `docs/plans/MORTIMER_SELF_SERVICE_ACCESS_IMPLEMENTATION_SPEC.md` and its companion `docs/plans/MORTIMER_SELF_SERVICE_ACCESS_AND_RECOVERY_PLAN.md` (added to main in PR #100, CX-09). Registry half: `docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md`
 - **Scope:** —
-- **Next step:** Check #2 needs WS-14 first. Setting the `.env` variables would not have been enough, because the variable fed only the installed check. On 09-29 Larry linked `/opt/homebrew/bin/claude` → `~/.local/bin/claude`, which is on the launchd PATH. The rerun daily file (`daily-2026-09-29.json`, 13:08 UTC) then showed `installed: true` but `runtime_error`. Reproducing the bot's exact call gave `Not logged in` without `USER` and `MORTIMER_SUBSCRIPTION_PROBE_OK` with `USER`/`LOGNAME`. Once WS-14 is deployed, rerun `com.mortimer.status-daily`. Then do the spoken and process checks. Codex's expected result is `gated` until its no-tools verification.
+- **Next step:** Larry runs the spoken and process checks from Claude's checklist (`Claude outputs/checklists/WS-06_self_service_checks.md`), then decides the `model_access.yaml` tier (Claude recommends deny).
 - **Updated:** 09-29
 
 </details>
@@ -234,14 +234,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Command Console and Atlas release acceptance
 
 - **Owner:** `larry`
-- **Status:** landed (PR #99, merge commit `4986c10`); Mac acceptance remains open
+- **Status:** landed (PR #99, merge commit `4986c10`); deployed in `eb24e81` on 09-29; Mac acceptance remains open
 - **Implemented by:** Codex (Codex desktop; exact model build is not exposed)
 - **Remaining work / acceptance:** Larry (Mac/live acceptance)
 - **Model version:** not recorded in a handoff receipt.
 - **Where:** [PR #99](https://github.com/Larryfix71566/jarvis-voice-ai/pull/99), merged to `main` as `4986c10`
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md`
 - **Scope:** —
-- **Next step:** After release authorization, deploy through `scripts/deploy_main.sh`; Larry then completes physical single- and multi-monitor acceptance on the deployed build.
+- **Next step:** Larry completes the physical single- and multi-monitor acceptance on the deployed build (`eb24e81`)
 - **Updated:** 09-29
 
 - [ ] **Single transcript surface (Larry, 2026-09-28):** keep the transcript in the main window; remove the duplicate transcript/captions from the left/compact panel and reclaim the vacated space. Preserve the orb, speaker feedback, microphone/voice controls, and main-window transcript history/accessibility. This supersedes earlier requirements to repeat brief captions in the compact rail; full response/results routing remains unchanged.
@@ -567,6 +567,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29 (night): Claude (Cowork) reconciled the roadmap with production `eb24e81`. The header now names the live release. WS-09 is recorded as deployed (PR #99 is in `eb24e81`), leaving only Mac acceptance. WS-06 check #2 now passes on data. `gh pr list` showed no open PRs. Codex was asked to confirm WS-01 to WS-05 itself (rule 9).
 
 - 2026-09-29 (evening): Claude (Cowork). WS-15 gains Larry's radar report: no radar showed, and the map under it is wrong for the area. Found in code: the app stacks the nine radar tiles vertically instead of stitching a 3×3 map, at a coarse zoom 6. Why radar did not show at all is untested. The scope adds the Swift radar view (coordinate with WS-09).
 
