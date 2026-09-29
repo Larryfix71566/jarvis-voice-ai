@@ -122,7 +122,7 @@ final class ProtectedDisplayContentTests: XCTestCase {
         capturedView.rootView = displayView(bodyOnly)
         capturedView.layoutSubtreeIfNeeded()
         capturedWindow.displayIfNeeded()
-        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        try await Task.sleep(nanoseconds: 200_000_000)
         try waitUntil("the body-only reference window is visible and unoccluded") {
             capturedWindow.isVisible && capturedWindow.occlusionState.contains(.visible)
         }
