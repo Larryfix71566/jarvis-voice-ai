@@ -1210,3 +1210,14 @@ This closes staged source deployment, not live feature acceptance or activation.
 No runtime feature flags or provider routes were deliberately changed by this
 operation. Remote enabled-mode acceptance, provider/VM/voice/display/accessibility
 and plan-specific activation/rollback gates remain open where previously open.
+
+
+### 2026-09-28 — repeated WS-01 integration instruction reconciled
+
+Fetched main and read its AGENTS/ROADMAP; current work was already committed
+and merge returned already up to date. The former conflicts are integrated
+in deployed `539f8f6`, with both workflow/status and Codex privacy/memory changes
+preserved. ROADMAP §3 now records the reserved migration names as applied,
+not pending renumbering. No applied migration was renamed or replayed.
+Focused R1/database/watcher checks passed 140 tests; the exact merged-release
+full-suite and deployment receipt above remain the release evidence.

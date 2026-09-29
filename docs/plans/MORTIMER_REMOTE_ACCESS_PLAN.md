@@ -59,7 +59,7 @@ Maps each closed review/cross-plan finding to the section changed and what chang
 | F20 | MINOR | §5 Step 7 | "add `import os`" instruction added for `spoken_acceptance.py`. |
 | F21 | MINOR | §9, §3 A5 | "Rotating the service token" paragraph added; A5 notes `service_headers()` is captured once per `AdminClient` (process-lifetime). |
 | F22 | MINOR | §3 A10, §5 Step 7 | Runner-app docstring range corrected to `run.py:169-183`. |
-| CP-F1 | BLOCKER | §0.7, §3 A3, §5 Step 1 | Migration cross-guard added (REMOTE owns `0034_client_tokens`; MAIL moves to `0035`); `MIGRATIONS` insertion anchored by "append after the last tuple", not a line number. |
+| CP-F1 | BLOCKER | §0.7, §3 A3, §5 Step 1 | Migration cross-guard added (REMOTE owns `0034_client_tokens`; MAIL reserves `0035`); `MIGRATIONS` insertion anchored by "append after the last tuple", not a line number. |
 | CP-F4 | MAJOR | §4 manifest rows, §5 Step 6(d) | `mcp_selfedit`/`mcp_web` manifest rows say **append** `JARVIS_SERVICE_TOKEN` (never replace — do not delete SEC's `JARVIS_UPGRADE_PROFILE` or `TAVILY_API_KEY`). |
 | CP-F6 | BLOCKER | §9, §10 R15, §7 T-A34b | Note added that `JARVIS_ENV_SCOPING_ENABLED=false` post-REMOTE leaks the token to all twelve children; `test_service_token_is_not_in_a_scoped_child_env` + CI-ordering assertion added. (SEC owns the §9 kill-switch row.) |
 | CP-F15 | MAJOR | §3 A15, §5 Step 10, §6, §8 V6 | K1 Keychain convention fixed to service `"com.mortimer.jarviskit"`, account `<scheme>://<host>:<port>` from the bot URL; NATIVE uses the same item. |
@@ -93,7 +93,7 @@ Roadmap §1's table and K5 imply the bot URL is configured. Verified: `grep -rn 
 4. **Do not fork, vendor, patch, or monkey-patch Pipecat.** `/usr/local/lib/python3.11/dist-packages/pipecat` (1.4.0) is read-only reference. A10's decision tree has exactly two branches and a third "report and stop" outcome; there is no fourth.
 5. **Write the code in §5 verbatim.** Where §5 gives a complete module, that module's content is the plan's content — do not "improve" the constant-time compare, do not add a cache, do not add a second verification path.
 6. **Kill switches are read in exactly one place each.** `JARVIS_AUTH_ENABLED` is read only in `jarvis/auth.py:auth_enabled()`. `JARVIS_BIND_HOST` is read only in `jarvis/bind.py:resolve_bind_host()`. If you find yourself reading either name a second time, you are wrong.
-7. **Migrations are append-only, and REMOTE owns `0034_client_tokens`.** Add one `MIGRATION_<n+1>` constant and **append its tuple after the last tuple in `MIGRATIONS`** (locate that tuple by searching for the newest `(".._..", MIGRATION_..)` line — today `("0033_skill_events", MIGRATION_0033_skill_events)` — not by a line number); never edit an existing migration string, never renumber. **Cross-plan guard (CP-F1):** REMOTE (W1) owns `0034_client_tokens`; `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (MAIL) moves its brief migration to `0035_brief`. Because `CREATE TABLE IF NOT EXISTS` makes a number collision silent, confirm before you start that no other `0034_*` exists: `grep -c 0034 jarvis/db.py` should be 0 (the existing newest is `0033`). If a `0034_*` other than `client_tokens` is already present, **stop and report** — wave order was violated.
+7. **Migrations are append-only, and REMOTE owns `0034_client_tokens`.** Add one `MIGRATION_<n+1>` constant and **append its tuple after the last tuple in `MIGRATIONS`** (locate that tuple by searching for the newest `(".._..", MIGRATION_..)` line — today `("0033_skill_events", MIGRATION_0033_skill_events)` — not by a line number); never edit an existing migration string, never renumber. **Cross-plan guard (CP-F1):** REMOTE (W1) owns `0034_client_tokens`; `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (MAIL) reserves `0035_brief`. Because `CREATE TABLE IF NOT EXISTS` makes a number collision silent, confirm before you start that no other `0034_*` exists: `grep -c 0034 jarvis/db.py` should be 0 (the existing newest is `0033`). If a `0034_*` other than `client_tokens` is already present, **stop and report** — wave order was violated.
 8. **`pytest tests/unit -q` must be green before you stop.** The suite is ~1538 tests today; §5 Step 5 changes the default auth posture for the whole suite and Step 5 is where you prove nothing else broke.
 9. **Every new module is stdlib-only or `jarvis.db`-only** unless §5 says otherwise. `jarvis/auth.py`, `jarvis/bind.py`, `jarvis/urls.py`, and `jarvis/authmw.py` import no third-party package — they are imported by the bot, the sidecar, the CLI, and MCP children.
 10. **If a step's precondition is not true, stop and report.** Do not improvise a substitute. The two places this can happen are A10's Check B1 and constraint 11 below.
@@ -117,13 +117,12 @@ There is no `StaticFiles` mount anywhere in the file (`grep -n 'StaticFiles\|app
 
 ### 1.2 Sidecar source route inventory — 79 decorators
 
-Refreshed 2026-09-28 on the in-progress merge of main `2e6f769`. This is a
-source inventory, not a successful runtime auth test. All routes must be
-covered by the shared bearer middleware when auth is enabled; none is exempt.
-With auth dormant, the service binds only to loopback. Skills request ownership
-is also checked server-side. `test_every_sidecar_route_requires_bearer_token`
-will verify the actual `APIRoute` count after memory imports are resolved.
-Line numbers below refer to this source snapshot.
+Revalidated 2026-09-28 against deployed main `539f8f6`: 79 runtime
+`APIRoute` entries. `test_every_sidecar_route_requires_bearer_token` passes
+for every route, including all ten integrated status/workflow routes. An
+isolated actual admin server also passed enabled/dormant health checks.
+No route is exempt with authentication enabled. Dormant auth forces loopback.
+Line numbers below are the earlier `2e6f769` source snapshot, not current offsets.
 
 | # | Method | Path | Line |
 |---|---|---|---|
@@ -2588,7 +2587,7 @@ The pass condition is unchanged: admin 200, vault 200, bot 307 or 200.
 
 ### R1.7 Migration id and route inventory
 
-- **Migration:** rename the unshipped `0031_client_tokens` to reserved `0034_client_tokens` (`ROADMAP.md` §3). In this plan's §0.7 and CP-F1, replace "REMOTE owns `0034_client_tokens`; MAIL moves to `0035`" with "REMOTE owns `0034_client_tokens`; MAIL reserves `0035`". Under the dormant default the table is created but unused, which is additive and harmless.
+- **Migration:** rename the unshipped `0031_client_tokens` to reserved `0034_client_tokens` (`ROADMAP.md` §3). The cross-plan guard in §0.7 and CP-F1 is "REMOTE owns `0034_client_tokens`; MAIL reserves `0035`". This renumbering is complete and applied in production as of 2026-09-28; do not repeat it. Under the dormant default the table is created but unused, which is additive and harmless.
 - **Route inventory:** after the merge, the sidecar has main's 10 routes that Codex's tree lacks (`/api/status/{build,catalog,github,location,logs,models,overview,services}`, `POST /api/status/subscription/probe`, `/api/workflows`), plus Codex's own. Recount decorators on the merged tree and update §1.2's table and `EXPECTED_SIDECAR_ROUTES` in `tests/unit/test_auth_middleware.py`. By decorator count the result is about 74 (58 shared, 10 main-only, 6 Codex-only); the test's `APIRoute` count is authoritative. Better still, replace the bare number with an explicit sorted list of `(method, path)`, so a newly added route fails the test with its name rather than a count.
 - `test_every_sidecar_route_requires_bearer_token` then proves that the 10 main routes also answer 401 when auth is enabled.
 
@@ -2689,3 +2688,37 @@ This closes staged source deployment, not live feature acceptance or activation.
 No runtime feature flags or provider routes were deliberately changed by this
 operation. Remote enabled-mode acceptance, provider/VM/voice/display/accessibility
 and plan-specific activation/rollback gates remain open where previously open.
+
+
+### 2026-09-28 — R1 revalidation after main deployment
+
+At Larry's renewed WS-01/WS-04 instruction, fetched main, read AGENTS/ROADMAP
+from `origin/main`, confirmed current work committed, and merged main (already
+up to date). R1.2–R1.8 runtime implementation is already present and deployed:
+explicit-true authentication, dormant loopback, service headers on all internal
+callers, preserved watcher/self-edit behavior, source guard, authenticated
+health helper and human deny entry, migration `0034_client_tokens`, 79-route
+middleware coverage, and native shared authenticated sender.
+
+The `.env.example` comment now matches R1's opt-in wording exactly; it remains
+commented and changes no running setting. The status-tool service-token test
+also checks the explicitly requested unset-token case. ROADMAP §3 now records
+the actual applied migration IDs rather than instructing another renumbering.
+
+A disposable loopback server ran the actual admin ASGI application with lifespan
+disabled, a temporary database and a synthetic service token: enabled bare
+health 401; enabled health helper 200; helper without token 401; dormant bare
+health and helper without token both 200. Server and temporary database were
+removed afterward. Production authentication, credentials and services were
+untouched. Receipt: `docs/acceptance/skills-workspace/receipts/rendering-performance-2026-09-28/r1-enabled-dormant-proof.json`.
+
+R1.10's full merged tests, native tests and dormant DEPLOY-MAIN phase D are
+recorded in the deployed release receipt. The isolated enabled-mode health
+proof is now recorded too. A spoken live `system_status` interaction is still
+unrecorded; remote activation and token onboarding remain deferred under R1.9.
+
+Focused R1/migration/watcher verification after the unset-token test update:
+140 passed (auth, middleware, bind, service token, caller guard, deployment
+helper, database upgrade/idempotency, progress watcher). The deployed runtime
+source is unchanged by this revalidation; only tests, example comments and
+status/evidence records changed.

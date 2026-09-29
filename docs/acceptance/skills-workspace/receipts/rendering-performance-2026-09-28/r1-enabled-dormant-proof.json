@@ -1,0 +1,11 @@
+{
+  "source_revision": "c0fb9f64a5b6d83cea70421045b8199bbc26e351",
+  "service": "actual admin ASGI app, lifespan disabled, synthetic DB/token, ephemeral loopback port",
+  "production_changed": false,
+  "sidecar_route_count": 79,
+  "enabled_bare_health": 401,
+  "enabled_service_helper": "200",
+  "enabled_helper_without_token": "401",
+  "dormant_bare_health": 200,
+  "dormant_helper_without_token": "200"
+}

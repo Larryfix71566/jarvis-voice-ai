@@ -1,0 +1,4 @@
+Runtime code: deployed 539f8f6, unchanged by follow-up.
+Command: python -m pytest tests/unit/test_auth.py tests/unit/test_auth_middleware.py tests/unit/test_bind.py tests/unit/test_service_token.py tests/unit/test_internal_callers_authenticated.py tests/unit/test_deploy_main.py tests/unit/test_db.py tests/unit/test_progress_watcher.py -q
+Environment: env -i, PYTHON_DOTENV_DISABLED=1; vault isolated by conftest.
+140 passed, 3 warnings in 5.01s
