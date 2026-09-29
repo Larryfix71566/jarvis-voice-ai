@@ -571,6 +571,185 @@ below the agent/status stack as notices or session content grow. The full
 stage keeps the same top-left ambient placement; only the compact rail's
 ordering changes.
 
+**Single-transcript amendment, 2026-09-28 (Larry; recorded by Codex):**
+keep the transcript in the main window and remove its duplicate from the
+left/compact panel. Reclaim the removed transcript’s layout space; do not leave
+an empty placeholder. The compact panel keeps its orb, speaker feedback,
+microphone/voice controls and ambient context. This amendment supersedes any
+earlier requirement in this plan to repeat brief conversation captions in that
+compact rail. Main-window transcript/history, keyboard and accessibility access,
+and the existing full-answer response/results routing remain intact.
+
+**Status: requested, not implemented or accepted.** WS-09 tracks this follow-up;
+implementation owner is unassigned and Larry owns acceptance. Verify live user
+and Mortimer speech appears in the main-window transcript with no duplicate
+compact-rail transcript, including single-monitor and supporting-display
+configurations. Confirm history remains accessible, the removed space is
+reclaimed, and voice controls and speaker feedback remain usable. No runtime
+code or deployment changes are part of recording this requirement.
+
+### WS-09 transcript cleanup — Luna implementation handoff
+
+**Prepared by:** Codex, 2026-09-28, at Larry’s request. **Status:** ready for
+dispatch; no implementation or acceptance performed. **Intended executor:**
+Luna through Codex, in an isolated worktree. Exact model version must be recorded
+by the executing session rather than inferred here. Larry remains WS-09’s
+acceptance owner. This is a bounded amendment to this plan, not a new plan.
+
+#### Outcome and fixed decisions
+
+Remove the repeated spoken-text block from the Command Console v2 compact voice
+region. Apply this to both the wide left rail and the narrow bottom region.
+Keep the existing main-window transcript access and response/results surfaces.
+Do not build a replacement transcript component or move the full response back
+into the voice region. Do not introduce a preference or a feature flag.
+
+**Verified source baseline:** `2c73700` on `codex/isolated-20260924`; main was
+`180766e` and roadmap documentation PR #98 was open when inspected. These are
+inspection references, not instructions to deploy an old revision. Before
+implementation, fetch current main and preserve any newer fixes.
+
+#### Verified code map
+
+- `macos/MortimerHost/Sources/MortimerHost/Console/CommandConsoleView.swift`
+  embeds `AdaptiveStageView`; it does not own this duplicate transcript.
+- `macos/MortimerHost/Sources/MortimerHost/Console/AdaptiveStageView.swift`:
+  `.rail` and `.bottom` both construct `OrbFieldView(compactPresentation: true)`.
+  `.conversation` has a separate central caption list. `compactStageContent`
+  either shows navigation/empty conversation guidance or `WorkspaceView`;
+  it is **not** a full transcript renderer. Do not assume otherwise.
+- `macos/MortimerHost/Sources/MortimerHost/Console/OrbFieldView.swift`:
+  `compactReadout` calls `captions` immediately after `audioInputNotice`, before
+  the `ForEach(AGENT_LAYOUT...)`. That is the duplicate to remove for layout 2.
+  The noncompact body also calls `captions`; keep that use.
+- `captions` shows the last user/assistant text and the first-run “Try…” hint
+  when connected with no entries. Remove that whole block only from v2 compact
+  presentation, including its hint and padding.
+- `macos/MortimerHost/Sources/MortimerHost/Drawer/LogTab.swift` renders the full
+  conversation history via `ConversationStore.entries`; `DrawerView` selects
+  it for the `transcript` tab. Preserve it and its existing access/detachment.
+- `macos/MortimerHost/Sources/MortimerHost/Stores/ConversationStore.swift`
+  keeps entries/latest captions. `AppMessageRouter` and `ResponseResultRouter`
+  own incoming transcript delivery and result routing. These are read-only
+  references for this task, not edit targets.
+
+#### Allowed changes and invariants
+
+Production edit scope is **only**
+`macos/MortimerHost/Sources/MortimerHost/Console/OrbFieldView.swift`.
+Test scope is the existing
+`macos/MortimerHost/Tests/MortimerHostTests/CompactConversationTests.swift`.
+Documentation updates belong to this subsection and the WS-09 block in
+`ROADMAP.md`. A requirement that needs broader production edits must be reported
+with the failing evidence before broadening scope.
+
+1. In `compactReadout`, render `captions` only when
+   `InterfaceLayoutVersion.resolve(layoutVersion) != 2`. Use the existing
+   resolver and existing AppStorage property, not raw-value logic or new state.
+2. Correct the compact-layout comment to describe the v2 omission. Retain the
+   shared `captions`, `captionPanel`, `lastUser` and `lastAssistant` helpers for
+   the existing noncompact/legacy paths.
+3. Do not use opacity, hidden overlays or accessibility-only suppression:
+   v2 must omit the caption subtree and its space. Existing VStack spacing
+   between remaining elements is sufficient; add no placeholder or fixed gap.
+4. Preserve layout 0/1 fallback behavior. Preserve the noncompact central
+   conversation captions, the full Log history, and all transcript commands.
+5. Preserve ambient clock/date ordering, orb/voice rendering, animation speed,
+   microphone/PTT/wake controls, speech meters, agent satellites, vitals,
+   confirmation notices, audio input/output notices, Reconnect and Dismiss.
+   These notices are not transcript duplicates and must remain visible.
+6. Do not change audio/STT, transcript collection/storage, privacy, sharing,
+   scrolling policies, result IDs, response grouping, display ownership,
+   monitor placement or reconnect handling. No Python, migration, config,
+   dependency, bundle or performance-budget changes.
+
+#### Sequential execution checklist
+
+- [ ] **P0 — Dispatch and baseline.** Read AGENTS/ROADMAP from current main.
+  Larry’s instruction to run this handoff authorizes the bounded Luna task;
+  record the implementation assignee, branch and exact model in WS-09 before
+  editing code. Keep Larry as acceptance owner. Integrate current main into
+  the isolated branch; do not touch production or Claude’s checkout. Record
+  actual HEAD, existing local changes, and any deviation from the code map.
+- [ ] **P1 — Small view change.** Make only the guard/comment change above.
+  Review the diff: no main-window transcript or result renderer is modified.
+- [ ] **P2 — Behavioral regression.** Extend `CompactConversationTests` using
+  its existing NSHostingView/NSWindow, isolated UserDefaults and accessibility
+  traversal pattern. Use synthetic user and assistant sentinel text in a
+  populated `ConversationStore` (see the existing live stream fixture for
+  `ConversationEntry` delivery). Prove the rendered behavior, not source text
+  matching or a helper that simply mirrors the new conditional:
+  - With layout 2, compact=true at widths 512 and 1000, the compact OrbField
+    accessibility subtree contains neither sentinel. Verify the actual stage
+    mode is `.bottom` and `.rail` respectively using existing mode/metrics.
+  - Update the conversation after hosting; new text must not reappear in that
+    compact subtree. The original store must retain both entries and updates.
+  - Render the existing `LogTab` with the same store and its required
+    environments: both sentinels remain available there. With compact=false,
+    the existing expanded main conversation still exposes its captions.
+  - With layout 1 and compact=true, legacy captions remain visible. Retain
+    current mode-toggle, voice accessibility, result ID and scroll assertions.
+  - Preserve and verify at least the “Microphone muted” status and an injected
+    audio-input notice in compact v2. Do not remove all text to satisfy absence.
+  Use the existing fixture cleanup helper and restore defaults. Avoid live
+  provider calls, production preferences or new runtime abstractions for tests.
+- [ ] **P3 — Validate.** Run the focused tests below, then the full MortimerHost
+  suite once. If a pre-existing/environment issue blocks a gate, record the
+  exact failure; do not relax expectations or call it passed. Inspect generated
+  compact screenshots at both widths for reclaimed space and unclipped status.
+- [ ] **P4 — Commit and handoff.** Update WS-09 and this checklist, preserving
+  unchecked live gates. Include diff scope, actual model, commit, test outputs
+  and screenshot paths. Commit/push a reviewable PR using repository protocol.
+  Do not declare the item closed because source tests passed.
+- [ ] **P5 — Deploy and accept.** After merge and release authorization, use
+  `scripts/deploy_main.sh` only. Record the deployed source/bundle revision and
+  rollback reference. Complete the physical checks below on that exact build.
+
+Commands from the executor’s repository root (no secrets or paid probes):
+
+```bash
+swift test --package-path macos/MortimerHost --filter CompactConversationTests
+swift test --package-path macos/MortimerHost --filter LiveVoiceResponseStreamTests
+swift test --package-path macos/MortimerHost --filter ResponseResultRouterTests
+swift test --package-path macos/MortimerHost
+git diff --check
+```
+
+The stream/router suites already test one response identity, streaming updates,
+supporting-display ownership and return to main. Do not weaken these tests.
+The existing build/deploy gates still apply; this list does not waive them.
+
+#### Exact closure criteria on the Mac
+
+- [ ] Single monitor, compact startup: speak a question and receive a reply.
+  Neither user nor Mortimer transcript text appears in the left compact rail.
+  Open the existing main-window Log/transcript and confirm both are retained;
+  confirm the full reply stays in the response/results area.
+- [ ] Narrow the window to trigger the bottom presentation: the duplicate
+  remains absent, status/controls are reachable, and the removed caption block
+  leaves no reserved space. Empty connected state has no compact “Try…” chip.
+- [ ] Switch expanded/compact, mute/unmute and reconnect: no returning compact
+  transcript, no lost history, and no loss of orb/speaker or mic feedback.
+- [ ] With a supporting display available, confirm existing result ownership
+  and close/return behavior remain intact; main-window transcript access stays
+  available and compact duplicates do not return. If hardware is unavailable,
+  leave this check open rather than substituting desktop Spaces as evidence.
+- [ ] Check keyboard/VoiceOver access to main transcript and voice controls.
+  Capture one populated compact screenshot and one main transcript screenshot
+  using synthetic/non-sensitive content, with exact build and test date.
+
+**Done means:** P1–P4 verified, exact candidate deployed, and every applicable
+physical check above recorded. Until then label implementation versus acceptance
+separately. Rollback is the deployment script’s saved prior release; do not
+introduce a transcript-specific runtime switch.
+
+**Luna handoff prompt:** “Implement the WS-09 transcript cleanup handoff in
+`docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md`. Follow its fixed file scope,
+v2-only behavior and acceptance checklist. Record your exact model and branch,
+preserve other systems’ work, keep the roadmap current, and stop at the PR
+handoff unless deployment is explicitly authorized. Do not redesign transcript
+or response routing.”
+
 Extend placement keys, not a second placement service: introduce HostWindowID
 with legacy(HostWindowKind) or content(UUID); its stable serialized keys are
 console/display/drawer/content:<UUID>. Keep HostWindowKind/findHostWindow wrappers
