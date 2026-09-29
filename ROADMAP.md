@@ -234,20 +234,23 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Command Console and Atlas release acceptance
 
 - **Owner:** `larry`
-- **Status:** open (Mac only)
-- **Implemented by:** Not attributed by this acceptance-only workstream
-- **Remaining work / acceptance:** Larry
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** —
+- **Status:** landed (PR #99, merge commit `4986c10`); Mac acceptance remains open
+- **Implemented by:** Codex (Codex desktop; exact model build is not exposed)
+- **Remaining work / acceptance:** Larry (Mac/live acceptance)
+- **Model version:** not recorded in a handoff receipt.
+- **Where:** [PR #99](https://github.com/Larryfix71566/jarvis-voice-ai/pull/99), merged to `main` as `4986c10`
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md`
 - **Scope:** —
-- **Next step:** Assign and implement the compact-panel transcript cleanup below, then follow `docs/acceptance/ACCEPTANCE_RUNBOOK.md`.
-- **Updated:** 09-28
+- **Next step:** After release authorization, deploy through `scripts/deploy_main.sh`; Larry then completes physical single- and multi-monitor acceptance on the deployed build.
+- **Updated:** 09-29
 
 - [ ] **Single transcript surface (Larry, 2026-09-28):** keep the transcript in the main window; remove the duplicate transcript/captions from the left/compact panel and reclaim the vacated space. Preserve the orb, speaker feedback, microphone/voice controls, and main-window transcript history/accessibility. This supersedes earlier requirements to repeat brief captions in the compact rail; full response/results routing remains unchanged.
-  - **Status:** requested; not implemented or validated.
-  - **Implementation owner:** unassigned until dispatch; intended executor is Luna through Codex. **Acceptance:** Larry. **Plan author:** Codex, at Larry’s request.
-  - **Implementation handoff:** [WS-09 transcript cleanup — Luna implementation handoff](docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md#ws-09-transcript-cleanup--luna-implementation-handoff). Exact file scope, fixed v2-only behavior, regression commands and release criteria are specified; no implementation has started.
+  - **Status:** Landed in `main` via PR #99 (`4986c10`); implementation and automated validation complete; deployment and user/Mac acceptance remain open.
+  - **Implementation owner:** Codex, explicitly dispatched by Larry on 2026-09-29; follows the Codex/Luna handoff specification. **Acceptance:** Larry. **Plan author:** Codex.
+  - **Scope:** `macos/MortimerHost/Sources/MortimerHost/Console/OrbFieldView.swift`, `macos/MortimerHost/Tests/MortimerHostTests/CompactConversationTests.swift`, this roadmap and the linked plan progress only.
+  - **Implementation handoff:** [WS-09 transcript cleanup — Luna implementation handoff](docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md#ws-09-transcript-cleanup--luna-implementation-handoff).
+  - **Validation:** focused compact transcript tests 3/3, live response stream 2/2, result router 7/7; full MortimerHost 374 passed, 7 environment-dependent skips, 0 failures. `git diff --check` passed. Render captures inspected at compact widths 512 and 1000; paths and details are in the linked plan.
+  - **Log (2026-09-29):** PR #99 merged as `4986c10`; Codex’s layout-v2-only caption removal and rendered-regression tests are in `main`. Full response/history surfaces and legacy layout are preserved. No deployment or Mac acceptance has been performed. Source retains the “Microphone muted” indicator, but automated coverage does not explicitly assert that exact compact status yet.
   - **Close when:** live user and Mortimer speech updates the main-window transcript without a duplicate in the compact rail, in single- and multi-monitor layouts; no blank transcript-sized gap or loss of voice controls/history.
 
 </details>
@@ -544,6 +547,8 @@ first lever to pull.
   3. The command variable fed only the installed check, and the probe discarded the runtime's failure category.
 
   Added WS-14 and CX-13 for fixes 2 and 3. Larry decided Claude lands them and Codex reviews. Targeted tests pass: 95 total, 18 of them new; the related status suites give the same result before and after. Protocol note: while checking for overlapping edits, Claude compared `jarvis/subscription.py` hashes in Codex's worktrees (read-only). That goes against rule 9 and won't be repeated. Future overlap checks go through this file and open PRs.
+
+- 2026-09-29: Codex reconciled WS-09 after PR #99 merged to `main` as `4986c10`. The transcript cleanup is landed; deployment and Larry’s single-/multi-monitor acceptance remain open. The Console/Atlas plan now records the merge and notes that compact-v2 automated tests do not explicitly assert the “Microphone muted” status string, though the source retains that indicator. No deployment or application tests were run for this documentation update.
 
 - 2026-09-28: Claude (Cowork). PR #100 added the self-service spec and its companion plan to main (CX-09 resolved) and corrected the Voice Workflows and Workflow Viewer plan status lines (WS-07). WS-06 now records the checks vetted against `539f8f6`: 1 closed, 2 nearly closed, subscriptions failing (`not_installed` in the 09-26 to 09-28 daily files), 7 open. WS-08 points to Claude's step-9 checklist. Added protocol rule 13 and proposed blocks WS-12 (CI upkeep) and WS-13 (T5 plan review). Evidence came from read-only reads of production files; no git was run.
 
