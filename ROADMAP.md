@@ -328,22 +328,46 @@ Claude’s work or enable any runtime feature.
 </details>
 
 <details id="ws-14">
-<summary>WS-14 — Subscription probe: sign-in, command and category fixes · Claude (Codex reviews)</summary>
+<summary>WS-14 — Subscription probe: sign-in, command and category fixes · Claude (Codex post-merge review)</summary>
 
 **Workstream:** Make the WS-06 check #2 subscription probe work under launchd and report why it fails. It touches WS-02's file (CX-13). Larry decided 09-29: Claude lands, Codex reviews before merge.
 
 - **Owner:** `claude`
-- **Status:** review (PR open; merge waits for Codex's review)
+- **Status:** landed (PR #102, merge `eb24e81`); deployed 09-29 10:07 EDT by DEPLOY-MAIN (Python 4879 passed, JarvisKit 219/0, MortimerHost 374/0)
 - **Implemented by:** Claude
-- **Remaining work / acceptance:** Codex reviews against the isolation plan. Larry merges and deploys with DEPLOY-MAIN. Acceptance: after the deploy, a `com.mortimer.status-daily` rerun shows `claude` `ok: true`, and `codex` `gated` (not `runtime_error`).
+- **Remaining work / acceptance:** Live check passed: the `com.mortimer.status-daily` rerun at 14:11 UTC 09-29 shows `claude` `ok: true`. `codex` shows `not_installed`, which is correct because no Codex CLI is on the launchd PATH. Claude's earlier prediction of `gated` was wrong: `gated` appears only once a Codex CLI resolves. The PR merged with no GitHub review on record, so Codex's post-merge review is still open (CX-13).
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** branch `fix/subscription-probe-user-env`
+- **Where:** main
 - **Plan:** Under `MORTIMER_SUBSCRIPTION_RUNTIME_ISOLATION_PLAN_2026-09-25.md`, which allows "home needed for provider-managed sign-in, plus only specifically justified" variables. The live evidence is in WS-06. Changes:
   1. `USER` and `LOGNAME` join the child-environment allowlist. They are not credentials, and there is a `pwd` fallback when launchd omits them.
   2. `_claude_argv` and `_codex_argv` run `provider_command()`, which reads the same `JARVIS_*_SUBSCRIPTION_COMMAND` variable as the installed check.
   3. `probe_subscription` keeps the runtime's own category when the legacy message table falls through to `runtime_error`. A `SubscriptionCapabilityError` reports `gated`. The legacy table and the `verify_model_access` golden output are unchanged.
 - **Scope:** `jarvis/subscription.py`, `jarvis/status/subscriptions.py`, `tests/unit/test_subscription.py`, `tests/unit/test_status_subscriptions.py`
-- **Next step:** Codex reviews the PR
+- **Next step:** Codex: post-merge review of PR #102 against the isolation plan (CX-13)
+- **Updated:** 09-29
+
+</details>
+
+<details id="ws-15">
+<summary>WS-15 — Weather: fresh location and current radar · Claude (proposed)</summary>
+
+**Workstream:** Larry, 09-29: *"it is missing current radar and it defaults to memory for weather instead of checking current location and getting fresh weather."* A weather answer must use where Larry is now and show current radar for that place.
+
+- **Owner:** `claude` (proposed)
+- **Status:** proposed
+- **Implemented by:** not started
+- **Remaining work / acceptance:** Evidence from the 09-29 10:08 EDT session (`logs/agents/2026-09-29/`), read-only:
+  1. **The location came from memory.** The voice model's delegation read *"typically in Spartanburg, SC or surrounding area"*. The analyst called `get_weather` and `get_weather_radar` with `"Spartanburg, SC"` and answered *"(assumed default, not confirmed device location)"*. Larry then had to name Charleston.
+  2. **Cause in code.** The device-location resolver (`jarvis/bot/device_location.py`, order per D-L6: device fix, then IP, then "not available", never memory) is wired only into `system_status` ("where am I", `_location_answer` in `jarvis/bot/pipeline.py`). `mcp_web.get_weather(city)` and `get_weather_radar(city)` take only a city string, so "current" weather gets whatever place the voice model writes, which in practice comes from memory.
+  3. **The app has not granted location since the rebuilds.** Its `location/hello` reported `authorization: not_determined` on 09-28 20:21 and 09-29 10:07. The last `authorized` hello with a fix was 09-25 22:58. So even a wired resolver would fall back to IP today. Why permission reset is untested; the app re-signing on rebuild is a candidate, not verified.
+  4. **Radar ran, for the wrong place.** `get_weather_radar` ran and sent a window display payload three times on 09-29 (the RainViewer frame was about 8 minutes old); the first was for Spartanburg. Whether it rendered in the app, and what "missing" means (not shown, not animated, or wrong area), is untested. Larry's description of what he saw settles it.
+
+  Acceptance, to be finalized in the plan: "what's the weather" with no place named uses a fresh device fix, or IP labeled approximate, never memory; the radar shown is for that same point and is current; a place Larry names still wins.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** plan amendment first (docs), then a code branch when claimed
+- **Plan:** amend `docs/plans/MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md` (W1–W8, implemented 08-22), showing options before any code. Candidate direction, not decided: resolve location in the D-L6 order and pass lat/lon to both tools; memory never supplies the place for "current".
+- **Scope:** when claimed: `mcp_servers/mcp_web/server.py`, `mcp_servers/mcp_web/logic.py`, the weather-location wiring in `jarvis/bot/pipeline.py`, the weather lines in `jarvis/prompts.py`, and their tests. It touches Swift only if the radar symptom needs it; the compact left panel is under WS-09 (Codex), so coordinate there first.
+- **Next step:** Larry describes the radar symptom and re-grants the app's location permission. Claude writes the plan amendment with options; Larry picks; Claude claims WS-15 through a roadmap PR.
 - **Updated:** 09-29
 
 </details>
@@ -394,7 +418,7 @@ Open means not yet resolved. Each entry names who resolves it.
 
 | CX-12 | Merge reconciliation must carry the three streaming flags from Codex's former live registry into the split live profiles, while preserving main's historical migration fixtures unchanged. Earlier source attribution to main was incorrect: Git rename merging had carried the flags into the historical YAML. | `codex` under WS-01, approved by Larry | resolved in main: three live flags restored; original fixtures preserved; explicit overlay regression passes |
 
-| CX-13 | WS-14 edits `jarvis/subscription.py`, which is WS-02's scope (Codex; landed, so unlocked, but its live isolation gates are open). The allowlist change adds `USER`/`LOGNAME`, justified by the live `Not logged in` result recorded in WS-06. | `larry` (09-29): Claude lands, and Codex reviews before merge | open until Codex's review |
+| CX-13 | WS-14 edits `jarvis/subscription.py`, which is WS-02's scope (Codex; landed, so unlocked, but its live isolation gates are open). The allowlist change adds `USER`/`LOGNAME`, justified by the live `Not logged in` result recorded in WS-06. | `larry` (09-29): Claude lands, and Codex reviews before merge | merged 09-29 (PR #102) with no GitHub review on record; open until Codex's post-merge review |
 
 ---
 
@@ -540,6 +564,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29 (later): Claude (Cowork). WS-14 landed (PR #102, `eb24e81`) and was deployed. The live daily check now shows the Claude subscription `ok: true`. Added WS-15 (proposed), Larry's weather rework: "current" weather took its place from memory (Spartanburg) because the device-location resolver feeds only `system_status` and the weather tools take only a city name; the app's location permission has read `not_determined` since 09-28; the radar symptom still needs Larry's description. Evidence came from read-only reads of logs.
 
 - 2026-09-29: Claude (Cowork). WS-06 check #2 traced on the Mac with Larry. There were three causes:
   1. The CLI isn't on the launchd PATH. Larry linked it into `/opt/homebrew/bin`.
