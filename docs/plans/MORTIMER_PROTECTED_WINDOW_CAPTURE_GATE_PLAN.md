@@ -1,6 +1,6 @@
 # Protected-window capture gate repair (WS-16)
 
-**Status:** IN REVIEW (PR #117); combined Swift gate passed, deployment open.
+**Status:** LANDED (PR #117, `c5781a8`); combined Swift gate passed, deployment open.
 **Owner:** Codex. Larry runs DEPLOY-MAIN and accepts the live result.
 **Recorded:** 2026-09-29.
 
@@ -95,3 +95,6 @@ were displayed, and it is not a passing privacy check.
   full MortimerHost suite passed 383 tests, five unrelated skips, zero
   failures; both previously failing tests executed and passed. PR #117
   review/merge and Larry's DEPLOY-MAIN run remain open.
+- 2026-09-29: PR #117 merged as `c5781a8` with all five CI checks green.
+  The repair is on main. Larry's DEPLOY-MAIN run and production acceptance
+  remain open; the prior Mac deploy stopped before changing production.
