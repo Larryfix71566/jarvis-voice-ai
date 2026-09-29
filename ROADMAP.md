@@ -22,6 +22,7 @@ Systems: **`claude`** (Cowork or Claude Code), **`codex`**, **`larry`** (steps o
 10. **Update your row when its state changes.** Do this on your branch; it lands with your PR. On merge the row becomes `landed`, with the PR number and merge commit, and the plan's status header is updated to match.
 11. **Status hierarchy:** this file (owner, state) > plan status header (design status) > receipts (evidence). When they disagree, correct the plan header, unless this file is the one that's wrong.
 12. **Attribution:** every PR body names the system and its session link.
+13. **Everything in progress has a block, including work that isn't code** (reviews, option write-ups, plan edits, guided Mac checks). Add it as `proposed` before starting and mark it `claimed` when you start. If the work produces no PR of its own, update the block through a docs-only PR at the end of the session. Both systems re-read §2 at the start of every session, because the other system may have changed it.
 
 Claude has one extra rule: it never runs `git` against the Mac repo (see `CLAUDE.md`). Larry commits.
 
@@ -181,13 +182,13 @@ Claude’s work or enable any runtime feature.
 - **Owner:** `claude`
 - **Status:** landed; Mac checks open
 - **Implemented by:** Claude
-- **Remaining work / acceptance:** Larry: 11 Mac checks and registry tier decision
+- **Remaining work / acceptance:** Larry, guided by Claude: of the 11 Mac checks vetted against `539f8f6` on 09-28, 1 is closed (#9, Swift: JarvisKit 219/0 in DEPLOY-MAIN), 2 are nearly closed (#1 catalogs, #4 daily job: both pass on `data/status/daily-*.json` and only need the spoken answer), 1 is failing (#2 subscriptions) and 7 are open. The tier decision for `config/model_access.yaml` is still Larry's.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main
-- **Plan:** Spec not on main (CX-09). Registry half: `docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md`
+- **Plan:** `docs/plans/MORTIMER_SELF_SERVICE_ACCESS_IMPLEMENTATION_SPEC.md` and its companion `docs/plans/MORTIMER_SELF_SERVICE_ACCESS_AND_RECOVERY_PLAN.md` (added to main in PR #100, CX-09). Registry half: `docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md`
 - **Scope:** —
-- **Next step:** `larry`: 11 Mac checks from the handoff §4; decide the tier of `config/model_access.yaml`
-- **Updated:** 09-25
+- **Next step:** Fix check #2 first. The daily files for 09-26, 09-27 and 09-28 report both the `claude` and `codex` subscription commands as `not_installed`, and `.env` sets neither `JARVIS_CLAUDE_SUBSCRIPTION_COMMAND` nor `JARVIS_CODEX_SUBSCRIPTION_COMMAND`. Larry adds the absolute paths, restarts the bot, then runs the spoken and process checks from Claude's checklist.
+- **Updated:** 09-28
 
 </details>
 
@@ -199,13 +200,13 @@ Claude’s work or enable any runtime feature.
 - **Owner:** `claude`
 - **Status:** landed (main `0b76f49`)
 - **Implemented by:** Claude
-- **Remaining work / acceptance:** Claude: correct stale plan header
+- **Remaining work / acceptance:** Larry: switch the reply guard from `log` to `correct` once the live log shows its precision. The live logs since the landing hold four `reply_guard` lines, which is not enough yet.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main
 - **Plan:** `docs/plans/MORTIMER_VOICE_WORKFLOWS_PLAN.md`, `docs/plans/MORTIMER_WORKFLOW_VIEWER_PLAN.md`
 - **Scope:** —
-- **Next step:** Correct the plan's status header (it still says "READY FOR HANDOFF")
-- **Updated:** 09-25
+- **Next step:** Plan headers corrected in PR #100 (09-28). Verified read-only: the end-run memory archive is done and the console is on. Next is the guard-mode decision after more live use.
+- **Updated:** 09-28
 
 </details>
 
@@ -222,7 +223,7 @@ Claude’s work or enable any runtime feature.
 - **Where:** main (`539f8f6`)
 - **Plan:** `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`
 - **Scope:** Orb rendering and its performance/visual regression tests
-- **Next step:** Performance gate passed in exact-main deployment; Larry placement, Reduce Motion and rollback checks remain
+- **Next step:** Performance gate passed in exact-main deployment. Larry runs the three step-9 checks (placement, Reduce Motion, rollback) using Claude's 09-28 checklist; Claude then fills in the receipt's "Live check" lines.
 - **Updated:** 09-28
 
 </details>
@@ -287,6 +288,42 @@ Claude’s work or enable any runtime feature.
 
 </details>
 
+<details id="ws-12">
+<summary>WS-12 — CI upkeep before the Ubuntu 26 runner switch · Claude (proposed)</summary>
+
+**Workstream:** Update the GitHub Actions versions (Node 20 deprecation warnings on `actions/checkout@v4` and `actions/setup-python@v5`) and pin `runs-on: ubuntu-24.04` before `ubuntu-latest` moves to Ubuntu 26 on 10-19.
+
+- **Owner:** `claude`
+- **Status:** proposed
+- **Implemented by:** not started
+- **Remaining work / acceptance:** Claude drafts; Larry reviews (the `.github/**` files are on the self-edit deny list, so this is a human-merged PR)
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** new branch from `origin/main` when claimed
+- **Plan:** none (small change; the PR body is the record)
+- **Scope:** `.github/workflows/*.yml`
+- **Next step:** Larry picks it; Claude marks it `claimed` and drafts the change
+- **Updated:** 09-28
+
+</details>
+
+<details id="ws-13">
+<summary>WS-13 — T5 mail, calendar and brief: review the draft plan against current main · Claude (proposed)</summary>
+
+**Workstream:** Review `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (DRAFT, 2026-08-26) against today's main before anyone builds T5. Docs only.
+
+- **Owner:** `claude`
+- **Status:** proposed
+- **Implemented by:** not started
+- **Remaining work / acceptance:** Larry approves or revises the plan
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** docs branch when claimed
+- **Plan:** `docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md`. Codex edited this plan on 09-26, so coordinate with Codex before any edit. Migration `0035` stays reserved for T5.
+- **Scope:** that plan file only
+- **Next step:** Larry picks it; confirm with Codex that it has no pending edits to the plan
+- **Updated:** 09-28
+
+</details>
+
 ---
 
 ## 3. Reserved shared numbers
@@ -327,7 +364,7 @@ Open means not yet resolved. Each entry names who resolves it.
 | CX-06 | T2 code was being written while `MORTIMER_REMOTE_ACCESS_PLAN.md` still says DRAFT. | `larry` (09-27): Codex keeps owning T2; turning it on stays undecided | decided |
 | CX-07 | Memory admission is designed in two places that do not know about each other. On main (Claude): the echo guard at extraction, and auto-settle of contradictions in the sweep, with a model call, notices and `memory_restore`. In Codex's worktree (GC24-05): a durable admission queue (extract → classify → apply) with a model classifier on a confidential route. Codex's `memory_extraction.py` lacks the echo guard, and its `memory_sweep.py` lacks auto-settle. See the evaluation's addendum. | `codex`: approved echo guard → durable classification/admission → saved memory → automatic contradiction settlement | resolved in main with approved ordering; full merged-release suite passes; live activation remains open |
 | CX-08 | Status files have forked: `docs/acceptance/IMPLEMENTATION_STATUS.md` is 7 KB on main and 50 KB in Codex's tree. | whoever merges WS-01 | resolved in main: concise current status; both original histories archived |
-| CX-09 | #86 cites `docs/plans/MORTIMER_SELF_SERVICE_ACCESS_IMPLEMENTATION_SPEC.md`, which is not in main's `docs/plans/` or `docs/archive/`. | `claude` or `larry`: add it, or record where it lives | open |
+| CX-09 | #86 cites `docs/plans/MORTIMER_SELF_SERVICE_ACCESS_IMPLEMENTATION_SPEC.md`, which is not in main's `docs/plans/` or `docs/archive/`. | `claude` or `larry`: add it, or record where it lives | resolved: the spec and its companion plan were recovered from `plan/self-service-access-and-recovery` and added to main in PR #100 (09-28), with status lines marking them implemented |
 | CX-10 | #86's branches were built inside Codex's checkout, and the voice-workflows plan calls #86 "Codex's". | Protocol rules 9 and 12 | closed by protocol |
 | CX-11 | Codex's T2 code against what Claude landed on main. (1) `JARVIS_AUTH_ENABLED` **defaults to true**, with no exempt routes, loopback included, so merging it turns auth on. (2) Main callers that send no token would then get 401: `jarvis/bot/status_tool.py` (the `system_status` tool from #86) and `scripts/deploy_main.sh` phase D, whose health checks expect 200 from `/api/health` and 200/307 from the bot, so the deploy would stop. (3) The route inventory in Codex's tree has 64 sidecar routes; main has 68 decorators, including 10 Codex's copy lacks: `/api/status/*` (9) and `/api/workflows`. (4) `mcp_servers/mcp_selfedit/logic.py`: Codex added service headers; main's copy also changed, so keep both. (5) Token setup is by CLI only (`python -m jarvis.auth add`), which conflicts with the no-shell-commands principle behind Claude's voice workflows (D-L2/D-L5). The native app already sends a Keychain token on every request (`JarvisHTTP.swift`), so it needs no code change, only a stored token. | `codex`: Addendum R1 fixes (1)–(4); `larry` decides (5) when T2 is decided (options in R1.9) | R1 implemented and deployed dormant; isolated enabled/dormant proof passes; token onboarding/remote activation remain undecided |
 
@@ -344,7 +381,7 @@ Nobody works on these until Larry turns one into a §2 row.
 - **T1.4 web retirement:** `MORTIMER_WEB_RETIREMENT_PLAN.md` (DRAFT).
 - **T3 local voice and Mac mini:** `MORTIMER_LOCAL_VOICE_AND_MINI_PLAN.md` (DRAFT; needs the hardware).
 - **T4b sensitive tier:** gated on G3. Larry's rule: no financial piece until models run locally on the mini.
-- **T5 mail, calendar and daily brief:** `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (DRAFT). Codex edited the plan document on 09-26; no mail code was found. Migration `0035` is reserved.
+- **T5 mail, calendar and daily brief** (plan review proposed as WS-13): `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (DRAFT). Codex edited the plan document on 09-26; no mail code was found. Migration `0035` is reserved.
 - **Personal VAD / speaker gate:** built and switched off pending the §6 effectiveness protocol (see §7 below).
 - **Optimization plan Rev 3.6:** remaining phases not reconciled in this pass.
 - **T7 home automation / T8 surveillance:** queued, unassigned; platforms/devices and camera permissions undecided. Detailed plans unwritten; see [platform roadmap](docs/plans/MORTIMER_PLATFORM_ROADMAP.md) §2.7–2.8. Requested by Larry; implementation system not assigned.
@@ -477,6 +514,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-28: Claude (Cowork). PR #100 added the self-service spec and its companion plan to main (CX-09 resolved) and corrected the Voice Workflows and Workflow Viewer plan status lines (WS-07). WS-06 now records the checks vetted against `539f8f6`: 1 closed, 2 nearly closed, subscriptions failing (`not_installed` in the 09-26 to 09-28 daily files), 7 open. WS-08 points to Claude's step-9 checklist. Added protocol rule 13 and proposed blocks WS-12 (CI upkeep) and WS-13 (T5 plan review). Evidence came from read-only reads of production files; no git was run.
 
 - 2026-09-28: Codex prepared Larry’s requested Luna handoff under the existing WS-09 Console/Atlas plan after inspecting `OrbFieldView`, `AdaptiveStageView`, `LogTab`, and transcript/result tests at `2c73700`. The duplicate is the `captions` call inside `compactReadout`; main history/results are separate. Plan only, no application edits or newly passed gates; intended executor Luna awaits dispatch.
 
