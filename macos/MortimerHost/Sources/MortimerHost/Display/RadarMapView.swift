@@ -2,6 +2,11 @@ import AppKit
 import MapKit
 import SwiftUI
 import JarvisKit
+import os
+
+/// Radar timing evidence (Larry, 09-29: radar "stutters or pauses"). Read with
+/// `log show --last 10m --style compact --predicate 'subsystem == "com.mortimer.host" AND category == "radar"'`.
+private let radarLog = Logger(subsystem: "com.mortimer.host", category: "radar")
 
 /// WS-15 PR 2 (MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md S6): Apple's map
 /// (streets, labels, standard or hybrid) with the radar as a tile overlay,
@@ -26,8 +31,12 @@ struct RadarMapView: NSViewRepresentable {
     /// being) all loaded, so the card can say "Loading radar…".
     var onReady: (Bool) -> Void = { _ in }
 
-    /// Opening view: about 60 km across, centred on the pin.
-    static let openingSpanMeters: CLLocationDistance = 60_000
+    /// Opening view: about 200 km across, centred on the pin. Larry, 09-29:
+    /// the radar looked blocky. The NEXRAD composite's finest level is zoom
+    /// 8 (about 0.5 km per pixel); the old 60 km view was near zoom 10-11, so
+    /// every radar pixel was blown up 4-8x. At 200 km the map opens near the
+    /// data's own resolution; zooming in still works (enlarged, smoothed).
+    static let openingSpanMeters: CLLocationDistance = 200_000
     static let frameInterval: TimeInterval = 0.6
     static let visibleAlpha: CGFloat = 0.8
 
@@ -82,6 +91,9 @@ struct RadarMapView: NSViewRepresentable {
         private var playing = false
         private var lastReady: Bool?
         private let store: RadarTileStore
+        private var installedAt = Date()
+        private var waitingSince: Date?
+        private var lastStats = Date()
         var onFrame: (Int) -> Void
         var onReady: (Bool) -> Void
 
@@ -100,6 +112,9 @@ struct RadarMapView: NSViewRepresentable {
             }
             guard !overlays.isEmpty else { return }
             shown = overlays.count - 1                                     // newest first
+            installedAt = Date()
+            lastStats = installedAt
+            radarLog.notice("radar installed frames=\(templates.count, privacy: .public) maxNativeZoom=\(radar.maxNativeZoom, privacy: .public)")
             map.addOverlays(overlays, level: .aboveRoads)
             report(frame: shown)
             timer = Timer.scheduledTimer(withTimeInterval: RadarMapView.frameInterval,
@@ -118,13 +133,36 @@ struct RadarMapView: NSViewRepresentable {
             guard overlays.indices.contains(shown) else { return }
             let ready = store.isReady(template: overlays[shown].template)
             if ready != lastReady {
+                if ready, lastReady != true {
+                    let ms = Int(Date().timeIntervalSince(installedAt) * 1000)
+                    radarLog.notice("radar frame \(self.shown, privacy: .public) ready; \(ms, privacy: .public) ms since install")
+                }
                 lastReady = ready
                 let report = onReady
                 DispatchQueue.main.async { report(ready) }
             }
             guard playing, ready, overlays.count > 1 else { return }
             let next = RadarTileMath.nextFrame(after: shown, count: overlays.count)
-            if store.isReady(template: overlays[next].template) { show(next) }
+            if store.isReady(template: overlays[next].template) {
+                if let since = waitingSince {
+                    let ms = Int(Date().timeIntervalSince(since) * 1000)
+                    radarLog.notice("radar waited \(ms, privacy: .public) ms for frame \(next, privacy: .public)")
+                    waitingSince = nil
+                }
+                show(next)
+            } else if waitingSince == nil {
+                waitingSince = Date()
+            }
+            logStatsIfDue()
+        }
+
+        /// Every 10 s: how often MapKit asked for tiles, how many came from
+        /// memory, how many went to the network and how long those took.
+        private func logStatsIfDue() {
+            guard Date().timeIntervalSince(lastStats) >= 10 else { return }
+            lastStats = Date()
+            let s = store.takeStats()
+            radarLog.notice("radar 10s: loadTile=\(s.requests, privacy: .public) memoryHits=\(s.hits, privacy: .public) fetches=\(s.fetches, privacy: .public) failed=\(s.failures, privacy: .public) fetchAvgMs=\(s.averageFetchMs, privacy: .public) fetchMaxMs=\(s.maxFetchMs, privacy: .public) shown=\(self.shown, privacy: .public)")
         }
 
         func show(_ index: Int) {
@@ -215,7 +253,7 @@ enum RadarTileMath {
                                       bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         else { return nil }
-        context.interpolationQuality = .medium
+        context.interpolationQuality = .high
         context.draw(piece, in: CGRect(x: 0, y: 0, width: side, height: side))
         guard let scaled = context.makeImage() else { return nil }
         return NSBitmapImageRep(cgImage: scaled).representation(using: .png, properties: [:])
@@ -293,6 +331,21 @@ final class RadarTileStore: @unchecked Sendable {
     private var waiting: [String: [Completion]] = [:]
     private var recent: [String] = []          // "z/x/y", newest last
 
+    /// Counters for the radar log; `takeStats` reads and resets them.
+    struct Stats: Equatable {
+        var requests = 0, hits = 0, fetches = 0, failures = 0
+        var totalFetchMs = 0, maxFetchMs = 0
+        var averageFetchMs: Int { fetches == 0 ? 0 : totalFetchMs / fetches }
+    }
+    private var stats = Stats()
+
+    func takeStats() -> Stats {
+        lock.lock(); defer { lock.unlock() }
+        let out = stats
+        stats = Stats()
+        return out
+    }
+
     init(fetch: @escaping Fetch = RadarTileStore.networkFetch) {
         self.fetch = fetch
         raw.countLimit = 1_500
@@ -334,9 +387,11 @@ final class RadarTileStore: @unchecked Sendable {
             completion(nil, nil)
             return
         }
+        lock.lock(); stats.requests += 1; lock.unlock()
         let whole = source.crop == CGRect(x: 0, y: 0, width: 1, height: 1)
         let key = "\(url.absoluteString)#\(source.crop.minX),\(source.crop.minY),\(source.crop.width)" as NSString
         if !whole, let done = enlarged.object(forKey: key) {
+            lock.lock(); stats.hits += 1; lock.unlock()
             completion(done as Data, nil)
             return
         }
@@ -353,6 +408,7 @@ final class RadarTileStore: @unchecked Sendable {
         let key = url.absoluteString
         lock.lock()
         if let hit = raw.object(forKey: key as NSString) {
+            stats.hits += 1
             lock.unlock()
             completion(hit as Data, nil)
             return
@@ -364,9 +420,15 @@ final class RadarTileStore: @unchecked Sendable {
         }
         waiting[key] = [completion]
         lock.unlock()
+        let started = Date()
         fetch(url) { [weak self] data, error in
             guard let self else { completion(data, error); return }
+            let ms = Int(Date().timeIntervalSince(started) * 1000)
             self.lock.lock()
+            self.stats.fetches += 1
+            self.stats.totalFetchMs += ms
+            self.stats.maxFetchMs = max(self.stats.maxFetchMs, ms)
+            if data == nil { self.stats.failures += 1 }
             let waiters = self.waiting.removeValue(forKey: key) ?? []
             if let data {
                 self.raw.setObject(data as NSData, forKey: key as NSString)
