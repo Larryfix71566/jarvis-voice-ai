@@ -233,20 +233,23 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Command Console and Atlas release acceptance
 
 - **Owner:** `larry`
-- **Status:** open (Mac only)
-- **Implemented by:** Not attributed by this acceptance-only workstream
-- **Remaining work / acceptance:** Larry
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** —
+- **Status:** implementation complete; review PR and Mac acceptance remain open
+- **Implemented by:** Codex (Codex desktop; exact model build is not exposed)
+- **Remaining work / acceptance:** Larry (Mac/live acceptance)
+- **Model version:** not recorded in a handoff receipt.
+- **Where:** branch `codex/isolated-20260924`; implementation scope below
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md`
 - **Scope:** —
-- **Next step:** Assign and implement the compact-panel transcript cleanup below, then follow `docs/acceptance/ACCEPTANCE_RUNBOOK.md`.
-- **Updated:** 09-28
+- **Next step:** Submit the tested bounded change as a PR. After merge and authorized deployment, Larry completes physical acceptance on single- and multi-monitor setups.
+- **Updated:** 09-29
 
 - [ ] **Single transcript surface (Larry, 2026-09-28):** keep the transcript in the main window; remove the duplicate transcript/captions from the left/compact panel and reclaim the vacated space. Preserve the orb, speaker feedback, microphone/voice controls, and main-window transcript history/accessibility. This supersedes earlier requirements to repeat brief captions in the compact rail; full response/results routing remains unchanged.
-  - **Status:** requested; not implemented or validated.
-  - **Implementation owner:** unassigned until dispatch; intended executor is Luna through Codex. **Acceptance:** Larry. **Plan author:** Codex, at Larry’s request.
-  - **Implementation handoff:** [WS-09 transcript cleanup — Luna implementation handoff](docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md#ws-09-transcript-cleanup--luna-implementation-handoff). Exact file scope, fixed v2-only behavior, regression commands and release criteria are specified; no implementation has started.
+  - **Status:** implementation and automated validation complete; no user/Mac acceptance yet.
+  - **Implementation owner:** Codex, explicitly dispatched by Larry on 2026-09-29; follows the Codex/Luna handoff specification. **Acceptance:** Larry. **Plan author:** Codex.
+  - **Scope:** `macos/MortimerHost/Sources/MortimerHost/Console/OrbFieldView.swift`, `macos/MortimerHost/Tests/MortimerHostTests/CompactConversationTests.swift`, this roadmap and the linked plan progress only.
+  - **Implementation handoff:** [WS-09 transcript cleanup — Luna implementation handoff](docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md#ws-09-transcript-cleanup--luna-implementation-handoff).
+  - **Validation:** focused compact transcript tests 3/3, live response stream 2/2, result router 7/7; full MortimerHost 374 passed, 7 environment-dependent skips, 0 failures. `git diff --check` passed. Render captures inspected at compact widths 512 and 1000; paths and details are in the linked plan.
+  - **Log (2026-09-29):** Codex implemented layout-v2-only caption removal and rendered-regression tests. Full response/history surfaces and legacy layout are preserved. Awaiting PR review, then Larry’s Mac acceptance.
   - **Close when:** live user and Mortimer speech updates the main-window transcript without a duplicate in the compact rail, in single- and multi-monitor layouts; no blank transcript-sized gap or loss of voice controls/history.
 
 </details>

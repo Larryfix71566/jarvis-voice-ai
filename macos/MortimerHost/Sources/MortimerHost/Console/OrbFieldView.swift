@@ -215,7 +215,9 @@ struct OrbFieldView: View {
         }
     }
 
-    /// Compact layout reuses the same status, caption and satellite owners.
+    /// Compact layout reuses the same status and satellite owners. Layout v2
+    /// keeps the transcript in the main conversation surface instead of
+    /// repeating captions here. Legacy layouts retain their existing captions.
     /// Scrolling keeps every notice and agent reachable in a narrow voice rail.
     private var compactReadout: some View {
         ScrollView {
@@ -247,7 +249,9 @@ struct OrbFieldView: View {
                     }
                 }
                 if let notice = notices.audioInputNotice { Text(notice).font(.caption) }
-                captions
+                if InterfaceLayoutVersion.resolve(layoutVersion) != 2 {
+                    captions
+                }
                 ForEach(AGENT_LAYOUT, id: \.key) { agent in
                     HStack(spacing: 8) { compactBeam(agent); satellite(agent) }
                 }
