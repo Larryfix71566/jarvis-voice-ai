@@ -87,6 +87,24 @@ Claude’s work or enable any runtime feature.
 
 ### Needs work: not yet built (proposed, claimed, in progress, in review, blocked)
 
+<details id="ws-16">
+<summary>WS-16 — Protected-window capture gate repair · Codex</summary>
+
+**Workstream:** Make the privacy-preserving live-window capture assertion deterministic enough to unblock DEPLOY-MAIN without weakening what it proves.
+
+- **Owner:** `codex`
+- **Status:** claimed (Larry, 09-29); claim PR pending
+- **Implemented by:** Codex diagnosis; test repair pending
+- **Remaining work / acceptance:** The `d460809` DEPLOY-MAIN run stopped in phase A on an exact pixel comparison between two separate protected/body-only windows. Identify and correct capture/fixture instability while preserving full-frame privacy coverage. Require a real foreground capture (not a skip), the full MortimerHost suite, then Larry's DEPLOY-MAIN run. WS-08 orb deployment and visual acceptance resume afterward.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** `codex/ws16-protected-capture-20260929`
+- **Plan:** `docs/plans/MORTIMER_PROTECTED_WINDOW_CAPTURE_GATE_PLAN.md`
+- **Scope:** `macos/MortimerHost/Tests/MortimerHostTests/ProtectedDisplayContentTests.swift`, this row's plan and acceptance evidence, and `ROADMAP.md` status only. Product display code remains outside this row; WS-15 owns `Display/DisplayContentView.swift` while active.
+- **Next step:** Merge the docs-only claim; then implement and validate a deterministic full-window comparison in this worktree.
+- **Updated:** 09-29
+
+</details>
+
 <details id="ws-05">
 <summary>WS-05 — Model access: subscriptions, APIs and SAYGM · Codex</summary>
 
@@ -577,6 +595,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29: Larry assigned Codex WS-16 after DEPLOY-MAIN for `d460809` stopped before production changes on the protected-window screenshot equality test. The logged captures differ in 21,946/1,041,600 pixels at the frame edge and body text; the central content matches. This docs-only claim reserves the test file and a separate worktree; it does not change product display code or relax the privacy assertion.
 
 - 2026-09-29: Codex WS-08 crystal-only implementation landed in PR #112 as `e9388fc`. The first `validate` run failed in an unchanged app-build timing test; that isolated test passed locally and the complete workflow passed on rerun. Sandbox controller and Knowledge base workflows also passed. Deployment and Larry's live orb checks remain open.
 
