@@ -93,14 +93,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Make the privacy-preserving live-window capture assertion deterministic enough to unblock DEPLOY-MAIN without weakening what it proves.
 
 - **Owner:** `codex`
-- **Status:** landed (PR #117, `c5781a8`); deployment acceptance open
+- **Status:** in-progress: PR #117 landed; phase A capture-fixture follow-up after DEPLOY-MAIN stopped
 - **Implemented by:** Codex diagnosis and test-fixture repair
-- **Remaining work / acceptance:** The `d460809` DEPLOY-MAIN run stopped in phase A on an exact pixel comparison between two separate protected/body-only windows. The merged repair reuses one window and still compares every captured pixel. Real ScreenCaptureKit capture passed four consecutive focused runs. With Claude's CX-14 fix in PR #118 (`adeffc1`), the combined MortimerHost suite passed 383 tests, five unrelated skips, zero failures; both the capture and radar policy tests executed and passed. Larry now reruns DEPLOY-MAIN on `c5781a8` and records its phase A result. WS-08 orb deployment and visual acceptance resume afterward.
+- **Remaining work / acceptance:** The PR #117 repair reuses one window and compares every captured pixel. DEPLOY-MAIN for `2ed1986` stopped in phase A because this test's separate `occlusionState` prerequisite timed out before ScreenCaptureKit ran; production stayed at `adeffc1`. The follow-up removes that unreliable prerequisite, requires ScreenCaptureKit to find and capture the real window, and compares protected, body-only, and empty-body captures so a blank capture cannot pass. Four focused runs passed without skips; the full MortimerHost suite passed 383 tests, six unrelated skips, zero failures, with the real capture executed. Merge this follow-up, then Larry reruns DEPLOY-MAIN. WS-08 orb deployment and visual acceptance resume afterward.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main (PR #117, `c5781a8`); status follow-up on `codex/ws16-protected-capture-20260929`
 - **Plan:** `docs/plans/MORTIMER_PROTECTED_WINDOW_CAPTURE_GATE_PLAN.md`
 - **Scope:** `macos/MortimerHost/Tests/MortimerHostTests/ProtectedDisplayContentTests.swift`, this row's plan and acceptance evidence, and `ROADMAP.md` status only. Product display code remains outside this row; WS-15 owns `Display/DisplayContentView.swift` while active.
-- **Next step:** Larry runs DEPLOY-MAIN for `c5781a8` and confirms the phase A protected-window capture executed and passed, then the release reaches production.
+- **Next step:** Review and merge the capture-fixture follow-up, then Larry reruns DEPLOY-MAIN and confirms phase A capture executed and passed before production acceptance.
 - **Updated:** 09-29
 
 </details>
@@ -596,6 +596,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29: Larry's DEPLOY-MAIN for `2ed1986` stopped in phase A; the protected-window capture test timed out waiting for `occlusionState.visible` before taking a screenshot. Production remained at `adeffc1`. Codex's WS-16 follow-up removes only that prerequisite and adds a third real capture to prove the local body rendered; four focused actual-capture runs and the full MortimerHost suite (383 tests, six unrelated skips, zero failures) passed in this worktree. Merge and a fresh DEPLOY-MAIN run remain open.
 
 - 2026-09-29: Codex WS-16 capture repair landed in PR #117 (`c5781a8`) after all five PR checks passed. The merged candidate passed MortimerHost 383 tests, five unrelated skips, zero failures; the actual protected-window capture executed and passed. Larry's DEPLOY-MAIN run and production acceptance remain open.
 

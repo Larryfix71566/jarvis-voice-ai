@@ -102,13 +102,13 @@ final class ProtectedDisplayContentTests: XCTestCase {
             #"{"title":"Captured title canary","body":"Visible captured body","surface":"window","data_policy":"local_only","links":[{"label":"captured-link-canary","url":"https://private.invalid/?token=secret"}],"images":["https://private.invalid/image.png"],"basemap_images":["https://private.invalid/basemap-canary.png"],"commands":["captured command canary"],"content":"captured clipboard canary"}"#.utf8))
         let bodyOnly = try JSONDecoder().decode(DisplayPayload.self, from: Data(
             #"{"title":"Captured title canary","body":"Visible captured body","surface":"window","data_policy":"local_only"}"#.utf8))
+        let emptyBody = try JSONDecoder().decode(DisplayPayload.self, from: Data(
+            #"{"title":"Captured title canary","surface":"window","data_policy":"local_only"}"#.utf8))
 
         let capturedView = host(protected)
         let capturedWindow = try XCTUnwrap(window)
         showForCapture(capturedWindow)
-        try waitUntil("the protected fixture window is visible and unoccluded") {
-            capturedWindow.isVisible && capturedWindow.occlusionState.contains(.visible)
-        }
+        try await Task.sleep(nanoseconds: 200_000_000)
         let protectedCapture = try await captureWindowPNG(capturedWindow)
 
         // Use the same live window for both payloads. Closing and recreating it changes
@@ -117,9 +117,6 @@ final class ProtectedDisplayContentTests: XCTestCase {
         capturedView.layoutSubtreeIfNeeded()
         capturedWindow.displayIfNeeded()
         try await Task.sleep(nanoseconds: 200_000_000)
-        try waitUntil("the body-only reference window is visible and unoccluded") {
-            capturedWindow.isVisible && capturedWindow.occlusionState.contains(.visible)
-        }
         let referenceCapture = try await captureWindowPNG(capturedWindow)
 
         let protectedImage = try XCTUnwrap(NSBitmapImageRep(data: protectedCapture))
@@ -132,6 +129,18 @@ final class ProtectedDisplayContentTests: XCTestCase {
             XCTFail("OS window-capture PNG differs from the protected body-only rendering: "
                     + pixelDifferenceSummary(protectedPixels, referencePixels,
                                              width: protectedImage.pixelsWide))
+        }
+
+        // A blank capture would also make two windows compare equal. Prove the
+        // real capture contains the local body by removing it in that same window.
+        capturedView.rootView = displayView(emptyBody)
+        capturedView.layoutSubtreeIfNeeded()
+        capturedWindow.displayIfNeeded()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        let emptyCapture = try await captureWindowPNG(capturedWindow)
+        let emptyImage = try XCTUnwrap(NSBitmapImageRep(data: emptyCapture))
+        if referencePixels == rgbaPixels(emptyImage) {
+            XCTFail("OS window capture did not visibly render the protected local body")
         }
     }
 
@@ -168,24 +177,6 @@ final class ProtectedDisplayContentTests: XCTestCase {
         window.level = .floating
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
-    }
-
-    private func waitUntil(_ description: String, timeout: TimeInterval = 3,
-                           condition: () -> Bool) throws {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !condition() && Date() < deadline {
-            if let event = NSApp.nextEvent(matching: .any, until: Date().addingTimeInterval(0.01),
-                                           inMode: .default, dequeue: true) {
-                NSApp.sendEvent(event)
-            }
-            NSApp.updateWindows()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.005))
-        }
-        guard condition() else {
-            throw NSError(domain: "ProtectedDisplayContentTests.WindowCapturePrerequisite",
-                          code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "Timed out waiting for \(description)"])
-        }
     }
 
     private func accessibilityLabels(in view: NSView) -> [String] {
@@ -229,7 +220,9 @@ final class ProtectedDisplayContentTests: XCTestCase {
                                                                                onScreenWindowsOnly: true)
         let windowID = CGWindowID(window.windowNumber)
         let captureWindow = try XCTUnwrap(shareable.windows.first { $0.windowID == windowID },
-                                          "the live test window should appear in ScreenCaptureKit's inventory")
+                                          "the live test window should appear in ScreenCaptureKit's inventory; "
+                                          + "visible=\(window.isVisible), "
+                                          + "unoccluded=\(window.occlusionState.contains(.visible))")
         let filter = SCContentFilter(desktopIndependentWindow: captureWindow)
         let configuration = SCStreamConfiguration()
         configuration.width = max(1, Int(window.frame.width * window.backingScaleFactor))

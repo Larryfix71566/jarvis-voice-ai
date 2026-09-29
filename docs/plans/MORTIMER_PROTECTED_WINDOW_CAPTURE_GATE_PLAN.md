@@ -1,6 +1,6 @@
 # Protected-window capture gate repair (WS-16)
 
-**Status:** LANDED (PR #117, `c5781a8`); combined Swift gate passed, deployment open.
+**Status:** IN PROGRESS; PR #117 landed, phase A capture-fixture follow-up under review.
 **Owner:** Codex. Larry runs DEPLOY-MAIN and accepts the live result.
 **Recorded:** 2026-09-29.
 
@@ -98,3 +98,15 @@ were displayed, and it is not a passing privacy check.
 - 2026-09-29: PR #117 merged as `c5781a8` with all five CI checks green.
   The repair is on main. Larry's DEPLOY-MAIN run and production acceptance
   remain open; the prior Mac deploy stopped before changing production.
+- 2026-09-29: DEPLOY-MAIN for `2ed1986` stopped in phase A because the
+  actual-window test timed out on `NSWindow.occlusionState.visible` before
+  ScreenCaptureKit ran. JarvisKit passed 218 tests; MortimerHost ran 383
+  tests with six skips and one failure; Python was not reached. Production
+  remained at `adeffc1`. The follow-up removes that occlusion precondition
+  and makes actual ScreenCaptureKit inventory/capture the prerequisite.
+  It also captures the same window with its body removed, proving that a
+  blank image cannot satisfy the protected/body-only equality check.
+  Four focused actual-capture runs passed without skips; the full
+  MortimerHost suite passed 383 tests, six unrelated skips, zero failures,
+  with the actual capture executed and passing. Review/merge and Larry's
+  fresh DEPLOY-MAIN run remain open.
