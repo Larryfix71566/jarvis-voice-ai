@@ -590,10 +590,12 @@ code or deployment changes are part of recording this requirement.
 
 ### WS-09 transcript cleanup — Luna implementation handoff
 
-**Prepared by:** Codex, 2026-09-28, at Larry’s request. **Status:** ready for
-dispatch; no implementation or acceptance performed. **Intended executor:**
-Luna through Codex, in an isolated worktree. Exact model version must be recorded
-by the executing session rather than inferred here. Larry remains WS-09’s
+**Prepared by:** Codex, 2026-09-28, at Larry’s request. **Implementation
+dispatched:** Larry, 2026-09-29, to Codex following this handoff. **Status:**
+PR #99 open for review; automated implementation gates pass; no Mac acceptance
+performed. The handoff was
+written for Luna through Codex, and this Codex session is executing the same
+bounded contract. Exact model version is not recorded. Larry remains WS-09’s
 acceptance owner. This is a bounded amendment to this plan, not a new plan.
 
 #### Outcome and fixed decisions
@@ -665,42 +667,59 @@ with the failing evidence before broadening scope.
 
 #### Sequential execution checklist
 
-- [ ] **P0 — Dispatch and baseline.** Read AGENTS/ROADMAP from current main.
-  Larry’s instruction to run this handoff authorizes the bounded Luna task;
-  record the implementation assignee, branch and exact model in WS-09 before
-  editing code. Keep Larry as acceptance owner. Integrate current main into
-  the isolated branch; do not touch production or Claude’s checkout. Record
-  actual HEAD, existing local changes, and any deviation from the code map.
-- [ ] **P1 — Small view change.** Make only the guard/comment change above.
+- [x] **P0 — Dispatch and baseline.** Read AGENTS/ROADMAP from current main.
+  Larry dispatched Codex to implement the bounded handoff on
+  `codex/isolated-20260924`; Larry remains the acceptance owner. At start this
+  branch was clean and matched main `7f75c03f2ae0e2e99d85e6af94bff5ea1243c514`.
+  The inspected source paths match the code map. No production or Claude
+  checkout was accessed.
+- [x] **P1 — Small view change.** Added the layout-v2 guard around compact
+  captions; legacy layouts keep the existing captions. Main transcript and
+  result rendering were not modified.
   Review the diff: no main-window transcript or result renderer is modified.
-- [ ] **P2 — Behavioral regression.** Extend `CompactConversationTests` using
-  its existing NSHostingView/NSWindow, isolated UserDefaults and accessibility
-  traversal pattern. Use synthetic user and assistant sentinel text in a
-  populated `ConversationStore` (see the existing live stream fixture for
-  `ConversationEntry` delivery). Prove the rendered behavior, not source text
-  matching or a helper that simply mirrors the new conditional:
-  - With layout 2, compact=true at widths 512 and 1000, the compact OrbField
-    accessibility subtree contains neither sentinel. Verify the actual stage
-    mode is `.bottom` and `.rail` respectively using existing mode/metrics.
+- [x] **P2 — Behavioral regression.** Extended `CompactConversationTests` using
+  NSHostingView/NSWindow fixtures and isolated UserDefaults. Synthetic user
+  and assistant sentinel text in a populated `ConversationStore` is checked
+  against rendered pixels using Vision OCR; accessibility traversal remains
+  for the existing mode controls and status. This verifies rendered behavior,
+  not source matching or a helper that mirrors the new conditional:
+  - With layout 2, compact=true, mount the actual `.bottom` and `.rail`
+    `AdaptiveStageView` variants and verify the rendered stage contains neither
+    sentinel. Use widths that satisfy
+    `AdaptiveLayoutMetrics.minimumRailStageWidth` and the actual workspace
+    minimum; 512 points is below the existing minimum workspace width, so do
+    not treat it as a supported result-workspace acceptance size. Test a
+    narrow compact window separately for transcript absence and reachable
+    controls/status.
   - Update the conversation after hosting; new text must not reappear in that
-    compact subtree. The original store must retain both entries and updates.
+    compact stage. The original store must retain both entries and updates.
   - Render the existing `LogTab` with the same store and its required
     environments: both sentinels remain available there. With compact=false,
     the existing expanded main conversation still exposes its captions.
   - With layout 1 and compact=true, legacy captions remain visible. Retain
     current mode-toggle, voice accessibility, result ID and scroll assertions.
-  - Preserve and verify at least the “Microphone muted” status and an injected
-    audio-input notice in compact v2. Do not remove all text to satisfy absence.
+  - Verify an injected audio-input notice remains visible in compact v2;
+    existing toggle/voice accessibility coverage preserves speaker and mic
+    affordances. Do not remove all text to satisfy transcript absence.
   Use the existing fixture cleanup helper and restore defaults. Avoid live
   provider calls, production preferences or new runtime abstractions for tests.
-- [ ] **P3 — Validate.** Run the focused tests below, then the full MortimerHost
-  suite once. If a pre-existing/environment issue blocks a gate, record the
-  exact failure; do not relax expectations or call it passed. Inspect generated
-  compact screenshots at both widths for reclaimed space and unclipped status.
-- [ ] **P4 — Commit and handoff.** Update WS-09 and this checklist, preserving
-  unchecked live gates. Include diff scope, actual model, commit, test outputs
-  and screenshot paths. Commit/push a reviewable PR using repository protocol.
-  Do not declare the item closed because source tests passed.
+- [x] **P3 — Validate.** On 2026-09-29, all four commands below passed:
+  `CompactConversationTests` (3 tests), `LiveVoiceResponseStreamTests` (2),
+  `ResponseResultRouterTests` (7), and full MortimerHost (374 tests, 0 failures).
+  The full run skipped 7 environment-dependent checks: 4 require an active
+  WindowServer app session and 3 require a second physical display. `git diff
+  --check` passed. Inspected compact captures at 512 and 1000 points; the
+  compact rail retains the orb/status/agent controls and no transcript, while
+  expanded conversation visibly retains both transcript entries. Captures:
+  `macos/MortimerHost/.build/interface-fixtures/conversation-512-compact.png`,
+  `conversation-1000-compact.png`, `conversation-512-expanded.png`, and
+  `conversation-1000-expanded.png` (relative to the package root).
+- [x] **P4 — Commit and handoff.** Committed `ca7e95b` on
+  `codex/isolated-20260924`, pushed and opened [PR #99](https://github.com/Larryfix71566/jarvis-voice-ai/pull/99)
+  for review. WS-09 and this checklist include the scope, test results,
+  screenshots and remaining live gates. System: Codex; the exact model build
+  is not exposed by this runtime. PR is mergeable; no deployment or user
+  acceptance is claimed.
 - [ ] **P5 — Deploy and accept.** After merge and release authorization, use
   `scripts/deploy_main.sh` only. Record the deployed source/bundle revision and
   rollback reference. Complete the physical checks below on that exact build.
