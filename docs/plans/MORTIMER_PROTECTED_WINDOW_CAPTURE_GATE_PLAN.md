@@ -1,6 +1,6 @@
 # Protected-window capture gate repair (WS-16)
 
-**Status:** IN PROGRESS; scoped repair built, real foreground capture and deployment open.
+**Status:** IN REVIEW (PR #117); real foreground capture and deployment open.
 **Owner:** Codex. Larry runs DEPLOY-MAIN and accepts the live result.
 **Recorded:** 2026-09-29.
 
