@@ -182,6 +182,11 @@ enum RadarTileMath {
 final class RadarTileOverlay: MKTileOverlay {
     let template: String
     let maxNativeZoom: Int
+    /// Radar tiles come from third-party servers, so they get their own
+    /// ephemeral session: nothing shared with Mortimer's own HTTP, and the
+    /// app's shared session stays reserved for JarvisHTTP (G13,
+    /// MemoryGraphClosureC3Tests).
+    private static let tileSession = URLSession(configuration: .ephemeral)
 
     init(template: String, maxNativeZoom: Int) {
         self.template = template
@@ -200,7 +205,7 @@ final class RadarTileOverlay: MKTileOverlay {
             result(nil, nil)
             return
         }
-        URLSession.shared.dataTask(with: url) { data, _, error in
+        Self.tileSession.dataTask(with: url) { data, _, error in
             guard let data, error == nil else {
                 result(nil, error)
                 return
