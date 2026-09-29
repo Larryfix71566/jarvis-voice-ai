@@ -14,6 +14,12 @@
 # gets the guidance the live result hook would append.
 # 26 cases: 20 replayed failures, 1 capability-question exemption,
 # 1 explicit ask, 2 human-only proposal steps, 1 merge (turn 2752), 1 control.
+# WS-15 (2026-09-29) adds 3: current weather with no place named must call
+# local_weather (place from this device, never memory); a named place stays
+# with the analyst (the Alpharetta control below).
+- {input: "What's the weather?", require_tool: local_weather}
+- {input: "Do I need an umbrella today?", require_tool: local_weather}
+- {input: "What does the week look like weather-wise?", require_tool: local_weather}
 
 - {from: 3535, input: "Can you not check my Internet connection for a location?", require_tool: system_status}
 - {from: 126, input: "Can you see my location?", require_tool: system_status}

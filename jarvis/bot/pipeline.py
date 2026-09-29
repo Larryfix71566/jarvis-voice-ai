@@ -81,6 +81,7 @@ from jarvis.bot.follow_up import (
     progress_updates_enabled,
 )
 from jarvis.bot.status_tool import build_system_status_tool
+from jarvis.bot.weather_tool import build_local_weather_tool
 from jarvis.bot.device_location import DeviceLocation, resolve_location, summarize_location
 from jarvis import ambient_weather
 from jarvis.bot.console_actions import build_console_action_tool
@@ -768,6 +769,23 @@ def build_pipeline(
         return summarize_location(result)
 
     _, system_status_handler = build_system_status_tool(location=_location_answer)
+
+    # WS-15 (MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md S3): current
+    # weather from the same device-first resolver, never a place a model
+    # wrote. Always registered (W8: no new kill switch).
+    async def _weather_location(protected: bool) -> dict:
+        return await resolve_location(
+            runtime.device_location, protected=protected,
+            ip_lookup=lambda: asyncio.to_thread(ambient_weather.ip_location))
+
+    async def _push_weather_card(payload: dict) -> None:
+        _logger.info("display_payload tool=local_weather surface=%s agent=supervisor kind=%s",
+                     payload.get("surface"), payload.get("kind"))
+        await send_app_message(transport, {"type": "display", "display": payload})
+
+    _, local_weather_handler = build_local_weather_tool(
+        locate=_weather_location, push_display=_push_weather_card)
+    local_weather_on = True
     # W12 — both read their kill switch once, here, and pass it to the menu,
     # the prompt and registration, so the three cannot disagree.
     progress_enabled = progress_updates_enabled()
@@ -948,6 +966,7 @@ def build_pipeline(
         clipboard=clipboard_enabled,
         progress=progress_enabled,
         follow_up=follow_up_enabled,
+        weather=local_weather_on,
     )
 
     # Phase 4 Rev 3.4 Stage A2 — see memory_stats above. Logged with the
@@ -1082,6 +1101,8 @@ def build_pipeline(
         register_voice_tool("progress_updates", progress_updates_handler)
     if follow_up_enabled:
         register_voice_tool("follow_up", follow_up_handler)
+    if local_weather_on:
+        register_voice_tool("local_weather", local_weather_handler)
     tts = ElevenLabsTTSService(
         api_key=settings.elevenlabs_api_key,
         settings=ElevenLabsTTSSettings(
@@ -1127,6 +1148,7 @@ def build_pipeline(
             status=status_enabled,
             progress=progress_enabled,
             follow_up=follow_up_enabled,
+            weather=local_weather_on,
         )
     ]
     context = LLMContext(

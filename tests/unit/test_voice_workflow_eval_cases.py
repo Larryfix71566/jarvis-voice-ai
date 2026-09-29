@@ -14,7 +14,7 @@ OFF = SimpleNamespace(jarvis_voice_workflows_enabled=False)
 
 
 def test_every_case_has_input_and_well_formed_prior():
-    assert len(CASES) == 26
+    assert len(CASES) == 29  # 26 + 3 WS-15 local_weather cases (2026-09-29)
     for case in CASES:
         assert case["input"].strip()
         for message in case.get("prior") or []:
@@ -52,3 +52,19 @@ def test_the_w12_cases_grade_on_the_timing_tools():
     logged = by_from[1456]
     assert not ev.grade(logged, "I can't set automatic status updates — there's no timer or "
                                 "wait capability.", [], [])[0]
+
+
+
+def test_the_ws15_cases_require_local_weather():
+    # WS-15: current weather with no place named must be answered by
+    # local_weather (this device's location), never delegated with a
+    # remembered place. A named place stays with the analyst.
+    weather = [c for c in CASES if c.get("require_tool") == "local_weather"]
+    assert [c["input"] for c in weather] == [
+        "What's the weather?", "Do I need an umbrella today?",
+        "What does the week look like weather-wise?"]
+    for case in weather:
+        assert ev.grade(case, "It's 75 and clear at Folly Beach.", [], ["local_weather"])[0]
+        assert not ev.grade(case, "It's 75 and clear in Spartanburg.", ["analyst"], [])[0]
+    control = next(c for c in CASES if c["input"] == "What's the weather in Alpharetta?")
+    assert control["expect_any"] == ["analyst"]

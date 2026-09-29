@@ -27,7 +27,7 @@ def web_search(query: str, max_results: int = 5) -> dict:
 
 @mcp.tool()
 def get_weather(city: str, days: int = 1) -> dict:
-    """Get current weather conditions and a short forecast (1-3 days) for a city, including a one-sentence human summary."""
+    """Get current weather conditions (with humidity and wind), a forecast of 1-7 days with chance of rain, the next 12 hours, and active NWS alerts for a city, including a one-sentence human summary."""
     return logic.get_weather(city, days)
 
 
