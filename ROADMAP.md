@@ -93,14 +93,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Make the privacy-preserving live-window capture assertion deterministic enough to unblock DEPLOY-MAIN without weakening what it proves.
 
 - **Owner:** `codex`
-- **Status:** review (PR #117); live capture gate passed, deployment open
+- **Status:** review (PR #117); live capture gate passed, deployment blocked by CX-14
 - **Implemented by:** Codex diagnosis and test-fixture repair
-- **Remaining work / acceptance:** The `d460809` DEPLOY-MAIN run stopped in phase A on an exact pixel comparison between two separate protected/body-only windows. The test now reuses one window and still compares every captured pixel. The old app-active prerequisite caused Larry's first interactive Terminal attempt to skip; removing only that prerequisite let real ScreenCaptureKit capture pass four consecutive focused runs and the full MortimerHost suite (374 tests, six unrelated skips, zero failures). After PR #117 merges, Larry reruns DEPLOY-MAIN. WS-08 orb deployment and visual acceptance resume afterward.
+- **Remaining work / acceptance:** The `d460809` DEPLOY-MAIN run stopped in phase A on an exact pixel comparison between two separate protected/body-only windows. The test now reuses one window and still compares every captured pixel. Removing the unnecessary app-active prerequisite let real ScreenCaptureKit capture pass four consecutive focused runs and the full pre-WS-15 MortimerHost suite (374 tests, six unrelated skips, zero failures). After WS-15 PR #114 merged, the capture test still passed, but the full suite failed in an unrelated `URLSession.shared` policy test (CX-14). After PR #117 merges and CX-14 is fixed, Larry reruns DEPLOY-MAIN. WS-08 orb deployment and visual acceptance resume afterward.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** `codex/ws16-protected-capture-20260929`
 - **Plan:** `docs/plans/MORTIMER_PROTECTED_WINDOW_CAPTURE_GATE_PLAN.md`
 - **Scope:** `macos/MortimerHost/Tests/MortimerHostTests/ProtectedDisplayContentTests.swift`, this row's plan and acceptance evidence, and `ROADMAP.md` status only. Product display code remains outside this row; WS-15 owns `Display/DisplayContentView.swift` while active.
-- **Next step:** Merge PR #117 after checks pass, then Larry reruns DEPLOY-MAIN and records the phase A capture result.
+- **Next step:** Merge PR #117 after checks pass; Claude resolves CX-14 under WS-15; then Larry reruns DEPLOY-MAIN and records the phase A capture result.
 - **Updated:** 09-29
 
 </details>
@@ -165,7 +165,7 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-29: *"it is missing current radar and it defaults to memory for weather instead of checking current location and getting fresh weather."* A weather answer must use where Larry is now and show current radar for that place.
 
 - **Owner:** `claude`
-- **Status:** in-progress: PR 1 in review (`local_weather`: place from this device, 7-day forecast, humidity and wind, alerts, honest radar wording). PR 2 (native Apple-map card with NOAA radar, card to front) next. Gates G-1 to G-3 passed 09-29 (plan §4a).
+- **Status:** in-progress: PR 1 merged and deployed 09-29 (#110; logs show `local_weather` using the device fix). PR 2 in review: one weather card in the main window (summary, hours, 7 days, alerts) with Apple's map, NOAA radar loop and a pin.
 - **Implemented by:** Claude (plan); code not started
 - **Remaining work / acceptance:** Evidence from the 09-29 10:08 EDT session (`logs/agents/2026-09-29/`), read-only:
   1. **The location came from memory.** The voice model's delegation read *"typically in Spartanburg, SC or surrounding area"*. The analyst called `get_weather` and `get_weather_radar` with `"Spartanburg, SC"` and answered *"(assumed default, not confirmed device location)"*. Larry then had to name Charleston.
@@ -179,10 +179,10 @@ Claude’s work or enable any runtime feature.
 
   Acceptance, now A1–A5 in the plan: "what's the weather" with no place named uses a fresh device fix, or IP labeled approximate, never memory; the radar shown is for that same point and is current; a place Larry names still wins.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** branch `ws15/weather-location-radar-pr1`
+- **Where:** branch `ws15/weather-card-map-pr2`
 - **Plan:** `docs/plans/MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md` (Option A: `local_weather` direct tool; `jarvis/weather/report.py` with Weather.gov 7-day, hourly and alerts; IEM NEXRAD radar with RainViewer outside the US; native `RadarMapView` and `WeatherCardView`). It supersedes W5/W6 of `MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md`. Research: `Claude outputs/ws15/ws15_weather_research.html`.
 - **Scope:** `jarvis/weather/` (new), `jarvis/weathergov.py`, `mcp_servers/mcp_web/logic.py`, `mcp_servers/mcp_web/server.py`, `jarvis/bot/weather_tool.py` (new), tool registration in `jarvis/bot/pipeline.py`, `jarvis/bot/display.py`, weather lines in `jarvis/prompts.py`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift`, `Display/DisplayContentView.swift`, `Display/WeatherCardView.swift` and `Display/RadarMapView.swift` (new), and their tests and evals. Re-checked 09-29: none of these is inside another block's scope.
-- **Next step:** Larry merges PR 1 and runs DEPLOY-MAIN, then checks A1, A6 and A8 (voice and location). Claude builds PR 2 (S6) for the card and map checks (A2–A5, A7).
+- **Next step:** Larry merges PR 2 and runs DEPLOY-MAIN, then runs acceptance A1–A7 (plan §6); Claude checks A8 in the logs. Then WS-15 moves to accepted.
 - **Updated:** 09-29
 
 </details>
@@ -435,6 +435,7 @@ Open means not yet resolved. Each entry names who resolves it.
 
 | ID | Conflict | Resolves | State |
 |---|---|---|---|
+| CX-14 | WS-15 PR #114 added `URLSession.shared.dataTask` in `Display/RadarMapView.swift`. On main `05c4a40`, the full MortimerHost suite fails two assertions in `MemoryGraphClosureC3Tests.testURLSessionSharedIsOnlyUsedByJarvisHTTPAndTheWakeWordSocket`, which forbids bare shared sessions outside JarvisHTTP. The WS-16 protected actual-window capture passes on this merged tree. | `claude` under active WS-15 scope; preserve the network-session policy and route radar fetching through the approved client. | open: blocks DEPLOY-MAIN phase A, unrelated to WS-16 capture repair |
 | CX-11 | Codex's T2 code against what Claude landed on main. (1) `JARVIS_AUTH_ENABLED` **defaults to true**, with no exempt routes, loopback included, so merging it turns auth on. (2) Main callers that send no token would then get 401: `jarvis/bot/status_tool.py` (the `system_status` tool from #86) and `scripts/deploy_main.sh` phase D, whose health checks expect 200 from `/api/health` and 200/307 from the bot, so the deploy would stop. (3) The route inventory in Codex's tree has 64 sidecar routes; main has 68 decorators, including 10 Codex's copy lacks: `/api/status/*` (9) and `/api/workflows`. (4) `mcp_servers/mcp_selfedit/logic.py`: Codex added service headers; main's copy also changed, so keep both. (5) Token setup is by CLI only (`python -m jarvis.auth add`), which conflicts with the no-shell-commands principle behind Claude's voice workflows (D-L2/D-L5). The native app already sends a Keychain token on every request (`JarvisHTTP.swift`), so it needs no code change, only a stored token. | `codex`: Addendum R1 fixes (1)–(4); `larry` decides (5) when T2 is decided (options in R1.9) | R1 implemented and deployed dormant; isolated enabled/dormant proof passes; token onboarding/remote activation remain undecided |
 | CX-13 | WS-14 edits `jarvis/subscription.py`, which is WS-02's scope (Codex; landed, so unlocked, but its live isolation gates are open). The allowlist change adds `USER`/`LOGNAME`, justified by the live `Not logged in` result recorded in WS-06. | `larry` (09-29): Claude lands, and Codex reviews before merge | resolved 09-29: Codex post-merge review of PR #102 found no blocking code issue; Mac Keychain/launchd evidence remains reported live evidence, not independently reproduced |
 | CX-01 | Codex's worktree is based on `977f50b` and lacks #86 and the voice-workflows landing (`jarvis/status/`, `notices.py`, `voice_workflows.py`, …). 24 `jarvis/` files changed on both sides. | `codex`: commit, then merge `origin/main` | resolved in main; deployed `539f8f6` |
@@ -596,9 +597,13 @@ first lever to pull.
 
 ## 8. Change log
 
+- 2026-09-29: Codex merged main `05c4a40` into WS-16 while preserving Claude's WS-15 roadmap entry. The actual protected-window capture passed on the merged tree. Full MortimerHost ran 383 tests with six skips and two failures, both in the `URLSession.shared` policy test caused by WS-15's new `RadarMapView.swift`. Registered CX-14 for Claude; WS-16 does not edit WS-15 product code.
+
 - 2026-09-29: Codex WS-16 removed only the app-active precondition after Larry's interactive Terminal capture also skipped. ScreenCaptureKit's real full-window comparison then passed four focused runs without skips and the full MortimerHost suite (374 tests, six unrelated skips, zero failures). PR #117 remains in review; production deployment is still open.
 
 - 2026-09-29: Codex WS-16 claim landed in PR #116 (`5182bdf`). Codex changed only the protected-window test fixture: protected and body-only payloads now render in the same live window; the full-frame exact comparison remains, with bounded pixel-difference diagnostics. Full MortimerHost passed 374 tests, seven skipped, zero failures. The capture test skipped because this shell's test host could not activate, so foreground capture and DEPLOY-MAIN remain open.
+
+- 2026-09-29 (night, WS-15 PR 2): Claude (Cowork). PR 1 (#110) is deployed and its logs confirm `local_weather` with the device fix. PR 2 follows Larry's one-window decision: the weather card lives in the main window only and is selected on arrival. It holds the summary, now, alerts, 12 hours, 7 days, and Apple's map with the NOAA/IEM radar loop and a pin; radar past zoom 8 is enlarged so it stays at street level.
 
 - 2026-09-29: Larry assigned Codex WS-16 after DEPLOY-MAIN for `d460809` stopped before production changes on the protected-window screenshot equality test. The logged captures differ in 21,946/1,041,600 pixels at the frame edge and body text; the central content matches. This docs-only claim reserves the test file and a separate worktree; it does not change product display code or relax the privacy assertion.
 

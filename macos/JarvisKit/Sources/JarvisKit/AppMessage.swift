@@ -170,6 +170,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         runID = nil; ts = timestamp; surface = .window; tool = nil
         commands = nil; note = nil; expectOutput = nil; content = nil
         chars = nil; truncated = nil; dataPolicy = nil; opaqueRef = nil
+        weather = nil
     }
 
     public let kind: String?
@@ -198,6 +199,10 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
     /// not be copied, shared, exported, or forwarded to the voice supervisor.
     public let dataPolicy: String?
     public let opaqueRef: String?
+    /// WS-15 PR 2: the weather card's structured view (kind "weather").
+    /// Lenient: nil when absent, malformed or of an unknown schema, so the
+    /// markdown body still renders.
+    public let weather: WeatherCard?
     public var isProtectedLocal: Bool {
         guard let dataPolicy else { return false }
         return dataPolicy != "approved_external"
@@ -210,6 +215,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         case expectOutput = "expect_output"
         case content, chars, truncated
         case dataPolicy = "data_policy", opaqueRef = "opaque_ref"
+        case weather
     }
 
     public init(from d: Decoder) throws {
@@ -237,6 +243,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated)
         dataPolicy = try c.decodeIfPresent(String.self, forKey: .dataPolicy)
         opaqueRef = try c.decodeIfPresent(String.self, forKey: .opaqueRef)
+        weather = (try? c.decodeIfPresent(WeatherCard.self, forKey: .weather)) ?? nil
     }
 }
 

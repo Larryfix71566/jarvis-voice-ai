@@ -23,6 +23,18 @@ struct DisplayContentView: View {
     @State private var viewport: CGSize = .zero
 
     var body: some View {
+        // WS-15 PR 2: a weather card renders as ONE card (summary, hours,
+        // week, map with radar); anything else keeps the standard layout.
+        if payload.kind == "weather", let card = payload.weather, !payload.isProtectedLocal {
+            ScrollView {
+                WeatherCardView(card: card).padding(12)
+            }
+        } else {
+            standardBody
+        }
+    }
+
+    private var standardBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 if let body = payload.body, !body.isEmpty {
