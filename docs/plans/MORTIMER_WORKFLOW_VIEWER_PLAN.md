@@ -1,6 +1,6 @@
 # Mortimer Workflow Viewer: Handoff Plan
 
-**Status:** DECIDED and BUILT in the VM, 2026-09-25 (Larry chose the recommended option for D-V1, D-V2 and D-V3; §3). Branch `viewer`; patch `closure-checks/viewer-on-phase4.patch`. The Python half is tested in the VM. The Swift half compiled and passed on the Mac in check run 2 (2026-09-25 18:06; §8).
+**Status:** LANDED 2026-09-25 in PR #91 (merge `0b76f49`) with the voice-workflows landing, and deployed; production now runs `539f8f6`. The **Workflows** button is present in the console (`AdaptiveStageView.conversationControls`). Decisions D-V1 to D-V3 (§3) stand. Reconciled 2026-09-28 (WS-07 in `ROADMAP.md`); the history below is unchanged.
 **Author:** Claude (Cowork), 2026-09-25 · **Approver:** Larry
 **Parent:** `MORTIMER_VOICE_WORKFLOWS_PLAN.md` §12 (layout C chosen 2026-09-25). This is the handoff plan §12 asked for.
 **Builds on:** branch `phase4` (Phases 1–4 + #86). It is a new branch `viewer` on top, and a sixth patch, `viewer-on-phase4.patch`, tested at the same end-of-project run.
