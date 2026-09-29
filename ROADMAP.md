@@ -360,14 +360,17 @@ Claude’s work or enable any runtime feature.
   1. **The location came from memory.** The voice model's delegation read *"typically in Spartanburg, SC or surrounding area"*. The analyst called `get_weather` and `get_weather_radar` with `"Spartanburg, SC"` and answered *"(assumed default, not confirmed device location)"*. Larry then had to name Charleston.
   2. **Cause in code.** The device-location resolver (`jarvis/bot/device_location.py`, order per D-L6: device fix, then IP, then "not available", never memory) is wired only into `system_status` ("where am I", `_location_answer` in `jarvis/bot/pipeline.py`). `mcp_web.get_weather(city)` and `get_weather_radar(city)` take only a city string, so "current" weather gets whatever place the voice model writes, which in practice comes from memory.
   3. **The app has not granted location since the rebuilds.** Its `location/hello` reported `authorization: not_determined` on 09-28 20:21 and 09-29 10:07. The last `authorized` hello with a fix was 09-25 22:58. So even a wired resolver would fall back to IP today. Why permission reset is untested; the app re-signing on rebuild is a candidate, not verified.
-  4. **Radar ran, for the wrong place.** `get_weather_radar` ran and sent a window display payload three times on 09-29 (the RainViewer frame was about 8 minutes old); the first was for Spartanburg. Whether it rendered in the app, and what "missing" means (not shown, not animated, or wrong area), is untested. Larry's description of what he saw settles it.
+  4. **Radar ran, for the wrong place.** `get_weather_radar` ran and sent a window display payload three times on 09-29 (the RainViewer frame was about 8 minutes old); the first was for Spartanburg.
+  5. **Larry, 09-29: "no radar showed up", and when radar does show, the map under it is wrong for the area.** Two separate issues:
+     - **Map wrong for the area (cause found in code).** `get_weather_radar` returns nine zoom-6 tiles (a 3×3 grid about 1,900 km across; the tile maths for Spartanburg checks out at x=17, y=25). The docstring says the UI stitches them into a 3×3 grid, but `imagesStack` in `DisplayContentView.swift` renders them as a `ForEach` of nine separate full-width images stacked vertically, each with its own basemap. So the screen shows nine separate map squares in a column, not one map of the area. Zoom 6 is also too coarse for local radar, and there is no marker for the point.
+     - **No radar at all (cause untested).** The server logged three `surface=window` radar payloads at 10:08–10:09, so it sent them. Whether the display window was open, whether later web-search results pushed the radar out of the supporting display (`maxSupportingStagePanels`), or whether the images failed to load has not been checked. It needs a live check with the display window open.
 
   Acceptance, to be finalized in the plan: "what's the weather" with no place named uses a fresh device fix, or IP labeled approximate, never memory; the radar shown is for that same point and is current; a place Larry names still wins.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** plan amendment first (docs), then a code branch when claimed
 - **Plan:** amend `docs/plans/MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md` (W1–W8, implemented 08-22), showing options before any code. Candidate direction, not decided: resolve location in the D-L6 order and pass lat/lon to both tools; memory never supplies the place for "current".
-- **Scope:** when claimed: `mcp_servers/mcp_web/server.py`, `mcp_servers/mcp_web/logic.py`, the weather-location wiring in `jarvis/bot/pipeline.py`, the weather lines in `jarvis/prompts.py`, and their tests. It touches Swift only if the radar symptom needs it; the compact left panel is under WS-09 (Codex), so coordinate there first.
-- **Next step:** Larry describes the radar symptom and re-grants the app's location permission. Claude writes the plan amendment with options; Larry picks; Claude claims WS-15 through a roadmap PR.
+- **Scope:** when claimed: `mcp_servers/mcp_web/server.py`, `mcp_servers/mcp_web/logic.py` (radar zoom and grid), the weather-location wiring in `jarvis/bot/pipeline.py`, the weather lines in `jarvis/prompts.py`, the radar rendering in `macos/MortimerHost/Sources/MortimerHost/Display/DisplayContentView.swift` (`imagesStack`), and their tests. The display window files overlap WS-09 (Codex): coordinate before editing them.
+- **Next step:** Larry re-grants the app's location permission. Claude writes the plan amendment with options for location, radar layout (one stitched map at a closer zoom with a marker, or an interactive map) and the missing-radar check; Larry picks; Claude claims WS-15 through a roadmap PR.
 - **Updated:** 09-29
 
 </details>
@@ -564,6 +567,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29 (evening): Claude (Cowork). WS-15 gains Larry's radar report: no radar showed, and the map under it is wrong for the area. Found in code: the app stacks the nine radar tiles vertically instead of stitching a 3×3 map, at a coarse zoom 6. Why radar did not show at all is untested. The scope adds the Swift radar view (coordinate with WS-09).
 
 - 2026-09-29 (later): Claude (Cowork). WS-14 landed (PR #102, `eb24e81`) and was deployed. The live daily check now shows the Claude subscription `ok: true`. Added WS-15 (proposed), Larry's weather rework: "current" weather took its place from memory (Spartanburg) because the device-location resolver feeds only `system_status` and the weather tools take only a city name; the app's location permission has read `not_determined` since 09-28; the radar symptom still needs Larry's description. Evidence came from read-only reads of logs.
 
