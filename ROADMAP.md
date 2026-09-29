@@ -2,7 +2,7 @@
 
 This file is the single record of **who is doing what** in this repository, for every system that writes code here. Plans (`docs/plans/`) hold design. Receipts (`docs/acceptance/`) hold evidence. **This file holds ownership and state.**
 
-**Last reconciled:** 2026-09-29, against main after PR #105. Production runs `eb24e81` (PR #102 merge), deployed 09-29 10:07 EDT by DEPLOY-MAIN. It includes everything landed through PR #102, including PR #99; blocks that still say "deployed `539f8f6`" are covered by it. No PRs were open at reconcile time. Original evaluation: [cross-system evaluation](docs/reviews/CROSS_SYSTEM_PLAN_EVAL_2026-09-27.md).
+**Last full reconciliation:** 2026-09-29, against main after PR #105. **Latest verified production:** `c3607e6` (PR #121 merge), deployed 09-29 18:04 EDT by DEPLOY-MAIN; this update records WS-16 acceptance only, not a full recheck of every workstream. Earlier blocks with older deployed revisions are covered by this release. Original evaluation: [cross-system evaluation](docs/reviews/CROSS_SYSTEM_PLAN_EVAL_2026-09-27.md).
 
 ---
 
@@ -86,24 +86,6 @@ Claude’s work or enable any runtime feature.
 - Ordered by what still needs work (Larry, 09-29). When a block's status changes, move it to the matching group. Ids are stable, so links keep working.
 
 ### Needs work: not yet built (proposed, claimed, in progress, in review, blocked)
-
-<details id="ws-16">
-<summary>WS-16 — Protected-window capture gate repair · Codex</summary>
-
-**Workstream:** Make the privacy-preserving live-window capture assertion deterministic enough to unblock DEPLOY-MAIN without weakening what it proves.
-
-- **Owner:** `codex`
-- **Status:** review (PR #121): PR #117 landed; phase A capture-fixture follow-up after DEPLOY-MAIN stopped
-- **Implemented by:** Codex diagnosis and test-fixture repair
-- **Remaining work / acceptance:** The PR #117 repair reuses one window and compares every captured pixel. DEPLOY-MAIN for `2ed1986` stopped in phase A because this test's separate `occlusionState` prerequisite timed out before ScreenCaptureKit ran; production stayed at `adeffc1`. The follow-up removes that unreliable prerequisite, requires ScreenCaptureKit to find and capture the real window, and compares protected, body-only, and empty-body captures so a blank capture cannot pass. Four focused runs passed without skips; the full MortimerHost suite passed 383 tests, six unrelated skips, zero failures, with the real capture executed. Merge this follow-up, then Larry reruns DEPLOY-MAIN. WS-08 orb deployment and visual acceptance resume afterward.
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** main (PR #117, `c5781a8`); status follow-up on `codex/ws16-protected-capture-20260929`
-- **Plan:** `docs/plans/MORTIMER_PROTECTED_WINDOW_CAPTURE_GATE_PLAN.md`
-- **Scope:** `macos/MortimerHost/Tests/MortimerHostTests/ProtectedDisplayContentTests.swift`, this row's plan and acceptance evidence, and `ROADMAP.md` status only. Product display code remains outside this row; WS-15 owns `Display/DisplayContentView.swift` while active.
-- **Next step:** Review and merge PR #121 after checks pass, then Larry reruns DEPLOY-MAIN and confirms phase A capture executed and passed before production acceptance.
-- **Updated:** 09-29
-
-</details>
 
 <details id="ws-05">
 <summary>WS-05 — Model access: subscriptions, APIs and SAYGM · Codex</summary>
@@ -401,7 +383,25 @@ Claude’s work or enable any runtime feature.
 
 ### Completed: accepted, nothing left
 
-_None yet. A block moves here when it reaches `accepted`, and later to §6._
+Accepted workstreams are listed below; implementation milestones also appear in §6.
+
+<details id="ws-16">
+<summary>WS-16 — Protected-window capture gate repair · Codex</summary>
+
+**Workstream:** Make the privacy-preserving live-window capture assertion deterministic enough to unblock DEPLOY-MAIN without weakening what it proves.
+
+- **Owner:** `codex`
+- **Status:** accepted: PR #121 merged as `c3607e6` and DEPLOY-MAIN passed 09-29
+- **Implemented by:** Codex diagnosis and test-fixture repair
+- **Remaining work / acceptance:** None for this capture gate. Larry's DEPLOY-MAIN for `c3607e6` passed phase A: the real ScreenCaptureKit protected-window test executed and passed (4.825 s), MortimerHost ran 383 tests with six unrelated skips and zero failures, JarvisKit ran 218 tests with zero failures, and Python had 4,924 passes and seven skips. Phase D reported healthy services and matching code, production and app-bundle revisions. WS-08's separate visual and Reduce Motion acceptance remains open.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (PR #117, `c5781a8`; PR #121, `c3607e6`); acceptance status on `codex/ws16-protected-capture-20260929`
+- **Plan:** `docs/plans/MORTIMER_PROTECTED_WINDOW_CAPTURE_GATE_PLAN.md`
+- **Scope:** `macos/MortimerHost/Tests/MortimerHostTests/ProtectedDisplayContentTests.swift`, this row's plan and acceptance evidence, and `ROADMAP.md` status only. Product display code remains outside this row; WS-15 owns `Display/DisplayContentView.swift` while active.
+- **Next step:** None for WS-16; continue the independently owned WS-08 visual acceptance on the deployed build.
+- **Updated:** 09-29
+
+</details>
 
 ---
 
@@ -596,6 +596,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29: Codex / WS-16 accepted after Larry's DEPLOY-MAIN of PR #121 (`c3607e6`): real ScreenCaptureKit protected-window test executed and passed (4.825 s); MortimerHost 383 tests, six unrelated skips, zero failures; JarvisKit 218/0; Python 4,924 passed and seven skipped. Production, app bundle and main match; services healthy. WS-08 visual and Reduce Motion acceptance remains open. Evidence: `/Users/larryfix/MortimerRollback/logs/deploy-mortimerhost-20260929-175921.txt` and `/Users/larryfix/MortimerRollback/release-c3607e6-20260929-175921`.
 
 - 2026-09-29: Larry's DEPLOY-MAIN for `2ed1986` stopped in phase A; the protected-window capture test timed out waiting for `occlusionState.visible` before taking a screenshot. Production remained at `adeffc1`. Codex's WS-16 follow-up removes only that prerequisite and adds a third real capture to prove the local body rendered; four focused actual-capture runs and the full MortimerHost suite (383 tests, six unrelated skips, zero failures) passed in this worktree. Merge and a fresh DEPLOY-MAIN run remain open.
 

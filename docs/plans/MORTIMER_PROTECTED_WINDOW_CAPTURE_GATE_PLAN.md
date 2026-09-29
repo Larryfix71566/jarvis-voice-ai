@@ -1,6 +1,6 @@
 # Protected-window capture gate repair (WS-16)
 
-**Status:** IN REVIEW (PR #121); PR #117 landed, phase A capture-fixture follow-up pending.
+**Status:** ACCEPTED 2026-09-29. PR #121 merged as `c3607e6`; Larry's DEPLOY-MAIN passed the real capture gate and deployed that revision.
 **Owner:** Codex. Larry runs DEPLOY-MAIN and accepts the live result.
 **Recorded:** 2026-09-29.
 
@@ -110,3 +110,14 @@ were displayed, and it is not a passing privacy check.
   MortimerHost suite passed 383 tests, six unrelated skips, zero failures,
   with the actual capture executed and passing. Review/merge and Larry's
   fresh DEPLOY-MAIN run remain open.
+- 2026-09-29: PR #121 merged as `c3607e6`. Larry ran DEPLOY-MAIN from
+  production. Phase A passed JarvisKit 218/0, MortimerHost 383 tests with
+  six unrelated skips and zero failures, and Python 4,924 passed, seven
+  skipped, two subtests passed. The actual ScreenCaptureKit test executed
+  and passed in 4.825 seconds, rather than skipping. Phase D reported
+  healthy admin/vault/bot services and matching main, production and app
+  bundle revisions at `c3607e653c93338bdc970c2633d233ae2e00a59d`.
+  Rollback snapshot and full logs are under
+  `/Users/larryfix/MortimerRollback/release-c3607e6-20260929-175921` and
+  `/Users/larryfix/MortimerRollback/logs`. WS-16 is accepted. WS-08's orb
+  visual and Reduce Motion acceptance is separate and remains open.
