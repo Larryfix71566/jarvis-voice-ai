@@ -166,3 +166,13 @@ def test_the_w12_timing_tools_come_last_and_are_the_factories_schemas():
     assert after == before + [PROGRESS_UPDATES_SCHEMA, FOLLOW_UP_SCHEMA]
     assert build_progress_updates_tool({})[0] is PROGRESS_UPDATES_SCHEMA
     assert build_follow_up_tool({})[0] is FOLLOW_UP_SCHEMA
+
+
+
+def test_local_weather_is_last_and_only_when_asked():
+    # WS-15: appended after every other tool so earlier menus keep their order.
+    from jarvis.bot.weather_tool import LOCAL_WEATHER_SCHEMA
+    assert LOCAL_WEATHER_SCHEMA not in supervisor_tool_schemas(DELEGATE)
+    menu = supervisor_tool_schemas(DELEGATE, status=True, progress=True, follow_up=True, weather=True)
+    assert menu[-1] == LOCAL_WEATHER_SCHEMA
+    assert menu[:-1] == supervisor_tool_schemas(DELEGATE, status=True, progress=True, follow_up=True)

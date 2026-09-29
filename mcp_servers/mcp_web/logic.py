@@ -46,7 +46,9 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from jarvis.weathergov import active_alerts as _wg_active_alerts
 from jarvis.weathergov import daily_forecast as _wg_daily_forecast
+from jarvis.weathergov import hourly_forecast as _wg_hourly_forecast
 from jarvis.weathergov import fetch_headers as _wg_fetch_headers
 from jarvis.weathergov import weathergov_current as _wg_current
 from mcp_servers.mcp_selfedit.logic import OFFLINE_ERROR
@@ -226,14 +228,21 @@ def _weather_via_weathergov(lat: float, lon: float, days: int) -> dict | None:
         return None
 
     temp_f = wg_current.get("temp_f")
+    # WS-15: the observation payload has no humidity/wind, but the hourly
+    # forecast's current hour does (verified 2026-09-29). Keys stay present
+    # and None when the hourly feed is unavailable (W2: shape never varies).
+    try:
+        hourly = (_wg_hourly_forecast(lat, lon, _weathergov_fetch, hours=12) or {}).get("periods") or []
+    except Exception:
+        hourly = []
+    now_hour = hourly[0] if hourly else {}
     current = {
         "temperature_f": temp_f,
         "temperature_c": _f_to_c(temp_f),
-        # Weather.gov's observation payload (shared via weathergov_current)
-        # does not surface humidity/wind — those keys stay present but
-        # None rather than silently disappearing (W2: shape never varies).
-        "humidity_percent": None,
+        "humidity_percent": now_hour.get("humidity"),
         "wind_kph": None,
+        # NWS's own wind text, e.g. "SE 8 mph" (additive, WS-15).
+        "wind": now_hour.get("wind"),
         "condition": wg_current.get("summary") or "",
         "observed_at": _provider_timestamp(wg_current.get("observed_at")),
     }
@@ -251,19 +260,30 @@ def _weather_via_weathergov(lat: float, lon: float, days: int) -> dict | None:
             "min_f": min_f,
             "max_c": _f_to_c(max_f),
             "min_c": _f_to_c(min_f),
-            # Weather.gov's /forecast periods don't carry a precipitation
-            # probability in the shape daily_forecast reads — left None
-            # rather than fabricated; Open-Meteo's fallback path below
-            # does populate it.
-            "precip_probability": None,
+            # WS-15: the period's own probabilityOfPrecipitation (the
+            # higher of the paired day/night), None when NWS reports none.
+            "precip_probability": d.get("pop"),
             "condition": d.get("condition", ""),
         })
+
+    try:
+        alerts = _wg_active_alerts(lat, lon, _weathergov_fetch)
+    except Exception:
+        alerts = None
 
     return {
         "city": wg_current.get("location") or "",
         "source": wg_current.get("source", "weather.gov"),
         "current": current,
         "daily": daily_out,
+        "hourly": [
+            {"start": h.get("start"), "temp_f": h.get("temp_f"),
+             "temp_c": _f_to_c(h.get("temp_f")), "pop": h.get("pop"),
+             "condition": h.get("condition")}
+            for h in hourly
+        ],
+        # None = the alert lookup failed; [] = none active.
+        "alerts": alerts,
     }
 
 
@@ -277,8 +297,6 @@ def get_weather(city: str, days: int = 1) -> dict:
     city = (city or "").strip()
     if not city:
         return {"error": "A city name is required."}
-    days = max(1, min(int(days), 3))
-    units = _configured_units()
 
     try:
         geo = httpx.get(GEOCODE_URL, params={"name": city, "count": 1}, timeout=TIMEOUT)
@@ -294,6 +312,22 @@ def get_weather(city: str, days: int = 1) -> dict:
     if place.get("country"):
         label = f"{label}, {place['country']}"
     lat, lon = float(place["latitude"]), float(place["longitude"])
+    return weather_at(lat, lon, label, days, requested_city=city)
+
+
+MAX_FORECAST_DAYS = 7
+
+
+def weather_at(lat: float, lon: float, label: str, days: int = 1, *,
+               requested_city: str = "") -> dict:
+    """Current conditions + forecast for coordinates (WS-15 S1). The body
+    get_weather always had, after geocoding — split out so a caller that
+    already knows WHERE (the local_weather tool, from this device's fix)
+    never goes through a place name. Same contract as get_weather: W1-W4,
+    both unit sets, `source` names the upstream, never raises."""
+    days = max(1, min(int(days), MAX_FORECAST_DAYS))
+    units = _configured_units()
+    city = requested_city
 
     wg_result = _weather_via_weathergov(lat, lon, days)
 
@@ -302,6 +336,8 @@ def get_weather(city: str, days: int = 1) -> dict:
         current = wg_result["current"]
         daily_out = wg_result["daily"]
         city_label = wg_result["city"] or label
+        hourly_out = wg_result["hourly"]
+        alerts = wg_result["alerts"]
     else:
         # --- fallback: Open-Meteo (non-US, or Weather.gov unavailable) ---
         try:
@@ -326,11 +362,13 @@ def get_weather(city: str, days: int = 1) -> dict:
         cur = data.get("current", {})
         daily = data.get("daily", {})
         temp_c = cur.get("temperature_2m")
+        wind_kph = cur.get("wind_speed_10m")
         current = {
             "temperature_c": temp_c,
             "temperature_f": _c_to_f(temp_c),
             "humidity_percent": cur.get("relative_humidity_2m"),
-            "wind_kph": cur.get("wind_speed_10m"),
+            "wind_kph": wind_kph,
+            "wind": f"{wind_kph} km/h" if wind_kph is not None else None,
             "condition": _condition(cur.get("weather_code")),
             "observed_at": _provider_timestamp(cur.get("time"), data.get("timezone")),
         }
@@ -350,6 +388,8 @@ def get_weather(city: str, days: int = 1) -> dict:
             })
         source = "open-meteo"
         city_label = label
+        hourly_out: list[dict] = []
+        alerts = None   # Open-Meteo has no alerts: unknown, not "none"
 
     first = daily_out[0] if daily_out else {}
     if units == "metric":
@@ -364,6 +404,8 @@ def get_weather(city: str, days: int = 1) -> dict:
     human = f"In {city_label} it's currently {cur_temp}{cur_unit} and {current['condition']}"
     if current.get("wind_kph") is not None:
         human += f" with {current['wind_kph']} km/h winds"
+    elif current.get("wind"):
+        human += f" with winds {current['wind']}"
     if first and first_max is not None and first_min is not None:
         human += (
             f"; {'today' if days == 1 else first.get('date', '')} expect a "
@@ -385,7 +427,11 @@ def get_weather(city: str, days: int = 1) -> dict:
         "units": units,
         "current": current,
         "daily": daily_out,
+        "hourly": hourly_out,
+        "alerts": alerts,
         "human": human,
+        "lat": lat,
+        "lon": lon,
     }
 
 
@@ -464,7 +510,13 @@ def get_weather_radar(city: str) -> dict:
     if place.get("country"):
         label = f"{label}, {place['country']}"
     lat, lon = float(place["latitude"]), float(place["longitude"])
+    return radar_at(lat, lon, label)
 
+
+def radar_at(lat: float, lon: float, label: str) -> dict:
+    """Radar tiles for coordinates (WS-15 S1) — get_weather_radar's body
+    after geocoding, so the local_weather tool can pass this device's own
+    fix instead of a place name. Same contract as get_weather_radar."""
     try:
         rv = httpx.get(RAINVIEWER_URL, timeout=TIMEOUT)
         rv.raise_for_status()

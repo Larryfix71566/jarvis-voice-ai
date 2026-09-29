@@ -147,7 +147,7 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-29: *"it is missing current radar and it defaults to memory for weather instead of checking current location and getting fresh weather."* A weather answer must use where Larry is now and show current radar for that place.
 
 - **Owner:** `claude`
-- **Status:** claimed (Option A chosen 09-29: native MapKit map + NOAA/IEM radar + Weather.gov 7-day; plan approved in direction; gates G-1 to G-3 next)
+- **Status:** in-progress: PR 1 in review (`local_weather`: place from this device, 7-day forecast, humidity and wind, alerts, honest radar wording). PR 2 (native Apple-map card with NOAA radar, card to front) next. Gates G-1 to G-3 passed 09-29 (plan §4a).
 - **Implemented by:** Claude (plan); code not started
 - **Remaining work / acceptance:** Evidence from the 09-29 10:08 EDT session (`logs/agents/2026-09-29/`), read-only:
   1. **The location came from memory.** The voice model's delegation read *"typically in Spartanburg, SC or surrounding area"*. The analyst called `get_weather` and `get_weather_radar` with `"Spartanburg, SC"` and answered *"(assumed default, not confirmed device location)"*. Larry then had to name Charleston.
@@ -161,10 +161,10 @@ Claude’s work or enable any runtime feature.
 
   Acceptance, now A1–A5 in the plan: "what's the weather" with no place named uses a fresh device fix, or IP labeled approximate, never memory; the radar shown is for that same point and is current; a place Larry names still wins.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** plan on main; code branch `ws15/weather-location-radar` after gates G-1 to G-3
+- **Where:** branch `ws15/weather-location-radar-pr1`
 - **Plan:** `docs/plans/MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md` (Option A: `local_weather` direct tool; `jarvis/weather/report.py` with Weather.gov 7-day, hourly and alerts; IEM NEXRAD radar with RainViewer outside the US; native `RadarMapView` and `WeatherCardView`). It supersedes W5/W6 of `MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md`. Research: `Claude outputs/ws15/ws15_weather_research.html`.
 - **Scope:** `jarvis/weather/` (new), `jarvis/weathergov.py`, `mcp_servers/mcp_web/logic.py`, `mcp_servers/mcp_web/server.py`, `jarvis/bot/weather_tool.py` (new), tool registration in `jarvis/bot/pipeline.py`, `jarvis/bot/display.py`, weather lines in `jarvis/prompts.py`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift`, `Display/DisplayContentView.swift`, `Display/WeatherCardView.swift` and `Display/RadarMapView.swift` (new), and their tests and evals. Re-checked 09-29: none of these is inside another block's scope.
-- **Next step:** Gates: G-1, Larry runs the 2-minute IEM/NWS probe from the Mac; G-2, Claude adds two app log lines and Larry reproduces the missing radar; G-3, Claude's MapKit spike. Then S1–S5 (one PR: location, voice summary, 7-day data) and S6 (a second PR: the native map).
+- **Next step:** Larry merges PR 1 and runs DEPLOY-MAIN, then checks A1, A6 and A8 (voice and location). Claude builds PR 2 (S6) for the card and map checks (A2–A5, A7).
 - **Updated:** 09-29
 
 </details>
@@ -579,6 +579,7 @@ first lever to pull.
 ## 8. Change log
 
 - 2026-09-29: Codex completed the WS-08 crystal-only source change and updated the existing orb plan/acceptance record. Removed the atom-orb legacy draw branch, `OrbShell` runtime selector, and `JARVIS_ORB_CRYSTAL` flag; retained the separate Silo wave and all crystal art values. JarvisKit 215/0, focused crystal tests 7/0, focused orb frame-time test 1/0 (4.933/14.150 ms p50/p95; empty p50 0.842 ms). Full MortimerHost: 374 executed, five skipped, one environment-sensitive protected-window screenshot mismatch; on base `0cc42f2` and the focused current run it skipped because WindowServer could not activate the test host. PR and Larry's post-deployment visual/Reduce Motion acceptance remain open.
+- 2026-09-29 (evening, WS-15 PR 1): Claude (Cowork). Gates passed. G-1: IEM `/cache/` tiles and Weather.gov (7-day, hourly, alerts) answer from the Mac. G-2: the missing radar card was received but left unread, because `WorkspaceStore.receive` only activates a session's first result. G-3: Apple's map and IEM radar render in the ad-hoc-signed app, but tiles past z8 must be enlarged. PR 1 adds `local_weather` (place from this device, never memory), a 7-day forecast with humidity, wind, chance of rain and alerts, and wording so Mortimer stops denying it has radar.
 
 - 2026-09-29 (evening, plan): Claude (Cowork) claimed WS-15 and added `docs/plans/MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md`. Larry chose Option A after the research: native Apple map, NOAA radar via IEM (5-minute updates, zoom 8, 50-minute loop), Weather.gov for today, 7 days, hourly and alerts, and a `local_weather` tool that never uses memory for the place. The plan has gates G-1 to G-3, steps S1–S8 and acceptance checks A1–A8. Device location confirmed working at 11:39 EDT. CX-07 moved back among the resolved conflicts (the 09-29 reorder listed it as open by mistake).
 

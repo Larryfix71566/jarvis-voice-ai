@@ -40,6 +40,9 @@ WEATHERGOV_POINTS_URL = "https://api.weather.gov/points/{lat:.4f},{lon:.4f}"
 WEATHERGOV_OBSERVATION_URL = (
     "https://api.weather.gov/stations/{station}/observations/latest"
 )
+# WS-15 (MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md S1): active alerts for
+# one point. Verified from the Mac on 2026-09-29 (HTTP 200, geo+json).
+WEATHERGOV_ALERTS_URL = "https://api.weather.gov/alerts/active?point={lat:.4f},{lon:.4f}"
 # How many nearby stations to try before giving up on an observation.
 # The nearest station is often a small airport that reports irregularly,
 # so one attempt is not enough; the list is ordered by distance, so a few
@@ -219,6 +222,8 @@ def daily_forecast(
             low = None if is_daytime else _f(day)
             condition = str(day.get("shortForecast") or "")
             label = str(day.get("name") or "")
+            detail = str(day.get("detailedForecast") or "")
+            pops = [period_pop(day)]
             # Pair with the paired night/day period when present.
             if i + 1 < len(periods):
                 nxt = periods[i + 1]
@@ -228,14 +233,95 @@ def daily_forecast(
                         low = _f(nxt)
                     else:
                         high = _f(nxt)
+                    pops.append(period_pop(nxt))
                     i += 1
+            known = [p for p in pops if p is not None]
             out.append({
                 "label": label,
                 "high_f": round(high) if high is not None else None,
                 "low_f": round(low) if low is not None else None,
                 "condition": condition,
+                # WS-15: additive keys. `pop` is the higher chance of
+                # precipitation of the paired day/night periods, or None
+                # when the office reports none; `detail` is the period's
+                # own NWS wording, trimmed.
+                "pop": max(known) if known else None,
+                "detail": detail[:280],
             })
             i += 1
         return {"city": city, "days": out}
+    except Exception:
+        return None
+
+
+def period_pop(period: dict) -> Optional[int]:
+    """probabilityOfPrecipitation.value from one NWS period, or None.
+    Pure. NWS sends `{"unitCode": "wmoUnit:percent", "value": 20}` or a
+    null value; a missing value is None, never 0."""
+    value = ((period or {}).get("probabilityOfPrecipitation") or {}).get("value")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(round(value))
+
+
+def hourly_forecast(
+    lat: float, lon: float, fetch: Callable[[str], Any], hours: int = 12,
+) -> Optional[dict]:
+    """WS-15 S1: the next `hours` hourly periods from Weather.gov's
+    `forecastHourly`, or None if unavailable. Never raises.
+
+    Returns {"periods": [{"start", "temp_f", "humidity", "wind", "pop",
+    "condition"}]}. `humidity` is relativeHumidity.value (%), `wind` is
+    NWS's own text ("SE 8 mph") — this is where the current humidity and
+    wind come from, since the observation path does not surface them.
+    Verified from the Mac on 2026-09-29: 156 periods, each with
+    relativeHumidity, windSpeed, windDirection, probabilityOfPrecipitation.
+    """
+    try:
+        point = fetch(WEATHERGOV_POINTS_URL.format(lat=lat, lon=lon))
+        url = (point.get("properties") or {}).get("forecastHourly")
+        if not url:
+            return None
+        periods = ((fetch(url).get("properties") or {}).get("periods")) or []
+        out: list[dict] = []
+        for period in periods[: max(1, hours)]:
+            temp = period.get("temperature")
+            if temp is not None and str(period.get("temperatureUnit", "F")).upper() == "C":
+                temp = temp * 9 / 5 + 32
+            humidity = (period.get("relativeHumidity") or {}).get("value")
+            speed = str(period.get("windSpeed") or "").strip()
+            direction = str(period.get("windDirection") or "").strip()
+            out.append({
+                "start": str(period.get("startTime") or ""),
+                "temp_f": round(float(temp)) if temp is not None else None,
+                "humidity": int(round(humidity)) if isinstance(humidity, (int, float)) else None,
+                "wind": " ".join(x for x in (direction, speed) if x) or None,
+                "pop": period_pop(period),
+                "condition": str(period.get("shortForecast") or ""),
+            })
+        return {"periods": out} if out else None
+    except Exception:
+        return None
+
+
+def active_alerts(lat: float, lon: float, fetch: Callable[[str], Any]) -> Optional[list]:
+    """WS-15 S1: active NWS alerts for one point, or None if the lookup
+    failed (an empty list means "none active" — the two are different
+    answers and are never merged). Never raises."""
+    try:
+        data = fetch(WEATHERGOV_ALERTS_URL.format(lat=lat, lon=lon))
+        out: list[dict] = []
+        for feature in (data or {}).get("features") or []:
+            props = (feature or {}).get("properties") or {}
+            event = str(props.get("event") or "").strip()
+            if not event:
+                continue
+            out.append({
+                "event": event,
+                "severity": str(props.get("severity") or ""),
+                "headline": str(props.get("headline") or "")[:200],
+                "ends": str(props.get("ends") or props.get("expires") or ""),
+            })
+        return out
     except Exception:
         return None
