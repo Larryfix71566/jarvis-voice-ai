@@ -38,10 +38,13 @@ globe with a Fresnel-weighted room reflection, a two-pane window and rim
 strip placed by mirror-sphere geometry, a caustic and a faint rim
 dispersion. Reflections no longer fade with voice strength, so the glass
 stays visible in standby. Plasma, comets, colors, measured-level behavior
-and Reduce Motion are unchanged. `JARVIS_ORB_CRYSTAL=off` restores the
-previous shell without a rebuild. Plan:
+and Reduce Motion are unchanged. **Revision 2 (2026-09-29):** the crystal
+renderer is the only atom-orb implementation; the old atom-shell branch and
+`JARVIS_ORB_CRYSTAL` toggle were removed. This does not remove the separate
+Silo wave in legacy layout 0. Plan:
 `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`; receipt:
-`docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-24.md`.
+`docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-24.md` (original); 2026-09-29 crystal-only implementation evidence:
+`docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-29.md`.
 
 **Baseline inspected:** repository commit `2ccf66cd7e00b82cf9136d2cd00f42e9bddb90af` (PR #63), 2026-09-10. Recheck the actual starting commit before implementation.
 **Owner:** Larry. Implementation may be assigned to a coding model one phase at a time. This document authorizes no application-code change by itself.

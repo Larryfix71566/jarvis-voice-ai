@@ -285,14 +285,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Orb crystal glass (#90), revised to use the crystal shell exclusively
 
 - **Owner:** `codex`
-- **Status:** in-progress
-- **Implemented by:** Claude original crystal-glass workstream; Codex rendering performance fixes; Codex single-shell cleanup in progress
-- **Remaining work / acceptance:** Codex removes the old orb-shell renderer and rollback flag and updates tests. Larry verifies the deployed crystal orb remains correct in compact/expanded layouts and under Reduce Motion; his 09-29 observations pass the current build, with final deployed acceptance after cleanup.
+- **Status:** review (implementation and focused gates complete; PR pending)
+- **Implemented by:** Claude original crystal-glass workstream; Codex rendering performance fixes and single-shell cleanup
+- **Remaining work / acceptance:** Codex implementation is ready for PR review. Focused crystal tests and timing gates pass. Full MortimerHost has one environment-sensitive failure in protected-window capture; it is outside WS-08 and skips on the unchanged base when the test host cannot activate. Larry verifies the deployed crystal orb in compact/expanded layouts and under Reduce Motion; his 09-29 observations pass the pre-cleanup build, with final deployed acceptance after this change.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** `codex/ws08-crystal-only-20260929`
 - **Plan:** `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`
 - **Scope:** Orb rendering, orb-specific configuration, performance/visual regression tests, and this plan's acceptance evidence.
-- **Next step:** Remove the legacy renderer and `JARVIS_ORB_CRYSTAL` rollback toggle, then run the focused Swift rendering and performance suites without changing artwork or budgets.
+- **Next step:** Open/review the implementation PR, merge and deploy through the standard release flow, then Larry rechecks compact/expanded layouts and Reduce Motion.
 - **Updated:** 09-29
 
 </details>
@@ -577,6 +577,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29: Codex completed the WS-08 crystal-only source change and updated the existing orb plan/acceptance record. Removed the atom-orb legacy draw branch, `OrbShell` runtime selector, and `JARVIS_ORB_CRYSTAL` flag; retained the separate Silo wave and all crystal art values. JarvisKit 215/0, focused crystal tests 7/0, focused orb frame-time test 1/0 (4.933/14.150 ms p50/p95; empty p50 0.842 ms). Full MortimerHost: 374 executed, five skipped, one environment-sensitive protected-window screenshot mismatch; on base `0cc42f2` and the focused current run it skipped because WindowServer could not activate the test host. PR and Larry's post-deployment visual/Reduce Motion acceptance remain open.
 
 - 2026-09-29 (evening, plan): Claude (Cowork) claimed WS-15 and added `docs/plans/MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md`. Larry chose Option A after the research: native Apple map, NOAA radar via IEM (5-minute updates, zoom 8, 50-minute loop), Weather.gov for today, 7 days, hourly and alerts, and a `local_weather` tool that never uses memory for the place. The plan has gates G-1 to G-3, steps S1–S8 and acceptance checks A1–A8. Device location confirmed working at 11:39 EDT. CX-07 moved back among the resolved conflicts (the 09-29 reorder listed it as open by mistake).
 
