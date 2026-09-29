@@ -11,6 +11,7 @@ struct WeatherCardView: View {
     @State private var hybrid = false
     @State private var playing = true
     @State private var frame = 0
+    @State private var radarReady = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -112,7 +113,7 @@ struct WeatherCardView: View {
             VStack(alignment: .leading, spacing: 6) {
                 RadarMapView(radar: radar, latitude: lat, longitude: lon,
                              placeLabel: card.place.label, hybrid: hybrid, playing: playing,
-                             onFrame: { frame = $0 })
+                             onFrame: { frame = $0 }, onReady: { radarReady = $0 })
                     .frame(height: 360)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .accessibilityLabel("Radar map around \(card.place.label)")
@@ -126,7 +127,7 @@ struct WeatherCardView: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel(playing ? "Pause radar loop" : "Play radar loop")
                     }
-                    Text(WeatherCardText.frameLabel(radar, index: frame))
+                    Text(WeatherCardText.radarStatus(radar, index: frame, ready: radarReady))
                         .font(.caption).monospacedDigit()
                     Spacer()
                     Picker("Map", selection: $hybrid) {
@@ -171,6 +172,11 @@ enum WeatherCardText {
         case let (nil, low?): return "low \(low)"
         default: return "–"
         }
+    }
+
+    /// "Loading radar…" until the shown frame's tiles are in, then the frame.
+    static func radarStatus(_ radar: WeatherCard.Radar, index: Int, ready: Bool) -> String {
+        ready ? frameLabel(radar, index: index) : "Loading radar…"
     }
 
     static func frameLabel(_ radar: WeatherCard.Radar, index: Int) -> String {
