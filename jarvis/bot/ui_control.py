@@ -39,6 +39,11 @@ UI_ACTIONS = frozenset({
     "transcript_open", "transcript_close",
     "display_popout", "display_close", "overlay_dismiss",
     "mic_mute", "wake_on", "wake_off",
+    # WS-15 (Larry, 2026-09-29: "the map should be zoomable by voice"):
+    # the weather card's map. The app applies these to the card on screen
+    # and ignores them when none is showing.
+    "map_zoom_in", "map_zoom_out", "map_reset",
+    "radar_pause", "radar_play", "map_satellite", "map_standard",
 })
 
 UI_TABS = frozenset({
@@ -83,7 +88,12 @@ UI_CONTROL_SCHEMA = {
             "display_close (close that window / 'show it here'), "
             "overlay_dismiss (dismiss the on-stage content panel / "
             "'close that'), mic_mute (stop listening), wake_on, "
-            "wake_off. When in doubt between the drawer and the display "
+            "wake_off. Weather map (the weather card on screen): "
+            "map_zoom_in ('zoom in' / 'closer'), map_zoom_out ('zoom out' / "
+            "'show more'), map_reset ('reset the map' / 'back to my "
+            "location'), radar_pause and radar_play (the radar loop), "
+            "map_satellite and map_standard (satellite or plain map). "
+            "When in doubt between the drawer and the display "
             "window, a bare 'open the sidecar/panel/drawer' means "
             "drawer_open. There is deliberately no mic_unmute: while "
             "muted the user cannot be heard, so the command could never "

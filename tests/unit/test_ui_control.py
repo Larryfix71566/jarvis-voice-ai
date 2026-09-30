@@ -84,6 +84,15 @@ class TestResolve:
         assert message == {"type": "ui", "action": "drawer_popout"}
 
 
+    # WS-15: voice control of the weather card's map (Larry, 2026-09-29).
+    def test_weather_map_actions(self):
+        for action in ("map_zoom_in", "map_zoom_out", "map_reset", "radar_pause",
+                       "radar_play", "map_satellite", "map_standard"):
+            message, reply = resolve_ui_command({"action": action, "tab": "runs"})
+            assert message == {"type": "ui", "action": action}
+            assert reply == "ok"
+
+
 class TestSchema:
     def test_schema_enums_match_constants(self):
         props = UI_CONTROL_SCHEMA["function"]["parameters"]["properties"]

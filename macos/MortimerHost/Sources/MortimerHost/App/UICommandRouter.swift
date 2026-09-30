@@ -208,9 +208,14 @@ final class UICommandRouter {
     /// calls): lets overlay_dismiss close the topmost in-console display
     /// panel, the web's exact semantics (DisplayPanel.tsx:351-358).
     let displayWindow: DisplayWindowStore?
+    /// WS-15: where the weather-map actions go (the app-wide channel; tests
+    /// pass their own).
+    let weatherMap: WeatherMapCommands
 
     init(drawer: DrawerState, overlay: ConsoleOverlayState, windows: WindowActions,
-         placement: WindowPlacement, displayWindow: DisplayWindowStore? = nil) {
+         placement: WindowPlacement, displayWindow: DisplayWindowStore? = nil,
+         weatherMap: WeatherMapCommands = .shared) {
+        self.weatherMap = weatherMap
         self.drawer = drawer
         self.overlay = overlay
         self.windows = windows
@@ -264,6 +269,9 @@ final class UICommandRouter {
             placement.openDisplay()
         case "display_close":
             windows.dismiss("display")
+        case let action where WeatherMapCommands.actions.contains(action):
+            // WS-15: the weather card's map (zoom, reset, radar loop, style).
+            weatherMap.send(action)
         case "overlay_dismiss":
             overlay.dismiss()
             // The web's semantics: dismiss closes the most recent

@@ -12,6 +12,15 @@ private let radarLog = Logger(subsystem: "com.mortimer.host", category: "radar")
 /// (streets, labels, standard or hybrid) with the radar drawn over it, a pin
 /// at the place, and a loop through the radar frames.
 ///
+/// Round 4 (Larry, 09-29, round-3 radar log): first frame fell to 2.4 s,
+/// but the loop waited 1.8-12.5 s between frames and, with nothing queued,
+/// kept re-downloading ~300 tiles a second. Decoded tiles (256 KB each)
+/// overflowed the 200 MB memory limit and were evicted and fetched again,
+/// and readiness also waited on tiles from zoom levels no longer shown.
+/// Now the compressed PNG (a few KB) is kept for every tile and decoded
+/// copies are only a small cache, and readiness counts only the zoom level
+/// the map last drew.
+///
 /// Round 3 (Larry, 09-29, from the radar log): with one MapKit tile overlay
 /// per frame, MapKit loaded all 11 frames at once (704 fetches, average
 /// 5.4 s, first frame after 10.8 s) and, while looping, re-requested tiles
@@ -27,6 +36,9 @@ struct RadarMapView: NSViewRepresentable {
     let placeLabel: String
     var hybrid: Bool = false
     var playing: Bool = true
+    /// WS-15 voice map control: the newest zoom/reset command and its serial
+    /// (WeatherMapCommands); applied once per serial.
+    var zoomCommand: (serial: Int, action: String)? = nil
     /// Called on the main actor with the index of the frame now shown.
     var onFrame: (Int) -> Void = { _ in }
     /// Called on the main actor when the shown frame's tiles are (or stop
@@ -71,6 +83,15 @@ struct RadarMapView: NSViewRepresentable {
         context.coordinator.onFrame = onFrame
         context.coordinator.onReady = onReady
         context.coordinator.setPlaying(playing)
+        if let command = zoomCommand, command.serial != context.coordinator.lastZoomSerial {
+            context.coordinator.lastZoomSerial = command.serial
+            let opening = MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+                                             latitudinalMeters: Self.openingSpanMeters,
+                                             longitudinalMeters: Self.openingSpanMeters)
+            if let region = WeatherMapZoom.region(map.region, action: command.action, opening: opening) {
+                map.setRegion(region, animated: true)
+            }
+        }
     }
 
     static func dismantleNSView(_ map: MKMapView, coordinator: Coordinator) {
@@ -92,6 +113,8 @@ struct RadarMapView: NSViewRepresentable {
         private var lastStats = Date()
         var onFrame: (Int) -> Void
         var onReady: (Bool) -> Void
+        /// The last voice zoom command applied (so each is applied once).
+        var lastZoomSerial = 0
 
         init(onFrame: @escaping (Int) -> Void, onReady: @escaping (Bool) -> Void) {
             self.onFrame = onFrame
@@ -172,7 +195,7 @@ struct RadarMapView: NSViewRepresentable {
             guard let store, Date().timeIntervalSince(lastStats) >= 10 else { return }
             lastStats = Date()
             let s = store.takeStats()
-            radarLog.notice("radar 10s: tileLookups=\(s.requests, privacy: .public) memoryHits=\(s.hits, privacy: .public) fetches=\(s.fetches, privacy: .public) failed=\(s.failures, privacy: .public) fetchAvgMs=\(s.averageFetchMs, privacy: .public) fetchMaxMs=\(s.maxFetchMs, privacy: .public) queued=\(store.queuedCount, privacy: .public) shown=\(self.shown, privacy: .public)")
+            radarLog.notice("radar 10s: tileLookups=\(s.requests, privacy: .public) memoryHits=\(s.hits, privacy: .public) fetches=\(s.fetches, privacy: .public) failed=\(s.failures, privacy: .public) fetchAvgMs=\(s.averageFetchMs, privacy: .public) fetchMaxMs=\(s.maxFetchMs, privacy: .public) zooms=\(s.zoomList, privacy: .public) queued=\(store.queuedCount, privacy: .public) shown=\(self.shown, privacy: .public)")
         }
 
         func stop() {
@@ -382,7 +405,10 @@ final class RadarTileStore: @unchecked Sendable {
     struct Stats: Equatable {
         var requests = 0, hits = 0, fetches = 0, failures = 0
         var totalFetchMs = 0, maxFetchMs = 0
+        /// Zoom levels the map asked for in this window.
+        var zooms: Set<Int> = []
         var averageFetchMs: Int { fetches == 0 ? 0 : totalFetchMs / fetches }
+        var zoomList: String { zooms.sorted().map(String.init).joined(separator: ",") }
     }
 
     private final class ImageBox { let image: CGImage; init(_ i: CGImage) { image = i } }
@@ -391,7 +417,11 @@ final class RadarTileStore: @unchecked Sendable {
     let templates: [String]
     private let fetch: Fetch
     private let lock = NSLock()
+    /// Compressed tiles, kept for the life of the map (a few KB each).
+    private let raw = NSCache<NSString, NSData>()
+    /// Decoded tiles for drawing; a small cache, refilled from `raw`.
     private let images = NSCache<NSString, ImageBox>()
+    private var latestZ: Int?
     private var failed: Set<String> = []
     private var waiting: [String: [() -> Void]] = [:]   // queued or in flight
     private var urgent: [Job] = []
@@ -403,7 +433,8 @@ final class RadarTileStore: @unchecked Sendable {
     init(templates: [String], fetch: @escaping Fetch = RadarTileStore.networkFetch) {
         self.templates = templates
         self.fetch = fetch
-        images.totalCostLimit = 200 * 1024 * 1024
+        raw.totalCostLimit = 256 * 1024 * 1024
+        images.countLimit = 400
     }
 
     var queuedCount: Int { lock.lock(); defer { lock.unlock() }; return urgent.count + background.count }
@@ -418,30 +449,48 @@ final class RadarTileStore: @unchecked Sendable {
     func noteRequested(z: Int, x: Int, y: Int) {
         let key = "\(z)/\(x)/\(y)"
         lock.lock(); defer { lock.unlock() }
+        latestZ = z
+        stats.zooms.insert(z)
         if recent.last == key { return }
         recent.removeAll { $0 == key }
         recent.append(key)
         if recent.count > Self.recentLimit { recent.removeFirst(recent.count - Self.recentLimit) }
     }
 
-    /// The decoded tile, if it is in memory. Counts as a draw lookup.
+    /// The decoded tile, if it is in memory (decoding the kept PNG when the
+    /// decoded copy was dropped). Counts as a draw lookup.
     func image(frame: Int, z: Int, x: Int, y: Int) -> CGImage? {
         guard let key = key(frame: frame, z: z, x: x, y: y) else { return nil }
-        let box = images.object(forKey: key as NSString)
-        lock.lock(); stats.requests += 1; if box != nil { stats.hits += 1 }; lock.unlock()
-        return box?.image
+        var image = images.object(forKey: key as NSString)?.image
+        if image == nil, let data = raw.object(forKey: key as NSString), let decoded = Self.decode(data as Data) {
+            images.setObject(ImageBox(decoded), forKey: key as NSString)
+            image = decoded
+        }
+        lock.lock(); stats.requests += 1; if image != nil { stats.hits += 1 }; lock.unlock()
+        return image
     }
 
-    /// True when every recently requested tile of this frame is in memory (or
-    /// has failed — a missing tile must not stall the loop). False before
-    /// the map has asked for anything.
+    private func has(_ key: String) -> Bool {
+        raw.object(forKey: key as NSString) != nil || images.object(forKey: key as NSString) != nil
+    }
+
+    /// Drop every decoded copy (tests use this to prove tiles come back from
+    /// the kept PNGs without a download).
+    func purgeDecoded() { images.removeAllObjects() }
+
+    /// True when every recently requested tile of this frame, at the zoom
+    /// level the map last drew, is in memory (or has failed — a missing tile
+    /// must not stall the loop). False before the map has asked for anything.
     func isReady(frame: Int) -> Bool {
-        lock.lock(); let keys = recent; let failedNow = failed; lock.unlock()
-        guard !keys.isEmpty else { return false }
-        return keys.allSatisfy { k in
+        lock.lock(); let keys = recent; let failedNow = failed; let z = latestZ; lock.unlock()
+        guard let z else { return false }
+        let prefix = "\(z)/"
+        let current = keys.filter { $0.hasPrefix(prefix) }
+        guard !current.isEmpty else { return false }
+        return current.allSatisfy { k in
             let p = k.split(separator: "/").compactMap { Int($0) }
             guard p.count == 3, let key = key(frame: frame, z: p[0], x: p[1], y: p[2]) else { return true }
-            return images.object(forKey: key as NSString) != nil || failedNow.contains(key)
+            return has(key) || failedNow.contains(key)
         }
     }
 
@@ -450,7 +499,7 @@ final class RadarTileStore: @unchecked Sendable {
     /// in memory; never if it is already there.
     func request(frame: Int, z: Int, x: Int, y: Int, urgent isUrgent: Bool, loaded: @escaping () -> Void = {}) {
         guard let key = key(frame: frame, z: z, x: x, y: y), let url = URL(string: key) else { return }
-        if images.object(forKey: key as NSString) != nil { return }
+        if has(key) { return }
         lock.lock()
         if !isUrgent && failed.contains(key) { lock.unlock(); return }
         if waiting[key] != nil {
@@ -507,9 +556,9 @@ final class RadarTileStore: @unchecked Sendable {
             guard let self else { return }
             let ms = Int(Date().timeIntervalSince(started) * 1000)
             let image = data.flatMap(Self.decode)
-            if let image {
-                self.images.setObject(ImageBox(image), forKey: job.key as NSString,
-                                      cost: image.bytesPerRow * image.height)
+            if let image, let data {
+                self.raw.setObject(data as NSData, forKey: job.key as NSString, cost: data.count)
+                self.images.setObject(ImageBox(image), forKey: job.key as NSString)
             }
             self.lock.lock()
             self.inFlight -= 1
