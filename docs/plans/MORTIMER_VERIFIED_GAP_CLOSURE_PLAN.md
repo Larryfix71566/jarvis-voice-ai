@@ -1276,3 +1276,10 @@ test also failed alone on this Mac: its stdout assertion passed, but the
 process-substitution log stayed empty through the test's one-second wait.
 Neither file is changed by this WS-01 slice. Linux CI remains the authoritative
 full-suite gate for the PR.
+
+### 2026-09-29 — WS-01 claim-order repair landed
+
+PR #125 merged as `ab2a2ef`; its five GitHub checks passed, including full
+Linux validation. Current main with this fix was merged into WS-08 PR #115,
+whose five checks then passed and which merged as `8222940`. The CI race is
+closed. This does not close the original WS-01 physical/live acceptance gates.
