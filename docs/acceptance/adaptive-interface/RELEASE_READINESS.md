@@ -292,21 +292,26 @@ sandbox evidence; all additions remain open as release-acceptance gates.
   and unrelated roadmap gates dependent on their original acceptance rules.
 
 - [ ] **UI2-22 — Conversation thread (CC7a.1).** A five-turn spoken
-  conversation stays on one stage with Larry's and Mortimer's words in order;
+  conversation stays on one stage as transcript rows with Larry's and
+  Mortimer's full words in order, including a reply longer than 160 characters;
   no result or tab is created for a spoken answer; a result open on the stage
   keeps focus while the thread updates; protected turns follow the protected
   display rules.
 - [ ] **UI2-23 — Inline result cards (CC7a.2).** Weather, research and image
-  results appear as cards at their turn; open and Back work; compare and pin
-  from a card.
+  results appear as compact cards at their turn; open and Back work; compare and
+  pin from a card; a weather result that arrives while another result is open
+  shows a notice and does not take focus; closing a card leaves its Output
+  record.
 - [ ] **UI2-24 — Recents replaces tabs (CC7a.3).** No tab strip; Recents lists
   results pinned first; `result_select/close/pin/unpin` and "show the Folly
-  Beach weather again" work by voice and pointer; retention keeps pinned plus
-  about 10.
+  Beach weather again" work by voice and pointer; an ambiguous subject or a
+  stale selection makes Mortimer ask instead of acting; Recents shows pinned
+  plus about 10 (a display limit: nothing open or pinned is removed).
 - [ ] **UI2-25 — Reuse by subject (CC7a.4).** "What's the weather", "weather
   in Atlanta", "what's the weather" again gives two weather cards: the third
-  request reopens the first when fresh (15 minutes) or refreshes it in place
-  when stale; no duplicate fetch when fresh.
+  request reopens the first when fresh (15 minutes), shown as a reference line,
+  or refreshes it in place under the same identity when stale; no duplicate
+  fetch when fresh.
 
 ### Coverage and counting rules
 
