@@ -147,7 +147,7 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-29: *"it is missing current radar and it defaults to memory for weather instead of checking current location and getting fresh weather."* A weather answer must use where Larry is now and show current radar for that place.
 
 - **Owner:** `claude`
-- **Status:** in-progress: weather card, map and radar deployed with round 2 (#123: 200 km opening view, radar timing log). The radar log showed all 11 frames loading at once (first frame 10.8 s) and constant tile re-requests; round 3 (one radar layer drawing decoded tiles, shown frame first) in review.
+- **Status:** in-progress: one radar layer deployed (#126); first frame 2.4 s (was 10.8 s). Its log showed 1.8-12.5 s waits between frames and ~300 re-downloads a second from memory eviction. In review: round 4 (keep compressed tiles, small decoded cache, readiness at the drawn zoom) plus voice map control (zoom in/out, reset, radar play/pause, satellite/map) via ui_control.
 - **Implemented by:** Claude (plan); code not started
 - **Remaining work / acceptance:** Evidence from the 09-29 10:08 EDT session (`logs/agents/2026-09-29/`), read-only:
   1. **The location came from memory.** The voice model's delegation read *"typically in Spartanburg, SC or surrounding area"*. The analyst called `get_weather` and `get_weather_radar` with `"Spartanburg, SC"` and answered *"(assumed default, not confirmed device location)"*. Larry then had to name Charleston.
@@ -161,10 +161,10 @@ Claude’s work or enable any runtime feature.
 
   Acceptance, now A1–A5 in the plan: "what's the weather" with no place named uses a fresh device fix, or IP labeled approximate, never memory; the radar shown is for that same point and is current; a place Larry names still wins.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** branch `ws15/radar-single-layer`
+- **Where:** branch `ws15/radar-keep-png-voice-zoom`
 - **Plan:** `docs/plans/MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md` (Option A: `local_weather` direct tool; `jarvis/weather/report.py` with Weather.gov 7-day, hourly and alerts; IEM NEXRAD radar with RainViewer outside the US; native `RadarMapView` and `WeatherCardView`). It supersedes W5/W6 of `MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md`. Research: `Claude outputs/ws15/ws15_weather_research.html`.
 - **Scope:** `jarvis/weather/` (new), `jarvis/weathergov.py`, `mcp_servers/mcp_web/logic.py`, `mcp_servers/mcp_web/server.py`, `jarvis/bot/weather_tool.py` (new), tool registration in `jarvis/bot/pipeline.py`, `jarvis/bot/display.py`, weather lines in `jarvis/prompts.py`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift`, `Display/DisplayContentView.swift`, `Display/WeatherCardView.swift` and `Display/RadarMapView.swift` (new), and their tests and evals. Re-checked 09-29: none of these is inside another block's scope.
-- **Next step:** Merge and deploy round 3 (quit Mortimer before DEPLOY-MAIN); Larry re-checks the radar and sends the radar log; then acceptance A1–A7 (plan §6) and Claude checks A8.
+- **Next step:** Merge and deploy (quit Mortimer first); Larry re-checks the radar, tries the voice map commands, and sends the radar log; then acceptance A1-A7 (plan §6) and Claude checks A8.
 - **Updated:** 09-29
 
 </details>

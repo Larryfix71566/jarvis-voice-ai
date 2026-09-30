@@ -1,5 +1,6 @@
 import XCTest
 import AppKit
+import MapKit
 import JarvisKit
 @testable import MortimerHost
 
@@ -194,6 +195,30 @@ final class RadarTileStoreTests: XCTestCase {
         XCTAssertEqual(fake.requests.count, 3)
     }
 
+    func testDroppedDecodedTilesComeBackWithoutADownload() throws {
+        let fake = FakeFetch(); let store = RadarTileStore(templates: templates, fetch: fake.fetch)
+        store.noteRequested(z: 8, x: 71, y: 103)
+        store.request(frame: 0, z: 8, x: 71, y: 103, urgent: true)
+        fake.answerAll(with: try png())
+        store.purgeDecoded()
+        XCTAssertTrue(store.isReady(frame: 0), "the kept PNG still counts")
+        store.request(frame: 0, z: 8, x: 71, y: 103, urgent: true)
+        XCTAssertEqual(fake.requests.count, 1, "no second download")
+        XCTAssertEqual(try XCTUnwrap(store.image(frame: 0, z: 8, x: 71, y: 103)).width, 256)
+    }
+
+    func testReadinessCountsOnlyTheZoomLevelLastDrawn() throws {
+        let fake = FakeFetch(); let store = RadarTileStore(templates: templates, fetch: fake.fetch)
+        store.noteRequested(z: 7, x: 35, y: 51)           // an earlier zoom, never loaded
+        store.noteRequested(z: 8, x: 71, y: 103)
+        store.request(frame: 0, z: 8, x: 71, y: 103, urgent: true)
+        fake.answerFirst(with: try png())
+        XCTAssertTrue(store.isReady(frame: 0))
+        store.noteRequested(z: 7, x: 35, y: 51)           // zoomed back out: z7 now matters
+        XCTAssertFalse(store.isReady(frame: 0))
+        XCTAssertEqual(store.takeStats().zooms, [7, 8])
+    }
+
     func testAFailedTileDoesNotStallTheLoop() {
         let fake = FakeFetch(); let store = RadarTileStore(templates: templates, fetch: fake.fetch)
         store.noteRequested(z: 8, x: 71, y: 103)
@@ -248,6 +273,30 @@ final class RadarTileStoreTests: XCTestCase {
         let tiles = RadarTileMath.tiles(covering: inside, z: 8)
         XCTAssertEqual(tiles.map { "\($0.x)/\($0.y)" }, ["71/103", "72/103"])
         XCTAssertEqual(RadarTileMath.tiles(covering: CGRect(x: -10, y: -10, width: 5, height: 5), z: 1).count, 1)
+    }
+
+    func testVoiceZoomHalvesDoublesAndResets() throws {
+        let center = CLLocationCoordinate2D(latitude: 32.66, longitude: -79.93)
+        let start = MKCoordinateRegion(center: center, span: MKCoordinateSpan(latitudeDelta: 2, longitudeDelta: 2.4))
+        let opening = MKCoordinateRegion(center: center, span: MKCoordinateSpan(latitudeDelta: 1.8, longitudeDelta: 2.1))
+        let closer = try XCTUnwrap(WeatherMapZoom.region(start, action: "map_zoom_in", opening: opening))
+        XCTAssertEqual(closer.span.latitudeDelta, 1, accuracy: 1e-9)
+        XCTAssertEqual(closer.span.longitudeDelta, 1.2, accuracy: 1e-9)
+        let wider = try XCTUnwrap(WeatherMapZoom.region(start, action: "map_zoom_out", opening: opening))
+        XCTAssertEqual(wider.span.latitudeDelta, 4, accuracy: 1e-9)
+        let huge = MKCoordinateRegion(center: center, span: MKCoordinateSpan(latitudeDelta: 120, longitudeDelta: 300))
+        XCTAssertEqual(try XCTUnwrap(WeatherMapZoom.region(huge, action: "map_zoom_out", opening: opening)).span.latitudeDelta, 170)
+        let reset = try XCTUnwrap(WeatherMapZoom.region(closer, action: "map_reset", opening: opening))
+        XCTAssertEqual(reset.span.latitudeDelta, 1.8, accuracy: 1e-9)
+        XCTAssertNil(WeatherMapZoom.region(start, action: "radar_pause", opening: opening))
+    }
+
+    @MainActor
+    func testUnknownMapActionsAreIgnored() {
+        let channel = WeatherMapCommands()
+        channel.send("map_spin")
+        XCTAssertEqual(channel.serial, 0)
+        XCTAssertNil(channel.latest)
     }
 
     func testOpeningViewIsNearTheRadarsOwnResolution() {

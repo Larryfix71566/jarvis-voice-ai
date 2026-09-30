@@ -12,6 +12,10 @@ struct WeatherCardView: View {
     @State private var playing = true
     @State private var frame = 0
     @State private var radarReady = false
+    /// WS-15 voice map control; the serial seen when this card appeared, so
+    /// an old command is not replayed onto a new card.
+    @State private var zoomCommand: (serial: Int, action: String)? = nil
+    @State private var seenSerial = WeatherMapCommands.shared.serial
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -29,6 +33,17 @@ struct WeatherCardView: View {
         .padding(4)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Weather for \(card.place.label)")
+        .onChange(of: WeatherMapCommands.shared.serial) { _, serial in
+            guard serial != seenSerial, let action = WeatherMapCommands.shared.latest else { return }
+            seenSerial = serial
+            switch action {
+            case "radar_pause": playing = false
+            case "radar_play": playing = true
+            case "map_satellite": hybrid = true
+            case "map_standard": hybrid = false
+            default: zoomCommand = (serial, action)
+            }
+        }
     }
 
     // MARK: sections
@@ -113,6 +128,7 @@ struct WeatherCardView: View {
             VStack(alignment: .leading, spacing: 6) {
                 RadarMapView(radar: radar, latitude: lat, longitude: lon,
                              placeLabel: card.place.label, hybrid: hybrid, playing: playing,
+                             zoomCommand: zoomCommand,
                              onFrame: { frame = $0 }, onReady: { radarReady = $0 })
                     .frame(height: 360)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
