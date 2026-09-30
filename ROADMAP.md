@@ -607,6 +607,8 @@ first lever to pull.
 
 ## 8. Change log
 
+- 2026-09-30 (WS-15 fix, deploy blocker): Claude (Cowork). DEPLOY-MAIN for `1a0aac7` stopped on `RadarTileStoreTests.testDroppedDecodedTilesComeBackWithoutADownload` (kept PNG missing, second download). The radar kept PNGs in an `NSCache`, which may evict under memory pressure. Now a dictionary with an explicit 64 MB budget, oldest first, plus a budget test. Radar behaviour otherwise unchanged.
+
 - 2026-09-30 (WS-17 CC7a.1 in review): Claude (Cowork). Layout 2 stage shows the conversation as transcript rows with both speakers' full text (was the last two entries cut at 160 characters); spoken answers no longer become workspace results or supporting-display panels; structured payloads unchanged. Switch `mortimer.interface.conversationThread` (on by default). Awaiting Codex review before merge.
 
 - 2026-09-30 (WS-17 design approved; CX-15 resolved): Claude (Cowork). Larry picked transcript rows (over chat bubbles, so long replies read at full width), compact cards opened on the stage, the Recents menu, a reference line when a fresh result is reused, and a notice instead of a jump when a result arrives while another is open. Codex confirmed scope with boundaries; Claude checked each against main (`latestCaptions` = last two, 160-character captions; pin/unpin do not advance `inventoryRevision`; weather calls `select` on arrival; Log bound 200; workspace keeps 20 unpinned). Recorded in plan §7.2 and UI2-22..25; mockups in `docs/interface-research/cc7a/`. Next: CC7a.1.

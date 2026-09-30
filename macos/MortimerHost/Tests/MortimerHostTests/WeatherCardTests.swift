@@ -207,6 +207,25 @@ final class RadarTileStoreTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(store.image(frame: 0, z: 8, x: 71, y: 103)).width, 256)
     }
 
+    /// The kept PNGs have an explicit byte budget: over it, the oldest tile
+    /// is dropped first and the newest is always kept. Nothing else evicts.
+    func testKeptPNGsFollowAnExplicitByteBudgetOldestFirst() throws {
+        let data = try png()
+        let fake = FakeFetch()
+        let store = RadarTileStore(templates: templates, fetch: fake.fetch, rawByteLimit: data.count * 2)
+        store.noteRequested(z: 8, x: 71, y: 103)
+        for frame in 0..<3 {
+            store.request(frame: frame, z: 8, x: 71, y: 103, urgent: true)
+            fake.answerAll(with: data)
+        }
+        XCTAssertEqual(store.keptTileCount, 2, "three tiles, room for two")
+        store.purgeDecoded()
+        XCTAssertFalse(store.isReady(frame: 0), "the oldest PNG was dropped")
+        XCTAssertTrue(store.isReady(frame: 1))
+        XCTAssertTrue(store.isReady(frame: 2))
+        XCTAssertEqual(fake.requests.count, 3)
+    }
+
     func testReadinessCountsOnlyTheZoomLevelLastDrawn() throws {
         let fake = FakeFetch(); let store = RadarTileStore(templates: templates, fetch: fake.fetch)
         store.noteRequested(z: 7, x: 35, y: 51)           // an earlier zoom, never loaded

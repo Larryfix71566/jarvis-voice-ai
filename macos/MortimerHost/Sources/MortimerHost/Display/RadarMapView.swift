@@ -493,8 +493,15 @@ final class RadarTileStore: @unchecked Sendable {
     let templates: [String]
     private let fetch: Fetch
     private let lock = NSLock()
-    /// Compressed tiles, kept for the life of the map (a few KB each).
-    private let raw = NSCache<NSString, NSData>()
+    /// Compressed tiles, kept for the life of the map (a few KB each), in a
+    /// plain dictionary with a byte budget, oldest dropped first. Not NSCache:
+    /// NSCache may evict at any time under memory pressure, which silently
+    /// re-downloaded tiles and failed testDroppedDecodedTilesComeBackWithout
+    /// ADownload in DEPLOY-MAIN on 09-30. Guarded by `lock`.
+    private var raw: [String: Data] = [:]
+    private var rawOrder: [String] = []                  // oldest first
+    private var rawBytes = 0
+    private let rawByteLimit: Int
     /// Decoded tiles for drawing; a small cache, refilled from `raw`.
     private let images = NSCache<NSString, ImageBox>()
     private var latestZ: Int?
@@ -506,11 +513,35 @@ final class RadarTileStore: @unchecked Sendable {
     private var recent: [String] = []                    // "z/x/y", newest last
     private var stats = Stats()
 
-    init(templates: [String], fetch: @escaping Fetch = RadarTileStore.networkFetch) {
+    init(templates: [String], fetch: @escaping Fetch = RadarTileStore.networkFetch,
+         rawByteLimit: Int = 64 * 1024 * 1024) {
         self.templates = templates
         self.fetch = fetch
-        raw.totalCostLimit = 256 * 1024 * 1024
+        self.rawByteLimit = max(1, rawByteLimit)
         images.countLimit = 400
+    }
+
+    /// Compressed tiles currently kept (tests).
+    var keptTileCount: Int { lock.lock(); defer { lock.unlock() }; return raw.count }
+
+    private func rawData(_ key: String) -> Data? {
+        lock.lock(); defer { lock.unlock() }
+        return raw[key]
+    }
+
+    private func keepRaw(_ data: Data, for key: String) {
+        lock.lock(); defer { lock.unlock() }
+        if let old = raw[key] {
+            rawBytes -= old.count
+            rawOrder.removeAll { $0 == key }
+        }
+        raw[key] = data
+        rawOrder.append(key)
+        rawBytes += data.count
+        while rawBytes > rawByteLimit, let oldest = rawOrder.first, oldest != key {
+            rawOrder.removeFirst()
+            if let dropped = raw.removeValue(forKey: oldest) { rawBytes -= dropped.count }
+        }
     }
 
     var queuedCount: Int { lock.lock(); defer { lock.unlock() }; return urgent.count + background.count }
@@ -542,7 +573,7 @@ final class RadarTileStore: @unchecked Sendable {
     func image(frame: Int, z: Int, x: Int, y: Int) -> CGImage? {
         guard let key = key(frame: frame, z: z, x: x, y: y) else { return nil }
         var image = images.object(forKey: key as NSString)?.image
-        if image == nil, let data = raw.object(forKey: key as NSString), let decoded = Self.decode(data as Data) {
+        if image == nil, let data = rawData(key), let decoded = Self.decode(data) {
             images.setObject(ImageBox(decoded), forKey: key as NSString)
             image = decoded
         }
@@ -551,7 +582,7 @@ final class RadarTileStore: @unchecked Sendable {
     }
 
     private func has(_ key: String) -> Bool {
-        raw.object(forKey: key as NSString) != nil || images.object(forKey: key as NSString) != nil
+        rawData(key) != nil || images.object(forKey: key as NSString) != nil
     }
 
     /// Drop every decoded copy (tests use this to prove tiles come back from
@@ -637,7 +668,7 @@ final class RadarTileStore: @unchecked Sendable {
             let ms = Int(Date().timeIntervalSince(started) * 1000)
             let image = data.flatMap(Self.decode)
             if let image, let data {
-                self.raw.setObject(data as NSData, forKey: job.key as NSString, cost: data.count)
+                self.keepRaw(data, for: job.key)
                 self.images.setObject(ImageBox(image), forKey: job.key as NSString)
             }
             self.lock.lock()
