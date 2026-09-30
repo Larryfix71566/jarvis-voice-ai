@@ -9,15 +9,17 @@ import os
 private let radarLog = Logger(subsystem: "com.mortimer.host", category: "radar")
 
 /// WS-15 PR 2 (MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md S6): Apple's map
-/// (streets, labels, standard or hybrid) with the radar as a tile overlay,
-/// a pin at the place, and a loop through the radar frames.
+/// (streets, labels, standard or hybrid) with the radar drawn over it, a pin
+/// at the place, and a loop through the radar frames.
 ///
-/// G-3 (2026-09-29 spike): MapKit renders in this ad-hoc-signed app and the
-/// IEM tiles load, but MapKit requests nothing past an overlay's
-/// `maximumZ`, so radar vanished at the opening close-up view. Here the
-/// overlay accepts every zoom and serves zooms past the provider's last
-/// native level by enlarging the matching part of the parent tile
-/// (`RadarTileMath`), so the radar stays at street level.
+/// Round 3 (Larry, 09-29, from the radar log): with one MapKit tile overlay
+/// per frame, MapKit loaded all 11 frames at once (704 fetches, average
+/// 5.4 s, first frame after 10.8 s) and, while looping, re-requested tiles
+/// constantly (3,512 requests in 10 s). Now there is ONE overlay whose
+/// renderer draws the current frame from decoded tiles in memory. The shown
+/// frame's tiles download first; other frames follow, six at a time.
+/// Changing frame redraws that one layer and requests nothing. Past the
+/// provider's last native zoom the tile is drawn enlarged and smoothed.
 struct RadarMapView: NSViewRepresentable {
     let radar: WeatherCard.Radar
     let latitude: Double
@@ -75,47 +77,40 @@ struct RadarMapView: NSViewRepresentable {
         coordinator.stop()
     }
 
-    /// Larry, 2026-09-29: the radar "comes up slowly and flashes". It
-    /// flashed because each step removed the shown frame and added the next,
-    /// whose tiles were not loaded yet. Now every frame is added once and
-    /// stays; only the shown frame's renderer is visible (alpha). Tiles are
-    /// kept in `RadarTileStore`, a request for one frame warms the same tile
-    /// in every other frame, and the loop only moves to a frame whose tiles
-    /// are all in.
     @MainActor
     final class Coordinator: NSObject, MKMapViewDelegate {
-        private var overlays: [RadarTileOverlay] = []
-        private var renderers: [ObjectIdentifier: MKTileOverlayRenderer] = [:]
+        private var overlay: RadarFramesOverlay?
+        private var renderer: RadarFramesRenderer?
+        private var store: RadarTileStore?
+        private var frameCount = 0
         private(set) var shown: Int = -1
         private var timer: Timer?
         private var playing = false
         private var lastReady: Bool?
-        private let store: RadarTileStore
         private var installedAt = Date()
         private var waitingSince: Date?
         private var lastStats = Date()
         var onFrame: (Int) -> Void
         var onReady: (Bool) -> Void
 
-        init(onFrame: @escaping (Int) -> Void, onReady: @escaping (Bool) -> Void,
-             store: RadarTileStore = RadarTileStore()) {
+        init(onFrame: @escaping (Int) -> Void, onReady: @escaping (Bool) -> Void) {
             self.onFrame = onFrame
             self.onReady = onReady
-            self.store = store
         }
 
         func install(radar: WeatherCard.Radar, on map: MKMapView) {
             let templates = radar.frames.map(\.template)
-            overlays = templates.map {
-                RadarTileOverlay(template: $0, maxNativeZoom: radar.maxNativeZoom,
-                                 siblings: templates, store: store)
-            }
-            guard !overlays.isEmpty else { return }
-            shown = overlays.count - 1                                     // newest first
+            guard !templates.isEmpty else { return }
+            let store = RadarTileStore(templates: templates)
+            self.store = store
+            frameCount = templates.count
+            shown = templates.count - 1                                    // newest first
             installedAt = Date()
             lastStats = installedAt
-            radarLog.notice("radar installed frames=\(templates.count, privacy: .public) maxNativeZoom=\(radar.maxNativeZoom, privacy: .public)")
-            map.addOverlays(overlays, level: .aboveRoads)
+            radarLog.notice("radar installed frames=\(templates.count, privacy: .public) maxNativeZoom=\(radar.maxNativeZoom, privacy: .public) mode=single-layer")
+            let overlay = RadarFramesOverlay(maxNativeZoom: radar.maxNativeZoom)
+            self.overlay = overlay
+            map.addOverlay(overlay, level: .aboveRoads)
             report(frame: shown)
             timer = Timer.scheduledTimer(withTimeInterval: RadarMapView.frameInterval,
                                          repeats: true) { [weak self] _ in
@@ -130,8 +125,8 @@ struct RadarMapView: NSViewRepresentable {
         /// Every tick: report whether the shown frame is loaded; when
         /// playing, step to the next frame only if both are loaded.
         func tick() {
-            guard overlays.indices.contains(shown) else { return }
-            let ready = store.isReady(template: overlays[shown].template)
+            guard let store, shown >= 0 else { return }
+            let ready = store.isReady(frame: shown)
             if ready != lastReady {
                 if ready, lastReady != true {
                     let ms = Int(Date().timeIntervalSince(installedAt) * 1000)
@@ -141,9 +136,10 @@ struct RadarMapView: NSViewRepresentable {
                 let report = onReady
                 DispatchQueue.main.async { report(ready) }
             }
-            guard playing, ready, overlays.count > 1 else { return }
-            let next = RadarTileMath.nextFrame(after: shown, count: overlays.count)
-            if store.isReady(template: overlays[next].template) {
+            defer { logStatsIfDue() }
+            guard playing, ready, frameCount > 1 else { return }
+            let next = RadarTileMath.nextFrame(after: shown, count: frameCount)
+            if store.isReady(frame: next) {
                 if let since = waitingSince {
                     let ms = Int(Date().timeIntervalSince(since) * 1000)
                     radarLog.notice("radar waited \(ms, privacy: .public) ms for frame \(next, privacy: .public)")
@@ -153,29 +149,13 @@ struct RadarMapView: NSViewRepresentable {
             } else if waitingSince == nil {
                 waitingSince = Date()
             }
-            logStatsIfDue()
-        }
-
-        /// Every 10 s: how often MapKit asked for tiles, how many came from
-        /// memory, how many went to the network and how long those took.
-        private func logStatsIfDue() {
-            guard Date().timeIntervalSince(lastStats) >= 10 else { return }
-            lastStats = Date()
-            let s = store.takeStats()
-            radarLog.notice("radar 10s: loadTile=\(s.requests, privacy: .public) memoryHits=\(s.hits, privacy: .public) fetches=\(s.fetches, privacy: .public) failed=\(s.failures, privacy: .public) fetchAvgMs=\(s.averageFetchMs, privacy: .public) fetchMaxMs=\(s.maxFetchMs, privacy: .public) shown=\(self.shown, privacy: .public)")
         }
 
         func show(_ index: Int) {
-            guard overlays.indices.contains(index), index != shown else { return }
+            guard index >= 0, index < frameCount, index != shown else { return }
             shown = index
-            for (i, overlay) in overlays.enumerated() {
-                guard let renderer = renderers[ObjectIdentifier(overlay)] else { continue }
-                let alpha = i == index ? RadarMapView.visibleAlpha : 0
-                if renderer.alpha != alpha {
-                    renderer.alpha = alpha
-                    renderer.setNeedsDisplay()
-                }
-            }
+            renderer?.frame = index
+            renderer?.setNeedsDisplay()
             report(frame: index)
         }
 
@@ -186,17 +166,26 @@ struct RadarMapView: NSViewRepresentable {
             DispatchQueue.main.async { report(index) }
         }
 
+        /// Every 10 s: tiles drawn, how many were in memory, how many went to
+        /// the network and how long those took.
+        private func logStatsIfDue() {
+            guard let store, Date().timeIntervalSince(lastStats) >= 10 else { return }
+            lastStats = Date()
+            let s = store.takeStats()
+            radarLog.notice("radar 10s: tileLookups=\(s.requests, privacy: .public) memoryHits=\(s.hits, privacy: .public) fetches=\(s.fetches, privacy: .public) failed=\(s.failures, privacy: .public) fetchAvgMs=\(s.averageFetchMs, privacy: .public) fetchMaxMs=\(s.maxFetchMs, privacy: .public) queued=\(store.queuedCount, privacy: .public) shown=\(self.shown, privacy: .public)")
+        }
+
         func stop() {
             timer?.invalidate()
             timer = nil
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            if let tiles = overlay as? RadarTileOverlay {
-                let renderer = MKTileOverlayRenderer(tileOverlay: tiles)
-                let index = overlays.firstIndex { $0 === tiles }
-                renderer.alpha = index == shown ? RadarMapView.visibleAlpha : 0
-                renderers[ObjectIdentifier(tiles)] = renderer
+            if let frames = overlay as? RadarFramesOverlay, let store {
+                let renderer = RadarFramesRenderer(overlay: frames, store: store)
+                renderer.frame = shown
+                renderer.alpha = RadarMapView.visibleAlpha
+                self.renderer = renderer
                 return renderer
             }
             return MKOverlayRenderer(overlay: overlay)
@@ -258,48 +247,113 @@ enum RadarTileMath {
         guard let scaled = context.makeImage() else { return nil }
         return NSBitmapImageRep(cgImage: scaled).representation(using: .png, properties: [:])
     }
-}
 
-/// A radar frame as a MapKit tile overlay that never goes blank past the
-/// provider's last native zoom. Tiles come through the shared
-/// `RadarTileStore`; asking for one tile also warms it in the other frames.
-final class RadarTileOverlay: MKTileOverlay {
-    let template: String
-    let maxNativeZoom: Int
-    let siblings: [String]
-    let store: RadarTileStore
+    /// World width in MapKit map points (256 × 2^20).
+    static let worldMapPoints: Double = 268_435_456
 
-    init(template: String, maxNativeZoom: Int, siblings: [String] = [],
-         store: RadarTileStore = RadarTileStore()) {
-        self.template = template
-        self.maxNativeZoom = maxNativeZoom
-        self.siblings = siblings
-        self.store = store
-        super.init(urlTemplate: template)
-        canReplaceMapContent = false
-        minimumZ = 1
-        maximumZ = 20
+    /// The provider zoom to draw at for a MapKit zoom scale: the map's own
+    /// zoom, capped at the provider's last native level (tiles past it are
+    /// drawn enlarged and smoothed).
+    static func tileZoom(zoomScale: Double, maxNativeZoom: Int) -> Int {
+        let z = Int((20 + log2(max(zoomScale, 1e-9))).rounded())
+        return min(max(z, 0), max(maxNativeZoom, 0))
     }
 
-    override func loadTile(at path: MKTileOverlayPath, result: @escaping (Data?, Error?) -> Void) {
-        let source = RadarTileMath.source(z: path.z, x: path.x, y: path.y,
-                                          maxNativeZoom: maxNativeZoom)
-        store.noteRequested(z: source.z, x: source.x, y: source.y)
-        // This frame's own tile first; the other frames' copies of it after,
-        // so warming the loop never slows the first picture.
-        store.tile(template: template, source: source) { [store, siblings, template] data, error in
-            result(data, error)
-            for sibling in siblings where sibling != template {
-                store.prefetch(template: sibling, z: source.z, x: source.x, y: source.y)
+    /// The map rectangle one tile covers, as (x, y, width, height) in map points.
+    static func mapRect(z: Int, x: Int, y: Int) -> CGRect {
+        let size = worldMapPoints / Double(1 << z)
+        return CGRect(x: Double(x) * size, y: Double(y) * size, width: size, height: size)
+    }
+
+    /// Every tile at zoom `z` that touches `rect` (map points).
+    static func tiles(covering rect: CGRect, z: Int) -> [(x: Int, y: Int)] {
+        let n = 1 << z
+        let size = worldMapPoints / Double(n)
+        func clamp(_ v: Int) -> Int { min(max(v, 0), n - 1) }
+        let x0 = clamp(Int(floor(rect.minX / size))), x1 = clamp(Int(floor((rect.maxX - 1) / size)))
+        let y0 = clamp(Int(floor(rect.minY / size))), y1 = clamp(Int(floor((rect.maxY - 1) / size)))
+        guard x0 <= x1, y0 <= y1 else { return [] }
+        var out: [(x: Int, y: Int)] = []
+        for y in y0...y1 { for x in x0...x1 { out.append((x, y)) } }
+        return out
+    }
+}
+
+
+/// The radar as one map overlay covering the world; what it shows is the
+/// renderer's current frame.
+final class RadarFramesOverlay: NSObject, MKOverlay {
+    let maxNativeZoom: Int
+    init(maxNativeZoom: Int) { self.maxNativeZoom = maxNativeZoom }
+    var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: 0, longitude: 0) }
+    var boundingMapRect: MKMapRect { .world }
+}
+
+/// Draws the current radar frame from decoded tiles held by the store.
+/// MapKit calls `canDraw`/`draw` on background threads, so the frame index is
+/// lock-protected. A missing tile is requested (current frame first) and its
+/// rectangle redrawn when it arrives; the other frames' copies of every tile
+/// the map shows are queued behind it.
+final class RadarFramesRenderer: MKOverlayRenderer {
+    private let store: RadarTileStore
+    private let maxNativeZoom: Int
+    private let lock = NSLock()
+    private var _frame = 0
+
+    var frame: Int {
+        get { lock.lock(); defer { lock.unlock() }; return _frame }
+        set { lock.lock(); _frame = newValue; lock.unlock() }
+    }
+
+    init(overlay: RadarFramesOverlay, store: RadarTileStore) {
+        self.store = store
+        self.maxNativeZoom = overlay.maxNativeZoom
+        super.init(overlay: overlay)
+    }
+
+    override func canDraw(_ mapRect: MKMapRect, zoomScale: MKZoomScale) -> Bool {
+        let z = RadarTileMath.tileZoom(zoomScale: Double(zoomScale), maxNativeZoom: maxNativeZoom)
+        let current = frame
+        for tile in RadarTileMath.tiles(covering: cgRect(mapRect), z: z) {
+            store.noteRequested(z: z, x: tile.x, y: tile.y)
+            store.request(frame: current, z: z, x: tile.x, y: tile.y, urgent: true) { [weak self] in
+                let r = RadarTileMath.mapRect(z: z, x: tile.x, y: tile.y)
+                DispatchQueue.main.async {
+                    self?.setNeedsDisplay(MKMapRect(x: r.minX, y: r.minY, width: r.width, height: r.height),
+                                          zoomScale: zoomScale)
+                }
             }
+            store.queueOtherFrames(than: current, z: z, x: tile.x, y: tile.y)
+        }
+        return true
+    }
+
+    override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
+        let z = RadarTileMath.tileZoom(zoomScale: Double(zoomScale), maxNativeZoom: maxNativeZoom)
+        let current = frame
+        context.interpolationQuality = .high
+        for tile in RadarTileMath.tiles(covering: cgRect(mapRect), z: z) {
+            guard let image = store.image(frame: current, z: z, x: tile.x, y: tile.y) else { continue }
+            let m = RadarTileMath.mapRect(z: z, x: tile.x, y: tile.y)
+            let r = rect(for: MKMapRect(x: m.minX, y: m.minY, width: m.width, height: m.height))
+            // The renderer's context is flipped (y down); draw the image upright.
+            context.saveGState()
+            context.translateBy(x: r.minX, y: r.maxY)
+            context.scaleBy(x: 1, y: -1)
+            context.draw(image, in: CGRect(x: 0, y: 0, width: r.width, height: r.height))
+            context.restoreGState()
         }
     }
+
+    private func cgRect(_ m: MKMapRect) -> CGRect {
+        CGRect(x: m.origin.x, y: m.origin.y, width: m.size.width, height: m.size.height)
+    }
 }
 
-/// The radar's tile memory, one per map: raw tiles by URL (fetched once,
-/// however many overlays or prefetches ask), enlarged tiles by URL and
-/// crop, and the tiles the map most recently asked for, which decide
-/// whether a frame is ready to show. Unit-tested (RadarTileStoreTests).
+/// The radar's tile memory, one per map: decoded tiles per frame, a download
+/// queue with the shown frame first and at most `maxInFlight` downloads at a
+/// time, and the tiles the map most recently asked for, which decide whether
+/// a frame is ready to show. Unit-tested (RadarTileStoreTests).
 final class RadarTileStore: @unchecked Sendable {
     typealias Completion = (Data?, Error?) -> Void
     typealias Fetch = (URL, @escaping Completion) -> Void
@@ -311,6 +365,7 @@ final class RadarTileStore: @unchecked Sendable {
     private static let tileSession = URLSession(configuration: .ephemeral)
     /// Tiles the map asked for most recently (one view's worth, with room).
     static let recentLimit = 48
+    static let maxInFlight = 6
 
     static let networkFetch: Fetch = { url, done in
         RadarTileStore.tileSession.dataTask(with: url) { data, response, error in
@@ -323,21 +378,35 @@ final class RadarTileStore: @unchecked Sendable {
         }.resume()
     }
 
-    private let fetch: Fetch
-    private let lock = NSLock()
-    private let raw = NSCache<NSString, NSData>()
-    private let enlarged = NSCache<NSString, NSData>()
-    private var failed: Set<String> = []
-    private var waiting: [String: [Completion]] = [:]
-    private var recent: [String] = []          // "z/x/y", newest last
-
     /// Counters for the radar log; `takeStats` reads and resets them.
     struct Stats: Equatable {
         var requests = 0, hits = 0, fetches = 0, failures = 0
         var totalFetchMs = 0, maxFetchMs = 0
         var averageFetchMs: Int { fetches == 0 ? 0 : totalFetchMs / fetches }
     }
+
+    private final class ImageBox { let image: CGImage; init(_ i: CGImage) { image = i } }
+    private struct Job { let key: String; let url: URL; let frame: Int }
+
+    let templates: [String]
+    private let fetch: Fetch
+    private let lock = NSLock()
+    private let images = NSCache<NSString, ImageBox>()
+    private var failed: Set<String> = []
+    private var waiting: [String: [() -> Void]] = [:]   // queued or in flight
+    private var urgent: [Job] = []
+    private var background: [Job] = []
+    private var inFlight = 0
+    private var recent: [String] = []                    // "z/x/y", newest last
     private var stats = Stats()
+
+    init(templates: [String], fetch: @escaping Fetch = RadarTileStore.networkFetch) {
+        self.templates = templates
+        self.fetch = fetch
+        images.totalCostLimit = 200 * 1024 * 1024
+    }
+
+    var queuedCount: Int { lock.lock(); defer { lock.unlock() }; return urgent.count + background.count }
 
     func takeStats() -> Stats {
         lock.lock(); defer { lock.unlock() }
@@ -346,98 +415,118 @@ final class RadarTileStore: @unchecked Sendable {
         return out
     }
 
-    init(fetch: @escaping Fetch = RadarTileStore.networkFetch) {
-        self.fetch = fetch
-        raw.countLimit = 1_500
-        enlarged.countLimit = 1_500
-    }
-
     func noteRequested(z: Int, x: Int, y: Int) {
         let key = "\(z)/\(x)/\(y)"
         lock.lock(); defer { lock.unlock() }
+        if recent.last == key { return }
         recent.removeAll { $0 == key }
         recent.append(key)
         if recent.count > Self.recentLimit { recent.removeFirst(recent.count - Self.recentLimit) }
     }
 
-    /// True when every recently requested tile of this frame is loaded (or
+    /// The decoded tile, if it is in memory. Counts as a draw lookup.
+    func image(frame: Int, z: Int, x: Int, y: Int) -> CGImage? {
+        guard let key = key(frame: frame, z: z, x: x, y: y) else { return nil }
+        let box = images.object(forKey: key as NSString)
+        lock.lock(); stats.requests += 1; if box != nil { stats.hits += 1 }; lock.unlock()
+        return box?.image
+    }
+
+    /// True when every recently requested tile of this frame is in memory (or
     /// has failed — a missing tile must not stall the loop). False before
     /// the map has asked for anything.
-    func isReady(template: String) -> Bool {
-        lock.lock(); defer { lock.unlock() }
-        guard !recent.isEmpty else { return false }
-        return recent.allSatisfy { key in
-            let p = key.split(separator: "/").compactMap { Int($0) }
-            guard p.count == 3, let url = RadarTileMath.url(template: template, z: p[0], x: p[1], y: p[2])
-            else { return true }
-            let k = url.absoluteString
-            return raw.object(forKey: k as NSString) != nil || failed.contains(k)
+    func isReady(frame: Int) -> Bool {
+        lock.lock(); let keys = recent; let failedNow = failed; lock.unlock()
+        guard !keys.isEmpty else { return false }
+        return keys.allSatisfy { k in
+            let p = k.split(separator: "/").compactMap { Int($0) }
+            guard p.count == 3, let key = key(frame: frame, z: p[0], x: p[1], y: p[2]) else { return true }
+            return images.object(forKey: key as NSString) != nil || failedNow.contains(key)
         }
     }
 
-    func prefetch(template: String, z: Int, x: Int, y: Int) {
-        guard let url = RadarTileMath.url(template: template, z: z, x: x, y: y) else { return }
-        rawTile(url) { _, _ in }
-    }
-
-    /// The tile MapKit asked for: the provider's own tile, or the enlarged
-    /// part of its ancestor past the last native zoom.
-    func tile(template: String, source: RadarTileMath.Source, completion: @escaping Completion) {
-        guard let url = RadarTileMath.url(template: template, z: source.z, x: source.x, y: source.y) else {
-            completion(nil, nil)
-            return
-        }
-        lock.lock(); stats.requests += 1; lock.unlock()
-        let whole = source.crop == CGRect(x: 0, y: 0, width: 1, height: 1)
-        let key = "\(url.absoluteString)#\(source.crop.minX),\(source.crop.minY),\(source.crop.width)" as NSString
-        if !whole, let done = enlarged.object(forKey: key) {
-            lock.lock(); stats.hits += 1; lock.unlock()
-            completion(done as Data, nil)
-            return
-        }
-        rawTile(url) { [enlarged] data, error in
-            guard let data else { completion(nil, error); return }
-            if whole { completion(data, nil); return }
-            let out = RadarTileMath.enlarge(data, crop: source.crop)
-            if let out { enlarged.setObject(out as NSData, forKey: key) }
-            completion(out, nil)
-        }
-    }
-
-    private func rawTile(_ url: URL, completion: @escaping Completion) {
-        let key = url.absoluteString
+    /// Ask for a tile. Urgent requests go ahead of queued background ones
+    /// (and promote a queued background copy). `loaded` runs once the tile is
+    /// in memory; never if it is already there.
+    func request(frame: Int, z: Int, x: Int, y: Int, urgent isUrgent: Bool, loaded: @escaping () -> Void = {}) {
+        guard let key = key(frame: frame, z: z, x: x, y: y), let url = URL(string: key) else { return }
+        if images.object(forKey: key as NSString) != nil { return }
         lock.lock()
-        if let hit = raw.object(forKey: key as NSString) {
-            stats.hits += 1
-            lock.unlock()
-            completion(hit as Data, nil)
-            return
-        }
+        if !isUrgent && failed.contains(key) { lock.unlock(); return }
         if waiting[key] != nil {
-            waiting[key]?.append(completion)
+            waiting[key]?.append(loaded)
+            if isUrgent, let i = background.firstIndex(where: { $0.key == key }) {
+                urgent.append(background.remove(at: i))
+            }
             lock.unlock()
             return
         }
-        waiting[key] = [completion]
+        failed.remove(key)
+        waiting[key] = [loaded]
+        let job = Job(key: key, url: url, frame: frame)
+        if isUrgent { urgent.append(job) } else { background.append(job) }
         lock.unlock()
+        pump()
+    }
+
+    /// Queue the same tile in every other frame, in loop order.
+    func queueOtherFrames(than current: Int, z: Int, x: Int, y: Int) {
+        for f in templates.indices where f != current {
+            request(frame: f, z: z, x: x, y: y, urgent: false)
+        }
+    }
+
+    private func key(frame: Int, z: Int, x: Int, y: Int) -> String? {
+        guard templates.indices.contains(frame) else { return nil }
+        return RadarTileMath.url(template: templates[frame], z: z, x: x, y: y)?.absoluteString
+    }
+
+    private func pump() {
+        var start: [Job] = []
+        lock.lock()
+        while inFlight < Self.maxInFlight, !(urgent.isEmpty && background.isEmpty) {
+            let job: Job
+            if !urgent.isEmpty {
+                job = urgent.removeFirst()
+            } else {
+                // Other frames load whole frames at a time, in loop order
+                // (oldest first), so the loop can move on as soon as possible.
+                let i = background.indices.min { background[$0].frame < background[$1].frame } ?? 0
+                job = background.remove(at: i)
+            }
+            inFlight += 1
+            start.append(job)
+        }
+        lock.unlock()
+        for job in start { run(job) }
+    }
+
+    private func run(_ job: Job) {
         let started = Date()
-        fetch(url) { [weak self] data, error in
-            guard let self else { completion(data, error); return }
+        fetch(job.url) { [weak self] data, _ in
+            guard let self else { return }
             let ms = Int(Date().timeIntervalSince(started) * 1000)
+            let image = data.flatMap(Self.decode)
+            if let image {
+                self.images.setObject(ImageBox(image), forKey: job.key as NSString,
+                                      cost: image.bytesPerRow * image.height)
+            }
             self.lock.lock()
+            self.inFlight -= 1
             self.stats.fetches += 1
             self.stats.totalFetchMs += ms
             self.stats.maxFetchMs = max(self.stats.maxFetchMs, ms)
-            if data == nil { self.stats.failures += 1 }
-            let waiters = self.waiting.removeValue(forKey: key) ?? []
-            if let data {
-                self.raw.setObject(data as NSData, forKey: key as NSString)
-                self.failed.remove(key)
-            } else {
-                self.failed.insert(key)
-            }
+            if image == nil { self.failed.insert(job.key); self.stats.failures += 1 }
+            let callbacks = self.waiting.removeValue(forKey: job.key) ?? []
             self.lock.unlock()
-            waiters.forEach { $0(data, error) }
+            if image != nil { callbacks.forEach { $0() } }
+            self.pump()
         }
+    }
+
+    /// Decode once, up front, so drawing never decodes a PNG.
+    static func decode(_ data: Data) -> CGImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
     }
 }
