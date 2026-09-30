@@ -285,14 +285,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Orb crystal glass (#90), revised to use the crystal shell exclusively
 
 - **Owner:** `codex`
-- **Status:** landed (PR #112, merge commit `e9388fc`); deployment and live acceptance open
+- **Status:** landed and deployed in `c3607e6`; acceptance evidence in review (PR #115)
 - **Implemented by:** Claude original crystal-glass workstream; Codex rendering performance fixes and single-shell cleanup
-- **Remaining work / acceptance:** Deploy the merged crystal-only build, compare its five visual fixtures with the approved reference, then Larry verifies the orb in compact/expanded layouts and under Reduce Motion. His 09-29 observations pass the pre-cleanup build. The local full MortimerHost run had one environment-sensitive protected-window capture failure; PR #112's CI passed on rerun.
+- **Remaining work / acceptance:** Larry's DEPLOY-MAIN deployed `c3607e6` after WS-16's capture repair; release suites and health checks passed. Larry reaffirmed compact/expanded appearance and Reduce Motion behavior on 09-29, so these are not repeat asks. Codex regenerated and reviewed all five current crystal fixtures against the approved references; the required glass, reflections, orbits, nucleus and talker colors remain in place. The plan reserves final five-fixture visual approval for Larry. No post-deployment record yet itemizes all named live states (listening, user, Mortimer, overlap, standby) and placements (conversation, rail, bottom).
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (PR #112, `e9388fc`)
+- **Where:** main (PR #112, `e9388fc`); acceptance evidence: `codex/ws08-crystal-only-20260929` (PR #115)
 - **Plan:** `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`
 - **Scope:** Orb rendering, orb-specific configuration, performance/visual regression tests, and this plan's acceptance evidence.
-- **Next step:** Deploy `e9388fc` through the standard release flow, then Larry reviews the visual fixtures and rechecks compact/expanded layouts and Reduce Motion.
+- **Next step:** Larry reviews the five linked current fixtures in the WS-08 receipt and confirms only live states/placements not already observed. Do not repeat compact/expanded or Reduce Motion checks.
 - **Updated:** 09-29
 
 </details>
@@ -597,6 +597,10 @@ first lever to pull.
 
 ## 8. Change log
 
+- 2026-09-29: Codex / WS-08 merged current main including the WS-01 claim-order fix from PR #125 into PR #115, preserving both WS-08 acceptance evidence and WS-01/WS-15 history. PR #115 CI must now rerun against the fixed backend before its acceptance-evidence merge.
+
+- 2026-09-29: Codex / WS-08 reconciled deployment and acceptance after WS-16 closed. Larry's DEPLOY-MAIN installed `c3607e6` with release gates green; Larry reaffirmed compact/expanded appearance and Reduce Motion stillness. Codex regenerated five fixtures from the deployed orb source (focused CrystalOrbShellTests 7/0), reviewed their expected features against the checked-in references, and attached them to the WS-08 receipt. Final Larry fixture approval and any unobserved named live states/placements remain open.
+
 - 2026-09-29: Codex / WS-01: PR #124 merged the action-claim repair claim. The bounded worker fix now settles self-edit and app-build terminal action receipts before publishing terminal job state under the same job lock. Four barrier tests cover success and error ordering; 97 focused admin tests pass. The full Mac unit run had 4,740 passes, three skips and two out-of-scope failures (audio-filter shared state; deploy-script log flush); Linux CI and merge into WS-08 PR #115 remain open.
 
 - 2026-09-29: Codex / WS-01 claim proposed for PR #115's unrelated CI failure. Two full validation attempts failed in app-build/self-edit durable action-claim tests while the WS-08 PR changed only documentation and fixture PNGs; the three failing tests pass together locally. Source inspection finds both workers set the visible job to `done` before committing the corresponding terminal action claim, allowing a status poll to observe the old `claimed` state. This docs-only claim reserves a bounded ordering fix and deterministic regression tests on `codex/ws01-action-claim-order-20260929`; no backend code changes or CI checks are bypassed.
@@ -622,6 +626,8 @@ first lever to pull.
 - 2026-09-29 (night, WS-15 PR 2): Claude (Cowork). PR 1 (#110) is deployed and its logs confirm `local_weather` with the device fix. PR 2 follows Larry's one-window decision: the weather card lives in the main window only and is selected on arrival. It holds the summary, now, alerts, 12 hours, 7 days, and Apple's map with the NOAA/IEM radar loop and a pin; radar past zoom 8 is enlarged so it stays at street level.
 
 - 2026-09-29: Larry assigned Codex WS-16 after DEPLOY-MAIN for `d460809` stopped before production changes on the protected-window screenshot equality test. The logged captures differ in 21,946/1,041,600 pixels at the frame edge and body text; the central content matches. This docs-only claim reserves the test file and a separate worktree; it does not change product display code or relax the privacy assertion.
+
+- 2026-09-29: Codex WS-08 deployment follow-up. Larry ran DEPLOY-MAIN against `d460809`; phase A stopped on the protected-window capture test after JarvisKit passed. Production remained `e340101`. Analysis of the two pixel arrays found 21,946/1,041,600 differing pixels, all at the frame edge or the body-text area (none 64 px inside). The test is outside WS-08's assigned source scope; deployment and live orb acceptance remained blocked pending a separately assigned repair.
 
 - 2026-09-29: Codex WS-08 crystal-only implementation landed in PR #112 as `e9388fc`. The first `validate` run failed in an unchanged app-build timing test; that isolated test passed locally and the complete workflow passed on rerun. Sandbox controller and Knowledge base workflows also passed. Deployment and Larry's live orb checks remain open.
 
