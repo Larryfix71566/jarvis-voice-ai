@@ -18,6 +18,9 @@ struct AdaptiveStageView: View {
     /// still lets the user expand it and AppStorage preserves that choice.
     @AppStorage("mortimer.interface.compactConversation") private var compactConversation = true
     @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 2
+    /// CC7a.1 (WS-17): the conversation thread replaces the two-caption
+    /// stage in layout 2. See ConversationThread.
+    @AppStorage(ConversationThread.flagKey) private var threadEnabled = true
     @EnvironmentObject private var client: JarvisClient
     @Environment(WorkspaceStore.self) private var workspace
     @Environment(ConversationStore.self) private var conversation
@@ -72,6 +75,9 @@ struct AdaptiveStageView: View {
                         }
                         .padding(.horizontal, AdaptiveLayoutMetrics.workspacePadding)
                         .padding(.top, AdaptiveLayoutMetrics.workspacePadding)
+                        if showsThread {
+                            ConversationThreadView()
+                        } else {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 10) {
                                 if conversation.entries.isEmpty {
@@ -90,6 +96,7 @@ struct AdaptiveStageView: View {
                                 }
                             }
                             .padding(AdaptiveLayoutMetrics.workspacePadding)
+                        }
                         }
                         Divider()
                         VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse,
@@ -125,6 +132,10 @@ struct AdaptiveStageView: View {
         }
     }
 
+    private var showsThread: Bool {
+        ConversationThread.showsThread(layoutVersion: layoutVersion, threadEnabled: threadEnabled)
+    }
+
     @ViewBuilder
     private var conversationControls: some View {
         Button(compactConversation ? "Expand voice" : "Keep voice compact") {
@@ -158,6 +169,15 @@ struct AdaptiveStageView: View {
     private var compactStageContent: some View {
         if workspace.showsSkills {
             SkillsWorkspaceView(coordinator: coordinator)
+        } else if workspace.showsConversation && showsThread {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack { conversationControls; Spacer(minLength: 0) }
+                    .padding(.horizontal, AdaptiveLayoutMetrics.workspacePadding)
+                    .padding(.top, AdaptiveLayoutMetrics.workspacePadding)
+                    .padding(.bottom, 4)
+                ConversationThreadView()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else if workspace.showsConversation {
             VStack(alignment: .leading, spacing: 16) {
                 HStack { conversationControls; Spacer(minLength: 0) }

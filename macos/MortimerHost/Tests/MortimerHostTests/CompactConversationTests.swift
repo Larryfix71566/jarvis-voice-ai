@@ -183,6 +183,12 @@ final class CompactConversationTests: XCTestCase {
                           try transcriptEntry("stage-assistant", "assistant", assistantTranscript)])
         let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
             adminURL: URL(string: "http://127.0.0.1:7861")!, wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: "synthetic"))
+        // CC7a.1 (WS-17, plan 7.2, approved by Larry 2026-09-30): with the
+        // conversation thread on, the conversation IS the main stage, so the
+        // compact presentation shows it too. With the thread off, the
+        // pre-CC7a rule (compact stage shows no transcript) still holds.
+        for thread in [false, true] {
+        defaults.set(thread, forKey: ConversationThread.flagKey)
         for width in [512, 1000] {
         for compact in [true, false] {
             defaults.set(compact, forKey: "mortimer.interface.compactConversation")
@@ -211,7 +217,11 @@ final class CompactConversationTests: XCTestCase {
                 }
             }
             visit(view)
-            if compact {
+            if compact && thread {
+                let stageOCR = try renderedText(in: view)
+                XCTAssertTrue(stageOCR.contains(userTranscript.filter { !$0.isWhitespace }), "thread on: compact stage shows the user's turn at width \(width): \(stageOCR)")
+                XCTAssertTrue(stageOCR.contains(assistantTranscript.filter { !$0.isWhitespace }), "thread on: compact stage shows Mortimer's turn at width \(width): \(stageOCR)")
+            } else if compact {
                 let stageOCR = try renderedText(in: view)
                 XCTAssertFalse(stageOCR.contains(userTranscript.filter { !$0.isWhitespace }) || stageOCR.contains(assistantTranscript.filter { !$0.isWhitespace }),
                                "layout v2 compact stage at width \(width) must not repeat transcript: \(stageOCR)")
@@ -230,7 +240,7 @@ final class CompactConversationTests: XCTestCase {
             let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(".build/interface-fixtures")
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-                .write(to: directory.appendingPathComponent("conversation-\(width)-\(compact ? "compact" : "expanded").png"))
+                .write(to: directory.appendingPathComponent("conversation-\(width)-\(compact ? "compact" : "expanded")\(thread ? "-thread" : "").png"))
             let modeLabel = compact ? "Expand voice" : "Keep voice compact"
             for label in [modeLabel, "Memory graph", "Return to workspace"] {
                 let control = try XCTUnwrap(controls[label])
@@ -254,6 +264,9 @@ final class CompactConversationTests: XCTestCase {
                 if compact {
                     XCTAssertTrue(toggledOCR.contains(userTranscript.filter { !$0.isWhitespace }), "expanding voice exposes the main user transcript: \(toggledOCR)")
                     XCTAssertTrue(toggledOCR.contains(assistantTranscript.filter { !$0.isWhitespace }), "expanding voice exposes Mortimer’s main transcript: \(toggledOCR)")
+                } else if thread {
+                    XCTAssertTrue(toggledOCR.contains(userTranscript.filter { !$0.isWhitespace }), "thread on: returning to compact keeps the user's turn: \(toggledOCR)")
+                    XCTAssertTrue(toggledOCR.contains(assistantTranscript.filter { !$0.isWhitespace }), "thread on: returning to compact keeps Mortimer's turn: \(toggledOCR)")
                 } else {
                     XCTAssertFalse(toggledOCR.contains(userTranscript.filter { !$0.isWhitespace }) || toggledOCR.contains(assistantTranscript.filter { !$0.isWhitespace }),
                                    "returning to compact removes duplicate transcript: \(toggledOCR)")
@@ -262,6 +275,7 @@ final class CompactConversationTests: XCTestCase {
                 XCTAssertEqual(workspace.scrollOffsets[result.id], 240)
                 XCTAssertTrue(workspace.showsConversation)
             }
+        }
         }
         }
     }

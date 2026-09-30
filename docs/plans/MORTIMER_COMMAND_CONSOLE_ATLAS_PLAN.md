@@ -1401,6 +1401,18 @@ result card (RELEASE_READINESS UI2-19 note):
    result with the same key in place; weather tools reopen a fresh card
    instead of fetching. Flag removed after UI2-22..25 pass.
 
+**Progress, 2026-09-30 (Claude):** CC7a.1 in review on branch
+`ws17/cc7a1-conversation-thread`. New `Console/ConversationThreadView.swift`
+(`ConversationThread` rules and the transcript-row view); `AdaptiveStageView`
+shows it in layout 2 for both the expanded and compact presentations;
+`AppMessageRouter` routes spoken answers to `ResponseResultRouter` only when
+the switch `mortimer.interface.conversationThread` is off (on by default).
+Structured display payloads, weather's select-on-arrival (CC7a.2) and the tab
+strip (CC7a.3) are unchanged. Tests: `ConversationThreadTests` (rules,
+follow-bottom, a rendered OCR check that a reply longer than 160 characters
+shows to its end) and `LiveVoiceResponseStreamTests` (thread on: no result,
+no display panel; thread off: previous behaviour).
+
 ## 8. Acceptance evidence and regression gates
 
 Status values: NOT STARTED, IMPLEMENTED/UNVERIFIED, VERIFIED IN SANDBOX,

@@ -111,14 +111,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-30: conversation is spread over one tab per turn, only Mortimer's side shows, the tab strip fills up, and asking again re-fetches. Increment CC7a of the Command Console plan (WS-09's plan): one conversation thread with both sides, results as inline cards, Recents instead of tabs, reuse a fresh result by subject.
 
 - **Owner:** `claude` (implementation); `codex` reviews every increment before merge
-- **Status:** claimed; design approved by Larry 09-30; Codex confirmed scope (CX-15 resolved)
-- **Implemented by:** not started
+- **Status:** review: CC7a.1 (conversation thread) in PR, awaiting Codex review; design approved 09-30; CX-15 resolved
+- **Implemented by:** Claude (Cowork): CC7a.1
 - **Remaining work / acceptance:** CC7a.1-CC7a.4, each a reviewed PR; RELEASE_READINESS UI2-22..UI2-25 on the Mac. UI2-04, UI2-09 and UI2-13 are held until then. Approved design: `docs/interface-research/cc7a/cc7a-approved-design-2026-09-30.html` (transcript rows, compact cards, Recents menu, reuse reference line, no-jump notice); Codex's boundaries in plan §7.2.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** not started
+- **Where:** branch `ws17/cc7a1-conversation-thread`
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md` §7.1 item 9 and §7.2
 - **Scope:** `App/ResponseResultRouter.swift`, `Stores/WorkspaceStore.swift`, `Stores/ConversationStore.swift`, `Console/AdaptiveStageView.swift`, `Console/TopBarView.swift`, `Display/WorkspaceView.swift`, `App/AppMessageRouter.swift` (weather's select-on-arrival only), voice result actions (`App/ConsoleActionCoordinator.swift`, `App/ConsoleActionRegistry.swift`, JarvisKit `ConsoleProtocol.swift`, `jarvis/bot/console_protocol.py`), DisplayPayload `subject_key` (JarvisKit + `jarvis/bot/display.py`), weather tools' reuse check; tests for each
-- **Next step:** CC7a.1: conversation thread (transcript rows, both speakers' full text) behind a flag; `ResponseResultRouter` stops creating results for spoken answers in layout 2
+- **Next step:** Codex reviews CC7a.1 against plan 7.2 boundary 1; Larry merges and deploys; Larry checks UI2-22 on the Mac; then CC7a.2 (inline cards, no focus stealing)
 - **Updated:** 09-30
 
 </details>
@@ -606,6 +606,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-30 (WS-17 CC7a.1 in review): Claude (Cowork). Layout 2 stage shows the conversation as transcript rows with both speakers' full text (was the last two entries cut at 160 characters); spoken answers no longer become workspace results or supporting-display panels; structured payloads unchanged. Switch `mortimer.interface.conversationThread` (on by default). Awaiting Codex review before merge.
 
 - 2026-09-30 (WS-17 design approved; CX-15 resolved): Claude (Cowork). Larry picked transcript rows (over chat bubbles, so long replies read at full width), compact cards opened on the stage, the Recents menu, a reference line when a fresh result is reused, and a notice instead of a jump when a result arrives while another is open. Codex confirmed scope with boundaries; Claude checked each against main (`latestCaptions` = last two, 160-character captions; pin/unpin do not advance `inventoryRevision`; weather calls `select` on arrival; Log bound 200; workspace keeps 20 unpinned). Recorded in plan §7.2 and UI2-22..25; mockups in `docs/interface-research/cc7a/`. Next: CC7a.1.
 
