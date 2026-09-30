@@ -250,11 +250,17 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
 public struct UICommand: Sendable, Equatable, Decodable {
     public let action: String
     public let tab: String?
-    enum CodingKeys: String, CodingKey { case action, tab }
+    /// WS-15 map_zoom_to / map_center: the map's width in miles.
+    public let miles: Double?
+    /// WS-15 map_center: the place to center on, as the user said it.
+    public let place: String?
+    enum CodingKeys: String, CodingKey { case action, tab, miles, place }
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
         action = try c.decodeIfPresent(String.self, forKey: .action) ?? ""
         tab = try c.decodeIfPresent(String.self, forKey: .tab)
+        miles = try? c.decodeIfPresent(Double.self, forKey: .miles)
+        place = try? c.decodeIfPresent(String.self, forKey: .place)
     }
 }
 

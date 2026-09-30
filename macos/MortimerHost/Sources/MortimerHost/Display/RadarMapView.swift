@@ -46,7 +46,7 @@ struct RadarMapView: NSViewRepresentable {
     var playing: Bool = true
     /// WS-15 voice map control: the newest zoom/reset command and its serial
     /// (WeatherMapCommands); applied once per serial.
-    var zoomCommand: (serial: Int, action: String)? = nil
+    var zoomCommand: WeatherMapCommand? = nil
     /// Called on the main actor with the index of the frame now shown.
     var onFrame: (Int) -> Void = { _ in }
     /// Called on the main actor when the shown frame's tiles are (or stop
@@ -96,8 +96,21 @@ struct RadarMapView: NSViewRepresentable {
             let opening = MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
                                              latitudinalMeters: Self.openingSpanMeters,
                                              longitudinalMeters: Self.openingSpanMeters)
-            if let region = WeatherMapZoom.region(map.region, action: command.action, opening: opening) {
-                map.setRegion(region, animated: true)
+            let aspect = map.bounds.width > 0 ? Double(map.bounds.height / map.bounds.width) : 1
+            switch command.action {
+            case "map_zoom_to":
+                if let miles = command.miles {
+                    map.setRegion(WeatherMapZoom.region(center: map.region.center, acrossMiles: miles,
+                                                        aspect: aspect), animated: true)
+                }
+            case "map_center":
+                if let place = command.place {
+                    context.coordinator.center(on: place, miles: command.miles, aspect: aspect, map: map)
+                }
+            default:
+                if let region = WeatherMapZoom.region(map.region, action: command.action, opening: opening) {
+                    map.setRegion(region, animated: true)
+                }
             }
         }
     }
@@ -209,6 +222,30 @@ struct RadarMapView: NSViewRepresentable {
         func stop() {
             timer?.invalidate()
             timer = nil
+        }
+
+        /// map_center (Larry, 2026-09-30: "center the map on Atlanta"): find
+        /// the place with Apple Maps search, nearest the current view first,
+        /// and move there, keeping the current width unless miles were given.
+        func center(on place: String, miles: Double?, aspect: Double, map: MKMapView) {
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = place
+            request.region = map.region
+            let span = map.region.span
+            MKLocalSearch(request: request).start { [weak map] response, error in
+                MainActor.assumeIsolated {
+                    guard let map else { return }
+                    guard let item = response?.mapItems.first else {
+                        radarLog.notice("map center: no match for \(place, privacy: .public) error=\(String(describing: error), privacy: .public)")
+                        return
+                    }
+                    let coordinate = item.placemark.coordinate
+                    radarLog.notice("map center: \(place, privacy: .public) -> \(coordinate.latitude, privacy: .public),\(coordinate.longitude, privacy: .public)")
+                    let region = miles.map { WeatherMapZoom.region(center: coordinate, acrossMiles: $0, aspect: aspect) }
+                        ?? MKCoordinateRegion(center: coordinate, span: span)
+                    map.setRegion(region, animated: true)
+                }
+            }
         }
 
         /// Keep the renderer's idea of "on screen" current, and start

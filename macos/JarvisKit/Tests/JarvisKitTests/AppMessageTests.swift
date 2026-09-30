@@ -243,6 +243,17 @@ final class AppMessageTests: XCTestCase {
         XCTAssertEqual(cmd.tab, "agents")
     }
 
+    func testDecodeUICommandWithMilesAndPlace() throws {
+        let json = """
+        {"id":"m","label":"rtvi-ai","type":"server-message","data":{"type":"ui","action":"map_center","place":"Truist Park, Atlanta","miles":10}}
+        """
+        let message = try XCTUnwrap(try AppMessage.decode(frame: Data(json.utf8)))
+        guard case .ui(let cmd) = message else { return XCTFail("expected .ui") }
+        XCTAssertEqual(cmd.action, "map_center")
+        XCTAssertEqual(cmd.place, "Truist Park, Atlanta")
+        XCTAssertEqual(cmd.miles, 10)
+    }
+
     func testDecodeUICommandWithoutTab() throws {
         let json = """
         {"id":"m","label":"rtvi-ai","type":"server-message","data":{"type":"ui","action":"display_popout"}}

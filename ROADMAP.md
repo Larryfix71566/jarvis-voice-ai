@@ -165,7 +165,7 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-29: *"it is missing current radar and it defaults to memory for weather instead of checking current location and getting fresh weather."* A weather answer must use where Larry is now and show current radar for that place.
 
 - **Owner:** `claude`
-- **Status:** in-progress: card, map, smooth radar and voice map control accepted by Larry 09-30 (A1-A4). A7 London failed: Open-Meteo rejected current=time (added 44cb8ae, 09-28), so every non-US forecast failed; A5 Alpharetta was then refused by the retry guard as a reworded retry. Fix in review.
+- **Status:** in-progress: A1-A5 and A7 passed 09-30 (card, map, smooth radar, voice zoom/pause/satellite, London via Open-Meteo, Alpharetta). Larry asked for voice zoom to a distance and centering on a place; in review (map_zoom_to, map_center). A6 (location off) still to run.
 - **Implemented by:** Claude (plan); code not started
 - **Remaining work / acceptance:** Evidence from the 09-29 10:08 EDT session (`logs/agents/2026-09-29/`), read-only:
   1. **The location came from memory.** The voice model's delegation read *"typically in Spartanburg, SC or surrounding area"*. The analyst called `get_weather` and `get_weather_radar` with `"Spartanburg, SC"` and answered *"(assumed default, not confirmed device location)"*. Larry then had to name Charleston.
@@ -179,11 +179,11 @@ Claude’s work or enable any runtime feature.
 
   Acceptance, now A1–A5 in the plan: "what's the weather" with no place named uses a fresh device fix, or IP labeled approximate, never memory; the radar shown is for that same point and is current; a place Larry names still wins.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** branch `fix/open-meteo-current-time`
+- **Where:** branch `ws15/voice-map-zoom-to-center`
 - **Plan:** `docs/plans/MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md` (Option A: `local_weather` direct tool; `jarvis/weather/report.py` with Weather.gov 7-day, hourly and alerts; IEM NEXRAD radar with RainViewer outside the US; native `RadarMapView` and `WeatherCardView`). It supersedes W5/W6 of `MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md`. Research: `Claude outputs/ws15/ws15_weather_research.html`.
 - **Scope:** `jarvis/weather/` (new), `jarvis/weathergov.py`, `mcp_servers/mcp_web/logic.py`, `mcp_servers/mcp_web/server.py`, `jarvis/bot/weather_tool.py` (new), tool registration in `jarvis/bot/pipeline.py`, `jarvis/bot/display.py`, weather lines in `jarvis/prompts.py`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift`, `Display/DisplayContentView.swift`, `Display/WeatherCardView.swift` and `Display/RadarMapView.swift` (new), and their tests and evals. Re-checked 09-29: none of these is inside another block's scope.
-- **Next step:** Merge and deploy the Open-Meteo fix; Larry repeats A7 (London), A5 (Alpharetta) and A6 (location off); Claude checks A8 in the logs, writes the receipt and marks WS-15 accepted.
-- **Updated:** 09-29
+- **Next step:** Merge and deploy; Larry tries 'zoom to 10 miles' and 'center on Truist Park', then A6; Claude checks A8, writes the receipt and marks WS-15 accepted.
+- **Updated:** 09-30
 
 </details>
 
