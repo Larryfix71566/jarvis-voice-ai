@@ -102,10 +102,10 @@ final class WeatherCardTests: XCTestCase {
     }
 }
 
-/// The radar loop's tile memory (Larry, 2026-09-29: radar "comes up slowly
-/// and flashes"): each tile is fetched once however many frames or
-/// prefetches ask, and a frame counts as ready only when the tiles the map
-/// last asked for are in.
+/// The radar's tile memory (Larry, 2026-09-29: radar slow to start and
+/// choppy; the radar log showed every frame loading at once and constant
+/// re-requests). One overlay draws decoded tiles; downloads are queued with
+/// the shown frame first and at most six at a time.
 final class RadarTileStoreTests: XCTestCase {
     /// A fetcher that records requests and answers only when told to.
     final class FakeFetch: @unchecked Sendable {
@@ -119,11 +119,14 @@ final class RadarTileStoreTests: XCTestCase {
             let now = pending; pending = []
             now.forEach { $0.1(data, data == nil ? URLError(.badServerResponse) : nil) }
         }
+        func answerFirst(with data: Data?) {
+            let first = pending.removeFirst()
+            first.1(data, data == nil ? URLError(.badServerResponse) : nil)
+        }
     }
 
-    private let a = "https://t/a/{z}/{x}/{y}.png"
-    private let b = "https://t/b/{z}/{x}/{y}.png"
-    private let whole = RadarTileMath.Source(z: 8, x: 71, y: 103, crop: CGRect(x: 0, y: 0, width: 1, height: 1))
+    private let templates = ["https://t/a/{z}/{x}/{y}.png", "https://t/b/{z}/{x}/{y}.png",
+                             "https://t/c/{z}/{x}/{y}.png"]
 
     private func png() throws -> Data {
         let rep = try XCTUnwrap(NSBitmapImageRep(
@@ -133,79 +136,121 @@ final class RadarTileStoreTests: XCTestCase {
         return try XCTUnwrap(rep.representation(using: .png, properties: [:]))
     }
 
-    func testATileIsFetchedOnceForEveryoneWhoAsks() throws {
-        let fake = FakeFetch(); let store = RadarTileStore(fetch: fake.fetch)
-        var answers = 0
-        store.prefetch(template: a, z: 8, x: 71, y: 103)
-        store.tile(template: a, source: whole) { data, _ in if data != nil { answers += 1 } }
-        store.tile(template: a, source: whole) { data, _ in if data != nil { answers += 1 } }
+    func testATileIsFetchedOnceAndThenDrawnFromMemory() throws {
+        let fake = FakeFetch(); let store = RadarTileStore(templates: templates, fetch: fake.fetch)
+        var loaded = 0
+        store.request(frame: 0, z: 8, x: 71, y: 103, urgent: false) { loaded += 1 }
+        store.request(frame: 0, z: 8, x: 71, y: 103, urgent: true) { loaded += 1 }
         XCTAssertEqual(fake.requests.count, 1)
+        XCTAssertNil(store.image(frame: 0, z: 8, x: 71, y: 103))
         fake.answerAll(with: try png())
-        XCTAssertEqual(answers, 2)
-        store.tile(template: a, source: whole) { data, _ in if data != nil { answers += 1 } }
-        XCTAssertEqual(answers, 3, "a stored tile answers at once")
-        XCTAssertEqual(fake.requests.count, 1, "and is not fetched again")
+        XCTAssertEqual(loaded, 2)
+        let image = try XCTUnwrap(store.image(frame: 0, z: 8, x: 71, y: 103))
+        XCTAssertEqual(image.width, 256)
+        store.request(frame: 0, z: 8, x: 71, y: 103, urgent: true) { loaded += 1 }
+        XCTAssertEqual(fake.requests.count, 1, "a tile in memory is not fetched again")
+        XCTAssertEqual(loaded, 2)
+    }
+
+    func testTheShownFrameDownloadsAheadOfOtherFrames() throws {
+        let fake = FakeFetch(); let store = RadarTileStore(templates: templates, fetch: fake.fetch)
+        // Fill every download slot with other frames' tiles, then ask for the shown one.
+        for x in 0..<(RadarTileStore.maxInFlight + 3) {
+            store.request(frame: 1, z: 8, x: x, y: 0, urgent: false)
+        }
+        store.request(frame: 0, z: 8, x: 71, y: 103, urgent: true)
+        XCTAssertEqual(fake.requests.count, RadarTileStore.maxInFlight, "never more than the limit at once")
+        XCTAssertEqual(store.queuedCount, 4)
+        fake.answerFirst(with: try png())
+        XCTAssertEqual(fake.requests.last?.absoluteString, "https://t/a/8/71/103.png",
+                       "the freed slot goes to the shown frame")
+    }
+
+    func testOtherFramesLoadWholeFramesInLoopOrder() throws {
+        let fake = FakeFetch(); let store = RadarTileStore(templates: templates, fetch: fake.fetch)
+        for x in 0..<RadarTileStore.maxInFlight { store.request(frame: 0, z: 8, x: x, y: 9, urgent: true) }
+        // Queued tile by tile (as the map asks), frames 2 then 1 for each tile.
+        for x in 0..<2 {
+            store.request(frame: 2, z: 8, x: x, y: 0, urgent: false)
+            store.request(frame: 1, z: 8, x: x, y: 0, urgent: false)
+        }
+        fake.answerFirst(with: try png())
+        fake.answerFirst(with: try png())
+        XCTAssertEqual(fake.requests.suffix(2).map(\.absoluteString),
+                       ["https://t/b/8/0/0.png", "https://t/b/8/1/0.png"], "all of frame 1 before frame 2")
     }
 
     func testAFrameIsReadyOnlyWhenItsRequestedTilesAreIn() throws {
-        let fake = FakeFetch(); let store = RadarTileStore(fetch: fake.fetch)
-        XCTAssertFalse(store.isReady(template: a), "nothing asked for yet")
+        let fake = FakeFetch(); let store = RadarTileStore(templates: templates, fetch: fake.fetch)
+        XCTAssertFalse(store.isReady(frame: 0), "nothing asked for yet")
         store.noteRequested(z: 8, x: 71, y: 103)
-        store.tile(template: a, source: whole) { _, _ in }
-        store.prefetch(template: b, z: 8, x: 71, y: 103)
-        XCTAssertFalse(store.isReady(template: a))
-        XCTAssertFalse(store.isReady(template: b))
+        store.request(frame: 0, z: 8, x: 71, y: 103, urgent: true)
+        store.queueOtherFrames(than: 0, z: 8, x: 71, y: 103)
+        XCTAssertFalse(store.isReady(frame: 0))
         fake.answerAll(with: try png())
-        XCTAssertTrue(store.isReady(template: a))
-        XCTAssertTrue(store.isReady(template: b), "the prefetched frame is ready too")
+        XCTAssertTrue(store.isReady(frame: 0))
+        XCTAssertTrue(store.isReady(frame: 1), "other frames were queued behind it")
+        XCTAssertTrue(store.isReady(frame: 2))
+        XCTAssertEqual(fake.requests.count, 3)
     }
 
     func testAFailedTileDoesNotStallTheLoop() {
-        let fake = FakeFetch(); let store = RadarTileStore(fetch: fake.fetch)
+        let fake = FakeFetch(); let store = RadarTileStore(templates: templates, fetch: fake.fetch)
         store.noteRequested(z: 8, x: 71, y: 103)
-        store.prefetch(template: a, z: 8, x: 71, y: 103)
+        store.request(frame: 0, z: 8, x: 71, y: 103, urgent: false)
         fake.answerAll(with: nil)
-        XCTAssertTrue(store.isReady(template: a))
+        XCTAssertTrue(store.isReady(frame: 0))
+        store.request(frame: 0, z: 8, x: 71, y: 103, urgent: false)
+        XCTAssertEqual(fake.requests.count, 1, "background does not retry a failed tile")
+        store.request(frame: 0, z: 8, x: 71, y: 103, urgent: true)
+        XCTAssertEqual(fake.requests.count, 2, "the shown frame does")
     }
 
-    func testPastNativeZoomServesAnEnlargedTileAndKeepsIt() throws {
-        let fake = FakeFetch(); let store = RadarTileStore(fetch: fake.fetch)
-        let quarter = RadarTileMath.source(z: 9, x: 143, y: 206, maxNativeZoom: 8)
-        var out: Data?
-        store.tile(template: a, source: quarter) { data, _ in out = data }
-        fake.answerAll(with: try png())
-        XCTAssertEqual(try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(out))).pixelsWide, 256)
-        var again: Data?
-        store.tile(template: a, source: quarter) { data, _ in again = data }
-        XCTAssertEqual(again, out)
-        XCTAssertEqual(fake.requests.map(\.absoluteString), ["https://t/a/8/71/103.png"])
-    }
-
-    func testStatsCountRequestsHitsAndFetchesThenReset() throws {
-        let fake = FakeFetch(); let store = RadarTileStore(fetch: fake.fetch)
-        store.tile(template: a, source: whole) { _, _ in }
-        fake.answerAll(with: try png())
-        store.tile(template: a, source: whole) { _, _ in }
-        store.prefetch(template: b, z: 8, x: 71, y: 103)
-        fake.answerAll(with: nil)
+    func testStatsCountLookupsHitsAndFetchesThenReset() throws {
+        let fake = FakeFetch(); let store = RadarTileStore(templates: templates, fetch: fake.fetch)
+        store.request(frame: 0, z: 8, x: 1, y: 1, urgent: true)
+        store.request(frame: 1, z: 8, x: 1, y: 1, urgent: true)
+        fake.answerFirst(with: try png())
+        fake.answerFirst(with: nil)
+        _ = store.image(frame: 0, z: 8, x: 1, y: 1)
+        _ = store.image(frame: 1, z: 8, x: 1, y: 1)
         let s = store.takeStats()
-        XCTAssertEqual(s.requests, 2, "prefetches are not MapKit requests")
+        XCTAssertEqual(s.requests, 2)
         XCTAssertEqual(s.hits, 1)
         XCTAssertEqual(s.fetches, 2)
         XCTAssertEqual(s.failures, 1)
         XCTAssertEqual(store.takeStats(), RadarTileStore.Stats())
     }
 
-    func testOpeningViewIsNearTheRadarsOwnResolution() {
-        XCTAssertEqual(RadarMapView.openingSpanMeters, 200_000)
+    func testRecentRequestsAreBounded() throws {
+        let fake = FakeFetch(); let store = RadarTileStore(templates: templates, fetch: fake.fetch)
+        for x in 0..<(RadarTileStore.recentLimit + 5) { store.noteRequested(z: 8, x: x, y: 0) }
+        // Only the newest `recentLimit` tiles decide readiness: load just those.
+        for x in 5..<(RadarTileStore.recentLimit + 5) { store.request(frame: 0, z: 8, x: x, y: 0, urgent: true) }
+        while !fake.pending.isEmpty { fake.answerAll(with: try png()) }
+        XCTAssertTrue(store.isReady(frame: 0))
     }
 
-    func testRecentRequestsAreBounded() throws {
-        let fake = FakeFetch(); let store = RadarTileStore(fetch: fake.fetch)
-        for x in 0..<(RadarTileStore.recentLimit + 5) { store.noteRequested(z: 8, x: x, y: 0) }
-        // Only the newest `recentLimit` tiles decide readiness: fetch just those.
-        for x in 5..<(RadarTileStore.recentLimit + 5) { store.prefetch(template: a, z: 8, x: x, y: 0) }
-        fake.answerAll(with: try png())
-        XCTAssertTrue(store.isReady(template: a))
+    // MARK: drawing maths
+
+    func testDrawZoomFollowsTheMapAndStopsAtTheLastNativeLevel() {
+        XCTAssertEqual(RadarTileMath.tileZoom(zoomScale: pow(2, -13), maxNativeZoom: 8), 7)
+        XCTAssertEqual(RadarTileMath.tileZoom(zoomScale: pow(2, -12), maxNativeZoom: 8), 8)
+        XCTAssertEqual(RadarTileMath.tileZoom(zoomScale: pow(2, -9), maxNativeZoom: 8), 8)
+        XCTAssertEqual(RadarTileMath.tileZoom(zoomScale: pow(2, -9), maxNativeZoom: 7), 7)
+    }
+
+    func testTileRectanglesAndCoverage() {
+        let size = RadarTileMath.worldMapPoints / 256
+        XCTAssertEqual(RadarTileMath.mapRect(z: 8, x: 71, y: 103),
+                       CGRect(x: 71 * size, y: 103 * size, width: size, height: size))
+        let inside = CGRect(x: 71.5 * size, y: 103.5 * size, width: size, height: size / 4)
+        let tiles = RadarTileMath.tiles(covering: inside, z: 8)
+        XCTAssertEqual(tiles.map { "\($0.x)/\($0.y)" }, ["71/103", "72/103"])
+        XCTAssertEqual(RadarTileMath.tiles(covering: CGRect(x: -10, y: -10, width: 5, height: 5), z: 1).count, 1)
+    }
+
+    func testOpeningViewIsNearTheRadarsOwnResolution() {
+        XCTAssertEqual(RadarMapView.openingSpanMeters, 200_000)
     }
 }
