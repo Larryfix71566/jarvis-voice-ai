@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CC7a Approved Design</title>
+<style>
+/* Page chrome (light/dark) */
+:root{--pg:#f5f5f3;--pgcard:#fff;--pgink:#1d1d1f;--pgdim:#66666b;--pgline:#e0e0dc;--rec:#1f7a3a;--recbg:#e5f4ea}
+@media (prefers-color-scheme:dark){:root{--pg:#121214;--pgcard:#1b1b1e;--pgink:#ececef;--pgdim:#9a9aa1;--pgline:#2e2e33;--rec:#7ed69a;--recbg:#16301f}}
+/* App tokens: exact values from AppTheme.swift on main 25735fd */
+.app{--bg:#15191D;--panel:#11151A;--hair:#2A343D;--acc:#2CC9FF;--accF:rgba(44,201,255,.12);--accD:rgba(44,201,255,.35);--tx:#E2F1F9;--dim:#8FA8B8;--amb:#FFB454;--grn:#3DDC97;--glass:rgba(30,36,43,.94)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--pg);color:var(--pgink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:24px 16px 60px}
+.wrap{max-width:1080px;margin:0 auto}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:17px;margin:34px 0 6px}
+.sub{color:var(--pgdim);font-size:13px}
+.note{background:var(--pgcard);border:1px solid var(--pgline);border-radius:10px;padding:12px 14px;margin:12px 0;font-size:13px}
+.note b{font-weight:600}.note ul{margin:6px 0 0;padding-left:18px}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px;margin-top:10px}
+@media(max-width:520px){.opts{grid-template-columns:1fr}}
+.opt{background:var(--pgcard);border:1px solid var(--pgline);border-radius:12px;padding:12px}
+.opt h3{margin:0 0 2px;font-size:15px}.opt .why{color:var(--pgdim);font-size:12.5px;margin:0 0 10px}
+.no{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:99px;background:var(--pgline);color:var(--pgdim);margin-left:6px;vertical-align:1px}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:99px;background:var(--recbg);color:var(--rec);margin-left:6px;vertical-align:1px}
+.cmp{font-size:12.5px;color:var(--pgdim);margin-top:8px}.cmp b{color:var(--pgink)}
+/* App window */
+.app{background:var(--bg);color:var(--tx);border-radius:10px;overflow:hidden;border:1px solid #000;font-size:12.5px;line-height:1.4;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.top{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--glass);border-bottom:1px solid var(--hair)}
+.brand{font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.08em}
+.pill{font:10px ui-monospace,Menlo,monospace;padding:2px 8px;border-radius:99px;border:1px solid var(--accD);color:var(--acc)}
+.sp{flex:1}.tb{font-size:11px;color:var(--dim);border:1px solid var(--hair);border-radius:6px;padding:2px 8px}
+.tb.on{color:var(--tx);border-color:var(--accD);background:var(--accF)}
+.stage{padding:12px;min-height:280px;display:flex;flex-direction:column;gap:8px}
+.voice{height:46px;border-top:1px solid var(--hair);display:flex;align-items:center;gap:10px;padding:0 12px;color:var(--dim);font-size:11px}
+.wave{flex:0 0 150px;height:20px;background:repeating-linear-gradient(90deg,var(--accD) 0 2px,transparent 2px 6px);mask:linear-gradient(90deg,transparent,#000 20%,#000 80%,transparent);-webkit-mask:linear-gradient(90deg,transparent,#000 20%,#000 80%,transparent)}
+.orb{width:26px;height:26px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0,var(--acc) 35%,#0b3a4a 80%);opacity:.85}
+/* Thread A1 bubbles */
+.b{max-width:78%;padding:8px 11px;border-radius:12px}
+.b.me{align-self:flex-end;background:rgba(44,201,255,.16);border:1px solid var(--accD)}
+.b.mo{align-self:flex-start;background:var(--panel);border:1px solid var(--hair)}
+.meta{font-size:10px;color:var(--dim);margin-bottom:2px}
+/* Thread A2 transcript rows */
+.row{display:grid;grid-template-columns:70px 1fr;gap:10px;padding:6px 0;border-bottom:1px solid rgba(42,52,61,.6)}
+.who{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.06em;padding-top:2px}
+.who.me{color:var(--acc)}.who.mo{color:var(--dim)}
+.t{font-size:10px;color:var(--dim);font-weight:400;display:block;letter-spacing:0}
+.mic{font-size:10px;color:var(--dim)}
+/* Cards */
+.card{border:1px solid var(--hair);background:var(--panel);border-radius:10px;padding:9px 11px;display:flex;gap:10px;align-items:center}
+.card .ic{width:32px;height:32px;border-radius:8px;background:var(--accF);display:grid;place-items:center;font-size:16px;flex:none}
+.card .ttl{font-weight:600}.card .s{color:var(--dim);font-size:11.5px}
+.btn{margin-left:auto;font-size:11px;border:1px solid var(--accD);color:var(--acc);border-radius:6px;padding:2px 9px;white-space:nowrap}
+.big{border:1px solid var(--hair);background:var(--panel);border-radius:10px;overflow:hidden}
+.big .hd{display:flex;align-items:center;gap:8px;padding:8px 11px;border-bottom:1px solid var(--hair)}
+.wx{display:grid;grid-template-columns:1fr 1.25fr;gap:0}
+.wx .l{padding:10px 11px}.temp{font-size:30px;font-weight:300}
+.days{display:flex;gap:10px;margin-top:6px;font-size:10.5px;color:var(--dim)}
+.map{background:linear-gradient(160deg,#1d2a33,#15232b);position:relative;min-height:128px}
+.map:before{content:"";position:absolute;inset:18% 20% 30% 30%;border-radius:45%;background:radial-gradient(circle,rgba(61,220,151,.55),rgba(255,180,84,.35) 55%,transparent 70%);filter:blur(4px)}
+.map span{position:absolute;left:8px;bottom:6px;font-size:10px;color:var(--dim)}
+.flag{font-size:10px;color:var(--amb);border:1px solid rgba(255,180,84,.4);border-radius:99px;padding:0 7px}
+.back{font-size:11px;color:var(--acc)}
+/* Recents menu */
+.menuwrap{position:relative;height:0}
+.menu{position:absolute;right:12px;top:4px;width:320px;background:var(--glass);border:1px solid var(--hair);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:6px;z-index:2}
+.sec{font:600 9.5px ui-monospace,Menlo,monospace;color:var(--dim);letter-spacing:.08em;padding:6px 8px 3px}
+.mi{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px}
+.mi.sel{background:var(--accF)}
+.mi .n{font:10px ui-monospace,Menlo,monospace;color:var(--dim);width:14px}
+.mi .k{width:18px;text-align:center}.mi .age{margin-left:auto;font-size:10px;color:var(--dim)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--acc)}
+.fresh{color:var(--grn)}
+.hr{height:1px;background:var(--hair);margin:4px 6px}
+.banner{display:flex;align-items:center;gap:8px;border:1px solid var(--accD);background:var(--accF);border-radius:8px;padding:6px 10px;font-size:11.5px}
+.ref{align-self:flex-start;display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--dim);border-left:2px solid var(--acc);padding:3px 9px}
+.hl{outline:2px solid var(--acc);outline-offset:2px}
+.fade{opacity:.45}
+.reader{background:var(--panel);border:1px solid var(--hair);border-radius:10px;padding:10px 12px}
+.reader h4{margin:0 0 4px;font-size:14px}.reader p{margin:0 0 6px;color:var(--tx)}
+.src{font-size:10.5px;color:var(--dim)}
+table.b2{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+table.b2 td,table.b2 th{border-top:1px solid var(--pgline);padding:6px 6px;text-align:left;vertical-align:top}
+.pick{background:var(--pgcard);border:2px solid var(--rec);border-radius:12px;padding:14px;margin-top:30px}
+code{font:12px ui-monospace,Menlo,monospace}
+</style></head><body><div class="wrap">
+
+<h1>CC7a approved design: conversation-first main screen</h1>
+<div class="sub">WS-17 · for Larry's approval before CC7a.1 · drawn from the Swift views on main <code>25735fd</code> (colors from <code>AppTheme.swift</code>, top bar from <code>TopBarView.swift</code>). Not from a screenshot: the voice area is a placeholder for the existing wave and orb, which don't change.</div>
+
+<div class="note" style="border:2px solid var(--rec)"><b>Approved by Larry, 2026-09-30:</b> A2 transcript rows (chosen over bubbles so long replies read at full width), B1 compact cards, the Recents menu as shown (view buttons move into it), D2 reference line for reuse, and the new-result notice instead of a jump. CC7a.1–CC7a.4 are built to this design; Codex reviews each PR against it and plan §7.2.</div>
+
+<div class="note"><b>Already decided (you, 09-30, and Codex's CX-15 boundaries). These hold in every option:</b>
+<ul>
+<li>One conversation thread with <b>both sides, full text</b>. Today the stage shows only the last two turns, cut at 160 characters (<code>latestCaptions</code>, <code>liveCaption</code>).</li>
+<li>Spoken answers stop creating a result each. Structured results (weather, research, images) become cards in the thread.</li>
+<li><b>A Recents menu replaces the tab strip</b>, showing pinned results first, then about 10 recent ones. That's only a display limit: the app still keeps up to 20 unpinned results, and nothing open or pinned is removed.</li>
+<li><b>Asking again reuses a result:</b> fresh weather (under 15 minutes) reopens; older weather refreshes under the same identity. There are never duplicates.</li>
+<li><b>A new card never pulls you away from what you're reading.</b> Today weather jumps to the front (<code>AppMessageRouter</code> calls <code>select</code>); CC7a changes that.</li>
+<li><b>Voice keeps working by result ID:</b> "open number 2" or "open the Folly Beach weather" is matched against Recents. If two results match, or the list has changed, Mortimer asks you instead of guessing.</li>
+</ul></div>
+
+<!-- ============ 1 THREAD ============ -->
+<h2>1 · How the conversation reads</h2>
+<div class="sub">The same four turns in both. Pick one.</div>
+<div class="opts">
+<div class="opt"><h3>A1 · Chat bubbles <span class="no">Not chosen</span></h3><p class="why">You on the right, Mortimer on the left. You can tell the speakers apart at a glance, even across the room.</p>
+<div class="app"><div class="top"><span class="brand">MORTIMER</span><span class="pill">connected</span><span class="sp"></span><span class="tb">Recents ▾</span><span class="tb">◧ Panels</span></div>
+<div class="stage">
+<div class="b me"><div class="meta">You · 12:40 · spoken</div>What's the weather?</div>
+<div class="b mo"><div class="meta">Mortimer · 12:40</div>It's 82 and mostly sunny at Folly Beach, with a chance of storms after 4. Radar shows a line west of Charleston moving east.</div>
+<div class="b me"><div class="meta">You · 12:42 · typed</div>Remind me what the WS-12 deadline is about.</div>
+<div class="b mo"><div class="meta">Mortimer · 12:42</div>GitHub moves ubuntu-latest to Ubuntu 26 on October 19. Our three workflows still use it, so the fix is to pin ubuntu-24.04 and update the checkout and setup-python actions before then.</div>
+</div><div class="voice"><div class="wave"></div><div class="orb"></div>voice area (unchanged)</div></div></div>
+
+<div class="opt"><h3>A2 · Transcript rows <span class="tag">Approved</span></h3><p class="why">A speaker column on the left, with the text at full width. It reads like meeting minutes and fits more on screen.</p>
+<div class="app"><div class="top"><span class="brand">MORTIMER</span><span class="pill">connected</span><span class="sp"></span><span class="tb">Recents ▾</span><span class="tb">◧ Panels</span></div>
+<div class="stage" style="gap:0">
+<div class="row"><div class="who me">YOU<span class="t">12:40 🎙</span></div><div>What's the weather?</div></div>
+<div class="row"><div class="who mo">MORTIMER<span class="t">12:40</span></div><div>It's 82 and mostly sunny at Folly Beach, with a chance of storms after 4. Radar shows a line west of Charleston moving east.</div></div>
+<div class="row"><div class="who me">YOU<span class="t">12:42 ⌨︎</span></div><div>Remind me what the WS-12 deadline is about.</div></div>
+<div class="row"><div class="who mo">MORTIMER<span class="t">12:42</span></div><div>GitHub moves ubuntu-latest to Ubuntu 26 on October 19. Our three workflows still use it, so the fix is to pin ubuntu-24.04 and update the checkout and setup-python actions before then.</div></div>
+</div><div class="voice"><div class="wave"></div><div class="orb"></div>voice area (unchanged)</div></div></div>
+</div>
+<div class="cmp"><b>Both:</b> the thread follows new turns only while you're at the bottom. If you've scrolled up to read, a "↓ New" button appears instead of jumping. Protected (local-only) turns show as "Private turn · shown on this Mac only" and never leave this window. The Log tab in Panels stays the session history, up to its existing 200-entry limit.</div>
+
+<!-- ============ 2 CARDS ============ -->
+<h2>2 · How a result sits in the thread</h2>
+<div class="sub">This is Mortimer's weather reply with its card. Pick one.</div>
+<div class="opts">
+<div class="opt"><h3>B1 · Compact card, open to read <span class="tag">Approved</span></h3><p class="why">One line in the thread. "Open" shows the full result on the stage, and "← Conversation" brings you back. The thread stays readable, and the radar map loads only when you open it.</p>
+<div class="app"><div class="top"><span class="brand">MORTIMER</span><span class="pill">connected</span><span class="sp"></span><span class="tb">Recents ▾</span></div>
+<div class="stage">
+<div class="b me"><div class="meta">You · 12:40</div>What's the weather?</div>
+<div class="b mo"><div class="meta">Mortimer · 12:40</div>It's 82 and mostly sunny at Folly Beach, with a chance of storms after 4.</div>
+<div class="card"><div class="ic">⛅</div><div><div class="ttl">Weather · Folly Beach, SC</div><div class="s">82° · storms after 4 PM · radar 12:38</div></div><span class="btn">Open</span></div>
+<div class="b me"><div class="meta">You · 12:44</div>Look up the Ubuntu 26 runner change.</div>
+<div class="card"><div class="ic">🔎</div><div><div class="ttl">Research · GitHub Ubuntu 26 runners</div><div class="s">5 sources · summary ready</div></div><span class="btn">Open</span></div>
+</div><div class="voice"><div class="wave"></div><div class="orb"></div></div></div>
+<div class="sub" style="margin:10px 0 4px">After "Open" (or "open the weather"):</div>
+<div class="app"><div class="top"><span class="brand">MORTIMER</span><span class="sp"></span><span class="tb">Recents ▾</span></div>
+<div class="stage"><div style="display:flex;gap:10px;align-items:center"><span class="back">← Conversation</span><span class="sp"></span><span class="tb">Pin</span><span class="tb">Compare…</span><span class="tb">⧉ Display</span></div>
+<div class="big"><div class="wx"><div class="l"><div class="s" style="color:var(--dim)">Folly Beach, SC · device location</div><div class="temp">82°</div>Mostly sunny · storms after 4 PM<div class="days"><span>Thu 84°</span><span>Fri 81°</span><span>Sat 79°</span><span>Sun 83°</span></div></div><div class="map"><span>Radar · 12:38 · ▶</span></div></div></div>
+</div></div></div>
+
+<div class="opt"><h3>B2 · Full card inline <span class="no">Not chosen</span></h3><p class="why">The whole result (weather and radar, or a research summary with its sources) sits in the thread at thread width. Nothing to open, but a few results push the conversation far apart.</p>
+<div class="app"><div class="top"><span class="brand">MORTIMER</span><span class="pill">connected</span><span class="sp"></span><span class="tb">Recents ▾</span></div>
+<div class="stage">
+<div class="b me"><div class="meta">You · 12:40</div>What's the weather?</div>
+<div class="b mo"><div class="meta">Mortimer · 12:40</div>It's 82 and mostly sunny at Folly Beach, with a chance of storms after 4.</div>
+<div class="big"><div class="hd"><span>⛅</span><b>Weather · Folly Beach, SC</b><span class="sp"></span><span class="tb">⤢ Full size</span></div>
+<div class="wx"><div class="l"><div class="temp">82°</div>Mostly sunny · storms after 4 PM<div class="days"><span>Thu 84°</span><span>Fri 81°</span><span>Sat 79°</span></div></div><div class="map"><span>Radar · 12:38 · ▶</span></div></div></div>
+<div class="b me"><div class="meta">You · 12:44</div>Look up the Ubuntu 26 runner change.</div>
+<div class="big fade"><div class="hd"><span>🔎</span><b>Research · GitHub Ubuntu 26 runners</b></div><div style="padding:8px 11px;color:var(--dim)">Summary paragraph… · 5 sources</div></div>
+</div><div class="voice"><div class="wave"></div><div class="orb"></div></div></div></div>
+</div>
+<div class="cmp"><b>Trade-off:</b> B2 means one fewer click for weather, but every inline radar map loops at once, and the thread scrolls a lot. The earlier radar work showed that loading many frames at once is what made it slow. B1 keeps one map live at a time. <b>Both:</b> closing a card removes it from Recents but not from the Output history.</div>
+
+<!-- ============ 3 RECENTS ============ -->
+<h2>3 · Recents menu (you chose a menu on 09-30; this is how it would look)</h2>
+<div class="opts">
+<div class="opt" style="grid-column:1/-1"><h3>Recents, opened from the top bar <span class="tag">Approved</span></h3><p class="why">Pinned results first, then the 10 most recent. Numbers match what you can say ("open number 2"). The dot means you haven't opened it yet; "fresh" means asking again will reuse it.</p>
+<div class="app"><div class="top"><span class="brand">MORTIMER</span><span class="pill">connected</span><span class="sp"></span><span class="tb on">Recents ▾</span><span class="tb">◧ Panels</span></div>
+<div class="menuwrap"><div class="menu">
+<div class="sec">PINNED</div>
+<div class="mi"><span class="n">1</span><span class="k">📌</span>Research · Ubuntu 26 runners<span class="age">12:44</span></div>
+<div class="hr"></div><div class="sec">RECENT</div>
+<div class="mi sel"><span class="n">2</span><span class="k">⛅</span>Weather · Folly Beach<span class="age fresh">fresh · 12:40</span></div>
+<div class="mi"><span class="n">3</span><span class="k">🖼</span>Image · Truist Park map<span class="dot"></span><span class="age">11:52</span></div>
+<div class="mi"><span class="n">4</span><span class="k">⛅</span>Weather · London, UK<span class="age">11:30</span></div>
+<div class="mi"><span class="n">5</span><span class="k">🔎</span>Research · Open-Meteo limits<span class="age">10:05</span></div>
+<div class="hr"></div>
+<div class="mi" style="color:var(--dim)">Conversation · Knowledge Atlas · Memory graph · Skills · Workflows</div>
+</div></div>
+<div class="stage" style="min-height:300px">
+<div class="b me fade"><div class="meta">You · 12:44</div>Look up the Ubuntu 26 runner change.</div>
+<div class="card fade"><div class="ic">🔎</div><div><div class="ttl">Research · GitHub Ubuntu 26 runners</div><div class="s">5 sources</div></div><span class="btn">Open</span></div>
+</div><div class="voice"><div class="wave"></div><div class="orb"></div></div></div>
+<div class="cmp">Hover a row to show Pin / Close / Compare. By voice: "open number 3", "open the London weather", "pin that", "close number 4", "compare 2 and 4". If a subject matches more than one result (two Folly Beach weathers), Mortimer asks "the 12:40 one or the 9:15 one?". Proposed: the view buttons (Atlas, Memory graph, Skills, Workflows) move to the bottom of this menu, so the thread gets the full stage height. Say if you want them kept as a row above the thread.</div>
+</div></div>
+
+<!-- ============ 4 REUSE ============ -->
+<h2>4 · Asking again: "what's the weather" at 12:52, with a fresh 12:40 result</h2>
+<div class="sub">No new fetch and no duplicate either way; what differs is what you see. Pick one.</div>
+<div class="opts">
+<div class="opt"><h3>D1 · Jump back to the earlier card <span class="no">Not chosen</span></h3><p class="why">The thread scrolls up to the 12:40 card and highlights it. Nothing new appears at the bottom.</p>
+<div class="app"><div class="top"><span class="brand">MORTIMER</span><span class="sp"></span><span class="tb">Recents ▾</span></div>
+<div class="stage">
+<div class="b mo fade"><div class="meta">Mortimer · 12:40</div>It's 82 and mostly sunny at Folly Beach…</div>
+<div class="card hl"><div class="ic">⛅</div><div><div class="ttl">Weather · Folly Beach, SC</div><div class="s">82° · storms after 4 PM · 12:40</div></div><span class="btn">Open</span></div>
+<div class="b me fade"><div class="meta">You · 12:44</div>Look up the Ubuntu 26 runner change.</div>
+<div class="sub" style="color:var(--dim);font-size:11px;text-align:center">↓ 3 newer turns, including "what's the weather" at 12:52</div>
+</div><div class="voice"><div class="wave"></div><div class="orb"></div></div></div>
+<div class="cmp">Downside: your question at 12:52 and Mortimer's answer are off screen, so the thread no longer reads in order.</div></div>
+
+<div class="opt"><h3>D2 · A reference line at the bottom <span class="tag">Approved</span></h3><p class="why">The conversation stays in order. Mortimer's reply carries a one-line pointer to the same result (same ID, not a copy). Click it to open.</p>
+<div class="app"><div class="top"><span class="brand">MORTIMER</span><span class="sp"></span><span class="tb">Recents ▾</span></div>
+<div class="stage">
+<div class="card fade"><div class="ic">🔎</div><div><div class="ttl">Research · GitHub Ubuntu 26 runners</div></div></div>
+<div class="b me"><div class="meta">You · 12:52</div>What's the weather?</div>
+<div class="b mo"><div class="meta">Mortimer · 12:52</div>Same as 12 minutes ago: 82 at Folly Beach, storms after 4.</div>
+<div class="ref">↺ Weather · Folly Beach · from 12:40 <span class="btn">Open</span></div>
+<div class="sub" style="font-size:11px;margin-top:6px">If it's older than 15 minutes, the same result refreshes, and the line reads:</div>
+<div class="ref">⟳ Weather · Folly Beach · updated 12:58 <span class="btn">Open</span></div>
+</div><div class="voice"><div class="wave"></div><div class="orb"></div></div></div>
+<div class="cmp">Refreshing updates the result under the same identity, so the older card higher in the thread shows the new numbers too, with "updated 12:58". A different place, like "weather in London", is a different subject and always fetches.</div></div>
+</div>
+
+<!-- ============ 5 NO FOCUS STEAL ============ -->
+<h2>5 · A new result arrives while you're reading another one</h2>
+<div class="opts"><div class="opt" style="grid-column:1/-1"><h3>No jump: a notice at the top of the reader <span class="tag">Approved</span></h3><p class="why">You're reading the research result when you ask for the weather. The weather card goes into the thread and into Recents (with a dot), and a notice lets you switch when you choose. If you're on the conversation itself, the card simply appears in the thread, which is how weather "comes to the front" after CC7a.</p>
+<div class="app"><div class="top"><span class="brand">MORTIMER</span><span class="sp"></span><span class="tb">Recents ● ▾</span></div>
+<div class="stage">
+<div class="banner">⛅ New: Weather · Folly Beach, SC <span class="sp"></span><span class="btn">Show</span><span class="btn" style="color:var(--dim);border-color:var(--hair)">Dismiss</span></div>
+<div style="display:flex;gap:10px"><span class="back">← Conversation</span></div>
+<div class="reader"><h4>GitHub Ubuntu 26 runners</h4><p>ubuntu-latest will point to Ubuntu 26.04 starting October 19. Workflows that need 24.04 should pin <code style="color:var(--tx)">runs-on: ubuntu-24.04</code>…</p><div class="src">Sources: GitHub changelog · actions/runner-images</div></div>
+</div><div class="voice"><div class="wave"></div><div class="orb"></div></div></div>
+<div class="cmp">This replaces WS-15's "weather selects itself" behavior, which Codex flagged. Weather stays in the main window only, as it is now. "Show" or saying "show the weather" opens it.</div>
+</div></div>
+
+<!-- ============ PICK ============ -->
+<div class="pick"><b>Build order.</b> Each step is its own PR, reviewed by Codex before merge, then deployed and checked on the Mac. CC7a.1 is behind an on/off switch until CC7a.4 passes.
+<table class="b2"><tr><th>Step</th><th>What it delivers</th><th>Acceptance</th></tr>
+<tr><td>CC7a.1</td><td>Thread with both sides at full text; spoken answers stop creating results in layout 2; structured results unchanged</td><td>UI2-22</td></tr>
+<tr><td>CC7a.2</td><td>Cards in the thread; open and go back; no focus stealing, including weather</td><td>UI2-23</td></tr>
+<tr><td>CC7a.3</td><td>Recents replaces the tab strip; voice by number and subject resolves to IDs; pin/unpin advance <code>inventoryRevision</code></td><td>UI2-24</td></tr>
+<tr><td>CC7a.4</td><td>Subject key on results; reuse-if-fresh check before fetching; refresh under the same ID; reopen-by-subject in the shared console protocol</td><td>UI2-25</td></tr></table></div>
+
+</div></body></html>

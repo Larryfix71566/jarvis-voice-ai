@@ -1335,7 +1335,7 @@ result card (RELEASE_READINESS UI2-19 note):
 | Results | Display payloads (weather, research, images, graph) stay `WorkspaceResult`s but appear as compact cards in the thread where they arrived; opening one shows it full size with Back to the conversation. |
 | Tab strip | Removed. A **Recents** menu in the header lists results (kind, subject, time), pinned first. |
 | Asking again | Each result carries a subject key (kind + subject, e.g. `weather · Folly Beach`). If a fresh result with that key exists (weather: 15 minutes), reopen it; if stale, refresh that same card in place. Never a duplicate. |
-| Retention | Pinned results plus about the last 10 unpinned; the rest drop out of Recents (Output history rules unchanged). |
+| Retention | Recents shows pinned results plus about the last 10 unpinned. This is a display limit only: it never erases Output history or an open, compared or pinned result; `WorkspaceStore` retention (20 unpinned) is unchanged. |
 | Ownership | Claude implements; Codex reviews every increment before merge (CX-15). |
 
 **Contracts that must survive:**
@@ -1351,8 +1351,41 @@ result card (RELEASE_READINESS UI2-19 note):
    the thread as well: WS-16's real window capture and
    `DisplayWindowPrivacyBoundaryTests` stay green, with new tests for the
    thread.
-4. The drawer's Log tab remains the complete history (the thread is bounded).
+4. The drawer's Log tab remains the session history within its existing bound (`AppTuning.maxConversationEntries` = 200); it is not an unlimited archive.
 5. Legacy layouts (`layoutVersion` 1, previous layout) are untouched.
+
+**Approved design (Larry, 2026-09-30).** Mockups:
+`docs/interface-research/cc7a/cc7a-approved-design-2026-09-30.html`.
+
+| Element | Approved |
+|---|---|
+| Thread | **Transcript rows** (A2): speaker column (YOU / MORTIMER, time, spoken or typed) and full-width text. Chosen over chat bubbles so long replies read at full width. Both speakers' full text; follows new turns only while scrolled to the bottom, otherwise a "New" button. |
+| Result in the thread | **Compact card** (B1): kind icon, title with subject, one-line summary, Open. Open shows the result on the stage with "← Conversation", Pin, Compare, Display. One live radar map at a time. |
+| Recents | Header menu: PINNED, then RECENT (about 10), numbered to match voice ("open number 3"), unread dot, "fresh" age; row actions Pin / Close / Compare; the Atlas, Memory graph, Skills and Workflows buttons move to the bottom of this menu. |
+| Asking again | **Reference line** (D2): Mortimer's reply carries "↺ Weather · Folly Beach · from 12:40" pointing at the same result ID; when stale, the same result refreshes and the line reads "⟳ … updated 12:58". The thread stays in order. |
+| New result while reading | No jump: a "New: … Show / Dismiss" notice above the open result; the card joins the thread and Recents (unread). On the conversation itself the card just appears in the thread. |
+
+**Codex boundaries (CX-15, 2026-09-30).** Checked by Claude against main
+`25735fd`; each is a review criterion:
+
+1. `ResponseResultRouter`: stop creating a result per spoken answer in layout
+   2; keep the separate structured display-payload route. The thread shows both
+   speakers' full text (today the stage uses `ConversationStore.latestCaptions`,
+   the last two entries, truncated to 160 characters by `liveCaption`).
+2. `WorkspaceStore`: keep stable result UUIDs, comparison, pins, scroll and
+   inspector state, and the single-renderer supporting-display handoff. Closing
+   a card removes it from Recents, never its Output record.
+3. Voice: UUIDs stay the action protocol's canonical targets. A spoken index or
+   subject resolves against the current Recents inventory to a UUID, sent
+   through the existing coordinator. Ambiguous subjects and stale selections
+   are rejected (Mortimer asks), never acted on. `pin`/`unpin` must advance
+   `inventoryRevision` (they do not today). Reopen-by-subject is added to the
+   shared console protocol (`ConsoleProtocol.swift`, `console_protocol.py`),
+   not a separate UI-control path.
+4. Reuse and focus: check a fresh subject before fetching; refresh a stale
+   result under the same identity. Weather stays main-window only. A new card
+   does not pull focus: `AppMessageRouter`'s weather path currently calls
+   `workspace.select` on arrival; CC7a replaces that with the notice above.
 
 **Increments (each a reviewed PR, Codex review before merge):**
 
