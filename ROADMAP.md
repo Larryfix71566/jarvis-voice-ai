@@ -105,6 +105,24 @@ Claude’s work or enable any runtime feature.
 
 </details>
 
+<details id="ws-17">
+<summary>WS-17 — Command Console CC7a: conversation-first stage · Claude implementation, Codex review</summary>
+
+**Workstream:** Larry, 09-30: conversation is spread over one tab per turn, only Mortimer's side shows, the tab strip fills up, and asking again re-fetches. Increment CC7a of the Command Console plan (WS-09's plan): one conversation thread with both sides, results as inline cards, Recents instead of tabs, reuse a fresh result by subject.
+
+- **Owner:** `claude` (implementation); `codex` reviews every increment before merge
+- **Status:** claimed
+- **Implemented by:** not started
+- **Remaining work / acceptance:** CC7a.1-CC7a.4, each a reviewed PR; RELEASE_READINESS UI2-22..UI2-25 on the Mac. UI2-04, UI2-09 and UI2-13 are held until then.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** not started
+- **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md` §7.1 item 9 and §7.2
+- **Scope:** `App/ResponseResultRouter.swift`, `Stores/WorkspaceStore.swift`, `Stores/ConversationStore.swift`, `Console/AdaptiveStageView.swift`, `Console/TopBarView.swift`, `Display/WorkspaceView.swift`, voice result actions, DisplayPayload `subject_key` (JarvisKit + `jarvis/bot/display.py`), weather tools' reuse check; tests for each
+- **Next step:** Codex confirms scope (CX-15); then Claude posts mockups of the thread, cards and Recents for Larry before CC7a.1
+- **Updated:** 09-30
+
+</details>
+
 <details id="ws-12">
 <summary>WS-12 — CI upkeep before the Ubuntu 26 runner switch · Claude (proposed)</summary>
 
@@ -310,7 +328,7 @@ Claude’s work or enable any runtime feature.
 - **Where:** [PR #99](https://github.com/Larryfix71566/jarvis-voice-ai/pull/99), merged to `main` as `4986c10`
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md`
 - **Scope:** —
-- **Next step:** Larry completes the physical single- and multi-monitor acceptance on the deployed build (`eb24e81`)
+- **Next step:** Hold UI2-04, UI2-09 and UI2-13 until WS-17 (CC7a, conversation-first stage) lands; other physical acceptance can proceed on the deployed build
 - **Updated:** 09-29
 
 - [ ] **Single transcript surface (Larry, 2026-09-28):** keep the transcript in the main window; remove the duplicate transcript/captions from the left/compact panel and reclaim the vacated space. Preserve the orb, speaker feedback, microphone/voice controls, and main-window transcript history/accessibility. This supersedes earlier requirements to repeat brief captions in the compact rail; full response/results routing remains unchanged.
@@ -437,6 +455,7 @@ Open means not yet resolved. Each entry names who resolves it.
 |---|---|---|---|
 | CX-11 | Codex's T2 code against what Claude landed on main. (1) `JARVIS_AUTH_ENABLED` **defaults to true**, with no exempt routes, loopback included, so merging it turns auth on. (2) Main callers that send no token would then get 401: `jarvis/bot/status_tool.py` (the `system_status` tool from #86) and `scripts/deploy_main.sh` phase D, whose health checks expect 200 from `/api/health` and 200/307 from the bot, so the deploy would stop. (3) The route inventory in Codex's tree has 64 sidecar routes; main has 68 decorators, including 10 Codex's copy lacks: `/api/status/*` (9) and `/api/workflows`. (4) `mcp_servers/mcp_selfedit/logic.py`: Codex added service headers; main's copy also changed, so keep both. (5) Token setup is by CLI only (`python -m jarvis.auth add`), which conflicts with the no-shell-commands principle behind Claude's voice workflows (D-L2/D-L5). The native app already sends a Keychain token on every request (`JarvisHTTP.swift`), so it needs no code change, only a stored token. | `codex`: Addendum R1 fixes (1)–(4); `larry` decides (5) when T2 is decided (options in R1.9) | R1 implemented and deployed dormant; isolated enabled/dormant proof passes; token onboarding/remote activation remain undecided |
 | CX-13 | WS-14 edits `jarvis/subscription.py`, which is WS-02's scope (Codex; landed, so unlocked, but its live isolation gates are open). The allowlist change adds `USER`/`LOGNAME`, justified by the live `Not logged in` result recorded in WS-06. | `larry` (09-29): Claude lands, and Codex reviews before merge | resolved 09-29: Codex post-merge review of PR #102 found no blocking code issue; Mac Keychain/launchd evidence remains reported live evidence, not independently reproduced |
+| CX-15 | WS-17 (Command Console CC7a) changes Codex's adaptive-interface workspace (`WorkspaceStore`, `ResponseResultRouter`, stage, header) and supersedes the stable result tabs and 09-18 per-request response cards. | `larry` (09-30): Claude builds, Codex reviews each increment; `codex` confirms scope before CC7a.1 | decided; Codex scope confirmation open |
 | CX-14 | WS-15 PR #114 added `URLSession.shared.dataTask` in `Display/RadarMapView.swift`. On main `05c4a40`, the full MortimerHost suite failed two assertions in `MemoryGraphClosureC3Tests.testURLSessionSharedIsOnlyUsedByJarvisHTTPAndTheWakeWordSocket`. The WS-16 protected actual-window capture passed on that tree. | `claude` under active WS-15 scope | resolved by PR #118 (`adeffc1`): radar uses an ephemeral session; merged full MortimerHost suite passes 383 tests, five skips, zero failures |
 | CX-01 | Codex's worktree is based on `977f50b` and lacks #86 and the voice-workflows landing (`jarvis/status/`, `notices.py`, `voice_workflows.py`, …). 24 `jarvis/` files changed on both sides. | `codex`: commit, then merge `origin/main` | resolved in main; deployed `539f8f6` |
 | CX-02 | Migration ids `0025`–`0027` collide between main and Codex's tree. | `codex`: renumber per §3 | resolved in main; reserved IDs applied; upgrade/idempotency rechecked 09-28 |
@@ -596,6 +615,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-30 (WS-17 claimed): Claude (Cowork). Larry: one conversation tab with both sides, fewer tabs, reuse earlier results; build it into the adaptive interface with Claude implementing and Codex reviewing. Folded into the Command Console plan as CC7a (§7.2) before the release candidate; RELEASE_READINESS UI2-22..25 added and UI2-04/09/13 held; CX-15 registered for Codex's scope confirmation. Evidence: `ResponseResultRouter` creates one result per turn with assistant text only (up to 20 kept).
 
 - 2026-09-30 (stable app signing): Claude (Cowork). Larry: the app asked for microphone and location on every deploy. Evidence: `codesign -d -r-` showed `designated => cdhash H"74b9..."`; bundle.sh signed ad hoc, so each rebuild was a new app to macOS. New `scripts/setup_signing_identity.sh` creates a local code-signing identity once per Mac; bundle.sh signs with it when present and falls back to ad hoc otherwise. Codex: bundle.sh is shared release tooling.
 
