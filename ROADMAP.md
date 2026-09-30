@@ -159,34 +159,6 @@ Claude’s work or enable any runtime feature.
 
 </details>
 
-<details id="ws-15">
-<summary>WS-15 — Weather: fresh location and current radar · Claude</summary>
-
-**Workstream:** Larry, 09-29: *"it is missing current radar and it defaults to memory for weather instead of checking current location and getting fresh weather."* A weather answer must use where Larry is now and show current radar for that place.
-
-- **Owner:** `claude`
-- **Status:** in-progress: A1-A5 and A7 passed 09-30 (card, map, smooth radar, voice zoom/pause/satellite, London via Open-Meteo, Alpharetta). Larry asked for voice zoom to a distance and centering on a place; in review (map_zoom_to, map_center). A6 (location off) still to run.
-- **Implemented by:** Claude (plan); code not started
-- **Remaining work / acceptance:** Evidence from the 09-29 10:08 EDT session (`logs/agents/2026-09-29/`), read-only:
-  1. **The location came from memory.** The voice model's delegation read *"typically in Spartanburg, SC or surrounding area"*. The analyst called `get_weather` and `get_weather_radar` with `"Spartanburg, SC"` and answered *"(assumed default, not confirmed device location)"*. Larry then had to name Charleston.
-  2. **Cause in code.** The device-location resolver (`jarvis/bot/device_location.py`, order per D-L6: device fix, then IP, then "not available", never memory) is wired only into `system_status` ("where am I", `_location_answer` in `jarvis/bot/pipeline.py`). `mcp_web.get_weather(city)` and `get_weather_radar(city)` take only a city string, so "current" weather gets whatever place the voice model writes, which in practice comes from memory.
-  3. **The app has not granted location since the rebuilds.** Its `location/hello` reported `authorization: not_determined` on 09-28 20:21 and 09-29 10:07. The last `authorized` hello with a fix was 09-25 22:58. So even a wired resolver would fall back to IP today. Why permission reset is untested; the app re-signing on rebuild is a candidate, not verified.
-  4. **Radar ran, for the wrong place.** `get_weather_radar` ran and sent a window display payload three times on 09-29 (the RainViewer frame was about 8 minutes old); the first was for Spartanburg.
-  5. **Larry, 09-29: "no radar showed up", and when radar does show, the map under it is wrong for the area.** Two separate issues:
-     - **Map wrong for the area (cause found in code).** `get_weather_radar` returns nine zoom-6 tiles (a 3×3 grid about 1,900 km across; the tile maths for Spartanburg checks out at x=17, y=25). The docstring says the UI stitches them into a 3×3 grid, but `imagesStack` in `DisplayContentView.swift` renders them as a `ForEach` of nine separate full-width images stacked vertically, each with its own basemap. So the screen shows nine separate map squares in a column, not one map of the area. Zoom 6 is also too coarse for local radar, and there is no marker for the point.
-     - **No radar at all (cause untested).** The server logged three `surface=window` radar payloads at 10:08–10:09, so it sent them. Whether the display window was open, whether later web-search results pushed the radar out of the supporting display (`maxSupportingStagePanels`), or whether the images failed to load has not been checked. It needs a live check with the display window open.
-  6. **Device location works as of 11:39 EDT 09-29.** After the permission was granted: `authorization=authorized`, then a fix accurate to 35 m and 0.4 s old, labelled `Folly Beach, SC`. "Where am I?" answered "Folly Beach, South Carolina."
-
-  Acceptance, now A1–A5 in the plan: "what's the weather" with no place named uses a fresh device fix, or IP labeled approximate, never memory; the radar shown is for that same point and is current; a place Larry names still wins.
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** branch `ws15/voice-map-zoom-to-center`
-- **Plan:** `docs/plans/MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md` (Option A: `local_weather` direct tool; `jarvis/weather/report.py` with Weather.gov 7-day, hourly and alerts; IEM NEXRAD radar with RainViewer outside the US; native `RadarMapView` and `WeatherCardView`). It supersedes W5/W6 of `MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md`. Research: `Claude outputs/ws15/ws15_weather_research.html`.
-- **Scope:** `jarvis/weather/` (new), `jarvis/weathergov.py`, `mcp_servers/mcp_web/logic.py`, `mcp_servers/mcp_web/server.py`, `jarvis/bot/weather_tool.py` (new), tool registration in `jarvis/bot/pipeline.py`, `jarvis/bot/display.py`, weather lines in `jarvis/prompts.py`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift`, `Display/DisplayContentView.swift`, `Display/WeatherCardView.swift` and `Display/RadarMapView.swift` (new), and their tests and evals. Re-checked 09-29: none of these is inside another block's scope.
-- **Next step:** Merge and deploy; Larry tries 'zoom to 10 miles' and 'center on Truist Park', then A6; Claude checks A8, writes the receipt and marks WS-15 accepted.
-- **Updated:** 09-30
-
-</details>
-
 ### Built: waiting on live checks or acceptance
 
 <details id="ws-01">
@@ -403,6 +375,24 @@ Claude’s work or enable any runtime feature.
 
 Accepted workstreams are listed below; implementation milestones also appear in §6.
 
+<details id="ws-15">
+<summary>WS-15 — Weather: fresh location and current radar · Claude (accepted 09-30)</summary>
+
+**Workstream:** Larry, 09-29: weather must use where Larry is now and show current radar for that place, not a remembered place.
+
+- **Owner:** `claude`
+- **Status:** accepted: Larry on the Mac 2026-09-30, production `03b9e60` (A1–A8 pass; A6 with a wording follow-up)
+- **Implemented by:** Claude (Cowork); PRs #110, #114, #118, #120, #123, #126, #127, #128, #131, #132, #133, #134, #136
+- **Remaining work / acceptance:** None. Receipt: `docs/acceptance/weather/ws15-weather-location-radar-2026-09-30.md`. Follow-ups F1–F5 are in §5 Backlog.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main
+- **Plan:** `docs/plans/MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md`
+- **Scope:** as built: `local_weather`, weather card and radar map, voice map control, stable app signing, display-window stores, Open-Meteo request fix
+- **Next step:** None for WS-15
+- **Updated:** 09-30
+
+</details>
+
 <details id="ws-16">
 <summary>WS-16 — Protected-window capture gate repair · Codex</summary>
 
@@ -477,6 +467,7 @@ Open or undecided conflicts are listed first.
 
 Nobody works on these until Larry turns one into a §2 row.
 
+- **WS-15 follow-ups (09-30, receipt F1–F5):** F1 retry guard refuses a different place after a failure (exempt when Larry's own words bring a new token; `jarvis/agents/delegate.py`, Claude's WS-07 area); F2 "London, UK" not geocoded on first try; F3 spoken weather drops "approximately" when location comes from the internet connection; F4 Mortimer is not told which place the card on screen shows; F5 speech-to-text mishearings ("ten miles", "weather").
 - **T2 remote access: switching it on** (undecided). Codex builds it dormant under WS-04; turning it on, and how you get tokens without shell commands (CX-11 item 5), is a later decision.
 - **T1.3 native client hardware verification** V3–V9: `MORTIMER_NATIVE_CLIENT_APP_PLAN.md` §8.
 - **T1.4 web retirement:** `MORTIMER_WEB_RETIREMENT_PLAN.md` (DRAFT).
@@ -615,6 +606,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-30 (WS-15 accepted): Claude (Cowork). Larry accepted weather on the Mac: A1–A8 pass on production `03b9e60`; A6 (location off) answered from the internet connection, labelled approximate, never a remembered place. Receipt added; WS-15 moved to Completed; follow-ups F1–F5 added to the backlog.
 
 - 2026-09-30 (WS-17 claimed): Claude (Cowork). Larry: one conversation tab with both sides, fewer tabs, reuse earlier results; build it into the adaptive interface with Claude implementing and Codex reviewing. Folded into the Command Console plan as CC7a (§7.2) before the release candidate; RELEASE_READINESS UI2-22..25 added and UI2-04/09/13 held; CX-15 registered for Codex's scope confirmation. Evidence: `ResponseResultRouter` creates one result per turn with assistant text only (up to 20 kept).
 
