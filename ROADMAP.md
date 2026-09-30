@@ -177,14 +177,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Verified gap closure GC24-00…06: execution lifecycle, privacy log redaction, memory admission, Atlas
 
 - **Owner:** `codex`
-- **Status:** claimed: bounded action-claim settlement-order CI repair; earlier WS-01 foundation landed and deployed
+- **Status:** review: bounded action-claim settlement-order CI repair in PR #125; earlier WS-01 foundation landed and deployed
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Codex fixes the app-build and self-edit action-claim ordering exposed by PR #115 CI; Larry retains the original physical/live acceptance.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main (`539f8f6`); CI repair: `codex/ws01-action-claim-order-20260929`; shared-roadmap documentation: `codex/isolated-20260924`
 - **Plan:** `docs/plans/MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md`. The 12 gap-index plans fold into it (CX-05).
 - **Scope:** Existing WS-01 scope includes execution routes in `jarvis/admin/server.py`. This bounded follow-up changes only app-build/self-edit terminal claim ordering there, focused tests in `tests/unit/test_admin_appbuild.py` and `tests/unit/test_admin_selfedit.py`, this row's plan/acceptance evidence, and `ROADMAP.md` status. It does not edit WS-08 orb files or alter idempotency decisions.
-- **Next step:** Merge this docs-only WS-01 claim, then make terminal claim persistence precede visible terminal job state, add deterministic race coverage, and pass targeted plus full CI. Rebase PR #115 on the merged fix.
+- **Next step:** Pass PR #125 Linux CI, review and merge the WS-01 claim-order fix; then merge the fix into PR #115 and rerun its CI.
 - **Updated:** 09-29
 
 </details>
@@ -596,6 +596,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29: Codex / WS-01: PR #124 merged the action-claim repair claim. The bounded worker fix now settles self-edit and app-build terminal action receipts before publishing terminal job state under the same job lock. Four barrier tests cover success and error ordering; 97 focused admin tests pass. The full Mac unit run had 4,740 passes, three skips and two out-of-scope failures (audio-filter shared state; deploy-script log flush); Linux CI and merge into WS-08 PR #115 remain open.
 
 - 2026-09-29: Codex / WS-01 claim proposed for PR #115's unrelated CI failure. Two full validation attempts failed in app-build/self-edit durable action-claim tests while the WS-08 PR changed only documentation and fixture PNGs; the three failing tests pass together locally. Source inspection finds both workers set the visible job to `done` before committing the corresponding terminal action claim, allowing a status poll to observe the old `claimed` state. This docs-only claim reserves a bounded ordering fix and deterministic regression tests on `codex/ws01-action-claim-order-20260929`; no backend code changes or CI checks are bypassed.
 

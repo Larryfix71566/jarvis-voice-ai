@@ -489,6 +489,46 @@ def test_appbuild_run_id_prevents_replay_after_live_slot_is_replaced(
     assert status["job"]["result_available"] is False
 
 
+@pytest.mark.parametrize("crash,terminal,receipt_status", [
+    (False, "done", "completed"),
+    (True, "error", "failed"),
+])
+def test_appbuild_settles_claim_before_terminal_job(
+    registry_file, fresh_db, monkeypatch, crash, terminal, receipt_status,
+):
+    """A completed app-build job must already have a durable outcome."""
+    _install_fake_agent(monkeypatch, crash=crash)
+    entered = threading.Event()
+    release = threading.Event()
+    original_update = srv._update_appbuild_start_claim
+
+    def pause_terminal_update(run_id, status):
+        if status in {"completed", "failed"}:
+            entered.set()
+            assert release.wait(5)
+        return original_update(run_id, status)
+
+    monkeypatch.setattr(srv, "_update_appbuild_start_claim", pause_terminal_update)
+    c = TestClient(app)
+    identity = f"appbuild-settlement-{terminal}"
+    try:
+        started = c.post("/api/appbuild/start", json={
+            "app": "demo-app", "goal": "add a button", "run_id": identity,
+        }).json()
+        assert started["ok"] and started["started"]
+        assert entered.wait(2)
+        # Inspect the in-memory slot while the worker holds its lock; using
+        # the status route here would block until the claim write resumes.
+        assert srv._appbuild_job["state"] == "running"
+        receipt = srv.get_execution_action(srv._APPBUILD_START_ACTION_SCOPE, identity)
+        assert receipt["status"] != receipt_status
+    finally:
+        release.set()
+    _wait_for_job(c, terminal)
+    receipt = srv.get_execution_action(srv._APPBUILD_START_ACTION_SCOPE, identity)
+    assert receipt["status"] == receipt_status
+
+
 def test_appbuild_run_id_fails_closed_when_claim_store_is_unavailable(
     registry_file, fresh_db, monkeypatch,
 ):

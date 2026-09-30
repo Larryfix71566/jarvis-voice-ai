@@ -1187,6 +1187,13 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None,
             )
             summary = f"Ended without submitting a pull request.{still_open} {summary}".strip()
         with _run_lock:
+            # The job must not become terminal until its durable action claim
+            # has settled. Status readers use this lock and may immediately
+            # look up the receipt after seeing "done".
+            _update_staged_selfedit_claim(
+                action_run_id, "failed" if state in {"error", "cancelled"} else "completed",
+                action_scope,
+            )
             _run_agent_instance = None
             _run_job.update(
                 state=state,
@@ -1200,10 +1207,6 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None,
                 pr_url=result.get("pr_url"),
                 finished_at=time.time(),
             )
-        _update_staged_selfedit_claim(
-            action_run_id, "failed" if state in {"error", "cancelled"} else "completed",
-            action_scope,
-        )
         # Record job state without persisting user-authored instructions or
         # model-generated summaries to the diagnostic log.
         logger.info("selfedit_state_transition state=%s submitted=%s",
@@ -1211,13 +1214,13 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None,
     except Exception as exc:  # planner crash must still settle the job
         logger.warning("upgrade_run_failed error_type=%s", type(exc).__name__)
         with _run_lock:
+            _update_staged_selfedit_claim(action_run_id, "failed", action_scope)
             _run_agent_instance = None
             _run_job.update(
                 state="error",
                 summary=f"Upgrade run failed ({type(exc).__name__}).",
                 finished_at=time.time(),
             )
-        _update_staged_selfedit_claim(action_run_id, "failed", action_scope)
         logger.info("selfedit_state_transition state=error")
 
 
@@ -1352,27 +1355,29 @@ def _run_appbuild_agent(
         with _appbuild_lock:
             if _appbuild_job.get("cancel_requested", False):
                 state = "cancelled"
+            # Persist the terminal receipt before publishing a terminal job.
+            # A replay may read the receipt as soon as it sees this job finish.
+            _update_appbuild_start_claim(
+                run_id, "failed" if state in {"error", "cancelled"} else "completed",
+            )
             _appbuild_agent_instance = None
             _appbuild_job.update(
                 state=state, summary=result.get("summary", ""),
                 submitted=bool(result.get("submitted")), pr_url=result.get("pr_url"),
                 finished_at=time.time(),
             )
-        _update_appbuild_start_claim(
-            run_id, "failed" if state in {"error", "cancelled"} else "completed",
-        )
         logger.info("appbuild_state_transition state=%s", state)
     except Exception as exc:  # a build crash must still settle the job
         logger.warning("appbuild_run_failed error_type=%s", type(exc).__name__)
         with _appbuild_lock:
             cancelled = _appbuild_job.get("cancel_requested", False)
+            _update_appbuild_start_claim(run_id, "failed")
             _appbuild_agent_instance = None
             _appbuild_job.update(
                 state="cancelled" if cancelled else "error",
                 summary="Build cancelled." if cancelled else f"App build failed ({type(exc).__name__}).",
                 finished_at=time.time(),
             )
-        _update_appbuild_start_claim(run_id, "failed")
         logger.info("appbuild_state_transition state=%s",
                     "cancelled" if cancelled else "error")
 
