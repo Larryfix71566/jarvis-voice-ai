@@ -299,6 +299,29 @@ final class RadarTileStoreTests: XCTestCase {
         XCTAssertNil(channel.latest)
     }
 
+    func testOnlyTilesOnScreenCount() {
+        let size = RadarTileMath.worldMapPoints / 256
+        let visible = RadarTileMath.expanded(CGRect(x: 71.2 * size, y: 103.2 * size, width: 0.5 * size, height: 0.5 * size), by: 0.15)
+        XCTAssertTrue(RadarTileMath.isOnScreen(z: 8, x: 71, y: 103, visible: visible))
+        XCTAssertFalse(RadarTileMath.isOnScreen(z: 8, x: 75, y: 103, visible: visible))
+        XCTAssertFalse(RadarTileMath.isOnScreen(z: 8, x: 71, y: 110, visible: visible))
+        XCTAssertTrue(RadarTileMath.isOnScreen(z: 8, x: 75, y: 103, visible: nil), "before the map reports a view, everything counts")
+        XCTAssertEqual(RadarTileMath.expanded(CGRect(x: 10, y: 10, width: 100, height: 50), by: 0.1),
+                       CGRect(x: 0, y: 5, width: 120, height: 60))
+    }
+
+    func testANewViewStartsReadinessAgain() throws {
+        let fake = FakeFetch(); let store = RadarTileStore(templates: templates, fetch: fake.fetch)
+        store.noteRequested(z: 8, x: 71, y: 103)
+        store.request(frame: 0, z: 8, x: 71, y: 103, urgent: true)
+        fake.answerAll(with: try png())
+        XCTAssertTrue(store.isReady(frame: 0))
+        XCTAssertEqual(store.recentCount, 1)
+        store.clearRecent()
+        XCTAssertEqual(store.recentCount, 0)
+        XCTAssertFalse(store.isReady(frame: 0), "not ready until the new view's tiles are asked for")
+    }
+
     func testOpeningViewIsNearTheRadarsOwnResolution() {
         XCTAssertEqual(RadarMapView.openingSpanMeters, 200_000)
     }
