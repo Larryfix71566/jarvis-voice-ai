@@ -121,6 +121,15 @@ struct MortimerHostApp: App {
                 .environment(sharing)
                 .environment(drawer)
                 .environmentObject(client)
+                // Same app stores as the console: a view reading one this window
+                // lacks crashes on open (display_popout, 2026-09-30).
+                .environment(agentRuns)
+                .environment(displayResults)
+                .environment(skills)
+                .environment(conversation)
+                .environment(drawerModels)
+                .environment(overlay)
+                .environment(notices)
                 .background(WindowIdentifierSetter(identifier: "display", registry: contentWindows))
                 // The native form of the web's hasLivePopup poll: scene
                 // content on screen = window open. Drives the topbar's
@@ -134,6 +143,13 @@ struct MortimerHostApp: App {
         Window("Mortimer Drawer", id: "drawer") {
             DrawerView()
                 .environmentObject(client)
+                // Same app stores as the console: a view reading one this window
+                // lacks crashes on open (display_popout, 2026-09-30).
+                .environment(skills)
+                .environment(sharing)
+                .environment(displayWindow)
+                .environment(overlay)
+                .environment(notices)
                 .environment(agentRuns)
                 .environment(displayResults)
                 .environment(workspace)
@@ -166,6 +182,11 @@ struct MortimerHostApp: App {
             if let panel {
                 DetachedPanelView(panel: panel)
                     .environmentObject(client)
+                    // Same app stores as the console: a view reading one this window
+                    // lacks crashes on open (display_popout, 2026-09-30).
+                    .environment(skills)
+                    .environment(overlay)
+                    .environment(notices)
                     .environment(agentRuns)
                     .environment(displayResults)
                     .environment(workspace)
@@ -193,6 +214,11 @@ struct MortimerHostApp: App {
             if let panelID {
                 ContentPanelSceneView(panelID: panelID)
                     .environmentObject(client)
+                    // Same app stores as the console: a view reading one this window
+                    // lacks crashes on open (display_popout, 2026-09-30).
+                    .environment(skills)
+                    .environment(overlay)
+                    .environment(notices)
                     .environment(agentRuns)
                     .environment(displayResults)
                     .environment(workspace)

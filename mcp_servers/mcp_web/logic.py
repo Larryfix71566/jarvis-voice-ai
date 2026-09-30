@@ -57,6 +57,11 @@ TAVILY_URL = "https://api.tavily.com/search"
 TAVILY_MCP_URL = "https://mcp.tavily.com/mcp/"
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+# The Open-Meteo `current` variables we ask for (each must be a real
+# variable name; see weather_at and test_open_meteo_current_asks_only_real_variables).
+OPEN_METEO_CURRENT_VARIABLES = (
+    "temperature_2m", "relative_humidity_2m", "weather_code", "wind_speed_10m",
+)
 RAINVIEWER_URL = "https://api.rainviewer.com/public/weather-maps.json"
 CARTO_BASEMAP_URL = "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
 TIMEOUT = 10.0
@@ -346,7 +351,12 @@ def weather_at(lat: float, lon: float, label: str, days: int = 1, *,
                 params={
                     "latitude": lat,
                     "longitude": lon,
-                    "current": "time,temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
+                    # No "time" here: it is not a variable. Open-Meteo returns
+                    # current.time on its own and rejects the whole request
+                    # (HTTP 400) when asked for it -- every non-US forecast
+                    # failed from 09-28 until 09-30 (London, Larry's WS-15
+                    # acceptance). _provider_timestamp reads current.time below.
+                    "current": ",".join(OPEN_METEO_CURRENT_VARIABLES),
                     "daily": "temperature_2m_max,temperature_2m_min,"
                              "precipitation_probability_max,weather_code",
                     "timezone": "auto",

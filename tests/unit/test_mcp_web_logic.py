@@ -315,6 +315,28 @@ class TestGetWeather:
         result = logic.get_weather("Tokyo")
         assert result["current"]["condition"] == "unknown conditions"
 
+    def test_open_meteo_current_asks_only_real_variables(self, monkeypatch):
+        """2026-09-30: asking Open-Meteo for current=time,... returned HTTP 400
+        ("invalid String value time") and every non-US forecast failed. The
+        fakes here return 200 whatever is asked, so pin the request itself."""
+        captured = {}
+
+        def fake_get(url, params=None, timeout=None):
+            if "geocoding" in url:
+                return FakeResponse(GEO_PAYLOAD)
+            captured.update(params or {})
+            return FakeResponse(FORECAST_PAYLOAD)
+
+        monkeypatch.setattr(logic.httpx, "get", fake_get)
+        result = logic.get_weather("London", days=7)
+        requested = captured["current"].split(",")
+        assert "time" not in requested
+        assert set(requested) <= {"temperature_2m", "relative_humidity_2m", "weather_code",
+                                  "wind_speed_10m", "apparent_temperature", "precipitation",
+                                  "cloud_cover", "is_day", "wind_direction_10m"}
+        assert result["current"]["observed_at"] == "2026-09-28T12:00:00Z", \
+            "the observation time still comes from current.time in the reply"
+
     def test_days_clamped(self, monkeypatch):
         captured = {}
 

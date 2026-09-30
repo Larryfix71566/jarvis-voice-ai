@@ -292,11 +292,53 @@ final class RadarTileStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testZoomToMilesIsTheMapsWidth() {
+        let center = CLLocationCoordinate2D(latitude: 33.89, longitude: -84.47)
+        let r = WeatherMapZoom.region(center: center, acrossMiles: 10, aspect: 0.5)
+        // 10 miles wide: longitude span ≈ 16.09 km / (111.32 km × cos 33.89°).
+        let expectedLon = 10 * 1_609.344 / (111_320 * cos(33.89 * .pi / 180))
+        XCTAssertEqual(r.span.longitudeDelta, expectedLon, accuracy: expectedLon * 0.02)
+        // Height is half the width for a map twice as wide as tall.
+        XCTAssertEqual(r.span.latitudeDelta, 5 * 1_609.344 / 111_000, accuracy: 0.002)
+        XCTAssertEqual(r.center.latitude, center.latitude, accuracy: 1e-9)
+    }
+
+    @MainActor
+    func testCommandsCarryMilesAndPlace() {
+        let channel = WeatherMapCommands()
+        channel.send("map_center", miles: 25, place: "Atlanta")
+        XCTAssertEqual(channel.latestCommand, WeatherMapCommand(serial: 1, action: "map_center", miles: 25, place: "Atlanta"))
+    }
+
+    @MainActor
     func testUnknownMapActionsAreIgnored() {
         let channel = WeatherMapCommands()
         channel.send("map_spin")
         XCTAssertEqual(channel.serial, 0)
         XCTAssertNil(channel.latest)
+    }
+
+    func testOnlyTilesOnScreenCount() {
+        let size = RadarTileMath.worldMapPoints / 256
+        let visible = RadarTileMath.expanded(CGRect(x: 71.2 * size, y: 103.2 * size, width: 0.5 * size, height: 0.5 * size), by: 0.15)
+        XCTAssertTrue(RadarTileMath.isOnScreen(z: 8, x: 71, y: 103, visible: visible))
+        XCTAssertFalse(RadarTileMath.isOnScreen(z: 8, x: 75, y: 103, visible: visible))
+        XCTAssertFalse(RadarTileMath.isOnScreen(z: 8, x: 71, y: 110, visible: visible))
+        XCTAssertTrue(RadarTileMath.isOnScreen(z: 8, x: 75, y: 103, visible: nil), "before the map reports a view, everything counts")
+        XCTAssertEqual(RadarTileMath.expanded(CGRect(x: 10, y: 10, width: 100, height: 50), by: 0.1),
+                       CGRect(x: 0, y: 5, width: 120, height: 60))
+    }
+
+    func testANewViewStartsReadinessAgain() throws {
+        let fake = FakeFetch(); let store = RadarTileStore(templates: templates, fetch: fake.fetch)
+        store.noteRequested(z: 8, x: 71, y: 103)
+        store.request(frame: 0, z: 8, x: 71, y: 103, urgent: true)
+        fake.answerAll(with: try png())
+        XCTAssertTrue(store.isReady(frame: 0))
+        XCTAssertEqual(store.recentCount, 1)
+        store.clearRecent()
+        XCTAssertEqual(store.recentCount, 0)
+        XCTAssertFalse(store.isReady(frame: 0), "not ready until the new view's tiles are asked for")
     }
 
     func testOpeningViewIsNearTheRadarsOwnResolution() {

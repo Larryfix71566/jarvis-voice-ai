@@ -14,16 +14,28 @@ final class WeatherMapCommands {
     static let actions: Set<String> = [
         "map_zoom_in", "map_zoom_out", "map_reset",
         "radar_pause", "radar_play", "map_satellite", "map_standard",
+        "map_zoom_to", "map_center",
     ]
 
     private(set) var serial = 0
     private(set) var latest: String?
+    /// The newest command with its arguments (map_zoom_to / map_center).
+    private(set) var latestCommand: WeatherMapCommand?
 
-    func send(_ action: String) {
+    func send(_ action: String, miles: Double? = nil, place: String? = nil) {
         guard Self.actions.contains(action) else { return }
-        latest = action
         serial += 1
+        latest = action
+        latestCommand = WeatherMapCommand(serial: serial, action: action, miles: miles, place: place)
     }
+}
+
+/// One map command as the weather card applies it (applied once per serial).
+struct WeatherMapCommand: Equatable {
+    let serial: Int
+    let action: String
+    var miles: Double? = nil
+    var place: String? = nil
 }
 
 /// Pure map-region maths for the zoom commands. Unit-tested.
@@ -46,5 +58,18 @@ enum WeatherMapZoom {
             return nil
         }
         return r
+    }
+
+    static let metersPerMile = 1_609.344
+
+    /// Larry, 2026-09-30: "zoom to 10 miles" means the map is 10 miles wide,
+    /// edge to edge. `aspect` is the map's height / width, so the region's
+    /// height keeps the view's shape and MapKit fits the width exactly.
+    static func region(center: CLLocationCoordinate2D, acrossMiles miles: Double,
+                       aspect: Double) -> MKCoordinateRegion {
+        let width = max(miles, 0.1) * metersPerMile
+        let shape = aspect.isFinite && aspect > 0 ? aspect : 1
+        return MKCoordinateRegion(center: center, latitudinalMeters: width * shape,
+                                  longitudinalMeters: width)
     }
 }

@@ -271,7 +271,7 @@ final class UICommandRouter {
             windows.dismiss("display")
         case let action where WeatherMapCommands.actions.contains(action):
             // WS-15: the weather card's map (zoom, reset, radar loop, style).
-            weatherMap.send(action)
+            weatherMap.send(action, miles: command.miles, place: command.place)
         case "overlay_dismiss":
             overlay.dismiss()
             // The web's semantics: dismiss closes the most recent

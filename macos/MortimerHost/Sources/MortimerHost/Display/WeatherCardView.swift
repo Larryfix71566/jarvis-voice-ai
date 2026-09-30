@@ -14,7 +14,7 @@ struct WeatherCardView: View {
     @State private var radarReady = false
     /// WS-15 voice map control; the serial seen when this card appeared, so
     /// an old command is not replayed onto a new card.
-    @State private var zoomCommand: (serial: Int, action: String)? = nil
+    @State private var zoomCommand: WeatherMapCommand? = nil
     @State private var seenSerial = WeatherMapCommands.shared.serial
 
     var body: some View {
@@ -41,7 +41,7 @@ struct WeatherCardView: View {
             case "radar_play": playing = true
             case "map_satellite": hybrid = true
             case "map_standard": hybrid = false
-            default: zoomCommand = (serial, action)
+            default: zoomCommand = WeatherMapCommands.shared.latestCommand
             }
         }
     }

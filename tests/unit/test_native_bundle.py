@@ -34,8 +34,18 @@ class NativeBundleTests(unittest.TestCase):
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.log = self.root / "commands.jsonl"
+        # `security` is faked too (2026-09-30): bundle.sh asks the keychain
+        # for the local signing identity, and on a Mac that has one the real
+        # tool made these contracts depend on the developer's keychain. The
+        # fake reports no identity unless BUNDLE_TEST_IDENTITY names one, and
+        # is not logged, so the command lists below stay the build/sign/open
+        # boundary.
         boundary = '''import json,os,pathlib,sys
 name=pathlib.Path(sys.argv[0]).name
+if name=='security':
+    identity=os.environ.get('BUNDLE_TEST_IDENTITY','')
+    if identity: print('  1) AE46E6C82B42551214374D186D53B5D7B35A4195 "'+identity+'"')
+    sys.exit(0)
 with open(os.environ['BUNDLE_TEST_LOG'],'a') as log:
     log.write(json.dumps([name,*sys.argv[1:]])+'\\n')
 failure=os.environ.get('BUNDLE_TEST_FAILURE')
@@ -46,7 +56,7 @@ if name=='codesign':
         if failure=='framework-sign' and sys.argv[-1].endswith('.framework'): sys.exit(63)
         if failure=='app-sign' and sys.argv[-1].endswith('.app'): sys.exit(64)
 '''
-        for name in ["swift", "codesign", "open"]:
+        for name in ["swift", "codesign", "open", "security"]:
             path = self.bin / name
             path.write_text("#!" + sys.executable + "\n" + boundary)
             path.chmod(0o755)
@@ -55,6 +65,7 @@ if name=='codesign':
     def run_bundle(self, failure="", configuration="debug", **overrides):
         env = {**os.environ, "PATH": str(self.bin) + ":/usr/bin:/bin",
                "BUNDLE_TEST_LOG": str(self.log), "BUNDLE_TEST_FAILURE": failure,
+               "BUNDLE_TEST_IDENTITY": "",
                "MORTIMER_SOURCE_REVISION": "unknown", "MORTIMER_CANDIDATE_FINGERPRINT": "unknown", "MORTIMER_BUNDLE_LAUNCH": "1"}
         env.update(overrides)
         result = subprocess.run(["/bin/bash", str(self.script), configuration], env=env,
@@ -77,6 +88,20 @@ if name=='codesign':
             ["codesign", "--verify", "--deep", "--strict", str(self.app)],
             ["open", str(self.app)],
         ])
+
+    def test_local_signing_identity_is_used_when_the_keychain_has_one(self):
+        result, commands = self.run_bundle(BUNDLE_TEST_IDENTITY="Mortimer Local Code Signing")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        embedded = self.app / "Contents/MacOS/WebRTC.framework"
+        self.assertIn(["codesign", "--force", "--sign", "Mortimer Local Code Signing", str(embedded)], commands)
+        self.assertIn(["codesign", "--force", "--sign", "Mortimer Local Code Signing", str(self.app)], commands)
+        self.assertNotIn("signing ad hoc", result.stderr)
+
+    def test_without_an_identity_signing_falls_back_to_ad_hoc_with_a_note(self):
+        result, commands = self.run_bundle()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(["codesign", "--force", "--sign", "-", str(self.app)], commands)
+        self.assertIn("setup_signing_identity.sh", result.stderr)
 
     def test_release_provenance_is_embedded_without_launching_the_app(self):
         revision = "a" * 40

@@ -1,7 +1,7 @@
 # Mortimer: local weather with today, the week, and a live radar map (WS-15, Option A)
 
 **Author:** Claude (Cowork), 2026-09-29
-**Status:** IN PROGRESS. PR 1 (#110, location, 7-day forecast, spoken summary) merged and deployed 09-29; logs show `local_weather` using the device fix. PR 2 (the one-card view and native map) is in review.
+**Status:** ACCEPTED 2026-09-30 (Larry, on the Mac; production `03b9e60`). Receipt: `docs/acceptance/weather/ws15-weather-location-radar-2026-09-30.md`. Follow-ups F1–F5 are in the roadmap backlog.
 **Workstream:** WS-15 in `ROADMAP.md`
 **Supersedes:** W5/W6 of `MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md` (the one-card merge and the stacked RainViewer/CARTO radar). W1–W4, W7 and W8 stand: Weather.gov primary, both unit sets, `JARVIS_UNITS`, no new kill switches.
 **Research:** `Claude outputs/ws15/ws15_weather_research.html` (09-29), sources listed there.
