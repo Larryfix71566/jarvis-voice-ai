@@ -44,7 +44,10 @@ final class AppMessageRouter {
         transcriptSink = client.$transcript.sink { [weak self] entries in
             conversation?.set(entries)
             let layout = UserDefaults.standard.object(forKey: "mortimer.interface.layoutVersion") as? Int ?? 2
-            if InterfaceLayoutVersion.resolve(layout) == 2, let workspace {
+            // CC7a.1 (WS-17): with the conversation thread on, spoken
+            // answers stay in the thread and no longer become results.
+            if ConversationThread.routesSpokenAnswersToResults(
+                layoutVersion: layout, threadEnabled: ConversationThread.isEnabled()), let workspace {
                 let previousRevision = workspace.consoleRevision
                 self?.responseRouter.receive(entries, workspace: workspace, display: displayWindow)
                 if workspace.consoleRevision != previousRevision {

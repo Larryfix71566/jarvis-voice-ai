@@ -42,15 +42,22 @@ private final class HostTranscriptTransport: RTVITransport {
 
 @MainActor
 final class LiveVoiceResponseStreamTests: XCTestCase {
-    func testRTVIChunksReachTheExistingSingleResponseResult() async throws {
+    /// Sets a standard-defaults key for one test and restores it afterwards.
+    private func override(_ key: String, _ value: Any) -> () -> Void {
         let defaults = UserDefaults.standard
-        let key = "mortimer.interface.layoutVersion"
-        let previousLayout = defaults.object(forKey: key)
-        defaults.set(2, forKey: key)
-        defer {
-            if let previousLayout { defaults.set(previousLayout, forKey: key) }
+        let previous = defaults.object(forKey: key)
+        defaults.set(value, forKey: key)
+        return {
+            if let previous { defaults.set(previous, forKey: key) }
             else { defaults.removeObject(forKey: key) }
         }
+    }
+
+    /// Pre-CC7a behaviour, kept behind the conversation-thread switch.
+    func testRTVIChunksReachTheExistingSingleResponseResult() async throws {
+        let restoreLayout = override("mortimer.interface.layoutVersion", 2)
+        let restoreThread = override(ConversationThread.flagKey, false)
+        defer { restoreLayout(); restoreThread() }
 
         let config = JarvisConfig(
             botURL: URL(string: "http://127.0.0.1:7860")!,
@@ -90,6 +97,54 @@ final class LiveVoiceResponseStreamTests: XCTestCase {
         XCTAssertEqual(workspace.activeResult?.payload.body, "A single streamed answer.")
         XCTAssertEqual(display.panels.count, 1)
         XCTAssertEqual(conversation.latestCaptions.last?.text, "A single streamed answer.")
+        router.stop()
+    }
+
+    /// CC7a.1 (WS-17): with the thread on (the default), a streamed spoken
+    /// answer stays in the conversation at full length and creates no
+    /// workspace result or supporting-display panel.
+    func testThreadKeepsSpokenAnswersOutOfResultsAndDisplay() async throws {
+        let restoreLayout = override("mortimer.interface.layoutVersion", 2)
+        let restoreThread = override(ConversationThread.flagKey, true)
+        defer { restoreLayout(); restoreThread() }
+
+        let config = JarvisConfig(
+            botURL: URL(string: "http://127.0.0.1:7860")!,
+            adminURL: URL(string: "http://127.0.0.1:7861")!,
+            wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!,
+            token: nil
+        )
+        let transport = HostTranscriptTransport()
+        let client = JarvisClient(config: config, stubTransport: transport)
+        let workspace = WorkspaceStore()
+        let display = DisplayWindowStore()
+        let conversation = ConversationStore()
+        let router = AppMessageRouter()
+        router.start(client: client, agentRuns: AgentRunStore(),
+                     displayResults: DisplayResultStore(), displayWindow: display,
+                     workspace: workspace, conversation: conversation)
+        let revision = workspace.consoleRevision
+        let long = String(repeating: "Radar shows a line of storms west of Charleston. ", count: 6)
+
+        try transport.emit("user-transcription", text: "What's the weather?", final: true)
+        await flushTranscriptDelivery()
+        try transport.emit("bot-llm-started")
+        await flushTranscriptDelivery()
+        try transport.emit("bot-llm-text", text: long)
+        await flushTranscriptDelivery()
+        try transport.emit("bot-llm-stopped")
+        await flushTranscriptDelivery()
+
+        XCTAssertTrue(workspace.results.isEmpty, "A spoken answer must not create a result.")
+        XCTAssertTrue(display.panels.isEmpty, "A spoken answer must not reach the supporting display.")
+        XCTAssertEqual(workspace.consoleRevision, revision)
+        XCTAssertTrue(workspace.showsConversation)
+        let rows = ConversationThread.rows(conversation.entries)
+        XCTAssertEqual(rows.map(\.isUser), [true, false])
+        XCTAssertEqual(rows.first?.text, "What's the weather?")
+        XCTAssertGreaterThan(long.count, 160)
+        XCTAssertEqual(rows.last?.text, long.trimmingCharacters(in: .whitespacesAndNewlines),
+                       "The thread keeps the full answer, not a 160-character caption.")
         router.stop()
     }
 
