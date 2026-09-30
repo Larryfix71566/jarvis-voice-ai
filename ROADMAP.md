@@ -147,7 +147,7 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-29: *"it is missing current radar and it defaults to memory for weather instead of checking current location and getting fresh weather."* A weather answer must use where Larry is now and show current radar for that place.
 
 - **Owner:** `claude`
-- **Status:** in-progress: PR 1 (#110) and PR 2 (#114 + #118 session fix) deployed; Larry confirmed the weather card works 09-29. Radar loaded slowly and flashed; smoothing fix in review.
+- **Status:** in-progress: weather card, map and radar deployed (latest `38d3ac2`, radar loop without flashing). Larry 09-29: radar still blocky and stutters; round 2 (wider opening view, smoother enlargement, radar timing log) in review.
 - **Implemented by:** Claude (plan); code not started
 - **Remaining work / acceptance:** Evidence from the 09-29 10:08 EDT session (`logs/agents/2026-09-29/`), read-only:
   1. **The location came from memory.** The voice model's delegation read *"typically in Spartanburg, SC or surrounding area"*. The analyst called `get_weather` and `get_weather_radar` with `"Spartanburg, SC"` and answered *"(assumed default, not confirmed device location)"*. Larry then had to name Charleston.
@@ -161,10 +161,10 @@ Claude’s work or enable any runtime feature.
 
   Acceptance, now A1–A5 in the plan: "what's the weather" with no place named uses a fresh device fix, or IP labeled approximate, never memory; the radar shown is for that same point and is current; a place Larry names still wins.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** branch `ws15/radar-smooth-loop`
+- **Where:** branch `ws15/radar-sharper-and-logged`
 - **Plan:** `docs/plans/MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md` (Option A: `local_weather` direct tool; `jarvis/weather/report.py` with Weather.gov 7-day, hourly and alerts; IEM NEXRAD radar with RainViewer outside the US; native `RadarMapView` and `WeatherCardView`). It supersedes W5/W6 of `MORTIMER_WEATHER_FAHRENHEIT_AND_RADAR_PLAN.md`. Research: `Claude outputs/ws15/ws15_weather_research.html`.
 - **Scope:** `jarvis/weather/` (new), `jarvis/weathergov.py`, `mcp_servers/mcp_web/logic.py`, `mcp_servers/mcp_web/server.py`, `jarvis/bot/weather_tool.py` (new), tool registration in `jarvis/bot/pipeline.py`, `jarvis/bot/display.py`, weather lines in `jarvis/prompts.py`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift`, `Display/DisplayContentView.swift`, `Display/WeatherCardView.swift` and `Display/RadarMapView.swift` (new), and their tests and evals. Re-checked 09-29: none of these is inside another block's scope.
-- **Next step:** Merge the radar smoothing PR and run DEPLOY-MAIN; Larry re-checks the radar loop, then acceptance A1–A7 (plan §6) and Claude checks A8 in the logs.
+- **Next step:** Merge and deploy round 2 (quit Mortimer before DEPLOY-MAIN), Larry re-checks the radar and sends the radar log; Claude fixes the stutter from that evidence, then acceptance A1–A7.
 - **Updated:** 09-29
 
 </details>
@@ -177,15 +177,15 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Verified gap closure GC24-00…06: execution lifecycle, privacy log redaction, memory admission, Atlas
 
 - **Owner:** `codex`
-- **Status:** landed; deployed `539f8f6`; live acceptance open
+- **Status:** review: bounded action-claim settlement-order CI repair in PR #125; earlier WS-01 foundation landed and deployed
 - **Implemented by:** Codex
-- **Remaining work / acceptance:** Codex; Larry for physical acceptance
+- **Remaining work / acceptance:** Codex fixes the app-build and self-edit action-claim ordering exposed by PR #115 CI; Larry retains the original physical/live acceptance.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (`539f8f6`); shared-roadmap documentation: `codex/isolated-20260924`
+- **Where:** main (`539f8f6`); CI repair: `codex/ws01-action-claim-order-20260929`; shared-roadmap documentation: `codex/isolated-20260924`
 - **Plan:** `docs/plans/MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md`. The 12 gap-index plans fold into it (CX-05).
-- **Scope:** `jarvis/model_execution.py`, `jarvis/memory_admission.py`, `jarvis/runlog/`, `jarvis/agents/`, execution routes in `jarvis/admin/server.py`. GC24-03 logging edits touch the whole repo and resume only after CX-01. Larry-authorized docs-only slice (09-28): `ROADMAP.md`, `docs/README.md`, and this row’s existing plan progress log.
-- **Next step:** Shared expandable roadmap prepared on branch; merge documentation PR, then finish plan-specific live acceptance
-- **Updated:** 09-28
+- **Scope:** Existing WS-01 scope includes execution routes in `jarvis/admin/server.py`. This bounded follow-up changes only app-build/self-edit terminal claim ordering there, focused tests in `tests/unit/test_admin_appbuild.py` and `tests/unit/test_admin_selfedit.py`, this row's plan/acceptance evidence, and `ROADMAP.md` status. It does not edit WS-08 orb files or alter idempotency decisions.
+- **Next step:** Pass PR #125 Linux CI, review and merge the WS-01 claim-order fix; then merge the fix into PR #115 and rerun its CI.
+- **Updated:** 09-29
 
 </details>
 
@@ -285,11 +285,11 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Orb crystal glass (#90), revised to use the crystal shell exclusively
 
 - **Owner:** `codex`
-- **Status:** landed and deployed in `c3607e6`; final WS-08 visual/live acceptance open
+- **Status:** landed and deployed in `c3607e6`; acceptance evidence in review (PR #115)
 - **Implemented by:** Claude original crystal-glass workstream; Codex rendering performance fixes and single-shell cleanup
 - **Remaining work / acceptance:** Larry's DEPLOY-MAIN deployed `c3607e6` after WS-16's capture repair; release suites and health checks passed. Larry reaffirmed compact/expanded appearance and Reduce Motion behavior on 09-29, so these are not repeat asks. Codex regenerated and reviewed all five current crystal fixtures against the approved references; the required glass, reflections, orbits, nucleus and talker colors remain in place. The plan reserves final five-fixture visual approval for Larry. No post-deployment record yet itemizes all named live states (listening, user, Mortimer, overlap, standby) and placements (conversation, rail, bottom).
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (PR #112, `e9388fc`)
+- **Where:** main (PR #112, `e9388fc`); acceptance evidence: `codex/ws08-crystal-only-20260929` (PR #115)
 - **Plan:** `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`
 - **Scope:** Orb rendering, orb-specific configuration, performance/visual regression tests, and this plan's acceptance evidence.
 - **Next step:** Larry reviews the five linked current fixtures in the WS-08 receipt and confirms only live states/placements not already observed. Do not repeat compact/expanded or Reduce Motion checks.
@@ -597,7 +597,13 @@ first lever to pull.
 
 ## 8. Change log
 
+- 2026-09-29: Codex / WS-08 merged current main including the WS-01 claim-order fix from PR #125 into PR #115, preserving both WS-08 acceptance evidence and WS-01/WS-15 history. PR #115 CI must now rerun against the fixed backend before its acceptance-evidence merge.
+
 - 2026-09-29: Codex / WS-08 reconciled deployment and acceptance after WS-16 closed. Larry's DEPLOY-MAIN installed `c3607e6` with release gates green; Larry reaffirmed compact/expanded appearance and Reduce Motion stillness. Codex regenerated five fixtures from the deployed orb source (focused CrystalOrbShellTests 7/0), reviewed their expected features against the checked-in references, and attached them to the WS-08 receipt. Final Larry fixture approval and any unobserved named live states/placements remain open.
+
+- 2026-09-29: Codex / WS-01: PR #124 merged the action-claim repair claim. The bounded worker fix now settles self-edit and app-build terminal action receipts before publishing terminal job state under the same job lock. Four barrier tests cover success and error ordering; 97 focused admin tests pass. The full Mac unit run had 4,740 passes, three skips and two out-of-scope failures (audio-filter shared state; deploy-script log flush); Linux CI and merge into WS-08 PR #115 remain open.
+
+- 2026-09-29: Codex / WS-01 claim proposed for PR #115's unrelated CI failure. Two full validation attempts failed in app-build/self-edit durable action-claim tests while the WS-08 PR changed only documentation and fixture PNGs; the three failing tests pass together locally. Source inspection finds both workers set the visible job to `done` before committing the corresponding terminal action claim, allowing a status poll to observe the old `claimed` state. This docs-only claim reserves a bounded ordering fix and deterministic regression tests on `codex/ws01-action-claim-order-20260929`; no backend code changes or CI checks are bypassed.
 
 - 2026-09-29 (late, WS-15 radar smoothing): Claude (Cowork). Larry: the weather card works, but radar comes up slowly and flashes. Cause in code: each loop step removed the shown radar overlay and added the next one before its tiles were loaded, and no tiles were kept. Now all frames stay on the map with only the shown one visible, tiles are kept per map and warmed across frames after the visible tile loads, the loop steps only to loaded frames, and the card says "Loading radar…" until the first frame is in.
 
