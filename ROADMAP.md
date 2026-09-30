@@ -597,6 +597,8 @@ first lever to pull.
 
 ## 8. Change log
 
+- 2026-09-30 (stable app signing): Claude (Cowork). Larry: the app asked for microphone and location on every deploy. Evidence: `codesign -d -r-` showed `designated => cdhash H"74b9..."`; bundle.sh signed ad hoc, so each rebuild was a new app to macOS. New `scripts/setup_signing_identity.sh` creates a local code-signing identity once per Mac; bundle.sh signs with it when present and falls back to ad hoc otherwise. Codex: bundle.sh is shared release tooling.
+
 - 2026-09-29: Codex / WS-08 merged current main including the WS-01 claim-order fix from PR #125 into PR #115, preserving both WS-08 acceptance evidence and WS-01/WS-15 history. PR #115 CI must now rerun against the fixed backend before its acceptance-evidence merge.
 
 - 2026-09-29: Codex / WS-08 reconciled deployment and acceptance after WS-16 closed. Larry's DEPLOY-MAIN installed `c3607e6` with release gates green; Larry reaffirmed compact/expanded appearance and Reduce Motion stillness. Codex regenerated five fixtures from the deployed orb source (focused CrystalOrbShellTests 7/0), reviewed their expected features against the checked-in references, and attached them to the WS-08 receipt. Final Larry fixture approval and any unobserved named live states/placements remain open.
