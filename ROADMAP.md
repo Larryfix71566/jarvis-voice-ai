@@ -285,11 +285,11 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Orb crystal glass (#90), revised to use the crystal shell exclusively
 
 - **Owner:** `codex`
-- **Status:** landed and deployed in `c3607e6`; acceptance evidence in review (PR #115)
+- **Status:** landed and deployed in `c3607e6`; acceptance evidence landed in PR #115 (`8222940`); final visual/live acceptance open
 - **Implemented by:** Claude original crystal-glass workstream; Codex rendering performance fixes and single-shell cleanup
 - **Remaining work / acceptance:** Larry's DEPLOY-MAIN deployed `c3607e6` after WS-16's capture repair; release suites and health checks passed. Larry reaffirmed compact/expanded appearance and Reduce Motion behavior on 09-29, so these are not repeat asks. Codex regenerated and reviewed all five current crystal fixtures against the approved references; the required glass, reflections, orbits, nucleus and talker colors remain in place. The plan reserves final five-fixture visual approval for Larry. No post-deployment record yet itemizes all named live states (listening, user, Mortimer, overlap, standby) and placements (conversation, rail, bottom).
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (PR #112, `e9388fc`); acceptance evidence: `codex/ws08-crystal-only-20260929` (PR #115)
+- **Where:** main (PR #112, `e9388fc`; acceptance evidence PR #115, `8222940`)
 - **Plan:** `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`
 - **Scope:** Orb rendering, orb-specific configuration, performance/visual regression tests, and this plan's acceptance evidence.
 - **Next step:** Larry reviews the five linked current fixtures in the WS-08 receipt and confirms only live states/placements not already observed. Do not repeat compact/expanded or Reduce Motion checks.
@@ -596,6 +596,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-29: Codex / WS-08 acceptance evidence landed in PR #115 (`8222940`) after all five checks passed. The current fixtures and receipt are on main; Larry's explicit five-fixture approval and any unobserved named live states/placements remain open.
 
 - 2026-09-29: Codex / WS-08 merged current main including the WS-01 claim-order fix from PR #125 into PR #115, preserving both WS-08 acceptance evidence and WS-01/WS-15 history. PR #115 CI must now rerun against the fixed backend before its acceptance-evidence merge.
 
