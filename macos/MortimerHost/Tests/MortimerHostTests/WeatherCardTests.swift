@@ -292,6 +292,25 @@ final class RadarTileStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testZoomToMilesIsTheMapsWidth() {
+        let center = CLLocationCoordinate2D(latitude: 33.89, longitude: -84.47)
+        let r = WeatherMapZoom.region(center: center, acrossMiles: 10, aspect: 0.5)
+        // 10 miles wide: longitude span ≈ 16.09 km / (111.32 km × cos 33.89°).
+        let expectedLon = 10 * 1_609.344 / (111_320 * cos(33.89 * .pi / 180))
+        XCTAssertEqual(r.span.longitudeDelta, expectedLon, accuracy: expectedLon * 0.02)
+        // Height is half the width for a map twice as wide as tall.
+        XCTAssertEqual(r.span.latitudeDelta, 5 * 1_609.344 / 111_000, accuracy: 0.002)
+        XCTAssertEqual(r.center.latitude, center.latitude, accuracy: 1e-9)
+    }
+
+    @MainActor
+    func testCommandsCarryMilesAndPlace() {
+        let channel = WeatherMapCommands()
+        channel.send("map_center", miles: 25, place: "Atlanta")
+        XCTAssertEqual(channel.latestCommand, WeatherMapCommand(serial: 1, action: "map_center", miles: 25, place: "Atlanta"))
+    }
+
+    @MainActor
     func testUnknownMapActionsAreIgnored() {
         let channel = WeatherMapCommands()
         channel.send("map_spin")
