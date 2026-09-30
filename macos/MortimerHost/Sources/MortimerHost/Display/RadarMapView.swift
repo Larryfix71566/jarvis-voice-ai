@@ -12,6 +12,14 @@ private let radarLog = Logger(subsystem: "com.mortimer.host", category: "radar")
 /// (streets, labels, standard or hybrid) with the radar drawn over it, a pin
 /// at the place, and a loop through the radar frames.
 ///
+/// Round 5 (Larry, 09-29, round-4 radar log): once loaded, the loop runs
+/// with no downloads at all, but the first lap still paused ~1.8 s on every
+/// frame: over 1,000 tiles were queued (about 150 per frame) although a
+/// 200 km view shows only a handful. MapKit asks the renderer about far more
+/// map than is on screen. Now only tiles on screen (plus a small margin) are
+/// queued for the other frames and count towards "ready"; the rest load
+/// for the shown frame only, behind them.
+///
 /// Round 4 (Larry, 09-29, round-3 radar log): first frame fell to 2.4 s,
 /// but the loop waited 1.8-12.5 s between frames and, with nothing queued,
 /// kept re-downloading ~300 tiles a second. Decoded tiles (256 KB each)
@@ -195,7 +203,7 @@ struct RadarMapView: NSViewRepresentable {
             guard let store, Date().timeIntervalSince(lastStats) >= 10 else { return }
             lastStats = Date()
             let s = store.takeStats()
-            radarLog.notice("radar 10s: tileLookups=\(s.requests, privacy: .public) memoryHits=\(s.hits, privacy: .public) fetches=\(s.fetches, privacy: .public) failed=\(s.failures, privacy: .public) fetchAvgMs=\(s.averageFetchMs, privacy: .public) fetchMaxMs=\(s.maxFetchMs, privacy: .public) zooms=\(s.zoomList, privacy: .public) queued=\(store.queuedCount, privacy: .public) shown=\(self.shown, privacy: .public)")
+            radarLog.notice("radar 10s: tileLookups=\(s.requests, privacy: .public) memoryHits=\(s.hits, privacy: .public) fetches=\(s.fetches, privacy: .public) failed=\(s.failures, privacy: .public) fetchAvgMs=\(s.averageFetchMs, privacy: .public) fetchMaxMs=\(s.maxFetchMs, privacy: .public) zooms=\(s.zoomList, privacy: .public) readyTiles=\(store.recentCount, privacy: .public) queued=\(store.queuedCount, privacy: .public) shown=\(self.shown, privacy: .public)")
         }
 
         func stop() {
@@ -203,9 +211,17 @@ struct RadarMapView: NSViewRepresentable {
             timer = nil
         }
 
+        /// Keep the renderer's idea of "on screen" current, and start
+        /// readiness afresh for the new view.
+        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            renderer?.visibleRect = RadarTileMath.expanded(RadarTileMath.cgRect(mapView.visibleMapRect), by: 0.15)
+            store?.clearRecent()
+        }
+
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let frames = overlay as? RadarFramesOverlay, let store {
                 let renderer = RadarFramesRenderer(overlay: frames, store: store)
+                renderer.visibleRect = RadarTileMath.expanded(RadarTileMath.cgRect(mapView.visibleMapRect), by: 0.15)
                 renderer.frame = shown
                 renderer.alpha = RadarMapView.visibleAlpha
                 self.renderer = renderer
@@ -288,6 +304,22 @@ enum RadarTileMath {
         return CGRect(x: Double(x) * size, y: Double(y) * size, width: size, height: size)
     }
 
+    static func cgRect(_ m: MKMapRect) -> CGRect {
+        CGRect(x: m.origin.x, y: m.origin.y, width: m.size.width, height: m.size.height)
+    }
+
+    /// `rect` grown by `fraction` of its size on every side.
+    static func expanded(_ rect: CGRect, by fraction: Double) -> CGRect {
+        rect.insetBy(dx: -rect.width * fraction, dy: -rect.height * fraction)
+    }
+
+    /// Whether a tile touches the visible map. With no visible rect yet,
+    /// every tile counts (the first draw before MapKit reports a region).
+    static func isOnScreen(z: Int, x: Int, y: Int, visible: CGRect?) -> Bool {
+        guard let visible else { return true }
+        return mapRect(z: z, x: x, y: y).intersects(visible)
+    }
+
     /// Every tile at zoom `z` that touches `rect` (map points).
     static func tiles(covering rect: CGRect, z: Int) -> [(x: Int, y: Int)] {
         let n = 1 << z
@@ -322,10 +354,17 @@ final class RadarFramesRenderer: MKOverlayRenderer {
     private let maxNativeZoom: Int
     private let lock = NSLock()
     private var _frame = 0
+    private var _visible: CGRect?
 
     var frame: Int {
         get { lock.lock(); defer { lock.unlock() }; return _frame }
         set { lock.lock(); _frame = newValue; lock.unlock() }
+    }
+
+    /// The map on screen (map points, with a margin); nil until known.
+    var visibleRect: CGRect? {
+        get { lock.lock(); defer { lock.unlock() }; return _visible }
+        set { lock.lock(); _visible = newValue; lock.unlock() }
     }
 
     init(overlay: RadarFramesOverlay, store: RadarTileStore) {
@@ -337,16 +376,18 @@ final class RadarFramesRenderer: MKOverlayRenderer {
     override func canDraw(_ mapRect: MKMapRect, zoomScale: MKZoomScale) -> Bool {
         let z = RadarTileMath.tileZoom(zoomScale: Double(zoomScale), maxNativeZoom: maxNativeZoom)
         let current = frame
+        let visible = visibleRect
         for tile in RadarTileMath.tiles(covering: cgRect(mapRect), z: z) {
-            store.noteRequested(z: z, x: tile.x, y: tile.y)
-            store.request(frame: current, z: z, x: tile.x, y: tile.y, urgent: true) { [weak self] in
+            let onScreen = RadarTileMath.isOnScreen(z: z, x: tile.x, y: tile.y, visible: visible)
+            if onScreen { store.noteRequested(z: z, x: tile.x, y: tile.y) }
+            store.request(frame: current, z: z, x: tile.x, y: tile.y, urgent: onScreen) { [weak self] in
                 let r = RadarTileMath.mapRect(z: z, x: tile.x, y: tile.y)
                 DispatchQueue.main.async {
                     self?.setNeedsDisplay(MKMapRect(x: r.minX, y: r.minY, width: r.width, height: r.height),
                                           zoomScale: zoomScale)
                 }
             }
-            store.queueOtherFrames(than: current, z: z, x: tile.x, y: tile.y)
+            if onScreen { store.queueOtherFrames(than: current, z: z, x: tile.x, y: tile.y) }
         }
         return true
     }
@@ -368,9 +409,7 @@ final class RadarFramesRenderer: MKOverlayRenderer {
         }
     }
 
-    private func cgRect(_ m: MKMapRect) -> CGRect {
-        CGRect(x: m.origin.x, y: m.origin.y, width: m.size.width, height: m.size.height)
-    }
+    private func cgRect(_ m: MKMapRect) -> CGRect { RadarTileMath.cgRect(m) }
 }
 
 /// The radar's tile memory, one per map: decoded tiles per frame, a download
@@ -438,6 +477,10 @@ final class RadarTileStore: @unchecked Sendable {
     }
 
     var queuedCount: Int { lock.lock(); defer { lock.unlock() }; return urgent.count + background.count }
+    var recentCount: Int { lock.lock(); defer { lock.unlock() }; return recent.count }
+
+    /// The view changed: readiness starts again from the tiles now drawn.
+    func clearRecent() { lock.lock(); recent.removeAll(); lock.unlock() }
 
     func takeStats() -> Stats {
         lock.lock(); defer { lock.unlock() }
