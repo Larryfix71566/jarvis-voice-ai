@@ -48,6 +48,20 @@ enum ConversationThread {
         }
     }
 
+    /// New turns between two snapshots of the thread, found by row identity,
+    /// not by count: once the transcript is at its retention bound
+    /// (AppTuning.maxConversationEntries), a new turn replaces the oldest and
+    /// the count stays the same (Codex review of PR #140).
+    static func newTurns(from previous: [String], to current: [String]) -> Int {
+        guard let lastSeen = previous.last else { return current.count }
+        guard let index = current.lastIndex(of: lastSeen) else {
+            // The newest row we had is gone: the transcript was replaced
+            // (for example a new session). Everything shown is new.
+            return current.count
+        }
+        return current.count - index - 1
+    }
+
     /// Within this many points of the end counts as reading the newest turn.
     static let bottomTolerance = 24.0
 
@@ -114,8 +128,10 @@ struct ConversationThreadView: View {
                 } action: { _, atBottom in
                     follow.scrolled(atBottom: atBottom)
                 }
-                .onChange(of: rows.count) { old, new in
-                    if follow.rowsChanged(added: new - old) { scrollToEnd(proxy) }
+                .onChange(of: rows.map(\.id)) { old, new in
+                    let added = ConversationThread.newTurns(from: old, to: new)
+                    guard added > 0 else { return }
+                    if follow.rowsChanged(added: added) { scrollToEnd(proxy) }
                 }
                 .onChange(of: rows.last?.text) { _, _ in
                     // A streaming answer grows in place; keep its end in view

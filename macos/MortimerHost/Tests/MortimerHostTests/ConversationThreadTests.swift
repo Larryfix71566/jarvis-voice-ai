@@ -79,6 +79,43 @@ final class ConversationThreadTests: XCTestCase {
         XCTAssertEqual(ConversationThread.rows(store.entries).count, 6)
     }
 
+    /// Regression for the Codex review of PR #140: at the 200-entry
+    /// retention bound a new turn replaces the oldest, so the row count does
+    /// not change. New turns must still be counted while Larry is scrolled up.
+    func testNewTurnIsCountedAtTheRetentionBoundWhenScrolledUp() throws {
+        let store = ConversationStore()
+        let limit = AppTuning.maxConversationEntries
+        let full = try (0..<limit).map { try entry("e\($0)", $0 % 2 == 0 ? "user" : "assistant", "turn \($0)") }
+        store.set(full)
+        let before = ConversationThread.rows(store.entries).map(\.id)
+        store.set(full + [try entry("e\(limit)", "assistant", "the newest turn")])
+        let after = ConversationThread.rows(store.entries).map(\.id)
+        XCTAssertEqual(before.count, limit)
+        XCTAssertEqual(after.count, limit, "At the bound the count does not change.")
+        XCTAssertEqual(after.first, "e1", "The oldest entry was dropped.")
+
+        let added = ConversationThread.newTurns(from: before, to: after)
+        XCTAssertEqual(added, 1)
+        var follow = ConversationThread.Follow()
+        follow.scrolled(atBottom: false)
+        XCTAssertFalse(follow.rowsChanged(added: added), "Scrolled up: the text must not move.")
+        XCTAssertEqual(follow.unseen, 1, "The New button must appear.")
+    }
+
+    func testNewTurnCountingByIdentity() {
+        XCTAssertEqual(ConversationThread.newTurns(from: [], to: ["a", "b"]), 2)
+        XCTAssertEqual(ConversationThread.newTurns(from: ["a", "b"], to: ["a", "b"]), 0,
+                       "A streaming answer that grows in place is not a new turn.")
+        XCTAssertEqual(ConversationThread.newTurns(from: ["a", "b"], to: ["a", "b", "c", "d"]), 2)
+        XCTAssertEqual(ConversationThread.newTurns(from: ["a", "b"], to: ["b", "c"]), 1,
+                       "Oldest dropped, one added: one new turn.")
+        XCTAssertEqual(ConversationThread.newTurns(from: ["a", "b"], to: ["b"]), 0,
+                       "Trimming only is not a new turn.")
+        XCTAssertEqual(ConversationThread.newTurns(from: ["a", "b"], to: ["x", "y"]), 2,
+                       "A replaced transcript counts as new.")
+        XCTAssertEqual(ConversationThread.newTurns(from: ["a"], to: []), 0)
+    }
+
     func testBottomDetectionAllowsASmallToleranceAndShortContent() {
         XCTAssertTrue(ConversationThread.isAtBottom(contentHeight: 1000, visibleMaxY: 1000))
         XCTAssertTrue(ConversationThread.isAtBottom(contentHeight: 1000, visibleMaxY: 980))
