@@ -35,3 +35,7 @@ Focused benchmark, 300 frames per probe at 1440 × 220 pt:
 - [Mortimer current](orb-crystal-glass-2026-09-29-fixtures/orb-crystal-mortimer.png) · [approved reference](../../../interface-research/orb-crystal/crystal-mortimer-400x180.png)
 - [Overlap current](orb-crystal-glass-2026-09-29-fixtures/orb-crystal-overlap.png) · [approved reference](../../../interface-research/orb-crystal/crystal-overlap-400x180.png)
 - The plan's named live voice states (listening, user, Mortimer, overlap, standby) and placements (conversation, rail, bottom) are not all itemized in the post-deployment record. Only unobserved combinations remain to be confirmed; compact/expanded and Reduce Motion are already confirmed.
+
+## Final human acceptance — 2026-09-30
+
+Larry explicitly confirmed in the Codex task that WS-08 has been tested and accepted. This closes the outstanding human visual/live acceptance gate for the deployed crystal-only orb. The 09-29 fixture links and automated/deployment evidence above remain the supporting record. Larry did not provide a separate observation matrix for each named live state and placement, so this receipt records his overall acceptance without attributing unreported individual observations. No additional WS-08 test is requested.

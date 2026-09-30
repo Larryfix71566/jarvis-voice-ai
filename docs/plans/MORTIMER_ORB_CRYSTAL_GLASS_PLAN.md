@@ -1,7 +1,7 @@
 # Mortimer orb crystal glass plan — crystal shell only
 
-**Status:** LANDED AND DEPLOYED — PR #112 merged as `e9388fc` and is included in production `c3607e6`. Larry reaffirmed compact/expanded appearance and Reduce Motion behavior. Final five-fixture visual approval and any unobserved live-state/placement checks remain open. The former protected-window capture failure was fixed under WS-16 and passed DEPLOY-MAIN.
-**Recorded:** 2026-09-29.
+**Status:** ACCEPTED BY LARRY 2026-09-30 — PR #112 merged as `e9388fc` and is included in deployed release `c3607e6` and later production `03b9e60`. Larry explicitly confirmed WS-08 tested and accepted. Individual fixture/state/placement observations were not separately itemized; the overall human acceptance closes the remaining visual/live gate. The former protected-window capture failure was fixed under WS-16 and passed DEPLOY-MAIN.
+**Recorded:** 2026-09-30.
 **Original 2026-09-24 receipt:** `docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-24.md`.
 
 ### Revision 2 — crystal is the only orb shell (Larry, 2026-09-29)
@@ -155,7 +155,7 @@ Check: Swift package tests build successfully.
 
 There is no runtime rollback-to-old-shell check. If a release must be reverted, use the standard source/deployment rollback procedure.
 
-**Step 10 — Documentation.** Completed for code and automated checks: updated the adaptive-interface note, this plan, `ROADMAP.md`, and receipt `docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-29.md`. Visual acceptance and post-deployment checks remain pending; implementation status is complete and release acceptance remains open.
+**Step 10 — Documentation.** Code, automated checks and release evidence are recorded in this plan, `ROADMAP.md`, and `docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-29.md`. Larry explicitly accepted WS-08 on 2026-09-30; the receipt distinguishes that overall approval from unitemized individual observations.
 
 Larry commits.
 
@@ -193,8 +193,8 @@ There is no runtime selector for the retired shell. Use the standard source/depl
 ## 10. Approval
 
 - [x] Larry: plan approved for implementation (single-shell direction, 2026-09-29).
-- [ ] Larry: step 8 visual acceptance.
-- [ ] Larry: step 9 post-deployment check.
+- [x] Larry: step 8 visual acceptance — overall WS-08 sign-off reported 2026-09-30; no per-fixture observations supplied.
+- [x] Larry: step 9 post-deployment check — overall WS-08 sign-off reported 2026-09-30; compact/expanded and Reduce Motion were separately reported earlier, while other individual state/placement observations were not itemized.
 
 ## 11. Handoff prompt for the implementing model
 
@@ -1286,3 +1286,11 @@ the full `validate` job against the WS-01 action-claim fix. This lands the
 five current fixture images and the corrected acceptance receipt. It does not
 turn Larry's pending five-fixture approval or unobserved live states and
 placements into passed checks.
+
+## 2026-09-30 — Larry's final acceptance
+
+Larry explicitly confirmed WS-08 tested and accepted. This overall human
+sign-off closes steps 8 and 9 without claiming a separately recorded result
+for every fixture, live voice state or placement. The existing receipt retains
+the source, deployment, automated and visual-reference evidence. No further
+WS-08 implementation, deployment or repeat acceptance test is requested.
