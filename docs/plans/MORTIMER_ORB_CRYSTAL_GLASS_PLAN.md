@@ -1278,3 +1278,11 @@ The remaining acceptance is narrow: Larry's explicit five-fixture approval
 (step 8), plus evidence for any step 9 live states or placements not already
 seen. No further deployment or repeat compact/expanded or Reduce Motion check
 is required for this WS-08 revision.
+
+## 2026-09-29 — Acceptance evidence landed
+
+PR #115 merged as `8222940` after all five GitHub checks passed, including
+the full `validate` job against the WS-01 action-claim fix. This lands the
+five current fixture images and the corrected acceptance receipt. It does not
+turn Larry's pending five-fixture approval or unobserved live states and
+placements into passed checks.
