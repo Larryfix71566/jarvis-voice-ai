@@ -2,11 +2,11 @@
 
 One implementation, two callers. THE ONLY READ OF JARVIS_BIND_HOST.
 
-The rule, from K1: a non-loopback bind requires BOTH
-JARVIS_AUTH_ENABLED=true AND at least one unrevoked client token. When
-JARVIS_AUTH_ENABLED is false the bind host is FORCED to loopback
-regardless of what was asked for — the kill switch that turns off
-authentication must never be the switch that also opens a port.
+The rule, from K1 and R2: a non-loopback bind requires
+JARVIS_AUTH_ENABLED=true, JARVIS_REMOTE_BIND_ENABLED=true, and at least
+one unrevoked client token. When either switch is false the bind host is
+FORCED to loopback regardless of what was asked for. This lets local
+bearer authentication be enabled without exposing a remote listener.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 LOOPBACK = "127.0.0.1"
 BIND_HOST_ENV = "JARVIS_BIND_HOST"
 BIND_STRICT_ENV = "JARVIS_BIND_STRICT"
+REMOTE_BIND_ENABLED_ENV = "JARVIS_REMOTE_BIND_ENABLED"
 
 # How long to wait for a non-loopback host to appear on a local
 # interface. Tailscale assigns 100.x.y.z asynchronously at boot, so a
@@ -43,6 +44,11 @@ def _bind_strict() -> bool:
     hard refusal (exit 2). The 'no unrevoked token' case refuses in BOTH
     modes: that is a real misconfiguration, not an outage."""
     return (os.environ.get(BIND_STRICT_ENV) or "").strip().lower() == "true"
+
+
+def _remote_bind_enabled() -> bool:
+    """Only an explicit true permits a non-loopback listener (R2)."""
+    return (os.environ.get(REMOTE_BIND_ENABLED_ENV) or "").strip().lower() == "true"
 
 
 class BindRefused(RuntimeError):
@@ -96,6 +102,15 @@ def resolve_bind_host(
         if not is_loopback(requested):
             logger.error(
                 "bind_forced_loopback process=%s requested=%s reason=auth_disabled",
+                process,
+                requested,
+            )
+        return LOOPBACK
+
+    if not _remote_bind_enabled():
+        if not is_loopback(requested):
+            logger.error(
+                "bind_forced_loopback process=%s requested=%s reason=remote_bind_disabled",
                 process,
                 requested,
             )

@@ -1,6 +1,6 @@
 # Mortimer Remote Access Plan — per-client bearer tokens on every endpoint, Tailscale tunnel, fail-closed binds
 
-**Status:** Dormant Addendum R1 implementation deployed at `539f8f6`, 2026-09-28. Addendum R2 specifies local-only token onboarding (design in progress, not implemented or activated). Remote activation remains undecided; enabled-mode acceptance is open. Original plan drafted 2026-08-26. Implements roadmap track **T2** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.2). Gate: **G2**.
+**Status:** Dormant Addendum R1 implementation deployed at `539f8f6`, 2026-09-28. Addendum R2's local-only bind guard is implemented on the WS-04 branch; token onboarding is specified but not yet implemented or activated. Remote activation remains undecided; enabled-mode acceptance is open. Original plan drafted 2026-08-26. Implements roadmap track **T2** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.2). Gate: **G2**.
 
 **Author / origin.** Larry, quoted in the roadmap's origin block: *"ios app for remote connection to the AI Assistant via VPN tunnel for security"* and *"I want this data available to the AI and myself but secured from any intruder."* Roadmap R4 states the principle this plan implements: *"Token auth on every endpoint, even inside the tunnel. Why: a VPN authenticates devices, not callers; any app on a joined phone could otherwise call `/api/selfedit/run`."*
 
@@ -2725,7 +2725,7 @@ status/evidence records changed.
 
 ## Addendum R2 (2026-09-30) — prepare local bearer authentication without remote access
 
-**Status: design only.** Larry approved preparing this WS-04 step so WS-03 can
+**Status: guard implemented on branch; provisioning design only.** Larry approved preparing this WS-04 step so WS-03 can
 eventually read owner-scoped Versions, runtime inventory and creator activity.
 This addendum does not authorize turning on production authentication, binding
 off-host, minting live credentials, or activating a skill. R1.9's remote T2
@@ -2845,6 +2845,16 @@ declared internal children; do not widen `BASE_ENV_KEYS` or disable env scoping.
 
 **Handoff:** the next implementing model must first re-read current main,
 AGENTS.md, ROADMAP WS-04/CX-11 and R1.9, then land the guard separately from
-the supervised provisioner. It must not infer that this design-only addendum
+the supervised provisioner. It must not infer that this addendum
 is authorization to mint credentials or flip either runtime flag on Larry's
 Mac.
+
+### 2026-09-30 R2 guard checkpoint
+
+The separate `JARVIS_REMOTE_BIND_ENABLED` gate is implemented in `jarvis/bind.py`
+on the WS-04 branch, with an explicit-true test table and updated R1 remote
+cases. `.env.example` documents the two independent flags. Auth/bind/
+middleware/caller tests pass 89/89, and bot/service-token/launch-guard tests
+pass 18/18. The supervised provisioner, native Keychain helper, local
+activation and live acceptance have not been implemented. The production
+flags and credentials have not changed.

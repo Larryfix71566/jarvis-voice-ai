@@ -207,6 +207,7 @@ def test_admin_main_exits_before_uvicorn_on_bind_refusal(tmp_path, monkeypatch):
 
     monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "main.db"))
     monkeypatch.setenv("JARVIS_AUTH_ENABLED", "true")
+    monkeypatch.setenv("JARVIS_REMOTE_BIND_ENABLED", "true")
     monkeypatch.setenv("JARVIS_BIND_HOST", "100.64.1.2")
     run_migrations()
     monkeypatch.setattr(logging, "basicConfig", lambda **_kwargs: None)

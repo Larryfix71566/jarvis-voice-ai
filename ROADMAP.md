@@ -239,14 +239,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Remote access T2: bearer tokens, fail-closed bind, Tailscale
 
 - **Owner:** `codex` (Larry, 09-27)
-- **Status:** in-progress: local-only token-onboarding design; the T2 foundation remains landed and authentication remains dormant
+- **Status:** in-progress: R2 local-only design and remote-bind guard implemented on branch; supervised token provisioning remains open; production authentication remains dormant
 - **Implemented by:** Codex (remote foundation and R1)
 - **Remaining work / acceptance:** Codex prepares local-only onboarding; Larry separately decides activation and any remote bind
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** `codex/ws04-local-onboarding-20260930` (local-only onboarding design); foundation on main (`539f8f6`)
 - **Plan:** `docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md` (R1 implemented; R2 local-only onboarding design)
 - **Scope:** `jarvis/auth.py`, `jarvis/authmw.py`, `jarvis/bind.py`, `jarvis/urls.py`, `jarvis/bot/server.py`, auth middleware and bind in `jarvis/admin/server.py`. Plus the integration points in CX-11: `jarvis/bot/status_tool.py`, `scripts/deploy_main.sh` health checks, `mcp_servers/mcp_selfedit/logic.py` headers. R2 design reserves `scripts/provision_local_auth.py`, a small JarvisKit stdin-to-Keychain executable, its `Package.swift` target, and their tests; no runtime file changes in this planning PR.
-- **Next step:** Review R2's supervised preparation and local-only bind contract; then implement and verify it while leaving authentication and remote bind flags off in production
+- **Next step:** Review/merge the R2 bind guard, then implement the supervised vault/Keychain token provisioner; leave both production auth and remote-bind flags off
 - **Updated:** 09-30
 
 </details>
@@ -626,6 +626,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-30: Codex WS-04 added the R2 remote-bind gate on its isolated branch. With `JARVIS_AUTH_ENABLED=true`, a remote host still resolves to loopback unless `JARVIS_REMOTE_BIND_ENABLED=true`; auth-off remains loopback regardless. Existing remote tests now opt in explicitly. Focused auth/bind/caller/bot tests pass 107/107; no token or production setting changed.
 
 - 2026-09-30: Codex WS-04 selected the supervised local-only onboarding design in Addendum R2. It reserves `JARVIS_REMOTE_BIND_ENABLED` as a separate remote-listener gate, specifies vault/Keychain provisioning without an HTTP mint endpoint, and separates preparation from later local auth activation. This planning change creates no token, changes no runtime flag, and opens no listener; implementation and live acceptance remain open.
 
