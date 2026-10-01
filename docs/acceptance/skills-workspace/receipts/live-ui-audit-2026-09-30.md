@@ -18,6 +18,10 @@ No provider evaluation, creator draft, registry change, or activation occurred.
   tool, approval and success criteria; Next selected the second step.
 - Activity said `No skill trace recorded` rather than inferring completion from
   the intended process. No recorded live run was exercised.
+- In the disconnected app, searching for `git` narrowed the library to the
+  single matching Git skill. A keyboard-only attempt did not open its card,
+  but the host's Full Keyboard Access setting was not checked; this does not
+  establish either a keyboard pass or a product defect.
 - Versions displayed a generic connection failure. A direct read of the same
   local endpoint returned HTTP 503 with `Skills requests require bearer
   authentication`. The server intentionally requires an authenticated caller
@@ -44,3 +48,7 @@ operation, a physical second-display move, a Tart creator lifecycle, provider
 evaluation, paired voice latency, memory soak, or activation/rollback. The
 accepted SW-B/SW-C receipts are prior candidate-bound evidence and must be
 reconciled against the frozen release before final SW-L acceptance.
+The release-evidence verifier correctly rejected the current WS-03 branch's
+2026-09-28 receipts as stale (candidate HEAD, branch, tree and bundle differ).
+The installed Tart/Softnet doctor reports `ready_to_boot: true` and the cached
+Xcode image exists, but no guest was launched in this audit.
