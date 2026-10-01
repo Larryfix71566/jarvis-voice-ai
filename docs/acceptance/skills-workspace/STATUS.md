@@ -10,8 +10,8 @@ Latest live UI audit (2026-09-30): the installed app and production checkout
 both report `39fc6f9`; Skills library, Overview, intended Process navigation,
 and the no-trace Activity state were observed in the connected native app.
 The Versions endpoint returned the expected fail-closed 503 while bearer auth
-is dormant; the running UI's generic connection message is corrected on the
-WS-03 branch but is not yet deployed. No SW-A–SW-L gate was newly accepted.
+is dormant; the running UI's generic connection message is corrected in merged
+PR #145 (`9da99d4`) but is not yet deployed. No SW-A–SW-L gate was newly accepted.
 See [live UI audit](receipts/live-ui-audit-2026-09-30.md).
 
 Latest checkpoint (2026-09-28 20:19 EDT): PR #96 (`539f8f6`) is deployed on

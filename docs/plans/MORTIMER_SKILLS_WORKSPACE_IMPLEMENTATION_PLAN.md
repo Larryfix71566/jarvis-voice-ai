@@ -2856,3 +2856,11 @@ The focused Skills rendering suite passes 20 tests. See the dated
 No new SW-A–SW-L acceptance gate is closed. Real run/voice/accessibility,
 physical-display, Tart lifecycle, provider evaluation, performance-soak and
 activation/rollback evidence remain separate open gates.
+
+PR #145 passed all five GitHub checks and merged as `9da99d4` on 2026-09-30.
+The running production app and backend still report `39fc6f9`; the merged
+wording has not been visually verified there. The app session was interrupted
+while continuing native control inspection, so that attempt supplies no
+additional voice or accessibility acceptance evidence. The next bounded step
+is deployment and UI verification of this merge, followed by the remaining
+live gates once local caller authentication is decided under WS-04.
