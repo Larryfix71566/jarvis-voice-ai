@@ -203,15 +203,15 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Skills Workspace and skill creation (T6; supersedes `MORTIMER_SKILL_AUTHORING_PLAN.md`). Its own view, separate from the Workflow Viewer (Larry, 09-27)
 
 - **Owner:** `codex`
-- **Status:** landed; deployed `539f8f6`, still in production `03b9e60`; activation/live acceptance open
+- **Status:** claimed for live acceptance closure; implementation landed and deployed (`539f8f6`, retained in production `03b9e60`)
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Codex; Larry for human review and physical acceptance
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (`539f8f6`)
+- **Where:** `codex/ws03-live-acceptance-20260930` (acceptance work); foundation on main (`539f8f6`)
 - **Plan:** `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`
 - **Scope:** `jarvis/skill_*.py`, `jarvis/agent_skills.py`, `jarvis/selfedit/skill_policy.py`, `/api/skills*` in `jarvis/admin/server.py`. The five console view-mode Swift files are **shared with WS-07's landed Workflow Viewer**: add a new `skills` mode beside `workflows`; do not replace or restyle the viewer.
-- **Next step:** Staged deployment verified; complete Skills UI/voice/provider/VM and activation gates
-- **Updated:** 09-28
+- **Next step:** Reconcile current production and candidate evidence against SW-A–SW-L in the existing plan, then run target-Mac UI/voice/accessibility and real-VM gates. Keep provider evaluation and activation off until their separate prerequisites and human review are recorded.
+- **Updated:** 09-30
 
 </details>
 
@@ -606,6 +606,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-30: Larry directed Codex to resume WS-03. This docs-only claim reserves `codex/ws03-live-acceptance-20260930` for the remaining Skills Workspace acceptance work. The implementation is already deployed; no provider evaluation, runtime enforcement, skill activation, or new acceptance gate is claimed by this edit. Codex will first reconcile SW-A–SW-L evidence against current production, then run the target-Mac and real-VM checks with separate human review where required.
 
 - 2026-09-30 (WS-15 fix, deploy blocker): Claude (Cowork). DEPLOY-MAIN for `1a0aac7` stopped on `RadarTileStoreTests.testDroppedDecodedTilesComeBackWithoutADownload` (kept PNG missing, second download). The radar kept PNGs in an `NSCache`, which may evict under memory pressure. Now a dictionary with an explicit 64 MB budget, oldest first, plus a budget test. Radar behaviour otherwise unchanged.
 
