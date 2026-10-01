@@ -239,14 +239,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Remote access T2: bearer tokens, fail-closed bind, Tailscale
 
 - **Owner:** `codex` (Larry, 09-27)
-- **Status:** claimed for local-only token-onboarding design; the T2 foundation remains landed and authentication remains dormant
+- **Status:** in-progress: local-only token-onboarding design; the T2 foundation remains landed and authentication remains dormant
 - **Implemented by:** Codex (remote foundation and R1)
 - **Remaining work / acceptance:** Codex prepares local-only onboarding; Larry separately decides activation and any remote bind
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** `codex/ws04-local-onboarding-20260930` (local-only onboarding design); foundation on main (`539f8f6`)
-- **Plan:** `docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md` (DRAFT) + **Addendum R1** (dormant-merge fixes, approved 09-27)
-- **Scope:** `jarvis/auth.py`, `jarvis/authmw.py`, `jarvis/bind.py`, `jarvis/urls.py`, `jarvis/bot/server.py`, auth middleware and bind in `jarvis/admin/server.py`. Plus the integration points in CX-11: `jarvis/bot/status_tool.py`, `scripts/deploy_main.sh` health checks, `mcp_servers/mcp_selfedit/logic.py` headers
-- **Next step:** Reconcile R1.9's onboarding options and specify a local-only flow that supplies authenticated internal and native callers without opening remote access; leave runtime flags unchanged
+- **Plan:** `docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md` (R1 implemented; R2 local-only onboarding design)
+- **Scope:** `jarvis/auth.py`, `jarvis/authmw.py`, `jarvis/bind.py`, `jarvis/urls.py`, `jarvis/bot/server.py`, auth middleware and bind in `jarvis/admin/server.py`. Plus the integration points in CX-11: `jarvis/bot/status_tool.py`, `scripts/deploy_main.sh` health checks, `mcp_servers/mcp_selfedit/logic.py` headers. R2 design reserves `scripts/provision_local_auth.py`, a small JarvisKit stdin-to-Keychain executable, its `Package.swift` target, and their tests; no runtime file changes in this planning PR.
+- **Next step:** Review R2's supervised preparation and local-only bind contract; then implement and verify it while leaving authentication and remote bind flags off in production
 - **Updated:** 09-30
 
 </details>
@@ -453,6 +453,8 @@ Renumbering completed in the main integration. Read-only production verification
 
 **Self-edit allow-list rows:** owned by `docs/plans/ALLOWLIST_SEQUENCE.md`. That rule is unchanged: every allow-list change is a human commit.
 
+**Config keys reserved for WS-04 R2:** `JARVIS_REMOTE_BIND_ENABLED` (default false, independent of `JARVIS_AUTH_ENABLED`). Local bearer authentication may be enabled while this key remains false; only an explicit future remote-access decision may set it true. No new port or migration is reserved.
+
 ---
 
 ## 4. Conflict register
@@ -624,6 +626,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-30: Codex WS-04 selected the supervised local-only onboarding design in Addendum R2. It reserves `JARVIS_REMOTE_BIND_ENABLED` as a separate remote-listener gate, specifies vault/Keychain provisioning without an HTTP mint endpoint, and separates preparation from later local auth activation. This planning change creates no token, changes no runtime flag, and opens no listener; implementation and live acceptance remain open.
 
 - 2026-09-30: Larry assigned Codex a local-only WS-04 token-onboarding design to unblock owner-scoped Skills acceptance. This claim reserves `codex/ws04-local-onboarding-20260930`; it does not create tokens, enable authentication, or open a remote bind. The existing R1.9 choices and current caller/Keychain contracts will be reconciled in the WS-04 plan.
 
