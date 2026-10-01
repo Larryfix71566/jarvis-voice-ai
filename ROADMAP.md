@@ -111,14 +111,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-30: conversation is spread over one tab per turn, only Mortimer's side shows, the tab strip fills up, and asking again re-fetches. Increment CC7a of the Command Console plan (WS-09's plan): one conversation thread with both sides, results as inline cards, Recents instead of tabs, reuse a fresh result by subject.
 
 - **Owner:** `claude` (implementation); `codex` reviews every increment before merge
-- **Status:** review: CC7a.1 (conversation thread) in PR, awaiting Codex review; design approved 09-30; CX-15 resolved
+- **Status:** in-progress: CC7a.1 landed (PR #140, `1a0aac7`, Codex reviewed) and deployed in `39fc6f9`; UI2-22 Mac check open; CC7a.2 next
 - **Implemented by:** Claude (Cowork): CC7a.1
 - **Remaining work / acceptance:** CC7a.1-CC7a.4, each a reviewed PR; RELEASE_READINESS UI2-22..UI2-25 on the Mac. UI2-04, UI2-09 and UI2-13 are held until then. Approved design: `docs/interface-research/cc7a/cc7a-approved-design-2026-09-30.html` (transcript rows, compact cards, Recents menu, reuse reference line, no-jump notice); Codex's boundaries in plan §7.2.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** branch `ws17/cc7a1-conversation-thread`
+- **Where:** main (CC7a.1); next increment on a new branch
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md` §7.1 item 9 and §7.2
 - **Scope:** `App/ResponseResultRouter.swift`, `Stores/WorkspaceStore.swift`, `Stores/ConversationStore.swift`, `Console/AdaptiveStageView.swift`, `Console/TopBarView.swift`, `Display/WorkspaceView.swift`, `App/AppMessageRouter.swift` (weather's select-on-arrival only), voice result actions (`App/ConsoleActionCoordinator.swift`, `App/ConsoleActionRegistry.swift`, JarvisKit `ConsoleProtocol.swift`, `jarvis/bot/console_protocol.py`), DisplayPayload `subject_key` (JarvisKit + `jarvis/bot/display.py`), weather tools' reuse check; tests for each
-- **Next step:** Codex reviews CC7a.1 against plan 7.2 boundary 1; Larry merges and deploys; Larry checks UI2-22 on the Mac; then CC7a.2 (inline cards, no focus stealing)
+- **Next step:** Larry checks UI2-22 on the conversation view; then CC7a.2 (inline cards, no focus stealing incl. weather). WS-18 lands first: the 09-30 crash interrupted the check.
 - **Updated:** 09-30
 
 </details>
@@ -160,6 +160,24 @@ Claude’s work or enable any runtime feature.
 </details>
 
 ### Built: waiting on live checks or acceptance
+
+<details id="ws-18">
+<summary>WS-18 — Native audio: survive an output switch during speech · Claude</summary>
+
+**Workstream:** Larry, 09-30: Mortimer crashed at 18:09:08 after switching from AirPods to the Mac speaker mid-answer. Log: the engine rebuilt (`audio engine rebuilt after configuration change`), Voice Processing then reported `failed to run downlink DSP (state fault)`, and `AVAudioPlayerNode.play()` raised `player did not see an IO cycle` five seconds later (uncaught Objective-C exception, SIGABRT).
+
+- **Owner:** `claude`
+- **Status:** review: fix in PR (branch `ws18/audio-output-switch`)
+- **Implemented by:** Claude (Cowork)
+- **Remaining work / acceptance:** Larry switches AirPods to Mac speaker and back while Mortimer is mid-answer, both directions: the app stays up, with at most a short gap in his voice; the log shows `audio output flowing` after each rebuild.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** branch `ws18/audio-output-switch`
+- **Plan:** `docs/plans/MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md` (progress entry 2026-09-30)
+- **Scope:** `macos/JarvisKit/Sources/JarvisKit/AudioEngineIO.swift`, `macos/JarvisKit/Sources/JarvisKitObjC/`, `macos/JarvisKit/Package.swift` (new ObjC target), `JarvisFlags.outputIOWatchEnabled` in `JarvisConfig.swift`, `AudioEngineIOTests.swift`
+- **Next step:** Merge, deploy, Larry's device-switch check. Rollback without a rebuild: `defaults write com.mortimer.host JARVIS_AUDIO_OUTPUT_WATCH -bool false` (the play() catch stays on).
+- **Updated:** 09-30
+
+</details>
 
 <details id="ws-01">
 <summary>WS-01 — Reliability, privacy and memory gaps · Codex</summary>
@@ -606,6 +624,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-30 (WS-18 added, in review): Claude (Cowork), at Larry's request. Crash at 18:09:08 after an AirPods to Mac speaker switch: engine rebuilt, Voice Processing downlink state fault, no output IO, `AVAudioPlayerNode.play()` raised `player did not see an IO cycle`. Fix: start the player only once output IO is seen to flow (watch rebuilds a stalled output, 3 tries then a visible session failure) and catch the Objective-C exception around `play()`. Rollback switch `JARVIS_AUDIO_OUTPUT_WATCH`. WS-17 row updated: CC7a.1 landed (#140) and deployed (`39fc6f9`).
 
 - 2026-09-30 (WS-15 fix, deploy blocker): Claude (Cowork). DEPLOY-MAIN for `1a0aac7` stopped on `RadarTileStoreTests.testDroppedDecodedTilesComeBackWithoutADownload` (kept PNG missing, second download). The radar kept PNGs in an `NSCache`, which may evict under memory pressure. Now a dictionary with an explicit 64 MB budget, oldest first, plus a budget test. Radar behaviour otherwise unchanged.
 
