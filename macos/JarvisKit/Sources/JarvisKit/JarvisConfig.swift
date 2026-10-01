@@ -122,6 +122,11 @@ public enum JarvisFlags {
         }
         return on("JARVIS_AUDIO_METER")
     }
+    /// WS-18 rollback lever: `defaults write com.mortimer.host
+    /// JARVIS_AUDIO_OUTPUT_WATCH -bool false` starts the player without
+    /// waiting for output IO and turns off stall rebuilds. The exception
+    /// catch around `play()` stays on either way.
+    public static var outputIOWatchEnabled: Bool { on("JARVIS_AUDIO_OUTPUT_WATCH") }
     /// 2026-09-05 — auto-reconnect the session when the default output
     /// device changes (AirPods), so the bot's voice follows it. OPT-IN,
     /// unlike the three above (absent key == off): the plain WebRTC build
