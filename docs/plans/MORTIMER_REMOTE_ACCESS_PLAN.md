@@ -2854,7 +2854,8 @@ Mac.
 The separate `JARVIS_REMOTE_BIND_ENABLED` gate is implemented in `jarvis/bind.py`
 on the WS-04 branch, with an explicit-true test table and updated R1 remote
 cases. `.env.example` documents the two independent flags. Auth/bind/
-middleware/caller tests pass 89/89, and bot/service-token/launch-guard tests
-pass 18/18. The supervised provisioner, native Keychain helper, local
+middleware/caller tests and bot/service-token/launch-guard tests pass 109/109
+combined, including both real startup entry points' resolved loopback host
+arguments. The supervised provisioner, native Keychain helper, local
 activation and live acceptance have not been implemented. The production
 flags and credentials have not changed.
