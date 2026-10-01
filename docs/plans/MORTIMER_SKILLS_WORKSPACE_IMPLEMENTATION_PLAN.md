@@ -2841,3 +2841,18 @@ This closes staged source deployment, not live feature acceptance or activation.
 No runtime feature flags or provider routes were deliberately changed by this
 operation. Remote enabled-mode acceptance, provider/VM/voice/display/accessibility
 and plan-specific activation/rollback gates remain open where previously open.
+
+### 2026-09-30 — live UI audit and dormant-auth explanation
+
+Larry assigned Codex the remaining WS-03 acceptance work in ROADMAP PR #143.
+Production code and app bundle both report `39fc6f9`. In the connected native
+app, the six-package library, selected skill Overview, intended Process steps,
+and no-trace Activity state were observed. The owner-scoped Versions endpoint
+returns HTTP 503 while bearer authentication is dormant, as designed; the
+running UI called this a connection failure. A bounded native wording fix on
+the WS-03 branch explains this exact state without changing the auth boundary.
+The focused Skills rendering suite passes 20 tests. See the dated
+[live UI audit](../acceptance/skills-workspace/receipts/live-ui-audit-2026-09-30.md).
+No new SW-A–SW-L acceptance gate is closed. Real run/voice/accessibility,
+physical-display, Tart lifecycle, provider evaluation, performance-soak and
+activation/rollback evidence remain separate open gates.
