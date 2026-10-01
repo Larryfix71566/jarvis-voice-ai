@@ -203,14 +203,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Skills Workspace and skill creation (T6; supersedes `MORTIMER_SKILL_AUTHORING_PLAN.md`). Its own view, separate from the Workflow Viewer (Larry, 09-27)
 
 - **Owner:** `codex`
-- **Status:** claimed for live acceptance closure; implementation landed and deployed (`539f8f6`, retained in production `03b9e60`)
+- **Status:** in-progress: live UI evidence audit; implementation landed and retained in production `39fc6f9`; activation remains off
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Codex; Larry for human review and physical acceptance
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** `codex/ws03-live-acceptance-20260930` (acceptance work); foundation on main (`539f8f6`)
 - **Plan:** `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`
 - **Scope:** `jarvis/skill_*.py`, `jarvis/agent_skills.py`, `jarvis/selfedit/skill_policy.py`, `/api/skills*` in `jarvis/admin/server.py`. The five console view-mode Swift files are **shared with WS-07's landed Workflow Viewer**: add a new `skills` mode beside `workflows`; do not replace or restyle the viewer.
-- **Next step:** Reconcile current production and candidate evidence against SW-A–SW-L in the existing plan, then run target-Mac UI/voice/accessibility and real-VM gates. Keep provider evaluation and activation off until their separate prerequisites and human review are recorded.
+- **Next step:** Merge and deploy the bounded Versions error explanation; then run recorded-run/voice/accessibility and real-VM checks against a frozen release. Decide WS-04 authenticated local client onboarding separately before owner-scoped Versions, runtime inventory or creator can pass live acceptance. Provider evaluation and activation remain gated.
 - **Updated:** 09-30
 
 </details>
@@ -606,6 +606,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-30: Codex WS-03 observed the connected production Skills library, a three-step intended Process walkthrough, and truthful no-trace Activity on app/backend revision `39fc6f9`. Versions returned expected fail-closed 503 with dormant bearer auth, despite a misleading generic UI error; the WS-03 branch adds exact-state wording and a partial live receipt. Focused native Skills rendering tests passed 20/20. No new SW-A–SW-L gate is accepted; creator/provider/activation remain off.
 
 - 2026-09-30: Larry directed Codex to resume WS-03. This docs-only claim reserves `codex/ws03-live-acceptance-20260930` for the remaining Skills Workspace acceptance work. The implementation is already deployed; no provider evaluation, runtime enforcement, skill activation, or new acceptance gate is claimed by this edit. Codex will first reconcile SW-A–SW-L evidence against current production, then run the target-Mac and real-VM checks with separate human review where required.
 
