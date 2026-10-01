@@ -1365,6 +1365,25 @@ result card (RELEASE_READINESS UI2-19 note):
 | Asking again | **Reference line** (D2): Mortimer's reply carries "↺ Weather · Folly Beach · from 12:40" pointing at the same result ID; when stale, the same result refreshes and the line reads "⟳ … updated 12:58". The thread stays in order. |
 | New result while reading | No jump: a "New: … Show / Dismiss" notice above the open result; the card joins the thread and Recents (unread). On the conversation itself the card just appears in the thread. |
 
+**Single console row (Larry, 2026-09-30; increment CC7a.1b).** "All buttons
+on the console line, none below." Mockup:
+`docs/interface-research/cc7a/cc7a_single_row_approved_2026-09-30.html`.
+Layout 2 has one control row (`Console/ConsoleActionBar.swift`, in the
+console header): Conversation · Results ▾ (click opens the results view;
+the arrow lists the open results with shown/pinned/unread marks and a Close
+submenu) · Knowledge ▾ (Knowledge Atlas, Memory graph) · Tools ▾ (Skills,
+Workflows) · Actions ▾ (only while a result is shown: Acting on A/B in a
+comparison via `WorkspaceStore.comparisonSide`, View Summary/Sources, Pin,
+Compare with, Show on display, Copy, Share…, Export…) · Expand voice (on
+the conversation only). The stage, `WorkspaceView` and
+`WorkspaceResultPane` draw no controls of their own in layout 2 (the tab
+strip goes here, ahead of CC7a.3); layouts 0 and 1, detached panels and the
+supporting display keep theirs. The row never wraps: narrow windows drop the
+title, then show icons, each keeping its name as tooltip and accessibility
+label. This supersedes the approved mockup's view buttons at the bottom of
+Recents. CC7a.3 still adds Recents numbering, pinned-first order, fresh age
+and voice by subject to Results ▾.
+
 **Codex boundaries (CX-15, 2026-09-30).** Checked by Claude against main
 `25735fd`; each is a review criterion:
 

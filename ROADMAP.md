@@ -111,14 +111,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-30: conversation is spread over one tab per turn, only Mortimer's side shows, the tab strip fills up, and asking again re-fetches. Increment CC7a of the Command Console plan (WS-09's plan): one conversation thread with both sides, results as inline cards, Recents instead of tabs, reuse a fresh result by subject.
 
 - **Owner:** `claude` (implementation); `codex` reviews every increment before merge
-- **Status:** in-progress: CC7a.1 landed (PR #140, `1a0aac7`, Codex reviewed) and deployed in `39fc6f9`; UI2-22 Mac check open; CC7a.2 next
+- **Status:** review: CC7a.1b (single console row) in PR, awaiting Codex review; CC7a.1 landed (#140) and deployed
 - **Implemented by:** Claude (Cowork): CC7a.1
 - **Remaining work / acceptance:** CC7a.1-CC7a.4, each a reviewed PR; RELEASE_READINESS UI2-22..UI2-25 on the Mac. UI2-04, UI2-09 and UI2-13 are held until then. Approved design: `docs/interface-research/cc7a/cc7a-approved-design-2026-09-30.html` (transcript rows, compact cards, Recents menu, reuse reference line, no-jump notice); Codex's boundaries in plan §7.2.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (CC7a.1); next increment on a new branch
+- **Where:** branch `ws17/cc7a1b-single-console-row`
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md` §7.1 item 9 and §7.2
 - **Scope:** `App/ResponseResultRouter.swift`, `Stores/WorkspaceStore.swift`, `Stores/ConversationStore.swift`, `Console/AdaptiveStageView.swift`, `Console/TopBarView.swift`, `Display/WorkspaceView.swift`, `App/AppMessageRouter.swift` (weather's select-on-arrival only), voice result actions (`App/ConsoleActionCoordinator.swift`, `App/ConsoleActionRegistry.swift`, JarvisKit `ConsoleProtocol.swift`, `jarvis/bot/console_protocol.py`), DisplayPayload `subject_key` (JarvisKit + `jarvis/bot/display.py`), weather tools' reuse check; tests for each
-- **Next step:** Larry checks UI2-22 on the conversation view; then CC7a.2 (inline cards, no focus stealing incl. weather). WS-18 lands first: the 09-30 crash interrupted the check.
+- **Next step:** Codex reviews CC7a.1b; Larry merges, deploys and checks UI2-22 and the single row; then CC7a.2 (inline cards, no focus stealing)
 - **Updated:** 09-30
 
 </details>
@@ -624,6 +624,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-09-30 (WS-17 CC7a.1b in review): Claude (Cowork). Larry: all buttons on the console line, none below; Knowledge Atlas + Memory graph under Knowledge, Skills + Workflows under Tools, the result's actions under Actions. `ConsoleActionBar` replaces the console header's buttons; the stage, results view and result pane draw no rows in layout 2. Plan 7.2 and UI2-24 updated; mockup in `docs/interface-research/cc7a/`. Awaiting Codex review.
 
 - 2026-09-30 (WS-18 added, in review): Claude (Cowork), at Larry's request. Crash at 18:09:08 after an AirPods to Mac speaker switch: engine rebuilt, Voice Processing downlink state fault, no output IO, `AVAudioPlayerNode.play()` raised `player did not see an IO cycle`. Fix: start the player only once output IO is seen to flow (watch rebuilds a stalled output, 3 tries then a visible session failure) and catch the Objective-C exception around `play()`. Rollback switch `JARVIS_AUDIO_OUTPUT_WATCH`. WS-17 row updated: CC7a.1 landed (#140) and deployed (`39fc6f9`).
 

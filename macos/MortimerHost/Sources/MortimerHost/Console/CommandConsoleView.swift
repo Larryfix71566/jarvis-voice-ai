@@ -15,34 +15,14 @@ struct CommandConsoleView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Label("Command Console", systemImage: "command")
-                    .font(.headline)
-                Button("Conversation") {
-                    if let coordinator { _ = coordinator.executePointer(.viewSet, target: "conversation") }
-                    else { workspace.returnToConversation() }
-                }
-                Button("Knowledge Atlas") {
-                    if let coordinator { _ = coordinator.executePointer(.viewSet, target: "atlas") }
-                    else { workspace.openAtlas() }
-                }
-                Button("Skills") {
-                    if let coordinator { _ = coordinator.executePointer(.viewSet, target: "skills") }
-                    else { workspace.openSkills() }
-                }
-                Button("Memory graph") {
-                    if let coordinator { _ = coordinator.executePointer(.viewSet, target: "memory") }
-                    else { workspace.openMemoryGraph() }
-                }
-                Button("Workflows") {
-                    if let coordinator { _ = coordinator.executePointer(.viewSet, target: "workflows") }
-                    else { workspace.openWorkflows() }
-                }
-                Spacer()
+                // WS-17: the console's single control row (Larry, 09-30).
+                ConsoleActionBar(coordinator: coordinator)
                 if let result = notices.consoleResult {
                     Text(result.summary)
                         .font(.caption)
                         .lineLimit(1)
                         .foregroundStyle(result.status == "error" ? AppTheme.red : AppTheme.text.opacity(0.7))
+                        .layoutPriority(-1)   // the control row keeps its room
                 }
             }
             .padding(16)
