@@ -2864,3 +2864,13 @@ while continuing native control inspection, so that attempt supplies no
 additional voice or accessibility acceptance evidence. The next bounded step
 is deployment and UI verification of this merge, followed by the remaining
 live gates once local caller authentication is decided under WS-04.
+
+On the same source candidate (`9da99d4`; branch `4f02940` adds only status
+documentation), native tests pass on the target MacBook Air `Mac17,4`, Apple
+M5, macOS 27.0: JarvisKit 219/219 and the full MortimerHost command exits
+successfully. Its 100-sample rendered Skills benchmark reports wide/compact
+selection-to-layout p95 **13.099/7.683 ms** (20 ms limit) and cached
+navigation p95 **44.646/28.173 ms** (100 ms limit), with zero detail requests
+during measurement. These are local sub-budget results only. They do not
+replace paired voice p95, a ten-minute live-trace memory soak, actual speech,
+VoiceOver or a physical second-display check; SW-K and SW-I remain open.

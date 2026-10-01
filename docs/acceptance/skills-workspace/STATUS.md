@@ -14,6 +14,13 @@ is dormant; the running UI's generic connection message is corrected in merged
 PR #145 (`9da99d4`) but is not yet deployed. No SW-A–SW-L gate was newly accepted.
 See [live UI audit](receipts/live-ui-audit-2026-09-30.md).
 
+Merged-source native check on the MacBook Air `Mac17,4` (Apple M5, macOS
+27.0): JarvisKit passed 219 tests; the full MortimerHost test command passed.
+Its 100-sample rendered Skills selection-to-layout p95 was 13.099 ms wide /
+7.683 ms compact, and cached navigation p95 was 44.646/28.173 ms. Paired
+voice latency and the ten-minute live-trace memory soak remain unmeasured, so
+SW-K remains open.
+
 Latest checkpoint (2026-09-28 20:19 EDT): PR #96 (`539f8f6`) is deployed on
 the Mac through DEPLOY-MAIN. All CI workflows passed; exact merged-release
 checks passed 4,860 Python tests (seven skips), JarvisKit 219 tests, and

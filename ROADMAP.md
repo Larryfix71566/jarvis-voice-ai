@@ -203,7 +203,7 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Skills Workspace and skill creation (T6; supersedes `MORTIMER_SKILL_AUTHORING_PLAN.md`). Its own view, separate from the Workflow Viewer (Larry, 09-27)
 
 - **Owner:** `codex`
-- **Status:** in-progress: PR #145 merged as `9da99d4` (Versions dormant-auth wording and partial live audit); production remains `39fc6f9`; activation remains off
+- **Status:** in-progress: PR #145 merged as `9da99d4` (Versions dormant-auth wording and partial live audit); native suites and rendered Skills sub-budgets pass on the M5 Mac; production remains `39fc6f9`; activation remains off
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Codex; Larry for human review and physical acceptance
 - **Model version:** not recorded; do not infer from system name.
