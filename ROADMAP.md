@@ -221,14 +221,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Skills Workspace and skill creation (T6; supersedes `MORTIMER_SKILL_AUTHORING_PLAN.md`). Its own view, separate from the Workflow Viewer (Larry, 09-27)
 
 - **Owner:** `codex`
-- **Status:** in-progress: live UI evidence audit; implementation landed and retained in production `39fc6f9`; activation remains off
+- **Status:** in-progress: PR #145 merged as `9da99d4` (Versions dormant-auth wording and partial live audit); native suites and rendered Skills sub-budgets pass on the M5 Mac; production remains `39fc6f9`; activation remains off
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Codex; Larry for human review and physical acceptance
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** `codex/ws03-live-acceptance-20260930` (acceptance work); foundation on main (`539f8f6`)
 - **Plan:** `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`
 - **Scope:** `jarvis/skill_*.py`, `jarvis/agent_skills.py`, `jarvis/selfedit/skill_policy.py`, `/api/skills*` in `jarvis/admin/server.py`. The five console view-mode Swift files are **shared with WS-07's landed Workflow Viewer**: add a new `skills` mode beside `workflows`; do not replace or restyle the viewer.
-- **Next step:** Merge and deploy the bounded Versions error explanation; then run recorded-run/voice/accessibility and real-VM checks against a frozen release. Decide WS-04 authenticated local client onboarding separately before owner-scoped Versions, runtime inventory or creator can pass live acceptance. Provider evaluation and activation remain gated.
+- **Next step:** Deploy and visually verify the merged Versions explanation; then run recorded-run/voice/accessibility and real-VM checks against a frozen release. Decide WS-04 authenticated local client onboarding separately before owner-scoped Versions, runtime inventory or creator can pass live acceptance. Provider evaluation and activation remain gated.
 - **Updated:** 09-30
 
 </details>
@@ -628,6 +628,7 @@ first lever to pull.
 - 2026-09-30 (WS-18 added, in review): Claude (Cowork), at Larry's request. Crash at 18:09:08 after an AirPods to Mac speaker switch: engine rebuilt, Voice Processing downlink state fault, no output IO, `AVAudioPlayerNode.play()` raised `player did not see an IO cycle`. Fix: start the player only once output IO is seen to flow (watch rebuilds a stalled output, 3 tries then a visible session failure) and catch the Objective-C exception around `play()`. Rollback switch `JARVIS_AUDIO_OUTPUT_WATCH`. WS-17 row updated: CC7a.1 landed (#140) and deployed (`39fc6f9`).
 
 - 2026-09-30: Codex WS-03 observed the connected production Skills library, a three-step intended Process walkthrough, and truthful no-trace Activity on app/backend revision `39fc6f9`. Versions returned expected fail-closed 503 with dormant bearer auth, despite a misleading generic UI error; the WS-03 branch adds exact-state wording and a partial live receipt. Focused native Skills rendering tests passed 20/20. No new SW-A–SW-L gate is accepted; creator/provider/activation remain off.
+- 2026-09-30: WS-03 PR #145 passed all five CI checks and merged as `9da99d4`. It changes only the exact dormant-auth Versions explanation and documentation; production still reports `39fc6f9`. The live UI gates remain open until the merged build is deployed and tested.
 
 - 2026-09-30: Larry directed Codex to resume WS-03. This docs-only claim reserves `codex/ws03-live-acceptance-20260930` for the remaining Skills Workspace acceptance work. The implementation is already deployed; no provider evaluation, runtime enforcement, skill activation, or new acceptance gate is claimed by this edit. Codex will first reconcile SW-A–SW-L evidence against current production, then run the target-Mac and real-VM checks with separate human review where required.
 
