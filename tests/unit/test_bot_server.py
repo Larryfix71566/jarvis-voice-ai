@@ -89,6 +89,17 @@ def test_main_uses_gated_host_and_port(monkeypatch):
     assert captured["argv"] == ["bot.py", "--host", "127.0.0.1", "--port", "7999"]
 
 
+def test_main_local_auth_only_binds_loopback(monkeypatch):
+    monkeypatch.setenv("JARVIS_AUTH_ENABLED", "true")
+    monkeypatch.delenv("JARVIS_REMOTE_BIND_ENABLED", raising=False)
+    monkeypatch.setenv("JARVIS_BIND_HOST", "0.0.0.0")
+    monkeypatch.setattr(sys, "argv", ["bot.py"])
+    captured = {}
+    monkeypatch.setattr(server, "runner_main", lambda: captured.setdefault("argv", sys.argv[:]))
+    server.main()
+    assert captured["argv"][1:3] == ["--host", "127.0.0.1"]
+
+
 def test_main_exits_before_runner_on_bind_refusal(monkeypatch):
     monkeypatch.setenv("JARVIS_AUTH_ENABLED", "true")
     monkeypatch.setattr(server, "service_headers", lambda: {"Authorization": "Bearer test"})
