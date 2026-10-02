@@ -207,6 +207,7 @@ def test_admin_main_exits_before_uvicorn_on_bind_refusal(tmp_path, monkeypatch):
 
     monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "main.db"))
     monkeypatch.setenv("JARVIS_AUTH_ENABLED", "true")
+    monkeypatch.setenv("JARVIS_REMOTE_BIND_ENABLED", "true")
     monkeypatch.setenv("JARVIS_BIND_HOST", "100.64.1.2")
     run_migrations()
     monkeypatch.setattr(logging, "basicConfig", lambda **_kwargs: None)
@@ -214,3 +215,18 @@ def test_admin_main_exits_before_uvicorn_on_bind_refusal(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as exc:
         admin_server.main()
     assert exc.value.code == 2
+
+
+def test_admin_main_local_auth_only_binds_loopback(tmp_path, monkeypatch):
+    import uvicorn
+
+    import jarvis.admin.server as admin_server
+
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "local-auth.db"))
+    monkeypatch.setenv("JARVIS_AUTH_ENABLED", "true")
+    monkeypatch.delenv("JARVIS_REMOTE_BIND_ENABLED", raising=False)
+    monkeypatch.setenv("JARVIS_BIND_HOST", "0.0.0.0")
+    captured = {}
+    monkeypatch.setattr(uvicorn, "run", lambda _app, **kwargs: captured.update(kwargs))
+    admin_server.main()
+    assert captured["host"] == "127.0.0.1"

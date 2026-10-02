@@ -70,7 +70,12 @@ from jarvis.agents.delegate import (
 )
 from jarvis.anthropic_shim import native_base_url
 from jarvis.bot.connect_greeting import ConnectGreeting  # noqa: E402
-from jarvis.bot.voice_guidance import ReplyGuard, VoiceTurnState, VoiceWorkflowInjector
+from jarvis.bot.voice_guidance import (
+    ReplyGuard,
+    VoiceTurnState,
+    VoiceWorkflowInjector,
+    rtvi_observer_params,
+)
 from jarvis.bot.sensitive_turn import is_sensitive as _voice_is_sensitive
 from jarvis.voice_workflows import wrap_delegate_handler
 from jarvis.bot.follow_up import (
@@ -1307,6 +1312,20 @@ def build_pipeline(
     return pipeline, llm, aggregators, pusher
 
 
+def build_task(pipeline: Pipeline, llm: Any, observers: list) -> PipelineTask:
+    return PipelineTask(
+        pipeline,
+        # Phase 0 step 1 — required for UsageMetricsObserver to ever see a
+        # frame; confirmed 2026-09-01 no other consumer in this repo
+        # depended on these being off.
+        params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
+        observers=observers,
+        # Mortimer's text once (2026-09-30): the client builds the thread
+        # from bot-llm-text; see rtvi_observer_params.
+        rtvi_observer_params=rtvi_observer_params(llm),
+    )
+
+
 def _wrap_rtvi(message: dict) -> dict:
     """D-005: client-js 1.13 drops data-channel messages that are not
     rtvi-ai labeled, so app payloads are wrapped in a server-message
@@ -1491,10 +1510,10 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # Native-audio plan D7: on the WebSocket transport client app
             # messages arrive as InputTransportMessageFrame in the pipeline;
             # the processor is bound to the handlers below once they exist.
-            pipeline, _llm, aggregators, pusher = build_pipeline(
+            pipeline, llm, aggregators, pusher = build_pipeline(
                 transport, runtime, client_messages=client_messages)
         else:
-            pipeline, _llm, aggregators, pusher = build_pipeline(transport, runtime)
+            pipeline, llm, aggregators, pusher = build_pipeline(transport, runtime)
         from jarvis.bot.skill_creator_dispatch import register_session
         from jarvis.tenant import current_user_id
 
@@ -1619,14 +1638,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                         )
 
             observers.append(_FnFrameProbe())
-        task = PipelineTask(
-            pipeline,
-            # Phase 0 step 1 — required for UsageMetricsObserver above to
-            # ever see a frame; confirmed 2026-09-01 no other consumer in
-            # this repo depended on these being off.
-            params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
-            observers=observers,
-        )
+        task = build_task(pipeline, llm, observers)
         pusher.bind(task)
 
         client_connected = {"value": False}
