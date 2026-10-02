@@ -87,6 +87,24 @@ Claude’s work or enable any runtime feature.
 
 ### Needs work: not yet built (proposed, claimed, in progress, in review, blocked)
 
+<details id="ws-19">
+<summary>WS-19 — Repository review and unified roadmap reconciliation · Codex</summary>
+
+**Workstream:** Larry's 10-02 request to review the current repository and reconcile this roadmap against code, plans, acceptance evidence, deployment receipts, and PR state. Documentation and read-only review only.
+
+- **Owner:** `codex`
+- **Status:** claimed
+- **Implemented by:** Codex (review and roadmap update)
+- **Remaining work / acceptance:** Reconcile every §2 block and report verified findings to Larry; no feature activation or production edit.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** `docs/ws19-repo-roadmap-review-20261002`
+- **Plan:** this bounded review is tracked in this block and §8; no new implementation plan.
+- **Scope:** `ROADMAP.md` only for edits; repository, plans, receipts, CI and PRs are read-only evidence.
+- **Next step:** Review current main, open PRs, code paths and recorded acceptance, then correct stale statuses and next steps.
+- **Updated:** 10-02
+
+</details>
+
 <details id="ws-05">
 <summary>WS-05 — Model access: subscriptions, APIs and SAYGM · Codex</summary>
 
