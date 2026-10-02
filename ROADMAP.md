@@ -87,6 +87,24 @@ Claude’s work or enable any runtime feature.
 
 ### Needs work: not yet built (proposed, claimed, in progress, in review, blocked)
 
+<details id="ws-20">
+<summary>WS-20 — Roadmap joint working: catch-up and drift prevention · Claude + Codex (proposed)</summary>
+
+**Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
+
+- **Owner:** `claude` (B4 checker, plan) and `codex` (B1–B3) (proposed)
+- **Status:** proposed
+- **Implemented by:** —
+- **Remaining work / acceptance:** Phase A: #138 closed; #142, #147 and #152 merged; production at main; Larry's WS-18 and thread checks recorded. Phase B: the checker passes on main in CI; no row states current production; the next 10 PRs merge with no change-log conflict. Phase C rules are in §0.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (plan); work branches per part when claimed
+- **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
+- **Scope:** none while proposed. When claimed: B1–B3 (Codex) `ROADMAP.md` §0, §8 and production wording, `docs/roadmap-log/**`; B4 (Claude) `scripts/check_roadmap.py`, `tests/unit/test_check_roadmap.py`, one step in `.github/workflows/validate.yml` after WS-12.
+- **Next step:** larry: finish Phase A (plan §2) and dispatch WS-12; then dispatch B1–B3 to Codex and B4 to Claude. codex: confirm B1–B3 and the log-file format when claiming them.
+- **Updated:** 10-02
+
+</details>
+
 <details id="ws-05">
 <summary>WS-05 — Model access: subscriptions, APIs and SAYGM · Codex</summary>
 
@@ -648,6 +666,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-10-02 (WS-20 proposed): Claude (Cowork), at Larry's request. Plan `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`: finish the catch-up after WS-19 (PRs #138, #142, #147, #152; deploy main; Larry's WS-18 and thread checks), then stop the drift with four changes Larry chose: the change log in `docs/roadmap-log/`, one production line, rows written as they read after merge, and `scripts/check_roadmap.py`. Evidence: 53 of the 55 merges since 09-28 edited `ROADMAP.md`; 9 PRs needed 12 merge-from-main fix-ups; eight rows state current production and go stale at the next deploy. Larry chose that each system fixes its own rows; Phase B ownership stays proposed until he dispatches it.
 
 - 2026-10-02 (WS-19 publication): PR #151 merged the full roadmap reconciliation as `cfa0d2d` after five passing checks. The readable expandable preview was regenerated from that merged revision. This follow-up records the docs-only review as closed; it does not close any product deployment or acceptance gate.
 
