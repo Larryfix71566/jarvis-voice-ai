@@ -92,15 +92,15 @@ Claude’s work or enable any runtime feature.
 
 **Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
 
-- **Owner:** `claude` (B4 checker, plan) and `codex` (B1–B3) (proposed)
-- **Status:** proposed
+- **Owner:** `claude` (B4 checker, plan) and `codex` (B1–B3, proposed until Codex claims them)
+- **Status:** in-progress: Phase A landed — plan #153, WS-07 fix #154, #147 brought up to date, #138 closed, main `7c4637e` deployed 10-02 15:51 (receipt clean); #142 and #147 wait on Codex. B4 drift checker built by Claude and sent to Codex for review. B1–B3 not started
 - **Implemented by:** —
 - **Remaining work / acceptance:** Phase A: #138 closed; #142, #147 and #152 merged; production at main; Larry's WS-18 and thread checks recorded. Phase B: the checker passes on main in CI; no row states current production; the next 10 PRs merge with no change-log conflict. Phase C rules are in §0.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (plan); work branches per part when claimed
+- **Where:** main (plan); B4 on branch `ws20/b4-roadmap-check`
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
-- **Scope:** none while proposed. When claimed: B1–B3 (Codex) `ROADMAP.md` §0, §8 and production wording, `docs/roadmap-log/**`; B4 (Claude) `scripts/check_roadmap.py`, `tests/unit/test_check_roadmap.py`, one step in `.github/workflows/validate.yml` after WS-12.
-- **Next step:** larry: finish Phase A (plan §2) and dispatch WS-12; then dispatch B1–B3 to Codex and B4 to Claude. codex: confirm B1–B3 and the log-file format when claiming them.
+- **Scope:** B4 (Claude): `scripts/check_roadmap.py`, `tests/unit/test_check_roadmap.py`, the drift-check step in `.github/workflows/validate.yml`. B1–B3 (Codex, once claimed): `ROADMAP.md` §0, §8 and production wording, `docs/roadmap-log/**`.
+- **Next step:** codex: review #147 and the B4 checker PR; resolve and land #142; claim B1–B3. larry: merge each after Codex approves.
 - **Updated:** 10-02
 
 </details>
@@ -141,24 +141,6 @@ Claude’s work or enable any runtime feature.
 
 </details>
 
-<details id="ws-12">
-<summary>WS-12 — CI upkeep before the Ubuntu 26 runner switch · Claude (proposed)</summary>
-
-**Workstream:** Update the GitHub Actions versions (Node 20 deprecation warnings on `actions/checkout@v4` and `actions/setup-python@v5`) and pin `runs-on: ubuntu-24.04` before `ubuntu-latest` moves to Ubuntu 26 on 10-19.
-
-- **Owner:** `claude`
-- **Status:** proposed
-- **Implemented by:** not started
-- **Remaining work / acceptance:** Claude drafts; Larry reviews (the `.github/**` files are on the self-edit deny list, so this is a human-merged PR)
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** new branch from `origin/main` when claimed
-- **Plan:** none (small change; the PR body is the record)
-- **Scope:** `.github/workflows/*.yml`
-- **Next step:** Larry dispatches the proposed CI update; Claude claims it before changing workflows. Checked 10-02 on main: all three workflows still use `ubuntu-latest`, `actions/checkout@v4` and `actions/setup-python@v5`; `validate.yml` also uses `actions/setup-node@v4`. The planned runner transition remains an upcoming dependency, not a completed update.
-- **Updated:** 10-02
-
-</details>
-
 <details id="ws-13">
 <summary>WS-13 — T5 mail, calendar and brief: review the draft plan against current main · Claude (proposed)</summary>
 
@@ -185,14 +167,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-30: Mortimer crashed at 18:09:08 after switching from AirPods to the Mac speaker mid-answer. Log: the engine rebuilt (`audio engine rebuilt after configuration change`), Voice Processing then reported `failed to run downlink DSP (state fault)`, and `AVAudioPlayerNode.play()` raised `player did not see an IO cycle` five seconds later (uncaught Objective-C exception, SIGABRT).
 
 - **Owner:** `claude`
-- **Status:** landed in PR #144 (`c2f0f49`); not in verified production `39fc6f9`; physical acceptance open
+- **Status:** landed in PR #144 (`c2f0f49`) and deployed in `7c4637e` on 10-02; physical acceptance open (Larry deferred the AirPods check, 10-02)
 - **Implemented by:** Claude (Cowork)
 - **Remaining work / acceptance:** Larry switches AirPods to Mac speaker and back while Mortimer is mid-answer, both directions: the app stays up, with at most a short gap in his voice; the log shows `audio output flowing` after each rebuild.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main (PR #144, `c2f0f49`)
 - **Plan:** `docs/plans/MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md` (progress entry 2026-09-30)
 - **Scope:** `macos/JarvisKit/Sources/JarvisKit/AudioEngineIO.swift`, `macos/JarvisKit/Sources/JarvisKitObjC/`, `macos/JarvisKit/Package.swift` (new ObjC target), `JarvisFlags.outputIOWatchEnabled` in `JarvisConfig.swift`, `AudioEngineIOTests.swift`
-- **Next step:** Deploy a frozen main candidate, then Larry switches AirPods to Mac speaker and back during speech and checks for continued output and `audio output flowing`. The source rollback switch is `JARVIS_AUDIO_OUTPUT_WATCH=false`; the Objective-C `play()` catch remains.
+- **Next step:** larry: when convenient, switch AirPods to the Mac speaker and back while Mortimer is mid-answer; the app stays up and the log shows `audio output flowing`. Rollback without a rebuild: `JARVIS_AUDIO_OUTPUT_WATCH=false`; the Objective-C `play()` catch stays.
 - **Updated:** 10-02
 
 </details>
@@ -293,14 +275,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Voice workflows phases 1–4, Workflow Viewer, #80 privacy fix, DEPLOY-MAIN
 
 - **Owner:** `claude`
-- **Status:** landed (main `0b76f49`); thread-text fix landed 10-02 from branch `fix/ws07-bot-text-once`; Larry's thread check open
+- **Status:** landed (main `0b76f49`); thread-text fix landed 10-02 (#154) and deployed in `7c4637e` on 10-02; Larry's thread check open
 - **Implemented by:** Claude
 - **Remaining work / acceptance:** Larry: switch the reply guard from `log` to `correct` once the live log shows its precision. Recounted 09-30: the bot log holds four guard events (09-25, 09-29 twice, 09-30), all `action=logged kind=refusal`; the other `reply_guard=log` lines are startup settings, not events. Still not enough to judge precision. Backlog F1 (retry guard vs a different place) is in this area. Thread text once (10-02 fix): on a build that contains it, Larry sees each spoken answer once in the conversation thread (UI2-22).
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main
 - **Plan:** `docs/plans/MORTIMER_VOICE_WORKFLOWS_PLAN.md`, `docs/plans/MORTIMER_WORKFLOW_VIEWER_PLAN.md`
 - **Scope:** —
-- **Next step:** larry: deploy, then check one spoken answer in the thread (shows once). larry: guard-mode decision after more live use (four events so far).
+- **Next step:** larry: ask one question and check the answer shows once in the conversation thread; guard-mode decision after more live use (four events so far).
 - **Updated:** 10-02
 
 </details>
@@ -391,6 +373,24 @@ Claude’s work or enable any runtime feature.
 ### Completed: accepted product work and closed documentation reviews
 
 Accepted product workstreams and closed documentation reviews are listed below; implementation milestones also appear in §6.
+
+<details id="ws-12">
+<summary>WS-12 — CI upkeep before the Ubuntu 26 runner switch · Claude (accepted 10-02)</summary>
+
+**Workstream:** Update the GitHub Actions versions (Node 20 deprecation warnings on `actions/checkout@v4` and `actions/setup-python@v5`) and pin `runs-on: ubuntu-24.04` before `ubuntu-latest` moves to Ubuntu 26 on 10-19.
+
+- **Owner:** `claude`
+- **Status:** accepted: every workflow pins `runs-on: ubuntu-24.04` and uses `actions/checkout@v7`, `actions/setup-python@v7` and `actions/setup-node@v7` (node24); the PR's checks ran green on them and Larry reviewed the diff before merging (10-02)
+- **Implemented by:** Claude (Cowork)
+- **Remaining work / acceptance:** None for WS-12. Not changed here: the frontend build still sets `node-version: "20"`; moving it is a separate decision.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (branch `ws12/ci-runner-pins`)
+- **Plan:** none (small change; the PR body is the record)
+- **Scope:** —
+- **Next step:** None for WS-12.
+- **Updated:** 10-02
+
+</details>
 
 <details id="ws-19">
 <summary>WS-19 — Repository review and unified roadmap reconciliation · Codex</summary>
@@ -666,6 +666,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-10-02 (WS-12 accepted; WS-20 Phase A recorded): Claude (Cowork). WS-12: every workflow pins `runs-on: ubuntu-24.04` and uses actions/checkout, setup-python and setup-node v7 (node24), ahead of `ubuntu-latest` moving to Ubuntu 26 on 10-19; the PR's checks ran on them. WS-20 Phase A: plan (#153), WS-07 text fix (#154) and #147's update landed; #138 closed; main `7c4637e` deployed 10-02 15:51 with a clean receipt. Left: Codex reviews #147 and the B4 checker and lands #142; Larry deferred the WS-18 AirPods check. Rows: WS-07, WS-12, WS-18, WS-20.
 
 - 2026-10-02 (WS-07 fix: Mortimer's lines doubled in the thread): Claude (Cowork). Larry saw each Mortimer line twice, interleaved, in the CC7a thread; the LLM context and the server transcript held it once. Cause: pipecat's RTVI observer sends one `bot-llm-text` per LLM text frame; the LLM pushes token frames and ReplyGuard (`log` mode in production) pushes new sentence frames, so the app received both. Fix: the observer ignores frames pushed by the LLM itself (`rtvi_observer_params`, `build_task`); every LLM frame is still reported once when the guard passes it on, and the thread shows what is spoken. Reproduced and pinned in `tests/unit/test_rtvi_bot_text.py`. Remaining: Larry's thread check on a build that contains it (UI2-22).
 
