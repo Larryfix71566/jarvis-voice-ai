@@ -896,7 +896,7 @@ async def test_client_disconnect_ends_task_and_folds_memory(monkeypatch, tmp_pat
     memory_watcher_stopped = []
 
     class FakeTask:
-        def __init__(self, pipeline, observers=None, params=None):
+        def __init__(self, pipeline, observers=None, params=None, rtvi_observer_params=None):
             self._ended = asyncio.Event()
 
         async def cancel(self):
@@ -1051,7 +1051,7 @@ async def test_keyhealth_notice_kill_switch(monkeypatch, tmp_path, env_value, ex
     cancelled, folded, constructed = [], [], []
 
     class FakeTask:
-        def __init__(self, pipeline, observers=None, params=None):
+        def __init__(self, pipeline, observers=None, params=None, rtvi_observer_params=None):
             self._ended = asyncio.Event()
 
         async def cancel(self):
@@ -1200,7 +1200,7 @@ async def test_timing_tools_are_bound_for_the_session_and_released_at_teardown(
     seen: dict = {}
 
     class FakeTask:
-        def __init__(self, pipeline, observers=None, params=None):
+        def __init__(self, pipeline, observers=None, params=None, rtvi_observer_params=None):
             self._ended = asyncio.Event()
 
         async def cancel(self):
@@ -1332,7 +1332,7 @@ async def test_stt_row_written_at_teardown(monkeypatch, tmp_path):
     recorded: list[dict] = []
 
     class FakeTask:
-        def __init__(self, pipeline, observers=None, params=None):
+        def __init__(self, pipeline, observers=None, params=None, rtvi_observer_params=None):
             self._ended = asyncio.Event()
 
         async def cancel(self):
@@ -1464,7 +1464,7 @@ async def test_shared_registry_survives_session_teardown(monkeypatch, tmp_path):
     constructed, started, stopped, seen = [], [], [], []
 
     class FakeTask:
-        def __init__(self, pipeline, observers=None, params=None):
+        def __init__(self, pipeline, observers=None, params=None, rtvi_observer_params=None):
             self._ended = asyncio.Event()
 
         async def cancel(self):
@@ -1597,7 +1597,7 @@ async def test_late_result_hook_arms_the_neutralizer(monkeypatch, tmp_path, flag
     captured: dict = {}
 
     class FakeTask:
-        def __init__(self, pipeline, observers=None, params=None):
+        def __init__(self, pipeline, observers=None, params=None, rtvi_observer_params=None):
             captured["observers"] = list(observers or [])
             self._ended = asyncio.Event()
 
@@ -1748,7 +1748,7 @@ async def test_notices_ride_the_greeting_and_a_dead_session_refuses_late_results
     notices._reset_live_session_for_tests()
 
     class FakeTask:
-        def __init__(self, pipeline, observers=None, params=None):
+        def __init__(self, pipeline, observers=None, params=None, rtvi_observer_params=None):
             self._ended = asyncio.Event()
             self.handlers: dict = {}
             captured["task"] = self

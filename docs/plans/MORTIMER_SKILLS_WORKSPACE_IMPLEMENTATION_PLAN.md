@@ -2841,3 +2841,36 @@ This closes staged source deployment, not live feature acceptance or activation.
 No runtime feature flags or provider routes were deliberately changed by this
 operation. Remote enabled-mode acceptance, provider/VM/voice/display/accessibility
 and plan-specific activation/rollback gates remain open where previously open.
+
+### 2026-09-30 — live UI audit and dormant-auth explanation
+
+Larry assigned Codex the remaining WS-03 acceptance work in ROADMAP PR #143.
+Production code and app bundle both report `39fc6f9`. In the connected native
+app, the six-package library, selected skill Overview, intended Process steps,
+and no-trace Activity state were observed. The owner-scoped Versions endpoint
+returns HTTP 503 while bearer authentication is dormant, as designed; the
+running UI called this a connection failure. A bounded native wording fix on
+the WS-03 branch explains this exact state without changing the auth boundary.
+The focused Skills rendering suite passes 20 tests. See the dated
+[live UI audit](../acceptance/skills-workspace/receipts/live-ui-audit-2026-09-30.md).
+No new SW-A–SW-L acceptance gate is closed. Real run/voice/accessibility,
+physical-display, Tart lifecycle, provider evaluation, performance-soak and
+activation/rollback evidence remain separate open gates.
+
+PR #145 passed all five GitHub checks and merged as `9da99d4` on 2026-09-30.
+The running production app and backend still report `39fc6f9`; the merged
+wording has not been visually verified there. The app session was interrupted
+while continuing native control inspection, so that attempt supplies no
+additional voice or accessibility acceptance evidence. The next bounded step
+is deployment and UI verification of this merge, followed by the remaining
+live gates once local caller authentication is decided under WS-04.
+
+On the same source candidate (`9da99d4`; branch `4f02940` adds only status
+documentation), native tests pass on the target MacBook Air `Mac17,4`, Apple
+M5, macOS 27.0: JarvisKit 219/219 and the full MortimerHost command exits
+successfully. Its 100-sample rendered Skills benchmark reports wide/compact
+selection-to-layout p95 **13.099/7.683 ms** (20 ms limit) and cached
+navigation p95 **44.646/28.173 ms** (100 ms limit), with zero detail requests
+during measurement. These are local sub-budget results only. They do not
+replace paired voice p95, a ten-minute live-trace memory soak, actual speech,
+VoiceOver or a physical second-display check; SW-K and SW-I remain open.

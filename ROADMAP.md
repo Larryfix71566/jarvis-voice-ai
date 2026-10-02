@@ -2,7 +2,7 @@
 
 This file is the single record of **who is doing what** in this repository, for every system that writes code here. Plans (`docs/plans/`) hold design. Receipts (`docs/acceptance/`) hold evidence. **This file holds ownership and state.**
 
-**Last full reconciliation:** 2026-09-30, every §2 block rechecked against main `b48d93f` (after Codex's PR #130 WS-01/WS-08 status update), the DEPLOY-MAIN receipts and the live logs (Claude, Cowork). **Latest verified production:** `03b9e60` (PR #136 merge), deployed 09-30 12:45 EDT by DEPLOY-MAIN (receipt `deployment-receipt-03b9e60.json`: Python 4,938 passed / 7 skipped, MortimerHost 404 / 6 skipped / 0 failures, JarvisKit 219 / 0). Every landed revision named in the blocks below is included in that release. Original evaluation: [cross-system evaluation](docs/reviews/CROSS_SYSTEM_PLAN_EVAL_2026-09-27.md).
+**Last full reconciliation:** 2026-10-02, read-only review of every §2 block against `origin/main` `a39136a` (before the WS-19 claim), tracked code/configuration, plan and acceptance headers, open PRs, CI, and the latest DEPLOY-MAIN log. **Latest verified production:** `39fc6f9` (PR #141 merge), deployed 09-30 17:53 EDT. That deployment passed Python 4,938 / 7 skipped, MortimerHost 416 / 6 skipped / 0 failures, JarvisKit 219 / 0; phase D reported admin/vault 200, bot 307, and matching source/bundle revision. Main is ahead of production: PRs #143–#149 include WS-03, WS-04 and WS-18 changes that have **not** been verified in the running app. This review creates no new live acceptance. Original evaluation: [cross-system evaluation](docs/reviews/CROSS_SYSTEM_PLAN_EVAL_2026-09-27.md).
 
 ---
 
@@ -72,7 +72,7 @@ Claude’s work or enable any runtime feature.
 
 | System | Where it works | How work reaches main | Reads |
 |---|---|---|---|
-| `codex` | Worktrees of `~/Documents/Codex/2026-09-09/can/work/active-repo`. Current: `codex-isolated-20260924`, branch `codex/isolated-20260924`. | Larry pushes the branch and opens the PR | `AGENTS.md` |
+| `codex` | Isolated worktrees under `~/Documents/Codex/2026-09-09/can/work/`; the active branch for each task is named in its §2 block. | Codex pushes a scoped branch and opens a PR; Larry may also push a human-only protection change | `AGENTS.md` |
 | `claude` | Cowork: Linux VM plus a bridge to the Mac, never runs git on the Mac. Claude Code: a GitHub clone. | A branch or patch plus a commit-message file; Larry commits and pushes unless the session has GitHub access | `CLAUDE.md` |
 | `larry` | The Mac, production, the vault, GitHub | Merges PRs; deploys with `scripts/deploy_main.sh` | — |
 
@@ -87,6 +87,24 @@ Claude’s work or enable any runtime feature.
 
 ### Needs work: not yet built (proposed, claimed, in progress, in review, blocked)
 
+<details id="ws-20">
+<summary>WS-20 — Roadmap joint working: catch-up and drift prevention · Claude + Codex (proposed)</summary>
+
+**Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
+
+- **Owner:** `claude` (B4 checker, plan) and `codex` (B1–B3, proposed until Codex claims them)
+- **Status:** in-progress: Phase A landed — plan #153, WS-07 fix #154, #147 brought up to date, #138 closed, main `7c4637e` deployed 10-02 15:51 (receipt clean); #142 and #147 wait on Codex. B4 drift checker built by Claude and sent to Codex for review. B1–B3 not started
+- **Implemented by:** —
+- **Remaining work / acceptance:** Phase A: #138 closed; #142, #147 and #152 merged; production at main; Larry's WS-18 and thread checks recorded. Phase B: the checker passes on main in CI; no row states current production; the next 10 PRs merge with no change-log conflict. Phase C rules are in §0.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (plan); B4 on branch `ws20/b4-roadmap-check`
+- **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
+- **Scope:** B4 (Claude): `scripts/check_roadmap.py`, `tests/unit/test_check_roadmap.py`, the drift-check step in `.github/workflows/validate.yml`. B1–B3 (Codex, once claimed): `ROADMAP.md` §0, §8 and production wording, `docs/roadmap-log/**`.
+- **Next step:** codex: review #147 and the B4 checker PR; resolve and land #142; claim B1–B3. larry: merge each after Codex approves.
+- **Updated:** 10-02
+
+</details>
+
 <details id="ws-05">
 <summary>WS-05 — Model access: subscriptions, APIs and SAYGM · Codex</summary>
 
@@ -100,8 +118,8 @@ Claude’s work or enable any runtime feature.
 - **Where:** `codex/isolated-20260924`
 - **Plan:** `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md`
 - **Scope:** `jarvis/model_routing.py`, `jarvis/model_preferences.py`, `config/model_access.yaml`
-- **Next step:** Begin MAR-A: reconcile the deployed Mac checkout and capture live baseline evidence. Checked 09-30: no MAR-A commit on main or on `origin/codex/isolated-20260924` since the claim (plan last changed 09-22).
-- **Updated:** 09-30
+- **Next step:** Begin MAR-A against verified production `39fc6f9`, then capture live route/capability evidence. Read-only 10-02 check: no MAR-A change has landed since the claim; `config/model_access.yaml` still defaults to `direct_api`, with no automatic paid fallback. The route rollout remains gated.
+- **Updated:** 10-02
 
 </details>
 
@@ -111,33 +129,15 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-30: conversation is spread over one tab per turn, only Mortimer's side shows, the tab strip fills up, and asking again re-fetches. Increment CC7a of the Command Console plan (WS-09's plan): one conversation thread with both sides, results as inline cards, Recents instead of tabs, reuse a fresh result by subject.
 
 - **Owner:** `claude` (implementation); `codex` reviews every increment before merge
-- **Status:** review: CC7a.1 (conversation thread) in PR, awaiting Codex review; design approved 09-30; CX-15 resolved
+- **Status:** in-progress: CC7a.1 landed (PR #140, `1a0aac7`, Codex reviewed) and deployed in `39fc6f9`; CC7a.1b is open in PR #147 with passing checks but a merge conflict; UI2-22 Mac check and CC7a.2–.4 remain open
 - **Implemented by:** Claude (Cowork): CC7a.1
 - **Remaining work / acceptance:** CC7a.1-CC7a.4, each a reviewed PR; RELEASE_READINESS UI2-22..UI2-25 on the Mac. UI2-04, UI2-09 and UI2-13 are held until then. Approved design: `docs/interface-research/cc7a/cc7a-approved-design-2026-09-30.html` (transcript rows, compact cards, Recents menu, reuse reference line, no-jump notice); Codex's boundaries in plan §7.2.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** branch `ws17/cc7a1-conversation-thread`
+- **Where:** main (CC7a.1); PR #147 branch `ws17/cc7a1b-single-console-row` (unmerged)
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md` §7.1 item 9 and §7.2
 - **Scope:** `App/ResponseResultRouter.swift`, `Stores/WorkspaceStore.swift`, `Stores/ConversationStore.swift`, `Console/AdaptiveStageView.swift`, `Console/TopBarView.swift`, `Display/WorkspaceView.swift`, `App/AppMessageRouter.swift` (weather's select-on-arrival only), voice result actions (`App/ConsoleActionCoordinator.swift`, `App/ConsoleActionRegistry.swift`, JarvisKit `ConsoleProtocol.swift`, `jarvis/bot/console_protocol.py`), DisplayPayload `subject_key` (JarvisKit + `jarvis/bot/display.py`), weather tools' reuse check; tests for each
-- **Next step:** Codex reviews CC7a.1 against plan 7.2 boundary 1; Larry merges and deploys; Larry checks UI2-22 on the Mac; then CC7a.2 (inline cards, no focus stealing)
-- **Updated:** 09-30
-
-</details>
-
-<details id="ws-12">
-<summary>WS-12 — CI upkeep before the Ubuntu 26 runner switch · Claude (proposed)</summary>
-
-**Workstream:** Update the GitHub Actions versions (Node 20 deprecation warnings on `actions/checkout@v4` and `actions/setup-python@v5`) and pin `runs-on: ubuntu-24.04` before `ubuntu-latest` moves to Ubuntu 26 on 10-19.
-
-- **Owner:** `claude`
-- **Status:** proposed
-- **Implemented by:** not started
-- **Remaining work / acceptance:** Claude drafts; Larry reviews (the `.github/**` files are on the self-edit deny list, so this is a human-merged PR)
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** new branch from `origin/main` when claimed
-- **Plan:** none (small change; the PR body is the record)
-- **Scope:** `.github/workflows/*.yml`
-- **Next step:** Larry picks it; Claude marks it `claimed` and drafts the change. Checked 09-30 on main: all three workflows still use `runs-on: ubuntu-latest`, `actions/checkout@v4` and `actions/setup-python@v5` (`validate.yml` also `actions/setup-node@v4`). 19 days to the 10-19 switch.
-- **Updated:** 09-30
+- **Next step:** Claude resolves PR #147 against current main and Codex reviews that increment before merge; Larry checks UI2-22 on the deployed conversation view. Then CC7a.2 adds inline cards without focus stealing, including weather. The WS-18 fix is merged but awaits deployment and a physical device-switch check.
+- **Updated:** 10-02
 
 </details>
 
@@ -155,11 +155,29 @@ Claude’s work or enable any runtime feature.
 - **Plan:** `docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md`. Codex edited this plan on 09-26, so coordinate with Codex before any edit. Migration `0035` stays reserved for T5.
 - **Scope:** that plan file only
 - **Next step:** Larry picks it; confirm with Codex that it has no pending edits to the plan
-- **Updated:** 09-28
+- **Updated:** 10-02 (read-only: plan remains draft and no T5 code/claim found)
 
 </details>
 
-### Built: waiting on live checks or acceptance
+### Built: live acceptance or status publication still open
+
+<details id="ws-18">
+<summary>WS-18 — Native audio: survive an output switch during speech · Claude</summary>
+
+**Workstream:** Larry, 09-30: Mortimer crashed at 18:09:08 after switching from AirPods to the Mac speaker mid-answer. Log: the engine rebuilt (`audio engine rebuilt after configuration change`), Voice Processing then reported `failed to run downlink DSP (state fault)`, and `AVAudioPlayerNode.play()` raised `player did not see an IO cycle` five seconds later (uncaught Objective-C exception, SIGABRT).
+
+- **Owner:** `claude`
+- **Status:** landed in PR #144 (`c2f0f49`) and deployed in `7c4637e` on 10-02; physical acceptance open (Larry deferred the AirPods check, 10-02)
+- **Implemented by:** Claude (Cowork)
+- **Remaining work / acceptance:** Larry switches AirPods to Mac speaker and back while Mortimer is mid-answer, both directions: the app stays up, with at most a short gap in his voice; the log shows `audio output flowing` after each rebuild.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (PR #144, `c2f0f49`)
+- **Plan:** `docs/plans/MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md` (progress entry 2026-09-30)
+- **Scope:** `macos/JarvisKit/Sources/JarvisKit/AudioEngineIO.swift`, `macos/JarvisKit/Sources/JarvisKitObjC/`, `macos/JarvisKit/Package.swift` (new ObjC target), `JarvisFlags.outputIOWatchEnabled` in `JarvisConfig.swift`, `AudioEngineIOTests.swift`
+- **Next step:** larry: when convenient, switch AirPods to the Mac speaker and back while Mortimer is mid-answer; the app stays up and the log shows `audio output flowing`. Rollback without a rebuild: `JARVIS_AUDIO_OUTPUT_WATCH=false`; the Objective-C `play()` catch stays.
+- **Updated:** 10-02
+
+</details>
 
 <details id="ws-01">
 <summary>WS-01 — Reliability, privacy and memory gaps · Codex</summary>
@@ -174,8 +192,8 @@ Claude’s work or enable any runtime feature.
 - **Where:** main (`539f8f6` foundation; PR #125 `ab2a2ef` claim-order fix); shared-roadmap documentation: `codex/isolated-20260924`
 - **Plan:** `docs/plans/MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md`. The 12 gap-index plans fold into it (CX-05).
 - **Scope:** Existing WS-01 scope includes execution routes in `jarvis/admin/server.py`. This bounded follow-up changes only app-build/self-edit terminal claim ordering there, focused tests in `tests/unit/test_admin_appbuild.py` and `tests/unit/test_admin_selfedit.py`, this row's plan/acceptance evidence, and `ROADMAP.md` status. It does not edit WS-08 orb files or alter idempotency decisions.
-- **Next step:** Complete the original WS-01 physical/live acceptance; the action-claim CI repair and PR #115 integration need no further code change.
-- **Updated:** 09-29
+- **Next step:** Complete the original WS-01 physical/live acceptance on a frozen deployed candidate. The action-claim CI repair is on main; no new WS-01 code change was found in this read-only review.
+- **Updated:** 10-02 (source/receipt recheck; no new live gate)
 
 </details>
 
@@ -185,15 +203,15 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Subscription runtime isolation (GC24-04)
 
 - **Owner:** `codex`
-- **Status:** landed; deployed `539f8f6`, still in production `03b9e60`; live gates open
+- **Status:** landed; deployed since `539f8f6` and present in production `39fc6f9`; live capability/isolation gates open
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Codex; live account checks as required
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main (`539f8f6`)
 - **Plan:** `docs/plans/MORTIMER_SUBSCRIPTION_RUNTIME_ISOLATION_PLAN_2026-09-25.md`
 - **Scope:** `jarvis/subscription.py`
-- **Next step:** Staged deployment verified; run live capability/isolation gates
-- **Updated:** 09-28
+- **Next step:** Run the installed-runtime capability, provider, billing and isolation checks in the WS-02 plan; an authenticated text probe alone does not close them.
+- **Updated:** 10-02 (source/plan recheck; no new live gate)
 
 </details>
 
@@ -203,15 +221,15 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Skills Workspace and skill creation (T6; supersedes `MORTIMER_SKILL_AUTHORING_PLAN.md`). Its own view, separate from the Workflow Viewer (Larry, 09-27)
 
 - **Owner:** `codex`
-- **Status:** landed; deployed `539f8f6`, still in production `03b9e60`; activation/live acceptance open
+- **Status:** in-progress: PRs #145 (`9da99d4`) and #146 (`92e9528`) merged; Versions dormant-auth wording, partial UI audit and native/performance evidence are on main but not deployed in production `39fc6f9`; SW-B and SW-C remain the only accepted gates (2/12); activation remains off
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Codex; Larry for human review and physical acceptance
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (`539f8f6`)
+- **Where:** `codex/ws03-live-acceptance-20260930` (acceptance work); foundation on main (`539f8f6`)
 - **Plan:** `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`
 - **Scope:** `jarvis/skill_*.py`, `jarvis/agent_skills.py`, `jarvis/selfedit/skill_policy.py`, `/api/skills*` in `jarvis/admin/server.py`. The five console view-mode Swift files are **shared with WS-07's landed Workflow Viewer**: add a new `skills` mode beside `workflows`; do not replace or restyle the viewer.
-- **Next step:** Staged deployment verified; complete Skills UI/voice/provider/VM and activation gates
-- **Updated:** 09-28
+- **Next step:** Deploy and visually verify the merged Versions explanation, then run recorded-run/voice/accessibility, physical-display and real-VM checks against a frozen release. Owner-scoped Versions, runtime inventory and creator await WS-04 local authenticated client onboarding; provider evaluation, activation and rollback remain separate gates.
+- **Updated:** 10-02
 
 </details>
 
@@ -221,15 +239,15 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Remote access T2: bearer tokens, fail-closed bind, Tailscale
 
 - **Owner:** `codex` (Larry, 09-27)
-- **Status:** landed; deployed `539f8f6`, still in production `03b9e60`; auth remains dormant
+- **Status:** in-progress: R2 local-only design and separate remote-bind guard merged in PR #149 (`a39136a`), but not deployed in production `39fc6f9`; token provisioning and enabled-mode acceptance remain open; production authentication remains dormant
 - **Implemented by:** Codex (remote foundation and R1)
-- **Remaining work / acceptance:** Codex; Larry decides activation/token onboarding
+- **Remaining work / acceptance:** Codex prepares local-only onboarding; Larry separately decides activation and any remote bind
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (`539f8f6`)
-- **Plan:** `docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md` (DRAFT) + **Addendum R1** (dormant-merge fixes, approved 09-27)
-- **Scope:** `jarvis/auth.py`, `jarvis/authmw.py`, `jarvis/bind.py`, `jarvis/urls.py`, `jarvis/bot/server.py`, auth middleware and bind in `jarvis/admin/server.py`. Plus the integration points in CX-11: `jarvis/bot/status_tool.py`, `scripts/deploy_main.sh` health checks, `mcp_servers/mcp_selfedit/logic.py` headers
-- **Next step:** Dormant deployment verified; enabled-mode gate and token onboarding remain separate
-- **Updated:** 09-28
+- **Where:** main (R1 foundation `539f8f6`; R2 guard PR #149 `a39136a`); further onboarding work on `codex/ws04-local-onboarding-20260930`
+- **Plan:** `docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md` (R1 implemented; R2 local-only onboarding design)
+- **Scope:** `jarvis/auth.py`, `jarvis/authmw.py`, `jarvis/bind.py`, `jarvis/urls.py`, `jarvis/bot/server.py`, auth middleware and bind in `jarvis/admin/server.py`. Plus the integration points in CX-11: `jarvis/bot/status_tool.py`, `scripts/deploy_main.sh` health checks, `mcp_servers/mcp_selfedit/logic.py` headers. The R2 design proposes `scripts/provision_local_auth.py`, a small JarvisKit stdin-to-Keychain executable, its `Package.swift` target, and tests; no provisioner is implemented.
+- **Next step:** Larry selects the local token-onboarding method (supervised deploy setup, one-time CLI, or Mac pairing). Then Codex implements and tests the chosen vault/Keychain path and corrects the R2 plan header, which still calls the merged guard branch-only. Preparation does not itself enable auth; local activation and any remote bind remain separate decisions.
+- **Updated:** 10-02
 
 </details>
 
@@ -247,7 +265,7 @@ Claude’s work or enable any runtime feature.
 - **Plan:** `docs/plans/MORTIMER_SELF_SERVICE_ACCESS_IMPLEMENTATION_SPEC.md` and its companion `docs/plans/MORTIMER_SELF_SERVICE_ACCESS_AND_RECOVERY_PLAN.md` (added to main in PR #100, CX-09). Registry half: `docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md`
 - **Scope:** —
 - **Next step:** Larry runs the spoken and process checks from Claude's checklist (`Claude outputs/checklists/WS-06_self_service_checks.md`), then decides the `model_access.yaml` tier (Claude recommends deny).
-- **Updated:** 09-29
+- **Updated:** 10-02 (read-only: recorded Mac checks and tier decision remain open)
 
 </details>
 
@@ -257,19 +275,17 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Voice workflows phases 1–4, Workflow Viewer, #80 privacy fix, DEPLOY-MAIN
 
 - **Owner:** `claude`
-- **Status:** landed (main `0b76f49`)
+- **Status:** landed (main `0b76f49`); thread-text fix landed 10-02 (#154) and deployed in `7c4637e` on 10-02; Larry's thread check open
 - **Implemented by:** Claude
-- **Remaining work / acceptance:** Larry: switch the reply guard from `log` to `correct` once the live log shows its precision. Recounted 09-30: the bot log holds four guard events (09-25, 09-29 twice, 09-30), all `action=logged kind=refusal`; the other `reply_guard=log` lines are startup settings, not events. Still not enough to judge precision. Backlog F1 (retry guard vs a different place) is in this area.
+- **Remaining work / acceptance:** Larry: switch the reply guard from `log` to `correct` once the live log shows its precision. Recounted 09-30: the bot log holds four guard events (09-25, 09-29 twice, 09-30), all `action=logged kind=refusal`; the other `reply_guard=log` lines are startup settings, not events. Still not enough to judge precision. Backlog F1 (retry guard vs a different place) is in this area. Thread text once (10-02 fix): on a build that contains it, Larry sees each spoken answer once in the conversation thread (UI2-22).
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main
 - **Plan:** `docs/plans/MORTIMER_VOICE_WORKFLOWS_PLAN.md`, `docs/plans/MORTIMER_WORKFLOW_VIEWER_PLAN.md`
 - **Scope:** —
-- **Next step:** Guard-mode decision after more live use (four events so far). Plan headers corrected in PR #100 (09-28).
-- **Updated:** 09-30
+- **Next step:** larry: ask one question and check the answer shows once in the conversation thread; guard-mode decision after more live use (four events so far).
+- **Updated:** 10-02
 
 </details>
-
-
 
 <details id="ws-09">
 <summary>WS-09 — Command Console and Atlas acceptance · Larry acceptance</summary>
@@ -277,23 +293,23 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Command Console and Atlas release acceptance
 
 - **Owner:** `larry`
-- **Status:** landed (PR #99, merge commit `4986c10`); deployed in `eb24e81` on 09-29, still in production `03b9e60`; Mac acceptance remains open
+- **Status:** landed (PR #99, `4986c10`) and present in production `39fc6f9`; Mac acceptance remains open, with UI2-04/09/13 dependent on WS-17
 - **Implemented by:** Codex (Codex desktop; exact model build is not exposed)
 - **Remaining work / acceptance:** Larry (Mac/live acceptance)
 - **Model version:** not recorded in a handoff receipt.
 - **Where:** [PR #99](https://github.com/Larryfix71566/jarvis-voice-ai/pull/99), merged to `main` as `4986c10`
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md`
 - **Scope:** —
-- **Next step:** Hold UI2-04, UI2-09 and UI2-13 until WS-17 (CC7a, conversation-first stage) lands; other physical acceptance can proceed on the deployed build
-- **Updated:** 09-29
+- **Next step:** Complete unaffected physical acceptance on the deployed build. Reconcile the WS-09 response-routing runbook with CC7a before UI2-04/09/13: it still describes one full answer in a result card and brief conversation captions, while CC7a.1 now shows full transcript rows and does not create a WorkspaceResult for ordinary spoken answers.
+- **Updated:** 10-02
 
 - [ ] **Single transcript surface (Larry, 2026-09-28):** keep the transcript in the main window; remove the duplicate transcript/captions from the left/compact panel and reclaim the vacated space. Preserve the orb, speaker feedback, microphone/voice controls, and main-window transcript history/accessibility. This supersedes earlier requirements to repeat brief captions in the compact rail; full response/results routing remains unchanged.
-  - **Status:** Landed in `main` via PR #99 (`4986c10`); implementation and automated validation complete; deployment and user/Mac acceptance remain open.
+  - **Status:** Landed in `main` via PR #99 (`4986c10`) and included in production `39fc6f9`; implementation and automated validation complete; user/Mac acceptance remains open.
   - **Implementation owner:** Codex, explicitly dispatched by Larry on 2026-09-29; follows the Codex/Luna handoff specification. **Acceptance:** Larry. **Plan author:** Codex.
   - **Scope:** `macos/MortimerHost/Sources/MortimerHost/Console/OrbFieldView.swift`, `macos/MortimerHost/Tests/MortimerHostTests/CompactConversationTests.swift`, this roadmap and the linked plan progress only.
   - **Implementation handoff:** [WS-09 transcript cleanup — Luna implementation handoff](docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md#ws-09-transcript-cleanup--luna-implementation-handoff).
   - **Validation:** focused compact transcript tests 3/3, live response stream 2/2, result router 7/7; full MortimerHost 374 passed, 7 environment-dependent skips, 0 failures. `git diff --check` passed. Render captures inspected at compact widths 512 and 1000; paths and details are in the linked plan.
-  - **Log (2026-09-29):** PR #99 merged as `4986c10`; Codex’s layout-v2-only caption removal and rendered-regression tests are in `main`. Full response/history surfaces and legacy layout are preserved. No deployment or Mac acceptance has been performed. Source retains the “Microphone muted” indicator, but automated coverage does not explicitly assert that exact compact status yet.
+  - **Log (2026-10-02 review):** PR #99 merged as `4986c10`; Codex’s layout-v2-only compact caption removal is in production `39fc6f9`. WS-17 CC7a.1 subsequently changed ordinary spoken-answer placement in layout 2; that separate behavior is not a WS-09 transcript-cleanup regression. Mac acceptance of the compact-panel cleanup is still unrecorded. Source retains the “Microphone muted” indicator, but automated coverage does not explicitly assert that exact compact status yet.
   - **Close when:** live user and Mortimer speech updates the main-window transcript without a duplicate in the compact rail, in single- and multi-monitor layouts; no blank transcript-sized gap or loss of voice controls/history.
 
 </details>
@@ -308,11 +324,11 @@ Claude’s work or enable any runtime feature.
 - **Implemented by:** Claude: echo guard and auto-settlement; Codex: durable admission/classification and merge integration
 - **Remaining work / acceptance:** Larry: merged-pipeline acceptance and staged rollout
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (merged pipeline deployed from `539f8f6`; in production `03b9e60`)
+- **Where:** main (merged pipeline deployed from `539f8f6`; present in production `39fc6f9`)
 - **Plan:** `docs/plans/MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md`
 - **Scope:** —
-- **Next step:** CX-07 is resolved in main and deployed (§4). Production admission stays fail-closed per `docs/acceptance/memory-automation/STATUS.md` (last reconciled 09-25; not rechecked live on 09-30). Larry chooses staged Mac enablement.
-- **Updated:** 09-30
+- **Next step:** CX-07 is resolved in main and deployed (§4). Production admission remains fail-closed according to the last recorded memory status (09-25); this review did not remeasure live stage/benefit/cost. Larry chooses staged Mac enablement only after the recorded monitoring gate.
+- **Updated:** 10-02 (read-only; no new live memory gate)
 
 </details>
 
@@ -329,8 +345,70 @@ Claude’s work or enable any runtime feature.
 - **Where:** —
 - **Plan:** `docs/plans/MORTIMER_ADAPTIVE_INTERFACE_PLAN.md`
 - **Scope:** —
-- **Next step:** `docs/acceptance/adaptive-interface/RELEASE_READINESS.md`. Checked 09-30: 3 of the 26 UI2 items are ticked (UI2-01, UI2-04a, UI2-21); UI2-04, UI2-09 and UI2-13 are held for WS-17. That file's header still names `94a5641` as the last recorded deployment; production is `03b9e60` (DEPLOY-MAIN receipt 09-30). The header is Codex's to correct.
-- **Updated:** 09-30
+- **Next step:** `docs/acceptance/adaptive-interface/RELEASE_READINESS.md` still has 3 of 26 UI2 items checked (UI2-01, UI2-04a, UI2-21). UI2-04/09/13 wait for WS-17. Its header still calls `94a5641` the last recorded deployment and the shared runbook describes pre-CC7a answer routing; the acceptance owner must update both against `39fc6f9` before using them for a frozen-candidate sign-off.
+- **Updated:** 10-02
+
+</details>
+
+
+
+### Completed: accepted product work and closed documentation reviews
+
+Accepted product workstreams and closed documentation reviews are listed below; implementation milestones also appear in §6.
+
+<details id="ws-12">
+<summary>WS-12 — CI upkeep before the Ubuntu 26 runner switch · Claude (accepted 10-02)</summary>
+
+**Workstream:** Update the GitHub Actions versions (Node 20 deprecation warnings on `actions/checkout@v4` and `actions/setup-python@v5`) and pin `runs-on: ubuntu-24.04` before `ubuntu-latest` moves to Ubuntu 26 on 10-19.
+
+- **Owner:** `claude`
+- **Status:** accepted: every workflow pins `runs-on: ubuntu-24.04` and uses `actions/checkout@v7`, `actions/setup-python@v7` and `actions/setup-node@v7` (node24); the PR's checks ran green on them and Larry reviewed the diff before merging (10-02)
+- **Implemented by:** Claude (Cowork)
+- **Remaining work / acceptance:** None for WS-12. Not changed here: the frontend build still sets `node-version: "20"`; moving it is a separate decision.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (branch `ws12/ci-runner-pins`)
+- **Plan:** none (small change; the PR body is the record)
+- **Scope:** —
+- **Next step:** None for WS-12.
+- **Updated:** 10-02
+
+</details>
+
+<details id="ws-19">
+<summary>WS-19 — Repository review and unified roadmap reconciliation · Codex</summary>
+
+**Workstream:** Larry's 10-02 request to review the current repository and reconcile this roadmap against code, plans, acceptance evidence, deployment receipts, and PR state. Documentation and read-only review only.
+
+- **Owner:** `codex`
+- **Status:** landed: claim PR #150 merged as `f45f533`; reconciled roadmap PR #151 merged as `cfa0d2d`; docs-only review complete.
+- **Implemented by:** Codex (review and roadmap update)
+- **Remaining work / acceptance:** None for this documentation review. Product deployment and live acceptance remain in their own workstreams.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (PRs #150 and #151)
+- **Plan:** this bounded review is tracked in this block and §8; no new implementation plan.
+- **Scope:** `ROADMAP.md` only for edits; repository, plans, receipts, CI and PRs are read-only evidence.
+- **Next step:** None for WS-19; owners follow the open gates in their workstream blocks.
+- **Updated:** 10-02
+
+**Review findings (read-only, 10-02):** Six PRs (#143, #144, #145, #146, #148, #149) merged after the deployed `39fc6f9`; #143/#148 are claims, while WS-03/04/18 product changes remain undeployed. The remaining product gates are predominantly Mac/provider/activation evidence, not a missing implementation claim. PR #142 (WS-08 acceptance), PR #147 (WS-17 CC7a.1b), and the now-redundant PR #138 (CX-15 scope, already recorded by #139) were open with conflicts at review time. The shared acceptance runbook, adaptive release-readiness header, `docs/acceptance/IMPLEMENTATION_STATUS.md`, and WS-04 plan status header described older candidate/branch states; their owners must reconcile them before using them as current release evidence. No production setting, token, provider route or acceptance checkbox was changed by this review.
+
+</details>
+
+<details id="ws-08">
+<summary>WS-08 — Crystal orb, single shell · Claude + Codex (accepted 09-30)</summary>
+
+**Workstream:** Orb crystal glass (#90), revised to use the crystal shell exclusively
+
+- **Owner:** `codex`
+- **Status:** accepted: Larry reported WS-08 tested and accepted on 2026-09-30; deployed in `c3607e6`, deployed again in `03b9e60` on 09-30
+- **Implemented by:** Claude original crystal-glass workstream; Codex rendering performance fixes and single-shell cleanup
+- **Remaining work / acceptance:** None for WS-08. Larry explicitly reported the work tested and accepted on 09-30. This is Larry's overall sign-off; individual fixture/state/placement observations were not separately itemized. Deployment, release tests, five current fixtures, compact/expanded appearance and Reduce Motion evidence are in the linked receipt.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (PR #112, `e9388fc`; acceptance evidence PR #115, `8222940`)
+- **Plan:** `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`
+- **Scope:** Orb rendering, orb-specific configuration, performance/visual regression tests, and this plan's acceptance evidence.
+- **Next step:** None for WS-08
+- **Updated:** 10-02
 
 </details>
 
@@ -340,7 +418,7 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Make the WS-06 check #2 subscription probe work under launchd and report why it fails. It touches WS-02's file (CX-13). Larry decided 09-29: Claude lands, Codex reviews before merge.
 
 - **Owner:** `claude`
-- **Status:** landed (PR #102, merge `eb24e81`); deployed 09-29 10:07 EDT by DEPLOY-MAIN (Python 4879 passed, JarvisKit 219/0, MortimerHost 374/0)
+- **Status:** accepted for the bounded probe fix: PR #102 (`eb24e81`) deployed; 09-29 live daily probe passed and Codex post-merge review found no blocking issue. WS-06 overall acceptance remains separate.
 - **Implemented by:** Claude
 - **Remaining work / acceptance:** Live check passed: the `com.mortimer.status-daily` rerun at 14:11 UTC 09-29 shows `claude` `ok: true`. `codex` shows `not_installed`, which is correct because no Codex CLI is on the launchd PATH. Claude's earlier prediction of `gated` was wrong: `gated` appears only once a Codex CLI resolves. Codex completed a post-merge code review of PR #102 on 09-29; no blocking code issue found. The review did not independently reproduce the Mac Keychain/launchd test (CX-13).
 - **Model version:** not recorded; do not infer from system name.
@@ -350,30 +428,8 @@ Claude’s work or enable any runtime feature.
   2. `_claude_argv` and `_codex_argv` run `provider_command()`, which reads the same `JARVIS_*_SUBSCRIPTION_COMMAND` variable as the installed check.
   3. `probe_subscription` keeps the runtime's own category when the legacy message table falls through to `runtime_error`. A `SubscriptionCapabilityError` reports `gated`. The legacy table and the `verify_model_access` golden output are unchanged.
 - **Scope:** `jarvis/subscription.py`, `jarvis/status/subscriptions.py`, `tests/unit/test_subscription.py`, `tests/unit/test_status_subscriptions.py`
-- **Next step:** None for Codex review; Larry's live subscription acceptance remains as recorded in WS-06.
-- **Updated:** 09-29
-
-</details>
-
-### Completed: accepted, nothing left
-
-Accepted workstreams are listed below; implementation milestones also appear in §6.
-
-<details id="ws-08">
-<summary>WS-08 — Crystal orb, single shell · Claude + Codex (accepted 09-30)</summary>
-
-**Workstream:** Orb crystal glass (#90), revised to use the crystal shell exclusively
-
-- **Owner:** `codex`
-- **Status:** accepted: Larry reported WS-08 tested and accepted on 2026-09-30; deployed in `c3607e6`, retained in production `03b9e60`
-- **Implemented by:** Claude original crystal-glass workstream; Codex rendering performance fixes and single-shell cleanup
-- **Remaining work / acceptance:** None for WS-08. Larry explicitly reported the work tested and accepted on 09-30. This is Larry's overall sign-off; individual fixture/state/placement observations were not separately itemized. Deployment, release tests, five current fixtures, compact/expanded appearance and Reduce Motion evidence are in the linked receipt.
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** main (PR #112, `e9388fc`; acceptance evidence PR #115, `8222940`)
-- **Plan:** `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`
-- **Scope:** Orb rendering, orb-specific configuration, performance/visual regression tests, and this plan's acceptance evidence.
-- **Next step:** None for WS-08
-- **Updated:** 09-30
+- **Next step:** None for WS-14; continue the separate WS-06 spoken and process checks.
+- **Updated:** 10-02 (evidence recheck; no new Mac test)
 
 </details>
 
@@ -403,13 +459,13 @@ Accepted workstreams are listed below; implementation milestones also appear in 
 - **Owner:** `codex`
 - **Status:** accepted: PR #121 merged as `c3607e6` and DEPLOY-MAIN passed 09-29
 - **Implemented by:** Codex diagnosis and test-fixture repair
-- **Remaining work / acceptance:** None for this capture gate. Larry's DEPLOY-MAIN for `c3607e6` passed phase A: the real ScreenCaptureKit protected-window test executed and passed (4.825 s), MortimerHost ran 383 tests with six unrelated skips and zero failures, JarvisKit ran 218 tests with zero failures, and Python had 4,924 passes and seven skips. Phase D reported healthy services and matching code, production and app-bundle revisions. WS-08 was separately accepted by Larry on 09-30.
+- **Remaining work / acceptance:** None for this capture gate. Larry's DEPLOY-MAIN for `c3607e6` passed phase A: the real ScreenCaptureKit protected-window test executed and passed (4.825 s), MortimerHost ran 383 tests with six unrelated skips and zero failures, JarvisKit ran 218 tests with zero failures, and Python had 4,924 passes and seven skips. Phase D reported healthy services and matching code, production and app-bundle revisions. Larry accepted WS-08 overall on 09-30; PR #142 publishes its final acceptance receipt.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main (PR #117, `c5781a8`; PR #121, `c3607e6`); acceptance status on `codex/ws16-protected-capture-20260929`
 - **Plan:** `docs/plans/MORTIMER_PROTECTED_WINDOW_CAPTURE_GATE_PLAN.md`
 - **Scope:** `macos/MortimerHost/Tests/MortimerHostTests/ProtectedDisplayContentTests.swift`, this row's plan and acceptance evidence, and `ROADMAP.md` status only. Product display code remains outside this row; WS-15 owns `Display/DisplayContentView.swift` while active.
-- **Next step:** None for WS-16 or WS-08
-- **Updated:** 09-29
+- **Next step:** None for WS-16 or WS-08.
+- **Updated:** 10-02 (status cross-check only)
 
 </details>
 
@@ -437,6 +493,8 @@ Renumbering completed in the main integration. Read-only production verification
 
 **Self-edit allow-list rows:** owned by `docs/plans/ALLOWLIST_SEQUENCE.md`. That rule is unchanged: every allow-list change is a human commit.
 
+**Config keys reserved for WS-04 R2:** `JARVIS_REMOTE_BIND_ENABLED` (default false, independent of `JARVIS_AUTH_ENABLED`). Local bearer authentication may be enabled while this key remains false; only an explicit future remote-access decision may set it true. No new port or migration is reserved.
+
 ---
 
 ## 4. Conflict register
@@ -445,7 +503,7 @@ Open means not yet resolved. Each entry names who resolves it.
 
 | ID | Conflict | Resolves | State |
 |---|---|---|---|
-| CX-11 | Codex's T2 code against what Claude landed on main. (1) `JARVIS_AUTH_ENABLED` **defaults to true**, with no exempt routes, loopback included, so merging it turns auth on. (2) Main callers that send no token would then get 401: `jarvis/bot/status_tool.py` (the `system_status` tool from #86) and `scripts/deploy_main.sh` phase D, whose health checks expect 200 from `/api/health` and 200/307 from the bot, so the deploy would stop. (3) The route inventory in Codex's tree has 64 sidecar routes; main has 68 decorators, including 10 Codex's copy lacks: `/api/status/*` (9) and `/api/workflows`. (4) `mcp_servers/mcp_selfedit/logic.py`: Codex added service headers; main's copy also changed, so keep both. (5) Token setup is by CLI only (`python -m jarvis.auth add`), which conflicts with the no-shell-commands principle behind Claude's voice workflows (D-L2/D-L5). The native app already sends a Keychain token on every request (`JarvisHTTP.swift`), so it needs no code change, only a stored token. | `codex`: Addendum R1 fixes (1)–(4); `larry` decides (5) when T2 is decided (options in R1.9) | R1 implemented and deployed dormant; isolated enabled/dormant proof passes; token onboarding/remote activation remain undecided |
+| CX-11 | Historical T2 merge collision: (1) auth defaulted on; (2) internal callers and deployment health lacked service headers; (3) stale sidecar route inventory; (4) concurrent `mcp_selfedit` edits; (5) token setup remains CLI-only, while the native app already reads a Keychain token. Items (1)–(4) were resolved by dormant Addendum R1 and deployed. PR #149 added a second explicit remote-bind gate so local bearer auth need not expose a listener. | `codex`: choose and implement local-only token onboarding for (5); `larry` decides local activation and any remote bind separately | R1 deployed dormant; R2 bind guard merged as `a39136a` but not deployed in `39fc6f9`; onboarding method/provisioner and enabled-mode acceptance remain open |
 | CX-13 | WS-14 edits `jarvis/subscription.py`, which is WS-02's scope (Codex; landed, so unlocked, but its live isolation gates are open). The allowlist change adds `USER`/`LOGNAME`, justified by the live `Not logged in` result recorded in WS-06. | `larry` (09-29): Claude lands, and Codex reviews before merge | resolved 09-29: Codex post-merge review of PR #102 found no blocking code issue; Mac Keychain/launchd evidence remains reported live evidence, not independently reproduced |
 | CX-15 | WS-17 (Command Console CC7a) changes Codex's adaptive-interface workspace (`WorkspaceStore`, `ResponseResultRouter`, stage, header) and supersedes the stable result tabs and 09-18 per-request response cards. | `larry` (09-30): Claude builds, Codex reviews each increment; `codex` confirms scope before CC7a.1 | resolved 09-30: Codex confirmed scope with boundaries (result identity, Recents as a display limit, UUID-targeted voice actions, reuse under the same identity, no focus stealing); recorded in plan §7.2 |
 | CX-14 | WS-15 PR #114 added `URLSession.shared.dataTask` in `Display/RadarMapView.swift`. On main `05c4a40`, the full MortimerHost suite failed two assertions in `MemoryGraphClosureC3Tests.testURLSessionSharedIsOnlyUsedByJarvisHTTPAndTheWakeWordSocket`. The WS-16 protected actual-window capture passed on that tree. | `claude` under active WS-15 scope | resolved by PR #118 (`adeffc1`): radar uses an ephemeral session; merged full MortimerHost suite passes 383 tests, five skips, zero failures |
@@ -470,7 +528,7 @@ Open or undecided conflicts are listed first.
 Nobody works on these until Larry turns one into a §2 row.
 
 - **WS-15 follow-ups (09-30, receipt F1–F5):** F1 retry guard refuses a different place after a failure (exempt when Larry's own words bring a new token; `jarvis/agents/delegate.py`, Claude's WS-07 area); F2 "London, UK" not geocoded on first try; F3 spoken weather drops "approximately" when location comes from the internet connection; F4 Mortimer is not told which place the card on screen shows; F5 speech-to-text mishearings ("ten miles", "weather").
-- **T2 remote access: switching it on** (undecided). Codex builds it dormant under WS-04; turning it on, and how you get tokens without shell commands (CX-11 item 5), is a later decision.
+- **T2 remote access: switching it on** (undecided). WS-04's dormant R1 foundation and R2 remote-bind guard are merged; local token onboarding is the active WS-04 step, with method selection pending. Local authentication and any remote listener require separate later activation decisions (CX-11 item 5).
 - **T1.3 native client hardware verification** V3–V9: `MORTIMER_NATIVE_CLIENT_APP_PLAN.md` §8.
 - **T1.4 web retirement:** `MORTIMER_WEB_RETIREMENT_PLAN.md` (DRAFT).
 - **T3 local voice and Mac mini:** `MORTIMER_LOCAL_VOICE_AND_MINI_PLAN.md` (DRAFT; needs the hardware).
@@ -609,7 +667,30 @@ first lever to pull.
 
 ## 8. Change log
 
-- 2026-09-30 (WS-08 accepted): Larry explicitly confirmed the crystal-only orb tested and accepted. Codex moved WS-08 to Completed and closed the plan's step 8/9 human sign-off using that overall confirmation. The 09-29 receipt retains the fixture links, deployment and automated evidence; it does not invent a separate observation matrix for each live state and placement. No implementation or repeat test remains for WS-08.
+- 2026-10-02 (WS-08 acceptance publication; Larry accepted 09-30): Larry explicitly confirmed the crystal-only orb tested and accepted. Codex moved WS-08 to Completed and closed the plan's step 8/9 human sign-off using that overall confirmation. The 09-29 receipt retains the fixture links, deployment and automated evidence; it does not invent a separate observation matrix for each live state and placement. No implementation or repeat test remains for WS-08.
+
+- 2026-10-02 (WS-12 accepted; WS-20 Phase A recorded): Claude (Cowork). WS-12: every workflow pins `runs-on: ubuntu-24.04` and uses actions/checkout, setup-python and setup-node v7 (node24), ahead of `ubuntu-latest` moving to Ubuntu 26 on 10-19; the PR's checks ran on them. WS-20 Phase A: plan (#153), WS-07 text fix (#154) and #147's update landed; #138 closed; main `7c4637e` deployed 10-02 15:51 with a clean receipt. Left: Codex reviews #147 and the B4 checker and lands #142; Larry deferred the WS-18 AirPods check. Rows: WS-07, WS-12, WS-18, WS-20.
+
+- 2026-10-02 (WS-07 fix: Mortimer's lines doubled in the thread): Claude (Cowork). Larry saw each Mortimer line twice, interleaved, in the CC7a thread; the LLM context and the server transcript held it once. Cause: pipecat's RTVI observer sends one `bot-llm-text` per LLM text frame; the LLM pushes token frames and ReplyGuard (`log` mode in production) pushes new sentence frames, so the app received both. Fix: the observer ignores frames pushed by the LLM itself (`rtvi_observer_params`, `build_task`); every LLM frame is still reported once when the guard passes it on, and the thread shows what is spoken. Reproduced and pinned in `tests/unit/test_rtvi_bot_text.py`. Remaining: Larry's thread check on a build that contains it (UI2-22).
+
+- 2026-10-02 (WS-20 proposed): Claude (Cowork), at Larry's request. Plan `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`: finish the catch-up after WS-19 (PRs #138, #142, #147, #152; deploy main; Larry's WS-18 and thread checks), then stop the drift with four changes Larry chose: the change log in `docs/roadmap-log/`, one production line, rows written as they read after merge, and `scripts/check_roadmap.py`. Evidence: 53 of the 55 merges since 09-28 edited `ROADMAP.md`; 9 PRs needed 12 merge-from-main fix-ups; eight rows state current production and go stale at the next deploy. Larry chose that each system fixes its own rows; Phase B ownership stays proposed until he dispatches it.
+
+- 2026-10-02 (WS-19 publication): PR #151 merged the full roadmap reconciliation as `cfa0d2d` after five passing checks. The readable expandable preview was regenerated from that merged revision. This follow-up records the docs-only review as closed; it does not close any product deployment or acceptance gate.
+
+- 2026-10-02 (WS-19 full repository/roadmap review): Codex compared all 18 pre-existing §2 workstreams with `origin/main` `a39136a`, tracked source/configuration, plan and acceptance headers, three open PRs, CI, and the latest DEPLOY-MAIN log. Verified production is `39fc6f9` (09-30 17:53 EDT; Python 4,938 passed/7 skipped, MortimerHost 416 with six skips/zero failures, JarvisKit 219/zero failures; matching bundle/service revisions). Corrected main-versus-production wording for WS-02/03/04/09/10/18, recorded PR #146/#149 merges, the pending PR #147 and #142 conflicts, and Larry's WS-08 overall acceptance without inventing a per-state observation matrix. Moved bounded WS-14 probe work to Completed based on its recorded daily-probe pass and Codex review; WS-06 overall checks stay open. Noted that the adaptive readiness header and shared acceptance runbook still describe older deployments/response routing. WS-03 remains 2/12 accepted; WS-04 auth and remote bind remain off in production; no new live gate was closed. `ROADMAP.md` local links resolve (10 checked). This entry is a read-only evidence reconciliation, not a release or activation receipt.
+
+- 2026-09-30: Codex WS-04 added the R2 remote-bind gate on its isolated branch. With `JARVIS_AUTH_ENABLED=true`, a remote host still resolves to loopback unless `JARVIS_REMOTE_BIND_ENABLED=true`; auth-off remains loopback regardless. Existing remote tests now opt in explicitly. Focused auth/bind/caller/bot tests pass 109/109, including the real admin and bot startup host arguments; no token or production setting changed.
+
+- 2026-09-30: Codex WS-04 selected the supervised local-only onboarding design in Addendum R2. It reserves `JARVIS_REMOTE_BIND_ENABLED` as a separate remote-listener gate, specifies vault/Keychain provisioning without an HTTP mint endpoint, and separates preparation from later local auth activation. This planning change creates no token, changes no runtime flag, and opens no listener; implementation and live acceptance remain open.
+
+- 2026-09-30: Larry assigned Codex a local-only WS-04 token-onboarding design to unblock owner-scoped Skills acceptance. This claim reserves `codex/ws04-local-onboarding-20260930`; it does not create tokens, enable authentication, or open a remote bind. The existing R1.9 choices and current caller/Keychain contracts will be reconciled in the WS-04 plan.
+
+- 2026-09-30 (WS-18 added, in review): Claude (Cowork), at Larry's request. Crash at 18:09:08 after an AirPods to Mac speaker switch: engine rebuilt, Voice Processing downlink state fault, no output IO, `AVAudioPlayerNode.play()` raised `player did not see an IO cycle`. Fix: start the player only once output IO is seen to flow (watch rebuilds a stalled output, 3 tries then a visible session failure) and catch the Objective-C exception around `play()`. Rollback switch `JARVIS_AUDIO_OUTPUT_WATCH`. WS-17 row updated: CC7a.1 landed (#140) and deployed (`39fc6f9`).
+
+- 2026-09-30: Codex WS-03 observed the connected production Skills library, a three-step intended Process walkthrough, and truthful no-trace Activity on app/backend revision `39fc6f9`. Versions returned expected fail-closed 503 with dormant bearer auth, despite a misleading generic UI error; the WS-03 branch adds exact-state wording and a partial live receipt. Focused native Skills rendering tests passed 20/20. No new SW-A–SW-L gate is accepted; creator/provider/activation remain off.
+- 2026-09-30: WS-03 PR #145 passed all five CI checks and merged as `9da99d4`. It changes only the exact dormant-auth Versions explanation and documentation; production still reports `39fc6f9`. The live UI gates remain open until the merged build is deployed and tested.
+
+- 2026-09-30: Larry directed Codex to resume WS-03. This docs-only claim reserves `codex/ws03-live-acceptance-20260930` for the remaining Skills Workspace acceptance work. The implementation is already deployed; no provider evaluation, runtime enforcement, skill activation, or new acceptance gate is claimed by this edit. Codex will first reconcile SW-A–SW-L evidence against current production, then run the target-Mac and real-VM checks with separate human review where required.
 
 - 2026-09-30 (WS-15 fix, deploy blocker): Claude (Cowork). DEPLOY-MAIN for `1a0aac7` stopped on `RadarTileStoreTests.testDroppedDecodedTilesComeBackWithoutADownload` (kept PNG missing, second download). The radar kept PNGs in an `NSCache`, which may evict under memory pressure. Now a dictionary with an explicit 64 MB budget, oldest first, plus a budget test. Radar behaviour otherwise unchanged.
 
@@ -748,7 +829,7 @@ acceptance remains in §2 even when a feature’s code has landed.
 - [x] Crystal orb p50/p95 4.841/13.370 ms; original relative and absolute limits passed.
 - [x] Ten crystal/legacy voice-state render comparisons pixel-identical; no threshold relaxation.
 - **Attribution:** Codex implementation and validation; Larry assigned the bounded orb performance fix from Claude to Codex on 09-28.
-- **Acceptance:** Larry reported WS-08 tested and accepted on 09-30.
+- **Acceptance:** Larry accepted WS-08 overall on 09-30; PR #142 publishes the status, plan and receipt.
 
 </details>
 
@@ -759,7 +840,7 @@ acceptance remains in §2 even when a feature’s code has landed.
 - [x] **Claude / WS-06:** self-service access/recovery and registry-split code (#86; 09-25 landing).
 - [x] **Codex / WS-03:** separate Skills Workspace, developer-run creator and validation activity contracts.
 - [x] **Claude original workstream / WS-08:** crystal-glass orb (#90; 09-24); later performance fixes by Codex above.
-- [x] **WS-05 foundation:** provider-neutral execution, policy-aware logs, isolated subscription adapters and draft-confirmed preferences. The roadmap does not itemize every original contributor; Codex owns WS-02 isolation and is proposed for remaining WS-05 work.
+- [x] **WS-05 foundation:** provider-neutral execution, policy-aware logs, isolated subscription adapters and draft-confirmed preferences. The roadmap does not itemize every original contributor; Codex owns WS-02 isolation and has claimed remaining WS-05 work. MAR-A–J live rollout remains open.
 - **Still open:** corresponding live/activation gates in §2; WS-07 status-header correction.
 
 </details>

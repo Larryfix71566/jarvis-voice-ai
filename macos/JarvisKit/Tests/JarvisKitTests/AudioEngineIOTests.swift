@@ -1,5 +1,6 @@
 import AVFoundation
 import XCTest
+import JarvisKitObjC
 @testable import JarvisKit
 
 /// Native-audio plan §7, `AudioEngineIO`: the socket-free, device-free
@@ -252,5 +253,90 @@ final class DetachedPlayerTests: XCTestCase {
             XCTAssertNil(io.latestPlayoutLevel)
             XCTAssertNil(io.latestInputLevel)
         }
+    }
+}
+
+/// WS-18: an output-device switch must not terminate the app. 2026-09-30:
+/// AirPods → Mac speaker rebuilt the engine, Voice Processing then faulted
+/// its downlink, and `AVAudioPlayerNode.play()` raised "player did not see
+/// an IO cycle" five seconds later.
+final class OutputIOWatchTests: XCTestCase {
+    func testAFirstReadIsOnlyABaselineAndMovementMeansFlowing() {
+        var watch = OutputIOWatch(startedAt: 100)
+        XCTAssertEqual(watch.observe(sampleTime: 4_800, now: 100.1), .waiting, "one read proves nothing")
+        XCTAssertEqual(watch.observe(sampleTime: 9_600, now: 100.2), .flowing)
+        XCTAssertEqual(watch.state(now: 100.2 + OutputIOWatch.freshness - 0.05), .flowing)
+        XCTAssertEqual(watch.state(now: 100.2 + OutputIOWatch.freshness + 0.05), .waiting,
+                       "flowing needs recent movement")
+    }
+
+    func testAFrozenRenderTimeIsAStallNotIO() {
+        var watch = OutputIOWatch(startedAt: 100)
+        for i in 1...14 { XCTAssertNotEqual(watch.observe(sampleTime: 4_800, now: 100 + Double(i) * 0.1), .flowing) }
+        XCTAssertEqual(watch.observe(sampleTime: 4_800, now: 100 + OutputIOWatch.stallAfter + 0.01), .stalled,
+                       "the 09-30 case: running engine, no output cycle")
+    }
+
+    func testNoRenderTimeAtAllIsAStallAfterTheWindow() {
+        var watch = OutputIOWatch(startedAt: 50)
+        XCTAssertEqual(watch.observe(sampleTime: nil, now: 50.5), .waiting)
+        XCTAssertEqual(watch.observe(sampleTime: nil, now: 50 + OutputIOWatch.stallAfter + 0.01), .stalled)
+    }
+
+    func testAStallIsMeasuredFromTheLastMovement() {
+        var watch = OutputIOWatch(startedAt: 0)
+        watch.observe(sampleTime: 1, now: 0.1)
+        watch.observe(sampleTime: 2, now: 0.2)
+        XCTAssertEqual(watch.observe(sampleTime: 2, now: 1.0), .waiting)
+        XCTAssertEqual(watch.observe(sampleTime: 2, now: 0.2 + OutputIOWatch.stallAfter + 0.01), .stalled)
+        XCTAssertEqual(watch.observe(sampleTime: 3, now: 2.0), .flowing, "IO coming back clears the stall")
+    }
+
+    func testTheObjectiveCCatcherReturnsTheRaisedExceptionInsteadOfTerminating() {
+        let caught = JKCatchObjCException {
+            NSException(name: NSExceptionName("com.apple.coreaudio.avfaudio"),
+                        reason: "player did not see an IO cycle.", userInfo: nil).raise()
+        }
+        XCTAssertEqual(caught?.name.rawValue, "com.apple.coreaudio.avfaudio")
+        XCTAssertEqual(caught?.reason, "player did not see an IO cycle.")
+        var ran = false
+        XCTAssertNil(JKCatchObjCException { ran = true })
+        XCTAssertTrue(ran)
+    }
+
+    func testTheWatchCanBeSwitchedOff() {
+        let key = "JARVIS_AUDIO_OUTPUT_WATCH"
+        let previous = UserDefaults.standard.object(forKey: key)
+        defer {
+            if let previous { UserDefaults.standard.set(previous, forKey: key) }
+            else { UserDefaults.standard.removeObject(forKey: key) }
+        }
+        UserDefaults.standard.removeObject(forKey: key)
+        XCTAssertTrue(JarvisFlags.outputIOWatchEnabled, "on by default")
+        UserDefaults.standard.set(false, forKey: key)
+        XCTAssertFalse(JarvisFlags.outputIOWatchEnabled)
+    }
+
+    /// The signal the watch relies on, measured on this Mac: a running
+    /// output-only engine (no microphone, no permission prompt) advances its
+    /// output node's render sample time. Skipped when there is no output.
+    func testOutputNodeRenderTimeAdvancesOnARunningEngine() throws {
+        let engine = AVAudioEngine()
+        let format = engine.outputNode.outputFormat(forBus: 0)
+        try XCTSkipIf(format.sampleRate <= 0 || format.channelCount == 0, "no output device")
+        engine.connect(engine.mainMixerNode, to: engine.outputNode, format: format)
+        engine.mainMixerNode.outputVolume = 0
+        engine.prepare()
+        try engine.start()
+        defer { engine.stop() }
+        var watch = OutputIOWatch(startedAt: ProcessInfo.processInfo.systemUptime)
+        var state = OutputIOWatch.State.waiting
+        for _ in 0..<15 where state != .flowing {
+            Thread.sleep(forTimeInterval: 0.1)
+            let t = engine.outputNode.lastRenderTime
+            state = watch.observe(sampleTime: t.flatMap { $0.isSampleTimeValid ? Double($0.sampleTime) : nil },
+                                  now: ProcessInfo.processInfo.systemUptime)
+        }
+        XCTAssertEqual(state, .flowing, "the output node's render time did not advance within 1.5 s")
     }
 }

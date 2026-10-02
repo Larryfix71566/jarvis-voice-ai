@@ -39,6 +39,7 @@ from pipecat.frames.frames import (
     LLMTextFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.processors.frameworks.rtvi import RTVIObserverParams
 
 from jarvis.voice_workflows import (
     SENTENCE_END_RE,
@@ -55,7 +56,7 @@ from jarvis.voice_workflows import (
 
 __all__ = [
     "ReplyGuard", "VoiceTurnState", "VoiceWorkflowInjector",
-    "is_real_user_message", "normalize_guard_mode",
+    "is_real_user_message", "normalize_guard_mode", "rtvi_observer_params",
 ]
 
 logger = logging.getLogger(__name__)
@@ -260,3 +261,23 @@ class ReplyGuard(FrameProcessor):
             self._schedule(coro)
         else:
             self.create_task(coro, "reply_guard_correction")
+
+
+def rtvi_observer_params(llm: FrameProcessor) -> RTVIObserverParams:
+    """RTVI observer settings for a pipeline with ReplyGuard after ``llm``.
+
+    pipecat's RTVIObserver sends one ``bot-llm-text`` message per
+    LLMTextFrame it sees. ReplyGuard (every mode but "off") consumes the
+    LLM's token frames and pushes new sentence frames, so the observer sent
+    both streams and the client's thread showed each reply twice,
+    interleaved (Larry, 2026-09-30).
+
+    Ignoring frames pushed by the LLM itself removes the first stream and
+    nothing else: the observer does not mark an ignored frame as seen, so
+    every frame the LLM pushes downstream is reported once when ReplyGuard
+    passes it on (turn start and end, tool-call frames, metrics). The
+    client then gets the text that goes to TTS, once; a sentence the guard
+    cuts is not shown. Tool-call frames are broadcast and the observer
+    already reports only their downstream copy.
+    """
+    return RTVIObserverParams(ignored_sources=[llm])
