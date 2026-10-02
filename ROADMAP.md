@@ -287,24 +287,6 @@ Claude’s work or enable any runtime feature.
 
 </details>
 
-<details id="ws-08">
-<summary>WS-08 — Crystal orb, single shell · Larry accepted; receipt PR open</summary>
-
-**Workstream:** Orb crystal glass (#90), revised to use the crystal shell exclusively
-
-- **Owner:** `codex`
-- **Status:** accepted by Larry on 09-30; implementation deployed since `c3607e6` and present in production `39fc6f9`; acceptance-status PR #142 remains open with merge conflicts
-- **Implemented by:** Claude original crystal-glass workstream; Codex rendering performance fixes and single-shell cleanup
-- **Remaining work / acceptance:** No further product acceptance requested: Larry explicitly accepted WS-08 overall. PR #142 must reconcile its roadmap/plan/receipt updates with current main before the acceptance record is published. The 09-29 evidence covers deployment, five fixtures, compact/expanded appearance and Reduce Motion; it does not separately itemize every live state and placement.
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** main (PR #112, `e9388fc`; acceptance evidence PR #115, `8222940`)
-- **Plan:** `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`
-- **Scope:** Orb rendering, orb-specific configuration, performance/visual regression tests, and this plan's acceptance evidence.
-- **Next step:** Codex resolves PR #142's documentation conflict and lands the existing acceptance receipt; do not repeat accepted visual checks.
-- **Updated:** 10-02
-
-</details>
-
 <details id="ws-09">
 <summary>WS-09 — Command Console and Atlas acceptance · Larry acceptance</summary>
 
@@ -412,6 +394,24 @@ Accepted product workstreams and closed documentation reviews are listed below; 
 
 </details>
 
+<details id="ws-08">
+<summary>WS-08 — Crystal orb, single shell · Claude + Codex (accepted 09-30)</summary>
+
+**Workstream:** Orb crystal glass (#90), revised to use the crystal shell exclusively
+
+- **Owner:** `codex`
+- **Status:** accepted: Larry reported WS-08 tested and accepted on 2026-09-30; deployed in `c3607e6`, deployed again in `03b9e60` on 09-30
+- **Implemented by:** Claude original crystal-glass workstream; Codex rendering performance fixes and single-shell cleanup
+- **Remaining work / acceptance:** None for WS-08. Larry explicitly reported the work tested and accepted on 09-30. This is Larry's overall sign-off; individual fixture/state/placement observations were not separately itemized. Deployment, release tests, five current fixtures, compact/expanded appearance and Reduce Motion evidence are in the linked receipt.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (PR #112, `e9388fc`; acceptance evidence PR #115, `8222940`)
+- **Plan:** `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md`
+- **Scope:** Orb rendering, orb-specific configuration, performance/visual regression tests, and this plan's acceptance evidence.
+- **Next step:** None for WS-08
+- **Updated:** 10-02
+
+</details>
+
 <details id="ws-14">
 <summary>WS-14 — Subscription probe: sign-in, command and category fixes · Claude (Codex post-merge review)</summary>
 
@@ -459,12 +459,12 @@ Accepted product workstreams and closed documentation reviews are listed below; 
 - **Owner:** `codex`
 - **Status:** accepted: PR #121 merged as `c3607e6` and DEPLOY-MAIN passed 09-29
 - **Implemented by:** Codex diagnosis and test-fixture repair
-- **Remaining work / acceptance:** None for this capture gate. Larry's DEPLOY-MAIN for `c3607e6` passed phase A: the real ScreenCaptureKit protected-window test executed and passed (4.825 s), MortimerHost ran 383 tests with six unrelated skips and zero failures, JarvisKit ran 218 tests with zero failures, and Python had 4,924 passes and seven skips. Phase D reported healthy services and matching code, production and app-bundle revisions. Larry later accepted WS-08 overall; its documentation PR #142 remains open.
+- **Remaining work / acceptance:** None for this capture gate. Larry's DEPLOY-MAIN for `c3607e6` passed phase A: the real ScreenCaptureKit protected-window test executed and passed (4.825 s), MortimerHost ran 383 tests with six unrelated skips and zero failures, JarvisKit ran 218 tests with zero failures, and Python had 4,924 passes and seven skips. Phase D reported healthy services and matching code, production and app-bundle revisions. Larry accepted WS-08 overall on 09-30; PR #142 publishes its final acceptance receipt.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main (PR #117, `c5781a8`; PR #121, `c3607e6`); acceptance status on `codex/ws16-protected-capture-20260929`
 - **Plan:** `docs/plans/MORTIMER_PROTECTED_WINDOW_CAPTURE_GATE_PLAN.md`
 - **Scope:** `macos/MortimerHost/Tests/MortimerHostTests/ProtectedDisplayContentTests.swift`, this row's plan and acceptance evidence, and `ROADMAP.md` status only. Product display code remains outside this row; WS-15 owns `Display/DisplayContentView.swift` while active.
-- **Next step:** None for WS-16.
+- **Next step:** None for WS-16 or WS-08.
 - **Updated:** 10-02 (status cross-check only)
 
 </details>
@@ -667,6 +667,8 @@ first lever to pull.
 
 ## 8. Change log
 
+- 2026-10-02 (WS-08 acceptance publication; Larry accepted 09-30): Larry explicitly confirmed the crystal-only orb tested and accepted. Codex moved WS-08 to Completed and closed the plan's step 8/9 human sign-off using that overall confirmation. The 09-29 receipt retains the fixture links, deployment and automated evidence; it does not invent a separate observation matrix for each live state and placement. No implementation or repeat test remains for WS-08.
+
 - 2026-10-02 (WS-12 accepted; WS-20 Phase A recorded): Claude (Cowork). WS-12: every workflow pins `runs-on: ubuntu-24.04` and uses actions/checkout, setup-python and setup-node v7 (node24), ahead of `ubuntu-latest` moving to Ubuntu 26 on 10-19; the PR's checks ran on them. WS-20 Phase A: plan (#153), WS-07 text fix (#154) and #147's update landed; #138 closed; main `7c4637e` deployed 10-02 15:51 with a clean receipt. Left: Codex reviews #147 and the B4 checker and lands #142; Larry deferred the WS-18 AirPods check. Rows: WS-07, WS-12, WS-18, WS-20.
 
 - 2026-10-02 (WS-07 fix: Mortimer's lines doubled in the thread): Claude (Cowork). Larry saw each Mortimer line twice, interleaved, in the CC7a thread; the LLM context and the server transcript held it once. Cause: pipecat's RTVI observer sends one `bot-llm-text` per LLM text frame; the LLM pushes token frames and ReplyGuard (`log` mode in production) pushes new sentence frames, so the app received both. Fix: the observer ignores frames pushed by the LLM itself (`rtvi_observer_params`, `build_task`); every LLM frame is still reported once when the guard passes it on, and the thread shows what is spoken. Reproduced and pinned in `tests/unit/test_rtvi_bot_text.py`. Remaining: Larry's thread check on a build that contains it (UI2-22).
@@ -827,7 +829,7 @@ acceptance remains in §2 even when a feature’s code has landed.
 - [x] Crystal orb p50/p95 4.841/13.370 ms; original relative and absolute limits passed.
 - [x] Ten crystal/legacy voice-state render comparisons pixel-identical; no threshold relaxation.
 - **Attribution:** Codex implementation and validation; Larry assigned the bounded orb performance fix from Claude to Codex on 09-28.
-- **Acceptance:** Larry accepted WS-08 overall on 09-30; its status/plan/receipt publication remains pending in conflicting PR #142.
+- **Acceptance:** Larry accepted WS-08 overall on 09-30; PR #142 publishes the status, plan and receipt.
 
 </details>
 
