@@ -1,6 +1,6 @@
 # Roadmap joint working: catch-up and drift prevention (WS-20)
 
-**Status:** IN PROGRESS 2026-10-02. B2/B3 merged in #158, B4 merged in #156, and B1's 72-entry log migration lands via this PR. The ten-PR no-conflict observation and warn-only checker rollout remain open.
+**Status:** IN PROGRESS 2026-10-02. B2/B3 merged in #158, B4 merged in #156, and B1's 72-entry log migration lands in #160. The ten-PR no-conflict observation and warn-only checker rollout remain open.
 **Owners:** Claude: B4 checker, its own rows, this plan. Codex: B1–B3 protocol and change-log move, its own rows, review of B4. Larry: merges, deploys, Mac checks, approval of the protocol change.
 **Recorded:** 2026-10-02 against main `cfa0d2d` and open PR #152 (WS-19 close).
 **Author:** Claude (Cowork) · **Approver:** Larry
@@ -47,7 +47,7 @@ After A7, the eight rows that state current production are stale. B2 replaces th
 - §8 becomes a pointer and one rule: add a file, never edit §8.
 - Lands in a freeze window: after Phase A, with no open PR that edits `ROADMAP.md`. Both systems then switch their landing tooling to write a log file. Claude's scripts insert at the §8 anchor today.
 
-**Implemented in the freeze window, 2026-10-02:** All 72 entries from main `cc64d50` were moved one-to-one, with their entry text unchanged. The §8 marker and file-writing rule replace the old in-file entries. Claude's landing scripts need their separate switch after this merges.
+**Implemented in the freeze window, 2026-10-02, PR #160:** All 72 entries from main `cc64d50` were moved one-to-one, with their entry text unchanged. The §8 marker and file-writing rule replace the old in-file entries. Claude's landing scripts need their separate switch after #160 merges.
 
 ### B2 One production line (Codex; Claude reviews)
 
