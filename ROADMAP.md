@@ -293,15 +293,15 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Voice workflows phases 1–4, Workflow Viewer, #80 privacy fix, DEPLOY-MAIN
 
 - **Owner:** `claude`
-- **Status:** landed (main `0b76f49`)
+- **Status:** landed (main `0b76f49`); thread-text fix landed 10-02 from branch `fix/ws07-bot-text-once`; Larry's thread check open
 - **Implemented by:** Claude
-- **Remaining work / acceptance:** Larry: switch the reply guard from `log` to `correct` once the live log shows its precision. Recounted 09-30: the bot log holds four guard events (09-25, 09-29 twice, 09-30), all `action=logged kind=refusal`; the other `reply_guard=log` lines are startup settings, not events. Still not enough to judge precision. Backlog F1 (retry guard vs a different place) is in this area.
+- **Remaining work / acceptance:** Larry: switch the reply guard from `log` to `correct` once the live log shows its precision. Recounted 09-30: the bot log holds four guard events (09-25, 09-29 twice, 09-30), all `action=logged kind=refusal`; the other `reply_guard=log` lines are startup settings, not events. Still not enough to judge precision. Backlog F1 (retry guard vs a different place) is in this area. Thread text once (10-02 fix): on a build that contains it, Larry sees each spoken answer once in the conversation thread (UI2-22).
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main
 - **Plan:** `docs/plans/MORTIMER_VOICE_WORKFLOWS_PLAN.md`, `docs/plans/MORTIMER_WORKFLOW_VIEWER_PLAN.md`
 - **Scope:** —
-- **Next step:** Guard-mode decision after more live use (four events so far). Plan headers corrected in PR #100 (09-28).
-- **Updated:** 10-02 (read-only: four logged guard events are the last recorded precision evidence)
+- **Next step:** larry: deploy, then check one spoken answer in the thread (shows once). larry: guard-mode decision after more live use (four events so far).
+- **Updated:** 10-02
 
 </details>
 
@@ -666,6 +666,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-10-02 (WS-07 fix: Mortimer's lines doubled in the thread): Claude (Cowork). Larry saw each Mortimer line twice, interleaved, in the CC7a thread; the LLM context and the server transcript held it once. Cause: pipecat's RTVI observer sends one `bot-llm-text` per LLM text frame; the LLM pushes token frames and ReplyGuard (`log` mode in production) pushes new sentence frames, so the app received both. Fix: the observer ignores frames pushed by the LLM itself (`rtvi_observer_params`, `build_task`); every LLM frame is still reported once when the guard passes it on, and the thread shows what is spoken. Reproduced and pinned in `tests/unit/test_rtvi_bot_text.py`. Remaining: Larry's thread check on a build that contains it (UI2-22).
 
 - 2026-10-02 (WS-20 proposed): Claude (Cowork), at Larry's request. Plan `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`: finish the catch-up after WS-19 (PRs #138, #142, #147, #152; deploy main; Larry's WS-18 and thread checks), then stop the drift with four changes Larry chose: the change log in `docs/roadmap-log/`, one production line, rows written as they read after merge, and `scripts/check_roadmap.py`. Evidence: 53 of the 55 merges since 09-28 edited `ROADMAP.md`; 9 PRs needed 12 merge-from-main fix-ups; eight rows state current production and go stale at the next deploy. Larry chose that each system fixes its own rows; Phase B ownership stays proposed until he dispatches it.
 
