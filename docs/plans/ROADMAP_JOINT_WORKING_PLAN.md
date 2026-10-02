@@ -1,7 +1,7 @@
 # Roadmap joint working: catch-up and drift prevention (WS-20)
 
-**Status:** PROPOSED 2026-10-02. Larry chose the direction on 10-02: each system fixes its own rows, all four drift fixes in §3, and this plan in the repo. Ownership of the Phase B parts is proposed until Larry dispatches them.
-**Owners (proposed):** Claude: B4 checker, its own rows, this plan. Codex: B1–B3 protocol and change-log move, its own rows, review of B4. Larry: merges, deploys, Mac checks, approval of the protocol change.
+**Status:** IN PROGRESS 2026-10-02. Larry chose the direction on 10-02: each system fixes its own rows, all four drift fixes in §3, and this plan in the repo. Larry dispatched B1–B3 to Codex; B4 is in Claude's PR #156 for Codex review.
+**Owners:** Claude: B4 checker, its own rows, this plan. Codex: B1–B3 protocol and change-log move, its own rows, review of B4. Larry: merges, deploys, Mac checks, approval of the protocol change.
 **Recorded:** 2026-10-02 against main `cfa0d2d` and open PR #152 (WS-19 close).
 **Author:** Claude (Cowork) · **Approver:** Larry
 
@@ -106,7 +106,7 @@ Python standard library only. Reads `ROADMAP.md` and git; `--receipts DIR` on th
 
 - **Made (Larry, 10-02):** each system fixes its own rows; B1, B2, B3 and B4 all go in; the plan lives in the repo.
 - **Open for Larry:** dispatch WS-12 now; dispatch B1–B3 to Codex and B4 to Claude after Phase A; B4 warn or fail.
-- **Open for Codex:** confirm B1–B3 and the log-file format when claiming them; this plan's details there are a proposal.
+- **Confirmed by Codex, 10-02:** B1–B3 as specified. Each migrated entry gets `YYYY-MM-DD-<ws>-<system>-<slug>.md` with `date`, `system`, `rows`, `prs` front matter; use `prs: []` when an entry has no PR. Preserve entry text verbatim and verify one-to-one count. Do not land B1 while any open PR edits `ROADMAP.md`.
 
 ## 8. Risks
 
@@ -116,5 +116,7 @@ Python standard library only. Reads `ROADMAP.md` and git; `--receipts DIR` on th
 - Required cross-reviews add latency. They apply only to the other system's code, not to docs-only own-row PRs.
 
 ## Progress
+
+- 2026-10-02 (Codex B1–B3 claim): Larry dispatched Codex through the WS-20 handoff. Codex confirmed the B1 log format above and reserved `docs/ws20-b123-claim-20261002` for the bounded work. #142's roadmap conflict was reconciled on its branch and is awaiting fresh CI; Codex's reviews of #147 and #156 requested specific fixes. This claim changes no app code or production state. B1 migration waits for the roadmap PR freeze window; B2's production source will be the deployed `7c4637e` receipt, not main's header.
 
 - 2026-10-02: plan proposed (Claude). Phase A scripts prepared: `land_ws20_plan.sh`, `land_ws07_text_once.sh`, `resolve_cc7a1b.sh` (in `Claude outputs/`). WS-19's reconciliation (#151) had already fixed the rows from Claude's 10-02 review; the remaining items are in Phase A.

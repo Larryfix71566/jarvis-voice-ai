@@ -88,19 +88,19 @@ Claude’s work or enable any runtime feature.
 ### Needs work: not yet built (proposed, claimed, in progress, in review, blocked)
 
 <details id="ws-20">
-<summary>WS-20 — Roadmap joint working: catch-up and drift prevention · Claude + Codex (proposed)</summary>
+<summary>WS-20 — Roadmap joint working: catch-up and drift prevention · Claude + Codex</summary>
 
 **Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
 
-- **Owner:** `claude` (B4 checker, plan) and `codex` (B1–B3, proposed until Codex claims them)
-- **Status:** in-progress: Phase A landed — plan #153, WS-07 fix #154, #147 brought up to date, #138 closed, main `7c4637e` deployed 10-02 15:51 (receipt clean); #142 and #147 wait on Codex. B4 drift checker built by Claude and sent to Codex for review. B1–B3 not started
+- **Owner:** `claude` (B4 checker, plan) and `codex` (B1–B3, claimed by Codex on 10-02 at Larry's request)
+- **Status:** in-progress: Phase A landed — plan #153, WS-07 fix #154, #147 brought up to date, #138 closed, main `7c4637e` deployed 10-02 15:51 (receipt clean); #142 conflict resolved on Codex's branch and its CI is running; Codex reviewed #147 and #156 with requested fixes. B1–B3 claimed but not implemented; B1 waits for no open roadmap-editing PR.
 - **Implemented by:** —
 - **Remaining work / acceptance:** Phase A: #138 closed; #142, #147 and #152 merged; production at main; Larry's WS-18 and thread checks recorded. Phase B: the checker passes on main in CI; no row states current production; the next 10 PRs merge with no change-log conflict. Phase C rules are in §0.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (plan); B4 on branch `ws20/b4-roadmap-check`
+- **Where:** main (plan); B4 on branch `ws20/b4-roadmap-check`; B1–B3 claim on `docs/ws20-b123-claim-20261002`
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
-- **Scope:** B4 (Claude): `scripts/check_roadmap.py`, `tests/unit/test_check_roadmap.py`, the drift-check step in `.github/workflows/validate.yml`. B1–B3 (Codex, once claimed): `ROADMAP.md` §0, §8 and production wording, `docs/roadmap-log/**`.
-- **Next step:** codex: review #147 and the B4 checker PR; resolve and land #142; claim B1–B3. larry: merge each after Codex approves.
+- **Scope:** B4 (Claude): `scripts/check_roadmap.py`, `tests/unit/test_check_roadmap.py`, the drift-check step in `.github/workflows/validate.yml`. B1–B3 (Codex): `ROADMAP.md` §0, §8 and production wording, `docs/roadmap-log/**`, and dated status/progress in `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`.
+- **Next step:** codex: merge #142 after its new CI passes; review #147 and #156 again after their owners address the posted findings. Then B1–B3 continue on `docs/ws20-b123-claim-20261002` only after the claim is on main; B1's log migration waits until no open PR edits `ROADMAP.md`. larry: merge reviewed PRs and perform the separate app deployment after #147.
 - **Updated:** 10-02
 
 </details>
@@ -666,6 +666,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-10-02 (WS-20 B1–B3 Codex claim): Larry dispatched Codex to claim the change-log move, one production line and after-merge protocol rule. Codex accepted the planned one-file-per-entry format (`YYYY-MM-DD-<ws>-<system>-<slug>.md`) with front matter `date`, `system`, `rows`, `prs`; entries without a PR use `prs: []`. This claim changes documentation only. Codex's reviews of #147 and #156 requested fixes; #142's conflict is resolved on its branch and CI is pending. Implementation waits for the claim to land, and B1 waits for the roadmap PR freeze window.
 
 - 2026-10-02 (WS-12 accepted; WS-20 Phase A recorded): Claude (Cowork). WS-12: every workflow pins `runs-on: ubuntu-24.04` and uses actions/checkout, setup-python and setup-node v7 (node24), ahead of `ubuntu-latest` moving to Ubuntu 26 on 10-19; the PR's checks ran on them. WS-20 Phase A: plan (#153), WS-07 text fix (#154) and #147's update landed; #138 closed; main `7c4637e` deployed 10-02 15:51 with a clean receipt. Left: Codex reviews #147 and the B4 checker and lands #142; Larry deferred the WS-18 AirPods check. Rows: WS-07, WS-12, WS-18, WS-20.
 
