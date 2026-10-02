@@ -49,6 +49,8 @@ After A7, the eight rows that state current production are stale. B2 replaces th
 
 ### B2 One production line (Codex; Claude reviews)
 
+**Implemented on Codex's WS-20 branch, 2026-10-02; awaiting cross-owner wording review and merge.** The exact `7c4637e` SHA, deployment time and receipt path now appear once below the roadmap title. The header and affected rows use dated deployment events; the WS-03/04 merged-branch drift found by B4 is also corrected without claiming new live acceptance. The B4 checker reports no current-production phrase on this branch. The Production line changes only after a later deployment receipt exists.
+
 - One line under the title: `**Production:** <sha>, deployed <date time> (receipt <path>)`.
 - Rows record events, which stay true: "landed in #144 (`c2f0f49`)", "deployed in `39fc6f9` on 09-30", "accepted on `03b9e60`". Rows never state current production: no "still in production", "present in production", "not in production", "not deployed".
 - Whether a landed change is live is computed: is its merge commit an ancestor of the production SHA. B4 reports it.
@@ -56,6 +58,8 @@ After A7, the eight rows that state current production are stale. B2 replaces th
 - The same PR rewrites the eight rows' production wording mechanically. Owners review only that wording.
 
 ### B3 Rows written as they will read after merge (Codex writes the rule; both follow)
+
+**Implemented on Codex's WS-20 branch, 2026-10-02; awaiting protocol review and merge.** Rule 10 now requires after-merge wording and a ref for checked/verified claims. C1–C5 are added below rule 13; the one-time B2 cross-owner wording review is explicit. B1 has not moved §8 yet, so existing §8 log instructions stay in force until that migration.
 
 - A PR sets its own row to what is true once it merges: "landed (branch `x`)", never "review" or "awaiting review". `review` is shown by B4 from open PRs, not written in the row.
 - A "checked" or "verified" claim names what it was checked against: "Checked 10-02 on `origin/codex/isolated-20260924` (`addf278`)".
@@ -116,6 +120,8 @@ Python standard library only. Reads `ROADMAP.md` and git; `--receipts DIR` on th
 - Required cross-reviews add latency. They apply only to the other system's code, not to docs-only own-row PRs.
 
 ## Progress
+
+- 2026-10-02 (Codex B2/B3 implementation): Read `~/MortimerRollback/logs/deployment-receipt-7c4637e.json` without changing production. Added the exact deployed revision/time/receipt as the sole Production line; rewrote mutable production assertions in the header and WS-02/03/04/05/09/10 as dated events. Corrected WS-03/04 stale merged-branch states while keeping their acceptance and provisioning gates open. Added the after-merge rule and C1–C5. The B4 checker on the working branch reports only WS-10/11's pre-existing lifecycle-word warnings (their acceptance owner retains them). B1 waits for #147 and any other roadmap-editing PR to close before migration. No application code or runtime configuration changed.
 
 - 2026-10-02 (Codex B1–B3 claim): Larry dispatched Codex through the WS-20 handoff. Codex confirmed the B1 log format above and reserved `docs/ws20-b123-claim-20261002` for the bounded work. #142's roadmap conflict was reconciled and the PR merged as `d01f9af` after five passing checks; Codex's reviews of #147 and #156 requested specific fixes. This claim changes no app code or production state. B1 migration waits for the roadmap PR freeze window; B2's production source will be the deployed `7c4637e` receipt, not main's header.
 
