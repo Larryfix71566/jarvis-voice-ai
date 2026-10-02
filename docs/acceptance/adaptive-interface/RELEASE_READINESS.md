@@ -302,7 +302,8 @@ sandbox evidence; all additions remain open as release-acceptance gates.
   pin from a card; a weather result that arrives while another result is open
   shows a notice and does not take focus; closing a card leaves its Output
   record.
-- [ ] **UI2-24 — Recents replaces tabs (CC7a.3).** No tab strip; Recents lists
+- [ ] **UI2-24 — Recents replaces tabs (CC7a.1b, CC7a.3).** One console row and
+  nothing below it in any view (CC7a.1b); no tab strip; Recents lists
   results pinned first; `result_select/close/pin/unpin` and "show the Folly
   Beach weather again" work by voice and pointer; an ambiguous subject or a
   stale selection makes Mortimer ask instead of acting; Recents shows pinned

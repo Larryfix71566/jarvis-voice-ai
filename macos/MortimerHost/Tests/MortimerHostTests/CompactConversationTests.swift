@@ -193,7 +193,14 @@ final class CompactConversationTests: XCTestCase {
         for compact in [true, false] {
             defaults.set(compact, forKey: "mortimer.interface.compactConversation")
             defaults.set(2, forKey: "mortimer.interface.layoutVersion")
-            let view = NSHostingView(rootView: AdaptiveStageView(voiceState: .offline, wideWindow: width == 1000)
+            // WS-17: in layout 2 the mode toggle and the view controls live in
+            // the console's single row, so the fixture renders that row above
+            // the stage, as CommandConsoleView does.
+            let view = NSHostingView(rootView: VStack(spacing: 0) {
+                    ConsoleActionBar(coordinator: nil)
+                    AdaptiveStageView(voiceState: .offline, wideWindow: width == 1000)
+                }
+                .environment(DisplayWindowStore()).environment(ShareCoordinator())
                 .defaultAppStorage(defaults).environment(workspace).environmentObject(client)
                 .environment(AgentRunStore()).environment(DrawerState()).environment(DisplayResultStore())
                 .environment(conversation).environment(ConsoleNoticeState())
@@ -211,6 +218,12 @@ final class CompactConversationTests: XCTestCase {
                 guard let object = value as? NSObject else { return }
                 let label = NSSelectorFromString("accessibilityLabel")
                 if object.responds(to: label), let text = object.perform(label)?.takeUnretainedValue() as? String { labels.append(text); controls[text] = object }
+                // WS-17: a console Menu is an AXMenuButton named by its AXTitle, an
+                // NSAttributedString (probe on the Mac, 09-30).
+                let title = NSSelectorFromString("accessibilityTitle")
+                if object.responds(to: title), let raw = object.perform(title)?.takeUnretainedValue(),
+                   let text = (raw as? String) ?? (raw as? NSAttributedString)?.string,
+                   !text.isEmpty, controls[text] == nil { labels.append(text); controls[text] = object }
                 let children = NSSelectorFromString("accessibilityChildren")
                 if object.responds(to: children), let values = object.perform(children)?.takeUnretainedValue() as? [Any] {
                     values.forEach(visit)
@@ -242,7 +255,7 @@ final class CompactConversationTests: XCTestCase {
             try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
                 .write(to: directory.appendingPathComponent("conversation-\(width)-\(compact ? "compact" : "expanded")\(thread ? "-thread" : "").png"))
             let modeLabel = compact ? "Expand voice" : "Keep voice compact"
-            for label in [modeLabel, "Memory graph", "Return to workspace"] {
+            for label in [modeLabel, "Knowledge", "Results · 1"] {
                 let control = try XCTUnwrap(controls[label])
                 let rect = try XCTUnwrap(control.value(forKey: "accessibilityFrame") as? NSValue).rectValue
                 let viewport = window.convertToScreen(view.convert(view.bounds, to: nil))

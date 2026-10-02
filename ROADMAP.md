@@ -139,14 +139,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-30: conversation is spread over one tab per turn, only Mortimer's side shows, the tab strip fills up, and asking again re-fetches. Increment CC7a of the Command Console plan (WS-09's plan): one conversation thread with both sides, results as inline cards, Recents instead of tabs, reuse a fresh result by subject.
 
 - **Owner:** `claude` (implementation); `codex` reviews every increment before merge
-- **Status:** in-progress: CC7a.1 landed (PR #140, `1a0aac7`, Codex reviewed) and deployed in `39fc6f9`; CC7a.1b is open in PR #147 with passing checks but a merge conflict; UI2-22 Mac check and CC7a.2–.4 remain open
-- **Implemented by:** Claude (Cowork): CC7a.1
+- **Status:** in-progress: CC7a.1 (PR #140) and CC7a.1b, one console row (PR #147, Codex reviewed), landed; UI2-22 and UI2-24 Mac checks open; CC7a.2–CC7a.4 remain
+- **Implemented by:** Claude (Cowork): CC7a.1, CC7a.1b
 - **Remaining work / acceptance:** CC7a.1-CC7a.4, each a reviewed PR; RELEASE_READINESS UI2-22..UI2-25 on the Mac. UI2-04, UI2-09 and UI2-13 are held until then. Approved design: `docs/interface-research/cc7a/cc7a-approved-design-2026-09-30.html` (transcript rows, compact cards, Recents menu, reuse reference line, no-jump notice); Codex's boundaries in plan §7.2.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (CC7a.1); PR #147 branch `ws17/cc7a1b-single-console-row` (unmerged)
+- **Where:** main (CC7a.1, CC7a.1b); next increment on a new branch
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md` §7.1 item 9 and §7.2
 - **Scope:** `App/ResponseResultRouter.swift`, `Stores/WorkspaceStore.swift`, `Stores/ConversationStore.swift`, `Console/AdaptiveStageView.swift`, `Console/TopBarView.swift`, `Display/WorkspaceView.swift`, `App/AppMessageRouter.swift` (weather's select-on-arrival only), voice result actions (`App/ConsoleActionCoordinator.swift`, `App/ConsoleActionRegistry.swift`, JarvisKit `ConsoleProtocol.swift`, `jarvis/bot/console_protocol.py`), DisplayPayload `subject_key` (JarvisKit + `jarvis/bot/display.py`), weather tools' reuse check; tests for each
-- **Next step:** Claude resolves PR #147 against current main and Codex reviews that increment before merge; Larry checks UI2-22 on the deployed conversation view. Then CC7a.2 adds inline cards without focus stealing, including weather. The WS-18 fix is merged but awaits deployment and a physical device-switch check.
+- **Next step:** larry: on a build that contains CC7a.1b, check UI2-22 (both speakers, each answer once) and the single console row (UI2-24). claude: CC7a.2 (inline cards, no focus stealing incl. weather select-on-arrival), reviewed by codex.
 - **Updated:** 10-02
 
 </details>
@@ -676,6 +676,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-10-02 (WS-17 CC7a.1b landed after Codex review): Claude (Cowork). Larry, 09-30: all buttons on the console line, none below; Knowledge Atlas and Memory graph under Knowledge, Skills and Workflows under Tools, the result's actions under Actions. `ConsoleActionBar` replaces the console header's buttons; the stage, results view and result pane draw no rows in layout 2. Plan §7.2 and UI2-24 updated; mockup in `docs/interface-research/cc7a/`. Main was merged into the PR on 10-02, keeping WS-19's reconciled roadmap; the WS-17 row is written as it reads after merge.
 
 - 2026-10-02 (WS-20 B2/B3, Codex): Replaced the mutable production statements in the header and WS-02/03/04/05/09/10 with one exact Production line sourced from `deployment-receipt-7c4637e.json`; each row now records durable deployment events. Corrected the stale merged-branch state in Codex-owned WS-03/04 without closing their live gates. Rule 10 now writes rows for their after-merge state, and C1–C5 codify session checks, row ownership, cross-review, PR age and handoffs. The B4 checker reports no current-production phrase on this branch; WS-10/11 still have pre-existing lifecycle-word warnings for their acceptance owner. B1 log migration remains blocked by the open roadmap-editing PR #147.
 

@@ -67,6 +67,7 @@ struct AdaptiveStageView: View {
                 switch mode {
                 case .conversation:
                     VStack(spacing: 0) {
+                        if !consoleBarOwnsControls {
                         HStack {
                             Text("Command Center")
                                 .font(.system(size: 24, weight: .semibold))
@@ -75,6 +76,7 @@ struct AdaptiveStageView: View {
                         }
                         .padding(.horizontal, AdaptiveLayoutMetrics.workspacePadding)
                         .padding(.top, AdaptiveLayoutMetrics.workspacePadding)
+                        }
                         if showsThread {
                             ConversationThreadView()
                         } else {
@@ -132,6 +134,12 @@ struct AdaptiveStageView: View {
         }
     }
 
+    /// WS-17: in the Command Console (layout 2) every control lives in the
+    /// console's single row (`ConsoleActionBar`); the stage draws none.
+    private var consoleBarOwnsControls: Bool {
+        InterfaceLayoutVersion.resolve(layoutVersion) == 2
+    }
+
     private var showsThread: Bool {
         ConversationThread.showsThread(layoutVersion: layoutVersion, threadEnabled: threadEnabled)
     }
@@ -171,16 +179,18 @@ struct AdaptiveStageView: View {
             SkillsWorkspaceView(coordinator: coordinator)
         } else if workspace.showsConversation && showsThread {
             VStack(alignment: .leading, spacing: 0) {
-                HStack { conversationControls; Spacer(minLength: 0) }
-                    .padding(.horizontal, AdaptiveLayoutMetrics.workspacePadding)
-                    .padding(.top, AdaptiveLayoutMetrics.workspacePadding)
-                    .padding(.bottom, 4)
+                if !consoleBarOwnsControls {
+                    HStack { conversationControls; Spacer(minLength: 0) }
+                        .padding(.horizontal, AdaptiveLayoutMetrics.workspacePadding)
+                        .padding(.top, AdaptiveLayoutMetrics.workspacePadding)
+                        .padding(.bottom, 4)
+                }
                 ConversationThreadView()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else if workspace.showsConversation {
             VStack(alignment: .leading, spacing: 16) {
-                HStack { conversationControls; Spacer(minLength: 0) }
+                if !consoleBarOwnsControls { HStack { conversationControls; Spacer(minLength: 0) } }
                 Spacer()
                 Text("Conversation").font(.title2)
                 Text("Use the microphone controls to talk. Your results stay available in the workspace.")
@@ -189,7 +199,7 @@ struct AdaptiveStageView: View {
             }
             .padding(AdaptiveLayoutMetrics.workspacePadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        } else { WorkspaceView(coordinator: coordinator) }
+        } else { WorkspaceView(coordinator: coordinator, showsControls: !consoleBarOwnsControls) }
     }
 
 }
