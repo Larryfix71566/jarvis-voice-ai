@@ -1,6 +1,6 @@
 # Mortimer master roadmap
 
-**Production:** `7c4637ede98add988079431a44d6ec965309f757`, deployed 2026-10-02 15:51 EDT (receipt `~/MortimerRollback/logs/deployment-receipt-7c4637e.json`).
+**Production:** `ae70f2c54f9dc55d90f89a39493686c461fabe9d`, deployed 2026-10-02 19:23 EDT (receipt `~/MortimerRollback/logs/deployment-receipt-ae70f2c.json`).
 
 This file is the single record of **who is doing what** in this repository, for every system that writes code here. Plans (`docs/plans/`) hold design. Receipts (`docs/acceptance/`) hold evidence. **This file holds ownership and state.**
 
@@ -103,11 +103,11 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
 
 - **Owner:** `claude` (B4 checker, plan) and `codex` (B1–B3, claimed by Codex on 10-02 at Larry's request)
-- **Status:** in-progress: Phase A landed — plan #153, WS-07 fix #154, #138 closed, #142 merged as `d01f9af`, main `7c4637e` deployed 10-02 15:51 (receipt clean); Codex reviewed #147 and #156 with requested fixes. B2's production line and event-wording sweep plus B3's after-merge/C1–C5 rules land via this PR; B1 waits for no open roadmap-editing PR.
+- **Status:** in-progress: Phase A landed — plan #153, WS-07 fix #154, #138 closed, #142 merged as `d01f9af`, main `7c4637e` deployed 10-02 15:51 (receipt clean); #147 and #156 merged after Codex's re-review (`1faa75f`, `ae70f2c`); main `ae70f2c` deployed 10-02 19:23 (receipt clean). B2's production line and event-wording sweep plus B3's after-merge/C1–C5 rules land via this PR; B1 waits for no open roadmap-editing PR.
 - **Implemented by:** —
 - **Remaining work / acceptance:** Phase A: #138 closed; #142, #147 and #152 merged; production at main; Larry's WS-18 and thread checks recorded. Phase B: the checker passes on main in CI; no row states current production; the next 10 PRs merge with no change-log conflict. Phase C rules are in §0.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (plan and B1–B3 claim PR #157; B2/B3 via this PR). B4 remains in open PR #156. B1 reserves `docs/ws20-b1-roadmap-log-20261002` for work after the roadmap PR freeze.
+- **Where:** main (plan and B1–B3 claim PR #157; B2/B3 via this PR). B4 landed (#156). B1 reserves `docs/ws20-b1-roadmap-log-20261002` for work after the roadmap PR freeze.
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
 - **Scope:** B4 (Claude): `scripts/check_roadmap.py`, `tests/unit/test_check_roadmap.py`, the drift-check step in `.github/workflows/validate.yml`. B1–B3 (Codex): `ROADMAP.md` §0, §8 and production wording, `docs/roadmap-log/**`, and dated status/progress in `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`.
 - **Next step:** codex: review #147 and #156 again after their owners address the posted findings; migrate §8 under B1 once no open PR edits `ROADMAP.md`. larry: review this B2/B3 wording and protocol PR, merge reviewed PRs, and perform the separate app deployment after #147.
@@ -139,14 +139,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-30: conversation is spread over one tab per turn, only Mortimer's side shows, the tab strip fills up, and asking again re-fetches. Increment CC7a of the Command Console plan (WS-09's plan): one conversation thread with both sides, results as inline cards, Recents instead of tabs, reuse a fresh result by subject.
 
 - **Owner:** `claude` (implementation); `codex` reviews every increment before merge
-- **Status:** in-progress: CC7a.1 (PR #140) and CC7a.1b, one console row (PR #147, Codex reviewed), landed; UI2-22 and UI2-24 Mac checks open; CC7a.2–CC7a.4 remain
+- **Status:** in-progress: CC7a.1 (PR #140) and CC7a.1b, one console row (PR #147, Codex reviewed, merged as `1faa75f`), landed; CC7a.1b deployed in `ae70f2c` on 10-02 and Larry's Mac check passed the same day; CC7a.2–CC7a.4 remain
 - **Implemented by:** Claude (Cowork): CC7a.1, CC7a.1b
-- **Remaining work / acceptance:** CC7a.1-CC7a.4, each a reviewed PR; RELEASE_READINESS UI2-22..UI2-25 on the Mac. UI2-04, UI2-09 and UI2-13 are held until then. Approved design: `docs/interface-research/cc7a/cc7a-approved-design-2026-09-30.html` (transcript rows, compact cards, Recents menu, reuse reference line, no-jump notice); Codex's boundaries in plan §7.2.
+- **Remaining work / acceptance:** CC7a.1-CC7a.4, each a reviewed PR; RELEASE_READINESS UI2-22..UI2-25 on the Mac. UI2-04, UI2-09 and UI2-13 are held until then. Larry, Mac, 10-02, build `ae70f2c`: one console row with nothing below it in conversation, results and Knowledge Atlas (UI2-24's CC7a.1b part; its Recents parts wait for CC7a.3); Knowledge ▾ and Tools ▾ send content to the supporting display with no result open, and "Return display content here" brings it back; a spoken answer showed once in the thread. UI2-22's five-turn check is not yet run. Approved design: `docs/interface-research/cc7a/cc7a-approved-design-2026-09-30.html` (transcript rows, compact cards, Recents menu, reuse reference line, no-jump notice); Codex's boundaries in plan §7.2.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main (CC7a.1, CC7a.1b); next increment on a new branch
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md` §7.1 item 9 and §7.2
 - **Scope:** `App/ResponseResultRouter.swift`, `Stores/WorkspaceStore.swift`, `Stores/ConversationStore.swift`, `Console/AdaptiveStageView.swift`, `Console/TopBarView.swift`, `Display/WorkspaceView.swift`, `App/AppMessageRouter.swift` (weather's select-on-arrival only), voice result actions (`App/ConsoleActionCoordinator.swift`, `App/ConsoleActionRegistry.swift`, JarvisKit `ConsoleProtocol.swift`, `jarvis/bot/console_protocol.py`), DisplayPayload `subject_key` (JarvisKit + `jarvis/bot/display.py`), weather tools' reuse check; tests for each
-- **Next step:** larry: on a build that contains CC7a.1b, check UI2-22 (both speakers, each answer once) and the single console row (UI2-24). claude: CC7a.2 (inline cards, no focus stealing incl. weather select-on-arrival), reviewed by codex.
+- **Next step:** claude: CC7a.2 (inline cards, no focus stealing incl. weather select-on-arrival), reviewed by codex. larry: UI2-22's five-turn conversation check on any build from `ae70f2c` on.
 - **Updated:** 10-02
 
 </details>
@@ -285,14 +285,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Voice workflows phases 1–4, Workflow Viewer, #80 privacy fix, DEPLOY-MAIN
 
 - **Owner:** `claude`
-- **Status:** landed (main `0b76f49`); thread-text fix landed 10-02 (#154) and deployed in `7c4637e` on 10-02; Larry's thread check open
+- **Status:** landed (main `0b76f49`); thread-text fix landed 10-02 (#154) and deployed in `7c4637e` on 10-02; Larry's thread check passed on the Mac 10-02 (build `ae70f2c`)
 - **Implemented by:** Claude
-- **Remaining work / acceptance:** Larry: switch the reply guard from `log` to `correct` once the live log shows its precision. Recounted 09-30: the bot log holds four guard events (09-25, 09-29 twice, 09-30), all `action=logged kind=refusal`; the other `reply_guard=log` lines are startup settings, not events. Still not enough to judge precision. Backlog F1 (retry guard vs a different place) is in this area. Thread text once (10-02 fix): on a build that contains it, Larry sees each spoken answer once in the conversation thread (UI2-22).
+- **Remaining work / acceptance:** Larry: switch the reply guard from `log` to `correct` once the live log shows its precision. Recounted 09-30: the bot log holds four guard events (09-25, 09-29 twice, 09-30), all `action=logged kind=refusal`; the other `reply_guard=log` lines are startup settings, not events. Still not enough to judge precision. Backlog F1 (retry guard vs a different place) is in this area. Thread text once (10-02 fix): passed, Larry on the Mac 10-02, build `ae70f2c`: a spoken answer showed once in the thread. UI2-22's full five-turn check stays with WS-17.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main
 - **Plan:** `docs/plans/MORTIMER_VOICE_WORKFLOWS_PLAN.md`, `docs/plans/MORTIMER_WORKFLOW_VIEWER_PLAN.md`
 - **Scope:** —
-- **Next step:** larry: ask one question and check the answer shows once in the conversation thread; guard-mode decision after more live use (four events so far).
+- **Next step:** larry: guard-mode decision after more live use (four events so far).
 - **Updated:** 10-02
 
 </details>
@@ -676,6 +676,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-10-02 (WS-07, WS-17, WS-20 after deploy `ae70f2c`): Claude (Cowork). Larry deployed main `ae70f2c` at 19:23 (deploy phase A: Python 4,984 passed / 7 skipped, MortimerHost 425 / 6 skipped / 0 failures, JarvisKit 226 / 0; receipt clean, services and bundle at `ae70f2c`). Production line refreshed from `deployment-receipt-ae70f2c.json` (plan B2). Larry's Mac checks passed: one console row, nothing below (UI2-24's CC7a.1b part); send to the supporting display from Knowledge ▾ and Tools ▾ with no result open; a spoken answer shows once in the thread (WS-07 fix). UI2-22's five-turn check and UI2-24's Recents parts stay open. WS-20: Claude's parts only (#147, #156 merged after Codex's re-review; B4 landed).
 
 - 2026-10-02 (WS-17 CC7a.1b landed after Codex review): Claude (Cowork). Larry, 09-30: all buttons on the console line, none below; Knowledge Atlas and Memory graph under Knowledge, Skills and Workflows under Tools, the result's actions under Actions. `ConsoleActionBar` replaces the console header's buttons; the stage, results view and result pane draw no rows in layout 2. Plan §7.2 and UI2-24 updated; mockup in `docs/interface-research/cc7a/`. Main was merged into the PR on 10-02, keeping WS-19's reconciled roadmap; the WS-17 row is written as it reads after merge.
 
