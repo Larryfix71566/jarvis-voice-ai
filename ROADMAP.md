@@ -87,26 +87,6 @@ Claude’s work or enable any runtime feature.
 
 ### Needs work: not yet built (proposed, claimed, in progress, in review, blocked)
 
-<details id="ws-19">
-<summary>WS-19 — Repository review and unified roadmap reconciliation · Codex</summary>
-
-**Workstream:** Larry's 10-02 request to review the current repository and reconcile this roadmap against code, plans, acceptance evidence, deployment receipts, and PR state. Documentation and read-only review only.
-
-- **Owner:** `codex`
-- **Status:** review: claim PR #150 merged as `f45f533`; read-only audit and roadmap corrections committed on this branch; publication pending
-- **Implemented by:** Codex (review and roadmap update)
-- **Remaining work / acceptance:** Merge the documentation correction and refresh the readable preview from its merged revision; no feature activation or production edit.
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** `docs/ws19-repo-roadmap-review-20261002`
-- **Plan:** this bounded review is tracked in this block and §8; no new implementation plan.
-- **Scope:** `ROADMAP.md` only for edits; repository, plans, receipts, CI and PRs are read-only evidence.
-- **Next step:** Land the reconciled roadmap, then identify its merged source revision for the readable preview. No production or activation step belongs to WS-19.
-- **Updated:** 10-02
-
-**Review findings (read-only, 10-02):** Six PRs (#143, #144, #145, #146, #148, #149) merged after the deployed `39fc6f9`; #143/#148 are claims, while WS-03/04/18 product changes remain undeployed. The remaining product gates are predominantly Mac/provider/activation evidence, not a missing implementation claim. PR #142 (WS-08 acceptance), PR #147 (WS-17 CC7a.1b), and the now-redundant PR #138 (CX-15 scope, already recorded by #139) are open with conflicts. The shared acceptance runbook, adaptive release-readiness header, `docs/acceptance/IMPLEMENTATION_STATUS.md`, and WS-04 plan status header still describe older candidate/branch states; their owners must reconcile them before using them as current release evidence. No production setting, token, provider route or acceptance checkbox was changed by this review.
-
-</details>
-
 <details id="ws-05">
 <summary>WS-05 — Model access: subscriptions, APIs and SAYGM · Codex</summary>
 
@@ -390,9 +370,29 @@ Claude’s work or enable any runtime feature.
 
 
 
-### Completed: accepted, nothing left
+### Completed: accepted product work and closed documentation reviews
 
-Accepted workstreams are listed below; implementation milestones also appear in §6.
+Accepted product workstreams and closed documentation reviews are listed below; implementation milestones also appear in §6.
+
+<details id="ws-19">
+<summary>WS-19 — Repository review and unified roadmap reconciliation · Codex</summary>
+
+**Workstream:** Larry's 10-02 request to review the current repository and reconcile this roadmap against code, plans, acceptance evidence, deployment receipts, and PR state. Documentation and read-only review only.
+
+- **Owner:** `codex`
+- **Status:** landed: claim PR #150 merged as `f45f533`; reconciled roadmap PR #151 merged as `cfa0d2d`; docs-only review complete.
+- **Implemented by:** Codex (review and roadmap update)
+- **Remaining work / acceptance:** None for this documentation review. Product deployment and live acceptance remain in their own workstreams.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (PRs #150 and #151)
+- **Plan:** this bounded review is tracked in this block and §8; no new implementation plan.
+- **Scope:** `ROADMAP.md` only for edits; repository, plans, receipts, CI and PRs are read-only evidence.
+- **Next step:** None for WS-19; owners follow the open gates in their workstream blocks.
+- **Updated:** 10-02
+
+**Review findings (read-only, 10-02):** Six PRs (#143, #144, #145, #146, #148, #149) merged after the deployed `39fc6f9`; #143/#148 are claims, while WS-03/04/18 product changes remain undeployed. The remaining product gates are predominantly Mac/provider/activation evidence, not a missing implementation claim. PR #142 (WS-08 acceptance), PR #147 (WS-17 CC7a.1b), and the now-redundant PR #138 (CX-15 scope, already recorded by #139) were open with conflicts at review time. The shared acceptance runbook, adaptive release-readiness header, `docs/acceptance/IMPLEMENTATION_STATUS.md`, and WS-04 plan status header described older candidate/branch states; their owners must reconcile them before using them as current release evidence. No production setting, token, provider route or acceptance checkbox was changed by this review.
+
+</details>
 
 <details id="ws-14">
 <summary>WS-14 — Subscription probe: sign-in, command and category fixes · Claude (Codex post-merge review)</summary>
@@ -648,6 +648,8 @@ first lever to pull.
 ---
 
 ## 8. Change log
+
+- 2026-10-02 (WS-19 publication): PR #151 merged the full roadmap reconciliation as `cfa0d2d` after five passing checks. The readable expandable preview was regenerated from that merged revision. This follow-up records the docs-only review as closed; it does not close any product deployment or acceptance gate.
 
 - 2026-10-02 (WS-19 full repository/roadmap review): Codex compared all 18 pre-existing §2 workstreams with `origin/main` `a39136a`, tracked source/configuration, plan and acceptance headers, three open PRs, CI, and the latest DEPLOY-MAIN log. Verified production is `39fc6f9` (09-30 17:53 EDT; Python 4,938 passed/7 skipped, MortimerHost 416 with six skips/zero failures, JarvisKit 219/zero failures; matching bundle/service revisions). Corrected main-versus-production wording for WS-02/03/04/09/10/18, recorded PR #146/#149 merges, the pending PR #147 and #142 conflicts, and Larry's WS-08 overall acceptance without inventing a per-state observation matrix. Moved bounded WS-14 probe work to Completed based on its recorded daily-probe pass and Codex review; WS-06 overall checks stay open. Noted that the adaptive readiness header and shared acceptance runbook still describe older deployments/response routing. WS-03 remains 2/12 accepted; WS-04 auth and remote bind remain off in production; no new live gate was closed. `ROADMAP.md` local links resolve (10 checked). This entry is a read-only evidence reconciliation, not a release or activation receipt.
 
