@@ -1,7 +1,7 @@
 ---
 date: 2026-10-02
 system: codex
-rows: [WS-19, WS-02, WS-08, WS-14, WS-06, WS-03, WS-04]
+rows: [WS-19, WS-02, WS-03, WS-04, WS-09, WS-10, WS-18, WS-08, WS-14, WS-06]
 prs: [146, 149, 147, 142]
 ---
 

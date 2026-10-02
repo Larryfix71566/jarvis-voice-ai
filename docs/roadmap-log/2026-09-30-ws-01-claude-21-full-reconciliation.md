@@ -1,7 +1,7 @@
 ---
 date: 2026-09-30
 system: claude
-rows: [WS-01, WS-08, WS-02, WS-10, WS-07, WS-11, WS-12, WS-05, WS-06, WS-13, WS-14, WS-15, WS-16]
+rows: [WS-01, WS-08, WS-02, WS-03, WS-04, WS-09, WS-10, WS-07, WS-11, WS-12, WS-05, WS-06, WS-13, WS-14, WS-15, WS-16]
 prs: [130]
 ---
 
