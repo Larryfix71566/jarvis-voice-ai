@@ -93,9 +93,9 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry's 10-02 request to review the current repository and reconcile this roadmap against code, plans, acceptance evidence, deployment receipts, and PR state. Documentation and read-only review only.
 
 - **Owner:** `codex`
-- **Status:** in-progress: claim PR #150 merged as `f45f533`; read-only audit complete; roadmap corrections underway
+- **Status:** review: claim PR #150 merged as `f45f533`; read-only audit and roadmap corrections committed on this branch; publication pending
 - **Implemented by:** Codex (review and roadmap update)
-- **Remaining work / acceptance:** Reconcile every §2 block and report verified findings to Larry; no feature activation or production edit.
+- **Remaining work / acceptance:** Merge the documentation correction and refresh the readable preview from its merged revision; no feature activation or production edit.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** `docs/ws19-repo-roadmap-review-20261002`
 - **Plan:** this bounded review is tracked in this block and §8; no new implementation plan.
