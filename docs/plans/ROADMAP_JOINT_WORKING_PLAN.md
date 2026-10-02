@@ -45,7 +45,7 @@ After A7, the eight rows that state current production are stale. B2 replaces th
 - New folder `docs/roadmap-log/`, one file per entry: `YYYY-MM-DD-<ws>-<system>-<slug>.md` with front matter `date`, `system`, `rows`, `prs`, then the entry text.
 - Migration: a script moves every entry in §8 (72 on main `cc64d50` at the freeze window) into files verbatim; the entry count before and after must match.
 - §8 becomes a pointer and one rule: add a file, never edit §8.
-- Lands in a freeze window: after Phase A, with no open PR that edits `ROADMAP.md`. Both systems then switch their landing tooling to write a log file. Claude's scripts insert at the §8 anchor today.
+- Lands in a freeze window: after Phase A, with no open PR that edits `ROADMAP.md`. Both systems then switch their landing tooling to write a log file. Before #160, Claude's scripts inserted at the §8 anchor; they need a separate switch after #160 merges.
 
 **Implemented in the freeze window, 2026-10-02, PR #160:** All 72 entries from main `cc64d50` were moved one-to-one, with their entry text unchanged. The §8 marker and file-writing rule replace the old in-file entries. Claude's landing scripts need their separate switch after #160 merges.
 
@@ -61,7 +61,7 @@ After A7, the eight rows that state current production are stale. B2 replaces th
 
 ### B3 Rows written as they will read after merge (Codex writes the rule; both follow)
 
-**Merged in #158 (`04eb3f0`), 2026-10-02.** Rule 10 requires after-merge wording and a ref for checked/verified claims. C1–C5 are below rule 13; the one-time B2 cross-owner wording review is explicit. B1 replaces the §8 logging instruction via this PR.
+**Merged in #158 (`04eb3f0`), 2026-10-02.** Rule 10 requires after-merge wording and a ref for checked/verified claims. C1–C5 are below rule 13; the one-time B2 cross-owner wording review is explicit. B1 replaces the §8 logging instruction in #160.
 
 - A PR sets its own row to what is true once it merges: "landed (branch `x`)", never "review" or "awaiting review". `review` is shown by B4 from open PRs, not written in the row.
 - A "checked" or "verified" claim names what it was checked against: "Checked 10-02 on `origin/codex/isolated-20260924` (`addf278`)".
@@ -111,7 +111,7 @@ Python standard library only. Reads `ROADMAP.md` and git; `--receipts DIR` on th
 ## 7. Decisions
 
 - **Made (Larry, 10-02):** each system fixes its own rows; B1, B2, B3 and B4 all go in; the plan lives in the repo.
-- **Open for Larry:** dispatch WS-12 now; dispatch B1–B3 to Codex and B4 to Claude after Phase A; B4 warn or fail.
+- **Resolved by Larry on 10-02:** WS-12 landed; B1–B3 went to Codex and B4 to Claude; B4 runs warn-only in CI for the first week. The later strict-mode decision remains for Larry after the owned status-word cleanup.
 - **Confirmed by Codex, 10-02:** B1–B3 as specified. Each migrated entry gets `YYYY-MM-DD-<ws>-<system>-<slug>.md` with `date`, `system`, `rows`, `prs` front matter; use `prs: []` when an entry has no PR. Preserve entry text verbatim and verify one-to-one count. Do not land B1 while any open PR edits `ROADMAP.md`.
 
 ## 8. Risks
