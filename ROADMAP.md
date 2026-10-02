@@ -2,7 +2,7 @@
 
 This file is the single record of **who is doing what** in this repository, for every system that writes code here. Plans (`docs/plans/`) hold design. Receipts (`docs/acceptance/`) hold evidence. **This file holds ownership and state.**
 
-**Last full reconciliation:** 2026-09-30, every §2 block rechecked against main `b48d93f` (after Codex's PR #130 WS-01/WS-08 status update), the DEPLOY-MAIN receipts and the live logs (Claude, Cowork). **Latest verified production:** `03b9e60` (PR #136 merge), deployed 09-30 12:45 EDT by DEPLOY-MAIN (receipt `deployment-receipt-03b9e60.json`: Python 4,938 passed / 7 skipped, MortimerHost 404 / 6 skipped / 0 failures, JarvisKit 219 / 0). Every landed revision named in the blocks below is included in that release. Original evaluation: [cross-system evaluation](docs/reviews/CROSS_SYSTEM_PLAN_EVAL_2026-09-27.md).
+**Last full reconciliation:** 2026-10-02, read-only review of every §2 block against `origin/main` `a39136a` (before the WS-19 claim), tracked code/configuration, plan and acceptance headers, open PRs, CI, and the latest DEPLOY-MAIN log. **Latest verified production:** `39fc6f9` (PR #141 merge), deployed 09-30 17:53 EDT. That deployment passed Python 4,938 / 7 skipped, MortimerHost 416 / 6 skipped / 0 failures, JarvisKit 219 / 0; phase D reported admin/vault 200, bot 307, and matching source/bundle revision. Main is ahead of production: PRs #143–#149 include WS-03, WS-04 and WS-18 changes that have **not** been verified in the running app. This review creates no new live acceptance. Original evaluation: [cross-system evaluation](docs/reviews/CROSS_SYSTEM_PLAN_EVAL_2026-09-27.md).
 
 ---
 
@@ -72,7 +72,7 @@ Claude’s work or enable any runtime feature.
 
 | System | Where it works | How work reaches main | Reads |
 |---|---|---|---|
-| `codex` | Worktrees of `~/Documents/Codex/2026-09-09/can/work/active-repo`. Current: `codex-isolated-20260924`, branch `codex/isolated-20260924`. | Larry pushes the branch and opens the PR | `AGENTS.md` |
+| `codex` | Isolated worktrees under `~/Documents/Codex/2026-09-09/can/work/`; the active branch for each task is named in its §2 block. | Codex pushes a scoped branch and opens a PR; Larry may also push a human-only protection change | `AGENTS.md` |
 | `claude` | Cowork: Linux VM plus a bridge to the Mac, never runs git on the Mac. Claude Code: a GitHub clone. | A branch or patch plus a commit-message file; Larry commits and pushes unless the session has GitHub access | `CLAUDE.md` |
 | `larry` | The Mac, production, the vault, GitHub | Merges PRs; deploys with `scripts/deploy_main.sh` | — |
 
@@ -93,14 +93,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry's 10-02 request to review the current repository and reconcile this roadmap against code, plans, acceptance evidence, deployment receipts, and PR state. Documentation and read-only review only.
 
 - **Owner:** `codex`
-- **Status:** claimed
+- **Status:** in-progress: claim PR #150 merged as `f45f533`; read-only audit complete; roadmap corrections underway
 - **Implemented by:** Codex (review and roadmap update)
 - **Remaining work / acceptance:** Reconcile every §2 block and report verified findings to Larry; no feature activation or production edit.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** `docs/ws19-repo-roadmap-review-20261002`
 - **Plan:** this bounded review is tracked in this block and §8; no new implementation plan.
 - **Scope:** `ROADMAP.md` only for edits; repository, plans, receipts, CI and PRs are read-only evidence.
-- **Next step:** Review current main, open PRs, code paths and recorded acceptance, then correct stale statuses and next steps.
+- **Next step:** Land the reconciled roadmap, then identify its merged source revision for the readable preview. No production or activation step belongs to WS-19.
 - **Updated:** 10-02
 
 </details>
@@ -118,8 +118,8 @@ Claude’s work or enable any runtime feature.
 - **Where:** `codex/isolated-20260924`
 - **Plan:** `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md`
 - **Scope:** `jarvis/model_routing.py`, `jarvis/model_preferences.py`, `config/model_access.yaml`
-- **Next step:** Begin MAR-A: reconcile the deployed Mac checkout and capture live baseline evidence. Checked 09-30: no MAR-A commit on main or on `origin/codex/isolated-20260924` since the claim (plan last changed 09-22).
-- **Updated:** 09-30
+- **Next step:** Begin MAR-A against verified production `39fc6f9`, then capture live route/capability evidence. Read-only 10-02 check: no MAR-A change has landed since the claim; `config/model_access.yaml` still defaults to `direct_api`, with no automatic paid fallback. The route rollout remains gated.
+- **Updated:** 10-02
 
 </details>
 
@@ -129,15 +129,15 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-30: conversation is spread over one tab per turn, only Mortimer's side shows, the tab strip fills up, and asking again re-fetches. Increment CC7a of the Command Console plan (WS-09's plan): one conversation thread with both sides, results as inline cards, Recents instead of tabs, reuse a fresh result by subject.
 
 - **Owner:** `claude` (implementation); `codex` reviews every increment before merge
-- **Status:** in-progress: CC7a.1 landed (PR #140, `1a0aac7`, Codex reviewed) and deployed in `39fc6f9`; UI2-22 Mac check open; CC7a.2 next
+- **Status:** in-progress: CC7a.1 landed (PR #140, `1a0aac7`, Codex reviewed) and deployed in `39fc6f9`; CC7a.1b is open in PR #147 with passing checks but a merge conflict; UI2-22 Mac check and CC7a.2–.4 remain open
 - **Implemented by:** Claude (Cowork): CC7a.1
 - **Remaining work / acceptance:** CC7a.1-CC7a.4, each a reviewed PR; RELEASE_READINESS UI2-22..UI2-25 on the Mac. UI2-04, UI2-09 and UI2-13 are held until then. Approved design: `docs/interface-research/cc7a/cc7a-approved-design-2026-09-30.html` (transcript rows, compact cards, Recents menu, reuse reference line, no-jump notice); Codex's boundaries in plan §7.2.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (CC7a.1); next increment on a new branch
+- **Where:** main (CC7a.1); PR #147 branch `ws17/cc7a1b-single-console-row` (unmerged)
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md` §7.1 item 9 and §7.2
 - **Scope:** `App/ResponseResultRouter.swift`, `Stores/WorkspaceStore.swift`, `Stores/ConversationStore.swift`, `Console/AdaptiveStageView.swift`, `Console/TopBarView.swift`, `Display/WorkspaceView.swift`, `App/AppMessageRouter.swift` (weather's select-on-arrival only), voice result actions (`App/ConsoleActionCoordinator.swift`, `App/ConsoleActionRegistry.swift`, JarvisKit `ConsoleProtocol.swift`, `jarvis/bot/console_protocol.py`), DisplayPayload `subject_key` (JarvisKit + `jarvis/bot/display.py`), weather tools' reuse check; tests for each
-- **Next step:** Larry checks UI2-22 on the conversation view; then CC7a.2 (inline cards, no focus stealing incl. weather). WS-18 lands first: the 09-30 crash interrupted the check.
-- **Updated:** 09-30
+- **Next step:** Claude resolves PR #147 against current main and Codex reviews that increment before merge; Larry checks UI2-22 on the deployed conversation view. Then CC7a.2 adds inline cards without focus stealing, including weather. The WS-18 fix is merged but awaits deployment and a physical device-switch check.
+- **Updated:** 10-02
 
 </details>
 
@@ -154,8 +154,8 @@ Claude’s work or enable any runtime feature.
 - **Where:** new branch from `origin/main` when claimed
 - **Plan:** none (small change; the PR body is the record)
 - **Scope:** `.github/workflows/*.yml`
-- **Next step:** Larry picks it; Claude marks it `claimed` and drafts the change. Checked 09-30 on main: all three workflows still use `runs-on: ubuntu-latest`, `actions/checkout@v4` and `actions/setup-python@v5` (`validate.yml` also `actions/setup-node@v4`). 19 days to the 10-19 switch.
-- **Updated:** 09-30
+- **Next step:** Larry dispatches the proposed CI update; Claude claims it before changing workflows. Checked 10-02 on main: all three workflows still use `ubuntu-latest`, `actions/checkout@v4` and `actions/setup-python@v5`; `validate.yml` also uses `actions/setup-node@v4`. The planned runner transition remains an upcoming dependency, not a completed update.
+- **Updated:** 10-02
 
 </details>
 
@@ -173,7 +173,7 @@ Claude’s work or enable any runtime feature.
 - **Plan:** `docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md`. Codex edited this plan on 09-26, so coordinate with Codex before any edit. Migration `0035` stays reserved for T5.
 - **Scope:** that plan file only
 - **Next step:** Larry picks it; confirm with Codex that it has no pending edits to the plan
-- **Updated:** 09-28
+- **Updated:** 10-02 (read-only: plan remains draft and no T5 code/claim found)
 
 </details>
 
@@ -185,15 +185,15 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-30: Mortimer crashed at 18:09:08 after switching from AirPods to the Mac speaker mid-answer. Log: the engine rebuilt (`audio engine rebuilt after configuration change`), Voice Processing then reported `failed to run downlink DSP (state fault)`, and `AVAudioPlayerNode.play()` raised `player did not see an IO cycle` five seconds later (uncaught Objective-C exception, SIGABRT).
 
 - **Owner:** `claude`
-- **Status:** review: fix in PR (branch `ws18/audio-output-switch`)
+- **Status:** landed in PR #144 (`c2f0f49`); not in verified production `39fc6f9`; physical acceptance open
 - **Implemented by:** Claude (Cowork)
 - **Remaining work / acceptance:** Larry switches AirPods to Mac speaker and back while Mortimer is mid-answer, both directions: the app stays up, with at most a short gap in his voice; the log shows `audio output flowing` after each rebuild.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** branch `ws18/audio-output-switch`
+- **Where:** main (PR #144, `c2f0f49`)
 - **Plan:** `docs/plans/MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md` (progress entry 2026-09-30)
 - **Scope:** `macos/JarvisKit/Sources/JarvisKit/AudioEngineIO.swift`, `macos/JarvisKit/Sources/JarvisKitObjC/`, `macos/JarvisKit/Package.swift` (new ObjC target), `JarvisFlags.outputIOWatchEnabled` in `JarvisConfig.swift`, `AudioEngineIOTests.swift`
-- **Next step:** Merge, deploy, Larry's device-switch check. Rollback without a rebuild: `defaults write com.mortimer.host JARVIS_AUDIO_OUTPUT_WATCH -bool false` (the play() catch stays on).
-- **Updated:** 09-30
+- **Next step:** Deploy a frozen main candidate, then Larry switches AirPods to Mac speaker and back during speech and checks for continued output and `audio output flowing`. The source rollback switch is `JARVIS_AUDIO_OUTPUT_WATCH=false`; the Objective-C `play()` catch remains.
+- **Updated:** 10-02
 
 </details>
 
