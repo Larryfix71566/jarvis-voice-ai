@@ -1382,7 +1382,11 @@ supporting display keep theirs. The row never wraps: narrow windows drop the
 title, then show icons, each keeping its name as tooltip and accessibility
 label. This supersedes the approved mockup's view buttons at the bottom of
 Recents. CC7a.3 still adds Recents numbering, pinned-first order, fresh age
-and voice by subject to Results ▾.
+and voice by subject to Results ▾. Sending content to the
+supporting display stays available with no result open (Codex review of
+#147, 10-02): Knowledge ▾ shows the memory graph on the display, Tools ▾
+Skills and Workflows, Results ▾ any pinned result, and each offers "Return
+display content here" while the display window is open.
 
 **Codex boundaries (CX-15, 2026-09-30).** Checked by Claude against main
 `25735fd`; each is a review criterion:

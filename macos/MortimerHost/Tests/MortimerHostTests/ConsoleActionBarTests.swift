@@ -43,6 +43,46 @@ final class ConsoleActionBarTests: XCTestCase {
         XCTAssertFalse(ConsoleActionBar.showsActions(mode: .atlas, hasActiveResult: true))
     }
 
+    // MARK: Supporting display (Codex review of #147, 10-02)
+
+    /// Layout 2 with no result open (Knowledge Atlas shown): Actions is
+    /// hidden, yet memory graph, Skills and Workflows can still be sent to
+    /// the supporting display from Knowledge and Tools.
+    func testSendToDisplayStaysAvailableWithNoResultOpen() {
+        let workspace = WorkspaceStore()
+        workspace.openAtlas()
+        XCTAssertNil(workspace.activeResult)
+        XCTAssertFalse(ConsoleActionBar.showsActions(mode: .atlas, hasActiveResult: false))
+
+        let knowledge = ConsoleActionBar.knowledgeDisplayCommands(windowOpen: false)
+        let tools = ConsoleActionBar.toolsDisplayCommands(windowOpen: false)
+        XCTAssertEqual(knowledge.map(\.content), [.memoryGraph])
+        XCTAssertEqual(tools.map(\.content), [.skills, .workflows])
+        for command in knowledge + tools {
+            XCTAssertTrue(ConsoleActionBar.apply(command, to: workspace), command.title)
+            XCTAssertEqual(workspace.supportingContent, command.content, command.title)
+        }
+    }
+
+    func testReturnHereAppearsOnlyWhileTheDisplayWindowIsOpen() {
+        XCTAssertFalse(ConsoleActionBar.knowledgeDisplayCommands(windowOpen: false).contains { $0.content == nil })
+        XCTAssertEqual(ConsoleActionBar.knowledgeDisplayCommands(windowOpen: true).last?.title, "Return display content here")
+        XCTAssertEqual(ConsoleActionBar.toolsDisplayCommands(windowOpen: true).last?.title, "Return display content here")
+        XCTAssertFalse(ConsoleActionBar.apply(.init(title: "Return display content here", content: nil), to: WorkspaceStore()))
+    }
+
+    func testPinnedResultsCanBeSentWithoutOpeningThem() throws {
+        let a = try result("A"), b = try result("B")
+        let workspace = WorkspaceStore()
+        workspace.receive(a); workspace.receive(b)
+        XCTAssertTrue(workspace.pin(b.id))
+        let commands = ConsoleActionBar.pinnedDisplayCommands(results: workspace.results,
+                                                              isPinned: { workspace.pinnedIDs.contains($0) })
+        XCTAssertEqual(commands.map(\.content), [.result(b.id)])
+        XCTAssertTrue(ConsoleActionBar.apply(commands[0], to: workspace))
+        XCTAssertEqual(workspace.supportingContent, .result(b.id))
+    }
+
     // MARK: Rendered
 
     private func labels(layoutVersion: Int, width: CGFloat, withBar: Bool) throws -> [String] {

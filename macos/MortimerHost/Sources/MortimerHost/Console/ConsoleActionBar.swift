@@ -13,7 +13,9 @@ import JarvisKit
 /// the results view, the arrow lists the open results) · Knowledge ▾
 /// (Knowledge Atlas, Memory graph: what Mortimer knows) · Tools ▾ (Skills,
 /// Workflows: what Mortimer can do) · Actions ▾ (only while a result is
-/// shown) · Expand voice (only on the conversation). The row never wraps: when it does
+/// shown) · Expand voice (only on the conversation). Sending content to the
+/// supporting display stays available with no result open: each menu offers
+/// it for its own content (Codex review of #147, 10-02). The row never wraps: when it does
 /// not fit it drops the "Command Console" title, then shows icons, keeping
 /// every control's accessibility label and tooltip.
 struct ConsoleActionBar: View {
@@ -175,6 +177,11 @@ struct ConsoleActionBar: View {
                         }
                     }
                 }
+                let pinned = Self.pinnedDisplayCommands(results: workspace.results,
+                                                        isPinned: { workspace.pinnedIDs.contains($0) })
+                if !pinned.isEmpty {
+                    Menu("Show pinned on display") { displayButtons(pinned) }
+                }
             }
         } label: {
             barLabel(title, icon: "doc.text.magnifyingglass", icons: icons)
@@ -204,6 +211,8 @@ struct ConsoleActionBar: View {
         Menu {
             Button("Knowledge Atlas") { go("atlas") }
             Button("Memory graph") { go("memory") }
+            Divider()
+            displayButtons(Self.knowledgeDisplayCommands(windowOpen: display.isWindowOpen))
         } label: {
             barLabel("Knowledge", icon: "books.vertical", icons: icons)
         }
@@ -220,6 +229,8 @@ struct ConsoleActionBar: View {
         Menu {
             Button("Skills") { go("skills") }
             Button("Workflows") { go("workflows") }
+            Divider()
+            displayButtons(Self.toolsDisplayCommands(windowOpen: display.isWindowOpen))
         } label: {
             barLabel("Tools", icon: "wrench.and.screwdriver", icons: icons)
         }
@@ -366,6 +377,62 @@ struct ConsoleActionBar: View {
     private func sendToDisplay(_ content: SupportingDisplayContent) {
         guard workspace.sendToDisplay(content) else { return }
         drawer.placementRef?.openDisplay()
+    }
+
+    // MARK: Show on the supporting display (Codex review of #147, 10-02)
+
+    /// One "show on the supporting display" command. Layout 2 hides the
+    /// results view's Display menu, so each command sits in the menu that
+    /// owns its content and stays reachable with no result open: Knowledge
+    /// (memory graph), Tools (Skills, Workflows), Results (pinned results),
+    /// Actions (the result shown). `content == nil` returns the display
+    /// content to this window.
+    struct DisplayCommand: Equatable, Identifiable {
+        let title: String
+        let content: SupportingDisplayContent?
+        var id: String {
+            if case .result(let id) = content { return id.uuidString }
+            return title
+        }
+    }
+
+    private static func returnHere(_ windowOpen: Bool) -> [DisplayCommand] {
+        windowOpen ? [DisplayCommand(title: "Return display content here", content: nil)] : []
+    }
+
+    static func knowledgeDisplayCommands(windowOpen: Bool) -> [DisplayCommand] {
+        [DisplayCommand(title: "Show memory graph on display", content: .memoryGraph)] + returnHere(windowOpen)
+    }
+
+    static func toolsDisplayCommands(windowOpen: Bool) -> [DisplayCommand] {
+        [DisplayCommand(title: "Show Skills on display", content: .skills),
+         DisplayCommand(title: "Show workflows on display", content: .workflows)] + returnHere(windowOpen)
+    }
+
+    /// Pinned results that may leave this window (protected-local ones never do).
+    static func pinnedDisplayCommands(results: [WorkspaceResult], isPinned: (UUID) -> Bool) -> [DisplayCommand] {
+        results.filter { isPinned($0.id) && !$0.payload.isProtectedLocal }
+            .map { DisplayCommand(title: $0.payload.title ?? "Pinned result", content: .result($0.id)) }
+    }
+
+    /// Puts the command's content on the supporting display; false when the
+    /// store refuses it (a protected or closed result) or for "return here".
+    @discardableResult
+    static func apply(_ command: DisplayCommand, to workspace: WorkspaceStore) -> Bool {
+        guard let content = command.content else { return false }
+        return workspace.sendToDisplay(content)
+    }
+
+    @ViewBuilder
+    private func displayButtons(_ commands: [DisplayCommand]) -> some View {
+        ForEach(commands) { command in
+            Button(command.title) { run(command) }
+        }
+    }
+
+    private func run(_ command: DisplayCommand) {
+        guard command.content != nil else { drawer.placementRef?.closeDisplay(); return }
+        if Self.apply(command, to: workspace) { drawer.placementRef?.openDisplay() }
     }
 
     // MARK: Expand voice
