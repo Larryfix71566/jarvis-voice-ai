@@ -75,10 +75,11 @@ def test_missing_fields_are_errors():
 
 
 @pytest.mark.parametrize("status", ["pending merged-pipeline acceptance", "open (Mac only)"])
-def test_non_lifecycle_status_words_warn(status):
-    # WS-10 and WS-11 on 10-02.
+def test_non_lifecycle_status_words_are_errors(status):
+    # WS-10 and WS-11 on 10-02. An error, so the contract holds once CI drops
+    # --warn-only (Codex review of #156); --warn-only still exits 0.
     found = cr.check_fields(cr.parse_blocks(roadmap(block("10", Status=status))))
-    assert [f.level for f in found] == ["warning"] and "not a lifecycle word" in found[0].message
+    assert [f.level for f in found] == ["error"] and "not a lifecycle word" in found[0].message
 
 
 @pytest.mark.parametrize("status", ["in-progress: CC7a.1 landed", "landed: claim PR #150 merged", "accepted: Larry",
@@ -229,12 +230,15 @@ def test_after_the_move_entries_in_section_8_and_bad_log_files_are_errors(tmp_pa
     text = roadmap(block("07"), changelog=f"{cr.LOG_MARKER}\n\n- 2026-10-03: added here by mistake\n")
     log = tmp_path / cr.LOG_DIR
     log.mkdir(parents=True)
-    (log / "2026-10-03-ws-07-claude-ok.md").write_text("---\ndate: 2026-10-03\nsystem: claude\nrows: WS-07\n---\ntext\n")
-    (log / "2026-10-03-ws-99-codex-bad.md").write_text("---\ndate: 2026-10-03\nsystem: codex\nrows: WS-99\n---\n")
+    (log / "2026-10-03-ws-07-claude-ok.md").write_text("---\ndate: 2026-10-03\nsystem: claude\nrows: WS-07\nprs: [156]\n---\ntext\n")
+    (log / "2026-10-03-ws-07-codex-no-pr.md").write_text("---\ndate: 2026-10-03\nsystem: codex\nrows: WS-07\nprs: []\n---\nno PR\n")
+    (log / "2026-10-03-ws-07-codex-no-prs-key.md").write_text("---\ndate: 2026-10-03\nsystem: codex\nrows: WS-07\n---\n")
+    (log / "2026-10-03-ws-99-codex-bad.md").write_text("---\ndate: 2026-10-03\nsystem: codex\nrows: WS-99\nprs: []\n---\n")
     (log / "no-front-matter.md").write_text("just text\n")
     found = messages(cr.check_changelog(text, tmp_path), "error")
     assert found == [
         "§8: 1 entries in ROADMAP.md §8; add a file under docs/roadmap-log/ instead",
+        "docs/roadmap-log/2026-10-03-ws-07-codex-no-prs-key.md: front matter lacks prs",
         "docs/roadmap-log/2026-10-03-ws-99-codex-bad.md: names WS-99, which ROADMAP.md does not define",
         "docs/roadmap-log/no-front-matter.md: no front matter",
     ]
@@ -264,4 +268,6 @@ def test_the_real_roadmap_parses_into_complete_blocks():
     text = (root / "ROADMAP.md").read_text(encoding="utf-8")
     blocks = cr.parse_blocks(text)
     assert len(blocks) >= 18
-    assert messages(cr.check_fields(blocks), "error") == []
+    # Structure only: lifecycle wording is a reported error the roadmap's
+    # owners fix (warn-only in CI for now), not a reason to fail this suite.
+    assert [m for m in messages(cr.check_fields(blocks), "error") if "missing fields" in m] == []

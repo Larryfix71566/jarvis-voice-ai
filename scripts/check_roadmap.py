@@ -17,7 +17,8 @@ when it goes stale instead of at the next full reconciliation:
               names (needs `gh`)
   changelog   once §8 holds the marker <!-- changelog: docs/roadmap-log/ -->:
               no entries left in §8, and
-              every log file has its front matter and names existing rows
+              every log file has its front matter (date, system, rows,
+              prs; `prs: []` allowed) and names existing rows
   ids         WS ids are unique; every WS id mentioned is defined
 
 Standard library only. Prints one finding per line, `WS-xx: problem
@@ -170,7 +171,7 @@ def check_fields(blocks: list[Block]) -> list[Finding]:
         if missing:
             out.append(Finding("error", b.ws, f"missing fields: {', '.join(missing)}", b.line))
         if "Status" in b.fields and b.status_word not in LIFECYCLE:
-            out.append(Finding("warning", b.ws,
+            out.append(Finding("error", b.ws,
                                f"Status starts with {b.status_word!r}, not a lifecycle word "
                                f"({', '.join(LIFECYCLE)})", b.field_lines.get("Status", b.line)))
     return out
@@ -291,8 +292,10 @@ def check_changelog(text: str, root: Path) -> list[Finding]:
         if not head:
             out.append(Finding("error", f"{LOG_DIR}/{path.name}", "no front matter"))
             continue
-        meta = dict(re.findall(r"^(\w+):\s*(.*)$", head, re.M))
+        meta = dict(re.findall(r"^(\w+):[ \t]*(.*)$", head, re.M))
+        # `prs` must be present but may be empty (`prs: []`) for an entry with no PR.
         missing = [k for k in ("date", "system", "rows") if not meta.get(k)]
+        missing += [k for k in ("prs",) if k not in meta]
         if missing:
             out.append(Finding("error", f"{LOG_DIR}/{path.name}", f"front matter lacks {', '.join(missing)}"))
         for ws in WS_RE.findall(meta.get("rows", "")):
