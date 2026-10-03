@@ -1,0 +1,55 @@
+{
+  "receipt_id": "WS-05-MAR-EF-LIVE-READINESS-2026-10-02",
+  "captured_at_utc": "2026-10-03T01:14:24Z",
+  "workstream": "WS-05",
+  "source_main": "ecdf3a3687a4ebbc6fb5269c0160f5d2e567fbb4",
+  "routing_enabled_in_probe_environment": false,
+  "claude_subscription": {
+    "cli_version": "2.1.278",
+    "auth_status_reported_logged_in": true,
+    "auth_method": "claude.ai",
+    "subscription_type_reported": "max",
+    "isolated_adapter_public_probe": {
+      "ok": false,
+      "category": "authentication"
+    },
+    "direct_cli_public_probe": {
+      "ok": false,
+      "terminal_reason": "api_error",
+      "http_status": 401
+    },
+    "conclusion": "The account-status command does not establish usable subscription inference; reauthentication and a successful isolated probe remain required."
+  },
+  "codex_subscription": {
+    "cli_version": "0.158.0-alpha.2.1",
+    "login_status": "Logged in using ChatGPT",
+    "isolated_adapter_public_probe": {
+      "ok": false,
+      "category": "gated"
+    },
+    "conclusion": "The adapter intentionally blocks text execution until no-tools runtime capability is verified for this installed CLI version."
+  },
+  "saygm": {
+    "catalog_request_ok": true,
+    "vault_credential_present": true,
+    "catalog_models": 64,
+    "catalog_advertised_confidential_models": 0,
+    "configured_billing": "saygm_credit",
+    "configured_privacy": "approved_external",
+    "conclusion": "Catalog access works; no catalog-confirmed confidential inference route is available for the planned confidential pilot."
+  },
+  "handling": {
+    "probe_inputs": "fixed public synthetic prompts only",
+    "private_project_content_sent": false,
+    "response_content_saved_in_receipt": false,
+    "credentials_saved_in_receipt": false,
+    "production_configuration_changed": false,
+    "production_database_changed": false
+  },
+  "open_gates": [
+    "reauthenticate the Claude CLI and repeat the isolated adapter probe",
+    "verify Codex no-tools runtime capability before enabling its subscription adapter",
+    "obtain catalog-confirmed confidential inference availability before a SAYGM confidential pilot",
+    "keep live model routing disabled until separate quality, privacy, latency, and rollback gates pass"
+  ]
+}
