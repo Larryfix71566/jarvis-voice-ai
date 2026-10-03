@@ -1,0 +1,100 @@
+{
+  "receipt_id": "WS-05-MAR-A-REFRESH-2026-10-02",
+  "captured_at_utc": "2026-10-03T00:55:16Z",
+  "workstream": "WS-05",
+  "milestone": "MAR-A",
+  "production": {
+    "checkout": "/Users/larryfix/jarvis-voice-ai-clean",
+    "head": "ae70f2c54f9dc55d90f89a39493686c461fabe9d",
+    "deployment_receipt": "/Users/larryfix/MortimerRollback/logs/deployment-receipt-ae70f2c.json",
+    "deployment_status": "deployed",
+    "deployed_at": "2026-10-02T19:23:31-04:00",
+    "bundle_source_revision_matches_head": true,
+    "receipt_problems_count": 0,
+    "uncommitted_entries_count": 5,
+    "tracked_modified_entries_count": 0,
+    "untracked_entries_count": 5,
+    "uncommitted_contents_inspected": false,
+    "loaded_service_pids_match_deployment_receipt": {
+      "bot": true,
+      "admin": true,
+      "extractor": true,
+      "costs": true,
+      "vault": true
+    },
+    "launch_agent_working_directory": "/Users/larryfix/jarvis-voice-ai-clean",
+    "current_process_executable_independently_verified": true,
+    "current_process_executable_evidence": "ps comm for five receipt-matching PIDs: bot/admin/extractor/costs use .venv/bin/python under the launchd working directory; vault uses services/mortimer-vault/.venv/bin/python",
+    "current_process_environment_independently_verified": false
+  },
+  "candidate": {
+    "checkout": "/Users/larryfix/Documents/Codex/2026-09-09/can/work/codex-isolated-20260924",
+    "head_after_main_merge": "1bc84a1",
+    "main_at_capture": "bd41b5e"
+  },
+  "routing_configuration_observed": {
+    "routing_enabled_setting_in_production_env": "unset",
+    "code_default_when_unset": false,
+    "configured_default_route": "direct_api",
+    "configured_fallback_routes": [],
+    "voice_supervisor_profile": "claude-haiku-4-5",
+    "memory_profile": "claude-sonnet-5",
+    "routing_flag_and_override_absent_from_env_file": true,
+    "routing_flag_and_override_absent_from_launch_agent_environment": true,
+    "effective_process_route_unverified": true
+  },
+  "model_call_site_audit": {
+    "python_version": "3.12.13",
+    "production": {"total": 28, "covered": 28, "review_required": 0},
+    "candidate": {"total": 28, "covered": 28, "review_required": 0}
+  },
+  "usage_since_deployment": {
+    "window_start_utc": "2026-10-02T23:23:31Z",
+    "latest_record_utc": "2026-10-02T23:32:40.072830Z",
+    "all_provider_calls": 15,
+    "llm_calls": 8,
+    "llm_calls_by_workload": {
+      "supervisor": 3,
+      "memory_extraction": 3,
+      "memory_classify": 1,
+      "kb_digest": 1
+    },
+    "stt_calls": 1,
+    "tts_calls": 6,
+    "llm_input_tokens": 2716,
+    "llm_output_tokens": 2659,
+    "estimated_llm_cost_usd": 0.057757,
+    "estimated_all_provider_cost_usd": 0.129253,
+    "usage_known_rows": 15,
+    "rows_with_route_name": 0,
+    "rows_with_billing_source": 0,
+    "rows_with_model_duration_ms": 0,
+    "read_mode": "SQLite query_only; aggregate metadata only",
+    "model_quality_scores_available": false
+  },
+  "agent_run_context": {
+    "completed_supervisor_runs_since_deployment": 1,
+    "run_status": "ok",
+    "run_latency_ms": 61,
+    "limitation": "Agent-run duration is not model-call latency or model quality"
+  },
+  "actions_performed": [
+    "read-only checkout, deployment receipt, launchd and configuration inspection",
+    "read-only production and candidate AST model-call-site audits",
+    "aggregate-only read-only queries of costs.db and jarvis.db"
+  ],
+  "actions_not_performed": [
+    "provider calls",
+    "feature activation",
+    "credential changes",
+    "production writes",
+    "reading prompt or response content"
+  ],
+  "mar_a_complete": false,
+  "open_gates": [
+    "independently verify the effective process routing flag and model-access override, or accept the launchd script plus env-file proxy",
+    "extend the separate public synthetic smoke with representative workload quality and model-call latency evidence",
+    "capture route and billing attribution with the routing gate still disabled or mark this as unavailable until gated pilot",
+    "obtain enough observations per workload to interpret latency and quality"
+  ]
+}

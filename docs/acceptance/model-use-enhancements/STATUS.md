@@ -1,6 +1,6 @@
 # Model Use Enhancements — status
 
-**As of:** 2026-09-20
+**As of:** 2026-09-29
 **Plan:** [Model Use Enhancements](../../plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md)
 **Execution sequence:** [Remaining Gaps Implementation Plan](../../plans/MORTIMER_REMAINING_GAPS_IMPLEMENTATION_PLAN.md)
 
@@ -29,6 +29,25 @@ no linked receipt are also unreceipted.
 
 - [ ] **MAR-A** — Reconcile the installed Mac checkout with the candidate
   release and capture live baseline latency/quality/usage.
+  A 2026-10-02 aggregate-only refresh confirms the deployed release `ae70f2c`,
+  matching bundle source revision and five loaded service PIDs, and 28/28
+  classified model call sites in both production and the current Codex tree.
+  Since that deployment the ledger has 15 provider calls (8 LLM), with usage
+  and estimated cost but no populated route, billing-source, or model-duration
+  fields. One completed supervisor run is not a model quality or latency
+  sample. The [refresh receipt](receipts/mar-a-baseline-refresh-2026-10-02.json)
+  records the evidence and remaining gates without reading prompt content or
+  making a provider call.
+  A separate [public synthetic direct-API probe](receipts/mar-a-synthetic-direct-api-2026-10-02.json)
+  made ten capped, tool-free calls: five Haiku voice-supervisor fixtures and
+  five Sonnet analyst fixtures all matched exactly, with median execution
+  durations of 508.3 ms and 994.0 ms respectively. This is a narrow smoke
+  baseline, not representative research/development quality or a stable p95;
+  the production ledger's missing route/billing/duration fields remain open.
+  The earlier [2026-09-29 baseline receipt](receipts/mar-a-baseline-2026-09-29.json)
+  covered 28/28 call sites on the then-deployed `eb24e81` release. Its process
+  identity limitation was partly resolved by the current executable check;
+  its missing model-call metrics remain a production-ledger limitation.
 - [ ] **MAR-D** — Apply privacy policy checks to every tool result, council
   continuation, and usage/logging path. Enabled-mode confidential and
   local-only sub-agent runs now redact tool arguments/results and final

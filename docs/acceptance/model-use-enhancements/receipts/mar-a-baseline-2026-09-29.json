@@ -1,0 +1,104 @@
+{
+  "receipt_id": "WS-05-MAR-A-2026-09-29",
+  "captured_at_utc": "2026-09-29T17:11:55Z",
+  "workstream": "WS-05",
+  "milestone": "MAR-A",
+  "production": {
+    "checkout": "/Users/larryfix/jarvis-voice-ai-clean",
+    "head": "eb24e811926b8d144c88a1eee128b64e2580ded4",
+    "deployment_receipt": "/Users/larryfix/MortimerRollback/logs/deployment-receipt-eb24e81.json",
+    "deployment_status": "deployed",
+    "deployment_timestamp": "2026-09-29T10:07:29-04:00",
+    "deployment_revision_match": true,
+    "deployed_app_bundle_identifier": "com.mortimer.host",
+    "deployed_app_bundle_source_revision": "eb24e811926b8d144c88a1eee128b64e2580ded4",
+    "launch_agents": "loaded at capture",
+    "current_process_identity": "not independently verified; process listing unavailable"
+  },
+  "candidate": {
+    "checkout": "/Users/larryfix/Documents/Codex/2026-09-09/can/work/codex-isolated-20260924",
+    "head": "24b1171126868ff4ff3bce2b4aa9fe833e5ab37d"
+  },
+  "static_and_runtime_audit": {
+    "python_runtime": "production venv Python 3.12.13",
+    "model_call_site_audit": {
+      "total": 28,
+      "covered": 28,
+      "review_required": 0
+    },
+    "daily_status_snapshot": {
+      "generated_at": "2026-09-29T14:11:44+00:00",
+      "source_head": "eb24e811926b8d144c88a1eee128b64e2580ded4",
+      "errors_count": 0,
+      "scope_note": "daily status snapshot only; not a whole-application model error rate"
+    }
+  },
+  "routing_configuration_observed": {
+    "routing_enabled_setting": "unset in production .env; code default is false",
+    "runtime_process_environment_independently_read": false,
+    "voice_supervisor": "claude-haiku-4-5 via direct_api",
+    "background_and_memory_profiles": "claude-sonnet-5 via direct_api; confidential policy configured",
+    "default_route": "direct_api",
+    "fallbacks": []
+  },
+  "usage_baseline": {
+    "database": "/Users/larryfix/jarvis-voice-ai-clean/data/costs.db",
+    "read_mode": "SQLite query_only; aggregate rows only; no prompts or responses read",
+    "full_window": {
+      "start": "2026-09-01T19:09:25.350040+00:00",
+      "end": "2026-09-29T15:40:34.135081+00:00",
+      "all_provider_calls": 4665,
+      "llm_calls": 3445,
+      "llm_input_tokens": 5221060,
+      "llm_output_tokens": 577722,
+      "estimated_llm_cost_usd": 33.8884,
+      "llm_usage_known_rows": 41,
+      "llm_rows_with_duration": 0,
+      "llm_rows_with_route_or_billing_attribution": 0
+    },
+    "since_deployment": {
+      "start": "2026-09-29T14:07:29+00:00",
+      "end": "2026-09-29T15:40:34.135081+00:00",
+      "all_provider_calls": 69,
+      "llm_calls": 35,
+      "llm_input_tokens": 6252,
+      "llm_output_tokens": 8496,
+      "estimated_llm_cost_usd": 0.2103,
+      "llm_usage_known_rows": 35,
+      "llm_rows_with_duration": 0,
+      "llm_rows_with_route_or_billing_attribution": 0,
+      "llm_calls_by_workload_and_model": {
+        "analyst / claude-sonnet-5": 9,
+        "kb_digest / claude-sonnet-5": 2,
+        "memory_classify / claude-sonnet-5": 2,
+        "memory_extraction / claude-sonnet-5": 9,
+        "supervisor / claude-haiku-4-5": 13
+      }
+    },
+    "limitations": [
+      "costs are estimated",
+      "route and billing mode are unknown",
+      "latency is absent",
+      "quality scores are absent"
+    ]
+  },
+  "actions_performed": [
+    "read-only deployment and configuration inspection",
+    "read-only production call-site audit",
+    "aggregate-only query of usage/cost ledger"
+  ],
+  "actions_not_performed": [
+    "provider calls",
+    "feature activation",
+    "credential changes",
+    "production writes",
+    "reading prompt/response content"
+  ],
+  "mar_a_complete": false,
+  "open_gates": [
+    "agree a safe measurement method for latency and quality",
+    "collect route/billing attribution",
+    "independently verify effective running process configuration",
+    "capture workload-appropriate latency and quality evidence"
+  ]
+}

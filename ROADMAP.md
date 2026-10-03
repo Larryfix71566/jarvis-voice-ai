@@ -122,14 +122,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Model Use Enhancements MAR-A…J (checklist in §7)
 
 - **Owner:** `codex`
-- **Status:** claimed: the bounded admission-test stability fix landed in PR #162; MAR-A route rollout and live gates remain open
-- **Implemented by:** Not itemized for every foundation component; WS-02 isolation is Codex
-- **Remaining work / acceptance:** Codex; Larry for live account/deployment steps
+- **Status:** in-progress: MAR-A baseline evidence is partial; the bounded admission-test stability fix landed in PR #162; route rollout and live gates remain open
+- **Implemented by:** Foundation contributions are not fully itemized; WS-02 isolation and MAR-A baseline work are Codex
+- **Remaining work / acceptance:** Codex completes MAR-A evidence and subsequent open gates; Larry handles live provider/account and deployment decisions
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** `codex/isolated-20260924` for MAR-A; main includes bounded test-stability claim [#161](https://github.com/Larryfix71566/jarvis-voice-ai/pull/161) as `eacf99b` and fix [#162](https://github.com/Larryfix71566/jarvis-voice-ai/pull/162) as `30ac2c7`
+- **Where:** `codex/isolated-20260924` for MAR-A baseline [#165](https://github.com/Larryfix71566/jarvis-voice-ai/pull/165); main includes bounded test-stability claim [#161](https://github.com/Larryfix71566/jarvis-voice-ai/pull/161) as `eacf99b` and fix [#162](https://github.com/Larryfix71566/jarvis-voice-ai/pull/162) as `30ac2c7`
 - **Plan:** `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md`
-- **Scope:** `jarvis/model_routing.py`, `jarvis/model_preferences.py`, `config/model_access.yaml`; bounded test-stability scope: `tests/unit/test_model_execution.py` only, with no production admission-policy change
-- **Next step:** codex: reconcile MAR-A against the deployed release named in the Production line and the baseline on `origin/codex/isolated-20260924` (`addf278`), then capture live route/capability evidence. The bounded test-only fix replaced the fixed 20-tick waiter-registration poll with a 2-second deadline; 30 focused repeats, all 38 model-execution tests, and all five PR #162 CI checks passed on 10-02. No production admission-policy or model route changed. The 10-02 read-only main check used `a39136a`: `config/model_access.yaml` defaulted to `direct_api`, with no automatic paid fallback; the route rollout remained gated.
+- **Scope:** `jarvis/model_routing.py`, `jarvis/model_preferences.py`, `config/model_access.yaml`; `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md`; `docs/acceptance/model-use-enhancements/**`. Bounded landed test-stability scope: `tests/unit/test_model_execution.py` only, with no production admission-policy change
+- **Next step:** codex: the 10-02 MAR-A refresh confirms deployed `ae70f2c`, five loaded service PIDs matching its receipt, production venv executables, and 28/28 classified call sites on production and this branch. A ten-call public synthetic direct-API smoke returned exact expected outputs on five Haiku and five Sonnet fixtures (median 508.3/994.0 ms). The 15 production ledger rows since deployment include eight LLM calls but no populated model-call duration, route, or billing source. Obtain representative workload quality, verify the effective routing flag beyond the launchd/env-file proxy, and capture production route/billing attribution before closing MAR-A. The test-only stability fix passed 30 focused repeats, all 38 model-execution tests, and five PR #162 checks; rollout remains gated.
 - **Updated:** 10-02
 
 </details>
