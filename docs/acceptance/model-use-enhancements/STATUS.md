@@ -76,15 +76,21 @@ no linked receipt are also unreceipted.
   test remains open. The 2026-09-20 receipt recorded a missing key; that is
   historical evidence, not the current credential state.
 - [ ] **MAR-F** — Complete Claude re-authentication and capability evidence.
-  On 2026-10-02, `claude auth status` reported a signed-in Max account, but
-  Mortimer's isolated public-prompt probe failed authentication and a direct
-  Claude CLI public-prompt call returned HTTP 401. Account status alone is not
-  inference readiness. `codex login status` reported ChatGPT sign-in; its
-  Mortimer adapter remains intentionally gated pending no-tools verification
-  for the installed CLI. The [live readiness receipt](receipts/model-access-live-readiness-2026-10-02.json)
-  records these distinct outcomes without credentials or response text.
+  The [initial 2026-10-02 readiness receipt](receipts/model-access-live-readiness-2026-10-02.json)
+  recorded HTTP 401 from the older `/Users/larryfix/.local/bin/claude` despite
+  its account-status report. After Larry refreshed sign-in, a
+  [same-day recheck](receipts/mar-f-claude-subscription-recheck-2026-10-02.json)
+  found the selected `/opt/homebrew/bin/claude` signed in to Claude Max: both
+  direct and Mortimer-isolated fixed public-prompt inference succeeded on
+  `claude-sonnet-5`. The older executable remains signed out. Bot and admin
+  launch-agent `PATH` resolves the signed-in executable, but the running
+  process environment was not independently inspected and routing remains
+  disabled. `codex login status` reported ChatGPT sign-in; its Mortimer adapter
+  remains intentionally gated pending no-tools verification for the installed CLI.
   Subscription tokens remain in each provider's own sign-in store, outside
   the project vault. Both adapters remain text-only and reject Mortimer tools.
+  Capability, billing/overage, representative workload, and deployed-route
+  acceptance remain open.
 - [ ] **MAR-G** — Migrate all non-voice call sites and prove no background
   workload inherits the voice route. Memory, extraction, sweep, procedure,
   digest, agent, council, upgrade, shared-content vision, and production screen
@@ -326,18 +332,20 @@ See [`model-call-site-inventory-2026-09-25.json`](receipts/model-call-site-inven
   and `production_automation_enabled=false`; receipt:
   [`rollout-monitoring-receipt.json`](../memory-automation/rollout-monitoring-receipt.json).
 - SAYGM confidential-model attestation and subscription route enablement
-  remain incomplete. The 2026-09-21 report of successful Claude and Codex
-  probes was user-reported history; the 2026-10-02 live receipt supersedes
-  it for current readiness. The deployed revision is documented under MAR-A.
+  remain incomplete. The 2026-10-02 Claude recheck supersedes that day's
+  earlier HTTP 401 result for the selected Homebrew CLI, while preserving it
+  as evidence of the alternate signed-out executable. The deployed revision
+  is documented under MAR-A.
 
 ## Next exact handoff actions
 
 1. Run live voice acceptance for the route tool and verify spoken confirmation
    updates the native catalog without an implicit fallback.
-2. Restore Claude CLI authentication, then rerun the isolated subscription
-   probe. Verify Codex's no-tools runtime capability for its installed version
-   before lifting its adapter gate. A sandbox-preserving tool bridge is still
-   required for tool-bearing developer/app-builder workloads.
+2. Verify Claude subscription CLI resolution and auth inside the running
+   service before activation; then validate allowance/billing and workload
+   capabilities. Verify Codex's no-tools runtime capability for its installed
+   version before lifting its adapter gate. A sandbox-preserving tool bridge
+   is still required for tool-bearing developer/app-builder workloads.
 3. Recheck SAYGM catalog and capability metadata when a confidential model is
    advertised; do not classify the current 64-model catalog as confidential.
 4. Reconcile the installed checkout with this candidate before enabling
