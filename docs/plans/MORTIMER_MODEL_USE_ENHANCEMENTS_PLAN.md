@@ -40,7 +40,16 @@ It cannot establish latency, quality, route/billing attribution, or current
 process identity. MAR-A remains open until those gaps are measured through an
 agreed safe method. No provider calls or production changes were made.
 
-**Stage status:** MAR-A deployment reconciliation and call-site inventory are recorded in the 2026-09-29 baseline receipt; trustworthy latency/quality, route/billing attribution, and current-process identity evidence remain open. MAR-B has its initial model/route/workload
+The 2026-10-02 refresh now ties the installed checkout and bundle to `ae70f2c`,
+matches five current service PIDs to its deployment receipt, and again covers
+28/28 call sites. The [refresh receipt](../acceptance/model-use-enhancements/receipts/mar-a-baseline-refresh-2026-10-02.json)
+records the sparse post-deployment usage window and the missing measurements.
+
+**Stage status:** MAR-A deployment reconciliation, process executable identity,
+and call-site inventory are recorded in the 2026-10-02 refresh. A narrow
+synthetic latency/quality smoke is recorded separately; representative
+workload quality, effective process routing flag, and production route/billing
+attribution remain open. MAR-B has its initial model/route/workload
 contracts and MAR-C has the provider-neutral text execution contract. MAR-D
 has local privacy enforcement and enabled-mode confidential/local-only
 sub-agent run-log redaction, council call policy enforcement, and protected
@@ -92,6 +101,10 @@ Related documents:
 - [Automated-memory plan](MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md)
 
 ## Progress
+
+- 2026-10-02 (Codex, MAR-A baseline refresh): The installed Mac remains on deployed `ae70f2c` while main is `bd41b5e`. Current launchd bot/admin/extractor/costs/vault PIDs match the clean deployment receipt; a read-only `ps` executable-name check confirms the production venv processes. The production checkout has zero tracked edits and five untracked entries. The routing flag and model-access override are absent from the sourced `.env` and launch-agent environment, but the running process environment itself was not inspected. Production and merged candidate each pass the Python 3.12 call-site audit at 28/28. The read-only ledger window since deployment contains 15 provider calls (8 LLM), with zero populated route, billing-source, or model-duration fields; one completed supervisor run is not a quality score. No provider call or production write was made during this aggregate baseline capture. See [`mar-a-baseline-refresh-2026-10-02.json`](../acceptance/model-use-enhancements/receipts/mar-a-baseline-refresh-2026-10-02.json). MAR-A remains open for representative quality/latency evidence, effective-routing verification, and production route/billing attribution.
+
+- 2026-10-02 (Codex, MAR-A synthetic direct-API smoke): Ten public, tool-free, capped calls through the provider-neutral execution boundary produced exact expected outputs in five Haiku voice-supervisor and five Sonnet analyst fixtures. Median call durations were 508.3 ms and 994.0 ms; nearest-rank p95 is the sample maximum (617.0 ms and 1184.3 ms) with only five calls per model. The [receipt](../acceptance/model-use-enhancements/receipts/mar-a-synthetic-direct-api-2026-10-02.json) records route/billing metadata and token counts but no response text or credential. This is a narrow instruction-following and latency smoke, not representative workload quality or production route/billing attribution. MAR-A remains open.
 
 - 2026-10-02 (Codex, bounded test-stability fix, PR #162 merged as `30ac2c7`): The model-admission priority test now waits up to two seconds for the interactive waiter registered on a worker thread, polling at 1 ms intervals instead of assuming 20 zero-delay event-loop turns suffice. Its existing capacity and priority assertions remain. Thirty focused iterations and all 38 tests in `tests/unit/test_model_execution.py` passed locally; all five PR checks passed. This is a test-only change; MAR-A live route/capability evidence and rollout remain open.
 

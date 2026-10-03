@@ -1,0 +1,198 @@
+{
+  "receipt_id": "WS-05-MAR-A-SYNTHETIC-DIRECT-API-2026-10-02",
+  "captured_at_utc": "2026-10-03T00:58:42.085272+00:00",
+  "workstream": "WS-05",
+  "milestone": "MAR-A",
+  "source_checkout": "/Users/larryfix/Documents/Codex/2026-09-09/can/work/codex-isolated-20260924",
+  "source_revision": "1bc84a1",
+  "purpose": "Public synthetic direct-API latency and narrow instruction-following smoke; not live production quality acceptance",
+  "provider_calls": 10,
+  "models_and_routes": {
+    "voice_supervisor": {
+      "calls": 5,
+      "exact_matches": 5,
+      "errors": 0,
+      "median_duration_ms": 508.3,
+      "p95_duration_ms_nearest_rank": 617.0,
+      "prompt_tokens": 135,
+      "completion_tokens": 32
+    },
+    "analyst": {
+      "calls": 5,
+      "exact_matches": 5,
+      "errors": 0,
+      "median_duration_ms": 994.0,
+      "p95_duration_ms_nearest_rank": 1184.3,
+      "prompt_tokens": 178,
+      "completion_tokens": 81
+    }
+  },
+  "public_fixtures": [
+    {
+      "case_id": "exact-token",
+      "instruction": "Reply with exactly BASELINE_OK and no other text.",
+      "expected": "BASELINE_OK"
+    },
+    {
+      "case_id": "arithmetic",
+      "instruction": "Reply with only the integer result of 17 multiplied by 23.",
+      "expected": "391"
+    },
+    {
+      "case_id": "time",
+      "instruction": "A train departs at 09:10 and travels 95 minutes. Reply with only the arrival time in HH:MM.",
+      "expected": "10:45"
+    },
+    {
+      "case_id": "extraction",
+      "instruction": "Given Oslo: 7 C; Paris: 12 C, reply with only the integer temperature for Oslo.",
+      "expected": "7"
+    },
+    {
+      "case_id": "sort",
+      "instruction": "Sort amber, blue, coral alphabetically. Reply with comma-separated words and no spaces.",
+      "expected": "amber,blue,coral"
+    }
+  ],
+  "limits": {
+    "max_output_tokens_per_call": 48,
+    "timeout_seconds_per_call": 20,
+    "tools_enabled": false,
+    "automatic_retries": 0
+  },
+  "data_handling": {
+    "input_content_class": "public synthetic fixtures",
+    "response_content_saved": false,
+    "credential_value_saved": false,
+    "production_database_touched": false,
+    "production_configuration_changed": false
+  },
+  "individual_calls": [
+    {
+      "workload": "voice_supervisor",
+      "case_id": "exact-token",
+      "model": "claude-haiku-4-5",
+      "route": "direct_api",
+      "billing": "provider_api",
+      "duration_ms": 508.3,
+      "prompt_tokens": 19,
+      "completion_tokens": 7,
+      "exact_match": true,
+      "error_type": null
+    },
+    {
+      "workload": "voice_supervisor",
+      "case_id": "arithmetic",
+      "model": "claude-haiku-4-5",
+      "route": "direct_api",
+      "billing": "provider_api",
+      "duration_ms": 434.4,
+      "prompt_tokens": 23,
+      "completion_tokens": 5,
+      "exact_match": true,
+      "error_type": null
+    },
+    {
+      "workload": "voice_supervisor",
+      "case_id": "time",
+      "model": "claude-haiku-4-5",
+      "route": "direct_api",
+      "billing": "provider_api",
+      "duration_ms": 534.2,
+      "prompt_tokens": 36,
+      "completion_tokens": 7,
+      "exact_match": true,
+      "error_type": null
+    },
+    {
+      "workload": "voice_supervisor",
+      "case_id": "extraction",
+      "model": "claude-haiku-4-5",
+      "route": "direct_api",
+      "billing": "provider_api",
+      "duration_ms": 456.5,
+      "prompt_tokens": 31,
+      "completion_tokens": 5,
+      "exact_match": true,
+      "error_type": null
+    },
+    {
+      "workload": "voice_supervisor",
+      "case_id": "sort",
+      "model": "claude-haiku-4-5",
+      "route": "direct_api",
+      "billing": "provider_api",
+      "duration_ms": 617.0,
+      "prompt_tokens": 26,
+      "completion_tokens": 8,
+      "exact_match": true,
+      "error_type": null
+    },
+    {
+      "workload": "analyst",
+      "case_id": "exact-token",
+      "model": "claude-sonnet-5",
+      "route": "direct_api",
+      "billing": "provider_api",
+      "duration_ms": 994.0,
+      "prompt_tokens": 26,
+      "completion_tokens": 10,
+      "exact_match": true,
+      "error_type": null
+    },
+    {
+      "workload": "analyst",
+      "case_id": "arithmetic",
+      "model": "claude-sonnet-5",
+      "route": "direct_api",
+      "billing": "provider_api",
+      "duration_ms": 857.6,
+      "prompt_tokens": 27,
+      "completion_tokens": 3,
+      "exact_match": true,
+      "error_type": null
+    },
+    {
+      "workload": "analyst",
+      "case_id": "time",
+      "model": "claude-sonnet-5",
+      "route": "direct_api",
+      "billing": "provider_api",
+      "duration_ms": 1084.2,
+      "prompt_tokens": 43,
+      "completion_tokens": 38,
+      "exact_match": true,
+      "error_type": null
+    },
+    {
+      "workload": "analyst",
+      "case_id": "extraction",
+      "model": "claude-sonnet-5",
+      "route": "direct_api",
+      "billing": "provider_api",
+      "duration_ms": 863.8,
+      "prompt_tokens": 43,
+      "completion_tokens": 3,
+      "exact_match": true,
+      "error_type": null
+    },
+    {
+      "workload": "analyst",
+      "case_id": "sort",
+      "model": "claude-sonnet-5",
+      "route": "direct_api",
+      "billing": "provider_api",
+      "duration_ms": 1184.3,
+      "prompt_tokens": 39,
+      "completion_tokens": 27,
+      "exact_match": true,
+      "error_type": null
+    }
+  ],
+  "limitations": [
+    "Five short public fixtures per model only; p95 is the sample maximum and is not a stable production estimate",
+    "Exact-match fixtures measure narrow instruction following, not research, development, memory or tool quality",
+    "Execution-boundary duration includes local admission and provider time but not end-to-end voice, tool or UI latency",
+    "These probes are not recorded in the production usage ledger and do not fill its missing route, billing or duration fields"
+  ]
+}
