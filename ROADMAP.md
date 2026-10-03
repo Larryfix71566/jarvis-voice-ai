@@ -125,10 +125,10 @@ Claude’s work or enable any runtime feature.
 - **Implemented by:** Not itemized for every foundation component; WS-02 isolation is Codex
 - **Remaining work / acceptance:** Codex; Larry for live account/deployment steps
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** `codex/isolated-20260924`
+- **Where:** `codex/isolated-20260924` for MAR-A; bounded test-stability slice on `codex/ws05-admission-test-stability-20261002` after the docs-only claim lands
 - **Plan:** `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md`
-- **Scope:** `jarvis/model_routing.py`, `jarvis/model_preferences.py`, `config/model_access.yaml`
-- **Next step:** codex: reconcile MAR-A against the deployed release named in the Production line and the baseline on `origin/codex/isolated-20260924` (`addf278`), then capture live route/capability evidence. The 10-02 read-only main check used `a39136a`: `config/model_access.yaml` defaulted to `direct_api`, with no automatic paid fallback; the route rollout remained gated.
+- **Scope:** `jarvis/model_routing.py`, `jarvis/model_preferences.py`, `config/model_access.yaml`; bounded test-stability scope: `tests/unit/test_model_execution.py` only, with no production admission-policy change
+- **Next step:** codex: on `codex/ws05-admission-test-stability-20261002`, replace the fixed 20-tick waiter-registration poll in `test_background_admission_reserves_capacity_and_prioritizes_interactive` with a deadline-based wait, then run repeated focused and full model-execution tests. Separately reconcile MAR-A against the deployed release named in the Production line and the baseline on `origin/codex/isolated-20260924` (`addf278`), then capture live route/capability evidence. The 10-02 read-only main check used `a39136a`: `config/model_access.yaml` defaulted to `direct_api`, with no automatic paid fallback; the route rollout remained gated.
 - **Updated:** 10-02
 
 </details>
