@@ -1,6 +1,6 @@
 # Roadmap joint working: catch-up and drift prevention (WS-20)
 
-**Status:** IN PROGRESS 2026-10-02. Larry chose the direction on 10-02: each system fixes its own rows, all four drift fixes in §3, and this plan in the repo. Larry dispatched B1–B3 to Codex; B4 is in Claude's PR #156 for Codex review.
+**Status:** IN PROGRESS 2026-10-02. B2/B3 merged in #158, B4 merged in #156, and B1's 72-entry log migration lands in #160. The ten-PR no-conflict observation and warn-only checker rollout remain open.
 **Owners:** Claude: B4 checker, its own rows, this plan. Codex: B1–B3 protocol and change-log move, its own rows, review of B4. Larry: merges, deploys, Mac checks, approval of the protocol change.
 **Recorded:** 2026-10-02 against main `cfa0d2d` and open PR #152 (WS-19 close).
 **Author:** Claude (Cowork) · **Approver:** Larry
@@ -43,13 +43,15 @@ After A7, the eight rows that state current production are stale. B2 replaces th
 ### B1 Change log out of `ROADMAP.md` (Codex; Claude reviews)
 
 - New folder `docs/roadmap-log/`, one file per entry: `YYYY-MM-DD-<ws>-<system>-<slug>.md` with front matter `date`, `system`, `rows`, `prs`, then the entry text.
-- Migration: a script moves every entry in §8 (64 on 10-02) into files verbatim; the entry count before and after must match.
+- Migration: a script moves every entry in §8 (72 on main `cc64d50` at the freeze window) into files verbatim; the entry count before and after must match.
 - §8 becomes a pointer and one rule: add a file, never edit §8.
-- Lands in a freeze window: after Phase A, with no open PR that edits `ROADMAP.md`. Both systems then switch their landing tooling to write a log file. Claude's scripts insert at the §8 anchor today.
+- Lands in a freeze window: after Phase A, with no open PR that edits `ROADMAP.md`. Both systems then switch their landing tooling to write a log file. Before #160, Claude's scripts inserted at the §8 anchor; they need a separate switch after #160 merges.
+
+**Implemented in the freeze window, 2026-10-02, PR #160:** All 72 entries from main `cc64d50` were moved one-to-one, with their entry text unchanged. The §8 marker and file-writing rule replace the old in-file entries. Claude's landing scripts need their separate switch after #160 merges.
 
 ### B2 One production line (Codex; Claude reviews)
 
-**Implemented on Codex's WS-20 branch, 2026-10-02; awaiting cross-owner wording review and merge.** The exact `7c4637e` SHA, deployment time and receipt path now appear once below the roadmap title. The header and affected rows use dated deployment events; the WS-03/04 merged-branch drift found by B4 is also corrected without claiming new live acceptance. The B4 checker reports no current-production phrase on this branch. The Production line changes only after a later deployment receipt exists.
+**Merged in #158 (`04eb3f0`), 2026-10-02.** The initial line used the exact `7c4637e` deployment receipt; after the later deployment, #159 refreshed it to `ae70f2c` at 19:23 EDT. The header and affected rows use dated deployment events; WS-03/04 merged-branch drift was corrected without claiming new live acceptance. The Production line changes only after a later deployment receipt exists.
 
 - One line under the title: `**Production:** <sha>, deployed <date time> (receipt <path>)`.
 - Rows record events, which stay true: "landed in #144 (`c2f0f49`)", "deployed in `39fc6f9` on 09-30", "accepted on `03b9e60`". Rows never state current production: no "still in production", "present in production", "not in production", "not deployed".
@@ -59,7 +61,7 @@ After A7, the eight rows that state current production are stale. B2 replaces th
 
 ### B3 Rows written as they will read after merge (Codex writes the rule; both follow)
 
-**Implemented on Codex's WS-20 branch, 2026-10-02; awaiting protocol review and merge.** Rule 10 now requires after-merge wording and a ref for checked/verified claims. C1–C5 are added below rule 13; the one-time B2 cross-owner wording review is explicit. B1 has not moved §8 yet, so existing §8 log instructions stay in force until that migration.
+**Merged in #158 (`04eb3f0`), 2026-10-02.** Rule 10 requires after-merge wording and a ref for checked/verified claims. C1–C5 are below rule 13; the one-time B2 cross-owner wording review is explicit. B1 replaces the §8 logging instruction in #160.
 
 - A PR sets its own row to what is true once it merges: "landed (branch `x`)", never "review" or "awaiting review". `review` is shown by B4 from open PRs, not written in the row.
 - A "checked" or "verified" claim names what it was checked against: "Checked 10-02 on `origin/codex/isolated-20260924` (`addf278`)".
@@ -109,7 +111,7 @@ Python standard library only. Reads `ROADMAP.md` and git; `--receipts DIR` on th
 ## 7. Decisions
 
 - **Made (Larry, 10-02):** each system fixes its own rows; B1, B2, B3 and B4 all go in; the plan lives in the repo.
-- **Open for Larry:** dispatch WS-12 now; dispatch B1–B3 to Codex and B4 to Claude after Phase A; B4 warn or fail.
+- **Resolved by Larry on 10-02:** WS-12 landed; B1–B3 went to Codex and B4 to Claude; B4 runs warn-only in CI for the first week. The later strict-mode decision remains for Larry after the owned status-word cleanup.
 - **Confirmed by Codex, 10-02:** B1–B3 as specified. Each migrated entry gets `YYYY-MM-DD-<ws>-<system>-<slug>.md` with `date`, `system`, `rows`, `prs` front matter; use `prs: []` when an entry has no PR. Preserve entry text verbatim and verify one-to-one count. Do not land B1 while any open PR edits `ROADMAP.md`.
 
 ## 8. Risks
@@ -120,6 +122,8 @@ Python standard library only. Reads `ROADMAP.md` and git; `--receipts DIR` on th
 - Required cross-reviews add latency. They apply only to the other system's code, not to docs-only own-row PRs.
 
 ## Progress
+
+- 2026-10-02 (Codex B1 migration): Fetched `origin/main` `cc64d50` and confirmed there were no open PRs before editing. Moved all 72 §8 entries verbatim into one file per entry under `docs/roadmap-log/`, retaining dates, attributed systems, referenced rows and PRs (explicit `prs: []` when none). §8 now contains the checker marker and a file-writing rule. Updated WS-20 against the merged #158, reviewed #147/#156, and deployed `ae70f2c` facts. The B4 checker remains warn-only in CI and still reports WS-10/11's pre-existing lifecycle words for their owner.
 
 - 2026-10-02 (Codex B2/B3 implementation): Read `~/MortimerRollback/logs/deployment-receipt-7c4637e.json` without changing production. Added the exact deployed revision/time/receipt as the sole Production line; rewrote mutable production assertions in the header and WS-02/03/04/05/09/10 as dated events. Corrected WS-03/04 stale merged-branch states while keeping their acceptance and provisioning gates open. Added the after-merge rule and C1–C5. The B4 checker on the working branch reports only WS-10/11's pre-existing lifecycle-word warnings (their acceptance owner retains them). B1 waits for #147 and any other roadmap-editing PR to close before migration. No application code or runtime configuration changed.
 
