@@ -11,11 +11,15 @@ struct PlacementScreen: Equatable {
     /// the default console role; an explicit user move can still override it
     /// through a persisted manual placement record.
     let isMain: Bool
+    /// The screen's own name (`NSScreen.localizedName`), for the console
+    /// inventory and spoken replies only. Never an identity (WS-21 D2).
+    let name: String
 
-    init(id: String, visibleFrame: CGRect, isMain: Bool = false) {
+    init(id: String, visibleFrame: CGRect, isMain: Bool = false, name: String = "") {
         self.id = id
         self.visibleFrame = visibleFrame
         self.isMain = isMain
+        self.name = name
     }
 }
 

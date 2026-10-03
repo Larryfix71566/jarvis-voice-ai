@@ -143,18 +143,10 @@ final class WorkspaceStore {
                 "screen_id": .null,
             ])
         }
-        #if os(macOS)
-        let screenValues: [JSONValue] = NSScreen.screens.enumerated().map { index, screen in
-            .object([
-                "id": .string(screen.localizedName.isEmpty ? "screen-\(index)" : screen.localizedName),
-                "label": .string(String((screen.localizedName.isEmpty ? "Display \(index + 1)" : screen.localizedName).prefix(120))),
-                "index": .number(Double(index)),
-                "primary": .bool(index == 0),
-            ])
-        }
-        #else
+        // WS-21 D2: screens are listed by ConsoleActionCoordinator from
+        // placement's own identities (the hardware display UUID), never by
+        // NSScreen name, so a voice move names a screen placement knows.
         let screenValues: [JSONValue] = []
-        #endif
         let mode: String
         if showsConversation { mode = "conversation" }
         else if showsSkills { mode = "skills" }

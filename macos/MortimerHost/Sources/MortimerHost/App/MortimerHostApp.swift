@@ -321,14 +321,26 @@ struct MortimerHostApp: App {
         let placement = WindowPlacement(drawer: drawer, windows: windowActions,
                                         contentWindows: contentWindows)
         self.placement = placement
+        // WS-21 D1: one route to the supporting display for voice and menus.
+        let supportingDisplay = SupportingDisplayCoordinator(
+            workspace: workspace, display: displayWindow,
+            environment: .live(placement: placement))
+        let notices = self.notices
+        supportingDisplay.onPointerFailure = { outcome in
+            notices.showConsoleResult(ConsoleResult(
+                sessionID: UUID(), generation: UUID(), requestID: UUID(),
+                status: outcome.status, code: outcome.code, summary: outcome.summary))
+        }
         self.consoleCoordinator = ConsoleActionCoordinator(workspace: workspace, display: displayWindow,
                                                             placement: placement, atlas: atlas,
                                                             panels: panels, drawer: drawer,
                                                             sharing: sharing, attachments: attachments,
                                                             client: client, notices: notices,
-                                                            skills: skills)
+                                                            skills: skills,
+                                                            supportingDisplay: supportingDisplay)
         let router = UICommandRouter(drawer: drawer, overlay: overlay, windows: windowActions,
-                                     placement: placement, displayWindow: displayWindow)
+                                     placement: placement, displayWindow: displayWindow,
+                                     workspace: workspace)
         self.uiRouter = router
         messageRouter.start(
             client: client,
@@ -344,6 +356,7 @@ struct MortimerHostApp: App {
         )
         router.start(client: client)
         drawer.placementRef = placement
+        drawer.supportingDisplayRef = supportingDisplay
     }
 }
 

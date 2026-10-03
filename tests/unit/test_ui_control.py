@@ -175,3 +175,13 @@ def test_developer_is_not_advertised_as_a_tab_in_the_schema():
     UI_TABS stays the single list of real keys."""
     assert "agents" in UI_TABS
     assert "developer" not in UI_TABS
+
+
+def test_display_popout_no_longer_promises_to_move_content():
+    """WS-21 D4 (Larry, 10-03): display_popout opened an empty window while
+    Mortimer said the radar was on the other monitor. It opens the window as
+    it is; moving a result there is console_action display_show."""
+    description = UI_CONTROL_SCHEMA["function"]["description"]
+    popout = description[description.index("display_popout"):description.index("display_close")]
+    assert "moves nothing" in popout and "display_show" in popout
+    assert "move informational content" not in description

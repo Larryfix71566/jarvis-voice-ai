@@ -1,6 +1,6 @@
 # Supporting display transfer: one validated, confirmed route
 
-**Status:** approved scope (Larry, 2026-10-03: new row WS-21; Claude implements, Codex reviews before merge). Design below; not yet implemented.
+**Status:** PR #171; Codex requested changes on `43f3d5b` (2026-10-03, four defects), repaired on `ws21/display-transfer`, awaiting Codex's re-review; Mac acceptance open. Approved scope: Larry, 2026-10-03, new row WS-21; Claude implements, Codex reviews before merge.
 **Row:** `ROADMAP.md` WS-21.
 **Baseline:** `origin/main` `63aaeef` (deployed 2026-10-03).
 
@@ -53,7 +53,9 @@ the voice action (D4), the Results, Knowledge and Tools menus (`ConsoleActionBar
 results view's Display menu (`WorkspaceView`), and `skill_display_transfer`.
 
 `transfer(content, screenID?) async -> TransferOutcome` runs in this order. Nothing
-opens until steps 1 and 2 pass.
+opens until steps 1 and 2 pass, and steps 1–3 change nothing, so a refused or
+repeated request leaves a transfer that is still confirming alone (Codex review
+of #171).
 
 1. **Content.** `.result(UUID)` must be a live workspace result that is not
    protected-local. A missing, closed or protected result is rejected with a named reason.
@@ -66,9 +68,11 @@ opens until steps 1 and 2 pass.
    rejected with a reason.
 3. **Reuse.** If the display window is already presenting this content on this screen,
    the result is `noop` ("already showing") and nothing reopens.
-4. **Apply.** `workspace.sendToDisplay(content)`, assign the display window to the
-   destination screen (`ScreenPlacement.assignDisplay(to:)`, D2), then
-   `placement.openDisplay()`.
+4. **Accept and apply.** `workspace.sendToDisplay(content)`, assign the display window
+   to the destination screen (`ScreenPlacement.assignDisplay(to:)`, D2), then
+   `placement.openDisplay()`. Only an accepted transfer takes over from one still
+   confirming. It inherits what that chain of transfers started from (the earlier
+   selection, and whether the window was already open), and with it the cleanup.
 5. **Confirm (D3)** and return `applied` with a summary naming the content and screen,
    or a failure with the reason.
 
@@ -88,29 +92,27 @@ than on its last automatic choice.
 
 ### D3. Confirmation that the content is presented
 
-`DisplayWindowView` reports what it actually renders. On appear, and whenever the
-selection changes, it records the supporting-content key it chose (stage panels for a
-transport payload, or the supporting stage for a pointer/voice selection) in
-`DisplayWindowStore.presented`.
+"Presented" uses the rule the main surface already uses to decide that a
+result is on the supporting display: `DisplayWindowStore.isPresented(content,
+selection:layoutVersion:)`. It is true only while the display scene is on
+screen (`isWindowOpen` is set by the scene's own `onAppear`/`onDisappear`) and
+the stage renders that content: a stage panel for a transport payload, or the
+supporting stage for a pointer or voice selection. The coordinator also checks
+that the display window's frame lies on the destination screen
+(`ScreenPlacement.screenID(of: .display)`).
 
-The coordinator then checks the following, every runloop turn for up to 3.5 s (inside
-the bot's 5 s wait):
+It checks both every 50 ms for up to 3.5 s, inside the bot's 5 s wait. Both
+true → `applied`. A timeout, or the destination disconnecting, → `error` with
+the cause. Either way the chain's earlier selection is put back (or cleared if
+there was none), and a window the chain opened is closed, so main does not
+point at an absent window and no empty window is left. A newer accepted
+transfer supersedes an older one still waiting; the older one returns
+`superseded` and undoes nothing, so it can never undo a newer success or a
+display that was open before.
 
-- the display window exists and is visible (`findHostWindow(.display)`);
-- the window's frame lies on the destination screen
-  (`DisplayPlacementPolicy.screen(for:in:)`);
-- `DisplayWindowStore.isWindowOpen` is true;
-- `workspace.supportingContent` equals the requested content;
-- `DisplayWindowStore.presented` equals the requested content's key.
-
-All five → `applied`. A timeout, a display window closed by the display-lost handler,
-or the destination disconnecting during the wait → `error` with the cause. Each of those
-also clears the supporting selection, so main does not keep pointing at an absent
-window.
-
-The console path stays request/response. `AppMessageRouter` runs the transfer in a
-child task and sends the `console/result` when it settles, so other messages are not
-held up while it waits.
+The console path stays request/response. `AppMessageRouter` runs a transfer in
+its own task and sends the `console/result` when it settles, so other
+messages are not held while it waits.
 
 ### D4. Voice contract
 
@@ -127,12 +129,18 @@ held up while it waits.
   result's UUID from the inventory, and success is spoken only from its result.
 - `display_close` keeps working; with nothing else on the display it is the existing
   "return it here".
+- `display_popout` with nothing for the display to show sends a `ui/noop`
+  ("Nothing is on the other display yet…"), which the bot speaks, instead of
+  opening an empty window.
 
 ### D5. Detach and move validation
 
 - `panel_detach` with a result UUID that is not a live workspace result is `invalid`,
   and no content record is created. Its `screen_id` (now allowed by both validators) must
-  be a connected placement ID.
+  be a connected placement ID. That check runs once, before any change, for every
+  detach form: a content target, an open content panel's UUID, and a fixed panel.
+  Each then lands on the named screen (a fixed panel records it in
+  `PanelStore.screenByPanel`; an open content panel moves).
 - `panel_move` rejects an unknown or disconnected `screen_id` before `PanelStore`
   changes.
 - `PanelStore.move`/`moveContent` take a validated screen and keep their own non-empty
@@ -144,8 +152,15 @@ The requested and periodic inventories are built from one function, so they cann
 differ:
 
 - `screens`: placement ID, name, `is_console`, `is_supporting`.
-- `supporting_display`: `{content, result_id?, screen_id, presented}`, where `presented`
-  is D3's check evaluated now.
+- `supporting_display`: `{open, content, result_id, result_ids, tiles, screen_id,
+  presented}`, read from what the window renders
+  (`DisplayWindowStore.visibleStage`: the selection alone in layout 1; otherwise the
+  supplemental tile, the bounded stage panels, then pinned panels). `content` and
+  `result_id` name the first tile, `result_ids` lists up to six results across all
+  tiles, and `presented` is true while the window is open and the stage is not
+  empty. An ordinary `surface: window` result has no selection and is still listed
+  (Codex review of #171). `isPresented` reads the same stage. A protected result's
+  ID is never listed.
 - `panels`: fixed panels and content panels with their actual screen ID, read from
   placement for an open window and from the record otherwise; null only when the
   panel is not detached.
@@ -174,8 +189,16 @@ Native (MortimerHost):
   screen → `invalid`;
 - the requested and periodic inventories are equal, with placement screen IDs.
 
-Codex's six diagnostic tests and two probes are added unchanged as regression tests
-once Larry copies them over. They must fail on `63aaeef` and pass on this branch.
+Codex's six diagnostic tests are characterization tests: they assert the defects and
+passed on `63aaeef`, so they cannot run unchanged as regressions (corrected 2026-10-03,
+Codex review of #171). The originals, the two Python probes (which print observations
+and were never pass/fail tests) and the review evidence are archived unchanged in
+`docs/acceptance/supporting-display/codex-audit-2026-10-03/`. Each of the six has a
+regression twin with the repaired expectation in `VoiceDisplayAuditRegressionTests`.
+Codex's four review probes are in `SupportingDisplayTransferTests` unchanged, with
+further cases for a successor that succeeds, a failure that restores an already-open
+display, a refused request during a transfer that later fails, detach of an open
+content panel, and an inventory of several tiles.
 
 Python: `display_show` validation (targets, `screen_id`), `screen_id` accepted on
 `panel_detach`, the console tool returning failure text when the app reports an error,
@@ -203,3 +226,27 @@ result actions by number and subject), which stays in WS-17.
 
 - 2026-10-03: row and plan claimed (Larry chose a new row). Defects F1–F5 confirmed
   against `63aaeef`.
+- 2026-10-03: D1–D7 implemented on `ws21/display-transfer`.
+  - `SupportingDisplayCoordinator` (new) is the one route; `display_show`
+    and `skill_display_transfer` reply from `executeTransfer` after D3's
+    confirmation, and the results, Knowledge and Tools menus call it through
+    `DrawerState.supportingDisplayRef`.
+  - `ScreenPlacement` gained `currentScreens`, `screenID(of:)`,
+    `consoleScreenID`, `preferredSupportingScreenID` and `assignDisplay(to:)`,
+    and `PlacementScreen` gained `name`.
+  - `ConsoleActionCoordinator.inventoryJSON()` is the one inventory, and the
+    `inventory` action's result now carries it as `data`.
+  - Panel detach and move reject unknown results and screens.
+  - Native tests are in `SupportingDisplayTransferTests`; existing panel
+    tests now name connected placement screens. Python tests cover the
+    `display_show` contract, `screen_id` on detach, failure relay and the
+    `display_popout` description.
+  - Codex's six diagnostic tests and two probes are still to be added once
+    copied over.
+- 2026-10-03: Codex reviewed `43f3d5b` (request changes) and reproduced four defects
+  with independent probes: a refused request superseded a valid transfer still
+  confirming; a failed replacement left the window its predecessor opened open and
+  empty; fixed-panel detach ignored `screen_id`; the inventory reported nothing
+  presented while a transport result was on the stage. Repaired as D1, D3, D5 and D6
+  now describe. Codex's audit tests and probes are archived and their regression
+  twins added (§4).

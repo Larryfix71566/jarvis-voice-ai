@@ -19,7 +19,7 @@ ALLOWED_ACTIONS = frozenset({
     "graph_zoom", "graph_pan", "graph_filter", "graph_group", "graph_path",
     "graph_path_clear", "graph_inspector", "graph_original", "graph_center",
     "graph_move_node", "panel_detach", "panel_move", "panel_return", "panel_close",
-    "panel_focus", "panel_fullscreen", "panels_return_all", "sidecar_width", "sidecar_text",
+    "panel_focus", "panel_fullscreen", "panels_return_all", "display_show", "sidecar_width", "sidecar_text",
     "sidecar_scroll_tabs", "appearance_set", "console_caption", "console_status",
     "wave_tuning_open", "wave_tuning_set", "reset_layout", "share_preview", "share_copy",
     "share_save", "share_picker", "share_cancel", "share_source", "input_paste",
@@ -59,7 +59,10 @@ ACTION_ARG_FIELDS: dict[str, frozenset[str]] = {
     "graph_inspector": frozenset({"open"}),
     "graph_original": frozenset({"enabled"}),
     "graph_move_node": frozenset({"x", "y"}),
+    # WS-21 (plan D4/D5): a placement screen ID from the inventory.
     "panel_move": frozenset({"screen_id"}),
+    "panel_detach": frozenset({"screen_id"}),
+    "display_show": frozenset({"screen_id"}),
     "panel_fullscreen": frozenset({"enabled"}),
     "sidecar_width": frozenset({"points"}),
     "sidecar_text": frozenset({"size"}),
@@ -97,7 +100,7 @@ REQUIRED_TARGET_ACTIONS = frozenset({
     "panel_return", "panel_close", "panel_focus", "panel_fullscreen",
     "input_remove",
     "skill_select", "skill_step_select", "skill_step_explain", "skill_run_select", "skill_example_preview",
-    "skill_display_transfer",
+    "skill_display_transfer", "display_show",
 })
 REQUIRED_SECONDARY_TARGET_ACTIONS = frozenset({"compare_set", "graph_path"})
 

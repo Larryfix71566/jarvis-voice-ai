@@ -137,6 +137,8 @@ struct ConsoleActionRegistry: Sendable {
         .graphFocus: ["depth"], .graphFilter: ["kind", "visible"], .graphGroup: ["collapsed"],
         .graphInspector: ["open"], .graphOriginal: ["enabled"],
         .graphMoveNode: ["x", "y"], .panelMove: ["screen_id"],
+        // WS-21 (plan D4/D5): screen_id is a placement ID from the inventory.
+        .panelDetach: ["screen_id"], .displayShow: ["screen_id"],
         .panelFullscreen: ["enabled"], .sidecarWidth: ["points"],
         .sidecarText: ["size"], .sidecarScrollTabs: ["direction"],
         .appearanceSet: ["layout"], .consoleCaption: ["expanded"],
@@ -201,7 +203,7 @@ struct ConsoleActionRegistry: Sendable {
         .panelDetach, .panelMove, .panelReturn, .panelClose, .panelFocus,
         .panelFullscreen, .inputRemove, .skillSelect, .skillStepSelect,
         .skillStepExplain, .skillRunSelect, .skillExamplePreview,
-        .skillDisplayTransfer,
+        .skillDisplayTransfer, .displayShow,
     ]
 
     private static let secondaryTargetActions: Set<ConsoleAction> = [

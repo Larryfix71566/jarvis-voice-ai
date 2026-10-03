@@ -13,6 +13,13 @@ final class ConsoleActionCoordinatorTests: XCTestCase {
                        secondaryTarget: secondary, args: args)
     }
 
+    /// WS-21 D2: panel moves name placement screen IDs, and only connected
+    /// ones are accepted. "display-2" stands for a connected second screen.
+    private static let screens = [
+        PlacementScreen(id: "display-1", visibleFrame: CGRect(x: 0, y: 0, width: 1440, height: 900), isMain: true),
+        PlacementScreen(id: "display-2", visibleFrame: CGRect(x: 1440, y: 0, width: 1920, height: 1080)),
+    ]
+
     private func coordinator() -> (ConsoleActionCoordinator, WorkspaceStore, AtlasStore, PanelStore, DrawerState) {
         let workspace = WorkspaceStore()
         let atlas = AtlasStore()
@@ -23,7 +30,7 @@ final class ConsoleActionCoordinatorTests: XCTestCase {
                                                     display: DisplayWindowStore(),
                                                     placement: placement,
                                                     atlas: atlas, panels: panels,
-                                                    drawer: drawer)
+                                                    drawer: drawer, screens: { Self.screens })
         return (coordinator, workspace, atlas, panels, drawer)
     }
 
@@ -387,7 +394,8 @@ final class ConsoleActionCoordinatorTests: XCTestCase {
         let placement = WindowPlacement(drawer: drawer, windows: actions)
         let coordinator = ConsoleActionCoordinator(workspace: workspace,
                                                     display: DisplayWindowStore(),
-                                                    placement: placement, panels: panels)
+                                                    placement: placement, panels: panels,
+                                                    screens: { Self.screens })
 
         XCTAssertEqual(coordinator.execute(request(.panelDetach, target: "atlas",
                                                    revision: workspace.consoleRevision)), .applied)

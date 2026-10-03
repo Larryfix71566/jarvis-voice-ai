@@ -37,7 +37,12 @@ CONSOLE_ACTION_SCHEMA = {
             "only opens the composer. skill_request_preview followed by "
             "skill_request starts a sandbox draft. Voice cannot publish, activate, "
             "or roll back a skill; opening a review PR requires native exact-diff "
-            "review."
+            "review. display_show puts content on the other (supporting) display: "
+            "target is a result id from the inventory, or memory_graph, skills or "
+            "workflows; optional args.screen_id is a screens id from the inventory. "
+            "It returns only after the app confirms the content is showing on that "
+            "screen; say it is there only when the result says so, and relay its "
+            "reason when it fails."
         ),
         "parameters": {
             "type": "object",

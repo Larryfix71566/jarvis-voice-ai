@@ -125,25 +125,44 @@ final class DisplayWindowStore {
         return Array(presentationPanels.prefix(AppTuning.maxSupportingStagePanels - reserved))
     }
 
+    /// One thing the supporting display renders.
+    enum StageItem: Equatable {
+        /// App-owned content (a pointer or voice selection) without a panel.
+        case selection(SupportingDisplayContent)
+        /// A transport panel, in the stage or pinned.
+        case panel(DisplayWindowPanel)
+    }
+
+    /// What `DisplayWindowView` renders for this selection, in its order:
+    /// the selection alone in layout 1; otherwise the supplemental tile, the
+    /// bounded stage panels, then pinned panels. Whether the window is on
+    /// screen is separate (`isWindowOpen`). WS-21 D6: the inventory and
+    /// `isPresented` both read this, so neither can disagree with the stage.
+    func visibleStage(selection: SupportingDisplayContent?, layoutVersion: Int = 2) -> [StageItem] {
+        if layoutVersion == 1, let selection { return [.selection(selection)] }
+        var items: [StageItem] = []
+        if let supplemental = supplementalContent(selection) { items.append(.selection(supplemental)) }
+        items += (stagePanels(selection: selection) + panels.filter(\.pinned)).map(StageItem.panel)
+        return items
+    }
+
     /// Used by the main surface's return locator. A queued selection alone
     /// cannot hide a result which the supporting window is not rendering.
     func isPresented(_ content: SupportingDisplayContent,
                      selection: SupportingDisplayContent?, layoutVersion: Int = 2) -> Bool {
         guard isWindowOpen else { return false }
-        if layoutVersion == 1, let selection { return content == selection }
-        if supplementalContent(selection) == content { return true }
-        let visible = stagePanels(selection: selection) + panels.filter(\.pinned)
-        switch content {
-        case .memoryGraph:
-            return visible.contains { $0.allPayloads.contains(where: Self.isMemoryGraphPayload) }
-        case .result(let id):
-            return visible.contains { $0.allWorkspaceIDs.contains(id) }
-        case .skills, .skillDetail:
-            // The owning SkillsStore validates the selected detail before
-            // rendering; the full-library mode uses the same stage locator.
-            return selection == content
-        case .workflows:
-            return false   // only ever the supplemental tile, handled above
+        return visibleStage(selection: selection, layoutVersion: layoutVersion).contains { item in
+            switch item {
+            case .selection(let shown):
+                return shown == content
+            case .panel(let panel):
+                switch content {
+                case .memoryGraph: return panel.allPayloads.contains(where: Self.isMemoryGraphPayload)
+                case .result(let id): return panel.allWorkspaceIDs.contains(id)
+                // Skills, skill detail and workflows never ride a transport panel.
+                case .skills, .skillDetail, .workflows: return false
+                }
+            }
         }
     }
 
@@ -408,7 +427,7 @@ final class DisplayWindowStore {
         return "developer-run:\(runID)"
     }
 
-    private static func isMemoryGraphPayload(_ payload: DisplayPayload) -> Bool {
+    static func isMemoryGraphPayload(_ payload: DisplayPayload) -> Bool {
         let values = [payload.kind, payload.title, payload.tool]
             .compactMap { $0?.lowercased() }
         if values.contains(where: { $0.contains("memory_graph") || $0.contains("memory graph") }) {

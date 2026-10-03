@@ -91,3 +91,45 @@ def test_voice_inventory_returns_bounded_snapshot_and_current_revision():
     )
     text = asyncio.run(handler({"action": "inventory"}))
     assert '"revision":8' in text and sent[0]["revision"] == 8
+
+
+def test_display_show_failure_is_relayed_not_reported_as_done():
+    """WS-21 D3: Mortimer says content is on the other screen only when the
+    app confirmed it; a failure's reason is what the Supervisor gets."""
+    sent = []
+
+    async def push(message):
+        sent.append(message)
+
+    async def refused(_request_id):
+        return {"status": "error", "code": "screen_unavailable",
+                "summary": "That display isn't connected, so nothing was moved."}
+
+    async def confirmed(_request_id):
+        return {"status": "ok", "code": "display_presented",
+                "summary": "Weather is now on DELL U2720Q."}
+
+    ids = dict(session_id="00000000-0000-4000-8000-000000000001",
+               generation="00000000-0000-4000-8000-000000000002")
+    _, failing = build_console_action_tool(push, await_result=refused, **ids)
+    target = str(uuid.uuid4())
+    reply = asyncio.run(failing({"action": "display_show", "target": target,
+                                 "args": {"screen_id": "nope"}}))
+    assert reply == "That display isn't connected, so nothing was moved."
+    assert sent[0]["action"] == "display_show" and sent[0]["args"] == {"screen_id": "nope"}
+    _, working = build_console_action_tool(push, await_result=confirmed, **ids)
+    assert asyncio.run(working({"action": "display_show", "target": target})) == "Weather is now on DELL U2720Q."
+
+
+def test_display_show_with_no_reply_is_not_reported_as_done():
+    async def push(_message):
+        return None
+
+    async def silent(_request_id):
+        return None
+
+    _, handler = build_console_action_tool(
+        push, session_id="00000000-0000-4000-8000-000000000001",
+        generation="00000000-0000-4000-8000-000000000002", await_result=silent)
+    assert asyncio.run(handler({"action": "display_show", "target": str(uuid.uuid4())})) == \
+        "I couldn't confirm that console action."
