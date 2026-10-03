@@ -158,6 +158,7 @@ final class ConversationThreadTests: XCTestCase {
                           try entry("a1", "assistant", longReply)])
         let view = NSHostingView(rootView: ConversationThreadView()
             .environment(conversation)
+            .environment(WorkspaceStore())
             .environment(\.mortimerReduceMotion, true)
             .preferredColorScheme(.dark))
         view.frame = NSRect(x: 0, y: 0, width: 760, height: 520)
@@ -174,5 +175,123 @@ final class ConversationThreadTests: XCTestCase {
         for expected in ["weatherquestionmarker", "threadstartmarker", "threadendmarker"] {
             XCTAssertTrue(text.contains(expected), "missing \(expected) in rendered thread: \(text)")
         }
+    }
+
+    // MARK: CC7a.2 inline result cards (UI2-23)
+
+    private func payload(_ object: [String: Any]) throws -> DisplayPayload {
+        try JSONDecoder().decode(DisplayPayload.self, from: JSONSerialization.data(withJSONObject: object))
+    }
+
+    private func weatherPayload() throws -> DisplayPayload {
+        try payload(["kind": "weather", "title": "Weather", "surface": "window",
+                     "body": "82 and mostly sunny",
+                     "weather": ["schema": 1,
+                                 "place": ["label": "Folly Beach, SC", "source": "device", "approximate": false],
+                                 "units": "imperial",
+                                 "now": ["temp": "82°", "condition": "Mostly sunny", "symbol": "sun.max"],
+                                 "alerts": [["event": "Heat", "headline": "Heat advisory"]],
+                                 "summary": "Sunny", "attribution": "NWS"]])
+    }
+
+    func testCardsNameKindSubjectAndOneSummaryLine() throws {
+        let weather = ConversationThread.card(WorkspaceResult(payload: try weatherPayload()))
+        XCTAssertEqual(weather.title, "Weather · Folly Beach, SC")
+        XCTAssertEqual(weather.summary, "82° · Mostly sunny · 1 alert")
+        XCTAssertEqual(weather.icon, "cloud.sun")
+
+        let research = ConversationThread.card(WorkspaceResult(payload: try payload([
+            "kind": "research", "title": "GitHub Ubuntu 26 runners",
+            "links": [["url": "https://a.example"], ["url": "https://b.example"], ["url": "https://c.example"]]])))
+        XCTAssertEqual(research.title, "Research · GitHub Ubuntu 26 runners")
+        XCTAssertEqual(research.summary, "3 sources")
+
+        let image = ConversationThread.card(WorkspaceResult(payload: try payload([
+            "title": "Truist Park map", "images": ["https://img.example/map.png"]])))
+        XCTAssertEqual(image.title, "Image · Truist Park map")
+        XCTAssertEqual(image.summary, "1 image")
+
+        let text = ConversationThread.card(WorkspaceResult(payload: try payload([
+            "title": "Notes", "body": "\n\n## First heading line\nSecond line"])))
+        XCTAssertEqual(text.summary, "First heading line", "One line, Markdown marks removed.")
+
+        let long = ConversationThread.oneLine(String(repeating: "word ", count: 60))
+        XCTAssertEqual(long.count, 140)
+        XCTAssertTrue(long.hasSuffix("…"))
+    }
+
+    /// Protected (local-only) results show no body excerpt in the thread.
+    func testPrivateCardsShowNoBodyText() throws {
+        let card = ConversationThread.card(WorkspaceResult(payload: try payload([
+            "title": "Account summary", "body": "Protected body canary", "data_policy": "local_only"])))
+        XCTAssertTrue(card.isPrivate)
+        XCTAssertEqual(card.summary, ConversationThread.privateSummary)
+        XCTAssertFalse(card.title.contains("canary") || card.summary.contains("canary"))
+    }
+
+    /// Cards sit at the end of the turn they arrived in: after Mortimer's
+    /// reply (even when the tool result came first) and before the next
+    /// question; in arrival order within a turn.
+    func testCardsSitAtTheEndOfTheTurnTheyArrivedIn() throws {
+        let rows = ConversationThread.rows([
+            try entry("u1", "user", "What's the weather?", at: 100),
+            try entry("a1", "assistant", "It's 82 and sunny.", at: 105),
+            try entry("u2", "user", "Look up the runner change.", at: 200),
+            try entry("a2", "assistant", "Here it is.", at: 205),
+        ])
+        func card(_ name: String, at time: Double) -> ConversationThread.Card {
+            ConversationThread.Card(id: UUID(), time: Date(timeIntervalSince1970: time), kind: "Result",
+                                    icon: "doc.text", subject: name, summary: "", isPrivate: false)
+        }
+        let early = card("early", at: 50)
+        let weather = card("weather", at: 102)      // the tool answered before the reply
+        let radar = card("radar", at: 103)
+        let research = card("research", at: 210)
+        let items = ConversationThread.items(rows: rows, cards: [research, radar, early, weather])
+        XCTAssertEqual(items.map(\.id), [
+            "card-\(early.id.uuidString)", "u1", "a1",
+            "card-\(weather.id.uuidString)", "card-\(radar.id.uuidString)",
+            "u2", "a2", "card-\(research.id.uuidString)",
+        ])
+        XCTAssertEqual(ConversationThread.items(rows: [], cards: [radar, weather]).map(\.id),
+                       ["card-\(weather.id.uuidString)", "card-\(radar.id.uuidString)"])
+    }
+
+    /// A card joining the end counts as new for the "New" button.
+    func testACardAtTheEndCountsAsNew() {
+        XCTAssertEqual(ConversationThread.newTurns(from: ["u1", "a1"], to: ["u1", "a1", "card-x"]), 1)
+    }
+
+    /// UI2-23 evidence in the suite: the rendered thread shows the card's
+    /// title and summary under the reply.
+    func testRenderedThreadShowsAResultCard() throws {
+        _ = NSApplication.shared
+        let conversation = ConversationStore()
+        conversation.set([try entry("u1", "user", "Card question marker", at: 1000),
+                          try entry("a1", "assistant", "Card reply marker", at: 1001)])
+        let workspace = WorkspaceStore()
+        workspace.quietArrivals = true
+        workspace.receive(WorkspaceResult(payload: try payload([
+            "kind": "research", "title": "Runner card marker",
+            "links": [["url": "https://a.example"], ["url": "https://b.example"], ["url": "https://c.example"]]]),
+            receivedAt: Date(timeIntervalSince1970: 1002)))
+        let view = NSHostingView(rootView: ConversationThreadView()
+            .environment(conversation)
+            .environment(workspace)
+            .environment(\.mortimerReduceMotion, true)
+            .preferredColorScheme(.dark))
+        view.frame = NSRect(x: 0, y: 0, width: 760, height: 520)
+        let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = view
+        window.orderFrontRegardless()
+        defer { closeRenderingFixtureWindow(window) }
+        view.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        let text = try threadRenderedText(in: view)
+        for expected in ["cardreplymarker", "runnercardmarker"] {
+            XCTAssertTrue(text.contains(expected), "missing \(expected) in rendered thread: \(text)")
+        }
+        XCTAssertTrue(workspace.showsConversation, "Rendering the card did not open the result.")
     }
 }

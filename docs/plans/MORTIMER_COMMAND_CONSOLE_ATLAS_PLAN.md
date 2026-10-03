@@ -1436,6 +1436,31 @@ follow-bottom, a rendered OCR check that a reply longer than 160 characters
 shows to its end) and `LiveVoiceResponseStreamTests` (thread on: no result,
 no display panel; thread off: previous behaviour).
 
+**Progress, 2026-10-02 (Claude):** CC7a.2 in review on branch
+`ws17/cc7a2-inline-cards`. `ConversationThread.card` gives each workspace
+result a compact card (approved B1): kind icon, "Kind · subject" (weather
+uses its place label), one summary line ("82° · Mostly sunny · 1 alert",
+"3 sources", "1 image", or the first text line), and for protected results
+"Private · shown on this Mac only" instead of any body text.
+`ConversationThread.items` places each card at the end of the turn it
+arrived in: after Mortimer's reply, even when the tool answered first, and
+before the next question. Open selects the result through the console
+coordinator; Back is the console row's Conversation button (single-row
+rule). The card's menu pins, compares (`compareSet`) or closes. Closing
+removes it from the workspace, not from Output. No focus is taken:
+`WorkspaceStore.quietArrivals`, kept in step with the thread by
+`AdaptiveStageView`, makes every arrival unread with no change of view,
+including the session's first result. While something other than the
+conversation is shown, `arrivalNoticeID` drives "New: … Show / Dismiss"
+above the stage (`ArrivalNoticeView`). `AppMessageRouter`'s weather path
+calls `select` only while quiet arrivals are off (Codex boundary 4). The
+memory-graph display path still opens the graph view: that is the
+requested action, not an arrival. Tests: `ConversationThreadTests` (card
+text for weather, research, image, text and protected results; placement;
+rendered card) and `WorkspaceStoreTests` (quiet arrivals keep the stage,
+notice set and cleared by Show, Back, Dismiss and close, retention bound,
+thread-off behaviour unchanged). UI2-23 remains a Mac check.
+
 ## 8. Acceptance evidence and regression gates
 
 Status values: NOT STARTED, IMPLEMENTED/UNVERIFIED, VERIFIED IN SANDBOX,

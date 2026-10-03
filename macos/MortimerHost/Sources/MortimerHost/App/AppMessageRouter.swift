@@ -217,7 +217,12 @@ final class AppMessageRouter {
                     // spoken reply (G-2 found both).
                     if Self.showsInMainWindowOnly(payload) {
                         workspace?.receive(result)
-                        workspace?.select(result.id)
+                        // CC7a.2 (WS-17, plan §7.2 Codex boundary 4): with
+                        // the conversation thread on, weather no longer
+                        // comes to the front. It arrives quietly like every
+                        // other result: a card in the thread, or a "New"
+                        // notice over whatever is being read.
+                        if workspace?.quietArrivals != true { workspace?.select(result.id) }
                         break
                     }
                     switch payload.surface {
@@ -310,8 +315,9 @@ final class AppMessageRouter {
 
 
 extension AppMessageRouter {
-    /// WS-15 PR 2: payloads that render only in the main window and are
-    /// selected on arrival. Pure; unit-tested (AppMessageRouterWeatherTests).
+    /// WS-15 PR 2: payloads that render only in the main window. They are
+    /// selected on arrival only while `WorkspaceStore.quietArrivals` is off
+    /// (CC7a.2). Pure; unit-tested (AppMessageRouterWeatherTests).
     nonisolated static func showsInMainWindowOnly(_ payload: DisplayPayload) -> Bool {
         payload.kind == "weather" && payload.weather != nil && !payload.isProtectedLocal
     }
