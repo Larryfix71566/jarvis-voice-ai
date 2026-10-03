@@ -1499,6 +1499,14 @@ an unread card. `CC7a2ReviewRegressionTests` is back to its original
 assertions (its bare events carry no request); `CC7a2bArrivalRouteTests`
 drives the router through each of these routes.
 
+Codex's re-review of `ba52a25` (10-03) found one more route: a newer run of
+the same agent replaces the older run's card in `AgentRunStore`, so the
+older run's result had no start time and fell back to the 120 s window,
+opening over the newer conversation. The router now dates runs from its own
+record of "working" messages (`ArrivalRunClock`, the latest 64 runs), and a
+payload whose run ID has no recorded start stays a card; only a payload
+with no run ID uses the 120 s window.
+
 ## 8. Acceptance evidence and regression gates
 
 Status values: NOT STARTED, IMPLEMENTED/UNVERIFIED, VERIFIED IN SANDBOX,

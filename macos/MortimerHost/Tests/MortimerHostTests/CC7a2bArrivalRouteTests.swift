@@ -108,6 +108,38 @@ final class CC7a2bArrivalRouteTests: XCTestCase {
         XCTAssertTrue(f.workspace.unreadIDs.contains(result.id))
     }
 
+    /// Codex re-review of #169: a newer run of the same agent replaces the
+    /// older run's card in AgentRunStore, so the older run's result must not
+    /// fall back to the direct-result window and take the conversation.
+    func testAnOlderRunsResultStaysACardAfterANewerRunReplacesIt() async throws {
+        let f = fixture()
+        defer { f.router.stop() }
+        try larrySpoke(f, secondsAgo: 30)
+        try await runStarted(f, "r-old")                 // analyst, first question
+        try await Task.sleep(nanoseconds: 50_000_000)
+        try larrySpoke(f, secondsAgo: 0)                 // Larry asks something else
+        try await Task.sleep(nanoseconds: 50_000_000)
+        try await runStarted(f, "r-new")                 // analyst again: replaces r-old's card
+        let old = try await deliver(f, ["kind": "markdown", "title": "Old search", "body": "Earlier",
+                                        "surface": "window", "tool": "web_search", "run_id": "r-old"])
+        XCTAssertTrue(f.workspace.showsConversation, "The older answer does not replace the newer conversation.")
+        XCTAssertTrue(f.workspace.unreadIDs.contains(old.id))
+        let fresh = try await deliver(f, ["kind": "markdown", "title": "New search", "body": "Latest",
+                                          "surface": "window", "tool": "web_search", "run_id": "r-new"])
+        XCTAssertFalse(f.workspace.showsConversation, "The answer to the latest question still opens.")
+        XCTAssertEqual(f.workspace.activeID, fresh.id)
+    }
+
+    func testAResultFromARunTheAppNeverSawStartStaysACard() async throws {
+        let f = fixture()
+        defer { f.router.stop() }
+        try larrySpoke(f)                                // within the direct-result window
+        let result = try await deliver(f, ["kind": "markdown", "title": "Search", "body": "Results",
+                                           "surface": "window", "tool": "web_search", "run_id": "r-unseen"])
+        XCTAssertTrue(f.workspace.showsConversation, "An explicit but untracked run ID is not a direct result.")
+        XCTAssertTrue(f.workspace.unreadIDs.contains(result.id))
+    }
+
     func testAWindowResultOwnedByAnOpenSupportingDisplayKeepsTheConversation() async throws {
         let f = fixture(displayOpen: true)
         defer { f.router.stop() }

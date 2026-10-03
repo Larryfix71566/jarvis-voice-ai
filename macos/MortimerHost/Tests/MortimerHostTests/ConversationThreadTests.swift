@@ -318,9 +318,11 @@ final class ConversationThreadTests: XCTestCase {
     /// conversation only when it answers what he just asked.
     func testArrivalIntentOpensOnlyTheAnswerToTheCurrentRequest() {
         let spoke = Date(timeIntervalSince1970: 10_000)
-        func answers(_ tool: String?, run: Double?, spoke: Date? = spoke, now: Double) -> Bool {
+        func answers(_ tool: String?, run: Double?, runID: String? = "r1", spoke: Date? = spoke,
+                     now: Double) -> Bool {
             ArrivalIntent.answersCurrentRequest(
-                tool: tool, runStartedAt: run.map { Date(timeIntervalSince1970: $0) },
+                tool: tool, runID: run == nil ? nil : runID,
+                runStartedAt: run.map { Date(timeIntervalSince1970: $0) },
                 lastUserTurnAt: spoke, now: Date(timeIntervalSince1970: now))
         }
         XCTAssertTrue(answers("weather_report", run: 10_002, now: 10_009),
@@ -336,5 +338,26 @@ final class ConversationThreadTests: XCTestCase {
                        "Long after he spoke, an unattributed result does not open.")
         XCTAssertFalse(answers("get_weather", run: 10_002, spoke: nil, now: 10_005),
                        "With no turn of his on record, nothing counts as asked for.")
+        XCTAssertFalse(ArrivalIntent.answersCurrentRequest(
+            tool: "web_search", runID: "r-unseen", runStartedAt: nil,
+            lastUserTurnAt: spoke, now: Date(timeIntervalSince1970: 10_005)),
+            "Codex re-review of #169: a run ID the app never saw start is a card, not a direct result.")
+        XCTAssertTrue(ArrivalIntent.answersCurrentRequest(
+            tool: "web_search", runID: "", runStartedAt: nil,
+            lastUserTurnAt: spoke, now: Date(timeIntervalSince1970: 10_005)),
+            "An empty run ID is no run: the direct-result window applies.")
+    }
+
+    func testArrivalRunClockKeepsStartsByRunAndForgetsTheOldestPastCapacity() {
+        let clock = ArrivalRunClock()
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        clock.recordStart("r-old", at: t0)
+        clock.recordStart("r-new", at: t0.addingTimeInterval(5))
+        XCTAssertEqual(clock.startedAt("r-old"), t0, "A replaced run keeps its start.")
+        XCTAssertNil(clock.startedAt(nil)); XCTAssertNil(clock.startedAt(""))
+        clock.recordStart(nil, at: t0); clock.recordStart("", at: t0)
+        for i in 0..<ArrivalRunClock.capacity { clock.recordStart("r\(i)", at: t0) }
+        XCTAssertNil(clock.startedAt("r-old"), "Bounded: the oldest start is dropped first.")
+        XCTAssertNotNil(clock.startedAt("r\(ArrivalRunClock.capacity - 1)"))
     }
 }

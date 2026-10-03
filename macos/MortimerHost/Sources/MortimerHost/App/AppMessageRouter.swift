@@ -18,6 +18,7 @@ final class AppMessageRouter {
     private var task: Task<Void, Never>?
     private var transcriptSink: AnyCancellable?
     private let responseRouter = ResponseResultRouter()
+    private let runClock = ArrivalRunClock()
     private var stateSink: AnyCancellable?
     private var audioOutputSink: AnyCancellable?
     private var audioInputSink: AnyCancellable?
@@ -95,12 +96,16 @@ final class AppMessageRouter {
         // transport event can be delivered before any continuation exists.
         let messageStream = client.messageStream()
         let locator = self.locator
+        let runClock = self.runClock
         task = Task {
             for await message in messageStream {
                 switch message {
                 case .agentWorking, .agentDone, .agentTool, .agentActivity, .capability:
                     // E3: delegation tick / outcome tones (OrbField.tsx:125-127).
-                    if case .agentWorking = message { Sounds.play(.tick) }
+                    if case .agentWorking(let working) = message {
+                        Sounds.play(.tick)
+                        runClock.recordStart(working.runId, at: Date())
+                    }
                     if case .agentDone(let done) = message { Sounds.play(done.ok ? .done : .fail) }
                     agentRuns.apply(message)
                 case .voiceCatalog:
@@ -212,8 +217,8 @@ final class AppMessageRouter {
                     let runID = payload.runID.flatMap { $0.isEmpty ? nil : $0 }
                     let answers = ArrivalIntent.answersCurrentRequest(
                         tool: payload.tool,
-                        runStartedAt: runID.flatMap { id in
-                            agentRuns.runs.last(where: { $0.runId == id })?.startedAt },
+                        runID: runID,
+                        runStartedAt: runClock.startedAt(runID),
                         lastUserTurnAt: conversation?.entries.last(where: { $0.role == "user" })
                             .map { Date(timeIntervalSince1970: $0.createdAt) },
                         now: Date())
