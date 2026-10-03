@@ -1,5 +1,7 @@
 // CC7a.2 regression probes from Codex's review of PR #164 (10-02, CX-15),
-// added unchanged except for the class name and its defaults-suite prefix.
+// added unchanged except for the class name and its defaults-suite prefix;
+// the arrival-route test's conversation case was amended in CC7a.2b for
+// Larry's 10-03 decision (a result asked for from the conversation opens).
 // On 5b1b91f they reproduced two P2 findings: a layout switch left quiet
 // arrivals off with the thread showing, and the New count missed a reply
 // inserted before a tool-first card (and counted rows as new when the last
@@ -61,12 +63,19 @@ private final class ReviewTransport: RTVITransport {
                     for _ in 0..<200 { await Task.yield() }
                     XCTAssertEqual(workspace.results.count, initial == "result" ? 2 : 1, "Delivery: \(payload["title"]!)")
                     let result = try XCTUnwrap(workspace.results.last)
-                    if quiet {
-                        XCTAssertEqual(workspace.showsConversation, initial == "conversation")
+                    if quiet && initial == "conversation" {
+                        // Amended for Larry's 10-03 decision (CC7a.2b): on the
+                        // conversation the requested result opens.
+                        XCTAssertFalse(workspace.showsConversation)
+                        XCTAssertEqual(workspace.activeID, result.id)
+                        XCTAssertFalse(workspace.unreadIDs.contains(result.id))
+                        XCTAssertNil(workspace.arrivalNoticeID)
+                    } else if quiet {
+                        XCTAssertFalse(workspace.showsConversation)
                         XCTAssertEqual(workspace.showsAtlas, initial == "atlas")
                         if let oldID { XCTAssertEqual(workspace.activeID, oldID) }
                         XCTAssertTrue(workspace.unreadIDs.contains(result.id))
-                        XCTAssertEqual(workspace.arrivalNoticeID, initial == "conversation" ? nil : result.id)
+                        XCTAssertEqual(workspace.arrivalNoticeID, result.id)
                     } else {
                         XCTAssertNil(workspace.arrivalNoticeID)
                         let weather = payload["kind"] as? String == "weather"

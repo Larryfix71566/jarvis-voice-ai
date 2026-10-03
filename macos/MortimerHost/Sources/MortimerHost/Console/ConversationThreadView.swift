@@ -418,9 +418,10 @@ struct ConversationThreadCardView: View {
 }
 
 /// CC7a.2 approved design "New result while reading": while something
-/// other than the conversation is on the stage, a quiet arrival shows
+/// other than the conversation is on the stage, an arrival shows
 /// "New: … Show / Dismiss" above it instead of taking the stage. On the
-/// conversation itself the card just appears in the thread.
+/// conversation itself the result opens (Larry, 10-03); its card stays in
+/// the thread for later.
 struct ArrivalNoticeView: View {
     let coordinator: ConsoleActionCoordinator?
     @Environment(WorkspaceStore.self) private var workspace

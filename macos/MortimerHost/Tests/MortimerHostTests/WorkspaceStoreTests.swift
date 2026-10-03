@@ -244,15 +244,17 @@ final class WorkspaceStoreTests: XCTestCase {
     /// conversation it is a card in the thread; while something else is
     /// shown it raises the "New" notice, which Show, Back to the
     /// conversation, Dismiss or closing the result clear.
-    func testQuietArrivalsNeverChangeTheStageAndRaiseTheNoticeOnlyWhileReading() throws {
+    func testArrivalsOpenOnTheConversationAndRaiseTheNoticeWhileReading() throws {
         let store = WorkspaceStore()
         store.quietArrivals = true
         let first = try result()
         store.receive(first)
-        XCTAssertTrue(store.showsConversation, "The first result of a session stays a card in the thread.")
-        XCTAssertEqual(store.activeID, first.id, "It is the active result for the Results view, not shown.")
-        XCTAssertTrue(store.unreadIDs.contains(first.id))
-        XCTAssertNil(store.arrivalNoticeID, "On the conversation the card itself is the notice.")
+        // Larry, 10-03: on the conversation a result is the answer to what
+        // he just asked, so it opens (and its card stays in the thread).
+        XCTAssertFalse(store.showsConversation, "A result asked for from the conversation opens.")
+        XCTAssertEqual(store.activeID, first.id)
+        XCTAssertFalse(store.unreadIDs.contains(first.id), "Opened, so read.")
+        XCTAssertNil(store.arrivalNoticeID)
 
         store.openAtlas()
         let second = try result()
@@ -346,5 +348,23 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertTrue(store.quietArrivals)
         store.releaseQuietArrivals(owner: laterTwo)           // 2 -> 0: no stage at all
         XCTAssertFalse(store.quietArrivals)
+    }
+
+    /// Larry, 10-03: asking again from the conversation opens the new answer,
+    /// even when an earlier result is active; asking while reading does not.
+    func testEachAnswerAskedForFromTheConversationOpens() throws {
+        let store = WorkspaceStore()
+        store.quietArrivals = true
+        let weather = try result(), research = try result()
+        store.receive(weather)
+        store.returnToConversation()
+        store.receive(research)
+        XCTAssertFalse(store.showsConversation)
+        XCTAssertEqual(store.activeID, research.id, "The newer answer opens, not the earlier one.")
+        XCTAssertNil(store.arrivalNoticeID)
+        let whileReading = try result()
+        store.receive(whileReading)
+        XCTAssertEqual(store.activeID, research.id, "While reading a result, a new one does not take over.")
+        XCTAssertEqual(store.arrivalNoticeID, whileReading.id)
     }
 }

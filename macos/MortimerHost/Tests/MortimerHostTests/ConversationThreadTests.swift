@@ -292,6 +292,7 @@ final class ConversationThreadTests: XCTestCase {
             "kind": "research", "title": "Runner card marker",
             "links": [["url": "https://a.example"], ["url": "https://b.example"], ["url": "https://c.example"]]]),
             receivedAt: Date(timeIntervalSince1970: 1002)))
+        workspace.returnToConversation()   // it opened on arrival (Larry, 10-03); back to the thread
         let view = NSHostingView(rootView: ConversationThreadView()
             .environment(conversation)
             .environment(workspace)
@@ -309,6 +310,6 @@ final class ConversationThreadTests: XCTestCase {
         for expected in ["cardreplymarker", "runnercardmarker"] {
             XCTAssertTrue(text.contains(expected), "missing \(expected) in rendered thread: \(text)")
         }
-        XCTAssertTrue(workspace.showsConversation, "Rendering the card did not open the result.")
+        XCTAssertTrue(workspace.showsConversation, "Rendering the card does not open the result again.")
     }
 }

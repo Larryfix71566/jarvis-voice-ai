@@ -1363,7 +1363,7 @@ result card (RELEASE_READINESS UI2-19 note):
 | Result in the thread | **Compact card** (B1): kind icon, title with subject, one-line summary, Open. Open shows the result on the stage with "← Conversation", Pin, Compare, Display. One live radar map at a time. |
 | Recents | Header menu: PINNED, then RECENT (about 10), numbered to match voice ("open number 3"), unread dot, "fresh" age; row actions Pin / Close / Compare; the Atlas, Memory graph, Skills and Workflows buttons move to the bottom of this menu. |
 | Asking again | **Reference line** (D2): Mortimer's reply carries "↺ Weather · Folly Beach · from 12:40" pointing at the same result ID; when stale, the same result refreshes and the line reads "⟳ … updated 12:58". The thread stays in order. |
-| New result while reading | No jump: a "New: … Show / Dismiss" notice above the open result; the card joins the thread and Recents (unread). On the conversation itself the card just appears in the thread. |
+| New result while reading | No jump: a "New: … Show / Dismiss" notice above the open result; the card joins the thread and Recents (unread). On the conversation itself the result opens and its card stays in the thread (amended by Larry, 2026-10-03, below). |
 
 **Single console row (Larry, 2026-09-30; increment CC7a.1b).** "All buttons
 on the console line, none below." Mockup:
@@ -1409,6 +1409,8 @@ display content here" while the display window is open.
    result under the same identity. Weather stays main-window only. A new card
    does not pull focus: `AppMessageRouter`'s weather path currently calls
    `workspace.select` on arrival; CC7a replaces that with the notice above.
+   Amended (Larry, 2026-10-03): this applies while a result or another view
+   is being read. On the conversation, the arriving result opens.
 
 **Increments (each a reviewed PR, Codex review before merge):**
 
@@ -1468,6 +1470,19 @@ report per identity (`setQuietArrivals(_:owner:)`,
 reply inserted before a tool-first card was missed and closing the last
 card counted rows as new; it now counts identities not seen before.
 Codex's probes are kept as `CC7a2ReviewRegressionTests`.
+
+**Amendment, 2026-10-03 (Larry, after the UI2-23 run on `9545641`):** "when
+I requested the weather it pulled the data and read the results but it
+didn't focus on the weather card, that should happen automatically." Larry
+chose: a result that arrives while the conversation is on the stage opens
+(it answers what was just asked) and its card stays in the thread; while a
+result or another view is being read, the "New" notice as approved. This
+applies to every kind of result, not only weather. CC7a.2b
+(`ws17/cc7a2b-open-requested`): `WorkspaceStore.receive(_:quietly:)` calls
+`select` when the conversation is shown; the router is unchanged.
+`CC7a2ReviewRegressionTests`' arrival-route case for the conversation was
+amended to the new rule; `testEachAnswerAskedForFromTheConversationOpens`
+pins it.
 
 ## 8. Acceptance evidence and regression gates
 

@@ -217,11 +217,11 @@ final class AppMessageRouter {
                     // spoken reply (G-2 found both).
                     if Self.showsInMainWindowOnly(payload) {
                         workspace?.receive(result)
-                        // CC7a.2 (WS-17, plan §7.2 Codex boundary 4): with
-                        // the conversation thread on, weather no longer
-                        // comes to the front. It arrives quietly like every
-                        // other result: a card in the thread, or a "New"
-                        // notice over whatever is being read.
+                        // CC7a.2 (WS-17, plan §7.2): with the conversation
+                        // thread on, weather arrives like every other result
+                        // (WorkspaceStore.receive): it opens when the
+                        // conversation is on the stage (Larry, 10-03) and
+                        // raises a "New" notice over anything else.
                         if workspace?.quietArrivals != true { workspace?.select(result.id) }
                         break
                     }
