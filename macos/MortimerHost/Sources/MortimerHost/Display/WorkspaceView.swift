@@ -227,6 +227,10 @@ struct WorkspaceView: View {
     }
 
     private func sendToDisplay(_ content: SupportingDisplayContent) {
+        // WS-21 D1: the same validated, confirmed route voice uses.
+        if let supportingDisplay = drawer.supportingDisplayRef {
+            supportingDisplay.show(content); return
+        }
         guard workspace.sendToDisplay(content) else { return }
         drawer.placementRef?.openDisplay()
     }

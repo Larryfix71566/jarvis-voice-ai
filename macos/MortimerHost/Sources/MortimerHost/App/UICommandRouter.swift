@@ -52,6 +52,8 @@ final class DrawerState {
     /// button call the same WindowPlacement.popOutDrawer() the voice
     /// command uses (C5 — one setter for click and voice).
     @ObservationIgnored var placementRef: WindowPlacement?
+    /// WS-21 D1: the one route to the supporting display, for the menus.
+    @ObservationIgnored var supportingDisplayRef: SupportingDisplayCoordinator?
 
     init() {
         // Persisted prefs (App.tsx D13): validated reads, defaults on
@@ -211,11 +213,17 @@ final class UICommandRouter {
     /// WS-15: where the weather-map actions go (the app-wide channel; tests
     /// pass their own).
     let weatherMap: WeatherMapCommands
+    /// WS-21 D4: what the supporting display would show. With it, an empty
+    /// `display_popout` says so instead of opening an empty window.
+    let workspace: WorkspaceStore?
+    /// Sends a `ui/noop` reason; the bot speaks it verbatim.
+    var sendNoop: (@MainActor (String) -> Void)?
 
     init(drawer: DrawerState, overlay: ConsoleOverlayState, windows: WindowActions,
          placement: WindowPlacement, displayWindow: DisplayWindowStore? = nil,
-         weatherMap: WeatherMapCommands = .shared) {
+         weatherMap: WeatherMapCommands = .shared, workspace: WorkspaceStore? = nil) {
         self.weatherMap = weatherMap
+        self.workspace = workspace
         self.drawer = drawer
         self.overlay = overlay
         self.windows = windows
@@ -225,6 +233,12 @@ final class UICommandRouter {
 
     func start(client: JarvisClient) {
         guard task == nil else { return }
+        if sendNoop == nil {
+            sendNoop = { [weak client] reason in
+                guard let message = ClientMessage.noop(reason) else { return }
+                client?.send(message)
+            }
+        }
         task = Task {
             for await message in client.messageStream() {
                 if case .ui(let command) = message {
@@ -237,6 +251,15 @@ final class UICommandRouter {
     func stop() {
         task?.cancel()
         task = nil
+    }
+
+    /// True when the supporting display would render nothing.
+    private var displayIsEmpty: Bool {
+        guard let displayWindow, let workspace else { return false }
+        let selection = workspace.supportingContent
+        return displayWindow.stagePanels(selection: selection).isEmpty
+            && displayWindow.supplementalContent(selection) == nil
+            && !displayWindow.panels.contains(where: \.pinned)
     }
 
     /// P15's dispatch table, verbatim. Internal (not private) so §7.3
@@ -266,7 +289,15 @@ final class UICommandRouter {
             drawer.isPoppedOut = false
             drawer.isOpen = true
         case "display_popout":
-            placement.openDisplay()
+            // WS-21 D4 (Larry, 10-03: an empty display while Mortimer said
+            // the radar was there): this opens the supporting display as it
+            // is. Content goes there through `display_show`, which confirms.
+            // With nothing to show, say so rather than open an empty window.
+            if displayIsEmpty {
+                sendNoop?("Nothing is on the other display yet. Ask me to show a specific result there.")
+            } else {
+                placement.openDisplay()
+            }
         case "display_close":
             windows.dismiss("display")
         case let action where WeatherMapCommands.actions.contains(action):

@@ -155,6 +155,25 @@ final class AppMessageRouter {
                         break
                     }
                     guard let consoleCoordinator else { break }
+                    if ConsoleActionCoordinator.isDisplayTransfer(request.action) {
+                        // WS-21 D3: a display transfer is acknowledged only
+                        // once the supporting display confirms it is showing
+                        // the content on the intended screen, or with the
+                        // reason it is not. It runs in its own task so other
+                        // messages are not held while it waits.
+                        Task { @MainActor in
+                            let transfer = await consoleCoordinator.executeTransfer(request)
+                            let result = ConsoleResult(sessionID: request.sessionID,
+                                                       generation: request.generation,
+                                                       requestID: request.requestID,
+                                                       status: transfer.status, code: transfer.code,
+                                                       summary: transfer.summary)
+                            notices?.showConsoleResult(result)
+                            client.send(.consoleResult(result))
+                            consoleCoordinator.publishInventory()
+                        }
+                        break
+                    }
                     let outcome = consoleCoordinator.execute(request)
                     let status: String
                     let code: String
@@ -180,11 +199,15 @@ final class AppMessageRouter {
                     case .invalid: status = "error"; code = "invalid_target"; summary = "That console target is no longer available."
                     case .stale: status = "error"; code = "stale_selection"; summary = "The console changed; please choose the item again."
                     }
+                    // WS-21 D6: the requested inventory carries the same data
+                    // as the published one.
+                    let isInventory = request.action == .inventory && outcome == .applied
                     let result = ConsoleResult(sessionID: request.sessionID,
                                                 generation: request.generation,
                                                 requestID: request.requestID,
-                                                status: status, code: code,
-                                                summary: summary)
+                                                status: status, code: isInventory ? "inventory" : code,
+                                                summary: isInventory ? "Console inventory ready." : summary,
+                                                data: isInventory ? consoleCoordinator.inventoryJSON() : nil)
                     notices?.showConsoleResult(result)
                     client.send(.consoleResult(result))
                     consoleCoordinator.publishInventory()

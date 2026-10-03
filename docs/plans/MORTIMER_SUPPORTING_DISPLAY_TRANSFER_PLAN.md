@@ -1,6 +1,6 @@
 # Supporting display transfer: one validated, confirmed route
 
-**Status:** approved scope (Larry, 2026-10-03: new row WS-21; Claude implements, Codex reviews before merge). Design below; not yet implemented.
+**Status:** implemented on `ws21/display-transfer` (2026-10-03), awaiting Codex's review; Mac acceptance open. Approved scope: Larry, 2026-10-03, new row WS-21; Claude implements, Codex reviews before merge.
 **Row:** `ROADMAP.md` WS-21.
 **Baseline:** `origin/main` `63aaeef` (deployed 2026-10-03).
 
@@ -88,29 +88,24 @@ than on its last automatic choice.
 
 ### D3. Confirmation that the content is presented
 
-`DisplayWindowView` reports what it actually renders. On appear, and whenever the
-selection changes, it records the supporting-content key it chose (stage panels for a
-transport payload, or the supporting stage for a pointer/voice selection) in
-`DisplayWindowStore.presented`.
+"Presented" uses the rule the main surface already uses to decide that a
+result is on the supporting display: `DisplayWindowStore.isPresented(content,
+selection:layoutVersion:)`. It is true only while the display scene is on
+screen (`isWindowOpen` is set by the scene's own `onAppear`/`onDisappear`) and
+the stage renders that content: a stage panel for a transport payload, or the
+supporting stage for a pointer or voice selection. The coordinator also checks
+that the display window's frame lies on the destination screen
+(`ScreenPlacement.screenID(of: .display)`).
 
-The coordinator then checks the following, every runloop turn for up to 3.5 s (inside
-the bot's 5 s wait):
+It checks both every 50 ms for up to 3.5 s, inside the bot's 5 s wait. Both
+true → `applied`. A timeout, or the destination disconnecting, → `error` with
+the cause. Either way the supporting selection is cleared, and a window the
+transfer opened is closed, so main does not point at an absent window and no
+empty window is left. A newer transfer supersedes an older one still waiting.
 
-- the display window exists and is visible (`findHostWindow(.display)`);
-- the window's frame lies on the destination screen
-  (`DisplayPlacementPolicy.screen(for:in:)`);
-- `DisplayWindowStore.isWindowOpen` is true;
-- `workspace.supportingContent` equals the requested content;
-- `DisplayWindowStore.presented` equals the requested content's key.
-
-All five → `applied`. A timeout, a display window closed by the display-lost handler,
-or the destination disconnecting during the wait → `error` with the cause. Each of those
-also clears the supporting selection, so main does not keep pointing at an absent
-window.
-
-The console path stays request/response. `AppMessageRouter` runs the transfer in a
-child task and sends the `console/result` when it settles, so other messages are not
-held up while it waits.
+The console path stays request/response. `AppMessageRouter` runs a transfer in
+its own task and sends the `console/result` when it settles, so other
+messages are not held while it waits.
 
 ### D4. Voice contract
 
@@ -127,6 +122,9 @@ held up while it waits.
   result's UUID from the inventory, and success is spoken only from its result.
 - `display_close` keeps working; with nothing else on the display it is the existing
   "return it here".
+- `display_popout` with nothing for the display to show sends a `ui/noop`
+  ("Nothing is on the other display yet…"), which the bot speaks, instead of
+  opening an empty window.
 
 ### D5. Detach and move validation
 
@@ -144,8 +142,8 @@ The requested and periodic inventories are built from one function, so they cann
 differ:
 
 - `screens`: placement ID, name, `is_console`, `is_supporting`.
-- `supporting_display`: `{content, result_id?, screen_id, presented}`, where `presented`
-  is D3's check evaluated now.
+- `supporting_display`: `{open, content, result_id, screen_id, presented}`, where
+  `presented` is D3's check evaluated now. A protected result's ID is never listed.
 - `panels`: fixed panels and content panels with their actual screen ID, read from
   placement for an open window and from the record otherwise; null only when the
   panel is not detached.
@@ -203,3 +201,20 @@ result actions by number and subject), which stays in WS-17.
 
 - 2026-10-03: row and plan claimed (Larry chose a new row). Defects F1–F5 confirmed
   against `63aaeef`.
+- 2026-10-03: D1–D7 implemented on `ws21/display-transfer`.
+  - `SupportingDisplayCoordinator` (new) is the one route; `display_show`
+    and `skill_display_transfer` reply from `executeTransfer` after D3's
+    confirmation, and the results, Knowledge and Tools menus call it through
+    `DrawerState.supportingDisplayRef`.
+  - `ScreenPlacement` gained `currentScreens`, `screenID(of:)`,
+    `consoleScreenID`, `preferredSupportingScreenID` and `assignDisplay(to:)`,
+    and `PlacementScreen` gained `name`.
+  - `ConsoleActionCoordinator.inventoryJSON()` is the one inventory, and the
+    `inventory` action's result now carries it as `data`.
+  - Panel detach and move reject unknown results and screens.
+  - Native tests are in `SupportingDisplayTransferTests`; existing panel
+    tests now name connected placement screens. Python tests cover the
+    `display_show` contract, `screen_id` on detach, failure relay and the
+    `display_popout` description.
+  - Codex's six diagnostic tests and two probes are still to be added once
+    copied over.

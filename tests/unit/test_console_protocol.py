@@ -277,3 +277,27 @@ def test_voice_fixture_covers_every_locked_acceptance_phrase():
     for case in cases:
         validate_request(req(action=case["action"], target=case.get("target"),
                              args=case.get("args", {})))
+
+
+# WS-21 (MORTIMER_SUPPORTING_DISPLAY_TRANSFER_PLAN.md D4/D5)
+
+def test_display_show_needs_a_target_and_takes_only_a_screen_id():
+    result_id = str(uuid.uuid4())
+    out = validate_request(req(action="display_show", target=result_id))
+    assert out["action"] == "display_show" and out["target"] == result_id
+    validate_request(req(action="display_show", target="memory_graph",
+                         args={"screen_id": "37D8832A-2D66-02CA-B9F7-8F30A301B230"}))
+    with pytest.raises(ValueError):
+        validate_request(req(action="display_show"))
+    with pytest.raises(ValueError):
+        validate_request(req(action="display_show", target=result_id, args={"screen": "x"}))
+    with pytest.raises(ValueError):
+        validate_request(req(action="display_show", target=result_id, args={"screen_id": 2}))
+
+
+def test_panel_detach_accepts_the_screen_id_it_reads():
+    """Codex audit F5: detach read screen_id while both validators rejected it."""
+    validate_request(req(action="panel_detach", target="content:atlas",
+                         args={"screen_id": "37D8832A-2D66-02CA-B9F7-8F30A301B230"}))
+    assert ACTION_ARG_FIELDS["panel_detach"] == frozenset({"screen_id"})
+    assert "display_show" in ALLOWED_ACTIONS and "display_show" in REQUIRED_TARGET_ACTIONS

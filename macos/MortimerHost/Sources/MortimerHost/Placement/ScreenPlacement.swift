@@ -248,8 +248,53 @@ final class ScreenPlacement {
             let uuid = CGDisplayCreateUUIDFromDisplayID(identity)?.takeRetainedValue()
             let id = uuid.map { CFUUIDCreateString(nil, $0) as String } ?? "display-\(identity)"
             return PlacementScreen(id: id, visibleFrame: screen.visibleFrame,
-                                  isMain: identity == mainDisplay)
+                                  isMain: identity == mainDisplay,
+                                  name: String(screen.localizedName.prefix(120)))
         }
+    }
+
+    // MARK: WS-21 — one screen identity for transfers, placement and inventory
+
+    /// The connected screens as placement identifies them. The console
+    /// inventory and the supporting-display coordinator read this, never
+    /// `NSScreen` names, so every caller agrees on one ID per screen.
+    func currentScreens() -> [PlacementScreen] { screenProvider() }
+
+    /// The placement ID of the screen a host window is on, or nil when the
+    /// window is closed or off every screen.
+    func screenID(of kind: HostWindowKind) -> String? {
+        guard let window = windowProvider(kind), window.isVisible else { return nil }
+        return DisplayPlacementPolicy.screen(for: window.frame, in: screenProvider())?.id
+    }
+
+    /// The screen the console occupies: its window if it is open, otherwise
+    /// the display macOS designates as main.
+    func consoleScreenID() -> String? {
+        screenID(of: .console) ?? screenProvider().first(where: \.isMain)?.id
+    }
+
+    /// The last non-console screen the supporting display was confirmed on.
+    var preferredSupportingScreenID: String? {
+        lastSupportingScreenID ?? policy.records[.display]?.screenID
+    }
+
+    /// Send the supporting display to `screenID` on the next reposition.
+    /// A manual placement already on that screen is kept; any other record is
+    /// replaced by a full-screen placement there. Returns false when the
+    /// screen is not connected.
+    @discardableResult
+    func assignDisplay(to screenID: String) -> Bool {
+        guard let screen = screenProvider().first(where: { $0.id == screenID }) else { return false }
+        if policy.records[.display]?.screenID != screenID {
+            policy.records[.display] = PlacementRecord(
+                screenID: screenID, frame: screen.visibleFrame, manual: false,
+                manualRevision: (policy.records[.display]?.manualRevision ?? 0) + 1)
+            placedFrames[.display] = nil
+        }
+        lastSupportingScreenID = screenID
+        persist()
+        scheduleReposition()
+        return true
     }
 
     func noteClosed(_ kind: HostWindowKind) {

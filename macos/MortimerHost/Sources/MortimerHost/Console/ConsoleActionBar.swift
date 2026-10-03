@@ -375,6 +375,10 @@ struct ConsoleActionBar: View {
     }
 
     private func sendToDisplay(_ content: SupportingDisplayContent) {
+        // WS-21 D1: the same validated, confirmed route voice uses.
+        if let supportingDisplay = drawer.supportingDisplayRef {
+            supportingDisplay.show(content); return
+        }
         guard workspace.sendToDisplay(content) else { return }
         drawer.placementRef?.openDisplay()
     }
@@ -431,8 +435,8 @@ struct ConsoleActionBar: View {
     }
 
     private func run(_ command: DisplayCommand) {
-        guard command.content != nil else { drawer.placementRef?.closeDisplay(); return }
-        if Self.apply(command, to: workspace) { drawer.placementRef?.openDisplay() }
+        guard let content = command.content else { drawer.placementRef?.closeDisplay(); return }
+        sendToDisplay(content)
     }
 
     // MARK: Expand voice

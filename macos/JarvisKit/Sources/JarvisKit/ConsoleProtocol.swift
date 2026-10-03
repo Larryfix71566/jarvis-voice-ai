@@ -21,6 +21,7 @@ public enum ConsoleAction: String, Codable, Sendable, CaseIterable {
     case graphMoveNode = "graph_move_node", panelDetach = "panel_detach", panelMove = "panel_move"
     case panelReturn = "panel_return", panelClose = "panel_close", panelFocus = "panel_focus"
     case panelFullscreen = "panel_fullscreen", panelsReturnAll = "panels_return_all"
+    case displayShow = "display_show"
     case sidecarWidth = "sidecar_width", sidecarText = "sidecar_text", sidecarScrollTabs = "sidecar_scroll_tabs"
     case appearanceSet = "appearance_set", consoleCaption = "console_caption", consoleStatus = "console_status"
     case waveTuningOpen = "wave_tuning_open", waveTuningSet = "wave_tuning_set", resetLayout = "reset_layout"

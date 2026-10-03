@@ -21,41 +21,37 @@ final class ConsoleActionCoordinator {
     private let registry = ConsoleActionRegistry()
     private var skillWorkspaceActionOwner: UUID?
     private var skillWorkspaceActionHandler: ((ConsoleAction, ConsoleRequest) -> Outcome)?
+    /// WS-21: the one route to the supporting display (plan D1).
+    let supportingDisplay: SupportingDisplayCoordinator?
+    /// WS-21 D2: connected screens as placement identifies them. Panel moves
+    /// and detaches are checked against these IDs before anything changes.
+    private let screens: @MainActor () -> [PlacementScreen]
 
     init(workspace: WorkspaceStore, display: DisplayWindowStore, placement: WindowPlacement,
          atlas: AtlasStore? = nil, panels: PanelStore? = nil, drawer: DrawerState? = nil,
          sharing: ShareCoordinator? = nil, attachments: AttachmentStore? = nil,
          client: JarvisClient? = nil, notices: ConsoleNoticeState? = nil,
-         skills: SkillsStore? = nil) {
+         skills: SkillsStore? = nil,
+         supportingDisplay: SupportingDisplayCoordinator? = nil,
+         screens: @escaping @MainActor () -> [PlacementScreen] = { ScreenPlacement.shared.currentScreens() }) {
         self.workspace = workspace; self.display = display; self.placement = placement
         self.atlas = atlas; self.panels = panels; self.drawer = drawer; self.sharing = sharing
         self.client = client
         self.attachments = attachments
         self.notices = notices
         self.skills = skills
+        self.supportingDisplay = supportingDisplay
+        self.screens = screens
         skills?.onInventoryMutation = { [weak self, weak workspace] in
             workspace?.noteConsoleMutation()
             self?.publishInventory()
         }
     }
 
+    /// WS-21 D6: the requested inventory is the published one, so the two
+    /// cannot differ. Foundation form for local callers and tests.
     func inventory() -> [String: Any] {
-        var result = workspace.consoleInventory
-        result["skills"] = skills?.catalogInventory.map(Self.foundationValue) ?? []
-        if let skills {
-            result["skills_state"] = [
-                "selected_skill_id": skills.selectedSkillID.map { $0 as Any } ?? NSNull(),
-                "tab": skills.selectedTab,
-                "selected_step_id": skills.selectedStepID.map { $0 as Any } ?? NSNull(),
-                "selected_run_id": skills.selectedRunID.map { $0 as Any } ?? NSNull(),
-                "selected_example_id": skills.selectedExampleID.map { $0 as Any } ?? NSNull(),
-                "state_filter": skills.stateFilter,
-                "category_filter": skills.categoryFilter,
-                "steps": skills.selectedProcessInventory.map(Self.foundationValue),
-                "runs": skills.selectedRunInventory.map(Self.foundationValue),
-            ]
-        }
-        return result
+        (Self.foundationValue(inventoryJSON()) as? [String: Any]) ?? [:]
     }
 
     func registerSkillWorkspaceActionHandler(
@@ -109,6 +105,15 @@ final class ConsoleActionCoordinator {
     func publishInventory() {
         guard let client, let sessionID = client.consoleSessionID,
               let generation = client.consoleGeneration else { return }
+        client.send(.consoleInventory(ConsoleInventory(
+            sessionID: sessionID, generation: generation,
+            revision: workspace.consoleRevision,
+            data: inventoryJSON())))
+    }
+
+    /// The one inventory builder (WS-21 D6): published after mutations and
+    /// returned as the `inventory` action's data.
+    func inventoryJSON() -> JSONValue {
         var data = workspace.consoleInventoryJSON
         if case .object(var object) = data {
             object["attachments"] = .array(attachments?.consoleInventoryEntries ?? [])
@@ -127,22 +132,97 @@ final class ConsoleActionCoordinator {
                 ])
             }
             // Dynamic content panels are the authoritative detachable
-            // identities. Keep the legacy enum panels only as a fallback so
-            // older clients still see their four fixed surfaces, while the
-            // wire ceiling remains six entries.
-            if let panels, !panels.contentInventoryEntries.isEmpty {
-                let legacy = object["panels"].flatMap { value -> [JSONValue]? in
-                    if case .array(let values) = value { return values }
-                    return nil
-                } ?? []
-                object["panels"] = .array(Array((panels.contentInventoryEntries + legacy).prefix(6)))
+            // identities and come first; the four fixed surfaces follow,
+            // within the six-entry wire ceiling. WS-21 D6: every entry
+            // carries its actual destination screen (null when not detached).
+            let fixed: [JSONValue] = ConsolePanel.allCases.map { panel -> JSONValue in
+                let screen: String? = panels?.screenByPanel[panel]
+                let detached: Bool = panels?.detached.contains(panel) ?? false
+                return .object([
+                    "id": .string(panel.rawValue),
+                    "kind": .string(panel.rawValue),
+                    "title": .string(panel.rawValue.capitalized),
+                    "detached": .bool(detached),
+                    "screen_id": screen.map(JSONValue.string) ?? .null,
+                ])
+            }
+            object["panels"] = .array(Array(((panels?.contentInventoryEntries ?? []) + fixed).prefix(6)))
+            if let supportingDisplay {
+                object["screens"] = .array(supportingDisplay.screensInventory())
+                object["supporting_display"] = supportingDisplay.supportingDisplayInventory()
+            } else {
+                object["screens"] = .array(screens().prefix(8).enumerated().map { index, screen -> JSONValue in
+                    .object([
+                        "id": .string(screen.id),
+                        "label": .string(screen.name.isEmpty ? "Display \(index + 1)" : screen.name),
+                        "index": .number(Double(index)),
+                        "primary": .bool(screen.isMain),
+                    ])
+                })
             }
             data = .object(object)
         }
-        client.send(.consoleInventory(ConsoleInventory(
-            sessionID: sessionID, generation: generation,
-            revision: workspace.consoleRevision,
-            data: data)))
+        return data
+    }
+
+    // MARK: WS-21 — display transfers (voice `display_show`, `skill_display_transfer`)
+
+    static func isDisplayTransfer(_ action: ConsoleAction) -> Bool {
+        action == .displayShow || action == .skillDisplayTransfer
+    }
+
+    /// Voice display transfers complete only after the supporting display
+    /// confirms (plan D3), so they run here rather than in `execute`.
+    func executeTransfer(_ request: ConsoleRequest) async -> SupportingDisplayCoordinator.Outcome {
+        guard request.revision == workspace.consoleRevision else {
+            return .rejected(code: "stale_selection", reason: "The console changed; please choose the item again.")
+        }
+        guard registry.validate(request, currentRevision: workspace.consoleRevision) else {
+            return .rejected(code: "invalid_target", reason: "That console target is no longer available.")
+        }
+        guard let supportingDisplay else {
+            return .rejected(code: "unsupported", reason: "The supporting display is unavailable here.")
+        }
+        let content: SupportingDisplayContent
+        switch request.action {
+        case .displayShow:
+            guard let target = request.target,
+                  let parsed = SupportingDisplayCoordinator.content(forTarget: target) else {
+                return .rejected(code: "invalid_target",
+                                 reason: "Name a result from the inventory, the memory graph, Skills or workflows.")
+            }
+            content = parsed
+        case .skillDisplayTransfer:
+            guard let skills, let target = request.target, target == skills.selectedSkillID else {
+                return .rejected(code: "invalid_target", reason: "Select that skill first.")
+            }
+            content = .skillDetail(target)
+        default:
+            return .rejected(code: "invalid_target", reason: "That is not a display transfer.")
+        }
+        let outcome = await supportingDisplay.transfer(content, screenID: stringArg(request, "screen_id"))
+        if outcome.succeeded { workspace.noteConsoleMutation() }
+        return outcome
+    }
+
+    /// WS-21 D2/D5: a screen ID must be one placement knows and is connected.
+    private func connectedScreen(_ id: String?) -> Bool {
+        guard let id = id?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty else { return false }
+        return screens().contains { $0.id == id }
+    }
+
+    /// WS-21 D5 (Codex audit F3): a content panel may only name results that
+    /// are open and may leave the main window.
+    private func contentIsAvailable(_ content: PanelContent) -> Bool {
+        func available(_ id: UUID) -> Bool {
+            guard let result = workspace.results.first(where: { $0.id == id }) else { return false }
+            return !result.payload.isProtectedLocal
+        }
+        switch content {
+        case .result(let id), .sources(let id): return available(id)
+        case .comparison(let a, let b): return available(a) && available(b)
+        case .memoryGraph, .atlas, .transcript: return true
+        }
     }
 
     func execute(_ request: ConsoleRequest) -> Outcome {
@@ -481,8 +561,10 @@ final class ConsoleActionCoordinator {
             // bounded store either opens/focuses it or returns the explicit
             // capacity outcome without evicting an existing panel.
             if request.action == .panelDetach, let content = PanelContent.parseTarget(target) {
-                switch panels.openContent(content, origin: target,
-                                           screenID: stringArg(request, "screen_id") ?? request.secondaryTarget) {
+                guard contentIsAvailable(content) else { return .invalid }
+                let screen = stringArg(request, "screen_id") ?? request.secondaryTarget
+                if screen != nil, !connectedScreen(screen) { return .invalid }
+                switch panels.openContent(content, origin: target, screenID: screen) {
                 case .opened(let id), .focused(let id):
                     placement.openContentPanel(id, screenID: panels.contentRecord(id)?.screenID)
                     workspace.noteConsoleMutation()
@@ -516,6 +598,7 @@ final class ConsoleActionCoordinator {
         case .panelMove:
             guard let panels, let target = request.target,
                   let screen = stringArg(request, "screen_id") ?? request.secondaryTarget else { return .invalid }
+            guard connectedScreen(screen) else { return .invalid }
             if let uuid = UUID(uuidString: target), let contentID = panels.contentRecords.keys.first(where: { $0.rawValue == uuid }) {
                 guard panels.moveContent(contentID, to: screen) else { return .invalid }
                 placement.openContentPanel(contentID, screenID: screen)
@@ -606,6 +689,10 @@ final class ConsoleActionCoordinator {
         case .exportFolderClear:
             workspace.exporter.clearFolder(); return .applied
         case .sharedContent:
+            return .unsupported
+        case .displayShow:
+            // Completes only after the display confirms; AppMessageRouter
+            // sends it through `executeTransfer` (WS-21 D3).
             return .unsupported
         }
     }
