@@ -58,15 +58,16 @@ text before stdout/UI emission, and the shared MCP registry blocks external
 servers during an armed sensitive turn before invocation. The remaining audit
 covers detached continuation and provider-specific result sinks.
 MAR-E has catalog parsing, vault allowlisting,
-and API-compatible routing; live credential/catalog verification remains open.
+and API-compatible routing. A 2026-10-02 authenticated catalog check returned
+64 models, none advertised as confidential; the confidential pilot remains open.
 MAR-F has gated text-only Claude and Codex subscription adapters; their child
 processes strip inherited API credentials and endpoint overrides before launch.
-A synthetic
-read-only Codex probe succeeded using the authenticated default model, while
-the Claude probe reports that the CLI is not logged in. The prior OpenRouter
-Codex model identifier was rejected by the subscription account. Claude
-re-authentication, model capability evidence, and tool-preserving execution
-remain open. MAR-G
+A historical user-reported synthetic Codex probe succeeded using its authenticated
+default model; the prior OpenRouter Codex model identifier was rejected by that account.
+The 2026-10-02 current check finds Claude Max reported signed in but inference
+returns HTTP 401, while Codex is signed in but its Mortimer adapter remains
+gated until no-tools verification. Claude re-authentication, model capability
+evidence, and tool-preserving execution remain open. MAR-G
 through MAR-J remain open.
 
 **Reconciled 2026-09-22 against main `88b206f`.** This header and
@@ -101,6 +102,8 @@ Related documents:
 - [Automated-memory plan](MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md)
 
 ## Progress
+
+- 2026-10-02 (Codex, MAR-E/F live readiness): On merged main `ecdf3a3`, the Mac vault-backed SAYGM catalog request succeeded with 64 models and zero advertised confidential models. Claude CLI 2.1.278 reported a signed-in Max account but both the isolated Mortimer adapter probe and a direct public-prompt CLI probe failed authentication (HTTP 401 on the direct call). Codex CLI 0.158.0-alpha.2.1 reported ChatGPT sign-in; its Mortimer adapter deliberately returned `gated` because no-tools runtime capability is not yet verified. See the [secret-free receipt](../acceptance/model-use-enhancements/receipts/model-access-live-readiness-2026-10-02.json). No route was enabled or production configuration changed.
 
 - 2026-10-02 (Codex, MAR-A baseline refresh): The installed Mac remains on deployed `ae70f2c` while main is `bd41b5e`. Current launchd bot/admin/extractor/costs/vault PIDs match the clean deployment receipt; a read-only `ps` executable-name check confirms the production venv processes. The production checkout has zero tracked edits and five untracked entries. The routing flag and model-access override are absent from the sourced `.env` and launch-agent environment, but the running process environment itself was not inspected. Production and merged candidate each pass the Python 3.12 call-site audit at 28/28. The read-only ledger window since deployment contains 15 provider calls (8 LLM), with zero populated route, billing-source, or model-duration fields; one completed supervisor run is not a quality score. No provider call or production write was made during this aggregate baseline capture. See [`mar-a-baseline-refresh-2026-10-02.json`](../acceptance/model-use-enhancements/receipts/mar-a-baseline-refresh-2026-10-02.json). MAR-A remains open for representative quality/latency evidence, effective-routing verification, and production route/billing attribution.
 

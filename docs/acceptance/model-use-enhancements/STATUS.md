@@ -1,10 +1,10 @@
 # Model Use Enhancements — status
 
-**As of:** 2026-09-29
+**As of:** 2026-10-02
 **Plan:** [Model Use Enhancements](../../plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md)
 **Execution sequence:** [Remaining Gaps Implementation Plan](../../plans/MORTIMER_REMAINING_GAPS_IMPLEMENTATION_PLAN.md)
 
-**Reconciled 2026-09-25 against main `4acb4dc` (#90).** PR #90 changes the
+**Historical reconciliation, 2026-09-25 against main `4acb4dc` (#90).** PR #90 changes the
 accepted orb shell and does not change model execution, privacy, subscription
 capability, memory admission, or route gates. Its commit reports MortimerHost
 258 executed / 3 skipped / 0 failures, JarvisKit 199 passed, and Crystal p95
@@ -70,38 +70,21 @@ no linked receipt are also unreceipted.
   covers this one path; MAR-D remains open until all source/sink families and
   direct-mode paths are inventoried and negatively tested.
 - [ ] **MAR-E** — Perform the confidential-model portion of the SAYGM pilot.
-  The Mac vault credential and live catalog check are now verified; the
-  catalog returned 56 models but advertised zero confidential models, so a
-  catalog-confirmed confidential synthetic test remains open.
-  (Reconciled 2026-09-22: the live catalog result is user-reported and not
-  in a committed receipt. The only committed SAYGM receipt,
-  [`saygm-readiness-2026-09-20.json`](receipts/saygm-readiness-2026-09-20.json),
-  records `saygm_catalog.ok: false`, `SAYGM_API_KEY is not set`. The
-  vault-backed readiness receipt records the SAYGM route with
-  `credential_present: false`.)
+  The 2026-10-02 [live readiness receipt](receipts/model-access-live-readiness-2026-10-02.json)
+  confirms the vault credential and authenticated catalog request: 64 models,
+  none advertised as confidential. A catalog-confirmed confidential synthetic
+  test remains open. The 2026-09-20 receipt recorded a missing key; that is
+  historical evidence, not the current credential state.
 - [ ] **MAR-F** — Complete Claude re-authentication and capability evidence.
-  (Unticked 2026-09-22, reconciled against main `88b206f`. The only committed
-  probe evidence, [`subscription-probes-2026-09-20.md`](receipts/subscription-probes-2026-09-20.md)
-  and [`subscription-readiness-2026-09-20.json`](receipts/subscription-readiness-2026-09-20.json),
-  records Claude `Not logged in` (`subscription_probes.claude.ok: false`,
-  category `authentication`). The 2026-09-21 successful Claude probe below is
-  user-reported and unverified. Re-tick when a committed probe receipt shows
-  it.)
-  Both Claude and Codex adapters are text-only and gated, and both
-  subprocesses strip inherited provider API credentials and endpoint
-  overrides before launch. Claude OAuth is currently not logged in and
-  requires re-authentication. The installed Codex CLI authenticated
-  successfully with its default model; the
-  old OpenRouter `gpt-5.1-codex-max` identifier is rejected by the ChatGPT
-  subscription and is therefore kept separate from the new verified profile.
-  The established Mac vault is present at
-  `/Users/larryfix/jarvis-voice-ai-clean/data/secrets.vault` and decrypts
-  successfully. It contains `ANTHROPIC_API_KEY` (API fallback), but a Claude
-  subscription is an OAuth/keychain session rather than a vault secret, so
-  subscription authentication is kept outside the vault. On 2026-09-21 the
-  refreshed Claude Max session passed the same noninteractive probe as Codex;
-  both subscription routes now have live text capability evidence.
-  (User-reported; not recorded in a committed receipt.)
+  On 2026-10-02, `claude auth status` reported a signed-in Max account, but
+  Mortimer's isolated public-prompt probe failed authentication and a direct
+  Claude CLI public-prompt call returned HTTP 401. Account status alone is not
+  inference readiness. `codex login status` reported ChatGPT sign-in; its
+  Mortimer adapter remains intentionally gated pending no-tools verification
+  for the installed CLI. The [live readiness receipt](receipts/model-access-live-readiness-2026-10-02.json)
+  records these distinct outcomes without credentials or response text.
+  Subscription tokens remain in each provider's own sign-in store, outside
+  the project vault. Both adapters remain text-only and reject Mortimer tools.
 - [ ] **MAR-G** — Migrate all non-voice call sites and prove no background
   workload inherits the voice route. Memory, extraction, sweep, procedure,
   digest, agent, council, upgrade, shared-content vision, and production screen
@@ -342,25 +325,20 @@ See [`model-call-site-inventory-2026-09-25.json`](receipts/model-call-site-inven
 - Offline memory rollout gate: **passed** with `live_database_touched=false`
   and `production_automation_enabled=false`; receipt:
   [`rollout-monitoring-receipt.json`](../memory-automation/rollout-monitoring-receipt.json).
-- SAYGM confidential-model attestation, subscription route enablement, and Mac
-  deployment reconciliation remain incomplete. Claude re-authentication is
-  complete and has passed the live noninteractive probe. (Reconciled
-  2026-09-22: that statement is user-reported. The committed probe receipts
-  still show Claude `Not logged in`, so MAR-F is open above.)
+- SAYGM confidential-model attestation and subscription route enablement
+  remain incomplete. The 2026-09-21 report of successful Claude and Codex
+  probes was user-reported history; the 2026-10-02 live receipt supersedes
+  it for current readiness. The deployed revision is documented under MAR-A.
 
 ## Next exact handoff actions
 
 1. Run live voice acceptance for the route tool and verify spoken confirmation
    updates the native catalog without an implicit fallback.
-2. Preserve the validated Claude/Codex subscription sign-ins and implement a
-   sandbox-preserving tool bridge before enabling subscription routes for
-   developer/app-builder workloads.
-3. Run live credential/catalog checks only on the Mac vault, then record the
-   provider, catalog tier, capability result, and rollback evidence here.
-   From this candidate checkout, set
-   `JARVIS_VAULT_PATH=/Users/larryfix/jarvis-voice-ai-clean/data/secrets.vault`
-   and run `uv run python scripts/verify_model_access.py --saygm
-   --probe-subscriptions --output
-   docs/acceptance/model-use-enhancements/receipts/live-route-readiness.json`.
+2. Restore Claude CLI authentication, then rerun the isolated subscription
+   probe. Verify Codex's no-tools runtime capability for its installed version
+   before lifting its adapter gate. A sandbox-preserving tool bridge is still
+   required for tool-bearing developer/app-builder workloads.
+3. Recheck SAYGM catalog and capability metadata when a confidential model is
+   advertised; do not classify the current 64-model catalog as confidential.
 4. Reconcile the installed checkout with this candidate before enabling
    `JARVIS_MODEL_ROUTING_ENABLED=1` in any deployed launch service.
