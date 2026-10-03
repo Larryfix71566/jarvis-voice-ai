@@ -1521,6 +1521,12 @@ struct SkillsWorkspaceView: View {
             versionEvidence = response
             versionEvidenceError = nil
             announceAccessibilityStatus(.versions, .loaded)
+        } catch JarvisError.http(status: 503, body: let body)
+            where body.contains("Skills requests require bearer authentication") {
+            guard selectedID == id else { return }
+            versionEvidence = nil
+            versionEvidenceError = "Version and candidate history require bearer authentication, which is not enabled for this local session. The Skills library and process remain available."
+            announceAccessibilityStatus(.versions, .failed)
         } catch {
             guard selectedID == id else { return }
             versionEvidence = nil

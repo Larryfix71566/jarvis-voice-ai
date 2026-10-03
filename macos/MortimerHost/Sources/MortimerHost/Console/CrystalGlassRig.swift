@@ -1,22 +1,5 @@
 import CoreGraphics
 import Foundation
-import JarvisKit
-
-/// Which glass shell the adaptive orb draws
-/// (docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md D3).
-enum OrbShell: Equatable {
-    /// Option A, approved by Larry 2026-09-23: clear, thick-walled glass lit
-    /// by a studio window. The default.
-    case crystal
-    /// The shell exactly as it was before the plan (the 2026-09-18
-    /// glass/comet revision), kept verbatim as the rollback.
-    case legacy
-
-    /// Resolved once per launch. `JARVIS_ORB_CRYSTAL=off` in the environment,
-    /// or `defaults write com.mortimer.host JARVIS_ORB_CRYSTAL -bool false`,
-    /// selects `.legacy` from the next launch on.
-    static let resolved: OrbShell = JarvisFlags.orbCrystalShellEnabled ? .crystal : .legacy
-}
 
 /// Everything about the crystal shell that does not depend on voice state
 /// or phase: the constants of the approved preview

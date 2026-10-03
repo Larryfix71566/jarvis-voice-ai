@@ -134,6 +134,7 @@ async def run_eval() -> tuple[int, int]:
         for schema in supervisor_tool_schemas(
             None, ui_control=flags["ui_control"], screen=flags["screen"],
             clipboard=flags["clipboard"], status=status_on, **timing,
+            weather=True,  # WS-15: local_weather ships unconditionally (W8)
         )
     ] if show_tools else []
     voice_catalog = catalog_summary(load_voice_catalog()) if flags["voice"] else None
@@ -160,7 +161,8 @@ async def run_eval() -> tuple[int, int]:
 
             orch = Orchestrator(settings, registry, str(uuid.uuid4()), on_event=on_event,
                                 extra_tools=extra_tools, voice_catalog=voice_catalog,
-                                status=status_on and show_tools, **timing, **flags)
+                                status=status_on and show_tools, weather=show_tools,
+                                **timing, **flags)
             orch._history.extend(_hooked(m, settings) for m in case.get("prior") or [])
             try:
                 reply = await orch.chat(case["input"])

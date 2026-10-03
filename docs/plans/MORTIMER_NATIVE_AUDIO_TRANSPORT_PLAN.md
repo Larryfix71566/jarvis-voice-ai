@@ -560,3 +560,7 @@ the last commit and is itself revertible.
 Not touching the remote/WebRTC path, the wake listener, the sidecar, message
 shapes, or UI. Not adding audio features beyond parity. Not removing WebRTC
 from the codebase — it is the T2 transport.
+
+## Progress 2026-09-30 (WS-18, Claude)
+
+An AirPods to Mac speaker switch mid-answer crashed the app: D3's rebuild ran and the engine reported running, but Voice Processing then faulted its downlink and no output IO cycle came; the next `AVAudioPlayerNode.play()` raised `player did not see an IO cycle` after 5 s. `AudioEngineIO` now starts the player only when the output node's render time is seen to advance (`OutputIOWatch`, checked every 100 ms on the engine queue), rebuilds an output that shows no IO for 1.5 s (3 tries, then `onFailure`), and calls `play()` through `JKCatchObjCException` (new `JarvisKitObjC` target) so a refusal drops the queued speech and rebuilds. Rollback: `JARVIS_AUDIO_OUTPUT_WATCH` false.

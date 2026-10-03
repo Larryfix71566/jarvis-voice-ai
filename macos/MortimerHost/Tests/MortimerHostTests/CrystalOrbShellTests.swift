@@ -7,8 +7,8 @@ import SwiftUI
 /// from the approved preview (docs/interface-research/orb-crystal/), measured
 /// 2026-09-23 at 400 × 180 pt on black: the key-window reflection covers
 /// 70–79 pt² of the reflection band at ≥ 0.6 brightness in every voice
-/// state, the legacy shell covers 0 pt², and pixels farther than
-/// 1.25 × radius from the center are identical between the two shells.
+/// state. This suite verifies the sole crystal renderer and produces the
+/// five state fixtures used for visual acceptance.
 @MainActor
 final class CrystalOrbShellTests: XCTestCase {
     private static let width = 400.0, height = 180.0
@@ -16,12 +16,11 @@ final class CrystalOrbShellTests: XCTestCase {
     private static var radius: Double { min(height, 2 * min(width / 2, width / 2)) * 0.255 }
 
     private func render(_ activity: VoicePresentationState.Activity, userEnergy: Double = 0,
-                        outputEnergy: Double = 0, phase: Double = 1.3,
-                        shell: OrbShell) throws -> NSBitmapImageRep {
+                        outputEnergy: Double = 0, phase: Double = 1.3) throws -> NSBitmapImageRep {
         let view = NSHostingView(rootView: Canvas { context, size in
             CometOrbRenderer.draw(context: &context, size: size, stageCenterX: nil, phase: phase,
                                   userEnergy: userEnergy, outputEnergy: outputEnergy,
-                                  activity: activity, shell: shell)
+                                  activity: activity)
         }.background(Color.black))
         view.frame = NSRect(x: 0, y: 0, width: Self.width, height: Self.height)
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -106,78 +105,55 @@ final class CrystalOrbShellTests: XCTestCase {
         }
     }
 
-    func testTheShellDefaultsToCrystal() {
-        // The test process has neither JARVIS_ORB_CRYSTAL in its environment
-        // nor the key in its own defaults domain (not com.mortimer.host).
-        XCTAssertEqual(OrbShell.resolved, .crystal)
-    }
-
     // MARK: - Rendering
 
-    /// The defect this plan fixes, stated as a test: the legacy glass all but
-    /// vanishes in standby; the crystal glass keeps its window reflection.
+    /// The approved room reflections remain visible even before a voice session.
     func testCrystalKeepsItsReflectionsInStandby() throws {
-        let legacy = reflectionArea(try render(.offline, shell: .legacy))
-        let crystal = reflectionArea(try render(.offline, shell: .crystal))
-        XCTAssertEqual(legacy, 0, "legacy standby had no bright reflection in the preview")
+        let crystal = reflectionArea(try render(.offline))
         XCTAssertGreaterThanOrEqual(crystal, 35, "half of the preview's 70 pt² window reflection")
     }
 
     /// Reflections belong to the room, not to the voice state.
     func testCrystalReflectionsDoNotFollowVoiceState() throws {
-        let standby = reflectionArea(try render(.offline, shell: .crystal))
+        let standby = reflectionArea(try render(.offline))
         let cases: [(VoicePresentationState.Activity, Double, Double)] = [
             (.listening, 0, 0), (.user, 0.385, 0), (.assistant, 0, 0.294), (.user, 0.385, 0.294),
         ]
         for (activity, user, output) in cases {
-            let area = reflectionArea(try render(activity, userEnergy: user, outputEnergy: output, shell: .crystal))
+            let area = reflectionArea(try render(activity, userEnergy: user, outputEnergy: output))
             XCTAssertEqual(area, standby, accuracy: standby * 0.15,
                            "\(activity) changed the reflection area (\(area) vs standby \(standby) pt²)")
         }
     }
 
-    /// Plasma, comets and colors are outside the plan's scope. Beyond
-    /// 1.25 × radius only the comets draw, so both shells must match there
-    /// pixel for pixel, and the nucleus must keep its color.
-    func testCometsAndNucleusAreUnchanged() throws {
-        let cases: [(VoicePresentationState.Activity, Double, Double)] = [
-            (.listening, 0, 0), (.user, 0.385, 0), (.assistant, 0, 0.294), (.user, 0.385, 0.294),
-        ]
+    /// The nucleus changes color with the active speaker while retaining the
+    /// approved room-light reflections.
+    func testNucleusReflectsTheCurrentSpeaker() throws {
+        let user = try render(.user, userEnergy: 0.385)
+        let mortimer = try render(.assistant, outputEnergy: 0.294)
+        let cx = user.pixelsWide / 2, cy = user.pixelsHigh / 2
+        let userCenter = try XCTUnwrap(user.colorAt(x: cx, y: cy)?.usingColorSpace(.deviceRGB))
+        let mortimerCenter = try XCTUnwrap(mortimer.colorAt(x: cx, y: cy)?.usingColorSpace(.deviceRGB))
+        let difference = abs(Double(userCenter.redComponent) - Double(mortimerCenter.redComponent))
+            + abs(Double(userCenter.greenComponent) - Double(mortimerCenter.greenComponent))
+            + abs(Double(userCenter.blueComponent) - Double(mortimerCenter.blueComponent))
+        XCTAssertGreaterThan(difference, 0.08, "the nucleus should distinguish user and Mortimer activity")
+    }
+
+    /// Side-by-side fixtures for Larry's visual acceptance (§7 step V).
+    func testReferenceStatesRenderCrystalFixtures() throws {
         let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent(".build/interface-fixtures")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        for (activity, user, output) in cases {
-            let legacy = try render(activity, userEnergy: user, outputEnergy: output, shell: .legacy)
-            let crystal = try render(activity, userEnergy: user, outputEnergy: output, shell: .crystal)
-            XCTAssertEqual(legacy.pixelsWide, crystal.pixelsWide)
-            var outside = 0, differing = 0
-            forEachPixel(legacy) { x, y, rho, a in
-                guard rho > 1.25, let c = crystal.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { return }
-                outside += 1
-                let d = max(abs(a.0 - Double(c.redComponent)), abs(a.1 - Double(c.greenComponent)),
-                            abs(a.2 - Double(c.blueComponent)))
-                if d > 2.0 / 255 { differing += 1 }
-            }
-            XCTAssertGreaterThan(outside, 10_000)
-            XCTAssertEqual(differing, 0, "\(activity): comets changed outside the glass")
-            let cx = legacy.pixelsWide / 2, cy = legacy.pixelsHigh / 2
-            let a = try XCTUnwrap(legacy.colorAt(x: cx, y: cy)?.usingColorSpace(.deviceRGB))
-            let b = try XCTUnwrap(crystal.colorAt(x: cx, y: cy)?.usingColorSpace(.deviceRGB))
-            XCTAssertEqual(Double(a.redComponent), Double(b.redComponent), accuracy: 0.06)
-            XCTAssertEqual(Double(a.greenComponent), Double(b.greenComponent), accuracy: 0.06)
-            XCTAssertEqual(Double(a.blueComponent), Double(b.blueComponent), accuracy: 0.06)
-        }
-        // Side-by-side fixtures for Larry's visual acceptance (§7 step V).
         let names: [(String, VoicePresentationState.Activity, Double, Double)] = [
             ("standby", .offline, 0, 0), ("idle", .listening, 0, 0), ("user", .user, 0.385, 0),
             ("mortimer", .assistant, 0, 0.294), ("overlap", .user, 0.385, 0.294),
         ]
         for (name, activity, user, output) in names {
-            for shell in [OrbShell.legacy, .crystal] {
-                let bitmap = try render(activity, userEnergy: user, outputEnergy: output, shell: shell)
-                try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-                    .write(to: directory.appendingPathComponent("orb-\(shell == .crystal ? "crystal" : "legacy")-\(name).png"))
-            }
+            let bitmap = try render(activity, userEnergy: user, outputEnergy: output)
+            XCTAssertGreaterThan(reflectionArea(bitmap), 0, "\(name): crystal glass should render")
+            try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+                .write(to: directory.appendingPathComponent("orb-crystal-\(name).png"))
         }
     }
 }

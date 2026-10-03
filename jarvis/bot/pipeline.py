@@ -70,7 +70,12 @@ from jarvis.agents.delegate import (
 )
 from jarvis.anthropic_shim import native_base_url
 from jarvis.bot.connect_greeting import ConnectGreeting  # noqa: E402
-from jarvis.bot.voice_guidance import ReplyGuard, VoiceTurnState, VoiceWorkflowInjector
+from jarvis.bot.voice_guidance import (
+    ReplyGuard,
+    VoiceTurnState,
+    VoiceWorkflowInjector,
+    rtvi_observer_params,
+)
 from jarvis.bot.sensitive_turn import is_sensitive as _voice_is_sensitive
 from jarvis.voice_workflows import wrap_delegate_handler
 from jarvis.bot.follow_up import (
@@ -81,6 +86,7 @@ from jarvis.bot.follow_up import (
     progress_updates_enabled,
 )
 from jarvis.bot.status_tool import build_system_status_tool
+from jarvis.bot.weather_tool import build_local_weather_tool
 from jarvis.bot.device_location import DeviceLocation, resolve_location, summarize_location
 from jarvis import ambient_weather
 from jarvis.bot.console_actions import build_console_action_tool
@@ -768,6 +774,23 @@ def build_pipeline(
         return summarize_location(result)
 
     _, system_status_handler = build_system_status_tool(location=_location_answer)
+
+    # WS-15 (MORTIMER_WEATHER_LOCATION_AND_RADAR_PLAN.md S3): current
+    # weather from the same device-first resolver, never a place a model
+    # wrote. Always registered (W8: no new kill switch).
+    async def _weather_location(protected: bool) -> dict:
+        return await resolve_location(
+            runtime.device_location, protected=protected,
+            ip_lookup=lambda: asyncio.to_thread(ambient_weather.ip_location))
+
+    async def _push_weather_card(payload: dict) -> None:
+        _logger.info("display_payload tool=local_weather surface=%s agent=supervisor kind=%s",
+                     payload.get("surface"), payload.get("kind"))
+        await send_app_message(transport, {"type": "display", "display": payload})
+
+    _, local_weather_handler = build_local_weather_tool(
+        locate=_weather_location, push_display=_push_weather_card)
+    local_weather_on = True
     # W12 — both read their kill switch once, here, and pass it to the menu,
     # the prompt and registration, so the three cannot disagree.
     progress_enabled = progress_updates_enabled()
@@ -948,6 +971,7 @@ def build_pipeline(
         clipboard=clipboard_enabled,
         progress=progress_enabled,
         follow_up=follow_up_enabled,
+        weather=local_weather_on,
     )
 
     # Phase 4 Rev 3.4 Stage A2 — see memory_stats above. Logged with the
@@ -1082,6 +1106,8 @@ def build_pipeline(
         register_voice_tool("progress_updates", progress_updates_handler)
     if follow_up_enabled:
         register_voice_tool("follow_up", follow_up_handler)
+    if local_weather_on:
+        register_voice_tool("local_weather", local_weather_handler)
     tts = ElevenLabsTTSService(
         api_key=settings.elevenlabs_api_key,
         settings=ElevenLabsTTSSettings(
@@ -1127,6 +1153,7 @@ def build_pipeline(
             status=status_enabled,
             progress=progress_enabled,
             follow_up=follow_up_enabled,
+            weather=local_weather_on,
         )
     ]
     context = LLMContext(
@@ -1283,6 +1310,20 @@ def build_pipeline(
     ])
     pipeline = Pipeline(pipeline_steps)
     return pipeline, llm, aggregators, pusher
+
+
+def build_task(pipeline: Pipeline, llm: Any, observers: list) -> PipelineTask:
+    return PipelineTask(
+        pipeline,
+        # Phase 0 step 1 — required for UsageMetricsObserver to ever see a
+        # frame; confirmed 2026-09-01 no other consumer in this repo
+        # depended on these being off.
+        params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
+        observers=observers,
+        # Mortimer's text once (2026-09-30): the client builds the thread
+        # from bot-llm-text; see rtvi_observer_params.
+        rtvi_observer_params=rtvi_observer_params(llm),
+    )
 
 
 def _wrap_rtvi(message: dict) -> dict:
@@ -1469,10 +1510,10 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # Native-audio plan D7: on the WebSocket transport client app
             # messages arrive as InputTransportMessageFrame in the pipeline;
             # the processor is bound to the handlers below once they exist.
-            pipeline, _llm, aggregators, pusher = build_pipeline(
+            pipeline, llm, aggregators, pusher = build_pipeline(
                 transport, runtime, client_messages=client_messages)
         else:
-            pipeline, _llm, aggregators, pusher = build_pipeline(transport, runtime)
+            pipeline, llm, aggregators, pusher = build_pipeline(transport, runtime)
         from jarvis.bot.skill_creator_dispatch import register_session
         from jarvis.tenant import current_user_id
 
@@ -1597,14 +1638,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                         )
 
             observers.append(_FnFrameProbe())
-        task = PipelineTask(
-            pipeline,
-            # Phase 0 step 1 — required for UsageMetricsObserver above to
-            # ever see a frame; confirmed 2026-09-01 no other consumer in
-            # this repo depended on these being off.
-            params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
-            observers=observers,
-        )
+        task = build_task(pipeline, llm, observers)
         pusher.bind(task)
 
         client_connected = {"value": False}

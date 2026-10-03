@@ -1235,3 +1235,51 @@ versions remain “not recorded” when no run evidence identifies them.
 Source baseline: main `180766e`; branch `codex/isolated-20260924`. This is a
 documentation-only slice: no runtime changes, new model assignments, activation
 or newly passed acceptance gates. Documentation PR merge remains the next step.
+
+### 2026-09-29 — WS-01 action-claim settlement-order CI follow-up claimed
+
+PR #115 carries only WS-08 roadmap, plan and fixture evidence, but its full
+validation failed twice in unrelated action-claim tests. The second run failed
+three assertions in `test_admin_appbuild.py` and `test_admin_selfedit.py` that
+expect a durable `completed` claim after the visible job becomes `done`; all
+three pass together in a focused local run. The PR's diff contains no backend
+code or tests. In `jarvis/admin/server.py`, `_run_appbuild_agent` and
+`_run_agent` publish the terminal in-memory job state before calling their
+durable claim update. A concurrent status poll can therefore see `done` and
+then find the still-`claimed` receipt, which the recovery path correctly
+reports as `unknown`.
+
+The bounded repair is to commit the terminal claim outcome before exposing a
+terminal job state, for success and failure/cancellation paths, without
+weakening duplicate-run protection. Add a deterministic concurrency test that
+holds the claim write and verifies the visible job has not yet become terminal;
+then release it and verify the durable and visible terminal states agree. Run
+the focused admin action tests and full backend validation. Claim this slice
+on main first through a docs-only PR; no backend code is changed by the claim.
+
+### 2026-09-29 — WS-01 claim-order implementation
+
+The docs-only claim landed through PR #124. The self-edit and app-build workers
+now settle the durable terminal action claim while holding their respective job
+locks, immediately before publishing terminal in-memory job state. This covers
+success, failure, and cancellation without changing duplicate-run decisions or
+claim-update error handling. Four deterministic tests pause the terminal claim
+write, verify the job remains running, then release the write and verify that
+the receipt and terminal job agree. The two focused admin modules pass (97
+tests). Full unit and CI validation remain before merging this fix into WS-08
+PR #115.
+
+Local full-unit run: 4,740 passed, three skipped, two failures outside this
+scope. The audio-filter default test passed when rerun alone, indicating
+shared-state contamination in the broad Mac run. The deploy-script log-flush
+test also failed alone on this Mac: its stdout assertion passed, but the
+process-substitution log stayed empty through the test's one-second wait.
+Neither file is changed by this WS-01 slice. Linux CI remains the authoritative
+full-suite gate for the PR.
+
+### 2026-09-29 — WS-01 claim-order repair landed
+
+PR #125 merged as `ab2a2ef`; its five GitHub checks passed, including full
+Linux validation. Current main with this fix was merged into WS-08 PR #115,
+whose five checks then passed and which merged as `8222940`. The CI race is
+closed. This does not close the original WS-01 physical/live acceptance gates.

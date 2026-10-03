@@ -44,7 +44,10 @@ final class AppMessageRouter {
         transcriptSink = client.$transcript.sink { [weak self] entries in
             conversation?.set(entries)
             let layout = UserDefaults.standard.object(forKey: "mortimer.interface.layoutVersion") as? Int ?? 2
-            if InterfaceLayoutVersion.resolve(layout) == 2, let workspace {
+            // CC7a.1 (WS-17): with the conversation thread on, spoken
+            // answers stay in the thread and no longer become results.
+            if ConversationThread.routesSpokenAnswersToResults(
+                layoutVersion: layout, threadEnabled: ConversationThread.isEnabled()), let workspace {
                 let previousRevision = workspace.consoleRevision
                 self?.responseRouter.receive(entries, workspace: workspace, display: displayWindow)
                 if workspace.consoleRevision != previousRevision {
@@ -207,6 +210,16 @@ final class AppMessageRouter {
                     // the workspace as the fallback when no supporting
                     // display is open; while the display is live its view
                     // yields through the locator in WorkspaceView.
+                    // WS-15 PR 2 (Larry, 2026-09-29: "they should be on one
+                    // window"): a weather card lives in the main window only
+                    // and comes to the front, instead of going to the
+                    // supporting display or waiting unread behind the
+                    // spoken reply (G-2 found both).
+                    if Self.showsInMainWindowOnly(payload) {
+                        workspace?.receive(result)
+                        workspace?.select(result.id)
+                        break
+                    }
                     switch payload.surface {
                     case .window:
                         // Protected local answers remain available in the
@@ -292,5 +305,14 @@ final class AppMessageRouter {
         stateSink = nil
         audioOutputSink = nil
         audioInputSink = nil
+    }
+}
+
+
+extension AppMessageRouter {
+    /// WS-15 PR 2: payloads that render only in the main window and are
+    /// selected on arrival. Pure; unit-tested (AppMessageRouterWeatherTests).
+    nonisolated static func showsInMainWindowOnly(_ payload: DisplayPayload) -> Bool {
+        payload.kind == "weather" && payload.weather != nil && !payload.isProtectedLocal
     }
 }

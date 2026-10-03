@@ -8,6 +8,9 @@ struct WorkspaceResultPane: View {
     let result: WorkspaceResult
     var onSupportingDisplay = false
     let coordinator: ConsoleActionCoordinator?
+    /// WS-17: false in the Command Console, whose single control row
+    /// (`ConsoleActionBar`) carries these actions.
+    var showsActions = true
     @EnvironmentObject private var client: JarvisClient
     @Environment(WorkspaceStore.self) private var workspace
     @Environment(DisplayWindowStore.self) private var display
@@ -17,10 +20,11 @@ struct WorkspaceResultPane: View {
     @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 2
 
     init(result: WorkspaceResult, onSupportingDisplay: Bool = false,
-         coordinator: ConsoleActionCoordinator? = nil) {
+         coordinator: ConsoleActionCoordinator? = nil, showsActions: Bool = true) {
         self.result = result
         self.onSupportingDisplay = onSupportingDisplay
         self.coordinator = coordinator
+        self.showsActions = showsActions
     }
 
     var body: some View {
@@ -47,14 +51,16 @@ struct WorkspaceResultPane: View {
                     Button("Return here") { drawer.placementRef?.closeDisplay() }
                 }
             } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack {
-                        if !result.payload.isProtectedLocal { modePicker(presentation) }
-                        copyButton; shareButton; exportButton
-                    }
-                    VStack(alignment: .leading) {
-                        if !result.payload.isProtectedLocal { modePicker(presentation) }
-                        HStack { copyButton; shareButton; exportButton }
+                if showsActions {
+                    ViewThatFits(in: .horizontal) {
+                        HStack {
+                            if !result.payload.isProtectedLocal { modePicker(presentation) }
+                            copyButton; shareButton; exportButton
+                        }
+                        VStack(alignment: .leading) {
+                            if !result.payload.isProtectedLocal { modePicker(presentation) }
+                            HStack { copyButton; shareButton; exportButton }
+                        }
                     }
                 }
                 if workspace.exporter.resultID == result.id, let message = workspace.exporter.message {
@@ -83,36 +89,7 @@ struct WorkspaceResultPane: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .id(result.id)
         .sheet(isPresented: $showingSharePreview) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Share preview").font(.headline)
-                    Spacer()
-                    Button("Cancel") {
-                        if let coordinator { _ = coordinator.executePointer(.shareCancel) }
-                        else { sharing.cancel() }
-                        showingSharePreview = false
-                    }
-                    Button("Copy") {
-                        if let coordinator { _ = coordinator.executePointer(.shareCopy) }
-                        else { _ = sharing.copy() }
-                    }
-                    Button("Save…") {
-                        if let coordinator { _ = coordinator.executePointer(.shareSave) }
-                        else { sharing.chooseSave() }
-                    }
-                    Button("Share…") {
-                        if let coordinator { _ = coordinator.executePointer(.sharePicker) }
-                        else { _ = sharing.presentPicker() }
-                    }
-                }
-                if let preview = sharing.preview {
-                    SharePreviewView(text: preview.text, format: preview.format, data: preview.data)
-                } else {
-                    Text("The preview is no longer available.").foregroundStyle(AppTheme.textDim)
-                }
-            }
-            .padding(16)
-            .frame(minWidth: 520, minHeight: 360)
+            SharePreviewSheet(coordinator: coordinator, isPresented: $showingSharePreview)
         }
     }
 
@@ -172,5 +149,46 @@ struct WorkspaceResultPane: View {
     private var original: some View {
         DisplayContentView(payload: result.payload, restoredScrollOffset: workspace.scrollOffsets[result.id],
                            onScrollOffset: { workspace.rememberScroll($0, for: result.id) })
+    }
+}
+
+/// The share preview, shared by the result pane and the console's single
+/// control row (WS-17). Unchanged from the pane's former inline sheet.
+struct SharePreviewSheet: View {
+    let coordinator: ConsoleActionCoordinator?
+    @Binding var isPresented: Bool
+    @Environment(ShareCoordinator.self) private var sharing
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Share preview").font(.headline)
+                Spacer()
+                Button("Cancel") {
+                    if let coordinator { _ = coordinator.executePointer(.shareCancel) }
+                    else { sharing.cancel() }
+                    isPresented = false
+                }
+                Button("Copy") {
+                    if let coordinator { _ = coordinator.executePointer(.shareCopy) }
+                    else { _ = sharing.copy() }
+                }
+                Button("Save…") {
+                    if let coordinator { _ = coordinator.executePointer(.shareSave) }
+                    else { sharing.chooseSave() }
+                }
+                Button("Share…") {
+                    if let coordinator { _ = coordinator.executePointer(.sharePicker) }
+                    else { _ = sharing.presentPicker() }
+                }
+            }
+            if let preview = sharing.preview {
+                SharePreviewView(text: preview.text, format: preview.format, data: preview.data)
+            } else {
+                Text("The preview is no longer available.").foregroundStyle(AppTheme.textDim)
+            }
+        }
+        .padding(16)
+        .frame(minWidth: 520, minHeight: 360)
     }
 }

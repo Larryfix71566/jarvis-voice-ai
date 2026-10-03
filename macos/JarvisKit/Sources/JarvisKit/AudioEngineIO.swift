@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import JarvisKitObjC
 import os
 
 private let engineLog = Logger(subsystem: "com.mortimer.jarviskit", category: "audio-engine")
@@ -330,6 +331,47 @@ struct PlayoutQueue: Equatable {
     }
 }
 
+// MARK: - Output IO watch (WS-18)
+
+/// Whether the output device is actually cycling, judged from successive
+/// reads of the output node's render sample time. "Engine running" is not
+/// enough: on 2026-09-30 an AirPods → Mac speaker switch rebuilt the engine,
+/// which reported running, but Voice Processing then failed its downlink
+/// ("failed to run downlink DSP (state fault)") and no output IO cycle ever
+/// came. The next `AVAudioPlayerNode.play()` waited 5 s and raised "player
+/// did not see an IO cycle", terminating the app. Pure value type.
+struct OutputIOWatch: Equatable {
+    enum State: Equatable { case flowing, waiting, stalled }
+
+    /// The render time must have moved within this window to count as flowing.
+    static let freshness: TimeInterval = 0.35
+    /// No movement for this long after a (re)start or the last movement is a stall.
+    static let stallAfter: TimeInterval = 1.5
+
+    private(set) var startedAt: TimeInterval
+    private(set) var lastSample: Double?
+    private(set) var lastAdvance: TimeInterval?
+
+    init(startedAt: TimeInterval) { self.startedAt = startedAt }
+
+    /// Records one read of the output render sample time (nil when the node
+    /// has no valid render time) and returns the state after it. The first
+    /// valid read is only a baseline: a frozen value must not count as IO.
+    @discardableResult
+    mutating func observe(sampleTime: Double?, now: TimeInterval) -> State {
+        if let sampleTime {
+            if let lastSample, sampleTime != lastSample { lastAdvance = now }
+            lastSample = sampleTime
+        }
+        return state(now: now)
+    }
+
+    func state(now: TimeInterval) -> State {
+        if let lastAdvance, now - lastAdvance <= Self.freshness { return .flowing }
+        return now - (lastAdvance ?? startedAt) >= Self.stallAfter ? .stalled : .waiting
+    }
+}
+
 /// Int16 little-endian mono/stereo PCM → a Float32 buffer the player node
 /// can schedule, at the rate the frame declared. Pure.
 enum PlayoutDecoder {
@@ -451,6 +493,17 @@ final class AudioEngineIO: @unchecked Sendable {
     private var builtDeviceSignature = "-"
     private static let rebuildAttempts = 6
     private static let rebuildRetryGap: TimeInterval = 0.5
+    /// WS-18: the output IO watch. Queue-confined like everything else.
+    private var ioWatch = OutputIOWatch(startedAt: 0)
+    private var ioTimer: DispatchSourceTimer?
+    /// Speech is scheduled but the player waits for output IO to flow.
+    private var pendingPlay = false
+    /// Rebuilds caused by a stalled output since IO last flowed.
+    private var stallRebuilds = 0
+    /// Logged once per engine start, so the log shows the watch saw IO.
+    private var ioSeenSinceStart = false
+    private static let ioCheckInterval: TimeInterval = 0.1
+    private static let maxStallRebuilds = 3
     /// Production always asks for Voice Processing I/O; the §3.3 bench
     /// builds a second engine with it off to measure what VPIO removes.
     let wantsVoiceProcessing: Bool
@@ -639,6 +692,7 @@ final class AudioEngineIO: @unchecked Sendable {
             #endif
             self?.queue.async { self?.rebuildLocked() }
         }
+        startIOWatchLocked()
         engineLog.notice("audio engine started: capture \(captureFormat.sampleRate, privacy: .public) Hz mono, channel 0 of \(tapFormat.channelCount, privacy: .public) (hardware \(hardwareInput.channelCount, privacy: .public) ch before VPIO), output \(outputFormat.sampleRate, privacy: .public) Hz \(outputFormat.channelCount, privacy: .public) ch, VPIO \(self.voiceProcessing ? "on" : "off", privacy: .public)")
     }
 
@@ -752,6 +806,9 @@ final class AudioEngineIO: @unchecked Sendable {
     }
 
     private func stopLocked() {
+        ioTimer?.cancel()
+        ioTimer = nil
+        pendingPlay = false
         if let configObserver { NotificationCenter.default.removeObserver(configObserver) }
         configObserver = nil
         if let engine {
@@ -836,8 +893,92 @@ final class AudioEngineIO: @unchecked Sendable {
                 if self.playout.completed(generation: generation) { self.onPlayoutChanged?(false) }
             }
         }
-        if !player.isPlaying { player.play() }
         if !wasPlaying { onPlayoutChanged?(true) }
+        if !player.isPlaying { startPlayerWhenOutputFlowsLocked(context: "speech") }
+    }
+
+    // MARK: Output IO watch (WS-18)
+
+    private func startIOWatchLocked() {
+        ioTimer?.cancel()
+        ioTimer = nil
+        guard JarvisFlags.outputIOWatchEnabled else { return }
+        ioWatch = OutputIOWatch(startedAt: ProcessInfo.processInfo.systemUptime)
+        ioSeenSinceStart = false
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + Self.ioCheckInterval, repeating: Self.ioCheckInterval)
+        timer.setEventHandler { [weak self] in self?.checkOutputIOLocked() }
+        timer.resume()
+        ioTimer = timer
+    }
+
+    /// On `queue`. The output node belongs to the engine, which only this
+    /// queue replaces, so reading its render time here cannot race a detach.
+    private func checkOutputIOLocked() {
+        guard let engine else { return }
+        let renderTime = engine.outputNode.lastRenderTime
+        let sample = renderTime.flatMap { $0.isSampleTimeValid ? Double($0.sampleTime) : nil }
+        switch ioWatch.observe(sampleTime: sample, now: ProcessInfo.processInfo.systemUptime) {
+        case .flowing:
+            if !ioSeenSinceStart {
+                ioSeenSinceStart = true
+                engineLog.notice("audio output flowing (\(Int((ProcessInfo.processInfo.systemUptime - self.ioWatch.startedAt) * 1000), privacy: .public) ms after start)")
+            }
+            if stallRebuilds > 0 {
+                engineLog.notice("audio output flowing again after \(self.stallRebuilds, privacy: .public) stall rebuild(s)")
+                stallRebuilds = 0
+            }
+            if pendingPlay {
+                pendingPlay = false
+                if !player.isPlaying { startPlayerLocked(context: "queued speech") }
+            }
+        case .waiting:
+            break
+        case .stalled:
+            handleOutputStallLocked()
+        }
+    }
+
+    /// The player is started only once output IO is seen to cycle;
+    /// otherwise the speech stays scheduled and the watch starts it.
+    private func startPlayerWhenOutputFlowsLocked(context: String) {
+        if !JarvisFlags.outputIOWatchEnabled
+            || ioWatch.state(now: ProcessInfo.processInfo.systemUptime) == .flowing {
+            pendingPlay = false
+            startPlayerLocked(context: context)
+        } else {
+            if !pendingPlay {
+                engineLog.notice("audio output not flowing yet; holding \(context, privacy: .public) until it does")
+            }
+            pendingPlay = true
+        }
+    }
+
+    /// `play()` raises an Objective-C exception, not a Swift error, when the
+    /// output never cycles. Caught here, it drops the queued speech and
+    /// rebuilds instead of terminating the app.
+    private func startPlayerLocked(context: String) {
+        if let exception = JKCatchObjCException({ self.player.play() }) {
+            engineLog.error("player.play refused during \(context, privacy: .public): \(exception.name.rawValue, privacy: .public): \(exception.reason ?? "-", privacy: .public); dropping queued speech and rebuilding")
+            let changed = playout.flush()
+            player.stop()
+            resetPlayoutTimeline()
+            if changed { onPlayoutChanged?(false) }
+            if JarvisFlags.outputIOWatchEnabled { handleOutputStallLocked() } else { rebuildLocked() }
+        }
+    }
+
+    private func handleOutputStallLocked() {
+        stallRebuilds += 1
+        guard stallRebuilds <= Self.maxStallRebuilds else {
+            engineLog.error("audio output still stalled after \(Self.maxStallRebuilds, privacy: .public) rebuilds; failing the session")
+            ioTimer?.cancel()
+            ioTimer = nil
+            onFailure?(JarvisError.transport("audio output stalled: no output IO after \(Self.maxStallRebuilds) rebuilds"))
+            return
+        }
+        engineLog.error("audio output stalled: no output IO for \(OutputIOWatch.stallAfter, privacy: .public) s; rebuilding (\(self.stallRebuilds, privacy: .public) of \(Self.maxStallRebuilds, privacy: .public))")
+        rebuildLocked()
     }
 
     /// ~20 ms slices, so the wave has something to move to within a
@@ -886,7 +1027,7 @@ final class AudioEngineIO: @unchecked Sendable {
         let changed = playout.flush()
         player.stop()
         resetPlayoutTimeline()
-        if playerFormat != nil, engine?.isRunning == true { player.play() }
+        if playerFormat != nil, engine?.isRunning == true { startPlayerWhenOutputFlowsLocked(context: "flush") }
         if changed { onPlayoutChanged?(false) }
     }
 }

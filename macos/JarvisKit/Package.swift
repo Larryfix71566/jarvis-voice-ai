@@ -13,9 +13,16 @@ let package = Package(
         .package(url: "https://github.com/stasel/WebRTC.git", from: "120.0.0"),
     ],
     targets: [
+        // WS-18: the one Objective-C file, so the audio engine can survive
+        // AVFoundation calls that report failure by raising an NSException.
+        .target(
+            name: "JarvisKitObjC",
+            path: "Sources/JarvisKitObjC",
+            publicHeadersPath: "include"
+        ),
         .target(
             name: "JarvisKit",
-            dependencies: [.product(name: "WebRTC", package: "WebRTC")],
+            dependencies: ["JarvisKitObjC", .product(name: "WebRTC", package: "WebRTC")],
             // Swift 5 language mode, stated EXPLICITLY. Tools version 6.2 is
             // required for the .v26 platform literals above, and 6.x defaults
             // the language mode to .v6 — so this setting is not a no-op, it is
@@ -34,7 +41,7 @@ let package = Package(
         ),
         .testTarget(
             name: "JarvisKitTests",
-            dependencies: ["JarvisKit"],
+            dependencies: ["JarvisKit", "JarvisKitObjC"],
             resources: [
                 .copy("Fixtures"),        // CORE §7's eleven AppMessage frames
                 .copy("admin-fixtures"),  // APP §8 V0's captured sidecar bodies

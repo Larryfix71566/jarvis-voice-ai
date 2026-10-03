@@ -188,12 +188,70 @@ final class AppMessageTests: XCTestCase {
         XCTAssertEqual(p.basemapImages?.count, p.images?.count)
     }
 
+    // WS-15 PR 2: the structured weather card rides on the display payload.
+    private func weatherFrame(schema: Int = 1, extra: String = "") -> Data {
+        let json = """
+        {"id":"m","label":"rtvi-ai","type":"server-message","data":
+          {"type":"display","display":{"kind":"weather","surface":"window","title":"Weather — Folly Beach, SC",
+           "body":"In Folly Beach it's 82°F.","images":[],"basemap_images":[],
+           "weather":{"schema":\(schema),
+             "place":{"label":"Folly Beach, SC","lat":32.6611,"lon":-79.928,"source":"device","approximate":false},
+             "units":"imperial",
+             "now":{"temp":"82°","condition":"Clear","humidity":"72%","wind":"E 10 mph","symbol":"sun.max.fill"},
+             "days":[{"name":"Wed","high":"80°","low":"73°","pop":"20%","condition":"Mostly Sunny","symbol":"cloud.sun.fill"}],
+             "hourly":[{"label":"3 PM","temp":"82°","pop":null,"symbol":"sun.max.fill"}],
+             "alerts":[{"event":"Rip Current Statement","headline":"Rip currents likely"}],
+             "radar":{"provider":"iem","max_native_zoom":8,
+                      "frames":[{"label":"now","template":"https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png"}],
+                      "attribution":"Radar: NOAA NEXRAD via Iowa Environmental Mesonet"},
+             "summary":"In Folly Beach it's 82°F.","attribution":"Forecast: National Weather Service"\(extra)}}}}
+        """
+        return Data(json.utf8)
+    }
+
+    func testDecodeDisplayWeatherCard() throws {
+        let message = try XCTUnwrap(try AppMessage.decode(frame: weatherFrame()))
+        guard case .display(let p) = message else { return XCTFail("expected .display") }
+        XCTAssertEqual(p.kind, "weather")
+        let card = try XCTUnwrap(p.weather)
+        XCTAssertEqual(card.place.label, "Folly Beach, SC")
+        XCTAssertEqual(card.place.lat, 32.6611)
+        XCTAssertEqual(card.now.humidity, "72%")
+        XCTAssertEqual(card.days.first?.name, "Wed")
+        XCTAssertNil(card.hourly.first?.pop)
+        XCTAssertEqual(card.radar?.maxNativeZoom, 8)
+        XCTAssertEqual(card.radar?.frames.count, 1)
+        XCTAssertEqual(card.alerts.first?.event, "Rip Current Statement")
+    }
+
+    func testUnknownWeatherSchemaFallsBackToTheBody() throws {
+        let message = try XCTUnwrap(try AppMessage.decode(frame: weatherFrame(schema: 2)))
+        guard case .display(let p) = message else { return XCTFail("expected .display") }
+        XCTAssertNil(p.weather)
+        XCTAssertEqual(p.body, "In Folly Beach it's 82°F.")
+    }
+
+    func testResponsePayloadHasNoWeather() {
+        XCTAssertNil(DisplayPayload(responseText: "x", timestamp: 1).weather)
+    }
+
     func testDecodeUICommandWithTab() throws {
         let data = try fixture("ui_command")
         let message = try XCTUnwrap(try AppMessage.decode(frame: data))
         guard case .ui(let cmd) = message else { return XCTFail("expected .ui") }
         XCTAssertEqual(cmd.action, "drawer_tab")
         XCTAssertEqual(cmd.tab, "agents")
+    }
+
+    func testDecodeUICommandWithMilesAndPlace() throws {
+        let json = """
+        {"id":"m","label":"rtvi-ai","type":"server-message","data":{"type":"ui","action":"map_center","place":"Truist Park, Atlanta","miles":10}}
+        """
+        let message = try XCTUnwrap(try AppMessage.decode(frame: Data(json.utf8)))
+        guard case .ui(let cmd) = message else { return XCTFail("expected .ui") }
+        XCTAssertEqual(cmd.action, "map_center")
+        XCTAssertEqual(cmd.place, "Truist Park, Atlanta")
+        XCTAssertEqual(cmd.miles, 10)
     }
 
     func testDecodeUICommandWithoutTab() throws {

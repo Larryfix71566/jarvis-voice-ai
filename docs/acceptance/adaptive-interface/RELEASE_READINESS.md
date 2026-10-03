@@ -149,6 +149,7 @@ sandbox evidence; all additions remain open as release-acceptance gates.
   selected composition with measured user/AI waveform feedback, captions and
   existing controls. Preserve all eight tabs, readable scrolling headers,
   font preferences, attention states and unsent drafts. Keep old layouts usable.
+  **Held for CC7a (Larry, 2026-09-30):** run after UI2-22..UI2-25 so the redesigned stage is accepted once.
 - [x] **UI2-04a — Measured-wave visibility correction (implementation).** The
   adaptive wave now applies documented channel-specific measured-audio gains
   (`0.55` input / `0.42` playout) after the dB window, lifting the recorded
@@ -244,6 +245,7 @@ sandbox evidence; all additions remain open as release-acceptance gates.
   including sharing and moving content. Verify ambiguous references, duplicate
   titles, late results, unavailable displays and honest failure feedback.
   Retain mic/PTT/wake behavior; document the boundary at OS-owned dialogs.
+  **Held for CC7a (Larry, 2026-09-30):** run after UI2-22..UI2-25 so the redesigned stage is accepted once.
 - [ ] **UI2-10 — Sharing security and memory-isolation acceptance.** Extend
   existing Security V2–V6 coverage for the final UI2-01 decision, imported
   instructions, malformed/oversize inputs, stale sessions, unauthorized batches,
@@ -264,6 +266,7 @@ sandbox evidence; all additions remain open as release-acceptance gates.
   viewport/font combinations, keyboard/VoiceOver, contrast/reduced motion,
   notices and all tab workflows. Record Larry's acceptance of the actual
   running design, identified by artifact receipt, not a concept image.
+  **Held for CC7a (Larry, 2026-09-30):** run after UI2-22..UI2-25 so the redesigned stage is accepted once.
 - [ ] **UI2-14 — Exact-candidate independent verification (CC7–CC8).** Obtain
   the full-profile sandbox/independent-verifier receipt, required Swift/backend
   suites and repository CI for the frozen candidate. Historical receipts and
@@ -287,6 +290,29 @@ sandbox evidence; all additions remain open as release-acceptance gates.
   UI2 item and every original gap. Move only evidenced completions below; list
   unresolved hardware or design requirements explicitly. Keep web retirement
   and unrelated roadmap gates dependent on their original acceptance rules.
+
+- [ ] **UI2-22 — Conversation thread (CC7a.1).** A five-turn spoken
+  conversation stays on one stage as transcript rows with Larry's and
+  Mortimer's full words in order, including a reply longer than 160 characters;
+  no result or tab is created for a spoken answer; a result open on the stage
+  keeps focus while the thread updates; protected turns follow the protected
+  display rules.
+- [ ] **UI2-23 — Inline result cards (CC7a.2).** Weather, research and image
+  results appear as compact cards at their turn; open and Back work; compare and
+  pin from a card; a weather result that arrives while another result is open
+  shows a notice and does not take focus; closing a card leaves its Output
+  record.
+- [ ] **UI2-24 — Recents replaces tabs (CC7a.1b, CC7a.3).** One console row and
+  nothing below it in any view (CC7a.1b); no tab strip; Recents lists
+  results pinned first; `result_select/close/pin/unpin` and "show the Folly
+  Beach weather again" work by voice and pointer; an ambiguous subject or a
+  stale selection makes Mortimer ask instead of acting; Recents shows pinned
+  plus about 10 (a display limit: nothing open or pinned is removed).
+- [ ] **UI2-25 — Reuse by subject (CC7a.4).** "What's the weather", "weather
+  in Atlanta", "what's the weather" again gives two weather cards: the third
+  request reopens the first when fresh (15 minutes), shown as a reference line,
+  or refreshes it in place under the same identity when stale; no duplicate
+  fetch when fresh.
 
 ### Coverage and counting rules
 

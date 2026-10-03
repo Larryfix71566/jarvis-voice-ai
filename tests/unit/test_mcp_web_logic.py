@@ -315,6 +315,28 @@ class TestGetWeather:
         result = logic.get_weather("Tokyo")
         assert result["current"]["condition"] == "unknown conditions"
 
+    def test_open_meteo_current_asks_only_real_variables(self, monkeypatch):
+        """2026-09-30: asking Open-Meteo for current=time,... returned HTTP 400
+        ("invalid String value time") and every non-US forecast failed. The
+        fakes here return 200 whatever is asked, so pin the request itself."""
+        captured = {}
+
+        def fake_get(url, params=None, timeout=None):
+            if "geocoding" in url:
+                return FakeResponse(GEO_PAYLOAD)
+            captured.update(params or {})
+            return FakeResponse(FORECAST_PAYLOAD)
+
+        monkeypatch.setattr(logic.httpx, "get", fake_get)
+        result = logic.get_weather("London", days=7)
+        requested = captured["current"].split(",")
+        assert "time" not in requested
+        assert set(requested) <= {"temperature_2m", "relative_humidity_2m", "weather_code",
+                                  "wind_speed_10m", "apparent_temperature", "precipitation",
+                                  "cloud_cover", "is_day", "wind_direction_10m"}
+        assert result["current"]["observed_at"] == "2026-09-28T12:00:00Z", \
+            "the observation time still comes from current.time in the reply"
+
     def test_days_clamped(self, monkeypatch):
         captured = {}
 
@@ -326,7 +348,8 @@ class TestGetWeather:
 
         monkeypatch.setattr(logic.httpx, "get", fake_get)
         logic.get_weather("Tokyo", days=9)
-        assert captured["forecast_days"] == 3
+        # WS-15: the cap moved from 3 to 7 days (a weekly forecast).
+        assert captured["forecast_days"] == 7
 
 
 WG_POINT_PAYLOAD = {
@@ -813,3 +836,132 @@ class TestSportsScoresEdges:
         p = SUBAGENT_PROMPTS["analyst"]
         assert "For game scores or schedules call sports_scores first" in p
         assert "say the result is unconfirmed" in p
+
+
+
+# ------------------------------------------------------------------ WS-15
+WG_POINT_FULL = {
+    "properties": {
+        "relativeLocation": {"properties": {"city": "Folly Beach"}},
+        "observationStations": "https://api.weather.gov/gridpoints/CHS/88,71/stations",
+        "forecast": "https://api.weather.gov/gridpoints/CHS/88,71/forecast",
+        "forecastHourly": "https://api.weather.gov/gridpoints/CHS/88,71/forecast/hourly",
+    }
+}
+WG_HOURLY = {"properties": {"periods": [
+    {"startTime": "2026-09-29T14:00:00-04:00", "temperature": 76, "temperatureUnit": "F",
+     "relativeHumidity": {"value": 68}, "windSpeed": "8 mph", "windDirection": "SE",
+     "probabilityOfPrecipitation": {"value": 5}, "shortForecast": "Sunny"},
+    {"startTime": "2026-09-29T15:00:00-04:00", "temperature": 77, "temperatureUnit": "F",
+     "relativeHumidity": {"value": 66}, "windSpeed": "9 mph", "windDirection": "SE",
+     "probabilityOfPrecipitation": {"value": None}, "shortForecast": "Sunny"},
+]}}
+WG_WEEK = {"properties": {"periods": [
+    {"name": "This Afternoon", "isDaytime": True, "temperature": 82, "temperatureUnit": "F",
+     "shortForecast": "Sunny", "probabilityOfPrecipitation": {"value": 10}},
+    {"name": "Tonight", "isDaytime": False, "temperature": 72, "temperatureUnit": "F",
+     "shortForecast": "Clear", "probabilityOfPrecipitation": {"value": 20}},
+    {"name": "Wednesday", "isDaytime": True, "temperature": 80, "temperatureUnit": "F",
+     "shortForecast": "Chance Showers", "probabilityOfPrecipitation": {"value": 50}},
+    {"name": "Wednesday Night", "isDaytime": False, "temperature": 71, "temperatureUnit": "F",
+     "shortForecast": "Cloudy", "probabilityOfPrecipitation": {"value": None}},
+]}}
+WG_ALERTS = {"features": [{"properties": {"event": "Rip Current Statement", "severity": "Moderate",
+                                          "headline": "Rip currents likely", "ends": "2026-09-30T20:00:00-04:00"}}]}
+
+
+def _fake_get_ws15(alerts=WG_ALERTS, geocode_calls=None):
+    def fake_get(url, params=None, timeout=None, headers=None):
+        if "geocoding" in url:
+            if geocode_calls is not None:
+                geocode_calls.append(url)
+            return FakeResponse(GEO_PAYLOAD)
+        if "alerts/active" in url:
+            if isinstance(alerts, Exception):
+                raise alerts
+            return FakeResponse(alerts)
+        if url.endswith("/forecast/hourly"):
+            return FakeResponse(WG_HOURLY)
+        if url.endswith("/forecast"):
+            return FakeResponse(WG_WEEK)
+        if "stations" in url and "observations" not in url:
+            return FakeResponse(WG_STATIONS_PAYLOAD)
+        if "observations/latest" in url:
+            return FakeResponse(WG_OBS_PAYLOAD)
+        if "api.weather.gov/points" in url:
+            return FakeResponse(WG_POINT_FULL)
+        raise AssertionError(f"unexpected URL: {url}")
+    return fake_get
+
+
+class TestWeatherAtWS15:
+    def test_coordinates_skip_geocoding(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(logic.httpx, "get", _fake_get_ws15(geocode_calls=calls))
+        result = logic.weather_at(32.661, -79.928, "Folly Beach, SC", 7)
+        assert calls == []
+        assert result["lat"] == 32.661 and result["lon"] == -79.928
+        assert result["source"] == "weather.gov"
+
+    def test_humidity_and_wind_come_from_the_hourly_feed(self, monkeypatch):
+        monkeypatch.setattr(logic.httpx, "get", _fake_get_ws15())
+        cur = logic.weather_at(32.661, -79.928, "Folly Beach, SC", 7)["current"]
+        assert cur["humidity_percent"] == 68
+        assert cur["wind"] == "SE 8 mph"
+        assert cur["wind_kph"] is None  # NWS gives mph text; never converted by guess
+
+    def test_chance_of_rain_is_the_higher_of_day_and_night(self, monkeypatch):
+        monkeypatch.setattr(logic.httpx, "get", _fake_get_ws15())
+        daily = logic.weather_at(32.661, -79.928, "x", 7)["daily"]
+        assert [d["precip_probability"] for d in daily] == [20, 50]
+        assert daily[1]["condition"] == "Chance Showers"
+
+    def test_alerts_and_hourly_are_carried(self, monkeypatch):
+        monkeypatch.setattr(logic.httpx, "get", _fake_get_ws15())
+        result = logic.weather_at(32.661, -79.928, "x", 7)
+        assert result["alerts"] == [{"event": "Rip Current Statement", "severity": "Moderate",
+                                     "headline": "Rip currents likely",
+                                     "ends": "2026-09-30T20:00:00-04:00"}]
+        assert [h["temp_f"] for h in result["hourly"]] == [76, 77]
+        assert result["hourly"][1]["pop"] is None
+
+    def test_failed_alert_lookup_is_none_not_empty(self, monkeypatch):
+        monkeypatch.setattr(logic.httpx, "get", _fake_get_ws15(alerts=httpx.ConnectError("x")))
+        assert logic.weather_at(32.661, -79.928, "x", 7)["alerts"] is None
+
+    def test_no_active_alerts_is_an_empty_list(self, monkeypatch):
+        monkeypatch.setattr(logic.httpx, "get", _fake_get_ws15(alerts={"features": []}))
+        assert logic.weather_at(32.661, -79.928, "x", 7)["alerts"] == []
+
+    def test_shape_is_the_same_on_the_open_meteo_path(self, monkeypatch):
+        def fake_get(url, params=None, timeout=None, headers=None):
+            if "api.weather.gov" in url:
+                raise httpx.ConnectError("outside the US")
+            return FakeResponse(FORECAST_PAYLOAD)
+        monkeypatch.setattr(logic.httpx, "get", fake_get)
+        result = logic.weather_at(35.68, 139.69, "Tokyo, Japan", 7)
+        assert result["source"] == "open-meteo"
+        assert result["hourly"] == [] and result["alerts"] is None
+        assert "wind" in result["current"]
+
+    def test_get_weather_still_geocodes_a_named_city(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(logic.httpx, "get", _fake_get_ws15(geocode_calls=calls))
+        result = logic.get_weather("Spartanburg", days=2)
+        assert len(calls) == 1
+        assert result["requested_city"] == "Spartanburg"
+
+
+class TestRadarAtWS15:
+    def test_coordinates_skip_geocoding(self, monkeypatch):
+        calls = []
+
+        def fake_get(url, params=None, timeout=None, headers=None):
+            if "geocoding" in url:
+                calls.append(url)
+            return _fake_radar_get(url, params=params, timeout=timeout)
+        monkeypatch.setattr(logic.httpx, "get", fake_get)
+        result = logic.radar_at(32.661, -79.928, "Folly Beach, SC")
+        assert calls == []
+        assert result["city"] == "Folly Beach, SC"
+        assert len(result["tiles"]) == 9

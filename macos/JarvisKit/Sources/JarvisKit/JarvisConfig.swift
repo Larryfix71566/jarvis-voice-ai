@@ -104,18 +104,6 @@ public enum JarvisFlags {
     /// off must never fail open onto a remote host in the clear.
     public static var authEnabled: Bool { on("JARVIS_CLIENT_AUTH_ENABLED") }
     public static var glassEnabled: Bool { on("JARVIS_GLASS_ENABLED") }
-    /// docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md D3 — the orb's glass
-    /// shell. Default on (the crystal shell). `JARVIS_ORB_CRYSTAL=off` (or
-    /// false/0/no) in the environment, or `defaults write com.mortimer.host
-    /// JARVIS_ORB_CRYSTAL -bool false`, restores the previous shell. The
-    /// environment wins. MortimerHost reads it once per launch
-    /// (`OrbShell.resolved`).
-    public static var orbCrystalShellEnabled: Bool {
-        if let raw = ProcessInfo.processInfo.environment["JARVIS_ORB_CRYSTAL"]?.lowercased() {
-            return !["off", "false", "0", "no"].contains(raw)
-        }
-        return on("JARVIS_ORB_CRYSTAL")
-    }
     /// D10 rollback: `JARVIS_AUDIO_CAPTURE=tap` returns capture to the
     /// input tap, whose 100 ms buffers were the whole reason for the sink
     /// node. Anything else (or unset) uses the sink node.
@@ -134,6 +122,11 @@ public enum JarvisFlags {
         }
         return on("JARVIS_AUDIO_METER")
     }
+    /// WS-18 rollback lever: `defaults write com.mortimer.host
+    /// JARVIS_AUDIO_OUTPUT_WATCH -bool false` starts the player without
+    /// waiting for output IO and turns off stall rebuilds. The exception
+    /// catch around `play()` stays on either way.
+    public static var outputIOWatchEnabled: Bool { on("JARVIS_AUDIO_OUTPUT_WATCH") }
     /// 2026-09-05 — auto-reconnect the session when the default output
     /// device changes (AirPods), so the bot's voice follows it. OPT-IN,
     /// unlike the three above (absent key == off): the plain WebRTC build

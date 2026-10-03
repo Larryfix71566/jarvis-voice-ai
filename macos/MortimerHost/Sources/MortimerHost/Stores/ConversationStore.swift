@@ -13,8 +13,9 @@ import JarvisKit
 final class ConversationStore {
     private(set) var entries: [ConversationEntry] = []
 
-    /// The conversation surface is a live caption, not a second response
-    /// reader. The full transcript remains available in the Log tab.
+    /// The pre-CC7a conversation surface: a live caption of the last two
+    /// entries. Used only when the conversation thread is switched off
+    /// (ConversationThread.flagKey); the thread shows every entry in full.
     var latestCaptions: [ConversationEntry] { Array(entries.suffix(2)) }
 
     static func liveCaption(_ text: String, limit: Int = 160) -> String {

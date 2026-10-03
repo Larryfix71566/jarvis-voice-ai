@@ -82,7 +82,7 @@ VOICE_ADDENDUM = """You are speaking aloud through a voice interface. Output pla
 # tool would invite hallucinated calls. The final sentence disambiguates
 # against rule 8's "changing your own interface ... delegated to developer",
 # which refers to self-edit (code changes), not view changes.
-UI_CONTROL_ADDENDUM = """UI control: when a ui_control call returns "ok", say nothing about it — the visible change is the confirmation; continue with at most the answer to whatever else the user asked. When it returns "ok-muted", give a one-phrase sign-off (e.g. "Going quiet."). When it returns an error sentence, relay it in one short sentence. Never narrate UI actions you were not asked to perform, and never call ui_control unless the user asked for a UI change. Opening, closing, or switching panels, windows, the transcript, the mic, or the wake word is ui_control; changing how the interface is built or behaves is the developer specialist. Use drawer_popout to send the panels themselves to the display screen, and drawer_popin to bring them back in-page."""
+UI_CONTROL_ADDENDUM = """UI control: when a ui_control call returns "ok", say nothing about it — the visible change is the confirmation; continue with at most the answer to whatever else the user asked. When it returns "ok-muted", give a one-phrase sign-off (e.g. "Going quiet."). When it returns an error sentence, relay it in one short sentence. Never narrate UI actions you were not asked to perform, and never call ui_control unless the user asked for a UI change. Opening, closing, or switching panels, windows, the transcript, the mic, or the wake word is ui_control; changing how the interface is built or behaves is the developer specialist. Use drawer_popout to send the panels themselves to the display screen, and drawer_popin to bring them back in-page. Zooming, resetting or switching the weather map, and pausing or playing its radar, are ui_control actions (map_zoom_in, map_zoom_out, map_reset, radar_pause, radar_play, map_satellite, map_standard, map_zoom_to with miles, map_center with place) — never fetch the weather again or delegate a lookup for them. map_center finds the place itself. map_reset returns to the place the weather card is for, which is not always the user's location."""
 
 
 # Self-service status (status spec T2.5, L1/L8) — appended only when the
@@ -521,6 +521,9 @@ PROGRESS_ADDENDUM = """Progress updates: while a task you started is still runni
 FOLLOW_UP_ADDENDUM = """Follow-ups: when the user asks you to wait and then check something ("wait sixty seconds then check again", "look again in five minutes"), call follow_up with the delay and exactly what to check, then say when you will check back. When a [follow-up due] note arrives, run that check with the tool or specialist that can answer it and report what you found. Calling follow_up with after_seconds 0 cancels pending follow-ups ("never mind checking back"). A reminder about something the user must do, or for a set time of day, belongs to scheduler, not follow_up."""
 
 
+WEATHER_ADDENDUM = """Local weather: for weather, rain, umbrella or forecast questions with no place named ("what's the weather", "is it going to rain", "what's the week look like"), call local_weather yourself. It finds where the user is right now from this device; never delegate these, never name or guess a place, and never use a remembered place for current weather. Relay its answer as given, including "approximately" when it says so. When it says a weather card with radar was sent to the screen, the radar is on that card: never say you have no radar. For a place the user names ("weather in Alpharetta"), delegate to the analyst as usual."""
+
+
 def build_supervisor_prompt(
     *,
     jarvis_name: str,
@@ -538,6 +541,7 @@ def build_supervisor_prompt(
     status: bool = False,
     progress: bool = False,
     follow_up: bool = False,
+    weather: bool = False,
 ) -> str:
     """Assemble the Supervisor system prompt for one configuration.
 
@@ -564,6 +568,7 @@ def build_supervisor_prompt(
         (clipboard, HANDOFF_ADDENDUM),
         (progress, PROGRESS_ADDENDUM),
         (follow_up, FOLLOW_UP_ADDENDUM),
+        (weather, WEATHER_ADDENDUM),
     ):
         if enabled:
             prompt += "\n" + addendum

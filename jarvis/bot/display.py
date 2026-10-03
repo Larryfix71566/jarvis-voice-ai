@@ -150,7 +150,7 @@ def build_display_payload(
     else:
         kind, title, body, images, links = built
         basemap_images = []
-    return {
+    payload = {
         "kind": kind,
         "title": title,
         "body": body,
@@ -169,6 +169,18 @@ def build_display_payload(
         # "get_weather") both read it.
         "tool": tool,
     }
+    # WS-15 PR 2: a weather card also carries its structured view, which
+    # the native app renders as ONE card (summary, today, hours, 7 days,
+    # Apple map with radar). The markdown body and legacy radar images stay
+    # as the fallback for anything that cannot decode it.
+    if tool == "weather_report":
+        from jarvis.bot.weather_card import weather_view
+
+        view = weather_view(data)
+        if view is not None:
+            payload["kind"] = "weather"
+            payload["weather"] = view
+    return payload
 
 
 # ------------------------------------------------------------- formatters
@@ -371,6 +383,14 @@ def _fmt_weather_report(args: dict, data: dict) -> tuple | None:
 
     if weather:
         city = str(weather.get("city") or "")
+        # WS-15: active NWS alerts lead the card. None means the lookup
+        # failed and is not shown as "no alerts".
+        for alert in (weather.get("alerts") or [])[:3]:
+            if isinstance(alert, dict) and alert.get("event"):
+                line = f"**Alert: {alert['event']}**"
+                if alert.get("headline"):
+                    line += f" — {alert['headline']}"
+                parts.append(line)
         human = str(weather.get("human") or "").strip()
         if human:
             parts.append(human)

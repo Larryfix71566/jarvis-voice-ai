@@ -41,6 +41,7 @@ from jarvis.bot.console_actions import CONSOLE_ACTION_SCHEMA
 from jarvis.bot.shared_content import SHARED_CONTENT_SCHEMA
 from jarvis.bot.status_tool import SYSTEM_STATUS_SCHEMA
 from jarvis.bot.follow_up import FOLLOW_UP_SCHEMA, PROGRESS_UPDATES_SCHEMA
+from jarvis.bot.weather_tool import LOCAL_WEATHER_SCHEMA
 
 
 def supervisor_tool_schemas(
@@ -54,6 +55,7 @@ def supervisor_tool_schemas(
     status: bool = False,
     progress: bool = False,
     follow_up: bool = False,
+    weather: bool = False,
 ) -> list[dict]:
     """OpenAI-style tool schemas the Supervisor sees, for one configuration.
 
@@ -98,4 +100,7 @@ def supervisor_tool_schemas(
         schemas.append(PROGRESS_UPDATES_SCHEMA)
     if follow_up:
         schemas.append(FOLLOW_UP_SCHEMA)
+    # WS-15: after everything else, so every earlier menu keeps its order.
+    if weather:
+        schemas.append(LOCAL_WEATHER_SCHEMA)
     return schemas

@@ -1299,7 +1299,11 @@ work; complete unaffected documentation/tests while reporting the blocker.
    fixtures and physical-device acceptance. Optional live provider/voice checks
    consume real calls only in the candidate acceptance session, with the user's
    normal test input. Do not silently turn fixture tests into paid/live tests.
-9. **CC8 — Release candidate and controlled promotion.** Build/package exact
+9. **CC7a — Conversation-first stage (Larry, 2026-09-30; WS-17).** Before
+   the release candidate. Specified in §7.2. Claude implements; Codex reviews
+   each increment before merge. Supersedes the stable result tab strip in §2
+   and the per-request response cards of the 09-18 routing update.
+10. **CC8 — Release candidate and controlled promotion.** Build/package exact
    artifact, collect receipts/screenshots, complete hardware gates and have Larry
    approve the appearance. Complete UI2-17's separate five-day daily-driver
    period on the frozen installed candidate, keeping the old release available;
@@ -1312,6 +1316,125 @@ The server gates exist from CC1 but remain false through CC6 except in isolated
 tests. CC7 candidate explicitly enables them. An installed v2 UI with an older
 server retains local presentation/copy/save; unsupported voice/upload shows a
 clear capability notice, never a fabricated successful action.
+
+### 7.2 CC7a — Conversation-first stage (Larry, 2026-09-30)
+
+**Why (Larry, 09-30):** conversation is spread across one tab per turn, only
+Mortimer's side shows, the tab strip fills up, and asking for something again
+fetches it again. Evidence: `App/ResponseResultRouter.swift` creates a
+`WorkspaceResult` per user turn and keeps only `role == "assistant"` entries;
+up to 20 results are kept (`AppTuning.maxDisplayResults`).
+
+**Decisions (Larry, 09-30).** These supersede, for layout 2, the "stable result
+tabs" of §2 and the 09-18 routing rule that placed each full answer in its own
+result card (RELEASE_READINESS UI2-19 note):
+
+| Question | Decision |
+|---|---|
+| Main stage | One conversation thread, both sides, newest at the bottom, updated each turn. Spoken answers no longer create results or tabs. |
+| Results | Display payloads (weather, research, images, graph) stay `WorkspaceResult`s but appear as compact cards in the thread where they arrived; opening one shows it full size with Back to the conversation. |
+| Tab strip | Removed. A **Recents** menu in the header lists results (kind, subject, time), pinned first. |
+| Asking again | Each result carries a subject key (kind + subject, e.g. `weather · Folly Beach`). If a fresh result with that key exists (weather: 15 minutes), reopen it; if stale, refresh that same card in place. Never a duplicate. |
+| Retention | Recents shows pinned results plus about the last 10 unpinned. This is a display limit only: it never erases Output history or an open, compared or pinned result; `WorkspaceStore` retention (20 unpinned) is unchanged. |
+| Ownership | Claude implements; Codex reviews every increment before merge (CX-15). |
+
+**Contracts that must survive:**
+
+1. Compare (A/B), pin/unpin, close, Sources, Move, Copy, Share operate on the
+   open result and on Recents entries; the §4.2 voice actions
+   `result_select/close/pin/unpin` address Recents entries (by index and by
+   subject), and a new reopen-by-subject action serves "show the Folly Beach
+   weather again".
+2. "Speech does not resize the workspace or change its selection" (§4): the
+   thread updates while a result is open without pulling focus back to it.
+3. Protected (local-only) turns follow the existing protected-display rules in
+   the thread as well: WS-16's real window capture and
+   `DisplayWindowPrivacyBoundaryTests` stay green, with new tests for the
+   thread.
+4. The drawer's Log tab remains the session history within its existing bound (`AppTuning.maxConversationEntries` = 200); it is not an unlimited archive.
+5. Legacy layouts (`layoutVersion` 1, previous layout) are untouched.
+
+**Approved design (Larry, 2026-09-30).** Mockups:
+`docs/interface-research/cc7a/cc7a-approved-design-2026-09-30.html`.
+
+| Element | Approved |
+|---|---|
+| Thread | **Transcript rows** (A2): speaker column (YOU / MORTIMER, time, spoken or typed) and full-width text. Chosen over chat bubbles so long replies read at full width. Both speakers' full text; follows new turns only while scrolled to the bottom, otherwise a "New" button. |
+| Result in the thread | **Compact card** (B1): kind icon, title with subject, one-line summary, Open. Open shows the result on the stage with "← Conversation", Pin, Compare, Display. One live radar map at a time. |
+| Recents | Header menu: PINNED, then RECENT (about 10), numbered to match voice ("open number 3"), unread dot, "fresh" age; row actions Pin / Close / Compare; the Atlas, Memory graph, Skills and Workflows buttons move to the bottom of this menu. |
+| Asking again | **Reference line** (D2): Mortimer's reply carries "↺ Weather · Folly Beach · from 12:40" pointing at the same result ID; when stale, the same result refreshes and the line reads "⟳ … updated 12:58". The thread stays in order. |
+| New result while reading | No jump: a "New: … Show / Dismiss" notice above the open result; the card joins the thread and Recents (unread). On the conversation itself the card just appears in the thread. |
+
+**Single console row (Larry, 2026-09-30; increment CC7a.1b).** "All buttons
+on the console line, none below." Mockup:
+`docs/interface-research/cc7a/cc7a_single_row_approved_2026-09-30.html`.
+Layout 2 has one control row (`Console/ConsoleActionBar.swift`, in the
+console header): Conversation · Results ▾ (click opens the results view;
+the arrow lists the open results with shown/pinned/unread marks and a Close
+submenu) · Knowledge ▾ (Knowledge Atlas, Memory graph) · Tools ▾ (Skills,
+Workflows) · Actions ▾ (only while a result is shown: Acting on A/B in a
+comparison via `WorkspaceStore.comparisonSide`, View Summary/Sources, Pin,
+Compare with, Show on display, Copy, Share…, Export…) · Expand voice (on
+the conversation only). The stage, `WorkspaceView` and
+`WorkspaceResultPane` draw no controls of their own in layout 2 (the tab
+strip goes here, ahead of CC7a.3); layouts 0 and 1, detached panels and the
+supporting display keep theirs. The row never wraps: narrow windows drop the
+title, then show icons, each keeping its name as tooltip and accessibility
+label. This supersedes the approved mockup's view buttons at the bottom of
+Recents. CC7a.3 still adds Recents numbering, pinned-first order, fresh age
+and voice by subject to Results ▾. Sending content to the
+supporting display stays available with no result open (Codex review of
+#147, 10-02): Knowledge ▾ shows the memory graph on the display, Tools ▾
+Skills and Workflows, Results ▾ any pinned result, and each offers "Return
+display content here" while the display window is open.
+
+**Codex boundaries (CX-15, 2026-09-30).** Checked by Claude against main
+`25735fd`; each is a review criterion:
+
+1. `ResponseResultRouter`: stop creating a result per spoken answer in layout
+   2; keep the separate structured display-payload route. The thread shows both
+   speakers' full text (today the stage uses `ConversationStore.latestCaptions`,
+   the last two entries, truncated to 160 characters by `liveCaption`).
+2. `WorkspaceStore`: keep stable result UUIDs, comparison, pins, scroll and
+   inspector state, and the single-renderer supporting-display handoff. Closing
+   a card removes it from Recents, never its Output record.
+3. Voice: UUIDs stay the action protocol's canonical targets. A spoken index or
+   subject resolves against the current Recents inventory to a UUID, sent
+   through the existing coordinator. Ambiguous subjects and stale selections
+   are rejected (Mortimer asks), never acted on. `pin`/`unpin` must advance
+   `inventoryRevision` (they do not today). Reopen-by-subject is added to the
+   shared console protocol (`ConsoleProtocol.swift`, `console_protocol.py`),
+   not a separate UI-control path.
+4. Reuse and focus: check a fresh subject before fetching; refresh a stale
+   result under the same identity. Weather stays main-window only. A new card
+   does not pull focus: `AppMessageRouter`'s weather path currently calls
+   `workspace.select` on arrival; CC7a replaces that with the notice above.
+
+**Increments (each a reviewed PR, Codex review before merge):**
+
+1. **CC7a.1 Conversation thread.** Stage shows `ConversationStore` entries with
+   both roles; `ResponseResultRouter` stops creating results for spoken
+   answers. Behind a flag until CC7a.4.
+2. **CC7a.2 Inline result cards.** Results render as cards in the thread at
+   their turn; open/Back; compare and pin from the card.
+3. **CC7a.3 Recents menu.** Replaces the tab strip; voice result actions
+   retargeted; retention bound.
+4. **CC7a.4 Subject keys and reuse.** `subject_key` and `fresh_until` on
+   display payloads (JarvisKit + `jarvis/bot/display.py`); the app replaces a
+   result with the same key in place; weather tools reopen a fresh card
+   instead of fetching. Flag removed after UI2-22..25 pass.
+
+**Progress, 2026-09-30 (Claude):** CC7a.1 in review on branch
+`ws17/cc7a1-conversation-thread`. New `Console/ConversationThreadView.swift`
+(`ConversationThread` rules and the transcript-row view); `AdaptiveStageView`
+shows it in layout 2 for both the expanded and compact presentations;
+`AppMessageRouter` routes spoken answers to `ResponseResultRouter` only when
+the switch `mortimer.interface.conversationThread` is off (on by default).
+Structured display payloads, weather's select-on-arrival (CC7a.2) and the tab
+strip (CC7a.3) are unchanged. Tests: `ConversationThreadTests` (rules,
+follow-bottom, a rendered OCR check that a reply longer than 160 characters
+shows to its end) and `LiveVoiceResponseStreamTests` (thread on: no result,
+no display panel; thread off: previous behaviour).
 
 ## 8. Acceptance evidence and regression gates
 

@@ -82,12 +82,18 @@ final class FullConsoleRenderingTests: XCTestCase {
             guard let object = value as? NSObject else { return }
             let label = NSSelectorFromString("accessibilityLabel")
             if object.responds(to: label), let text = object.perform(label)?.takeUnretainedValue() as? String { controls[text] = object }
+            // WS-17: a console Menu is an AXMenuButton named by its AXTitle, an
+            // NSAttributedString (probe on the Mac, 09-30).
+            let title = NSSelectorFromString("accessibilityTitle")
+            if object.responds(to: title), let raw = object.perform(title)?.takeUnretainedValue(),
+               let text = (raw as? String) ?? (raw as? NSAttributedString)?.string,
+               !text.isEmpty, controls[text] == nil { controls[text] = object }
             let children = NSSelectorFromString("accessibilityChildren")
             if object.responds(to: children), let values = object.perform(children)?.takeUnretainedValue() as? [Any] { values.forEach(visit) }
         }
         visit(view)
         let viewport = window.convertToScreen(view.convert(view.bounds, to: nil))
-        let required = ["OUTPUT", "Sidecar tab text size", "🔇 Mic off", "Wake word off"] + (startup ? ["Expand voice", "Knowledge Atlas", "Memory graph", "Paste content", "Choose content"] : [])
+        let required = ["OUTPUT", "Sidecar tab text size", "🔇 Mic off", "Wake word off"] + (startup ? ["Expand voice", "Knowledge", "Tools", "Paste content", "Choose content"] : [])
         for label in required {
             let control = try XCTUnwrap(controls[label], "Missing \(label); labels: \(controls.keys.sorted())")
             let frame = try XCTUnwrap(control.value(forKey: "accessibilityFrame") as? NSValue).rectValue

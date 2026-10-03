@@ -84,6 +84,39 @@ class TestResolve:
         assert message == {"type": "ui", "action": "drawer_popout"}
 
 
+    # WS-15: voice control of the weather card's map (Larry, 2026-09-29).
+    def test_weather_map_actions(self):
+        for action in ("map_zoom_in", "map_zoom_out", "map_reset", "radar_pause",
+                       "radar_play", "map_satellite", "map_standard"):
+            message, reply = resolve_ui_command({"action": action, "tab": "runs"})
+            assert message == {"type": "ui", "action": action}
+            assert reply == "ok"
+
+
+    # Larry, 2026-09-30: "zoom to 10 miles" and "center the map on Atlanta".
+    def test_map_zoom_to_carries_miles(self):
+        message, reply = resolve_ui_command({"action": "map_zoom_to", "miles": "10"})
+        assert message == {"type": "ui", "action": "map_zoom_to", "miles": 10.0}
+        assert reply == "ok"
+
+    def test_map_zoom_to_needs_sensible_miles(self):
+        for bad in ({}, {"miles": "far"}, {"miles": 0}, {"miles": 50000}):
+            message, reply = resolve_ui_command({"action": "map_zoom_to", **bad})
+            assert message is None and "miles" in reply
+
+    def test_map_center_carries_place_and_optional_miles(self):
+        message, _ = resolve_ui_command({"action": "map_center", "place": "  Truist Park,   Atlanta "})
+        assert message == {"type": "ui", "action": "map_center", "place": "Truist Park, Atlanta"}
+        message, _ = resolve_ui_command({"action": "map_center", "place": "Atlanta", "miles": 25})
+        assert message == {"type": "ui", "action": "map_center", "place": "Atlanta", "miles": 25.0}
+        message, reply = resolve_ui_command({"action": "map_center"})
+        assert message is None and "place" in reply
+
+    def test_miles_and_place_ignored_on_other_actions(self):
+        message, _ = resolve_ui_command({"action": "map_zoom_in", "miles": 5, "place": "x"})
+        assert message == {"type": "ui", "action": "map_zoom_in"}
+
+
 class TestSchema:
     def test_schema_enums_match_constants(self):
         props = UI_CONTROL_SCHEMA["function"]["parameters"]["properties"]

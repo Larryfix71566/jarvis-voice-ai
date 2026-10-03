@@ -13,8 +13,8 @@
 #
 # SPM resolves WebRTC beside the executable. Copy its resolved framework next
 # to the executable, alongside SPM resource bundles, so launch does not depend
-# on the executable remaining in SPM's build-products directory. Ad-hoc signing
-# is for local testing; this is not a notarized distribution package.
+# on the executable remaining in SPM's build-products directory. Local signing
+# (see below) is for this Mac; this is not a notarized distribution package.
 set -euo pipefail
 CONFIG="${1:-debug}"
 case "$CONFIG" in debug|release) ;; *) echo "Expected debug or release" >&2; exit 2 ;; esac
@@ -107,14 +107,25 @@ cat > "$APP/Contents/Info.plist" << PLIST
 </dict>
 </plist>
 PLIST
-# Ad-hoc sign so TCC (microphone) attributes the grant to a stable identity.
+# Signing (2026-09-30): an ad-hoc signature's designated requirement is the
+# build's cdhash, which changes on every build, so macOS asked for microphone
+# and location again after every deploy. Sign with this Mac's stable local
+# identity when it has one (scripts/setup_signing_identity.sh, once per Mac);
+# otherwise fall back to ad hoc so sandboxes and new Macs still build.
+SIGN_NAME="${MORTIMER_SIGN_IDENTITY:-Mortimer Local Code Signing}"
+SIGN="-"
+if security find-identity -p codesigning 2>/dev/null | grep -q "\"$SIGN_NAME\""; then
+  SIGN="$SIGN_NAME"
+else
+  echo "note: no '$SIGN_NAME' signing identity; signing ad hoc (macOS will re-ask for permissions after rebuilds). Run scripts/setup_signing_identity.sh once to fix." >&2
+fi
 # SPM's resolved framework is not necessarily signed. Sign only our embedded
 # copy, then seal the containing app and verify both before attempting launch.
 for framework in "$APP/Contents/MacOS"/*.framework; do
   [ -d "$framework" ] || continue
-  codesign --force --sign - "$framework"
+  codesign --force --sign "$SIGN" "$framework"
 done
-codesign --force --sign - "$APP"
+codesign --force --sign "$SIGN" "$APP"
 codesign --verify --deep --strict "$APP"
 echo "bundled: $APP"
 if [ "${MORTIMER_BUNDLE_LAUNCH:-1}" != "0" ]; then

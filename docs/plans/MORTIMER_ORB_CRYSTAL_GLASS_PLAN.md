@@ -1,9 +1,37 @@
-# Mortimer orb crystal glass plan — replace the orb's glass shell with option A
+# Mortimer orb crystal glass plan — crystal shell only
 
-**Status:** IMPLEMENTED and performance follow-up deployed at `539f8f6`, 2026-09-28 (see addendum below). Original 2026-09-24 receipt: receipt `docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-24.md`. Step 9's placement, Reduce Motion and rollback checks are open until recorded in that receipt.
-**Owner:** Larry. Implementation goes to a coding model in one pass. Larry runs every commit, merge and install, and steps 8 and 9. The implementer never runs `git merge`, `git push`, `launchctl`, `defaults write`, or `bundle.sh`.
+**Status:** ACCEPTED BY LARRY 2026-09-30 — PR #112 merged as `e9388fc` and is included in deployed release `c3607e6` and later production `03b9e60`. Larry explicitly confirmed WS-08 tested and accepted. Individual fixture/state/placement observations were not separately itemized; the overall human acceptance closes the remaining visual/live gate. The former protected-window capture failure was fixed under WS-16 and passed DEPLOY-MAIN.
+**Recorded:** 2026-09-30.
+**Original 2026-09-24 receipt:** `docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-24.md`.
+
+### Revision 2 — crystal is the only orb shell (Larry, 2026-09-29)
+
+Larry directed that the crystal orb be the sole implementation. Remove the old
+orb-shell drawing branch, its `JARVIS_ORB_CRYSTAL` environment/UserDefaults
+rollback flag, and tests that instantiate the old shell. The app must always
+render the crystal shell; do not retain a hidden legacy fallback. This applies
+to the atom orb only: the separate Silo wave in legacy layout 0 remains outside
+this plan's scope. Keep the approved crystal design, colors, geometry, motion,
+accessibility behavior, and frame-time budget unchanged. Existing static
+research images may remain as historical references; they are not runtime
+alternatives.
+
+This amendment supersedes earlier D2/D3 rollback instructions, legacy-vs-crystal
+comparisons in tests, the legacy-relative frame-time gate, and the rollback part
+of step 9. Keep the empty-canvas sensitivity and 16.7 ms crystal p95 budget.
+The implementation removes the flag test because the source structure makes
+the crystal path unconditional; do not add a runtime shell selector. No change
+to art constants is authorized.
+
+Larry's 2026-09-29 live observations on the deployed crystal build: compact and
+expanded layouts both displayed the orb correctly; Reduce Motion left the orb
+visible and stopped its movement. These are reported acceptance checks and must
+be recorded as user-observed, not as automated or independently observed facts.
+After the single-shell change is deployed, Larry rechecks those two behaviors;
+there is no rollback-to-old-shell check.
+**Design owner:** Larry. **Implementation:** Codex under WS-08 on the branch named in `ROADMAP.md`; commit and PR follow `AGENTS.md`. Larry merges and deploys. The implementer does not modify production, install the app, or change `defaults`.
 **Approved design:** option A ("Crystal") from the orb glass comparison, chosen by Larry on 2026-09-23. The comparison page is the Claude artifact https://claude.ai/artifact/852XZZzAqkt5WmHUe6ruGY. A copy of it and reference renders are checked in under `docs/interface-research/orb-crystal/`.
-**Baseline inspected:** `main` at `a1ca3c8` (2026-09-23). File hashes in §0 rule 2.
+**Baseline inspected:** `origin/main` at `0cc42f2` before the WS-08 implementation branch was created; the claim merge is the branch parent.
 **Safety claim:** the adaptive interface plan's contracts UI-1 through UI-7 (`docs/plans/MORTIMER_ADAPTIVE_INTERFACE_PLAN.md` §3) stay in force word for word. This plan adds no contract and relaxes none. It changes pixels inside the orb's glass and nothing else.
 
 Path shorthand: `MH/` = `macos/MortimerHost/Sources/MortimerHost/`, `JK/` = `macos/JarvisKit/Sources/JarvisKit/`, `MHT/` = `macos/MortimerHost/Tests/MortimerHostTests/`, `JKT/` = `macos/JarvisKit/Tests/JarvisKitTests/`.
@@ -11,19 +39,16 @@ Path shorthand: `MH/` = `macos/MortimerHost/Sources/MortimerHost/`, `JK/` = `mac
 | Rev | Date | Change |
 |---|---|---|
 | 1 | 2026-09-23 | First version. |
+| 2 | 2026-09-29 | Crystal shell is the sole implementation; remove legacy shell and rollback flag at Larry's direction. |
 
 ## 0. Binding constraints for the implementing model
 
-1. **Copy, do not author.** Every line of new or changed code is in Appendices A–F. Insert it exactly. Do not rename, reorder, reformat, "simplify" or re-derive anything, and do not change any number.
-2. **Check the baseline first.** Before editing, run `shasum -a 256` on the two files you will edit. They must match:
-   - `MH/Console/CometOrbRenderer.swift` → `1ee8617c735cb8488d80e26a642e5b502d580755dbbf9c64008da2bdc22d932c`
-   - `JK/JarvisConfig.swift` → `dbc184c9211c572590f1846c5b9b0a34af9fb76fd4068bebd7efaa7083962a52`
-
-   If either differs, stop and report both hashes and `git log -3 --oneline -- <file>`. Do not merge by hand.
-3. **Compile errors.** The appendix code was written against Apple's SwiftUI documentation but has not been compiled. If `swift build` fails, you may fix only type and syntax problems (an argument label, a missing explicit `CGFloat(...)` or `Double(...)` conversion, a missing `self.` or `Self.`, an import). A fix may not change a numeric constant, a color, a blend mode, a draw order, a clip, a filter radius or a shape. Record each fix in `DEVIATIONS.md` using that file's entry format (next free `D-` number, "Architecture impact: none"). If the only fix you can find changes one of those things, stop and report the compiler output.
-4. **Tests.** Existing tests are not edited, skipped or loosened (UI-7). If an existing test fails after the change, stop and report the test name and its output. If a new test from this plan fails, stop and report its output and any JSON or PNG it wrote. Do not tune a threshold or a design constant to make a test pass.
-5. **Scope.** Touch only the files in §4. Nothing under `jarvis/`, `web/`, `config/`, `scripts/`, or any other Swift file.
-6. **Look.** Do not judge whether the result "looks right" and adjust it. Visual acceptance is Larry's, in step 8.
+1. **Preserve the approved design.** Revision 2 authorizes only removing the retired shell branch/selector and updating tests and documentation to match. Do not change any crystal art, color, geometry, motion, accessibility behavior or performance threshold.
+2. **Branch.** Work only on the WS-08 branch recorded in `ROADMAP.md`. Reconcile a different branch or unexpected base before editing.
+3. **Design.** Preserve the approved crystal artwork and all motion, accessibility and performance thresholds. The crystal renderer is the only atom-orb renderer; do not add a shell selector or fallback.
+4. **Tests.** Update only tests that directly assert the retired shell, and delete the obsolete flag test. Do not skip or loosen other tests (UI-7). Report every full-suite failure with its exact name and output. Do not tune a threshold or design constant to make a test pass.
+5. **Scope.** Touch only the files in §4, plus the roadmap and acceptance/plan documentation required to report status. Nothing under `jarvis/`, `web/`, `config/`, `scripts/`, or unrelated Swift files.
+6. **Look.** Do not adjust the approved design based on the implementer's own visual judgment. Visual acceptance is Larry's, after deployment.
 
 ## 1. Background (verified against the source at `a1ca3c8`)
 
@@ -40,7 +65,7 @@ Why the current shell reads as light and not glass, from the code:
 
 ## 2. Scope
 
-**In scope:** a new shell for the adaptive orb, option A. It adds a glass body, a thick-wall line, a Fresnel-weighted room reflection, a two-pane window reflection and a rim strip light placed by mirror-sphere geometry, a softer second window reflection off the far wall, a caustic, rim dispersion and a silhouette hairline. It also adds a rollback flag, tests, reference images and two documentation updates.
+**In scope:** option A crystal glass as the only adaptive atom-orb renderer. Remove the former shell drawing branch and `JARVIS_ORB_CRYSTAL` toggle; update tests, plan and roadmap. Preserve the approved glass body, wall, Fresnel reflection, window and strip lights, second window reflection, caustic, rim dispersion, hairline, voice response, motion and frame-time budget.
 
 **Unchanged, and tested where a test can see it:**
 
@@ -50,30 +75,29 @@ Why the current shell reads as light and not glass, from the code:
 - Accessibility label and value (`VoiceWaveView.swift:28-29`), window-visibility sampling, wake flash, Debug ▸ Wave level windows.
 - `OrbFieldView` (readout, satellites, beams, captions, notices), every drawer tab, `Glass.swift` panels, the legacy Silo wave for layout 0.
 
-**Out of scope:** options B and C; the frozen web console (`web/src/components/OrbField.tsx`); any change to how comets or plasma look; caching reflections into bitmaps (D5); removing the legacy shell (a later cleanup once the crystal shell has shipped).
+**Out of scope:** options B and C; the frozen web console (`web/src/components/OrbField.tsx`); any change to how comets or plasma look; caching reflections into bitmaps (D5); the separate Silo wave in legacy layout 0.
 
 ## 3. Decisions
 
 **D1 — Option A exactly as previewed.** Every constant in Appendix A equals the value in the approved preview (`docs/interface-research/orb-crystal/glass-orb.html`, `STYLE.crystal`, `KEY`, `STRIP`, `FRESNEL`, `buildEnv`, `drawGlass`). *Why:* Larry chose what he saw. Changing a value, even to "improve" it, is a new design decision.
 
-**D2 — Only the shell changes; the legacy shell stays byte-for-byte.** `draw` gains a `shell` parameter and branches right after `breath` is computed. The crystal path calls the same `plasma` and `comets` with the same arguments as the legacy path. The legacy lines are not edited. *Why:* the request was "all existing features the same outside of the look of the glass". Leaving the old lines untouched makes the rollback exact.
+**D2 — Original revision decision (superseded by Revision 2).** Revision 1 used a shell parameter and retained legacy shell code as a rollback. Revision 2 removes that branch and makes crystal rendering unconditional; shared plasma/comet helpers and their design values remain unchanged.
 
-**D3 — Rollback flag `JARVIS_ORB_CRYSTAL`, default on, read once per launch.** It follows the `JarvisFlags.audioMeterEnabled` pattern. The environment wins: `off`, `false`, `0` and `no` turn it off, anything else turns it on. Otherwise `UserDefaults` is used, and an absent key means on. `OrbShell.resolved` is a `static let`, so the flag is read once and changes take effect on the next launch. *Why:* this repo keeps a no-rebuild rollback lever for visual changes (`JARVIS_GLASS_ENABLED`, `JARVIS_FORCE_WEBRTC`). Reading once avoids an environment lookup on every frame at 60 Hz. **Decision made on Larry's behalf. Larry: confirm it, or strike it. If it is struck, this plan gets a rev 2 that removes the flag everywhere it appears; do not implement rev 1 with parts deleted.**
+**D3 — Original revision decision (superseded by Revision 2).** Revision 1 proposed `JARVIS_ORB_CRYSTAL`; Larry's Revision 2 decision removes it. Rollback for this code change is a standard source/deployment rollback only; there is no in-app shell selector.
 
 **D4 — Light geometry is computed, not drawn by hand.** A distant light in direction *d* reflects toward the viewer where the surface normal is `normalize(d + view)`. Its screen position is that normal's x and y times the radius (`CrystalGlassRig.mirrorPoint`). The window panes and the strip are superellipse rectangles in light space, mapped point by point (96 samples). The outlines are `static let`s in unit coordinates, computed once per process and scaled each frame. *Why:* this is what makes the reflection curve with the sphere. It is also the preview's exact method, and it is pure math, so it is unit-tested.
 
 **D5 — Draw every frame; no bitmap caching.** The reflections do not depend on voice state, so they could be cached, but they are drawn as vector fills each frame. *Why:* `CometOrbRenderer`'s own header rule is that no bitmap is substituted for voice feedback. Caching also adds size and scale invalidation to get wrong. D6 measures whether drawing every frame is affordable.
 
-**D6 — Frame-time gate.** New test `OrbShellFrameTimeTests` uses the `MemoryGraphFrameTimeTests` span on a 1440 × 220 pt canvas, 300 frames each for an empty canvas, the legacy shell and the crystal shell. The gates are:
-  - **Sensitivity:** legacy p50 > 1.10 × empty p50. This proves the span sees drawing cost; the same rule is in P4.
+**D6 — Frame-time gate.** `OrbShellFrameTimeTests` uses the `MemoryGraphFrameTimeTests` span on a 1440 × 220 pt canvas, with 300 frames each for an empty canvas and the crystal orb. Revision 2 removes the legacy-relative comparison. The gates are:
+  - **Sensitivity:** crystal p50 > 1.10 × empty p50. This proves the span sees drawing cost; the same rule is in P4.
   - **Budget:** crystal p95 ≤ 16.7 ms, one 60 Hz frame. `VoiceWaveAnimation` samples at 60 Hz while audio is active.
-  - **Relative:** crystal p50 ≤ 1.5 × legacy p50. The crystal shell adds 4 blurred layers to the legacy 10, which is 1.4×. The gate allows that with a small margin.
 
   If any gate fails: **stop and report the JSON** (§0 rule 4). Do not optimize. *Why:* UI2-21 requires "bounded rendering cost", and it has never been measured for the orb.
 
 **D7 — Reflections ignore voice state; only the halo and the wall glow follow it.** The body, wall line, room reflection, caustic, window, strip, back reflection, dispersion and hairline all use fixed opacities. The halo and the wall glow are multiplied by `strength`. *Why:* a glass object keeps its reflections when the light inside goes out. This is the property the preview showed in standby, and a test pins it.
 
-**D8 — Blur a group by filtering the layer, not its contents.** Each blurred group is drawn as `var copy = context; copy.addFilter(.blur(radius:)); copy.drawLayer { … }`. *Why:* Apple's documentation for `addFilter` says a filter "applies to subsequent drawing operations", and each one is rasterized, filtered and composited on its own. A `drawLayer` call is one operation, so this blurs the group as a whole, which is what the preview did. The legacy code blurs each stroke inside the layer instead; it is not touched (D2).
+**D8 — Blur a group by filtering the layer, not its contents.** Each blurred group is drawn as `var copy = context; copy.addFilter(.blur(radius:)); copy.drawLayer { … }`. *Why:* Apple's documentation for `addFilter` says a filter "applies to subsequent drawing operations", and each one is rasterized, filtered and composited on its own. A `drawLayer` call is one operation, so this blurs the group as a whole, as in the preview.
 
 **D9 — The Fresnel layer's 0.62 opacity is multiplied into its gradient.** It is not set as a layer opacity. *Why:* under `.destinationIn` the result alpha is sky alpha × Fresnel alpha, so multiplying the sky alpha by 0.62 gives an identical result. It also avoids depending on how `drawLayer` treats `GraphicsContext.opacity`, which Apple's documentation does not state.
 
@@ -81,18 +105,19 @@ Why the current shell reads as light and not glass, from the code:
 
 **D11 — Reference images are checked in.** Reference PNGs rendered by the preview go under `docs/interface-research/orb-crystal/`. They are the look Larry approved. The new test writes the Swift renders next to its other fixtures for side-by-side comparison. *Why:* the implementer cannot open the artifact link, and "looks like the preview" needs something to compare against.
 
-**D12 — Tests.** Existing tests are unchanged and must pass. They exercise the crystal shell automatically, because `WaveEngine` uses `OrbShell.resolved`. New tests: `OrbShellFlagTests` (JarvisKit), `CrystalOrbShellTests` and `OrbShellFrameTimeTests` (MortimerHost). Every expected number in them was measured from the preview on 2026-09-23 and is stated in the test's header comment. The bright-area threshold is half the preview's measurement, and the other tolerances are wider than the differences the preview showed (reflection area ±15% against 0.4%, center pixel ±0.06 against 0.012), so a small Canvas-versus-SwiftUI difference does not trip them.
+**D12 — Tests.** Existing tests remain unchanged unless they directly test the retired selector or compare against the retired renderer. `CrystalOrbShellTests` covers glass geometry/reflection visibility, speaker color and visual fixture rendering. `OrbShellFrameTimeTests` keeps the empty-canvas sensitivity and absolute 16.7 ms p95 gate. `OrbShellFlagTests` is removed because the runtime selector no longer exists. Preview-based geometry and reflection thresholds remain unchanged.
 
 ## 4. File manifest
 
 | File | Change | Appendix |
 |---|---|---|
-| `MH/Console/CrystalGlassRig.swift` | **new**: `OrbShell`, `CrystalGlassRig` constants and geometry | A |
-| `MH/Console/CometOrbRenderer.swift` | edit: `shell` parameter (E1), crystal branch (E2), crystal extension appended (E3) | B |
-| `JK/JarvisConfig.swift` | edit: `JarvisFlags.orbCrystalShellEnabled` | C |
-| `JKT/OrbShellFlagTests.swift` | **new** | D |
-| `MHT/CrystalOrbShellTests.swift` | **new** | E |
-| `MHT/OrbShellFrameTimeTests.swift` | **new** | F |
+| `MH/Console/CrystalGlassRig.swift` | remove `OrbShell`; preserve `CrystalGlassRig` constants and geometry | A |
+| `MH/Console/CometOrbRenderer.swift` | remove shell parameter and old shell drawing; call crystal renderer unconditionally; preserve crystal artwork/helpers | B |
+| `MH/Console/VoiceWaveView.swift` | update stale comment to describe the unconditional crystal renderer | — |
+| `JK/JarvisConfig.swift` | remove `JarvisFlags.orbCrystalShellEnabled` | C |
+| `JKT/OrbShellFlagTests.swift` | delete; the selector no longer exists | D |
+| `MHT/CrystalOrbShellTests.swift` | update tests to exercise the sole renderer; retain geometry/reflection checks and visual fixtures | E |
+| `MHT/OrbShellFrameTimeTests.swift` | compare crystal to empty canvas; retain sensitivity and 16.7 ms p95 gates | F |
 | `docs/interface-research/orb-crystal/*` | **new** (already written when this plan was delivered; verify they exist) | — |
 | `docs/plans/MORTIMER_ADAPTIVE_INTERFACE_PLAN.md` | edit: one amendment paragraph | G.1 |
 | `docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-<YYYY-MM-DD>.md` | **new**: acceptance receipt | G.2 |
@@ -104,41 +129,33 @@ Why the current shell reads as light and not glass, from the code:
 
 Run everything from the repository root. A step is complete only when its check passes.
 
-**Step 0 — Preconditions.** Larry creates the branch `feat/orb-crystal-glass` from `main`. Check the §0 rule 2 hashes. Confirm the reference files in §4 exist. Then, before any edit, run `swift test --package-path macos/JarvisKit` and `swift test --package-path macos/MortimerHost` in Larry's logged-in session and save both outputs as the baseline for step 7.
+**Step 0 — Preconditions.** Use the Codex-owned WS-08 branch and worktree recorded in `ROADMAP.md`, merged with main before edits. Confirm the reference files in §4 exist. Never edit production.
 
-**Step 1 — Flag (Appendix C, D).** Insert the Appendix C lines into `JK/JarvisConfig.swift` directly after the line `    public static var glassEnabled: Bool { on("JARVIS_GLASS_ENABLED") }`. Create `JKT/OrbShellFlagTests.swift` from Appendix D.
-Check: `swift test --package-path macos/JarvisKit --filter OrbShellFlagTests` → 4 tests, 0 failures.
+**Step 1 — Remove the shell selector.** Delete `orbCrystalShellEnabled` from `JK/JarvisConfig.swift`, remove `OrbShell` from `MH/Console/CrystalGlassRig.swift`, delete `JKT/OrbShellFlagTests.swift`, and remove the shell parameter and branch from `CometOrbRenderer.draw`.
 
-**Step 2 — Rig (Appendix A).** Create `MH/Console/CrystalGlassRig.swift` from Appendix A.
+**Step 2 — Rig.** Preserve `CrystalGlassRig` constants and light geometry in `MH/Console/CrystalGlassRig.swift`; remove only the `OrbShell` type and its selector documentation.
 
-**Step 3 — Renderer (Appendix B).** Apply E1, E2 and E3 to `MH/Console/CometOrbRenderer.swift`. Each anchor occurs exactly once in the baseline file; if one does not, stop (§0 rule 2).
-Check: `swift build --package-path macos/MortimerHost` succeeds (§0 rule 3 applies).
+**Step 3 — Renderer.** In `MH/Console/CometOrbRenderer.swift`, remove the legacy shell's draw code and call the crystal renderer unconditionally. Keep crystal design and shared plasma/comet helpers unchanged.
+Check: Swift package tests build successfully.
 
-**Step 4 — Behavior tests (Appendix E).** Create `MHT/CrystalOrbShellTests.swift`.
-Check: `swift test --package-path macos/MortimerHost --filter CrystalOrbShellTests` → 7 tests, 0 failures. The test writes `orb-crystal-*.png` and `orb-legacy-*.png` for five states into the same `.build/interface-fixtures/` directory `VoiceWaveRenderingTests` already uses; it is relative to the test process's working directory, so locate it with `find . -name 'orb-crystal-standby.png' -path '*interface-fixtures*'` and record the path in the receipt.
+**Step 4 — Behavior tests.** Completed: `CrystalOrbShellTests` now checks geometry/reflections, speaker color, and five crystal-state fixtures. Focused check passed (7 tests, 0 failures); fixtures are under `macos/MortimerHost/.build/interface-fixtures/`.
 
-**Step 5 — Existing orb tests.** Check: `swift test --package-path macos/MortimerHost --filter VoiceWaveRenderingTests` and `--filter WindowVisibilityTests`, 0 failures, no edits. Run these in Larry's logged-in session; `WindowVisibilityTests` is known to fail headless (closure plan G20).
+**Step 5 — Existing orb tests.** These remained unchanged and ran as part of the full suite. Three `WindowVisibilityTests` cases skipped because the test host could not become active (closure plan G20).
 
-**Step 6 — Frame time (Appendix F).** Create `MHT/OrbShellFrameTimeTests.swift`.
-Check: `swift test --package-path macos/MortimerHost --filter OrbShellFrameTimeTests` in the logged-in session. All three gates pass, and `orb-frame-time.json` exists in the directory step 4 found. On a failed gate, D6 applies: stop and report.
+**Step 6 — Frame time.** Completed: the legacy probe and relative gate were removed. Focused test passed sensitivity and 16.7 ms p95 gates; JSON is under `macos/MortimerHost/.build/interface-fixtures/`.
 
-**Step 7 — Full suites.** Check: `swift test --package-path macos/JarvisKit` and `swift test --package-path macos/MortimerHost`, in the same session as step 0. The set of failing tests must equal step 0's baseline set. The new tests add to the executed count and must pass. Any failure not in the baseline: stop and report.
+**Step 7 — Full suites.** Run `swift test --package-path macos/JarvisKit` and `swift test --package-path macos/MortimerHost`. The orb tests must pass. Report any unrelated existing failure without changing its code under this workstream; establish whether it reproduces on the unchanged base before attributing it to the orb.
 
 **Step 8 — Visual acceptance (Larry).** Open `orb-crystal-<state>.png` from the directory step 4 found next to `docs/interface-research/orb-crystal/crystal-<state>-400x180.png` for all five states. Pass means the same features in the same places: the two-pane window upper left near the rim, the strip light and the softer second window lower right, the dark wall line, the wall glow lower right in the talker's color, and the glass still visible in standby. Canvas and SwiftUI blur and gradient rendering differ slightly, so this is not a pixel match. If Larry wants any value changed, that is a new revision of this plan, not an implementation fix.
 
-**Step 9 — Live check and rollback proof (Larry).** Run `macos/MortimerHost/scripts/bundle.sh` and connect.
+**Step 9 — Live check (Larry, after deployment).** Run `macos/MortimerHost/scripts/bundle.sh` and connect.
 - Confirm the crystal shell in Listening, while you speak, while Mortimer speaks, while both speak, and in Standby.
 - Confirm it in the conversation, rail and bottom placements.
 - Confirm Reduce Motion (System Settings ▸ Accessibility ▸ Display) freezes it.
 
-Then prove the rollback:
-- Quit the app. Run `defaults write com.mortimer.host JARVIS_ORB_CRYSTAL -bool false`, relaunch, and confirm the old shell is back.
-- Quit again. Run `defaults delete com.mortimer.host JARVIS_ORB_CRYSTAL`, relaunch, and confirm the crystal shell is back.
+There is no runtime rollback-to-old-shell check. If a release must be reverted, use the standard source/deployment rollback procedure.
 
-**Step 10 — Documentation (Appendix G).**
-- Insert G.1 into `docs/plans/MORTIMER_ADAPTIVE_INTERFACE_PLAN.md` directly after the paragraph that ends ``receipt is `docs/acceptance/adaptive-interface/receipts/candidate-atom-wave-2026-09-18.md`.``
-- Create the receipt from G.2, filled in with the real counts and results from steps 4–9.
-- Change this plan's **Status** line to `IMPLEMENTED <date>, receipt <path>`.
+**Step 10 — Documentation.** Code, automated checks and release evidence are recorded in this plan, `ROADMAP.md`, and `docs/acceptance/adaptive-interface/receipts/orb-crystal-glass-2026-09-29.md`. Larry explicitly accepted WS-08 on 2026-09-30; the receipt distinguishes that overall approval from unitemized individual observations.
 
 Larry commits.
 
@@ -150,45 +167,48 @@ Every crystal-shell number is a named `static let` in `CrystalGlassRig` (Appendi
 
 | Check | Where | Evidence |
 |---|---|---|
-| Flag default and both levers | `OrbShellFlagTests` (4) | test output |
 | Light geometry equals the preview's math | `CrystalOrbShellTests.testMirrorPointIsTheHalfVector`, `testTheKeyWindowSitsUpperLeftNearTheRim`, `testFresnelStopsFollowSchlickForGlass` | test output |
-| Default shell is crystal | `testTheShellDefaultsToCrystal` | test output |
-| Glass stays visible in standby (the reported defect) | `testCrystalKeepsItsReflectionsInStandby`: crystal ≥ 35 pt² of bright reflection in the 0.55–0.95 radius band (preview 70), legacy 0 | test output |
+| Crystal renderer stays visible in standby (the reported defect) | `testCrystalKeepsItsReflectionsInStandby`: crystal ≥ 35 pt² of bright reflection in the 0.55–0.95 radius band (preview 70) | test output |
 | Reflections ignore voice state (D7) | `testCrystalReflectionsDoNotFollowVoiceState`: listening, user, Mortimer and overlap within ±15% of standby (preview: within 0.4%) | test output |
-| Comets and nucleus unchanged (§2) | `testCometsAndNucleusAreUnchanged`: every pixel beyond 1.25 × radius within 2/255 of legacy, and center pixel within 0.06 per channel (preview: 0 pixels differ, center within 3/255) | test output, fixtures |
+| Speaker color and visual states | `testNucleusReflectsTheCurrentSpeaker`, `testReferenceStatesRenderCrystalFixtures` | test output and five crystal PNG fixtures |
 | Existing behavior | `VoiceWaveRenderingTests`, `WindowVisibilityTests`, full suites | test output |
 | Cost | `OrbShellFrameTimeTests` (D6) | `orb-frame-time.json` |
 | Look | Larry, step 8 | fixtures vs reference PNGs |
-| Live, placements, Reduce Motion, rollback | Larry, step 9 | receipt |
+| Live, placements and Reduce Motion | Larry, step 9 | receipt |
 
 ## 8. Rollback
 
-- **No rebuild:** `defaults write com.mortimer.host JARVIS_ORB_CRYSTAL -bool false`, then relaunch MortimerHost. Or launch with `JARVIS_ORB_CRYSTAL=off` in the environment. The legacy shell lines are unchanged (D2), so this is the exact previous look.
-- **Full:** revert the commit. No data, settings or server state is involved.
+There is no runtime selector for the retired shell. Use the standard source/deployment rollback if a release must be reverted. No data, settings or server state is involved.
 
 ## 9. Risks
 
 | Risk | Likelihood | Effect | Handling |
 |---|---|---|---|
-| Appendix code does not compile as written | medium: written against the docs, not compiled | step 3 fails | §0 rule 3: type and syntax fixes only, logged in `DEVIATIONS.md`, otherwise stop |
+| SwiftUI blur radius or gradient interpolation differs from the browser, so the look drifts from the preview | medium | window softer or harder, glow stronger or weaker | Larry judges after deployment; changes go through a plan revision |
 | SwiftUI blur radius or gradient interpolation differs from the browser, so the look drifts from the preview | medium | window softer or harder, glow stronger or weaker | thresholds at half the preview's numbers; Larry judges in step 8; changes go through a plan revision |
 | `blendMode` does not apply to a `drawLayer` composite | low | reflections composite normally instead of screened; on the dark body, for near-white reflections, the difference is small | step 8 catches a visible difference; report it and do not work around it |
 | Frame cost too high on the MacBook Air at full width | unknown; not yet measured | dropped frames while talking | D6 gate; stop and report |
 | The frame-time span does not see drawing cost | unknown | gate would pass without meaning anything | sensitivity gate; stop and report |
-| Flag left `false` after the step 9 check | low | old look persists | step 9 ends with `defaults delete` and a visual check |
 
 ## 10. Approval
 
-- [ ] Larry: D3 (keep a rollback flag), confirmed or struck.
-- [ ] Larry: plan approved for implementation.
-- [ ] Larry: step 8 visual acceptance.
-- [ ] Larry: step 9 live check and rollback proof.
+- [x] Larry: plan approved for implementation (single-shell direction, 2026-09-29).
+- [x] Larry: step 8 visual acceptance — overall WS-08 sign-off reported 2026-09-30; no per-fixture observations supplied.
+- [x] Larry: step 9 post-deployment check — overall WS-08 sign-off reported 2026-09-30; compact/expanded and Reduce Motion were separately reported earlier, while other individual state/placement observations were not itemized.
 
 ## 11. Handoff prompt for the implementing model
 
-> Implement `docs/plans/MORTIMER_ORB_CRYSTAL_GLASS_PLAN.md` steps 0–7 and step 10's receipt draft in the repository at `~/jarvis-voice-ai-clean` on branch `feat/orb-crystal-glass`. Read §0 first; it overrides anything you would otherwise do. Copy code only from Appendices A–F, exactly. Do not change any number, color, blend mode, order or shape. Do not edit or skip existing tests. Run every check in §5 and paste its output. Stop and report at the first failed check, with its output. Do not run git merge or push, do not install the app, and do not run `defaults write`. Steps 8 and 9 are Larry's.
+> Implement the Revision 2 crystal-only cleanup on the WS-08 branch recorded in `ROADMAP.md`. Work only in the assigned worktree, never production. Remove the old atom-orb branch and `JARVIS_ORB_CRYSTAL`; preserve crystal art, separate Silo wave, motion, accessibility and performance limits. Update only tests that directly assert the retired shell and run all focused/native package suites. Report unrelated full-suite failures accurately. Leave deployment and post-deployment visual/Reduce Motion checks to Larry. Do not use `defaults` or install the app.
 
 ---
+
+## Historical revision-1 appendices (reference only)
+
+The following code appendices document the original crystal-shell implementation
+and are retained for decision history. They contain the retired `OrbShell`
+selector, legacy renderer, flag tests and relative performance comparison.
+**Do not apply those appendices. Revision 2 above and the 2026-09-29 progress
+record below define the current implementation.**
 
 ## Appendix A — `MH/Console/CrystalGlassRig.swift` (new file, entire content)
 
@@ -1168,3 +1188,109 @@ This closes staged source deployment, not live feature acceptance or activation.
 No runtime feature flags or provider routes were deliberately changed by this
 operation. Remote enabled-mode acceptance, provider/VM/voice/display/accessibility
 and plan-specific activation/rollback gates remain open where previously open.
+
+
+## 2026-09-29 — WS-08 single-shell direction claimed
+
+Larry confirmed that the crystal orb should be the only atom-orb shell. This revision removes the production fallback and rollback test; it does not change the crystal artwork or the separate Silo wave. Larry reports the current build passes compact/expanded appearance and Reduce Motion stillness checks. Implementation was pending the WS-08 claim merge.
+
+## 2026-09-29 — WS-08 crystal-only implementation
+
+Codex removed `OrbShell`, the legacy draw branch and `JARVIS_ORB_CRYSTAL`; the
+crystal renderer is now unconditional. The Silo wave in layout 0, shared plasma
+and comet drawing, colors, geometry, motion and accessibility are unchanged.
+The tests now check approved crystal reflections and geometry, speaker-colored
+nucleus, five crystal fixture states, and the unchanged empty-canvas sensitivity
+plus 16.7 ms p95 performance gates. The obsolete JarvisKit flag test was removed.
+
+Verification on Apple M5 / macOS 27.0: JarvisKit 215 tests, zero failures;
+focused CrystalOrbShellTests 7/0; OrbShellFrameTimeTests 1/0 (focused p50/p95
+4.933/14.150 ms; empty p50 0.842 ms). Full MortimerHost ran 374 tests, five
+skips and one failure in
+`ProtectedDisplayContentTests.testProtectedContentInActualWindowCaptureMatchesBodyOnlyReference` at line 134. The failure is outside WS-08's files. On unchanged base `0cc42f2`, that
+window-capture test skipped because the test host could not become active; the
+focused current-branch run skipped it for the same WindowServer limitation.
+Thus the full-suite capture mismatch is recorded as an environment-sensitive
+unrelated failure, not as a passing full suite or an orb regression.
+
+Crystal visual fixtures and the timing JSON are under the ignored
+`macos/MortimerHost/.build/interface-fixtures/`. PR/CI, Larry's source-image
+comparison, merge/deployment, and post-deployment compact/expanded plus Reduce
+Motion checks remain open. No production files or app settings were changed.
+
+## 2026-09-29 — WS-08 merged and CI green
+
+PR #112 merged to main as `e9388fc`. Its first `validate` run failed in
+`tests/unit/test_admin_appbuild.py::test_submit_after_done_delegates_to_workspace`,
+which is outside WS-08 and unchanged by the PR. That test passed in an isolated
+local run; the full `validate` workflow passed on rerun, as did Sandbox controller
+and Knowledge base. The five-fixture comparison, deployment, and Larry's
+post-deployment compact/expanded and Reduce Motion checks remain open.
+
+## 2026-09-29 — DEPLOY-MAIN stopped before production changes
+
+Larry ran `scripts/deploy_main.sh` against `origin/main` at `d460809`.
+JarvisKit passed (215/0); MortimerHost ran 374 tests with five skips and one
+failure, `ProtectedDisplayContentTests.testProtectedContentInActualWindowCaptureMatchesBodyOnlyReference`
+at line 134. The script stopped in phase A, so no snapshot, install or service
+switch occurred. A read-only check still found production at `e340101`.
+The deployment log is local at
+`/Users/larryfix/MortimerRollback/logs/deploy-main-20260929-154149.log`.
+
+The failed assertion printed both 1240 × 840 RGBA captures. They differ at
+21,946 of 1,041,600 pixels (2.107%). Differences occur in the outer capture
+edge and the body-text area (approximately x=24–290, y=29–57); a 64-pixel
+inset contains no differences. The fixture creates and captures two separate
+windows in sequence. Window composition/text-render timing is a plausible
+cause, but this observation alone does not prove it. The source's protected
+render path ignores the ancillary fields. The captured arrays do not show
+evidence that those fields appeared, and the failed equality cannot be counted
+as a privacy pass.
+
+`ProtectedDisplayContentTests.swift` is outside WS-08's orb-specific scope.
+A separately assigned repair should make the live capture deterministic while
+preserving the privacy comparison, then pass the full MortimerHost suite and
+DEPLOY-MAIN before deployment and orb acceptance can continue.
+
+## 2026-09-29 — Deployment and acceptance reconciliation
+
+WS-16 fixed the independent protected-window capture gate. Larry's DEPLOY-MAIN
+then deployed `c3607e6`, which includes the WS-08 crystal-only change. The real
+capture test executed and passed; MortimerHost ran 383 tests with six unrelated
+skips and zero failures, JarvisKit ran 218 tests with zero failures, and Python
+reported 4,924 passed and seven skipped. Main, production and app-bundle
+revisions matched; services were healthy.
+
+Larry reaffirmed in this task that compact and expanded appearance and Reduce
+Motion stillness had already been confirmed. These are user-reported live
+checks, not Codex-observed ones, and should not be repeated. The five fixture
+PNGs left in production's `.build` directory were dated 09-24 and therefore
+were not used as current-release evidence. Codex regenerated all five from the
+merged source; orb product files are unchanged from deployed `c3607e6`.
+`CrystalOrbShellTests` passed 7/0. The current 400 × 180 fixtures and the
+approved 800 × 360 reference images show the specified glass, paired
+upper-left reflection, lower-right soft reflection, dark wall, orbit paths,
+nucleus and talker colors in the same relative positions. The images are
+linked from the existing WS-08 receipt. This is Codex's comparison, not
+Larry's final visual sign-off.
+
+The remaining acceptance is narrow: Larry's explicit five-fixture approval
+(step 8), plus evidence for any step 9 live states or placements not already
+seen. No further deployment or repeat compact/expanded or Reduce Motion check
+is required for this WS-08 revision.
+
+## 2026-09-29 — Acceptance evidence landed
+
+PR #115 merged as `8222940` after all five GitHub checks passed, including
+the full `validate` job against the WS-01 action-claim fix. This lands the
+five current fixture images and the corrected acceptance receipt. It does not
+turn Larry's pending five-fixture approval or unobserved live states and
+placements into passed checks.
+
+## 2026-09-30 — Larry's final acceptance
+
+Larry explicitly confirmed WS-08 tested and accepted. This overall human
+sign-off closes steps 8 and 9 without claiming a separately recorded result
+for every fixture, live voice state or placement. The existing receipt retains
+the source, deployment, automated and visual-reference evidence. No further
+WS-08 implementation, deployment or repeat acceptance test is requested.

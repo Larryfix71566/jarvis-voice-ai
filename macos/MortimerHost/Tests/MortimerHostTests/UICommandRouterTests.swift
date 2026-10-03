@@ -111,6 +111,42 @@ final class UICommandRouterTests: XCTestCase {
         XCTAssertFalse(spy.overlay.isVisible)
     }
 
+    // WS-15: voice control of the weather card's map.
+    func testWeatherMapActionsGoToTheWeatherMapChannel() throws {
+        let drawer = DrawerState()
+        let overlay = ConsoleOverlayState()
+        let windows = WindowActions()
+        let channel = WeatherMapCommands()
+        let router = UICommandRouter(drawer: drawer, overlay: overlay, windows: windows,
+                                     placement: WindowPlacement(drawer: drawer, windows: windows),
+                                     weatherMap: channel)
+        for (i, action) in ["map_zoom_in", "map_zoom_out", "map_reset", "radar_pause",
+                            "radar_play", "map_satellite", "map_standard"].enumerated() {
+            router.handle(try command(action))
+            XCTAssertEqual(channel.serial, i + 1)
+            XCTAssertEqual(channel.latest, action)
+        }
+        router.handle(try command("drawer_close"))
+        XCTAssertEqual(channel.serial, 7, "other actions do not reach the map")
+    }
+
+    func testZoomToAndCenterCarryTheirArguments() throws {
+        let drawer = DrawerState()
+        let windows = WindowActions()
+        let channel = WeatherMapCommands()
+        let router = UICommandRouter(drawer: drawer, overlay: ConsoleOverlayState(), windows: windows,
+                                     placement: WindowPlacement(drawer: drawer, windows: windows),
+                                     weatherMap: channel)
+        let zoom = try XCTUnwrap(try AppMessage.decode(frame: Data(#"{"type":"ui","action":"map_zoom_to","miles":10}"#.utf8)))
+        guard case .ui(let zoomCommand) = zoom else { return XCTFail("expected .ui") }
+        router.handle(zoomCommand)
+        XCTAssertEqual(channel.latestCommand, WeatherMapCommand(serial: 1, action: "map_zoom_to", miles: 10))
+        let center = try XCTUnwrap(try AppMessage.decode(frame: Data(#"{"type":"ui","action":"map_center","place":"Truist Park"}"#.utf8)))
+        guard case .ui(let centerCommand) = center else { return XCTFail("expected .ui") }
+        router.handle(centerCommand)
+        XCTAssertEqual(channel.latestCommand, WeatherMapCommand(serial: 2, action: "map_center", place: "Truist Park"))
+    }
+
     func testMicActionsNotDoubleHandled() throws {
         let spy = makeRouter()
         let tabBefore = spy.drawer.activeTab

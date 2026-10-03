@@ -13,13 +13,19 @@ struct WorkspaceView: View {
     @Environment(\.mortimerReduceMotion) private var reduceMotion
     @Environment(DisplayWindowStore.self) private var display
     @Environment(DrawerState.self) private var drawer
+    /// WS-17: false in the Command Console, whose single control row
+    /// (`ConsoleActionBar`) carries the navigation, the result list (Results ▾)
+    /// and the result actions. Detached panels and older layouts keep them.
+    let showsControls: Bool
 
-    init(coordinator: ConsoleActionCoordinator? = nil) {
+    init(coordinator: ConsoleActionCoordinator? = nil, showsControls: Bool = true) {
         self.coordinator = coordinator
+        self.showsControls = showsControls
     }
 
     var body: some View {
         VStack(spacing: 12) {
+            if showsControls {
             ViewThatFits(in: .horizontal) {
                 HStack { navigationControls; Spacer(); resultControls }
                     .fixedSize(horizontal: true, vertical: false)
@@ -62,6 +68,7 @@ struct WorkspaceView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                     }
                 }
+            }
             }
             if workspace.showsMemoryGraph {
                 if isOnSupportingDisplay(.memoryGraph) {
@@ -134,7 +141,7 @@ struct WorkspaceView: View {
                 Button("Return here") { drawer.placementRef?.closeDisplay() }
             }
         } else {
-            WorkspaceResultPane(result: result, coordinator: coordinator)
+            WorkspaceResultPane(result: result, coordinator: coordinator, showsActions: showsControls)
         }
     }
 

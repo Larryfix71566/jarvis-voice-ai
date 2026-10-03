@@ -330,7 +330,7 @@ final class WaveEngine {
     }
 
     /// Audio state and easing stay in the shared engine. The adaptive renderer
-    /// draws the selected glass/plasma/comet treatment; rollback stays above.
+    /// always draws the crystal glass/plasma/comet treatment.
     private func drawAtom(context: inout GraphicsContext, size: CGSize, now: Double,
                           stageCenterX: CGFloat?, userLevel: Double,
                           outputLevel: Double, presentation: VoicePresentationState,

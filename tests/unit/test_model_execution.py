@@ -667,10 +667,11 @@ async def test_background_admission_reserves_capacity_and_prioritizes_interactiv
     assert admission.active_counts == (1, 1)
 
     foreground = asyncio.create_task(interactive())
-    for _ in range(20):
-        if admission.waiting_interactive:
-            break
-        await asyncio.sleep(0)
+    async def wait_for_interactive_waiter():
+        while admission.waiting_interactive != 1:
+            await asyncio.sleep(0.001)
+
+    await asyncio.wait_for(wait_for_interactive_waiter(), timeout=2)
     assert admission.waiting_interactive == 1
     assert not second_background_started.is_set()
 

@@ -26,6 +26,7 @@ def bind_db(tmp_path, monkeypatch):
     monkeypatch.setenv("JARVIS_AUTH_ENABLED", "true")
     monkeypatch.delenv("JARVIS_BIND_HOST", raising=False)
     monkeypatch.delenv("JARVIS_BIND_STRICT", raising=False)
+    monkeypatch.setenv("JARVIS_REMOTE_BIND_ENABLED", "true")
     run_migrations()
 
 
@@ -55,6 +56,26 @@ def test_auth_disabled_forces_loopback_even_when_remote_requested(bind_db, monke
     monkeypatch.setenv("JARVIS_BIND_HOST", "0.0.0.0")
     assert bind.resolve_bind_host("test") == "127.0.0.1"
     assert "bind_forced_loopback" in caplog.text
+
+
+@pytest.mark.parametrize("raw", [None, "", "false", "yes", "1", "ture"])
+def test_local_auth_forces_loopback_without_explicit_remote_opt_in(
+    bind_db, monkeypatch, caplog, raw
+):
+    monkeypatch.setenv("JARVIS_BIND_HOST", "100.64.1.2")
+    if raw is None:
+        monkeypatch.delenv("JARVIS_REMOTE_BIND_ENABLED", raising=False)
+    else:
+        monkeypatch.setenv("JARVIS_REMOTE_BIND_ENABLED", raw)
+    assert bind.resolve_bind_host("test") == "127.0.0.1"
+    assert "reason=remote_bind_disabled" in caplog.text
+
+
+def test_remote_opt_in_without_auth_still_forces_loopback(bind_db, monkeypatch):
+    monkeypatch.setenv("JARVIS_AUTH_ENABLED", "false")
+    monkeypatch.setenv("JARVIS_REMOTE_BIND_ENABLED", "true")
+    monkeypatch.setenv("JARVIS_BIND_HOST", "100.64.1.2")
+    assert bind.resolve_bind_host("test") == "127.0.0.1"
 
 
 def test_remote_bind_without_token_refuses(bind_db, monkeypatch):

@@ -1,0 +1,126 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Single Console Row</title><style>
+/* Page chrome (light/dark) */
+:root{--pg:#f5f5f3;--pgcard:#fff;--pgink:#1d1d1f;--pgdim:#66666b;--pgline:#e0e0dc;--rec:#1f7a3a;--recbg:#e5f4ea}
+@media (prefers-color-scheme:dark){:root{--pg:#121214;--pgcard:#1b1b1e;--pgink:#ececef;--pgdim:#9a9aa1;--pgline:#2e2e33;--rec:#7ed69a;--recbg:#16301f}}
+/* App tokens: exact values from AppTheme.swift on main 25735fd */
+.app{--bg:#15191D;--panel:#11151A;--hair:#2A343D;--acc:#2CC9FF;--accF:rgba(44,201,255,.12);--accD:rgba(44,201,255,.35);--tx:#E2F1F9;--dim:#8FA8B8;--amb:#FFB454;--grn:#3DDC97;--glass:rgba(30,36,43,.94)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--pg);color:var(--pgink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:24px 16px 60px}
+.wrap{max-width:1080px;margin:0 auto}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:17px;margin:34px 0 6px}
+.sub{color:var(--pgdim);font-size:13px}
+.note{background:var(--pgcard);border:1px solid var(--pgline);border-radius:10px;padding:12px 14px;margin:12px 0;font-size:13px}
+.note b{font-weight:600}.note ul{margin:6px 0 0;padding-left:18px}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px;margin-top:10px}
+@media(max-width:520px){.opts{grid-template-columns:1fr}}
+.opt{background:var(--pgcard);border:1px solid var(--pgline);border-radius:12px;padding:12px}
+.opt h3{margin:0 0 2px;font-size:15px}.opt .why{color:var(--pgdim);font-size:12.5px;margin:0 0 10px}
+.no{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:99px;background:var(--pgline);color:var(--pgdim);margin-left:6px;vertical-align:1px}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:99px;background:var(--recbg);color:var(--rec);margin-left:6px;vertical-align:1px}
+.cmp{font-size:12.5px;color:var(--pgdim);margin-top:8px}.cmp b{color:var(--pgink)}
+/* App window */
+.app{background:var(--bg);color:var(--tx);border-radius:10px;overflow:hidden;border:1px solid #000;font-size:12.5px;line-height:1.4;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.top{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--glass);border-bottom:1px solid var(--hair)}
+.brand{font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.08em}
+.pill{font:10px ui-monospace,Menlo,monospace;padding:2px 8px;border-radius:99px;border:1px solid var(--accD);color:var(--acc)}
+.sp{flex:1}.tb{font-size:11px;color:var(--dim);border:1px solid var(--hair);border-radius:6px;padding:2px 8px}
+.tb.on{color:var(--tx);border-color:var(--accD);background:var(--accF)}
+.stage{padding:12px;min-height:280px;display:flex;flex-direction:column;gap:8px}
+.voice{height:46px;border-top:1px solid var(--hair);display:flex;align-items:center;gap:10px;padding:0 12px;color:var(--dim);font-size:11px}
+.wave{flex:0 0 150px;height:20px;background:repeating-linear-gradient(90deg,var(--accD) 0 2px,transparent 2px 6px);mask:linear-gradient(90deg,transparent,#000 20%,#000 80%,transparent);-webkit-mask:linear-gradient(90deg,transparent,#000 20%,#000 80%,transparent)}
+.orb{width:26px;height:26px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0,var(--acc) 35%,#0b3a4a 80%);opacity:.85}
+/* Thread A1 bubbles */
+.b{max-width:78%;padding:8px 11px;border-radius:12px}
+.b.me{align-self:flex-end;background:rgba(44,201,255,.16);border:1px solid var(--accD)}
+.b.mo{align-self:flex-start;background:var(--panel);border:1px solid var(--hair)}
+.meta{font-size:10px;color:var(--dim);margin-bottom:2px}
+/* Thread A2 transcript rows */
+.row{display:grid;grid-template-columns:70px 1fr;gap:10px;padding:6px 0;border-bottom:1px solid rgba(42,52,61,.6)}
+.who{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.06em;padding-top:2px}
+.who.me{color:var(--acc)}.who.mo{color:var(--dim)}
+.t{font-size:10px;color:var(--dim);font-weight:400;display:block;letter-spacing:0}
+.mic{font-size:10px;color:var(--dim)}
+/* Cards */
+.card{border:1px solid var(--hair);background:var(--panel);border-radius:10px;padding:9px 11px;display:flex;gap:10px;align-items:center}
+.card .ic{width:32px;height:32px;border-radius:8px;background:var(--accF);display:grid;place-items:center;font-size:16px;flex:none}
+.card .ttl{font-weight:600}.card .s{color:var(--dim);font-size:11.5px}
+.btn{margin-left:auto;font-size:11px;border:1px solid var(--accD);color:var(--acc);border-radius:6px;padding:2px 9px;white-space:nowrap}
+.big{border:1px solid var(--hair);background:var(--panel);border-radius:10px;overflow:hidden}
+.big .hd{display:flex;align-items:center;gap:8px;padding:8px 11px;border-bottom:1px solid var(--hair)}
+.wx{display:grid;grid-template-columns:1fr 1.25fr;gap:0}
+.wx .l{padding:10px 11px}.temp{font-size:30px;font-weight:300}
+.days{display:flex;gap:10px;margin-top:6px;font-size:10.5px;color:var(--dim)}
+.map{background:linear-gradient(160deg,#1d2a33,#15232b);position:relative;min-height:128px}
+.map:before{content:"";position:absolute;inset:18% 20% 30% 30%;border-radius:45%;background:radial-gradient(circle,rgba(61,220,151,.55),rgba(255,180,84,.35) 55%,transparent 70%);filter:blur(4px)}
+.map span{position:absolute;left:8px;bottom:6px;font-size:10px;color:var(--dim)}
+.flag{font-size:10px;color:var(--amb);border:1px solid rgba(255,180,84,.4);border-radius:99px;padding:0 7px}
+.back{font-size:11px;color:var(--acc)}
+/* Recents menu */
+.menuwrap{position:relative;height:0}
+.menu{position:absolute;right:12px;top:4px;width:320px;background:var(--glass);border:1px solid var(--hair);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:6px;z-index:2}
+.sec{font:600 9.5px ui-monospace,Menlo,monospace;color:var(--dim);letter-spacing:.08em;padding:6px 8px 3px}
+.mi{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px}
+.mi.sel{background:var(--accF)}
+.mi .n{font:10px ui-monospace,Menlo,monospace;color:var(--dim);width:14px}
+.mi .k{width:18px;text-align:center}.mi .age{margin-left:auto;font-size:10px;color:var(--dim)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--acc)}
+.fresh{color:var(--grn)}
+.hr{height:1px;background:var(--hair);margin:4px 6px}
+.banner{display:flex;align-items:center;gap:8px;border:1px solid var(--accD);background:var(--accF);border-radius:8px;padding:6px 10px;font-size:11.5px}
+.ref{align-self:flex-start;display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--dim);border-left:2px solid var(--acc);padding:3px 9px}
+.hl{outline:2px solid var(--acc);outline-offset:2px}
+.fade{opacity:.45}
+.reader{background:var(--panel);border:1px solid var(--hair);border-radius:10px;padding:10px 12px}
+.reader h4{margin:0 0 4px;font-size:14px}.reader p{margin:0 0 6px;color:var(--tx)}
+.src{font-size:10.5px;color:var(--dim)}
+table.b2{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+table.b2 td,table.b2 th{border-top:1px solid var(--pgline);padding:6px 6px;text-align:left;vertical-align:top}
+.pick{background:var(--pgcard);border:2px solid var(--rec);border-radius:12px;padding:14px;margin-top:30px}
+code{font:12px ui-monospace,Menlo,monospace}
+
+.crow{display:flex;align-items:center;gap:6px;padding:8px 10px;background:rgba(17,21,26,.55);border-bottom:1px solid var(--hair);flex-wrap:nowrap;overflow:hidden}
+.crow .lbl{font-weight:600;font-size:12px;white-space:nowrap;margin-right:4px}
+.b{font-size:11px;border:1px solid var(--hair);border-radius:6px;padding:2px 8px;color:var(--tx);white-space:nowrap;background:rgba(255,255,255,.03)}
+.b.on{border-color:var(--accD);background:var(--accF);color:var(--acc)}
+.sep{width:1px;height:18px;background:var(--hair);margin:0 4px;flex:none}
+.grp{font:9px ui-monospace,Menlo,monospace;color:var(--dim);letter-spacing:.06em;margin-right:2px}
+.seg{display:inline-flex;border:1px solid var(--hair);border-radius:6px;overflow:hidden}.seg span{font-size:11px;padding:2px 8px}.seg .on{background:var(--acc);color:#04131a}
+.sp2{flex:1}
+.body{padding:12px;min-height:120px;color:var(--dim);font-size:12px}
+.hint{font-size:12.5px;color:var(--pgdim);margin:6px 0 14px}
+</style></head><body><div class="wrap">
+<h1>Single console row — approved 2026-09-30</h1>
+<div class="sub">WS-17 · Larry 09-30: "all buttons on the console line, none below". Drawn from <code>CommandConsoleView</code>, <code>AdaptiveStageView</code>, <code>WorkspaceView</code> and <code>WorkspaceResultPane</code> on main. Layout 2 (Command Console) only; the older layouts and the supporting display keep their own controls.</div>
+<div class="note" style="border:2px solid var(--rec)"><b>Approved by Larry, 2026-09-30:</b> one row, nothing below. Left to right:
+<ul><li><b>Conversation</b></li>
+<li><b>Results ▾</b> — click opens the results view; the arrow lists the open results (✓ shown, 📌 pinned, • unread) and a Close submenu. Replaces the tab strip and "Return to workspace".</li>
+<li><b>Knowledge ▾</b> — Knowledge Atlas, Memory graph (what Mortimer knows).</li>
+<li><b>Tools ▾</b> — Skills, Workflows (what Mortimer can do).</li>
+<li><b>Actions ▾</b> — only while a result is shown: Acting on A/B (comparison only), View Summary/Sources, Pin, Compare with ▸, Show on display ▸, Copy, Share…, Export….</li>
+<li><b>Expand voice</b> — right end, on the conversation only.</li></ul>
+Narrow windows drop the "Command Console" title, then show icons; every control keeps its name for VoiceOver and as a tooltip. Layouts 0 and 1, detached panels and the supporting display keep their own controls.</div>
+
+<h2>1 · On the conversation</h2>
+<div class="app"><div class="top"><span class="brand">MORTIMER</span><span class="pill">connected</span><span class="sp"></span><span class="tb">◧ Panels</span></div>
+<div class="crow"><span class="lbl">⌘ Command Console</span><span class="b on">Conversation</span><span class="b">Results ▾ 3</span><span class="b">Knowledge ▾</span><span class="b">Tools ▾</span><span class="sp2"></span><span class="b">Expand voice</span></div>
+<div class="body"><div class="row" style="grid-template-columns:70px 1fr"><div class="who me">YOU<span class="t">8:33</span></div><div style="color:var(--tx)">My location.</div></div><div class="row" style="grid-template-columns:70px 1fr"><div class="who mo">MORTIMER<span class="t">8:33</span></div><div style="color:var(--tx)">You're in Folly Beach, South Carolina, from your device's location.</div></div></div></div>
+<p class="hint">No second row: the thread starts right under the console line.</p>
+
+<h2>2 · A result open</h2>
+<div class="app"><div class="top"><span class="brand">MORTIMER</span><span class="pill">connected</span><span class="sp"></span><span class="tb">◧ Panels</span></div>
+<div class="crow"><span class="lbl">⌘ Command Console</span><span class="b">Conversation</span><span class="b on">Results ▾ 3</span><span class="b">Knowledge ▾</span><span class="b">Tools ▾</span><span class="sep"></span><span class="b">Actions ▾</span><span class="sp2"></span></div>
+<div class="body"><b style="color:var(--tx);font-size:14px">Research — Folly Beach SC history Civil War Morris Island Hurricane Hugo</b><br><br>1. Discover the History and Vibrant Community of Folly Beach, SC …</div></div>
+<p class="hint">The title stays above the result; its buttons are in <b>Actions ▾</b>.</p>
+
+<h2>3 · Two results compared</h2>
+<div class="app"><div class="crow"><span class="lbl">⌘</span><span class="b">Conversation</span><span class="b on">Results ▾ 3</span><span class="b">Knowledge ▾</span><span class="b">Tools ▾</span><span class="sep"></span><span class="b">Actions ▾</span><span class="sp2"></span></div>
+<div class="body" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="hl" style="padding:8px;border-radius:8px"><b style="color:var(--tx)">A · Weather — Folly Beach</b></div><div style="padding:8px;border:1px solid var(--hair);border-radius:8px"><b style="color:var(--tx)">B · Weather — London</b></div></div></div>
+<p class="hint">In a comparison, <b>Actions ▾</b> starts with "Acting on: A / B"; the chosen side is outlined. It uses the existing comparison-side state (<code>WorkspaceStore.comparisonSide</code>), so voice and pointer agree.</p>
+
+<h2>4 · A narrow window</h2>
+<div class="app" style="max-width:640px"><div class="crow"><span class="lbl">⌘</span><span class="b">💬</span><span class="b on">🔍 ▾</span><span class="b">📚 ▾</span><span class="b">🛠 ▾</span><span class="sep"></span><span class="b">⋯ ▾</span><span class="sp2"></span></div>
+<div class="body">The row never wraps: in a narrow window it shows icons (Conversation, Results, Knowledge, Tools, Actions), each with its full name as tooltip and VoiceOver label.</div></div>
+
+<div class="pick"><b>Built as CC7a.1b</b>, reviewed by Codex before merge. Recents details (numbers, pinned first, fresh age, voice by subject) still come in CC7a.3.</div>
+</div></body></html>

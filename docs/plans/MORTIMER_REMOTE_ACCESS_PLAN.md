@@ -1,6 +1,6 @@
 # Mortimer Remote Access Plan — per-client bearer tokens on every endpoint, Tailscale tunnel, fail-closed binds
 
-**Status:** Dormant Addendum R1 implementation deployed at `539f8f6`, 2026-09-28. Remote activation remains undecided; enabled-mode acceptance is open. Original plan drafted 2026-08-26. Implements roadmap track **T2** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.2). Gate: **G2**.
+**Status:** Dormant Addendum R1 implementation deployed at `539f8f6`, 2026-09-28. Addendum R2's local-only bind guard is implemented on the WS-04 branch; token onboarding is specified but not yet implemented or activated. Remote activation remains undecided; enabled-mode acceptance is open. Original plan drafted 2026-08-26. Implements roadmap track **T2** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.2). Gate: **G2**.
 
 **Author / origin.** Larry, quoted in the roadmap's origin block: *"ios app for remote connection to the AI Assistant via VPN tunnel for security"* and *"I want this data available to the AI and myself but secured from any intruder."* Roadmap R4 states the principle this plan implements: *"Token auth on every endpoint, even inside the tunnel. Why: a VPN authenticates devices, not callers; any app on a joined phone could otherwise call `/api/selfedit/run`."*
 
@@ -2722,3 +2722,140 @@ Focused R1/migration/watcher verification after the unset-token test update:
 helper, database upgrade/idempotency, progress watcher). The deployed runtime
 source is unchanged by this revalidation; only tests, example comments and
 status/evidence records changed.
+
+## Addendum R2 (2026-09-30) — prepare local bearer authentication without remote access
+
+**Status: guard implemented on branch; provisioning design only.** Larry approved preparing this WS-04 step so WS-03 can
+eventually read owner-scoped Versions, runtime inventory and creator activity.
+This addendum does not authorize turning on production authentication, binding
+off-host, minting live credentials, or activating a skill. R1.9's remote T2
+decision remains separate. The current production app/backend still run with
+authentication dormant, and the Skills owner-scoped endpoints correctly fail
+closed there.
+
+### R2.1 Decision and invariant
+
+Use R1.9 option **(c)** as an *explicit supervised preparation mode*, not as
+an automatic action on every deploy. It mints two distinct existing K1 tokens:
+one internal service token in the project vault under `JARVIS_SERVICE_TOKEN`,
+and one local Mac client token in the login Keychain item that
+`KeychainStore` already reads (service `com.mortimer.jarviskit`, account
+`http://127.0.0.1:7860`). Only SHA-256 hashes and non-secret token names live
+in `client_tokens` (migration `0034`). No token is returned by an HTTP/MCP
+endpoint or shown in the app. R1 A13 remains intact. This chooses the path
+that avoids routine terminal credential handling and an unauthenticated local
+pairing endpoint. It does not change K1 token format or add scopes.
+
+Reserve `JARVIS_REMOTE_BIND_ENABLED` in ROADMAP §3 before code. Its only read
+is in `jarvis/bind.py`; the exact string `true` enables consideration of a
+non-loopback `JARVIS_BIND_HOST`, and absent/false/typo forces `127.0.0.1` even
+when `JARVIS_AUTH_ENABLED=true`. The existing R1 tests for auth-off loopback
+remain. With the new gate true, the existing R1 requirement for auth, an
+unrevoked token and a bindable interface still applies. `JARVIS_AUTH_ENABLED`
+therefore controls *who may call*; the new key controls *whether a remote
+listener may exist*. R2 preparation and later local activation leave the
+remote key absent/false. No new migration, port or launchd label is needed.
+
+### R2.2 Implement in this order
+
+1. Add the `jarvis.bind.resolve_bind_host` gate and its truth table tests
+   before any provisioning work: auth off/remote flag on is loopback;
+   auth on/remote flag absent or false/remote host requested is loopback;
+   both flags true with no active token refuses; both true with a token retain
+   R1's bindable-address and strict/fallback behavior. Test invalid values
+   such as `yes` and `1` as false. Keep the native client URLs at loopback.
+2. Factor token creation in `jarvis.auth` into a function that inserts an
+   immutable named hash row and returns the plaintext **in process**. The
+   existing `python -m jarvis.auth add` CLI keeps its one-time stdout behavior
+   for explicit operator use; the new supervised caller never prints it.
+   Names are unique and never reused. Do not add a mint route or tool.
+3. Add a small JarvisKit executable target for Keychain provisioning. It
+   accepts the non-secret bot URL as an argument, reads exactly one K1 token
+   from stdin, calls `KeychainStore.setToken`, reads the same item back to
+   verify equality, and prints only success/failure. It must not put the token
+   in argv, shell history, logs or a temporary file. It uses the existing
+   `KeychainStore` implementation so accessibility and account derivation do
+   not drift. The target is a local operator helper, never an agent tool.
+4. Add `scripts/provision_local_auth.py` as the supervised coordinator. It
+   requires the production repository, loopback bot/admin URLs, an unlocked
+   vault and writable login Keychain, and refuses if the service vault entry
+   or local Keychain item already exists; rotation is a separate reviewed
+   operation. It creates unique `service-local-<UTC timestamp>` and
+   `larry-macbook-local-<UTC timestamp>` rows, stores the service plaintext
+   with `jarvis.vault.set_secret`, pipes the device plaintext to the Swift
+   helper, and verifies both by readback plus `verify_bearer` without echoing
+   either value. It reports only token names, storage presence and masked
+   verdicts. On a handled failure, revoke newly minted rows and delete only
+   storage items this invocation created. On an interrupted invocation, a
+   rerun must stop with the incomplete non-secret names and a documented
+   revoke/cleanup path; it must never silently mint replacements.
+5. Add an **opt-in** `--prepare-local-auth` path to the human-only
+   `scripts/deploy_main.sh`. It runs the normal exact-main phase A verification
+   and phase B rollback snapshot first, then invokes the coordinator while
+   authentication is still off. Normal DEPLOY-MAIN runs remain unchanged.
+   Preparation does not write `JARVIS_AUTH_ENABLED=true`, change
+   `JARVIS_BIND_HOST`, restart into enabled mode, or set the remote flag.
+   The receipt records the source revision, token names and masked proof only.
+6. Specify a separate, later **local activation** step in the same supervised
+   deploy path. It first checks both stored tokens against the DB, all current
+   internal callers, the native account URL, and an explicit loopback bind.
+   Then it atomically stages `JARVIS_AUTH_ENABLED=true` with
+   `JARVIS_REMOTE_BIND_ENABLED=false` in the production launch configuration,
+   restarts the bot/admin and their dependent callers, and probes authenticated
+   health. A failed probe restores the prior config and restarts the prior
+   local behavior; it does not restore the database over newer conversations.
+   This activation mode is **not** part of R2 preparation and needs Larry's
+   separate go-ahead after the preparation code and receipt are reviewed.
+
+For R2, update the `jarvis.auth` module comment that currently says Mortimer
+never stores plaintext: the auth database still stores only hashes, while the
+*explicit local preparation* stores the service token in the existing vault
+and the Mac client token in the existing device-only Keychain. Neither goes in
+`.env`, a receipt, or a PR. Keep `JARVIS_SERVICE_TOKEN` scoped to its existing
+declared internal children; do not widen `BASE_ENV_KEYS` or disable env scoping.
+
+### R2.3 Acceptance and rollback boundaries
+
+- Unit tests cover the complete two-flag bind table, mint-once/refuse-existing,
+  handled failure and interrupted retry, exact Keychain service/account,
+  no token in output/argv/receipt, and production flag unchanged after
+  preparation. Existing all-route 401 tests still run with auth explicitly on.
+- In a disposable database, vault and Keychain namespace, run preparation
+  twice: first succeeds and second refuses without another active token.
+  Inject failures after DB insert, vault write and Keychain write, and verify
+  only this attempt's partial state is removed. No live secret is used in CI.
+- A live **preparation** receipt requires the exact source revision, verified
+  vault/Keychain presence, both DB identities, auth still off and bot/admin
+  listeners on loopback only. No token value or protected user content may
+  appear in logs or artifacts. Passing preparation does **not** close G2 or
+  WS-03 SW-L.
+- Later local activation acceptance must show bare loopback admin and bot
+  requests return 401; both authenticated requests succeed; native Connect,
+  voice turn, `system_status`, Skills Versions and runtime inventory work;
+  creator remains subject to its separate sandbox/approval gates. Check the
+  actual listening sockets and an off-host probe: no LAN or Tailscale
+  listener. Revoke the local device token in a controlled test and verify
+  immediate 401 before rotating to a fresh named token.
+- Rollback from local activation sets `JARVIS_AUTH_ENABLED=false`, keeps the
+  remote-bind key false, restarts services and verifies the prior loopback
+  behavior. Prepared tokens may remain inert for a retry, or be revoked and
+  removed by a separate supervised cleanup; do not print or re-use a name.
+  Remote activation remains a new explicit decision with G2's tunnel, port,
+  revocation and physical-device tests, never a side effect of this rollout.
+
+**Handoff:** the next implementing model must first re-read current main,
+AGENTS.md, ROADMAP WS-04/CX-11 and R1.9, then land the guard separately from
+the supervised provisioner. It must not infer that this addendum
+is authorization to mint credentials or flip either runtime flag on Larry's
+Mac.
+
+### 2026-09-30 R2 guard checkpoint
+
+The separate `JARVIS_REMOTE_BIND_ENABLED` gate is implemented in `jarvis/bind.py`
+on the WS-04 branch, with an explicit-true test table and updated R1 remote
+cases. `.env.example` documents the two independent flags. Auth/bind/
+middleware/caller tests and bot/service-token/launch-guard tests pass 109/109
+combined, including both real startup entry points' resolved loopback host
+arguments. The supervised provisioner, native Keychain helper, local
+activation and live acceptance have not been implemented. The production
+flags and credentials have not changed.
