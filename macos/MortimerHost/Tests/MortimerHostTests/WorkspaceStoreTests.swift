@@ -322,4 +322,29 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertTrue(store.containsResult(pinned.id))
         XCTAssertEqual(store.results.count, 4, "open + pinned + historyLimit (2) others")
     }
+
+    /// Codex review of PR #164: on a layout switch the new stage appears
+    /// before the old one disappears. Each stage reports for itself, so the
+    /// departing stage cannot turn quiet arrivals off under its replacement.
+    func testQuietArrivalsFollowTheStagesThatShowTheThread() {
+        let store = WorkspaceStore()
+        let layoutOne = UUID(), layoutTwo = UUID(), laterTwo = UUID()
+        store.setQuietArrivals(false, owner: layoutOne)
+        XCTAssertFalse(store.quietArrivals)
+        store.setQuietArrivals(true, owner: layoutTwo)        // 1 -> 2: new stage appears
+        store.releaseQuietArrivals(owner: layoutOne)          // then the old one leaves
+        XCTAssertTrue(store.quietArrivals, "Layout 1 -> 2 keeps quiet arrivals on.")
+        store.setQuietArrivals(false, owner: layoutOne)       // 2 -> 1
+        store.releaseQuietArrivals(owner: layoutTwo)
+        XCTAssertFalse(store.quietArrivals, "Layout 2 -> 1 turns them off.")
+        store.setQuietArrivals(true, owner: laterTwo)         // 1 -> 2 again
+        store.releaseQuietArrivals(owner: layoutOne)
+        XCTAssertTrue(store.quietArrivals)
+        store.setQuietArrivals(false, owner: laterTwo)        // thread switched off
+        XCTAssertFalse(store.quietArrivals)
+        store.setQuietArrivals(true, owner: laterTwo)         // and on
+        XCTAssertTrue(store.quietArrivals)
+        store.releaseQuietArrivals(owner: laterTwo)           // 2 -> 0: no stage at all
+        XCTAssertFalse(store.quietArrivals)
+    }
 }

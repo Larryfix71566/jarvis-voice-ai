@@ -21,6 +21,8 @@ struct AdaptiveStageView: View {
     /// CC7a.1 (WS-17): the conversation thread replaces the two-caption
     /// stage in layout 2. See ConversationThread.
     @AppStorage(ConversationThread.flagKey) private var threadEnabled = true
+    /// This stage's identity for `WorkspaceStore.setQuietArrivals(_:owner:)`.
+    @State private var arrivalOwner = UUID()
     @EnvironmentObject private var client: JarvisClient
     @Environment(WorkspaceStore.self) private var workspace
     @Environment(ConversationStore.self) private var conversation
@@ -135,9 +137,12 @@ struct AdaptiveStageView: View {
         // CC7a.2 (WS-17): while the thread shows, results arrive quietly
         // (a card in the thread, or the "New" notice) instead of taking
         // the stage. Other layouts keep the previous arrival behaviour.
-        .onAppear { workspace.quietArrivals = showsThread }
-        .onChange(of: showsThread) { _, shows in workspace.quietArrivals = shows }
-        .onDisappear { workspace.quietArrivals = false }
+        // Reported per stage: on a layout switch the departing stage's
+        // onDisappear runs after its replacement's onAppear (Codex review
+        // of PR #164), so it withdraws only its own report.
+        .onAppear { workspace.setQuietArrivals(showsThread, owner: arrivalOwner) }
+        .onChange(of: showsThread) { _, shows in workspace.setQuietArrivals(shows, owner: arrivalOwner) }
+        .onDisappear { workspace.releaseQuietArrivals(owner: arrivalOwner) }
     }
 
     /// WS-17: in the Command Console (layout 2) every control lives in the

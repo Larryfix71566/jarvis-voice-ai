@@ -158,18 +158,16 @@ enum ConversationThread {
         return items
     }
 
-    /// New turns between two snapshots of the thread, found by row identity,
-    /// not by count: once the transcript is at its retention bound
-    /// (AppTuning.maxConversationEntries), a new turn replaces the oldest and
-    /// the count stays the same (Codex review of PR #140).
+    /// New items between two snapshots of the thread: the identities in
+    /// `current` that were not in `previous`, wherever they sit. Not by count
+    /// (at the retention bound, AppTuning.maxConversationEntries, a new turn
+    /// replaces the oldest; Codex review of PR #140) and not by position
+    /// (a reply is inserted before its turn's tool-first card, and closing
+    /// the last card moves no row; Codex review of PR #164). A replaced
+    /// transcript, such as a new session, counts as all new.
     static func newTurns(from previous: [String], to current: [String]) -> Int {
-        guard let lastSeen = previous.last else { return current.count }
-        guard let index = current.lastIndex(of: lastSeen) else {
-            // The newest row we had is gone: the transcript was replaced
-            // (for example a new session). Everything shown is new.
-            return current.count
-        }
-        return current.count - index - 1
+        let seen = Set(previous)
+        return current.reduce(0) { $0 + (seen.contains($1) ? 0 : 1) }
     }
 
     /// Within this many points of the end counts as reading the newest turn.

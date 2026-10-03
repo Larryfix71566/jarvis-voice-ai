@@ -1459,7 +1459,15 @@ requested action, not an arrival. Tests: `ConversationThreadTests` (card
 text for weather, research, image, text and protected results; placement;
 rendered card) and `WorkspaceStoreTests` (quiet arrivals keep the stage,
 notice set and cleared by Show, Back, Dismiss and close, retention bound,
-thread-off behaviour unchanged). UI2-23 remains a Mac check.
+thread-off behaviour unchanged). UI2-23 remains a Mac check. Codex review
+of PR #164 (10-02) found two P2 regressions, both fixed on the branch:
+(1) on a layout switch the departing stage's `onDisappear` ran after its
+replacement's `onAppear` and turned quiet arrivals off, so stages now
+report per identity (`setQuietArrivals(_:owner:)`,
+`releaseQuietArrivals(owner:)`); (2) `newTurns` counted by position, so a
+reply inserted before a tool-first card was missed and closing the last
+card counted rows as new; it now counts identities not seen before.
+Codex's probes are kept as `CC7a2ReviewRegressionTests`.
 
 ## 8. Acceptance evidence and regression gates
 

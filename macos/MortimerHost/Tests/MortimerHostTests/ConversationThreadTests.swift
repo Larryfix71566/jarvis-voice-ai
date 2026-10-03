@@ -262,6 +262,23 @@ final class ConversationThreadTests: XCTestCase {
         XCTAssertEqual(ConversationThread.newTurns(from: ["u1", "a1"], to: ["u1", "a1", "card-x"]), 1)
     }
 
+    /// Codex review of PR #164: new items are counted by identity, wherever
+    /// they sit. A reply inserted before its turn's tool-first card is new;
+    /// closing the last card adds nothing; a scrolled-up reader is told.
+    func testNewItemsAreCountedByIdentityNotPosition() {
+        XCTAssertEqual(ConversationThread.newTurns(from: ["u1", "card-x"], to: ["u1", "a1", "card-x"]), 1)
+        XCTAssertEqual(ConversationThread.newTurns(from: ["u1", "a1", "card-x"], to: ["u1", "a1"]), 0)
+        XCTAssertEqual(ConversationThread.newTurns(from: ["u1", "a1", "card-x"],
+                                                   to: ["u1", "a1", "card-x", "u2", "card-y"]), 2)
+        XCTAssertEqual(ConversationThread.newTurns(from: ["u1", "a1", "card-x"], to: ["a1", "card-x", "u2"]), 1,
+                       "At the retention bound: oldest dropped, one added.")
+        var follow = ConversationThread.Follow()
+        follow.scrolled(atBottom: false)
+        XCTAssertFalse(follow.rowsChanged(added: ConversationThread.newTurns(
+            from: ["u1", "card-x"], to: ["u1", "a1", "card-x"])))
+        XCTAssertEqual(follow.unseen, 1, "The reply that slid in above the card shows the New button.")
+    }
+
     /// UI2-23 evidence in the suite: the rendered thread shows the card's
     /// title and summary under the reply.
     func testRenderedThreadShowsAResultCard() throws {

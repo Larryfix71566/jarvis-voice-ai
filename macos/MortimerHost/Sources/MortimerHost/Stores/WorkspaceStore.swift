@@ -58,12 +58,17 @@ final class WorkspaceStore {
     /// the stage. The stage shows "New: … Show / Dismiss" for it; the
     /// arrival itself never changes the selection or the view.
     private(set) var arrivalNoticeID: UUID?
-    /// CC7a.2: on while layout 2 shows the conversation thread
-    /// (`AdaptiveStageView` keeps it in step with `ConversationThread`).
-    /// Every arrival is then quiet (see `receive(_:quietly:)`), whichever
-    /// route delivered it. Off by default, so other layouts and existing
-    /// callers keep the pre-CC7a behaviour.
+    /// CC7a.2: on while layout 2 shows the conversation thread. Every
+    /// arrival is then quiet (see `receive(_:quietly:)`), whichever route
+    /// delivered it. Off by default, so other layouts and existing callers
+    /// keep the pre-CC7a behaviour. Stages report through
+    /// `setQuietArrivals(_:owner:)`; tests may set it directly.
     var quietArrivals = false
+    /// Each stage's own answer, keyed by its identity (Codex review of PR
+    /// #164): on a layout switch the new stage appears before the old one
+    /// disappears, so a departing stage must remove only its own entry and
+    /// never overwrite its replacement's.
+    @ObservationIgnored private var quietArrivalOwners: [UUID: Bool] = [:]
     var showComparisonOnCompact = false
     private(set) var comparisonSide: WorkspaceComparisonSide = .a
     let exporter = WorkspaceExportCoordinator()
@@ -256,6 +261,18 @@ final class WorkspaceStore {
         unreadIDs.remove(id)
         if arrivalNoticeID == id { arrivalNoticeID = nil }
         inventoryRevision += 1
+    }
+
+    /// A stage reports whether it shows the conversation thread.
+    func setQuietArrivals(_ on: Bool, owner: UUID) {
+        quietArrivalOwners[owner] = on
+        quietArrivals = quietArrivalOwners.values.contains(true)
+    }
+
+    /// A stage that leaves the screen withdraws only its own report.
+    func releaseQuietArrivals(owner: UUID) {
+        quietArrivalOwners.removeValue(forKey: owner)
+        quietArrivals = quietArrivalOwners.values.contains(true)
     }
 
     /// "Dismiss" on the arrival notice. The result stays unread in the
