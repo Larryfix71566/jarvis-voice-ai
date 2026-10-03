@@ -98,6 +98,18 @@ final class SupportingDisplayCoordinator {
     private let display: DisplayWindowStore
     private let environment: Environment
     private var generation = 0
+    /// The accepted transfer still waiting for confirmation, if any. A newer
+    /// accepted transfer takes it over; a rejected request never touches it
+    /// (Codex review of #171).
+    private var pending: Pending?
+
+    /// What a chain of superseding transfers started from, so whichever one
+    /// settles last can put it back: the selection before the first one, and
+    /// whether the window was already open then.
+    private struct Pending {
+        let priorSelection: SupportingDisplayContent?
+        let windowWasOpen: Bool
+    }
     /// Reports pointer-initiated failures, which have no voice reply.
     var onPointerFailure: (@MainActor (Outcome) -> Void)?
 
@@ -119,9 +131,8 @@ final class SupportingDisplayCoordinator {
     }
 
     func transfer(_ content: SupportingDisplayContent, screenID requested: String?) async -> Outcome {
-        generation += 1
-        let mine = generation
-
+        // Steps 1-3 change nothing, so a refused or repeated request leaves a
+        // transfer that is still confirming alone.
         // 1. Content: a live result that may leave this window.
         if case .result(let id) = content {
             guard let result = workspace.results.first(where: { $0.id == id }) else {
@@ -172,12 +183,25 @@ final class SupportingDisplayCoordinator {
             return .alreadyShowing(title: title, screen: screenName)
         }
 
-        // 4. Apply.
-        let wasOpen = display.isWindowOpen
+        // 4. Accept and apply. An accepted transfer takes over any transfer
+        // still confirming, and with it the state that chain started from.
+        // (A pending chain's prior selection may be nil; it still wins.)
+        let priorSelection: SupportingDisplayContent?
+        let windowWasOpen: Bool
+        if let chain = pending {
+            priorSelection = chain.priorSelection
+            windowWasOpen = chain.windowWasOpen
+        } else {
+            priorSelection = workspace.supportingContent
+            windowWasOpen = display.isWindowOpen
+        }
         guard workspace.sendToDisplay(content) else {
             return .rejected(code: "result_unavailable",
                              reason: "That content can't be shown on the other display.")
         }
+        generation += 1
+        let mine = generation
+        pending = Pending(priorSelection: priorSelection, windowWasOpen: windowWasOpen)
         environment.assignDisplay(destination.id)
         environment.openDisplay()
 
@@ -185,19 +209,21 @@ final class SupportingDisplayCoordinator {
         let deadline = environment.now() + environment.confirmTimeout
         while true {
             guard mine == generation else {
+                // The newer transfer owns the window and the cleanup now.
                 return .failed(code: "superseded",
                                reason: "A newer display request replaced this one.")
             }
             if !environment.screens().contains(where: { $0.id == destination.id }) {
-                undo(content, wasOpen: wasOpen)
+                undo(content)
                 return .failed(code: "screen_disconnected",
                                reason: "\(Outcome.sentence(screenName)) disconnected before \(title) appeared on it, so it is back in the main window.")
             }
             if isPresented(content), environment.windowScreenID(.display) == destination.id {
+                pending = nil
                 return .presented(title: title, screen: screenName)
             }
             if environment.now() >= deadline {
-                undo(content, wasOpen: wasOpen)
+                undo(content)
                 return .failed(code: "not_confirmed",
                                reason: "The other display didn't confirm it is showing \(title), so it is back in the main window.")
             }
@@ -213,10 +239,16 @@ final class SupportingDisplayCoordinator {
     }
 
     /// A failed transfer must not leave main pointing at an absent window or
-    /// an empty window open.
-    private func undo(_ content: SupportingDisplayContent, wasOpen: Bool) {
-        if workspace.supportingContent == content { workspace.showOriginalDisplayPanels() }
-        if !wasOpen { environment.closeDisplay() }
+    /// an empty window open. It puts back what the chain of transfers started
+    /// from: the earlier selection, and a closed window if it was closed.
+    private func undo(_ content: SupportingDisplayContent) {
+        guard let chain = pending else { return }
+        pending = nil
+        if workspace.supportingContent == content {
+            let restored = chain.priorSelection.map { $0 != content && workspace.sendToDisplay($0) } ?? false
+            if !restored { workspace.showOriginalDisplayPanels() }
+        }
+        if !chain.windowWasOpen { environment.closeDisplay() }
     }
 
     // MARK: Inventory (plan D6)
@@ -237,29 +269,48 @@ final class SupportingDisplayCoordinator {
         }
     }
 
-    /// What the supporting display owns and where it is.
+    /// The most result IDs one inventory lists.
+    static let maxInventoryResultIDs = 6
+
+    /// What the supporting display shows and where it is, read from the
+    /// stage the window renders (`DisplayWindowStore.visibleStage`): an app
+    /// selection, transport panels, or both (Codex review of #171: a normal
+    /// `surface: window` result has no selection and must still be listed).
+    /// `content`/`result_id` name the first tile; `result_ids` lists every
+    /// listable result. A protected result's ID is never listed.
     func supportingDisplayInventory() -> JSONValue {
-        let selection = workspace.supportingContent
-        var content: JSONValue = .null
-        var resultID: JSONValue = .null
-        switch selection {
-        case .result(let id):
-            let protected = workspace.results.first(where: { $0.id == id })?.payload.isProtectedLocal ?? true
-            content = .string("result")
-            resultID = protected ? .null : .string(id.uuidString)
-        case .memoryGraph: content = .string("memory_graph")
-        case .skills: content = .string("skills")
-        case .workflows: content = .string("workflows")
-        case .skillDetail: content = .string("skill_detail")
-        case nil: break
+        let stage = display.visibleStage(selection: workspace.supportingContent,
+                                         layoutVersion: environment.layoutVersion())
+        func listable(_ id: UUID?) -> UUID? {
+            guard let id, let result = workspace.results.first(where: { $0.id == id }),
+                  !result.payload.isProtectedLocal else { return nil }
+            return id
         }
+        func describe(_ item: DisplayWindowStore.StageItem) -> (kind: String, ids: [UUID]) {
+            switch item {
+            case .selection(.result(let id)): return ("result", [listable(id)].compactMap { $0 })
+            case .selection(.memoryGraph): return ("memory_graph", [])
+            case .selection(.skills): return ("skills", [])
+            case .selection(.workflows): return ("workflows", [])
+            case .selection(.skillDetail): return ("skill_detail", [])
+            case .panel(let panel):
+                let kind = panel.allPayloads.contains(where: DisplayWindowStore.isMemoryGraphPayload)
+                    ? "memory_graph" : "result"
+                return (kind, panel.allWorkspaceIDs.compactMap(listable))
+            }
+        }
+        let described = stage.map(describe)
+        var resultIDs: [UUID] = []
+        for id in described.flatMap({ $0.ids }) where !resultIDs.contains(id) { resultIDs.append(id) }
         let open = display.isWindowOpen
         return .object([
             "open": .bool(open),
-            "content": content,
-            "result_id": resultID,
+            "content": described.first.map { JSONValue.string($0.kind) } ?? .null,
+            "result_id": described.first?.ids.first.map { JSONValue.string($0.uuidString) } ?? .null,
+            "result_ids": .array(resultIDs.prefix(Self.maxInventoryResultIDs).map { JSONValue.string($0.uuidString) }),
+            "tiles": .number(Double(stage.count)),
             "screen_id": open ? (environment.windowScreenID(.display).map(JSONValue.string) ?? .null) : .null,
-            "presented": .bool(selection.map { isPresented($0) } ?? false),
+            "presented": .bool(open && !stage.isEmpty),
         ])
     }
 

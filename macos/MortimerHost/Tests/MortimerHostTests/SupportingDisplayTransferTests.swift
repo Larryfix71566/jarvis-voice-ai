@@ -254,6 +254,7 @@ final class SupportingDisplayTransferTests: XCTestCase {
         XCTAssertEqual(f.coordinator.supportingDisplayInventory(), .object([
             "open": .bool(true), "content": .string("result"),
             "result_id": .string(item.id.uuidString),
+            "result_ids": .array([.string(item.id.uuidString)]), "tiles": .number(1),
             "screen_id": .string(FakeDisplay.dell.id), "presented": .bool(true),
         ]))
     }
@@ -372,5 +373,199 @@ final class SupportingDisplayTransferTests: XCTestCase {
         XCTAssertTrue(workspace.sendToDisplay(.memoryGraph))
         router.handle(command)
         XCTAssertEqual(opened, ["display"], "with content it opens as before")
+    }
+
+    // Independent Codex review probes. Desired behavior; no implementation edits.
+    func testReviewRejectedRequestDoesNotAbandonAnInFlightTransfer() async throws {
+        let f = fixture()
+        let item = try weather()
+        f.workspace.receive(item)
+        f.fake.onOpen = { f.display.setWindowOpen(true) }
+        var env = f.fake.environment()
+        var pendingCoordinator: SupportingDisplayCoordinator!
+        var rejection: SupportingDisplayCoordinator.Outcome?
+        env.pause = {
+            rejection = await pendingCoordinator.transfer(.result(UUID()), screenID: nil)
+            f.fake.displayScreen = FakeDisplay.dell.id
+        }
+        pendingCoordinator = SupportingDisplayCoordinator(workspace: f.workspace, display: f.display,
+                                                         environment: env)
+        let original = await pendingCoordinator.transfer(.result(item.id), screenID: nil)
+        XCTAssertEqual(rejection?.code, "result_unavailable")
+        XCTAssertEqual(original.status, "ok", "a rejected request changed nothing and must not cancel the valid transfer")
+    }
+
+    func testReviewFailedReplacementClosesTheWindowOpenedByTheSupersededTransfer() async throws {
+        let f = fixture()
+        let first = try weather()
+        let replacement = try payload(#"{"title":"Research","body":"Evidence","surface":"window"}"#)
+        f.workspace.receive(first); f.workspace.receive(replacement)
+        f.fake.onOpen = { f.display.setWindowOpen(true) }
+        var env = f.fake.environment()
+        var pendingCoordinator: SupportingDisplayCoordinator!
+        var replacing = false
+        var replacementOutcome: SupportingDisplayCoordinator.Outcome?
+        env.pause = {
+            f.fake.clock += 0.25
+            if !replacing {
+                replacing = true
+                replacementOutcome = await pendingCoordinator.transfer(.result(replacement.id), screenID: nil)
+            } else { await Task.yield() }
+        }
+        pendingCoordinator = SupportingDisplayCoordinator(workspace: f.workspace, display: f.display,
+                                                         environment: env)
+        let original = await pendingCoordinator.transfer(.result(first.id), screenID: nil)
+        XCTAssertEqual(original.code, "superseded")
+        XCTAssertEqual(replacementOutcome?.code, "not_confirmed")
+        XCTAssertNil(f.workspace.supportingContent)
+        XCTAssertFalse(f.display.isWindowOpen, "neither request confirmed; the chain-created empty window must close")
+        XCTAssertEqual(f.fake.closed, 1)
+    }
+
+    func testReviewFixedPanelDetachHonorsItsRequestedScreen() {
+        let f = fixture()
+        let panels = PanelStore()
+        let console = consoleCoordinator(f, panels: panels)
+        let bad = console.execute(request(.panelDetach, target: "results",
+            args: ["screen_id": .string("DISCONNECTED")], revision: f.workspace.consoleRevision))
+        XCTAssertEqual(bad, .invalid, "the fixed-panel route must validate the destination too")
+        XCTAssertFalse(panels.detached.contains(.results))
+        let good = console.execute(request(.panelDetach, target: "results",
+            args: ["screen_id": .string(FakeDisplay.dell.id)], revision: f.workspace.consoleRevision))
+        XCTAssertEqual(good, .applied)
+        XCTAssertEqual(panels.screenByPanel[.results], FakeDisplay.dell.id)
+    }
+
+    func testReviewInventoryReportsATransportResultActuallyPresentedOnTheSharedStage() async throws {
+        let f = fixture()
+        let item = try payload(#"{"title":"Web search","body":"Evidence","surface":"window"}"#)
+        f.workspace.receive(item)
+        XCTAssertNotNil(f.display.apply(item.payload, workspaceID: item.id))
+        f.fake.assigned = [FakeDisplay.dell.id]
+        f.fake.presentOnAssignedScreen()
+        XCTAssertNil(f.workspace.supportingContent, "the normal transport route does not set a supplemental selection")
+        XCTAssertTrue(f.coordinator.isPresented(.result(item.id)), "the result is actually in the visible shared stage")
+        guard case .object(let inventory) = f.coordinator.supportingDisplayInventory() else { return XCTFail("object") }
+        XCTAssertEqual(inventory["presented"], .bool(true), "inventory must not say nothing is presented")
+        XCTAssertEqual(inventory["content"], .string("result"))
+        XCTAssertEqual(inventory["result_id"], .string(item.id.uuidString))
+    }
+
+    // MARK: Ownership and cleanup across superseding transfers (repair of the review probes)
+
+    func testASupersededTransferLeavesItsSuccessfulSuccessorAlone() async throws {
+        let f = fixture()
+        let first = try weather()
+        let second = try payload(#"{"title":"Research","body":"Evidence","surface":"window"}"#)
+        f.workspace.receive(first); f.workspace.receive(second)
+        var opens = 0
+        f.fake.onOpen = {
+            opens += 1
+            f.display.setWindowOpen(true)
+            if opens == 2 { f.fake.displayScreen = f.fake.assigned.last }   // only the second presents
+        }
+        var env = f.fake.environment()
+        var coordinator: SupportingDisplayCoordinator!
+        var secondOutcome: SupportingDisplayCoordinator.Outcome?
+        env.pause = {
+            f.fake.clock += 0.25
+            if secondOutcome == nil {
+                secondOutcome = await coordinator.transfer(.result(second.id), screenID: nil)
+            }
+        }
+        coordinator = SupportingDisplayCoordinator(workspace: f.workspace, display: f.display, environment: env)
+        let firstOutcome = await coordinator.transfer(.result(first.id), screenID: nil)
+        XCTAssertEqual(secondOutcome?.status, "ok")
+        XCTAssertEqual(firstOutcome.code, "superseded")
+        XCTAssertEqual(f.workspace.supportingContent, .result(second.id), "the older request did not undo the newer one")
+        XCTAssertTrue(f.display.isWindowOpen)
+        XCTAssertEqual(f.fake.closed, 0)
+    }
+
+    func testAFailedTransferPutsBackTheDisplayItReplaced() async throws {
+        let f = fixture()
+        let earlier = try weather()
+        let next = try payload(#"{"title":"Research","body":"Evidence","surface":"window"}"#)
+        f.workspace.receive(earlier); f.workspace.receive(next)
+        let shown = await f.coordinator.transfer(.result(earlier.id), screenID: nil)
+        XCTAssertEqual(shown.status, "ok")
+        f.fake.onOpen = { f.fake.screens.removeAll { $0.id == FakeDisplay.dell.id } }
+        let failed = await f.coordinator.transfer(.result(next.id), screenID: nil)
+        XCTAssertEqual(failed.code, "screen_disconnected")
+        XCTAssertEqual(f.workspace.supportingContent, .result(earlier.id), "the display it replaced is back")
+        XCTAssertTrue(f.display.isWindowOpen, "a window that was already open stays open")
+        XCTAssertEqual(f.fake.closed, 0)
+    }
+
+    func testARejectedRequestLeavesNoTraceOnALaterFailure() async throws {
+        let f = fixture()
+        let item = try weather()
+        f.workspace.receive(item)
+        f.fake.onOpen = { f.display.setWindowOpen(true) }        // never on the right screen
+        var env = f.fake.environment()
+        var coordinator: SupportingDisplayCoordinator!
+        var refused: SupportingDisplayCoordinator.Outcome?
+        env.pause = {
+            f.fake.clock += 0.25
+            if refused == nil { refused = await coordinator.transfer(.result(item.id), screenID: "GONE") }
+        }
+        coordinator = SupportingDisplayCoordinator(workspace: f.workspace, display: f.display, environment: env)
+        let outcome = await coordinator.transfer(.result(item.id), screenID: nil)
+        XCTAssertEqual(refused?.code, "screen_unavailable")
+        XCTAssertEqual(outcome.code, "not_confirmed", "the valid transfer kept ownership and settled itself")
+        XCTAssertNil(f.workspace.supportingContent)
+        XCTAssertFalse(f.display.isWindowOpen)
+        XCTAssertEqual(f.fake.closed, 1)
+    }
+
+    // MARK: Detach destinations on every route
+
+    func testDetachOfAnOpenContentPanelHonorsItsRequestedScreen() throws {
+        let f = fixture()
+        let panels = PanelStore()
+        let console = consoleCoordinator(f, panels: panels)
+        let item = try weather()
+        f.workspace.receive(item)
+        XCTAssertEqual(console.execute(request(.panelDetach, target: "result:\(item.id.uuidString)",
+                                               revision: f.workspace.consoleRevision)), .applied)
+        let record = try XCTUnwrap(panels.contentRecords.values.first)
+        XCTAssertNil(record.screenID)
+        let uuid = record.id.rawValue.uuidString
+        XCTAssertEqual(console.execute(request(.panelDetach, target: uuid, args: ["screen_id": .string("GONE")],
+                                               revision: f.workspace.consoleRevision)), .invalid)
+        XCTAssertNil(panels.contentRecords[record.id]?.screenID, "a disconnected screen changes nothing")
+        XCTAssertEqual(console.execute(request(.panelDetach, target: uuid,
+                                               args: ["screen_id": .string(FakeDisplay.dell.id)],
+                                               revision: f.workspace.consoleRevision)), .applied)
+        XCTAssertEqual(panels.contentRecords[record.id]?.screenID, FakeDisplay.dell.id)
+        XCTAssertEqual(console.execute(request(.panelDetach, target: "result:\(item.id.uuidString)",
+                                               args: ["screen_id": .string(FakeDisplay.main.id)],
+                                               revision: f.workspace.consoleRevision)), .applied,
+                       "the content target names the open panel and moves it")
+        XCTAssertEqual(panels.contentRecords.count, 1)
+        XCTAssertEqual(panels.contentRecords[record.id]?.screenID, FakeDisplay.main.id)
+    }
+
+    // MARK: Inventory from the visible stage
+
+    func testInventoryListsEveryTileOnTheSharedStage() throws {
+        let f = fixture()
+        let item = try payload(#"{"title":"Web search","body":"Evidence","surface":"window"}"#)
+        f.workspace.receive(item)
+        XCTAssertNotNil(f.display.apply(item.payload, workspaceID: item.id))
+        XCTAssertTrue(f.workspace.sendToDisplay(.memoryGraph))
+        f.fake.assigned = [FakeDisplay.dell.id]
+        f.fake.presentOnAssignedScreen()
+        guard case .object(let shown) = f.coordinator.supportingDisplayInventory() else { return XCTFail("object") }
+        XCTAssertEqual(shown["content"], .string("memory_graph"), "the first tile, as the stage renders it")
+        XCTAssertEqual(shown["result_id"], .null)
+        XCTAssertEqual(shown["result_ids"], .array([.string(item.id.uuidString)]))
+        XCTAssertEqual(shown["tiles"], .number(2))
+        XCTAssertEqual(shown["presented"], .bool(true))
+        XCTAssertEqual(shown["screen_id"], .string(FakeDisplay.dell.id))
+        f.display.setWindowOpen(false)
+        guard case .object(let closed) = f.coordinator.supportingDisplayInventory() else { return XCTFail("object") }
+        XCTAssertEqual(closed["presented"], .bool(false), "nothing is presented while the window is closed")
+        XCTAssertEqual(closed["screen_id"], .null)
     }
 }

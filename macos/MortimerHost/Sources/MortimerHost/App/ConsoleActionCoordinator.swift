@@ -534,6 +534,11 @@ final class ConsoleActionCoordinator {
             return NSWorkspace.shared.open(url) ? .applied : .noop
         case .panelDetach, .panelReturn, .panelFocus, .panelClose, .panelFullscreen:
             guard let panels, let target = request.target else { return .invalid }
+            // WS-21 D5 (Codex review of #171): every detach form validates its
+            // destination before anything changes, and then lands there.
+            let detachScreen = request.action == .panelDetach
+                ? (stringArg(request, "screen_id") ?? request.secondaryTarget) : nil
+            if detachScreen != nil, !connectedScreen(detachScreen) { return .invalid }
             // Dynamic content panels are addressed by UUID after they appear
             // in the native inventory. Their exact content identity remains
             // in PanelStore, so a delayed title or screen label cannot retarget
@@ -541,6 +546,7 @@ final class ConsoleActionCoordinator {
             if let uuid = UUID(uuidString: target), let contentID = panels.contentRecords.keys.first(where: { $0.rawValue == uuid }) {
                 switch request.action {
                 case .panelDetach, .panelFocus:
+                    if let detachScreen { _ = panels.moveContent(contentID, to: detachScreen) }
                     panels.focusContent(contentID)
                     placement.openContentPanel(contentID,
                                                screenID: panels.contentRecord(contentID)?.screenID)
@@ -562,10 +568,12 @@ final class ConsoleActionCoordinator {
             // capacity outcome without evicting an existing panel.
             if request.action == .panelDetach, let content = PanelContent.parseTarget(target) {
                 guard contentIsAvailable(content) else { return .invalid }
-                let screen = stringArg(request, "screen_id") ?? request.secondaryTarget
-                if screen != nil, !connectedScreen(screen) { return .invalid }
-                switch panels.openContent(content, origin: target, screenID: screen) {
+                switch panels.openContent(content, origin: target, screenID: detachScreen) {
                 case .opened(let id), .focused(let id):
+                    // An already-open panel moves to the screen this request names.
+                    if let detachScreen, panels.contentRecord(id)?.screenID != detachScreen {
+                        _ = panels.moveContent(id, to: detachScreen)
+                    }
                     placement.openContentPanel(id, screenID: panels.contentRecord(id)?.screenID)
                     workspace.noteConsoleMutation()
                     return .applied
@@ -577,7 +585,12 @@ final class ConsoleActionCoordinator {
             switch request.action {
             case .panelDetach:
                 panels.detach(panel)
-                placement.openPanel(panel)
+                if let detachScreen {
+                    panels.move(panel, to: detachScreen)
+                    placement.openPanel(panel, screenID: detachScreen)
+                } else {
+                    placement.openPanel(panel)
+                }
             case .panelReturn, .panelClose:
                 panels.returnPanel(panel)
                 placement.dismissPanel(panel)

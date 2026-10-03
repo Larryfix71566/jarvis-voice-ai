@@ -1,0 +1,84 @@
+--- /Users/larryfix/Documents/Codex/2026-09-09/can/outputs/ws21-codex-review-20261003/SupportingDisplayTransferTests.PR171-original.swift	2026-10-03 15:53:12
++++ /Users/larryfix/Documents/Codex/2026-09-09/can/outputs/ws21-codex-review-20261003/SupportingDisplayTransferTests.with-codex-probes.swift	2026-10-03 15:51:37
+@@ -372,5 +372,81 @@
+         XCTAssertTrue(workspace.sendToDisplay(.memoryGraph))
+         router.handle(command)
+         XCTAssertEqual(opened, ["display"], "with content it opens as before")
++    }
++
++    // Independent Codex review probes. Desired behavior; no implementation edits.
++    func testReviewRejectedRequestDoesNotAbandonAnInFlightTransfer() async throws {
++        let f = fixture()
++        let item = try weather()
++        f.workspace.receive(item)
++        f.fake.onOpen = { f.display.setWindowOpen(true) }
++        var env = f.fake.environment()
++        var pendingCoordinator: SupportingDisplayCoordinator!
++        var rejection: SupportingDisplayCoordinator.Outcome?
++        env.pause = {
++            rejection = await pendingCoordinator.transfer(.result(UUID()), screenID: nil)
++            f.fake.displayScreen = FakeDisplay.dell.id
++        }
++        pendingCoordinator = SupportingDisplayCoordinator(workspace: f.workspace, display: f.display,
++                                                         environment: env)
++        let original = await pendingCoordinator.transfer(.result(item.id), screenID: nil)
++        XCTAssertEqual(rejection?.code, "result_unavailable")
++        XCTAssertEqual(original.status, "ok", "a rejected request changed nothing and must not cancel the valid transfer")
++    }
++
++    func testReviewFailedReplacementClosesTheWindowOpenedByTheSupersededTransfer() async throws {
++        let f = fixture()
++        let first = try weather()
++        let replacement = try payload(#"{"title":"Research","body":"Evidence","surface":"window"}"#)
++        f.workspace.receive(first); f.workspace.receive(replacement)
++        f.fake.onOpen = { f.display.setWindowOpen(true) }
++        var env = f.fake.environment()
++        var pendingCoordinator: SupportingDisplayCoordinator!
++        var replacing = false
++        var replacementOutcome: SupportingDisplayCoordinator.Outcome?
++        env.pause = {
++            f.fake.clock += 0.25
++            if !replacing {
++                replacing = true
++                replacementOutcome = await pendingCoordinator.transfer(.result(replacement.id), screenID: nil)
++            } else { await Task.yield() }
++        }
++        pendingCoordinator = SupportingDisplayCoordinator(workspace: f.workspace, display: f.display,
++                                                         environment: env)
++        let original = await pendingCoordinator.transfer(.result(first.id), screenID: nil)
++        XCTAssertEqual(original.code, "superseded")
++        XCTAssertEqual(replacementOutcome?.code, "not_confirmed")
++        XCTAssertNil(f.workspace.supportingContent)
++        XCTAssertFalse(f.display.isWindowOpen, "neither request confirmed; the chain-created empty window must close")
++        XCTAssertEqual(f.fake.closed, 1)
+     }
++
++    func testReviewFixedPanelDetachHonorsItsRequestedScreen() {
++        let f = fixture()
++        let panels = PanelStore()
++        let console = consoleCoordinator(f, panels: panels)
++        let bad = console.execute(request(.panelDetach, target: "results",
++            args: ["screen_id": .string("DISCONNECTED")], revision: f.workspace.consoleRevision))
++        XCTAssertEqual(bad, .invalid, "the fixed-panel route must validate the destination too")
++        XCTAssertFalse(panels.detached.contains(.results))
++        let good = console.execute(request(.panelDetach, target: "results",
++            args: ["screen_id": .string(FakeDisplay.dell.id)], revision: f.workspace.consoleRevision))
++        XCTAssertEqual(good, .applied)
++        XCTAssertEqual(panels.screenByPanel[.results], FakeDisplay.dell.id)
++    }
++
++    func testReviewInventoryReportsATransportResultActuallyPresentedOnTheSharedStage() async throws {
++        let f = fixture()
++        let item = try payload(#"{"title":"Web search","body":"Evidence","surface":"window"}"#)
++        f.workspace.receive(item)
++        XCTAssertNotNil(f.display.apply(item.payload, workspaceID: item.id))
++        f.fake.assigned = [FakeDisplay.dell.id]
++        f.fake.presentOnAssignedScreen()
++        XCTAssertNil(f.workspace.supportingContent, "the normal transport route does not set a supplemental selection")
++        XCTAssertTrue(f.coordinator.isPresented(.result(item.id)), "the result is actually in the visible shared stage")
++        guard case .object(let inventory) = f.coordinator.supportingDisplayInventory() else { return XCTFail("object") }
++        XCTAssertEqual(inventory["presented"], .bool(true), "inventory must not say nothing is presented")
++        XCTAssertEqual(inventory["content"], .string("result"))
++        XCTAssertEqual(inventory["result_id"], .string(item.id.uuidString))
++    }
+ }

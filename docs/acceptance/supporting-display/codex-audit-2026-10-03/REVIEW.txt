@@ -1,0 +1,29 @@
+Codex review of PR #171 (WS-21), 2026-10-03
+Head reviewed and rechecked: 43f3d5b803ac600965ab952b9345668f5924ec3c
+Verdict: request changes; do not merge or deploy this head.
+Claude remains implementation owner. No app code changed by Codex.
+
+Checks: all five GitHub checks green. Independently: original SupportingDisplayTransferTests 17/17 pass; Python console/actions/protocol/UI focused tests 47/47 pass.
+Four independent desired-behavior probes fail, with nine assertion failures, in PR171-review-probes.diff and ws21-pr171-review-probes.log.
+
+[P2] Rejecting a request must not supersede an accepted in-flight transfer
+SupportingDisplayCoordinator.swift:122-123 increments generation before validating content/destination. A valid weather transfer awaiting window placement is canceled as superseded by a request for a nonexistent result, even though that new request is rejected without applying a transfer. The probe advances the first window onto its correct screen after the rejection; the original still returns error.
+Repair: validate content/destination before accepting the new generation. Only an accepted transfer may take ownership from the previous one. Keep rejected requests side-effect-free. Preserve the independent probe's expected success for the valid request.
+
+[P2] Carry window-creation ownership through superseding requests
+SupportingDisplayCoordinator.swift:217-219 closes only when that invocation's wasOpen was false. A creates the window and waits; B supersedes A and sees it open; B times out, clears selection, and does not close it. A exits superseded without cleanup. Both requests fail and an empty window remains. Probe confirms isWindowOpen=true and zero close calls.
+Repair: transfer window-creation/cleanup responsibility to the accepted successor, or use an explicit pending-transfer transaction state. The final failure must dispose of a window created by the request chain, while an older request must not undo a newer successful request or an unrelated preexisting display.
+
+[P2] Validate and honor screen_id on every panel_detach target form
+ConsoleActionCoordinator.swift:576-580: fixed enum panels only detach and open; args.screen_id is ignored. panel_detach target=results screen_id=DISCONNECTED returns applied and detaches; a connected ID also returns applied but screenByPanel[results] stays nil. Existing content-panel UUID branch also ignores detach's requested screen.
+Repair: centralize detach destination validation before any PanelStore mutation for content targets, existing content-panel UUIDs, and fixed enum panels. Pass the validated destination into placement and persist its ownership. Reject disconnected screens without creating/detaching/focusing anything.
+
+[P2] Inventory must report transport-owned shared-stage content
+SupportingDisplayCoordinator.swift:241-262 inspects only workspace.supportingContent. A normal surface=window web-search result belongs to DisplayWindowStore, with no supplemental selection. The shared stage presents it, and isPresented(result) returns true, but inventory returns presented=false, content=null, result_id=null.
+Repair: derive inventory from the actual visible shared stage, including transport panels plus supplemental selection, using the same presentation rule as the renderer. If multiple results are visible, represent them with bounded nonprotected result IDs rather than claiming there is no content. Keep requested/published inventories identical.
+
+Diagnostic import correction
+The original six VoiceDisplayAuditTests are characterization tests and PASSED on 63aaeef by asserting the defects. Preserve them unchanged as archived evidence, but adapt/reverse expected assertions and injected seams when making executable repair regressions. The plan section 4 requirement to add them unchanged and have them fail on 63aaeef is contradictory and must be corrected. The original Python probes print observations; they were never pass/fail tests.
+
+Single-screen menus refusing Show on display is consistent with the supporting-screen transfer design. No new layout or changes to arrival routing are requested.
+External-monitor live acceptance remains open. Current production was not changed by this review.

@@ -1,0 +1,67 @@
+Building for debugging...
+[1 / 4]
+[2 / 6] MortimerHostTests-product
+[4 / 8] MortimerHostTests-product
+/private/tmp/ws21-pr171-review-zhoi_5et/macos/MortimerHost/Tests/MortimerHostTests/CompactConversationTests.swift:164:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+162 |     func testSavedCompactPreferenceChangesNativeConversationPresentation() throws {
+163 |         _ = NSApplication.shared
+164 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+165 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+166 |         let suite = "compact-conversation-" + UUID().uuidString
+
+/private/tmp/ws21-pr171-review-zhoi_5et/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:156:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+154 |     func testOverflowButtonsReachBothEndsWithoutChangingSelection() throws {
+155 |         _ = NSApplication.shared
+156 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+157 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+158 |         let selection = HeaderSelection()
+
+/private/tmp/ws21-pr171-review-zhoi_5et/macos/MortimerHost/Tests/MortimerHostTests/SkillsWorkspaceRenderingTests.swift:478:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+476 |     func testLibraryAndSelectedProcessStepRenderAtWideAndNarrowWidths() throws {
+477 |         _ = NSApplication.shared
+478 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+479 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+480 |         let client = JarvisClient(config: JarvisConfig(
+
+/private/tmp/ws21-pr171-review-zhoi_5et/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayAcceptanceTests.swift:125:30: warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+123 |     func testReturningToOriginalPanelsPreservesResearchPinsAndReadingState() throws {
+124 |         _ = NSApplication.shared
+125 |         NSApplication.shared.accessibilitySetValue(true,
+    |                              `- warning: 'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h) [#DeprecatedDeclaration]
+126 |             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+127 |         let suite = "supporting-display-" + UUID().uuidString
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[10 / 12] MortimerHostTests-product
+Build complete! (1.30 sec)
+Test Suite 'Selected tests' started at 2026-10-03 15:51:48.226.
+Test Suite 'MortimerHostTests.xctest' started at 2026-10-03 15:51:48.227.
+Test Suite 'SupportingDisplayTransferTests' started at 2026-10-03 15:51:48.227.
+Test Case '-[MortimerHostTests.SupportingDisplayTransferTests testReviewFailedReplacementClosesTheWindowOpenedByTheSupersededTransfer]' started.
+/private/tmp/ws21-pr171-review-zhoi_5et/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayTransferTests.swift:420: error: -[MortimerHostTests.SupportingDisplayTransferTests testReviewFailedReplacementClosesTheWindowOpenedByTheSupersededTransfer] : XCTAssertFalse failed - neither request confirmed; the chain-created empty window must close
+/private/tmp/ws21-pr171-review-zhoi_5et/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayTransferTests.swift:421: error: -[MortimerHostTests.SupportingDisplayTransferTests testReviewFailedReplacementClosesTheWindowOpenedByTheSupersededTransfer] : XCTAssertEqual failed: ("0") is not equal to ("1")
+Test Case '-[MortimerHostTests.SupportingDisplayTransferTests testReviewFailedReplacementClosesTheWindowOpenedByTheSupersededTransfer]' failed (0.188 seconds).
+Test Case '-[MortimerHostTests.SupportingDisplayTransferTests testReviewFixedPanelDetachHonorsItsRequestedScreen]' started.
+/private/tmp/ws21-pr171-review-zhoi_5et/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayTransferTests.swift:430: error: -[MortimerHostTests.SupportingDisplayTransferTests testReviewFixedPanelDetachHonorsItsRequestedScreen] : XCTAssertEqual failed: ("applied") is not equal to ("invalid") - the fixed-panel route must validate the destination too
+/private/tmp/ws21-pr171-review-zhoi_5et/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayTransferTests.swift:431: error: -[MortimerHostTests.SupportingDisplayTransferTests testReviewFixedPanelDetachHonorsItsRequestedScreen] : XCTAssertFalse failed
+/private/tmp/ws21-pr171-review-zhoi_5et/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayTransferTests.swift:435: error: -[MortimerHostTests.SupportingDisplayTransferTests testReviewFixedPanelDetachHonorsItsRequestedScreen] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("DELL-0001")")
+Test Case '-[MortimerHostTests.SupportingDisplayTransferTests testReviewFixedPanelDetachHonorsItsRequestedScreen]' failed (0.021 seconds).
+Test Case '-[MortimerHostTests.SupportingDisplayTransferTests testReviewInventoryReportsATransportResultActuallyPresentedOnTheSharedStage]' started.
+/private/tmp/ws21-pr171-review-zhoi_5et/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayTransferTests.swift:448: error: -[MortimerHostTests.SupportingDisplayTransferTests testReviewInventoryReportsATransportResultActuallyPresentedOnTheSharedStage] : XCTAssertEqual failed: ("Optional(JarvisKit.JSONValue.bool(false))") is not equal to ("Optional(JarvisKit.JSONValue.bool(true))") - inventory must not say nothing is presented
+/private/tmp/ws21-pr171-review-zhoi_5et/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayTransferTests.swift:449: error: -[MortimerHostTests.SupportingDisplayTransferTests testReviewInventoryReportsATransportResultActuallyPresentedOnTheSharedStage] : XCTAssertEqual failed: ("Optional(JarvisKit.JSONValue.null)") is not equal to ("Optional(JarvisKit.JSONValue.string("result"))")
+/private/tmp/ws21-pr171-review-zhoi_5et/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayTransferTests.swift:450: error: -[MortimerHostTests.SupportingDisplayTransferTests testReviewInventoryReportsATransportResultActuallyPresentedOnTheSharedStage] : XCTAssertEqual failed: ("Optional(JarvisKit.JSONValue.null)") is not equal to ("Optional(JarvisKit.JSONValue.string("F78E5186-C5E7-4235-AA1C-2C579BB85EDC"))")
+Test Case '-[MortimerHostTests.SupportingDisplayTransferTests testReviewInventoryReportsATransportResultActuallyPresentedOnTheSharedStage]' failed (0.001 seconds).
+Test Case '-[MortimerHostTests.SupportingDisplayTransferTests testReviewRejectedRequestDoesNotAbandonAnInFlightTransfer]' started.
+/private/tmp/ws21-pr171-review-zhoi_5et/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayTransferTests.swift:394: error: -[MortimerHostTests.SupportingDisplayTransferTests testReviewRejectedRequestDoesNotAbandonAnInFlightTransfer] : XCTAssertEqual failed: ("error") is not equal to ("ok") - a rejected request changed nothing and must not cancel the valid transfer
+Test Case '-[MortimerHostTests.SupportingDisplayTransferTests testReviewRejectedRequestDoesNotAbandonAnInFlightTransfer]' failed (0.000 seconds).
+Test Suite 'SupportingDisplayTransferTests' failed at 2026-10-03 15:51:48.437.
+	 Executed 4 tests, with 9 failures (0 unexpected) in 0.210 (0.210) seconds
+Test Suite 'MortimerHostTests.xctest' failed at 2026-10-03 15:51:48.437.
+	 Executed 4 tests, with 9 failures (0 unexpected) in 0.210 (0.210) seconds
+Test Suite 'Selected tests' failed at 2026-10-03 15:51:48.437.
+	 Executed 4 tests, with 9 failures (0 unexpected) in 0.210 (0.211) seconds
+Note: Some test targets reported failures:
+  - MortimerHostTests (XCTest)
