@@ -21,6 +21,8 @@ struct AdaptiveStageView: View {
     /// CC7a.1 (WS-17): the conversation thread replaces the two-caption
     /// stage in layout 2. See ConversationThread.
     @AppStorage(ConversationThread.flagKey) private var threadEnabled = true
+    /// This stage's identity for `WorkspaceStore.setQuietArrivals(_:owner:)`.
+    @State private var arrivalOwner = UUID()
     @EnvironmentObject private var client: JarvisClient
     @Environment(WorkspaceStore.self) private var workspace
     @Environment(ConversationStore.self) private var conversation
@@ -78,7 +80,7 @@ struct AdaptiveStageView: View {
                         .padding(.top, AdaptiveLayoutMetrics.workspacePadding)
                         }
                         if showsThread {
-                            ConversationThreadView()
+                            ConversationThreadView(coordinator: coordinator)
                         } else {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 10) {
@@ -132,6 +134,15 @@ struct AdaptiveStageView: View {
             }
             .animation(AdaptiveTransition.animation(reduceMotion: reduceMotion), value: mode)
         }
+        // CC7a.2 (WS-17): while the thread shows, results arrive quietly
+        // (a card in the thread, or the "New" notice) instead of taking
+        // the stage. Other layouts keep the previous arrival behaviour.
+        // Reported per stage: on a layout switch the departing stage's
+        // onDisappear runs after its replacement's onAppear (Codex review
+        // of PR #164), so it withdraws only its own report.
+        .onAppear { workspace.setQuietArrivals(showsThread, owner: arrivalOwner) }
+        .onChange(of: showsThread) { _, shows in workspace.setQuietArrivals(shows, owner: arrivalOwner) }
+        .onDisappear { workspace.releaseQuietArrivals(owner: arrivalOwner) }
     }
 
     /// WS-17: in the Command Console (layout 2) every control lives in the
@@ -173,8 +184,23 @@ struct AdaptiveStageView: View {
         }
     }
 
+    /// CC7a.2: while the thread is on and something other than the
+    /// conversation is on the stage, a quiet arrival's "New: … Show /
+    /// Dismiss" notice sits above it.
     @ViewBuilder
     private var compactStageContent: some View {
+        if showsThread && !workspace.showsConversation {
+            VStack(spacing: 0) {
+                ArrivalNoticeView(coordinator: coordinator)
+                stageBody
+            }
+        } else {
+            stageBody
+        }
+    }
+
+    @ViewBuilder
+    private var stageBody: some View {
         if workspace.showsSkills {
             SkillsWorkspaceView(coordinator: coordinator)
         } else if workspace.showsConversation && showsThread {
@@ -185,7 +211,7 @@ struct AdaptiveStageView: View {
                         .padding(.top, AdaptiveLayoutMetrics.workspacePadding)
                         .padding(.bottom, 4)
                 }
-                ConversationThreadView()
+                ConversationThreadView(coordinator: coordinator)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else if workspace.showsConversation {

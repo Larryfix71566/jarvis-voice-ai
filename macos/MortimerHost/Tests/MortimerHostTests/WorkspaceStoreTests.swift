@@ -237,4 +237,114 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertNil(resultObject["body"])
         XCTAssertNil(payload["path"])
     }
+
+    // MARK: CC7a.2 (WS-17): quiet arrivals while the conversation thread shows
+
+    /// UI2-23: a result that arrives never takes the stage. On the
+    /// conversation it is a card in the thread; while something else is
+    /// shown it raises the "New" notice, which Show, Back to the
+    /// conversation, Dismiss or closing the result clear.
+    func testQuietArrivalsNeverChangeTheStageAndRaiseTheNoticeOnlyWhileReading() throws {
+        let store = WorkspaceStore()
+        store.quietArrivals = true
+        let first = try result()
+        store.receive(first)
+        XCTAssertTrue(store.showsConversation, "The first result of a session stays a card in the thread.")
+        XCTAssertEqual(store.activeID, first.id, "It is the active result for the Results view, not shown.")
+        XCTAssertTrue(store.unreadIDs.contains(first.id))
+        XCTAssertNil(store.arrivalNoticeID, "On the conversation the card itself is the notice.")
+
+        store.openAtlas()
+        let second = try result()
+        store.receive(second)
+        XCTAssertTrue(store.showsAtlas, "Reading the Atlas is not interrupted.")
+        XCTAssertEqual(store.activeID, first.id)
+        XCTAssertEqual(store.arrivalNoticeID, second.id)
+        store.select(second.id)
+        XCTAssertNil(store.arrivalNoticeID, "Show opens it and clears the notice.")
+        XCTAssertFalse(store.unreadIDs.contains(second.id))
+
+        let third = try result()
+        store.receive(third)
+        XCTAssertEqual(store.activeID, second.id, "The open result keeps focus.")
+        XCTAssertEqual(store.arrivalNoticeID, third.id)
+        store.dismissArrivalNotice()
+        XCTAssertNil(store.arrivalNoticeID)
+        XCTAssertTrue(store.unreadIDs.contains(third.id), "Dismiss leaves it unread in the thread and Results.")
+
+        let fourth = try result()
+        store.receive(fourth)
+        store.close(fourth.id)
+        XCTAssertNil(store.arrivalNoticeID, "Closing the result ends its notice.")
+
+        let fifth = try result()
+        store.receive(fifth)
+        store.returnToConversation()
+        XCTAssertNil(store.arrivalNoticeID, "Back on the conversation the card is in the thread.")
+        XCTAssertTrue(store.showsConversation)
+    }
+
+    /// Weather was brought to the front on arrival (WS-15 PR 2); with the
+    /// thread on it arrives like every other result. The router's only
+    /// change is to skip `select` while `quietArrivals` is on, so the store
+    /// state after `receive` is the whole behaviour.
+    func testQuietArrivalKeepsAnOpenResultInFocusAndOffKeepsThePreviousBehaviour() throws {
+        let quiet = WorkspaceStore()
+        quiet.quietArrivals = true
+        let open = try result(), weather = try result()
+        quiet.receive(open)
+        quiet.select(open.id)
+        quiet.receive(weather)
+        XCTAssertEqual(quiet.activeID, open.id)
+        XCTAssertEqual(quiet.arrivalNoticeID, weather.id)
+        XCTAssertFalse(quiet.showsConversation)
+
+        let previous = WorkspaceStore()
+        let incoming = try result()
+        previous.receive(incoming)
+        XCTAssertFalse(previous.showsConversation, "Thread off: the first result still opens the workspace.")
+        XCTAssertNil(previous.arrivalNoticeID, "Thread off: no notice is ever raised.")
+    }
+
+    /// Quiet arrivals keep the retention bound and never evict the open
+    /// result or a pin.
+    func testQuietArrivalsKeepTheRetentionBound() throws {
+        let store = WorkspaceStore(historyLimit: 2)
+        store.quietArrivals = true
+        let open = try result()
+        store.receive(open)
+        store.select(open.id)
+        let pinned = try result()
+        store.receive(pinned)
+        XCTAssertTrue(store.pin(pinned.id))
+        for _ in 0..<6 { store.receive(try result()) }
+        XCTAssertTrue(store.containsResult(open.id))
+        XCTAssertTrue(store.containsResult(pinned.id))
+        XCTAssertEqual(store.results.count, 4, "open + pinned + historyLimit (2) others")
+    }
+
+    /// Codex review of PR #164: on a layout switch the new stage appears
+    /// before the old one disappears. Each stage reports for itself, so the
+    /// departing stage cannot turn quiet arrivals off under its replacement.
+    func testQuietArrivalsFollowTheStagesThatShowTheThread() {
+        let store = WorkspaceStore()
+        let layoutOne = UUID(), layoutTwo = UUID(), laterTwo = UUID()
+        store.setQuietArrivals(false, owner: layoutOne)
+        XCTAssertFalse(store.quietArrivals)
+        store.setQuietArrivals(true, owner: layoutTwo)        // 1 -> 2: new stage appears
+        store.releaseQuietArrivals(owner: layoutOne)          // then the old one leaves
+        XCTAssertTrue(store.quietArrivals, "Layout 1 -> 2 keeps quiet arrivals on.")
+        store.setQuietArrivals(false, owner: layoutOne)       // 2 -> 1
+        store.releaseQuietArrivals(owner: layoutTwo)
+        XCTAssertFalse(store.quietArrivals, "Layout 2 -> 1 turns them off.")
+        store.setQuietArrivals(true, owner: laterTwo)         // 1 -> 2 again
+        store.releaseQuietArrivals(owner: layoutOne)
+        XCTAssertTrue(store.quietArrivals)
+        store.setQuietArrivals(false, owner: laterTwo)        // thread switched off
+        XCTAssertFalse(store.quietArrivals)
+        store.setQuietArrivals(true, owner: laterTwo)         // and on
+        XCTAssertTrue(store.quietArrivals)
+        store.releaseQuietArrivals(owner: laterTwo)           // 2 -> 0: no stage at all
+        XCTAssertFalse(store.quietArrivals)
+    }
 }

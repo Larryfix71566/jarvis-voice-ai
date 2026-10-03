@@ -111,7 +111,7 @@ Claude’s work or enable any runtime feature.
 - **Where:** main (plan #153, B1–B3 claim #157, B2/B3 #158, B4 #156, B1 log migration #160).
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
 - **Scope:** B4 (Claude): `scripts/check_roadmap.py`, `tests/unit/test_check_roadmap.py`, the drift-check step in `.github/workflows/validate.yml`. B1–B3 (Codex): `ROADMAP.md` §0, §8 and production wording, `docs/roadmap-log/**`, and dated status/progress in `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`.
-- **Next step:** codex: verify the merged log count and tell Claude the §8 anchor has moved. claude: update landing scripts to write a dated log file. Both systems: monitor the next 10 PRs for change-log conflicts; the WS-10/11 acceptance owner corrects their lifecycle wording before CI leaves warn-only mode.
+- **Next step:** codex: verify the merged log count and tell Claude the §8 anchor has moved. Both systems: monitor the next 10 PRs for change-log conflicts; the WS-10/11 acceptance owner corrects their lifecycle wording before CI leaves warn-only mode.
 - **Updated:** 10-02
 
 </details>
@@ -140,14 +140,14 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 09-30: conversation is spread over one tab per turn, only Mortimer's side shows, the tab strip fills up, and asking again re-fetches. Increment CC7a of the Command Console plan (WS-09's plan): one conversation thread with both sides, results as inline cards, Recents instead of tabs, reuse a fresh result by subject.
 
 - **Owner:** `claude` (implementation); `codex` reviews every increment before merge
-- **Status:** in-progress: CC7a.1 (PR #140) and CC7a.1b, one console row (PR #147, Codex reviewed, merged as `1faa75f`), landed; CC7a.1b deployed in `ae70f2c` on 10-02 and Larry's Mac check passed the same day; CC7a.2–CC7a.4 remain
-- **Implemented by:** Claude (Cowork): CC7a.1, CC7a.1b
+- **Status:** in-progress: CC7a.1 (PR #140), CC7a.1b, one console row (PR #147, merged as `1faa75f`) and CC7a.2, inline result cards (PR #164, Codex reviewed), landed; CC7a.1b deployed in `ae70f2c` on 10-02 and Larry's Mac check passed the same day; CC7a.3–CC7a.4 remain
+- **Implemented by:** Claude (Cowork): CC7a.1, CC7a.1b, CC7a.2
 - **Remaining work / acceptance:** CC7a.1-CC7a.4, each a reviewed PR; RELEASE_READINESS UI2-22..UI2-25 on the Mac. UI2-04, UI2-09 and UI2-13 are held until then. Larry, Mac, 10-02, build `ae70f2c`: one console row with nothing below it in conversation, results and Knowledge Atlas (UI2-24's CC7a.1b part; its Recents parts wait for CC7a.3); Knowledge ▾ and Tools ▾ send content to the supporting display with no result open, and "Return display content here" brings it back; a spoken answer showed once in the thread. UI2-22's five-turn check is not yet run. Approved design: `docs/interface-research/cc7a/cc7a-approved-design-2026-09-30.html` (transcript rows, compact cards, Recents menu, reuse reference line, no-jump notice); Codex's boundaries in plan §7.2.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (CC7a.1, CC7a.1b); next increment on a new branch
+- **Where:** main (CC7a.1, CC7a.1b, CC7a.2); next increment on a new branch
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md` §7.1 item 9 and §7.2
-- **Scope:** `App/ResponseResultRouter.swift`, `Stores/WorkspaceStore.swift`, `Stores/ConversationStore.swift`, `Console/AdaptiveStageView.swift`, `Console/TopBarView.swift`, `Display/WorkspaceView.swift`, `App/AppMessageRouter.swift` (weather's select-on-arrival only), voice result actions (`App/ConsoleActionCoordinator.swift`, `App/ConsoleActionRegistry.swift`, JarvisKit `ConsoleProtocol.swift`, `jarvis/bot/console_protocol.py`), DisplayPayload `subject_key` (JarvisKit + `jarvis/bot/display.py`), weather tools' reuse check; tests for each
-- **Next step:** claude: CC7a.2 (inline cards, no focus stealing incl. weather select-on-arrival), reviewed by codex. larry: UI2-22's five-turn conversation check on any build from `ae70f2c` on.
+- **Scope:** `App/ResponseResultRouter.swift`, `Stores/WorkspaceStore.swift`, `Stores/ConversationStore.swift`, `Console/AdaptiveStageView.swift`, `Console/ConversationThreadView.swift`, `Console/TopBarView.swift`, `Display/WorkspaceView.swift`, `App/AppMessageRouter.swift` (weather's select-on-arrival only), voice result actions (`App/ConsoleActionCoordinator.swift`, `App/ConsoleActionRegistry.swift`, JarvisKit `ConsoleProtocol.swift`, `jarvis/bot/console_protocol.py`), DisplayPayload `subject_key` (JarvisKit + `jarvis/bot/display.py`), weather tools' reuse check; tests for each
+- **Next step:** larry: on a build that contains CC7a.2, check UI2-23 (a weather and a research card at their turn; Open, and Conversation to come back; pin and compare from a card; a result that arrives while another is open shows the New notice and does not take focus; closing a card leaves its Output record) and UI2-22's five-turn conversation. claude: CC7a.3 (Recents menu, voice result actions by number and subject), reviewed by codex.
 - **Updated:** 10-02
 
 </details>

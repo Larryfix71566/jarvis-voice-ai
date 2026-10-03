@@ -53,6 +53,22 @@ final class WorkspaceStore {
     /// Skills, Atlas, Memory Graph, and Conversation.
     private(set) var showsWorkflows = false
     private(set) var supportingContent: SupportingDisplayContent?
+    /// CC7a.2 (WS-17, plan §7.2 "New result while reading"): a result that
+    /// arrived quietly while something other than the conversation was on
+    /// the stage. The stage shows "New: … Show / Dismiss" for it; the
+    /// arrival itself never changes the selection or the view.
+    private(set) var arrivalNoticeID: UUID?
+    /// CC7a.2: on while layout 2 shows the conversation thread. Every
+    /// arrival is then quiet (see `receive(_:quietly:)`), whichever route
+    /// delivered it. Off by default, so other layouts and existing callers
+    /// keep the pre-CC7a behaviour. Stages report through
+    /// `setQuietArrivals(_:owner:)`; tests may set it directly.
+    var quietArrivals = false
+    /// Each stage's own answer, keyed by its identity (Codex review of PR
+    /// #164): on a layout switch the new stage appears before the old one
+    /// disappears, so a departing stage must remove only its own entry and
+    /// never overwrite its replacement's.
+    @ObservationIgnored private var quietArrivalOwners: [UUID: Bool] = [:]
     var showComparisonOnCompact = false
     private(set) var comparisonSide: WorkspaceComparisonSide = .a
     let exporter = WorkspaceExportCoordinator()
@@ -188,9 +204,27 @@ final class WorkspaceStore {
     func noteConsoleMutation() { inventoryRevision += 1 }
 
     func receive(_ result: WorkspaceResult) {
+        receive(result, quietly: quietArrivals)
+    }
+
+    /// `quietly` (CC7a.2, conversation thread on): the result joins the
+    /// workspace unread and appears as a card in the thread, and nothing on
+    /// screen changes, not even for the first result of the session (§7.2
+    /// contract 2, "a new card does not pull focus"). If no result is
+    /// active yet it becomes the active one without being shown, so the
+    /// Results view has something to open. Off: the pre-CC7a behaviour.
+    func receive(_ result: WorkspaceResult, quietly: Bool) {
         guard !results.contains(where: { $0.id == result.id }) else { return }
         results.append(result)
         inventoryRevision += 1
+        if quietly {
+            if activeID == nil { activeID = result.id }
+            unreadIDs.insert(result.id)
+            if !showsConversation { arrivalNoticeID = result.id }
+            hasReceivedResult = true
+            trimHistory()
+            return
+        }
         if !hasReceivedResult {
             activeID = result.id
             // Opening the graph or returning to conversation can happen
@@ -225,8 +259,25 @@ final class WorkspaceStore {
         showsConversation = false
         showsMemoryGraph = false
         unreadIDs.remove(id)
+        if arrivalNoticeID == id { arrivalNoticeID = nil }
         inventoryRevision += 1
     }
+
+    /// A stage reports whether it shows the conversation thread.
+    func setQuietArrivals(_ on: Bool, owner: UUID) {
+        quietArrivalOwners[owner] = on
+        quietArrivals = quietArrivalOwners.values.contains(true)
+    }
+
+    /// A stage that leaves the screen withdraws only its own report.
+    func releaseQuietArrivals(owner: UUID) {
+        quietArrivalOwners.removeValue(forKey: owner)
+        quietArrivals = quietArrivalOwners.values.contains(true)
+    }
+
+    /// "Dismiss" on the arrival notice. The result stays unread in the
+    /// thread and the Results menu.
+    func dismissArrivalNotice() { arrivalNoticeID = nil }
 
     @discardableResult
     func selectAdjacentResult(step: Int) -> Bool {
@@ -245,6 +296,8 @@ final class WorkspaceStore {
         showsWorkflows = false
         showsMemoryGraph = false
         showsConversation = true
+        // The new result's card is in the thread now; the notice is done.
+        arrivalNoticeID = nil
         inventoryRevision += 1
     }
     func openMemoryGraph() {
@@ -456,6 +509,7 @@ final class WorkspaceStore {
 
     private func remove(_ id: UUID) {
         if supportingContent == .result(id) { supportingContent = nil }
+        if arrivalNoticeID == id { arrivalNoticeID = nil }
         presentations.removeValue(forKey: id)
         resultGraphs.removeValue(forKey: id)?.cancel()
         results.removeAll { $0.id == id }
