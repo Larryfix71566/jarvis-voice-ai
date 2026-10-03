@@ -64,10 +64,13 @@ MAR-F has gated text-only Claude and Codex subscription adapters; their child
 processes strip inherited API credentials and endpoint overrides before launch.
 A historical user-reported synthetic Codex probe succeeded using its authenticated
 default model; the prior OpenRouter Codex model identifier was rejected by that account.
-The 2026-10-02 current check finds Claude Max reported signed in but inference
-returns HTTP 401, while Codex is signed in but its Mortimer adapter remains
-gated until no-tools verification. Claude re-authentication, model capability
-evidence, and tool-preserving execution remain open. MAR-G
+The first 2026-10-02 check found HTTP 401 on the older Claude executable.
+After Larry refreshed sign-in, the selected Homebrew CLI and Mortimer's
+isolated text adapter both passed a fixed public `claude-sonnet-5` probe;
+the older executable remains signed out. Codex is signed in but its Mortimer
+adapter remains gated until no-tools verification. Claude account access is
+restored for this candidate environment; live process identity, allowance,
+model capabilities, and tool-preserving execution remain open. MAR-G
 through MAR-J remain open.
 
 **Reconciled 2026-09-22 against main `88b206f`.** This header and
@@ -102,6 +105,8 @@ Related documents:
 - [Automated-memory plan](MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md)
 
 ## Progress
+
+- 2026-10-02 (Codex, MAR-F Claude recheck): After Larry's sign-in, `/opt/homebrew/bin/claude` 2.1.278 reported Claude Max and completed a fixed public `claude-sonnet-5` prompt; the isolated Mortimer adapter returned the expected token as well. The older `~/.local/bin/claude` remained signed out. Installed bot/admin launch-agent `PATH` resolves Homebrew Claude and `.env` defines no override, but running process environment was not inspected. See the [recheck receipt](../acceptance/model-use-enhancements/receipts/mar-f-claude-subscription-recheck-2026-10-02.json). This clears the candidate text-authentication probe only; routing remains disabled and capability, billing, representative workload, privacy, and rollback gates remain open.
 
 - 2026-10-02 (Codex, merged evidence handoff): MAR-A baseline PR #165 merged as `ecdf3a3` with all five checks passing, and MAR-E/F live-readiness PR #166 merged as `1ada011` after all five checks passed. The workstream remains in progress but has no active unmerged Codex branch; the next scoped slice must be claimed on main before implementation. Claude CLI reauthentication is a live user step; route activation remains gated.
 

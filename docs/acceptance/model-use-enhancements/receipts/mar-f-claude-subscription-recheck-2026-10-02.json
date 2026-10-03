@@ -1,0 +1,51 @@
+{
+  "receipt_id": "WS-05-MAR-F-CLAUDE-RECHECK-2026-10-02",
+  "captured_at_utc": "2026-10-03T01:41:07Z",
+  "workstream": "WS-05",
+  "milestone": "MAR-F",
+  "source_main": "70e50542d5815668fa888f252f43e0f1caafee2d",
+  "installed_cli": {
+    "selected_path": "/opt/homebrew/bin/claude",
+    "version": "2.1.278",
+    "auth_status_logged_in": true,
+    "auth_method": "claude.ai",
+    "subscription_type_reported": "max",
+    "alternate_path": "/Users/larryfix/.local/bin/claude",
+    "alternate_auth_status_logged_in": false
+  },
+  "direct_public_probe": {
+    "model_requested": "claude-sonnet-5",
+    "terminal_reason": "completed",
+    "is_error": false,
+    "expected_token_matched": true,
+    "api_error_status": null
+  },
+  "isolated_mortimer_adapter_public_probe": {
+    "model_requested": "claude-sonnet-5",
+    "ok": true,
+    "response_present": true,
+    "category": null
+  },
+  "launch_agent_command_resolution_proxy": {
+    "bot_and_admin_path": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    "command_resolved_with_that_path": "/opt/homebrew/bin/claude",
+    "dotenv_path_override_present": false,
+    "dotenv_claude_command_override_present": false,
+    "running_process_environment_inspected": false
+  },
+  "data_handling": {
+    "prompt_class": "fixed public synthetic token request",
+    "private_project_content_sent": false,
+    "response_text_saved": false,
+    "credentials_saved": false,
+    "production_configuration_changed": false,
+    "production_database_changed": false
+  },
+  "conclusion": "Claude subscription text inference works through the selected CLI and Mortimer's isolated adapter in this candidate environment. This does not enable a production route or validate tool use, image input, billing/overage, or end-to-end workload quality.",
+  "open_gates": [
+    "verify exact CLI selection and authentication in the running service environment before activation",
+    "verify subscription allowance, paid overage setting, and billing source independently",
+    "validate workload capabilities, representative quality, privacy, latency, and rollback before rollout",
+    "keep tool-bearing subscription workloads gated until a sandbox-preserving bridge is validated"
+  ]
+}
