@@ -300,8 +300,9 @@ sandbox evidence; all additions remain open as release-acceptance gates.
 - [ ] **UI2-23 — Inline result cards (CC7a.2).** Weather, research and image
   results appear as compact cards at their turn; open and Back work; compare and
   pin from a card; a weather result that arrives while another result is open
-  shows a notice and does not take focus; a result that arrives while the
-  conversation is shown opens (Larry, 2026-10-03); closing a card leaves its
+  shows a notice and does not take focus; on the conversation the result
+  Larry just asked for opens (Larry, 2026-10-03), while a background completion
+  stays a card and an open supporting display keeps the conversation; closing a card leaves its
   Output record.
 - [ ] **UI2-24 — Recents replaces tabs (CC7a.1b, CC7a.3).** One console row and
   nothing below it in any view (CC7a.1b); no tab strip; Recents lists

@@ -1363,7 +1363,7 @@ result card (RELEASE_READINESS UI2-19 note):
 | Result in the thread | **Compact card** (B1): kind icon, title with subject, one-line summary, Open. Open shows the result on the stage with "← Conversation", Pin, Compare, Display. One live radar map at a time. |
 | Recents | Header menu: PINNED, then RECENT (about 10), numbered to match voice ("open number 3"), unread dot, "fresh" age; row actions Pin / Close / Compare; the Atlas, Memory graph, Skills and Workflows buttons move to the bottom of this menu. |
 | Asking again | **Reference line** (D2): Mortimer's reply carries "↺ Weather · Folly Beach · from 12:40" pointing at the same result ID; when stale, the same result refreshes and the line reads "⟳ … updated 12:58". The thread stays in order. |
-| New result while reading | No jump: a "New: … Show / Dismiss" notice above the open result; the card joins the thread and Recents (unread). On the conversation itself the result opens and its card stays in the thread (amended by Larry, 2026-10-03, below). |
+| New result while reading | No jump: a "New: … Show / Dismiss" notice above the open result; the card joins the thread and Recents (unread). On the conversation itself the answer to what was just asked opens and its card stays in the thread; a background completion stays a card, and a result the open supporting display renders leaves the conversation in place (amended by Larry, 2026-10-03, and the Codex review of #169, below). |
 
 **Single console row (Larry, 2026-09-30; increment CC7a.1b).** "All buttons
 on the console line, none below." Mockup:
@@ -1410,7 +1410,9 @@ display content here" while the display window is open.
    does not pull focus: `AppMessageRouter`'s weather path currently calls
    `workspace.select` on arrival; CC7a replaces that with the notice above.
    Amended (Larry, 2026-10-03): this applies while a result or another view
-   is being read. On the conversation, the arriving result opens.
+   is being read. On the conversation, the result that answers the current
+   request opens; a background completion stays a card; a result the open
+   supporting display renders keeps the conversation on the main stage.
 
 **Increments (each a reviewed PR, Codex review before merge):**
 
@@ -1479,10 +1481,23 @@ chose: a result that arrives while the conversation is on the stage opens
 result or another view is being read, the "New" notice as approved. This
 applies to every kind of result, not only weather. CC7a.2b
 (`ws17/cc7a2b-open-requested`): `WorkspaceStore.receive(_:quietly:)` calls
-`select` when the conversation is shown; the router is unchanged.
-`CC7a2ReviewRegressionTests`' arrival-route case for the conversation was
-amended to the new rule; `testEachAnswerAskedForFromTheConversationOpens`
-pins it.
+`select` when the conversation is shown and the router says the result
+answers the current request (below).
+`testEachAnswerAskedForFromTheConversationOpens` pins it.
+
+Codex's review of #169 (10-03) narrowed "opens" to what Larry asked for.
+A background job (`research_report`, `plan_ready`) can finish during a
+later conversation, and with the supporting display open a window result
+would have left the main stage showing only "Result is on the supporting
+display". The router now passes `answersCurrentRequest`
+(`ArrivalIntent`): a result opens when its run started after Larry's
+latest turn, or, with no run, when it arrives within 120 s of that turn;
+watcher completions never open. A window result opens on the main stage
+only while no supporting display is open; otherwise the conversation stays
+and the display renders it. Every other arrival on the conversation stays
+an unread card. `CC7a2ReviewRegressionTests` is back to its original
+assertions (its bare events carry no request); `CC7a2bArrivalRouteTests`
+drives the router through each of these routes.
 
 ## 8. Acceptance evidence and regression gates
 

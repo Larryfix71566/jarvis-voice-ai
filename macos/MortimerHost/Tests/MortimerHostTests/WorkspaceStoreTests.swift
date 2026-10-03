@@ -248,9 +248,9 @@ final class WorkspaceStoreTests: XCTestCase {
         let store = WorkspaceStore()
         store.quietArrivals = true
         let first = try result()
-        store.receive(first)
-        // Larry, 10-03: on the conversation a result is the answer to what
-        // he just asked, so it opens (and its card stays in the thread).
+        store.receive(first, answersCurrentRequest: true)
+        // Larry, 10-03: on the conversation the answer to what he just
+        // asked opens (and its card stays in the thread).
         XCTAssertFalse(store.showsConversation, "A result asked for from the conversation opens.")
         XCTAssertEqual(store.activeID, first.id)
         XCTAssertFalse(store.unreadIDs.contains(first.id), "Opened, so read.")
@@ -356,15 +356,29 @@ final class WorkspaceStoreTests: XCTestCase {
         let store = WorkspaceStore()
         store.quietArrivals = true
         let weather = try result(), research = try result()
-        store.receive(weather)
+        store.receive(weather, answersCurrentRequest: true)
         store.returnToConversation()
-        store.receive(research)
+        store.receive(research, answersCurrentRequest: true)
         XCTAssertFalse(store.showsConversation)
         XCTAssertEqual(store.activeID, research.id, "The newer answer opens, not the earlier one.")
         XCTAssertNil(store.arrivalNoticeID)
         let whileReading = try result()
-        store.receive(whileReading)
-        XCTAssertEqual(store.activeID, research.id, "While reading a result, a new one does not take over.")
+        store.receive(whileReading, answersCurrentRequest: true)
+        XCTAssertEqual(store.activeID, research.id, "While reading a result, even an answer does not take over.")
         XCTAssertEqual(store.arrivalNoticeID, whileReading.id)
+    }
+
+    /// Codex review of #169: a result nobody vouched for as the current
+    /// answer (a background job finishing later) stays a card on the
+    /// conversation, unread, with no notice and no change of view.
+    func testAResultThatIsNotTheCurrentAnswerStaysACardOnTheConversation() throws {
+        let store = WorkspaceStore()
+        store.quietArrivals = true
+        let late = try result()
+        store.receive(late)
+        XCTAssertTrue(store.showsConversation)
+        XCTAssertTrue(store.unreadIDs.contains(late.id))
+        XCTAssertNil(store.arrivalNoticeID, "On the conversation the card itself is the notice.")
+        XCTAssertEqual(store.activeID, late.id, "Active for the Results view, not shown.")
     }
 }

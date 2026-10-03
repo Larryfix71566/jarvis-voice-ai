@@ -292,7 +292,6 @@ final class ConversationThreadTests: XCTestCase {
             "kind": "research", "title": "Runner card marker",
             "links": [["url": "https://a.example"], ["url": "https://b.example"], ["url": "https://c.example"]]]),
             receivedAt: Date(timeIntervalSince1970: 1002)))
-        workspace.returnToConversation()   // it opened on arrival (Larry, 10-03); back to the thread
         let view = NSHostingView(rootView: ConversationThreadView()
             .environment(conversation)
             .environment(workspace)
@@ -310,6 +309,32 @@ final class ConversationThreadTests: XCTestCase {
         for expected in ["cardreplymarker", "runnercardmarker"] {
             XCTAssertTrue(text.contains(expected), "missing \(expected) in rendered thread: \(text)")
         }
-        XCTAssertTrue(workspace.showsConversation, "Rendering the card does not open the result again.")
+        XCTAssertTrue(workspace.showsConversation, "Rendering the card did not open the result.")
+    }
+
+    // MARK: CC7a.2b: what counts as the answer to the current request
+
+    /// Larry, 10-03, with Codex's review of #169: a result opens on the
+    /// conversation only when it answers what he just asked.
+    func testArrivalIntentOpensOnlyTheAnswerToTheCurrentRequest() {
+        let spoke = Date(timeIntervalSince1970: 10_000)
+        func answers(_ tool: String?, run: Double?, spoke: Date? = spoke, now: Double) -> Bool {
+            ArrivalIntent.answersCurrentRequest(
+                tool: tool, runStartedAt: run.map { Date(timeIntervalSince1970: $0) },
+                lastUserTurnAt: spoke, now: Date(timeIntervalSince1970: now))
+        }
+        XCTAssertTrue(answers("weather_report", run: 10_002, now: 10_009),
+                      "A delegation started after Larry spoke answers him.")
+        XCTAssertFalse(answers("web_search", run: 9_000, now: 10_009),
+                       "A detached run started before his latest turn finishes later: not this answer.")
+        XCTAssertFalse(answers("research_report", run: nil, now: 10_005),
+                       "A background research job's completion never opens by itself.")
+        XCTAssertFalse(answers("plan_ready", run: 10_002, now: 10_005))
+        XCTAssertTrue(answers("memory_graph_view", run: nil, now: 10_030),
+                      "A direct tool right after he spoke answers him.")
+        XCTAssertFalse(answers("memory_graph_view", run: nil, now: 10_000 + ArrivalIntent.directWindow + 1),
+                       "Long after he spoke, an unattributed result does not open.")
+        XCTAssertFalse(answers("get_weather", run: 10_002, spoke: nil, now: 10_005),
+                       "With no turn of his on record, nothing counts as asked for.")
     }
 }

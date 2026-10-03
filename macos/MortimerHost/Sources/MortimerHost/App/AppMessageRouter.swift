@@ -206,6 +206,17 @@ final class AppMessageRouter {
                     attachments?.presentConsent(consent)
                 case .display(let payload):
                     let result = WorkspaceResult(payload: payload)
+                    // CC7a.2b (Larry 10-03; Codex review of #169): only a
+                    // result that answers what Larry just asked may open on
+                    // the conversation. See ArrivalIntent.
+                    let runID = payload.runID.flatMap { $0.isEmpty ? nil : $0 }
+                    let answers = ArrivalIntent.answersCurrentRequest(
+                        tool: payload.tool,
+                        runStartedAt: runID.flatMap { id in
+                            agentRuns.runs.last(where: { $0.runId == id })?.startedAt },
+                        lastUserTurnAt: conversation?.entries.last(where: { $0.role == "user" })
+                            .map { Date(timeIntervalSince1970: $0.createdAt) },
+                        now: Date())
                     // Window-routed content has one renderer at a time. Keep
                     // the workspace as the fallback when no supporting
                     // display is open; while the display is live its view
@@ -216,7 +227,7 @@ final class AppMessageRouter {
                     // supporting display or waiting unread behind the
                     // spoken reply (G-2 found both).
                     if Self.showsInMainWindowOnly(payload) {
-                        workspace?.receive(result)
+                        workspace?.receive(result, answersCurrentRequest: answers)
                         // CC7a.2 (WS-17, plan §7.2): with the conversation
                         // thread on, weather arrives like every other result
                         // (WorkspaceStore.receive): it opens when the
@@ -232,7 +243,7 @@ final class AppMessageRouter {
                         // display store. This check must precede both
                         // DisplayWindowStore.apply and any display handoff.
                         if payload.isProtectedLocal {
-                            workspace?.receive(result)
+                            workspace?.receive(result, answersCurrentRequest: answers)
                             break
                         }
                         // An exact repeat is already represented by the same
@@ -244,7 +255,14 @@ final class AppMessageRouter {
                         let existingID = displayWindow.presentedWorkspaceID(for: payload)
                             .flatMap { id in workspace?.containsResult(id) == true ? id : nil }
                         let workspaceID = existingID ?? result.id
-                        if existingID == nil { workspace?.receive(result) }
+                        // While the supporting display is open it renders
+                        // this result, and the main stage would show only a
+                        // placeholder, so the conversation stays (Codex
+                        // review of #169); the card is in the thread.
+                        if existingID == nil {
+                            workspace?.receive(result,
+                                answersCurrentRequest: answers && !displayWindow.isWindowOpen)
+                        }
                         guard let panelID = displayWindow.apply(payload, workspaceID: workspaceID) else {
                             // The display store can reject protected content at
                             // its own sink boundary. Keep the result in the
@@ -262,7 +280,7 @@ final class AppMessageRouter {
                             }
                         }
                     case .drawer:
-                        workspace?.receive(result)
+                        workspace?.receive(result, answersCurrentRequest: answers)
                         displayResults.apply(payload, workspaceID: result.id)
                         // D31's three-case auto-open rule (App.tsx:247-254),
                         // drawer-routed results only: closed → open on
