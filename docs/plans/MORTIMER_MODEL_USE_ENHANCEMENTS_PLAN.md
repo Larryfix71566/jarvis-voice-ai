@@ -86,7 +86,7 @@ Related documents:
 
 ## Progress
 
-- 2026-10-02 (Codex, bounded test-stability fix): The model-admission priority test now waits up to two seconds for the interactive waiter registered on a worker thread, polling at 1 ms intervals instead of assuming 20 zero-delay event-loop turns suffice. Its existing capacity and priority assertions remain. Thirty focused iterations and all 38 tests in `tests/unit/test_model_execution.py` passed locally. This is a test-only change; MAR-A live route/capability evidence and rollout remain open.
+- 2026-10-02 (Codex, bounded test-stability fix, PR #162): The model-admission priority test now waits up to two seconds for the interactive waiter registered on a worker thread, polling at 1 ms intervals instead of assuming 20 zero-delay event-loop turns suffice. Its existing capacity and priority assertions remain. Thirty focused iterations and all 38 tests in `tests/unit/test_model_execution.py` passed locally. This is a test-only change; MAR-A live route/capability evidence and rollout remain open.
 
 - 2026-10-02 (Codex, bounded test stability claim): Larry reported an intermittent failure in `test_background_admission_reserves_capacity_and_prioritizes_interactive`. The test waits at most 20 `asyncio.sleep(0)` turns for an interactive waiter registered by `_acquire` on a worker thread. Codex will replace that scheduling assumption with a deadline-based wait in `tests/unit/test_model_execution.py`, without changing `ModelAdmissionController` or route policy. The 10-02 baseline test passed eight local repeats, which does not disprove the reported approximately one-in-four failure. This is separate from MAR-A rollout and makes no live acceptance claim.
 
