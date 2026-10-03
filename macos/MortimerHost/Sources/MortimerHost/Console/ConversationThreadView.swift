@@ -417,10 +417,69 @@ struct ConversationThreadCardView: View {
     }
 }
 
+/// CC7a.2b (Larry, 10-03; Codex review of #169): whether an arriving
+/// result answers what Larry just asked, so it may open on the
+/// conversation. The bot's payload names no user turn, so the app decides
+/// from what it already knows: the delegation run that produced the result
+/// (`run_id`, with the time `AgentRunStore` saw it start) and the last time
+/// Larry spoke (`ConversationStore`).
+enum ArrivalIntent {
+    /// Background jobs announced by their watchers when they finish
+    /// (`jarvis/bot/plan_watcher.py`, `research_watcher.py`). They answer an
+    /// earlier request, minutes later, so they never open by themselves.
+    static let backgroundTools: Set<String> = ["plan_ready", "research_report"]
+    /// A result with no run ID (a direct supervisor tool such as local
+    /// weather or a graph view) counts as the current answer only this soon
+    /// after Larry last spoke.
+    static let directWindow: TimeInterval = 120
+
+    /// `runID` is the payload's run; `runStartedAt` is when the app saw that
+    /// run start, nil if it never did. A run ID with no known start is not
+    /// treated as a direct result (Codex re-review of #169): it is a card.
+    static func answersCurrentRequest(tool: String?, runID: String?, runStartedAt: Date?,
+                                      lastUserTurnAt: Date?, now: Date) -> Bool {
+        if let tool, backgroundTools.contains(tool) { return false }
+        guard let lastUserTurnAt else { return false }
+        if let runID, !runID.isEmpty {
+            // A delegation started after Larry last spoke is the one his
+            // latest request started; one started earlier (a detached or
+            // replaced run finishing during a later turn) is not, and nor is
+            // a run this app never saw start.
+            guard let runStartedAt else { return false }
+            return runStartedAt >= lastUserTurnAt
+        }
+        let elapsed = now.timeIntervalSince(lastUserTurnAt)
+        return elapsed >= 0 && elapsed <= directWindow
+    }
+}
+
+/// When each delegated run started, as the router saw its "working" message.
+/// Kept apart from `AgentRunStore`, whose cards replace an agent's previous
+/// run and fade after it finishes, so a result's run can still be dated after
+/// its card is gone (Codex re-review of #169).
+final class ArrivalRunClock {
+    static let capacity = 64
+    private var starts: [String: Date] = [:]
+    private var order: [String] = []
+
+    func recordStart(_ runID: String?, at date: Date) {
+        guard let runID, !runID.isEmpty else { return }
+        if starts[runID] == nil { order.append(runID) }
+        starts[runID] = date
+        while order.count > Self.capacity { starts[order.removeFirst()] = nil }
+    }
+
+    func startedAt(_ runID: String?) -> Date? {
+        guard let runID, !runID.isEmpty else { return nil }
+        return starts[runID]
+    }
+}
+
 /// CC7a.2 approved design "New result while reading": while something
-/// other than the conversation is on the stage, a quiet arrival shows
+/// other than the conversation is on the stage, an arrival shows
 /// "New: … Show / Dismiss" above it instead of taking the stage. On the
-/// conversation itself the card just appears in the thread.
+/// conversation itself the answer to what Larry just asked opens (Larry,
+/// 10-03; `ArrivalIntent`); its card stays in the thread for later.
 struct ArrivalNoticeView: View {
     let coordinator: ConsoleActionCoordinator?
     @Environment(WorkspaceStore.self) private var workspace

@@ -59,8 +59,9 @@ final class WorkspaceStore {
     /// arrival itself never changes the selection or the view.
     private(set) var arrivalNoticeID: UUID?
     /// CC7a.2: on while layout 2 shows the conversation thread. Every
-    /// arrival is then quiet (see `receive(_:quietly:)`), whichever route
-    /// delivered it. Off by default, so other layouts and existing callers
+    /// arrival then follows `receive(_:quietly:)` (opens on the
+    /// conversation, a "New" notice elsewhere), whichever route delivered
+    /// it. Off by default, so other layouts and existing callers
     /// keep the pre-CC7a behaviour. Stages report through
     /// `setQuietArrivals(_:owner:)`; tests may set it directly.
     var quietArrivals = false
@@ -203,25 +204,37 @@ final class WorkspaceStore {
     /// requests stale before a panel mutation can be retargeted.
     func noteConsoleMutation() { inventoryRevision += 1 }
 
-    func receive(_ result: WorkspaceResult) {
-        receive(result, quietly: quietArrivals)
+    /// `answersCurrentRequest`: the caller has established that this result
+    /// answers what Larry just asked and belongs on the main stage (see
+    /// `ArrivalIntent`). Defaults to false, so an arrival nobody vouched
+    /// for never opens by itself.
+    func receive(_ result: WorkspaceResult, answersCurrentRequest: Bool = false) {
+        receive(result, quietly: quietArrivals, answersCurrentRequest: answersCurrentRequest)
     }
 
-    /// `quietly` (CC7a.2, conversation thread on): the result joins the
-    /// workspace unread and appears as a card in the thread, and nothing on
-    /// screen changes, not even for the first result of the session (§7.2
-    /// contract 2, "a new card does not pull focus"). If no result is
-    /// active yet it becomes the active one without being shown, so the
-    /// Results view has something to open. Off: the pre-CC7a behaviour.
-    func receive(_ result: WorkspaceResult, quietly: Bool) {
+    /// `quietly` (CC7a.2, conversation thread on): the result never
+    /// interrupts something being read. On the conversation, a result that
+    /// answers what Larry just asked opens, like Open on its card (Larry,
+    /// 10-03, after the UI2-23 run: "when I requested the weather ... it
+    /// didn't focus on the weather card, that should happen
+    /// automatically"); anything else, such as a background job finishing
+    /// later (Codex review of #169), stays a card in the thread. While
+    /// another result or view is shown, it joins unread and raises the
+    /// "New" notice. If no result is active yet it becomes the active one
+    /// without being shown. Off: the pre-CC7a behaviour.
+    func receive(_ result: WorkspaceResult, quietly: Bool, answersCurrentRequest: Bool = false) {
         guard !results.contains(where: { $0.id == result.id }) else { return }
         results.append(result)
         inventoryRevision += 1
         if quietly {
-            if activeID == nil { activeID = result.id }
-            unreadIDs.insert(result.id)
-            if !showsConversation { arrivalNoticeID = result.id }
             hasReceivedResult = true
+            if showsConversation && answersCurrentRequest {
+                select(result.id)
+            } else {
+                if activeID == nil { activeID = result.id }
+                unreadIDs.insert(result.id)
+                if !showsConversation { arrivalNoticeID = result.id }
+            }
             trimHistory()
             return
         }

@@ -311,4 +311,53 @@ final class ConversationThreadTests: XCTestCase {
         }
         XCTAssertTrue(workspace.showsConversation, "Rendering the card did not open the result.")
     }
+
+    // MARK: CC7a.2b: what counts as the answer to the current request
+
+    /// Larry, 10-03, with Codex's review of #169: a result opens on the
+    /// conversation only when it answers what he just asked.
+    func testArrivalIntentOpensOnlyTheAnswerToTheCurrentRequest() {
+        let spoke = Date(timeIntervalSince1970: 10_000)
+        func answers(_ tool: String?, run: Double?, runID: String? = "r1", spoke: Date? = spoke,
+                     now: Double) -> Bool {
+            ArrivalIntent.answersCurrentRequest(
+                tool: tool, runID: run == nil ? nil : runID,
+                runStartedAt: run.map { Date(timeIntervalSince1970: $0) },
+                lastUserTurnAt: spoke, now: Date(timeIntervalSince1970: now))
+        }
+        XCTAssertTrue(answers("weather_report", run: 10_002, now: 10_009),
+                      "A delegation started after Larry spoke answers him.")
+        XCTAssertFalse(answers("web_search", run: 9_000, now: 10_009),
+                       "A detached run started before his latest turn finishes later: not this answer.")
+        XCTAssertFalse(answers("research_report", run: nil, now: 10_005),
+                       "A background research job's completion never opens by itself.")
+        XCTAssertFalse(answers("plan_ready", run: 10_002, now: 10_005))
+        XCTAssertTrue(answers("memory_graph_view", run: nil, now: 10_030),
+                      "A direct tool right after he spoke answers him.")
+        XCTAssertFalse(answers("memory_graph_view", run: nil, now: 10_000 + ArrivalIntent.directWindow + 1),
+                       "Long after he spoke, an unattributed result does not open.")
+        XCTAssertFalse(answers("get_weather", run: 10_002, spoke: nil, now: 10_005),
+                       "With no turn of his on record, nothing counts as asked for.")
+        XCTAssertFalse(ArrivalIntent.answersCurrentRequest(
+            tool: "web_search", runID: "r-unseen", runStartedAt: nil,
+            lastUserTurnAt: spoke, now: Date(timeIntervalSince1970: 10_005)),
+            "Codex re-review of #169: a run ID the app never saw start is a card, not a direct result.")
+        XCTAssertTrue(ArrivalIntent.answersCurrentRequest(
+            tool: "web_search", runID: "", runStartedAt: nil,
+            lastUserTurnAt: spoke, now: Date(timeIntervalSince1970: 10_005)),
+            "An empty run ID is no run: the direct-result window applies.")
+    }
+
+    func testArrivalRunClockKeepsStartsByRunAndForgetsTheOldestPastCapacity() {
+        let clock = ArrivalRunClock()
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        clock.recordStart("r-old", at: t0)
+        clock.recordStart("r-new", at: t0.addingTimeInterval(5))
+        XCTAssertEqual(clock.startedAt("r-old"), t0, "A replaced run keeps its start.")
+        XCTAssertNil(clock.startedAt(nil)); XCTAssertNil(clock.startedAt(""))
+        clock.recordStart(nil, at: t0); clock.recordStart("", at: t0)
+        for i in 0..<ArrivalRunClock.capacity { clock.recordStart("r\(i)", at: t0) }
+        XCTAssertNil(clock.startedAt("r-old"), "Bounded: the oldest start is dropped first.")
+        XCTAssertNotNil(clock.startedAt("r\(ArrivalRunClock.capacity - 1)"))
+    }
 }
