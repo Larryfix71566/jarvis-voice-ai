@@ -203,13 +203,31 @@ class RunLogger:
             return False
 
     def mark_sensitive(self) -> None:
-        """Redact future records and scrub any earlier skill trace for this run."""
+        """Protect future records and remove content from earlier run/skill traces."""
         self._sensitive = True
+        # Source policy can tighten after a tool returns. Keep identities,
+        # sequence/counter metadata and verdicts while removing every earlier
+        # content-bearing field, including the pre-result MCP error buffer.
+        for record in self._buffer:
+            for key in ("task", "arguments", "result", "reply", "error"):
+                if key in record and record[key] is not None:
+                    record[key] = SENSITIVE_SENTINEL
 
         def _scrub_skill_trace() -> None:
             conn = get_conn(self._db_path)
             try:
                 conn.execute("BEGIN IMMEDIATE")
+                conn.execute(
+                    "UPDATE agent_events SET args_preview=CASE WHEN args_preview IS NOT NULL THEN ? ELSE NULL END, "
+                    "result_preview=CASE WHEN result_preview IS NOT NULL THEN ? ELSE NULL END "
+                    "WHERE user_id=? AND run_id=?",
+                    (SENSITIVE_SENTINEL, SENSITIVE_SENTINEL, self.user_id, self.run_id),
+                )
+                conn.execute(
+                    "UPDATE agent_runs SET task=?, reply_preview=CASE WHEN reply_preview IS NOT NULL THEN ? ELSE NULL END, "
+                    "error=CASE WHEN error IS NOT NULL THEN ? ELSE NULL END WHERE user_id=? AND run_id=?",
+                    (SENSITIVE_SENTINEL, SENSITIVE_SENTINEL, SENSITIVE_SENTINEL, self.user_id, self.run_id),
+                )
                 existed = conn.execute(
                     "SELECT 1 FROM skill_events WHERE user_id=? AND run_id=? LIMIT 1",
                     (self.user_id, self.run_id),
@@ -238,6 +256,8 @@ class RunLogger:
                 conn.close()
 
         self._safe("skill_trace_redaction", _scrub_skill_trace)
+        if self._finished:
+            self._safe("payload_redaction", self._write_payload)
 
     def _trip_cap(self, added_bytes: int) -> bool:
         """Update byte/event counters; return True the first moment

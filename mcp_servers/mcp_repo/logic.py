@@ -168,20 +168,21 @@ def repo_list_files(subdir: str = "", pattern: str = "") -> dict:
     results: list[str] = []
     truncated = False
     for candidate in sorted(base.rglob("*")):
-        if not candidate.is_file():
-            continue
         try:
-            rel = candidate.relative_to(root)
-        except ValueError:
-            continue  # symlink resolved outside root — skip, don't error
-        if any(part.lower() in DENY_SEGMENTS for part in rel.parts):
+            requested = candidate.relative_to(root).as_posix()
+            resolved = resolve_repo_path(root, requested)
+            if not resolved.is_relative_to(base) or not resolved.is_file():
+                continue
+            rel = resolved.relative_to(root)
+        except (RepoPathError, ValueError, OSError):
             continue
         if pattern and not candidate.match(pattern):
             continue
         if len(results) >= REPO_SEARCH_MAX_RESULTS:
             truncated = True
             break
-        results.append(rel.as_posix())
+        if rel.as_posix() not in results:
+            results.append(rel.as_posix())
     return {"ok": True, "files": results, "truncated": truncated}
 
 
@@ -204,18 +205,18 @@ def repo_search(query: str, subdir: str = "") -> dict:
         if len(matches) >= REPO_SEARCH_MAX_RESULTS:
             truncated = True
             break
-        if not candidate.is_file():
-            continue
         try:
-            rel = candidate.relative_to(root)
-        except ValueError:
-            continue
-        if any(part.lower() in DENY_SEGMENTS for part in rel.parts):
-            continue
-        try:
-            if candidate.stat().st_size > REPO_READ_MAX_BYTES:
+            requested = candidate.relative_to(root).as_posix()
+            resolved = resolve_repo_path(root, requested)
+            if not resolved.is_relative_to(base) or not resolved.is_file():
                 continue
-            text = candidate.read_text(encoding="utf-8")
+            rel = resolved.relative_to(root)
+        except (RepoPathError, ValueError, OSError):
+            continue
+        try:
+            if resolved.stat().st_size > REPO_READ_MAX_BYTES:
+                continue
+            text = resolved.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
         for line_no, line in enumerate(text.splitlines(), start=1):

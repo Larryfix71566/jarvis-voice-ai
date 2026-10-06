@@ -287,6 +287,58 @@ class TestRepoSearch:
         assert len(res["matches"]) <= 1
 
 
+@pytest.mark.parametrize("name", ["private.key", "private.pem", "private.p12", "private.pfx",
+                                   "id_rsa_backup", "id_ed25519_local", "private.sqlite",
+                                   "private.sqlite3", "private.db", "private.vault", ".env.private"])
+def test_walks_apply_filename_secret_guards_before_reading(repo, name, monkeypatch):
+    forbidden = repo / "src" / name
+    forbidden.write_text("SYNTHETIC_PRIVATE_WALK_CANARY\n")
+    original = Path.read_text
+
+    def guarded_read(path, *args, **kwargs):
+        assert path != forbidden
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", guarded_read)
+    listed = logic.repo_list_files()
+    found = logic.repo_search("SYNTHETIC_PRIVATE_WALK_CANARY")
+    assert "src/" + name not in listed["files"]
+    assert found["matches"] == []
+
+
+def test_walks_do_not_read_symlinks_outside_root_or_into_denied_files(repo, tmp_path, monkeypatch):
+    outside = tmp_path / "outside.txt"
+    outside.write_text("SYNTHETIC_PRIVATE_LINK_CANARY\n")
+    (repo / "src" / "outside.txt").symlink_to(outside)
+    (repo / "src" / "git-config.txt").symlink_to(repo / ".git" / "config")
+    (repo / "src" / "credential.txt").symlink_to(repo / "id_rsa")
+    original = Path.read_text
+
+    def guarded_read(path, *args, **kwargs):
+        assert path not in {outside, repo / ".git" / "config", repo / "id_rsa"}
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", guarded_read)
+    listed = logic.repo_list_files()
+    found = logic.repo_search("SYNTHETIC_PRIVATE_LINK_CANARY")
+    assert not {"src/outside.txt", "src/git-config.txt", "src/credential.txt"}.intersection(listed["files"])
+    assert found["matches"] == []
+
+
+def test_walks_keep_requested_subdirectory_scope_even_for_inside_root_symlinks(repo):
+    (repo / "src" / "outside-subdir.md").symlink_to(repo / "README.md")
+    assert "README.md" not in logic.repo_list_files(subdir="src")["files"]
+    assert logic.repo_search("hello", subdir="src")["matches"] == []
+
+
+def test_walks_preserve_approved_document_reads_and_env_example(repo):
+    listed = logic.repo_list_files()
+    assert {"CLAUDE.md", "README.md", ".env.example", "src/app.py"}.issubset(listed["files"])
+    assert logic.repo_search("guidance")["matches"] == [
+        {"path": "CLAUDE.md", "line": 1, "text": "# guidance"},
+    ]
+
+
 # --------------------------------------------------------- writes (D12)
 
 
