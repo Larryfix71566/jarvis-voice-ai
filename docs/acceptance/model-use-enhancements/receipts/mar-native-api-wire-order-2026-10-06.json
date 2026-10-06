@@ -29,7 +29,7 @@
     "tests/unit/test_claude_developer_capability.py": "2598bb45f16909f7c4de0a819dd1cd33091d4abfa6e98f571e6b0a6c60da1533"
   },
   "date": "2026-10-06",
-  "fresh_head_ci_required": true,
+  "fresh_head_ci_required": false,
   "independent_review": "31 meaningful cases pass; original7625 accepts eight invalid negative bindings, repaired f948 accepts honest/refuses all eight. No remaining scoped findings.",
   "local_only_result": {
     "all_full_acceptance_flags": {
@@ -98,6 +98,26 @@
   "production_changed": false,
   "repair": "Pin sorted exact API advertisement separately from unchanged Registry/argv/receipt order; bind schema to exact name. Negative fixture emits Bash once, optional terminal DONE, then refuses third request. Require one observed Bash and typed zero host ingress; parent also binds selected model and distinct canonical parent/origin.",
   "system": "codex",
+  "terminal_ci": {
+    "all_five_success": true,
+    "checks": {
+      "allowlist": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/37525298208/job/112480645307",
+      "controller-tests": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/37525298172/job/112480645557",
+      "knowledge-base": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/37525298410/job/112480646014",
+      "policy-tests": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/37525298208/job/112480644957",
+      "validate": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/37525298208/job/112480645399"
+    },
+    "eval_passed": 13,
+    "head": "408bc6f1c93e86db36567797b9439cfa9dfebb11",
+    "integration_passed": 196,
+    "integration_skipped": 4,
+    "log_sha256": "08d3a8c2880b23a62a163c0a56e09f9f52566f45dea967bea2f842c7883d3759",
+    "run": 37525298208,
+    "unit_passed": 6214,
+    "unit_skipped": 11,
+    "unit_subtests_passed": 2,
+    "validate_job": 112480645399
+  },
   "version_allowlist_changed": false,
   "workstream": "WS-05"
 }
