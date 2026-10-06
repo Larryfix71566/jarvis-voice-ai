@@ -65,6 +65,7 @@ from jarvis.model_routing import (
     resolve_policy,
 )
 from jarvis.model_budget import TaskBudget, begin_model_task_budget, remaining_seconds, ModelBudgetUnavailable
+from jarvis.skills.registry import ADVISORY_SOURCE_TOOLS
 from jarvis.privacy_policy import (
     DataPolicy, ToolResultEnvelope, ToolResultBindingError,
     assert_route_allowed, make_tool_execution_scope, issue_tool_result,
@@ -851,7 +852,7 @@ class SubAgent:
                                system_prompt_override=system_prompt_override,
                                tool_specs_override=tool_specs_override,
                                tool_executor=tool_executor,
-                               task_budget=run_budget),
+                               task_budget=run_budget, task_started_at=task_started_at),
                     timeout=run_timeout,
                 )
             if private_route:
@@ -931,6 +932,7 @@ class SubAgent:
         tool_specs_override: list[dict[str, Any]] | None = None,
         tool_executor: Callable[[str, dict[str, Any]], Any] | None = None,
         task_budget: TaskBudget | None = None,
+        task_started_at: float | None = None,
     ) -> str:
         # F8 — locals, defaulting to the instance's configured client/model
         # when no override was resolved by run(). Every model call below
@@ -1618,9 +1620,12 @@ class SubAgent:
                     else:
                         classified_call = getattr(self._registry, "call_classified", None)
                         if execution_scope is not None and callable(classified_call):
+                            host_binding = ({"task_budget": task_budget,
+                                             "task_started_at": task_started_at}
+                                            if tool_name in ADVISORY_SOURCE_TOOLS else {})
                             result = await classified_call(
                                 tool_name, arguments, self.mcp_servers,
-                                execution_scope=execution_scope,
+                                execution_scope=execution_scope, **host_binding,
                             )
                         else:
                             result = await self._registry.call(

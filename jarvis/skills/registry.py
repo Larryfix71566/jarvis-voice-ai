@@ -48,6 +48,7 @@ from jarvis.privacy_policy import (
     issue_tool_result, make_tool_execution_scope, unclassified_tool_result,
     validate_tool_result,
 )
+from jarvis.model_budget import TaskBudget
 from jarvis.toolresult import classify_tool_result
 from jarvis.yaml_utils import load_unique_yaml_file
 
@@ -110,6 +111,12 @@ _WORKSPACE_SOURCE_OPERATIONS = {
                               'selfedit_write', 'selfedit_finish'}),
     'mcp-apps': frozenset({'app_build_start', 'app_build_status', 'app_build_submit'}),
 }
+_ADVISORY_SOURCE_OPERATIONS = {
+    'mcp-selfedit': frozenset({'plan_start', 'plan_status', 'plan_choose', 'plan_adopt'}),
+    'mcp-web': frozenset({'research_compare_start', 'research_status', 'research_save'}),
+}
+ADVISORY_SOURCE_TOOLS = frozenset().union(*_ADVISORY_SOURCE_OPERATIONS.values())
+_ADVISORY_STARTS = frozenset({'plan_start', 'research_compare_start'})
 _PINNED_SOURCE_MODULES = {
     server: f"mcp_servers.{server.replace('-', '_')}.server"
     for server in (*_PUBLIC_SOURCE_OPERATIONS, "mcp-repo", *_WORKSPACE_SOURCE_OPERATIONS)
@@ -739,6 +746,7 @@ class SkillRegistry:
     async def call_classified(
         self, tool_name: str, arguments: dict, server_names: list[str] | None = None,
         *, execution_scope: ToolExecutionScope,
+        task_budget: TaskBudget | None = None, task_started_at: float | None = None,
     ) -> ToolResultEnvelope:
         """Invoke with host-issued source policy before any result sink.
 
@@ -765,7 +773,8 @@ class SkillRegistry:
                 holder.arm("tool_source_policy", execution_scope.parent_request_id)
             if runlog is not None:
                 runlog.mark_sensitive()
-        value = await self._call(tool_name, arguments, server_names, execution_scope=execution_scope)
+        value = await self._call(tool_name, arguments, server_names, execution_scope=execution_scope,
+                                 task_budget=task_budget, task_started_at=task_started_at)
         if not isinstance(value, ToolResultEnvelope):
             raise ToolResultBindingError()
         return value
@@ -773,6 +782,7 @@ class SkillRegistry:
     async def _call(
         self, tool_name: str, arguments: dict, server_names: list[str] | None = None,
         *, execution_scope: ToolExecutionScope | None = None,
+        task_budget: TaskBudget | None = None, task_started_at: float | None = None,
     ) -> str | ToolResultEnvelope:
         # Do not let a caller or adapter mutate the arguments after the scope
         # was checked and bind a different asynchronous invocation to it.
@@ -823,7 +833,8 @@ class SkillRegistry:
         # Supervisor tool call) — this is the normal case, not a warning.
         return await self._invoke(tool_name, server, session, arguments,
                                   runlog, allow_restart=True, execution_scope=execution_scope,
-                                  source_arguments=source_arguments)
+                                  source_arguments=source_arguments, task_budget=task_budget,
+                                  task_started_at=task_started_at)
 
     async def _call_watching(self, server: str, session: Any,
                              tool_name: str, arguments: dict, *, meta: dict | None = None) -> Any:
@@ -940,6 +951,142 @@ class SkillRegistry:
             return issue_tool_result(scope, '{"error":"workspace_source_unavailable","ok":false}',
                 floor, 'host-generated-workspace-refusal')
 
+    async def _advisory_source_invocation(self, tool, server, session, arguments,
+                                          source_arguments, runlog, scope, *,
+                                          task_budget=None, task_started_at=None):
+        from jarvis.development_attestation import (new_source_challenge, pin_source_authority,
+            verify_advisory_source, _advisory_context, DevelopmentSourceAttestationError)
+        from jarvis.model_budget import bind_model_task_budget_for_transport
+        from jarvis.model_routing import ModelRouteError, resolve_policy
+        from jarvis.privacy_policy import strictest
+
+        expected_agent = 'developer' if server == 'mcp-selfedit' else 'analyst'
+        kind = 'planning' if expected_agent == 'developer' else 'research'
+        child_workload = 'planning' if kind == 'planning' else 'council'
+        prepared = None
+        pin = None
+        floor = scope.input_policy
+        metadata = {'protocol': 'mortimer.advisory-source.v1', 'owner_id': getattr(runlog, 'user_id', ''),
+                    'bot_session_id': getattr(runlog, 'session_id', ''),
+                    'caller_run_id': scope.parent_request_id, 'caller_agent': expected_agent,
+                    'tool_name': tool, 'arguments': source_arguments, 'task_id': scope.task_id,
+                    'tool_call_id': scope.tool_call_id, 'input_policy': scope.input_policy.level,
+                    'challenge': new_source_challenge()}
+
+        async def phase(name, extra=None):
+            return await self._call_watching(server, session, tool, arguments,
+                meta={'mortimer_advisory_source': {**metadata, 'phase': name, **(extra or {})}})
+
+        def response_body(result, envelope):
+            policy, content = validate_tool_result(scope, envelope)
+            structured = getattr(result, 'structuredContent', None)
+            text = '\n'.join(getattr(block, 'text', '') for block in result.content).strip()
+            if (getattr(result, 'isError', False) or structured is None
+                    or unclassified_tool_result(scope, structured).content != content or text != content):
+                raise ToolResultBindingError()
+            return policy, structured
+
+        async def cancel_prepared():
+            # This capability cancels only the exact prepared start; it cannot
+            # create a job, choose a replacement or reset its budget.
+            challenge = new_source_challenge()
+            result = await phase('cancel', {'preparation_id': prepared['preparation_id'],
+                'source_context': prepared['source_context'], 'challenge': challenge})
+            hidden = (getattr(result, 'meta', None) or {}).get('mortimer_advisory_source')
+            if type(hidden) is not dict or set(hidden) != {'source_receipt'}:
+                raise ToolResultBindingError()
+            envelope = verify_advisory_source(pin, scope, hidden['source_receipt'],
+                context=prepared['source_context'], challenge=challenge, phase='cancel')
+            _, body = response_body(result, envelope)
+            if body.get('ok') is not True or pin_source_authority() != pin:
+                raise ToolResultBindingError()
+
+        async def settle_cancel():
+            cancellation = asyncio.create_task(cancel_prepared())
+            try:
+                await asyncio.wait_for(asyncio.shield(cancellation), timeout=2.0)
+            except BaseException:
+                cancellation.cancel()
+                await asyncio.gather(cancellation, return_exceptions=True)
+
+        try:
+            contract = self._source_contract_for(tool, server, session)
+            if contract is None or not contract.local_admin:
+                raise ToolResultBindingError()
+            self._workspace_live_run(runlog, scope, check_floor=False, expected_agent=expected_agent)
+            binding = None
+            if tool in _ADVISORY_STARTS:
+                if (type(task_budget) is not TaskBudget or task_budget.workload != expected_agent
+                        or task_budget.parent_request_id != scope.parent_request_id
+                        or task_budget.user_id != runlog.user_id):
+                    raise ToolResultBindingError()
+                binding = await asyncio.to_thread(bind_model_task_budget_for_transport,
+                    task_budget, child_workload, resolve_policy(child_workload).limits,
+                    started_at=task_started_at)
+                metadata.update(owner_scope_id=binding.owner.scope_id,
+                                child_scope_id=binding.child.scope_id)
+            associated = await phase('associate')
+            if (getattr(associated, 'isError', False)
+                    or getattr(associated, 'structuredContent', None) != {'ok': True}):
+                raise ToolResultBindingError()
+            pin = pin_source_authority()
+            challenge = new_source_challenge()
+            result = await phase('prepare', {'challenge': challenge})
+            hidden = (getattr(result, 'meta', None) or {}).get('mortimer_advisory_source')
+            if (getattr(result, 'isError', False) or type(hidden) is not dict
+                    or set(hidden) != {'source_context', 'preparation_id', 'source_receipt'}):
+                raise ToolResultBindingError()
+            context = _advisory_context(hidden['source_context'])
+            if (context['owner_id'] != runlog.user_id or context['bot_session_id'] != runlog.session_id
+                    or context['caller_run_id'] != scope.parent_request_id
+                    or context['caller_agent'] != expected_agent or context['advisory_kind'] != kind
+                    or (binding is not None and (context['owner_scope_id'] != binding.owner.scope_id
+                                                or context['child_scope_id'] != binding.child.scope_id))):
+                raise ToolResultBindingError()
+            envelope = verify_advisory_source(pin, scope, hidden['source_receipt'],
+                context=context, challenge=challenge, phase='prepare')
+            accepted, body = response_body(result, envelope)
+            prepared = {'ok': True, 'preparation_id': hidden['preparation_id'], 'source_context': context}
+            if body != prepared or pin_source_authority() != pin:
+                raise ToolResultBindingError()
+            floor = strictest(floor, accepted,
+                self._workspace_live_run(runlog, scope, expected_agent=expected_agent))
+            if floor.level in {'confidential', 'local_only'}:
+                holder = current_sensitive_turn.get()
+                if holder is not None:
+                    holder.arm('advisory_source_policy', scope.parent_request_id)
+                runlog.mark_sensitive()
+            challenge = new_source_challenge()  # preparation verification consumed its own nonce
+            result = await phase('execute', {'preparation_id': prepared['preparation_id'],
+                'source_context': context, 'challenge': challenge})
+            hidden = (getattr(result, 'meta', None) or {}).get('mortimer_advisory_source')
+            if type(hidden) is not dict or set(hidden) != {'source_receipt'}:
+                raise ToolResultBindingError()
+            envelope = verify_advisory_source(pin, scope, hidden['source_receipt'],
+                context=context, challenge=challenge, phase='execute')
+            policy, _ = response_body(result, envelope)
+            floor = strictest(floor, policy,
+                self._workspace_live_run(runlog, scope, expected_agent=expected_agent))
+            if pin_source_authority() != pin or self._source_contract_for(tool, server, session) is None:
+                raise ToolResultBindingError()
+            return issue_tool_result(scope, envelope.content, floor,
+                                     envelope.source_scope, envelope.canonical_refs)
+        except asyncio.CancelledError:
+            if prepared is not None and tool in _ADVISORY_STARTS:
+                await settle_cancel()
+            raise
+        except Exception:  # contain raw transport/provider fields before sinks
+            if prepared is not None and tool in _ADVISORY_STARTS:
+                await settle_cancel()
+                runlog.tool_outcome_unknown(tool, scope.tool_call_id,
+                                            reason_code='advisory_source_unavailable')
+            try:
+                floor = strictest(floor, self._workspace_live_run(runlog, scope, expected_agent=expected_agent))
+            except (ToolResultBindingError, ModelRouteError, DevelopmentSourceAttestationError):
+                floor = strictest(floor, DataPolicy('confidential', 'unverified-advisory-floor'))
+            return issue_tool_result(scope, '{"error":"advisory_source_unavailable","ok":false}',
+                floor, 'host-generated-advisory-refusal')
+
     def _finish_workspace_source(self, envelope, scope, tool, server, runlog, latency_ms):
         policy, content = validate_tool_result(scope, envelope)
         if policy.level in {'confidential', 'local_only'}:
@@ -958,15 +1105,21 @@ class SkillRegistry:
                       arguments: dict, runlog: Any, *,
                       allow_restart: bool,
                       execution_scope: ToolExecutionScope | None = None,
-                      source_arguments: dict | None = None) -> str | ToolResultEnvelope:
+                      source_arguments: dict | None = None,
+                      task_budget: TaskBudget | None = None,
+                      task_started_at: float | None = None) -> str | ToolResultEnvelope:
         source_arguments = arguments if source_arguments is None else source_arguments
         call_start = time.perf_counter()
         try:
             contract = self._source_contract_for(tool_name, server, session)
             workspace = (execution_scope is not None and contract is not None and contract.local_admin
                          and tool_name in _WORKSPACE_SOURCE_OPERATIONS.get(server, ()))
+            advisory = execution_scope is not None and tool_name in _ADVISORY_SOURCE_OPERATIONS.get(server, ())
             result = await asyncio.wait_for(
-                self._workspace_source_invocation(tool_name, server, session, arguments,
+                self._advisory_source_invocation(tool_name, server, session, arguments,
+                    source_arguments, runlog, execution_scope, task_budget=task_budget,
+                    task_started_at=task_started_at) if advisory
+                else self._workspace_source_invocation(tool_name, server, session, arguments,
                     source_arguments, runlog, execution_scope) if workspace
                 else self._call_watching(server, session, tool_name, arguments),
                 timeout=CALL_TIMEOUT,
@@ -988,14 +1141,17 @@ class SkillRegistry:
                 logger.warning("mcp_server_transport_error name=%s tool=%s error_type=%s",
                                server, tool_name, h.last_error)
                 ok = False
-                if allow_restart:
+                # A lost start response cannot establish whether its job was
+                # created. Never automatically replay a consequential start.
+                if allow_restart and not (execution_scope is not None and tool_name in _ADVISORY_STARTS):
                     ok = await self._restart(server, failed_session=session)
                 new_session = self._sessions.get(server)
                 if ok and tool_name in self._tools and new_session is not None:
                     return await self._invoke(tool_name, server, new_session,
                                               arguments, runlog,
                                               allow_restart=False, execution_scope=execution_scope,
-                                              source_arguments=source_arguments)
+                                              source_arguments=source_arguments, task_budget=task_budget,
+                                              task_started_at=task_started_at)
                 latency_ms = int((time.perf_counter() - call_start) * 1000)
                 content = (f"{tool_name} failed: {server} stopped and could not "
                            f"be restarted ({h.last_error}).")
@@ -1292,7 +1448,7 @@ class SkillRegistry:
                 except (OSError, ValueError):
                     repo_root = None
             local_admin = False
-            if name in _WORKSPACE_SOURCE_OPERATIONS:
+            if name in _WORKSPACE_SOURCE_OPERATIONS or name in _ADVISORY_SOURCE_OPERATIONS:
                 from urllib.parse import urlsplit
                 from jarvis.urls import ADMIN_URL_ENV, DEFAULT_ADMIN_URL
                 try:
