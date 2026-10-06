@@ -96,10 +96,25 @@ Claude’s work or enable any runtime feature.
 - Expand a workstream for its editable fields. These blocks replace the former rows; the protocol’s references to a “row” mean the corresponding workstream block.
 - Ordered by what still needs work (Larry, 09-29). When a block's status changes, move it to the matching group. Ids are stable, so links keep working.
 
+**Reading the acceptance lists:** Each unfinished block lists its remaining decisions, prerequisite work and checks, with the responsible actor and pass condition. Check a box only when a dated receipt names the tested revision/configuration and result; record Larry's sign-off where the plan requires it. Valid shared receipts may satisfy more than one row. Completed workstreams stay below and are not reopened.
+
+**Documentation authorization, 2026-10-06:** Larry asked Codex to add a list for every item needing acceptance. This bounded WS-20 documentation update adds plan-derived checklists across the open blocks on `codex/ws05-execution-20261005` (#184); implementation owners, existing status fields and acceptance decisions remain unchanged.
+
 ### Needs work: not yet built (proposed, claimed, in progress, in review, blocked)
 
 <details id="ws-20">
 <summary>WS-20 — Roadmap joint working: catch-up and drift prevention · Claude + Codex</summary>
+
+### Acceptance checklist — remaining
+
+B1–B4 implementation is merged; the 72-entry migration is already verified.
+
+- [ ] **Codex / Claude · documentation:** Land the owned status corrections, including WS-10/11's lifecycle labels; the roadmap checker reports no unresolved errors against the current production receipt.
+- [ ] **Codex / Claude · observation:** Record ten post-migration PR merges with no change-log conflict. Record the actual PRs; do not infer this from the number of commits.
+- [ ] **Larry · decision:** After the warn-only rollout period and owned corrections, decide whether the checker becomes a blocking CI gate; the chosen behavior is recorded and verified.
+- [ ] **Each acceptance owner · evidence:** Link the remaining live checks to their own rows (WS-17, WS-18 and the other open gates); publish the final Phase A/B exit record without treating implementation as live acceptance.
+
+Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.md).
 
 **Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
 
@@ -108,11 +123,11 @@ Claude’s work or enable any runtime feature.
 - **Implemented by:** Codex (B1–B3); Claude (B4)
 - **Remaining work / acceptance:** Phase A: #138 closed; #142, #147 and #152 merged; the 10-02 19:23 deployment and Larry's one-row, supporting-display and single-answer checks recorded; WS-18 AirPods and UI2-22 five-turn checks remain separate. Phase B: B1 migration is complete; checker warn-only rollout remains open; WS-10/11 lifecycle wording awaits their acceptance owner; next 10 PRs merge without change-log conflict. Phase C rules are in §0.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (plan #153, B1–B3 claim #157, B2/B3 #158, B4 #156, B1 log migration #160).
+- **Where:** main (plan #153, B1–B3 claim #157, B2/B3 #158, B4 #156, B1 log migration #160); bounded acceptance-checklist documentation: `codex/ws05-execution-20261005` (#184).
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
 - **Scope:** B4 (Claude): `scripts/check_roadmap.py`, `tests/unit/test_check_roadmap.py`, the drift-check step in `.github/workflows/validate.yml`. B1–B3 (Codex): `ROADMAP.md` §0, §8 and production wording, `docs/roadmap-log/**`, and dated status/progress in `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`.
 - **Next step:** codex and claude: write new entries under `docs/roadmap-log/`; the migrated count and unchanged bodies are verified. Both systems: monitor the next 10 PRs for change-log conflicts; the WS-10/11 acceptance owner corrects their lifecycle wording before CI leaves warn-only mode.
-- **Updated:** 10-06 (Codex B1/B2 factual reconciliation; no new acceptance)
+- **Updated:** 10-06 (Codex B1/B2 reconciliation and Larry-requested acceptance lists; no new acceptance)
 
 </details>
 
@@ -120,6 +135,19 @@ Claude’s work or enable any runtime feature.
 
 <details id="ws-17">
 <summary>WS-17 — Command Console CC7a: conversation-first stage · Claude implementation, Codex review</summary>
+
+### Acceptance checklist — remaining
+
+The earlier one-row and card-operation subparts keep their recorded passes. Current live checks and future implementation gates are separate below.
+
+- [ ] **Larry · current five-turn conversation:** On the identified deployed build, both speakers' full text remains ordered, including an answer >160 characters. Ordinary speech creates no result/tab; reading a result keeps focus while the thread updates; protected-content rules hold. This is release-readiness “UI2-22 — conversation thread.”
+- [ ] **Larry · current arrival-routing recheck:** Weather just asked for from Conversation opens; weather requested while reading another result shows New without jumping; a late background result stays a card. A web result with the supporting display open leaves conversation on main and appears on that display. This is the changed CC7a.2b part of release-readiness “UI2-23 — inline cards.”
+- [ ] **Claude / Codex / Larry · CC7a.3 implementation prerequisite:** Review, merge and deploy the Recents increment (currently PR #173). Preserve UUID targets, open/pinned/Output history, numbered pinned-first inventory, unread/updated markers and truthful ambiguity/stale-target resolution; the WS-21 merge dependency is already satisfied.
+- [ ] **Larry · Recents live tail after CC7a.3:** Voice/pointer select, close, pin/unpin and reopen by number/subject match the visible inventory; ambiguous/stale requests clarify. Pinned plus approximately ten visible entries does not discard open/pinned/Output records. This completes the unaccepted Recents part of release-readiness UI2-24, not a rerun of its accepted one-row part.
+- [ ] **Claude / Codex, then Larry · CC7a.4 implementation and reuse:** Implement/review/deploy subject/freshness reuse, then weather → Atlanta → original weather yields two cards. Fresh ≤15-minute original content reopens without fetching and adds a reference line; stale refresh replaces the same identity. Record release-readiness UI2-25; remove the temporary feature switch only after UI2-22…25 pass.
+- [ ] **Larry / evidence recorder · dependent closure:** Record exact-build conversation/card/Recents/reuse outcomes, then finish changed console preservation, voice parity and accessibility UI2-04/09/13 in WS-09/11. Do not close them from the earlier partial CC7a checks.
+
+Sources: [Command Console plan §7.2](docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md), [release-readiness CC7a UI2-22…25](docs/acceptance/adaptive-interface/RELEASE_READINESS.md). The Atlas/developer checks with reused UI2 numbers in another status file are different requirements.
 
 **Workstream:** Larry, 09-30: conversation is spread over one tab per turn, only Mortimer's side shows, the tab strip fills up, and asking again re-fetches. Increment CC7a of the Command Console plan (WS-09's plan): one conversation thread with both sides, results as inline cards, Recents instead of tabs, reuse a fresh result by subject.
 
@@ -139,6 +167,18 @@ Claude’s work or enable any runtime feature.
 <details id="ws-21">
 <summary>WS-21 — Supporting display transfer: one validated, confirmed route · Claude implementation, Codex review</summary>
 
+### Acceptance checklist — remaining
+
+#171 is merged and deployed in `bde22bb`; merge/deploy are not pending acceptance tasks. The old fields below await the separate #172/#174 status reconciliation.
+
+- [ ] **Larry / Codex · real transfer:** Using voice and the pointer route, send an existing weather/radar result to the intended external screen. The actual result and screen match; success is spoken only after content/placement confirmation. Conversation stays on main, with radar controls/pins/reading state retained.
+- [ ] **Larry · repeated request:** Ask for the same transfer again. Mortimer truthfully says “already showing”; identity stays the same, with no reopening, duplicate fetch or extra window.
+- [ ] **Larry / Codex · rejected destinations/content:** With monitor unplugged, the request says unavailable and opens nothing. Stale/closed/protected result and unknown/disconnected-screen cases refuse before changing content or placement; console-screen targets are refused.
+- [ ] **Larry / Codex · disconnect during confirmation:** Unplug during an in-flight transfer and exercise an unconfirmed transfer. A truthful failure restores/clears the prior selection and closes the window opened by the failed request; no empty leftover, stale locator or undoing a newer successful transfer.
+- [ ] **Larry / Codex · placement and inventory:** Requested/published inventory agrees with the actual result, content, presentation and hardware screen. Applicable detach lands on the named connected screen; valid newer transfers supersede earlier ones without false success or destroying the newer state. Record exact-build outcomes and keep conversation on main throughout.
+
+Source: [supporting-display plan §§4–5](docs/plans/MORTIMER_SUPPORTING_DISPLAY_TRANSFER_PLAN.md). Requires the physical external monitor; existing regression tests are implementation evidence, not a substitute for these live checks.
+
 **Workstream:** Larry, 10-03, on deployed `63aaeef`: asked to put the weather radar on the external monitor, Mortimer said it was there while the supporting display opened empty (two `display_popout` calls, both `ok`). Codex's audit found five defects: a voice command that opens the window without content, success reported before the app confirms, detach accepting unknown results, screen IDs that placement does not recognise, and an incomplete contract and inventory. Repair: one coordinator for voice and pointer, validated before anything opens, confirmed before success is spoken.
 
 - **Owner:** `claude` (implementation); `codex` reviews before merge
@@ -156,6 +196,18 @@ Claude’s work or enable any runtime feature.
 
 <details id="ws-13">
 <summary>WS-13 — T5 mail, calendar and brief: review the draft plan against current main · Claude (proposed)</summary>
+
+### Approval and future acceptance checklist
+
+This item is proposed, not ready for live acceptance. Future tests below apply after the plan is approved and implemented.
+
+- [ ] **Claude / Codex · prerequisite review:** Reconcile the draft with current architecture, security/model-routing rules, actual native client and reserved migration `0035`; coordinate the existing plan edits before implementation.
+- [ ] **Larry · plan decisions:** Approve read-only scope, calendar visibility/backend, Secretary routing/isolation and documented residual risks, vault names, brief schedule and permitted content/logging. Supply selected account access through the established vault/OS flow; credentials are not entered in this roadmap.
+- [ ] **Claude / Codex · implementation and security evidence:** Deliver reviewed implementation and required suites; mail secrets reach only the intended child, reads do not mark mail read, injection fixtures cause zero post-mail tool calls, routing meets the existing ≥90% floor, and digest speech is grounded in the visible facts.
+- [ ] **Larry · future Mac checks:** Complete plan V1–V10 on the selected backend: secret isolation, EventKit/CalDAV calendar parity, unread preservation, agent/injection isolation, routing, requested and once-daily scheduled brief, grounding and all kill switches. Record actual scores and outcomes rather than assuming the draft's defaults are correct.
+- [ ] **Larry / Claude · release:** Approve the tested artifact/configuration, record deployment and reversible rollback, and confirm the brief/card/timezone and failure behavior on the Mac. Sending mail or writing calendar events remains outside this plan.
+
+Source: [mail/calendar/brief plan §§8, 12](docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md). This is an approval/implementation dependency list, not a claim that the proposed feature exists.
 
 **Workstream:** Review `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (DRAFT, 2026-08-26) against today's main before anyone builds T5. Docs only.
 
@@ -177,6 +229,23 @@ Claude’s work or enable any runtime feature.
 <details id="ws-05">
 <summary>WS-05 — Model access: subscriptions, APIs and SAYGM · Codex</summary>
 
+### Acceptance checklist — remaining
+
+PR #177 is merged. Its green CI and localhost-only tool proof do not close live model or rollout acceptance.
+
+- [ ] **Larry · prerequisites:** Decide the exact private `REPO_MAP` → Claude probe, provide an operator-issued service identity, assign the native-readiness test repair on main, and settle manual/private/public-crawl source authority. Document these before dependent provider or developer work.
+- [ ] **Claude · review:** Record the cross-system review of merged #177; its merge is not evidence that this review happened.
+- [ ] **Codex / Larry · baseline and release identity (MAR-A):** Freeze the candidate, verify the running app/backend/effective configuration, and capture representative quality, queue time, first useful output, total duration, calls and route/billing attribution. Historical missing measurements stay unknown.
+- [ ] **Codex · effective routing and privacy (MAR-B/C/D/G):** On enabled workloads, saved route/model selections hold; unavailable models refuse; prompts, tool results, council calls and logs retain their actual source restrictions. Manual and crawl routes need complete proof; cancellation, recovery, bounded budgets, independent council identities and dedicated memory routes remain correct.
+- [ ] **Codex / Larry · subscriptions (MAR-F; shares WS-02 evidence):** Validate the exact service-resolved runtime/model/controls and actual authenticated workload. Claude 2.1.291 is unverified; Codex tool workloads remain unsupported. Prove isolated sign-in, no inherited API credentials, cleanup and truthful exhaustion without paid fallback.
+- [ ] **Codex / Larry · SAYGM (MAR-E):** A catalog-confirmed, eligible confidential route must exist before the synthetic confidential pilot; record model/tier/capabilities and required attestation. The current 64-model catalog advertises zero confidential models, so this gate is blocked rather than passed by catalog access.
+- [ ] **Codex / Larry · representative pilots (MAR-I):** Complete equivalent baseline/candidate research retrieval, a real nonempty developer edit with all 12 sandbox checks, independent holdout quality and rollback, and synthetic confidential-memory cases. Verify exact source/parent ownership, constraints, cancellation and cleanup; a no-op or four-operation mock cannot close the developer pilot.
+- [ ] **Larry, supported by Codex · controls (MAR-H):** Exercise native and spoken route selection, draft/confirm/cancel, unavailable choices and stale selections. The visible result and actual route agree; existing voice, results and monitor behavior remain intact.
+- [ ] **Codex / Larry · quality and latency:** Compare cold/warm representative tasks with the same fixtures and rubric. Local acknowledgement ≤250 ms; short sub-agent median adds ≤1 second; added p95 delay >2 seconds requires review. Research/development use total time and quality; background work preserves voice priority.
+- [ ] **Larry / Codex · account and rollout (MAR-J):** Record account allowance, billing source and paid-overage settings; unknown cost stays unknown. Approve staged defaults only after the preceding gates pass, verify quota/queue behavior with no API fallback, and record the tested/deployed configuration and rollback.
+
+Sources: [model-use plan §§11, 14–15](docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md), [current status and receipts](docs/acceptance/model-use-enhancements/STATUS.md). Source approvals and account decisions here are pending tasks, not authorization supplied by this checklist.
+
 **Workstream:** Model Use Enhancements MAR-A…J (checklist in §7)
 
 - **Owner:** `codex`
@@ -194,6 +263,12 @@ Claude’s work or enable any runtime feature.
 
 <details id="ws-18">
 <summary>WS-18 — Native audio: survive an output switch during speech · Claude</summary>
+
+### Acceptance checklist — remaining
+
+- [ ] **Larry · live AirPods switch:** On a build containing #144 or later, switch AirPods → Mac speaker and Mac speaker → AirPods while Mortimer is mid-answer. In both directions the app stays alive, any voice gap is short, and the log shows `audio output flowing` after each rebuild. Record build, date and both outcomes. Requires AirPods; the previously deferred check is not assumed passed.
+
+Source: [native-audio plan, WS-18 progress](docs/plans/MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md). The documented rollback flag is available; it is not an additional mandated live test.
 
 **Workstream:** Larry, 09-30: Mortimer crashed at 18:09:08 after switching from AirPods to the Mac speaker mid-answer. Log: the engine rebuilt (`audio engine rebuilt after configuration change`), Voice Processing then reported `failed to run downlink DSP (state fault)`, and `AVAudioPlayerNode.play()` raised `player did not see an IO cycle` five seconds later (uncaught Objective-C exception, SIGABRT).
 
@@ -213,6 +288,19 @@ Claude’s work or enable any runtime feature.
 <details id="ws-01">
 <summary>WS-01 — Reliability, privacy and memory gaps · Codex</summary>
 
+### Acceptance checklist — remaining
+
+The integration, deployment history and PR #125 claim-order repair retain their recorded evidence.
+
+- [ ] **Codex / Larry · preparation:** Freeze the actual deployed candidate; receipts identify source, app/backend/configuration, executable hash and date. Follow current CC7a answer routing rather than the older captions/result-card wording.
+- [ ] **Larry, supported by Codex · display recovery:** Exercise remaining research, graph and append-only developer-result scenarios: close/reopen, monitor unplug/reconnect and backend/voice reconnect. One owner and one bounded supporting stage remain; IDs, selection, pins and drafts survive with no duplicate fetches or window growth. Untested mirrored/three-screen hardware cases remain explicitly open.
+- [ ] **Larry / Codex · Atlas freshness:** Verify authenticated refresh, source change, empty/partial failure, expired authentication, reconnect and late responses. Context precedes research results; state and limits are truthful; moving views does not duplicate fetching.
+- [ ] **Larry / Codex · spoken, sharing and accessibility journeys:** Verify remaining real audio/result actions and text/image preview, copy, save, share-picker cancel/return and approved inbound transfer. Target/provider, bounds, cancellation and cleanup are visible; VoiceOver, keyboard and font/accessibility settings work. Preserve the narrower accepted WS-17 checks and WS-08 sign-off.
+- [ ] **Owning systems / Larry · dependencies:** Complete the applicable audio/security/C8 gates under their existing protocols, WS-02/05 model gates and WS-10 memory rollout. UI2-04/09/13 await WS-17's conversation/card/Recents/reuse acceptance; speaker gating stays off pending its own effectiveness evidence.
+- [ ] **Codex / Larry · release closure:** Obtain the exact-candidate independent verifier, prove rollback preserves data/preferences and loaded identities, and record five stable daily-driver days. Material changes restart affected measurements and the frozen-candidate observation period.
+
+Sources: [verified-gap plan §§12–14](docs/plans/MORTIMER_VERIFIED_GAP_CLOSURE_PLAN.md), [acceptance runbook](docs/acceptance/ACCEPTANCE_RUNBOOK.md). Reuse valid receipts from the owning rows rather than repeat the same physical test for every workstream.
+
 **Workstream:** Verified gap closure GC24-00…06: execution lifecycle, privacy log redaction, memory admission, Atlas
 
 - **Owner:** `codex`
@@ -230,6 +318,19 @@ Claude’s work or enable any runtime feature.
 
 <details id="ws-02">
 <summary>WS-02 — Subscription runtime isolation · Codex</summary>
+
+### Acceptance checklist — remaining
+
+Existing Codex loopback and Claude public-fixture proofs retain their narrow scope; neither certifies billing or real developer-workload acceptance.
+
+- [ ] **Codex · runtime identity:** Record the service-resolved executable/version/hash, exact model, sign-in/input/output contract and customization/tool suppression. A changed or unverified runtime stays unavailable; Claude 2.1.291 currently needs validation.
+- [ ] **Codex · installed-runtime isolation:** Prove stdin-only prompts, temporary working directory outside the repo, allowlisted environment, no inherited unrelated credentials/endpoints or project hooks/plugins/MCP/built-in tools, and refusal of malformed/contradictory terminal output.
+- [ ] **Codex · lifecycle:** On the actual accepted runtime, success/failure/timeout/cancel clean their children and temporary state; termination grace is ≤2 seconds before escalation/reaping, and no late result is delivered.
+- [ ] **Codex / Larry · authenticated workload:** Execute the exact supported model/capabilities through Mortimer without implicit model/account/API fallback. Regenerate the full local runtime receipt where needed; text login or the sanitized loopback receipt cannot activate unsupported capabilities. Shares representative workload evidence with WS-05.
+- [ ] **Larry · account evidence:** Verify subscription/API identity, account allowance and paid-overage settings using supported account surfaces. Call success and list-price metadata alone do not prove zero cost.
+- [ ] **Codex / Larry · release:** Record exact source/runtime/configuration and service-resolved authentication/isolation, cleanup and deployed behavior; activate only capabilities whose required receipts and workload gates pass.
+
+Sources: [subscription-isolation plan SR-1…SR-6 and completion criteria](docs/plans/MORTIMER_SUBSCRIPTION_RUNTIME_ISOLATION_PLAN_2026-09-25.md), [latest model-use evidence](docs/acceptance/model-use-enhancements/STATUS.md).
 
 **Workstream:** Subscription runtime isolation (GC24-04)
 
@@ -249,6 +350,23 @@ Claude’s work or enable any runtime feature.
 <details id="ws-03">
 <summary>WS-03 — Skills Workspace and skill creator · Codex</summary>
 
+### Acceptance checklist — remaining
+
+SW-B and SW-C are already accepted (2/12). Recorded selection/navigation timing passes are retained; they do not close the remaining SW-K checks.
+
+- [ ] **Codex / Larry · deployed baseline (SW-A):** Visually verify the Versions explanation on the identified installed build; dormant authentication is described truthfully. Original skills, compact Conversation, voice/mute/orb, eight tabs, memory, Atlas, sharing and developer aggregation retain behavior; preexisting faults are identified separately.
+- [ ] **Codex / Larry · recorded runs (SW-D):** Use actual successful/failed/skipped/unknown/legacy runs and duplicate/out-of-order/reconnect events. Intended steps stay distinct from the actual trace, progress is never invented, and details open without extra windows. Owner-scoped activity depends on WS-04 authentication.
+- [ ] **Codex · privacy and owner boundaries (SW-E):** Verify canaries cannot leak through inventory, SQL/JSONL, diagnostics, argv, exports, screenshots, examples, evaluations or supporting displays, including wrong-owner requests.
+- [ ] **Codex / Larry · real sandbox (SW-F):** On an authorized creator draft, the actual VM permits only approved package/fixture changes; offline validation and changed-candidate rejection work. No host fallback, live-checkout write, network/credential mount or receipt-drift activation. Depends on authentication, real VM and source/model readiness.
+- [ ] **Codex / Larry · paired quality evaluation (SW-G):** Run six reviewed cases × two repetitions × baseline/candidate: 12 complete pairs / 24 trials with the frozen rubric. All deterministic safety checks pass; blinded quality passes ≥10/12 and is no worse than baseline. Record latency/calls/cost; eligible provider/budget authorization is a prerequisite.
+- [ ] **Codex / Larry · lifecycle and activation (SW-H):** Duplicate requests produce one job/PR; cancel prevents late publication; restart reconciles uncertainty. Exact-diff review, merge, deploy and atomic activation remain separate; in-flight revisions stay stable and rollback restores the accepted version. Depends on SW-F/G and maintainer review.
+- [ ] **Larry / Codex · voice/accessibility (SW-I):** Every control uses its shared voice action; stale/ambiguous targets clarify. VoiceOver, keyboard, large type, contrast and application accessibility settings work; search/filter persists and steps are usable without hover.
+- [ ] **Larry / Codex · physical displays (SW-J):** One/two displays, two research results and a creator run: move, close/reopen, unplug during validation, reconnect and restart. One append-only creator tile retains steps/retries/selection; no duplicates, focus theft, orphan or unintended new job.
+- [ ] **Codex / Larry · remaining performance (SW-K):** Paired voice p95 regression ≤50 ms; ten-minute library/live-trace memory growth ≤10 MiB, tied to the exact Mac/build. Retain the already-recorded ≤20 ms selection and ≤100 ms navigation sub-results.
+- [ ] **Codex / Larry · release and handoff (SW-L):** Required frozen suites, actual app/backend/config/package identities, visible ready/loaded state, current evidence and rollback agree. Required authentication, evaluation/activation and parent privacy/model gates are satisfied; failed historical full-profile receipts remain failed.
+
+Source: [Skills plan §12, SW-A…SW-L](docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md). Dependencies are WS-04 local onboarding, WS-05 source/model readiness and the applicable parent release gates.
+
 **Workstream:** Skills Workspace and skill creation (T6; supersedes `MORTIMER_SKILL_AUTHORING_PLAN.md`). Its own view, separate from the Workflow Viewer (Larry, 09-27)
 
 - **Owner:** `codex`
@@ -266,6 +384,20 @@ Claude’s work or enable any runtime feature.
 
 <details id="ws-04">
 <summary>WS-04 — Remote access · Codex; Larry decides activation</summary>
+
+### Acceptance checklist — remaining
+
+R1 foundation and the remote-bind guard are merged. Local preparation, local activation and remote binding are separate gates.
+
+- [ ] **Larry · prerequisite decision:** Choose supervised setup, one-time CLI or Mac pairing for local token onboarding. The R2 recommendation is not a substitute for the unresolved roadmap decision.
+- [ ] **Codex · implementation prerequisite:** Build and validate the chosen vault/Keychain onboarding path and reconcile the R2 header. Under the proposed supervised path: mint once, pass secrets through stdin, verify vault/Keychain readback, refuse existing storage and clean only this attempt's partial state. No token appears in argv/logs/temp files/receipts; preparation changes no auth or remote flag.
+- [ ] **Codex · disposable acceptance:** Verify first-run success, repeat refusal without another active identity, interrupted retry and failures after DB/vault/Keychain writes. Check the exact Keychain service/account, both-flag combinations and unauthenticated 401 behavior using disposable credentials.
+- [ ] **Larry / Codex · live preparation:** With separate authorization, record exact source, presence/readback and both database identities; authentication stays off and bot/admin listeners stay loopback-only. Preparation alone does not close enabled-mode or Skills acceptance.
+- [ ] **Larry / Codex · local activation, if approved:** Bare bot/admin requests return 401; authenticated Connect, voice/status and Skills Versions/inventory work. Verify actual sockets/no off-host listener, immediate device revocation and rollback to prior loopback behavior with remote binding false.
+- [ ] **Larry · spoken check:** Record the still-unverified real `system_status` answer on the chosen frozen setup; health probes and native tests alone do not close this spoken gate.
+- [ ] **Larry / Codex · remote mode only if separately chosen:** Record the remote-bind decision. If activated, complete G2/§8 tunnel/ACL/Funnel, LAN and tailnet socket, authenticated voice/barge-in/Runs, POST/PATCH offer, Keychain and immediate-revocation checks. If deferred, record that limitation rather than claiming remote access accepted.
+
+Source: [remote-access plan Addenda R1/R2 and §8](docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md). This checklist grants no credential-minting or activation authority.
 
 **Workstream:** Remote access T2: bearer tokens, fail-closed bind, Tailscale
 
@@ -285,6 +417,20 @@ Claude’s work or enable any runtime feature.
 <details id="ws-06">
 <summary>WS-06 — Self-service recovery and model registry · Claude implementation; Larry acceptance</summary>
 
+### Acceptance checklist — remaining
+
+Keep the recorded Swift check and data-level model/subscription/status checks closed. Their spoken counterparts still need live evidence.
+
+- [ ] **Larry / Claude · spoken status:** Ask which models work, whether services are up, whether the app rebuilt and where you are. Answers use actual tools, in one turn without unsolicited terminal commands/delegation. Record the still-open spoken counterparts of checklist #1/#2/#4/#8.
+- [ ] **Larry / Claude · external status:** Ask whether the exact named model is available on the subscription, which provider models are new, and whether PRs are open. Replies name the real probe/catalog source and fetch time; the first daily connect reports findings only when something changed.
+- [ ] **Larry / Claude · corrected retry:** The failed “Alfreda” request followed by “I meant Alpharetta” succeeds without the old retry lockout.
+- [ ] **Larry / Claude · process recovery:** A long developer run survives a three-minute client disconnect and reports its result after reconnect, with no `Available: none`. A controlled `mcp-web` child crash is recovered on the next request, with the successful restart recorded.
+- [ ] **Larry / Claude · graph and remaining source checks:** An unknown graph topic produces the truthful overview; structured sports answers or explicitly unconfirmed search fallback match the existing source policy. A one-day reconnect log supplies the recorded transport data.
+- [ ] **Larry / Claude · registry split:** Registry/environment verdicts, live delegation and model-picker behavior remain equivalent; the sandbox loop creates a reviewed PR adding a profile on an existing endpoint without altering endpoint/credential ownership.
+- [ ] **Claude / Larry · completeness:** Bring the referenced eleven-check Mac list into the existing repository plan and map every item to evidence, including still-open #3/#5/#6/#7/#10/#11. The detailed external checklist is not tracked here, so its numbering must not be guessed. Record the week's no-unsolicited-commands observation and the remaining `model_access.yaml` tier decision.
+
+Sources: [self-service specification acceptance map and P2–P7](docs/plans/MORTIMER_SELF_SERVICE_ACCESS_IMPLEMENTATION_SPEC.md), [recovery plan §4](docs/plans/MORTIMER_SELF_SERVICE_ACCESS_AND_RECOVERY_PLAN.md), [registry split §8](docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md). These are the repo-backed checks; the eleven-item mapping remains an explicit documentation prerequisite.
+
 **Workstream:** Self-service access and recovery P1–P7, plus registry split P5 (#86's files; merged in the 09-25 landing)
 
 - **Owner:** `claude`
@@ -303,6 +449,18 @@ Claude’s work or enable any runtime feature.
 <details id="ws-07">
 <summary>WS-07 — Voice workflows and Workflow Viewer · Claude</summary>
 
+### Acceptance checklist — remaining
+
+The recorded one-answer-in-the-thread check stays closed. The full five-turn conversation belongs to WS-17.
+
+- [ ] **Claude / Larry · reply-guard evidence:** Review genuine guard events in `log` mode, separating events from startup-setting lines; record precision and false refusals sufficient to judge a switch. The four previously recorded events did not establish this.
+- [ ] **Larry · guard-mode decision:** After that evidence, approve keeping `log` or switching to `correct`; record the effective mode and verify correction does not fabricate completed actions or bypass confirmation. No automatic switch is authorized here.
+- [ ] **Larry / Claude · remaining workflow live/evaluation record:** Record the planned workflow-enabled/disabled routing and voice evaluation outcomes and the unrecorded end-run live checks; retain prior suite/merge/deploy/memory-archive evidence.
+- [ ] **Larry · viewer journey:** “Show me the workflows” and each Workflows button open the gallery; “Show workflows” uses the supporting display. The availability flow shows its three wrapped steps and the five draft cards remain dashed and clearly drafts.
+- [ ] **Claude / Larry · closure:** Link the guard decision, viewer and remaining live/evaluation receipts to the exact build. UI2-22's five-turn outcome and any retry-location follow-up remain with their owning rows/backlog.
+
+Sources: [voice-workflows plan Progress, §5 and §12](docs/plans/MORTIMER_VOICE_WORKFLOWS_PLAN.md), [Workflow Viewer §6](docs/plans/MORTIMER_WORKFLOW_VIEWER_PLAN.md).
+
 **Workstream:** Voice workflows phases 1–4, Workflow Viewer, #80 privacy fix, DEPLOY-MAIN
 
 - **Owner:** `claude`
@@ -320,6 +478,23 @@ Claude’s work or enable any runtime feature.
 
 <details id="ws-09">
 <summary>WS-09 — Command Console and Atlas acceptance · Larry acceptance</summary>
+
+### Acceptance checklist — remaining
+
+Reuse valid shared receipts with WS-11 and preserve recorded orb, one-row and partial card/display checks. Older documents reuse some UI2 numbers; the linked requirement title determines the check.
+
+- [ ] **Larry / evidence recorder · preparation:** Freeze source/build/configuration and record loaded path, executable hash and date. Reconcile pre-CC7a runbook wording and map every remaining preservation/C8/native-client requirement to evidence.
+- [ ] **Larry · console, accessibility and transcript cleanup:** Check the remaining eight-tab/header-scroll/font/attention/unsent-draft/legacy-layout/keyboard/VoiceOver/contrast/notice interactions. Live user/Mortimer text stays in main history without duplicated compact-rail text or blank transcript-sized space; voice/mic controls remain. Changed UI2-04/13 checks wait for WS-17.
+- [ ] **Larry / Codex · Atlas and graph:** Exercise source/provenance inspection, grouping, pins/comparison, graph selection/search/filter/path/camera/fallback and honest missing/truncated data. Authenticated refresh, source changes, failure/reconnect/late data preserve identity/reading state, with no duplicate fetching; live performance/VoiceOver/multi-display evidence remains required.
+- [ ] **Larry / Codex · display governance:** Complete the remaining one/two/three/mirrored topology, manual placement, return-all, panel limit, pin-overflow and bounded one-to-four-result-stage checks. Stable IDs, drafts, pins and selection survive; no duplicate renderer, subscription, fetch or window storm. Unavailable hardware remains an explicit limitation; shares WS-21 transfer evidence.
+- [ ] **Larry · outward sharing:** Real selected text and image: preview, copy into another app, save/reopen, folder access, cancel and Share-picker return. Only the selected artifact leaves the app; no adjacent private UI. Opening a picker never counts as recipient delivery.
+- [ ] **Larry / implementation owner · inbound analysis:** Paste/drop/choose and explicit batches show the exact preview, provider/model and bounded progress; cancellation, failure, reconnect and ephemeral cleanup work. Malformed/oversize/imported-instruction/stale-session/unauthorized-batch tests refuse safely, including storage/diagnostic sinks; no upload or replay without approval.
+- [ ] **Larry · complete voice parity:** After WS-17, exercise every new enabled action through voice and the shared pointer/keyboard action, including move/share/select and graph focus/filter/path. Ambiguous/stale targets clarify or refuse; late/unavailable-display outcomes are truthful; mute/PTT/wake and OS-dialog boundaries are preserved.
+- [ ] **Implementation/evaluation owner · contracts and compatibility:** Verify ownership/schema/capability negotiation, acknowledgements, stale targets, cancellation, duplicate requests, menu/prompt/voice-fixture parity, old clients, disabled features and native/WebRTC messages. No fabricated success or duplicate side effect; existing evaluation floors and denominator/budgets hold.
+- [ ] **Codex / Larry · combined load and glass:** Graph + six panels + maximum accepted attachment load during voice preserves audio and bounded memory. Selection p95 ≤16.7 ms, navigation acknowledgement p95 ≤200 ms, graph pan/zoom p95 ≤33.3 ms, with >10% baseline degradation treated as a regression. Actual developer same-run results stay grouped; supporting tiles and legacy fallback obey Liquid Glass on/off settings.
+- [ ] **Verifier / Larry · release closure:** Exact-candidate required suites/CI/independent full-profile receipt pass; rollback preserves drafts/preferences/files and cancels pending transfers. Record loaded versions/hash/health, end-to-end voice/sharing and five frozen-candidate daily-driver days; material fixes restart the observation. Record each remaining gate and Larry's outcome.
+
+Sources: [Command Console plan §8](docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md), [release-readiness checklist](docs/acceptance/adaptive-interface/RELEASE_READINESS.md), [Atlas coverage and developer grouping/glass requirements](docs/acceptance/command-console/STATUS.md), [runbook](docs/acceptance/ACCEPTANCE_RUNBOOK.md). UI2-04/09/13 depend on WS-17's conversation/card/Recents/reuse gates.
 
 **Workstream:** Command Console and Atlas release acceptance
 
@@ -348,6 +523,19 @@ Claude’s work or enable any runtime feature.
 <details id="ws-10">
 <summary>WS-10 — Automatic memory rollout · Claude + Codex implementation; Larry rollout</summary>
 
+### Acceptance checklist — remaining
+
+The provider shadow, offline staged-rollout gate and 28-exchange recovery are already recorded. Synthetic first-20 decisions are not review of real decisions.
+
+- [ ] **Codex / Claude / Larry · preparation:** Freeze the merged release and verify the actual classifier, eligible dedicated memory route, effective automation stage and baseline. Satisfy WS-05 confidential/source gates for every enabled model route; shadow writes no live memory or prompt changes.
+- [ ] **Larry, supported by the implementation owners · staged use:** Approve and record one daily-driver day of shadow, then explicit preferences, then corroborated inferences, with the required observation at each stage. Task rules remain tentative until existing workflow confirmation accepts them.
+- [ ] **Larry · first 20 real decisions:** Inspect the first 20 live admissions/corrections; each has correct scope/evidence, is reversible, and does not turn assistant/quoted content into trusted user preference or permission.
+- [ ] **Codex / Claude · benefit and budgets:** Record counts/denominators against the frozen baseline: preference use, relevant recall, repeated questions, interruptions and stale errors. No recall/preference regression; failing interruption/stale cases improve and zero-error baselines stay zero. Admission p95 ≤200 ms cached / ≤2 s one bounded model call; daily ≤100 candidates / five model calls; latency/cost and configured limits pass the versioned rollout gate.
+- [ ] **Codex / Claude / Larry · privacy and voice:** Verify forget/delete/redaction across queue, retrieval, inspection/undo and usage; no duplicate durable rows or unauthorized scope. Restart-safe bounded maintenance preserves ongoing voice and prompts no routine cleanup chore.
+- [ ] **Larry / implementation owners · rollback and receipt:** Prove reversible corrections and immediate disable on privacy, scope, duplicate, budget or stale-use regression; record effective settings, stage changes, real benefit/cost and Larry's staged acceptance. The historical recovery remains separate and closed.
+
+Sources: [memory plan B5/B7/B9](docs/plans/MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md), [runbook §5](docs/acceptance/ACCEPTANCE_RUNBOOK.md), [rollout limits fixture](tests/fixtures/memory_rollout_acceptance.json). Existing fixture limits do not constitute live measurement or approval to enable automation.
+
 **Workstream:** Memory automation: staged enablement on the Mac
 
 - **Owner:** `larry`
@@ -365,6 +553,19 @@ Claude’s work or enable any runtime feature.
 
 <details id="ws-11">
 <summary>WS-11 — Adaptive interface C8 acceptance · Larry acceptance</summary>
+
+### Acceptance checklist — remaining
+
+WS-08's orb sign-off and other explicitly recorded partial checks remain closed. Shared WS-09/17/18 receipts may satisfy the same underlying requirement without duplicate runs.
+
+- [ ] **Larry / Codex · candidate and coverage:** Reconcile stale C8 deployment/routing headers; freeze the actual source/fingerprint/loaded artifact/configuration/topology. Map every remaining C8 and P0/native-client row to a dated result; changed UI2-04/09/13 require WS-17 first.
+- [ ] **Larry · remaining preservation workflows:** Check remaining legacy/candidate P0 interactions, Agents ticker/model-to-done, Repo/Edit/Memory/Runs round trips, Output/Log lineage, display modes and readable shared-glass/opaque fallback. Use disposable write targets and keep per-row evidence; preserve accepted subparts.
+- [ ] **Larry / Codex · visual/accessibility matrix:** Conversation/results at 900×600, 1280×800, 1440×900, ultrawide and portrait external sizes; available Retina/non-Retina; docked/detached tabs, overflow/drafts, long/error payloads, two pins/comparison, graph states and font/keyboard/VoiceOver. No clipping, lost reading state or inaccessible controls. Orb appearance/Reduce Motion sign-off is not reopened; broader application accessibility still needs evidence.
+- [ ] **Larry / Codex · remaining physical audio:** Built-in/headphones/AirPods and available alternate devices: mute/PTT, quiet/loud/noise, AI-only, interruption, output switch, reconnect, sleep/wake and mic denial. Preserve intelligibility/pitch/speed, timely truthful channels, wake/barge-in and requests; no echo-only false user turns or duplicate session. Record remaining AirPods echo benches and earbud-removal investigation; share the distinct WS-18 switch-during-answer result.
+- [ ] **Larry / Codex · monitor and rollback tails:** Complete remaining applicable one/two/mirrored/three-display, graph/draft-display loss, changed order/resolution, manual intent, close/reopen, lock/sleep/Reset Layout and layout rollback/back cases. Controls become reachable ≤1 second after stable topology; drafts/results/pins/graph state survive with no snap-back over newer manual placement or conversation restart. Existing named topology passes remain bounded to their actual tested scope.
+- [ ] **Verifier / Larry · closure:** Exact C5 verifier receipt matches the C8 commit/fingerprint. Each remaining row has positive evidence or an explicit written known-limitation acceptance. Record the outstanding native-client five-day outcome attestation and the separate redesign frozen-candidate observation; a historical layout-1 exception does not certify layout 2.
+
+Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSURE_PLAN.md), [P0 preservation checklist](docs/acceptance/adaptive-interface/P0-preservation-checklist.md), [native client §8](docs/plans/MORTIMER_NATIVE_CLIENT_APP_PLAN.md), [C8 open items](docs/acceptance/adaptive-interface/C8-open-items.md), [release readiness](docs/acceptance/adaptive-interface/RELEASE_READINESS.md).
 
 **Workstream:** Adaptive interface C8 acceptance
 

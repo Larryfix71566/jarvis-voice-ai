@@ -134,3 +134,7 @@ Python standard library only. Reads `ROADMAP.md` and git; `--receipts DIR` on th
 ### 2026-10-06 — Codex B1/B2 reconciliation
 
 The original 72 entries in §8 at `cc64d50` match 72 migrated file bodies at #160 merge `30fa3db` verbatim; the separate migration entry is additional. B1 is complete. The production line was refreshed from the latest successful receipt, `bde22bb` deployed 2026-10-03 16:34 EDT. Checker strict-mode rollout and the ten-PR conflict observation are not inferred complete. Claude-owned status corrections remain proposed in #172/#174; this update does not claim their merge or new live acceptance.
+
+### 2026-10-06 — Per-item acceptance lists (Codex; requested by Larry)
+
+Added a concrete checklist near the top of every unfinished ROADMAP block, derived from its existing plan/readiness record. Each item names the actor, prerequisite or decision when applicable, and pass criteria. Existing accepted gates and partial passes are retained; no checkbox is newly accepted and no implementation owner/status is reassigned. The list distinguishes proposed mail/brief approval, future CC7a implementation and actual Mac tests, and exposes the untracked WS-06 eleven-item numbering as a documentation prerequisite. Shared receipts can close matching requirements without duplicate runs; source titles disambiguate reused UI2 numbers. This is the bounded roadmap documentation slice authorized in Larry's current request, not a new implementation plan or activation authority.
