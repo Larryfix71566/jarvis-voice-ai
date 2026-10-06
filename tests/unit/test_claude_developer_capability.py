@@ -543,12 +543,18 @@ async def captured(tmp_path):
             'parent_request_id': parent, 'origin_task_id': f'native-capability:{parent}:0',
             'hook_evidence': hooks, 'native_calls': calls, 'native_tool_names': [call['name'] for call in calls],
             'output_bytes': 100}
-    packets = lambda count: [dict(names=['mcp__mortimer__' + name for name in names], schemas_match=True,
+    # Match the observed 2.1.290 sorted API menu; Registry/argv order stays above.
+    packets = lambda count: [dict(names=probe.wire_tool_names(refs), schemas_match=True,
         model=contract['selection']['model'], canary_absent=True, synthetic_auth_only=True,
         constraint_present=True) for _ in range(count)]
+    negative_parent = str(uuid.uuid4())
     observations = {'live': phase(['repo_read_file']), 'isolation': phase(['repo_read_file', 'selfedit_finish']),
-        'negative': {'native_tool_names': ['Bash'], 'unadvertised_host_tool_rejected': True,
-                     'cleanup_verified': True, 'output_bytes': 100},
+        'negative': {'parent_request_id': negative_parent, 'origin_task_id': f'native-capability:{negative_parent}:0',
+                     'observed_models': [contract['selection']['model']],
+                     'native_tool_names': ['Bash'], 'unadvertised_host_tool_rejected': True,
+                     'native_calls': [{'tool_call_id': 'unit-bash', 'name': 'Bash',
+                         'arguments_sha256': probe.digest(probe.canonical({'command': 'inert synthetic negative'}))}],
+                     'native_host_ingress_count': 0, 'cleanup_verified': True, 'output_bytes': 100},
         'isolation_http': packets(3), 'negative_http': packets(1), 'sources': sources}
     proof = {'schema_version': 1, 'provider': 'claude', 'model': contract['selection']['model'],
         'frozen_contract': contract, 'executable': identity, 'schemas': schemas, 'tool_names': names,
@@ -805,3 +811,146 @@ asyncio.run(run())
         os.close(write_fd)
         from jarvis.subscription import _terminate_async
         await _terminate_async(process)
+
+
+def test_wire_advertisement_sorts_names_without_reordering_registry_refs():
+    refs = (ModelToolReference('z_tool', {'type': 'object', 'properties': {'z': {'type': 'integer'}}}),
+            ModelToolReference('a_tool', {'type': 'object', 'properties': {'a': {'type': 'string'}}}))
+    tools = [{'name': 'mcp__mortimer__' + ref.name, 'input_schema': dict(ref.parameters)} for ref in reversed(refs)]
+    assert [ref.name for ref in refs] == ['z_tool', 'a_tool']
+    assert probe.wire_tool_names(refs) == ['mcp__mortimer__a_tool', 'mcp__mortimer__z_tool']
+    observed = probe.tool_menu_observation(tools, refs)
+    assert observed == {'names': probe.wire_tool_names(refs), 'schemas_match': True}
+
+
+@pytest.mark.parametrize('change', ['duplicate', 'unknown', 'swapped_schema', 'missing_schema', 'non_dict', 'non_list'])
+def test_api_schema_authority_is_exact_name_not_position(change):
+    refs = (ModelToolReference('z_tool', {'type': 'object', 'properties': {'z': {'type': 'integer'}}}),
+            ModelToolReference('a_tool', {'type': 'object', 'properties': {'a': {'type': 'string'}}}))
+    tools = [{'name': 'mcp__mortimer__' + ref.name, 'input_schema': dict(ref.parameters)} for ref in reversed(refs)]
+    if change == 'duplicate': tools[0] = dict(tools[1])
+    elif change == 'unknown': tools[0]['name'] = 'not-advertised'
+    elif change == 'swapped_schema': tools[0]['input_schema'], tools[1]['input_schema'] = tools[1]['input_schema'], tools[0]['input_schema']
+    elif change == 'missing_schema': tools[0].pop('input_schema')
+    elif change == 'non_dict': tools[0] = None
+    elif change == 'non_list': tools = {}
+    assert probe.tool_menu_observation(tools, refs)['schemas_match'] is False
+
+
+@pytest.mark.parametrize('count', [0, 1, 2, 3])
+async def test_parent_negative_http_count_accepts_only_one_or_two(captured, count):
+    value, contract, schemas = captured
+    packet = value['observations']['negative_http'][0]
+    value['observations']['negative_http'] = [dict(packet) for _ in range(count)]
+    if count in (1, 2):
+        probe.validate_capture(value, contract, expected_schemas=schemas)
+    else:
+        with pytest.raises(probe.CapabilityUnavailable, match='worker_result_invalid'):
+            probe.validate_capture(value, contract, expected_schemas=schemas)
+
+
+@pytest.mark.parametrize('change', ['registry_order', 'duplicate', 'unknown', 'schema', 'extra_bash_call', 'host_ingress', 'bool_ingress'])
+async def test_parent_retains_sorted_full_menu_and_single_bash_zero_ingress(captured, change):
+    value, contract, schemas = captured
+    packet = value['observations']['negative_http'][0]
+    if change == 'registry_order':
+        packet['names'] = ['mcp__mortimer__' + name for name in value['tool_names']]
+        assert packet['names'] != sorted(packet['names'])
+    elif change == 'duplicate': packet['names'][0] = packet['names'][1]
+    elif change == 'unknown': packet['names'][0] = 'mcp__mortimer__not-advertised'
+    elif change == 'schema': packet['schemas_match'] = False
+    elif change == 'extra_bash_call': value['observations']['negative']['native_calls'] *= 2
+    else: value['observations']['negative']['native_host_ingress_count'] = True if change == 'bool_ingress' else 1
+    with pytest.raises(probe.CapabilityUnavailable, match='worker_result_invalid'):
+        probe.validate_capture(value, contract, expected_schemas=schemas)
+
+
+@pytest.mark.parametrize('stream', [False, True])
+async def test_actual_negative_handler_emits_one_bash_then_done_and_refuses_third(tmp_path, monkeypatch, stream):
+    """Exercise the installed handler with in-memory streams, no socket/CLI."""
+    import io
+    refs = (ModelToolReference('z_tool', {'type': 'object', 'properties': {'z': {'type': 'integer'}}}),
+            ModelToolReference('a_tool', {'type': 'object', 'properties': {'a': {'type': 'string'}}}))
+    created = []
+    class InertServer:
+        def __init__(self, address, handler):
+            assert address == ('127.0.0.1', 0)
+            self.handler, self.server_port = handler, 43121
+            created.append(self)
+        def serve_forever(self, **kwargs): pass
+        def shutdown(self): pass
+        def server_close(self): pass
+    monkeypatch.setattr(probe.http.server, 'HTTPServer', InertServer)
+    packet = {'model': 'unit-model', 'stream': stream, 'system': probe.CONSTRAINT,
+        'tools': [{'name': 'mcp__mortimer__' + ref.name, 'input_schema': dict(ref.parameters)} for ref in reversed(refs)]}
+    raw = json.dumps(packet).encode()
+    async with storage_scope(db_path=tmp_path / 'inert.db', costs_db_path=tmp_path / 'inert-costs.db') as stores:
+        async with probe.loopback_fixture(tmp_path, 'unit-model', refs, bash=True) as fixture:
+            def request():
+                handler = created[0].handler.__new__(created[0].handler)
+                handler.path = '/v1/messages'
+                handler.headers = {'Content-Length': str(len(raw)), 'x-api-key': 'native40-synthetic-not-a-key'}
+                handler.rfile, handler.wfile = io.BytesIO(raw), io.BytesIO()
+                statuses = []
+                handler.send_response = statuses.append
+                handler.send_error = statuses.append
+                handler.send_header = lambda *args: None
+                handler.end_headers = lambda: None
+                handler.do_POST()
+                return statuses, handler.wfile.getvalue()
+            first_status, first = request()
+            second_status, second = request()
+            assert first_status == second_status == [200]
+            if stream:
+                def event(raw, kind):
+                    for entry in raw.decode().split('\n\n'):
+                        if entry.startswith('event: ' + kind + '\n'):
+                            return json.loads(entry.split('data: ', 1)[1])
+                    pytest.fail('missing event')
+                assert event(first, 'content_block_start')['content_block']['name'] == 'Bash'
+                assert event(first, 'message_delta')['delta']['stop_reason'] == 'tool_use'
+                assert event(second, 'content_block_start')['content_block']['type'] == 'text'
+                assert event(second, 'content_block_delta')['delta'] == {'type': 'text_delta', 'text': probe.DONE}
+                assert event(second, 'message_delta')['delta']['stop_reason'] == 'end_turn'
+            else:
+                assert json.loads(first)['content'][0]['name'] == 'Bash'
+                assert json.loads(first)['stop_reason'] == 'tool_use'
+                assert json.loads(second)['content'] == [{'type': 'text', 'text': probe.DONE}]
+                assert json.loads(second)['stop_reason'] == 'end_turn'
+            assert len(fixture['observations']) == 2 and probe.verified_loopback(fixture, 'unit-model')
+            assert not fixture['canary'].exists()
+            third_status, third = request()
+            assert third_status == [409] and third == b''
+            assert len(fixture['observations']) == 3 and not probe.verified_loopback(fixture, 'unit-model')
+        assert fixture['closed'] is True
+    assert stores.cleanup_verified and stores.pending_workers == 0
+
+
+@pytest.mark.parametrize('change', ['missing_model', 'missing_parent', 'missing_origin', 'wrong_model',
+    'wrong_origin', 'malformed_parent', 'nonstring_parent', 'noncanonical_parent', 'live_parent', 'isolation_parent'])
+async def test_negative_round_requires_exact_model_and_distinct_canonical_parent(captured, change):
+    value, contract, schemas = captured
+    negative = value['observations']['negative']
+    if change.startswith('missing_'):
+        negative.pop({'missing_model': 'observed_models', 'missing_parent': 'parent_request_id',
+                      'missing_origin': 'origin_task_id'}[change])
+    elif change == 'wrong_model': negative['observed_models'] = ['unobserved-model']
+    elif change == 'wrong_origin': negative['origin_task_id'] = 'native-capability:unrelated:0'
+    else:
+        parent = {'malformed_parent': 'not-a-uuid', 'nonstring_parent': None,
+            'noncanonical_parent': '00000000-0000-4000-8000-00000000000A',
+            'live_parent': value['observations']['live']['parent_request_id'],
+            'isolation_parent': value['observations']['isolation']['parent_request_id']}[change]
+        negative['parent_request_id'] = parent
+        negative['origin_task_id'] = f'native-capability:{parent}:0'
+    with pytest.raises(probe.CapabilityUnavailable, match='worker_result_invalid'):
+        probe.validate_capture(value, contract, expected_schemas=schemas)
+
+
+async def test_distinct_negative_session_can_reuse_an_opaque_native_call_id(captured):
+    value, contract, schemas = captured
+    live = value['observations']['live']
+    negative = value['observations']['negative']
+    assert negative['parent_request_id'] not in (live['parent_request_id'], value['observations']['isolation']['parent_request_id'])
+    negative['native_calls'][0]['tool_call_id'] = live['native_calls'][0]['tool_call_id']
+    probe.validate_capture(value, contract, expected_schemas=schemas)

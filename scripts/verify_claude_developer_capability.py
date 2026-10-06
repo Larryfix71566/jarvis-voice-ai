@@ -480,6 +480,7 @@ async def protocol_round(identity, model, refs, guard, timeout, *, environment=N
             result['hook_evidence'] = list(session.hook_evidence)
             result['native_tool_names'] = list(session.observed_native_tools)
             result['native_calls'] = list(session.native_calls)
+            result['native_host_ingress_count'] = session.call_count
             result['parent_request_id'] = parent
             result['origin_task_id'] = first.task_id
             if not expect_bash and session.observed_models != {model}:
@@ -492,6 +493,21 @@ async def protocol_round(identity, model, refs, guard, timeout, *, environment=N
     if session.output_bytes > OUTPUT_BYTES or (session.failure is not None and not expect_bash):
         raise CapabilityUnavailable('native_transport_failed')
     return result
+
+
+def wire_tool_names(refs):
+    # The installed 2.1.290 CLI keeps Registry/argv identity but sorts the API
+    # advertisement. Schema authority remains attached to the exact name.
+    return sorted('mcp__mortimer__' + ref.name for ref in refs)
+
+
+def tool_menu_observation(tools, refs):
+    expected = {'mcp__mortimer__' + ref.name: dict(ref.parameters) for ref in refs}
+    names = [item.get('name') if type(item) is dict else None for item in tools] if type(tools) is list else []
+    schemas_match = (type(tools) is list and len(tools) == len(refs)
+        and all(type(name) is str for name in names) and len(set(names)) == len(names)
+        and set(names) == set(expected) and all(item.get('input_schema') == expected[item['name']] for item in tools))
+    return {'names': names, 'schemas_match': schemas_match}
 
 
 @asynccontextmanager
@@ -511,7 +527,7 @@ async def loopback_fixture(directory, model, refs, *, bash=False):
         'hooks': {'UserPromptSubmit': [{'hooks': [{'type': 'command', 'command': 'printf ' + marker}]}]}}))
     canary = home / 'forbidden-bash-side-effect'
     observations = []
-    expected_names = ['mcp__mortimer__' + ref.name for ref in refs]
+    expected_names = wire_tool_names(refs)
     class Handler(http.server.BaseHTTPRequestHandler):
         def setup(self):
             super().setup()
@@ -530,17 +546,17 @@ async def loopback_fixture(directory, model, refs, *, bash=False):
             if '/messages' not in self.path:
                 self.send_response(200); self.end_headers(); self.wfile.write(b'{"input_tokens":8}'); return
             tools = packet.get('tools', [])
-            observations.append({'names': [item.get('name') for item in tools],
-                'schemas_match': len(tools) == len(refs) and all(
-                    item.get('input_schema') == dict(ref.parameters) for item, ref in zip(tools, refs)),
+            observations.append({**tool_menu_observation(tools, refs),
                 'model': packet.get('model'), 'canary_absent': marker not in json.dumps(packet),
                 'constraint_present': CONSTRAINT in json.dumps(packet),
                 'synthetic_auth_only': self.headers.get('x-api-key') == 'native40-synthetic-not-a-key'
                     and self.headers.get('Authorization') is None})
             index = len(observations)
+            if index > (2 if bash else 3):
+                self.send_error(409); return
             tool_name = 'Bash' if bash else ('mcp__mortimer__repo_read_file' if index == 1 else 'mcp__mortimer__selfedit_finish')
             arguments = {'command': 'touch ' + str(canary)} if bash else ({'path': REFERENCE} if index == 1 else {})
-            use_tool = bash or index < 3
+            use_tool = index == 1 if bash else index < 3
             block = {'type': 'tool_use', 'id': 'toolu_native40_' + str(index), 'name': tool_name, 'input': arguments}
             if not use_tool:
                 block = {'type': 'text', 'text': DONE}
@@ -572,7 +588,8 @@ async def loopback_fixture(directory, model, refs, *, bash=False):
         'ANTHROPIC_API_KEY': 'native40-synthetic-not-a-key',
         'ANTHROPIC_BASE_URL': 'http://127.0.0.1:' + str(server.server_port),
         'CLAUDE_CODE_MAX_RETRIES': '0', 'API_TIMEOUT_MS': '10000'},
-        'observations': observations, 'expected_names': expected_names, 'canary': canary,
+        'observations': observations, 'expected_names': expected_names,
+        'expected_message_counts': (1, 2) if bash else (3,), 'canary': canary,
         'closed': False}
     try:
         yield value
@@ -588,7 +605,7 @@ async def loopback_fixture(directory, model, refs, *, bash=False):
 
 def verified_loopback(value, model):
     seen = value['observations']
-    return bool(seen) and all(item['names'] == value['expected_names'] and item['schemas_match']
+    return len(seen) in value['expected_message_counts'] and all(item['names'] == value['expected_names'] and item['schemas_match'] is True
         and item['model'] == model and item['canary_absent'] and item['synthetic_auth_only'] for item in seen)
 
 
@@ -667,7 +684,10 @@ async def acquire(directory, frozen, timeout, started_at):
                     raise CapabilityUnavailable('native_runtime_changed')
                 proof = {'native_tool_call_observed': live['native_tool_call_observed'],
                     'unknown_tool_rejected': live['unknown_tool_rejected'],
-                    'unadvertised_host_tool_rejected': bash['unadvertised_host_tool_rejected'] and verified_loopback(negative, actual['selection']['model']),
+                    'unadvertised_host_tool_rejected': bash['unadvertised_host_tool_rejected']
+                        and bash['native_tool_names'] == ['Bash'] and len(bash['native_calls']) == 1
+                        and type(bash['native_host_ingress_count']) is int and bash['native_host_ingress_count'] == 0
+                        and verified_loopback(negative, actual['selection']['model']),
                     'unadvertised_host_tool_side_effect_absent': not negative['canary'].exists(),
                     'customization_canaries_absent': verified_loopback(isolated, actual['selection']['model']),
                     'builtins_disabled': verified_loopback(isolated, actual['selection']['model']) and verified_loopback(negative, actual['selection']['model']),
@@ -964,12 +984,22 @@ def validate_capture(value, frozen, *, expected_schemas):
                         or source['content_digest'] != digest(source['content'].encode()) or json.loads(source['content']) != body):
                     raise ValueError()
         negative = observation['negative']
-        if (negative['native_tool_names'] != ['Bash'] or negative['unadvertised_host_tool_rejected'] is not True
-                or negative['cleanup_verified'] is not True):
+        negative_calls = negative['native_calls']
+        negative_parent = negative['parent_request_id']
+        if (negative['observed_models'] != [value['model']] or type(negative_parent) is not str
+                or str(uuid.UUID(negative_parent)) != negative_parent
+                or negative_parent in {observation['live']['parent_request_id'], observation['isolation']['parent_request_id']}
+                or negative['origin_task_id'] != f'native-capability:{negative_parent}:0'
+                or negative['native_tool_names'] != ['Bash'] or negative['unadvertised_host_tool_rejected'] is not True
+                or negative['cleanup_verified'] is not True or type(negative_calls) is not list
+                or len(negative_calls) != 1 or negative_calls[0]['name'] != 'Bash'
+                or type(negative_calls[0]['tool_call_id']) is not str
+                or re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}', negative_calls[0]['tool_call_id']) is None
+                or type(negative['native_host_ingress_count']) is not int or negative['native_host_ingress_count'] != 0):
             raise ValueError()
-        for phase, count in (('isolation_http', 3), ('negative_http', 1)):
+        for phase, counts in (('isolation_http', (3,)), ('negative_http', (1, 2))):
             packets = observation[phase]
-            if (len(packets) != count or any(item['names'] != ['mcp__mortimer__' + name for name in names]
+            if (type(packets) is not list or len(packets) not in counts or any(item['names'] != wire_tool_names(refs)
                     or item['schemas_match'] is not True or item['model'] != value['model']
                     or item['canary_absent'] is not True or item['synthetic_auth_only'] is not True for item in packets)):
                 raise ValueError()

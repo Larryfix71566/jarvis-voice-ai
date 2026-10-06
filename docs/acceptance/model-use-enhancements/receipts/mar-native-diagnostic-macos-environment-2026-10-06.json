@@ -50,6 +50,12 @@
     "tests": 8
   },
   "inverses": "Foreign/malformed values are injected after OS startup because macOS normalizes an inherited foreign UID marker. Extra authority still refuses; Linux omits the marker.",
+  "later_local_only_evidence": {
+    "artifact_sha256": "79909dc8e751d7667667a8ff561db8e844b61fd219f9ffa0cf96c4d73ec5abf2",
+    "exit_code": 0,
+    "receipt": "mar-native-api-wire-order-2026-10-06.json",
+    "runtime_receipt": false
+  },
   "local_only_retry": {
     "actual_child_boundary": {
       "boundary_passed": true,
@@ -58,13 +64,37 @@
       "missing_environment_keys": []
     },
     "exit_code": 2,
-    "failure": "still under metadata diagnosis; no protocol incompatibility is inferred",
+    "failure": "Default CLI is now2.1.291 and the existing exact2.1.290 contract correctly refuses; the Mac environment repair passes the actual child boundary.",
     "harness_sha256": "96b7cd1e52cb8aa01648e96ec1f883c4a382ed017462923e06e33c5287d43a1d",
     "log_sha256": "ddd5b12170d3b55366a66ab2cc0a9ff31ea6926a0d143fef7137a3a762b9afb1",
     "protocol_receipt_published": false
   },
   "mar_i_complete": false,
   "native_readiness_test_assignment_pending": true,
+  "observed_all_five_green_ci": {
+    "eval_passed": 13,
+    "head": "60cc5c568aec9f03cb71db7f9132a7d08465a657",
+    "integration_passed": 196,
+    "integration_skipped": 4,
+    "raw_log_sha256": "92d51c9c4110f40348461934699873e00ef438282e666b2d3816e045b69ebeb9",
+    "run": 37517083273,
+    "unit_passed": 6183,
+    "unit_skipped": 11,
+    "unit_subtests_passed": 2,
+    "validate_job": 112452683979
+  },
+  "pinned_local_only_failure": {
+    "diagnostic": {
+      "category": "all_http_loopback_auth_proof_invalid",
+      "checkpoint": "verify_partial"
+    },
+    "diagnostic_sha256": "70b1ebb0569143a049c9e838aba542b2c653a0d5dd43d67fc11512c23d41b4bf",
+    "exit_code": 2,
+    "external_inference_performed": false,
+    "harness_sha256": "728c33efb86f011d1ecfb82cef8aacabdba3535dc6a1ce2ed4b073ec282e3227",
+    "interpretation": "Exact failing comparison within fixture HTTP proof remains under diagnosis; no protocol acceptance or runtime incompatibility is inferred.",
+    "protocol_receipt_published": false
+  },
   "pr": 177,
   "prior_all_five_green_ci_head": "8668060e3130a77c7ff94344b0cba30b9659ada0",
   "private_document_sent": false,
@@ -72,6 +102,22 @@
   "production_route_ready": false,
   "repair": "Darwin derives only f\"0x{os.getuid():X}:0x0:0x0\"; present mismatches refuse. Linux adds no marker. No arbitrary ambient value or extra authority passes through.",
   "roadmap_checker": "Only preexisting Larry-owned WS-10 pending / WS-11 open lifecycle errors; no edits to those rows.",
+  "runtime_version_audit": {
+    "actual_version": "2.1.291 (Claude Code)",
+    "allowed_versions": [
+      "2.1.290 (Claude Code)"
+    ],
+    "category": "Claude native tool version has no verified contract",
+    "exception_type": "SubscriptionCapabilityError",
+    "exit_code": 0,
+    "identity_accepted": false
+  },
   "system": "codex",
+  "verified_previous_runtime": {
+    "matches_previous_committed_capability_receipt": true,
+    "path": "/Users/larryfix/.local/share/claude/versions/2.1.290",
+    "production_command_changed": false,
+    "sha256": "b8412a3826b2dc8ecb1c0605970c28dea28355de5faa740407dd881acdd40237"
+  },
   "workstream": "WS-05"
 }

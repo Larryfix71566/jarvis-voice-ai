@@ -27,7 +27,7 @@ no linked receipt are also unreceipted.
 
 ## Candidate validation — 2026-10-06
 
-**Current diagnostic gate:** All five GitHub checks pass at `8668060`; later heads require fresh checks. The reviewed current-UID macOS environment repair passes 373 affected cases with three existing skips, plus independent nine repository and eight temporary-harness cases. All 38 previous functions and 68 assertions remain. A localhost-only attempt still refuses without protocol evidence, while its actual child boundary and imports pass; the remaining metadata failure is being diagnosed. External REPO_MAP→Claude authorization, the native-readiness test's main scope claim, operator-issued identity, workload quality, account settings and rollout remain open. [Receipt](receipts/mar-native-diagnostic-macos-environment-2026-10-06.json).
+**Current diagnostic gate:** Code head `60cc5c5` passes all five CI checks. The later wire-order/negative-parent repair passes 146 focused, 386 affected (three existing skips) and 31 independent cases; fresh-head CI remains required. Actual synthetic localhost-only validation passes all 40 schemas, the named read/mutation/Bash refusals and session/server/registry/storage cleanup. The owner-600 artifact remains partial with every full acceptance flag false. Default CLI `2.1.291` is unverified; local validation used SHA-matching `2.1.290`. Exact external document authorization, native-readiness main scope claim, operator identity, representative quality, account settings, cross-review and rollout remain open. [Receipt](receipts/mar-native-api-wire-order-2026-10-06.json).
 
 The earlier captures below record results at their named revisions. They do not supersede the current gate above or the terminal all12 result.
 
