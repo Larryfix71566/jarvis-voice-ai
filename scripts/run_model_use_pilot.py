@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import hashlib
 import inspect
@@ -57,23 +57,25 @@ def load_fixture() -> tuple[dict, str]:
     return data, digest
 
 
-@contextmanager
-def isolated_state():
-    """Overwrite inherited paths before importing any database-aware modules."""
-    with tempfile.TemporaryDirectory(prefix="ws05-pilot-") as scratch:
-        replacements = {"JARVIS_DB_PATH": str(Path(scratch) / "pilot.db"),
-                        "JARVIS_COSTS_DB": str(Path(scratch) / "costs.db"),
-                        "JARVIS_MODEL_PREFERENCES_ENABLED": "0"}
-        previous = {key: os.environ.get(key) for key in replacements}
-        os.environ.update(replacements)
-        try:
-            yield
-        finally:
-            for key, value in previous.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
+@asynccontextmanager
+async def isolated_state(*, drain_timeout_s=10.0):
+    """Use private caller-context stores; drain their workers before deletion."""
+    from jarvis.storage_context import StorageScopeUnavailable, storage_scope
+    scratch = tempfile.TemporaryDirectory(prefix="ws05-pilot-")
+    scope = None
+    try:
+        async with storage_scope(db_path=Path(scratch.name) / "pilot.db",
+                                 costs_db_path=Path(scratch.name) / "costs.db",
+                                 model_preferences_enabled=False,
+                                 drain_timeout_s=drain_timeout_s,
+                                 cleanup=scratch.cleanup) as scope:
+            yield scope
+    except StorageScopeUnavailable as exc:
+        if (exc.code not in {"storage_cleanup_unverified", "storage_cleanup_failed"}
+                or scope is None or scope.cleanup_verified or scope.cleanup_error != exc.code):
+            raise
+        # The scope retains this directory's cleanup callback until actual
+        # workers finish. run_pilot reports this fixed failure explicitly.
 
 
 def score_case(case: dict, text: str) -> dict:
@@ -189,6 +191,11 @@ def _source_identity() -> dict:
 
 def compare_receipts(baseline: dict, candidate: dict) -> dict:
     """Compare matching live diagnostics without promoting them to rollout proof."""
+    if any("storage_cleanup" in receipt and
+           (type(receipt["storage_cleanup"]) is not dict
+            or receipt["storage_cleanup"].get("verified") is not True)
+           for receipt in (baseline, candidate)):
+        raise PilotUnavailable("comparison_cleanup_unverified")
     for field in ("fixture_sha256", "scorer_version", "group"):
         if baseline.get(field) != candidate.get(field):
             raise PilotUnavailable("incomparable_receipt_corpus")
@@ -267,7 +274,8 @@ async def run_pilot(*, mode: str = "dry", group: str = "research", profile: str 
     report["limitations"].append("research fixtures measure source-grounded synthesis, not source retrieval or complete research workflows")
     start = time.monotonic()
     resolved_cache = {}
-    with isolated_state():
+    async with isolated_state() as storage:
+        from jarvis.storage_context import state_to_thread
         from jarvis.model_routing import inspect_route_choice, resolve_model_route, resolve_model_route_checked, make_route_client
         from jarvis.model_execution import ModelContextMessage, ModelExecutionRequest, ModelOutputRequirements, execute_chat
         from jarvis.privacy_policy import DataPolicy
@@ -314,7 +322,7 @@ async def run_pilot(*, mode: str = "dry", group: str = "research", profile: str 
                             if route == "saygm" and policy.privacy == "confidential":
                                 report["catalog_preflight_attempts"] += 1
                             try:
-                                resolved_cache[key] = await asyncio.wait_for(asyncio.to_thread(
+                                resolved_cache[key] = await asyncio.wait_for(state_to_thread(
                                     resolve_model_route_checked, case["workload"],
                                     explicit_profile=requested_profile, explicit_route=route,
                                     policy_path=policy_path, registry_path=registry_path),
@@ -393,6 +401,13 @@ async def run_pilot(*, mode: str = "dry", group: str = "research", profile: str 
                                     await result
                             except Exception:
                                 pass
+    report["storage_cleanup"] = {"verified": storage.cleanup_verified,
+                                  "duration_ms": storage.cleanup_duration_ms,
+                                  "pending_workers": storage.pending_workers,
+                                  "batch_deadline_overrun_ms": max(0.0, (time.monotonic() - start - deadline_s) * 1000)}
+    if not storage.cleanup_verified:
+        report["error"] = storage.cleanup_error or "storage_cleanup_unverified"
+        report["deadline_guarantee_available"] = False
     report["summary"] = _aggregate(report["trials"])
     return report
 
@@ -462,6 +477,7 @@ def main(argv=None) -> int:
         passed = (all(row["status"] == "dry_ready_unverified" for row in report["trials"])
                   if args.mode == "dry" else
                   all(row["status"] == "completed" and row["quality"]["passed"] for row in report["trials"]))
+        passed = passed and report.get("storage_cleanup", {}).get("verified", True)
         return 0 if passed else 1
     except Exception as exc:
         print(json.dumps({"ok": False, "error_category": type(exc).__name__}, sort_keys=True))

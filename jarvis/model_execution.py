@@ -50,6 +50,8 @@ from jarvis.privacy_policy import (
     bounded_tool_arguments,
 )
 
+from jarvis.storage_context import state_to_thread
+
 logger = logging.getLogger(__name__)
 
 
@@ -224,28 +226,55 @@ class ModelAdmissionController:
         if priority not in {"interactive", "background"}:
             raise ModelExecutionInputError("priority must be interactive or background")
         cancelled = threading.Event()
-        acquisition = asyncio.create_task(asyncio.to_thread(
-            self._acquire, priority, cancelled,
-        ))
+        handoff = threading.Lock()
+        owns_slot = abandoned = False
+
+        def release_owned(*, abandon: bool = False) -> None:
+            nonlocal owns_slot, abandoned
+            with handoff:
+                abandoned = abandoned or abandon
+                release, owns_slot = owns_slot, False
+            if release:
+                self._release(priority)
+
+        def acquire_owned() -> bool:
+            nonlocal owns_slot
+            acquired = self._acquire(priority, cancelled)
+            with handoff:
+                if acquired and not abandoned:
+                    owns_slot = True
+                    return True
+            # The async owner may be gone before a real worker's committed
+            # lease is delivered. The worker still owns compensating release.
+            if acquired:
+                self._release(priority)
+            return False
+
+        # Capacity waiters touch no storage. Keep them out of a bounded
+        # storage pool so they cannot starve admitted requests' DB work.
+        acquisition = asyncio.create_task(asyncio.to_thread(acquire_owned))
         try:
             acquired = await asyncio.shield(acquisition)
         except asyncio.CancelledError:
             cancelled.set()
             with self._condition:
                 self._condition.notify_all()
+            release_owned(abandon=True)
             try:
-                acquired = await asyncio.shield(acquisition)
+                await asyncio.shield(acquisition)
             except asyncio.CancelledError:
-                acquired = False
-            if acquired:
-                self._release(priority)
+                # Another cancellation or loop shutdown may also cancel the
+                # delivery task. The retained worker handoff releases any
+                # late grant without relying on that task's result.
+                pass
             raise
         if not acquired:
             raise asyncio.CancelledError
         try:
             yield
         finally:
-            self._release(priority)
+            release_owned()
+
 
 
 _PROCESS_ADMISSION = ModelAdmissionController()
@@ -977,13 +1006,13 @@ async def execute_chat(request: ModelExecutionRequest,
         async with asyncio.timeout_at(entry_loop_time + setup_limit) as deadline:
             require_active()
             if child_budget is not None:
-                child_budget = await asyncio.to_thread(validate_model_child_budget, child_budget)
+                child_budget = await state_to_thread(validate_model_child_budget, child_budget)
                 require_active()
             limits = resolved.limits
             # The host-only binding is checked against durable owner/child
             # records, including when this invocation omits the keyword. A
             # persisted sponsored child cannot reopen as an independent pool.
-            binding = await asyncio.to_thread(
+            binding = await state_to_thread(
                 resolve_model_child_budget, request.workload,
                 request.parent_request_id, limits, child_budget=child_budget,
                 started_at=budget_started_at,
@@ -998,7 +1027,7 @@ async def execute_chat(request: ModelExecutionRequest,
                 # Validate the host handle and retain its earlier output-only
                 # cap. Durable state is reopened below, never accepted from
                 # caller-provided policy fields as the spending authority.
-                await asyncio.to_thread(remaining_seconds, task_budget)
+                await state_to_thread(remaining_seconds, task_budget)
                 require_active()
                 limits = WorkloadLimits(*(
                     min(first, second) if first is not None and second is not None
@@ -1015,7 +1044,7 @@ async def execute_chat(request: ModelExecutionRequest,
                 budget = binding.child
                 limits = binding.limits
             else:
-                budget = await asyncio.to_thread(
+                budget = await state_to_thread(
                     begin_model_task_budget, request.workload,
                     request.parent_request_id, limits, started_at=budget_started_at,
                 )
@@ -1027,7 +1056,7 @@ async def execute_chat(request: ModelExecutionRequest,
             messages, effective_policy, tools, tool_validators, seen_tool_call_ids = _validated_inputs(
                 request, resolved,
             )
-            remaining = await asyncio.to_thread(
+            remaining = await state_to_thread(
                 remaining_child_seconds if binding is not None else remaining_seconds,
                 binding if binding is not None else budget,
             )
@@ -1059,7 +1088,7 @@ async def execute_chat(request: ModelExecutionRequest,
                         await emit_tool_result(item.tool_call_id, item.name)
                 if budget.scope_id is not None:
                     estimate = _estimated_text_input_tokens(messages, tools) if spend_capped else 1
-                    await asyncio.to_thread(
+                    await state_to_thread(
                         check_model_call_budget,
                         binding if binding is not None else budget, request.task_id,
                         resolved.provider, resolved.model, resolved.route.name,
@@ -1090,7 +1119,7 @@ async def execute_chat(request: ModelExecutionRequest,
                 if spend_capped and not _api_adapter_has_no_retries(client):
                     raise ModelBudgetUnavailable("budget_unsupported_route")
                 if budget.scope_id is not None:
-                    await asyncio.to_thread(
+                    await state_to_thread(
                         reserve_model_child_call_budget if binding is not None else reserve_model_call_budget,
                         binding if binding is not None else budget, request.task_id,
                         resolved.provider, resolved.model, resolved.route.name,

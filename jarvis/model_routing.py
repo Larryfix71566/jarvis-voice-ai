@@ -388,8 +388,9 @@ def resolve_policy(workload: str, *, explicit_profile: str | None = None,
         raise ModelRouteError(f"unknown workload {workload!r}")
     raw = dict(data.get("defaults") or {})
     raw.update(workloads.get(workload) or {})
+    from jarvis.storage_context import preferences_enabled
     if (not skill_eval and include_preferences
-            and os.environ.get("JARVIS_MODEL_PREFERENCES_ENABLED", "1") != "0"):
+            and preferences_enabled(os.environ.get("JARVIS_MODEL_PREFERENCES_ENABLED", "1") != "0")):
         try:
             from jarvis.model_preferences import list_preferences
             preference = next((item for item in list_preferences()

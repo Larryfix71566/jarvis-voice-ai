@@ -1,0 +1,104 @@
+{
+  "date": "2026-10-06",
+  "system": "codex",
+  "workstream": "WS-05",
+  "pr": 177,
+  "main_claim": {
+    "pr": 182,
+    "merge_ref": "d5d8caecff71991a5c834b5bb6bec426afb16f85",
+    "integrated_ref": "d052314"
+  },
+  "candidate_parent_ref": "fd41f301807060749e60775da8121f895495556b",
+  "source_sha256": {
+    "jarvis/storage_context.py": "2fef8edbbed2d5761fdbb73fd51ce1aa496dce1159c9a7a9e984148f02f6d14c",
+    "jarvis/db.py": "3a4af2463d3f44e88547a5bf4e6e7741b310ec9a0cc0034a3850ae37057c467c",
+    "jarvis/usage_ledger.py": "4ef8441a0edf69e4e56de66149e7cc9d68cebf85debc5991471884c97e738974",
+    "jarvis/model_routing.py": "60466c9b471390953ecfe739e73986cdefe6dd7ab4b1c10ee389ccede2b179e0",
+    "jarvis/model_execution.py": "9e0942388578dfe4e9cf61d989d5658e73e17e550cfca0cf611ce2aa5aca830a",
+    "scripts/run_model_use_pilot.py": "2c321583b637afa28f626d34c56bc2422d8bbddcb94f665826a0dfbaef33ec76",
+    "tests/unit/test_model_use_pilot.py": "95efd26b8218e33bd8f0fc4f7ff54b08144b5ca655b1d151ff84d983f380d339",
+    "tests/unit/test_storage_context.py": "aa8f8685b54ff9450c8c9e62ddc781a84d26473134f4e9286c4ff28f47c95330",
+    "tests/unit/test_model_storage_admission.py": "822543902df2568331d9ad2a9daf8483cd571e9f157de72209e1d40049a7b867",
+    "tests/unit/test_model_admission_cancellation.py": "8f0a6e30b668a8ccc57d33cd4fc6ca043c451f251ddc0fd073b4b8c58f0e8881",
+    "tests/unit/test_model_admission_shutdown.py": "10853a98bf2b272bb61d64a1caaad255e70d927e2c3ed3bde706a91d35f3d7d8"
+  },
+  "causal_reproductions": [
+    "actual foreign SQLite worker borrowed global pilot path and wrote after directory cleanup scan",
+    "actual acquired interactive/background slots leaked when owner cancelled twice before worker delivery",
+    "actual asyncio.run shutdown cancels owner and delivery independently"
+  ],
+  "repair": [
+    "immutable context-local DB/costs/preferences; full caller context copied into bounded daemon workers",
+    "actual running futures retained across coroutine cancellation; drained before deletion or quarantined with fixed failed receipt and retired-context refusal",
+    "explicit active/outside DB paths retain precedence; retired copies cannot escape to explicit storage",
+    "capacity grant owned by synchronized worker/caller handoff; late abandoned grant releases once even if async delivery is cancelled",
+    "pure admission waits remain outside bounded storage-worker pool"
+  ],
+  "validation": {
+    "root_final": {
+      "passed": 395,
+      "log": "/private/tmp/ws05-storage-admission-final.log",
+      "junit": "/private/tmp/ws05-storage-admission-final.xml"
+    },
+    "storage_independent": {
+      "passed": 45,
+      "verdict": "clean"
+    },
+    "admission_independent": {
+      "passed_groups": [
+        38,
+        7
+      ],
+      "verdict": "clean; repeated cancellation and real loop-shutdown probes pass"
+    },
+    "groups_overlap": true,
+    "original_causal_test_bodies_copied_unchanged": true,
+    "original_spend_assertions_unchanged": true
+  },
+  "published_ci": {
+    "ref": "4dc3dfb",
+    "validate": "failed",
+    "unit_passed": 5881,
+    "unit_failed": 17,
+    "skipped": 3,
+    "passing_subtests": 2,
+    "duration_s": 1802.69,
+    "failure_pattern": "mostly council/memory/catalog/admission deadlines; exact initiating poisoned lease is unproven",
+    "new_head_must_rerun": true
+  },
+  "frozen_mac_diagnostic": {
+    "ref": "4dc3dfb",
+    "passed": 5889,
+    "failed": 9,
+    "skipped": 3,
+    "passing_subtests": 2,
+    "duration_s": 102.59,
+    "failures": "known audio-default issue plus eight denied local socket/Unix/process checks",
+    "permitted_followup_passed": 92,
+    "no_hang_observed": true
+  },
+  "image_progress": {
+    "source_ref": "fd41f301807060749e60775da8121f895495556b",
+    "task_id": "75f9c74bf90d",
+    "source_files": 1738,
+    "source_bytes": 23804486,
+    "source_sha256": "6751a3a7425b86798113d8985b3f22ff552c9d79129a335a4e00424c9e9a8707",
+    "dependency_key": "c713fb909e943d018c5631eb9af1732bda8db31ca8409e358df2f7f2e4344954",
+    "source_packaging_and_clone": "succeeded",
+    "image_registered": false,
+    "last_preparation": "terminal guest_readiness_unverified; owned task recorded stopped, settings unchanged",
+    "settings_sha256": "99c2c7a63be65db7f655384d38688ff6217d7e3de29db53ccac0ef0dc0afe000"
+  },
+  "remaining": [
+    "fresh frozen full unit/CI",
+    "diagnose real guest exec readiness and complete immutable image",
+    "four reviewed Developer prototype defects under repair; real full40/native/holdout acceptance remains missing",
+    "manual/public-crawl proof, confidential-memory route, account/voice/deployment/rollback gates"
+  ],
+  "limitations": [
+    "no green complete CI/deployment claim",
+    "no production routing, account or settings change",
+    "storage scope cannot terminate arbitrary running Python thread; finite cleanup failure quarantines rather than claiming success",
+    "CI failures are consistent with the proven leak but their exact historical initiating cancellation is not known"
+  ]
+}

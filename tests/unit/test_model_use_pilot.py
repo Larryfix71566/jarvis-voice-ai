@@ -109,15 +109,21 @@ async def test_provider_output_and_error_text_never_enter_receipt():
 
 
 async def test_inherited_production_db_paths_and_preferences_are_overwritten(monkeypatch):
+    from jarvis import db, usage_ledger
+    from jarvis.storage_context import costs_path, preferences_enabled
     monkeypatch.setenv("JARVIS_DB_PATH", "/production/jarvis.db")
     monkeypatch.setenv("JARVIS_COSTS_DB", "/production/costs.db")
     monkeypatch.setenv("JARVIS_MODEL_PREFERENCES_ENABLED", "1")
     observed = []
     def factory(resolved, case):
-        observed.append((os.environ["JARVIS_DB_PATH"], os.environ["JARVIS_COSTS_DB"], os.environ["JARVIS_MODEL_PREFERENCES_ENABLED"]))
+        observed.append((str(db._default_db_path()), str(costs_path(usage_ledger.DB_PATH)),
+                         preferences_enabled(True)))
+        assert os.environ["JARVIS_DB_PATH"] == "/production/jarvis.db"
+        assert os.environ["JARVIS_COSTS_DB"] == "/production/costs.db"
+        assert os.environ["JARVIS_MODEL_PREFERENCES_ENABLED"] == "1"
         return fake_client(pilot._golden_response(case))
     await pilot.run_pilot(mode="offline", client_factory=factory)
-    assert all("/production/" not in db and "/production/" not in cost and prefs == "0" for db, cost, prefs in observed)
+    assert all("/production/" not in db and "/production/" not in cost and prefs is False for db, cost, prefs in observed)
     assert os.environ["JARVIS_DB_PATH"] == "/production/jarvis.db"
     assert os.environ["JARVIS_MODEL_PREFERENCES_ENABLED"] == "1"
 
@@ -205,6 +211,55 @@ def test_matching_live_comparison_flags_latency_and_quality_regression_without_a
     assert report["p95_review_threshold_exceeded"] is True
     assert report["candidate_quality_no_regression"] is False
     assert report["stable_p95_or_rollout_acceptance_claimed"] is False
+
+
+async def test_actual_unverified_storage_cleanup_is_reported_and_comparison_refused(monkeypatch):
+    import threading
+    from contextlib import asynccontextmanager
+    from jarvis.storage_context import state_to_thread
+    entered, release, cleaned = threading.Event(), threading.Event(), threading.Event()
+    original_isolation = pilot.isolated_state
+    held, owned = [], []
+    def work():
+        entered.set()
+        assert release.wait(3)
+    @asynccontextmanager
+    async def isolation():
+        async with original_isolation(drain_timeout_s=.01) as scope:
+            owned.append(scope.paths.db.parent)
+            cleanup = scope._cleanup
+            def complete_cleanup():
+                cleanup()
+                cleaned.set()
+            scope._cleanup = complete_cleanup
+            held.append(asyncio.create_task(state_to_thread(work)))
+            assert await asyncio.to_thread(entered.wait, 2)
+            yield scope
+    monkeypatch.setattr(pilot, 'isolated_state', isolation)
+    try:
+        report = await pilot.run_pilot()
+        assert report['storage_cleanup']['verified'] is False
+        assert report['storage_cleanup']['duration_ms'] >= 10
+        assert report['error'] == 'storage_cleanup_unverified'
+        assert report['deadline_guarantee_available'] is False
+        assert report['provider_requests_attempted'] == 0
+        assert owned[0].exists()
+        with pytest.raises(pilot.PilotUnavailable, match='comparison_cleanup_unverified'):
+            pilot.compare_receipts(comparison_receipt(), report)
+    finally:
+        release.set()
+        await asyncio.gather(*held, return_exceptions=True)
+    assert await asyncio.to_thread(cleaned.wait, 2)
+    assert not owned[0].exists()
+
+
+def test_cli_unverified_storage_cleanup_cannot_return_success(monkeypatch, capsys):
+    async def report(**kwargs):
+        return {'trials': [{'status': 'dry_ready_unverified'}],
+                'storage_cleanup': {'verified': False}, 'error': 'storage_cleanup_unverified'}
+    monkeypatch.setattr(pilot, 'run_pilot', report)
+    assert pilot.main([]) == 1
+    assert json.loads(capsys.readouterr().out)['error'] == 'storage_cleanup_unverified'
 
 
 def test_comparison_rejects_offline_or_mismatched_fixture_evidence():

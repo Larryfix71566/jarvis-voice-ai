@@ -915,12 +915,14 @@ MIGRATIONS: list[tuple[str, str]] = [
 
 
 def _default_db_path() -> Path:
-    return Path(os.environ.get("JARVIS_DB_PATH", "data/jarvis.db"))
+    from jarvis.storage_context import database_path
+    return database_path(Path(os.environ.get("JARVIS_DB_PATH", "data/jarvis.db")))
 
 
 def get_conn(db_path: str | Path | None = None) -> sqlite3.Connection:
     """Open a connection (WAL mode, Row factory). Creates the parent dir."""
-    path = Path(db_path) if db_path is not None else _default_db_path()
+    default_path = _default_db_path()  # A retired copied scope cannot use an explicit escape path.
+    path = Path(db_path) if db_path is not None else default_path
     if str(path) != ":memory:":
         path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)

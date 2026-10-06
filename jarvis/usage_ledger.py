@@ -247,7 +247,9 @@ def compute_cost(provider: str,
 # ---------------------------------------------------------------- ledger
 
 def _conn() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    from jarvis.storage_context import costs_path
+    path = costs_path(DB_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
     # Rev 3: WAL + busy_timeout from day one, not "when a future concurrent
     # writer appears". There are two writers from the FIRST council round:
     # council.py/upgrade_agent.py run inside the admin sidecar process,
@@ -257,7 +259,7 @@ def _conn() -> sqlite3.Connection:
     # INSERT (and costs_api's reads) overlap without SQLITE_BUSY. WAL is
     # persistent per database file, so setting it on every connect is
     # idempotent and costs nothing.
-    conn = sqlite3.connect(DB_PATH, timeout=5.0)
+    conn = sqlite3.connect(path, timeout=5.0)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
     conn.executescript(_SCHEMA)
@@ -334,9 +336,11 @@ def existing_model_budget_connection() -> sqlite3.Connection | None:
     budget table has no prior state; unreadable existing storage is an error,
     which the admission authority must never treat as an unrestricted task.
     """
-    if not DB_PATH.exists():
+    from jarvis.storage_context import costs_path
+    path = costs_path(DB_PATH)
+    if not path.exists():
         return None
-    conn = sqlite3.connect(DB_PATH.resolve().as_uri() + "?mode=ro", uri=True, timeout=5.0)
+    conn = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=5.0)
     try:
         conn.execute("PRAGMA busy_timeout=5000")
         if _model_budget_schema_exists(conn):
