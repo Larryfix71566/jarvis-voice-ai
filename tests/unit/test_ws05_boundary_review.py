@@ -13,6 +13,8 @@ import openai
 import pytest
 
 from jarvis import usage_ledger
+from jarvis import model_budget
+from jarvis.agents import base
 from jarvis.agents.base import SubAgent
 from jarvis.anthropic_shim import AsyncAnthropicChatShim
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
@@ -231,27 +233,87 @@ def test_named_model_preflight_cannot_construct_a_new_owner_to_escape_quarantine
 
 
 async def test_task_deadline_includes_hanging_run_association_before_client_creation(isolation, monkeypatch):
-    resolved = route(WorkloadLimits(deadline_seconds=.05))
+    resolved = route(WorkloadLimits(deadline_seconds=60))
     monkeypatch.setattr("jarvis.agents.base.resolve_model_route_checked", lambda *_args, **_kwargs: resolved)
     created = []
     monkeypatch.setattr("jarvis.agents.base.make_route_client", lambda _route: created.append(True))
     subject = SubAgent("developer", "Developer", "review fixture", [], settings(), SimpleNamespace(),
                        model_profile="claude-opus", on_profile_fallback="refuse")
-    cancelled = asyncio.Event()
+    clock = SimpleNamespace(now=model_budget.time.time())
+    monkeypatch.setattr(model_budget, "time", SimpleNamespace(time=lambda: clock.now))
+    monkeypatch.setattr(base, "time", SimpleNamespace(time=lambda: clock.now,
+        monotonic=base.time.monotonic, perf_counter=base.time.perf_counter))
+    budgets = []
+    begin = base.begin_model_task_budget
+    def capture_budget(*args, **kwargs):
+        budget = begin(*args, **kwargs)
+        budgets.append(budget)
+        return budget
+    monkeypatch.setattr(base, "begin_model_task_budget", capture_budget)
+    entered, cancelled = asyncio.Event(), asyncio.Event()
 
     async def associate(_run_id):
         try:
+            entered.set()
             await asyncio.Event().wait()
         finally:
             cancelled.set()
 
-    result = await asyncio.wait_for(subject.run(
-        "public synthetic review task", on_run_created=associate, tool_specs_override=[],
-    ), timeout=.5)
+    operation = asyncio.create_task(subject.run(
+        "public synthetic review task", on_run_created=associate, tool_specs_override=[]))
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=3)
+        assert len(budgets) == 1
+        budget = budgets[0]
+        advance = budget.deadline_at - clock.now + 1
+        clock.now += advance
+        assert remaining_seconds(budget) == 0
+        # Move the loop clock only after association is awaiting: this
+        # triggers the actual wait_for deadline and its cancellation path.
+        loop = asyncio.get_running_loop()
+        loop_time = loop.time
+        with monkeypatch.context() as timer_patch:
+            timer_patch.setattr(loop, "time", lambda: loop_time() + advance)
+            result = await asyncio.wait_for(operation, timeout=3)
+    finally:
+        if not operation.done():
+            operation.cancel()
+            await asyncio.gather(operation, return_exceptions=True)
 
     assert cancelled.is_set()
     assert result.startswith("FAILED:") or "timed out" in result.lower()
     assert created == []
+
+
+async def test_expired_run_association_never_calls_factory_or_creates_client(isolation, monkeypatch):
+    resolved = route(WorkloadLimits(deadline_seconds=60))
+    monkeypatch.setattr(base, "resolve_model_route_checked", lambda *_args, **_kwargs: resolved)
+    clock = SimpleNamespace(now=model_budget.time.time())
+    monkeypatch.setattr(model_budget, "time", SimpleNamespace(time=lambda: clock.now))
+    monkeypatch.setattr(base, "time", SimpleNamespace(time=lambda: clock.now,
+        monotonic=base.time.monotonic, perf_counter=base.time.perf_counter))
+    begin = base.begin_model_task_budget
+    def expire_budget(*args, **kwargs):
+        budget = begin(*args, **kwargs)
+        clock.now = budget.deadline_at + 1
+        assert remaining_seconds(budget) == 0
+        return budget
+    monkeypatch.setattr(base, "begin_model_task_budget", expire_budget)
+    associated, created = [], []
+    monkeypatch.setattr(base, "make_route_client", lambda _route: created.append(True))
+    monkeypatch.setattr(base, "record_execution_result", lambda *_args, **_kwargs:
+                        pytest.fail("expired association cannot publish model usage"))
+    subject = SubAgent("developer", "Developer", "review fixture", [], settings(), SimpleNamespace(),
+                       model_profile="claude-opus", on_profile_fallback="refuse")
+    async def association_coroutine():
+        pytest.fail("expired association coroutine cannot start")
+    def associate(_run_id):
+        associated.append(True)
+        return association_coroutine()
+    result = await asyncio.wait_for(subject.run(
+        "public synthetic review task", on_run_created=associate, tool_specs_override=[]), timeout=3)
+    assert result.startswith("FAILED:")
+    assert associated == [] and created == []
 
 
 async def test_confirmed_saved_selection_is_used_after_agent_creation_with_actual_sdk_transport(isolation, monkeypatch):

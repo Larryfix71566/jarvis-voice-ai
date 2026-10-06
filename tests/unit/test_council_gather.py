@@ -179,7 +179,7 @@ def test_routed_council_call_uses_shared_execution_boundary(monkeypatch):
         api_key_env="OPENAI_API_KEY", identity="openai/test-model",
         priority="background",
     )
-    monkeypatch.setattr(council_mod, "resolve_model_route", lambda *a, **k: route)
+    monkeypatch.setattr(council_mod, "resolve_model_route_checked", lambda *a, **k: route)
     captured = {}
 
     async def fake_execute(request, resolved):
@@ -233,7 +233,7 @@ def test_routed_council_protected_policy_rejects_external_before_client(monkeypa
         api_key_env="OPENAI_API_KEY", identity="openai/test-model",
         priority="background",
     )
-    monkeypatch.setattr(council_mod, "resolve_model_route", lambda *a, **k: route)
+    monkeypatch.setattr(council_mod, "resolve_model_route_checked", lambda *a, **k: route)
     monkeypatch.setattr(
         "jarvis.model_execution.make_route_client",
         lambda *_args, **_kwargs: pytest.fail("protected request reached client construction"),

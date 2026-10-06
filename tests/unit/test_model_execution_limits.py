@@ -2,6 +2,7 @@
 import asyncio
 import json
 import sqlite3
+import threading
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -10,6 +11,8 @@ import openai
 import pytest
 
 from jarvis import usage_ledger
+from jarvis import model_budget
+from jarvis import model_execution
 from jarvis.model_budget import ModelBudgetUnavailable, begin_model_task_budget
 from jarvis.model_execution import (
     ModelAdmissionController, ModelAttachment, ModelExecutionRequest,
@@ -197,9 +200,14 @@ async def test_nontext_estimate_shapes_are_refused_before_client_creation(ledger
     assert created == []
 
 
-async def test_expired_parent_deadline_cannot_be_reset_by_configuration(ledger):
-    budget = begin_model_task_budget("developer", "budget-parent", WorkloadLimits(deadline_seconds=.01))
-    await asyncio.sleep(.02)
+async def test_expired_parent_deadline_cannot_be_reset_by_configuration(ledger, monkeypatch):
+    # Expire the durable wall-clock deadline without racing execution's
+    # independent setup timeout while SQLite opens on a loaded CI worker.
+    clock = SimpleNamespace(now=model_budget.time.time())
+    monkeypatch.setattr(model_budget, "time", SimpleNamespace(time=lambda: clock.now))
+    budget = begin_model_task_budget("developer", "budget-parent", WorkloadLimits(deadline_seconds=60))
+    clock.now = budget.deadline_at + 1
+    assert model_budget.remaining_seconds(budget) == 0
     created = []
     with pytest.raises(ModelBudgetUnavailable, match="budget_deadline_exhausted"):
         await execute_chat(request(), route(), task_budget=budget,
@@ -207,14 +215,49 @@ async def test_expired_parent_deadline_cannot_be_reset_by_configuration(ledger):
     assert created == []
 
 
-async def test_deadline_includes_time_queued_for_admission(ledger):
+async def test_deadline_includes_time_queued_for_admission(ledger, monkeypatch):
     controller = ModelAdmissionController()
+    entered = threading.Event()
+    can_start = controller._can_start
+    def capture_waiter(priority, token):
+        if priority == "interactive" and controller.active_counts == (1, 1):
+            entered.set()
+        return can_start(priority, token)
+    monkeypatch.setattr(controller, "_can_start", capture_waiter)
+    clock = SimpleNamespace(now=model_budget.time.time())
+    monkeypatch.setattr(model_budget, "time", SimpleNamespace(time=lambda: clock.now))
+    monkeypatch.setattr(model_execution, "time", SimpleNamespace(time=lambda: clock.now,
+        monotonic=model_execution.time.monotonic))
+    budgets = []
+    begin = model_execution.begin_model_task_budget
+    def capture_budget(*args, **kwargs):
+        budget = begin(*args, **kwargs)
+        budgets.append(budget)
+        return budget
+    monkeypatch.setattr(model_execution, "begin_model_task_budget", capture_budget)
     async with controller.slot("interactive"), controller.slot("background"):
         created = []
-        with pytest.raises(TimeoutError):
-            await execute_chat(request(), route(WorkloadLimits(deadline_seconds=.02)),
-                               admission=controller, client_factory=lambda _: created.append(True))
+        operation = asyncio.create_task(execute_chat(
+            request(), route(WorkloadLimits(deadline_seconds=60)),
+            admission=controller, client_factory=lambda _: created.append(True)))
+        try:
+            assert await asyncio.to_thread(entered.wait, 3)
+            assert controller.waiting_interactive == 1 and len(budgets) == 1
+            advance = budgets[0].deadline_at - clock.now + 1
+            clock.now += advance
+            assert model_budget.remaining_seconds(budgets[0]) == 0
+            loop = asyncio.get_running_loop()
+            loop_time = loop.time
+            with monkeypatch.context() as timer_patch:
+                timer_patch.setattr(loop, "time", lambda: loop_time() + advance)
+                with pytest.raises(TimeoutError):
+                    await asyncio.wait_for(operation, 3)
+        finally:
+            if not operation.done():
+                operation.cancel()
+                await asyncio.gather(operation, return_exceptions=True)
         assert created == []
+        assert controller.waiting_interactive == 0
     assert controller.active_counts == (0, 0)
 
 

@@ -12,6 +12,8 @@ It never produces or touches a diff.
 from __future__ import annotations
 
 import asyncio
+from contextvars import copy_context
+from dataclasses import dataclass, field
 import hashlib
 import json
 import logging
@@ -34,15 +36,21 @@ from jarvis.model_execution import (
     ModelExecutionRequest,
     execute_chat,
 )
+from jarvis.model_budget import (
+    ChildTaskBudget, ModelBudgetUnavailable, TaskBudget,
+    begin_model_child_budget, begin_model_task_budget, remaining_child_seconds,
+)
 from jarvis.model_routing import (
     AccessRoute,
     ModelRouteError,
+    ResolvedModelRoute,
     make_sync_route_client,
-    resolve_model_route,
+    resolve_model_route_checked,
     resolve_policy,
 )
 from jarvis.privacy_policy import DataPolicy, assert_route_allowed, strictest
 from jarvis.prompts import PLAN_AUTHOR_PROMPT, PLAN_REVIEW_PROMPT
+from jarvis.tenant import current_user_id
 from jarvis.usage_ledger import (
     provider_from_base_url,
     record_completion,
@@ -78,6 +86,130 @@ COUNCIL_SHADOW_INLINE = False
 # pass to finish before asserting on its writes — production code never
 # reads this.
 _last_shadow_thread: threading.Thread | None = None
+
+
+@dataclass(frozen=True)
+class _CouncilExecution:
+    """Host-only round admission; payload dictionaries cannot sponsor calls."""
+
+    budget: ChildTaskBudget
+    data_policy: DataPolicy
+    cancel_event: threading.Event | None = None
+    sponsored: bool = False
+    routes: dict[tuple[str, str], ResolvedModelRoute] = field(default_factory=dict, repr=False)
+
+    def check(self) -> None:
+        if self.cancel_event is not None and self.cancel_event.is_set():
+            raise asyncio.CancelledError
+        if remaining_child_seconds(self.budget) <= 0:
+            raise ModelBudgetUnavailable("budget_deadline_exhausted")
+
+
+def _host_policy(context: dict, workload: str, policy: DataPolicy | None) -> DataPolicy:
+    effective = _context_data_policy(context, workload=workload)
+    if policy is not None:
+        if type(policy) is not DataPolicy:
+            raise ModelRouteError("council host policy is unavailable")
+        effective = strictest(effective, policy)
+    return effective
+
+
+def _round_owner(
+    workload: str, round_id: str, parent_budget: TaskBudget | None,
+    cancel_event: threading.Event | None, started_at: float,
+) -> TaskBudget | None:
+    if cancel_event is not None:
+        if type(cancel_event) is not threading.Event:
+            raise ModelBudgetUnavailable("budget_scope_mismatch")
+        if cancel_event.is_set():
+            raise asyncio.CancelledError
+    if os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") != "1":
+        if parent_budget is not None:
+            raise ModelBudgetUnavailable("budget_unsupported_route")
+        return None
+    if parent_budget is not None:
+        if type(parent_budget) is not TaskBudget:
+            raise ModelBudgetUnavailable("budget_scope_mismatch")
+        return parent_budget
+    policy = resolve_policy(workload, include_preferences=False)
+    return begin_model_task_budget(workload, f"council:{round_id}", policy.limits,
+                                   started_at=started_at)
+
+
+def _child_execution(
+    owner: TaskBudget | None, workload: str, policy: DataPolicy,
+    cancel_event: threading.Event | None, *, started_at: float, sponsored: bool,
+) -> _CouncilExecution | None:
+    if owner is None:
+        return None
+    limits = resolve_policy(workload, include_preferences=False).limits
+    binding = begin_model_child_budget(owner, workload, limits, started_at=started_at)
+    execution = _CouncilExecution(binding, policy, cancel_event, sponsored)
+    execution.check()
+    return execution
+
+
+async def _await_owned(operation: Any, execution: _CouncilExecution) -> Any:
+    """Cancel admitted work before it can publish after its host owner ends."""
+    task = asyncio.ensure_future(operation)
+    try:
+        while not task.done():
+            execution.check()
+            await asyncio.wait({task}, timeout=0.05)
+        execution.check()
+        return await task
+    finally:
+        if not task.done():
+            task.cancel()
+        # Always retrieve a completed exception, including deadline races.
+        if task.cancelled() or not task.done():
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        elif task.exception() is not None:
+            task.exception()
+
+
+async def _gather_members(operations: Any) -> list[Any]:
+    tasks = [asyncio.create_task(operation) for operation in operations]
+    try:
+        return await asyncio.gather(*tasks)
+    except BaseException:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+
+
+async def _member_route(profile: dict[str, Any], workload: str,
+                        execution: _CouncilExecution | None) -> ResolvedModelRoute:
+    name = str(profile["name"])
+    key = (workload, name)
+    if execution is not None:
+        execution.check()
+        if execution.budget.workload != workload:
+            raise ModelBudgetUnavailable("budget_scope_mismatch")
+        if key in execution.routes:
+            return execution.routes[key]
+    resolving = asyncio.to_thread(resolve_model_route_checked,
+                                   workload, explicit_profile=name)
+    resolved = (await _await_owned(resolving, execution)
+                if execution is not None else await resolving)
+    if execution is not None:
+        if resolved.profile_name != name or resolved.identity != profile.get("identity"):
+            raise ModelRouteError("council member identity changed")
+        assert_route_allowed(resolved.route, execution.data_policy)
+        execution.routes[key] = resolved
+    return resolved
+
+
+async def _pin_members(names: list[str], profiles: dict[str, dict[str, Any]],
+                       execution: _CouncilExecution | None) -> None:
+    if execution is not None:
+        for name in names:
+            await _member_route(profiles[name], execution.budget.workload, execution)
 
 
 def _context_data_policy(context: dict[str, Any], *, workload: str) -> DataPolicy:
@@ -268,6 +400,7 @@ text after the SCORES section."""
 async def _call_profile(
     profile: dict[str, Any], system_prompt: str, user_content: str,
     timeout_s: float, *, rung: str, data_policy: DataPolicy | None = None,
+    execution: _CouncilExecution | None = None,
 ) -> tuple[str, dict[str, int] | None]:
     """One OpenAI-compatible chat completion for one registry profile.
     Raises on any failure (missing key, network error, timeout) — callers
@@ -291,11 +424,8 @@ async def _call_profile(
     use_routing = os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
     resolved_route = None
     if use_routing:
-        try:
-            resolved_route = resolve_model_route(
-                "council", explicit_profile=str(profile["name"]))
-        except ModelRouteError as exc:
-            raise RuntimeError(str(exc)) from exc
+        workload = "planning" if system_prompt == PLAN_AUTHOR_PROMPT else "council"
+        resolved_route = await _member_route(profile, workload, execution)
         # Routed council calls use the same validated input, policy, usage,
         # and deadline boundary as other model workloads. The un-routed
         # implementation below remains the compatibility path while the
@@ -303,7 +433,10 @@ async def _call_profile(
         route_policy = data_policy or DataPolicy(
             resolved_route.route.privacy, "council-request"
         )
+        if execution is not None:
+            route_policy = strictest(route_policy, execution.data_policy)
         request_id = f"council:{uuid.uuid4().hex}"
+        parent_id = execution.budget.parent_request_id if execution is not None else request_id
         provider = resolved_route.provider
         extra_body = effort.extra_body_for(
             rung=rung, provider=provider, explicit=profile.get("effort"),
@@ -312,7 +445,7 @@ async def _call_profile(
         request = ModelExecutionRequest(
             workload=resolved_route.workload,
             task_id=request_id,
-            parent_request_id=request_id,
+            parent_request_id=parent_id,
             instructions="",
             context=(
                 ModelContextMessage("system", system_prompt, route_policy),
@@ -323,15 +456,36 @@ async def _call_profile(
             temperature=profile.get("temperature"),
             extra_body=extra_body or None,
         )
-        execution = await execute_chat(request, resolved_route)
-        record_execution_result(rung, execution)
+        kwargs = {"child_budget": execution.budget} if execution is not None else {}
+        if execution is not None:
+            def guard_owner(event: Any) -> None:
+                if event.event_type in {"failed", "cancelled"}:
+                    return
+                try:
+                    execution.check()
+                except ModelBudgetUnavailable:
+                    # Telemetry swallows ordinary observer errors. Cancel
+                    # this actual execution task as well, so its mandatory
+                    # pre-invocation check cannot continue after refusal.
+                    asyncio.current_task().cancel()
+                    raise
+            kwargs["event_sink"] = guard_owner
+        operation = execute_chat(request, resolved_route, **kwargs)
+        completed = (await _await_owned(operation, execution)
+                     if execution is not None else await operation)
+        if execution is not None:
+            execution.check()
+        record_execution_result(rung, completed)
         usage = None
-        if execution.prompt_tokens is not None and execution.completion_tokens is not None:
+        if completed.prompt_tokens is not None and completed.completion_tokens is not None:
             usage = {
-                "prompt_tokens": execution.prompt_tokens,
-                "completion_tokens": execution.completion_tokens,
+                "prompt_tokens": completed.prompt_tokens,
+                "completion_tokens": completed.completion_tokens,
             }
-        return execution.text, usage
+        return completed.text, usage
+
+    if execution is not None:
+        raise ModelBudgetUnavailable("budget_unsupported_route")
 
     def _sync_call() -> tuple[str, dict[str, int] | None]:
         resolved_route = None
@@ -504,6 +658,7 @@ async def _gather_proposals(
     usage_by_name: dict[str, dict[str, int] | None] | None = None,
     *, timeout_s: float = COUNCIL_MEMBER_TIMEOUT_S, rung: str,
     data_policy: DataPolicy | None = None,
+    execution: _CouncilExecution | None = None,
 ) -> tuple[list[Proposal], dict[str, int]]:
     """Fan out `system_prompt` (V14: PROPOSER_PROMPT or, for a scope
     round, SCOPE_ADVISOR_PROMPT — `_convene_inner` selects the pair once
@@ -536,12 +691,16 @@ async def _gather_proposals(
             call_kwargs = {"rung": rung}
             if data_policy is not None:
                 call_kwargs["data_policy"] = data_policy
+            if execution is not None:
+                call_kwargs["execution"] = execution
             content, usage = await _call_profile(
                 profiles_by_name[name], system_prompt, user_content,
                 timeout_s, **call_kwargs,
             )
             return name, content, usage
-        except Exception as exc:  # noqa: BLE001 — never raise into convene()
+        except ModelBudgetUnavailable:
+            raise
+        except Exception as exc:  # noqa: BLE001 — ordinary provider abstention
             # GC6(a): same fix as the judge branch above -- the exception TYPE
             # must survive even when str(exc) is empty.
             logger.warning(
@@ -550,7 +709,7 @@ async def _gather_proposals(
             )
             return name, None, None
 
-    results = await asyncio.gather(*(_one(n) for n in names))
+    results = await _gather_members(_one(n) for n in names)
     proposals = [
         Proposal(label="", profile=name, content=content)
         for name, content, _usage in results
@@ -606,6 +765,7 @@ async def _gather_scores(
     usage_by_name: dict[str, dict[str, int] | None] | None = None,
     timeout_s: float = COUNCIL_MEMBER_TIMEOUT_S, rung: str,
     data_policy: DataPolicy | None = None,
+    execution: _CouncilExecution | None = None,
 ) -> tuple[list[Score], dict[str, int]]:
     """Fan out `system_prompt` (V14: JUDGE_PROMPT or, for a scope round,
     SCOPE_JUDGE_PROMPT — selected once by the caller, same rule as
@@ -626,11 +786,15 @@ async def _gather_scores(
             call_kwargs = {"rung": rung}
             if data_policy is not None:
                 call_kwargs["data_policy"] = data_policy
+            if execution is not None:
+                call_kwargs["execution"] = execution
             raw, usage = await _call_profile(
                 profiles_by_name[name], system_prompt, judge_user_content,
                 timeout_s, **call_kwargs,
             )
             return parse_scores(name, raw, labels), usage
+        except ModelBudgetUnavailable:
+            raise
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "council_judge_failed profile=%s shadow=%s error_type=%s",
@@ -647,7 +811,7 @@ async def _gather_scores(
                 for lbl in labels
             ], None
 
-    results = await asyncio.gather(*(_one(n) for n in judge_names))
+    results = await _gather_members(_one(n) for n in judge_names)
     out: list[Score] = []
     totals = _empty_usage_totals()
     for name, (scores, usage) in zip(judge_names, results):
@@ -663,6 +827,8 @@ async def _gather_scores(
 async def convene(
     *, workflow: str, placement: str, trigger: str, goal: str, tier: int,
     context: dict, run_id: str | None = None,
+    parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
+    cancel_event: threading.Event | None = None,
 ) -> RoundResult | None:
     """Run one council round. Returns None on ANY structural failure
     (kill switch off, no usable profiles, an unexpected exception) — D13.
@@ -672,14 +838,19 @@ async def convene(
     `result is None` and `result.winner is None` (D2.1's `_maybe_escalate`
     does exactly this). `context` carries placement-specific input (for
     E1: keys 'diff' and 'checks'). Writes the D8 rows and JSONL itself.
-    Never raises."""
+    Budget refusals propagate; ordinary structural failures return None."""
     if not _council_enabled():
         return None
+    started_at_unix = time.time()
     try:
         return await _convene_inner(
             workflow=workflow, placement=placement, trigger=trigger,
             goal=goal, tier=tier, context=context, run_id=run_id,
+            parent_budget=parent_budget, data_policy=data_policy,
+            cancel_event=cancel_event, started_at_unix=started_at_unix,
         )
+    except ModelBudgetUnavailable:
+        raise
     except Exception as exc:  # noqa: BLE001 — D13, never raise into the agent loop
         _log_safe_failure("council_convene_failed", exc)
         return None
@@ -688,11 +859,17 @@ async def convene(
 async def _convene_inner(
     *, workflow: str, placement: str, trigger: str, goal: str, tier: int,
     context: dict, run_id: str | None,
+    parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
+    cancel_event: threading.Event | None = None, started_at_unix: float | None = None,
 ) -> RoundResult:
     round_id = uuid.uuid4().hex
     started_at = now_iso()
     started_monotonic = time.monotonic()
-    data_policy = _context_data_policy(context, workload="council")
+    started_at_unix = time.time() if started_at_unix is None else started_at_unix
+    data_policy = _host_policy(context, "council", data_policy)
+    owner = _round_owner("council", round_id, parent_budget, cancel_event, started_at_unix)
+    execution = _child_execution(owner, "council", data_policy, cancel_event,
+        started_at=started_at_unix, sponsored=parent_budget is not None)
 
     # MORTIMER_LLM_COUNCIL_V2_PLAN.md V14 — the ONE prompt-pair selection
     # site. Every gather call in this round (proposer fan-out, live
@@ -785,11 +962,13 @@ async def _convene_inner(
         )
 
     proposer_user_content = _proposer_user_message(goal, context, placement)
+    await _pin_members(proposer_names + judge_names, profiles_by_name, execution)
     proposer_usage_by_name: dict[str, dict[str, int] | None] = {}
     proposals, proposer_usage = await _gather_proposals(
         proposer_names, profiles_by_name, proposer_user_content,
         proposer_system_prompt, usage_by_name=proposer_usage_by_name,
         rung="council", data_policy=data_policy,
+        execution=execution,
     )
 
     # MORTIMER_LLM_COUNCIL_V2_PLAN.md V1 — the carried proposal is a real
@@ -839,7 +1018,10 @@ async def _convene_inner(
         judge_names, profiles_by_name, judge_user_content, labels, shadow=False,
         system_prompt=judge_system_prompt, usage_by_name=judge_usage_by_name,
         rung="council", data_policy=data_policy,
+        execution=execution,
     )
+    if execution is not None:
+        execution.check()
 
     # V9 — the round row's token totals sum only the proposer + live-
     # judge passes (never replay, never shadow — the shadow pass's own
@@ -926,23 +1108,31 @@ async def _convene_inner(
             _log_safe_failure("council_shadow_config_failed", exc)
             shadow_judge_names = []
         if shadow_judge_names:
-            if COUNCIL_SHADOW_INLINE:
+            if COUNCIL_SHADOW_INLINE or (execution is not None and (
+                    execution.sponsored or execution.cancel_event is not None)):
                 await _shadow_pass(
                     round_id, shadow_judge_names, profiles_by_name,
                     judge_user_content, labels, profile_tiers, label_to_profile,
                     payload_path, judge_system_prompt=judge_system_prompt,
                     data_policy=data_policy,
+                    execution=execution,
                 )
             else:
                 global _last_shadow_thread
+                tenant_context = copy_context()
+                def detached_shadow() -> None:
+                    try:
+                        tenant_context.run(asyncio.run, _shadow_pass(
+                            round_id, shadow_judge_names, profiles_by_name,
+                            judge_user_content, labels, profile_tiers,
+                            label_to_profile, payload_path,
+                            judge_system_prompt=judge_system_prompt,
+                            data_policy=data_policy, execution=execution,
+                        ))
+                    except (ModelBudgetUnavailable, asyncio.CancelledError) as exc:
+                        _log_safe_failure("council_detached_shadow_refused", exc)
                 thread = threading.Thread(
-                    target=lambda: asyncio.run(_shadow_pass(
-                        round_id, shadow_judge_names, profiles_by_name,
-                        judge_user_content, labels, profile_tiers,
-                        label_to_profile, payload_path,
-                        judge_system_prompt=judge_system_prompt,
-                        data_policy=data_policy,
-                    )),
+                    target=detached_shadow,
                     daemon=True,
                 )
                 thread.start()
@@ -985,6 +1175,8 @@ def _finalize_too_small(
 async def draft_candidates(
     goal: str, *, members: dict[str, list[str]] | None = None, judge: bool = True,
     context: dict | None = None, run_id: str | None = None,
+    parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
+    cancel_event: threading.Event | None = None,
 ) -> RoundResult | None:
     """Fan out PLAN_AUTHOR_PROMPT to every usable proposer (or the subset
     named in `members["proposers"]`) and, when `judge` is True, score the
@@ -993,7 +1185,7 @@ async def draft_candidates(
     Returns None on any structural failure (kill switch off, unexpected
     exception), matching convene()'s D13 contract. Returns a RoundResult
     with `winner=None` always — this function never selects a winner; a
-    human does, via record_user_choice. Never raises.
+    human does, via record_user_choice. Budget refusals propagate.
 
     MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R3 — `context` is optional and
     additive (default None -> {}, so every existing caller is unchanged).
@@ -1004,10 +1196,15 @@ async def draft_candidates(
     round is written with `placement="review"` instead of `"doc"`."""
     if not _council_enabled():
         return None
+    started_at_unix = time.time()
     try:
         return await _draft_candidates_inner(
             goal, members=members, judge=judge, context=context or {}, run_id=run_id,
+            parent_budget=parent_budget, data_policy=data_policy,
+            cancel_event=cancel_event, started_at_unix=started_at_unix,
         )
+    except ModelBudgetUnavailable:
+        raise
     except Exception as exc:  # noqa: BLE001 — D13, never raise into the caller
         _log_safe_failure("council_draft_candidates_failed", exc)
         return None
@@ -1022,15 +1219,26 @@ async def draft_candidates(
 async def _draft_candidates_inner(
     goal: str, *, members: dict[str, list[str]] | None, judge: bool,
     context: dict, run_id: str | None,
+    parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
+    cancel_event: threading.Event | None = None, started_at_unix: float | None = None,
 ) -> RoundResult:
     round_id = uuid.uuid4().hex
     started_at = now_iso()
     started_monotonic = time.monotonic()
-    data_policy = _context_data_policy(context, workload="planning")
+    started_at_unix = time.time() if started_at_unix is None else started_at_unix
+    data_policy = _host_policy(context, "planning", data_policy)
+    owner = _round_owner("planning", round_id, parent_budget, cancel_event, started_at_unix)
 
     is_review = context.get("document") is not None
     placement = "review" if is_review else "doc"
     proposer_system_prompt = PLAN_REVIEW_PROMPT if is_review else PLAN_AUTHOR_PROMPT
+    adviser_policy = _host_policy(context, "council", data_policy)
+    data_policy = strictest(data_policy, adviser_policy)
+    council_execution = _child_execution(owner, "council", adviser_policy, cancel_event,
+        started_at=started_at_unix, sponsored=parent_budget is not None)
+    author_execution = (council_execution if is_review else _child_execution(
+        owner, "planning", data_policy, cancel_event, started_at=started_at_unix,
+        sponsored=parent_budget is not None))
 
     registry = load_model_registry()
     profiles_by_name: dict[str, dict[str, Any]] = registry.get("profiles", {})
@@ -1075,12 +1283,14 @@ async def _draft_candidates_inner(
         )
 
     proposer_user_content = _proposer_user_message(goal, context, "doc")
+    await _pin_members(proposer_names, profiles_by_name, author_execution)
     proposer_usage_by_name: dict[str, dict[str, int] | None] = {}
     proposals, proposer_usage = await _gather_proposals(
         proposer_names, profiles_by_name, proposer_user_content,
         proposer_system_prompt, usage_by_name=proposer_usage_by_name,
         timeout_s=council_config.PLANNING_MEMBER_TIMEOUT_S,
         rung="planning", data_policy=data_policy,
+        execution=author_execution,
     )
 
     if not proposals:
@@ -1134,6 +1344,7 @@ async def _draft_candidates_inner(
                     break
         judge_names = _sort_by_registry(judge_names)
         if judge_names:
+            await _pin_members(judge_names, profiles_by_name, council_execution)
             judge_user_content = _judge_user_message(goal, context, proposals, "doc")
             live_scores, live_usage = await _gather_scores(
                 judge_names, profiles_by_name, judge_user_content, labels,
@@ -1141,7 +1352,12 @@ async def _draft_candidates_inner(
                 usage_by_name=judge_usage_by_name,
                 timeout_s=council_config.PLANNING_MEMBER_TIMEOUT_S,
                 rung="planning", data_policy=data_policy,
+                execution=council_execution,
             )
+    if author_execution is not None:
+        author_execution.check()
+    if council_execution is not None:
+        council_execution.check()
 
     reported_calls = proposer_usage["reported_calls"] + live_usage["reported_calls"]
     if reported_calls > 0:
@@ -1304,8 +1520,8 @@ def _write_round_row(
                 "abstentions, winner_profile, winner_label, winner_mean, "
                 "select_reason, status, started_at, ended_at, latency_ms, "
                 "prompt_tokens, completion_tokens, registry_order, "
-                "proposers_attempted, judges_attempted) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "proposers_attempted, judges_attempted, user_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     round_id, run_id, workflow, placement, trigger, tier,
                     _truncate(_redact_council_value(goal, data_policy)),
@@ -1318,6 +1534,7 @@ def _write_round_row(
                     ended_at, latency_ms, prompt_tokens, completion_tokens,
                     json.dumps(registry_order) if registry_order is not None else None,
                     proposers_attempted, judges_attempted,
+                    current_user_id() if os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1" else "local",
                 ),
             )
             conn.commit()
@@ -1345,8 +1562,8 @@ def _write_score_rows(
             conn.executemany(
                 "INSERT INTO council_scores (round_id, judge_profile, "
                 "judge_tier, shadow, proposal_label, proposal_profile, "
-                "score, abstain_reason, justification, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "score, abstain_reason, justification, created_at, user_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 [
                     (
                         round_id, s.judge_profile,
@@ -1357,6 +1574,7 @@ def _write_score_rows(
                         _redact_council_value(s.abstain_reason, data_policy),
                         _truncate(_redact_council_value(s.justification, data_policy)),
                         created_at,
+                        current_user_id() if os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1" else "local",
                     )
                     for s in scores
                 ],
@@ -1803,6 +2021,7 @@ async def _shadow_pass(
     label_to_profile: dict[str, str], payload_path: Path,
     *, judge_system_prompt: str = JUDGE_PROMPT,
     data_policy: DataPolicy | None = None,
+    execution: _CouncilExecution | None = None,
 ) -> None:
     """MORTIMER_LLM_COUNCIL_V2_PLAN.md V7 — the shadow pass's entire
     execution, extracted so it can run inline (tests, `COUNCIL_SHADOW_
@@ -1811,9 +2030,9 @@ async def _shadow_pass(
     JSONL score records (open mode "a"), and — V9 — folds its usage into
     the round row via a best-effort additive UPDATE (the round row may
     already show NULL from the live pass if nothing there reported
-    usage; COALESCE treats that as 0 for the addition). Never raises —
-    a shadow-pass failure is logged and simply means no shadow rows/
-    usage for this round, exactly as when it ran inline.
+    usage; COALESCE treats that as 0 for the addition). Ordinary provider
+    failures are abstentions; host budget refusals propagate to the
+    sponsored owner or the detached standalone thread's safe logger.
 
     `judge_system_prompt` (V14, keyword-only with a default so the
     fixed positional shape this function had at V7 is unchanged):
@@ -1829,7 +2048,12 @@ async def _shadow_pass(
             shadow=True, system_prompt=judge_system_prompt,
             usage_by_name=shadow_usage_by_name,
             rung="council", data_policy=data_policy,
+            execution=execution,
         )
+        if execution is not None:
+            execution.check()
+    except ModelBudgetUnavailable:
+        raise
     except Exception as exc:  # noqa: BLE001 — D8.2.1, never degrades the round
         _log_safe_failure("council_shadow_failed", exc)
         return

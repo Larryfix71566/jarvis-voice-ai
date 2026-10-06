@@ -11,10 +11,11 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 from jarvis import usage_ledger
+from jarvis import model_budget
 from jarvis.agents import upgrade_agent as ua
 from jarvis.model_execution import ModelToolCall
 from jarvis.model_preferences import stage_preference, confirm_preference
-from jarvis.model_budget import begin_model_task_budget
+from jarvis.model_budget import ModelBudgetUnavailable, begin_model_task_budget
 from jarvis.model_routing import AccessRoute, ResolvedModelRoute, WorkloadLimits, ModelRouteError
 from jarvis.privacy_policy import DataPolicy, issue_tool_result, make_tool_execution_scope
 from tests.unit.test_development_sources import workspace as host_workspace
@@ -130,6 +131,44 @@ def prefer(workload, profile, access="direct_api"):
 
 def fixed_route(monkeypatch, selected):
     monkeypatch.setattr(ua, "resolve_model_route_checked", lambda *args, **kwargs: selected)
+
+
+@pytest.fixture
+def phase_deadline(monkeypatch):
+    """Fire the real owner callback after a phase enters and time expires."""
+    clock = SimpleNamespace(now=time.time())
+    timers = []
+
+    class Timer:
+        def __init__(self, seconds, callback):
+            self.seconds, self.callback = seconds, callback
+            self.started = self.cancelled = self.fired = False
+            timers.append(self)
+
+        def start(self):
+            self.started = True
+
+        def cancel(self):
+            self.cancelled = True
+
+    monkeypatch.setattr(model_budget, "time", SimpleNamespace(time=lambda: clock.now))
+    monkeypatch.setattr(ua, "time", SimpleNamespace(time=lambda: clock.now,
+                                                   monotonic=time.monotonic))
+    monkeypatch.setattr(ua, "threading", SimpleNamespace(
+        Lock=threading.Lock, Event=threading.Event, Timer=Timer))
+
+    def expire(agent):
+        assert len(timers) == 1 and timers[0].started and not timers[0].fired
+        budget = agent._run_snapshot.budget
+        assert model_budget.remaining_seconds(budget) > 0
+        clock.now = budget.deadline_at + 1
+        # The absolute saved deadline, rather than just a timer flag, must
+        # be exhausted before the production owner cancellation runs.
+        assert model_budget.remaining_seconds(budget) == 0
+        timers[0].fired = True
+        timers[0].callback()
+
+    return expire
 
 
 @pytest.mark.parametrize("kind,workload", [(ua.UpgradeAgent, "developer"),
@@ -335,15 +374,16 @@ def test_native_unsupported_caps_refuse_before_session_or_client(limits, monkeyp
 
 
 def test_deadline_cancels_inflight_planner_and_never_ledgers_late_result(
-    monkeypatch, fixture_issuer,
+    monkeypatch, fixture_issuer, phase_deadline,
 ):
     workspace = WorkspaceFixture()
     agent = ua.UpgradeAgent(workspace)
-    fixed_route(monkeypatch, route(limits=WorkloadLimits(deadline_seconds=.04)))
+    fixed_route(monkeypatch, route(limits=WorkloadLimits(deadline_seconds=60)))
     ended, recorded = [], []
     monkeypatch.setattr(ua, "record_execution_result", lambda *args, **kwargs: recorded.append(True))
     async def execute(*args, **kwargs):
         try:
+            phase_deadline(agent)
             await asyncio.Event().wait()
         finally:
             ended.append(True)
@@ -355,13 +395,13 @@ def test_deadline_cancels_inflight_planner_and_never_ledgers_late_result(
 
 
 def test_late_synchronous_tool_result_is_discarded_after_owner_cancel(
-    monkeypatch, fixture_issuer,
+    monkeypatch, fixture_issuer, phase_deadline,
 ):
     workspace = WorkspaceFixture()
     agent = ua.UpgradeAgent(workspace)
-    fixed_route(monkeypatch, route(limits=WorkloadLimits(deadline_seconds=.04)))
+    fixed_route(monkeypatch, route(limits=WorkloadLimits(deadline_seconds=60)))
     def dispatch(service, name, args, *, execution_scope, context=None):
-        time.sleep(.08)
+        phase_deadline(agent)
         return issue_tool_result(execution_scope, json.dumps({"ok": True, "content": CANARY}),
                                  DataPolicy("approved_external", "unit"), "unit")
     fixture_issuer.dispatch_workspace_tool = dispatch
@@ -456,17 +496,20 @@ def test_private_history_keeps_its_policy_through_council_and_summary(
     assert report["status"] == {"phase": "editing", "proposal_count": 0}
     assert agent.result_policy.level == "confidential"
     assert councils[0]["context"]["privacy"] == "confidential"
+    assert councils[0]["data_policy"].level == "confidential"
+    assert councils[0]["parent_budget"].parent_request_id == seen[0].parent_request_id
+    assert councils[0]["cancel_event"] is agent._cancel
     assert councils[0]["context"]["diff"][0]["diff"] == CANARY
     assert councils[0]["run_id"] == seen[0].parent_request_id
     assert all(item.data_policy.level == "confidential" for request in seen for item in request.context)
 
 
 def test_council_is_cancelled_by_shared_run_deadline_before_advice_sink(
-    monkeypatch, fixture_issuer,
+    monkeypatch, fixture_issuer, phase_deadline,
 ):
     workspace = WorkspaceFixture()
     agent = ua.UpgradeAgent(workspace)
-    fixed_route(monkeypatch, route(limits=WorkloadLimits(deadline_seconds=.05)))
+    fixed_route(monkeypatch, route(limits=WorkloadLimits(deadline_seconds=60)))
     def dispatch(service, name, args, *, execution_scope, context=None):
         return issue_tool_result(execution_scope, json.dumps({"ok": False, "declined": True,
             "reason": "synthetic decline"}), DataPolicy("approved_external", "unit"), "unit")
@@ -476,6 +519,7 @@ def test_council_is_cancelled_by_shared_run_deadline_before_advice_sink(
     ended = []
     async def convene(**kwargs):
         try:
+            phase_deadline(agent)
             await asyncio.Event().wait()
         finally:
             ended.append(True)
@@ -486,8 +530,13 @@ def test_council_is_cancelled_by_shared_run_deadline_before_advice_sink(
     assert workspace.cancelled == workspace.started
 
 
-@pytest.mark.parametrize("limits", [WorkloadLimits(60), WorkloadLimits(None, None, .1)])
-def test_capped_run_refuses_council_without_child_budget_binding(limits, monkeypatch, fixture_issuer):
+@pytest.mark.parametrize("limits,code", [
+    (WorkloadLimits(60), "budget_output_limit"),
+    (WorkloadLimits(None, None, .1), "budget_spend_exhausted"),
+])
+def test_capped_council_preserves_host_binding_and_typed_budget_refusal(
+    limits, code, monkeypatch, fixture_issuer,
+):
     workspace = WorkspaceFixture()
     agent = ua.UpgradeAgent(workspace)
     fixed_route(monkeypatch, route(limits=limits))
@@ -495,13 +544,52 @@ def test_capped_run_refuses_council_without_child_budget_binding(limits, monkeyp
         return issue_tool_result(execution_scope, json.dumps({"ok": False, "declined": True,
             "reason": "synthetic decline"}), DataPolicy("approved_external", "unit"), "unit")
     fixture_issuer.dispatch_workspace_tool = dispatch
+    executed, councils = [], []
     async def execute(*args, **kwargs):
+        executed.append(True)
         return result(text="", calls=(tool("session_decline", {}),))
     monkeypatch.setattr(ua, "execute_chat", execute)
-    monkeypatch.setattr("jarvis.council.council.convene", lambda **kwargs: pytest.fail("unbound council spend"))
+    async def convene(**kwargs):
+        councils.append(kwargs)
+        assert kwargs["parent_budget"] is agent._run_snapshot.budget
+        assert kwargs["data_policy"] == agent._current_run_policy()
+        assert kwargs["cancel_event"] is agent._cancel
+        raise ModelBudgetUnavailable(code)
+    monkeypatch.setattr("jarvis.council.council.convene", convene)
     refusal = agent.run("public goal")
-    assert refusal["failure_code"] == "development_council_budget_unavailable"
+    assert refusal["failure_code"] == code
     assert not refusal["ok"] and not refusal.get("declined")
+    assert len(councils) == 1 and executed == [True]
+    assert councils[0]["parent_budget"].limits == limits
+    assert councils[0]["parent_budget"].parent_request_id == workspace.parent
+    assert "Council scope advice" not in json.dumps(refusal)
+
+
+def test_capped_council_advice_uses_same_host_owner(monkeypatch, fixture_issuer):
+    workspace = WorkspaceFixture()
+    agent = ua.UpgradeAgent(workspace)
+    fixed_route(monkeypatch, route(limits=WorkloadLimits(60, 60, .1)))
+    def dispatch(service, name, args, *, execution_scope, context=None):
+        return issue_tool_result(execution_scope, json.dumps({"ok": False, "declined": True,
+            "reason": "synthetic decline"}), DataPolicy("approved_external", "unit"), "unit")
+    fixture_issuer.dispatch_workspace_tool = dispatch
+    executed, councils = [], []
+    async def execute(*args, **kwargs):
+        executed.append(True)
+        return result(text="", calls=(tool("session_decline", {}),))
+    async def convene(**kwargs):
+        councils.append(kwargs)
+        assert kwargs["parent_budget"] is agent._run_snapshot.budget
+        assert kwargs["data_policy"] == agent._current_run_policy()
+        assert kwargs["cancel_event"] is agent._cancel
+        return SimpleNamespace(winner=SimpleNamespace(content="synthetic bounded advice"))
+    monkeypatch.setattr(ua, "execute_chat", execute)
+    monkeypatch.setattr("jarvis.council.council.convene", convene)
+    report = agent.run("public goal")
+    assert report["declined"] and not report["ok"] and "failure_code" not in report
+    assert report["summary"] == "synthetic decline\n\n[Council scope advice]\nsynthetic bounded advice"
+    assert len(councils) == 1 and executed == [True]
+    assert councils[0]["parent_budget"].parent_request_id == workspace.parent
 
 
 def test_verified_submission_survives_uncertain_native_cleanup(monkeypatch, fixture_issuer):
@@ -641,9 +729,13 @@ def test_capped_run_with_council_disabled_can_finish_declined(monkeypatch, fixtu
 def test_task_deadline_includes_slow_route_verification_before_workspace_or_client(monkeypatch):
     workspace = WorkspaceFixture()
     agent = ua.UpgradeAgent(workspace)
+    clock = SimpleNamespace(now=time.time())
+    monkeypatch.setattr(model_budget, "time", SimpleNamespace(time=lambda: clock.now))
+    monkeypatch.setattr(ua, "time", SimpleNamespace(time=lambda: clock.now,
+                                                   monotonic=time.monotonic))
     def checked(*args, **kwargs):
-        time.sleep(.08)
-        return route(limits=WorkloadLimits(deadline_seconds=.04))
+        clock.now += 61
+        return route(limits=WorkloadLimits(deadline_seconds=60))
     monkeypatch.setattr(ua, "resolve_model_route_checked", checked)
     monkeypatch.setattr(ua, "make_route_client", lambda *args, **kwargs: pytest.fail("expired client"))
     monkeypatch.setattr(ua, "execute_chat", lambda *args, **kwargs: pytest.fail("expired model"))

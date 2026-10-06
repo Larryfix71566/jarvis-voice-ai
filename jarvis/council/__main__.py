@@ -20,7 +20,10 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
+import time
+import uuid
 from pathlib import Path
 
 from jarvis.agents.upgrade_agent import load_model_registry
@@ -31,6 +34,10 @@ from jarvis.council.scoring import mean_of, select_winner
 from jarvis.council.types import Proposal, Score
 from jarvis.db import get_conn
 from jarvis.runlog.store import parse_since
+from jarvis.model_budget import ModelBudgetUnavailable
+from jarvis.model_routing import ModelRouteError
+from jarvis.privacy_policy import DataPolicy
+from jarvis.tenant import current_user_id
 
 _JUDGE_TIER_CHOICES = ("economy", "mid", "frontier")
 
@@ -38,8 +45,10 @@ _JUDGE_TIER_CHOICES = ("economy", "mid", "frontier")
 def _load_round_row(round_id: str) -> dict | None:
     conn = get_conn()
     try:
+        enabled = os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
         row = conn.execute(
-            "SELECT * FROM council_rounds WHERE round_id = ?", (round_id,)
+            "SELECT * FROM council_rounds WHERE round_id = ?" + (" AND user_id = ?" if enabled else ""),
+            (round_id, current_user_id()) if enabled else (round_id,),
         ).fetchone()
         return dict(row) if row else None
     finally:
@@ -99,6 +108,7 @@ def _live_scores_from_payload(records: list[dict]) -> list[Score]:
 
 
 async def _do_replay(round_id: str, judge_tier_name: str, *, dry_run: bool) -> int:
+    started_at_unix = time.time()
     round_row = _load_round_row(round_id)
     if round_row is None:
         print(f"no such round: {round_id}", file=sys.stderr)
@@ -140,6 +150,23 @@ async def _do_replay(round_id: str, judge_tier_name: str, *, dry_run: bool) -> i
 
     labels = [p.label for p in proposals]
     context = _context_from_payload(records)
+    enabled = os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
+    # Stored payloads have no registered source-release capability. Their
+    # JSON privacy fields can tighten restrictions, never approve bytes.
+    data_policy = council_mod._host_policy(context, "council", DataPolicy()) if enabled else None
+    # Historical run/context IDs are telemetry, never sponsorship authority.
+    # Every replay funds its own fresh coordinator under current policy.
+    owner = council_mod._round_owner("council", uuid.uuid4().hex, None, None,
+                                    started_at_unix)
+    execution = (council_mod._child_execution(owner, "council", data_policy, None,
+        started_at=started_at_unix, sponsored=False) if enabled else None)
+    try:
+        await council_mod._pin_members(replay_judge_names, profiles_by_name, execution)
+    except ModelBudgetUnavailable:
+        raise
+    except ModelRouteError:
+        print("replay source policy has no verified permitted route", file=sys.stderr)
+        return 1
     judge_user_content = council_mod._judge_user_message(
         round_row["goal"], context, proposals, round_row.get("placement") or "planner",
     )
@@ -149,6 +176,7 @@ async def _do_replay(round_id: str, judge_tier_name: str, *, dry_run: bool) -> i
     replay_scores, _replay_usage = await council_mod._gather_scores(
         replay_judge_names, profiles_by_name, judge_user_content, labels,
         shadow=True, rung="council",
+        **({"data_policy": data_policy, "execution": execution} if enabled else {}),
     )
 
     live_winner, live_reason = select_winner(proposals, live_scores, registry_order)
@@ -179,6 +207,7 @@ async def _do_replay(round_id: str, judge_tier_name: str, *, dry_run: bool) -> i
         label_to_profile = {p.label: p.profile for p in proposals}
         council_mod._write_score_rows(
             round_id, replay_scores, profile_tiers, label_to_profile, shadow=True,
+            **({"data_policy": data_policy} if enabled else {}),
         )
     return 0
 
