@@ -122,7 +122,7 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Model Use Enhancements MAR-A…J (checklist in §7)
 
 - **Owner:** `codex`
-- **Status:** in-progress: scoped route, limit, development/source and creator receipt repairs land via candidate #177; focused committed-code gate passes 572 tests plus 45 subtests. Shared capped council budgets, ordinary MCP source integration, large-edit parity and live rollout acceptance remain open
+- **Status:** in-progress: scoped route, limit, development/source and creator receipt repairs land via candidate #177; focused development gate passes 572 tests plus 45 subtests; later native-owner concurrency gate passes 282 overlapping tests. Shared capped council budgets, ordinary MCP source integration, large-edit parity and live rollout acceptance remain open
 - **Implemented by:** Foundation contributions are not fully itemized; WS-02 isolation and MAR-A baseline work are Codex
 - **Remaining work / acceptance:** Codex completes MAR-A evidence and subsequent open gates; Larry handles live provider/account and deployment decisions
 - **Model version:** not recorded; do not infer from system name.

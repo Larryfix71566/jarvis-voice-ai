@@ -49,6 +49,8 @@ and [independent subscription review](receipts/independent-subscription-review-2
 
 The later committed development/source gate at `8902693` passes **572 tests and 45 subtests**, with zero failures/skips and three existing deprecation warnings. It covers actual inert host sandbox facets, authenticated creator IPC, route refresh, task bounds and cleanup ownership. See [the source-bound receipt](receipts/mar-development-source-bridge-2026-10-06.json). It does not replace broader repo/Mac results or establish live VM/provider acceptance.
 
+The subsequent native-owner repair at `5c50385` passes **282 focused tests**, including four unchanged independent concurrency probes. Both actual text clients refuse queued starts and suppress active late publication after shared cleanup quarantine; Codex receipt-worker wait cannot bypass the guard. [Receipt](receipts/mar-native-text-quarantine-2026-10-06.json). Counts overlap the other focused gates and must not be added into a unique full-suite total.
+
 ## Open items first
 
 The 10-05 changes below are **candidate implementation**, on the isolated

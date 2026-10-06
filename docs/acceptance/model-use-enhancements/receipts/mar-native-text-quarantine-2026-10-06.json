@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "workstream": "WS-05",
+  "system": "codex",
+  "date": "2026-10-06",
+  "audited_ref": "5c503858dec28d1b4a0161156c18ee38f3d719b9",
+  "source_sha256": {
+    "jarvis/subscription.py": "9623d017eab0b6225b98a622a1ba21bf657e249d491dd7c6bb85a16b5ac1a5a7",
+    "jarvis/agents/base.py": "5bc5eff455a3eff57ae7b9c2d3fd96f03c2d09fb814db73fb29cf41f2fa6aad9",
+    "tests/unit/test_subscription_text_quarantine.py": "c0e16ab12dfd107cf566fed62f91b535944eb688360f303330eedb4f6b9ff9ae",
+    "tests/unit/test_subagent_native_concurrency.py": "9f355f09e1f487ec58a354726d0677b335bcfff0eb0038dfcf8a95a485e224e1"
+  },
+  "verification": {
+    "passed": 282,
+    "failed": 0,
+    "skipped": 0,
+    "warnings": 2,
+    "log_sha256": "a1ded85ce518257996cf2c3dd277a0e4f8837419bd1d1a2aa1c02f124802d0c2",
+    "junit_sha256": "e4abbb3ff82ab493016b9c1774b2a9b74b011ef3106c31645d14c0894ddb1f6f"
+  },
+  "independent_regressions": {
+    "file": "tests/unit/test_subagent_native_concurrency.py",
+    "count": 4,
+    "copied_unchanged": true,
+    "sha256": "9f355f09e1f487ec58a354726d0677b335bcfff0eb0038dfcf8a95a485e224e1",
+    "scope": "actual Claude/Codex text clients, SubAgent.run, execute_chat and default admission with inert native runners"
+  },
+  "proved": [
+    "cleanup failure retains the exact stateless completion owner",
+    "queued native requests refuse after admission before entering the runner",
+    "active late native responses cannot reach agent_done, usage recording or output",
+    "Codex receipt-worker wait cannot authorize child launch after owner quarantine",
+    "ordinary authentication failures do not incorrectly claim unverified cleanup"
+  ],
+  "environment_note": "The initial restricted suite passed275 tests but three local Unix-socket binds were denied. Those three passed with local socket permission; the frozen focused rerun passes282 including the four independently preserved probes.",
+  "providers_called": false,
+  "vm_started": false,
+  "production_changed": false,
+  "not_proved": [
+    "real native Developer workload capability/quality",
+    "account billing or overage",
+    "full Mac/deployment acceptance",
+    "complete WS-05 rollout"
+  ]
+}
