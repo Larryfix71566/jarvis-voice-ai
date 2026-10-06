@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "workstream": "WS-05",
+  "system": "codex",
+  "date": "2026-10-06",
+  "audited_ref": "3a2fb5d3e025c92bac18ccb41361a62c4792e28e",
+  "source_sha256": {
+    "jarvis/admin/server.py": "e2f7cdd02ec18a952bff09f81b00dbe8e58405e630810ebcc670420bb111060d",
+    "jarvis/development_attestation.py": "3cc602d453b368438f9875436135f242f5c180df790c2f6a0daa02e7ff693071",
+    "jarvis/development_sources.py": "d29555a3e65e2fe968ce23c8b2e28c6dbf5a2bb7978fcd1958b8519d601a795c",
+    "jarvis/skills/registry.py": "3f205dc8425643ccee2e9b6076f0c8a7f87da91f6d1dd28c1ba3b5d46467dbea",
+    "mcp_servers/mcp_apps/logic.py": "b863d1f319e148d4705fd2bdbef84a7b818db22b1638121d104d6c6e7e41efc0",
+    "mcp_servers/mcp_apps/server.py": "9debab2df2f8c8d377903a3550a88a369a74acc2c7bf9be175034e22d17ae9e9",
+    "mcp_servers/mcp_selfedit/logic.py": "8d88c737999ce707a0077597dfe52303b5706aff6c59c2a2148017408a20203c",
+    "mcp_servers/mcp_selfedit/server.py": "a50dc06dcdcec477a83df08e4a2155985be59d23d9b8d3c7925581e30a68577a",
+    "tests/unit/test_workspace_source_bridge.py": "bd0da451a3b7fac0f5cad0bf0e3f90fa08a55b9b013293cc0dd792d3c024ec2c",
+    "tests/unit/test_admin_advisory_budget.py": "f410c7b743980ec6b1f804f9e51700d95221dd3d34e5a4f1db466dc2c73a8cef",
+    "tests/integration/test_workspace_source_stdio.py": "ffb620e3bda576d7d22e2fc043bc7ce3b4973e14f34e163f8c97b6af8cd76cbf"
+  },
+  "verification": {
+    "focused": {
+      "passed": 434,
+      "failed": 0,
+      "warnings": 3,
+      "log_sha256": "0f4827c108435e637727c231fa58182e5e2afc0f45bb1ed079f04efc9d4d132c",
+      "junit_sha256": "8560471bdef5c508eacca12739e7d4b52bbd98b8afe48891e755611b5c82a0c1"
+    },
+    "actual_mcp_stdio": {
+      "passed": 2,
+      "failed": 0,
+      "log_sha256": "59e343ffe54618f75f4cda823fa55a7177ae6a73236414442169d45f8300e5f1",
+      "junit_sha256": "6c72b8baaf115324b6ece1c3b43fe8771520c7435cfb478e11f3b76892644f55"
+    },
+    "full_unit": {
+      "passed": 5721,
+      "failed": 2,
+      "skipped": 3,
+      "passing_subtests": 2,
+      "log_sha256": "8e29ffc3a68ff852f4bc91c95a9536ec7af245f7a3e7cf5044a4f6525f7fc5ee",
+      "junit_sha256": "c6fc7bb7ccb66de042908c2f771b92af59694b0947e6ffc35ac812e3849e9223",
+      "failures": [
+        "existing audio-filter default failure previously reproduced on unchanged main",
+        "new sidecar route inventory expected79/actual82; three new source POST routes require the related inventory-test update"
+      ]
+    }
+  },
+  "proved": [
+    "Real installed MCP modules carry hidden request/response source metadata while provider tool schemas omit host bindings",
+    "Separate workspace protocol uses authenticated service-bot, live/current caller and retained same-owner/session job, pinned host anchor and one-use preparation/challenge",
+    "Exact project source/proposals retain permission and approval gates, while unknown/private foreign GitHub data stays confidential",
+    "Restriction-only journals persist local-only no-write goals and copied derivatives before ingress; dangling/replaced/symlink/hardlink/forged owner or session records refuse",
+    "Existing start handlers classify the same acquired plan bytes passed to background workers; lost acknowledgements cannot downgrade restrictions",
+    "Shared advisory/research budgets preserve entry time, cancellation and authenticated thread context; unverified manual/crawled input refuses without paid fallback"
+  ],
+  "providers_called": false,
+  "native_provider_process_started": false,
+  "mcp_stdio_processes_started": true,
+  "transport_network": "synthetic loopback admin HTTP/Unix only",
+  "vm_started": false,
+  "production_changed": false,
+  "not_proved": [
+    "Complete manual advisory/research source approval",
+    "Full lifecycle publication URL display parity (separate follow-on)",
+    "Real native Developer capability/quality or VM acceptance",
+    "Representative full research retrieval",
+    "Account billing/overage",
+    "Full unit/deployment acceptance",
+    "Complete WS-05 rollout"
+  ]
+}
