@@ -1,0 +1,76 @@
+{
+  "actual_live_full_menu_proof_acquired": false,
+  "actual_native_cli_inference_performed": false,
+  "author_affected": {
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0,
+    "tests": 303,
+    "xml_sha256": "57ab20678b83588d2f013b6e7e779d8cbd5797029feb7e05543b7e961e29dcc8"
+  },
+  "author_focused": {
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0,
+    "tests": 104,
+    "xml_sha256": "89071c303e66c5f80f635de9951e39c84e9e34c82e24e7f18998b83b0b4aee44"
+  },
+  "billing_verified": false,
+  "changed_files": {
+    "scripts/verify_claude_developer_capability.py": "f371785e73a2d84c9d47a16f666311a5d1a4497b70e3ab7c8737a379eefe827f",
+    "tests/unit/test_claude_developer_capability.py": "4866063811cf66c88e346820db9e6097ddce799d945737e8475254e9274356f5"
+  },
+  "date": "2026-10-06",
+  "developer_accepted": false,
+  "effective_contract": "Actual policy/whole registry/model identity/quality/privacy floor/config hashes/installed runtime plus ordered six-server forty-schema menu",
+  "finite_provider_token_or_spend_caps": "Refused as unsupported; host deadline/bytes/two tool calls per round do not prove provider token or monetary caps.",
+  "frozen_previous_ci": {
+    "all_five_checks": "SUCCESS",
+    "source_commit": "a653289932997fe6a95a32c1c61815f155665c83",
+    "validate_job": 112404299376,
+    "validate_run": 37502944202
+  },
+  "full_profile_verified": false,
+  "independent_original_findings": [
+    "spoof-cleared durable budget limits accepted",
+    "authentic child used root-only remaining helper",
+    "cleanup expiry lost process/readers ownership",
+    "contradictory/missing parent evidence accepted"
+  ],
+  "independent_probes": {
+    "budget_probe.log": "a9d5a7f92b32064c948247b482b05ea9a9949fcf2b22a4e8e7ec50398dbcf50f",
+    "budget_probe.py": "8bf66ce4cbe2436e2edd00d284db386e0323bda35476cf02b371d777426b6d33",
+    "cleanup_probe.log": "afeaedc59ec88aecb28dade15001de23870eb1beb778a2c38d1d39d1d0390702",
+    "cleanup_probe.py": "b0320866ee352e64f492fe3e72de979e4267184ac43a6fe28d8f8c8cb5b0a3e9",
+    "evidence_probe.log": "2aa9dab5beaac5e0edacb9e129fff7e61e0b79c31d94fad53af162e97ffd3135",
+    "evidence_probe.py": "92a8046c78443bc1c3c329a9eb37bf2c89e16167810f01783add0ed99407ca80"
+  },
+  "independent_unit": {
+    "log_sha256": "6b27c73d32390f64106ebd1b0e6c81f5b275f25d3a806302ad6cea409677de53",
+    "passed": 104,
+    "seconds": 5.25,
+    "skipped": 0
+  },
+  "independent_witnesses": "Bounded and cleared durable handles refuse; genuine child passes with ancestor deadline; honest evidence passes/ten contradictory witnesses refuse; actual12.02s held inert child retains exact owners/quarantine then owned recovery drains0 with native cleanup still unverified.",
+  "later_heads_require_new_ci": true,
+  "mar_i_complete": false,
+  "mode": "dry_by_default_explicit_native_capability_diagnostic",
+  "only_permitted_operation": "repo_read_file with exact path docs/REPO_MAP.md; all other/private/mutation calls fixed refusal before Registry ingress",
+  "ordinary_route_refusal_preserved": "route lacks required capabilities: tools",
+  "original_parameter_cases_retained": 66,
+  "original_script_sha256": "ea6d0018eea0f18eac4a9a768040fcc38686746604698e42b233469a3d0f7819",
+  "original_test_bodies_retained": 28,
+  "original_tests_sha256": "3e35f491f08e8a74867e2dfd35d4de6fdebdac699e56c0c68acc7597b4763802",
+  "pr": 177,
+  "production_route_ready": false,
+  "quarantine": "On unresolved drain exact process/readers/lifetime and private600 ownership marker are retained; no blindkill or scratch deletion and no cleanup claim. CLI marker explicitly records that readers need their owning event loop.",
+  "repair": "Use current durable and captured bounds/full authentic child path; shield actual worker lifetime/readers and retain explicit unverified quarantine evidence; independently reconcile schemas/source/hooks/final constraints/finite parent-frozen host limits and exact bounded byte counts.",
+  "root_dry_run": {
+    "exitcode": 0,
+    "inference_performed": false,
+    "model": "claude-opus-5"
+  },
+  "system": "codex",
+  "workload_quality_accepted": false,
+  "workstream": "WS-05"
+}

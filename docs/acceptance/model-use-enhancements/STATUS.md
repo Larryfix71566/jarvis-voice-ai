@@ -27,6 +27,8 @@ no linked receipt are also unreceipted.
 
 ## Candidate validation — 2026-10-06
 
+The dry-default full-menu native diagnostic is independently repaired and passes104 focused/303 affected/104 independent overlapping cases. Its normal missing-tools refusal remains; exact public live capture and all Developer/billing/rollout gates stay open. The four original causal witnesses are retained. [Diagnostic receipt](receipts/mar-native-full-menu-bootstrap-2026-10-06.json). All five GitHub checks now pass on frozen `a653289`; later heads require new checks. Actual all12 rerun at that ref has passed both Python suites (6,068 plus2 subtests/11 skips each); remaining checks are running, so no overall pass is inferred.
+
 **Latest sandbox/CI stability evidence, 2026-10-06:** Actual pinned-image all12 baseline at `4fd8228` is terminal:11 checks passed; strict-owner host fixtures fail the baseline Python check. The reviewed test-only ownership and phase-entry repairs pass200 combined cases, with independent56 deadline and2 natural-deadline probes. Fresh CI and actual guest rerun are required; no Developer acceptance is inferred. [Terminal](receipts/mar-tokenizer-full-profile-terminal-2026-10-06.json), [fixture](receipts/mar-pilot-fixture-ownership-2026-10-06.json), [deadline](receipts/mar-deadline-confirmed-phases-2026-10-06.json).
 
 Earlier captures below retain their named-source timing and failures; the terminal evidence above supersedes prior live wording.
