@@ -174,8 +174,11 @@ The proof concerns the actual published ten-PR window and its recorded merge his
       "log_tree_matches_published": true
     }
   ],
-  "section8_sha256": "62d34e09e176c65c1a1cfb035bc8ea30e665d984cc308a87ebe8b57f4edf964e"
+  "section8_sha256": "62d34e09e176c65c1a1cfb035bc8ea30e665d984cc308a87ebe8b57f4edf964e",
+  "all_published_merges_in_window_enumerated": 12,
+  "section8_bytes": 277,
+  "section8_extraction": "UTF-8 bytes from the ## 8. heading up to but excluding the next level-2 numbered heading, retaining trailing separator and blank lines; git-show full text has outer whitespace stripped."
 }
 ```
 
-Receipt SHA-256: `5db0a141966d2f2c948edc9d0dcbb3726cae6251c45c83c89185fe9f18c16ab5`.
+Receipt SHA-256: `9262e36f3824744ce99c4c44585466a357ab65445bd8ae77877bef38432ad4f8`.
