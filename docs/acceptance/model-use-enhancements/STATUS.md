@@ -30,6 +30,21 @@ no linked receipt are also unreceipted.
 Candidate: [draft PR #177](https://github.com/Larryfix71566/jarvis-voice-ai/pull/177),
 pushed for cross-system review; not merged or deployed.
 
+Latest bounded source repair: `50daa8b` passed **476 affected tests**, **two
+installed-MCP stdio/loopback tests**, and independent reruns of **six unchanged
+counterexamples plus 11 targeted legitimate-path/authentication checks**.
+Those groups overlap and are not a unique total. The repair pins source floors
+at actual file admission, lifecycle workers to retained ownership, real App
+Builder role/parent identity, and exact saved PR handles. All 82 admin routes
+remain covered by the existing bearer assertion. The frozen full unit run
+passes **5,738 plus two subtests**, with **three skips and one failure**: the
+same previously reproduced audio-default issue. The new auth inventory failure
+is closed. Latest-head CI still needs publication/rerun; no VM, provider,
+account or production action was performed. The
+[ordinary source receipt](receipts/mar-ordinary-workspace-sources-2026-10-06.json)
+records the exact frozen result. Manual advisory/research provenance and
+real workload acceptance remain open.
+
 The 10-06 extensions are claimed through merged #178 (`0960373`) and #179 (`fb3e1aa`). They add
 per-run SubAgent selection refresh, sealed host source handling before early
 sinks, durable optional task admission and legacy canonical council guards.
@@ -54,7 +69,7 @@ The subsequent native-owner repair at `5c50385` passes **282 focused tests**, in
 ## Open items first
 
 The 10-05 changes below are **candidate implementation**, on the isolated
-`codex/ws05-execution-20261005` branch claimed through #175, #176, #178 and #179. They do not
+`codex/ws05-execution-20261005` branch claimed through #175, #176, #178, #179 and #180. They do not
 change production routing, credentials, account settings or the deployed app.
 
 - [ ] **MAR-A — deployed baseline and measurements.** The
@@ -75,8 +90,10 @@ change production routing, credentials, account settings or the deployed app.
   sanitizes public error payloads and redacts earlier MCP buffers. Installed
   Upgrade/AppBuild issuers and authenticated creator receipts now preserve exact
   host source/owner bindings before sinks. The ordinary self-edit/app MCP loop
-  still needs equivalent proof; its raw outputs do not gain external approval. Do not label all
-  authorized repository data confidential or let provider output approve itself.
+  now uses a separate authenticated workspace receipt before sinks, with the
+  50daa8b admission/lifecycle repairs above. Unknown raw outputs do not gain
+  external approval. Authenticated advisory/research transport remains open;
+  preserve standing project-code grants and private source floors.
 - [ ] **MAR-E — SAYGM confidential pilot.** Authentication and catalog access
   [succeeded again on 10-05](receipts/model-access-catalog-readiness-2026-10-05.json): 64 models, zero advertised confidential models.
   Candidate execution binds the exact catalog ID, tier, capability shape and
@@ -103,7 +120,11 @@ change production routing, credentials, account settings or the deployed app.
   saved SubAgent choices now refresh and optional parent limits are enforced.
   UpgradeAgent/AppBuildAgent now refresh confirmed choices per run, verify source
   envelopes and share limits without enabled-mode implicit failover. Capped
-  council child budgets and larger-edit parity remain unfinished. Complete
+  council child sponsorship and larger-edit parity are implemented in the
+  candidate: [317 council/budget cases](receipts/mar-council-child-budgets-2026-10-06.json)
+  and [170 edit-transport cases](receipts/mar-large-edit-parity-2026-10-06.json)
+  pass in their frozen overlapping gates. Advisory transport still needs
+  actual durable parent authority and cancellation ownership. Complete
   enabled-mode run/usage/cancellation evidence remains open.
 - [ ] **MAR-H — native and voice controls.** Native saved choices outrank defaults,
   unavailable choices remain visible, and changes invalidate drafts and late
