@@ -804,16 +804,22 @@ class SubAgent:
                 )
             if on_run_created is not None:
                 try:
+                    # Check before calling the factory: an expired budget must
+                    # not create a coroutine that is then abandoned unawaited.
+                    association_timeout = self._timeout_s
+                    if run_budget is not None:
+                        association_timeout = min(association_timeout,
+                            await asyncio.to_thread(remaining_seconds, run_budget))
+                    if association_timeout <= 0:
+                        raise ModelBudgetUnavailable("budget_deadline_exhausted")
+                    association_deadline = asyncio.get_running_loop().time() + association_timeout
                     with run_logger_scope(runlog):
                         associated = on_run_created(resolved_run_id)
                         if inspect.isawaitable(associated):
-                            association_timeout = self._timeout_s
-                            if run_budget is not None:
-                                association_timeout = min(association_timeout,
-                                    await asyncio.to_thread(remaining_seconds, run_budget))
-                            if association_timeout <= 0:
-                                raise ModelBudgetUnavailable("budget_deadline_exhausted")
-                            associated = await asyncio.wait_for(associated, association_timeout)
+                            # wait_for owns/cancels the returned awaitable even
+                            # if a synchronous factory used the remaining time.
+                            associated = await asyncio.wait_for(associated, max(
+                                0, association_deadline - asyncio.get_running_loop().time()))
                     if associated is False:
                         raise RuntimeError("run association refused")
                 except Exception as exc:  # noqa: BLE001 — no model/tool work before durable association

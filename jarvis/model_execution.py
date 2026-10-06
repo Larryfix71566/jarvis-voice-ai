@@ -34,8 +34,9 @@ from jarvis.model_routing import (
     make_route_client,
 )
 from jarvis.model_budget import (
-    ModelBudgetUnavailable, TaskBudget, begin_model_task_budget,
+    ModelBudgetUnavailable, TaskBudget, ChildTaskBudget, begin_model_task_budget,
     remaining_seconds, reserve_model_call_budget,
+    resolve_model_child_budget, remaining_child_seconds, reserve_model_child_call_budget,
 )
 from jarvis.privacy_policy import (
     DataPolicy,
@@ -835,7 +836,8 @@ async def execute_chat(request: ModelExecutionRequest,
                        event_sink: Callable[[ModelExecutionEvent], Any] | None = None,
                        event_sink_policy: DataPolicy | None = None,
                        admission: ModelAdmissionController | None = None,
-                       task_budget: TaskBudget | None = None) -> ModelExecutionResult:
+                       task_budget: TaskBudget | None = None,
+                       child_budget: ChildTaskBudget | None = None) -> ModelExecutionResult:
     """Execute one validated request, preserving context and attachments.
 
     Cancellation propagates to the provider client, and the outer deadline
@@ -845,6 +847,8 @@ async def execute_chat(request: ModelExecutionRequest,
     entry_loop_time = asyncio.get_running_loop().time()
     started_at = time.monotonic()
     budget_started_at = time.time()
+    if task_budget is not None and child_budget is not None:
+        raise ModelBudgetUnavailable("budget_policy_mismatch")
     request = _limited_output_request(request, resolved.limits.max_output_tokens_per_call)
     messages, effective_policy, tools, tool_validators, seen_tool_call_ids = _validated_inputs(
         request, resolved
@@ -959,9 +963,25 @@ async def execute_chat(request: ModelExecutionRequest,
         if (isinstance(task_budget, TaskBudget) and type(task_budget.limits) is WorkloadLimits
                 and task_budget.limits.deadline_seconds is not None):
             setup_limit = min(setup_limit, task_budget.limits.deadline_seconds)
+        if isinstance(child_budget, ChildTaskBudget):
+            for handle in (child_budget.owner, child_budget.child):
+                if (isinstance(handle, TaskBudget) and type(handle.limits) is WorkloadLimits
+                        and handle.limits.deadline_seconds is not None):
+                    setup_limit = min(setup_limit, handle.limits.deadline_seconds)
         async with asyncio.timeout_at(entry_loop_time + setup_limit) as deadline:
             require_active()
             limits = resolved.limits
+            # The host-only binding is checked against durable owner/child
+            # records, including when this invocation omits the keyword. A
+            # persisted sponsored child cannot reopen as an independent pool.
+            binding = await asyncio.to_thread(
+                resolve_model_child_budget, request.workload,
+                request.parent_request_id, limits, child_budget=child_budget,
+                started_at=budget_started_at,
+            )
+            require_active()
+            if binding is not None and task_budget is not None:
+                raise ModelBudgetUnavailable("budget_policy_mismatch")
             if task_budget is not None:
                 if (not isinstance(task_budget, TaskBudget) or task_budget.workload != request.workload
                         or task_budget.parent_request_id != request.parent_request_id):
@@ -982,18 +1002,26 @@ async def execute_chat(request: ModelExecutionRequest,
                          task_budget.limits.max_estimated_spend_usd_per_task),
                     )
                 ))
-            budget = await asyncio.to_thread(
-                begin_model_task_budget, request.workload,
-                request.parent_request_id, limits, started_at=budget_started_at,
-            )
+            if binding is not None:
+                budget = binding.child
+                limits = binding.limits
+            else:
+                budget = await asyncio.to_thread(
+                    begin_model_task_budget, request.workload,
+                    request.parent_request_id, limits, started_at=budget_started_at,
+                )
+                limits = budget.limits
             require_active()
             # The durable parent's bounds can be stricter than a new route
             # snapshot (including after configuration is cleared/restarted).
-            request = _limited_output_request(request, budget.limits.max_output_tokens_per_call)
+            request = _limited_output_request(request, limits.max_output_tokens_per_call)
             messages, effective_policy, tools, tool_validators, seen_tool_call_ids = _validated_inputs(
                 request, resolved,
             )
-            remaining = await asyncio.to_thread(remaining_seconds, budget)
+            remaining = await asyncio.to_thread(
+                remaining_child_seconds if binding is not None else remaining_seconds,
+                binding if binding is not None else budget,
+            )
             require_active()
             if remaining <= 0:
                 raise ModelBudgetUnavailable("budget_deadline_exhausted")
@@ -1001,7 +1029,7 @@ async def execute_chat(request: ModelExecutionRequest,
                 remaining, max(0, request.timeout_s - (time.monotonic() - started_at)),
             )
             deadline.reschedule(min(deadline.when(), tightened_deadline))
-            spend_capped = budget.limits.max_estimated_spend_usd_per_task is not None
+            spend_capped = limits.max_estimated_spend_usd_per_task is not None
             if spend_capped:
                 if resolved.route.adapter not in {"openai_compatible", "saygm_gateway"}:
                     raise ModelBudgetUnavailable("budget_unsupported_route")
@@ -1044,7 +1072,8 @@ async def execute_chat(request: ModelExecutionRequest,
                 if budget.scope_id is not None:
                     estimate = _estimated_text_input_tokens(messages, tools) if spend_capped else 1
                     await asyncio.to_thread(
-                        reserve_model_call_budget, budget, request.task_id,
+                        reserve_model_child_call_budget if binding is not None else reserve_model_call_budget,
+                        binding if binding is not None else budget, request.task_id,
                         resolved.provider, resolved.model, resolved.route.name,
                         resolved.route.billing, estimate, request.output.max_tokens or 1,
                     )

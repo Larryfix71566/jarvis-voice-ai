@@ -2090,9 +2090,12 @@ class UpgradeAgent:
                 workflow=self._council_workflow, placement="planner", trigger=trigger,
                 goal=goal, tier=tier, context=context,
                 run_id=self._execution_parent_id if self._run_snapshot is not None else self._run_id,
+                **self._council_execution_kwargs(),
             ))
         except Exception as exc:                    # noqa: BLE001
             self._check_run_deadline()
+            if self._run_snapshot is not None and isinstance(exc, ModelBudgetUnavailable):
+                raise
             _log_safe_failure("council_escalation_failed", exc)
             return None
         self._check_run_deadline()
@@ -2133,9 +2136,12 @@ class UpgradeAgent:
                 goal=goal, tier=1,
                 context=context,
                 run_id=self._execution_parent_id if self._run_snapshot is not None else self._run_id,
+                **self._council_execution_kwargs(),
             ))
         except Exception as exc:                    # noqa: BLE001
             self._check_run_deadline()
+            if self._run_snapshot is not None and isinstance(exc, ModelBudgetUnavailable):
+                raise
             _log_safe_failure("council_scope_council_failed", exc)
             return None
         self._check_run_deadline()
@@ -2171,13 +2177,18 @@ class UpgradeAgent:
 
     def _assert_council_budget_supported(self) -> bool:
         from jarvis.council.council import _council_enabled
-        if not _council_enabled():
-            return False
-        limits = self._run_snapshot.budget.limits
-        if (limits.max_output_tokens_per_call is not None
-                or limits.max_estimated_spend_usd_per_task is not None):
-            raise PlannerCouncilBudgetUnavailable("development_council_budget_unavailable")
-        return True
+        # Capped runs are supported only through the sealed host sponsor
+        # passed below. Council owns child admission, never context JSON.
+        return _council_enabled()
+
+    def _council_execution_kwargs(self) -> dict[str, Any]:
+        if self._run_snapshot is None:
+            return {}
+        return {
+            "parent_budget": self._run_snapshot.budget,
+            "data_policy": self._current_run_policy(),
+            "cancel_event": self._cancel,
+        }
 
     def _dispatch(self, name: str, args: dict) -> dict:
         """Closed toolset — unknown tools are refused outright."""
