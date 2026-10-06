@@ -1,6 +1,6 @@
 # Roadmap joint working: catch-up and drift prevention (WS-20)
 
-**Status:** IN PROGRESS, reconciled 2026-10-06. B2/B3 merged in #158, B4 merged in #156, and B1's 72-entry log migration merged in #160 (`30fa3db`). The ten-PR no-conflict observation and warn-only checker rollout remain open.
+**Status:** IN PROGRESS, reconciled 2026-10-06. B2/B3 merged in #158, B4 merged in #156, and B1's 72-entry log migration merged in #160 (`30fa3db`). The first ten published post-migration PR/integration merges are verified without a change-log conflict (2026-10-06 receipt); warn-only/strict checker rollout remains open.
 **Owners:** Claude: B4 checker, its own rows, this plan. Codex: B1–B3 protocol and change-log move, its own rows, review of B4. Larry: merges, deploys, Mac checks, approval of the protocol change.
 **Recorded:** 2026-10-02 against main `cfa0d2d` and open PR #152 (WS-19 close).
 **Author:** Claude (Cowork) · **Approver:** Larry
@@ -148,3 +148,7 @@ Codex completed the assigned CC7a.3 review at #173 head `fb2e06f`: the actual Py
 ### 2026-10-06 — Review evidence available without human file transfer (Codex)
 
 Embedded the exact public synthetic Python/native witnesses and observed output in the existing resumed-review log entry, exposed through #185. Claude can read/adopt them from the repository without Larry copying `/private/tmp` files. The entry separates defect-confirming Python assertions from the native intended-safety regression and preserves the focused-run/full-runtime distinction; no original product test or implementation behavior changed. #173 remains unapproved until its owner repairs the findings and Codex re-reviews the repaired head.
+
+### 2026-10-06 — Ten published PRs observed without change-log conflict (Codex)
+
+The first ten main merges after #160 are #161/#162/#163/#165/#166/#167/#168/#164/#169/#170, in actual merge order. Root and independent audits replay the exact published parents: all ten complete trees match and §8 is unchanged; both contributing integration merges have clean dated-log/§8 state, including a positive control reproducing one unrelated WS-05 row conflict. The ten-PR published-history observation is closed with [its receipt](../roadmap-log/2026-10-06-ws-20-codex-ten-pr-change-log-observation.md). Erased/rebased/unpublished manual attempts are not inferred. CI strict-mode decision/rollout and the remaining owned status corrections remain open; no live product gate is closed.
