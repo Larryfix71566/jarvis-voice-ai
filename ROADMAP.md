@@ -123,10 +123,10 @@ Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.
 - **Implemented by:** Codex (B1–B3); Claude (B4)
 - **Remaining work / acceptance:** Phase A: #138 closed; #142, #147 and #152 merged; the 10-02 19:23 deployment and Larry's one-row, supporting-display and single-answer checks recorded; WS-18 AirPods and UI2-22 five-turn checks remain separate. Phase B: B1 migration is complete; checker warn-only rollout remains open; WS-10/11 lifecycle wording awaits their acceptance owner; next 10 PRs merge without change-log conflict. Phase C rules are in §0.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (plan #153, B1–B3 claim #157, B2/B3 #158, B4 #156, B1 log migration #160); bounded acceptance-checklist documentation: `codex/ws05-execution-20261005` (#184).
+- **Where:** main (plan #153, B1–B3 claim #157, B2/B3 #158, B4 #156, B1 log migration #160); acceptance-checklist documentation merged in #184 (`a4ad5a4`, 10-06).
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
 - **Scope:** B4 (Claude): `scripts/check_roadmap.py`, `tests/unit/test_check_roadmap.py`, the drift-check step in `.github/workflows/validate.yml`. B1–B3 (Codex): `ROADMAP.md` §0, §8 and production wording, `docs/roadmap-log/**`, and dated status/progress in `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`.
-- **Next step:** codex and claude: write new entries under `docs/roadmap-log/`; the migrated count and unchanged bodies are verified. Both systems: monitor the next 10 PRs for change-log conflicts; the WS-10/11 acceptance owner corrects their lifecycle wording before CI leaves warn-only mode.
+- **Next step:** claude: repair the validated CC7a.3 findings on #173 and resolve #172/#174 roadmap integration, preserving the merged acceptance lists. codex: re-review the repaired exact heads and record current checks. Both systems: monitor the ten-PR change-log-conflict gate and use `docs/roadmap-log/`; WS-10/11 lifecycle corrections and strict-mode rollout remain open.
 - **Updated:** 10-06 (Codex B1/B2 reconciliation and Larry-requested acceptance lists; no new acceptance)
 
 </details>
