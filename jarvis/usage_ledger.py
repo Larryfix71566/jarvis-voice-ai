@@ -294,6 +294,20 @@ def _conn() -> sqlite3.Connection:
     return conn
 
 
+def _model_budget_schema_exists(conn: sqlite3.Connection) -> bool:
+    names = {row[0] for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name IN "
+        "('model_task_budgets','model_call_budget_reservations',"
+        "'model_task_budget_links','model_call_budget_reservation_scopes')",
+    )}
+    core = {"model_task_budgets", "model_call_budget_reservations"}
+    child = {"model_task_budget_links", "model_call_budget_reservation_scopes"}
+    if ((names & core and not core <= names) or
+            (names & child and (not child <= names or not core <= names))):
+        raise sqlite3.DatabaseError("incomplete model budget schema")
+    return core <= names
+
+
 def model_budget_connection() -> sqlite3.Connection:
     """Open optional admission storage; failures belong to its authority.
 
@@ -303,6 +317,7 @@ def model_budget_connection() -> sqlite3.Connection:
     """
     conn = _conn()
     try:
+        _model_budget_schema_exists(conn)
         conn.executescript(_MODEL_BUDGET_SCHEMA)
         conn.execute("PRAGMA foreign_keys=ON")
         return conn
@@ -324,17 +339,8 @@ def existing_model_budget_connection() -> sqlite3.Connection | None:
     conn = sqlite3.connect(DB_PATH.resolve().as_uri() + "?mode=ro", uri=True, timeout=5.0)
     try:
         conn.execute("PRAGMA busy_timeout=5000")
-        exists = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='model_task_budgets'",
-        ).fetchone()
-        if exists:
+        if _model_budget_schema_exists(conn):
             return conn
-        if conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name IN "
-            "('model_call_budget_reservations','model_task_budget_links',"
-            "'model_call_budget_reservation_scopes')",
-        ).fetchone():
-            raise sqlite3.DatabaseError("incomplete model budget schema")
         conn.close()
         return None
     except Exception:

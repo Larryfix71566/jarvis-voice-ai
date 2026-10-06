@@ -129,6 +129,18 @@ def test_partial_sponsorship_schema_also_refuses_new_ordinary_parent():
         begin_model_task_budget("planning", "new-parent", WorkloadLimits(), now=110)
 
 
+def test_direct_reservation_never_recreates_lost_child_accounting():
+    binding = child(owner(WorkloadLimits(100, None, 1)), WorkloadLimits(100, None, .1002))
+    reserve(binding)
+    with sqlite3.connect(usage_ledger.DB_PATH) as conn:
+        conn.execute("DROP TABLE model_call_budget_reservation_scopes")
+    with pytest.raises(ModelBudgetUnavailable, match="budget_storage_unavailable"):
+        reserve(binding)
+    assert len(rows("model_call_budget_reservations")) == 1
+    with sqlite3.connect(usage_ledger.DB_PATH) as conn:
+        assert conn.execute("SELECT 1 FROM sqlite_master WHERE name='model_call_budget_reservation_scopes'").fetchone() is None
+
+
 def test_child_absolute_deadline_uses_first_child_start_and_owner_expiry():
     binding = child(owner(WorkloadLimits(100, 30)), WorkloadLimits(200, 20), now=110)
     assert binding.owner.deadline_at == binding.child.deadline_at == 130
