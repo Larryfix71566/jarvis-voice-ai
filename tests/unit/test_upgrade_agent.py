@@ -1320,20 +1320,24 @@ def test_routed_planner_cancel_during_request_returns_structured_cancelled_resul
 
     monkeypatch.setattr(ua_mod, "make_route_client", lambda *a, **k: AsyncClient())
     started = threading.Event()
+    drained = threading.Event()
 
     async def fake_execute(*args, **kwargs):
         started.set()
-        await asyncio.Event().wait()
+        # Schedule from the request itself: the callback runs only after
+        # this coroutine yields with its request pending. Bootstrap latency
+        # cannot move cancellation into the before-session branch.
+        asyncio.get_running_loop().call_soon(agent.request_cancel)
+        try:
+            await asyncio.Event().wait()
+        finally:
+            drained.set()
 
     monkeypatch.setattr(ua_mod, "execute_chat", fake_execute)
-    cancel = threading.Timer(0.02, agent.request_cancel)
-    cancel.start()
-    try:
-        result = agent.run("read a file")
-    finally:
-        cancel.join(timeout=1)
+    result = agent.run("read a file")
 
     assert started.is_set()
+    assert drained.is_set()
     assert result["cancelled"] is True
     assert result["ok"] is False
     assert "cancelled by the user" in result["summary"]

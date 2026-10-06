@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-06",
+  "system": "codex",
+  "workstream": "WS-05",
+  "pr": 177,
+  "candidate_parent_ref": "4f1e2f1",
+  "published_failure_ref": "9f1e7d5",
+  "source_sha256": {
+    "tests/unit/test_upgrade_agent.py": "c49288a9cb0eb41a4c1d7a472049ce4e430eccd909fbf8a104384918c7ebc02a"
+  },
+  "failure": "20ms Timer could cancel before request bootstrap, despite test claiming to exercise in-flight cancellation",
+  "causal_reproduction": {
+    "passed": 1,
+    "probe": "/private/tmp/test_ws05_upgrade_cancel_ci_repro.py",
+    "sha256": "bfe721d4209e2ffd0ef9bb45af5e2065511b6bf47daabc98ccdea6ef34b3ad25",
+    "log": "/private/tmp/ws05-upgrade-cancel-ci-repro.log",
+    "result": "frozen original test fails started assertion when real snapshot preparation remains pending until timer fires; implementation correctly reports before-session cancellation"
+  },
+  "repair": "fake_execute schedules cancellation through running-loop call_soon before awaiting pending request; callback runs after request yields",
+  "preserved_assertions": [
+    "started",
+    "structured cancelled result",
+    "ok false",
+    "cancelled by user summary",
+    "no submission"
+  ],
+  "added_assertion": "request coroutine drained",
+  "validation": {
+    "passed": 3,
+    "deselected": 46,
+    "log": "/private/tmp/ws05-upgrade-cancel-fixed.log",
+    "junit": "/private/tmp/ws05-upgrade-cancel-fixed.xml"
+  },
+  "limitations": [
+    "no implementation edit",
+    "latest-head CI must rerun",
+    "pilot directory cleanup failure remains under diagnosis",
+    "no provider, VM, production or rollout acceptance"
+  ]
+}
