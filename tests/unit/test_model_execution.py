@@ -1025,10 +1025,11 @@ async def test_caller_cancellation_emits_terminal_event_and_releases_capacity():
         resolved_route(capabilities=("text",)), client_factory=lambda _: client,
         event_sink=events.append, admission=admission,
     ))
-    for _ in range(50):
-        if client.completions.kwargs is not None:
-            break
-        await asyncio.sleep(0)
+    # Durable admission can run on a worker thread. Wait for the actual
+    # outbound phase instead of assuming event-loop ticks schedule it.
+    async with asyncio.timeout(2):
+        while client.completions.kwargs is None:
+            await asyncio.sleep(0.001)
     assert client.completions.kwargs is not None
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
