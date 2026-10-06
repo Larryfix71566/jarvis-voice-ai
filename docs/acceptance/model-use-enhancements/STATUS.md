@@ -27,6 +27,8 @@ no linked receipt are also unreceipted.
 
 ## Candidate validation — 2026-10-06
 
+Fresh immutable image `c43cc422…` is prepared from `8042722`. Actual normal offline worker at `4fd8228` proves protected default tokenizer lookup/four hashes/write refusal, the three unchanged RTVI cases and desktop/Keychain acceptance. Bounded tasks are stopped/settings unchanged. All12 verification is separately confirmed live (exec8389 / primary `f6ccb30d4441` / verification `c11a71ad1cb3`) with identical baseline/candidate; its pass is not inferred. [Image/worker receipt](receipts/mar-tokenizer-image-worker-2026-10-06.json). Native40 exact-order audit exposes a deterministic preflight/client receipt mismatch; two-file repair and full-menu capability capture remain separate gates.
+
 The actual six-MCP/40-tool Developer harness is independently reviewed: author82 and independent111 overlapping checks pass, preserving original witnesses and exact causal refusals. Native40 capability, operator-issued identity, actual edit/all12/holdout/cleanup/rollback acceptance remain open. [Harness receipt](receipts/mar-full-developer-harness-2026-10-06.json).
 
 Pinned English tokenizer preparation is implemented after main scope #183 merged and was integrated. Independent exact-block17 and root hydration/image11 plus6 subtests pass; actual fresh immutable image, different-UID offline worker and unchanged full12 acceptance remain open. [Recipe receipt](receipts/mar-tokenizer-recipe-2026-10-06.json).
