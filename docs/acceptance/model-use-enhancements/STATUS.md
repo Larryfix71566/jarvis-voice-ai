@@ -30,7 +30,7 @@ no linked receipt are also unreceipted.
 Candidate: [draft PR #177](https://github.com/Larryfix71566/jarvis-voice-ai/pull/177),
 pushed for cross-system review; not merged or deployed.
 
-The 10-06 extension is claimed through merged #178 (`0960373`). It adds
+The 10-06 extensions are claimed through merged #178 (`0960373`) and #179 (`fb3e1aa`). They add
 per-run SubAgent selection refresh, sealed host source handling before early
 sinks, durable optional task admission and legacy canonical council guards.
 Focused agent/execution/delegate tests: 260 passed; source registry/runlog/repo:
@@ -47,10 +47,12 @@ and [independent subscription review](receipts/independent-subscription-review-2
 - Detached-checkout policy: **9 passed**. Call-site classification: **30/30**, not privacy acceptance. JarvisKit: **226 passed**. Native route controls: **10 passed**. Batched native coverage includes **493 unique identifiers**, six skips and one capture failure, also reproduced on unchanged main.
 - No assertions were relaxed or tests removed. Full Mac/deployment gates are **not claimed green**. Global production routing and account settings remain unchanged.
 
+The later committed development/source gate at `8902693` passes **572 tests and 45 subtests**, with zero failures/skips and three existing deprecation warnings. It covers actual inert host sandbox facets, authenticated creator IPC, route refresh, task bounds and cleanup ownership. See [the source-bound receipt](receipts/mar-development-source-bridge-2026-10-06.json). It does not replace broader repo/Mac results or establish live VM/provider acceptance.
+
 ## Open items first
 
 The 10-05 changes below are **candidate implementation**, on the isolated
-`codex/ws05-execution-20261005` branch claimed through #175, #176 and #178. They do not
+`codex/ws05-execution-20261005` branch claimed through #175, #176, #178 and #179. They do not
 change production routing, credentials, account settings or the deployed app.
 
 - [ ] **MAR-A — deployed baseline and measurements.** The
@@ -68,9 +70,10 @@ change production routing, credentials, account settings or the deployed app.
   pins the offline repairs. Declared tool-result restrictions are checked before
   native continuation. The 10-06 typed registry/agent boundary also defaults
   unknown acquired sources confidential, validates guarded repository bytes,
-  sanitizes public error payloads and redacts earlier MCP buffers. Actual
-  self-edit/app-build/creator issuers and the other owned tool loops remain
-  open; their raw output does not gain an external approval. Do not label all
+  sanitizes public error payloads and redacts earlier MCP buffers. Installed
+  Upgrade/AppBuild issuers and authenticated creator receipts now preserve exact
+  host source/owner bindings before sinks. The ordinary self-edit/app MCP loop
+  still needs equivalent proof; its raw outputs do not gain external approval. Do not label all
   authorized repository data confidential or let provider output approve itself.
 - [ ] **MAR-E — SAYGM confidential pilot.** Authentication and catalog access
   [succeeded again on 10-05](receipts/model-access-catalog-readiness-2026-10-05.json): 64 models, zero advertised confidential models.
@@ -96,8 +99,9 @@ change production routing, credentials, account settings or the deployed app.
   identities before any council provider call; the 10-06 legacy loader/member
   guard also rejects canonical and physical aliases before key lookup. Per-run
   saved SubAgent choices now refresh and optional parent limits are enforced.
-  UpgradeAgent/AppBuildAgent preferences, source policy, shared limits and
-  enabled-mode failover discipline still need a bounded claimed slice. Complete
+  UpgradeAgent/AppBuildAgent now refresh confirmed choices per run, verify source
+  envelopes and share limits without enabled-mode implicit failover. Capped
+  council child budgets and larger-edit parity remain unfinished. Complete
   enabled-mode run/usage/cancellation evidence remains open.
 - [ ] **MAR-H — native and voice controls.** Native saved choices outrank defaults,
   unavailable choices remain visible, and changes invalidate drafts and late
