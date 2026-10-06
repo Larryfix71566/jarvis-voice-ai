@@ -35,8 +35,7 @@ per-run SubAgent selection refresh, sealed host source handling before early
 sinks, durable optional task admission and legacy canonical council guards.
 Focused agent/execution/delegate tests: 260 passed; source registry/runlog/repo:
 176 passed; identity suites: 298 passed / three historical skips. A wider unit
-audit has 5,387 passes / three skips / the known audio-default failure; final
-review changes are checked separately. These counts do not supersede the
+audit has 5,405 passes / three skips / the known audio-default failure; the final independent boundary suite passes 115 cases. The final integration/evals gate reports 173 passes, four skips and the same four baseline function-inventory failures. See [the source-bound integration receipt](receipts/mar-bdg-runtime-integration-2026-10-06.json). These counts do not supersede the
 earlier broad/native receipts below or imply a green deployment gate.
 
 See the [aggregate verification receipt](receipts/candidate-verification-2026-10-06.json)
