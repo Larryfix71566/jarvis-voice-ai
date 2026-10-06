@@ -114,6 +114,8 @@ async def _dispatch_creator(body: SkillCreatorDispatchIn, request: Request) -> d
         "request_id": body.request_id,
         "creator_revision": _revision,
     }
+    source_authority = None
+    source_context = None
 
     async def _post(path: str, payload: dict) -> dict:
         response = await client.post(path, json={**context, **payload})
@@ -142,16 +144,89 @@ async def _dispatch_creator(body: SkillCreatorDispatchIn, request: Request) -> d
             created_run.set_result(run_id)
         return True
 
-    async def execute_tool(tool_name: str, arguments: dict) -> dict:
+    async def execute_tool(tool_name: str, arguments: dict, *, execution_scope=None) -> Any:
+        nonlocal source_authority, source_context
+        if execution_scope is None:
+            envelope = await _post("/api/skills/creator/tool", {
+                "developer_run_id": created_run.result(),
+                "tool_name": tool_name,
+                "arguments": arguments,
+            })
+            result = envelope.get("result")
+            if not isinstance(result, dict):
+                raise RuntimeError("admin_creator_tool_receipt_invalid")
+            return result
+        from jarvis.bot.sensitive_turn import current_sensitive_turn
+        from jarvis.development_attestation import (
+            DevelopmentSourceAttestationError, new_source_challenge,
+            pin_source_authority, verify_tool_source,
+        )
+        from jarvis.privacy_policy import (ToolExecutionScope, ToolResultBindingError,
+                                          make_tool_execution_scope)
+        from jarvis.runlog.context import get_run_logger
+
+        run_id = created_run.result()
+        runlog = get_run_logger()
+
+        def require_source_context() -> None:
+            current = get_run_logger()
+            with _creator_runs_lock:
+                registered = _creator_runs.get(run_id)
+            if (active_session(body.bot_session_id) is not active
+                    or active.owner_id != body.owner_id
+                    or current_sensitive_turn.get() is not active.sensitive_turn
+                    or current is not runlog or current is None
+                    or current.run_id != run_id or current.agent != "developer"
+                    or current.user_id != body.owner_id or current.session_id != body.bot_session_id
+                    or registered is None
+                    or registered[:3] != (body.owner_id, body.bot_session_id, body.request_id)
+                    or registered[3] is not dispatch_task_ref.get("task")
+                    or registered[3].done()):
+                raise RuntimeError("admin_creator_source_binding_invalid")
+
+        require_source_context()
+        if not isinstance(execution_scope, ToolExecutionScope) or execution_scope.parent_request_id != run_id:
+            raise RuntimeError("admin_creator_source_binding_invalid")
+        expected = make_tool_execution_scope(
+            execution_scope.parent_request_id, execution_scope.task_id, execution_scope.tool_call_id,
+            tool_name, arguments, execution_scope.input_policy,
+        )
+        if (expected.tool_name != execution_scope.tool_name
+                or expected.argument_digest != execution_scope.argument_digest):
+            raise RuntimeError("admin_creator_source_binding_invalid")
+        if source_authority is None:
+            association = await _post("/api/skills/creator/associate", {
+                "developer_run_id": run_id, "source_authority": True,
+            })
+            require_source_context()
+            metadata = association.get("source_context")
+            if (not isinstance(metadata, dict)
+                    or any(metadata.get(key) != value for key, value in {
+                        **context, "developer_run_id": run_id,
+                    }.items())):
+                raise RuntimeError("admin_creator_source_binding_invalid")
+            source_context = metadata
+            source_authority = pin_source_authority()
+        challenge = new_source_challenge()
         envelope = await _post("/api/skills/creator/tool", {
-            "developer_run_id": created_run.result(),
+            "developer_run_id": run_id,
             "tool_name": tool_name,
             "arguments": arguments,
+            "source_challenge": challenge,
+            "source_task_id": execution_scope.task_id,
+            "source_tool_call_id": execution_scope.tool_call_id,
+            "source_input_policy": execution_scope.input_policy.level,
         })
-        result = envelope.get("result")
-        if not isinstance(result, dict):
-            raise RuntimeError("admin_creator_tool_receipt_invalid")
-        return result
+        require_source_context()
+        try:
+            return verify_tool_source(
+                source_authority, execution_scope, envelope.get("source_receipt"),
+                context=source_context, challenge=challenge,
+            )
+        except DevelopmentSourceAttestationError:
+            active.sensitive_turn.arm("tool_source_policy", run_id)
+            runlog.mark_sensitive()
+            raise ToolResultBindingError() from None
 
     async def execute() -> None:
         try:
