@@ -1,0 +1,286 @@
+{
+  "actual_verifier_receipt": {
+    "attempt": "36948433e7494428ab7a18fb5d852375",
+    "baseline": "986bab36a1e4588c37923c3f17f750f3fe37231c73dd14c01bdb2a1ebcd36032",
+    "candidate": "986bab36a1e4588c37923c3f17f750f3fe37231c73dd14c01bdb2a1ebcd36032",
+    "checks": [
+      {
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-c",
+          "import jarvis, jarvis.config, jarvis.cli, jarvis.runlog"
+        ],
+        "log_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+        "name": "backend-imports",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 2.868
+      },
+      {
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/tests/unit",
+          "-q"
+        ],
+        "log_sha256": "d9d32514bc30a05af087062577f6e5656a6c02f05d80b36165b1cd8521ffe7a3",
+        "name": "baseline-backend",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 434.649
+      },
+      {
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "tests/unit",
+          "-q"
+        ],
+        "log_sha256": "1aee2c6b758e624ffb56f0f16ec8b7ee1cd696e2a1937c0c49da422a8ae54e0c",
+        "name": "backend",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 420.45
+      },
+      {
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/tests/evals/sub_agent_evals.py",
+          "-q"
+        ],
+        "log_sha256": "ecdf873776a565b221cca49aadbeb0c50e897161ddec3ac2fc68e6f588549a80",
+        "name": "scripted-evals",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 1.705
+      },
+      {
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "scripts/latency_probe.py",
+          "--budget",
+          "tests/fixtures/latency_sample.log"
+        ],
+        "log_sha256": "c192bbb7b228dedbda047e7571ca16605031294ad5dea939ebe8696c07781b2a",
+        "name": "latency",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 0.107
+      },
+      {
+        "argv": [
+          "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+          "-m",
+          "pytest",
+          "services/mortimer-vault/tests",
+          "-q"
+        ],
+        "log_sha256": "75facf1c0ef342d3652fe5343a7b73312b0540efd38c155974bf673af58c8c4c",
+        "name": "knowledge-base",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 3.679
+      },
+      {
+        "argv": [
+          "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/services/mortimer-vault/tests",
+          "-q"
+        ],
+        "log_sha256": "73e4f16647dde0a26ec1918ab8285b637f5af92f833719dcfe8f04a219abefcd",
+        "name": "baseline-knowledge-base",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 5.585
+      },
+      {
+        "argv": [
+          "npm",
+          "--prefix",
+          "web",
+          "run",
+          "build"
+        ],
+        "log_sha256": "f4b7089c49450feeb96a294e3771ef988682cbfad06f15fd7e8ee6a829e49e7d",
+        "name": "web",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 30.935
+      },
+      {
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "macos/JarvisKit"
+        ],
+        "log_sha256": "57f479a31d801d440ad97c69ee2bc83a5889debb7e3f127c61c3fd43c6f54c93",
+        "name": "native-library",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 91.258
+      },
+      {
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "macos/MortimerHost"
+        ],
+        "log_sha256": "9ff13fd7151e7e8bb20d02eae53069fc4411616fe7481c1c70cfc6c4499c0c30",
+        "name": "native-app",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 189.798
+      },
+      {
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "/Users/admin/mortimer/verification/macos/JarvisKit"
+        ],
+        "log_sha256": "4fbef31d65434ffd49a5c5a554c431cf1165076f46235b0c29dae2a2441c44cf",
+        "name": "baseline-native-library",
+        "passed": false,
+        "returncode": 1,
+        "seconds": 22.759
+      },
+      {
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "/Users/admin/mortimer/verification/macos/MortimerHost"
+        ],
+        "log_sha256": "a23626866153a6febc72473a66ee5c761359fd7a5325b0d8ad88eb96c8306370",
+        "name": "baseline-native-app",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 183.454
+      }
+    ],
+    "desktop_probe": {
+      "log_sha256": "adbe9a9199ac1cd291958992aa51394dbd50840d5c75fed5cd68600ea52742d9",
+      "passed": true,
+      "returncode": 0,
+      "seconds": 23.299
+    },
+    "development_task": "3b0481959d85",
+    "image": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+    "passed": false,
+    "profile": "c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e",
+    "runner": "67dfc621dae442649cac7977e2349b53bc0b0e193684e0d7ce4c95e6745e9188",
+    "source_commit": "a653289932997fe6a95a32c1c61815f155665c83",
+    "source_unchanged": true,
+    "status": "failed",
+    "verification_task": "122f68fa4801",
+    "version": 1
+  },
+  "baseline_backend": {
+    "passed": 6068,
+    "seconds": 431.71,
+    "skipped": 11,
+    "subtests_passed": 2
+  },
+  "candidate_backend": {
+    "passed": 6068,
+    "seconds": 418.81,
+    "skipped": 11,
+    "subtests_passed": 2
+  },
+  "date": "2026-10-06",
+  "developer_accepted": false,
+  "exact_failure": {
+    "assertion": "XCTAssertGreaterThan(pingCount,5)",
+    "line": 530,
+    "observed_pings": 5,
+    "other_readiness_watchdog_assertions_failed": false,
+    "test": "NativeAudioTransportTests.testASilentServerIsGivenTheReadyDeadlineBeforeTheStallWatchdogExists"
+  },
+  "failed_checks": [
+    "baseline-native-library"
+  ],
+  "final_owned_tasks": [
+    {
+      "status": "stopped",
+      "task": "122f68fa4801"
+    },
+    {
+      "status": "stopped",
+      "task": "3b0481959d85"
+    }
+  ],
+  "image_id": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+  "image_record_unchanged": true,
+  "mar_i_complete": false,
+  "native_app": {
+    "baseline_failures": 0,
+    "baseline_skipped": 7,
+    "baseline_tests": 493,
+    "candidate_failures": 0,
+    "candidate_skipped": 7,
+    "candidate_tests": 493
+  },
+  "native_document_probe": {
+    "approval_received": false,
+    "code_commit": "ddfacfaf4954922a449743d6a655de9b06b4abda",
+    "destination": "Claude external subscription service via existing native login",
+    "document": "docs/REPO_MAP.md",
+    "document_bytes": 6214,
+    "document_sha256": "cb5b1b008553b3bc4716e826e6a75df681e5db08cf90583156b0779e1a2b2664",
+    "explicit_user_approval_requested": true,
+    "model": "claude-opus-5",
+    "phase": "not_started_automatic_approval_review_rejected",
+    "private_payload_sent": false,
+    "process_started": false,
+    "reason": "No trusted authorization for this exact private repository payload and destination",
+    "runtime_compatibility_failure_inferred": false
+  },
+  "native_library": {
+    "baseline_failures": 1,
+    "baseline_tests": 226,
+    "candidate_failures": 0,
+    "candidate_tests": 226
+  },
+  "nonempty_edit": false,
+  "passed_checks": 11,
+  "pr": 177,
+  "raw_result_path": "/private/tmp/ws05-fixture-full-profile-baseline.json",
+  "raw_result_sha256": "67e39e7bed0b58ac45797c9437ff03e370213e5362a7c063ede5c81eb57851a2",
+  "read_only_audit": {
+    "controlled_scheduler_pause": {
+      "after_test_start_ms": 30,
+      "log_sha256": "ea0926fbd4d4727616a2495929580ab331af9532ef64cb38f69ffb68a279df16",
+      "only_failure_line": 530,
+      "pause_ms": 650,
+      "pings": 4,
+      "seconds": 1.256
+    },
+    "immediate_unpaused_inverse": {
+      "log_sha256": "d0ad50454d261ea4725c81d97fdfb6e841a92e687ea27384fed993df91bbf159",
+      "passed": true,
+      "seconds": 1.217
+    },
+    "native_source_or_assertions_changed": false,
+    "qualification": "Scheduling sensitivity is demonstrated; the exact sandbox delay mechanism and a production/runtime regression are not proven.",
+    "scope": "No current main row covers these readiness/timer files. WS-05 forbids voice/test assertion/timing waivers; WS-18 currently covers engine/device-switch paths only. Larry assignment/main claim requested before implementation.",
+    "setup": "ready deadline3s, stall0.3s, ping interval0.05s; fixed700ms sleep starts after awaitSocket sees factory creation, not confirmed opened/timer arming.",
+    "source_file_sha256": {
+      "macos/JarvisKit/Sources/JarvisKit/NativeAudioTransport.swift": "ce3d7d31bbb5280f3b3ab8f7f5dced3342ba2b5bc37ef93f3faf9f037509fd91",
+      "macos/JarvisKit/Tests/JarvisKitTests/NativeAudioTransportTests.swift": "cc3c5fb6769f95184560218df8744c106226efc1ba653d5cb2531570fae00b70"
+    },
+    "unchanged_host_test_normal_pass_seconds": 1.231
+  },
+  "running_vm_count_after": 0,
+  "settings_unchanged": true,
+  "source_commit": "a653289932997fe6a95a32c1c61815f155665c83",
+  "system": "codex",
+  "workstream": "WS-05"
+}
