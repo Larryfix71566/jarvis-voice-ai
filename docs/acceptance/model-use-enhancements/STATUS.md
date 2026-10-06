@@ -45,6 +45,21 @@ account or production action was performed. The
 records the exact frozen result. Manual advisory/research provenance and
 real workload acceptance remain open.
 
+The later advisory slice at `5da9b47` passes **501 affected cases**, **265
+independent legacy/protocol cases**, **177 independently reviewed budget cases**,
+**nine Base/Registry boundary cases** and **two installed-MCP stdio cases**
+(overlapping groups). It retains original host budgets, signed preparation,
+actual Developer/Analyst roles and owning cancellation/generation before sinks.
+All 18 tool schemas are unchanged; all 86 admin routes retain authentication.
+Frozen full unit: **5,803 plus two subtests passed, three skips and only the
+same audio-default failure**. [Receipt](receipts/mar-advisory-source-budget-2026-10-06.json).
+This supports single-author voice planning and protected source transport; it
+does not close nested council/review, full research, real Developer capability,
+private-memory availability, billing or deployment gates. Configured Tart and
+Softnet are ready; the Developer pilot still needs a compatible image and real
+sandbox/MCP driver. The prior published `cc37241` passed all five CI checks;
+new-head CI remains separate.
+
 The 10-06 extensions are claimed through merged #178 (`0960373`) and #179 (`fb3e1aa`). They add
 per-run SubAgent selection refresh, sealed host source handling before early
 sinks, durable optional task admission and legacy canonical council guards.
@@ -92,8 +107,9 @@ change production routing, credentials, account settings or the deployed app.
   host source/owner bindings before sinks. The ordinary self-edit/app MCP loop
   now uses a separate authenticated workspace receipt before sinks, with the
   50daa8b admission/lifecycle repairs above. Unknown raw outputs do not gain
-  external approval. Authenticated advisory/research transport remains open;
-  preserve standing project-code grants and private source floors.
+  external approval. The later advisory transport has signed source/budget
+  proof before sinks; complete manual/public-crawl approval remains open.
+  Preserve standing project-code grants and private source floors.
 - [ ] **MAR-E — SAYGM confidential pilot.** Authentication and catalog access
   [succeeded again on 10-05](receipts/model-access-catalog-readiness-2026-10-05.json): 64 models, zero advertised confidential models.
   Candidate execution binds the exact catalog ID, tier, capability shape and
@@ -123,8 +139,9 @@ change production routing, credentials, account settings or the deployed app.
   council child sponsorship and larger-edit parity are implemented in the
   candidate: [317 council/budget cases](receipts/mar-council-child-budgets-2026-10-06.json)
   and [170 edit-transport cases](receipts/mar-large-edit-parity-2026-10-06.json)
-  pass in their frozen overlapping gates. Advisory transport still needs
-  actual durable parent authority and cancellation ownership. Complete
+  pass in their frozen overlapping gates. Advisory transport now has actual
+  durable parent authority and cancellation ownership; nested council/review
+  sponsorship remains explicitly unsupported. Complete
   enabled-mode run/usage/cancellation evidence remains open.
 - [ ] **MAR-H — native and voice controls.** Native saved choices outrank defaults,
   unavailable choices remain visible, and changes invalidate drafts and late

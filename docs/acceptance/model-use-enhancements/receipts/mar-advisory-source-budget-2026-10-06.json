@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "workstream": "WS-05",
+  "system": "codex",
+  "date": "2026-10-06",
+  "audited_ref": "5da9b473ef017ed4d12a089fcde1cfe6dae1daed",
+  "implementation_refs": {
+    "budget": "6007479",
+    "source": "c091d7e",
+    "agent_registry_stdio": "5da9b47"
+  },
+  "claim": {
+    "pr": 181,
+    "merge": "ac8eb7a",
+    "integrated_before_code": "cc37241"
+  },
+  "source_sha256": {
+    "jarvis/model_budget.py": "f8e06145a3ddcaf8088d7db51f915685e15e8354128d107c56dedadeed77130e",
+    "jarvis/advisory_sources.py": "8df7a9c1c2969a77a90ce82c7c1e17bf4aa49e422549ab076d58e6b5e0d1d9fb",
+    "jarvis/development_attestation.py": "4b7cf2b742328bb02606a804432ed464caa357898040e1d703e1e94cd2f0832e",
+    "jarvis/admin/server.py": "0ff05275872bbcc833cd05bf8cb699de8270b4d63de95075a2bbbfd897cb99fb",
+    "jarvis/agents/base.py": "2c89f3ddd57b58ef472143ae0c12d92767008c022e90b89efab05a44456afa12",
+    "jarvis/skills/registry.py": "47229d4d2c537d192a3b24273024ca094cca75d0fa72ea193fb7fa5ee2616196",
+    "jarvis/research/crawl.py": "7f06a708485557f691bf7cea26dd23f5baa3ba2493d36d360084f50fce21df07",
+    "mcp_servers/mcp_selfedit/server.py": "5b9040d3915aa8fd1bc078268e44064786d066c61228166c93d9bcb22f5626fd",
+    "mcp_servers/mcp_selfedit/logic.py": "eb326f5307af883874ecb74fb0dff78d9d926ff3c991e285f820ca92b2b999ca",
+    "mcp_servers/mcp_web/server.py": "3f7b72115b8d49ca64731eed7112ddda4e4dede1992ad43c38c50840b9e21814",
+    "mcp_servers/mcp_web/logic.py": "f8b119beaf86eda7163cf8597767ce3641f04cc9dda198715d0947d70fd84fbe",
+    "tests/unit/test_model_budget_transport.py": "f4312d806c711b8cbab53c9d5e958b0781e7ead4e61ce1dfeef17be653298305",
+    "tests/unit/test_advisory_source_bridge.py": "b791249e4855219d505571ec47f39e80a5c015cabe986dfabdf284f80ed7f1be",
+    "tests/unit/test_registry_advisory_transport.py": "a892cab195e829b025f424fe9b8fbfa30f8f3e5a2e58576122f4723fb8bcd657",
+    "tests/unit/test_subagent_advisory_budget.py": "3b7394a312353c37cd17f8dfcd0dc80af11a68b0ce128dfbeee1b0ef149f3008",
+    "tests/unit/test_auth_middleware.py": "be874a8b0036ef7f43b1fe679c13d40fb92bd7a0f73e169a82a0424688e64dc3",
+    "tests/integration/test_advisory_source_stdio.py": "13a55f17829cdc4cc14a5ce1d13ae0e46314a183dc46424d2ea8db6c7d933660"
+  },
+  "verification": {
+    "budget_transport_independent": {
+      "passed": 177,
+      "failed": 0,
+      "new_transport_cases": 31,
+      "same_two_process_authority_verified": true
+    },
+    "source_focused": {
+      "passed": 501,
+      "failed": 0,
+      "log_sha256": "daa94d57f14a610b61b799edff8fc0203bcc9867a72f72f20886982fe31a1197",
+      "junit_sha256": "02dc1afd82f795558d9fcfe34fe2abf4566fb10614c68befc95fe5644d5c754a"
+    },
+    "independent_advisory_legacy_logic": {
+      "passed": 265,
+      "failed": 0,
+      "registered_schemas_unchanged": 18,
+      "advisory_schemas_unchanged": 7,
+      "frozen_14_path_manifest_sha256": "b8b57aca546b82027e9beb3810d7230d4de01e8f151d75c48a2722e246d37f75"
+    },
+    "real_subagent_and_registry_boundaries": {
+      "passed": 9,
+      "failed": 0,
+      "includes_5_unchanged_phase_cancel_cases": true,
+      "log_sha256": "f3df6456c354199bb63d093a464805c411e86201b6b6959acfca57276af4ab43"
+    },
+    "actual_installed_mcp_stdio": {
+      "passed": 2,
+      "failed": 0,
+      "models_called": 0,
+      "log_sha256": "a19a2aaa76816419c2eb1dd7ca97a86a3c1b7bd57a7c1d6a01ea9521e61269ba",
+      "junit_sha256": "7e52f80b952bf0b397153dcb9a96463f80969afbd83b5d33acbb7b8119c56669",
+      "initial_refusal": "new test lacked the explicit live SensitiveTurn holder; observed tool_protected before any HTTP; standard holder added without assertion relaxation"
+    },
+    "full_unit": {
+      "passed": 5803,
+      "passing_subtests": 2,
+      "failed": 1,
+      "skipped": 3,
+      "warnings": 13,
+      "log_sha256": "8d1a54bfaff512050aad066b4715e8626f0f20c96b4d54f00a2de08c3a262f94",
+      "junit_sha256": "d1367878c5dbc89ac4cc03b6d1458795d9f45739cf0658b4d9ccfe1ad9c8b68a",
+      "failures": [
+        "existing tests/unit/test_audio_filters.py::test_factory_disabled_returns_none_even_with_engine previously reproduced on unchanged main"
+      ],
+      "full_mac_gate_green": false
+    },
+    "groups_overlap": true,
+    "latest_head_ci": "awaiting publication/rerun; prior cc37241 passed all five and does not establish this ref"
+  },
+  "proved": [
+    "Original sealed host parent explicitly persists even all-null/output-only for IPC; receiver requires exact durable tenant/parent/workload/root and child locators, never JSON limits",
+    "Signed separate advisory prepare floor is checked before operation, with fresh one-use phase challenges and actual Developer/Analyst role; results are re-sealed before sinks",
+    "Real author-only single-mode worker retains configured planning/frontier model floor and original shared budget; no silent mode rewrite",
+    "Exact owning cancellation event and generation guard prevent old completion overwriting replacement; test causally joins actual worker",
+    "Pending starts cancel with signed acknowledgement, later execution refuses, and a lost actual start reply does not replay the operation",
+    "Status after normal origin completion and same-owner/session document saves retain real workspace actor, content identity and monotonic source policy",
+    "Unknown crawled bytes remain confidential; returned JSON labels cannot approve them, and public profiles refuse without a model client",
+    "Public MCP schemas are unchanged; all86 admin routes retain bearer checks"
+  ],
+  "providers_called": false,
+  "vm_started": false,
+  "native_provider_process_started": false,
+  "mcp_stdio_processes_started": true,
+  "transport_network": "synthetic localhost HTTP/stdio only",
+  "production_changed": false,
+  "not_proved": [
+    "Nested council/review planning sponsorship; requests explicitly refuse instead of becoming single-author work",
+    "Complete manual advisory approval or public crawler source proof",
+    "Representative full research retrieval or real sandbox Developer quality",
+    "Actual full Developer native capability receipt",
+    "Confidential memory inference availability",
+    "Account billing/allowance/overage",
+    "Full Mac/deployment and complete WS-05 rollout"
+  ]
+}
