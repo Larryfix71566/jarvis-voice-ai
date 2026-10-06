@@ -591,7 +591,7 @@ def test_existing_receipt_path_is_refused_before_any_live_action(tmp_path, monke
     assert caught.value.code == 2 and output.read_text() == 'protected'
 
 
-def test_receipt_created_after_preflight_is_preserved_atomically(tmp_path, monkeypatch):
+def _mac_only_receipt_race_witness(tmp_path, monkeypatch):
     # Match the independent oldbug witness: create output during the run.
     directory = Path('/private/tmp') / ('ws05-receipt-repair-' + uuid.uuid4().hex)
     directory.mkdir(mode=0o700)
@@ -609,6 +609,65 @@ def test_receipt_created_after_preflight_is_preserved_atomically(tmp_path, monke
         assert list(directory.iterdir()) == [output]
     finally:
         output.unlink(missing_ok=True); directory.rmdir()
+
+
+def test_receipt_created_after_preflight_is_preserved_atomically(tmp_path, monkeypatch):
+    # Exercise the same competing-artifact race in the real permitted repo
+    # receipt anchor. The test-owned root exists on macOS and Linux alike.
+    monkeypatch.setattr(pilot, 'ROOT', tmp_path)
+    directory = tmp_path / 'docs/acceptance/model-use-enhancements/receipts' / (
+        'ws05-receipt-repair-' + uuid.uuid4().hex)
+    directory.mkdir(parents=True, mode=0o700)
+    output = directory / 'receipt.json'
+    competed, attempted_links = [], []
+    installed_link = pilot.os.link
+    try:
+        def completed_run(**kwargs):
+            output.write_text('existing protected receipt')
+            output.chmod(0o600)
+            info = output.lstat()
+            competed.append((info.st_dev, info.st_ino, info.st_mode))
+            return {'status': 'dry_ready_unverified', 'developer_accepted': False, 'mar_i_complete': False}
+        def attempted_link(source, destination, **kwargs):
+            attempted_links.append((source, destination))
+            return installed_link(source, destination, **kwargs)
+        monkeypatch.setattr(pilot, 'run_development_pilot', completed_run)
+        monkeypatch.setattr(pilot.os, 'link', attempted_link)
+        with pytest.raises(SystemExit) as caught:
+            pilot.main(['--mode', 'dry', '--source-ref', 'HEAD', '--image-id', 'a' * 64,
+                '--image-home', str(directory), '--profile', 'claude-opus', '--route', 'direct_api',
+                '--output', str(output)])
+        assert caught.value.code == 2 and output.read_text() == 'existing protected receipt'
+        assert len(attempted_links) == 1 and attempted_links[0][1] == output.name
+        info = output.lstat()
+        assert competed == [(info.st_dev, info.st_ino, info.st_mode)]
+        assert info.st_mode & 0o777 == 0o600 and directory.stat().st_mode & 0o777 == 0o700
+        assert list(directory.iterdir()) == [output]
+    finally:
+        output.unlink(missing_ok=True); directory.rmdir()
+
+
+def test_receipt_race_fixture_without_macos_temp_root_preserves_old_witness_and_inverse(tmp_path, monkeypatch):
+    """Offline Linux-equivalent filesystem prerequisite; no provider or VM.
+
+    Keep the previous body unchanged above. Simulate the same missing macOS
+    directory from the actual Ubuntu CI log, then run the repaired artifact
+    race under that restriction. The publication guard itself stays real.
+    """
+    installed_mkdir = Path.mkdir
+    missing_root_attempts = []
+    def mkdir_without_macos_root(path, *args, **kwargs):
+        if path.parent == Path('/private/tmp'):
+            missing_root_attempts.append(path)
+            raise FileNotFoundError(2, 'No such file or directory', str(path))
+        return installed_mkdir(path, *args, **kwargs)
+    monkeypatch.setattr(Path, 'mkdir', mkdir_without_macos_root)
+    with pytest.raises(FileNotFoundError) as caught:
+        _mac_only_receipt_race_witness(tmp_path, monkeypatch)
+    assert Path(caught.value.filename) == missing_root_attempts[0]
+    assert len(missing_root_attempts) == 1
+    test_receipt_created_after_preflight_is_preserved_atomically(tmp_path, monkeypatch)
+    assert len(missing_root_attempts) == 1
 
 
 def test_successful_receipt_publication_is_exclusive_owner_mode_and_no_temporary_leak(tmp_path, monkeypatch):
