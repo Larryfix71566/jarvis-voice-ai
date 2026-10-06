@@ -525,6 +525,8 @@ Renumbering completed in the main integration. Read-only production verification
 
 **Config keys reserved for WS-04 R2:** `JARVIS_REMOTE_BIND_ENABLED` (default false, independent of `JARVIS_AUTH_ENABLED`). Local bearer authentication may be enabled while this key remains false; only an explicit future remote-access decision may set it true. No new port or migration is reserved.
 
+**Config keys reserved for WS-05, 2026-10-05:** `JARVIS_CODEX_SUBSCRIPTION_CAPABILITY_RECEIPT` points to a secret-free, version/model/binary/catalog/arguments-bound capability receipt; the existing no-tools verification flag alone does not establish capability. `JARVIS_SUBSCRIPTION_TOOLS_ENABLED` defaults false and gates a provider-native bridge whose tool operations must pass through Mortimer's permission and sandbox boundary. These reservations do not enable either route in production. No port or migration is reserved.
+
 ---
 
 ## 4. Conflict register
