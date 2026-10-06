@@ -16,9 +16,19 @@ MAX_SOURCE_BYTES = 256 * 1024 * 1024
 MAX_FILE_BYTES = 32 * 1024 * 1024
 MAX_FILES = 50000
 SECRET = re.compile(rb"(?:gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{24,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY)")
+# Independently reviewed synthetic redaction/scanner fixtures, frozen 2026-10-06.
+# Exact whole-file pins grant no path-only/pattern exemption; any edit is rescanned.
 REVIEWED_TEST_FIXTURES = {
-    "tests/unit/test_mcp_apps_github.py": "ce15f378a89c7b056ba88ca5c421342c303fcfc07670141927d2bb5398888e03",
-    "tests/unit/test_memory.py": "bc0ce75f3b9989bf1269ba0adc0776e4beb429bdda9c08d8cd1488029db14912",
+    'tests/unit/test_admin_status.py': 'fd0bc1f3a204c2d6baf8995f3b01785955b599309df321775597dcd1b80610e2',
+    'tests/unit/test_mcp_apps_github.py': 'e284f44537e596f49f7c6a7e3b711c8d810cb7874ff07562aa3f84a6eaed0f62',
+    'tests/unit/test_memory.py': '43647f889b835169f3bd8defb618d81b8fcf24001a55e8ad6c925a6611efba10',
+    'tests/unit/test_status_catalog.py': 'f6dbf4db8bb1806dbf7c92e4e636875cf7cd9eefd44dc1d728796567e96c49ac',
+    'tests/unit/test_status_daily.py': '2dd60a76e8628e8364d9609b38a887ed4fb305f2d5ffd9788eed0340135d4be4',
+    'tests/unit/test_status_logs.py': '7155b12e72ca71e2f1f22bee12608868db52ef51df6ef46a086314600cdcb43c',
+    'tests/unit/test_status_models.py': '0f18478d9d27763edd055df760b4a6840e33995f0515608b1bdd4e90b1e894a3',
+    'tests/unit/test_status_providers.py': '68eb01078156221de31ea83ea8b3588bfbc634a9fa78ca4ff04c47b08daa3caf',
+    'tests/unit/test_status_subscriptions.py': 'd858ce77c07280591ce2b2f1405308834edc9e26e3c35d266c741099201d3979',
+    'tests/unit/test_status_summaries.py': '17fa5cae14825cbe0a6ec6e8e6fa7e903377e32bf2f0121ead63b01f27e2a266',
 }
 # Historical baseline of the already-reviewed memory scanner tests. The three
 # credential-shaped literals are byte-identical to the current reviewed file;
