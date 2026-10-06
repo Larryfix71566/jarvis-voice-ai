@@ -1,10 +1,10 @@
 # Mortimer master roadmap
 
-**Production:** `63aaeef0ed44163d619fe269d018554d6cfc682a`, deployed 2026-10-03 13:55 EDT (receipt `~/MortimerRollback/logs/deployment-receipt-63aaeef.json`).
+**Production:** `bde22bb6425c6bf36a3e0d7cf53f2785c274190d`, deployed 2026-10-03 16:34 EDT (receipt `~/MortimerRollback/logs/deployment-receipt-bde22bb.json`).
 
 This file is the single record of **who is doing what** in this repository, for every system that writes code here. Plans (`docs/plans/`) hold design. Receipts (`docs/acceptance/`) hold evidence. **This file holds ownership and state.**
 
-**Last full reconciliation:** 2026-10-02, read-only review of every §2 block against `origin/main` `a39136a` (before the WS-19 claim), tracked code/configuration, plan and acceptance headers, open PRs, CI, and the 09-30 DEPLOY-MAIN log. That earlier deployment of `39fc6f9` passed Python 4,938 / 7 skipped, MortimerHost 416 / 6 skipped / 0 failures, JarvisKit 219 / 0; phase D reported admin/vault 200, bot 307, and matching source/bundle revision. PRs #143–#149 merged after that earlier deployment; the 10-02 release in the Production line above subsequently included their code. This review created no new live acceptance. Original evaluation: [cross-system evaluation](docs/reviews/CROSS_SYSTEM_PLAN_EVAL_2026-09-27.md).
+**Last full reconciliation:** 2026-10-05, Claude (Cowork) at Larry's request: every §2 block and §3–§5 checked against `origin/main` `bde22bb`, the deployment receipts through `bde22bb` (10-03 16:34 EDT; Python 4,989 passed / 7 skipped, MortimerHost 483 / 3 skipped / 0 failures, JarvisKit 226 / 0), unmerged remote branches and `scripts/check_roadmap.py`. Findings: `docs/roadmap-log/2026-10-05-ws-20-claude-roadmap-sync.md`. Previous: 2026-10-02 read-only review by Codex (WS-19) against `a39136a`. Original evaluation: [cross-system evaluation](docs/reviews/CROSS_SYSTEM_PLAN_EVAL_2026-09-27.md).
 
 ---
 
@@ -104,15 +104,15 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
 
 - **Owner:** `claude` (B4 checker, plan) and `codex` (B1–B3, claimed by Codex on 10-02 at Larry's request)
-- **Status:** in-progress: Phase A landed — plan #153, WS-07 fix #154, #138 closed, #142 merged as `d01f9af`; #147 and #156 merged after Codex's re-review (`1faa75f`, `ae70f2c`), and `ae70f2c` was deployed 10-02 19:23 with a clean receipt. B2's production line and event-wording sweep plus B3's after-merge/C1–C5 rules landed in #158 (`04eb3f0`). B4 landed in #156. B1 moves all 72 §8 entries to individual log files in PR #160.
+- **Status:** in-progress: Phase A landed — plan #153, WS-07 fix #154, #138 closed, #142 merged as `d01f9af`; #147 and #156 merged after Codex's re-review (`1faa75f`, `ae70f2c`), and `ae70f2c` was deployed 10-02 19:23 with a clean receipt. B2's production line and event-wording sweep plus B3's after-merge/C1–C5 rules landed in #158 (`04eb3f0`). B4 landed in #156. B1 moved the 72 §8 entries to individual log files in PR #160, merged as `30fa3db`.
 - **Implemented by:** Codex (B1–B3); Claude (B4)
-- **Remaining work / acceptance:** Phase A: #138 closed; #142, #147 and #152 merged; the 10-02 19:23 deployment and Larry's one-row, supporting-display and single-answer checks recorded; WS-18 AirPods and UI2-22 five-turn checks remain separate. Phase B: B1 log migration and checker warn-only rollout; WS-10/11 lifecycle wording awaits their acceptance owner; next 10 PRs merge without change-log conflict. Phase C rules are in §0.
+- **Remaining work / acceptance:** Phase A: #138 closed; #142, #147 and #152 merged; the 10-02 19:23 deployment and Larry's one-row, supporting-display and single-answer checks recorded; WS-18 AirPods and UI2-22 five-turn checks remain separate. Phase B: B1 log migration merged (`30fa3db`); checker warn-only rollout; WS-10/11 lifecycle wording corrected 10-05 at Larry's request, so the checker reports no errors; next 10 PRs merge without change-log conflict. Phase C rules are in §0.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** main (plan #153, B1–B3 claim #157, B2/B3 #158, B4 #156, B1 log migration #160).
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
 - **Scope:** B4 (Claude): `scripts/check_roadmap.py`, `tests/unit/test_check_roadmap.py`, the drift-check step in `.github/workflows/validate.yml`. B1–B3 (Codex): `ROADMAP.md` §0, §8 and production wording, `docs/roadmap-log/**`, and dated status/progress in `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`.
-- **Next step:** codex: verify the merged log count and tell Claude the §8 anchor has moved. Both systems: monitor the next 10 PRs for change-log conflicts; the WS-10/11 acceptance owner corrects their lifecycle wording before CI leaves warn-only mode.
-- **Updated:** 10-02
+- **Next step:** codex: verify the merged log count and tell Claude the §8 anchor has moved. Both systems: monitor the next 10 PRs for change-log conflicts before CI leaves warn-only mode (the WS-10/11 wording that blocked it was corrected 10-05).
+- **Updated:** 10-05
 
 </details>
 
@@ -152,23 +152,6 @@ Claude’s work or enable any runtime feature.
 
 </details>
 
-<details id="ws-21">
-<summary>WS-21 — Supporting display transfer: one validated, confirmed route · Claude implementation, Codex review</summary>
-
-**Workstream:** Larry, 10-03, on deployed `63aaeef`: asked to put the weather radar on the external monitor, Mortimer said it was there while the supporting display opened empty (two `display_popout` calls, both `ok`). Codex's audit found five defects: a voice command that opens the window without content, success reported before the app confirms, detach accepting unknown results, screen IDs that placement does not recognise, and an incomplete contract and inventory. Repair: one coordinator for voice and pointer, validated before anything opens, confirmed before success is spoken.
-
-- **Owner:** `claude` (implementation); `codex` reviews before merge
-- **Status:** landed via PR #171 (Codex reviewed); Mac external-display acceptance open
-- **Implemented by:** Claude (Cowork)
-- **Remaining work / acceptance:** Codex re-reviews PR #171 after the repair of its 10-03 review (four defects: a refused request superseding a valid transfer, a failed replacement leaving an empty window, fixed-panel detach ignoring `screen_id`, the inventory missing transport results). Codex's audit tests and probes are archived in `docs/acceptance/supporting-display/codex-audit-2026-10-03/`, with regression twins in `VoiceDisplayAuditRegressionTests` and its four review probes in `SupportingDisplayTransferTests`. After approval, Larry merges and deploys, and runs the external-display checks on the Mac.
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** `ws21/display-transfer`, PR #171
-- **Plan:** `docs/plans/MORTIMER_SUPPORTING_DISPLAY_TRANSFER_PLAN.md`
-- **Scope:** `jarvis/bot/ui_control.py`, `jarvis/bot/console_actions.py`, `UI_CONTROL_ADDENDUM` in `jarvis/prompts.py`; the display-transfer, panel and screen parts of `jarvis/bot/console_protocol.py`, JarvisKit `ConsoleProtocol.swift`, `App/ConsoleActionRegistry.swift`, `App/ConsoleActionCoordinator.swift` and the inventory in `Stores/WorkspaceStore.swift` (shared with WS-17, see CX-16); `App/UICommandRouter.swift`, `App/AppMessageRouter.swift` (console results for display transfers only), new `App/SupportingDisplayCoordinator.swift`, `App/MortimerHostApp.swift` (wiring only), `Placement/ScreenPlacement.swift`, `Placement/WindowPlacement.swift`, `Placement/DisplayPlacementPolicy.swift`, `Stores/PanelStore.swift`, `Display/DisplayWindowView.swift`, `Display/DisplayWindowStore.swift`, `docs/acceptance/supporting-display/**`, the display menus in `Console/ConsoleActionBar.swift` and `Display/WorkspaceView.swift`; tests for each
-- **Next step:** codex: re-review PR #171 against the four review probes and the original scenarios (weather/radar transfer, repeated requests, stale result IDs, missing monitors, disconnect during transfer, the conversation remaining on the main screen). larry: merge and deploy after approval, then on the Mac with the external monitor: ask for the weather radar on the other screen (it appears there and Mortimer says so), ask again (already showing), ask with the monitor unplugged (Mortimer says it isn't connected), and check the conversation stays on the main screen.
-- **Updated:** 10-03
-
-</details>
 
 <details id="ws-13">
 <summary>WS-13 — T5 mail, calendar and brief: review the draft plan against current main · Claude (proposed)</summary>
@@ -189,6 +172,24 @@ Claude’s work or enable any runtime feature.
 </details>
 
 ### Built: live acceptance or status publication still open
+
+<details id="ws-21">
+<summary>WS-21 — Supporting display transfer: one validated, confirmed route · Claude implementation, Codex review</summary>
+
+**Workstream:** Larry, 10-03, on deployed `63aaeef`: asked to put the weather radar on the external monitor, Mortimer said it was there while the supporting display opened empty (two `display_popout` calls, both `ok`). Codex's audit found five defects: a voice command that opens the window without content, success reported before the app confirms, detach accepting unknown results, screen IDs that placement does not recognise, and an incomplete contract and inventory. Repair: one coordinator for voice and pointer, validated before anything opens, confirmed before success is spoken.
+
+- **Owner:** `claude` (implementation); `codex` reviews before merge
+- **Status:** landed via PR #171, merged as `bde22bb` and deployed in `bde22bb` on 10-03 16:34 EDT; Mac external-display acceptance open
+- **Implemented by:** Claude (Cowork)
+- **Remaining work / acceptance:** Codex reviewed `43f3d5b` and found four defects (a refused request superseding a valid transfer, a failed replacement leaving an empty window, fixed-panel detach ignoring `screen_id`, the inventory missing transport results); Claude repaired them in `bb9cf35`, and Larry merged #171 on 10-03. A Codex re-review of `bb9cf35` is not recorded on the PR. Codex's audit tests and probes are archived in `docs/acceptance/supporting-display/codex-audit-2026-10-03/`, with regression twins in `VoiceDisplayAuditRegressionTests` and its four review probes in `SupportingDisplayTransferTests`. Deployed in `bde22bb` on 10-03 (clean receipt). Remaining: the external-display checks on the Mac.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (PR #171, merge `bde22bb`)
+- **Plan:** `docs/plans/MORTIMER_SUPPORTING_DISPLAY_TRANSFER_PLAN.md`
+- **Scope:** `jarvis/bot/ui_control.py`, `jarvis/bot/console_actions.py`, `UI_CONTROL_ADDENDUM` in `jarvis/prompts.py`; the display-transfer, panel and screen parts of `jarvis/bot/console_protocol.py`, JarvisKit `ConsoleProtocol.swift`, `App/ConsoleActionRegistry.swift`, `App/ConsoleActionCoordinator.swift` and the inventory in `Stores/WorkspaceStore.swift` (shared with WS-17, see CX-16); `App/UICommandRouter.swift`, `App/AppMessageRouter.swift` (console results for display transfers only), new `App/SupportingDisplayCoordinator.swift`, `App/MortimerHostApp.swift` (wiring only), `Placement/ScreenPlacement.swift`, `Placement/WindowPlacement.swift`, `Placement/DisplayPlacementPolicy.swift`, `Stores/PanelStore.swift`, `Display/DisplayWindowView.swift`, `Display/DisplayWindowStore.swift`, `docs/acceptance/supporting-display/**`, the display menus in `Console/ConsoleActionBar.swift` and `Display/WorkspaceView.swift`; tests for each
+- **Next step:** larry: on the `bde22bb` deployment (10-03), with the external monitor: ask for the weather radar on the other screen (it appears there and Mortimer says so), ask again (already showing), ask with the monitor unplugged (Mortimer says it isn't connected), and check the conversation stays on the main screen. codex: if you re-reviewed `bb9cf35`, record the result here (post-merge).
+- **Updated:** 10-05
+
+</details>
 
 <details id="ws-18">
 <summary>WS-18 — Native audio: survive an output switch during speech · Claude</summary>
@@ -349,7 +350,7 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Memory automation: staged enablement on the Mac
 
 - **Owner:** `larry`
-- **Status:** pending merged-pipeline acceptance
+- **Status:** landed: merged pipeline deployed in `539f8f6` on 09-28 and again in `39fc6f9` on 09-30; merged-pipeline acceptance and staged rollout open
 - **Implemented by:** Claude: echo guard and auto-settlement; Codex: durable admission/classification and merge integration
 - **Remaining work / acceptance:** Larry: merged-pipeline acceptance and staged rollout
 - **Model version:** not recorded; do not infer from system name.
@@ -357,7 +358,7 @@ Claude’s work or enable any runtime feature.
 - **Plan:** `docs/plans/MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md`
 - **Scope:** —
 - **Next step:** CX-07 is resolved in main and deployed (§4). Production admission remains fail-closed according to the last recorded memory status (09-25); this review did not remeasure live stage/benefit/cost. Larry chooses staged Mac enablement only after the recorded monitoring gate.
-- **Updated:** 10-02 (read-only; no new live memory gate)
+- **Updated:** 10-05
 
 </details>
 
@@ -367,15 +368,15 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Adaptive interface C8 acceptance
 
 - **Owner:** `larry`
-- **Status:** open (Mac only)
+- **Status:** landed; C8 acceptance open (Mac only)
 - **Implemented by:** Not attributed by this acceptance-only workstream
 - **Remaining work / acceptance:** Larry
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** —
 - **Plan:** `docs/plans/MORTIMER_ADAPTIVE_INTERFACE_PLAN.md`
 - **Scope:** —
-- **Next step:** `docs/acceptance/adaptive-interface/RELEASE_READINESS.md` still has 3 of 26 UI2 items checked (UI2-01, UI2-04a, UI2-21). UI2-04/09/13 wait for WS-17. Its header still calls `94a5641` the last recorded deployment and the shared runbook describes pre-CC7a answer routing; the acceptance owner must update both against `39fc6f9` before using them for a frozen-candidate sign-off.
-- **Updated:** 10-02
+- **Next step:** `docs/acceptance/adaptive-interface/RELEASE_READINESS.md` still has 3 of 26 UI2 items checked (UI2-01, UI2-04a, UI2-21). UI2-04/09/13 wait for WS-17. Its header still calls `94a5641` the last recorded deployment and the shared runbook describes pre-CC7a answer routing; the acceptance owner must update both against the `bde22bb` deployment (10-03) before using them for a frozen-candidate sign-off.
+- **Updated:** 10-05
 
 </details>
 
@@ -532,8 +533,8 @@ Open means not yet resolved. Each entry names who resolves it.
 
 | ID | Conflict | Resolves | State |
 |---|---|---|---|
-| CX-16 | WS-21 (supporting display transfer) edits the display-transfer, panel and screen parts of files in WS-17's scope: `console_protocol.py`, `ConsoleProtocol.swift`, `ConsoleActionRegistry.swift`, `ConsoleActionCoordinator.swift`, the `WorkspaceStore` inventory, and the display menu in `WorkspaceView.swift`. Both rows are Claude's; WS-17 has no open branch. | `larry` (10-03): new row WS-21; WS-17's CC7a.3 starts from main after WS-21 merges | open until WS-21 merges |
-| CX-11 | Historical T2 merge collision: (1) auth defaulted on; (2) internal callers and deployment health lacked service headers; (3) stale sidecar route inventory; (4) concurrent `mcp_selfedit` edits; (5) token setup remains CLI-only, while the native app already reads a Keychain token. Items (1)–(4) were resolved by dormant Addendum R1 and deployed. PR #149 added a second explicit remote-bind gate so local bearer auth need not expose a listener. | `codex`: choose and implement local-only token onboarding for (5); `larry` decides local activation and any remote bind separately | R1 deployed dormant; R2 bind guard merged as `a39136a` but not deployed in `39fc6f9`; onboarding method/provisioner and enabled-mode acceptance remain open |
+| CX-16 | WS-21 (supporting display transfer) edits the display-transfer, panel and screen parts of files in WS-17's scope: `console_protocol.py`, `ConsoleProtocol.swift`, `ConsoleActionRegistry.swift`, `ConsoleActionCoordinator.swift`, the `WorkspaceStore` inventory, and the display menu in `WorkspaceView.swift`. Both rows are Claude's; WS-17 has no open branch. | `larry` (10-03): new row WS-21; WS-17's CC7a.3 starts from main after WS-21 merges | resolved 10-05: WS-21 merged as `bde22bb` on 10-03, releasing its scope; CC7a.3 starts from that main |
+| CX-11 | Historical T2 merge collision: (1) auth defaulted on; (2) internal callers and deployment health lacked service headers; (3) stale sidecar route inventory; (4) concurrent `mcp_selfedit` edits; (5) token setup remains CLI-only, while the native app already reads a Keychain token. Items (1)–(4) were resolved by dormant Addendum R1 and deployed. PR #149 added a second explicit remote-bind gate so local bearer auth need not expose a listener. | `codex`: choose and implement local-only token onboarding for (5); `larry` decides local activation and any remote bind separately | R1 deployed dormant; R2 bind guard merged as `a39136a` and deployed in `7c4637e` on 10-02 (auth and remote bind off); onboarding method/provisioner and enabled-mode acceptance remain open |
 | CX-13 | WS-14 edits `jarvis/subscription.py`, which is WS-02's scope (Codex; landed, so unlocked, but its live isolation gates are open). The allowlist change adds `USER`/`LOGNAME`, justified by the live `Not logged in` result recorded in WS-06. | `larry` (09-29): Claude lands, and Codex reviews before merge | resolved 09-29: Codex post-merge review of PR #102 found no blocking code issue; Mac Keychain/launchd evidence remains reported live evidence, not independently reproduced |
 | CX-15 | WS-17 (Command Console CC7a) changes Codex's adaptive-interface workspace (`WorkspaceStore`, `ResponseResultRouter`, stage, header) and supersedes the stable result tabs and 09-18 per-request response cards. | `larry` (09-30): Claude builds, Codex reviews each increment; `codex` confirms scope before CC7a.1 | resolved 09-30: Codex confirmed scope with boundaries (result identity, Recents as a display limit, UUID-targeted voice actions, reuse under the same identity, no focus stealing); recorded in plan §7.2 |
 | CX-14 | WS-15 PR #114 added `URLSession.shared.dataTask` in `Display/RadarMapView.swift`. On main `05c4a40`, the full MortimerHost suite failed two assertions in `MemoryGraphClosureC3Tests.testURLSessionSharedIsOnlyUsedByJarvisHTTPAndTheWakeWordSocket`. The WS-16 protected actual-window capture passed on that tree. | `claude` under active WS-15 scope | resolved by PR #118 (`adeffc1`): radar uses an ephemeral session; merged full MortimerHost suite passes 383 tests, five skips, zero failures |
