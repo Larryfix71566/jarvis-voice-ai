@@ -60,6 +60,8 @@ Softnet are ready; the Developer pilot still needs a compatible image and real
 sandbox/MCP driver. The prior published `cc37241` passed all five CI checks;
 new-head CI remains separate.
 
+The subsequent descendant/review slice at `58b4e21` includes `cc420bf` budgets and `df80223` council/execution integration. Original D/P/C sponsorship, exact acquired-document context and before-client admission pass **192 independent budget**, **97 focused root / 27 independent root**, **422 affected source** and **two installed-MCP** overlapping cases. The 32 budget, eight root and ten review cases are new. Approved review documents retain council/economy eligibility; unknown bytes remain confidential. Frozen full unit records 5,851 passes plus two subtests / three skips / the prior audio failure and a new retry-proof reservation regression, being repaired without relaxing its assertion. Bounded final source review and new-head CI remain pending. [Receipt](receipts/mar-descendant-review-2026-10-06.json). This is candidate evidence; manual/public-crawl provenance, full research, actual sandbox Developer and rollout remain open.
+
 The 10-06 extensions are claimed through merged #178 (`0960373`) and #179 (`fb3e1aa`). They add
 per-run SubAgent selection refresh, sealed host source handling before early
 sinks, durable optional task admission and legacy canonical council guards.
@@ -140,8 +142,8 @@ change production routing, credentials, account settings or the deployed app.
   candidate: [317 council/budget cases](receipts/mar-council-child-budgets-2026-10-06.json)
   and [170 edit-transport cases](receipts/mar-large-edit-parity-2026-10-06.json)
   pass in their frozen overlapping gates. Advisory transport now has actual
-  durable parent authority and cancellation ownership; nested council/review
-  sponsorship remains explicitly unsupported. Complete
+  durable parent authority and cancellation ownership. The later descendant/review
+  candidate supports nested sponsorship and sealed acquired documents, with final frozen gates pending. Complete
   enabled-mode run/usage/cancellation evidence remains open.
 - [ ] **MAR-H — native and voice controls.** Native saved choices outrank defaults,
   unavailable choices remain visible, and changes invalidate drafts and late
