@@ -1,6 +1,6 @@
 # Model Use Enhancements
 
-**Status:** IMPLEMENTATION IN PROGRESS — routing foundation landed; rollout remains gated.
+**Status:** LANDED FOUNDATION AND BOUNDED REPAIRS — PR #177 merged as `c38d895` on 2026-10-06; live acceptance and rollout remain gated.
 **Recorded:** 2026-09-20.
 **Origin:** Larry's model-access, subscription, SAYGM, orchestrator, and latency discussions; implementation plan preserved from the conversation at Larry's request.
 **Scope:** Manual subscription/API selection, SAYGM integration, privacy-aware routing, and preservation of Mortimer's existing behavior. Voice-provider replacement is a separate decision requiring testing.
@@ -32,7 +32,7 @@ voice-only built-in profile, so readiness checks validate the unchanged voice
 route while the general model registry continues to reject Haiku for
 non-voice workloads.
 
-**Current candidate status (2026-10-06):** Draft [PR #177](https://github.com/Larryfix71566/jarvis-voice-ai/pull/177) contains the committed implementation and evidence. The isolated branch
+**Current merged status (2026-10-06):** [PR #177](https://github.com/Larryfix71566/jarvis-voice-ai/pull/177) merged as `c38d895`, including final head `06a7ad5` and code head `408bc6f`; both heads passed all five CI checks. The merge does not establish live acceptance or deployment. The isolated branch
 `codex/ws05-execution-20261005` is claimed on main through #175, #176, #178,
 #179 (`fb3e1aa`), #180 (`4a2d4aa`) and #181 (`ac8eb7a`) before their bounded source/council/advisory edits.
 Production checkout, installed bundle and deployment receipt agree on
@@ -670,3 +670,7 @@ close the item.**
 - Captured aggregate-only usage/cost totals and workload counts. The ledger has no duration, quality score, or route/billing attribution.
 - Added the evidence and limitations to [`mar-a-baseline-2026-09-29.json`](../acceptance/model-use-enhancements/receipts/mar-a-baseline-2026-09-29.json). MAR-A stays open pending a safe, approved measurement method and the missing metrics.
 - No provider calls, feature activation, credential changes, prompt/response reads, or production writes.
+
+### 2026-10-06 — Post-merge roadmap reconciliation (Codex)
+
+GitHub and fetched main confirm #177 merged as `c38d895`. The roadmap now places WS-05 with built work whose acceptance remains open. Existing scoped diagnostics and CI evidence retain their exact revisions. The latest recorded production receipt is `bde22bb`, deployed 10-03 16:34 EDT; no deployment was performed. Exact external-payload authorization, operator-issued identity, native-test assignment, manual-source policy, cross-system review recording, runtime capability/workload, account and rollout gates remain open. No full acceptance flag was changed.
