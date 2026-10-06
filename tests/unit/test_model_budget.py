@@ -245,6 +245,63 @@ def test_budget_deadline_includes_time_waiting_for_storage_admission(monkeypatch
     assert remaining_seconds(budget, now=104) == 1
 
 
+def test_host_origin_includes_worker_delay_without_changing_simulated_check_clock(monkeypatch):
+    monkeypatch.setattr(model_budget.time, "time", lambda: pytest.fail("live clock sampled"))
+    budget = begin_model_task_budget(
+        "analyst", "parent-1", WorkloadLimits(deadline_seconds=5), started_at=95, now=100,
+    )
+    assert budget.started_at == 95
+    assert budget.deadline_at == 100
+    assert remaining_seconds(budget, now=100) == 0
+    reopened = begin_model_task_budget(
+        "analyst", "parent-1", WorkloadLimits(), started_at=100, now=100,
+    )
+    assert reopened.started_at == 95
+    assert reopened.deadline_at == 100
+    with pytest.raises(ModelBudgetUnavailable, match="budget_deadline_exhausted"):
+        _reserve(reopened, now=100)
+
+
+def test_reopened_parent_keeps_persisted_origin_with_earlier_or_later_caller_start():
+    first = begin_model_task_budget(
+        "analyst", "parent-1", WorkloadLimits(deadline_seconds=10), started_at=95, now=100,
+    )
+    for origin in (90, 101):
+        reopened = begin_model_task_budget(
+            "analyst", "parent-1", WorkloadLimits(deadline_seconds=20), started_at=origin, now=102,
+        )
+        assert reopened == first
+        assert remaining_seconds(reopened, now=102) == 3
+
+
+@pytest.mark.parametrize("origin", [True, -1, float("inf"), float("nan"), "95"])
+def test_malformed_host_origin_refuses_before_storage(origin):
+    with pytest.raises(ModelBudgetUnavailable, match="budget_clock_unavailable"):
+        begin_model_task_budget(
+            "analyst", "parent-1", WorkloadLimits(deadline_seconds=5), started_at=origin, now=100,
+        )
+    assert not usage_ledger.DB_PATH.exists()
+
+
+def test_future_host_origin_refuses_before_storage():
+    with pytest.raises(ModelBudgetUnavailable, match="budget_clock_mismatch"):
+        begin_model_task_budget(
+            "analyst", "parent-1", WorkloadLimits(deadline_seconds=5), started_at=101, now=100,
+        )
+    assert not usage_ledger.DB_PATH.exists()
+
+
+@pytest.mark.parametrize("postlock", [94, 99])
+def test_host_origin_is_checked_against_fresh_postlock_clock(monkeypatch, postlock):
+    samples = iter([100, postlock])
+    monkeypatch.setattr(model_budget.time, "time", lambda: next(samples))
+    with pytest.raises(ModelBudgetUnavailable, match="budget_clock_mismatch"):
+        begin_model_task_budget(
+            "analyst", "parent-1", WorkloadLimits(deadline_seconds=5), started_at=95,
+        )
+    assert _counts() == (0, 0, 0)
+
+
 @pytest.mark.parametrize("field,value", [
     ("parent_request_id", "other-parent"), ("workload", "developer"),
     ("user_id", "other-user"), ("scope_id", "other-scope"), ("started_at", 99),

@@ -260,12 +260,16 @@ def _existing_scope(owner: str, workload: str, parent_request_id: str) -> TaskBu
 
 
 def begin_model_task_budget(
-    workload: str, parent_request_id: str, limits: WorkloadLimits, *, now: float | None = None,
+    workload: str, parent_request_id: str, limits: WorkloadLimits, *,
+    started_at: float | None = None, now: float | None = None,
 ) -> TaskBudget:
     """Start/reopen one user's task budget; reused parents only tighten.
 
-    ``now`` is a Unix timestamp, allowing durable deadlines across processes
-    and restarts. New output-only or uncapped scopes never create storage.
+    ``started_at`` is the trusted host's execution-entry Unix timestamp for
+    a new durable scope, including time waiting for this worker or storage.
+    ``now`` independently supplies the current check clock for simulations;
+    it never changes a persisted parent's start. New output-only or uncapped
+    scopes never create storage or sample the budget clock.
     Existing storage is read without writes to find prior restrictions, so
     clearing configuration cannot reset a resumed parent's budget.
     The provider execution owner starts this at task creation, never while
@@ -284,17 +288,22 @@ def begin_model_task_budget(
         )
     _identifiers(workload, parent_request_id)
     called_at = _clock_value(now)
+    origin = called_at if started_at is None else _clock_value(started_at)
+    if origin > called_at:
+        raise ModelBudgetUnavailable("budget_clock_mismatch")
     with _transaction() as conn:
         # Take a fresh wall-clock sample after acquiring SQLite's write lock.
         # Concurrent requests can acquire that lock in a different order
         # from their initial timestamps; that is not a clock rollback.
         current = called_at if now is not None else _clock_value(None)
+        if origin > current or current < called_at:
+            raise ModelBudgetUnavailable("budget_clock_mismatch")
         row = conn.execute(
             "SELECT * FROM model_task_budgets WHERE user_id=? AND workload=? AND parent_request_id=?",
             (owner, workload, parent_request_id),
         ).fetchone()
         if row is None:
-            start, scope_id = called_at, uuid4().hex
+            start, scope_id = origin, uuid4().hex
             prior_deadline = prior_output = prior_ceiling = None
         else:
             _row_budget(row)

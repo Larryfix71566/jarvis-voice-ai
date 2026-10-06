@@ -811,6 +811,9 @@ async def execute_chat(request: ModelExecutionRequest,
     prevents late results from being returned to callers. Tool loops remain
     owned by their existing agent boundary.
     """
+    entry_loop_time = asyncio.get_running_loop().time()
+    started_at = time.monotonic()
+    budget_started_at = time.time()
     request = _limited_output_request(request, resolved.limits.max_output_tokens_per_call)
     messages, effective_policy, tools, tool_validators, seen_tool_call_ids = _validated_inputs(
         request, resolved
@@ -830,11 +833,41 @@ async def execute_chat(request: ModelExecutionRequest,
         )
     controller = admission or _PROCESS_ADMISSION
     sequence = 0
+    deadline: asyncio.Timeout | None = None
+
+    def require_active() -> None:
+        # Awaited adapters and observers can swallow CancelledError. The
+        # timeout object's state and monotonic deadline still own admission
+        # and publication, even after such an await returns a late value.
+        current = asyncio.current_task()
+        timed_out = deadline is not None and (
+            deadline.expired() or (deadline.when() is not None
+                                   and asyncio.get_running_loop().time() >= deadline.when())
+        )
+        if timed_out:
+            raise TimeoutError
+        if current is not None and current.cancelling():
+            raise asyncio.CancelledError
+
+    async def observe(event: ModelExecutionEvent, *, terminal: bool = False) -> None:
+        if not terminal:
+            require_active()
+        try:
+            observed = event_sink(event)
+            if inspect.isawaitable(observed):
+                await observed
+        except Exception:  # noqa: BLE001 — telemetry observers never own request outcome
+            pass
+        if not terminal:
+            require_active()
 
     async def emit(event_type: ExecutionEventType, *, error_code: str | None = None,
                    progress_stage: ExecutionProgressStage | None = None,
                    text_delta: str | None = None) -> None:
         nonlocal sequence
+        terminal = event_type in {"cancelled", "failed"}
+        if not terminal:
+            require_active()
         sequence += 1
         if event_sink is None:
             return
@@ -848,17 +881,11 @@ async def execute_chat(request: ModelExecutionRequest,
             progress_stage=progress_stage,
             text_delta=text_delta,
         )
-        try:
-            observed = event_sink(event)
-            if inspect.isawaitable(observed):
-                await observed
-        except Exception:  # noqa: BLE001 — telemetry observers never own request outcome
-            # Lifecycle observers must not turn a successful provider result
-            # into a failure or obscure the original provider exception.
-            return
+        await observe(event, terminal=terminal)
 
     async def emit_tool_request(call: ModelToolCall) -> None:
         nonlocal sequence
+        require_active()
         sequence += 1
         if event_sink is None:
             return
@@ -871,15 +898,11 @@ async def execute_chat(request: ModelExecutionRequest,
             tool_call_id=call.tool_call_id,
             tool_name=call.name,
         )
-        try:
-            observed = event_sink(event)
-            if inspect.isawaitable(observed):
-                await observed
-        except Exception:  # noqa: BLE001 — telemetry observers never own request outcome
-            return
+        await observe(event)
 
     async def emit_tool_result(call_id: str, name: str) -> None:
         nonlocal sequence
+        require_active()
         sequence += 1
         if event_sink is None:
             return
@@ -892,20 +915,21 @@ async def execute_chat(request: ModelExecutionRequest,
             tool_call_id=call_id,
             tool_name=name,
         )
-        try:
-            observed = event_sink(event)
-            if inspect.isawaitable(observed):
-                await observed
-        except Exception:  # noqa: BLE001 — telemetry observers never own request outcome
-            return
+        await observe(event)
 
-    started_at = time.monotonic()
     client = None
     try:
         # The deadline includes lifecycle admission and time spent queued for
         # capacity; cancellation at either point must still emit one terminal
         # event rather than escaping before the lifecycle guard is active.
-        async with asyncio.timeout(request.timeout_s) as deadline:
+        setup_limit = request.timeout_s
+        if resolved.limits.deadline_seconds is not None:
+            setup_limit = min(setup_limit, resolved.limits.deadline_seconds)
+        if (isinstance(task_budget, TaskBudget) and type(task_budget.limits) is WorkloadLimits
+                and task_budget.limits.deadline_seconds is not None):
+            setup_limit = min(setup_limit, task_budget.limits.deadline_seconds)
+        async with asyncio.timeout_at(entry_loop_time + setup_limit) as deadline:
+            require_active()
             limits = resolved.limits
             if task_budget is not None:
                 if (not isinstance(task_budget, TaskBudget) or task_budget.workload != request.workload
@@ -915,6 +939,7 @@ async def execute_chat(request: ModelExecutionRequest,
                 # cap. Durable state is reopened below, never accepted from
                 # caller-provided policy fields as the spending authority.
                 await asyncio.to_thread(remaining_seconds, task_budget)
+                require_active()
                 limits = WorkloadLimits(*(
                     min(first, second) if first is not None and second is not None
                     else first if first is not None else second
@@ -928,8 +953,9 @@ async def execute_chat(request: ModelExecutionRequest,
                 ))
             budget = await asyncio.to_thread(
                 begin_model_task_budget, request.workload,
-                request.parent_request_id, limits,
+                request.parent_request_id, limits, started_at=budget_started_at,
             )
+            require_active()
             # The durable parent's bounds can be stricter than a new route
             # snapshot (including after configuration is cleared/restarted).
             request = _limited_output_request(request, budget.limits.max_output_tokens_per_call)
@@ -937,11 +963,13 @@ async def execute_chat(request: ModelExecutionRequest,
                 request, resolved,
             )
             remaining = await asyncio.to_thread(remaining_seconds, budget)
+            require_active()
             if remaining <= 0:
                 raise ModelBudgetUnavailable("budget_deadline_exhausted")
-            deadline.reschedule(asyncio.get_running_loop().time() + min(
+            tightened_deadline = asyncio.get_running_loop().time() + min(
                 remaining, max(0, request.timeout_s - (time.monotonic() - started_at)),
-            ))
+            )
+            deadline.reschedule(min(deadline.when(), tightened_deadline))
             spend_capped = budget.limits.max_estimated_spend_usd_per_task is not None
             if spend_capped:
                 if resolved.route.adapter not in {"openai_compatible", "saygm_gateway"}:
@@ -952,6 +980,7 @@ async def execute_chat(request: ModelExecutionRequest,
                     raise ModelBudgetUnavailable("budget_input_invalid")
             await emit("queued")
             async with controller.slot(resolved.priority):
+                require_active()
                 await emit("started")
                 # Tool execution belongs to the caller, so this boundary
                 # receives results as validated conversation context on the
@@ -962,6 +991,7 @@ async def execute_chat(request: ModelExecutionRequest,
                         await emit_tool_result(item.tool_call_id, item.name)
                 client = (client_factory(resolved) if client_factory is not None
                           else make_route_client(resolved, timeout=request.timeout_s))
+                require_active()
                 completion_args: dict[str, Any] = {
                     "model": resolved.model,
                     "messages": messages,
@@ -989,20 +1019,20 @@ async def execute_chat(request: ModelExecutionRequest,
                     )
                     # A cancellation suppressed by a custom adapter must not
                     # publish or start a provider operation after reservation.
-                    current = asyncio.current_task()
-                    if current is not None and current.cancelling():
-                        raise asyncio.CancelledError
+                    require_active()
                 await emit("progress", progress_stage="provider_request")
                 native_execute = getattr(client, "execute_request", None)
                 if native_execute is not None:
                     response = await native_execute(request, resolved, completion_args)
                 else:
                     response = await client.chat.completions.create(**completion_args)
+                require_active()
                 if request.stream_text:
                     response = await _collect_chat_stream(
                         response,
                         lambda fragment: emit("text_delta", text_delta=fragment),
                     )
+                    require_active()
                 await emit("progress", progress_stage="response_received")
                 message = response.choices[0].message
                 text = message.content
@@ -1052,6 +1082,7 @@ async def execute_chat(request: ModelExecutionRequest,
                     provider_extras=provider_extras,
                 )
                 await emit("completed")
+                require_active()
                 return result
     except asyncio.CancelledError:
         await close_model_request(client, request.parent_request_id)
