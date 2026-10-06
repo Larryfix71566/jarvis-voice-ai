@@ -23,6 +23,19 @@ import pytest
 import pytest_asyncio
 
 from scripts import run_model_use_full_development_pilot as pilot
+from tests.unit.test_model_use_development_pilot import owned_pilot_source, bind_owned_pilot_source
+
+
+def test_strict_committed_support_uses_actual_owned_snapshot_git(owned_pilot_source):
+    """Real temporary Git proof; fixture ownership is not an acceptance gate."""
+    assert pilot.ROOT == owned_pilot_source.root
+    assert Path(pilot.__file__) == pilot.ROOT / 'scripts/run_model_use_full_development_pilot.py'
+    actual = pilot._require_committed_support()
+    assert actual == {name: owned_pilot_source.fingerprints[name] for name in actual}
+    helper = pilot.support()
+    assert helper.load_corpus()['target_path'] == 'mcp_servers/mcp_time/logic.py'
+    assert helper.ROOT == pilot.ROOT and helper.CORPUS.is_relative_to(pilot.ROOT)
+    assert helper.ORACLE.is_relative_to(pilot.ROOT)
 
 
 def synthetic_token():

@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import stat
 import subprocess
 from types import SimpleNamespace
 import asyncio
@@ -17,7 +18,191 @@ from tests.unit.test_development_sources import workspace
 from tests.unit.test_council_budget_ownership import transport_env
 
 
+_FROZEN_PILOT_SOURCE = Path(pilot.__file__).resolve().parents[1]
+
+
+def _copy_owned_pilot_source(source, destination):
+    """Copy this test's frozen source bytes, never a candidate or runtime tree.
+
+    Hydrated verification source deliberately belongs to the administrator.
+    These host-simulation fixtures need new current-UID files before entering
+    the unchanged host ownership guards; they do not adopt the baseline files.
+    """
+    from sandbox.artifacts import Candidate, File, source_path_allowed
+    from sandbox.profiles import MORTIMER
+    packages = {'jarvis', 'sandbox', 'mcp_servers', 'config', 'scripts'}
+    fixed = set(MORTIMER.dependencies) | {
+        'tests/fixtures/model_use_development_cases.json',
+        'docs/acceptance/model-use-enhancements/receipts/mar-f-claude-native-fixture-capability-2026-10-05.json',
+    }
+    def selected(name):
+        return (name.split('/')[0] in packages or name in fixed) and source_path_allowed(name)
+    if (source / '.git').exists():
+        # Local inventory only. No remote, safe-directory waiver or untracked
+        # author's files are admitted into the fixture snapshot.
+        raw = subprocess.check_output(['git', '--no-optional-locks', '-C', str(source), 'ls-files', '-z'])
+        names = [name for name in raw.decode().split('\0') if name and selected(name)]
+    else:
+        # The immutable hydration archive has no Git metadata. Walk only the
+        # same bounded source packages and named test/dependency inputs.
+        names = []
+        for package in sorted(packages):
+            for directory, folders, files in os.walk(source / package, followlinks=False):
+                folders[:] = [name for name in folders if not name.startswith('.')
+                    and name not in {'__pycache__', 'node_modules', 'data', 'logs', 'runtime', 'outputs'}]
+                for leaf in files:
+                    name = (Path(directory) / leaf).relative_to(source).as_posix()
+                    if selected(name):
+                        names.append(name)
+        names.extend(name for name in fixed if (source / name).is_file())
+    assert names and len(names) == len(set(names))
+    frozen = []
+    for name in sorted(names):
+        original = source / name
+        before = original.lstat()
+        assert stat.S_ISREG(before.st_mode) and not original.is_symlink()
+        assert original.resolve().is_relative_to(source.resolve())
+        raw = original.read_bytes()
+        assert pilot._pins(original.lstat()) == pilot._pins(before)
+        frozen.append(File(name, 0o755 if before.st_mode & 0o111 else 0o644, raw))
+    # Reuse the real source path, size and credential-fixture scanner. This
+    # fixture grants no new source exclusions or secret-pattern exemptions.
+    Candidate(tuple(frozen))
+    fingerprints = {}
+    for file in frozen:
+        copied = destination / file.path
+        copied.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        copied.write_bytes(file.data)
+        copied.chmod(0o500 if file.mode == 0o755 else 0o400)
+        fingerprints[file.path] = digest(file.data)
+        assert digest(copied.read_bytes()) == fingerprints[file.path]
+        assert copied.lstat().st_uid == os.getuid() and copied.lstat().st_nlink == 1
+    # A real local commit supplies the existing committed-support guard. The
+    # temp index has no remotes or inherited hooks/global Git configuration.
+    environment = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+    environment.update(GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull)
+    prefix = ['git', '-C', str(destination), '-c', 'core.hooksPath=' + os.devnull]
+    for command in (['init', '-q'], ['add', '--force', '.'],
+                    ['-c', 'user.name=WS05 fixture', '-c', 'user.email=fixture@example.invalid',
+                     'commit', '-q', '-m', 'Frozen owned host-simulation source']):
+        subprocess.run(prefix + command, env=environment, check=True, capture_output=True)
+    # MCP's real child-env allowlist intentionally does not forward arbitrary
+    # Python flags. Keep source directories unwritable so child imports cannot
+    # place bytecode or other mutable outputs among the frozen inputs.
+    for directory in destination.rglob('*'):
+        if directory.is_dir() and '.git' not in directory.relative_to(destination).parts:
+            directory.chmod(0o500)
+    destination.chmod(0o500)
+    return SimpleNamespace(root=destination, original=source, fingerprints=fingerprints)
+
+
+@pytest.fixture(scope='session')
+def owned_pilot_source(tmp_path_factory):
+    """One source copy for both pilot modules; mutable unit outputs stay away."""
+    key = '_ws05_owned_frozen_pilot_source'
+    snapshot = getattr(tmp_path_factory, key, None)
+    if snapshot is None:
+        destination = tmp_path_factory.mktemp('ws05-owned-frozen-source')
+        destination.chmod(0o700)
+        snapshot = _copy_owned_pilot_source(_FROZEN_PILOT_SOURCE, destination)
+        setattr(tmp_path_factory, key, snapshot)
+    try:
+        yield snapshot
+        for name, expected in snapshot.fingerprints.items():
+            copied = snapshot.root / name
+            assert copied.lstat().st_uid == os.getuid() and copied.lstat().st_nlink == 1
+            assert copied.lstat().st_mode & 0o022 == 0
+            assert digest(copied.read_bytes()) == expected, name
+        actual = {path.relative_to(snapshot.root).as_posix() for path in snapshot.root.rglob('*')
+                  if path.is_file() and '.git' not in path.relative_to(snapshot.root).parts}
+        assert actual == set(snapshot.fingerprints), 'mutable outputs entered the frozen source fixture'
+    finally:
+        # All test-owned children are stopped before session teardown. Restore
+        # directory write access solely for pytest's eventual temp cleanup.
+        snapshot.root.chmod(0o700)
+        for directory in snapshot.root.rglob('*'):
+            if directory.is_dir() and '.git' not in directory.relative_to(snapshot.root).parts:
+                directory.chmod(0o700)
+
+
+@pytest.fixture(autouse=True)
+def bind_owned_pilot_source(owned_pilot_source, monkeypatch):
+    """Bind only test globals/child imports; restore them after every case."""
+    from scripts import run_model_use_full_development_pilot as full
+    from jarvis.agents import base, upgrade_agent
+    from jarvis import model_routing
+    from jarvis.skills import registry
+    root = owned_pilot_source.root
+    for module, relative in ((pilot, 'scripts/run_model_use_development_pilot.py'),
+                             (full, 'scripts/run_model_use_full_development_pilot.py'),
+                             (base, 'jarvis/agents/base.py'), (upgrade_agent, 'jarvis/agents/upgrade_agent.py')):
+        monkeypatch.setattr(module, '__file__', str(root / relative))
+    monkeypatch.setattr(pilot, 'ROOT', root)
+    monkeypatch.setattr(pilot, 'CORPUS', root / 'tests/fixtures/model_use_development_cases.json')
+    monkeypatch.setattr(pilot, 'ORACLE', root / 'scripts/model_use_development_oracle.py')
+    monkeypatch.setattr(full, 'ROOT', root)
+    monkeypatch.setattr(registry, 'REPO_ROOT', root)
+    monkeypatch.setattr(model_routing, 'DEFAULT_POLICY_PATH', root / 'config/model_access.yaml')
+    for name in ('DEFAULT_CONFIG_PATH', 'DEFAULT_CONFIG_DIR', 'DEFAULT_ENDPOINTS_PATH',
+                 'DEFAULT_PROFILES_PATH', 'DEFAULT_REGISTRY_PATH'):
+        original = getattr(upgrade_agent, name)
+        monkeypatch.setattr(upgrade_agent, name, root / 'config' /
+            (original.name if name != 'DEFAULT_CONFIG_DIR' else ''))
+    # Fresh inspection children and actual MCP discovery import this exact
+    # baseline copy. The parent's sys.path and original source are untouched.
+    monkeypatch.setenv('PYTHONPATH', str(root))
+    monkeypatch.setenv('PYTHONDONTWRITEBYTECODE', '1')
+
+
 def digest(raw): return hashlib.sha256(raw).hexdigest()
+
+
+def test_foreign_owned_baseline_metadata_refuses_but_exact_private_copy_passes(
+        tmp_path, monkeypatch, owned_pilot_source):
+    """Host equivalent of admin-source/worker-UID separation, without chown.
+
+    Only the immutable original tree's lstat owner is simulated. The UID
+    resolver, strict reader and copied-file metadata stay entirely real.
+    """
+    original = tmp_path / 'hydrated-immutable-baseline'
+    original.mkdir(mode=0o700)
+    for name, fingerprint in owned_pilot_source.fingerprints.items():
+        source = owned_pilot_source.root / name
+        target = original / name
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        target.write_bytes(source.read_bytes())
+        target.chmod(stat.S_IMODE(source.stat().st_mode))
+        assert digest(target.read_bytes()) == fingerprint
+    assert not (original / '.git').exists()
+    installed_lstat, installed_uid, installed_read = Path.lstat, os.getuid, pilot._read
+    foreign_uid = os.getuid() + 1
+    def foreign_baseline_lstat(path, *args, **kwargs):
+        info = installed_lstat(path, *args, **kwargs)
+        if path.is_relative_to(original) and stat.S_ISREG(info.st_mode):
+            fields = list(info)
+            fields[4] = foreign_uid
+            return os.stat_result(fields)
+        return info
+    monkeypatch.setattr(Path, 'lstat', foreign_baseline_lstat)
+    corpus = original / 'tests/fixtures/model_use_development_cases.json'
+    assert corpus.lstat().st_uid == foreign_uid and corpus.lstat().st_uid != os.getuid()
+    with pytest.raises(pilot.DevelopmentPilotUnavailable, match='host_file_unverified'):
+        pilot._read(corpus)
+    copied = tmp_path / 'current-worker-owned-source'
+    copied.mkdir(mode=0o700)
+    snapshot = _copy_owned_pilot_source(original, copied)
+    assert snapshot.fingerprints == owned_pilot_source.fingerprints
+    for name, fingerprint in snapshot.fingerprints.items():
+        path = copied / name
+        assert path.lstat().st_uid == os.getuid() and path.lstat().st_nlink == 1
+        assert digest(pilot._read(path, limit=32 * 1024 * 1024)) == fingerprint
+    assert pilot._read(copied / corpus.relative_to(original)) == corpus.read_bytes()
+    # The unchanged guard still rejects unsafe current-owner files too.
+    unsafe = tmp_path / 'group-writable-corpus.json'
+    unsafe.write_bytes(corpus.read_bytes()); unsafe.chmod(0o620)
+    with pytest.raises(pilot.DevelopmentPilotUnavailable, match='host_file_unverified'):
+        pilot._read(unsafe)
+    assert os.getuid is installed_uid and pilot._read is installed_read
 
 
 def oracle_result(case, raw_spec, phase, passed):

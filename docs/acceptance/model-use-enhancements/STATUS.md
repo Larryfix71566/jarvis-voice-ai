@@ -27,6 +27,10 @@ no linked receipt are also unreceipted.
 
 ## Candidate validation — 2026-10-06
 
+**Latest sandbox/CI stability evidence, 2026-10-06:** Actual pinned-image all12 baseline at `4fd8228` is terminal:11 checks passed; strict-owner host fixtures fail the baseline Python check. The reviewed test-only ownership and phase-entry repairs pass200 combined cases, with independent56 deadline and2 natural-deadline probes. Fresh CI and actual guest rerun are required; no Developer acceptance is inferred. [Terminal](receipts/mar-tokenizer-full-profile-terminal-2026-10-06.json), [fixture](receipts/mar-pilot-fixture-ownership-2026-10-06.json), [deadline](receipts/mar-deadline-confirmed-phases-2026-10-06.json).
+
+Earlier captures below retain their named-source timing and failures; the terminal evidence above supersedes prior live wording.
+
 Fresh immutable image `c43cc422…` is prepared from `8042722`. Actual normal offline worker at `4fd8228` proves protected default tokenizer lookup/four hashes/write refusal, the three unchanged RTVI cases and desktop/Keychain acceptance. Bounded tasks are stopped/settings unchanged. All12 verification is separately confirmed live (exec8389 / primary `f6ccb30d4441` / verification `c11a71ad1cb3`) with identical baseline/candidate; its pass is not inferred. [Image/worker receipt](receipts/mar-tokenizer-image-worker-2026-10-06.json). Native40 deterministic preflight/client order mismatch is repaired with author88/independent121 overlapping checks. Full-menu capability capture remains separate; normal native tools are unapproved.
 
 The actual six-MCP/40-tool Developer harness is independently reviewed: author82 and independent111 overlapping checks pass, preserving original witnesses and exact causal refusals. Native40 capability, operator-issued identity, actual edit/all12/holdout/cleanup/rollback acceptance remain open. [Harness receipt](receipts/mar-full-developer-harness-2026-10-06.json).

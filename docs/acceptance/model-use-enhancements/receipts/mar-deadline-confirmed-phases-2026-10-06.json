@@ -1,0 +1,54 @@
+{
+  "actual_updated_Ubuntu_CI_passed": false,
+  "causal_probe_path": "/private/tmp/test_ws05_deadline_causal_audit.py",
+  "causal_probe_sha256": "c8c76c35c638d4a39d1f60c648b38a6f30ae4a7ad208814dd63ca8d074f84435",
+  "changed_path": "tests/unit/test_model_execution_deadlines.py",
+  "changed_path_sha256": "f0de44da1fc69fc9c5de4a1da58db90843015c710cd281ea5b16678141542424",
+  "date": "2026-10-06",
+  "developer_accepted": false,
+  "diagnosis": "The exact original tests reproduce their CI failure modes when bootstrap is held until the50ms budget expires: no observer/provider phase is reached and no spend reservation exists. This establishes the early-phase assumption, not the exact initiating CI delay or a production defect.",
+  "failed_ci_ref": "7ff27d5c20b5314433237acd941224d9cfd320de",
+  "failed_ci_run": 37496665138,
+  "fake_clock_used": false,
+  "independent_natural_deadline_probes": {
+    "errors": 0,
+    "failures": 0,
+    "reported_seconds": 2.29,
+    "skipped": 0,
+    "tests": 2,
+    "xml_sha256": "b77dc9d4bf44bdb63ef466a6ff8a2aba0d25c8e1c1dd6716a022dc6638820536"
+  },
+  "independent_suite": {
+    "errors": 0,
+    "failures": 0,
+    "reported_seconds": 1.5,
+    "skipped": 0,
+    "tests": 56,
+    "xml_sha256": "14ef1b7f3e747057ec79cfc0131f7f3abc58ecf81b6cf8defc3e79969547e0ea"
+  },
+  "mar_i_complete": false,
+  "pr": 177,
+  "production_code_changed": false,
+  "repair": "Capture the real asyncio.Timeout owned by the actual request task; require exactly one matching context and confirmed observer/SDK entry before rescheduling expiry to now. Retain natural50ms bootstrap-expiry coverage for capped and uncapped requests.",
+  "retained_assertions": [
+    "no post-expiry provider starts",
+    "suppressed cancellation cannot publish late output",
+    "actual late SDK closure",
+    "one admitted spend reservation retained",
+    "zero completed LLM spend",
+    "only failed timeout event"
+  ],
+  "root_suite": {
+    "errors": 0,
+    "failures": 0,
+    "reported_seconds": 1.25,
+    "skipped": 0,
+    "tests": 56,
+    "xml_sha256": "827a1beb6e576ba58af36c41d1c5dd28506082cb755929a1bd3f1669070dc2b6"
+  },
+  "system": "codex",
+  "tests_skipped": false,
+  "unchanged_original_path": "/private/tmp/ws05-model-execution-deadlines-original.py",
+  "unchanged_original_sha256": "4f884c5a2f4582b1e9442f8c5e504dbdb22ba77b6f487cdded62d70fa6767711",
+  "workstream": "WS-05"
+}

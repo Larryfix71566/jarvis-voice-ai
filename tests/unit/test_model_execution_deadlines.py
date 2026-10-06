@@ -57,6 +57,35 @@ def ledger(tmp_path, monkeypatch):
     return path
 
 
+@pytest.fixture
+def expire_at_confirmed_phase(monkeypatch):
+    """Tighten the real request timeout only after the tested phase is reached.
+
+    These cases test cancellation suppression after an observer/SDK starts.
+    The separate host-entry cases retain short deadlines during bootstrap.
+    No execution clock, budget, guard or provider response is replaced.
+    """
+    original = asyncio.timeout_at
+    owned = {}
+
+    def capture(when):
+        timeout = original(when)
+        owned.setdefault(asyncio.current_task(), []).append(timeout)
+        return timeout
+
+    monkeypatch.setattr(asyncio, "timeout_at", capture)
+
+    def expire(task):
+        contexts = owned[task]
+        assert len(contexts) == 1
+        timeout = contexts[0]
+        loop = asyncio.get_running_loop()
+        assert not timeout.expired() and timeout.when() > loop.time()
+        timeout.reschedule(loop.time())
+
+    return expire
+
+
 async def test_worker_bootstrap_delay_expires_at_host_entry_and_survives_cleared_config(ledger, monkeypatch):
     original = model_execution.begin_model_task_budget
     finished = threading.Event()
@@ -112,7 +141,9 @@ async def test_configured_deadline_includes_initial_input_validation(ledger, mon
 
 @pytest.mark.parametrize("stage", ["queued", "started", "provider_request"])
 @pytest.mark.parametrize("explicit_cancel", [False, True])
-async def test_expired_lifecycle_observer_cannot_start_provider(ledger, stage, explicit_cancel):
+async def test_expired_lifecycle_observer_cannot_start_provider(
+    ledger, stage, explicit_cancel, expire_at_confirmed_phase,
+):
     calls = []
     events = []
     entered = asyncio.Event()
@@ -134,12 +165,14 @@ async def test_expired_lifecycle_observer_cannot_start_provider(ledger, stage, e
                 return  # hostile/buggy observer suppresses the deadline cancellation
 
     worker = asyncio.create_task(execute_chat(
-        request(), route(WorkloadLimits() if explicit_cancel else WorkloadLimits(deadline_seconds=.05)),
+        request(), route(WorkloadLimits() if explicit_cancel else WorkloadLimits(deadline_seconds=10)),
         client_factory=lambda _: client, event_sink=observe,
     ))
     await asyncio.wait_for(entered.wait(), 1)
     if explicit_cancel:
         worker.cancel()
+    else:
+        expire_at_confirmed_phase(worker)
     with pytest.raises(asyncio.CancelledError if explicit_cancel else TimeoutError):
         await worker
     assert calls == []
@@ -209,14 +242,18 @@ async def test_expired_stream_cannot_publish_fragment_after_suppressed_cancellat
     assert events[-1].error_code == "timeout"
 
 
-async def test_late_real_sdk_response_retains_admitted_spend_reservation(ledger, monkeypatch):
+async def test_late_real_sdk_response_retains_admitted_spend_reservation(
+    ledger, monkeypatch, expire_at_confirmed_phase,
+):
     events = []
+    entered = asyncio.Event()
     monkeypatch.setattr(usage_ledger, "load_price_map", lambda: {"models": {
         "openai/fixture": {"input_per_m": 1, "output_per_m": 1,
                            "cache_write_mult": 1, "cache_read_mult": 1},
     }})
 
     async def transport(_):
+        entered.set()
         try:
             await asyncio.Future()
         except asyncio.CancelledError:
@@ -231,14 +268,62 @@ async def test_late_real_sdk_response_retains_admitted_spend_reservation(ledger,
         api_key="synthetic-unused-key", base_url="https://fixture.invalid/v1", max_retries=0,
         http_client=httpx.AsyncClient(transport=httpx.MockTransport(transport)),
     ) as client:
+        worker = asyncio.create_task(execute_chat(
+            request(), route(WorkloadLimits(100, 10, .01)),
+            client_factory=lambda _: client, event_sink=events.append,
+        ))
+        await asyncio.wait_for(entered.wait(), 1)
+        with sqlite3.connect(ledger) as conn:
+            assert conn.execute("SELECT COUNT(*) FROM model_call_budget_reservations").fetchone() == (1,)
+        expire_at_confirmed_phase(worker)
         with pytest.raises(TimeoutError):
-            await execute_chat(request(), route(WorkloadLimits(100, .05, .01)),
-                               client_factory=lambda _: client, event_sink=events.append)
+            await worker
+    assert client.is_closed()
     with sqlite3.connect(ledger) as conn:
         assert conn.execute("SELECT COUNT(*) FROM model_call_budget_reservations").fetchone() == (1,)
         assert conn.execute("SELECT COUNT(*) FROM llm_calls").fetchone() == (0,)
     assert not any(event.event_type == "completed" for event in events)
     assert events[-1].error_code == "timeout"
+
+
+@pytest.mark.parametrize("spend_capped", [False, True])
+async def test_short_host_deadline_before_admission_never_creates_a_provider_or_reservation(
+    ledger, monkeypatch, spend_capped,
+):
+    """The CI signatures are valid early refusal, not late-response evidence."""
+    entered, release, finished = threading.Event(), threading.Event(), threading.Event()
+    original = model_execution.resolve_model_child_budget
+    calls, events = [], []
+
+    def held(*args, **kwargs):
+        entered.set()
+        try:
+            assert release.wait(2)
+            return original(*args, **kwargs)
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(model_execution, "resolve_model_child_budget", held)
+    limits = WorkloadLimits(100, .05, .01) if spend_capped else WorkloadLimits(deadline_seconds=.05)
+    worker = asyncio.create_task(execute_chat(
+        request(), route(limits), client_factory=lambda _: calls.append(True), event_sink=events.append,
+    ))
+    try:
+        assert await asyncio.to_thread(entered.wait, 1)
+        with pytest.raises(TimeoutError):
+            await worker
+        assert calls == []
+        assert [(event.event_type, event.progress_stage, event.error_code) for event in events] == [
+            ("failed", None, "timeout"),
+        ]
+    finally:
+        release.set()
+        assert await asyncio.to_thread(finished.wait, 1)
+    if ledger.exists():
+        with sqlite3.connect(ledger) as conn:
+            exists = conn.execute("SELECT 1 FROM sqlite_master WHERE name='model_call_budget_reservations'").fetchone()
+            if exists:
+                assert conn.execute("SELECT COUNT(*) FROM model_call_budget_reservations").fetchone() == (0,)
 
 
 async def test_synchronous_provider_delay_cannot_evade_monotonic_deadline(ledger):
