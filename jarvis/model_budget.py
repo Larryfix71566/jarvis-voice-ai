@@ -32,6 +32,7 @@ _SQLITE_MAX_INT = 2 ** 63 - 1
 _EPHEMERAL_SEAL = re.compile(r"[0-9a-f]{64}\Z")
 _SCOPE_ID = re.compile(r"[0-9a-f]{32}\Z")
 _EPHEMERAL_BUDGET_KEY = secrets.token_bytes(32)
+_MAX_BUDGET_SCOPES = 64
 
 
 class ModelBudgetUnavailable(ModelRouteError):
@@ -99,10 +100,16 @@ class ChildTaskBudget:
     owner: TaskBudget
     child: TaskBudget
     _seal: str = field(default="", repr=False)
+    _ancestors: tuple[TaskBudget, ...] = field(default=(), repr=False)
 
     @property
     def limits(self) -> WorkloadLimits:
-        return self.child.limits
+        path = _budget_path(self)
+        def minimum(name):
+            return min((getattr(b.limits, name) for b in path
+                        if getattr(b.limits, name) is not None), default=None)
+        return WorkloadLimits(minimum("max_output_tokens_per_call"), minimum("deadline_seconds"),
+                              minimum("max_estimated_spend_usd_per_task"))
 
     @property
     def workload(self) -> str:
@@ -120,7 +127,7 @@ class ChildTaskBudget:
 def _child_seal(binding: ChildTaskBudget) -> str:
     try:
         parts = []
-        for budget in (binding.owner, binding.child):
+        for budget in (binding.owner, *binding._ancestors, binding.child):
             parts.append((budget.user_id, budget.workload, budget.parent_request_id,
                           budget.limits.as_metadata(), budget.scope_id, budget.started_at,
                           budget.deadline_at, budget.spend_ceiling_usd, budget._ephemeral_seal))
@@ -131,18 +138,33 @@ def _child_seal(binding: ChildTaskBudget) -> str:
         raise ModelBudgetUnavailable("budget_policy_mismatch") from None
 
 
-def _issue_child(owner: TaskBudget, child: TaskBudget) -> ChildTaskBudget:
-    value = ChildTaskBudget(owner, child)
+def _issue_child(owner: TaskBudget, child: TaskBudget, *, ancestors: tuple[TaskBudget, ...] = ()) -> ChildTaskBudget:
+    value = ChildTaskBudget(owner, child, _ancestors=ancestors)
     return replace(value, _seal=_child_seal(value))
+
+
+def _budget_path(binding: ChildTaskBudget) -> tuple[TaskBudget, ...]:
+    if (not binding._ancestors and binding.owner.workload == binding.child.workload
+            and binding.owner.scope_id == binding.child.scope_id):
+        return (binding.child,)
+    return (binding.owner, *binding._ancestors, binding.child)
 
 
 def _validate_child(binding: ChildTaskBudget) -> None:
     if type(binding) is not ChildTaskBudget:
         raise ModelBudgetUnavailable("budget_scope_mismatch")
-    _validate_handle(binding.owner)
-    _validate_handle(binding.child)
-    if (binding.owner.user_id != binding.child.user_id
-            or binding.owner.parent_request_id != binding.child.parent_request_id):
+    if type(binding._ancestors) is not tuple or len(binding._ancestors) > _MAX_BUDGET_SCOPES - 2:
+        raise ModelBudgetUnavailable("budget_scope_mismatch")
+    for budget in (binding.owner, *binding._ancestors, binding.child):
+        _validate_handle(budget)
+        if (budget.user_id != binding.owner.user_id
+                or budget.parent_request_id != binding.owner.parent_request_id):
+            raise ModelBudgetUnavailable("budget_scope_mismatch")
+    path = _budget_path(binding)
+    if (len({budget.workload for budget in path}) != len(path)
+            or len({budget.scope_id for budget in path if budget.scope_id is not None})
+            != sum(budget.scope_id is not None for budget in path)
+            or any(budget.scope_id is None for budget in path) != all(budget.scope_id is None for budget in path)):
         raise ModelBudgetUnavailable("budget_scope_mismatch")
     if (type(binding._seal) is not str or not _EPHEMERAL_SEAL.fullmatch(binding._seal)
             or not hmac.compare_digest(binding._seal, _child_seal(binding))):
@@ -436,7 +458,28 @@ def _parent_link(conn: sqlite3.Connection, scope: str) -> str | None:
     return None if row is None else row[0]
 
 
-def _linked_owner(workload: str, parent: str) -> TaskBudget | None:
+def _read_budget_chain(conn: sqlite3.Connection, leaf: sqlite3.Row) -> tuple[TaskBudget, ...]:
+    """Follow immediate sponsors; every row belongs to this tenant/request."""
+    reverse = []
+    seen = set()
+    row = leaf
+    while True:
+        if (row is None or row["scope_id"] in seen or len(reverse) >= _MAX_BUDGET_SCOPES
+                or row["user_id"] != _owner() or row["parent_request_id"] != leaf["parent_request_id"]):
+            raise ModelBudgetUnavailable("budget_scope_mismatch")
+        seen.add(row["scope_id"])
+        reverse.append(_row_budget(row))
+        parent = _parent_link(conn, row["scope_id"])
+        if parent is None:
+            break
+        row = conn.execute("SELECT * FROM model_task_budgets WHERE scope_id=?", (parent,)).fetchone()
+    path = tuple(reversed(reverse))
+    if len({budget.workload for budget in path}) != len(path):
+        raise ModelBudgetUnavailable("budget_scope_mismatch")
+    return path
+
+
+def _linked_binding(workload: str, parent: str) -> ChildTaskBudget | None:
     """Read persisted sponsorship without creating/updating an ordinary store."""
     try:
         conn = usage_ledger.existing_model_budget_connection()
@@ -450,19 +493,61 @@ def _linked_owner(workload: str, parent: str) -> TaskBudget | None:
                                  (_owner(), workload, parent)).fetchone()
             if child is None:
                 return None
-            root_id = _parent_link(conn, child["scope_id"])
-            if root_id is None:
+            if _parent_link(conn, child["scope_id"]) is None:
                 return None
-            root = conn.execute("SELECT * FROM model_task_budgets WHERE scope_id=?", (root_id,)).fetchone()
-            if (root is None or root["user_id"] != _owner() or root["parent_request_id"] != parent
-                    or root_id == child["scope_id"] or _parent_link(conn, root_id) is not None):
-                raise ModelBudgetUnavailable("budget_scope_mismatch")
-            _row_budget(child)
-            return _row_budget(root)
+            path = _read_budget_chain(conn, child)
+            return _issue_child(path[0], path[-1], ancestors=path[1:-1])
     except ModelBudgetUnavailable:
         raise
     except Exception:
         raise ModelBudgetUnavailable("budget_storage_unavailable") from None
+
+
+def validate_model_child_budget(binding: ChildTaskBudget) -> ChildTaskBudget:
+    """Authenticate the complete stored path without admission or clock writes.
+
+    Returned handles use current durable policy, including expired bounds;
+    status may remain readable. Remaining-time and reservation helpers still
+    enforce expiry before any model/client operation.
+    """
+    _validate_child(binding)
+    expected = _budget_path(binding)
+    if binding.child.scope_id is None:
+        if any(_existing_scope(b.user_id, b.workload, b.parent_request_id) is not None for b in expected):
+            raise ModelBudgetUnavailable("budget_policy_mismatch")
+        return binding
+    try:
+        conn = usage_ledger.existing_model_budget_connection()
+        if conn is None:
+            raise ModelBudgetUnavailable("budget_scope_mismatch")
+        with closing(conn):
+            conn.row_factory = sqlite3.Row
+            _has_child_schema(conn)
+            leaf = conn.execute("SELECT * FROM model_task_budgets WHERE scope_id=?",
+                                (binding.child.scope_id,)).fetchone()
+            if leaf is None:
+                raise ModelBudgetUnavailable("budget_scope_mismatch")
+            path = _read_budget_chain(conn, leaf)
+            _validate_stored_path(path, expected)
+            return _issue_child(path[0], path[-1], ancestors=path[1:-1])
+    except ModelBudgetUnavailable:
+        raise
+    except Exception:
+        raise ModelBudgetUnavailable("budget_storage_unavailable") from None
+
+
+def _validate_stored_path(path, expected):
+    if ([(b.scope_id, b.workload, b.parent_request_id, b.started_at) for b in path]
+            != [(b.scope_id, b.workload, b.parent_request_id, b.started_at) for b in expected]):
+        raise ModelBudgetUnavailable("budget_scope_mismatch")
+    for current, prior in zip(path, expected):
+        for actual, captured in (
+            (current.limits.max_output_tokens_per_call, prior.limits.max_output_tokens_per_call),
+            (current.spend_ceiling_usd, prior.spend_ceiling_usd),
+            (current.deadline_at, prior.deadline_at),
+        ):
+            if captured is not None and (actual is None or actual > captured):
+                raise ModelBudgetUnavailable("budget_policy_mismatch")
 
 
 def _write_scope(conn, workload, parent, limits, current, origin, *, absolute_deadline=None):
@@ -610,7 +695,7 @@ def _begin_model_child_budget(owner: TaskBudget, workload: str, limits: Workload
         linked = _parent_link(conn, child.scope_id)
         if linked is not None and linked != root.scope_id:
             raise ModelBudgetUnavailable("budget_scope_mismatch")
-        if conn.execute("SELECT 1 FROM model_task_budget_links WHERE parent_scope_id=?", (child.scope_id,)).fetchone():
+        if linked is None and conn.execute("SELECT 1 FROM model_task_budget_links WHERE parent_scope_id=?", (child.scope_id,)).fetchone():
             raise ModelBudgetUnavailable("budget_scope_mismatch")
         conn.execute("INSERT OR IGNORE INTO model_task_budget_links(child_scope_id,parent_scope_id,created_at) VALUES (?,?,?)",
                      (child.scope_id, root.scope_id, current))
@@ -620,6 +705,97 @@ def _begin_model_child_budget(owner: TaskBudget, workload: str, limits: Workload
                      "SELECT reservation_id,? FROM model_call_budget_reservations WHERE scope_id=?",
                      (root.scope_id, child.scope_id))
         return _issue_child(root, child)
+
+
+def _merged_limits(first: WorkloadLimits, second: WorkloadLimits) -> WorkloadLimits:
+    return WorkloadLimits(*(_tightest(a, b) for a, b in zip(
+        tuple(first.as_metadata().values()), tuple(second.as_metadata().values()))))
+
+
+def _refresh_model_binding(binding: ChildTaskBudget, limits: WorkloadLimits, *, started_at=None, now=None):
+    binding = validate_model_child_budget(binding)
+    limits = _merged_limits(limits, binding.child.limits)
+    if not binding._ancestors:
+        return begin_model_child_budget(binding.owner, binding.workload, limits,
+                                        started_at=started_at, now=now)
+    parent = _issue_child(binding.owner, binding._ancestors[-1], ancestors=binding._ancestors[:-1])
+    return begin_model_descendant_budget(parent, binding.workload, limits,
+                                         started_at=started_at, now=now)
+
+
+def _materialize_model_binding(binding: ChildTaskBudget, *, started_at=None, now=None):
+    if not binding._ancestors:
+        return _begin_model_child_budget(binding.owner, binding.workload, binding.child.limits,
+            started_at=started_at, now=now, persist=True)
+    parent = _issue_child(binding.owner, binding._ancestors[-1], ancestors=binding._ancestors[:-1])
+    parent = _materialize_model_binding(parent, started_at=started_at, now=now)
+    return begin_model_descendant_budget(parent, binding.workload, binding.child.limits,
+                                         started_at=started_at, now=now)
+
+
+def begin_model_descendant_budget(parent: ChildTaskBudget, workload: str, limits: WorkloadLimits, *,
+                                  started_at: float | None = None, now: float | None = None) -> ChildTaskBudget:
+    """Fund a leaf from an authentic coordinator and every retained ancestor.
+
+    The original root remains .owner. Same-workload calls refine/coalesce the
+    actual coordinator. No bare TaskBudget or JSON can create a descendant,
+    and an existing leaf with a different immediate sponsor cannot reparent.
+    """
+    _validate_child(parent)
+    if type(limits) is not WorkloadLimits:
+        raise ModelBudgetUnavailable("budget_policy_mismatch")
+    _identifiers(workload, parent.parent_request_id)
+    if workload == parent.workload:
+        return _refresh_model_binding(parent, limits, started_at=started_at, now=now)
+    if workload in {budget.workload for budget in _budget_path(parent)}:
+        raise ModelBudgetUnavailable("budget_scope_mismatch")
+    if len(_budget_path(parent)) >= _MAX_BUDGET_SCOPES:
+        raise ModelBudgetUnavailable("budget_scope_mismatch")
+    parent = validate_model_child_budget(parent)
+    if (parent.child.scope_id is None and limits == WorkloadLimits()
+            and all(b.limits == WorkloadLimits() for b in _budget_path(parent))
+            and _existing_scope(parent.user_id, workload, parent.parent_request_id) is None):
+        return _issue_child(parent.owner, _issue_ephemeral_budget(parent.user_id, workload,
+            parent.parent_request_id, limits), ancestors=_budget_path(parent)[1:])
+    parent = _refresh_model_binding(parent, WorkloadLimits(), started_at=started_at, now=now)
+    if parent.child.scope_id is None:
+        # Persist the authenticated coordinator only for this constrained
+        # descendant; no invented cap is used to force storage.
+        parent = _materialize_model_binding(parent, started_at=started_at, now=now)
+    with _transaction() as conn:
+        current = _clock_value(now)
+        origin = current if started_at is None else _clock_value(started_at)
+        if origin > current:
+            raise ModelBudgetUnavailable("budget_clock_mismatch")
+        rows = _binding_rows(conn, parent, current)
+        if any(row["deadline_at"] is not None and row["deadline_at"] <= current for row in rows):
+            conn.commit()  # only validated ancestor clock observations exist
+            raise ModelBudgetUnavailable("budget_deadline_exhausted")
+        existing = conn.execute("SELECT * FROM model_task_budgets WHERE user_id=? AND workload=? AND parent_request_id=?",
+                                (_owner(), workload, parent.parent_request_id)).fetchone()
+        if existing is not None:
+            linked = _parent_link(conn, existing["scope_id"])
+            if (linked is not None and linked != parent.child.scope_id) or (linked is None and conn.execute(
+                    "SELECT 1 FROM model_task_budget_links WHERE parent_scope_id=?", (existing["scope_id"],)).fetchone()):
+                raise ModelBudgetUnavailable("budget_scope_mismatch")
+        path = tuple(_row_budget(row) for row in rows)
+        inherited = limits
+        for budget in path:
+            inherited = WorkloadLimits(
+                _tightest(inherited.max_output_tokens_per_call, budget.limits.max_output_tokens_per_call),
+                inherited.deadline_seconds,
+                _tightest(inherited.max_estimated_spend_usd_per_task, budget.limits.max_estimated_spend_usd_per_task))
+        expiry = min((b.deadline_at for b in path if b.deadline_at is not None), default=None)
+        child = _write_scope(conn, workload, parent.parent_request_id, inherited, current, origin,
+                             absolute_deadline=expiry)
+        conn.execute("INSERT OR IGNORE INTO model_task_budget_links(child_scope_id,parent_scope_id,created_at) VALUES (?,?,?)",
+                     (child.scope_id, path[-1].scope_id, current))
+        for budget in path:
+            conn.execute("INSERT OR IGNORE INTO model_call_budget_reservation_scopes(reservation_id,scope_id) "
+                "SELECT r.reservation_id,? FROM model_call_budget_reservations r WHERE r.scope_id=? OR EXISTS "
+                "(SELECT 1 FROM model_call_budget_reservation_scopes s WHERE s.reservation_id=r.reservation_id AND s.scope_id=?)",
+                (budget.scope_id, child.scope_id, child.scope_id))
+        return _issue_child(path[0], child, ancestors=path[1:])
 
 
 def resolve_model_child_budget(workload: str, parent_request_id: str, limits: WorkloadLimits, *,
@@ -633,37 +809,31 @@ def resolve_model_child_budget(workload: str, parent_request_id: str, limits: Wo
     _identifiers(workload, parent_request_id)
     if type(limits) is not WorkloadLimits:
         raise ModelBudgetUnavailable("budget_policy_mismatch")
-    owner = _linked_owner(workload, parent_request_id)
+    binding = _linked_binding(workload, parent_request_id)
     if child_budget is not None:
         _validate_child(child_budget)
         if child_budget.workload != workload or child_budget.parent_request_id != parent_request_id:
             raise ModelBudgetUnavailable("budget_scope_mismatch")
-        if owner is not None and (owner.workload != child_budget.owner.workload
-                                  or owner.scope_id != child_budget.owner.scope_id):
-            raise ModelBudgetUnavailable("budget_scope_mismatch")
-        owner = owner or child_budget.owner
-        limits = WorkloadLimits(*(_tightest(a, b) for a, b in zip(
-            tuple(limits.as_metadata().values()), tuple(child_budget.limits.as_metadata().values()))))
-    if owner is None:
+        if binding is not None:
+            _validate_stored_path(_budget_path(binding), _budget_path(child_budget))
+        binding = binding or child_budget
+        limits = _merged_limits(limits, child_budget.child.limits)
+    if binding is None:
         return None
-    return begin_model_child_budget(owner, workload, limits, started_at=started_at, now=now)
+    return _refresh_model_binding(binding, limits, started_at=started_at, now=now)
 
 
 def _binding_rows(conn, binding, current):
-    root = _scope_row(conn, binding.owner, current)
-    child = root if binding.owner.scope_id == binding.child.scope_id else _scope_row(conn, binding.child, current)
-    if (root["scope_id"] != child["scope_id"] and _parent_link(conn, child["scope_id"]) != root["scope_id"]):
-        raise ModelBudgetUnavailable("budget_scope_mismatch")
-    if _parent_link(conn, root["scope_id"]) is not None:
-        raise ModelBudgetUnavailable("budget_scope_mismatch")
-    return root, child
+    expected = _budget_path(binding)
+    rows = tuple(_scope_row(conn, budget, current) for budget in expected)
+    _validate_stored_path(_read_budget_chain(conn, rows[-1]), expected)
+    return rows
 
 
 def remaining_child_seconds(binding: ChildTaskBudget, *, now: float | None = None) -> float:
     _validate_child(binding)
     if binding.child.scope_id is None:
-        if (_existing_scope(binding.owner.user_id, binding.owner.workload, binding.parent_request_id) is not None
-                or _existing_scope(binding.user_id, binding.workload, binding.parent_request_id) is not None):
+        if any(_existing_scope(b.user_id, b.workload, b.parent_request_id) is not None for b in _budget_path(binding)):
             raise ModelBudgetUnavailable("budget_policy_mismatch")
         return math.inf
     with _transaction(retain_clock_on_refusal=True) as conn:
@@ -691,14 +861,17 @@ def reserve_model_child_call_budget(binding: ChildTaskBudget, task_id: str, prov
         return ModelCallReservation(reservation, None)
     with _transaction(retain_clock_on_refusal=True) as conn:
         current = _clock_value(now)
-        root, child = _binding_rows(conn, binding, current)
-        rows = {row["scope_id"]: row for row in (root, child)}
+        funding = _binding_rows(conn, binding, current)
+        root, child = funding[0], funding[-1]
+        rows = {row["scope_id"]: row for row in funding}
         if any(row["deadline_at"] is not None and current >= row["deadline_at"] for row in rows.values()):
             raise ModelBudgetUnavailable("budget_deadline_exhausted")
-        current_output = _tightest(root["max_output_tokens_per_call"], child["max_output_tokens_per_call"])
-        current_spend = _tightest(*(
+        current_output = min((row["max_output_tokens_per_call"] for row in funding
+                              if row["max_output_tokens_per_call"] is not None), default=None)
+        current_spend = min((
             None if row["spend_ceiling_usd"] is None else
-            _decimal(row["spend_ceiling_usd"], code="budget_policy_mismatch") for row in (root, child)))
+            _decimal(row["spend_ceiling_usd"], code="budget_policy_mismatch") for row in funding
+            if row["spend_ceiling_usd"] is not None), default=None)
         # A newly stricter DB policy must be reopened before request-output
         # and retry proofs are made; a guessed estimate of 1 is no authority.
         if ((current_output is not None and (binding.limits.max_output_tokens_per_call is None
