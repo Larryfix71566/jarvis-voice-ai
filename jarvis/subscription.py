@@ -19,6 +19,8 @@ import sys
 import tempfile
 import time
 from collections.abc import Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -37,6 +39,33 @@ class SubscriptionCapabilityError(SubscriptionRuntimeError):
 
     def __init__(self, message: str) -> None:
         super().__init__(message, category="capability")
+
+
+_text_owner = ContextVar('subscription_text_owner', default=None)
+
+
+def _assert_text_owner() -> None:
+    owner = _text_owner.get()
+    if owner is not None and owner.cleanup_unverified:
+        raise SubscriptionRuntimeError('owned subscription cleanup is unverified', category='cleanup')
+
+
+@contextmanager
+def _text_owner_scope(owner):
+    token = _text_owner.set(owner)
+    try:
+        _assert_text_owner()
+        try:
+            yield
+            # Another active call on this owner may have failed its cleanup
+            # while this one awaited the runtime. Do not publish its output.
+            _assert_text_owner()
+        except SubscriptionRuntimeError as exc:
+            if exc.category == 'cleanup':
+                owner.cleanup_unverified = True
+            raise
+    finally:
+        _text_owner.reset(token)
 
 
 # These are the only caller environment values copied to a provider process.
@@ -419,6 +448,7 @@ def _run_sync(argv: Sequence[str], prompt: str, timeout: float, *, provider: str
             f"{provider} subscription runtime requires verified process-group cancellation on this platform"
         )
     with _temp_cwd() as workdir:
+        _assert_text_owner()
         process: subprocess.Popen[str] | None = None
         try:
             process = subprocess.Popen(
@@ -555,6 +585,9 @@ async def _run_async(argv: Sequence[str], prompt: str, timeout: float, *, provid
             f"{provider} subscription runtime requires verified process-group cancellation on this platform"
         )
     with _temp_cwd() as workdir:
+        # This runs after a Codex capability-receipt worker returns, rather
+        # than treating its earlier preflight as permission to start a child.
+        _assert_text_owner()
         try:
             process = await asyncio.create_subprocess_exec(
                 *_materialize_catalog(argv, workdir, catalog), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
@@ -648,13 +681,15 @@ class _Completions:
     def __init__(self, model: str, timeout: float):
         self.model = model
         self.timeout = timeout
+        self.cleanup_unverified = False
 
     def create(self, **kwargs: Any) -> Any:
         if kwargs.get("tools"):
             raise SubscriptionRuntimeError("subscription text adapter does not support Mortimer tools")
         _assert_text_capabilities(kwargs)
-        return _run_claude_response(str(kwargs.get("model") or self.model),
-                           list(kwargs.get("messages") or []), self.timeout)
+        with _text_owner_scope(self):
+            return _run_claude_response(str(kwargs.get("model") or self.model),
+                               list(kwargs.get("messages") or []), self.timeout)
 
 
 class _AsyncCompletions(_Completions):
@@ -662,8 +697,9 @@ class _AsyncCompletions(_Completions):
         if kwargs.get("tools"):
             raise SubscriptionRuntimeError("subscription text adapter does not support Mortimer tools")
         _assert_text_capabilities(kwargs)
-        return await _run_claude_response_async(str(kwargs.get("model") or self.model),
-                                       list(kwargs.get("messages") or []), self.timeout)
+        with _text_owner_scope(self):
+            return await _run_claude_response_async(str(kwargs.get("model") or self.model),
+                                           list(kwargs.get("messages") or []), self.timeout)
 
 
 class SubscriptionTextClient:
@@ -672,11 +708,19 @@ class SubscriptionTextClient:
         self.base_url = "subscription://claude"
         self.chat = SimpleNamespace(completions=_AsyncCompletions(model, timeout))
 
+    @property
+    def cleanup_unverified(self):
+        return self.chat.completions.cleanup_unverified
+
 
 class SubscriptionSyncTextClient:
     def __init__(self, model: str, *, timeout: float = 120.0):
         self.base_url = "subscription://claude"
         self.chat = SimpleNamespace(completions=_Completions(model, timeout))
+
+    @property
+    def cleanup_unverified(self):
+        return self.chat.completions.cleanup_unverified
 
 
 class _CodexCompletions(_Completions):
@@ -684,8 +728,9 @@ class _CodexCompletions(_Completions):
         if kwargs.get("tools"):
             raise SubscriptionRuntimeError("Codex subscription text adapter does not support Mortimer tools")
         _assert_text_capabilities(kwargs)
-        return _run_codex_response(str(kwargs.get("model") or self.model),
-                          list(kwargs.get("messages") or []), self.timeout)
+        with _text_owner_scope(self):
+            return _run_codex_response(str(kwargs.get("model") or self.model),
+                              list(kwargs.get("messages") or []), self.timeout)
 
 
 class _AsyncCodexCompletions(_CodexCompletions):
@@ -693,8 +738,9 @@ class _AsyncCodexCompletions(_CodexCompletions):
         if kwargs.get("tools"):
             raise SubscriptionRuntimeError("Codex subscription text adapter does not support Mortimer tools")
         _assert_text_capabilities(kwargs)
-        return await _run_codex_response_async(str(kwargs.get("model") or self.model),
-                                      list(kwargs.get("messages") or []), self.timeout)
+        with _text_owner_scope(self):
+            return await _run_codex_response_async(str(kwargs.get("model") or self.model),
+                                          list(kwargs.get("messages") or []), self.timeout)
 
 
 class CodexSubscriptionTextClient:
@@ -703,8 +749,16 @@ class CodexSubscriptionTextClient:
         self.base_url = "subscription://codex"
         self.chat = SimpleNamespace(completions=_AsyncCodexCompletions(model, timeout))
 
+    @property
+    def cleanup_unverified(self):
+        return self.chat.completions.cleanup_unverified
+
 
 class CodexSubscriptionSyncTextClient:
     def __init__(self, model: str, *, timeout: float = 120.0):
         self.base_url = "subscription://codex"
         self.chat = SimpleNamespace(completions=_CodexCompletions(model, timeout))
+
+    @property
+    def cleanup_unverified(self):
+        return self.chat.completions.cleanup_unverified

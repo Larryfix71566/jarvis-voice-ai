@@ -481,6 +481,15 @@ class SubAgent:
             self._native_route_clients[key] = make_route_client(route)
         return self._native_route_clients[key]
 
+    def _execution_client(self, client):
+        # execute_chat invokes this after admission. A queued task may already
+        # hold a native client whose other owner failed during the wait.
+        native_owner = any(owned is client for owned in self._native_route_clients.values())
+        if (id(client) in self._native_cleanup_quarantined
+                or (native_owner and getattr(client, 'cleanup_unverified', False))):
+            raise ModelRouteError('native runtime cleanup remains unverified')
+        return client
+
     def _system_prompt_for(self, task: str) -> str:
         """The system prompt this RUN gets.
 
@@ -1408,9 +1417,10 @@ class SubAgent:
                         extra_body=extra_body or None,
                     ),
                     resolved_route,
-                    client_factory=lambda _route: client,
+                    client_factory=lambda _route: self._execution_client(client),
                     task_budget=task_budget,
                 )
+                self._execution_client(client)
                 raise_if_cancelled()
                 record_execution_result(
                     self.name, execution, session_id=runlog.run_id
