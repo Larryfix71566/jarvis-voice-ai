@@ -37,6 +37,7 @@ from jarvis.model_budget import (
     ModelBudgetUnavailable, TaskBudget, ChildTaskBudget, begin_model_task_budget,
     remaining_seconds, reserve_model_call_budget,
     resolve_model_child_budget, remaining_child_seconds, reserve_model_child_call_budget,
+    validate_model_child_budget,
 )
 from jarvis.privacy_policy import (
     DataPolicy,
@@ -963,13 +964,20 @@ async def execute_chat(request: ModelExecutionRequest,
         if (isinstance(task_budget, TaskBudget) and type(task_budget.limits) is WorkloadLimits
                 and task_budget.limits.deadline_seconds is not None):
             setup_limit = min(setup_limit, task_budget.limits.deadline_seconds)
-        if isinstance(child_budget, ChildTaskBudget):
-            for handle in (child_budget.owner, child_budget.child):
+        if child_budget is not None:
+            # These captured fields can only shorten the setup timeout. The
+            # authoritative storage read itself belongs inside that timeout.
+            handles = ((child_budget.owner, *child_budget._ancestors, child_budget.child)
+                       if type(child_budget) is ChildTaskBudget and type(child_budget._ancestors) is tuple else ())
+            for handle in handles:
                 if (isinstance(handle, TaskBudget) and type(handle.limits) is WorkloadLimits
                         and handle.limits.deadline_seconds is not None):
                     setup_limit = min(setup_limit, handle.limits.deadline_seconds)
         async with asyncio.timeout_at(entry_loop_time + setup_limit) as deadline:
             require_active()
+            if child_budget is not None:
+                child_budget = await asyncio.to_thread(validate_model_child_budget, child_budget)
+                require_active()
             limits = resolved.limits
             # The host-only binding is checked against durable owner/child
             # records, including when this invocation omits the keyword. A
@@ -1048,6 +1056,17 @@ async def execute_chat(request: ModelExecutionRequest,
                 for item in request.context:
                     if isinstance(item, ModelContextMessage) and item.role == "tool":
                         await emit_tool_result(item.tool_call_id, item.name)
+                if budget.scope_id is not None:
+                    estimate = _estimated_text_input_tokens(messages, tools) if spend_capped else 1
+                    await asyncio.to_thread(
+                        reserve_model_child_call_budget if binding is not None else reserve_model_call_budget,
+                        binding if binding is not None else budget, request.task_id,
+                        resolved.provider, resolved.model, resolved.route.name,
+                        resolved.route.billing, estimate, request.output.max_tokens or 1,
+                    )
+                    # Every inherited pool admits the attempt before client
+                    # construction. Failed setup retains the same reservation.
+                    require_active()
                 client = (client_factory(resolved) if client_factory is not None
                           else make_route_client(resolved, timeout=request.timeout_s))
                 require_active()
@@ -1069,17 +1088,6 @@ async def execute_chat(request: ModelExecutionRequest,
                     completion_args["stream"] = True
                 if spend_capped and not _api_adapter_has_no_retries(client):
                     raise ModelBudgetUnavailable("budget_unsupported_route")
-                if budget.scope_id is not None:
-                    estimate = _estimated_text_input_tokens(messages, tools) if spend_capped else 1
-                    await asyncio.to_thread(
-                        reserve_model_child_call_budget if binding is not None else reserve_model_call_budget,
-                        binding if binding is not None else budget, request.task_id,
-                        resolved.provider, resolved.model, resolved.route.name,
-                        resolved.route.billing, estimate, request.output.max_tokens or 1,
-                    )
-                    # A cancellation suppressed by a custom adapter must not
-                    # publish or start a provider operation after reservation.
-                    require_active()
                 await emit("progress", progress_stage="provider_request")
                 native_execute = getattr(client, "execute_request", None)
                 if native_execute is not None:

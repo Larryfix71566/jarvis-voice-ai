@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 import hashlib
 import json
 import logging
+import math
 import os
 import random
 import threading
@@ -38,7 +39,8 @@ from jarvis.model_execution import (
 )
 from jarvis.model_budget import (
     ChildTaskBudget, ModelBudgetUnavailable, TaskBudget,
-    begin_model_child_budget, begin_model_task_budget, remaining_child_seconds,
+    begin_model_child_budget, begin_model_descendant_budget,
+    begin_model_task_budget, remaining_child_seconds, validate_model_child_budget,
 )
 from jarvis.model_routing import (
     AccessRoute,
@@ -105,8 +107,38 @@ class _CouncilExecution:
             raise ModelBudgetUnavailable("budget_deadline_exhausted")
 
 
-def _host_policy(context: dict, workload: str, policy: DataPolicy | None) -> DataPolicy:
+def _context_snapshot(context: dict) -> dict:
+    """Copy primitive context before awaits without invoking foreign serializers."""
+    def snapshot(value: Any) -> Any:
+        if value is None or type(value) in {str, bool, int}:
+            return value
+        if type(value) is float and math.isfinite(value):
+            return value
+        if type(value) in {list, tuple}:
+            return [snapshot(item) for item in value]
+        if type(value) is dict and all(type(key) is str for key in value):
+            return {key: snapshot(item) for key, item in value.items()}
+        if type(value) is DataPolicy:
+            return {"level": value.level, "source": value.source}
+        raise ModelRouteError("council context is unavailable")
+    if type(context) is not dict:
+        raise ModelRouteError("council context is unavailable")
+    return snapshot(context)
+
+
+def _host_policy(context: dict, workload: str, policy: DataPolicy | None,
+                 context_source: Any = None) -> DataPolicy:
     effective = _context_data_policy(context, workload=workload)
+    if os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1":
+        if context_source is not None:
+            from jarvis.advisory_sources import AdvisorySourceContext
+            if type(context_source) is not AdvisorySourceContext:
+                raise ModelRouteError("council source proof is unavailable")
+            effective = strictest(effective, context_source.context_policy_for(context))
+        elif context.get("document") is not None:
+            effective = strictest(effective, DataPolicy("confidential", "unverified-review-context"))
+    elif context_source is not None:
+        raise ModelRouteError("council source proof requires model routing")
     if policy is not None:
         if type(policy) is not DataPolicy:
             raise ModelRouteError("council host policy is unavailable")
@@ -139,11 +171,22 @@ def _round_owner(
 def _child_execution(
     owner: TaskBudget | None, workload: str, policy: DataPolicy,
     cancel_event: threading.Event | None, *, started_at: float, sponsored: bool,
+    coordinator: ChildTaskBudget | None = None,
 ) -> _CouncilExecution | None:
     if owner is None:
+        if coordinator is not None:
+            raise ModelBudgetUnavailable("budget_unsupported_route")
         return None
     limits = resolve_policy(workload, include_preferences=False).limits
-    binding = begin_model_child_budget(owner, workload, limits, started_at=started_at)
+    if coordinator is not None:
+        coordinator = validate_model_child_budget(coordinator)
+        root = coordinator.owner
+        if (root.user_id, root.workload, root.parent_request_id, root.scope_id) != (
+                owner.user_id, owner.workload, owner.parent_request_id, owner.scope_id):
+            raise ModelBudgetUnavailable("budget_scope_mismatch")
+        binding = begin_model_descendant_budget(coordinator, workload, limits, started_at=started_at)
+    else:
+        binding = begin_model_child_budget(owner, workload, limits, started_at=started_at)
     execution = _CouncilExecution(binding, policy, cancel_event, sponsored)
     execution.check()
     return execution
@@ -1177,6 +1220,7 @@ async def draft_candidates(
     context: dict | None = None, run_id: str | None = None,
     parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
     cancel_event: threading.Event | None = None,
+    coordinator_budget: ChildTaskBudget | None = None, context_source: Any = None,
 ) -> RoundResult | None:
     """Fan out PLAN_AUTHOR_PROMPT to every usable proposer (or the subset
     named in `members["proposers"]`) and, when `judge` is True, score the
@@ -1198,10 +1242,14 @@ async def draft_candidates(
         return None
     started_at_unix = time.time()
     try:
+        # Retain exactly the verified bytes throughout the asynchronous round.
+        snapshot = (_context_snapshot({} if context is None else context)
+                    if os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1" else context or {})
         return await _draft_candidates_inner(
-            goal, members=members, judge=judge, context=context or {}, run_id=run_id,
+            goal, members=members, judge=judge, context=snapshot, run_id=run_id,
             parent_budget=parent_budget, data_policy=data_policy,
             cancel_event=cancel_event, started_at_unix=started_at_unix,
+            coordinator_budget=coordinator_budget, context_source=context_source,
         )
     except ModelBudgetUnavailable:
         raise
@@ -1221,24 +1269,49 @@ async def _draft_candidates_inner(
     context: dict, run_id: str | None,
     parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
     cancel_event: threading.Event | None = None, started_at_unix: float | None = None,
+    coordinator_budget: ChildTaskBudget | None = None, context_source: Any = None,
 ) -> RoundResult:
     round_id = uuid.uuid4().hex
     started_at = now_iso()
     started_monotonic = time.monotonic()
     started_at_unix = time.time() if started_at_unix is None else started_at_unix
-    data_policy = _host_policy(context, "planning", data_policy)
+    data_policy = _host_policy(context, "planning", data_policy, context_source)
+    if context_source is not None:
+        source_budget = context_source.coordinator_budget
+        if coordinator_budget is not None:
+            coordinator_budget = validate_model_child_budget(coordinator_budget)
+            if (coordinator_budget.owner.scope_id, coordinator_budget.child.scope_id,
+                    coordinator_budget.user_id, coordinator_budget.parent_request_id) != (
+                    source_budget.owner.scope_id, source_budget.child.scope_id,
+                    source_budget.user_id, source_budget.parent_request_id):
+                raise ModelBudgetUnavailable("budget_scope_mismatch")
+        coordinator_budget = source_budget
+        source_cancel = context_source.cancel_event
+        if cancel_event is not None and cancel_event is not source_cancel:
+            raise ModelBudgetUnavailable("budget_scope_mismatch")
+        cancel_event = source_cancel
+    if coordinator_budget is not None:
+        if os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") != "1":
+            raise ModelBudgetUnavailable("budget_unsupported_route")
+        coordinator_budget = validate_model_child_budget(coordinator_budget)
+        if coordinator_budget.workload != "planning":
+            raise ModelBudgetUnavailable("budget_scope_mismatch")
+        if parent_budget is None:
+            parent_budget = coordinator_budget.owner
     owner = _round_owner("planning", round_id, parent_budget, cancel_event, started_at_unix)
 
     is_review = context.get("document") is not None
     placement = "review" if is_review else "doc"
     proposer_system_prompt = PLAN_REVIEW_PROMPT if is_review else PLAN_AUTHOR_PROMPT
-    adviser_policy = _host_policy(context, "council", data_policy)
+    adviser_policy = _host_policy(context, "council", data_policy, context_source)
     data_policy = strictest(data_policy, adviser_policy)
+    planning_execution = _child_execution(owner, "planning", data_policy, cancel_event,
+        started_at=started_at_unix, sponsored=parent_budget is not None,
+        coordinator=coordinator_budget)
     council_execution = _child_execution(owner, "council", adviser_policy, cancel_event,
-        started_at=started_at_unix, sponsored=parent_budget is not None)
-    author_execution = (council_execution if is_review else _child_execution(
-        owner, "planning", data_policy, cancel_event, started_at=started_at_unix,
-        sponsored=parent_budget is not None))
+        started_at=started_at_unix, sponsored=parent_budget is not None,
+        coordinator=planning_execution.budget if planning_execution is not None else None)
+    author_execution = council_execution if is_review else planning_execution
 
     registry = load_model_registry()
     profiles_by_name: dict[str, dict[str, Any]] = registry.get("profiles", {})

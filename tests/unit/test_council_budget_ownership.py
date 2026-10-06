@@ -166,12 +166,13 @@ async def test_explicit_below_floor_author_refuses_before_any_model_call(transpo
     assert report is None and state.sent == [] and state.clients == []
 
 
-async def test_review_adviser_retains_council_economy_eligibility(transport_env):
+async def test_unknown_review_document_cannot_claim_public_adviser_eligibility(transport_env):
     state = transport_env
     report = await council.draft_candidates("public review", context={"document": "public document"},
         members={"proposers": ["economy-one"]}, judge=False)
-    assert report is not None and len(report.proposals) == 1
-    assert len(state.sent) == 1 and state.captured[0][0].workload == "council"
+    # The former positive fixture supplied no acquired-source proof. Review
+    # tier eligibility is now pinned by the authenticated advisory bridge case.
+    assert report is None and state.sent == [] and state.clients == []
 
 
 async def test_owner_cancellation_drains_inflight_transport_before_publication(transport_env):
