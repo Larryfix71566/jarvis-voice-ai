@@ -30,6 +30,15 @@ no linked receipt are also unreceipted.
 Candidate: [draft PR #177](https://github.com/Larryfix71566/jarvis-voice-ai/pull/177),
 pushed for cross-system review; not merged or deployed.
 
+The 10-06 extension is claimed through merged #178 (`0960373`). It adds
+per-run SubAgent selection refresh, sealed host source handling before early
+sinks, durable optional task admission and legacy canonical council guards.
+Focused agent/execution/delegate tests: 260 passed; source registry/runlog/repo:
+176 passed; identity suites: 298 passed / three historical skips. A wider unit
+audit has 5,387 passes / three skips / the known audio-default failure; final
+review changes are checked separately. These counts do not supersede the
+earlier broad/native receipts below or imply a green deployment gate.
+
 See the [aggregate verification receipt](receipts/candidate-verification-2026-10-06.json)
 and [independent subscription review](receipts/independent-subscription-review-2026-10-06.json).
 
@@ -42,7 +51,7 @@ and [independent subscription review](receipts/independent-subscription-review-2
 ## Open items first
 
 The 10-05 changes below are **candidate implementation**, on the isolated
-`codex/ws05-execution-20261005` branch claimed through #175 and #176. They do not
+`codex/ws05-execution-20261005` branch claimed through #175, #176 and #178. They do not
 change production routing, credentials, account settings or the deployed app.
 
 - [ ] **MAR-A — deployed baseline and measurements.** The
@@ -58,8 +67,11 @@ change production routing, credentials, account settings or the deployed app.
   static privacy floors, confidential replay/settlement and sanitized late-delivery
   logs are implemented. The [source/sink regression receipt](receipts/mar-d-source-sink-regressions-2026-10-05.json)
   pins the offline repairs. Declared tool-result restrictions are checked before
-  native continuation; newly acquired or unlabelled source policy/provenance and
-  the broader legacy-path audit still require acceptance. Do not label all
+  native continuation. The 10-06 typed registry/agent boundary also defaults
+  unknown acquired sources confidential, validates guarded repository bytes,
+  sanitizes public error payloads and redacts earlier MCP buffers. Actual
+  self-edit/app-build/creator issuers and the other owned tool loops remain
+  open; their raw output does not gain an external approval. Do not label all
   authorized repository data confidential or let provider output approve itself.
 - [ ] **MAR-E — SAYGM confidential pilot.** Authentication and catalog access
   [succeeded again on 10-05](receipts/model-access-catalog-readiness-2026-10-05.json): 64 models, zero advertised confidential models.
@@ -82,9 +94,12 @@ change production routing, credentials, account settings or the deployed app.
   and review-settlement paths. Classification is not behavioral acceptance.
   Background work keeps dedicated profiles and static privacy/quality floors;
   the voice supervisor is unchanged. Enabled routing rejects duplicate canonical
-  identities before any council provider call; globally-off legacy council still
-  lacks that guard. Complete enabled-mode run/usage/cancellation
-  evidence and legacy council canonical-identity coverage remain open.
+  identities before any council provider call; the 10-06 legacy loader/member
+  guard also rejects canonical and physical aliases before key lookup. Per-run
+  saved SubAgent choices now refresh and optional parent limits are enforced.
+  UpgradeAgent/AppBuildAgent preferences, source policy, shared limits and
+  enabled-mode failover discipline still need a bounded claimed slice. Complete
+  enabled-mode run/usage/cancellation evidence remains open.
 - [ ] **MAR-H — native and voice controls.** Native saved choices outrank defaults,
   unavailable choices remain visible, and changes invalidate drafts and late
   replies. Catalog descriptors separate profile capabilities, provider gates and

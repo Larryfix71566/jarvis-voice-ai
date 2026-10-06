@@ -394,8 +394,8 @@ def resolve_policy(workload: str, *, explicit_profile: str | None = None,
             from jarvis.model_preferences import list_preferences
             preference = next((item for item in list_preferences()
                                if item.get("workload") == workload), None)
-        except Exception:  # noqa: BLE001 — preferences are optional; route defaults remain authoritative
-            preference = None
+        except Exception:  # noqa: BLE001 — a read failure cannot authorize model substitution
+            raise ModelRouteError("saved model preferences are unavailable") from None
         if preference:
             configured_privacy = raw.get("privacy")
             saved_privacy = preference.get("privacy")

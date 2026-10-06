@@ -33,7 +33,8 @@ route while the general model registry continues to reject Haiku for
 non-voice workloads.
 
 **Current candidate status (2026-10-06):** Draft [PR #177](https://github.com/Larryfix71566/jarvis-voice-ai/pull/177) contains the committed implementation and evidence. The isolated branch
-`codex/ws05-execution-20261005` is claimed on main through #175 and #176.
+`codex/ws05-execution-20261005` is claimed on main through #175, #176 and #178
+(`#178` merged as `0960373` before its additional paths were edited).
 Production checkout, installed bundle and deployment receipt agree on
 `bde22bb`; the 10-05 aggregate-only baseline records 26 provider calls (12 LLM)
 since deployment, with no populated historical route, billing-source or
@@ -46,6 +47,18 @@ repairs, confidential replay/settlement execution, content-safe continuation
 logs, and prospective non-streaming API accounting metadata. These are local
 implementation results, not deployed acceptance.
 
+The 10-06 integration also refreshes saved selections for each SubAgent run,
+preserves concurrent snapshots and refuses unreadable preferences instead of
+using an old model. Native owners retain cleanup quarantine across ordinary
+runs and named-model preflight. Sealed host tool results are validated before
+agent/log/event/continuation sinks; unknown sources stay confidential, verified
+public failures are reduced to fixed categories, and repository source scopes
+are pinned to actual guarded paths and bytes. Optional output/deadline and
+configured-price task admission retain stricter parent bounds without writing
+observed usage or silently selecting another route. The legacy registry and
+council now reject canonical and wire aliases before key lookup. No production
+limit values are assigned.
+
 Claude 2.1.290 has a separately gated native MCP bridge. Only Mortimer's existing
 validated agent tool loop executes operations; request-bound IPC returns its
 results and mandatory system constraints to the provider runtime. Passing
@@ -57,9 +70,11 @@ three samples, no stable-p95 claim). Previous direct-API and Claude diagnostics
 failed the strict JSON-format gate, leaving their content unscored. Those
 receipts cannot establish a quality comparison with the newer Codex harness.
 
-**Open rollout gates:** all newly acquired source policies and legacy council
-identity coverage; representative research and real sandbox Developer quality;
-confidential memory pilot; supported workload spending/output limits; exact
+**Open rollout gates:** source classification for actual self-edit, app-build
+and creator operations, plus UpgradeAgent/AppBuildAgent per-run preferences,
+source labels and enabled-mode failover discipline; representative research
+and real sandbox Developer quality; confidential memory pilot; full workload
+acceptance of optional limits; exact
 running-service capabilities and activation; billing/allowance/paid-overage
 settings; voice route-control and deployed rollback acceptance. SAYGM's latest
 authenticated catalog contains 64 models and zero advertised confidential
@@ -100,6 +115,8 @@ Related documents:
 
 ## Progress
 
+- 2026-10-06 (Codex, per-run agent and execution integration): Reproduced ignored saved selections, stale credential reuse and startup refusal that survived repair; per-run route snapshots now honor confirmed choices without mutating concurrent model state, rebuild API clients for rotated keys, and retain native owners/quarantine through named preflight. Unreadable preferences and a disabled routed agent refuse instead of selecting a fallback. Host source envelopes are checked before all agent result sinks; raw/custom results cannot approve themselves. Parent deadlines cover queueing, run association and tools; optional output and configured-price spend bounds are enforced before outbound calls, including failed/cancelled reservation retention, unknown-price refusal and supported-SDK zero-retry proof. The focused agent/execution/delegate suite passes 260 cases. Source handling separately passes 176 tests; legacy identity handling passes 298 with three unchanged historical skips. These are candidate results, not deployment or real Developer acceptance. The wider unit audit reports 5,387 passes, three skips and the same pre-existing audio-default failure; the final review fixes receive their own rerun.
+
 - 2026-10-06 (Codex, host-result and workload-limit contracts): Added frozen host execution scopes and HMAC-bound result envelopes that authenticate parent/task/tool-call/arguments/content/source policy, while keeping scope keys and provenance out of provider messages. Tampering, replay, forged JSON labels and repr-hook objects are refused; unknown primitive results inherit confidential policy. New and existing privacy/execution tests pass 115 cases. Optional immutable workload limits validate and snapshot nullable output/deadline/estimated-spend fields; related route tests pass 72 cases. These are contract pieces, not completed registry/execution enforcement or rollout acceptance; no production values are set.
 
 - 2026-10-06 (Codex, next independent slice): Candidate #177 at `2992183` now passes all five CI checks. Docs claim #178 reserves optional output/deadline/configured-price task-spend keys and extends the bounded host source, early MCP log and legacy canonical-identity paths; those new paths stay untouched until the claim merges on main. A no-provider source audit proves nonfinancial unknown content reaches early registry error logging and subsequent agent/model sinks. Existing source-policy helpers and workload-limit contract paths are already claimed; no production values are assigned.
@@ -129,9 +146,10 @@ Related documents:
 
 These open gates are not waived by the passing candidate tests:
 
-- **Typed source policies (MAR-D/G):** Claim the local registry/executor contract before editing it. A host-issued tool-result envelope must bind source scope and privacy to the exact parent/task/tool-call, with source policy joined to input/workload floors before any run log, UI event, derived instruction or provider continuation. Unknown/mismatched newly acquired source defaults confidential. Provider JSON cannot approve itself; verified authorized repository reads remain approved external. Negative tests must cover pre-result sinks as well as the model continuation. Preserve routing-off compatibility without claiming it confidential.
-- **Council identity (MAR-B/G):** The candidate enabled-route guard rejects duplicate canonical identities before provider construction. Extend the authoritative legacy loader/member selection only after its path is claimed and reviewed; the globally-off legacy path is still open. Judge/proposer independence uses identity, never profile name.
-- **Workload limits (MAR-B/C/J):** Current request deadlines, tool counts, API token requirements and isolated pilot reservations are not a general spending policy. Reserve any added workload keys first. Subscription runtimes must refuse limits they cannot enforce; model-call estimates do not prove account charges. No exhaustion or limit failure may select a paid fallback implicitly.
+- **Typed source policies (MAR-D/G):** The claimed registry/runlog/repository and SubAgent integration now authenticates exact source scopes and protects early sinks. Remaining actual self-edit/app-build/creator sources need trusted issuers; unknown results correctly stop external continuation today. Claim any additional bot/creator or sandbox receipt paths on main before editing. Reuse existing owner/session/run/revision/job/path/content authority; permission to access a workspace alone cannot approve its baseline or logs for external processing. Preserve routing-off compatibility without claiming it confidential.
+- **Council identity (MAR-B/G):** Enabled and legacy loaders/member selection now reject duplicate canonical and physical identities before credential lookup. Review the guard with the actual registry and retain representative enabled-mode council acceptance; judge/proposer independence uses identity, never profile name.
+- **Workload limits (MAR-B/C/J):** Optional reserved limits are integrated into the execution and SubAgent task boundaries; absent/null values assign no new production ceilings. Validate the remaining owned loops, deadlines, cancellation, configured prices and native unsupported-cap refusals in representative workloads. Estimates are not provider/account charge guarantees. No exhaustion or limit failure may select a paid fallback implicitly.
+- **Remaining owned execution loops (MAR-G):** A read-only audit found UpgradeAgent (including AppBuildAgent and standalone creator execution) labels raw tool history with route privacy, treats its configured default as an explicit profile, and retains planner failover in enabled mode. Its current additional claim covers canonical identity only. Claim a bounded execution/source slice before changes; refresh saved choices, authenticate acquired sources, apply the shared limits and forbid implicit route/model substitution while preserving the explicit routing-off legacy contract.
 - **Real Developer pilot (MAR-F/I):** Use the actual isolated sandbox driver through the existing permission/draft loop and exact real tool schemas. Obtain its own immutable capability receipt; the public fixture receipt cannot authorize it. Verify source policy, required constraints, cancellation, cleanup, consolidated parent ownership, quality and rollback. Text-only or no-op mocks cannot establish developer acceptance.
 - **Research and private-memory acceptance (MAR-E/I/J):** Pin the same source/scorer/framework before and after measurements, compare equivalent baseline/candidate cases, and report schema failure separately from factual quality. Source-packet synthesis does not establish full research retrieval. Use a catalog-confirmed compliant route for confidential synthetic memory; current SAYGM catalog offers none. Account allowance/paid-overage and physical/spoken checks remain Larry's gates.
 

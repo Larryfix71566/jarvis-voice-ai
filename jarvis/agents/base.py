@@ -46,7 +46,7 @@ from jarvis.agents.upgrade_agent import (
     load_model_registry,
     resolve_profile,
 )
-from jarvis.bot.sensitive_turn import arm_from_text, is_sensitive
+from jarvis.bot.sensitive_turn import arm_from_text, is_sensitive, current_sensitive_turn
 from jarvis.config import Settings
 from jarvis.model_execution import (
     ModelContextMessage,
@@ -59,11 +59,17 @@ from jarvis.model_execution import (
 from jarvis.model_routing import (
     ModelRouteError,
     ResolvedModelRoute,
+    inspect_route_choice,
     make_route_client,
     resolve_model_route_checked,
     resolve_policy,
 )
-from jarvis.privacy_policy import DataPolicy, strictest
+from jarvis.model_budget import TaskBudget, begin_model_task_budget, remaining_seconds, ModelBudgetUnavailable
+from jarvis.privacy_policy import (
+    DataPolicy, ToolResultEnvelope, ToolResultBindingError,
+    assert_route_allowed, make_tool_execution_scope, issue_tool_result,
+    unclassified_tool_result, validate_tool_result, strictest,
+)
 from jarvis.procedures import mark_used, match_procedure
 from jarvis.prompts import AGENT_DISCIPLINE, SUBAGENT_PROMPTS
 from jarvis.repo_map import (
@@ -287,6 +293,10 @@ class SubAgent:
         self.description = description
         self.mcp_servers = list(mcp_servers)
         self._settings = settings
+        self._client_factory_injected = client_factory is not None
+        # Native owners retain cleanup/quarantine state between runs. API
+        # clients are rebuilt after policy validation to read rotated keys.
+        self._native_route_clients: dict[tuple[Any, ...], Any] = {}
         self._registry = registry
         self._timeout_s = timeout_s
         self._max_iterations = max(1, int(max_iterations))
@@ -338,21 +348,18 @@ class SubAgent:
             getattr(settings, "jarvis_model_routing_enabled", False)
             or model_routing_env_enabled()
         )
+        self._routing_at_construction = routing_enabled and not self._client_factory_injected
         self._resolved_route: ResolvedModelRoute | None = None
         if client_factory is not None:
             self._client = client_factory(settings)
-        elif model_profile:
+        elif model_profile or routing_enabled:
             try:
                 if routing_enabled:
-                    resolved = resolve_model_route_checked(
-                        name, explicit_profile=model_profile)
+                    # agents.yaml supplies a startup default, not an explicit
+                    # per-task request. Saved workload selections must win.
+                    resolved = resolve_model_route_checked(name)
                     self._resolved_route = resolved
-                    defer_private_client = configured_private or resolved.route.privacy in {
-                        "confidential", "local_only",
-                    }
-                    self._client = (
-                        None if defer_private_client else make_route_client(resolved)
-                    )
+                    self._client = None
                     self._model = resolved.model
                     self._api_key_env = resolved.api_key_env or ""
                 else:
@@ -439,11 +446,39 @@ class SubAgent:
 
     @property
     def model(self) -> str:
-        """The RESOLVED model string this agent will call — the same value
-        RunLogger records, never the configured profile name. On a profile
-        resolution failure this is the voice model, which is the honest
-        answer and the one the Agents tab must show."""
+        """Current configured model; each run records its own resolved snapshot."""
+        if self._manages_routes():
+            metadata = self._configured_route_metadata()
+            return str(metadata[1]["model"]) if metadata is not None else "unavailable"
         return self._model
+
+    def _manages_routes(self) -> bool:
+        return not self._client_factory_injected and bool(
+            getattr(self._settings, "jarvis_model_routing_enabled", False)
+            or model_routing_env_enabled()
+        )
+
+    def _configured_route_metadata(self):
+        """Read current selection without a catalog, credential or model call."""
+        try:
+            policy = resolve_policy(self.name)
+            return inspect_route_choice(self.name, policy.profile, policy.route)
+        except (ModelRouteError, ValueError, OSError):
+            return None
+
+    def _routed_client_for(self, route: ResolvedModelRoute):
+        # Recreating a native adapter must never bypass failed cleanup on the
+        # previous owner. No model/default instance state changes per task.
+        if any(getattr(client, "cleanup_unverified", False)
+               for client in self._native_route_clients.values()):
+            raise ModelRouteError("native runtime cleanup remains unverified")
+        native = route.route.adapter in {"subscription_runtime", "codex_subscription_runtime"}
+        if not native:
+            return make_route_client(route)
+        key = (route.route, route.model, route.identity, route.base_url)
+        if key not in self._native_route_clients:
+            self._native_route_clients[key] = make_route_client(route)
+        return self._native_route_clients[key]
 
     def _system_prompt_for(self, task: str) -> str:
         """The system prompt this RUN gets.
@@ -472,6 +507,9 @@ class SubAgent:
         """The credential this agent's own model rides on ("" for the
         voice-model path). Read-only; delegate.py reports a successful run
         against it to jarvis.keyhealth.note_success (status spec T3.3)."""
+        if self._manages_routes():
+            metadata = self._configured_route_metadata()
+            return (metadata[2].credential_env or "") if metadata is not None else ""
         return self._api_key_env
 
     @property
@@ -484,17 +522,17 @@ class SubAgent:
         always be `unknown`. `unreachable` and `unknown` are both False —
         a network blip must never paint a working agent red, which is the
         same rejected/unreachable discipline github_probe established."""
-        if not self._api_key_env:
+        if not self.api_key_env:
             return False
         from jarvis import keyhealth
-        return keyhealth.is_unusable(self._api_key_env)
+        return keyhealth.is_unusable(self.api_key_env)
 
     @property
     def model_unusable_detail(self) -> str:
-        if not self._api_key_env:
+        if not self.api_key_env:
             return ""
         from jarvis import keyhealth
-        return keyhealth.detail(self._api_key_env)
+        return keyhealth.detail(self.api_key_env)
 
     @property
     def refuses(self) -> str:
@@ -503,6 +541,8 @@ class SubAgent:
         shown to the user verbatim — never a generic failure, because the
         whole point is that "the wrong model did your build work" is the
         thing that must not happen quietly."""
+        if self._manages_routes():
+            return "" if self._configured_route_metadata() is not None else "The current model selection is unavailable."
         return self._refuse_reason
 
     @property
@@ -510,7 +550,7 @@ class SubAgent:
         """True when a `model_profile:` was configured but could not be
         resolved (unknown profile, or its api_key_env unset), so `model`
         is the voice-model fallback rather than the assignment."""
-        return self._model_fallback
+        return False if self._manages_routes() else self._model_fallback
 
     def resolve_model_profile(self, profile_name: str) -> tuple[Any | None, str, str]:
         """Compatibility wrapper preserving the public 3-value result."""
@@ -566,7 +606,7 @@ class SubAgent:
                     )
                 )
                 return (
-                    None if private_route else make_route_client(resolved),
+                    None if private_route else self._routed_client_for(resolved),
                     resolved.model, "", resolved,
                 )
             registry_data = load_model_registry()
@@ -635,7 +675,9 @@ class SubAgent:
         # returned verbatim so the Supervisor can relay it — Golden Rule 1
         # and rule 11 both require a stated cause, and "REFUSED:" with no
         # explanation is how the model ends up inventing one.
-        if self._refuse_reason:
+        if self._routing_at_construction and not self._manages_routes():
+            return "REFUSED: model routing was disabled; restart this agent before using its legacy configuration."
+        if self._refuse_reason and not self._manages_routes():
             logger.warning("subagent_refused agent=%s", self.name)
             return f"REFUSED: {self._refuse_reason}"
 
@@ -646,7 +688,18 @@ class SubAgent:
 
         run_client, run_model = self._client, self._model
         run_resolved_route = self._resolved_route
-        if model_profile_override:
+        if self._manages_routes():
+            try:
+                run_resolved_route = resolve_model_route_checked(
+                    self.name, explicit_profile=model_profile_override,
+                )
+                run_model = run_resolved_route.model
+                run_client = None
+            except (ModelRouteError, ValueError, OSError) as exc:
+                logger.warning("subagent_route_refresh_refused agent=%s code=%s",
+                               self.name, type(exc).__name__[:64])
+                return "REFUSED: the current model selection could not be verified; no fallback was used."
+        elif model_profile_override:
             override_client, override_model, refused_reason, override_route = (
                 self._resolve_model_profile_details(model_profile_override)
             )
@@ -677,7 +730,8 @@ class SubAgent:
             )
         else:
             workload_policy_floor = current_policy_floor or self._configured_policy_floor
-        if run_resolved_route is not None and run_resolved_route.route.name == "saygm":
+        if (not self._manages_routes() and run_resolved_route is not None
+                and run_resolved_route.route.name == "saygm"):
             # Confidential catalog attestations are live capabilities, not a
             # constructor-time grant. Re-resolve before reusing any client;
             # withdrawn or less-private offerings must stop this run.
@@ -730,13 +784,24 @@ class SubAgent:
             # even when the originating conversational turn was unlabeled.
         )
         runlog.start()
+        run_budget: TaskBudget | None = None
         try:
+            if run_resolved_route is not None:
+                run_budget = await asyncio.to_thread(
+                    begin_model_task_budget, self.name, resolved_run_id, run_resolved_route.limits,
+                )
             if on_run_created is not None:
                 try:
                     with run_logger_scope(runlog):
                         associated = on_run_created(resolved_run_id)
                         if inspect.isawaitable(associated):
-                            associated = await associated
+                            association_timeout = self._timeout_s
+                            if run_budget is not None:
+                                association_timeout = min(association_timeout,
+                                    await asyncio.to_thread(remaining_seconds, run_budget))
+                            if association_timeout <= 0:
+                                raise ModelBudgetUnavailable("budget_deadline_exhausted")
+                            associated = await asyncio.wait_for(associated, association_timeout)
                     if associated is False:
                         raise RuntimeError("run association refused")
                 except Exception as exc:  # noqa: BLE001 — no model/tool work before durable association
@@ -744,10 +809,16 @@ class SubAgent:
                                    self.name, type(exc).__name__[:64])
                     runlog.finish("FAILED: run association could not be verified.")
                     return "FAILED: creator run could not be durably associated."
+            run_timeout = self._timeout_s
+            if run_budget is not None:
+                budget_remaining = await asyncio.to_thread(remaining_seconds, run_budget)
+                if budget_remaining <= 0:
+                    raise ModelBudgetUnavailable("budget_deadline_exhausted")
+                run_timeout = min(run_timeout, budget_remaining)
             if run_resolved_route is not None and run_client is None:
                 # Fresh runtime objects are created only after the route
                 # policy, protected sink and durable association are accepted.
-                run_client = make_route_client(run_resolved_route)
+                run_client = self._routed_client_for(run_resolved_route)
             run_event_callback = (
                 _protected_event_callback(on_event) if private_route else on_event
             )
@@ -761,8 +832,9 @@ class SubAgent:
                                explicit_skill_id=explicit_skill_id,
                                system_prompt_override=system_prompt_override,
                                tool_specs_override=tool_specs_override,
-                               tool_executor=tool_executor),
-                    timeout=self._timeout_s,
+                               tool_executor=tool_executor,
+                               task_budget=run_budget),
+                    timeout=run_timeout,
                 )
             if private_route:
                 # The voice supervisor is a separate external destination.
@@ -831,6 +903,7 @@ class SubAgent:
         system_prompt_override: str | None = None,
         tool_specs_override: list[dict[str, Any]] | None = None,
         tool_executor: Callable[[str, dict[str, Any]], Any] | None = None,
+        task_budget: TaskBudget | None = None,
     ) -> str:
         # F8 — locals, defaulting to the instance's configured client/model
         # when no override was resolved by run(). Every model call below
@@ -840,6 +913,7 @@ class SubAgent:
         client = client if client is not None else self._client
         model = model if model is not None else self._model
         start = time.perf_counter()
+        acquired_policy: DataPolicy | None = None
 
         def raise_if_cancelled() -> None:
             # Some provider/tool adapters catch CancelledError during cleanup
@@ -1295,6 +1369,8 @@ class SubAgent:
                 )
                 if policy_floor is not None:
                     policy = strictest(policy, policy_floor)
+                if acquired_policy is not None:
+                    policy = strictest(policy, acquired_policy)
                 if is_sensitive():
                     # The selected route is not permission to downgrade the
                     # originating turn. Sensitive-turn policy is inherited by
@@ -1321,6 +1397,7 @@ class SubAgent:
                     ),
                     resolved_route,
                     client_factory=lambda _route: client,
+                    task_budget=task_budget,
                 )
                 raise_if_cancelled()
                 record_execution_result(
@@ -1395,6 +1472,14 @@ class SubAgent:
                     tool_name, "skill_step_started", "running", tool_call.id,
                 )
                 tool_start = time.perf_counter()
+                execution_scope = (
+                    make_tool_execution_scope(
+                        parent_request_id=runlog.run_id,
+                        task_id=f"subagent:{runlog.run_id}:{iteration}",
+                        tool_call_id=tool_call.id, tool_name=tool_name,
+                        arguments=arguments, input_policy=policy,
+                    ) if resolved_route is not None else None
+                )
                 try:
                     if skill_reference_tool_enabled and tool_name == "skill_reference_read":
                         reference_path = arguments.get("reference_path")
@@ -1474,6 +1559,14 @@ class SubAgent:
                                         "skill_trace_unavailable error_type=%s",
                                         type(trace_exc).__name__[:64],
                                     )
+                        if execution_scope is not None:
+                            result = issue_tool_result(
+                                execution_scope, result,
+                                source_policy=DataPolicy("approved_external", "selected-skill-reference"),
+                                source_scope="selected_skill_revision",
+                                canonical_refs=(target_skill_id or skill.name,
+                                                target_revision or skill_revision),
+                            )
                     elif tool_executor is not None:
                         if tool_name not in scoped_tool_names:
                             result = json.dumps(
@@ -1481,17 +1574,55 @@ class SubAgent:
                                 separators=(",", ":"),
                             )
                         else:
-                            custom_result = tool_executor(tool_name, arguments)
+                            accepts_scope = (
+                                execution_scope is not None
+                                and "execution_scope" in inspect.signature(tool_executor).parameters
+                            )
+                            custom_result = (
+                                tool_executor(tool_name, arguments, execution_scope=execution_scope)
+                                if accepts_scope else tool_executor(tool_name, arguments)
+                            )
                             if inspect.isawaitable(custom_result):
                                 custom_result = await custom_result
-                            result = (custom_result if isinstance(custom_result, str)
+                            result = (custom_result if isinstance(custom_result, (str, ToolResultEnvelope))
                                       else json.dumps(custom_result, ensure_ascii=False,
                                                       separators=(",", ":")))
                     else:
-                        result = await self._registry.call(
-                            tool_name, arguments, self.mcp_servers
-                        )
+                        classified_call = getattr(self._registry, "call_classified", None)
+                        if execution_scope is not None and callable(classified_call):
+                            result = await classified_call(
+                                tool_name, arguments, self.mcp_servers,
+                                execution_scope=execution_scope,
+                            )
+                        else:
+                            result = await self._registry.call(
+                                tool_name, arguments, self.mcp_servers,
+                            )
                     raise_if_cancelled()
+                    if execution_scope is not None:
+                        if not isinstance(result, ToolResultEnvelope):
+                            result = unclassified_tool_result(execution_scope, result)
+                        try:
+                            source_policy, result = validate_tool_result(execution_scope, result)
+                        except ToolResultBindingError:
+                            holder = current_sensitive_turn.get()
+                            if holder is not None:
+                                holder.arm("tool_source_policy", runlog.run_id)
+                            runlog.mark_sensitive()
+                            raise
+                        acquired_policy = strictest(source_policy, acquired_policy or policy)
+                        if acquired_policy.level in {"confidential", "local_only"}:
+                            holder = current_sensitive_turn.get()
+                            if holder is not None:
+                                holder.arm("tool_source_policy", runlog.run_id)
+                            runlog.mark_sensitive()
+                        try:
+                            assert_route_allowed(resolved_route.route, acquired_policy)
+                        except ModelRouteError:
+                            # No continuation, derived instruction, verification
+                            # payload, activity result or final content crosses
+                            # a route below this newly acquired source floor.
+                            return "FAILED: this tool source requires a more private route; no protected content was shared."
                 except asyncio.CancelledError:
                     # Dispatch already began, so cancellation cannot prove
                     # whether a mutating action took effect. Persist the

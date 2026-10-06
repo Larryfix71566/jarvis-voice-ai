@@ -17,7 +17,7 @@ import threading
 import time
 from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import SimpleNamespace
 from typing import Any, Literal
 
@@ -30,7 +30,12 @@ from jarvis.model_routing import (
     AccessRoute,
     ModelRouteError,
     ResolvedModelRoute,
+    WorkloadLimits,
     make_route_client,
+)
+from jarvis.model_budget import (
+    ModelBudgetUnavailable, TaskBudget, begin_model_task_budget,
+    remaining_seconds, reserve_model_call_budget,
 )
 from jarvis.privacy_policy import (
     DataPolicy,
@@ -798,13 +803,15 @@ async def execute_chat(request: ModelExecutionRequest,
                        client_factory: Callable[..., Any] | None = None,
                        event_sink: Callable[[ModelExecutionEvent], Any] | None = None,
                        event_sink_policy: DataPolicy | None = None,
-                       admission: ModelAdmissionController | None = None) -> ModelExecutionResult:
+                       admission: ModelAdmissionController | None = None,
+                       task_budget: TaskBudget | None = None) -> ModelExecutionResult:
     """Execute one validated request, preserving context and attachments.
 
     Cancellation propagates to the provider client, and the outer deadline
     prevents late results from being returned to callers. Tool loops remain
     owned by their existing agent boundary.
     """
+    request = _limited_output_request(request, resolved.limits.max_output_tokens_per_call)
     messages, effective_policy, tools, tool_validators, seen_tool_call_ids = _validated_inputs(
         request, resolved
     )
@@ -898,7 +905,51 @@ async def execute_chat(request: ModelExecutionRequest,
         # The deadline includes lifecycle admission and time spent queued for
         # capacity; cancellation at either point must still emit one terminal
         # event rather than escaping before the lifecycle guard is active.
-        async with asyncio.timeout(request.timeout_s):
+        async with asyncio.timeout(request.timeout_s) as deadline:
+            limits = resolved.limits
+            if task_budget is not None:
+                if (not isinstance(task_budget, TaskBudget) or task_budget.workload != request.workload
+                        or task_budget.parent_request_id != request.parent_request_id):
+                    raise ModelBudgetUnavailable("budget_scope_mismatch")
+                # Validate the host handle and retain its earlier output-only
+                # cap. Durable state is reopened below, never accepted from
+                # caller-provided policy fields as the spending authority.
+                await asyncio.to_thread(remaining_seconds, task_budget)
+                limits = WorkloadLimits(*(
+                    min(first, second) if first is not None and second is not None
+                    else first if first is not None else second
+                    for first, second in zip(
+                        (limits.max_output_tokens_per_call, limits.deadline_seconds,
+                         limits.max_estimated_spend_usd_per_task),
+                        (task_budget.limits.max_output_tokens_per_call,
+                         task_budget.limits.deadline_seconds,
+                         task_budget.limits.max_estimated_spend_usd_per_task),
+                    )
+                ))
+            budget = await asyncio.to_thread(
+                begin_model_task_budget, request.workload,
+                request.parent_request_id, limits,
+            )
+            # The durable parent's bounds can be stricter than a new route
+            # snapshot (including after configuration is cleared/restarted).
+            request = _limited_output_request(request, budget.limits.max_output_tokens_per_call)
+            messages, effective_policy, tools, tool_validators, seen_tool_call_ids = _validated_inputs(
+                request, resolved,
+            )
+            remaining = await asyncio.to_thread(remaining_seconds, budget)
+            if remaining <= 0:
+                raise ModelBudgetUnavailable("budget_deadline_exhausted")
+            deadline.reschedule(asyncio.get_running_loop().time() + min(
+                remaining, max(0, request.timeout_s - (time.monotonic() - started_at)),
+            ))
+            spend_capped = budget.limits.max_estimated_spend_usd_per_task is not None
+            if spend_capped:
+                if resolved.route.adapter not in {"openai_compatible", "saygm_gateway"}:
+                    raise ModelBudgetUnavailable("budget_unsupported_route")
+                if request.output.max_tokens is None:
+                    raise ModelBudgetUnavailable("budget_output_limit")
+                if request.attachments or any(not isinstance(m.get("content"), str) for m in messages):
+                    raise ModelBudgetUnavailable("budget_input_invalid")
             await emit("queued")
             async with controller.slot(resolved.priority):
                 await emit("started")
@@ -927,6 +978,20 @@ async def execute_chat(request: ModelExecutionRequest,
                     }
                 if request.stream_text:
                     completion_args["stream"] = True
+                if spend_capped and not _api_adapter_has_no_retries(client):
+                    raise ModelBudgetUnavailable("budget_unsupported_route")
+                if budget.scope_id is not None:
+                    estimate = _estimated_text_input_tokens(messages, tools) if spend_capped else 1
+                    await asyncio.to_thread(
+                        reserve_model_call_budget, budget, request.task_id,
+                        resolved.provider, resolved.model, resolved.route.name,
+                        resolved.route.billing, estimate, request.output.max_tokens or 1,
+                    )
+                    # A cancellation suppressed by a custom adapter must not
+                    # publish or start a provider operation after reservation.
+                    current = asyncio.current_task()
+                    if current is not None and current.cancelling():
+                        raise asyncio.CancelledError
                 await emit("progress", progress_stage="provider_request")
                 native_execute = getattr(client, "execute_request", None)
                 if native_execute is not None:
@@ -1000,8 +1065,44 @@ async def execute_chat(request: ModelExecutionRequest,
         await close_model_request(client, request.parent_request_id)
         # Only a stable category is published. Provider exception text may
         # include input, credentials, endpoints or account details.
-        await emit("failed", error_code=type(exc).__name__)
+        await emit("failed", error_code=(exc.code if isinstance(exc, ModelBudgetUnavailable)
+                                         else type(exc).__name__))
         raise
+
+
+def _limited_output_request(request: ModelExecutionRequest, cap: int | None) -> ModelExecutionRequest:
+    if cap is None:
+        return request
+    if not isinstance(request.output, ModelOutputRequirements):
+        raise ModelExecutionInputError("output requirements are invalid")
+    existing = request.output.max_tokens
+    if existing is not None and (type(existing) is not int or not 1 <= existing <= 32_000):
+        raise ModelExecutionInputError("max_tokens must be an integer from 1 to 32000")
+    return replace(request, output=replace(request.output, max_tokens=min(existing, cap)
+                                          if existing is not None else cap))
+
+
+def _estimated_text_input_tokens(messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> int:
+    # Explicit conservative local estimate, not a provider token or invoice
+    # measurement. Include every UTF-8 byte plus framing/schema overhead.
+    return 1024 + len(json.dumps({"messages": messages, "tools": tools},
+                                ensure_ascii=False, separators=(",", ":"),
+                                allow_nan=False).encode("utf-8"))
+
+
+def _api_adapter_has_no_retries(client: Any) -> bool:
+    """Prove retry configuration from supported SDKs, never a foreign flag."""
+    import openai
+    import anthropic
+    from jarvis.anthropic_shim import AsyncAnthropicChatShim
+    from jarvis.llm_client import _OpenRouterCachingClient
+
+    if type(client) is _OpenRouterCachingClient:
+        client = client._client
+    if type(client) is AsyncAnthropicChatShim:
+        client = client._anthropic
+    return (type(client) in {openai.AsyncOpenAI, anthropic.AsyncAnthropic}
+            and type(client.max_retries) is int and client.max_retries == 0)
 
 
 async def close_model_request(client: Any, parent_request_id: str) -> None:

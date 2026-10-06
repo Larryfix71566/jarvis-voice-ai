@@ -332,7 +332,8 @@ async def test_failed_process_verification_still_removes_private_ipc(monkeypatch
     assert not directory.exists()
 
 
-@pytest.mark.parametrize("content", ["中" * 200000, "😀" * 1000000, "\x00" * 1000000])
+@pytest.mark.parametrize("content", ["中" * 200000, "😀" * 1000000, "\x00" * 1000000],
+                         ids=["cjk-200k", "emoji-1m", "controls-1m"])
 async def test_actual_unix_gateway_preserves_large_unicode_and_control_content(content):
     s = session()
     errors = []
