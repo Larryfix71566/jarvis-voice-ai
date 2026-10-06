@@ -283,6 +283,122 @@ def _project_code(context, path):
                  or path in _reference_files))
 
 
+def _proposal_plan(service, context, state, arguments):
+    """Rebuild the installed proposal transform from the pinned inert base."""
+    from jarvis.selfedit import proposals
+    from jarvis.selfedit.allowlist import CORE, ROUTINE
+    from jarvis.selfedit.service import SelfEditService
+
+    if (not isinstance(service, SelfEditService) or type(arguments.get('path')) is not str
+            or type(arguments.get('new_content')) is not str
+            or type(arguments.get('rationale', '')) is not str
+            or set(arguments) - {'path', 'new_content', 'rationale', 'visual_intent', 'proposal'}):
+        return None
+    target = arguments['path'].strip()
+    if (not source_path_allowed(target) or proposals.is_proposal_path(target)
+            or not (service.is_human_only(target) or (
+                arguments.get('proposal') is True and target.startswith('tests/')
+                and service._tier(target) in {CORE, ROUTINE}))):
+        return None
+    files = context._session._files(state)
+    if files.baseline.fingerprint != context._identity[7]:
+        raise ModelRouteError('development_source_snapshot_changed')
+    baseline = next((file for file in files.baseline.files if file.path == target), None)
+    patch_path = proposals.proposal_path(target)
+    patch_base = next((file for file in files.baseline.files if file.path == patch_path), None)
+    try:
+        text = proposals.render(target, baseline.data.decode('utf-8') if baseline else None,
+                                arguments['new_content'], arguments.get('rationale', ''),
+                                baseline.mode if baseline else 0o644)
+    except (UnicodeError, ValueError):
+        return None
+    return target, baseline, patch_path, patch_base, text
+
+
+def _proposal_source(context, plan, arguments, observations, result, after):
+    """Approve only the exact saved patch and the host's unchanged approval notice."""
+    from jarvis.selfedit import proposals
+
+    target, baseline, patch_path, patch_base, text = plan
+    expected_result = {
+        'ok': True, 'path': target, 'proposal': True, 'proposal_file': patch_path,
+        'diff': text[text.index('diff --git'):],
+        'summary': f'{target} was NOT changed. The change is saved as a proposal ({patch_path}) for Larry to approve and apply himself.',
+    }
+    expected_bases = [file for file in (baseline, patch_base) if file is not None]
+    if result != expected_result or len(observations) != len(expected_bases) + 1:
+        return None
+    levels = []
+    for task, digest, file, origin, level in observations:
+        if task != context._identity[1] or digest != context._identity[7] or level not in _levels:
+            return None
+        levels.append(DataPolicy(level, 'verified-proposal-observation'))
+    for observation, origin in zip(observations, expected_bases):
+        if observation[2] != origin or observation[3] != origin:
+            return None
+    written = observations[-1][2]
+    if (written.path != patch_path or written.data != text.encode('utf-8')
+            or written.mode != (patch_base.mode if patch_base else 0o644)
+            or observations[-1][3] != patch_base):
+        return None
+    previous = patch_base.data.decode('utf-8', errors='replace') if patch_base else ''
+    saved = {
+        'path': patch_path,
+        'rationale': proposals.rationale_for(target, arguments.get('rationale', ''), proposals.content_digest(text)),
+        'diff': ''.join(difflib.unified_diff(previous.splitlines(keepends=True), text.splitlines(keepends=True),
+                                         fromfile='a/' + patch_path, tofile='b/' + patch_path)),
+        'visual_intent': '',
+    }
+    records = after.get('proposals', [])
+    if (type(records) is not list or any(type(item) is not dict for item in records)
+            or [item for item in records if item.get('path') == patch_path] != [saved]):
+        return None
+    if ((baseline is not None and not _project_code(context, target))
+            or (patch_base is not None and not _project_code(context, patch_path))):
+        levels.append(DataPolicy('confidential', 'private-proposal-baseline'))
+    policy = strictest(context.input_floor, *levels)
+    references = (target, patch_path, hashlib.sha256(written.data).hexdigest())
+    if baseline is not None:
+        references += (hashlib.sha256(baseline.data).hexdigest(),)
+    return policy, references
+
+
+def _edit_observation(context, arguments, observations):
+    if len(observations) not in {1, 2}:
+        return None
+    task, digest, file, baseline, level = observations[-1]
+    if (task != context._identity[1] or digest != context._identity[7]
+            or file.path != arguments.get('path') or level not in _levels):
+        return None
+    if baseline is None:
+        if len(observations) != 1:
+            return None
+    elif (len(observations) != 2
+          or observations[0][0:2] != (task, digest)
+          or observations[0][2] != baseline or observations[0][3] != baseline
+          or observations[0][4] not in _levels):
+        return None
+    return task, digest, file, baseline, level
+
+
+def _protect_unbound_proposal_bytes(context, plan, observations, state):
+    """An observed write outside the authenticated render cannot approve later reads."""
+    _, _, path, base, text = plan
+    if not any(file.path == path and (file.data != text.encode('utf-8')
+               or file.mode != (base.mode if base else 0o644))
+               for _, _, file, _, _ in observations):
+        return
+    with pin_source_session(context._service, context._session, context._identity):
+        files = context._session._files(state)
+        with files._locked():
+            journal = files._journal()
+            level = journal.get('source_floor', 'confidential')
+            if level not in _levels:
+                level = 'confidential'
+            journal['source_floor'] = max((level, 'confidential'), key=_levels.get)
+            files._save(journal)
+
+
 def _invoke(service, name, args):
     if name == 'file_read':
         return service.read_file(args['path'])
@@ -317,10 +433,21 @@ def dispatch_workspace_tool(service, name, arguments, *, execution_scope, contex
         unknown = unclassified_tool_result(execution_scope, result)
         return issue_tool_result(execution_scope, unknown.content,
             strictest(context.input_floor, unknown.policy), unknown.source_scope)
-    context, _ = _live(service, execution_scope.parent_request_id, context)
+    context, before = _live(service, execution_scope.parent_request_id, context)
     baseline_level = 'approved_external' if context._identity[4] == _project else 'confidential'
+    proposal = _proposal_plan(service, context, before, arguments) if name == 'edit_propose' else None
+    input_floor = strictest(context.input_floor, execution_scope.input_policy)
+    if proposal is not None:
+        target, baseline, patch_path, patch_base, _ = proposal
+        if ((baseline is not None and not _project_code(context, target))
+                or (patch_base is not None and not _project_code(context, patch_path))):
+            # The new patch contains source-derived bytes. Persist this floor
+            # before any guest write, so a later patch read cannot downgrade a
+            # private baseline even if its target is never itself changed.
+            input_floor = strictest(input_floor, DataPolicy('confidential', 'private-proposal-baseline'))
     with pin_source_session(service, context._session, context._identity), capture_sources(
-            strictest(context.input_floor, execution_scope.input_policy).level, baseline_level) as capture:
+            input_floor.level, baseline_level,
+            baseline_policy=lambda path: baseline_level if _project_code(context, path) else 'confidential') as capture:
         result = invoke() if invoke else _invoke(service, name, arguments)
     _, after = _live(service, execution_scope.parent_request_id, context, terminal=name == 'session_submit')
     source = DataPolicy('confidential', 'unclassified-development-source')
@@ -343,8 +470,22 @@ def dispatch_workspace_tool(service, name, arguments, *, execution_scope, contex
         else:
             result = {'ok': False, 'error': 'development_operation_failed'}
         source = context.input_floor
-    elif name in {'file_read', 'edit_propose'} and type(result) is dict and len(capture.observations) == 1:
-        task, baseline_digest, file, baseline, level = capture.observations[0]
+    elif proposal is not None and type(result) is dict and result.get('proposal') is True:
+        verified = _proposal_source(context, proposal, arguments, capture.observations, result, after)
+        if verified is not None:
+            source, proposal_refs = verified
+            refs += proposal_refs
+        else:
+            _protect_unbound_proposal_bytes(context, proposal, capture.observations, after)
+    elif name in {'file_read', 'edit_propose'} and type(result) is dict:
+        observation = (capture.observations[0] if name == 'file_read' and len(capture.observations) == 1
+                       else _edit_observation(context, arguments, capture.observations)
+                       if name == 'edit_propose' else None)
+        if observation is None:
+            content = json.dumps(result, ensure_ascii=True, separators=(',', ':'), allow_nan=False)
+            return issue_tool_result(execution_scope, content, strictest(context.input_floor, source),
+                                     'development:' + context._identity[0], refs)
+        task, baseline_digest, file, baseline, level = observation
         if (task == context._identity[1] and baseline_digest == context._identity[7]
                 and file.path == arguments.get('path') and result.get('path') == file.path):
             if baseline is not None and not _project_code(context, file.path):

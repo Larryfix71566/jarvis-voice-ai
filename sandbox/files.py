@@ -20,6 +20,7 @@ class SourceCapture:
     input_level: str
     baseline_level: str
     observations: list = field(default_factory=list, repr=False)
+    baseline_policy: Callable[[str], str] | None = field(default=None, repr=False)
 
 
 _source_capture = ContextVar('sandbox_source_capture', default=None)
@@ -27,10 +28,13 @@ _levels = {'approved_external': 1, 'confidential': 2, 'local_only': 3}
 
 
 @contextmanager
-def capture_sources(input_level: str, baseline_level: str):
+def capture_sources(input_level: str, baseline_level: str, *,
+                    baseline_policy: Callable[[str], str] | None = None):
     if input_level not in _levels or baseline_level not in _levels:
         raise SandboxError('Invalid host source policy')
-    capture = SourceCapture(input_level, baseline_level)
+    if baseline_policy is not None and not callable(baseline_policy):
+        raise SandboxError('Invalid host source policy')
+    capture = SourceCapture(input_level, baseline_level, baseline_policy=baseline_policy)
     token = _source_capture.set(capture)
     try:
         yield capture
@@ -103,6 +107,18 @@ class WorkspaceFiles:
                     level = max((admitted_level, task_floor), key=_levels.get)
             elif file == baseline:
                 level = capture.baseline_level
+        if file == baseline and capture.baseline_policy is not None:
+            try:
+                scoped = capture.baseline_policy(file.path)
+                if scoped not in _levels:
+                    scoped = 'confidential'
+            except Exception:
+                scoped = 'confidential'
+            level = max((level, scoped), key=_levels.get)
+        # Acquired source bytes can be copied into another file during this
+        # same host operation. Raise admission before any later guest write;
+        # classifying only the final result cannot protect that derivative.
+        capture.input_level = max((capture.input_level, level), key=_levels.get)
         capture.observations.append((self.task, self.baseline.fingerprint, file,
                                      baseline, level))
 

@@ -228,6 +228,10 @@ class Session:
             files = self._files(state)
             baseline = next((file for file in files.baseline.files if file.path == path), None)
             mode = baseline.mode if baseline else 0o644
+            if baseline is not None:
+                # The returned diff derives from this immutable base. Its
+                # host source floor must precede admission of new bytes.
+                files.observe_baseline(baseline)
             files.write(path, content.encode(), rationale, mode)
             previous = baseline.data.decode("utf-8", errors="replace") if baseline else ""
             diff = "".join(difflib.unified_diff(previous.splitlines(keepends=True), content.splitlines(keepends=True),
