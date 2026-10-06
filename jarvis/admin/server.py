@@ -1111,6 +1111,13 @@ def _run_research_job(
             "planning", {}, run_id, parent_budget=parent_budget,
             data_policy=data_policy, cancel_event=cancel_event, started_at=started_at,
         )
+        input_policy = policy
+        # The original HTTP packet is distinct from acquired page content.
+        # Freeze it before work; never include a prior crawl's raw response
+        # in the next site's request or downgrade an acquired result floor.
+        crawl_urls, crawl_focus = tuple(urls), focus
+        if owner is not None:
+            research_crawl.assert_crawl_input_allowed(input_policy)
         cfg = research_crawl.load_research_config()
         api_key = os.environ.get(research_crawl.TAVILY_API_KEY_ENV)
         if not api_key:
@@ -1122,16 +1129,26 @@ def _run_research_job(
             return
         client = research_crawl.TavilyCrawlClient(timeout=float(cfg.get("timeout_s", 120)) + 10.0)
         results = []
-        for url in urls:
+        for url in crawl_urls:
             _check_advisory_owner(owner, cancel_event)
-            results.append(research_crawl.crawl_site(client, url, focus, api_key, cfg))
             if owner is not None:
                 from jarvis.privacy_policy import strictest
-                policy = strictest(policy, research_crawl.crawl_source_policy(results[-1]))
+                current_input = input_policy
                 if guard['source'] is not None:
-                    from jarvis.advisory_sources import record_advisory_job
-                    record_advisory_job(guard['source'], _research_job, policy=policy)
+                    from jarvis.advisory_sources import check_advisory_source
+                    current_input = strictest(current_input,
+                        check_advisory_source(guard['source'], _research_job))
+                research_crawl.assert_crawl_input_allowed(current_input)
+            results.append(research_crawl.crawl_site(client, url, crawl_focus, api_key, cfg))
             _check_advisory_owner(owner, cancel_event)
+        if owner is not None:
+            from jarvis.privacy_policy import strictest
+            # No acquired content enters the shared job, digest, model, or
+            # result sinks until its full accumulated floor is recorded.
+            policy = strictest(policy, *(research_crawl.crawl_source_policy(result) for result in results))
+            if guard['source'] is not None:
+                from jarvis.advisory_sources import record_advisory_job
+                record_advisory_job(guard['source'], _research_job, policy=policy)
         # R9 — per-site failure, never all-or-nothing: only when EVERY
         # site failed does this become a terminal error.
         if not any(r.get("ok") for r in results):

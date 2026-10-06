@@ -182,7 +182,7 @@ def test_research_cancellation_stops_before_next_source_call(admin_env, monkeypa
         return {"ok": True, "url": url, "pages": [], "credits": 1, "page_count": 0}
     monkeypatch.setattr(srv.research_crawl, "crawl_site", first_source)
     srv._run_research_job(["https://a.invalid", "https://b.invalid"], "", "cancelled-research",
-        cancel_event=cancelled)
+        cancel_event=cancelled, data_policy=DataPolicy("approved_external", "synthetic-host-approved-input"))
     assert crawled == ["https://a.invalid"]
     assert srv._research_job["state"] == "error" and srv._research_job["error"] == "budget_cancelled"
     assert admin_env.sent == [] and admin_env.clients == []

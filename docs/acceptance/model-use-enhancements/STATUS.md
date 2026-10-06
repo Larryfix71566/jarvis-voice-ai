@@ -27,6 +27,8 @@ no linked receipt are also unreceipted.
 
 ## Candidate validation — 2026-10-06
 
+The latest crawler-input repair passes **62 focused / 61 independently reviewed overlapping cases**, with exact source hashes in [its receipt](receipts/mar-research-input-egress-2026-10-06.json). Protected focus now refuses before actual crawler client/HTTP access, including a stricter host restriction between sites. This grants no public status to acquired unknown pages. Published `9f1e7d5` CI has **two failures**, pilot temporary-directory cleanup and cancellation occurring before the planner request starts; both repairs are in progress. Four other checks pass. An actual compatible-image preparation attempt failed before VM boot because ten synthetic credential fixture files lack current exact reviewed hashes; production settings stayed unchanged. This is a source-archive prerequisite, not Developer acceptance. Manual/public-crawl proof, representative pilots and rollout remain open.
+
 Candidate: [draft PR #177](https://github.com/Larryfix71566/jarvis-voice-ai/pull/177),
 pushed for cross-system review; not merged or deployed.
 

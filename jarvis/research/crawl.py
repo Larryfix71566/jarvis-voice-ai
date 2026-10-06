@@ -84,6 +84,17 @@ def crawl_source_policy(result):
     return DataPolicy('confidential', 'unverified-crawl-page-origin')
 
 
+def assert_crawl_input_allowed(policy):
+    """The crawler is an external sink before any model sees its response."""
+    from jarvis.model_routing import AccessRoute, ModelRouteError
+    from jarvis.privacy_policy import DataPolicy, assert_route_allowed
+    if type(policy) is not DataPolicy:
+        raise ModelRouteError('research input classification is unavailable')
+    assert_route_allowed(AccessRoute(name='research_crawl', adapter='tavily_http',
+        billing='provider_api', credential_env=TAVILY_API_KEY_ENV,
+        privacy='approved_external', base_url=TAVILY_CRAWL_URL), policy)
+
+
 def load_research_config(path: str | os.PathLike[str] | None = None) -> dict[str, Any]:
     """Load config/research.yaml. A missing file falls back to the same
     defaults the file ships with, so a fresh checkout without the file
