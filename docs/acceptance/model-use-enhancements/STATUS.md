@@ -27,6 +27,9 @@ no linked receipt are also unreceipted.
 
 ## Candidate validation — 2026-10-06
 
+See the [aggregate verification receipt](receipts/candidate-verification-2026-10-06.json)
+and [independent subscription review](receipts/independent-subscription-review-2026-10-06.json).
+
 - Final subscription/agent/execution focused suite: **243 passed**; source-bound independent review covers exact context/tool binding, system constraints, UTF8 transport, invalid-input child cleanup and cleanup quarantine.
 - Broad Mac unit run: **5,076 passed, 3 skipped, 1 failed**; unchanged main has **4,802 passed, 3 skipped, the same audio-default failure**. The last receipt-await guard has a separate focused rerun.
 - Integration/evals: **186 passed, 4 skipped, 4 failed** on both candidate and unchanged main (the same bot function-inventory assertions). Process-supervision failures from the initial restricted run pass with appropriate process access.

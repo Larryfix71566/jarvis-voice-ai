@@ -1,0 +1,80 @@
+{
+  "assertions_relaxed": false,
+  "callsite_inventory": {
+    "classified": 30,
+    "privacy_acceptance": false,
+    "total": 30
+  },
+  "checks": {
+    "candidate_integration_evals": {
+      "failed": 4,
+      "log_sha256": "dcc726bb4b85f3702d8be0f0c2e7f60d743248e935f75d82ef66774cbbd0047a",
+      "passed": 186,
+      "skipped": 4
+    },
+    "candidate_unit": {
+      "failed": 1,
+      "final_receipt_wait_guard_covered_by_focused_rerun": true,
+      "log_sha256": "46cc0a9f7c8c2b85bf39e8090a77350de4bb707d15c401c96d3b73d44b23e600",
+      "passed": 5076,
+      "skipped": 3
+    },
+    "detached_checkout_policy": {
+      "failed": 0,
+      "log_sha256": "1deaccf4890e0355860f24932d561d9a7ca30284daae2feb24d482db8014020d",
+      "passed": 9
+    },
+    "final_subscription_focused": {
+      "failed": 0,
+      "log_sha256": "c9b446e9b4df50364ef51684a4438b4cfefcf39edc1b40c766f5ae729afe66a5",
+      "passed": 243
+    },
+    "jarviskit": {
+      "failed": 0,
+      "log_sha256": "364cae1d246a0e84faaa22476a609dcd92a35dc37b58fcae77d3cfe8575899c9",
+      "passed": 226
+    },
+    "main_integration_evals_comparison": {
+      "failed": 4,
+      "log_sha256": "013e66f7bdd131032239e94c80476c83c9a7ec317c9f83e20cae602f6954ac79",
+      "passed": 186,
+      "skipped": 4
+    },
+    "main_unit_comparison": {
+      "failed": 1,
+      "log_sha256": "330fdf5f7b2bffb8b7914295b156c4bc63364aa6f37c16ae19fad2299a78d494",
+      "passed": 4802,
+      "skipped": 3
+    }
+  },
+  "date": "2026-10-06",
+  "full_mac_gate_passed": false,
+  "independent_review": "independent-subscription-review-2026-10-06.json",
+  "limitations": [
+    "Broad Mac commands retain five failures reproduced against unchanged main and do not establish a green gate.",
+    "The last receipt-await quarantine guard was verified by a final 243-test focused rerun and source-bound independent review; do not assign its final source hashes retroactively to the earlier broad run.",
+    "Initial restricted combined run had process-inspection failures; appropriate-process-access integration run passes supervision tests.",
+    "Adapter billing labels are not independent account charge verification."
+  ],
+  "native_capture_failure_record": "model-route-controls-native-2026-10-05.json",
+  "production_changed": false,
+  "provider_calls_in_gate_runs": 0,
+  "schema_version": 1,
+  "source_sha256": {
+    "jarvis/model_execution.py": "4dc6b57fe81fe32813ee88e3472f9d2e7d0017075937b29f11892f4a6782a5b2",
+    "jarvis/model_routing.py": "0b35e2676f7b2e7b56d1c415ee64b6020b27745b01cd40356bd4c354e1344032",
+    "jarvis/subscription.py": "c0ec83ce310ecbdfeb7647dbe8c10df9e9370c40f753bd2bde64c971cf1926fe",
+    "jarvis/subscription_tools.py": "4340a6591cb30823e566cbec8b462a113167a8743ef7a6ade37763f7ea24cd5b",
+    "tests/unit/test_subscription_tools.py": "d3de3fca689f98371a7c7c2bb28c0da783bab337f2bde16a4ee09b244d67c62c"
+  },
+  "system": "codex",
+  "tests_removed": false,
+  "unchanged_main_failure_nodeids": [
+    "tests/unit/test_audio_filters.py::test_factory_disabled_returns_none_even_with_engine",
+    "tests/integration/test_bot_wiring.py::test_six_functions_registered",
+    "tests/integration/test_bot_wiring.py::test_ui_control_kill_switch_unregisters_tool",
+    "tests/integration/test_bot_wiring.py::test_status_kill_switch_unregisters_tool",
+    "tests/integration/test_bot_wiring.py::test_screen_vision_kill_switch_unregisters_tools"
+  ],
+  "workstream": "WS-05"
+}
