@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "workstream": "WS-05",
+  "system": "codex",
+  "date": "2026-10-06",
+  "audited_ref": "7baa9624198ce86f59c997494cefebbbbc3410ba",
+  "source_sha256": {
+    "jarvis/privacy_policy.py": "ec82388674d7c82f50ea447713567cb717fd19ce820925b9b3558b57a4f86a97",
+    "jarvis/model_execution.py": "d625eec182f0d7c8bf79d2a5b379650a3588fa218a0d3fec17bdf33c6aa614a6",
+    "jarvis/subscription_tools.py": "4d6ffa8072f5238bfca2cee97ad6309019fcc7629ca9f45280292865ba922937",
+    "tests/unit/test_model_large_edits.py": "bdef3aa23dfefb6e990547217bed8e7b18c18d2405d13109cc558a4af82a7d07"
+  },
+  "verification": {
+    "passed": 170,
+    "failed": 0,
+    "skipped": 0,
+    "log_sha256": "eb3dcbf3445a9b4a826f8eb117e9767bcb2d49aa9cfb4525be5cfcaa27945be0",
+    "junit_sha256": "c4bd235ca8257ad1a7fd2cb6b2a8751c6f8bc526201c9891a931c6e8b1715663"
+  },
+  "proved": [
+    "Canonical tool arguments preserve installed full-file editor limits, including Unicode/JSON escape expansion and bounded rationale metadata",
+    "Actual inert SelfEditService and AppWorkspace edits remain subject to their existing 200000-byte/256-KiB caps and permissions",
+    "Tool-call history validates current registered schemas before provider construction",
+    "Split streamed names and argument-first fragments remain bounded and exactly registered before tool events",
+    "Authenticated result scopes and inert Unix native-tool gateway support the larger matching edit/read payloads; unrelated tool bounds remain unchanged"
+  ],
+  "providers_called": false,
+  "native_process_started": false,
+  "vm_started": false,
+  "production_changed": false,
+  "not_proved": [
+    "Real native Developer capability or quality",
+    "Account billing/overage",
+    "Full deployment acceptance",
+    "Complete WS-05 rollout"
+  ]
+}
