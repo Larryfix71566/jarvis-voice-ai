@@ -30,6 +30,7 @@ _MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./:-]{0,255}\Z")
 _WORKLOAD = re.compile(r"[a-z][a-z0-9_]{0,63}\Z")
 _SQLITE_MAX_INT = 2 ** 63 - 1
 _EPHEMERAL_SEAL = re.compile(r"[0-9a-f]{64}\Z")
+_SCOPE_ID = re.compile(r"[0-9a-f]{32}\Z")
 _EPHEMERAL_BUDGET_KEY = secrets.token_bytes(32)
 
 
@@ -498,13 +499,83 @@ def begin_model_child_budget(owner: TaskBudget, workload: str, limits: WorkloadL
     A sponsored output-only policy persists its owner/child authority. Only a
     genuinely all-null fresh binding avoids storage and clock sampling.
     """
+    return _begin_model_child_budget(owner, workload, limits, started_at=started_at,
+                                     now=now, persist=False)
+
+
+def bind_model_task_budget_for_transport(
+    owner: TaskBudget, child_workload: str, child_limits: WorkloadLimits, *,
+    started_at: float, now: float | None = None,
+) -> ChildTaskBudget:
+    """Publish actual host authority before a cross-process child operation.
+
+    This opt-in persists even an all-null owner/child pair; ordinary task and
+    child helpers keep their no-storage defaults. The caller supplies its
+    authentic local owner, locally resolved child limits and trusted host
+    entry time. Only the resulting owner/child scope IDs may travel as
+    locators: serialized ceilings, deadlines or handles are never authority.
+    Transport roles require a distinct direct child, never a self/nested link.
+    """
+    if type(owner) is not TaskBudget:
+        raise ModelBudgetUnavailable("budget_scope_mismatch")
+    _validate_handle(owner)
+    if child_workload == owner.workload:
+        raise ModelBudgetUnavailable("budget_scope_mismatch")
+    if started_at is None:
+        raise ModelBudgetUnavailable("budget_clock_unavailable")
+    origin = _clock_value(started_at)
+    return _begin_model_child_budget(owner, child_workload, child_limits,
+                                     started_at=origin, now=now, persist=True)
+
+
+def recover_model_task_budget_for_transport(
+    workload: str, parent_request_id: str, *, scope_id: str,
+) -> TaskBudget:
+    """Read one exact durable root in the authenticated receiving process.
+
+    Workload/parent come from the verified host caller contract. A scope ID
+    only locates that existing row; missing/foreign/replaced/nested authority
+    refuses without creating storage or sampling a new execution clock.
+    Resolve the expected child through resolve_model_child_budget afterwards
+    and compare both recovered scope IDs to the accepted transport locators.
+    """
+    _identifiers(workload, parent_request_id)
+    if type(scope_id) is not str or not _SCOPE_ID.fullmatch(scope_id):
+        raise ModelBudgetUnavailable("budget_scope_mismatch")
+    owner = _owner()
+    try:
+        conn = usage_ledger.existing_model_budget_connection()
+        if conn is None:
+            raise ModelBudgetUnavailable("budget_scope_mismatch")
+        with closing(conn):
+            conn.row_factory = sqlite3.Row
+            _has_child_schema(conn)
+            row = conn.execute(
+                "SELECT * FROM model_task_budgets WHERE user_id=? AND workload=? AND parent_request_id=?",
+                (owner, workload, parent_request_id),
+            ).fetchone()
+            if row is None or row["scope_id"] != scope_id or _parent_link(conn, scope_id) is not None:
+                raise ModelBudgetUnavailable("budget_scope_mismatch")
+            budget = _row_budget(row)
+            if budget.limits == WorkloadLimits() and not _scope_has_link(conn, scope_id):
+                raise ModelBudgetUnavailable("budget_policy_mismatch")
+            return budget
+    except ModelBudgetUnavailable:
+        raise
+    except Exception:
+        raise ModelBudgetUnavailable("budget_storage_unavailable") from None
+
+
+def _begin_model_child_budget(owner: TaskBudget, workload: str, limits: WorkloadLimits, *,
+                              started_at: float | None, now: float | None,
+                              persist: bool) -> ChildTaskBudget:
     _validate_handle(owner)
     if type(limits) is not WorkloadLimits:
         raise ModelBudgetUnavailable("budget_policy_mismatch")
     _identifiers(workload, owner.parent_request_id)
     prior_root = _existing_scope(owner.user_id, owner.workload, owner.parent_request_id)
     prior_child = _existing_scope(owner.user_id, workload, owner.parent_request_id)
-    if (owner.scope_id is None and owner.limits == WorkloadLimits() and limits == WorkloadLimits()
+    if (not persist and owner.scope_id is None and owner.limits == WorkloadLimits() and limits == WorkloadLimits()
             and prior_root is None and prior_child is None):
         return _issue_child(owner, _issue_ephemeral_budget(owner.user_id, workload, owner.parent_request_id, limits))
     with _transaction() as conn:
