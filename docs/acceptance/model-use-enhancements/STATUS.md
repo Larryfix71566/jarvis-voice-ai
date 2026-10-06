@@ -1,6 +1,6 @@
 # Model Use Enhancements — status
 
-**As of:** 2026-10-02
+**As of:** 2026-10-05
 **Plan:** [Model Use Enhancements](../../plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md)
 **Execution sequence:** [Remaining Gaps Implementation Plan](../../plans/MORTIMER_REMAINING_GAPS_IMPLEMENTATION_PLAN.md)
 
@@ -26,6 +26,12 @@ and no item is ticked on their strength. Test counts in this file that have
 no linked receipt are also unreceipted.
 
 ## Open items first
+
+Candidate API attribution is implemented on `codex/ws05-execution-20261005`;
+[41 offline tests](receipts/mar-a-prospective-api-attribution-2026-10-05.json)
+verify prospective non-streaming API metadata and single-owner accounting.
+This does not recover historical timing or close deployed MAR-A acceptance.
+
 
 - [ ] **MAR-A** — Reconcile the installed Mac checkout with the candidate
   release and capture live baseline latency/quality/usage.

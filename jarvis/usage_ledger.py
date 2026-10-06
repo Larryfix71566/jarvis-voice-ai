@@ -39,9 +39,11 @@ from __future__ import annotations
 import os
 import sqlite3
 import threading
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 try:
     import yaml  # PyYAML, already a dependency via config loading
@@ -108,6 +110,20 @@ CREATE INDEX IF NOT EXISTS idx_calls_model ON llm_calls (month, provider, model)
 
 _lock = threading.Lock()
 _price_map_cache: Optional[dict] = None
+
+
+@dataclass(frozen=True)
+class ApiCompletionMetadata:
+    """Local client instrumentation, never provider-supplied billing evidence.
+
+    The API client factory attaches this exact type without replacing the
+    completion object. Duration measures a completed non-streaming SDK call;
+    historical calls and assembled streaming completions remain unknown.
+    """
+
+    route_name: str
+    billing_source: str
+    duration_ms: float | None
 
 
 # ---------------------------------------------------------------- price map
@@ -330,6 +346,13 @@ def provider_from_base_url(base_url: str) -> str:
     base_url is: self-updating if .env is ever repointed, and available at
     every call site via the already-constructed client (client.base_url)."""
     b = (base_url or "").lower()
+    try:
+        endpoint = urlsplit(b)
+        if (endpoint.scheme == "https" and endpoint.hostname == "api.saygm.com"
+                and endpoint.port in {None, 443}):
+            return "saygm"
+    except ValueError:
+        pass
     if "anthropic.com" in b:
         return "anthropic"
     if "openrouter.ai" in b:
@@ -383,7 +406,8 @@ def record_completion(rung: str,
                       reported_cost: Optional[float] = None,
                       plan_state: Optional[str] = None,
                       billing_source: str | None = None,
-                      route_name: str | None = None) -> None:
+                      route_name: str | None = None,
+                      duration_ms: float | None = None) -> None:
     """The one adapter for every call site in this repo — all are
     chat.completions.create via AsyncOpenAI regardless of upstream vendor.
 
@@ -395,6 +419,16 @@ def record_completion(rung: str,
               and let scripts/pull_openrouter_activity.py backfill by
               gen_id later.
     """
+    # Accept only our local metadata type. A provider's JSON extra named like
+    # this attribute cannot relabel API spend as a subscription call.
+    metadata = getattr(response, "_mortimer_api_call", None)
+    if isinstance(metadata, ApiCompletionMetadata):
+        if billing_source is None:
+            billing_source = metadata.billing_source
+        if route_name is None:
+            route_name = metadata.route_name
+        if duration_ms is None:
+            duration_ms = metadata.duration_ms
     u = _get(response, "usage") or {}
     prompt_value = _get(u, "prompt_tokens")
     completion_value = _get(u, "completion_tokens")
@@ -437,6 +471,7 @@ def record_completion(rung: str,
         cache_breakdown_known=(cached_value is not None and cache_write_value is not None),
         billing_source=billing_source,
         route_name=route_name,
+        duration_ms=duration_ms,
     )
 
 

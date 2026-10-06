@@ -49,12 +49,67 @@ Design:
 from __future__ import annotations
 
 import os
+import time
+from functools import wraps
 from typing import Any
 
 import openai
 
 from jarvis.anthropic_shim import AnthropicChatShim, AsyncAnthropicChatShim
-from jarvis.usage_ledger import provider_from_base_url
+from jarvis.usage_ledger import ApiCompletionMetadata, provider_from_base_url
+
+
+def _instrument_completion(client: Any, provider: str, *, asynchronous: bool) -> Any:
+    """Measure this API adapter without changing its client/response identity.
+
+    The wrapper forwards every argument unchanged and does not write a ledger
+    row: existing record_completion callers remain the single accounting owner.
+    Streaming durations cannot be recovered from the initial SDK return and
+    are deliberately left unknown. API billing labels describe the adapter,
+    not verified account charges. No model/provider response text is inspected.
+    """
+    completions = getattr(getattr(client, "chat", None), "completions", None)
+    create = getattr(completions, "create", None)
+    if not callable(create) or getattr(create, "_mortimer_measured", False):
+        return client
+    route = "saygm" if provider == "saygm" else "direct_api"
+    billing = "saygm_credit" if provider == "saygm" else "provider_api"
+
+    def mark(response: Any, kwargs: dict[str, Any], started: float) -> Any:
+        if kwargs.get("stream") is True:
+            # A foreign test/cache client may reuse a previous object. Never
+            # let its earlier non-streaming duration describe this stream.
+            try:
+                if isinstance(getattr(response, "_mortimer_api_call", None), ApiCompletionMetadata):
+                    object.__delattr__(response, "_mortimer_api_call")
+            except (AttributeError, TypeError):
+                pass
+            return response
+        metadata = ApiCompletionMetadata(route, billing, (time.monotonic() - started) * 1000)
+        try:
+            object.__setattr__(response, "_mortimer_api_call", metadata)
+        except (AttributeError, TypeError):
+            # Immutable/foreign responses keep unknown measurements. Never
+            # replace the result with a proxy or infer timing retrospectively.
+            pass
+        return response
+
+    if asynchronous:
+        @wraps(create)
+        async def measured(**kwargs: Any) -> Any:
+            started = time.monotonic()
+            return mark(await create(**kwargs), kwargs, started)
+    else:
+        @wraps(create)
+        def measured(**kwargs: Any) -> Any:
+            started = time.monotonic()
+            return mark(create(**kwargs), kwargs, started)
+    measured._mortimer_measured = True
+    try:
+        completions.create = measured
+    except (AttributeError, TypeError):
+        pass
+    return client
 
 
 def native_enabled() -> bool:
@@ -153,11 +208,11 @@ def make_async_client(*, api_key: str, base_url: str | None, provider: str | Non
     resolved = _resolve_provider(provider, base_url)
     kwargs = _client_kwargs(api_key, base_url, timeout, max_retries)
     if resolved == "anthropic" and native_enabled():
-        return AsyncAnthropicChatShim(**kwargs)
+        return _instrument_completion(AsyncAnthropicChatShim(**kwargs), resolved, asynchronous=True)
     client = openai.AsyncOpenAI(**kwargs)
     if resolved == "openrouter":
-        return _OpenRouterCachingClient(client, resolved, _AsyncOpenRouterCompletions)
-    return client
+        client = _OpenRouterCachingClient(client, resolved, _AsyncOpenRouterCompletions)
+    return _instrument_completion(client, resolved, asynchronous=True)
 
 
 def make_sync_client(*, api_key: str, base_url: str | None, provider: str | None = None,
@@ -170,8 +225,8 @@ def make_sync_client(*, api_key: str, base_url: str | None, provider: str | None
     resolved = _resolve_provider(provider, base_url)
     kwargs = _client_kwargs(api_key, base_url, timeout, max_retries)
     if resolved == "anthropic" and native_enabled():
-        return AnthropicChatShim(**kwargs)
+        return _instrument_completion(AnthropicChatShim(**kwargs), resolved, asynchronous=False)
     client = openai.OpenAI(**kwargs)
     if resolved == "openrouter":
-        return _OpenRouterCachingClient(client, resolved, _SyncOpenRouterCompletions)
-    return client
+        client = _OpenRouterCachingClient(client, resolved, _SyncOpenRouterCompletions)
+    return _instrument_completion(client, resolved, asynchronous=False)
