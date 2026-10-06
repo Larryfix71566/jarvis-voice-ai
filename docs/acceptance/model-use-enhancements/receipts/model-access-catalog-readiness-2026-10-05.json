@@ -1,0 +1,22 @@
+{
+  "catalog": {
+    "advertised_confidential_models": 0,
+    "authenticated": true,
+    "models": 64
+  },
+  "date": "2026-10-05",
+  "inference_calls": 0,
+  "limitations": [
+    "Credential/catalog success does not establish confidential-model availability.",
+    "Catalog metadata does not establish independent attestation or guardrail/account configuration.",
+    "No confidential inference was attempted."
+  ],
+  "mar_e_accepted": false,
+  "production_changed": false,
+  "schema_version": 1,
+  "sensitive_data_included": false,
+  "source": "authenticated existing vault-backed SAYGM catalog, isolated readiness command",
+  "stage": "MAR-E",
+  "system": "codex",
+  "workstream": "WS-05"
+}

@@ -25,6 +25,14 @@ committed receipt and are unverified**. They are labelled where they appear,
 and no item is ticked on their strength. Test counts in this file that have
 no linked receipt are also unreceipted.
 
+## Candidate validation — 2026-10-06
+
+- Final subscription/agent/execution focused suite: **243 passed**; source-bound independent review covers exact context/tool binding, system constraints, UTF8 transport, invalid-input child cleanup and cleanup quarantine.
+- Broad Mac unit run: **5,076 passed, 3 skipped, 1 failed**; unchanged main has **4,802 passed, 3 skipped, the same audio-default failure**. The last receipt-await guard has a separate focused rerun.
+- Integration/evals: **186 passed, 4 skipped, 4 failed** on both candidate and unchanged main (the same bot function-inventory assertions). Process-supervision failures from the initial restricted run pass with appropriate process access.
+- Detached-checkout policy: **9 passed**. Call-site classification: **30/30**, not privacy acceptance. JarvisKit: **226 passed**. Native route controls: **10 passed**. Batched native coverage includes **493 unique identifiers**, six skips and one capture failure, also reproduced on unchanged main.
+- No assertions were relaxed or tests removed. Full Mac/deployment gates are **not claimed green**. Global production routing and account settings remain unchanged.
+
 ## Open items first
 
 The 10-05 changes below are **candidate implementation**, on the isolated

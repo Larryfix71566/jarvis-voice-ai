@@ -48,6 +48,48 @@ class FakeClient:
         self.chat = SimpleNamespace(completions=self.completions)
 
 
+class FakeNativeClient:
+    def __init__(self, *, fail=False):
+        self.requests = []
+        self.closed = []
+        self.fail = fail
+
+    async def execute_request(self, request, route, completion_args):
+        self.requests.append((request, route, completion_args))
+        if self.fail:
+            raise RuntimeError("native fixture failed")
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
+            content="native fixture completed", tool_calls=[]))])
+
+    async def close_request(self, parent):
+        self.closed.append(parent)
+
+
+@pytest.mark.asyncio
+async def test_native_request_uses_the_same_validated_boundary_and_parent_cleanup():
+    native = FakeNativeClient()
+    req = ModelExecutionRequest("developer", "native-task", "native-parent", "public fixture")
+    result = await execute_chat(req, resolved_route(), client_factory=lambda _: native)
+    assert result.text == "native fixture completed"
+    assert native.requests[0][0] is req
+    native.fail = True
+    with pytest.raises(RuntimeError):
+        await execute_chat(req, resolved_route(), client_factory=lambda _: native)
+    assert native.closed == ["native-parent"]
+
+
+@pytest.mark.asyncio
+async def test_native_transport_never_receives_a_privacy_rejected_continuation():
+    native = FakeNativeClient()
+    req = ModelExecutionRequest("developer", "native-task", "native-parent", "protected fixture")
+    created = []
+    with pytest.raises(ModelRouteError):
+        await execute_chat(req, resolved_route(privacy="approved_external"),
+                           client_factory=lambda _: created.append(native))
+    assert created == []
+    assert native.requests == []
+
+
 class FakeAsyncStream:
     def __init__(self, chunks):
         self.chunks = chunks

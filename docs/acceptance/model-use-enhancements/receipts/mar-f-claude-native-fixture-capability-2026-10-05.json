@@ -1,0 +1,54 @@
+{
+  "api_credentials_absent": true,
+  "billing_verified": false,
+  "builtins_disabled": true,
+  "control_protocol_sha256": "869e897df7fc92e55cb19f96dc61ca614a305a35d53c5c6c78f79766bedc2f48",
+  "customization_canaries_absent": true,
+  "error_category": null,
+  "evidence_date": "2026-10-05",
+  "executable": {
+    "path": "/Users/larryfix/.local/share/claude/versions/2.1.290",
+    "sha256": "b8412a3826b2dc8ecb1c0605970c28dea28355de5faa740407dd881acdd40237",
+    "version": "2.1.290 (Claude Code)"
+  },
+  "invocation_sha256": "bd628d8a558a9c217e8bde49f83a595931655638b168e3370ad7a1700210eed7",
+  "isolation_env_sha256": "d80e52b51d0d3fd3d45af52342d43d91f35d2821c03aa726a3ae30dcff02ec6c",
+  "limits": [
+    "Public no-effect fixture only; no developer/app-builder quality acceptance.",
+    "Provider-reported token counts do not establish subscription billing or paid-overage settings.",
+    "Fixture-specific tool schema; not developer/app-builder tool registry or quality acceptance. No production gates changed.",
+    "The installed CLI uses its own provider-managed sign-in. No auth credentials or account billing settings were read for this capability proof.",
+    "This sanitized evidence is limited to the public_fixture schema. It does not accept the real developer registry or a developer sandbox pilot.",
+    "Production routing and subscription gates remain unchanged; subscription allowance and paid-overage acceptance are separate."
+  ],
+  "model": "claude-sonnet-5",
+  "native_tool_call_observed": true,
+  "production_gate_changed": false,
+  "proof_sources": [
+    "installed_cli_provider_public_fixture",
+    "installed_cli_loopback_isolation",
+    "installed_cli_loopback_unadvertised_host_tool"
+  ],
+  "protocol": "claude-stream-json-mortimer-mcp-v2",
+  "protocol_source": {
+    "file": "claude_agent_sdk/_internal/query.py",
+    "package": "claude-agent-sdk",
+    "sha256": "0562517de949f4431177f204fe84cda3265f495d0eb0a949b9ced96cc5bd8276",
+    "version": "0.2.163"
+  },
+  "provider": "claude",
+  "record_kind": "sanitized_capability_acceptance_evidence",
+  "runtime_receipt": false,
+  "schema_version": 1,
+  "sensitive_data_included": false,
+  "system_constraints_observed": true,
+  "terminal_success_without_error_items": true,
+  "tool_names": [
+    "public_fixture"
+  ],
+  "tool_schema_sha256": "f07f787440914075f6e000d4351faeccacd6032366e7c15e9f2eba8f1bbcc913",
+  "unadvertised_host_tool_rejected": true,
+  "unadvertised_host_tool_side_effect_absent": true,
+  "unknown_tool_rejected": true,
+  "workload_quality_accepted": false
+}

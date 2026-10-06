@@ -14,6 +14,7 @@ from jarvis.subscription import (
     CodexSubscriptionTextClient,
     SubscriptionCapabilityError,
     SubscriptionRuntimeError,
+    _codex_argv,
     _codex_text,
     _failure_category,
     _run_async,
@@ -21,7 +22,62 @@ from jarvis.subscription import (
     _run_codex,
     _subscription_env,
     _terminate_sync,
+    normalize_claude_usage,
 )
+
+
+def test_anthropic_usage_preserves_uncached_input_and_excludes_cli_cost_metadata():
+    usage = normalize_claude_usage({"input_tokens": 2, "cache_read_input_tokens": 18000,
+        "cache_creation_input_tokens": 76000, "output_tokens": 27, "cost_usd": 999,
+        "authInfo": {"private": "must-not-save"}})
+    assert usage == {"prompt_tokens": 94002, "completion_tokens": 27,
+                     "cache_read_input_tokens": 18000, "cache_creation_input_tokens": 76000}
+    assert usage["prompt_tokens"] - usage["cache_read_input_tokens"] - usage["cache_creation_input_tokens"] == 2
+
+
+def test_missing_or_malformed_subscription_usage_stays_unknown():
+    assert normalize_claude_usage(None) == {"prompt_tokens": None, "completion_tokens": None,
+        "cache_read_input_tokens": None, "cache_creation_input_tokens": None}
+    usage = normalize_claude_usage({"input_tokens": 2, "output_tokens": True,
+                                   "cache_read_input_tokens": 0})
+    assert usage["prompt_tokens"] is None
+    assert usage["completion_tokens"] is None
+    assert usage["cache_creation_input_tokens"] is None
+
+
+def test_claude_text_completion_counts_survive_the_normal_ledger(monkeypatch, tmp_path):
+    from jarvis import subscription, usage_ledger
+    monkeypatch.setattr(subscription, "_run_sync", lambda *_a, **_k: json.dumps({
+        "is_error": False, "result": "public answer", "usage": {"input_tokens": 2,
+        "cache_read_input_tokens": 18000, "cache_creation_input_tokens": 76000, "output_tokens": 27},
+        "total_cost_usd": 123, "authInfo": {"private": "must-not-save"}}))
+    response = subscription.SubscriptionSyncTextClient("claude-sonnet-5").chat.completions.create(
+        messages=[{"role": "user", "content": "public fixture"}])
+    monkeypatch.setattr(usage_ledger, "DB_PATH", tmp_path / "costs.db")
+    monkeypatch.setattr(usage_ledger, "_price_map_cache", {"models": {}})
+    usage_ledger.record_completion("developer", "subscription", "claude-sonnet-5", response,
+                                  billing_source="subscription", route_name="subscription")
+    with usage_ledger._conn() as conn:
+        row = conn.execute("SELECT input_tokens, output_tokens, cache_read_tokens, "
+                           "cache_write_tokens, usage_known FROM llm_calls").fetchone()
+    assert row == (2, 27, 18000, 76000, 1)
+
+
+async def test_invalid_utf8_prompt_is_rejected_before_real_child_start(tmp_path):
+    marker = tmp_path / "unexpected-child-start"
+    child = "from pathlib import Path; import sys,time; Path(sys.argv[1]).write_text('started'); time.sleep(60)"
+    with pytest.raises(SubscriptionRuntimeError) as refused:
+        await _run_async([sys.executable, "-c", child, str(marker)], "private\ud800fixture", 1, provider="Fake")
+    assert refused.value.category == "malformed_input"
+    assert str(refused.value) == "subscription prompt is not valid UTF-8 text"
+    assert not marker.exists()
+
+
+def test_sync_invalid_utf8_prompt_cannot_spawn_child(monkeypatch):
+    from jarvis import subscription
+    monkeypatch.setattr(subscription.subprocess, "Popen", lambda *_a, **_k: pytest.fail("child started"))
+    with pytest.raises(SubscriptionRuntimeError, match="not valid UTF-8"):
+        subscription._run_sync(["fake"], "private\ud800fixture", 1, provider="Fake")
 
 
 def _codex_events(text: str = "final answer") -> str:
@@ -143,6 +199,8 @@ def test_codex_invocation_uses_stdin_isolated_cwd_and_disabled_tool_families(mon
     seen = {}
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv(_CODEX_NO_TOOL_VERIFICATION_ENV, "1")
+    monkeypatch.setattr("jarvis.subscription.validate_codex_capability_receipt",
+                        lambda model: (_codex_argv(model), {"models": [{"slug": model}]}))
 
     def fake_popen(argv, **kwargs):
         process = _FakePopen(argv, **kwargs)
@@ -240,7 +298,8 @@ def test_sync_termination_escalates_to_kill_for_remaining_process_group(monkeypa
     _terminate_sync(process)
 
     assert calls[0] == signal.SIGTERM
-    assert calls[-1] == signal.SIGKILL
+    assert signal.SIGKILL in calls
+    assert calls[-1] == 0  # Final descendant verification follows escalation.
     assert process.returncode == -signal.SIGKILL
 
 
@@ -253,6 +312,8 @@ def test_codex_process_failure_does_not_expose_provider_output(monkeypatch):
         return process
 
     monkeypatch.setenv(_CODEX_NO_TOOL_VERIFICATION_ENV, "1")
+    monkeypatch.setattr("jarvis.subscription.validate_codex_capability_receipt",
+                        lambda model: (_codex_argv(model), {"models": [{"slug": model}]}))
     monkeypatch.setattr("jarvis.subscription.subprocess.Popen", fake_popen)
     with pytest.raises(SubscriptionRuntimeError) as exc:
         _run_codex("gpt-codex", [], 3)
@@ -347,8 +408,10 @@ async def test_async_cancellation_terminates_real_provider_child_process_group(t
     child_pid = int(child_pid_file.read_text())
 
     task.cancel()
-    with pytest.raises(asyncio.CancelledError):
+    with pytest.raises((asyncio.CancelledError, SubscriptionRuntimeError)) as stopped:
         await task
+    if isinstance(stopped.value, SubscriptionRuntimeError):
+        assert stopped.value.category == "cleanup"
 
     # The child shares its parent's process group. Wait briefly for OS reaping
     # before failing, without relying on a provider process or a long sleep.
@@ -381,7 +444,7 @@ async def test_timeout_kills_descendant_after_provider_leader_has_exited(tmp_pat
             [sys.executable, "-c", parent_code, str(child_pid_file), child_code],
             "private prompt", 0.05, provider="Fake",
         )
-    assert exc.value.category == "timeout"
+    assert exc.value.category in {"timeout", "cleanup"}
     assert child_pid_file.exists()
     child_pid = int(child_pid_file.read_text())
 
@@ -394,6 +457,27 @@ async def test_timeout_kills_descendant_after_provider_leader_has_exited(tmp_pat
         await asyncio.sleep(0.02)
     else:
         pytest.fail("orphaned provider child remained alive after timeout cleanup")
+
+
+def test_permission_error_is_not_successful_group_cleanup(monkeypatch):
+    from jarvis import subscription
+    monkeypatch.setattr(subscription.os, "killpg", lambda *_a: (_ for _ in ()).throw(PermissionError()))
+    monkeypatch.setattr(subscription, "_owned_group_absent_after_permission_error", lambda _pid: False)
+    with pytest.raises(SubscriptionRuntimeError) as refusal:
+        subscription._owned_group_present(123)
+    assert refusal.value.category == "cleanup"
+
+
+def test_bsd_missing_group_is_verified_by_exact_read_only_selection(monkeypatch):
+    from jarvis import subscription
+    monkeypatch.setattr(subscription.sys, "platform", "darwin")
+    seen = []
+    def ps(argv, **kwargs):
+        seen.append(argv)
+        return type("Result", (), {"returncode": 1, "stdout": "", "stderr": ""})()
+    monkeypatch.setattr(subscription.subprocess, "run", ps)
+    assert subscription._owned_group_absent_after_permission_error(123)
+    assert seen == [["/bin/ps", "-g", "123", "-o", "pid=,pgid=,stat="]]
 
 
 @pytest.mark.asyncio
@@ -455,6 +539,8 @@ def test_claude_defaults_to_the_bare_command(monkeypatch):
 
 def test_codex_runs_the_configured_command(monkeypatch):
     monkeypatch.setenv(_CODEX_NO_TOOL_VERIFICATION_ENV, "1")
+    monkeypatch.setattr("jarvis.subscription.validate_codex_capability_receipt",
+                        lambda model: (_codex_argv(model), {"models": [{"slug": model}]}))
     monkeypatch.setenv("JARVIS_CODEX_SUBSCRIPTION_COMMAND", "/opt/tools/codex")
     seen = _capture_popen(monkeypatch, _codex_events("answer"))
     assert _run_codex("gpt-test", [{"role": "user", "content": "hi"}], 3) == "answer"

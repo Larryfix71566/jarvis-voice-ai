@@ -16,7 +16,12 @@ from jarvis.agents.base import (
 )
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.model_execution import ModelAdmissionController
-from jarvis.model_routing import AccessRoute, ResolvedModelRoute, resolve_policy
+from jarvis.model_routing import (
+    AccessRoute,
+    ModelRouteError,
+    ResolvedModelRoute,
+    resolve_policy,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -903,6 +908,10 @@ class TestSubAgentLoop:
             ),
             api_key_env=None, identity="saygm/model", priority="interactive",
         )
+        fake_client = agent._client
+        monkeypatch.setattr("jarvis.agents.base.resolve_model_route_checked",
+                            lambda *_a, **_k: agent._resolved_route)
+        monkeypatch.setattr("jarvis.agents.base.make_route_client", lambda _route: fake_client)
         recorded = []
         monkeypatch.setattr(
             "jarvis.agents.base.record_execution_result",
@@ -1065,7 +1074,8 @@ class TestSubAgentLoop:
                 "route": "direct_api", "privacy": "approved_external",
             }],
         )
-        assert resolve_policy("librarian").privacy == "approved_external"
+        with pytest.raises(ModelRouteError):
+            resolve_policy("librarian")
         assert resolve_policy("librarian", include_preferences=False).privacy == "confidential"
 
         agent, completions = make_agent(
@@ -1799,7 +1809,7 @@ class TestModelProfile:
         )
         assert agent._model == "kimi-k2.7-code"
         assert agent._client.api_key == "test-key"
-        assert str(agent._client.base_url) == "https://api.moonshot.ai/v1/"  # noqa: SLF001
+        assert str(agent._client.base_url) == "https://api.moonshot.ai/v1/"
         # Larry 2026-08-19 — the public pair the Agents tab card reads.
         assert agent.model == "kimi-k2.7-code"
         assert agent.model_is_fallback is False
@@ -1850,6 +1860,37 @@ class TestModelProfile:
             model_profile="totally-bogus-profile-name",
         )
         assert agent._client is fake
+
+
+async def test_cached_saygm_attestation_is_rechecked_and_withdrawal_stops_the_run(monkeypatch):
+    agent, completions = make_agent([("text", "must not be sent")], name="scheduler")
+    agent._resolved_route = ResolvedModelRoute(
+        workload="scheduler", profile_name="claude-sonnet-5", model="claude-sonnet-5-TEE",
+        provider="saygm", base_url="https://api.saygm.com/v1",
+        route=AccessRoute("saygm", "saygm_gateway", "saygm_credit", "SAYGM_API_KEY",
+                          "confidential", capabilities=("text", "tools")),
+        api_key_env="SAYGM_API_KEY", identity="anthropic/claude-sonnet-5")
+    checked = []
+    def withdrawn(workload, **kwargs):
+        checked.append((workload, kwargs))
+        raise ModelRouteError("catalog entry was withdrawn")
+    monkeypatch.setattr("jarvis.agents.base.resolve_model_route_checked", withdrawn)
+    monkeypatch.setattr("jarvis.agents.base.make_route_client", lambda *_a: pytest.fail("stale client recreated"))
+    result = await agent.run("public synthetic fixture")
+    assert result.startswith("REFUSED: the current SAYGM catalog")
+    assert checked == [("scheduler", {"explicit_profile": "claude-sonnet-5"})]
+    assert completions.requests == []
+
+
+async def test_agent_finally_closes_only_its_native_parent(monkeypatch):
+    agent, _completions = make_agent([("text", "done")])
+    closed = []
+    async def close(parent):
+        closed.append(parent)
+    agent._client.close_request = close
+    result = await agent.run("public synthetic fixture", run_id="native-owner")
+    assert result == "done"
+    assert closed == ["native-owner"]
 
 
 class TestRuntimeModelOverride:
@@ -1992,13 +2033,13 @@ class TestRuntimeModelOverride:
         agent, default_fake, _constructed = self._agent_with_fake_override_client(
             tmp_path, monkeypatch, [("text", "override reply")],
         )
-        before_client = agent._client  # noqa: SLF001
-        before_model = agent._model  # noqa: SLF001
+        before_client = agent._client
+        before_model = agent._model
 
         await agent.run("research radar", model_profile_override="fable")
 
-        assert agent._client is before_client  # noqa: SLF001
-        assert agent._model == before_model  # noqa: SLF001
+        assert agent._client is before_client
+        assert agent._model == before_model
         # A subsequent DEFAULT run (no override) still uses the default
         # client — the override never leaked into instance state.
         reply2 = await agent.run("what time is it")
@@ -2178,6 +2219,7 @@ def test_librarian_budget_is_ten():
     """T1.4 (2026-09-22): the 09-18 memory-graph run needed 13 tool calls
     against the default 5 and ran out."""
     from pathlib import Path
+
     import yaml
     root = Path(__file__).resolve().parents[2]
     agents = yaml.safe_load((root / "config" / "agents.yaml").read_text())["sub_agents"]

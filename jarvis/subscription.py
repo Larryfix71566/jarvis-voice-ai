@@ -8,14 +8,18 @@ the project vault. Tool-capable subscription execution is a separate gate.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import pwd
+import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 from collections.abc import Sequence
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -61,6 +65,121 @@ def provider_command(which: str) -> str:
     return os.environ.get(COMMAND_ENV[which]) or which
 
 _CODEX_NO_TOOL_VERIFICATION_ENV = "JARVIS_CODEX_SUBSCRIPTION_NO_TOOLS_VERIFIED"
+CODEX_CAPABILITY_RECEIPT_ENV = "JARVIS_CODEX_SUBSCRIPTION_CAPABILITY_RECEIPT"
+CODEX_VERIFIED_VERSIONS = frozenset({"codex-cli 0.160.0"})
+_CODEX_CATALOG_ARGUMENT = "<mortimer-pinned-model-catalog>"
+# These names were checked against the installed 0.160.0 feature registry.
+# Code Mode's host remains enabled: the selected model requires it even when
+# the model-visible tool registry is empty. Disabling the host emits an error
+# item, which our strict completion parser correctly rejects.
+CODEX_DISABLED_FEATURES = (
+    "agent_message_board", "apps", "artifact", "auth_elicitation", "browser_use",
+    "browser_use_external", "browser_use_full_cdp_access", "chronicle", "code_mode",
+    "computer_use", "context_management", "current_time_reminder",
+    "default_mode_request_user_input", "deferred_executor", "deferred_tool_world_state",
+    "enable_mcp_apps", "executor_capability_discovery", "goals",
+    "guardian_conversation_history_tools", "hooks", "image_generation", "in_app_browser",
+    "in_app_chat", "in_app_local_automation", "memories", "multi_agent", "multi_agent_v2",
+    "non_prefixed_mcp_tool_names", "plugins", "remote_plugin", "request_permissions_tool",
+    "send_message_to_user_async", "shell_snapshot", "shell_snapshot_v2", "shell_tool",
+    "skill_mcp_dependency_install", "skill_search", "sleep_tool", "standalone_web_search",
+    "tool_call_mcp_elicitation", "tool_suggest", "unified_exec", "view_image",
+    "workspace_dependencies", "worktrees", "unbounded_connection_retries",
+    "respect_system_proxy", "system_proxy_fallback",
+)
+CODEX_ISOLATION_CONFIG = {
+    "web_search": "disabled", "mcp_servers": {}, "tool_suggest.discoverables": [],
+    "tools.update_plan.enabled": False, "tools.experimental_request_user_input.enabled": False,
+    "tools.web_search": False, "history.persistence": "none", "analytics.enabled": False,
+    "otel.log_user_prompt": False, "otel.log_agent_responses": False,
+    "project_doc_max_bytes": 0, "memories.generate_memories": False,
+    "check_for_update_on_startup": False, "features.enable_request_compression": False,
+}
+
+
+def _canonical_json(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _json_digest(value: Any) -> str:
+    return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
+
+
+def _file_digest(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def codex_runtime_identity() -> dict[str, str]:
+    """Inspect executable identity only; never read an authentication store."""
+    command = provider_command("codex")
+    selected = shutil.which(command)
+    if selected is None:
+        raise SubscriptionCapabilityError("Codex subscription command is unavailable")
+    executable = Path(selected).resolve()
+    try:
+        digest = _file_digest(executable)
+        with _temp_cwd() as workdir:
+            result = subprocess.run(
+                [str(executable), "--version"], cwd=workdir,
+                env=_subscription_env(workdir), capture_output=True, text=True,
+                timeout=5, check=False,
+            )
+        version = result.stdout.strip()
+        if result.returncode != 0 or version not in CODEX_VERIFIED_VERSIONS:
+            raise SubscriptionCapabilityError("Codex installed version has no verified capability contract")
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise SubscriptionCapabilityError("Codex runtime identity could not be verified") from exc
+    return {"path": str(executable), "sha256": digest, "version": version}
+
+
+def validate_codex_capability_receipt(model: str) -> tuple[list[str], dict[str, Any]]:
+    """Require exact installed binary/model/config evidence, never a bare flag.
+
+    The catalog content is embedded in the receipt. The subprocess launcher
+    copies that content to its private request directory; a mutable catalog
+    path cannot alter the tool surface between validation and execution.
+    Local mock evidence proves tool construction, not account access or billing.
+    """
+    receipt_path = os.environ.get(CODEX_CAPABILITY_RECEIPT_ENV)
+    if not receipt_path:
+        raise SubscriptionCapabilityError("Codex no-tools capability receipt is required")
+    try:
+        path = Path(receipt_path)
+        if not path.is_file() or path.stat().st_size > 2_000_000:
+            raise ValueError("invalid receipt file")
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        if (not isinstance(receipt, dict) or type(receipt.get("schema_version")) is not int
+                or receipt.get("schema_version") != 1):
+            raise ValueError("invalid receipt schema")
+        identity = codex_runtime_identity()
+        catalog = receipt["catalog"]
+        if (receipt.get("runtime") != "codex" or receipt.get("model") != model
+                or receipt.get("executable") != identity
+                or receipt.get("proof_kind") != "installed_cli_loopback_mock"
+                or receipt.get("advertised_tools") != []
+                or receipt.get("terminal_success_without_error_items") is not True
+                or receipt.get("negative_unadvertised_tool_rejected") is not True
+                or receipt.get("api_credentials_absent") is not True
+                or type(receipt.get("real_provider_calls")) is not int
+                or receipt.get("real_provider_calls") != 0
+                or not isinstance(catalog, dict)
+                or not isinstance(catalog.get("models"), list)
+                or len(catalog["models"]) != 1
+                or catalog["models"][0].get("slug") != model
+                or receipt.get("catalog_sha256") != _json_digest(catalog)):
+            raise ValueError("capability evidence mismatch")
+        argv = _codex_argv(model, command=identity["path"])
+        if receipt.get("invocation_sha256") != _json_digest(argv):
+            raise ValueError("invocation evidence mismatch")
+    except SubscriptionCapabilityError:
+        raise
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
+        raise SubscriptionCapabilityError("Codex capability receipt does not match this runtime request") from exc
+    return argv, catalog
 
 
 def _subscription_env(temp_dir: str | None = None) -> dict[str, str]:
@@ -84,6 +203,10 @@ def _subscription_env(temp_dir: str | None = None) -> dict[str, str]:
 
 
 def _prompt(messages: list[dict[str, Any]]) -> str:
+    if any(not isinstance(item, dict) or item.get("role") not in {"system", "user", "assistant"}
+           or not isinstance(item.get("content"), str) or item.get("tool_calls")
+           for item in messages):
+        raise SubscriptionCapabilityError("subscription text input does not support images or tool history")
     return "\n\n".join(
         f"{str(item.get('role', 'user')).upper()}: {item.get('content', '')}"
         for item in messages
@@ -106,21 +229,21 @@ def _claude_argv(model: str) -> list[str]:
     ]
 
 
-def _codex_argv(model: str) -> list[str]:
+def _codex_argv(model: str, *, command: str | None = None) -> list[str]:
     """Build a constrained Codex invocation after its no-tools gate is proven."""
-    command = provider_command("codex")
-    return [
+    command = command or provider_command("codex")
+    argv = [
         command, "exec", "--json", "--ephemeral", "--ignore-user-config",
-        "--ignore-rules", "--skip-git-repo-check",
-        "--sandbox", "read-only", "--disable", "shell_tool", "--disable",
-        "unified_exec", "--disable", "view_image", "--disable", "sleep_tool",
-        "--disable", "code_mode", "--disable", "code_mode_host", "--disable",
-        "browser_use", "--disable", "browser_use_external", "--disable",
-        "computer_use", "--disable", "apps", "--disable", "plugins",
-        "--disable", "multi_agent", "--disable", "image_generation",
-        "--disable", "request_permissions_tool", "-c", 'web_search="disabled"',
-        "--model", model, "-",
+        "--ignore-rules", "--skip-git-repo-check", "--strict-config",
+        "--sandbox", "read-only", "--model", model,
     ]
+    for feature in CODEX_DISABLED_FEATURES:
+        argv.extend(["--disable", feature])
+    argv.extend(["--enable", "code_mode_host"])
+    for name, value in CODEX_ISOLATION_CONFIG.items():
+        argv.extend(["-c", name + "=" + _canonical_json(value)])
+    argv.extend(["-c", "model_catalog_json=" + json.dumps(_CODEX_CATALOG_ARGUMENT), "-"])
+    return argv
 
 
 def _claude_text(stdout: str) -> str:
@@ -173,6 +296,10 @@ def _codex_text(stdout: str) -> str:
     if any(event.get("item", {}).get("type") == "error"
            for event in events if isinstance(event.get("item"), dict)):
         raise SubscriptionRuntimeError("Codex returned a failed item")
+    if any(event["item"].get("type") not in {"agent_message", "reasoning"}
+           for event in events if isinstance(event.get("item"), dict)):
+        raise SubscriptionRuntimeError("Codex text runtime returned a non-text item",
+                                       category="capability")
 
     messages = [event.get("item") for event in events
                 if event["type"] == "item.completed"
@@ -204,6 +331,36 @@ def _failure_category(stderr: str) -> str:
     return "provider_failure"
 
 
+def _owned_group_absent_after_permission_error(pid: int) -> bool:
+    """BSD signal-zero can return EPERM for a vanished group; verify only it.
+
+    This is read-only, selects the exact owned process group, and never prints
+    process commands, arguments, environment, or unrelated process metadata.
+    An unavailable/denied inspection remains unverified.
+    """
+    if sys.platform != "darwin":
+        return False
+    try:
+        result = subprocess.run(["/bin/ps", "-g", str(pid), "-o", "pid=,pgid=,stat="],
+                                capture_output=True, text=True, timeout=1, check=False,
+                                env=_subscription_env())
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 1 and not result.stdout.strip() and not result.stderr.strip()
+
+
+def _owned_group_present(pid: int) -> bool:
+    try:
+        os.killpg(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError as exc:
+        if _owned_group_absent_after_permission_error(pid):
+            return False
+        raise SubscriptionRuntimeError("owned provider cleanup could not be verified", category="cleanup") from exc
+    return True
+
+
 def _terminate_sync(process: subprocess.Popen[str]) -> None:
     try:
         if os.name == "posix":
@@ -215,9 +372,7 @@ def _terminate_sync(process: subprocess.Popen[str]) -> None:
     deadline = time.monotonic() + 2
     while time.monotonic() < deadline:
         process.poll()  # Reap an exited leader while checking its descendants.
-        try:
-            os.killpg(process.pid, 0)
-        except ProcessLookupError:
+        if not _owned_group_present(process.pid):
             break
         time.sleep(0.05)
     else:
@@ -225,10 +380,40 @@ def _terminate_sync(process: subprocess.Popen[str]) -> None:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-    process.wait()
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired as exc:
+        raise SubscriptionRuntimeError("owned provider cleanup could not be verified", category="cleanup") from exc
+    deadline = time.monotonic() + 2
+    while True:
+        if not _owned_group_present(process.pid):
+            return
+        if time.monotonic() >= deadline:
+            raise SubscriptionRuntimeError("owned provider descendants remain after cleanup", category="cleanup")
+        time.sleep(0.05)
 
 
-def _run_sync(argv: Sequence[str], prompt: str, timeout: float, *, provider: str) -> str:
+def _materialize_catalog(argv: Sequence[str], workdir: str,
+                         catalog: dict[str, Any] | None) -> list[str]:
+    if catalog is None:
+        return list(argv)
+    path = Path(workdir) / "approved-model-catalog.json"
+    path.write_text(_canonical_json(catalog), encoding="utf-8")
+    path.chmod(0o600)
+    return [arg.replace(_CODEX_CATALOG_ARGUMENT, str(path)) for arg in argv]
+
+
+def _encoded_prompt(prompt: str) -> bytes:
+    try:
+        return prompt.encode("utf-8")
+    except (AttributeError, UnicodeError) as exc:
+        raise SubscriptionRuntimeError("subscription prompt is not valid UTF-8 text",
+                                       category="malformed_input") from exc
+
+
+def _run_sync(argv: Sequence[str], prompt: str, timeout: float, *, provider: str,
+              catalog: dict[str, Any] | None = None) -> str:
+    _encoded_prompt(prompt)  # Validate before a text-mode child can be created.
     if os.name != "posix":
         raise SubscriptionCapabilityError(
             f"{provider} subscription runtime requires verified process-group cancellation on this platform"
@@ -237,7 +422,7 @@ def _run_sync(argv: Sequence[str], prompt: str, timeout: float, *, provider: str
         process: subprocess.Popen[str] | None = None
         try:
             process = subprocess.Popen(
-                list(argv), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                _materialize_catalog(argv, workdir, catalog), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
                 cwd=workdir, env=_subscription_env(workdir),
                 start_new_session=(os.name == "posix"),
@@ -269,8 +454,47 @@ def _run_sync(argv: Sequence[str], prompt: str, timeout: float, *, provider: str
 
 
 def _run_claude(model: str, messages: list[dict[str, Any]], timeout: float) -> str:
+    return _run_claude_response(model, messages, timeout).choices[0].message.content
+
+
+def _count(source: Any, key: str) -> int | None:
+    value = source.get(key) if isinstance(source, dict) else None
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def normalize_claude_usage(source: Any) -> dict[str, int | None]:
+    """Preserve token counts only, with Anthropic's inclusive input semantics."""
+    counts = [_count(source, key) for key in (
+        "input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")]
+    return {"prompt_tokens": sum(counts) if all(value is not None for value in counts) else None,
+            "completion_tokens": _count(source, "output_tokens"),
+            "cache_read_input_tokens": counts[1], "cache_creation_input_tokens": counts[2]}
+
+
+def _response(text: str, usage: Any) -> Any:
+    return SimpleNamespace(choices=[SimpleNamespace(
+        message=SimpleNamespace(content=text, tool_calls=[]))], usage=usage)
+
+
+def _claude_response(stdout: str) -> Any:
+    text = _claude_text(stdout)
+    return _response(text, normalize_claude_usage(json.loads(stdout).get("usage")))
+
+
+def _codex_response(stdout: str) -> Any:
+    text = _codex_text(stdout)
+    terminal = next(json.loads(line) for line in stdout.splitlines()
+                    if line.strip() and json.loads(line).get("type") == "turn.completed")
+    usage = terminal.get("usage")
+    return _response(text, {"prompt_tokens": _count(usage, "input_tokens"),
+                            "completion_tokens": _count(usage, "output_tokens"),
+                            "cache_read_input_tokens": _count(usage, "cached_input_tokens"),
+                            "cache_creation_input_tokens": None})
+
+
+def _run_claude_response(model: str, messages: list[dict[str, Any]], timeout: float) -> Any:
     stdout = _run_sync(_claude_argv(model), _prompt(messages), timeout, provider="Claude")
-    return _claude_text(stdout)
+    return _claude_response(stdout)
 
 
 def _run_codex(model: str, messages: list[dict[str, Any]], timeout: float) -> str:
@@ -280,12 +504,17 @@ def _run_codex(model: str, messages: list[dict[str, Any]], timeout: float) -> st
     every built-in/hosted tool has been removed. Keep this route closed until
     the exact installed version passes the plan's tool-surface acceptance.
     """
+    return _run_codex_response(model, messages, timeout).choices[0].message.content
+
+
+def _run_codex_response(model: str, messages: list[dict[str, Any]], timeout: float) -> Any:
     if os.environ.get(_CODEX_NO_TOOL_VERIFICATION_ENV) != "1":
         raise SubscriptionCapabilityError(
             "Codex subscription text route is disabled until its no-tools runtime capability is verified"
         )
-    stdout = _run_sync(_codex_argv(model), _prompt(messages), timeout, provider="Codex")
-    return _codex_text(stdout)
+    argv, catalog = validate_codex_capability_receipt(model)
+    stdout = _run_sync(argv, _prompt(messages), timeout, provider="Codex", catalog=catalog)
+    return _codex_response(stdout)
 
 
 async def _terminate_async(process: asyncio.subprocess.Process) -> None:
@@ -297,9 +526,7 @@ async def _terminate_async(process: asyncio.subprocess.Process) -> None:
         pass
     deadline = time.monotonic() + 2
     while time.monotonic() < deadline:
-        try:
-            os.killpg(process.pid, 0)
-        except ProcessLookupError:
+        if not await asyncio.to_thread(_owned_group_present, process.pid):
             break
         await asyncio.sleep(0.05)
     else:
@@ -307,10 +534,22 @@ async def _terminate_async(process: asyncio.subprocess.Process) -> None:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-    await process.wait()
+    try:
+        await asyncio.wait_for(process.wait(), timeout=2)
+    except asyncio.TimeoutError as exc:
+        raise SubscriptionRuntimeError("owned provider cleanup could not be verified", category="cleanup") from exc
+    deadline = time.monotonic() + 2
+    while True:
+        if not await asyncio.to_thread(_owned_group_present, process.pid):
+            return
+        if time.monotonic() >= deadline:
+            raise SubscriptionRuntimeError("owned provider descendants remain after cleanup", category="cleanup")
+        await asyncio.sleep(0.05)
 
 
-async def _run_async(argv: Sequence[str], prompt: str, timeout: float, *, provider: str) -> str:
+async def _run_async(argv: Sequence[str], prompt: str, timeout: float, *, provider: str,
+                     catalog: dict[str, Any] | None = None) -> str:
+    prompt_bytes = _encoded_prompt(prompt)
     if os.name != "posix":
         raise SubscriptionCapabilityError(
             f"{provider} subscription runtime requires verified process-group cancellation on this platform"
@@ -318,7 +557,7 @@ async def _run_async(argv: Sequence[str], prompt: str, timeout: float, *, provid
     with _temp_cwd() as workdir:
         try:
             process = await asyncio.create_subprocess_exec(
-                *argv, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+                *_materialize_catalog(argv, workdir, catalog), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE, cwd=workdir, env=_subscription_env(workdir),
                 start_new_session=(os.name == "posix"),
             )
@@ -326,7 +565,7 @@ async def _run_async(argv: Sequence[str], prompt: str, timeout: float, *, provid
             raise SubscriptionRuntimeError(
                 f"{provider} subscription runtime could not start", category="runtime_unavailable") from exc
 
-        communication = asyncio.create_task(process.communicate(prompt.encode("utf-8")))
+        communication = asyncio.create_task(process.communicate(prompt_bytes))
         try:
             stdout, stderr = await asyncio.wait_for(asyncio.shield(communication), timeout)
         except asyncio.TimeoutError as exc:
@@ -372,19 +611,37 @@ async def _run_async(argv: Sequence[str], prompt: str, timeout: float, *, provid
 
 
 async def _run_claude_async(model: str, messages: list[dict[str, Any]], timeout: float) -> str:
+    return (await _run_claude_response_async(model, messages, timeout)).choices[0].message.content
+
+
+async def _run_claude_response_async(model: str, messages: list[dict[str, Any]], timeout: float) -> Any:
     stdout = await _run_async(_claude_argv(model), _prompt(messages), timeout,
                               provider="Claude")
-    return _claude_text(stdout)
+    return _claude_response(stdout)
 
 
 async def _run_codex_async(model: str, messages: list[dict[str, Any]], timeout: float) -> str:
+    return (await _run_codex_response_async(model, messages, timeout)).choices[0].message.content
+
+
+async def _run_codex_response_async(model: str, messages: list[dict[str, Any]], timeout: float) -> Any:
     if os.environ.get(_CODEX_NO_TOOL_VERIFICATION_ENV) != "1":
         raise SubscriptionCapabilityError(
             "Codex subscription text route is disabled until its no-tools runtime capability is verified"
         )
-    stdout = await _run_async(_codex_argv(model), _prompt(messages), timeout,
-                              provider="Codex")
-    return _codex_text(stdout)
+    argv, catalog = await asyncio.to_thread(validate_codex_capability_receipt, model)
+    stdout = await _run_async(argv, _prompt(messages), timeout,
+                              provider="Codex", catalog=catalog)
+    return _codex_response(stdout)
+
+
+def _assert_text_capabilities(kwargs: dict[str, Any]) -> None:
+    if kwargs.get("max_tokens") is not None:
+        raise SubscriptionCapabilityError("subscription runtime cannot enforce max_tokens")
+    if kwargs.get("stream") or kwargs.get("response_format") is not None:
+        raise SubscriptionCapabilityError("subscription text runtime does not support requested output capability")
+    if kwargs.get("temperature") is not None or kwargs.get("extra_body"):
+        raise SubscriptionCapabilityError("subscription text runtime cannot enforce provider generation parameters")
 
 
 class _Completions:
@@ -395,20 +652,18 @@ class _Completions:
     def create(self, **kwargs: Any) -> Any:
         if kwargs.get("tools"):
             raise SubscriptionRuntimeError("subscription text adapter does not support Mortimer tools")
-        text = _run_claude(str(kwargs.get("model") or self.model),
+        _assert_text_capabilities(kwargs)
+        return _run_claude_response(str(kwargs.get("model") or self.model),
                            list(kwargs.get("messages") or []), self.timeout)
-        return SimpleNamespace(choices=[SimpleNamespace(
-            message=SimpleNamespace(content=text, tool_calls=[]))])
 
 
 class _AsyncCompletions(_Completions):
     async def create(self, **kwargs: Any) -> Any:
         if kwargs.get("tools"):
             raise SubscriptionRuntimeError("subscription text adapter does not support Mortimer tools")
-        text = await _run_claude_async(str(kwargs.get("model") or self.model),
+        _assert_text_capabilities(kwargs)
+        return await _run_claude_response_async(str(kwargs.get("model") or self.model),
                                        list(kwargs.get("messages") or []), self.timeout)
-        return SimpleNamespace(choices=[SimpleNamespace(
-            message=SimpleNamespace(content=text, tool_calls=[]))])
 
 
 class SubscriptionTextClient:
@@ -428,20 +683,18 @@ class _CodexCompletions(_Completions):
     def create(self, **kwargs: Any) -> Any:
         if kwargs.get("tools"):
             raise SubscriptionRuntimeError("Codex subscription text adapter does not support Mortimer tools")
-        text = _run_codex(str(kwargs.get("model") or self.model),
+        _assert_text_capabilities(kwargs)
+        return _run_codex_response(str(kwargs.get("model") or self.model),
                           list(kwargs.get("messages") or []), self.timeout)
-        return SimpleNamespace(choices=[SimpleNamespace(
-            message=SimpleNamespace(content=text, tool_calls=[]))])
 
 
 class _AsyncCodexCompletions(_CodexCompletions):
     async def create(self, **kwargs: Any) -> Any:
         if kwargs.get("tools"):
             raise SubscriptionRuntimeError("Codex subscription text adapter does not support Mortimer tools")
-        text = await _run_codex_async(str(kwargs.get("model") or self.model),
+        _assert_text_capabilities(kwargs)
+        return await _run_codex_response_async(str(kwargs.get("model") or self.model),
                                       list(kwargs.get("messages") or []), self.timeout)
-        return SimpleNamespace(choices=[SimpleNamespace(
-            message=SimpleNamespace(content=text, tool_calls=[]))])
 
 
 class CodexSubscriptionTextClient:

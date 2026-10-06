@@ -53,6 +53,7 @@ from jarvis.model_execution import (
     ModelExecutionRequest,
     ModelToolCall,
     ModelToolReference,
+    close_model_request,
     execute_chat,
 )
 from jarvis.model_routing import (
@@ -676,6 +677,23 @@ class SubAgent:
             )
         else:
             workload_policy_floor = current_policy_floor or self._configured_policy_floor
+        if run_resolved_route is not None and run_resolved_route.route.name == "saygm":
+            # Confidential catalog attestations are live capabilities, not a
+            # constructor-time grant. Re-resolve before reusing any client;
+            # withdrawn or less-private offerings must stop this run.
+            try:
+                run_resolved_route = resolve_model_route_checked(
+                    self.name, explicit_profile=model_profile_override or run_resolved_route.profile_name,
+                )
+                if workload_policy_floor is not None:
+                    from jarvis.privacy_policy import assert_route_allowed
+                    assert_route_allowed(run_resolved_route.route, workload_policy_floor)
+            except Exception as exc:  # noqa: BLE001 — fail closed with a payload-free reason
+                logger.warning("subagent_saygm_revalidation_failed agent=%s code=%s",
+                               self.name, type(exc).__name__[:64])
+                return "REFUSED: the current SAYGM catalog cannot verify this model route."
+            run_model = run_resolved_route.model
+            run_client = None
         private_route = bool(
             run_resolved_route is not None
             and run_resolved_route.route.privacy in {"confidential", "local_only"}
@@ -726,9 +744,9 @@ class SubAgent:
                                    self.name, type(exc).__name__[:64])
                     runlog.finish("FAILED: run association could not be verified.")
                     return "FAILED: creator run could not be durably associated."
-            if private_route and run_client is None:
-                # Private runtime objects are created only after both the
-                # route policy and the local result sink have been accepted.
+            if run_resolved_route is not None and run_client is None:
+                # Fresh runtime objects are created only after the route
+                # policy, protected sink and durable association are accepted.
                 run_client = make_route_client(run_resolved_route)
             run_event_callback = (
                 _protected_event_callback(on_event) if private_route else on_event
@@ -796,6 +814,12 @@ class SubAgent:
             reply = f"FAILED: specialist error ({error_code})."
             runlog.finish(reply)
             return reply
+
+        finally:
+            # A suspended native tool request must not outlive its owner when
+            # the existing permission/tool loop refuses, times out or exhausts.
+            await close_model_request(run_client if run_client is not None else self._client,
+                                      resolved_run_id)
 
     async def _loop(
         self, task: str, on_event: EventCallback | None, runlog: RunLogger,

@@ -893,6 +893,7 @@ async def execute_chat(request: ModelExecutionRequest,
             return
 
     started_at = time.monotonic()
+    client = None
     try:
         # The deadline includes lifecycle admission and time spent queued for
         # capacity; cancellation at either point must still emit one terminal
@@ -927,7 +928,11 @@ async def execute_chat(request: ModelExecutionRequest,
                 if request.stream_text:
                     completion_args["stream"] = True
                 await emit("progress", progress_stage="provider_request")
-                response = await client.chat.completions.create(**completion_args)
+                native_execute = getattr(client, "execute_request", None)
+                if native_execute is not None:
+                    response = await native_execute(request, resolved, completion_args)
+                else:
+                    response = await client.chat.completions.create(**completion_args)
                 if request.stream_text:
                     response = await _collect_chat_stream(
                         response,
@@ -984,13 +989,33 @@ async def execute_chat(request: ModelExecutionRequest,
                 await emit("completed")
                 return result
     except asyncio.CancelledError:
+        await close_model_request(client, request.parent_request_id)
         await emit("cancelled")
         raise
     except TimeoutError:
+        await close_model_request(client, request.parent_request_id)
         await emit("failed", error_code="timeout")
         raise
     except Exception as exc:
+        await close_model_request(client, request.parent_request_id)
         # Only a stable category is published. Provider exception text may
         # include input, credentials, endpoints or account details.
         await emit("failed", error_code=type(exc).__name__)
         raise
+
+
+async def close_model_request(client: Any, parent_request_id: str) -> None:
+    """Close only this parent's native session after failure or agent cleanup."""
+    close = getattr(client, "close_request", None)
+    if close is None:
+        return
+    try:
+        cleanup = close(parent_request_id)
+        if inspect.isawaitable(cleanup):
+            task = asyncio.ensure_future(cleanup)
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                await asyncio.shield(task)
+    except Exception as exc:  # noqa: BLE001 — cleanup diagnostics contain no provider payload
+        logger.warning("model_request_cleanup_failed: %s", type(exc).__name__)
