@@ -32,46 +32,40 @@ voice-only built-in profile, so readiness checks validate the unchanged voice
 route while the general model registry continues to reject Haiku for
 non-voice workloads.
 
-**Latest MAR-A progress (2026-09-29):** The deployment receipt ties the installed
-bundle and production checkout to `eb24e81`; the production-venv audit covers
-28/28 model call sites. Aggregate usage data is recorded in the
-[MAR-A baseline receipt](../acceptance/model-use-enhancements/receipts/mar-a-baseline-2026-09-29.json).
-It cannot establish latency, quality, route/billing attribution, or current
-process identity. MAR-A remains open until those gaps are measured through an
-agreed safe method. No provider calls or production changes were made.
+**Current candidate status (2026-10-05):** The isolated branch
+`codex/ws05-execution-20261005` is claimed on main through #175 and #176.
+Production checkout, installed bundle and deployment receipt agree on
+`bde22bb`; the 10-05 aggregate-only baseline records 26 provider calls (12 LLM)
+since deployment, with no populated historical route, billing-source or
+model-duration fields. Those missing measurements cannot be recovered.
+Running-process activation and representative workload quality remain open.
 
-The 2026-10-02 refresh now ties the installed checkout and bundle to `ae70f2c`,
-matches five current service PIDs to its deployment receipt, and again covers
-28/28 call sites. The [refresh receipt](../acceptance/model-use-enhancements/receipts/mar-a-baseline-refresh-2026-10-02.json)
-records the sparse post-deployment usage window and the missing measurements.
+The candidate adds exact catalog/model/capability binding and pinned credential
+contracts, workload quality floors, saved native preference and stale-draft
+repairs, confidential replay/settlement execution, content-safe continuation
+logs, and prospective non-streaming API accounting metadata. These are local
+implementation results, not deployed acceptance.
 
-**Stage status:** MAR-A deployment reconciliation, process executable identity,
-and call-site inventory are recorded in the 2026-10-02 refresh. A narrow
-synthetic latency/quality smoke is recorded separately; representative
-workload quality, effective process routing flag, and production route/billing
-attribution remain open. MAR-B has its initial model/route/workload
-contracts and MAR-C has the provider-neutral text execution contract. MAR-D
-has local privacy enforcement and enabled-mode confidential/local-only
-sub-agent run-log redaction, council call policy enforcement, and protected
-council payload redaction. Delegation status events also redact protected task
-text before stdout/UI emission, and the shared MCP registry blocks external
-servers during an armed sensitive turn before invocation. The remaining audit
-covers detached continuation and provider-specific result sinks.
-MAR-E has catalog parsing, vault allowlisting,
-and API-compatible routing. A 2026-10-02 authenticated catalog check returned
-64 models, none advertised as confidential; the confidential pilot remains open.
-MAR-F has gated text-only Claude and Codex subscription adapters; their child
-processes strip inherited API credentials and endpoint overrides before launch.
-A historical user-reported synthetic Codex probe succeeded using its authenticated
-default model; the prior OpenRouter Codex model identifier was rejected by that account.
-The first 2026-10-02 check found HTTP 401 on the older Claude executable.
-After Larry refreshed sign-in, the selected Homebrew CLI and Mortimer's
-isolated text adapter both passed a fixed public `claude-sonnet-5` probe;
-the older executable remains signed out. Codex is signed in but its Mortimer
-adapter remains gated until no-tools verification. Claude account access is
-restored for this candidate environment; live process identity, allowance,
-model capabilities, and tool-preserving execution remain open. MAR-G
-through MAR-J remain open.
+Claude 2.1.290 has a separately gated native MCP bridge. Only Mortimer's existing
+validated agent tool loop executes operations; request-bound IPC returns its
+results and mandatory system constraints to the provider runtime. Passing
+public-fixture receipts cover exact runtime/schema/protocol identities,
+isolation, unadvertised-tool refusal and cleanup. They do not enable the actual
+Developer registry. Codex 0.160.0 has a matching text-only no-tools proof; a
+three-case public research diagnostic passed all scored cases (median 3.9 s,
+three samples, no stable-p95 claim). Previous direct-API and Claude diagnostics
+failed the strict JSON-format gate, leaving their content unscored. Those
+receipts cannot establish a quality comparison with the newer Codex harness.
+
+**Open rollout gates:** all newly acquired source policies and legacy council
+identity coverage; representative research and real sandbox Developer quality;
+confidential memory pilot; supported workload spending/output limits; exact
+running-service capabilities and activation; billing/allowance/paid-overage
+settings; voice route-control and deployed rollback acceptance. SAYGM's latest
+authenticated catalog contains 64 models and zero advertised confidential
+models. Local runtime is still a placeholder. Direct OpenAI API access is not
+configured in the authoritative endpoint registry. Production global routing
+must remain unchanged while its private workloads lack compliant routes.
 
 **Reconciled 2026-09-22 against main `88b206f`.** This header and
 [the status file](../acceptance/model-use-enhancements/STATUS.md) now agree
@@ -106,6 +100,8 @@ Related documents:
 
 ## Progress
 
+- 2026-10-05 (Codex, MAR-B/D/E/F/H/I candidate): Route configuration cannot redefine native/local privacy or redirect authoritative API credentials; SAYGM catalog calls refuse redirects and use the exact catalog model, tier and advertised capabilities. Saved choices retain the static workload privacy/quality floors. Native controls preserve unavailable saved selections and bind confirmation to the exact current draft. Enabled historical-memory replay and review settlement now cross the shared confidential execution boundary, and late-delivery/settlement logs omit exception content and memory keys. Native subscription receipts and the bounded pilot harness are committed as scoped evidence, with account billing, complete source-policy coverage and representative Developer/private-memory acceptance explicitly open. No production activation or paid fallback was added. The ten native route-control tests pass; a protected-window capture failure also reproduces against unchanged main, so the deployment gate is not claimed green.
+
 - 2026-10-05 (Codex, prospective MAR-A API metadata): On the isolated WS-05 branch claimed through #175 (`66198c5`) and audit extension #176 (`0b6723c`), the existing API factory now measures completed non-streaming calls while preserving client/response identity and arguments. Existing accounting remains its single owner; trusted local metadata supplies adapter route/billing and duration without saving content or relabeling old rows. Forty-one factory/ledger regressions pass, including actual one-row persistence, cache-control, cancellation and provider-extra spoof refusal. See [the offline receipt](../acceptance/model-use-enhancements/receipts/mar-a-prospective-api-attribution-2026-10-05.json). This is candidate code, not deployed evidence. Streaming/voice measurements, actual account billing and representative quality remain open; no production route or provider credential changed.
 
 
@@ -122,6 +118,16 @@ Related documents:
 - 2026-10-02 (Codex, bounded test-stability fix, PR #162 merged as `30ac2c7`): The model-admission priority test now waits up to two seconds for the interactive waiter registered on a worker thread, polling at 1 ms intervals instead of assuming 20 zero-delay event-loop turns suffice. Its existing capacity and priority assertions remain. Thirty focused iterations and all 38 tests in `tests/unit/test_model_execution.py` passed locally; all five PR checks passed. This is a test-only change; MAR-A live route/capability evidence and rollout remain open.
 
 - 2026-10-02 (Codex, bounded test stability claim): Larry reported an intermittent failure in `test_background_admission_reserves_capacity_and_prioritizes_interactive`. The test waits at most 20 `asyncio.sleep(0)` turns for an interactive waiter registered by `_acquire` on a worker thread. Codex will replace that scheduling assumption with a deadline-based wait in `tests/unit/test_model_execution.py`, without changing `ModelAdmissionController` or route policy. The 10-02 baseline test passed eight local repeats, which does not disprove the reported approximately one-in-four failure. This is separate from MAR-A rollout and makes no live acceptance claim.
+
+### Remaining bounded implementation boundaries — 2026-10-06
+
+These open gates are not waived by the passing candidate tests:
+
+- **Typed source policies (MAR-D/G):** Claim the local registry/executor contract before editing it. A host-issued tool-result envelope must bind source scope and privacy to the exact parent/task/tool-call, with source policy joined to input/workload floors before any run log, UI event, derived instruction or provider continuation. Unknown/mismatched newly acquired source defaults confidential. Provider JSON cannot approve itself; verified authorized repository reads remain approved external. Negative tests must cover pre-result sinks as well as the model continuation. Preserve routing-off compatibility without claiming it confidential.
+- **Council identity (MAR-B/G):** The candidate enabled-route guard rejects duplicate canonical identities before provider construction. Extend the authoritative legacy loader/member selection only after its path is claimed and reviewed; the globally-off legacy path is still open. Judge/proposer independence uses identity, never profile name.
+- **Workload limits (MAR-B/C/J):** Current request deadlines, tool counts, API token requirements and isolated pilot reservations are not a general spending policy. Reserve any added workload keys first. Subscription runtimes must refuse limits they cannot enforce; model-call estimates do not prove account charges. No exhaustion or limit failure may select a paid fallback implicitly.
+- **Real Developer pilot (MAR-F/I):** Use the actual isolated sandbox driver through the existing permission/draft loop and exact real tool schemas. Obtain its own immutable capability receipt; the public fixture receipt cannot authorize it. Verify source policy, required constraints, cancellation, cleanup, consolidated parent ownership, quality and rollback. Text-only or no-op mocks cannot establish developer acceptance.
+- **Research and private-memory acceptance (MAR-E/I/J):** Pin the same source/scorer/framework before and after measurements, compare equivalent baseline/candidate cases, and report schema failure separately from factual quality. Source-packet synthesis does not establish full research retrieval. Use a catalog-confirmed compliant route for confidential synthetic memory; current SAYGM catalog offers none. Account allowance/paid-overage and physical/spoken checks remain Larry's gates.
 
 ## 1. Lock the scope and intended outcome
 

@@ -1,6 +1,6 @@
 # Model Use Enhancements — status
 
-**As of:** 2026-10-05
+**As of:** 2026-10-06
 **Plan:** [Model Use Enhancements](../../plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md)
 **Execution sequence:** [Remaining Gaps Implementation Plan](../../plans/MORTIMER_REMAINING_GAPS_IMPLEMENTATION_PLAN.md)
 
@@ -27,122 +27,77 @@ no linked receipt are also unreceipted.
 
 ## Open items first
 
-Candidate API attribution is implemented on `codex/ws05-execution-20261005`;
-[41 offline tests](receipts/mar-a-prospective-api-attribution-2026-10-05.json)
-verify prospective non-streaming API metadata and single-owner accounting.
-This does not recover historical timing or close deployed MAR-A acceptance.
+The 10-05 changes below are **candidate implementation**, on the isolated
+`codex/ws05-execution-20261005` branch claimed through #175 and #176. They do not
+change production routing, credentials, account settings or the deployed app.
 
-
-- [ ] **MAR-A** — Reconcile the installed Mac checkout with the candidate
-  release and capture live baseline latency/quality/usage.
-  A 2026-10-02 aggregate-only refresh confirms the deployed release `ae70f2c`,
-  matching bundle source revision and five loaded service PIDs, and 28/28
-  classified model call sites in both production and the current Codex tree.
-  Since that deployment the ledger has 15 provider calls (8 LLM), with usage
-  and estimated cost but no populated route, billing-source, or model-duration
-  fields. One completed supervisor run is not a model quality or latency
-  sample. The [refresh receipt](receipts/mar-a-baseline-refresh-2026-10-02.json)
-  records the evidence and remaining gates without reading prompt content or
-  making a provider call.
-  A separate [public synthetic direct-API probe](receipts/mar-a-synthetic-direct-api-2026-10-02.json)
-  made ten capped, tool-free calls: five Haiku voice-supervisor fixtures and
-  five Sonnet analyst fixtures all matched exactly, with median execution
-  durations of 508.3 ms and 994.0 ms respectively. This is a narrow smoke
-  baseline, not representative research/development quality or a stable p95;
-  the production ledger's missing route/billing/duration fields remain open.
-  The earlier [2026-09-29 baseline receipt](receipts/mar-a-baseline-2026-09-29.json)
-  covered 28/28 call sites on the then-deployed `eb24e81` release. Its process
-  identity limitation was partly resolved by the current executable check;
-  its missing model-call metrics remain a production-ledger limitation.
-- [ ] **MAR-D** — Apply privacy policy checks to every tool result, council
-  continuation, and usage/logging path. Enabled-mode confidential and
-  local-only sub-agent runs now redact tool arguments/results and final
-  replies in the durable run log. Council proposer, judge, planning, and
-  shadow passes now accept and enforce a stricter request policy, and their
-  durable payload/score sinks redact protected content. Delegation status
-  events now redact protected task text before stdout/UI emission; the
-  shared MCP registry now blocks external servers during an armed sensitive
-  turn before invocation; the remaining audit covers detached continuation
-  and provider-specific result sinks. In the isolated tree, council/planning
-  also inherit the static workload privacy floor when callers omit a label;
-  route preferences and weaker caller labels cannot lower it. Too-small
-  pre-provider rounds carry policy to their durable row and redact protected
-  goals. Confidential/local-only specialist answers now use an awaited local
-  result handoff and are returned to the external voice supervisor only as a
-  fixed status and opaque reference; protected UI results reject copy/share/
-  export. See the dated
-  [GC24-03 council receipt](../verified-gap-closure/GC24-03-council-workload-floor-2026-09-24.md).
-  The [protected local-result receipt](../verified-gap-closure/GC24-03-protected-local-result-handoff-2026-09-25.md)
-  covers this one path; MAR-D remains open until all source/sink families and
-  direct-mode paths are inventoried and negatively tested.
-- [ ] **MAR-E** — Perform the confidential-model portion of the SAYGM pilot.
-  The 2026-10-02 [live readiness receipt](receipts/model-access-live-readiness-2026-10-02.json)
-  confirms the vault credential and authenticated catalog request: 64 models,
-  none advertised as confidential. A catalog-confirmed confidential synthetic
-  test remains open. The 2026-09-20 receipt recorded a missing key; that is
-  historical evidence, not the current credential state.
-- [ ] **MAR-F** — Complete Claude re-authentication and capability evidence.
-  The [initial 2026-10-02 readiness receipt](receipts/model-access-live-readiness-2026-10-02.json)
-  recorded HTTP 401 from the older `/Users/larryfix/.local/bin/claude` despite
-  its account-status report. After Larry refreshed sign-in, a
-  [same-day recheck](receipts/mar-f-claude-subscription-recheck-2026-10-02.json)
-  found the selected `/opt/homebrew/bin/claude` signed in to Claude Max: both
-  direct and Mortimer-isolated fixed public-prompt inference succeeded on
-  `claude-sonnet-5`. The older executable remains signed out. Bot and admin
-  launch-agent `PATH` resolves the signed-in executable, but the running
-  process environment was not independently inspected and routing remains
-  disabled. `codex login status` reported ChatGPT sign-in; its Mortimer adapter
-  remains intentionally gated pending no-tools verification for the installed CLI.
-  Subscription tokens remain in each provider's own sign-in store, outside
-  the project vault. Both adapters remain text-only and reject Mortimer tools.
-  Capability, billing/overage, representative workload, and deployed-route
-  acceptance remain open.
-- [ ] **MAR-G** — Migrate all non-voice call sites and prove no background
-  workload inherits the voice route. Memory, extraction, sweep, procedure,
-  digest, agent, council, upgrade, shared-content vision, and production screen
-  analysis now have shared-boundary paths under the routing gate. Audit v2
-  reports 25 classified entries and zero review-required entries in the
-  2026-09-24 receipt. Shared
-  content resolves and discloses the route per offer, then binds execution to
-  that batch's route snapshot. Enabled-mode Mac/runtime acceptance is not
-  complete.
-  (Isolated dirty tree, 2026-09-24: planner cancellation/race handling is now
-  covered; the planner, council, and vision migrations use the shared boundary.
-  Full unit/integration tests pass: 2,811 passed, 4 skipped, 2 subtests passed;
-  SubAgent eval: 13 passed. This is not merge or deployed-candidate proof. The
-  supervisor voice path remains an explicit exception. See the
-  [GC24-02 implementation receipt](../verified-gap-closure/GC24-02-execution-boundary-implementation-2026-09-24.md).)
-(2026-09-25 isolated-tree update: optional token streaming now crosses the
-shared execution boundary for three explicitly enabled direct Anthropic
-profiles. After adding the explicit event-sink policy guard, the focused
-boundary/shim/route suites pass 126 tests; the full Python unit/integration
-run passes 2,829 tests, 4 skipped, 11 warnings and 2 subtests. No production
-caller consumes streamed deltas yet; complete tool-loop lifecycle, result
-sinks, durable reconciliation and Mac/provider acceptance remain open. See
-the GC24-02 receipt.)
-The current 2026-09-25 audit reports 26 classified entries, including the
-production-routed shared memory classifier, with zero review-required entries.
-See [`model-call-site-inventory-2026-09-25.json`](receipts/model-call-site-inventory-2026-09-25.json).
-- [ ] **MAR-H** — Add persistent route/workload controls to the existing
-  native console and voice command path. The sidecar draft/confirm API and
-  SQLite persistence are now landed; native-console wiring is landed in the
-  Repo sidecar's MODEL ACCESS section; the gated `model_route` voice tool now
-  shares the same draft/confirm store; live voice acceptance remains open.
-- [ ] **MAR-I** — Run the research, development, and synthetic confidential
-  memory pilot. The checked-in offline rollout fixture passes its monitoring
-  gate without touching a live database; provider-backed shadow evidence is
-  still credential-gated.
-  (Reconciled 2026-09-22: the memory provider shadow is no longer
-  credential-gated.
-  [`../memory-automation/provider-shadow-receipt.json`](../memory-automation/provider-shadow-receipt.json),
-  recorded 2026-09-18, shows profile `claude-sonnet-5` via the direct
-  Anthropic API route (`ANTHROPIC_API_KEY`), 8 synthetic cases, 8 calls,
-  `no_regression: true`, `live_database_touched: false` and
-  `production_automation_enabled: false`. That receipt did not go through
-  the model-routing layer or a confidential route, and it covers no research
-  or development workload. MAR-I stays open.)
-- [ ] **MAR-J** — Complete latency, quality, privacy, rollback, and deployed
-  release evidence before changing defaults.
+- [ ] **MAR-A — deployed baseline and measurements.** The
+  [fresh aggregate baseline](receipts/mar-a-baseline-2026-10-05.json) reconciles
+  production, bundle and deployment receipt to `bde22bb`. Since deployment it
+  records 26 provider calls (12 LLM), without populated historical route,
+  billing-source or duration fields. The candidate's
+  [41 offline API attribution tests](receipts/mar-a-prospective-api-attribution-2026-10-05.json)
+  prove future non-streaming metadata and single-owner accounting. Historical
+  timing is unrecoverable; effective bot activation, representative quality,
+  voice/stream timing and deployed attribution remain open.
+- [ ] **MAR-D — complete source/sink privacy coverage.** Exact route/key contracts,
+  static privacy floors, confidential replay/settlement and sanitized late-delivery
+  logs are implemented. The [source/sink regression receipt](receipts/mar-d-source-sink-regressions-2026-10-05.json)
+  pins the offline repairs. Declared tool-result restrictions are checked before
+  native continuation; newly acquired or unlabelled source policy/provenance and
+  the broader legacy-path audit still require acceptance. Do not label all
+  authorized repository data confidential or let provider output approve itself.
+- [ ] **MAR-E — SAYGM confidential pilot.** Authentication and catalog access
+  [succeeded again on 10-05](receipts/model-access-catalog-readiness-2026-10-05.json): 64 models, zero advertised confidential models.
+  Candidate execution binds the exact catalog ID, tier, capability shape and
+  protected gateway/key contract; redirected catalog requests are refused.
+  There is no available confidential pilot route to accept today; catalog
+  checks do not establish attestation or account guardrail settings.
+- [ ] **MAR-F — subscription capability, account and workload acceptance.**
+  Installed Codex 0.160.0 has a [passing exact-model text/no-tools proof](receipts/mar-f-codex-text-capability-2026-10-05.json).
+  Installed Claude 2.1.290 has a [passing isolated public native-tool fixture and
+  negative unadvertised-Bash proof](receipts/mar-f-claude-native-fixture-capability-2026-10-05.json). Candidate Claude native tools require a
+  separate exact binary/model/invocation/schema/control-protocol receipt and
+  preserve the existing Mortimer tool executor, mandatory constraints and
+  request cleanup. Codex tool workloads remain unsupported. The fixture does
+  not authorize real Developer tools, prove account billing/overage settings,
+  or establish model quality on those tools. Provider sign-in stores remain
+  outside the vault; no token or credential was copied.
+- [ ] **MAR-G — enabled-mode workload acceptance.** The candidate call-site
+  inventory classifies 30/30 entries, including the repaired historical replay
+  and review-settlement paths. Classification is not behavioral acceptance.
+  Background work keeps dedicated profiles and static privacy/quality floors;
+  the voice supervisor is unchanged. Enabled routing rejects duplicate canonical
+  identities before any council provider call; globally-off legacy council still
+  lacks that guard. Complete enabled-mode run/usage/cancellation
+  evidence and legacy council canonical-identity coverage remain open.
+- [ ] **MAR-H — native and voice controls.** Native saved choices outrank defaults,
+  unavailable choices remain visible, and changes invalidate drafts and late
+  replies. Catalog descriptors separate profile capabilities, provider gates and
+  admin activation from unverified bot state. [Ten native route-control tests](receipts/model-route-controls-native-2026-10-05.json)
+  pass. Spoken stage/confirm behavior and deployed acceptance remain open.
+  The broader native protected-window capture gate fails with ScreenCaptureKit
+  `-3811` on both candidate and unchanged main; it was not removed or relaxed.
+- [ ] **MAR-I — three-workload pilot.** The reproducible harness is bounded,
+  dry-run by default, isolates databases, pins source/scorer hashes and records
+  only aggregate results. The
+  [Codex public research diagnostic](receipts/model-use-pilot-live-codex-research-2026-10-05.json)
+  scored 3/3 cases, median 3914.5 ms and sample maximum 3974.5 ms. This is three
+  cold source-packet synthesis calls, not complete research retrieval or stable
+  p95 acceptance. Earlier
+  [direct API](receipts/model-use-pilot-live-direct-research-2026-10-05.json) and
+  [Claude](receipts/model-use-pilot-live-claude-research-2026-10-05.json) diagnostics
+  completed 3/3 requests but failed the strict JSON-format gate; factual content
+  is unscored. [Recomparison](receipts/model-use-pilot-comparison-recheck-2026-10-05.json)
+  is explicitly inconclusive, and changed scorer/framework versions cannot be
+  compared as if they were identical. Real sandbox Developer and confidential
+  memory pilots remain open; historical public memory shadow is not a substitute.
+- [ ] **MAR-J — rollout.** Verify workload quality/latency, privacy, effective
+  service configuration, allowance/paid-overage settings, supported spend/output
+  limits and deployed rollback before changing defaults. The authoritative
+  endpoint registry has no direct OpenAI API endpoint; key presence alone is not
+  evidence of one. Local runtime is a placeholder and private defaults have no
+  compliant available route. Keep global production routing unchanged.
 
 ## Foundation landed
 

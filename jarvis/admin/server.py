@@ -101,7 +101,10 @@ from jarvis.model_preferences import (
     list_preferences,
     stage_preference,
 )
-from jarvis.model_routing import available_routes, load_access_config
+from jarvis.model_routing import (
+    available_routes, describe_route_choice, load_access_config,
+    model_profile_for_workload,
+)
 from jarvis import keyhealth
 from jarvis.prompts import (
     PLAN_AUTHOR_PROMPT,
@@ -1631,9 +1634,22 @@ def model_routes() -> dict:
     try:
         access = load_access_config()
         registry = load_model_registry()
+        workloads = access.get("workloads") or {}
+        configured_routes = access.get("routes") or {}
+        profile_pool = dict(registry.get("profiles") or {})
+        restricted_profiles = {}
+        # Preserve Haiku's voice-only exception without adding an economy
+        # profile to the general registry or hiding its current selection.
+        if "voice_supervisor" in workloads:
+            voice_name = workloads["voice_supervisor"].get("profile")
+            if voice_name and voice_name not in profile_pool:
+                profile_pool[voice_name] = model_profile_for_workload("voice_supervisor")
+                restricted_profiles[voice_name] = ["voice_supervisor"]
         profiles = []
-        for name, profile in sorted((registry.get("profiles") or {}).items()):
-            routes = available_routes(profile)
+        choices = {name: {} for name in workloads}
+        for name, profile in sorted(profile_pool.items()):
+            routes = available_routes(profile, route_catalog=configured_routes)
+            supported_workloads = restricted_profiles.get(name, sorted(workloads))
             profiles.append({
                 "name": name,
                 "identity": profile.get("identity", ""),
@@ -1641,12 +1657,21 @@ def model_routes() -> dict:
                 "model": profile.get("model", ""),
                 "tier": profile.get("tier"),
                 "routes": routes,
+                "supported_workloads": supported_workloads,
                 "api_key_env": profile.get("api_key_env"),
                 "key_present": bool(profile.get("api_key_env")
                                      and os.environ.get(profile["api_key_env"])),
             })
+            for workload in supported_workloads:
+                choices[workload][name] = {
+                    route: describe_route_choice(
+                        workload, name, route, access_config=access,
+                        registry=registry,
+                    )
+                    for route in routes
+                }
         route_catalog = {}
-        for name, route in (access.get("routes") or {}).items():
+        for name, route in configured_routes.items():
             route_catalog[name] = {
                 "adapter": route.get("adapter", name),
                 "billing": route.get("billing", name),
@@ -1656,9 +1681,18 @@ def model_routes() -> dict:
                 "key_present": bool(route.get("credential_env")
                                      and os.environ.get(route["credential_env"])),
             }
+        # Direct API is synthesized per profile by the resolver, not a global
+        # YAML route. Its credentials/capabilities are in choices above.
+        route_catalog.setdefault("direct_api", {
+            "adapter": "profile_api", "billing": "provider_api",
+            "privacy": "approved_external", "capabilities": [],
+            "per_profile": True,
+        })
         return {"ok": True, "routes": route_catalog,
-                "workloads": access.get("workloads") or {},
-                "profiles": profiles, "preferences": list_preferences()}
+                "workloads": workloads, "choices": choices,
+                "profiles": profiles, "preferences": list_preferences(),
+                "routing_enabled": os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1",
+                "routing_process": "admin"}
     except Exception as exc:  # noqa: BLE001 - read-only status boundary
         logger.warning("model_routes_status_failed error_type=%s",
                        type(exc).__name__)

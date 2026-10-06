@@ -1,0 +1,51 @@
+{
+  "compiled_identifier_batch_coverage": {
+    "batch_13_appkit_bootstrap_rerun": true,
+    "batch_13_log_sha256": "6a8907768695fbcf322c916f1f4cfc21eb85ab321eb964e1604a0a8108a35e3c",
+    "bootstrap_duplicate_excluded_from_unique_count": true,
+    "failures": 1,
+    "full_gate_passed": false,
+    "single_process_attempt": "stalled; owned process stopped after dispatch-thread exhaustion was observed",
+    "skips": 6,
+    "unique_test_identifiers": 493
+  },
+  "date": "2026-10-05",
+  "evidence_scope": "isolated candidate native route controls; whole-suite gate explicitly not green",
+  "existing_capture_failure": {
+    "candidate_isolated": {
+      "failures": 1,
+      "log_sha256": "cc50761623c0b2707f570c15b74a189fcd7351b419fa664f29bc4a187622e5b2",
+      "tests": 4
+    },
+    "deployment_gate_open": true,
+    "error": "ScreenCaptureKit audio/video capture failure -3811",
+    "privacy_assertion_removed": false,
+    "test": "ProtectedDisplayContentTests.testProtectedContentInActualWindowCaptureMatchesBodyOnlyReference",
+    "test_relaxed": false,
+    "unchanged_main_app_code": {
+      "failures": 1,
+      "log_sha256": "b89a6f80c73f487598d703a1280fbb942680d5a1221c6b177c6cff18cf0830d8",
+      "tests": 4
+    }
+  },
+  "focused": {
+    "failures": 0,
+    "log_sha256": "d13ffd3671d46788c727de70db7fc64815d5a076e20941821a6d9e688fc7ad99",
+    "test_class": "ModelRouteControlsTests",
+    "tests": 10
+  },
+  "limitations": [
+    "Batch coverage is not a passing single-process full suite.",
+    "The existing capture failure reproduces on unchanged main; deployment acceptance remains open.",
+    "Native controls have offline delayed-response tests, not spoken or deployed acceptance."
+  ],
+  "production_changed": false,
+  "provider_calls": 0,
+  "schema_version": 1,
+  "sources": {
+    "macos/MortimerHost/Sources/MortimerHost/Drawer/RepoTab.swift": "74c1486e391dfcd8673b41ad0e0e07156a6e5797de6586998aa19dbaa1680bba",
+    "macos/MortimerHost/Tests/MortimerHostTests/ModelRouteControlsTests.swift": "ab66272597b60fed5988baae20a881b1eaa377b9d1a5c14e99a0b176ce0f3715"
+  },
+  "system": "codex",
+  "workstream": "WS-05"
+}
