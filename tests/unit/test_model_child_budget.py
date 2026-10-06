@@ -112,6 +112,23 @@ def test_partial_sponsorship_schema_never_looks_like_unlinked_scope(table):
         resolve_model_child_budget("council", "parent-1", WorkloadLimits(), now=110)
 
 
+def test_missing_scope_table_with_prior_authority_is_never_an_old_uncapped_ledger():
+    child()
+    with sqlite3.connect(usage_ledger.DB_PATH) as conn:
+        conn.execute("DROP TABLE model_task_budgets")
+    for workload, parent in (("council", "parent-1"), ("council", "new-parent")):
+        with pytest.raises(ModelBudgetUnavailable, match="budget_storage_unavailable"):
+            begin_model_task_budget(workload, parent, WorkloadLimits(), now=110)
+
+
+def test_partial_sponsorship_schema_also_refuses_new_ordinary_parent():
+    child()
+    with sqlite3.connect(usage_ledger.DB_PATH) as conn:
+        conn.execute("DROP TABLE model_task_budget_links")
+    with pytest.raises(ModelBudgetUnavailable, match="budget_storage_unavailable"):
+        begin_model_task_budget("planning", "new-parent", WorkloadLimits(), now=110)
+
+
 def test_child_absolute_deadline_uses_first_child_start_and_owner_expiry():
     binding = child(owner(WorkloadLimits(100, 30)), WorkloadLimits(200, 20), now=110)
     assert binding.owner.deadline_at == binding.child.deadline_at == 130

@@ -329,6 +329,12 @@ def existing_model_budget_connection() -> sqlite3.Connection | None:
         ).fetchone()
         if exists:
             return conn
+        if conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name IN "
+            "('model_call_budget_reservations','model_task_budget_links',"
+            "'model_call_budget_reservation_scopes')",
+        ).fetchone():
+            raise sqlite3.DatabaseError("incomplete model budget schema")
         conn.close()
         return None
     except Exception:

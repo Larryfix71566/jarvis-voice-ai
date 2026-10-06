@@ -299,6 +299,7 @@ def _existing_scope(owner: str, workload: str, parent_request_id: str) -> TaskBu
             return None
         with closing(conn):
             conn.row_factory = sqlite3.Row
+            _has_child_schema(conn)
             row = conn.execute(
                 "SELECT * FROM model_task_budgets WHERE user_id=? AND workload=? AND parent_request_id=?",
                 (owner, workload, parent_request_id),
