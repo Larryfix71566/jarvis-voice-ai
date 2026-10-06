@@ -299,7 +299,7 @@ def _validate_handle(budget: TaskBudget) -> None:
         _identifiers(budget.workload, budget.parent_request_id)
 
 
-def _scope_row(conn: sqlite3.Connection, budget: TaskBudget, now: float) -> sqlite3.Row:
+def _scope_row(conn: sqlite3.Connection, budget: TaskBudget, now: float, *, observe_clock: bool = True) -> sqlite3.Row:
     row = conn.execute(
         "SELECT * FROM model_task_budgets WHERE user_id=? AND workload=? AND parent_request_id=?",
         (budget.user_id, budget.workload, budget.parent_request_id),
@@ -309,9 +309,10 @@ def _scope_row(conn: sqlite3.Connection, budget: TaskBudget, now: float) -> sqli
         raise ModelBudgetUnavailable("budget_scope_mismatch")
     _row_budget(row)
     _check_clock(row, now)
-    conn.execute(
-        "UPDATE model_task_budgets SET last_seen_at=? WHERE scope_id=?", (now, budget.scope_id),
-    )
+    if observe_clock:
+        conn.execute(
+            "UPDATE model_task_budgets SET last_seen_at=? WHERE scope_id=?", (now, budget.scope_id),
+        )
     return row
 
 
@@ -823,9 +824,9 @@ def resolve_model_child_budget(workload: str, parent_request_id: str, limits: Wo
     return _refresh_model_binding(binding, limits, started_at=started_at, now=now)
 
 
-def _binding_rows(conn, binding, current):
+def _binding_rows(conn, binding, current, *, observe_clock=True):
     expected = _budget_path(binding)
-    rows = tuple(_scope_row(conn, budget, current) for budget in expected)
+    rows = tuple(_scope_row(conn, budget, current, observe_clock=observe_clock) for budget in expected)
     _validate_stored_path(_read_budget_chain(conn, rows[-1]), expected)
     return rows
 
@@ -850,22 +851,38 @@ def _reserved_total(conn, scope):
     return sum((_decimal(row[0], code="budget_policy_mismatch") for row in rows), Decimal(0))
 
 
-def reserve_model_child_call_budget(binding: ChildTaskBudget, task_id: str, provider: str, model: str,
-                                    route_name: str, billing_source: str, estimated_input_tokens: int,
-                                    output_token_upper_bound: int, *, now: float | None = None) -> ModelCallReservation:
-    """Reserve one attempt against both pools in a single SQLite transaction."""
-    _validate_child(binding)
-    reservation = uuid4().hex
-    if binding.child.scope_id is None:
-        remaining_child_seconds(binding, now=now)
-        return ModelCallReservation(reservation, None)
-    with _transaction(retain_clock_on_refusal=True) as conn:
-        current = _clock_value(now)
-        funding = _binding_rows(conn, binding, current)
-        root, child = funding[0], funding[-1]
-        rows = {row["scope_id"]: row for row in funding}
-        if any(row["deadline_at"] is not None and current >= row["deadline_at"] for row in rows.values()):
-            raise ModelBudgetUnavailable("budget_deadline_exhausted")
+def _call_budget_ephemeral(budget):
+    if type(budget) is ChildTaskBudget:
+        _validate_child(budget)
+        if budget.child.scope_id is None:
+            remaining_child_seconds(budget)
+            return True
+    else:
+        _validate_handle(budget)
+        if budget.scope_id is None:
+            if _existing_scope(budget.user_id, budget.workload, budget.parent_request_id) is not None:
+                raise ModelBudgetUnavailable("budget_policy_mismatch")
+            return True
+    return False
+
+
+def _call_budget_rows(conn, budget, current, *, observe_clock=True):
+    if type(budget) is ChildTaskBudget:
+        return _binding_rows(conn, budget, current, observe_clock=observe_clock)
+    row = _scope_row(conn, budget, current, observe_clock=observe_clock)
+    if _parent_link(conn, budget.scope_id) is not None:
+        raise ModelBudgetUnavailable("budget_policy_mismatch")
+    return (row,)
+
+
+def _call_budget_admission(conn, budget, funding, current, task_id, provider, model,
+                           route_name, billing_source, estimated_input_tokens, output_token_upper_bound):
+    """The same authority checks serve dry reads and atomic reservation."""
+    rows = {row["scope_id"]: row for row in funding}
+    if any(row["deadline_at"] is not None and current >= row["deadline_at"] for row in funding):
+        raise ModelBudgetUnavailable("budget_deadline_exhausted")
+    if type(budget) is ChildTaskBudget:
+        binding = budget
         current_output = min((row["max_output_tokens_per_call"] for row in funding
                               if row["max_output_tokens_per_call"] is not None), default=None)
         current_spend = min((
@@ -886,7 +903,7 @@ def reserve_model_child_call_budget(binding: ChildTaskBudget, task_id: str, prov
                 current_output is not None and output_token_upper_bound > current_output):
             raise ModelBudgetUnavailable("budget_output_limit")
         if current_spend is None:
-            return ModelCallReservation(reservation, root["scope_id"])
+            return None, {}
         if (not isinstance(task_id, str) or not _OPAQUE_ID.fullmatch(task_id)
                 or not isinstance(provider, str) or not _MODEL_ID.fullmatch(provider)
                 or not isinstance(model, str) or not _MODEL_ID.fullmatch(model)
@@ -895,21 +912,97 @@ def reserve_model_child_call_budget(binding: ChildTaskBudget, task_id: str, prov
         if ((route_name, billing_source) not in {("direct_api", "provider_api"), ("saygm", "saygm_credit")}
                 or provider in {"subscription", "local"} or (route_name == "saygm" and provider != "saygm")):
             raise ModelBudgetUnavailable("budget_unsupported_route")
-        cost = _reservation_cost(provider, model, estimated_input_tokens, output_token_upper_bound)
-        with localcontext() as context:
-            context.prec = 100
-            totals = {scope: _reserved_total(conn, scope) + cost for scope in rows}
-        if any(row["spend_ceiling_usd"] is not None and totals[scope] > _decimal(row["spend_ceiling_usd"], code="budget_policy_mismatch")
-               for scope, row in rows.items()):
-            raise ModelBudgetUnavailable("budget_spend_exhausted")
+    else:
+        row = funding[0]
+        if row["spend_ceiling_usd"] is None:
+            return None, {}
+        if (not isinstance(task_id, str) or not _OPAQUE_ID.fullmatch(task_id)
+                or not isinstance(provider, str) or not _MODEL_ID.fullmatch(provider)
+                or not isinstance(model, str) or not _MODEL_ID.fullmatch(model)):
+            raise ModelBudgetUnavailable("budget_input_invalid")
+        if ((route_name, billing_source) not in {("direct_api", "provider_api"), ("saygm", "saygm_credit")}
+                or provider in {"subscription", "local"} or (route_name == "saygm" and provider != "saygm")):
+            raise ModelBudgetUnavailable("budget_unsupported_route")
+        if type(estimated_input_tokens) is not int or not 1 <= estimated_input_tokens <= _SQLITE_MAX_INT:
+            raise ModelBudgetUnavailable("budget_input_invalid")
+        if (type(output_token_upper_bound) is not int or not 1 <= output_token_upper_bound <= 32_000
+                or (row["max_output_tokens_per_call"] is not None and output_token_upper_bound > row["max_output_tokens_per_call"])):
+            raise ModelBudgetUnavailable("budget_output_limit")
+    cost = _reservation_cost(provider, model, estimated_input_tokens, output_token_upper_bound)
+    with localcontext() as context:
+        context.prec = 100
+        totals = {scope: _reserved_total(conn, scope) + cost for scope in rows}
+    if any(row["spend_ceiling_usd"] is not None and totals[scope] > _decimal(row["spend_ceiling_usd"], code="budget_policy_mismatch")
+           for scope, row in rows.items()):
+        raise ModelBudgetUnavailable("budget_spend_exhausted")
+    return cost, totals
+
+
+def check_model_call_budget(budget: TaskBudget | ChildTaskBudget, task_id: str, provider: str, model: str,
+                             route_name: str, billing_source: str, estimated_input_tokens: int,
+                             output_token_upper_bound: int, *, now: float | None = None) -> None:
+    """Read-only preflight; it grants no admission and never creates a UUID.
+
+    A retry-free client must still be proved, followed by atomic reservation
+    before outbound execution. Concurrent admission or price changes can make
+    that later reservation refuse. No schema, clock or accounting is written.
+    """
+    if _call_budget_ephemeral(budget):
+        return
+    try:
+        conn = usage_ledger.existing_model_budget_connection()
+        if conn is None:
+            raise ModelBudgetUnavailable("budget_scope_mismatch")
+        with closing(conn):
+            conn.row_factory = sqlite3.Row
+            _has_child_schema(conn)
+            conn.execute("BEGIN")
+            # Acquire a coherent read snapshot before sampling the clock;
+            # a blocked SQLite read cannot make a stale preflight time pass.
+            conn.execute("SELECT scope_id FROM model_task_budgets LIMIT 1").fetchone()
+            current = _clock_value(now)
+            funding = _call_budget_rows(conn, budget, current, observe_clock=False)
+            _call_budget_admission(conn, budget, funding, current, task_id, provider, model,
+                route_name, billing_source, estimated_input_tokens, output_token_upper_bound)
+    except ModelBudgetUnavailable:
+        raise
+    except Exception:
+        raise ModelBudgetUnavailable("budget_storage_unavailable") from None
+
+
+def _reserve_call_budget(budget, task_id, provider, model, route_name, billing_source,
+                         estimated_input_tokens, output_token_upper_bound, *, now=None):
+    ephemeral = _call_budget_ephemeral(budget)
+    reservation = uuid4().hex
+    if ephemeral:
+        return ModelCallReservation(reservation, None)
+    with _transaction(retain_clock_on_refusal=True) as conn:
+        current = _clock_value(now)
+        funding = _call_budget_rows(conn, budget, current)
+        cost, totals = _call_budget_admission(conn, budget, funding, current, task_id, provider, model,
+            route_name, billing_source, estimated_input_tokens, output_token_upper_bound)
+        root = funding[0]
+        if cost is None:
+            return ModelCallReservation(reservation, root["scope_id"])
         conn.execute("INSERT INTO model_call_budget_reservations "
             "(reservation_id,scope_id,task_id,provider,model,route_name,billing_source,estimated_input_tokens,output_token_upper_bound,reserved_cost_usd,created_at) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?)", (reservation, root["scope_id"], task_id, provider, model, route_name,
                                               billing_source, estimated_input_tokens, output_token_upper_bound, str(cost), current))
-        for scope in rows:
-            conn.execute("INSERT INTO model_call_budget_reservation_scopes(reservation_id,scope_id) VALUES (?,?)",
-                         (reservation, scope))
+        if type(budget) is ChildTaskBudget:
+            for row in funding:
+                conn.execute("INSERT INTO model_call_budget_reservation_scopes(reservation_id,scope_id) VALUES (?,?)",
+                             (reservation, row["scope_id"]))
         return ModelCallReservation(reservation, root["scope_id"], float(cost), float(totals[root["scope_id"]]))
+
+
+def reserve_model_child_call_budget(binding: ChildTaskBudget, task_id: str, provider: str, model: str,
+                                    route_name: str, billing_source: str, estimated_input_tokens: int,
+                                    output_token_upper_bound: int, *, now: float | None = None) -> ModelCallReservation:
+    """Atomically reserve one attempt against every inherited funding scope."""
+    if type(binding) is not ChildTaskBudget:
+        raise ModelBudgetUnavailable("budget_scope_mismatch")
+    return _reserve_call_budget(binding, task_id, provider, model, route_name, billing_source,
+                                estimated_input_tokens, output_token_upper_bound, now=now)
 
 
 def _reservation_cost(provider: str, model: str, input_tokens: int, output_tokens: int) -> Decimal:
@@ -954,49 +1047,5 @@ def reserve_model_call_budget(
     estimates, not a promise about actual billing or subscription overage.
     """
     _validate_handle(budget)
-    reservation_id = uuid4().hex
-    if budget.scope_id is None:
-        if _existing_scope(budget.user_id, budget.workload, budget.parent_request_id) is not None:
-            raise ModelBudgetUnavailable("budget_policy_mismatch")
-        return ModelCallReservation(reservation_id, None)
-    with _transaction(retain_clock_on_refusal=True) as conn:
-        current = _clock_value(now)
-        row = _scope_row(conn, budget, current)
-        if _parent_link(conn, budget.scope_id) is not None:
-            raise ModelBudgetUnavailable("budget_policy_mismatch")
-        if row["deadline_at"] is not None and current >= row["deadline_at"]:
-            raise ModelBudgetUnavailable("budget_deadline_exhausted")
-        if row["spend_ceiling_usd"] is None:
-            return ModelCallReservation(reservation_id, budget.scope_id)
-        if (not isinstance(task_id, str) or not _OPAQUE_ID.fullmatch(task_id)
-                or not isinstance(provider, str) or not _MODEL_ID.fullmatch(provider)
-                or not isinstance(model, str) or not _MODEL_ID.fullmatch(model)):
-            raise ModelBudgetUnavailable("budget_input_invalid")
-        if ((route_name, billing_source) not in {
-                ("direct_api", "provider_api"), ("saygm", "saygm_credit")}
-                or provider in {"subscription", "local"}
-                or (route_name == "saygm" and provider != "saygm")):
-            raise ModelBudgetUnavailable("budget_unsupported_route")
-        if (type(estimated_input_tokens) is not int
-                or not 1 <= estimated_input_tokens <= _SQLITE_MAX_INT):
-            raise ModelBudgetUnavailable("budget_input_invalid")
-        if (type(output_token_upper_bound) is not int
-                or not 1 <= output_token_upper_bound <= 32_000
-                or (row["max_output_tokens_per_call"] is not None
-                    and output_token_upper_bound > row["max_output_tokens_per_call"])):
-            raise ModelBudgetUnavailable("budget_output_limit")
-        cost = _reservation_cost(provider, model, estimated_input_tokens, output_token_upper_bound)
-        with localcontext() as context:
-            context.prec = 100
-            total = cost + _reserved_total(conn, budget.scope_id)
-        if total > _decimal(row["spend_ceiling_usd"], code="budget_policy_mismatch"):
-            raise ModelBudgetUnavailable("budget_spend_exhausted")
-        conn.execute(
-            "INSERT INTO model_call_budget_reservations "
-            "(reservation_id,scope_id,task_id,provider,model,route_name,billing_source,"
-            "estimated_input_tokens,output_token_upper_bound,reserved_cost_usd,created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (reservation_id, budget.scope_id, task_id, provider, model, route_name, billing_source,
-             estimated_input_tokens, output_token_upper_bound, str(cost), current),
-        )
-        return ModelCallReservation(reservation_id, budget.scope_id, float(cost), float(total))
+    return _reserve_call_budget(budget, task_id, provider, model, route_name, billing_source,
+                                estimated_input_tokens, output_token_upper_bound, now=now)

@@ -38,6 +38,7 @@ from jarvis.model_budget import (
     remaining_seconds, reserve_model_call_budget,
     resolve_model_child_budget, remaining_child_seconds, reserve_model_child_call_budget,
     validate_model_child_budget,
+    check_model_call_budget,
 )
 from jarvis.privacy_policy import (
     DataPolicy,
@@ -1059,13 +1060,13 @@ async def execute_chat(request: ModelExecutionRequest,
                 if budget.scope_id is not None:
                     estimate = _estimated_text_input_tokens(messages, tools) if spend_capped else 1
                     await asyncio.to_thread(
-                        reserve_model_child_call_budget if binding is not None else reserve_model_call_budget,
+                        check_model_call_budget,
                         binding if binding is not None else budget, request.task_id,
                         resolved.provider, resolved.model, resolved.route.name,
                         resolved.route.billing, estimate, request.output.max_tokens or 1,
                     )
-                    # Every inherited pool admits the attempt before client
-                    # construction. Failed setup retains the same reservation.
+                    # Refuse exhausted inherited pools before constructing a
+                    # client. This dry check cannot authorize an outbound call.
                     require_active()
                 client = (client_factory(resolved) if client_factory is not None
                           else make_route_client(resolved, timeout=request.timeout_s))
@@ -1088,6 +1089,17 @@ async def execute_chat(request: ModelExecutionRequest,
                     completion_args["stream"] = True
                 if spend_capped and not _api_adapter_has_no_retries(client):
                     raise ModelBudgetUnavailable("budget_unsupported_route")
+                if budget.scope_id is not None:
+                    await asyncio.to_thread(
+                        reserve_model_child_call_budget if binding is not None else reserve_model_call_budget,
+                        binding if binding is not None else budget, request.task_id,
+                        resolved.provider, resolved.model, resolved.route.name,
+                        resolved.route.billing, estimate, request.output.max_tokens or 1,
+                    )
+                    # Reserve atomically only after the real adapter's retry
+                    # proof; concurrent use may have exhausted a pool since
+                    # preflight. Failed/cancelled admitted attempts remain.
+                    require_active()
                 await emit("progress", progress_stage="provider_request")
                 native_execute = getattr(client, "execute_request", None)
                 if native_execute is not None:
