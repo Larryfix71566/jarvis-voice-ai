@@ -527,6 +527,8 @@ Renumbering completed in the main integration. Read-only production verification
 
 **Config keys reserved for WS-05, 2026-10-05:** `JARVIS_CODEX_SUBSCRIPTION_CAPABILITY_RECEIPT` points to a secret-free, version/model/binary/catalog/arguments-bound capability receipt; the existing no-tools verification flag alone does not establish capability. `JARVIS_SUBSCRIPTION_TOOLS_ENABLED` defaults false and gates a provider-native bridge whose tool operations must pass through Mortimer's permission and sandbox boundary. `JARVIS_SUBSCRIPTION_TOOL_CAPABILITY_RECEIPT` points to separate provider/version/schema/protocol tool acceptance; the tools flag alone does not establish native tool capability. Request-owned temporary Unix sockets/configuration have no fixed port or launch label. These reservations do not enable either route in production. No port or migration is reserved.
 
+**WS-05 workload quality key reserved before implementation, 2026-10-05:** `model_access.defaults.minimum_quality_tier` and `model_access.workloads.<name>.minimum_quality_tier`, with the existing registry tiers `economy`, `mid`, `frontier`. Apply the standing Sonnet-or-better (`mid`) floor to ordinary non-voice specialists and private background work; planning keeps its frontier floor, while voice and the documented council tier-1 pool retain their legitimate economy choices. Explicit or saved choices below the workload floor are unavailable; they are never silently replaced.
+
 ---
 
 ## 4. Conflict register
