@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "workstream": "WS-05",
+  "system": "codex",
+  "date": "2026-10-06",
+  "audited_ref": "e13fbf100f037c228621308bbcd0a0e185a28dab",
+  "source_sha256": {
+    "jarvis/model_budget.py": "a1c94f2284a9c1cca6f4df6073fc743e0b4f9677187871e7adaaa95e1f58e2a3",
+    "jarvis/usage_ledger.py": "afa7df17d735596ef81581c2526b798eaad25637bcf0c99da80a58a4e8536d31",
+    "jarvis/model_execution.py": "7690c3080b03c85a092dc614a50880d7560aab1ba82b10a71f72edb3a503d766",
+    "jarvis/agents/base.py": "9e57c86adc119763e55798fa2ef3ccafc3a2923cd7028603d6655b328ff8993c",
+    "jarvis/agents/upgrade_agent.py": "5e3d6c2a738010486e9dd2677026a0c819c875c94bb4571442e652bf59048e6e",
+    "jarvis/council/council.py": "68fe06a0dc629038f4ed1e86e17ae64261d234dee91ac432fe31710a49cbd024",
+    "jarvis/council/__main__.py": "8f8cfa3d7acc73bb70a5c21c8a51ceed588a87faaef2c8c8efe9d064f9aa2054",
+    "tests/unit/test_model_child_budget.py": "52fe643ab956252f345f58518a1ad27baef138504375391972c6f431c4700e0d",
+    "tests/unit/test_model_child_execution.py": "8d49b631b0313510d2d4474921afdfd8f4ac28c89ccd25282d2fe0626d3d293e",
+    "tests/unit/test_council_budget_ownership.py": "b7048b268ee38d06bfd289000204cab6ba9fa27455cfc753c2bfca01c2355a6f",
+    "tests/unit/test_council_gather.py": "16575d40f0e42871c9d59e4a32cb0cb44856e1123adc59685a6273d181736896",
+    "tests/unit/test_model_execution_limits.py": "8fe32502ba3ab10d4fb42221dff6cdd283123159d15643e0eefe6286566aa5a2",
+    "tests/unit/test_ws05_boundary_review.py": "33ee05674ba789bb40377739382f349e76f78e20accb51a9878a65e4a677a7c6",
+    "tests/unit/test_upgrade_routed_execution.py": "69450b3888183ff5f2b2a7c25e2e028a7ba250d5ea93c1e2d95d53b84110b6c7"
+  },
+  "verification": {
+    "passed": 317,
+    "failed": 0,
+    "skipped": 0,
+    "log_sha256": "aced0985116d282624a98cfa58bcd21c97ed2555473adaf6d01812d430eb370c",
+    "junit_sha256": "8185cef13c6d3f636f79c6fb9505c63d7b31c17ba5cbca237c47d94e52c7f0cd"
+  },
+  "transport": "real supported SDKs with httpx.MockTransport, synthetic responses and credentials only",
+  "proved": [
+    "One outbound attempt has one estimated reservation and one observed usage row; scope memberships fund owner and child atomically",
+    "Failed/cancelled attempts retain spend, null/omitted sponsor data cannot reset limits, and old host handles honor later durable bounds",
+    "Same-workload sponsorship coalesces; cross-tenant, orphan, forged, nested and replacement-owner bindings refuse",
+    "Council, planning authors/advisers, live judges and shadow work retain explicit model/tier/seed/effort identity while sharing host ownership",
+    "Sponsored shadows stay inline; detached standalone work copies authenticated tenant context",
+    "Replay has a fresh audit owner, refuses unknown historical bytes on disallowed routes and filters tenant before reading payloads",
+    "Run association preflights expiry before creating an awaitable; deadline regressions use actual phase entry and saved absolute expiry rather than 40ms scheduling assumptions"
+  ],
+  "providers_called": false,
+  "native_process_started": false,
+  "vm_started": false,
+  "production_changed": false,
+  "not_proved": [
+    "Manual admin input/crawled source approval",
+    "Real native Developer capability or quality",
+    "Representative full research retrieval",
+    "Account billing/overage",
+    "Full deployment acceptance",
+    "Complete WS-05 rollout"
+  ]
+}
