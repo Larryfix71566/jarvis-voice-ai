@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from mcp_servers.development_boundary import sandbox_required
+from mcp_servers.mcp_selfedit.logic import workspace_source_request
 
 APP_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$")
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"

@@ -105,9 +105,14 @@ _PUBLIC_SOURCE_OPERATIONS = {
                               "status_build", "status_catalog", "status_subscription"}),
 }
 _REPO_SOURCE_OPERATIONS = frozenset({"repo_read_file", "repo_list_files", "repo_search"})
+_WORKSPACE_SOURCE_OPERATIONS = {
+    'mcp-selfedit': frozenset({'selfedit_start', 'selfedit_status', 'selfedit_read',
+                              'selfedit_write', 'selfedit_finish'}),
+    'mcp-apps': frozenset({'app_build_start', 'app_build_status', 'app_build_submit'}),
+}
 _PINNED_SOURCE_MODULES = {
     server: f"mcp_servers.{server.replace('-', '_')}.server"
-    for server in (*_PUBLIC_SOURCE_OPERATIONS, "mcp-repo")
+    for server in (*_PUBLIC_SOURCE_OPERATIONS, "mcp-repo", *_WORKSPACE_SOURCE_OPERATIONS)
 }
 
 
@@ -117,6 +122,7 @@ class _ToolSourceContract:
     module: str
     session: Any = field(repr=False, compare=False)
     repo_root: Path | None = field(default=None, repr=False)
+    local_admin: bool = field(default=False, repr=False)
 
 #: skill.yaml requires_env_dynamic sources. Closed set — an unrecognised
 #: source is a hard error, because a typo that silently grants nothing is
@@ -642,6 +648,16 @@ class SkillRegistry:
                 "host-generated-tool-status", (),
             )
         outcome = classify_tool_result(tool_name, content)
+        if envelope is None and contract is not None and server == 'mcp-apps' and tool_name == 'app_write_file':
+            from mcp_servers.development_boundary import sandbox_required
+            expected = sandbox_required(application=True)
+            try:
+                if json.loads(content) == expected:
+                    envelope = issue_tool_result(execution_scope, content,
+                        DataPolicy('approved_external', 'host-generated-development-refusal'),
+                        'host-generated-development-refusal')
+            except (ValueError, TypeError):
+                pass
         if envelope is None and contract is not None:
             source_scope = f"public-operation:{server}:{tool_name}"
             refs: tuple[str, ...] = ()
@@ -810,7 +826,7 @@ class SkillRegistry:
                                   source_arguments=source_arguments)
 
     async def _call_watching(self, server: str, session: Any,
-                             tool_name: str, arguments: dict) -> Any:
+                             tool_name: str, arguments: dict, *, meta: dict | None = None) -> Any:
         """session.call_tool, raced against the owner task's end.
 
         A write to a child that just died crashes the stdio task group and
@@ -819,10 +835,11 @@ class SkillRegistry:
         CALL_TIMEOUT. The owner's `gone` event turns that into the same
         transport error a call after the crash gets."""
         h = self._handles.get(server)
+        kwargs = {} if meta is None else {'meta': meta}
         if h is None or h.session is not session:
-            return await session.call_tool(tool_name, arguments)
+            return await session.call_tool(tool_name, arguments, **kwargs)
         gone = h.gone
-        call = asyncio.ensure_future(session.call_tool(tool_name, arguments))
+        call = asyncio.ensure_future(session.call_tool(tool_name, arguments, **kwargs))
         watch = asyncio.ensure_future(gone.wait())
         try:
             await asyncio.wait({call, watch}, return_when=asyncio.FIRST_COMPLETED)
@@ -834,6 +851,108 @@ class SkillRegistry:
             return call.result()
         raise anyio.ClosedResourceError(f"{server} owner task ended during the call")
 
+    @staticmethod
+    def _workspace_live_run(runlog, scope, *, check_floor=True):
+        from jarvis.runlog.store import get_run, SENSITIVE_SENTINEL
+        from jarvis.skill_runtime import runtime_owner
+
+        if runlog is None or runlog.run_id != scope.parent_request_id:
+            raise ToolResultBindingError()
+        detail = get_run(scope.parent_request_id)
+        run = detail.get('run') if type(detail) is dict else None
+        if (type(run) is not dict or run.get('agent') != 'developer' or run.get('status') != 'running'
+                or run.get('user_id') != runlog.user_id or run.get('session_id') != runlog.session_id
+                or runtime_owner(runlog.session_id) != runlog.user_id):
+            raise ToolResultBindingError()
+        floor = DataPolicy('approved_external', 'verified-workspace-caller')
+        if any(run.get(key) == SENSITIVE_SENTINEL for key in ('task', 'task_preview', 'reply_preview')):
+            floor = DataPolicy('confidential', 'protected-workspace-caller')
+        if check_floor:
+            from jarvis.development_sources import workspace_floor
+            from jarvis.privacy_policy import strictest
+            floor = strictest(floor, workspace_floor(run))
+        return floor
+
+    async def _workspace_source_invocation(self, tool, server, session, arguments,
+                                            source_arguments, runlog, scope):
+        from jarvis.development_attestation import (new_source_challenge, pin_source_authority,
+            verify_workspace_source, _workspace_context, DevelopmentSourceAttestationError)
+        from jarvis.model_routing import ModelRouteError
+        from jarvis.privacy_policy import strictest
+
+        try:
+            self._workspace_live_run(runlog, scope, check_floor=False)
+            metadata = {'owner_id': runlog.user_id, 'bot_session_id': runlog.session_id,
+                        'developer_run_id': scope.parent_request_id, 'tool_name': tool,
+                        'arguments': source_arguments}
+            async def phase(name, extra=None):
+                return await self._call_watching(server, session, tool, arguments,
+                    meta={'mortimer_development_source': {**metadata, 'phase': name, **(extra or {})}})
+
+            associated = await phase('associate')
+            if getattr(associated, 'isError', False) or getattr(associated, 'structuredContent', None) != {'ok': True}:
+                raise ToolResultBindingError()
+            pin = pin_source_authority()  # before preparation or any operation
+            challenge = new_source_challenge()
+            call_binding = {'source_challenge': challenge,
+                'source_task_id': scope.task_id, 'source_tool_call_id': scope.tool_call_id,
+                'source_input_policy': scope.input_policy.level}
+            prepared = await phase('prepare', call_binding)
+            hidden = (getattr(prepared, 'meta', None) or {}).get('mortimer_development_source')
+            if (getattr(prepared, 'isError', False) or type(hidden) is not dict
+                    or set(hidden) != {'source_context', 'source_preparation_id'}):
+                raise ToolResultBindingError()
+            context = _workspace_context(hidden['source_context'])
+            if (context['owner_id'] != runlog.user_id or context['bot_session_id'] != runlog.session_id
+                    or context['developer_run_id'] != scope.parent_request_id
+                    or context['workspace_kind'] != ('app-build' if server == 'mcp-apps' else 'selfedit')
+                    or pin_source_authority() != pin):
+                raise ToolResultBindingError()
+            self._workspace_live_run(runlog, scope)
+            result = await phase('execute', {**call_binding, 'source_context': context,
+                'source_preparation_id': hidden['source_preparation_id']})
+            hidden = (getattr(result, 'meta', None) or {}).get('mortimer_development_source')
+            if (getattr(result, 'isError', False) or type(hidden) is not dict
+                    or set(hidden) != {'source_receipt'}):
+                raise ToolResultBindingError()
+            envelope = verify_workspace_source(pin, scope, hidden['source_receipt'],
+                                               context=context, challenge=challenge)
+            policy, content = validate_tool_result(scope, envelope)
+            structured = getattr(result, 'structuredContent', None)
+            text = '\n'.join(getattr(block, 'text', '') for block in result.content).strip()
+            if (structured is None or unclassified_tool_result(scope, structured).content != content
+                    or text != content):
+                raise ToolResultBindingError()
+            floor = self._workspace_live_run(runlog, scope)
+            if pin_source_authority() != pin or self._source_contract_for(tool, server, session) is None:
+                raise ToolResultBindingError()
+            return issue_tool_result(scope, content, strictest(policy, floor),
+                                     envelope.source_scope, envelope.canonical_refs)
+        except (ToolResultBindingError, DevelopmentSourceAttestationError, ModelRouteError, ValueError, TypeError, KeyError):
+            # No unverified body is released. This is an explicit host
+            # reduction to a fixed generated refusal, preserving retries.
+            floor = scope.input_policy
+            try:
+                floor = strictest(floor, self._workspace_live_run(runlog, scope))
+            except (ToolResultBindingError, ModelRouteError, DevelopmentSourceAttestationError):
+                floor = strictest(floor, DataPolicy('confidential', 'unverified-workspace-floor'))
+            return issue_tool_result(scope, '{"error":"workspace_source_unavailable","ok":false}',
+                floor, 'host-generated-workspace-refusal')
+
+    def _finish_workspace_source(self, envelope, scope, tool, server, runlog, latency_ms):
+        policy, content = validate_tool_result(scope, envelope)
+        if policy.level in {'confidential', 'local_only'}:
+            holder = current_sensitive_turn.get()
+            if holder is not None:
+                holder.arm('tool_source_policy', scope.parent_request_id)
+            if runlog is not None:
+                runlog.mark_sensitive()
+        if runlog is not None:
+            outcome = classify_tool_result(tool, content)
+            runlog.mcp_call(tool, server, ok=outcome.ok, latency_ms=latency_ms,
+                           error='development_operation_failed' if not outcome.ok else None)
+        return envelope
+
     async def _invoke(self, tool_name: str, server: str, session: Any,
                       arguments: dict, runlog: Any, *,
                       allow_restart: bool,
@@ -842,8 +961,13 @@ class SkillRegistry:
         source_arguments = arguments if source_arguments is None else source_arguments
         call_start = time.perf_counter()
         try:
+            contract = self._source_contract_for(tool_name, server, session)
+            workspace = (execution_scope is not None and contract is not None and contract.local_admin
+                         and tool_name in _WORKSPACE_SOURCE_OPERATIONS.get(server, ()))
             result = await asyncio.wait_for(
-                self._call_watching(server, session, tool_name, arguments),
+                self._workspace_source_invocation(tool_name, server, session, arguments,
+                    source_arguments, runlog, execution_scope) if workspace
+                else self._call_watching(server, session, tool_name, arguments),
                 timeout=CALL_TIMEOUT,
             )
         except asyncio.TimeoutError:
@@ -887,6 +1011,8 @@ class SkillRegistry:
                 failure_category="tool_exception")
 
         latency_ms = int((time.perf_counter() - call_start) * 1000)
+        if isinstance(result, ToolResultEnvelope):
+            return self._finish_workspace_source(result, execution_scope, tool_name, server, runlog, latency_ms)
         if getattr(result, "isError", False):
             text = " ".join(
                 getattr(c, "text", "") for c in result.content
@@ -1164,5 +1290,17 @@ class SkillRegistry:
                     repo_root = configured.resolve(strict=False)
                 except (OSError, ValueError):
                     repo_root = None
-            self._source_contracts[name] = _ToolSourceContract(name, module, session, repo_root)
+            local_admin = False
+            if name in _WORKSPACE_SOURCE_OPERATIONS:
+                from urllib.parse import urlsplit
+                from jarvis.urls import ADMIN_URL_ENV, DEFAULT_ADMIN_URL
+                try:
+                    origin = urlsplit(env.get(ADMIN_URL_ENV) or DEFAULT_ADMIN_URL)
+                    local_admin = (origin.scheme in {'http', 'https'}
+                        and origin.hostname in {'localhost', '127.0.0.1', '::1'}
+                        and not origin.username and not origin.password
+                        and origin.path in {'', '/'} and not origin.query and not origin.fragment)
+                except ValueError:
+                    pass
+            self._source_contracts[name] = _ToolSourceContract(name, module, session, repo_root, local_admin)
         return session, list(discovered)

@@ -60,6 +60,7 @@ import sys
 import threading
 import time
 import uuid
+from contextvars import ContextVar, copy_context
 from contextlib import closing
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -103,8 +104,12 @@ from jarvis.model_preferences import (
 )
 from jarvis.model_routing import (
     available_routes, describe_route_choice, load_access_config,
-    model_profile_for_workload,
+    model_profile_for_workload, ModelRouteError, resolve_policy,
 )
+from jarvis.model_budget import (
+    ModelBudgetUnavailable, TaskBudget, begin_model_task_budget, remaining_seconds,
+)
+from jarvis.privacy_policy import DataPolicy
 from jarvis import keyhealth
 from jarvis.prompts import (
     PLAN_AUTHOR_PROMPT,
@@ -342,6 +347,27 @@ class AppBuildGoalIn(BaseModel):
     plan: str | None = None
     plan_path: str | None = None
     run_id: str | None = None
+
+
+class WorkspaceSourceAssociationIn(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    owner_id: str = Field(min_length=1, max_length=64)
+    bot_session_id: str = Field(min_length=36, max_length=36)
+    developer_run_id: str = Field(min_length=36, max_length=36)
+
+
+class WorkspaceSourcePrepareIn(WorkspaceSourceAssociationIn):
+    tool_name: str = Field(min_length=1, max_length=64)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    source_challenge: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_task_id: str = Field(min_length=1, max_length=256)
+    source_tool_call_id: str = Field(min_length=1, max_length=256)
+    source_input_policy: Literal["approved_external", "confidential", "local_only"]
+
+
+class WorkspaceSourceToolIn(WorkspaceSourcePrepareIn):
+    source_context: dict[str, str]
+    source_preparation_id: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class ModelRouteStageIn(BaseModel):
@@ -907,14 +933,79 @@ def _research_busy() -> bool:
         return _research_job["state"] == "running"
 
 
-def _run_research_job(urls: list[str], focus: str, run_id: str) -> None:
+def _start_advisory_thread(target, *, args=(), kwargs=None, started_at=None) -> None:
+    """Keep the authenticated host context in council/planning workers."""
+    host_kwargs = dict(kwargs or {})
+    if os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1":
+        host_kwargs["started_at"] = time.time() if started_at is None else started_at
+    threading.Thread(target=copy_context().run, args=(target, *args),
+                     kwargs=host_kwargs, daemon=True).start()
+
+
+def _advisory_owner(
+    workload: str, context: dict[str, Any], run_id: str | None, *,
+    parent_budget: TaskBudget | None, data_policy: DataPolicy | None,
+    cancel_event: threading.Event | None, started_at: float,
+) -> tuple[TaskBudget | None, DataPolicy | None]:
+    if os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") != "1":
+        if parent_budget is not None:
+            raise ModelBudgetUnavailable("budget_unsupported_route")
+        return None, None
+    # Raw API dictionaries and returned crawl JSON cannot approve a source.
+    policy = council_mod._host_policy(
+        context, workload, DataPolicy() if data_policy is None else data_policy,
+    )
+    if parent_budget is not None:
+        if type(parent_budget) is not TaskBudget:
+            raise ModelBudgetUnavailable("budget_scope_mismatch")
+        owner = parent_budget
+    else:
+        owner = begin_model_task_budget(
+            workload, run_id or f"admin:{uuid.uuid4().hex}",
+            resolve_policy(workload, include_preferences=False).limits,
+            started_at=started_at,
+        )
+    _check_advisory_owner(owner, cancel_event)
+    return owner, policy
+
+
+def _check_advisory_owner(owner: TaskBudget | None, cancel_event: threading.Event | None) -> None:
+    if cancel_event is not None:
+        if type(cancel_event) is not threading.Event:
+            raise ModelBudgetUnavailable("budget_scope_mismatch")
+        if cancel_event.is_set():
+            raise asyncio.CancelledError
+    if owner is not None and remaining_seconds(owner) <= 0:
+        raise ModelBudgetUnavailable("budget_deadline_exhausted")
+
+
+def _advisory_failure(exc: BaseException, legacy_prefix: str) -> str:
+    if isinstance(exc, ModelBudgetUnavailable):
+        return exc.code
+    if isinstance(exc, asyncio.CancelledError):
+        return "budget_cancelled"
+    if isinstance(exc, ModelRouteError):
+        return "model_policy_refused"
+    return f"{legacy_prefix} ({type(exc).__name__})"
+
+
+def _run_research_job(
+    urls: list[str], focus: str, run_id: str, *,
+    parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
+    cancel_event: threading.Event | None = None, started_at: float | None = None,
+) -> None:
     """Background thread target (R1): crawl both sites (sync, one at a
     time — Tavily's own crawl is already parallel internally, and two
     concurrent 120s calls would only double the memory footprint for no
     real time saving), assemble the digest in CODE, then one model call
     for the prose comparison (R4/R5). Settles _research_job on every exit
     path, mirroring every other job target on this page."""
+    started_at = time.time() if started_at is None else started_at
     try:
+        owner, policy = _advisory_owner(
+            "planning", {}, run_id, parent_budget=parent_budget,
+            data_policy=data_policy, cancel_event=cancel_event, started_at=started_at,
+        )
         cfg = research_crawl.load_research_config()
         api_key = os.environ.get(research_crawl.TAVILY_API_KEY_ENV)
         if not api_key:
@@ -927,10 +1018,11 @@ def _run_research_job(urls: list[str], focus: str, run_id: str) -> None:
             _update_research_start_claim(run_id, "failed")
             return
         client = research_crawl.TavilyCrawlClient(timeout=float(cfg.get("timeout_s", 120)) + 10.0)
-        results = [
-            research_crawl.crawl_site(client, url, focus, api_key, cfg)
-            for url in urls
-        ]
+        results = []
+        for url in urls:
+            _check_advisory_owner(owner, cancel_event)
+            results.append(research_crawl.crawl_site(client, url, focus, api_key, cfg))
+            _check_advisory_owner(owner, cancel_event)
         # R9 — per-site failure, never all-or-nothing: only when EVERY
         # site failed does this become a terminal error.
         if not any(r.get("ok") for r in results):
@@ -967,10 +1059,19 @@ def _run_research_job(urls: list[str], focus: str, run_id: str) -> None:
                 )
             _update_research_start_claim(run_id, "failed")
             return
+        call_kwargs = {}
+        if owner is not None:
+            policy = council_mod._host_policy({}, "council", policy)
+            execution = council_mod._child_execution(
+                owner, "council", policy, cancel_event, started_at=started_at,
+                sponsored=parent_budget is not None,
+            )
+            call_kwargs = {"execution": execution, "data_policy": policy}
         content, _usage = asyncio.run(council_mod._call_profile(
             profile, RESEARCH_SYSTEM_PROMPT, user_content,
-            council_config.PLANNING_MEMBER_TIMEOUT_S, rung="research",
+            council_config.PLANNING_MEMBER_TIMEOUT_S, rung="research", **call_kwargs,
         ))
+        _check_advisory_owner(owner, cancel_event)
         with _research_lock:
             _research_job.update(
                 state="done",
@@ -982,12 +1083,12 @@ def _run_research_job(urls: list[str], focus: str, run_id: str) -> None:
             )
         _update_research_start_claim(run_id, "completed")
         logger.info("research_state_transition state=done site_count=%d", len(urls))
-    except Exception as exc:  # noqa: BLE001 — a crash must still settle the job
+    except (Exception, asyncio.CancelledError) as exc:  # every exit settles the job
         logger.warning("research_job_failed error_type=%s", type(exc).__name__)
         with _research_lock:
             _research_job.update(
                 state="error",
-                error=f"research job failed ({type(exc).__name__})",
+                error=_advisory_failure(exc, "research job failed"),
                 finished_at=time.time(),
             )
         _update_research_start_claim(run_id, "failed")
@@ -1014,6 +1115,33 @@ def _make_agent(service: SelfEditService, profile: str | None,
                 run_id: str | None = None) -> UpgradeAgent:
     """Construct the planner (seam for tests). run_id: GL9 (contract G2)."""
     return UpgradeAgent(service, profile=profile, run_id=run_id)
+
+
+# Only the authenticated source adapter binds this host capability. No
+# Pydantic field or provider-supplied privacy label can construct it.
+_workspace_start_policy = ContextVar('workspace_start_policy', default=None)
+
+
+def _source_plan_observed(path, result):
+    source = _workspace_start_policy.get()
+    if source is not None:
+        from jarvis.development_sources import host_plan_policy
+        source['plan_policy'] = host_plan_policy(_selfedit_service, path, result)
+        if 'run' in source:
+            from jarvis.development_sources import retain_workspace_floor
+            retain_workspace_floor(source['run'], source['plan_policy'])
+
+
+def _source_worker_kwargs():
+    source = _workspace_start_policy.get()
+    return {key: value for key, value in source.items() if key in {'data_policy', 'plan_policy'}} if source is not None else {}
+
+
+def _source_worker_target(target):
+    if _workspace_start_policy.get() is None:
+        return target
+    from functools import partial
+    return partial(copy_context().run, target)
 
 
 def _run_finish() -> None:
@@ -1152,7 +1280,8 @@ def _run_finish() -> None:
 def _run_agent(goal: str, profile: str | None, plan: str | None = None,
                run_id: str | None = None,
                action_run_id: str | None = None,
-               action_scope: str = _SELFEDIT_STAGED_START_ACTION_SCOPE) -> None:
+               action_scope: str = _SELFEDIT_STAGED_START_ACTION_SCOPE, *,
+               data_policy=None, plan_policy=None) -> None:
     """Background thread target: plan edits, then settle the job state."""
     global _run_agent_instance
     try:
@@ -1173,7 +1302,9 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None,
             logger.info("selfedit_stale_session_reverted branch_present=%s",
                         bool(stale))
             _selfedit_service.revert()
-        result = agent.run(goal, plan=plan)
+        policies = {key: value for key, value in {'data_policy': data_policy, 'plan_policy': plan_policy}.items()
+                    if value is not None}
+        result = agent.run(goal, plan=plan, **policies)
         if result.get("cancelled") or _run_job.get("cancel_requested", False):
             state = "cancelled"
             # Cancellation stops the VM and revokes publication eligibility;
@@ -1337,7 +1468,7 @@ def _prior_appbuild_submit(session_id: str, workspace_status: dict[str, Any]) ->
 
 def _run_appbuild_agent(
     app: str, goal: str, profile: str | None, plan: str | None = None,
-    run_id: str | None = None,
+    run_id: str | None = None, *, data_policy=None, plan_policy=None,
 ) -> None:
     """Background thread target, mirroring _run_agent: build one app, then
     settle _appbuild_job. The AppWorkspace itself lives on _appbuild_
@@ -1354,7 +1485,9 @@ def _run_appbuild_agent(
             cancelled = _appbuild_job.get("cancel_requested", False)
         if cancelled:
             agent.request_cancel()
-        result = agent.run(goal, plan=plan)
+        policies = {key: value for key, value in {'data_policy': data_policy, 'plan_policy': plan_policy}.items()
+                    if value is not None}
+        result = agent.run(goal, plan=plan, **policies)
         with _appbuild_lock:
             cancelled = _appbuild_job.get("cancel_requested", False) or result.get("cancelled", False)
         if cancelled:
@@ -1397,6 +1530,8 @@ def _council_busy() -> bool:
 
 def _run_council_job(
     *, trigger: str, goal: str, context: dict[str, Any], placement: str = "planner",
+    parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
+    cancel_event: threading.Event | None = None, started_at: float | None = None,
 ) -> None:
     """MORTIMER_LLM_COUNCIL_V2_PLAN.md V5 — background thread target,
     mirroring `_run_agent`'s shape: run the round, then settle
@@ -1406,17 +1541,25 @@ def _run_council_job(
     `winner=None` and `select_reason` populated — the same distinction
     `_maybe_escalate` makes between `result is None` and
     `result.winner is None`."""
+    started_at = time.time() if started_at is None else started_at
     try:
+        owner, policy = _advisory_owner(
+            "council", context, None, parent_budget=parent_budget,
+            data_policy=data_policy, cancel_event=cancel_event, started_at=started_at,
+        )
+        host_kwargs = ({"parent_budget": owner, "data_policy": policy,
+                        "cancel_event": cancel_event} if owner is not None else {})
         result = asyncio.run(council_mod.convene(
             workflow="selfedit", placement=placement, trigger=trigger,
-            goal=goal, tier=1, context=context,
+            goal=goal, tier=1, context=context, **host_kwargs,
         ))
-    except Exception as exc:  # noqa: BLE001 — a crash must still settle the job
+        _check_advisory_owner(owner, cancel_event)
+    except (Exception, asyncio.CancelledError) as exc:  # every exit settles the job
         logger.warning("council_job_failed error_type=%s", type(exc).__name__)
         with _council_lock:
             _council_job.update(
                 state="error",
-                error=f"council job failed ({type(exc).__name__})",
+                error=_advisory_failure(exc, "council job failed"),
                 finished_at=time.time(),
             )
         return
@@ -1463,6 +1606,8 @@ def _resolve_planning_profile(explicit: str | None) -> dict[str, Any]:
 def _run_plan_single(
     goal: str, profile: dict[str, Any], context: dict[str, Any],
     run_id: str | None = None,
+    *, parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
+    cancel_event: threading.Event | None = None, started_at: float | None = None,
 ) -> None:
     # MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R3 — single mode now shares
     # the same _proposer_user_message assembly council mode uses, so a
@@ -1471,17 +1616,32 @@ def _run_plan_single(
     is_review = context.get("document") is not None
     system_prompt = PLAN_REVIEW_PROMPT if is_review else PLAN_AUTHOR_PROMPT
     user_content = council_mod._proposer_user_message(goal, context, "doc")
+    started_at = time.time() if started_at is None else started_at
     try:
+        owner, policy = _advisory_owner(
+            "planning", context, run_id, parent_budget=parent_budget,
+            data_policy=data_policy, cancel_event=cancel_event, started_at=started_at,
+        )
+        call_kwargs = {}
+        if owner is not None:
+            workload = "council" if is_review else "planning"
+            policy = council_mod._host_policy(context, workload, policy)
+            execution = council_mod._child_execution(
+                owner, workload, policy, cancel_event, started_at=started_at,
+                sponsored=parent_budget is not None,
+            )
+            call_kwargs = {"execution": execution, "data_policy": policy}
         content, _usage = asyncio.run(council_mod._call_profile(
             profile, system_prompt, user_content,
-            council_config.PLANNING_MEMBER_TIMEOUT_S, rung="planning",
+            council_config.PLANNING_MEMBER_TIMEOUT_S, rung="planning", **call_kwargs,
         ))
-    except Exception as exc:  # noqa: BLE001 — a crash must still settle the job
+        _check_advisory_owner(owner, cancel_event)
+    except (Exception, asyncio.CancelledError) as exc:  # every exit settles the job
         logger.warning("plan_single_job_failed error_type=%s", type(exc).__name__)
         with _plan_lock:
             _plan_job.update(
                 state="error",
-                error=f"planning call failed ({type(exc).__name__})",
+                error=_advisory_failure(exc, "planning call failed"),
                 finished_at=time.time(),
             )
         _update_plan_start_claim(run_id, "failed")
@@ -1497,17 +1657,28 @@ def _run_plan_single(
 def _run_plan_council(
     goal: str, members: dict[str, list[str]] | None, context: dict[str, Any],
     run_id: str | None = None,
+    *, parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
+    cancel_event: threading.Event | None = None, started_at: float | None = None,
 ) -> None:
+    started_at = time.time() if started_at is None else started_at
     try:
+        owner, policy = _advisory_owner(
+            "planning", context, run_id, parent_budget=parent_budget,
+            data_policy=data_policy, cancel_event=cancel_event, started_at=started_at,
+        )
+        host_kwargs = ({"parent_budget": owner, "data_policy": policy,
+                        "cancel_event": cancel_event} if owner is not None else {})
         result = asyncio.run(council_mod.draft_candidates(
             goal, members=members, judge=True, context=context, run_id=run_id,
+            **host_kwargs,
         ))
-    except Exception as exc:  # noqa: BLE001
+        _check_advisory_owner(owner, cancel_event)
+    except (Exception, asyncio.CancelledError) as exc:
         logger.warning("plan_council_job_failed error_type=%s", type(exc).__name__)
         with _plan_lock:
             _plan_job.update(
                 state="error",
-                error=f"planning round failed ({type(exc).__name__})",
+                error=_advisory_failure(exc, "planning round failed"),
                 finished_at=time.time(),
             )
         _update_plan_start_claim(run_id, "failed")
@@ -1896,6 +2067,7 @@ def selfedit_run(body: GoalIn) -> dict:
         # R1). Same truncation knob: a seeded plan is a document injection
         # with the same size concerns as a reviewed one.
         read_result = repo_logic.repo_read_file(plan_path)
+        _source_plan_observed(plan_path, read_result)
         if not read_result.get("ok"):
             return {"ok": False, "error": read_result.get("error")}
         plan = read_result.get("content") or ""
@@ -1931,6 +2103,7 @@ def selfedit_run(body: GoalIn) -> dict:
         if not duplicate_claim:
             _run_job.update(
                 state="running", cancel_requested=False,
+                run_id=run_id,
                 goal=goal,
                 profile=agent.model_label(),
                 summary=None,
@@ -1950,9 +2123,10 @@ def selfedit_run(body: GoalIn) -> dict:
     logger.info("selfedit_state_transition state=running")
     try:
         threading.Thread(
-            target=_run_agent,
+            target=_source_worker_target(_run_agent),
             args=(goal, profile, plan, run_id, requested_action_id,
                   requested_action_scope),
+            **({'kwargs': _source_worker_kwargs()} if _workspace_start_policy.get() is not None else {}),
             daemon=True,
         ).start()
     except Exception as exc:
@@ -2399,11 +2573,10 @@ def selfedit_reject() -> dict:
             )
             council_started = True
     if council_started:
-        threading.Thread(
-            target=_run_council_job,
+        _start_advisory_thread(
+            _run_council_job,
             kwargs={"trigger": "E3", "goal": goal, "context": context},
-            daemon=True,
-        ).start()
+        )
 
     revert_result = _selfedit_service.revert()
     logger.info("selfedit_state_transition state=rejected ok=%s", revert_result.get("ok"))
@@ -2470,6 +2643,7 @@ def appbuild_start(body: AppBuildGoalIn) -> dict:
         # Voice-path plan seeding — identical read-and-refuse pattern to
         # selfedit_run's, so an unreadable plan can never seed a build.
         read_result = repo_logic.repo_read_file(plan_path)
+        _source_plan_observed(plan_path, read_result)
         if not read_result.get("ok"):
             return {"ok": False, "error": read_result.get("error")}
         plan = read_result.get("content") or ""
@@ -2523,7 +2697,8 @@ def appbuild_start(body: AppBuildGoalIn) -> dict:
     logger.info("appbuild_state_transition state=running")
     _update_appbuild_start_claim(run_id, "running")
     worker = threading.Thread(
-        target=_run_appbuild_agent, args=(app_name, goal, body.profile, plan, run_id), daemon=True,
+        target=_source_worker_target(_run_appbuild_agent), args=(app_name, goal, body.profile, plan, run_id), daemon=True,
+        **({'kwargs': _source_worker_kwargs()} if _workspace_start_policy.get() is not None else {}),
     )
     try:
         worker.start()
@@ -2754,6 +2929,7 @@ def appbuild_cancel() -> dict:
 
 @app.post("/api/research/start")
 def research_start(body: ResearchStartIn) -> dict:
+    advisory_started_at = time.time()
     if not _research_enabled():
         return {"ok": False, "error": RESEARCH_DISABLED_MESSAGE}
     run_id = (body.run_id or "").strip()
@@ -2814,9 +2990,10 @@ def research_start(body: ResearchStartIn) -> dict:
     _update_research_start_claim(run_id, "running")
     logger.info("research_state_transition state=running site_count=%d", len(urls))
     try:
-        threading.Thread(
-            target=_run_research_job, args=(urls, body.focus or "", run_id), daemon=True,
-        ).start()
+        _start_advisory_thread(
+            _run_research_job, args=(urls, body.focus or "", run_id),
+            started_at=advisory_started_at,
+        )
     except Exception as exc:
         logger.warning("research_job_dispatch_failed error_type=%s", type(exc).__name__)
         with _research_lock:
@@ -2930,6 +3107,340 @@ def memory_overview() -> dict:
         "observations": memory_module.list_observation_groups(),
         "usage": memory_module.memory_usage(),
     }
+
+
+_WORKSPACE_SOURCE_TOOLS = frozenset({
+    'selfedit_start', 'selfedit_status', 'selfedit_read', 'selfedit_write', 'selfedit_finish',
+    'app_build_start', 'app_build_status', 'app_build_submit',
+})
+_workspace_preparation_lock = threading.Lock()
+_workspace_preparations: dict[str, tuple] = {}
+
+
+def _workspace_source_run(body, request):
+    """The service credential authenticates transport, never JSON authority."""
+    from jarvis.runlog.store import get_run
+    from jarvis.skill_runtime import runtime_owner
+
+    identity = request.scope.get('client_identity')
+    if not auth_enabled() or identity is None or getattr(identity, 'name', None) != 'service-bot':
+        raise HTTPException(status_code=403, detail='workspace source requires authenticated service-bot')
+    try:
+        for raw in (body.bot_session_id, body.developer_run_id):
+            if str(uuid.UUID(raw)) != raw:
+                raise ValueError()
+        detail = get_run(body.developer_run_id)
+        run = detail['run'] if type(detail) is dict else None
+        if (type(run) is not dict or run.get('agent') != 'developer' or run.get('status') != 'running'
+                or run.get('user_id') != body.owner_id or run.get('session_id') != body.bot_session_id
+                or runtime_owner(body.bot_session_id) != body.owner_id):
+            raise ValueError()
+        return run
+    except Exception:
+        raise HTTPException(status_code=409, detail='workspace source caller is stale') from None
+
+
+def _workspace_source_arguments(body):
+    import inspect
+    from jarvis.privacy_policy import bounded_tool_arguments
+    from mcp_servers.mcp_selfedit import logic as selfedit_logic
+    from mcp_servers.mcp_apps import logic as apps_logic
+
+    if body.tool_name not in _WORKSPACE_SOURCE_TOOLS or 'run_id' in body.arguments:
+        raise HTTPException(status_code=403, detail='tool is outside workspace source capability')
+    try:
+        bounded_tool_arguments(body.tool_name, body.arguments)
+        module = apps_logic if body.tool_name.startswith('app_') else selfedit_logic
+        function = getattr(module, body.tool_name)
+        bound = inspect.signature(function).bind(None, **body.arguments)
+        bound.apply_defaults()
+        values = dict(bound.arguments)
+        values.pop('client')
+        for key, value in values.items():
+            if key in {'confirm', 'proposal'}:
+                if type(value) is not bool:
+                    raise ValueError()
+            elif key == 'target_paths':
+                if value is not None and (type(value) is not list or any(type(p) is not str for p in value)):
+                    raise ValueError()
+            elif value is not None and type(value) is not str:
+                raise ValueError()
+        if 'run_id' in values:
+            values['run_id'] = body.developer_run_id
+        return function, values
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(status_code=400, detail='invalid workspace source arguments') from None
+
+
+def _workspace_source_context(body, run, values, *, terminal=False):
+    from jarvis.development_sources import ordinary_context
+    from jarvis.runlog.store import get_run
+
+    kind = 'app-build' if body.tool_name.startswith('app_') else 'selfedit'
+    service, retained, job = None, None, None
+    lineage = body.developer_run_id
+    if body.tool_name == 'selfedit_start' and values['confirm']:
+        with _staging_lock:
+            _prune_expired_stagings()
+            sid = values['staging_id'].strip()
+            record = _selfedit_stagings.get(sid)
+            if record is None and (sid or not values['goal'].strip()) and len(_selfedit_stagings) == 1:
+                sid, record = next(iter(_selfedit_stagings.items()))
+            if record is not None:
+                job = record.get('run_id')
+                digest = hashlib.sha256(json.dumps(record, sort_keys=True, separators=(',', ':'),
+                                                   allow_nan=False).encode()).hexdigest()
+                lineage = sid + ':' + digest
+        if job is None and (values['staging_id'] or not values['goal'].strip()):
+            for lock, slot in ((_opening_lock, _opening_job), (_run_lock, _run_job)):
+                with lock:
+                    snapshot = dict(slot)
+                if snapshot.get('action_run_id') == values['staging_id'].strip():
+                    claim = get_execution_action(snapshot.get('action_scope') or _SELFEDIT_STAGED_START_ACTION_SCOPE,
+                                                 snapshot['action_run_id'])
+                    if claim is not None:
+                        job, lineage = snapshot.get('run_id'), snapshot['action_run_id']
+                        break
+            if job is None:
+                raise HTTPException(status_code=409, detail='workspace source lineage is unavailable')
+    elif body.tool_name in {'selfedit_read', 'selfedit_write', 'selfedit_finish'}:
+        service = _selfedit_service
+    elif body.tool_name == 'selfedit_status':
+        if values['staging_id']:
+            with _staging_lock:
+                record = _selfedit_stagings.get(values['staging_id'].strip())
+                if record is not None:
+                    job, lineage = record.get('run_id'), values['staging_id'].strip()
+        if job is None:
+            try:
+                _selfedit_service._session()
+                service = _selfedit_service
+            except Exception:
+                for lock, slot in ((_opening_lock, _opening_job), (_run_lock, _run_job)):
+                    with lock:
+                        candidate = slot.get('run_id')
+                    if candidate:
+                        job, lineage = candidate, candidate
+                        break
+    elif body.tool_name in {'app_build_status', 'app_build_submit'}:
+        with _appbuild_lock:
+            service, job = _appbuild_workspace, _appbuild_job.get('run_id')
+        if body.tool_name == 'app_build_submit' and service is None:
+            raise HTTPException(status_code=409, detail='workspace source lineage is unavailable')
+    if service is not None:
+        state = service._session()._read()
+        job, lineage = state.get('run_id'), state.get('id')
+    if job is not None:
+        detail = get_run(job)
+        retained = detail.get('run') if type(detail) is dict else None
+        if retained is None:
+            raise HTTPException(status_code=409, detail='workspace source lineage is unavailable')
+    return ordinary_context(service, run, retained, workspace_kind=kind,
+                            lineage_id=lineage, terminal=terminal)
+
+
+class _WorkspaceSourceClient:
+    """Installed ordinary transformations over existing guarded handlers."""
+    def __init__(self, scope, context, run):
+        self.scope, self.context, self.classified = scope, context, None
+        self.start_policy = {'data_policy': scope.input_policy, 'run': run}
+
+    def _file(self, name, values, invoke):
+        from jarvis.development_sources import dispatch_workspace_tool
+        from jarvis.privacy_policy import make_tool_execution_scope, validate_tool_result
+        inner = make_tool_execution_scope(self.scope.parent_request_id, self.scope.task_id,
+            self.scope.tool_call_id, name, values, self.scope.input_policy)
+        self.classified = dispatch_workspace_tool(_selfedit_service, name, values,
+            execution_scope=inner, context=self.context, invoke=invoke)
+        self.policy, content = validate_tool_result(inner, self.classified)
+        return json.loads(content)
+
+    def get(self, path, params=None):
+        params = params or {}
+        if path == '/api/selfedit/file':
+            return self._file('file_read', {'path': params['path']}, lambda: selfedit_file(params['path']))
+        if path == '/api/selfedit/models':
+            return selfedit_models()
+        if path == '/api/selfedit/run':
+            return selfedit_run_status(**params)
+        if path == '/api/appbuild/job':
+            return appbuild_job_status(**params)
+        raise ValueError('workspace_source_unavailable')
+
+    def post(self, path, json=None):
+        values = json or {}
+        if path == '/api/selfedit/write':
+            body = SelfEditWriteIn(**values)
+            args = {'path': body.path, 'new_content': body.content, 'rationale': body.rationale,
+                    'visual_intent': body.visual_intent, 'proposal': body.proposal}
+            return self._file('edit_propose', args, lambda: selfedit_write(body))
+        if path == '/api/selfedit/stage':
+            return selfedit_stage(SelfEditStageIn(**values))
+        if path == '/api/selfedit/run':
+            token = _workspace_start_policy.set(self.start_policy)
+            try:
+                return selfedit_run(GoalIn(**values))
+            finally:
+                _workspace_start_policy.reset(token)
+        if path == '/api/selfedit/finish':
+            return selfedit_finish()
+        if path == '/api/appbuild/start':
+            token = _workspace_start_policy.set(self.start_policy)
+            try:
+                return appbuild_start(AppBuildGoalIn(**values))
+            finally:
+                _workspace_start_policy.reset(token)
+        if path == '/api/appbuild/submit':
+            return appbuild_submit()
+        raise ValueError('workspace_source_unavailable')
+
+
+def _workspace_lifecycle_result(name, values, result):
+    """Explicit host reduction drops raw logs, URLs, goals and error text."""
+    if type(result) is not dict or result.get('ok') is not True:
+        return {'ok': False, 'error': 'development_operation_failed'}
+    if name == 'selfedit_start' and not values['confirm']:
+        sid = result.get('staging_id')
+        with _staging_lock:
+            stage = _selfedit_stagings.get(sid)
+            if (type(stage) is not dict or stage.get('goal') != values['goal'].strip()
+                    or stage.get('run_id') != values['run_id']):
+                return {'ok': False, 'error': 'development_operation_failed'}
+        return result  # Exact installed caller-input/profile/allowlist preview.
+    if name == 'app_build_start' and not values['confirm']:
+        return result  # Pure caller-input preview; no acquired application data.
+    reduced = {'ok': True}
+    for key in ('started', 'opening', 'duplicate', 'needs_confirmation', 'active',
+                'staging_found', 'already_submitted', 'reconciliation_required'):
+        if type(result.get(key)) is bool:
+            reduced[key] = result[key]
+    states = {'idle', 'starting', 'ready', 'running', 'validating', 'submitting', 'done',
+              'error', 'cancelled', 'completed', 'failed', 'unknown', 'recovered'}
+    state = result.get('state')
+    for key in ('opening', 'finish', 'job'):
+        if type(result.get(key)) is dict and result[key].get('state') in states:
+            state = result[key]['state']
+            if state not in {'idle', 'done'}:
+                break
+    if state in states:
+        reduced['state'] = state
+    for key in ('action_run_id', 'submission_id'):
+        value = result.get(key)
+        if type(value) is str and re.fullmatch(r'(?:[0-9a-f]{12}|[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', value):
+            reduced[key] = value
+    if result.get('session') or (name == 'selfedit_status' and result.get('active')):
+        reduced['session_open'] = True
+    if reduced.get('reconciliation_required') or state == 'unknown':
+        reduced['summary'] = 'The outcome is unresolved. Check this action again; do not retry automatically.'
+    elif name in {'selfedit_start', 'selfedit_status'} and reduced.get('session_open'):
+        reduced['summary'] = 'The isolated session is open. Read each file, write the approved change, then call selfedit_finish.'
+    elif name == 'selfedit_finish':
+        reduced['summary'] = 'Validation and draft submission are being checked. Ask for self-edit status; merging stays with you.'
+    elif name == 'app_build_submit':
+        reduced['summary'] = 'Draft submission is being checked. Ask for app-build status; merging stays with you.'
+    else:
+        reduced['summary'] = 'The development lifecycle state is available. Check status before another operation.'
+    return reduced
+
+
+@app.post('/api/development/source/associate')
+def associate_workspace_source(body: WorkspaceSourceAssociationIn, request: Request) -> dict:
+    _workspace_source_run(body, request)
+    from jarvis.development_attestation import ensure_admin_source_authority
+    ensure_admin_source_authority()
+    _workspace_source_run(body, request)
+    return {'ok': True}
+
+
+@app.post('/api/development/source/prepare')
+def prepare_workspace_source(body: WorkspaceSourcePrepareIn, request: Request) -> dict:
+    run = _workspace_source_run(body, request)
+    _, values = _workspace_source_arguments(body)
+    try:
+        from jarvis.development_sources import retain_workspace_floor
+        from jarvis.privacy_policy import DataPolicy
+        retain_workspace_floor(run, DataPolicy(body.source_input_policy, 'workspace-caller-floor'))
+        context = _workspace_source_context(body, run, values, terminal=body.tool_name.endswith(('status', 'finish', 'submit')))
+        _workspace_source_run(body, request)
+        import secrets
+        key = secrets.token_hex(32)
+        with _workspace_preparation_lock:
+            now = time.monotonic()
+            for prior, record in list(_workspace_preparations.items()):
+                if now - record[0] >= 60:
+                    _workspace_preparations.pop(prior, None)
+            if len(_workspace_preparations) >= 4096:
+                raise ValueError()
+            _workspace_preparations[key] = (now, body.model_dump(), context)
+        return {'ok': True, 'source_context': context.as_metadata(), 'source_preparation_id': key}
+    except Exception:
+        raise HTTPException(status_code=409, detail='workspace source context is unavailable') from None
+
+
+@app.post('/api/development/source/tool')
+def execute_workspace_source(body: WorkspaceSourceToolIn, request: Request) -> dict:
+    from jarvis.development_attestation import sign_workspace_source
+    from jarvis.development_sources import ordinary_context, _verify_workspace_floor_pins
+    from jarvis.privacy_policy import DataPolicy, issue_tool_result, make_tool_execution_scope, strictest
+    from jarvis.tenant import user_id_scope
+
+    run = _workspace_source_run(body, request)
+    function, values = _workspace_source_arguments(body)
+    terminal = body.tool_name.endswith(('status', 'finish', 'submit'))
+    try:
+        with _workspace_preparation_lock:
+            prepared = _workspace_preparations.pop(body.source_preparation_id, None)
+        binding = body.model_dump(exclude={'source_context', 'source_preparation_id'})
+        if prepared is None or not 0 <= time.monotonic() - prepared[0] < 60 or binding != prepared[1]:
+            raise ValueError()
+        context = prepared[2]
+        _verify_workspace_floor_pins(context)
+        current_context = _workspace_source_context(body, run, values, terminal=terminal)
+        if (context.as_metadata() != body.source_context or current_context.as_metadata() != body.source_context
+                or current_context._identity != context._identity or current_context._pins != context._pins):
+            raise ValueError()
+        scope = make_tool_execution_scope(body.developer_run_id, body.source_task_id, body.source_tool_call_id,
+            body.tool_name, body.arguments, strictest(context.input_floor,
+                DataPolicy(body.source_input_policy, 'workspace-caller-floor')))
+        from jarvis.development_sources import retain_workspace_floor
+        retain_workspace_floor(run, scope.input_policy)
+        client = _WorkspaceSourceClient(scope, context, run)
+        with user_id_scope(run['user_id']):
+            result = function(client, **values)
+        policy, source_scope, refs = context.input_floor, 'workspace-generated-lifecycle', ()
+        if client.classified is not None:
+            policy = strictest(policy, client.policy)
+            source_scope, refs = client.classified.source_scope, client.classified.canonical_refs
+        else:
+            result = _workspace_lifecycle_result(body.tool_name, values, result)
+        policy = strictest(policy, *(value for value in client.start_policy.values() if type(value) is DataPolicy))
+        current_run = _workspace_source_run(body, request)
+        if body.tool_name == 'selfedit_start':
+            if values['confirm'] and result.get('ok'):
+                expected_job = context.as_metadata().get('sandbox_job_id', body.developer_run_id)
+                with _opening_lock, _run_lock:
+                    if not any(slot.get('run_id') == expected_job for slot in (_opening_job, _run_job)):
+                        raise ValueError()
+            after = ordinary_context(None, current_run, workspace_kind='selfedit',
+                                     lineage_id=context.as_metadata()['lineage_id'])
+        else:
+            after = _workspace_source_context(body, current_run, values, terminal=terminal)
+            if after.as_metadata() != context.as_metadata():
+                raise ValueError()
+        policy = strictest(policy, after.input_floor)
+        classified = issue_tool_result(scope, json.dumps(result, sort_keys=True, separators=(',', ':'),
+            ensure_ascii=True, allow_nan=False), policy, source_scope, refs)
+        receipt = sign_workspace_source(scope, classified, context=context.as_metadata(), challenge=body.source_challenge)
+        _workspace_source_run(body, request)
+        if client.classified is not None:
+            final = _workspace_source_context(body, current_run, values, terminal=terminal)
+            if final.as_metadata() != context.as_metadata():
+                raise ValueError()
+        return {'ok': True, 'source_receipt': receipt}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=409, detail='workspace source binding changed') from None
 
 
 @app.post("/api/skills/runtime-inventory")
@@ -4037,6 +4548,7 @@ def council_convene(body: ConveneIn) -> dict:
     is implemented — D6.1's prompts are the only ones this plan defines;
     a reviewer-placement prompt was never specified, so that placement
     is refused rather than improvised."""
+    advisory_started_at = time.time()
     run_migrations()
     if body.placement != "planner":
         return {
@@ -4062,11 +4574,11 @@ def council_convene(body: ConveneIn) -> dict:
             winner=None, winner_mean=None, select_reason=None, error=None,
             started_at=time.time(), finished_at=None,
         )
-    threading.Thread(
-        target=_run_council_job,
+    _start_advisory_thread(
+        _run_council_job,
         kwargs={"trigger": "manual", "goal": goal, "context": context},
-        daemon=True,
-    ).start()
+        started_at=advisory_started_at,
+    )
     return {"ok": True, "started": True}
 
 
@@ -4169,6 +4681,7 @@ def council_roster(
 
 @app.post("/api/plan/start")
 def plan_start(body: PlanStartIn) -> dict:
+    advisory_started_at = time.time()
     run_migrations()
     goal = (body.goal or "").strip()
     if not goal:
@@ -4282,14 +4795,15 @@ def plan_start(body: PlanStartIn) -> dict:
         )
     _update_plan_start_claim(run_id, "running")
     if body.mode == "single":
-        threading.Thread(
-            target=_run_plan_single, args=(goal, profile, context, run_id), daemon=True,
-        ).start()
+        _start_advisory_thread(
+            _run_plan_single, args=(goal, profile, context, run_id),
+            started_at=advisory_started_at,
+        )
     else:
-        threading.Thread(
-            target=_run_plan_council,
-            args=(goal, body.members, context, run_id), daemon=True,
-        ).start()
+        _start_advisory_thread(
+            _run_plan_council, args=(goal, body.members, context, run_id),
+            started_at=advisory_started_at,
+        )
     return {"ok": True, "started": True}
 
 

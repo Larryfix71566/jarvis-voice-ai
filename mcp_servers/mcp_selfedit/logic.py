@@ -53,6 +53,40 @@ def _call(fn) -> dict[str, Any]:
         return {"ok": False, "error": OFFLINE_ERROR}
 
 
+def workspace_source_request(client, tool_name: str, actual_arguments: dict, metadata: dict) -> dict:
+    """Hidden host transport; metadata never participates in source approval.
+
+    Ordinary tools keep their legacy logic when this is not requested. The
+    authenticated admin invokes that installed logic and signs the final body.
+    """
+    try:
+        if (type(metadata) is not dict or metadata.get('tool_name') != tool_name
+                or metadata.get('phase') not in {'associate', 'prepare', 'execute'}):
+            raise ValueError()
+        arguments = metadata.get('arguments', {})
+        if type(arguments) is not dict:
+            raise ValueError()
+        if any(name == 'run_id' or name not in actual_arguments or actual_arguments[name] != value
+               for name, value in arguments.items()):
+            raise ValueError()
+        phase = metadata['phase']
+        body = {name: metadata[name] for name in ('owner_id', 'bot_session_id', 'developer_run_id')}
+        if phase != 'associate':
+            body.update(tool_name=tool_name, arguments=arguments)
+            body.update({name: metadata[name] for name in (
+                'source_challenge', 'source_task_id',
+                'source_tool_call_id', 'source_input_policy')})
+        if phase == 'execute':
+            body.update({name: metadata[name] for name in ('source_context', 'source_preparation_id')})
+        path = 'tool' if phase == 'execute' else phase
+        response = client.post('/api/development/source/' + path, json=body)
+        if type(response) is not dict or response.get('ok') is not True:
+            raise ValueError()
+        return response
+    except Exception:
+        return {'ok': False, 'error': 'workspace_source_unavailable'}
+
+
 def _format_models(models: list[dict[str, Any]]) -> str:
     parts = []
     for m in models:

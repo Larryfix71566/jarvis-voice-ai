@@ -33,6 +33,7 @@ from jarvis.privacy_policy import (
 from jarvis.tenant import is_valid_user_id
 
 PROTOCOL = "mortimer.development-source.v1"
+WORKSPACE_PROTOCOL = "mortimer.workspace-source.v1"
 _HEX = re.compile(r"[0-9a-f]{64}\Z")
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}\Z")
 _SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
@@ -115,6 +116,26 @@ def _context(value: object) -> dict[str, str]:
         for name in ("bot_session_id", "request_id", "developer_run_id", "sandbox_job_id"):
             if str(uuid.UUID(value[name])) != value[name]:
                 raise ValueError
+    except (ValueError, TypeError, AttributeError):
+        raise DevelopmentSourceAttestationError() from None
+    return dict(value)
+
+
+def _workspace_context(value: object) -> dict[str, str]:
+    required = {"owner_id", "bot_session_id", "developer_run_id", "workspace_kind", "lineage_id"}
+    optional = {"sandbox_job_id", "sandbox_session_id", "sandbox_task_id", "source_commit"}
+    if (type(value) is not dict or not required <= value.keys()
+            or value.keys() - required - optional
+            or any(type(item) is not str or not _ID.fullmatch(item) for item in value.values())
+            or not is_valid_user_id(value["owner_id"])
+            or value["workspace_kind"] not in {"selfedit", "app-build"}):
+        raise DevelopmentSourceAttestationError()
+    try:
+        for name in ("bot_session_id", "developer_run_id", "sandbox_job_id"):
+            if name in value and str(uuid.UUID(value[name])) != value[name]:
+                raise ValueError()
+        if "source_commit" in value and not re.fullmatch(r"[0-9a-f]{40,64}", value["source_commit"]):
+            raise ValueError()
     except (ValueError, TypeError, AttributeError):
         raise DevelopmentSourceAttestationError() from None
     return dict(value)
@@ -331,9 +352,21 @@ def _binding(scope: ToolExecutionScope) -> dict:
 def sign_tool_source(scope: ToolExecutionScope, envelope: ToolResultEnvelope, *,
                      context: dict[str, str], challenge: str) -> dict:
     """Sign only a locally sealed host classification after authorization rechecks."""
+    return _sign_tool_source(scope, envelope, context=context, challenge=challenge,
+                             protocol=PROTOCOL, validate_context=_context)
+
+
+def sign_workspace_source(scope: ToolExecutionScope, envelope: ToolResultEnvelope, *,
+                          context: dict[str, str], challenge: str) -> dict:
+    """Ordinary work has its own context; it never invents creator revisions."""
+    return _sign_tool_source(scope, envelope, context=context, challenge=challenge,
+                             protocol=WORKSPACE_PROTOCOL, validate_context=_workspace_context)
+
+
+def _sign_tool_source(scope, envelope, *, context, challenge, protocol, validate_context):
     try:
         policy, content = validate_tool_result(scope, envelope)
-        context = _context(context)
+        context = validate_context(context)
         if (type(challenge) is not str or not _HEX.fullmatch(challenge)
                 or context["developer_run_id"] != scope.parent_request_id):
             raise DevelopmentSourceAttestationError()
@@ -343,7 +376,7 @@ def sign_tool_source(scope: ToolExecutionScope, envelope: ToolResultEnvelope, *,
                 raise DevelopmentSourceAttestationError()
             now = _clock(time.time())
             payload = {
-                "protocol": PROTOCOL, "key_id": issuer.pin.key_id, "generation": issuer.pin.generation,
+                "protocol": protocol, "key_id": issuer.pin.key_id, "generation": issuer.pin.generation,
                 "issued_at": now, "expires_at": now + _TTL, "challenge": challenge,
                 "context": context, "binding": _binding(scope),
                 "result": {"content": content, "content_digest": envelope.content_digest,
@@ -362,15 +395,26 @@ def sign_tool_source(scope: ToolExecutionScope, envelope: ToolResultEnvelope, *,
 def verify_tool_source(pin: AuthorityPin, scope: ToolExecutionScope, receipt: dict, *,
                        context: dict[str, str], challenge: str) -> ToolResultEnvelope:
     """Verify exact host provenance, then re-seal under the bot's original local scope."""
+    return _verify_tool_source(pin, scope, receipt, context=context, challenge=challenge,
+                               protocol=PROTOCOL, validate_context=_context)
+
+
+def verify_workspace_source(pin: AuthorityPin, scope: ToolExecutionScope, receipt: dict, *,
+                            context: dict[str, str], challenge: str) -> ToolResultEnvelope:
+    return _verify_tool_source(pin, scope, receipt, context=context, challenge=challenge,
+                               protocol=WORKSPACE_PROTOCOL, validate_context=_workspace_context)
+
+
+def _verify_tool_source(pin, scope, receipt, *, context, challenge, protocol, validate_context):
     try:
         if type(pin) is not AuthorityPin or pin_source_authority() != pin:
             raise DevelopmentSourceAttestationError()
         if (type(receipt) is not dict or set(receipt) != {
                 "protocol", "key_id", "generation", "issued_at", "expires_at", "challenge",
                 "context", "binding", "result", "signature"}
-                or receipt["protocol"] != PROTOCOL or receipt["key_id"] != pin.key_id
+                or receipt["protocol"] != protocol or receipt["key_id"] != pin.key_id
                 or receipt["generation"] != pin.generation or receipt["challenge"] != challenge
-                or _context(receipt["context"]) != _context(context)
+                or validate_context(receipt["context"]) != validate_context(context)
                 or context["developer_run_id"] != scope.parent_request_id
                 or type(receipt["signature"]) is not str):
             raise DevelopmentSourceAttestationError()

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import difflib
+import fcntl
 import hashlib
 import hmac
 import json
@@ -84,6 +85,7 @@ class DevelopmentSourceContext:
     _identity: tuple = field(repr=False)
     _pins: tuple = field(repr=False)
     _seal: str = field(default='', repr=False)
+    _journal_pins: tuple = field(default=(), repr=False)
 
     def as_metadata(self):
         _verify_context(self, self._service)
@@ -93,14 +95,14 @@ class DevelopmentSourceContext:
 def _seal(context):
     material = (id(context._service), id(context._session), context._metadata,
                 context._identity, context._pins, context.input_floor.level,
-                context.input_floor.source)
+                context.input_floor.source, context._journal_pins)
     return hmac.new(_key, json.dumps(material, sort_keys=True,
                                     separators=(',', ':')).encode(), hashlib.sha256).hexdigest()
 
 
-def _make_context(service, session, metadata, identity, pins, floor):
+def _make_context(service, session, metadata, identity, pins, floor, journal_pins=()):
     context = DevelopmentSourceContext(floor, service, session,
-        tuple(sorted(metadata.items())), tuple(identity), tuple(pins))
+        tuple(sorted(metadata.items())), tuple(identity), tuple(pins), _journal_pins=tuple(journal_pins))
     object.__setattr__(context, '_seal', _seal(context))
     return context
 
@@ -192,6 +194,7 @@ def _live(service, parent, context, *, terminal=False):
     if context is None:
         context = _owner_context(service, parent, terminal=terminal)
     _verify_context(context, service)
+    _verify_workspace_floor_pins(context)
     if dict(context._metadata).get('developer_run_id') != parent:
         raise ModelRouteError('development_session_owner_mismatch')
     try:
@@ -207,6 +210,117 @@ def _live(service, parent, context, *, terminal=False):
     if identity != context._identity or pins != context._pins:
         raise ModelRouteError('development_session_changed')
     return context, state
+
+
+def _workspace_floor_path(run, *, create=False):
+    from jarvis.development_attestation import _home, _directory
+    from jarvis.tenant import is_valid_user_id
+    if (type(run) is not dict or not is_valid_user_id(run.get('user_id'))
+            or any(str(uuid.UUID(run[name])) != run[name] for name in ('session_id', 'run_id'))):
+        raise ModelRouteError('workspace_source_floor_invalid')
+    home = _home()
+    descriptor = _directory(home)
+    os.close(descriptor)
+    parent = home / '.source-authority'
+    path = parent / 'workspace-floors' / run['user_id'] / run['session_id'] / (run['run_id'] + '.json')
+    for part in ('workspace-floors', run['user_id'], run['session_id']):
+        parent /= part
+        if create:
+            try:
+                parent.mkdir(mode=0o700)
+            except FileExistsError:
+                pass
+        if not create:
+            try:
+                parent.lstat()
+            except FileNotFoundError:
+                return path
+        _secure(parent, home, directory=True)
+        if stat.S_IMODE(parent.stat().st_mode) != 0o700:
+            raise ModelRouteError('workspace_source_floor_invalid')
+    return path
+
+
+def _read_workspace_floor(run):
+    try:
+        path = _workspace_floor_path(run)
+        if not path.exists() and not path.is_symlink():
+            return DataPolicy('approved_external', 'no-retained-workspace-floor'), None
+        from jarvis.development_attestation import _home
+        identity = _secure(path, _home())
+        if stat.S_IMODE(path.stat().st_mode) != 0o600:
+            raise ValueError()
+        with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC), 'rb') as stream:
+            info = os.fstat(stream.fileno())
+            if (info.st_dev, info.st_ino) != identity or info.st_size > 2048:
+                raise ValueError()
+            record = json.load(stream)
+        if (type(record) is not dict or set(record) != {'owner_id', 'bot_session_id', 'developer_run_id', 'floor'}
+                or record['owner_id'] != run['user_id'] or record['bot_session_id'] != run['session_id']
+                or record['developer_run_id'] != run['run_id'] or record['floor'] not in _levels):
+            raise ValueError()
+        return DataPolicy(record['floor'], 'retained-workspace-floor'), identity
+    except Exception:
+        raise ModelRouteError('workspace_source_floor_invalid') from None
+
+
+def workspace_floor(run):
+    return _read_workspace_floor(run)[0]
+
+
+def retain_workspace_floor(run, policy):
+    """Restriction-only host journal, saved before staged/provider/guest ingress."""
+    if type(policy) is not DataPolicy:
+        raise ModelRouteError('workspace_source_floor_invalid')
+    path = _workspace_floor_path(run, create=True)
+    try:
+        descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+        created = True
+    except FileExistsError:
+        descriptor = os.open(path, os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC)
+        created = False
+    try:
+        info = os.fstat(descriptor)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1):
+            raise ValueError()
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        if (path.stat().st_dev, path.stat().st_ino) != (info.st_dev, info.st_ino):
+            raise ValueError()
+        old = DataPolicy('approved_external', 'new-workspace-floor') if created else workspace_floor(run)
+        level = strictest(old, policy).level
+        if created or level != old.level:
+            record = {'owner_id': run['user_id'], 'bot_session_id': run['session_id'],
+                      'developer_run_id': run['run_id'], 'floor': level}
+            encoded = json.dumps(record, sort_keys=True, separators=(',', ':')).encode()
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            pending = memoryview(encoded)
+            while pending:
+                written = os.write(descriptor, pending)
+                if written <= 0:
+                    raise ValueError()
+                pending = pending[written:]
+            os.ftruncate(descriptor, len(encoded))
+            os.fsync(descriptor)
+            directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        if (path.stat().st_dev, path.stat().st_ino) != (info.st_dev, info.st_ino):
+            raise ValueError()
+        return DataPolicy(level, 'retained-workspace-floor')
+    except Exception:
+        raise ModelRouteError('workspace_source_floor_invalid') from None
+    finally:
+        os.close(descriptor)
+
+
+def _verify_workspace_floor_pins(context):
+    for owner, session, run_id, identity, level in context._journal_pins:
+        policy, current = _read_workspace_floor({'user_id': owner, 'session_id': session, 'run_id': run_id})
+        if current != identity or _levels[policy.level] < _levels[level]:
+            raise ModelRouteError('workspace_source_floor_changed')
 
 
 def creator_context(service, state, run):
@@ -260,6 +374,86 @@ def creator_context(service, state, run):
         return _make_context(service, session, metadata, identity, pins, floor)
     except Exception:
         raise ModelRouteError('creator_source_context_invalid') from None
+
+
+def ordinary_context(service, run, retained_run=None, *, workspace_kind, lineage_id, terminal=False):
+    """Bind a live authenticated caller to the actual retained host job.
+
+    Admin supplies durable RunLogger rows after authentication. A different
+    Developer turn may use the retained session only for that same live bot
+    session and owner. No response labels or caller workspace IDs are inputs.
+    """
+    try:
+        from jarvis.development_attestation import _workspace_context
+        from jarvis.runlog.store import SENSITIVE_SENTINEL
+
+        if (type(run) is not dict or run.get('agent') != 'developer'
+                or run.get('status') != 'running'
+                or workspace_kind not in {'selfedit', 'app-build'}):
+            raise ValueError()
+        metadata = {'owner_id': run['user_id'], 'bot_session_id': run['session_id'],
+                    'developer_run_id': run['run_id'], 'workspace_kind': workspace_kind,
+                    'lineage_id': lineage_id}
+        _workspace_context(metadata)
+        floor = _floor('app_builder' if workspace_kind == 'app-build' else 'developer')
+        rows = [run]
+        if retained_run is not None:
+            if (type(retained_run) is not dict or retained_run.get('agent') != 'developer'
+                    or retained_run.get('user_id') != run['user_id']
+                    or retained_run.get('session_id') != run['session_id']):
+                raise ValueError()
+            if str(uuid.UUID(retained_run['run_id'])) != retained_run['run_id']:
+                raise ValueError()
+            metadata['sandbox_job_id'] = retained_run['run_id']
+            rows.append(retained_run)
+        journal_pins = []
+        for row in rows:
+            policy, identity_pin = _read_workspace_floor(row)
+            floor = strictest(floor, policy)
+            journal_pins.append((row['user_id'], row['session_id'], row['run_id'], identity_pin, policy.level))
+        if any(row.get(key) == SENSITIVE_SENTINEL for row in rows
+               for key in ('task', 'task_preview', 'reply_preview')):
+            floor = strictest(floor, DataPolicy('confidential', 'protected-development-lineage'))
+        if service is None:
+            return _make_context(None, None, metadata, (), (), floor, journal_pins)
+        if retained_run is None or service._kind != workspace_kind:
+            raise ValueError()
+        session = _host_session(service)
+        state, identity, pins = _snapshot(service, session, retained_run['run_id'], terminal=terminal)
+        metadata.update(sandbox_session_id=session.id, sandbox_task_id=state['task'],
+                        source_commit=state['ref'])
+        _workspace_context(metadata)
+        return _make_context(service, session, metadata, identity, pins, floor, journal_pins)
+    except Exception:
+        raise ModelRouteError('ordinary_source_context_invalid') from None
+
+
+def host_plan_policy(service, path, result):
+    """Classify exact locally read plan bytes from the installed host root."""
+    from jarvis.selfedit.service import SelfEditService
+    from mcp_servers.mcp_repo.logic import _repo_root, resolve_repo_path
+    policy = DataPolicy('confidential', 'unclassified-host-plan')
+    try:
+        if not isinstance(service, SelfEditService) or service._repository().casefold() != _project:
+            return policy
+        root = service.repo_root.resolve(strict=True)
+        if root != _repo_root().resolve(strict=True):
+            return policy
+        resolved = resolve_repo_path(root, path)
+        canonical = resolved.relative_to(root).as_posix()
+        if (type(result) is not dict or set(result) != {'ok', 'path', 'bytes', 'content'}
+                or result['ok'] is not True or result['path'] != canonical
+                or type(result['bytes']) is not int or type(result['content']) is not str
+                or resolved.stat().st_size != result['bytes']
+                or resolved.read_text(encoding='utf-8') != result['content']
+                or not source_path_allowed(canonical)):
+            return policy
+        if (canonical.split('/')[0] in _code_roots or canonical in _code_files
+                or canonical in _reference_files):
+            return DataPolicy('approved_external', 'verified-host-plan')
+    except Exception:
+        pass
+    return policy
 
 
 def workspace_status_for_owner(service, parent_request_id, *, context=None):
