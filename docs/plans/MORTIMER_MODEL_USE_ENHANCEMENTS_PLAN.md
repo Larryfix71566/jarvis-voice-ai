@@ -82,9 +82,7 @@ The uncommitted four-operation Upgrade pilot prototype has passed its first four
 and real sandbox Developer quality; confidential memory pilot; full workload
 acceptance of optional limits; exact
 running-service capabilities and activation; billing/allowance/paid-overage
-settings; voice route-control and deployed rollback acceptance. SAYGM's latest
-authenticated catalog contains 64 models and zero advertised confidential
-models. Local runtime is still a placeholder. Direct OpenAI API access is not
+settings; voice route-control and deployed rollback acceptance. SAYGM's [10-06 authenticated catalog](../acceptance/model-use-enhancements/receipts/model-access-catalog-readiness-2026-10-06.json) still contains 64 models and zero advertised confidential models. Local runtime is still a placeholder. Direct OpenAI API access is not
 configured in the authoritative endpoint registry. Production global routing
 must remain unchanged while its private workloads lack compliant routes.
 
@@ -120,6 +118,8 @@ Related documents:
 - [Automated-memory plan](MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md)
 
 ## Progress
+
+- 2026-10-06 (Codex, crawler transport and catalog): Actual inert httpx reproduction proves a response cookie reaches the next site's API request. Each crawl now owns a fresh closed client, pins the endpoint, refuses redirects and ignores process proxy/TLS overrides. Root44 and independent44 overlapping cases pass, preserving existing research bounds/order/digests/scorer, API-off behavior, error taxonomy and confidential unknown pages. This is transport isolation, not public-origin approval or research quality acceptance. Today's authenticated SAYGM catalog read still reports64 models and zero confidential models; no model/subscription call or production change occurred. [Transport receipt](../acceptance/model-use-enhancements/receipts/mar-crawl-transport-isolation-2026-10-06.json); [catalog receipt](../acceptance/model-use-enhancements/receipts/model-access-catalog-readiness-2026-10-06.json).
 
 - 2026-10-06 (Codex, exact-head CI and immutable image): `963ed85` passes all five GitHub checks; frozen Mac unit is 5,916 passes plus two subtests / three skips / the previously reproduced audio-default failure. Standard preparation/register succeeds for immutable image `9e71cb3f…` from `fd41f30`, with settings and both profile pointers unchanged. Actual guest agent works via `/usr/bin/true`; earlier `/bin/true` refusal was a probe-path error. Bounded offline input create refuses with EPERM, synthetic DB quick_check is ok, and both owned VMs are stopped. Standard worker hydration, all 12 checks and full40 Developer acceptance remain open. Four initial pilot defects are repaired; two subsequent model/output receipt defects remain under repair. [Image evidence](../acceptance/model-use-enhancements/receipts/mar-immutable-image-readiness-2026-10-06.json). Roadmap checker reports two pre-existing lifecycle-word errors in Larry-owned WS-10/WS-11; those rows are unchanged.
 

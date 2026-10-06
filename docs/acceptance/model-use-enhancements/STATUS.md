@@ -27,6 +27,8 @@ no linked receipt are also unreceipted.
 
 ## Candidate validation — 2026-10-06
 
+The bounded crawler transport repair now passes **44 root / 44 independently reviewed overlapping cases**: no response-cookie carryover, redirect credential spill, process proxy/TLS override or leaked clients. Existing research semantics remain. [Receipt](receipts/mar-crawl-transport-isolation-2026-10-06.json). The [10-06 vault-backed catalog read](receipts/model-access-catalog-readiness-2026-10-06.json) again reports64 SAYGM models and zero confidential models. Neither result establishes public-page origin, account billing, model quality or rollout acceptance.
+
 **Latest authority: candidate `963ed85`, draft PR #177.** All five GitHub checks are green. Frozen Mac unit: **5,916 passed plus two subtests, three skips and the previously reproduced audio-default failure**; full deployment acceptance remains open. [Storage/admission receipt](receipts/mar-storage-admission-lifecycle-2026-10-06.json).
 
 The standard immutable image is now prepared and registered as `9e71cb3f…` from `fd41f30`; production profile pointers/settings are unchanged. Actual bounded guest checks prove input write refusal and read-only synthetic DB integrity; both owned VMs are stopped. Worker isolation through normal clone/hydration and all twelve development checks remain open. [Image receipt](receipts/mar-immutable-image-readiness-2026-10-06.json).

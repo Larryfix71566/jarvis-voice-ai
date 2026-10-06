@@ -123,19 +123,27 @@ class TavilyCrawlClient:
     (status_code, json_body_or_None)."""
 
     def __init__(self, timeout: float = 150.0):
-        self._client = httpx.Client(timeout=timeout)
+        self._timeout = timeout
 
     def post(self, url: str, headers: dict, json: dict) -> tuple[int, dict | None]:
+        # The approved crawler route is this exact endpoint. A response must
+        # not lend cookies to the next site, redirect credentials elsewhere,
+        # or inherit a process proxy/TLS override. This says nothing about
+        # the origin or classification of the pages returned by Tavily.
+        if url != TAVILY_CRAWL_URL:
+            return (-1, None)
         try:
-            resp = self._client.post(url, headers=headers, json=json)
+            with httpx.Client(timeout=self._timeout, trust_env=False,
+                              follow_redirects=False) as client:
+                resp = client.post(url, headers=headers, json=json)
+                try:
+                    body = resp.json()
+                except ValueError:
+                    body = None
         except httpx.TimeoutException:
             return (0, None)  # 0 is this module's sentinel for "no response at all"
         except httpx.HTTPError:
             return (-1, None)  # -1: transport-level failure, not an HTTP status
-        try:
-            body = resp.json()
-        except ValueError:
-            body = None
         return (resp.status_code, body)
 
 
