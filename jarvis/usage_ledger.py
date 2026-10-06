@@ -142,6 +142,23 @@ CREATE TABLE IF NOT EXISTS model_call_budget_reservations (
 );
 CREATE INDEX IF NOT EXISTS idx_model_budget_reservations_scope
     ON model_call_budget_reservations (scope_id);
+CREATE TABLE IF NOT EXISTS model_task_budget_links (
+    child_scope_id TEXT PRIMARY KEY,
+    parent_scope_id TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    FOREIGN KEY (child_scope_id) REFERENCES model_task_budgets(scope_id),
+    FOREIGN KEY (parent_scope_id) REFERENCES model_task_budgets(scope_id),
+    CHECK (child_scope_id != parent_scope_id)
+);
+CREATE TABLE IF NOT EXISTS model_call_budget_reservation_scopes (
+    reservation_id TEXT NOT NULL,
+    scope_id TEXT NOT NULL,
+    PRIMARY KEY (reservation_id, scope_id),
+    FOREIGN KEY (reservation_id) REFERENCES model_call_budget_reservations(reservation_id),
+    FOREIGN KEY (scope_id) REFERENCES model_task_budgets(scope_id)
+);
+CREATE INDEX IF NOT EXISTS idx_model_budget_membership_scope
+    ON model_call_budget_reservation_scopes (scope_id);
 """
 
 _lock = threading.Lock()
