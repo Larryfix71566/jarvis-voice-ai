@@ -54,6 +54,30 @@ def test_static_selection_retains_ordinary_missing_tools_refusal():
         routing.resolve_model_route_checked('developer', explicit_profile='claude-opus', explicit_route='subscription')
 
 
+def test_production_capture_parent_remains_fixed_mac_authority():
+    assert probe.CAPTURE_PARENT == Path('/private/tmp')
+
+
+def test_default_contract_hashes_loader_owned_registry_sources():
+    from jarvis.agents.upgrade_agent import registry_source, load_registry_layers
+    contract = probe.frozen_contract('claude-opus', 'subscription')
+    layers = load_registry_layers()
+    paths = {registry_source().absolute(), Path(layers['source']).absolute(),
+             Path(layers['endpoints_source']).absolute()}
+    assert all(contract['effective_config_sha256'][str(path)] == probe.digest(path.read_bytes()) for path in paths)
+    assert contract['config_environment']['JARVIS_UPGRADE_MODELS'] == str(registry_source().absolute())
+
+
+def owned_capture_parent(tmp_path, monkeypatch):
+    """Use the unchanged receipt guard's project anchor, never global /tmp."""
+    root = tmp_path / 'receipt-project'
+    parent = root / 'docs/acceptance/model-use-enhancements/receipts'
+    parent.mkdir(parents=True, mode=0o700)
+    monkeypatch.setattr(probe, 'CAPTURE_PARENT', parent)
+    monkeypatch.setattr(probe.support(), 'ROOT', root)
+    return parent
+
+
 @pytest.mark.parametrize('kwargs', [dict(profile='missing-model', route='subscription'),
     dict(profile='claude-opus', route='direct_api'),
     dict(profile='claude-opus', route='subscription', model='voice-replacement')])
@@ -280,11 +304,12 @@ def test_fresh_environment_does_not_mutate_or_borrow_parent_authority(tmp_path, 
 
 
 @pytest.fixture
-def worker_boundary(monkeypatch):
-    with tempfile.TemporaryDirectory(prefix='mortimer-native40-capability-', dir='/private/tmp') as temporary:
+def worker_boundary(tmp_path, monkeypatch):
+    contract = probe.frozen_contract('claude-opus', 'subscription')
+    parent = owned_capture_parent(tmp_path, monkeypatch)
+    with tempfile.TemporaryDirectory(prefix='mortimer-native40-capability-', dir=parent) as temporary:
         directory = Path(temporary)
         directory.chmod(0o700)
-        contract = probe.frozen_contract('claude-opus', 'subscription')
         packet = {'contract': contract, 'timeout': 45, 'started_at': time.time()}
         request = directory / 'request.json'
         request.write_bytes(probe.canonical(packet)); request.chmod(0o600)
@@ -306,7 +331,7 @@ def test_owned_worker_boundary_accepts_exact_isolation(worker_boundary, monkeypa
 def test_direct_worker_cannot_borrow_ambient_authority(worker_boundary, monkeypatch, change):
     monkeypatch.delenv('PYTEST_CURRENT_TEST', raising=False)
     request, packet = worker_boundary
-    if change == 'cwd': monkeypatch.chdir('/private/tmp')
+    if change == 'cwd': monkeypatch.chdir(probe.CAPTURE_PARENT)
     elif change == 'mode': request.parent.chmod(0o755)
     else:
         key, value = {'db': ('JARVIS_DB_PATH', '/private/tmp/unowned.db'),
@@ -316,8 +341,11 @@ def test_direct_worker_cannot_borrow_ambient_authority(worker_boundary, monkeypa
     with pytest.raises(probe.CapabilityUnavailable): probe.validate_worker_boundary(request, packet)
 
 
-def test_no_clobber_reservation_precedes_any_live_capture(monkeypatch):
-    with tempfile.TemporaryDirectory(prefix='native40-receipt-', dir='/private/tmp') as temporary:
+def test_no_clobber_reservation_precedes_any_live_capture(tmp_path, monkeypatch):
+    contract = probe.frozen_contract('claude-opus', 'subscription')
+    parent = owned_capture_parent(tmp_path, monkeypatch)
+    monkeypatch.setattr(probe, 'frozen_contract', lambda *a, **k: contract)
+    with tempfile.TemporaryDirectory(prefix='native40-receipt-', dir=parent) as temporary:
         output = Path(temporary) / 'receipt.json'
         output.write_bytes(b'owned previous evidence')
         monkeypatch.setattr(probe, 'fresh_capture', lambda *a, **k: pytest.fail('inference'))
@@ -589,8 +617,9 @@ def inert_worker_parent(monkeypatch):
     return frozen
 
 
-async def test_output_overflow_retains_exact_unresolved_worker_and_readers(monkeypatch):
+async def test_output_overflow_retains_exact_unresolved_worker_and_readers(tmp_path, monkeypatch):
     frozen = inert_worker_parent(monkeypatch)
+    owned_capture_parent(tmp_path, monkeypatch)
     real_spawn = asyncio.create_subprocess_exec
     read_fd, write_fd = os.pipe()
     owned = {}
@@ -634,8 +663,9 @@ async def test_output_overflow_retains_exact_unresolved_worker_and_readers(monke
             probe._WORKER_QUARANTINE.pop(str(owner.directory), None)
 
 
-async def test_explicit_cancel_drains_signal_aware_real_worker_before_return(monkeypatch):
+async def test_explicit_cancel_drains_signal_aware_real_worker_before_return(tmp_path, monkeypatch):
     frozen = inert_worker_parent(monkeypatch)
+    owned_capture_parent(tmp_path, monkeypatch)
     real_spawn = asyncio.create_subprocess_exec
     read_fd, write_fd = os.pipe()
     ack_read, ack_write = os.pipe()

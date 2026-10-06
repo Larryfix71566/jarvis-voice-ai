@@ -1,0 +1,82 @@
+{
+  "architecture_test_changed": false,
+  "assertion_preservation_sha256": "d2b63ec950aa6e164a72122ce1aa978eb1f44cd1ca97172ccc6a5871f7bd12e6",
+  "author_absent_mac_parent": {
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0,
+    "tests": 106,
+    "xml_sha256": "a75091e9a84b62ffa89d1db90aa8f00bbf3d61f9adea80aa3fe46602f248acc8"
+  },
+  "author_affected": {
+    "errors": 0,
+    "failures": 0,
+    "skipped": 3,
+    "tests": 367,
+    "xml_sha256": "0a5b1aeebe1a05b3245cc89926e4faf31604a66c3494e5b6e2bc4014341fcd3a"
+  },
+  "author_focused": {
+    "errors": 0,
+    "failures": 0,
+    "skipped": 3,
+    "tests": 168,
+    "xml_sha256": "85a6da3da3d84e21ae868ac9f4cc6130d659ba51464ba7b44e566507e469e49a"
+  },
+  "causes": [
+    "Three cases and eight setup errors assumed Mac /private/tmp exists on Ubuntu; cancellation failure occurred before worker creation.",
+    "Diagnostic directly named two model-registry filenames outside the central loader."
+  ],
+  "changed_files": {
+    "scripts/verify_claude_developer_capability.py": "ba2d6c02c4b0fe84655a3ab8e10346fd9b51aa734517eaffb42908d2e67c4872",
+    "tests/unit/test_claude_developer_capability.py": "b2ac57c0a8856fee31f9516bf84748d84167ff3c06c8cdf9fc52e49fb06f13a9"
+  },
+  "date": "2026-10-06",
+  "developer_accepted": false,
+  "external_doc_probe_approval_pending": true,
+  "failed_ci": {
+    "failed": 4,
+    "head": "aaedc37f0202f478fb36a79223cfd3f604f1aa8d",
+    "job": 112420241783,
+    "log_sha256": "4aa5917bd1ab3cbcde36dfc83d27c7953cb17a0481c01ed9792e77693066f8c2",
+    "passed": 6160,
+    "run": 37507636053,
+    "seconds": 333.59,
+    "setup_errors": 8,
+    "skipped": 11,
+    "subtests_passed": 2
+  },
+  "global_temporary_directory_created": false,
+  "independent_artifacts": {
+    "absent_mac.log": "3d71108797aa784e869bfc7a163aee5677f99331062e2b8f12c0eb6c4f8bc923",
+    "absent_mac.xml": "7f78930699f7ee072b1883d978c3e27ce9290074775dbb4439e3545bdb727b8a",
+    "affected.log": "f14b13002ffa68b27007f2224179dc420677bce949c4ca313361bd37194a8568",
+    "affected.xml": "33b1bca9de396b7bbd7af181d7005a111e3b459ae7b12e4ac01c2706ee86f8b8",
+    "assertion_preservation.json": "d2b63ec950aa6e164a72122ce1aa978eb1f44cd1ca97172ccc6a5871f7bd12e6",
+    "frozen-script.py": "ba2d6c02c4b0fe84655a3ab8e10346fd9b51aa734517eaffb42908d2e67c4872",
+    "frozen-test.py": "b2ac57c0a8856fee31f9516bf84748d84167ff3c06c8cdf9fc52e49fb06f13a9",
+    "no_private_tmp.py": "63f694d490084545bbabe3b76794f328a749d57cf823232b325fd61814bbede1",
+    "source_hash_probe.log": "02d23f67a75e9ad1c6c5e295ab23fb3dab52508d17822da5a353a867f4bda0be",
+    "source_hash_probe.py": "6b9ba5aae92aa62f104bd96cbe58591bf4bc8ffa380c3c0de41ce705b04a8052"
+  },
+  "independent_results": {
+    "absent_mac_passed": 106,
+    "absent_mac_skipped": 0,
+    "existing_registry_migration_skips": 3,
+    "focused_passed": 165,
+    "source_hash_inverse": "Endpoint-only byte change alters digest and frozen contract while parsed semantics stay unchanged."
+  },
+  "mar_i_complete": false,
+  "native_cli_inference_performed": false,
+  "new_ubuntu_ci_passed": false,
+  "original_assertions_preserved": 65,
+  "original_test_functions": 36,
+  "pr": 177,
+  "production_capture_parent": "/private/tmp",
+  "production_parent_mode_uid_cwd_prefix_resolution_environment_guards_unchanged": true,
+  "production_route_ready": false,
+  "registry_source_authority": "registry_source/load_registry_layers actual selected source and endpoints_source; no duplicated filename literals, default and overrides fully hashed",
+  "sudo_used": false,
+  "system": "codex",
+  "test_anchor": "pytest-owned ROOT/docs/acceptance/model-use-enhancements/receipts using unchanged atomic publication guard",
+  "workstream": "WS-05"
+}

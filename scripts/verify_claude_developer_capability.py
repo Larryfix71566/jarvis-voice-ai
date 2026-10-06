@@ -35,10 +35,10 @@ DONE = 'MORTIMER_NATIVE40_PROTOCOL_OK'
 CONSTRAINT = ('This public protocol diagnostic read only its approved reference. '
               'No edit, publication, private operation or Developer workload was authorized.')
 OUTPUT_BYTES = 1_000_000
+CAPTURE_PARENT = Path('/private/tmp')
 WORKER_DRAIN_SECONDS = 12
 _WORKER_QUARANTINE = {}
-CONFIG_FILES = ('config/model_access.yaml', 'config/model_profiles.yaml',
-                'config/model_endpoints.yaml', 'config/agents.yaml', 'config/mcp_servers.yaml')
+CONFIG_FILES = ('config/model_access.yaml', 'config/agents.yaml', 'config/mcp_servers.yaml')
 
 
 class CapabilityUnavailable(RuntimeError):
@@ -249,6 +249,8 @@ def frozen_contract(profile, route, model=None):
     selected_registry = registry_source().absolute()
     layers = load_registry_layers()
     effective_sources = [selected_policy, selected_registry]
+    if layers.get('source'):
+        effective_sources.append(Path(layers['source']).absolute())
     if layers.get('endpoints_source'):
         effective_sources.append(Path(layers['endpoints_source']).absolute())
     return json.loads(canonical({'selection': selection(profile, route, model),
@@ -722,7 +724,7 @@ def validate_worker_boundary(request, packet):
     """Validate isolation before any MCP/native/DB module is imported."""
     directory = request.parent
     info = directory.lstat()
-    if (directory.parent != Path('/private/tmp') or not directory.name.startswith('mortimer-native40-capability-')
+    if (directory.parent != CAPTURE_PARENT or not directory.name.startswith('mortimer-native40-capability-')
             or not stat.S_ISDIR(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o700
             or info.st_uid != os.getuid() or directory.resolve() != directory
             or Path.cwd().resolve() != directory or request.name != 'request.json'):
@@ -777,7 +779,7 @@ async def fresh_capture(frozen, timeout, started_at, *, input_policy=None, task_
     if configured is not None: timeout = min(timeout, configured)
     if started_at + timeout <= time.time():
         raise CapabilityUnavailable('host_deadline_exhausted')
-    directory = Path(tempfile.mkdtemp(prefix='mortimer-native40-capability-', dir='/private/tmp'))
+    directory = Path(tempfile.mkdtemp(prefix='mortimer-native40-capability-', dir=CAPTURE_PARENT))
     directory.chmod(0o700)
     async with storage_scope(db_path=directory / 'identity.db', costs_db_path=directory / 'identity-costs.db',
                              model_preferences_enabled=False) as identity_store:
