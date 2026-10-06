@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import math
 import os
-from dataclasses import dataclass, replace
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -176,6 +177,61 @@ class AccessRoute:
 
 
 @dataclass(frozen=True)
+class WorkloadLimits:
+    """Optional task limits; spending refers to configured-price estimates.
+
+    A deadline is a duration, never a timestamp established during route
+    resolution. The execution owner starts it for each task. Unset limits
+    preserve the existing workload behavior.
+    """
+
+    max_output_tokens_per_call: int | None = None
+    deadline_seconds: float | None = None
+    max_estimated_spend_usd_per_task: float | None = None
+
+    def __post_init__(self) -> None:
+        output = self.max_output_tokens_per_call
+        if output is not None and (type(output) is not int or not 1 <= output <= 32_000):
+            raise ModelRouteError(
+                "workload max_output_tokens_per_call must be an integer from 1 to 32000 or null")
+        for name in ("deadline_seconds", "max_estimated_spend_usd_per_task"):
+            value = getattr(self, name)
+            if value is None:
+                continue
+            if type(value) not in {int, float}:
+                raise ModelRouteError(f"workload {name} must be positive and finite or null")
+            try:
+                valid = math.isfinite(value) and value > 0
+            except OverflowError:
+                valid = False
+            if not valid:
+                raise ModelRouteError(f"workload {name} must be positive and finite or null")
+
+    def as_metadata(self) -> dict[str, int | float | None]:
+        """Return only public policy values, without account or billing claims."""
+        return {
+            "max_output_tokens_per_call": self.max_output_tokens_per_call,
+            "deadline_seconds": self.deadline_seconds,
+            "max_estimated_spend_usd_per_task": self.max_estimated_spend_usd_per_task,
+        }
+
+
+def workload_limits_from_policy(raw: Mapping[str, Any]) -> WorkloadLimits:
+    """Validate limits from the already merged default/workload policy.
+
+    This helper does not read configuration, preferences, time, or providers.
+    A workload's explicit null clears an inherited default value.
+    """
+    if not isinstance(raw, Mapping):
+        raise ModelRouteError("workload policy must be a mapping")
+    return WorkloadLimits(
+        max_output_tokens_per_call=raw.get("max_output_tokens_per_call"),
+        deadline_seconds=raw.get("deadline_seconds"),
+        max_estimated_spend_usd_per_task=raw.get("max_estimated_spend_usd_per_task"),
+    )
+
+
+@dataclass(frozen=True)
 class WorkloadPolicy:
     workload: str
     profile: str
@@ -185,6 +241,11 @@ class WorkloadPolicy:
     fallback_routes: tuple[str, ...] = ()
     required_capabilities: tuple[str, ...] = ("text",)
     minimum_quality_tier: str = "mid"
+    limits: WorkloadLimits = field(default_factory=WorkloadLimits)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.limits, WorkloadLimits):
+            raise ModelRouteError("workload limits must be a validated WorkloadLimits record")
 
 
 @dataclass(frozen=True)
@@ -264,6 +325,11 @@ class ResolvedModelRoute:
     # Snapshot admission priority together with model/route selection so a
     # later preference edit cannot reclassify an in-flight request.
     priority: str = "interactive"
+    limits: WorkloadLimits = field(default_factory=WorkloadLimits)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.limits, WorkloadLimits):
+            raise ModelRouteError("resolved workload limits must be a validated WorkloadLimits record")
 
 
 def load_access_config(path: str | os.PathLike[str] | None = None) -> dict[str, Any]:
@@ -302,7 +368,7 @@ def _validate_policy(workload: str, raw: dict[str, Any]) -> WorkloadPolicy:
         raise ModelRouteError(
             f"workload {workload!r} minimum quality cannot be below its standing {standing_floor!r} floor")
     return WorkloadPolicy(workload, profile, route, privacy, priority, fallbacks,
-                          capabilities, minimum_quality)
+                          capabilities, minimum_quality, workload_limits_from_policy(raw))
 
 
 def resolve_policy(workload: str, *, explicit_profile: str | None = None,
@@ -600,6 +666,7 @@ def describe_route_choice(workload: str, profile_name: str, route_name: str, *,
             "required_capabilities": list(policy.required_capabilities),
             "minimum_quality_tier": policy.minimum_quality_tier,
             "model_quality_tier": profile.get("tier"),
+            "limits": policy.limits.as_metadata(),
         })
         assert_model_quality(policy, profile)
         env = environ if environ is not None else os.environ
@@ -678,6 +745,7 @@ def _resolved_route(policy: WorkloadPolicy, profile: dict[str, Any], route: Acce
         api_key_env=route.credential_env,
         identity=str(profile.get("identity") or ""),
         priority=policy.priority,
+        limits=policy.limits,
     )
 
 
