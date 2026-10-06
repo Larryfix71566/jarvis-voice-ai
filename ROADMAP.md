@@ -122,15 +122,16 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Model Use Enhancements MAR-A…J (checklist in §7)
 
 - **Owner:** `codex`
-- **Status:** in-progress: MAR-A baseline evidence is partial; the bounded admission-test stability fix landed in PR #162; route rollout and live gates remain open
+- **Status:** claimed: complete independently executable WS-05 integration, verification and pilot preparation; production activation and account-only gates remain separate
 - **Implemented by:** Foundation contributions are not fully itemized; WS-02 isolation and MAR-A baseline work are Codex
 - **Remaining work / acceptance:** Codex completes MAR-A evidence and subsequent open gates; Larry handles live provider/account and deployment decisions
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main after MAR-A baseline [#165](https://github.com/Larryfix71566/jarvis-voice-ai/pull/165) merged as `ecdf3a3` and MAR-E/F live readiness [#166](https://github.com/Larryfix71566/jarvis-voice-ai/pull/166) merged as `1ada011`; branch handoff [#167](https://github.com/Larryfix71566/jarvis-voice-ai/pull/167) merged as `70e5054`. The MAR-F Claude recheck is in [#168](https://github.com/Larryfix71566/jarvis-voice-ai/pull/168), documentation evidence only; the next implementation branch is not yet claimed. Main also includes bounded test-stability claim [#161](https://github.com/Larryfix71566/jarvis-voice-ai/pull/161) as `eacf99b` and fix [#162](https://github.com/Larryfix71566/jarvis-voice-ai/pull/162) as `30ac2c7`
+- **Where:** `codex/ws05-execution-20261005`; claim lands through this docs-only PR before code
 - **Plan:** `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md`
-- **Scope:** `jarvis/model_routing.py`, `jarvis/model_preferences.py`, `config/model_access.yaml`; `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md`; `docs/acceptance/model-use-enhancements/**`. Bounded landed test-stability scope: `tests/unit/test_model_execution.py` only, with no production admission-policy change
-- **Next step:** codex: Claude Max text inference now passes direct and isolated public probes via `/opt/homebrew/bin/claude`; verify selected CLI/auth in the running service, allowance/billing, and representative capability before any route change. Claim a new scoped branch for MAR-A representative workload quality, effective process routing verification, production route/billing attribution, and Codex no-tools capability verification. MAR-E's live SAYGM catalog has 64 models but none advertised confidential. Keep routing disabled before a gated pilot.
-- **Updated:** 10-02
+- **Scope:** model-access policy/execution/preferences and subscription-tool bridge only: `jarvis/model_routing.py`, `jarvis/model_preferences.py`, `jarvis/model_execution.py`, `jarvis/subscription.py`, `jarvis/subscription_tools.py`, `jarvis/saygm.py`, `jarvis/privacy_policy.py`, `config/model_access.yaml`; model-route endpoints in `jarvis/admin/server.py`, route diagnostics in `jarvis/status/`, model-execution integration in `jarvis/agents/base.py` and `jarvis/bot/model_route_tool.py`; `macos/MortimerHost/Sources/MortimerHost/Drawer/RepoTab.swift`, model-route types in `macos/JarvisKit/Sources/JarvisKit/AdminAPI.swift`; related model-access tests and verification/pilot scripts; `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md`, `docs/acceptance/model-use-enhancements/**`, shared architecture/model-route references. No WS-17/WS-21 console/result files or self-edit allowlist edits.
+- **Next step:** codex: implement saved-preference controls and exact SAYGM confidential-model binding with independent regressions; refresh baseline, validate official subscription runtime isolation and build the sandbox-preserving tool bridge; complete audits and isolated public/synthetic pilots. Keep deployed global routing unchanged pending compliant confidential/local routes and verified billing/rollout evidence. larry: only account-only settings/entitlements and physical/spoken acceptance when required.
+- **Updated:** 10-05
+
 
 </details>
 
