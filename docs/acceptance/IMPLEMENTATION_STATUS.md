@@ -31,10 +31,11 @@ candidate, environment and scope. All merge conflicts are resolved locally; rele
   acceptance remains open. Enabling remote access and token onboarding
   remain Larry's separate decisions. See
   [Remote Access Addendum R1](../plans/MORTIMER_REMOTE_ACCESS_PLAN.md).
-- **WS-05 — model use:** foundation is landed, further ownership is proposed
-  in ROADMAP, and per-route live evidence remains open. Subscription access
-  does not prove image, tool, streaming, cost-bound or confidential capability.
-  See [model-use status](model-use-enhancements/STATUS.md).
+- **WS-05 — model use:** Codex owns the active `codex/ws05-execution-20261005`
+  candidate in draft PR #177. Route, execution, privacy/source, budget and saved-control
+  foundations are implemented; real workload, account and deployed rollout acceptance
+  remain open. Subscription access does not prove image, tool, streaming, cost-bound
+  or confidential capability. See [model-use status](model-use-enhancements/STATUS.md).
 - **WS-06/07 — main's self-service access, registry and voice workflows:**
   source is landed on main; Codex is preserving it in the merge. Mac checks
   remain open per ROADMAP. Source integration does not certify a running build.
