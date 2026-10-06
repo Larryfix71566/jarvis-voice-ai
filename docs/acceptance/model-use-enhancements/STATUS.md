@@ -27,6 +27,14 @@ no linked receipt are also unreceipted.
 
 ## Candidate validation — 2026-10-06
 
+**Latest authority: candidate `963ed85`, draft PR #177.** All five GitHub checks are green. Frozen Mac unit: **5,916 passed plus two subtests, three skips and the previously reproduced audio-default failure**; full deployment acceptance remains open. [Storage/admission receipt](receipts/mar-storage-admission-lifecycle-2026-10-06.json).
+
+The standard immutable image is now prepared and registered as `9e71cb3f…` from `fd41f30`; production profile pointers/settings are unchanged. Actual bounded guest checks prove input write refusal and read-only synthetic DB integrity; both owned VMs are stopped. Worker isolation through normal clone/hydration and all twelve development checks remain open. [Image receipt](receipts/mar-immutable-image-readiness-2026-10-06.json).
+
+The four-operation pilot prototype is under repair for two subsequent independently reproduced receipt defects (model drift and output overwrite), after its original four defects passed repair review. No live Developer acceptance is claimed, and the full40 implementation remains missing. Manual/public-crawl proof, confidential-memory route, account limits, cross-system review, voice and rollout remain open.
+
+**Earlier candidate captures follow.** Each is evidence at its named ref; the latest record above supersedes its CI/image/prototype readiness wording. Counts overlap and are not additive.
+
 Private-store and admission lifecycle repairs pass **395 focused cases**, with **45 storage** and **38/7 admission** independently reviewed overlapping groups. Original spend and causal cancellation/shutdown assertions remain. [Receipt](receipts/mar-storage-admission-lifecycle-2026-10-06.json). Published4dc3dfb CI failed17 deadline/admission cases; the actual double-cancel leak is reproduced and repaired, but its exact CI initiating event is unproven and new-head CI must rerun. Packaging/clone succeeds for1,738 source files atfd41f30; immutable-image preparation remains open after guest exec readiness failed, with task stopped and settings unchanged. The Developer prototype has four reviewed defects under repair and no live/full40 acceptance.
 
 The exact synthetic-fixture hash repair is claimed on main through #182 (`d5d8cae`) and integrated before edits (`d052314`). Its48 tests plus48 subtests prove exact current bytes are accepted while edits/moves still refuse; scanner/exclusion AST, historical pins and fixture bodies are unchanged. [Receipt](receipts/mar-reviewed-fixture-hashes-2026-10-06.json). Immutable-image preparation and real Developer acceptance remain open. Context-local pilot storage repair is in progress; published candidate4dc3dfb CI remains live, not accepted.

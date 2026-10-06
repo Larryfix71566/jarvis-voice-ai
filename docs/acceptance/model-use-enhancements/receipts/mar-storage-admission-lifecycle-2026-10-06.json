@@ -64,7 +64,8 @@
     "passing_subtests": 2,
     "duration_s": 1802.69,
     "failure_pattern": "mostly council/memory/catalog/admission deadlines; exact initiating poisoned lease is unproven",
-    "new_head_must_rerun": true
+    "new_head_must_rerun": false,
+    "superseded_by": "963ed8504eeadb302f0f5f31f54a8f0ced226f8c"
   },
   "frozen_mac_diagnostic": {
     "ref": "4dc3dfb",
@@ -85,20 +86,46 @@
     "source_sha256": "6751a3a7425b86798113d8985b3f22ff552c9d79129a335a4e00424c9e9a8707",
     "dependency_key": "c713fb909e943d018c5631eb9af1732bda8db31ca8409e358df2f7f2e4344954",
     "source_packaging_and_clone": "succeeded",
-    "image_registered": false,
-    "last_preparation": "terminal guest_readiness_unverified; owned task recorded stopped, settings unchanged",
-    "settings_sha256": "99c2c7a63be65db7f655384d38688ff6217d7e3de29db53ccac0ef0dc0afe000"
+    "image_registered": true,
+    "last_preparation": "standard preparation and immutable registration succeeded; owned task and template stopped",
+    "settings_sha256": "99c2c7a63be65db7f655384d38688ff6217d7e3de29db53ccac0ef0dc0afe000",
+    "prior_preparation_refusal": "terminal guest_readiness_unverified; owned task recorded stopped, settings unchanged",
+    "image_id": "9e71cb3f07c046fb9d0e84c3980134bfbf0372b8628c4b15e271cd15c7aa4c6a",
+    "readiness_receipt": "mar-immutable-image-readiness-2026-10-06.json"
   },
   "remaining": [
-    "fresh frozen full unit/CI",
-    "diagnose real guest exec readiness and complete immutable image",
-    "four reviewed Developer prototype defects under repair; real full40/native/holdout acceptance remains missing",
+    "two further reproduced Developer prototype receipt defects under repair: model snapshot drift and concurrent output overwrite",
+    "full40 native Developer/MCP implementation and capability/holdout acceptance",
     "manual/public-crawl proof, confidential-memory route, account/voice/deployment/rollback gates"
   ],
   "limitations": [
-    "no green complete CI/deployment claim",
+    "all five exact-head CI checks green; full Mac deployment acceptance remains open",
     "no production routing, account or settings change",
     "storage scope cannot terminate arbitrary running Python thread; finite cleanup failure quarantines rather than claiming success",
     "CI failures are consistent with the proven leak but their exact historical initiating cancellation is not known"
-  ]
+  ],
+  "latest_verified_head": "963ed8504eeadb302f0f5f31f54a8f0ced226f8c",
+  "latest_ci": {
+    "ref": "963ed8504eeadb302f0f5f31f54a8f0ced226f8c",
+    "all_five_checks": "SUCCESS",
+    "validate_run": 37471503161,
+    "knowledge_run": 37471503026,
+    "controller_run": 37471503368,
+    "read_at": "2026-10-06",
+    "not_deployment_acceptance": true,
+    "evidence_file": "/private/tmp/ws05-pr177-963ed85-checks.json",
+    "evidence_sha256": "d50f542c49532f627d27db019ab4c513d0af2b0c3d4d609b5448a1492cc6215a"
+  },
+  "latest_frozen_mac_unit": {
+    "ref": "963ed8504eeadb302f0f5f31f54a8f0ced226f8c",
+    "passed": 5916,
+    "passing_subtests": 2,
+    "skipped": 3,
+    "failed": 1,
+    "warnings": 13,
+    "duration_s": 101.69,
+    "failure": "test_audio_filters.py::test_factory_disabled_returns_none_even_with_engine; previously reproduced on unchanged main",
+    "log": "/private/tmp/ws05-storage-admission-full-963ed85.log",
+    "junit": "/private/tmp/ws05-storage-admission-full-963ed85.xml"
+  }
 }
