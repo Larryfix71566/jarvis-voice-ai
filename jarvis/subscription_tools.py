@@ -37,6 +37,7 @@ from jarvis.subscription import (
     normalize_claude_usage,
     provider_command,
 )
+from jarvis.privacy_policy import tool_argument_limit, tool_result_limit, bounded_tool_arguments
 
 TOOLS_ENABLED_ENV = "JARVIS_SUBSCRIPTION_TOOLS_ENABLED"
 TOOL_CAPABILITY_RECEIPT_ENV = "JARVIS_SUBSCRIPTION_TOOL_CAPABILITY_RECEIPT"
@@ -73,10 +74,20 @@ def _encode_frame(packet: dict[str, Any], limit: int) -> bytes:
     return frame
 
 
-def _result_frame(content: str) -> bytes:
-    if not isinstance(content, str) or len(content) > MAX_RESULT_CHARACTERS:
+def _result_frame(content: str, name: str | None = None) -> bytes:
+    quota = tool_result_limit(name)
+    if not isinstance(content, str) or len(content) > quota:
         raise SubscriptionCapabilityError("native tool result exceeds the execution content limit")
-    return _encode_frame({"ok": True, "content": content}, MAX_RESULT_FRAME_BYTES)
+    return _encode_frame({"ok": True, "content": content}, 6 * quota + 128)
+
+
+def _request_frame_limit(names):
+    return max(262144, max((tool_argument_limit(name) for name in names), default=16384) + 65536)
+
+
+def _native_frame_limit(names):
+    return max(MAX_NATIVE_FRAME_BYTES,
+               max((6 * tool_result_limit(name) + 128 for name in names), default=0) + 65536)
 
 
 async def _close_writer(writer: asyncio.StreamWriter) -> None:
@@ -216,7 +227,8 @@ class _ClaudeNativeSession:
     async def start(self) -> None:
         if any(message.get("role") == "tool" or message.get("tool_calls") for message in self.messages):
             raise SubscriptionCapabilityError("a native session cannot start with unrelated tool history")
-        self.server = await asyncio.start_unix_server(self._gateway, path=str(self.socket_path), limit=262144)
+        self.server = await asyncio.start_unix_server(self._gateway, path=str(self.socket_path),
+                                                     limit=_request_frame_limit(self.names))
         self.socket_path.chmod(0o600)
         config = {"socket": str(self.socket_path), "nonce": self.nonce,
                   "parent_id": self.parent_id, "task_id": self.task_id,
@@ -239,7 +251,7 @@ class _ClaudeNativeSession:
             *argv, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE, cwd=self.temp.name,
             env=self._environment(), start_new_session=True,
-            limit=MAX_NATIVE_FRAME_BYTES,
+            limit=_native_frame_limit(self.names),
         )
         self.readers = [asyncio.create_task(self._stdout()), asyncio.create_task(self._stderr())]
         ordinary = [message for message in self.messages if message.get("role") != "system"]
@@ -259,7 +271,7 @@ class _ClaudeNativeSession:
     async def _write_native(self, packet: dict[str, Any]) -> None:
         if self.closed or not self.process or not self.process.stdin:
             raise SubscriptionRuntimeError("native control transport is unavailable")
-        self.process.stdin.write(_encode_frame(packet, MAX_NATIVE_FRAME_BYTES))
+        self.process.stdin.write(_encode_frame(packet, _native_frame_limit(self.names)))
         await self.process.stdin.drain()
 
     async def _post_tool_hook(self, event: dict[str, Any]) -> None:
@@ -339,6 +351,7 @@ class _ClaudeNativeSession:
                                 raise SubscriptionCapabilityError("native runtime requested an unapproved or excessive tool")
                             from jsonschema import Draft202012Validator
                             Draft202012Validator(self.schemas[name]).validate(arguments)
+                            bounded_tool_arguments(name, arguments)
                             staged.append(_Pending(call_id, name, copy.deepcopy(arguments),
                                                    asyncio.get_running_loop().create_future(), self.task_id))
                             calls.append(SimpleNamespace(id=call_id, type="function", function=SimpleNamespace(
@@ -402,6 +415,7 @@ class _ClaudeNativeSession:
                     raise SubscriptionCapabilityError("native gateway tool is unavailable")
                 from jsonschema import Draft202012Validator
                 Draft202012Validator(self.schemas[packet["name"]]).validate(packet["arguments"])
+                bounded_tool_arguments(packet['name'], packet['arguments'])
                 self.gateway_requests.add(gateway_id)
                 async with self.pending_ready:
                     await self.pending_ready.wait_for(lambda: self.closed or self.failure or any(
@@ -414,7 +428,7 @@ class _ClaudeNativeSession:
                     pending = candidates[0]
                     pending.claimed = True
                 content = await pending.result
-                frame = pending.frame if pending.frame is not None else _result_frame(content)
+                frame = pending.frame if pending.frame is not None else _result_frame(content, pending.name)
                 pending.delivery = asyncio.get_running_loop().create_future()
                 self.completed[pending.call_id] = pending
                 writer.write(frame)
@@ -490,7 +504,7 @@ class _ClaudeNativeSession:
             # Validate and serialize the entire batch before releasing any
             # result future. A later oversized/malformed result cannot cause
             # partial native continuation or a falsely completed call.
-            frames = {message["tool_call_id"]: _result_frame(message["content"]) for message in replies}
+            frames = {message["tool_call_id"]: _result_frame(message["content"], message['name']) for message in replies}
             constraint_text = "\n\n".join(message["content"] for message in constraints)
             _encode_frame({"hookSpecificOutput": {"hookEventName": "PostToolUse",
                             "additionalContext": constraint_text}}, MAX_RESULT_FRAME_BYTES)
@@ -645,10 +659,10 @@ async def _gateway_worker(config_path: str) -> None:
             raise ValueError("Mortimer rejected an unknown tool")
         writer = None
         try:
-            reader, writer = await asyncio.open_unix_connection(config["socket"], limit=MAX_RESULT_FRAME_BYTES)
+            reader, writer = await asyncio.open_unix_connection(config["socket"], limit=6 * tool_result_limit(name) + 128)
             packet = {key: config[key] for key in ("nonce", "parent_id", "task_id")}
             packet.update(name=name, arguments=arguments, request_id=uuid.uuid4().hex)
-            writer.write(_encode_frame(packet, 262144))
+            writer.write(_encode_frame(packet, _request_frame_limit((name,))))
             await writer.drain()
             response = json.loads(await reader.readline())
             if not response.get("ok"):

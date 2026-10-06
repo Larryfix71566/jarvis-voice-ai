@@ -64,6 +64,23 @@ _EXECUTION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}\Z")
 _TOOL_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _MAX_RESULT_CHARACTERS = 1_000_000
+# Preserve the installed editor's 256 KiB ceiling. Canonical JSON can expand
+# each UTF-8 byte to six ASCII escape characters; diffs can contain both files.
+_EDITOR_BYTES = 256 * 1024
+_LARGE_ARGUMENT_TOOLS = frozenset({'edit_propose', 'selfedit_write'})
+_LARGE_RESULT_TOOLS = _LARGE_ARGUMENT_TOOLS | {'file_read', 'selfedit_read'}
+
+
+def tool_argument_limit(name: str) -> int:
+    """Transport bound only; registered schemas and workspace caps still apply."""
+    # The editor also accepts an 8,000-character rationale. Non-BMP JSON
+    # escapes use twelve ASCII bytes per character; leave room for paths and
+    # the bounded creator visual intent without changing their own limits.
+    return 6 * _EDITOR_BYTES + 128 * 1024 if type(name) is str and name in _LARGE_ARGUMENT_TOOLS else 16_384
+
+
+def tool_result_limit(name: str | None = None) -> int:
+    return 12 * _EDITOR_BYTES + 128 * 1024 if type(name) is str and name in _LARGE_RESULT_TOOLS else _MAX_RESULT_CHARACTERS
 
 
 class ToolResultBindingError(ValueError):
@@ -129,6 +146,16 @@ def _json_text(value: object) -> str:
         raise ValueError("invalid_tool_result_content") from None
 
 
+def bounded_tool_arguments(name: str, arguments: dict[str, Any]) -> str:
+    """One canonical byte quota for scope, history, output and native IPC."""
+    if type(arguments) is not dict:
+        raise ValueError('invalid_tool_arguments')
+    text = _json_text(arguments)
+    if len(text.encode('utf-8')) > tool_argument_limit(name):
+        raise ValueError('invalid_tool_arguments')
+    return text
+
+
 @dataclass(frozen=True)
 class ToolExecutionScope:
     """Local call identity and input floor; the random key never leaves the host.
@@ -172,9 +199,7 @@ def make_tool_execution_scope(
     if type(arguments) is not dict:
         raise ValueError("invalid_tool_execution_scope")
     try:
-        argument_text = _json_text(arguments)
-        if len(argument_text.encode("utf-8")) > 16_384:
-            raise ValueError("invalid_tool_execution_scope")
+        argument_text = bounded_tool_arguments(tool_name, arguments)
     except ValueError:
         raise ValueError("invalid_tool_execution_scope") from None
     return ToolExecutionScope(
@@ -212,8 +237,8 @@ def _valid_source_scope(source_scope: object, canonical_refs: object) -> bool:
     )
 
 
-def _content_digest(content: object) -> str:
-    if type(content) is not str or len(content) > _MAX_RESULT_CHARACTERS:
+def _content_digest(content: object, tool_name: str | None = None) -> str:
+    if type(content) is not str or len(content) > tool_result_limit(tool_name):
         raise ValueError("invalid_tool_result_content")
     try:
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -256,7 +281,7 @@ def issue_tool_result(
         raise ValueError("invalid_tool_result_envelope")
     envelope = ToolResultEnvelope(
         content, effective_policy, source_scope,
-        canonical_refs, _content_digest(content), scope.parent_request_id,
+        canonical_refs, _content_digest(content, scope.tool_name), scope.parent_request_id,
         scope.task_id, scope.tool_call_id, scope.tool_name, scope.argument_digest,
     )
     # Reconstruct once with the seal; no mutable metadata is stored in either
@@ -283,7 +308,7 @@ def validate_tool_result(
                     scope.tool_name, scope.argument_digest)
                 or type(envelope.content_digest) is not str
                 or not _DIGEST.fullmatch(envelope.content_digest)
-                or _content_digest(envelope.content) != envelope.content_digest
+                or _content_digest(envelope.content, scope.tool_name) != envelope.content_digest
                 or type(envelope._seal) is not str or not _DIGEST.fullmatch(envelope._seal)
                 or not hmac.compare_digest(envelope._seal, _tool_result_seal(scope, envelope))
                 or strictest(scope.input_policy, envelope.policy).level != envelope.policy.level):

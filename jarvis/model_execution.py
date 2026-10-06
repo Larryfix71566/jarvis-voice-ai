@@ -42,6 +42,9 @@ from jarvis.privacy_policy import (
     assert_route_allowed,
     inherit_result_policy,
     strictest,
+    tool_argument_limit,
+    tool_result_limit,
+    bounded_tool_arguments,
 )
 
 logger = logging.getLogger(__name__)
@@ -380,7 +383,8 @@ def _validated_inputs(request: ModelExecutionRequest,
             raise ModelExecutionInputError("unsupported context message role")
         if not isinstance(item.data_policy, DataPolicy):
             raise ModelExecutionInputError("context data policy is invalid")
-        if not isinstance(item.content, str) or len(item.content) > 1_000_000:
+        quota = tool_result_limit(item.name) if item.role == 'tool' else 1_000_000
+        if not isinstance(item.content, str) or len(item.content) > quota:
             raise ModelExecutionInputError("context message content must be bounded text")
         if not isinstance(item.tool_calls, tuple):
             raise ModelExecutionInputError("context tool calls must be an immutable tuple")
@@ -419,7 +423,7 @@ def _validated_inputs(request: ModelExecutionRequest,
                 raw_arguments = call.raw_arguments
                 if raw_arguments is None:
                     raw_arguments = json.dumps(call.arguments, separators=(",", ":"))
-                if not isinstance(raw_arguments, str) or len(raw_arguments) > 16_384:
+                if not isinstance(raw_arguments, str) or len(raw_arguments) > tool_argument_limit(call.name):
                     raise ModelExecutionInputError("assistant tool arguments exceed the limit")
                 try:
                     parsed_arguments = json.loads(raw_arguments)
@@ -427,6 +431,10 @@ def _validated_inputs(request: ModelExecutionRequest,
                     raise ModelExecutionInputError("assistant tool arguments are malformed") from exc
                 if not isinstance(parsed_arguments, dict) or dict(call.arguments) != parsed_arguments:
                     raise ModelExecutionInputError("assistant tool arguments do not match their JSON")
+                try:
+                    bounded_tool_arguments(call.name, parsed_arguments)
+                except ValueError as exc:
+                    raise ModelExecutionInputError('assistant tool arguments exceed the canonical limit') from exc
                 call_extras = _validated_provider_extras(
                     call.provider_extras,
                     reserved={"id", "type", "function"},
@@ -584,6 +592,16 @@ def _validated_inputs(request: ModelExecutionRequest,
         raise ModelExecutionInputError(
             "tool history references a tool outside the caller's current allowlist"
         )
+    # Historical calls are sent to the provider again. Apply the same current
+    # registered schemas as new calls, after the trusted validators exist.
+    for item in request.context:
+        if isinstance(item, ModelContextMessage):
+            for call in item.tool_calls:
+                try:
+                    tool_validators[call.name].validate(dict(call.arguments))
+                except Exception as exc:
+                    raise ModelExecutionInputError(
+                        'historical tool arguments do not match the registered schema') from exc
 
     effective_policy = strictest(*policies)
     assert_route_allowed(resolved.route, effective_policy)
@@ -652,7 +670,7 @@ def _validated_tool_calls(message: Any,
             raise ModelExecutionOutputError("provider returned an invalid tool-call identity")
         if not isinstance(name, str) or name not in validators:
             raise ModelExecutionOutputError("provider requested a tool outside the allowlist")
-        if not isinstance(arguments, str) or len(arguments) > 16_384:
+        if not isinstance(arguments, str) or len(arguments) > tool_argument_limit(name):
             raise ModelExecutionOutputError("provider returned invalid or oversized tool arguments")
         try:
             parsed = json.loads(arguments)
@@ -660,6 +678,10 @@ def _validated_tool_calls(message: Any,
             raise ModelExecutionOutputError("provider returned malformed tool arguments") from exc
         if not isinstance(parsed, dict):
             raise ModelExecutionOutputError("tool arguments must be a JSON object")
+        try:
+            bounded_tool_arguments(name, parsed)
+        except ValueError as exc:
+            raise ModelExecutionOutputError('provider tool arguments exceed the canonical limit') from exc
         try:
             validators[name].validate(parsed)
         except Exception as exc:
@@ -678,7 +700,8 @@ def _validated_tool_calls(message: Any,
 
 
 async def _collect_chat_stream(stream: Any,
-                              on_text_delta: Callable[[str], Any]) -> Any:
+                              on_text_delta: Callable[[str], Any], *,
+                              allowed_tools: tuple[str, ...] = ()) -> Any:
     """Collect OpenAI-shaped chunks without exposing partial tool arguments.
 
     Text deltas are policy-bearing events; tool requests are reconstructed and
@@ -741,7 +764,15 @@ async def _collect_chat_stream(stream: Any,
                         if not isinstance(fragment, str):
                             raise ModelExecutionOutputError("provider streamed malformed tool data")
                         state[key] += fragment
-                        if len(state[key]) > (64 if key == "name" else 16_384):
+                        if len(state['name']) > 64:
+                            raise ModelExecutionOutputError("provider streamed oversized tool data")
+                        # A provider may send arguments before completing the
+                        # name. Bound that buffer by the permitted name prefixes;
+                        # the final exact name/schema is still checked before a
+                        # tool_request event or operation can be published.
+                        quota = max((tool_argument_limit(name) for name in allowed_tools
+                                     if name.startswith(state['name'])), default=16_384)
+                        if len(state['arguments']) > quota:
                             raise ModelExecutionOutputError("provider streamed oversized tool data")
                 raw_extras = _field(part, "model_extra") or {}
                 extras = _validated_provider_extras(
@@ -1031,6 +1062,7 @@ async def execute_chat(request: ModelExecutionRequest,
                     response = await _collect_chat_stream(
                         response,
                         lambda fragment: emit("text_delta", text_delta=fragment),
+                        allowed_tools=tuple(tool_validators),
                     )
                     require_active()
                 await emit("progress", progress_stage="response_received")
