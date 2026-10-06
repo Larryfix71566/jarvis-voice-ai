@@ -8,12 +8,16 @@ releases a reservation, and no reservation writes an observed usage row.
 from __future__ import annotations
 
 import math
+import hashlib
+import hmac
+import json
 import re
+import secrets
 import sqlite3
 import time
 from collections.abc import Iterator, Mapping
 from contextlib import closing, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation, localcontext
 from uuid import uuid4
 
@@ -25,6 +29,8 @@ _OPAQUE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}\Z")
 _MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./:-]{0,255}\Z")
 _WORKLOAD = re.compile(r"[a-z][a-z0-9_]{0,63}\Z")
 _SQLITE_MAX_INT = 2 ** 63 - 1
+_EPHEMERAL_SEAL = re.compile(r"[0-9a-f]{64}\Z")
+_EPHEMERAL_BUDGET_KEY = secrets.token_bytes(32)
 
 
 class ModelBudgetUnavailable(ModelRouteError):
@@ -45,6 +51,36 @@ class TaskBudget:
     started_at: float | None = None
     deadline_at: float | None = None
     spend_ceiling_usd: float | None = None
+    _ephemeral_seal: str = field(default="", repr=False)
+
+
+def _ephemeral_budget_seal(budget: TaskBudget) -> str:
+    """Authenticate a host-issued transient handle without creating storage.
+
+    Durable scopes use their independent SQLite record as authority. Output-
+    only/all-null scopes have no such record, so a dataclass alone cannot
+    authorize changing or clearing the captured parent policy.
+    """
+    try:
+        payload = json.dumps({
+            "schema_version": 1,
+            "user_id": budget.user_id,
+            "workload": budget.workload,
+            "parent_request_id": budget.parent_request_id,
+            "limits": budget.limits.as_metadata(),
+            "scope_id": budget.scope_id,
+            "started_at": budget.started_at,
+            "deadline_at": budget.deadline_at,
+            "spend_ceiling_usd": budget.spend_ceiling_usd,
+        }, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
+        return hmac.new(_EPHEMERAL_BUDGET_KEY, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    except (ValueError, TypeError, AttributeError, OverflowError):
+        raise ModelBudgetUnavailable("budget_policy_mismatch") from None
+
+
+def _issue_ephemeral_budget(owner: str, workload: str, parent: str, limits: WorkloadLimits) -> TaskBudget:
+    value = TaskBudget(owner, workload, parent, limits)
+    return replace(value, _ephemeral_seal=_ephemeral_budget_seal(value))
 
 
 @dataclass(frozen=True)
@@ -174,6 +210,11 @@ def _validate_handle(budget: TaskBudget) -> None:
             or budget.started_at is not None or budget.deadline_at is not None
             or budget.spend_ceiling_usd is not None):
         raise ModelBudgetUnavailable("budget_policy_mismatch")
+    if (budget.scope_id is None or budget._ephemeral_seal) and (
+            type(budget._ephemeral_seal) is not str
+            or not _EPHEMERAL_SEAL.fullmatch(budget._ephemeral_seal)
+            or not hmac.compare_digest(budget._ephemeral_seal, _ephemeral_budget_seal(budget))):
+        raise ModelBudgetUnavailable("budget_policy_mismatch")
     if budget.scope_id is not None:
         _identifiers(budget.workload, budget.parent_request_id)
 
@@ -236,7 +277,7 @@ def begin_model_task_budget(
     if limits.deadline_seconds is None and limits.max_estimated_spend_usd_per_task is None:
         prior = _existing_scope(owner, workload, parent_request_id)
         if prior is None:
-            return TaskBudget(owner, workload, parent_request_id, limits)
+            return _issue_ephemeral_budget(owner, workload, parent_request_id, limits)
         limits = WorkloadLimits(
             _tightest(prior.limits.max_output_tokens_per_call, limits.max_output_tokens_per_call),
             prior.limits.deadline_seconds, prior.limits.max_estimated_spend_usd_per_task,
