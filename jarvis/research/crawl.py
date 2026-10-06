@@ -29,6 +29,9 @@ returns a per-site result dict, never raises for an ordinary API failure.
 from __future__ import annotations
 
 import os
+import hashlib
+import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +59,29 @@ DEFAULT_FOCUS = "Identify what this site offers, who it is for, and what disting
 # used only to keep a defensively-truncated title/content read legible if
 # a future response ever exceeds it.
 _TITLE_MAX_CHARS = 120
+
+
+@dataclass(frozen=True)
+class CrawlSourceEvidence:
+    requested_url: str = field(repr=False)
+    transport_endpoint: str
+    content_digest: str
+    page_origin_verified: bool = False
+
+
+class _CrawlResult(dict):
+    """Wire-compatible body with separate host acquisition evidence."""
+    def __init__(self, value, requested_url):
+        super().__init__(value)
+        self._source_evidence = CrawlSourceEvidence(requested_url, TAVILY_CRAWL_URL,
+            hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'),
+                ensure_ascii=True, allow_nan=False).encode()).hexdigest())
+
+
+def crawl_source_policy(result):
+    """Tavily success supplies no page credential/redirect/public-origin proof."""
+    from jarvis.privacy_policy import DataPolicy
+    return DataPolicy('confidential', 'unverified-crawl-page-origin')
 
 
 def load_research_config(path: str | os.PathLike[str] | None = None) -> dict[str, Any]:
@@ -209,10 +235,10 @@ def crawl_site(
             "error": "the crawl completed but found no pages",
             "error_kind": "empty",
         }
-    return {
+    return _CrawlResult({
         "ok": True, "url": url, "pages": pages,
         "credits": credits, "page_count": len(pages),
-    }
+    }, url)
 
 
 def build_site_digest(site_result: dict[str, Any]) -> str:

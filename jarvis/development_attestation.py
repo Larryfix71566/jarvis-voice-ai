@@ -34,6 +34,7 @@ from jarvis.tenant import is_valid_user_id
 
 PROTOCOL = "mortimer.development-source.v1"
 WORKSPACE_PROTOCOL = "mortimer.workspace-source.v1"
+ADVISORY_PROTOCOL = "mortimer.advisory-source.v1"
 _HEX = re.compile(r"[0-9a-f]{64}\Z")
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}\Z")
 _SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
@@ -363,12 +364,39 @@ def sign_workspace_source(scope: ToolExecutionScope, envelope: ToolResultEnvelop
                              protocol=WORKSPACE_PROTOCOL, validate_context=_workspace_context)
 
 
-def _sign_tool_source(scope, envelope, *, context, challenge, protocol, validate_context):
+def _advisory_context(value):
+    required = {'owner_id', 'bot_session_id', 'caller_run_id', 'caller_agent', 'origin_run_id',
+                'advisory_kind', 'action_run_id', 'action_generation', 'owner_scope_id', 'child_scope_id'}
+    if type(value) is not dict or set(value) != required or not is_valid_user_id(value['owner_id']):
+        raise DevelopmentSourceAttestationError()
+    if (value['advisory_kind'] not in {'planning', 'research'}
+            or value['caller_agent'] != ('developer' if value['advisory_kind'] == 'planning' else 'analyst')):
+        raise DevelopmentSourceAttestationError()
+    for name in ('bot_session_id', 'caller_run_id', 'origin_run_id', 'action_run_id'):
+        if type(value[name]) is not str or str(uuid.UUID(value[name])) != value[name]:
+            raise DevelopmentSourceAttestationError()
+    for name in ('action_generation', 'owner_scope_id', 'child_scope_id'):
+        if type(value[name]) is not str or not re.fullmatch(r'[0-9a-f]{32}', value[name]):
+            raise DevelopmentSourceAttestationError()
+    if value['origin_run_id'] != value['action_run_id']:
+        raise DevelopmentSourceAttestationError()
+    return dict(value)
+
+
+def sign_advisory_source(scope, envelope, *, context, challenge, phase):
+    if phase not in {'prepare', 'execute', 'cancel'}:
+        raise DevelopmentSourceAttestationError()
+    return _sign_tool_source(scope, envelope, context=context, challenge=challenge,
+        protocol=ADVISORY_PROTOCOL, validate_context=_advisory_context, parent_key='caller_run_id', phase=phase)
+
+
+def _sign_tool_source(scope, envelope, *, context, challenge, protocol, validate_context,
+                      parent_key='developer_run_id', phase=None):
     try:
         policy, content = validate_tool_result(scope, envelope)
         context = validate_context(context)
         if (type(challenge) is not str or not _HEX.fullmatch(challenge)
-                or context["developer_run_id"] != scope.parent_request_id):
+                or context[parent_key] != scope.parent_request_id):
             raise DevelopmentSourceAttestationError()
         with _lock:
             issuer = _issuers.get(str(_home()))
@@ -384,6 +412,8 @@ def _sign_tool_source(scope, envelope, *, context, challenge, protocol, validate
                            "source_scope": envelope.source_scope,
                            "canonical_refs": list(envelope.canonical_refs)},
             }
+            if phase is not None:
+                payload['phase'] = phase
             signature = issuer.key.sign(_canonical(payload))
             if pin_source_authority() != issuer.pin:
                 raise DevelopmentSourceAttestationError()
@@ -405,17 +435,29 @@ def verify_workspace_source(pin: AuthorityPin, scope: ToolExecutionScope, receip
                                protocol=WORKSPACE_PROTOCOL, validate_context=_workspace_context)
 
 
-def _verify_tool_source(pin, scope, receipt, *, context, challenge, protocol, validate_context):
+def verify_advisory_source(pin, scope, receipt, *, context, challenge, phase):
+    if phase not in {'prepare', 'execute', 'cancel'}:
+        raise DevelopmentSourceAttestationError()
+    return _verify_tool_source(pin, scope, receipt, context=context, challenge=challenge,
+        protocol=ADVISORY_PROTOCOL, validate_context=_advisory_context, parent_key='caller_run_id', phase=phase)
+
+
+def _verify_tool_source(pin, scope, receipt, *, context, challenge, protocol, validate_context,
+                        parent_key='developer_run_id', phase=None):
     try:
         if type(pin) is not AuthorityPin or pin_source_authority() != pin:
             raise DevelopmentSourceAttestationError()
-        if (type(receipt) is not dict or set(receipt) != {
+        fields = {
                 "protocol", "key_id", "generation", "issued_at", "expires_at", "challenge",
                 "context", "binding", "result", "signature"}
+        if phase is not None:
+            fields.add('phase')
+        if (type(receipt) is not dict or set(receipt) != fields
                 or receipt["protocol"] != protocol or receipt["key_id"] != pin.key_id
                 or receipt["generation"] != pin.generation or receipt["challenge"] != challenge
                 or validate_context(receipt["context"]) != validate_context(context)
-                or context["developer_run_id"] != scope.parent_request_id
+                or context[parent_key] != scope.parent_request_id
+                or (phase is not None and receipt['phase'] != phase)
                 or type(receipt["signature"]) is not str):
             raise DevelopmentSourceAttestationError()
         payload = {key: value for key, value in receipt.items() if key != "signature"}

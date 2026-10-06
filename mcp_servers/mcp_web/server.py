@@ -1,6 +1,10 @@
 """mcp-web FastMCP server (thin wrapper over logic.py — plan §1 template)."""
 
-from fastmcp import FastMCP
+import json
+
+from fastmcp import Context, FastMCP
+from fastmcp.tools.tool import ToolResult
+from mcp.types import TextContent
 
 from . import logic
 
@@ -17,6 +21,33 @@ def _get_admin_client():
         from mcp_servers.mcp_selfedit.logic import AdminClient
         _admin_client = AdminClient()
     return _admin_client
+
+
+def _advisory_response(ctx, tool, arguments):
+    if ctx is None:
+        return None
+    request = ctx.request_context
+    meta = request.meta if request is not None else None
+    value = meta.model_dump().get('mortimer_advisory_source') if meta is not None else None
+    if value is None:
+        return None
+    response = logic.advisory_source_request(_get_admin_client(), tool, arguments, value)
+    body, hidden = {'ok': False, 'error': 'advisory_source_unavailable'}, {}
+    if response.get('ok') is True:
+        if value.get('phase') == 'associate':
+            body = {'ok': True}
+        else:
+            try:
+                receipt = response['source_receipt']
+                body = json.loads(receipt['result']['content'])
+                hidden = {'source_receipt': receipt}
+                if value['phase'] == 'prepare':
+                    hidden.update(source_context=response['source_context'], preparation_id=response['preparation_id'])
+            except (ValueError, TypeError, KeyError):
+                pass
+    return ToolResult(content=[TextContent(type='text', text=json.dumps(body, sort_keys=True,
+        separators=(',', ':'), ensure_ascii=True))], structured_content=body,
+        meta={'mortimer_advisory_source': hidden})
 
 
 @mcp.tool()
@@ -45,27 +76,33 @@ def sports_scores(league: str, date: str = "") -> dict:
 
 @mcp.tool()
 def research_compare_start(
-    urls: list, focus: str = "", confirm: bool = False, run_id: str = "",
+    urls: list, focus: str = "", confirm: bool = False, run_id: str = "", ctx: Context = None,
 ) -> dict:
     """Start a deep comparison of TWO websites' content (not a quick search) — crawls each site and writes a comparison review. Two-phase: confirm=false previews the cost and asks; only after the user explicitly agrees, call again with confirm=true. FOCUS optionally steers what the comparison is about (e.g. "pricing and support"). Runs in the background for a few minutes — use research_status for progress."""
+    source = _advisory_response(ctx, 'research_compare_start', dict(urls=urls, focus=focus,
+        confirm=confirm, run_id=run_id))
+    if source is not None:
+        return source
     return logic.research_compare_start(
         _get_admin_client(), urls, focus, confirm, run_id=run_id,
     )
 
 
 @mcp.tool()
-def research_status(run_id: str = "") -> dict:
+def research_status(run_id: str = "", ctx: Context = None) -> dict:
     """Report progress of the current site comparison: still crawling, failed, or ready to view/save."""
-    return logic.research_status(_get_admin_client(), run_id=run_id)
+    source = _advisory_response(ctx, 'research_status', dict(run_id=run_id))
+    return source if source is not None else logic.research_status(_get_admin_client(), run_id=run_id)
 
 
 @mcp.tool()
-def research_save(path: str = "", confirm: bool = False) -> dict:
+def research_save(path: str = "", confirm: bool = False, ctx: Context = None) -> dict:
     """Save the comparison in an open self-edit sandbox session, under
     docs/research/ by default. confirm=false previews; confirm=true writes a VM
     proposal. Follow session/retry guidance; selfedit_finish verifies and
     prepares a draft PR. This does not create a legacy commit action."""
-    return logic.research_save(_get_admin_client(), path or None, confirm)
+    source = _advisory_response(ctx, 'research_save', dict(path=path or None, confirm=confirm))
+    return source if source is not None else logic.research_save(_get_admin_client(), path or None, confirm)
 
 
 if __name__ == "__main__":

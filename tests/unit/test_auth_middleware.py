@@ -16,9 +16,11 @@ from jarvis.authmw import BearerAuthMiddleware
 from jarvis.db import get_conn, now_iso, run_migrations
 
 # Includes Skills endpoints and main's workflow/status routes.
-EXPECTED_SIDECAR_ROUTES = 82
+EXPECTED_SIDECAR_ROUTES = 86
 WORKSPACE_SOURCE_PATHS = {'/api/development/source/associate', '/api/development/source/prepare',
                           '/api/development/source/tool'}
+ADVISORY_SOURCE_PATHS = {'/api/advisory/source/associate', '/api/advisory/source/prepare',
+                         '/api/advisory/source/tool', '/api/advisory/source/cancel'}
 MAIN_STATUS_PATHS = {
     "/api/workflows", "/api/status/models", "/api/status/services",
     "/api/status/overview", "/api/status/build", "/api/status/location",
@@ -44,7 +46,9 @@ def test_every_sidecar_route_requires_bearer_token(
     assert len(routes) == EXPECTED_SIDECAR_ROUTES
     assert MAIN_STATUS_PATHS <= {route.path for route in routes}
     assert WORKSPACE_SOURCE_PATHS <= {route.path for route in routes}
+    assert ADVISORY_SOURCE_PATHS <= {route.path for route in routes}
     assert all(route.methods == {'POST'} for route in routes if route.path in WORKSPACE_SOURCE_PATHS)
+    assert all(route.methods == {'POST'} for route in routes if route.path in ADVISORY_SOURCE_PATHS)
 
     client = TestClient(app, raise_server_exceptions=False)
     for route in routes:

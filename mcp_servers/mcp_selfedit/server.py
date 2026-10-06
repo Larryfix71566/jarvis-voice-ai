@@ -50,6 +50,32 @@ def _source_response(ctx, tool, arguments):
         _meta={'mortimer_development_source': hidden})
 
 
+def _advisory_response(ctx, tool, arguments):
+    if ctx is None:
+        return None
+    meta = ctx.request_context.meta
+    value = meta.model_dump().get('mortimer_advisory_source') if meta is not None else None
+    if value is None:
+        return None
+    response = logic.advisory_source_request(_get_client(), tool, arguments, value)
+    body, hidden = {'ok': False, 'error': 'advisory_source_unavailable'}, {}
+    if response.get('ok') is True:
+        if value.get('phase') == 'associate':
+            body = {'ok': True}
+        else:
+            try:
+                receipt = response['source_receipt']
+                body = json.loads(receipt['result']['content'])
+                hidden = {'source_receipt': receipt}
+                if value['phase'] == 'prepare':
+                    hidden.update(source_context=response['source_context'], preparation_id=response['preparation_id'])
+            except (ValueError, TypeError, KeyError):
+                pass
+    return CallToolResult(content=[TextContent(type='text', text=json.dumps(body, sort_keys=True,
+        separators=(',', ':'), ensure_ascii=True))], structuredContent=body,
+        _meta={'mortimer_advisory_source': hidden})
+
+
 @mcp.tool()
 def selfedit_start(
     goal: str = "", profile: str = "", confirm: bool = False, plan_path: str = "",
@@ -192,7 +218,7 @@ def selfedit_revert(confirm: bool = False) -> dict:
 @mcp.tool()
 def plan_start(
     goal: str, mode: str = "single", profile: str = "", confirm: bool = False,
-    review_path: str = "", run_id: str = "",
+    review_path: str = "", run_id: str = "", ctx: Context = None,
 ) -> dict:
     """Start drafting an implementation plan, specification, or design
     document for GOAL — use this instead of writing the document yourself
@@ -212,6 +238,10 @@ def plan_start(
     authoring a new plan — use this whenever the user asks to have a
     plan, spec, or document reviewed, critiqued, or checked by a model.
     `run_id` is filled in by the system; leave it empty."""
+    source = _advisory_response(ctx, 'plan_start', dict(goal=goal, mode=mode, profile=profile,
+        confirm=confirm, review_path=review_path, run_id=run_id))
+    if source is not None:
+        return source
     return logic.plan_start(
         _get_client(), goal, mode or "single", profile or None, confirm,
         review_path or "", run_id=run_id,
@@ -219,32 +249,35 @@ def plan_start(
 
 
 @mcp.tool()
-def plan_status(action_run_id: str = "") -> dict:
+def plan_status(action_run_id: str = "", ctx: Context = None) -> dict:
     """Report progress of the current planning job: whether it is still
     drafting, whether council candidates are ready for the user to choose
     between (name each candidate's label and advisory score), or whether
     a finished plan is ready to be saved as a draft with plan_adopt. If
     plan_start reported an action_run_id after a duplicate/uncertain start,
     pass that ID to inspect its receipt before retrying."""
-    return logic.plan_status(_get_client(), action_run_id)
+    source = _advisory_response(ctx, 'plan_status', dict(action_run_id=action_run_id))
+    return source if source is not None else logic.plan_status(_get_client(), action_run_id)
 
 
 @mcp.tool()
-def plan_choose(label: str) -> dict:
+def plan_choose(label: str, ctx: Context = None) -> dict:
     """Choose one candidate plan from a council-mode planning round by its
     label (e.g. 'Proposal A'). No confirmation needed — this only records
     the user's choice; it writes nothing."""
-    return logic.plan_choose(_get_client(), label)
+    source = _advisory_response(ctx, 'plan_choose', dict(label=label))
+    return source if source is not None else logic.plan_choose(_get_client(), label)
 
 
 @mcp.tool()
-def plan_adopt(path: str = "", confirm: bool = False) -> dict:
+def plan_adopt(path: str = "", confirm: bool = False, ctx: Context = None) -> dict:
     """Save the finished plan/review in an open self-edit sandbox session.
     confirm=false previews; confirm=true writes the proposed document in the VM.
     If a session is needed or warming up, follow the returned retry guidance.
     selfedit_finish verifies and prepares a draft PR; no legacy commit action
     is created. PATH defaults to docs/plans/ or docs/reviews/."""
-    return logic.plan_adopt(_get_client(), path or None, confirm)
+    source = _advisory_response(ctx, 'plan_adopt', dict(path=path or None, confirm=confirm))
+    return source if source is not None else logic.plan_adopt(_get_client(), path or None, confirm)
 
 
 if __name__ == "__main__":
